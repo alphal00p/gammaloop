@@ -483,8 +483,8 @@ impl<'a> StandaloneRuntimeEvaluator<'a> {
             }
             StandaloneBackend::Symjit => Ok(Self::Symjit(
                 evaluator
-                    // SymJIT 2.21 supports optimization levels up to O2 and cannot compact some
-                    // complex temporary layouts.
+                    // Standalone backend selection uses O2 by default. Keep compaction
+                    // disabled because some complex temporary layouts were incompatible with it.
                     .jit_compile(
                         JITCompilationSettings::new()
                             .optimization_level(2)

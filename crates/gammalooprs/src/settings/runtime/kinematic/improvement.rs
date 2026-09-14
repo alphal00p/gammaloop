@@ -698,7 +698,7 @@ mod tests {
     fn arb_external_cache_preserves_native_constraints_and_archive_layout() {
         use crate::momentum::{Dep, ExternalMomenta, Helicity, Rotatable, RotationMethod};
         use crate::settings::runtime::kinematic::Externals;
-        use crate::utils::ArbPrec;
+        use crate::utils::{ArbPrec, SamplingFloat};
 
         test_initialise().unwrap();
         let signature: SignatureLike<ExternalIndex> = [1i8, 1, -1, -1].into_iter().collect();
@@ -721,6 +721,9 @@ mod tests {
             f_128_cache: None,
             arb_cache: Default::default(),
         };
+        let unimproved_sampling = externals
+            .get_dependent_externals::<SamplingFloat>(constructor)
+            .unwrap();
         externals
             .improve_and_cache(constructor, &masses, &e_cm)
             .unwrap();
@@ -739,6 +742,25 @@ mod tests {
         // The existing independent conservation/on-shell checker uses native
         // epsilon, so promoting a double or Quad improved point cannot pass.
         test_kinematic_validity(&native, &signature, &native_masses, &native_e_cm).unwrap();
+        let sampling = externals
+            .get_dependent_externals::<SamplingFloat>(constructor)
+            .unwrap();
+        assert_ne!(sampling, unimproved_sampling);
+        let expected_sampling: TiVec<ExternalIndex, FourMomentum<F<SamplingFloat>>> = native
+            .iter()
+            .map(|p| p.map_ref(&|x| F::<SamplingFloat>::from_arb(&x.0).unwrap()))
+            .collect();
+        assert_eq!(sampling, expected_sampling);
+        test_kinematic_validity(
+            &sampling,
+            &signature,
+            &masses
+                .iter()
+                .map(|m| F::<SamplingFloat>::from_ff64(*m))
+                .collect(),
+            &F::<SamplingFloat>::from_ff64(e_cm),
+        )
+        .unwrap();
 
         let rotated = externals.rotate(&RotationMethod::Pi2X.into());
         let rotated_native = rotated
@@ -753,6 +775,14 @@ mod tests {
             -native[ExternalIndex::from(2)].spatial.pz.clone()
         );
         test_kinematic_validity(&rotated_native, &signature, &native_masses, &native_e_cm).unwrap();
+        let rotated_sampling = rotated
+            .get_dependent_externals::<SamplingFloat>(constructor)
+            .unwrap();
+        let expected_rotated: TiVec<ExternalIndex, FourMomentum<F<SamplingFloat>>> = rotated_native
+            .iter()
+            .map(|p| p.map_ref(&|x| F::<SamplingFloat>::from_arb(&x.0).unwrap()))
+            .collect();
+        assert_eq!(rotated_sampling, expected_rotated);
 
         let config = bincode::config::standard();
         let encoded = bincode::encode_to_vec(&externals, config).unwrap();

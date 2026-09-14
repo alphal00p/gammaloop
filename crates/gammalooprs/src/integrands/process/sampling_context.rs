@@ -5,9 +5,10 @@
 //! and fixed physical coordinates together from the declared raw prerequisites.
 //! Each foreign inverse uses its supplied raw point, reusing a native preparation
 //! only for an identical plan and source. No partially sampled data are labelled
-//! a complete MomentumSample. Production prepares one canonical Arb draw;
-//! physical precision attempts materialize directly from that immutable source,
-//! never promoting a previously rounded point or pairing it with stale cut data.
+//! a complete MomentumSample. Production exactly embeds one completed source
+//! draw in canonical Arb storage; physical precision attempts materialize
+//! directly from that immutable authority, never promoting a previous physical
+//! retry or pairing its point with stale cut data.
 
 use crate::{
     cff::esurface::EsurfaceRay,
@@ -61,6 +62,29 @@ pub(crate) struct PreparedLUHost<T: FloatLike> {
     pub(crate) prior: Vec<T>,
     pub(crate) ray: EsurfaceRay<T>,
     pub(crate) solution: NewtonIterationResult<T>,
+}
+
+impl<T: FloatLike> PreparedLUHost<T> {
+    /// Freeze the completed source authority without reconstructing its ray or
+    /// revisiting any root, prerequisite or discrete source decision.
+    pub(crate) fn to_arb_exact(&self) -> Result<PreparedLUHost<ArbPrec>> {
+        Ok(PreparedLUHost {
+            plan: Arc::clone(&self.plan),
+            source: self.source.clone(),
+            prior: self
+                .prior
+                .iter()
+                .map(|value| F(value.clone()).to_arb_exact().map(|value| value.0))
+                .collect::<Result<_>>()?,
+            ray: self.ray.to_arb_exact()?,
+            solution: NewtonIterationResult {
+                solution: self.solution.solution.to_arb_exact()?,
+                derivative_at_solution: self.solution.derivative_at_solution.to_arb_exact()?,
+                error_of_function: self.solution.error_of_function.to_arb_exact()?,
+                num_iterations_used: self.solution.num_iterations_used,
+            },
+        })
+    }
 }
 
 impl PreparedLUHost<ArbPrec> {
@@ -361,15 +385,18 @@ mod tests {
     #[test]
     fn canonical_lu_host_materializes_directly_without_new_root_history() -> Result<()> {
         use crate::{
+            DependentMomentaConstructor,
             cff::{VertexSet, esurface::Esurface},
             dot,
-            graph::{Graph, parse::from_dot::IntoGraph},
+            graph::{Graph, GroupId, parse::from_dot::IntoGraph},
             initialisation::test_initialise,
+            integrands::process::gammaloop_sample::{DiscreteGraphSample, GammaLoopSample},
             momentum::{
-                FourMomentum, ThreeMomentum,
-                sample::{ExternalFourMomenta, LoopMomenta},
+                ExternalMomenta, FourMomentum, ThreeMomentum,
+                sample::{ExternalFourMomenta, LoopMomenta, MomentumSample},
             },
-            utils::QuadFloat,
+            settings::runtime::kinematic::Externals,
+            utils::{QuadFloat, SamplingFloat},
         };
         use linnet::half_edge::involution::EdgeIndex;
 
@@ -461,6 +488,105 @@ mod tests {
             host.solution.num_iterations_used
         );
         assert_eq!(format!("{history:?}"), original_history);
+        let mut source = host.materialize::<SamplingFloat>(1e-60)?;
+        source.solution.error_of_function = source.ray.evaluate(&source.solution.solution).0;
+        let promoted = source.to_arb_exact()?;
+        assert!(Arc::ptr_eq(&promoted.plan, &source.plan));
+        assert_eq!(promoted.source, source.source);
+        assert_eq!(
+            promoted.prior,
+            source
+                .prior
+                .iter()
+                .map(|value| F(value.clone()).to_arb_exact().unwrap().0)
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            promoted.solution.solution,
+            source.solution.solution.to_arb_exact()?
+        );
+        assert_eq!(
+            promoted.solution.derivative_at_solution,
+            source.solution.derivative_at_solution.to_arb_exact()?
+        );
+        assert_eq!(
+            promoted.solution.error_of_function,
+            source.solution.error_of_function.to_arb_exact()?
+        );
+        assert_eq!(
+            promoted.solution.num_iterations_used,
+            source.solution.num_iterations_used
+        );
+        let roundtrip = promoted.materialize::<SamplingFloat>(1e-60)?;
+        assert_eq!(format!("{roundtrip:?}"), format!("{source:?}"));
+
+        // Exercise the completed row boundary too: a selected host survives
+        // exact promotion and every physical retry without a second root solve.
+        let mut external_settings = Externals::default();
+        let Externals::Constant { momenta, .. } = &mut external_settings;
+        *momenta = vec![ExternalMomenta::Independent([4.0, 0.0, 0.0, 0.0].map(F)); 2];
+        let source_one = F::<SamplingFloat>::default().one();
+        let sample = MomentumSample::new(
+            LoopMomenta::from_iter([ThreeMomentum::new(
+                F(source.prior[0].clone()),
+                F(source.prior[1].clone()),
+                F(source.prior[2].clone()),
+            )]),
+            33,
+            &external_settings,
+            35,
+            &source_one / source_one.from_usize(7),
+            DependentMomentaConstructor::CrossSection,
+            Some(4),
+        )?;
+        let draw = GammaLoopSample {
+            groups: vec![(
+                Some(GroupId(1)),
+                vec![DiscreteGraphSample {
+                    graph_id: source.source.graph_id,
+                    channel_id: Some(source.source.generating_channel),
+                    prepared_lu_hosts: vec![source.clone()],
+                    physical_overlaps: None,
+                    sample,
+                    integrand_prefactor: source_one,
+                }],
+            )],
+        };
+        let canonical = draw.clone().into_canonical(
+            &external_settings,
+            DependentMomentaConstructor::CrossSection,
+        )?;
+        let retained = &canonical.groups[0].1[0].prepared_lu_hosts;
+        assert_eq!(retained.len(), 1);
+        assert!(Arc::ptr_eq(&retained[0].plan, &source.plan));
+        assert_eq!(format!("{:?}", retained[0]), format!("{promoted:?}"));
+        let frozen = format!("{canonical:?}");
+        canonical.materialize::<f64>(1e-10)?;
+        canonical.materialize::<QuadFloat>(1e-28)?;
+        canonical.materialize::<ArbPrec>(1e-60)?;
+        assert_eq!(format!("{canonical:?}"), frozen);
+        assert_eq!(format!("{history:?}"), original_history);
+        let mut invalid_row = draw;
+        invalid_row.groups[0].1[0].prepared_lu_hosts[0].prior[0] =
+            SamplingFloat::from_f64_exact_binary(f64::INFINITY);
+        assert!(
+            invalid_row
+                .into_canonical(
+                    &external_settings,
+                    DependentMomentaConstructor::CrossSection
+                )
+                .is_err()
+        );
+        for field in 0..3 {
+            let mut invalid = source.clone();
+            let nonfinite = F(SamplingFloat::from_f64_exact_binary(f64::INFINITY));
+            match field {
+                0 => invalid.solution.solution = nonfinite,
+                1 => invalid.solution.derivative_at_solution = nonfinite,
+                _ => invalid.solution.error_of_function = nonfinite,
+            }
+            assert!(invalid.to_arb_exact().is_err());
+        }
         assert!(matches!(
             host.materialize::<f64>(1e-25)
                 .unwrap_err()

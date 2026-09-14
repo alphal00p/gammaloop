@@ -105,6 +105,33 @@ impl EsurfaceRay<ArbPrec> {
 }
 
 impl<T: FloatLike> EsurfaceRay<T> {
+    /// Embed the represented equation exactly, preserving each ordered energy
+    /// occurrence. No routing, coefficient reconstruction or root solve occurs.
+    pub(crate) fn to_arb_exact(&self) -> Result<EsurfaceRay<ArbPrec>> {
+        let spatial = |p: &ThreeMomentum<F<T>>| -> Result<ThreeMomentum<F<ArbPrec>>> {
+            Ok(ThreeMomentum::new(
+                p.px.to_arb_exact()?,
+                p.py.to_arb_exact()?,
+                p.pz.to_arb_exact()?,
+            ))
+        };
+        Ok(EsurfaceRay {
+            energies: self
+                .energies
+                .iter()
+                .map(|(edge, velocity, offset, mass)| {
+                    Ok((
+                        *edge,
+                        spatial(velocity)?,
+                        spatial(offset)?,
+                        mass.to_arb_exact()?,
+                    ))
+                })
+                .collect::<Result<_>>()?,
+            shift: self.shift.to_arb_exact()?,
+        })
+    }
+
     const ENCLOSURE_PRECISION: u32 = 2048;
 
     // These directed operations serve the represented and original-routed
@@ -2675,6 +2702,68 @@ mod tests {
     use super::{EsurfaceExistence, add_external_shifts};
 
     #[test]
+    fn canonical_ray_embedding_preserves_ordered_occurrences_and_native_coefficients() {
+        use super::EsurfaceRay;
+        use crate::utils::SamplingFloat;
+
+        fn check<T: FloatLike>(marker: F<T>) {
+            let one = marker.one();
+            let velocity = ThreeMomentum::new(marker.clone(), -marker.clone(), one.zero());
+            let offset = ThreeMomentum::new(
+                one.from_usize(2),
+                &marker / one.from_usize(3),
+                F(T::from_f64_exact_binary(-0.0)),
+            );
+            let repeated = (EdgeIndex(4), velocity.clone(), offset.clone(), one.clone());
+            let ray = EsurfaceRay {
+                energies: vec![
+                    repeated.clone(),
+                    (EdgeIndex(7), offset, velocity, marker.clone()),
+                    repeated,
+                ],
+                shift: -marker.clone(),
+            };
+            let canonical = ray.to_arb_exact().unwrap();
+            assert_eq!(
+                canonical.energies.iter().map(|entry| entry.0).collect_vec(),
+                [EdgeIndex(4), EdgeIndex(7), EdgeIndex(4)]
+            );
+            assert_eq!(canonical.energies[0], canonical.energies[2]);
+            assert_eq!(canonical.energies[0].1.px, marker.to_arb_exact().unwrap());
+            // Preserve the native scalar's zero convention; a Quad sum need
+            // not retain the sign of the binary64 token used to construct it.
+            assert_eq!(
+                canonical.energies[0]
+                    .2
+                    .pz
+                    .0
+                    .mpfr_enclosure(1000)
+                    .0
+                    .is_sign_negative(),
+                ray.energies[0].2.pz.0.into_f64().is_sign_negative()
+            );
+            let roundtrip = canonical.materialize::<T>().unwrap();
+            assert_eq!(roundtrip.energies, ray.energies);
+            assert_eq!(roundtrip.shift, ray.shift);
+            for field in 0..4 {
+                let mut invalid = ray.clone();
+                let nonfinite = F(T::from_f64_exact_binary(f64::INFINITY));
+                match field {
+                    0 => invalid.energies[0].1.px = nonfinite,
+                    1 => invalid.energies[0].2.py = nonfinite,
+                    2 => invalid.energies[0].3 = nonfinite,
+                    _ => invalid.shift = nonfinite,
+                }
+                assert!(invalid.to_arb_exact().is_err());
+            }
+        }
+        let one = F::<QuadFloat>::default().one();
+        check(one + one.from_i64(2).powi(-80));
+        let one = F::<SamplingFloat>::default().one();
+        check(&one + one.from_i64(2).powi(-180) + one.from_i64(2).powi(-240));
+    }
+
+    #[test]
     fn joint_sampling_matches_distinct_reversed_edges_and_unequal_masses() {
         test_initialise().unwrap();
         // Splitting the kite's common line through E gives distinct edge IDs
@@ -3314,7 +3403,7 @@ mod tests {
             let mut completed = ray.clone();
             completed.energies[0].1.px += &cancellation - &one;
             let cancellation_result = ray.verify_lu_candidate(&completed, &solution, 6, &budget);
-            if T::sampling_precision() == crate::settings::runtime::Precision::Double {
+            if T::sampling_precision() == crate::utils::SamplingPrecision::Double {
                 assert_eq!(cancellation, one.zero());
                 for result in [tight_result, cancellation_result] {
                     assert!(matches!(

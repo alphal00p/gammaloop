@@ -57,7 +57,8 @@ use crate::{
         global::{CompilationOptimizationLevel, FrozenCompilationMode},
     },
     utils::{
-        ArbPrec, F, FUN_LIB, FloatLike, GS, Length, RuntimeCache, TENSORLIB, W_, f128,
+        ArbPrec, F, FUN_LIB, FloatLike, GS, Length, RuntimeCache, SamplingFloat, TENSORLIB, W_,
+        f128,
         hyperdual_utils::{DualOrNot, new_from_values},
     },
 };
@@ -1168,6 +1169,8 @@ pub struct GenericEvaluator {
     pub f128: ExpressionEvaluator<Complex<F<f128>>>,
     pub dual_shape: Option<Vec<Vec<usize>>>,
     pub arb: ExpressionEvaluator<Complex<F<ArbPrec>>>,
+    /// Only sampling programs warm this source lane; physical evaluators keep it empty.
+    pub(crate) sampling_fixed256: RuntimeCache<ExpressionEvaluator<Complex<F<SamplingFloat>>>>,
     pub(crate) loaded_f64_compiled: RuntimeCache<CompiledComplexEvaluatorSpenso>,
     pub(crate) symjit_f64: RuntimeCache<SymjitComplexEvaluatorGL>,
     pub(crate) active_f64_backend: RuntimeCache<ActiveF64Backend>,
@@ -1251,15 +1254,15 @@ impl GenericEvaluator {
 
         // Use the same numeric program as eager and external compilation. Rational
         // constant slots (such as pi) remain placeholders until domain mapping.
-        // SymJIT 2.21 supports optimization levels up to O2 and cannot compact some complex
-        // temporary layouts.
+        // SymJIT supports the requested O0–O3 level. Keep compaction disabled
+        // because some complex temporary layouts were incompatible with it.
         let evaluator = self
             .f64_eager
             .clone()
             .map_coeff(&|c| SymComplex::new(c.re.0, c.im.0))
             .jit_compile(
                 JITCompilationSettings::new()
-                    .optimization_level(usize::from(optimization_level).min(2) as u8)
+                    .optimization_level(usize::from(optimization_level) as u8)
                     .with_option("compact", "false"),
             )
             .map_err(|err| eyre!(err))?;
@@ -1462,6 +1465,7 @@ impl GenericEvaluator {
             f128,
             dual_shape,
             arb,
+            sampling_fixed256: RuntimeCache::default(),
             loaded_f64_compiled: RuntimeCache::default(),
             symjit_f64: RuntimeCache::default(),
             active_f64_backend: RuntimeCache::default(),
@@ -1725,113 +1729,70 @@ impl GenericEvaluatorFloat for f64 {
     // }
 }
 
-impl GenericEvaluatorFloat for f128 {
-    #[inline(always)]
-    fn get_evaluator_single(
-        generic_evaluator: &mut GenericEvaluator,
-    ) -> impl FnMut(&[Complex<F<f128>>]) -> Complex<F<f128>> {
-        // info!("USING COMPLEX F128 SINGLE");
-        #[inline(always)]
-        |params: &[Complex<F<f128>>]| generic_evaluator.f128.evaluate_single(params)
-    }
+// Eager scalar and dual dispatch share the same output shape at every native lane.
+macro_rules! impl_eager_evaluator_float {
+    ($scalar:ty, $evaluator:ident => $program:expr) => {
+        impl GenericEvaluatorFloat for $scalar {
+            #[inline(always)]
+            fn get_evaluator_single(
+                $evaluator: &mut GenericEvaluator,
+            ) -> impl FnMut(&[Complex<F<Self>>]) -> Complex<F<Self>> {
+                // info!("USING COMPLEX EAGER SINGLE");
+                #[inline(always)]
+                |params: &[Complex<F<Self>>]| ($program).evaluate_single(params)
+            }
 
-    fn get_evaluator(
-        generic_evaluator: &mut GenericEvaluator,
-    ) -> impl FnMut(&[Complex<F<f128>>]) -> Vec<DualOrNot<Complex<F<f128>>>> {
-        |params: &[Complex<F<f128>>]| {
-            // info!("USING COMPLEX F128 MULTIPLE");
-            let mut out = vec![Complex::default(); generic_evaluator.compute_out_size()];
-            generic_evaluator.f128.evaluate(params, &mut out);
+            fn get_evaluator(
+                $evaluator: &mut GenericEvaluator,
+            ) -> impl FnMut(&[Complex<F<Self>>]) -> Vec<DualOrNot<Complex<F<Self>>>> {
+                |params: &[Complex<F<Self>>]| {
+                    // info!("USING COMPLEX EAGER MULTIPLE");
+                    let mut out = vec![Complex::default(); $evaluator.compute_out_size()];
+                    ($program).evaluate(params, &mut out);
 
-            if let Some(dual_shape) = &generic_evaluator.dual_shape {
-                let dual_builder = HyperDual::<Complex<F<f128>>>::new(dual_shape.clone());
-                let dual_size = dual_builder.values.len();
+                    if let Some(dual_shape) = &$evaluator.dual_shape {
+                        let dual_builder = HyperDual::<Complex<F<Self>>>::new(dual_shape.clone());
+                        let dual_size = dual_builder.values.len();
 
-                out.chunks(dual_size)
-                    .map(|chunk| DualOrNot::Dual(new_from_values(&dual_builder, chunk)))
-                    .collect()
-            } else {
-                out.into_iter().map(DualOrNot::NonDual).collect()
+                        out.chunks(dual_size)
+                            .map(|chunk| DualOrNot::Dual(new_from_values(&dual_builder, chunk)))
+                            .collect()
+                    } else {
+                        out.into_iter().map(DualOrNot::NonDual).collect()
+                    }
+                }
+            }
+
+            fn get_parameters<'a>(
+                param_builder: &'a mut ParamBuilder,
+                cache: (bool, bool),
+                graph: &'a Graph,
+                sample: &'a MomentumSample<Self>,
+                helicities: &[Helicity],
+                additional_params: &[F<Self>],
+                left_threshold_params: Option<&ThresholdParams<Self>>,
+                right_threshold_params: Option<&ThresholdParams<Self>>,
+                lu_params: Option<&LUParams<Self>>,
+            ) -> InputParams<'a, Self> {
+                param_builder.update_emr_and_get_params(
+                    cache,
+                    sample,
+                    graph,
+                    helicities,
+                    additional_params,
+                    left_threshold_params,
+                    right_threshold_params,
+                    lu_params,
+                )
             }
         }
-    }
-
-    fn get_parameters<'a>(
-        param_builder: &'a mut ParamBuilder,
-        cache: (bool, bool),
-        graph: &'a Graph,
-        sample: &'a MomentumSample<Self>,
-        helicities: &[Helicity],
-        additional_params: &[F<f128>],
-        left_threshold_params: Option<&ThresholdParams<f128>>,
-        right_threshold_params: Option<&ThresholdParams<f128>>,
-        lu_params: Option<&LUParams<f128>>,
-    ) -> InputParams<'a, Self> {
-        param_builder.update_emr_and_get_params(
-            cache,
-            sample,
-            graph,
-            helicities,
-            additional_params,
-            left_threshold_params,
-            right_threshold_params,
-            lu_params,
-        )
-    }
+    };
 }
 
-impl GenericEvaluatorFloat for ArbPrec {
-    #[inline(always)]
-    fn get_evaluator_single(
-        generic_evaluator: &mut GenericEvaluator,
-    ) -> impl FnMut(&[Complex<F<ArbPrec>>]) -> Complex<F<ArbPrec>> {
-        #[inline(always)]
-        |params: &[Complex<F<ArbPrec>>]| generic_evaluator.arb.evaluate_single(params)
-    }
-
-    fn get_evaluator(
-        generic_evaluator: &mut GenericEvaluator,
-    ) -> impl FnMut(&[Complex<F<ArbPrec>>]) -> Vec<DualOrNot<Complex<F<ArbPrec>>>> {
-        |params: &[Complex<F<ArbPrec>>]| {
-            let mut out = vec![Complex::default(); generic_evaluator.compute_out_size()];
-            generic_evaluator.arb.evaluate(params, &mut out);
-
-            if let Some(dual_shape) = &generic_evaluator.dual_shape {
-                let dual_builder = HyperDual::<Complex<F<ArbPrec>>>::new(dual_shape.clone());
-                let dual_size = dual_builder.values.len();
-
-                out.chunks(dual_size)
-                    .map(|chunk| DualOrNot::Dual(new_from_values(&dual_builder, chunk)))
-                    .collect()
-            } else {
-                out.into_iter().map(DualOrNot::NonDual).collect()
-            }
-        }
-    }
-
-    fn get_parameters<'a>(
-        param_builder: &'a mut ParamBuilder,
-        cache: (bool, bool),
-        graph: &'a Graph,
-        sample: &'a MomentumSample<Self>,
-        helicities: &[Helicity],
-        additional_params: &[F<ArbPrec>],
-        left_threshold_params: Option<&ThresholdParams<ArbPrec>>,
-        right_threshold_params: Option<&ThresholdParams<ArbPrec>>,
-        lu_params: Option<&LUParams<ArbPrec>>,
-    ) -> InputParams<'a, Self> {
-        param_builder.update_emr_and_get_params(
-            cache,
-            sample,
-            graph,
-            helicities,
-            additional_params,
-            left_threshold_params,
-            right_threshold_params,
-            lu_params,
-        )
-    }
-}
+impl_eager_evaluator_float!(f128, evaluator => &mut evaluator.f128);
+impl_eager_evaluator_float!(ArbPrec, evaluator => &mut evaluator.arb);
+impl_eager_evaluator_float!(SamplingFloat, evaluator => evaluator.sampling_fixed256.as_mut()
+    .expect("fixed256 sampling evaluator must be prepared during warmup"));
 
 #[cfg(test)]
 mod tests {
@@ -2164,6 +2125,7 @@ mod tests {
         )
         .unwrap();
         assert!(evaluator.exprs.is_none());
+        assert!(evaluator.sampling_fixed256.as_ref().is_none());
         assert_eq!(evaluator.f64_eager.get_input_len(), 1);
         for value in [1.0, -2.0] {
             let input = [Complex::new_re(F(value))];
@@ -2189,6 +2151,7 @@ mod tests {
         .unwrap();
 
         assert!(decoded.exprs.is_none());
+        assert!(decoded.sampling_fixed256.as_ref().is_none());
         assert_eq!(decoded.f64_eager.get_input_len(), 1);
         for value in [1.0, -2.0] {
             let input = [Complex::new_re(F(value))];
@@ -2284,19 +2247,22 @@ mod tests {
             let eager = scalar_value(<f64 as GenericEvaluatorFloat>::get_evaluator(
                 &mut evaluator,
             )(&[]));
-            evaluator
-                .activate_symjit(CompilationOptimizationLevel::O0)
-                .unwrap();
-            let jit = scalar_value(<f64 as GenericEvaluatorFloat>::get_evaluator(
-                &mut evaluator,
-            )(&[]));
-            for actual in [eager, jit] {
-                assert!(actual.re.0.is_finite() && actual.im.0.is_finite());
-                assert!(
-                    (actual.re.0 - expected).abs() <= 4.0 * f64::EPSILON * expected.abs(),
-                    "actual={actual:?}, expected={expected}"
-                );
-                assert_eq!(actual.im.0, 0.0);
+            for level in [
+                CompilationOptimizationLevel::O0,
+                CompilationOptimizationLevel::O3,
+            ] {
+                evaluator.activate_symjit(level).unwrap();
+                let jit = scalar_value(<f64 as GenericEvaluatorFloat>::get_evaluator(
+                    &mut evaluator,
+                )(&[]));
+                for actual in [eager, jit] {
+                    assert!(actual.re.0.is_finite() && actual.im.0.is_finite());
+                    assert!(
+                        (actual.re.0 - expected).abs() <= 4.0 * f64::EPSILON * expected.abs(),
+                        "level={level}, actual={actual:?}, expected={expected}"
+                    );
+                    assert_eq!(actual.im.0, 0.0);
+                }
             }
         }
     }

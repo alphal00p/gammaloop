@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 
@@ -20,8 +20,8 @@ use crate::observables::{
 use crate::processes::{CutGroupId, GraphGroupSelectionSpec, StandaloneExportSettings};
 use crate::subtraction::lu_counterterm::LUSharedOverlaps;
 use crate::utils::{
-    ArbPrec, F, FloatLike, RuntimeCache, f128, format_for_compare_digits,
-    get_n_dim_for_n_loop_momenta,
+    ArbPrec, F, FloatLike, RuntimeCache, SamplingFloat, SamplingPrecision, f128,
+    format_for_compare_digits, get_n_dim_for_n_loop_momenta,
 };
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::owo_colors::OwoColorize;
@@ -2022,9 +2022,15 @@ pub struct LmbMultiChannelingSetup {
         RuntimeCache<Result<SamplingChannelBridge, sampling_maps::SamplingEvaluationError>>,
     pub(crate) sampling_bridge_quad:
         RuntimeCache<Result<SamplingChannelBridge<f128>, sampling_maps::SamplingEvaluationError>>,
+    pub(crate) sampling_bridge_fixed256: RuntimeCache<
+        Result<SamplingChannelBridge<SamplingFloat>, sampling_maps::SamplingEvaluationError>,
+    >,
     pub(crate) sampling_bridge_arb: RuntimeCache<
         Result<SamplingChannelBridge<ArbPrec>, sampling_maps::SamplingEvaluationError>,
     >,
+    /// One fixed source precision and strictest accuracy budget for the whole
+    /// integrand epoch. RuntimeCache contributes no bytes to saved states.
+    pub(crate) sampling_source: RuntimeCache<(SamplingPrecision, f64)>,
     pub(crate) sampling_catalogue: RuntimeCache<SamplingChannelCatalogue>,
     pub(crate) sampling_programs: RuntimeCache<Vec<SamplingChannelPrograms>>,
 }
@@ -2051,7 +2057,9 @@ impl LmbMultiChannelingSetup {
     pub(crate) fn invalidate_sampling(&mut self) {
         self.sampling_bridge.invalidate();
         self.sampling_bridge_quad.invalidate();
+        self.sampling_bridge_fixed256.invalidate();
         self.sampling_bridge_arb.invalidate();
+        self.sampling_source.invalidate();
         self.sampling_catalogue.invalidate();
         self.sampling_programs.invalidate();
     }
@@ -2628,6 +2636,91 @@ pub trait ProcessIntegrandImpl {
 
     fn warm_up(&mut self, model: &Model) -> Result<()>;
 
+    /// Choose the complete numerical proposal before any draw or physical retry.
+    /// This conservative admission floor is not a pointwise map-error bound;
+    /// density/root checks still fail explicitly when the fixed law is unresolved.
+    fn sampling_source_policy(&self) -> Result<(SamplingPrecision, f64)> {
+        let settings = self.get_settings();
+        let budget = GammaLoopSample::<ArbPrec>::source_accuracy_budget(settings)?;
+        let floor = F::<f128>::default().epsilon().sqrt().into_ff64().0;
+        let parameterization = settings
+            .sampling
+            .get_parameterization_settings()
+            .ok_or_else(|| eyre!("sampling source policy requires a channel parameterization"))?;
+        let quad_eligible = budget >= floor
+            && self.graph_count() > 0
+            && parameterization.sampling_channels.weight != SamplingChannelWeight::SingularityProxy
+            && (0..self.graph_count()).all(|id| {
+                self.get_graph(id)
+                    .sampling_setup()
+                    .sampling_catalogue
+                    .as_ref()
+                    .is_some_and(SamplingChannelCatalogue::supports_fixed_quad_source)
+            });
+        let externals = settings
+            .kinematics
+            .externals
+            .get_dependent_externals::<ArbPrec>(self.get_dependent_momenta_constructor())?;
+        let mut inputs = externals
+            .iter()
+            .flat_map(|momentum| {
+                [
+                    momentum.temporal.value.clone(),
+                    momentum.spatial.px.clone(),
+                    momentum.spatial.py.clone(),
+                    momentum.spatial.pz.clone(),
+                ]
+            })
+            .collect_vec();
+        let scale = F::<ArbPrec>::from_f64(settings.kinematics.e_cm);
+        let b = F::<ArbPrec>::from_f64(parameterization.b);
+        inputs.extend([
+            scale.square(),
+            &scale * &b,
+            scale,
+            b,
+            F::<ArbPrec>::from_f64(parameterization.power),
+            F::<ArbPrec>::from_f64(settings.lu_h_function.sigma),
+        ]);
+        for id in 0..self.graph_count() {
+            for mass in self
+                .get_graph(id)
+                .get_real_mass_vector()
+                .iter()
+                .filter_map(|(_, mass)| mass.as_ref())
+            {
+                let mass = F::<ArbPrec>::from_ff64(*mass);
+                inputs.extend([mass.square(), mass]);
+            }
+        }
+        if inputs
+            .iter()
+            .any(|value| value.is_nan() || value.is_infinite())
+        {
+            return Err(eyre!(
+                "sampling source has nonfinite fixed kinematic, mass or parameterization input"
+            ));
+        }
+        let quad_representable = inputs
+            .iter()
+            .all(|value| F::<f128>::from_arb(&value.0).is_ok());
+        let fixed256_floor = F::<SamplingFloat>::default().epsilon().sqrt().into_ff64().0;
+        Ok((
+            if quad_eligible && quad_representable {
+                SamplingPrecision::Quad
+            } else if budget >= fixed256_floor
+                && inputs
+                    .iter()
+                    .all(|value| F::<SamplingFloat>::from_arb(&value.0).is_ok())
+            {
+                SamplingPrecision::Fixed256
+            } else {
+                SamplingPrecision::Arb
+            },
+            budget,
+        ))
+    }
+
     /// Compile fixed graph geometry after process warmup has prepared masses
     /// and improved externals. Publish only when the fixed canonical precision
     /// has every bridge valid. Native bindings remain available for component
@@ -2670,7 +2763,26 @@ pub trait ProcessIntegrandImpl {
             setup.sampling_catalogue.set(catalogue);
             setup.sampling_programs.set(programs);
         }
-        let result = self.prepare_sampling_precision::<ArbPrec>();
+        let result = (|| {
+            let (precision, budget) = self.sampling_source_policy()?;
+            match precision {
+                SamplingPrecision::Quad => self.prepare_sampling_precision::<f128>(),
+                SamplingPrecision::Fixed256 => self.prepare_sampling_precision::<SamplingFloat>(),
+                SamplingPrecision::Arb => self.prepare_sampling_precision::<ArbPrec>(),
+                SamplingPrecision::Double => unreachable!("Double is never a canonical source"),
+            }?;
+            for graph in self.get_terms_mut() {
+                graph
+                    .sampling_setup_mut()
+                    .sampling_source
+                    .set((precision, budget));
+            }
+            crate::debug_tags!(#sampling;
+                stage = "sampling_source_warmup", precision = %precision, accuracy_budget = budget,
+                "selected fixed source for the complete integrand epoch"
+            );
+            Ok(())
+        })();
         if result.is_ok() {
             // Preserve the configured native component APIs and their cached
             // numerical diagnostics, without requiring a second proposal law
@@ -2687,7 +2799,7 @@ pub trait ProcessIntegrandImpl {
                 let native = match precision {
                     Precision::Double => self.prepare_sampling_precision::<f64>(),
                     Precision::Quad => self.prepare_sampling_precision::<f128>(),
-                    Precision::Arb => continue,
+                    Precision::Arb => self.prepare_sampling_precision::<ArbPrec>(),
                 };
                 if let Err(error) = native {
                     crate::debug_tags!(#sampling;
@@ -2751,7 +2863,18 @@ pub trait ProcessIntegrandImpl {
             .collect_vec();
         // The materialized draw, map consistency and physical host adoption
         // share one accuracy budget; native physical retries need no map binding.
-        let density_tolerance = GammaLoopSample::<T>::relative_accuracy_budget(self.get_settings());
+        let (source_precision, source_budget) = self
+            .get_graph(0)
+            .sampling_setup()
+            .sampling_source
+            .as_ref()
+            .copied()
+            .map_or_else(|| self.sampling_source_policy(), Ok)?;
+        let density_tolerance = if source_precision == T::sampling_precision() {
+            source_budget
+        } else {
+            GammaLoopSample::<T>::relative_accuracy_budget(self.get_settings())
+        };
         let bridges = (0..self.graph_count()).map(|id| {
             let graph = self.get_graph(id);
             let setup = graph.sampling_setup();
@@ -3217,6 +3340,8 @@ pub struct SamplingLawProbe<'a> {
     channel_id: SamplingChannelId,
     radial_coordinate: usize,
     retry_lower_half: bool,
+    sign_coordinate: Option<usize>,
+    alternating_graph_sign: bool,
     calls: [std::sync::atomic::AtomicUsize; 3],
 }
 
@@ -3227,6 +3352,7 @@ impl SamplingLawProbe<'_> {
         sample: &MomentumSample<T>,
         rotation: &Rotation,
         canonical: Option<&DiscreteGraphSample<ArbPrec>>,
+        graph_id: usize,
     ) -> Result<GraphEvaluationResult<T>> {
         let canonical =
             canonical.expect("production sampling probe receives the retained canonical row");
@@ -3248,9 +3374,10 @@ impl SamplingLawProbe<'_> {
         );
         let precision = T::sampling_precision();
         let index = match precision {
-            Precision::Double => 0,
-            Precision::Quad => 1,
-            Precision::Arb => 2,
+            SamplingPrecision::Double => 0,
+            SamplingPrecision::Quad => 1,
+            SamplingPrecision::Arb => 2,
+            SamplingPrecision::Fixed256 => unreachable!("source precision is not a physical lane"),
         };
         self.calls[index].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let point = sample
@@ -3269,13 +3396,22 @@ impl SamplingLawProbe<'_> {
         {
             let half = sample.one() / sample.one().from_usize(2);
             result.integrand_result.re = if self.retry_lower_half
-                && precision == Precision::Double
+                && precision == SamplingPrecision::Double
                 && F(reference.coordinates[self.radial_coordinate].clone()) < half
             {
                 sample.zero() / sample.zero()
             } else {
                 F(reference.inverse_jacobian)
             };
+            if let Some(axis) = self.sign_coordinate {
+                if F(reference.coordinates[axis].clone()) < half {
+                    result.integrand_result.re = -result.integrand_result.re;
+                }
+                result.integrand_result.im = -result.integrand_result.re.clone();
+            }
+            if self.alternating_graph_sign && graph_id % 2 == 1 {
+                result.integrand_result = -result.integrand_result;
+            }
         }
         Ok(result)
     }
@@ -3349,7 +3485,7 @@ fn evaluate_graph_term<T: FloatLike, I: ProcessIntegrandImpl>(
             EvaluationTarget::Physical(model) => model,
             #[cfg(test)]
             EvaluationTarget::SamplingLaw(probe) => {
-                return probe.evaluate(sample, context.rotation, canonical_sample);
+                return probe.evaluate(sample, context.rotation, canonical_sample, graph_id);
             }
             EvaluationTarget::Reference(reference) => {
                 // A reference is defined in the original raw frame, including its
@@ -3614,6 +3750,40 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
 
     let mut graph_result = graph_results[primary_rotation_index].clone();
     graph_result.integrand_result = average_result.clone();
+    if graph_result.absolute_integrand_result.is_some() {
+        // The physical absolute integral is a separate observable: cancellation
+        // between different channel points must not hide an unstable absolute
+        // contribution. Reuse the configured component/norm criterion, without
+        // borrowing the signed integral's maximum-weight escalation scale.
+        let absolute_results = graph_results
+            .iter()
+            .map(|result| {
+                result.absolute_integrand_result.clone().ok_or_else(|| {
+                    eyre!("sampling-channel absolute contribution missing from a rotation")
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let check = if context.check_on_norm {
+            stability_check_on_norm::<T>
+        } else {
+            stability_check::<T>
+        };
+        let (absolute, accuracy, stable, _) = check(
+            integrand.get_settings(),
+            &absolute_results,
+            context.stability_level,
+            Complex::new_re(average_result.re.zero()),
+            F::<T>::from_ff64(context.wgt),
+            context.is_final_level,
+            context.escalate_if_exact_zero,
+        );
+        graph_result.absolute_integrand_result = Some(absolute);
+        estimated_relative_accuracy = estimated_relative_accuracy
+            .into_iter()
+            .chain(accuracy)
+            .reduce(|left, right| left.max(right));
+        is_stable &= stable;
+    }
     if matches!(context.target, EvaluationTarget::Reference(_)) {
         // The Gaussian value and its raw-momentum moment are independent
         // observables. Reuse the scalar stability owner for the moment too;
@@ -3793,8 +3963,11 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
         evaluation_metadata,
     };
     let mut result = GraphEvaluationResult::zero(zero.clone());
+    let mut absolute = Complex::new_re(zero.clone());
+    let mut has_sampling_channels = false;
     for (group_index, (group_id, rows)) in gammaloop_sample.groups.iter().enumerate() {
         let mut grouped_events = crate::observables::GenericEventGroup::default();
+        let mut channel_values = BTreeMap::new();
         for (row_index, row) in rows.iter().enumerate() {
             let canonical_row =
                 canonical_sample.map(|sample| &sample.groups[group_index].1[row_index]);
@@ -3812,6 +3985,14 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
             // once through the same per-row owner, including explicit sums.
             graph_result.integrand_result *= Complex::new_re(row.integrand_prefactor.clone());
             graph_result.apply_sampling_factor(row.sample.jacobian());
+            has_sampling_channels |= row.channel_id.is_some();
+            // The source owner prepares one master point per channel and clones
+            // it across group members. Sum their complete physical bodies here;
+            // only distinct channel points contribute separate absolute values.
+            *channel_values
+                .entry(row.channel_id)
+                .or_insert_with(|| Complex::new_re(zero.clone())) +=
+                graph_result.integrand_result.clone();
             if group_id.is_some() {
                 for mut events in graph_result.event_groups.drain(..) {
                     grouped_events.append(&mut events);
@@ -3822,7 +4003,18 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
         if !grouped_events.is_empty() {
             result.event_groups.push(grouped_events);
         }
+        for value in channel_values.into_values() {
+            absolute += Complex::new(value.re.abs(), value.im.abs());
+        }
     }
+    result.absolute_integrand_result = Some(if has_sampling_channels {
+        absolute
+    } else {
+        Complex::new(
+            result.integrand_result.re.abs(),
+            result.integrand_result.im.abs(),
+        )
+    });
     Ok(result)
 }
 
@@ -3999,20 +4191,61 @@ impl<'a> EvaluationSource<'a> {
         let started = Instant::now();
         let history = std::mem::take(&mut metadata.radial_root_diagnostics);
         metadata.sampling_proposal_policies.begin_collection();
-        let result = match self {
-            Self::XSpace(sample) => parameterize::<ArbPrec, I>(sample, integrand, metadata),
-            Self::Momentum(input) => {
-                let ready = if input.channel_id.is_some() {
-                    integrand.prepare_sampling_precision::<ArbPrec>()
-                } else {
-                    Ok(())
-                };
-                ready.and_then(|_| {
+        let result = (|| {
+            let precision = if integrand.get_settings().sampling.uses_sampling_channels()
+                && !matches!(self, Self::Momentum(input) if input.channel_id.is_none())
+            {
+                integrand
+                    .get_graph(0)
+                    .sampling_setup()
+                    .sampling_source
+                    .as_ref()
+                    .ok_or_else(|| eyre!("fixed sampling source is not initialized; call warm_up"))?
+                    .0
+            } else {
+                SamplingPrecision::Arb
+            };
+            match (self, precision) {
+                (Self::XSpace(sample), SamplingPrecision::Quad) => {
+                    parameterize::<f128, I>(sample, integrand, metadata)?.into_canonical(
+                        &integrand.get_settings().kinematics.externals,
+                        integrand.get_dependent_momenta_constructor(),
+                    )
+                }
+                (Self::Momentum(input), SamplingPrecision::Quad) => {
+                    integrand.prepare_sampling_precision::<f128>()?;
+                    build_direct_gamma_sample::<f128, I>(integrand, input, metadata)?
+                        .into_canonical(
+                            &integrand.get_settings().kinematics.externals,
+                            integrand.get_dependent_momenta_constructor(),
+                        )
+                }
+                (Self::XSpace(sample), SamplingPrecision::Fixed256) => {
+                    parameterize::<SamplingFloat, I>(sample, integrand, metadata)?.into_canonical(
+                        &integrand.get_settings().kinematics.externals,
+                        integrand.get_dependent_momenta_constructor(),
+                    )
+                }
+                (Self::Momentum(input), SamplingPrecision::Fixed256) => {
+                    integrand.prepare_sampling_precision::<SamplingFloat>()?;
+                    build_direct_gamma_sample::<SamplingFloat, I>(integrand, input, metadata)?
+                        .into_canonical(
+                            &integrand.get_settings().kinematics.externals,
+                            integrand.get_dependent_momenta_constructor(),
+                        )
+                }
+                (Self::XSpace(sample), SamplingPrecision::Arb) => {
+                    parameterize::<ArbPrec, I>(sample, integrand, metadata)
+                }
+                (Self::Momentum(input), SamplingPrecision::Arb) => {
+                    if input.channel_id.is_some() {
+                        integrand.prepare_sampling_precision::<ArbPrec>()?;
+                    }
                     build_direct_gamma_sample::<ArbPrec, I>(integrand, input, metadata)
-                })
+                }
+                _ => unreachable!("prepared sources and Double source policies are excluded"),
             }
-            Self::Prepared { .. } => unreachable!(),
-        };
+        })();
         // Canonical roots and foreign inverses never consume native physical
         // retry occurrences. Preserve the discrete decisions and inclusive cost.
         metadata.radial_root_diagnostics = history;
@@ -4022,7 +4255,7 @@ impl<'a> EvaluationSource<'a> {
         metadata.parameterization_time += elapsed;
         result
             .map(Some)
-            .wrap_err("canonical sampling preparation failed at the fixed 1000-bit budget")
+            .wrap_err("canonical sampling preparation failed at the fixed source precision")
     }
 
     fn build_gamma_sample<T: FloatLike, I: ProcessIntegrandImpl>(
@@ -4628,8 +4861,20 @@ fn finalize_precise_evaluation_result<T: FloatLike>(
     integrator_weight: F<f64>,
     mut evaluation_metadata: EvaluationMetaData,
 ) -> GenericEvaluationResult<T> {
-    let re_is_nan = result.result.re.is_nan() || result.result.re.is_infinite();
-    let im_is_nan = result.result.im.is_nan() || result.result.im.is_infinite();
+    let re_is_nan = result.result.re.is_nan()
+        || result.result.re.is_infinite()
+        || result
+            .graph_result
+            .absolute_integrand_result
+            .as_ref()
+            .is_some_and(|value| value.re.is_nan() || value.re.is_infinite());
+    let im_is_nan = result.result.im.is_nan()
+        || result.result.im.is_infinite()
+        || result
+            .graph_result
+            .absolute_integrand_result
+            .as_ref()
+            .is_some_and(|value| value.im.is_nan() || value.im.is_infinite());
     if re_is_nan || im_is_nan {
         warn!(
             stage = "process_final_nonfinite_sample",
@@ -4665,6 +4910,12 @@ fn finalize_precise_evaluation_result<T: FloatLike>(
     GenericEvaluationResult {
         reference_moments: result.graph_result.reference_moments,
         integrand_result: nanless_result,
+        absolute_integrand_result: result.graph_result.absolute_integrand_result.map(|value| {
+            Complex::new(
+                if re_is_nan { value.re.zero() } else { value.re },
+                if im_is_nan { value.im.zero() } else { value.im },
+            )
+        }),
         parameterization_jacobian,
         integrator_weight,
         event_groups,
@@ -4798,8 +5049,8 @@ fn evaluate_momentum_configuration_precise<I: ProcessIntegrandImpl>(
 #[cfg(test)]
 pub(crate) mod tests {
     use super::{
-        LmbMultiChannelingSetup, RuntimeCache, SamplingChannelCompileContext, SamplingChannelId,
-        filtered_orientation_count, resolve_sampling_channel_selection,
+        GraphTerm, LmbMultiChannelingSetup, RuntimeCache, SamplingChannelCompileContext,
+        SamplingChannelId, filtered_orientation_count, resolve_sampling_channel_selection,
         resolve_visible_orientation_id, validate_orientation_catalog_group,
         validate_process_runtime_settings,
     };
@@ -4834,6 +5085,389 @@ pub(crate) mod tests {
     use std::sync::OnceLock;
     use typed_index_collections::TiVec;
 
+    /// Use the existing generated scalar cut fixture for a fixed-source body
+    /// retry. Its normalized q target makes a missing/doubled J*w observable.
+    pub(crate) fn check_fixed_quad_source_transport(
+        runtime: &mut super::ProcessIntegrand,
+        model: &crate::model::Model,
+        source: &symbolica::numerical_integration::Sample<F<f64>>,
+    ) -> color_eyre::Result<()> {
+        use super::{
+            EvaluationSource, EvaluationTarget, GraphTerm, ProcessIntegrand, ProcessIntegrandImpl,
+            SamplingLawProbe, evaluate_from_source_precise,
+        };
+        use crate::{
+            integrands::evaluation::EvaluationMetaData,
+            settings::runtime::{Precision, StabilityLevelSetting},
+            utils::{ArbPrec, QuadFloat, SamplingFloat, SamplingPrecision},
+        };
+        use spenso::algebra::complex::Complex;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let original_sampling = runtime.get_settings().sampling.clone();
+        for fixed256 in [false, true] {
+            runtime.get_mut_settings().sampling = original_sampling.clone();
+            if fixed256 {
+                let mut parser: crate::settings::runtime::SamplingSettingsParser =
+                    toml::from_str(&toml::to_string(&original_sampling)?)?;
+                parser.sampling_channel_weight =
+                    crate::settings::runtime::SamplingChannelWeight::SingularityProxy;
+                for definitions in parser.channel_definitions.values_mut() {
+                    for definition in definitions.values_mut() {
+                        definition.singularity_proxy = Some("1".into());
+                    }
+                }
+                runtime.get_mut_settings().sampling = toml::from_str(&toml::to_string(&parser)?)?;
+            }
+            let expected_source = if fixed256 {
+                SamplingPrecision::Fixed256
+            } else {
+                SamplingPrecision::Quad
+            };
+            let settings = runtime.get_mut_settings();
+            settings.stability.levels = vec![
+                StabilityLevelSetting::default_double(),
+                StabilityLevelSetting::default_quad(),
+                StabilityLevelSetting::default_arb(),
+            ];
+            settings.stability.rotation_axis.clear();
+            settings.stability.escalate_if_exact_zero = false;
+            settings.stability.loop_momenta_norm_escalation_factor = 0.0;
+            runtime.warm_up(model)?;
+            let ProcessIntegrand::CrossSection(integrand) = runtime else {
+                unreachable!("generated cut fixture")
+            };
+            let policy = integrand
+                .get_graph(0)
+                .sampling_setup()
+                .sampling_source
+                .as_ref()
+                .copied()
+                .unwrap();
+            assert_eq!(policy.0, expected_source);
+            let saved_catalogue = integrand
+                .get_graph(0)
+                .sampling_setup()
+                .sampling_catalogue
+                .as_ref()
+                .unwrap()
+                .clone();
+            integrand
+                .get_graph_mut(0)
+                .sampling_setup_mut()
+                .sampling_catalogue
+                .as_mut()
+                .unwrap()
+                .entries
+                .push(super::sampling_selection::SamplingCatalogueEntry::Surface {
+                    edges: vec![1, 2],
+                    parent_lmb: vec![1],
+                });
+            assert_eq!(
+                integrand.sampling_source_policy()?.0,
+                SamplingPrecision::Fixed256
+            );
+            integrand
+                .get_graph_mut(0)
+                .sampling_setup_mut()
+                .sampling_catalogue
+                .set(saved_catalogue);
+            let saved_externals = integrand.settings.kinematics.externals.clone();
+            let mut external_values = saved_externals.get_dependent_externals::<ArbPrec>(
+                integrand.get_dependent_momenta_constructor(),
+            )?;
+            external_values[crate::momentum::sample::ExternalIndex(0)]
+                .spatial
+                .px = F::<ArbPrec>::default().from_usize(2).powi(2000);
+            let crate::settings::runtime::kinematic::Externals::Constant { arb_cache, .. } =
+                &mut integrand.settings.kinematics.externals;
+            arb_cache.set(external_values);
+            assert_eq!(
+                integrand.sampling_source_policy()?.0,
+                SamplingPrecision::Fixed256
+            );
+            integrand.settings.kinematics.externals = saved_externals;
+            assert_eq!(integrand.sampling_source_policy()?, policy);
+            let mut metadata = EvaluationMetaData::new_empty();
+            let expected = if fixed256 {
+                super::parameterize::<SamplingFloat, _>(source, integrand, &mut metadata)?
+                    .into_canonical(
+                        &integrand.get_settings().kinematics.externals,
+                        integrand.get_dependent_momenta_constructor(),
+                    )?
+            } else {
+                super::parameterize::<QuadFloat, _>(source, integrand, &mut metadata)?
+                    .into_canonical(
+                        &integrand.get_settings().kinematics.externals,
+                        integrand.get_dependent_momenta_constructor(),
+                    )?
+            };
+            let source_kind = EvaluationSource::XSpace(source);
+            let anchor = source_kind.prepare_draw(integrand, &mut metadata)?.unwrap();
+            assert_eq!(format!("{anchor:?}"), format!("{expected:?}"));
+            let reference = integrand.get_graph(0).sampling_setup().clone();
+            let probe = SamplingLawProbe {
+                reference: &reference,
+                channel_id: SamplingChannelId(0),
+                radial_coordinate: 0,
+                retry_lower_half: true,
+                sign_coordinate: None,
+                alternating_graph_sign: false,
+                calls: std::array::from_fn(|_| AtomicUsize::new(0)),
+            };
+            let value = evaluate_from_source_precise(
+                integrand,
+                EvaluationTarget::SamplingLaw(&probe),
+                EvaluationSource::XSpace(source),
+                F(1.0),
+                false,
+                Complex::new_zero(),
+            )?
+            .try_into_f64()?;
+            assert_eq!(
+                value.evaluation_metadata.final_precision(),
+                Some(Precision::Quad)
+            );
+            assert_eq!(probe.calls[0].load(Ordering::Relaxed), 1);
+            assert_eq!(probe.calls[1].load(Ordering::Relaxed), 1);
+            assert_eq!(probe.calls[2].load(Ordering::Relaxed), 0);
+            assert!((value.integrand_result.re.0 - 1.0).abs() < 1.0e-8);
+            let prepared = EvaluationSource::Prepared {
+                sample: &anchor,
+                original: &source_kind,
+            };
+            let arb_sample = prepared.build_gamma_sample::<ArbPrec, _>(integrand, &mut metadata)?;
+            let arb_value = super::evaluate_single(
+                integrand,
+                EvaluationTarget::SamplingLaw(&probe),
+                &arb_sample,
+                &crate::momentum::Rotation::new(crate::momentum::RotationMethod::Identity),
+                &mut metadata,
+                Some(&anchor),
+            )?;
+            assert_eq!(probe.calls[2].load(Ordering::Relaxed), 1);
+            assert!((arb_value.integrand_result.re.into_ff64().0 - 1.0).abs() < 1.0e-8);
+            for calls in &probe.calls {
+                calls.store(0, Ordering::Relaxed);
+            }
+            assert!(
+                integrand
+                    .get_graph(0)
+                    .sampling_setup()
+                    .sampling_bridge::<ArbPrec>()
+                    .is_ok()
+            );
+            // A signed normalized density q(k) has integral zero and absolute
+            // integral one when its reference radial CDF selects the sign.
+            // Pair u with 1-u: two distinct channel points cancel in the signed
+            // estimator, while their absolute contributions must still add.
+            let mut absolute_runtime = integrand.clone();
+            let catalogue = absolute_runtime
+                .get_graph_mut(0)
+                .sampling_setup_mut()
+                .sampling_catalogue
+                .as_mut()
+                .unwrap();
+            catalogue.entries.push(catalogue.entries[0].clone());
+            let mut signed_probe = SamplingLawProbe {
+                reference: &reference,
+                channel_id: SamplingChannelId(0),
+                radial_coordinate: 0,
+                retry_lower_half: false,
+                sign_coordinate: Some(0),
+                alternating_graph_sign: false,
+                calls: std::array::from_fn(|_| AtomicUsize::new(0)),
+            };
+            let (selection, original_coordinates) =
+                super::gammaloop_sample::unwrap_sample::<f64>(source);
+            for lower in [0.125, 0.25, 0.375] {
+                let mut rows = Vec::new();
+                for (channel, radial) in [lower, 1.0 - lower].into_iter().enumerate() {
+                    let mut coordinates = original_coordinates.clone();
+                    coordinates[0] = F(radial);
+                    let source = symbolica::numerical_integration::Sample::Uniform(
+                        F(1.0),
+                        selection.clone(),
+                        coordinates,
+                    );
+                    let mut draw = EvaluationSource::XSpace(&source)
+                        .prepare_draw(&mut absolute_runtime, &mut metadata)?
+                        .unwrap();
+                    let mut row = draw.groups[0].1.remove(0);
+                    row.sample.sample.jacobian /= row.sample.one().from_usize(2);
+                    row.channel_id = Some(SamplingChannelId(channel));
+                    row.prepared_lu_hosts.clear();
+                    rows.push(row);
+                }
+                let draw = super::GammaLoopSample {
+                    groups: vec![(Some(GroupId(0)), rows)],
+                };
+                let identity =
+                    crate::momentum::Rotation::new(crate::momentum::RotationMethod::Identity);
+                let value = super::evaluate_single(
+                    &mut absolute_runtime,
+                    EvaluationTarget::SamplingLaw(&signed_probe),
+                    &draw,
+                    &identity,
+                    &mut metadata,
+                    Some(&draw),
+                )?;
+                assert!(value.integrand_result.re.into_ff64().0.abs() < 1.0e-8);
+                assert!(value.integrand_result.im.into_ff64().0.abs() < 1.0e-8);
+                let absolute = value.absolute_integrand_result.unwrap();
+                assert!((absolute.re.into_ff64().0 - 1.0).abs() < 1.0e-8);
+                assert!((absolute.im.into_ff64().0 - 1.0).abs() < 1.0e-8);
+                // Selected-channel MC has probability 1/2. Its individual
+                // absolute weighted samples are also one, not two or one-half.
+                for row in &draw.groups[0].1 {
+                    let selected = super::GammaLoopSample {
+                        groups: vec![(Some(GroupId(0)), vec![row.clone()])],
+                    };
+                    let value = super::evaluate_single(
+                        &mut absolute_runtime,
+                        EvaluationTarget::SamplingLaw(&signed_probe),
+                        &selected,
+                        &identity,
+                        &mut metadata,
+                        Some(&selected),
+                    )?;
+                    assert!(
+                        (2.0 * value.absolute_integrand_result.unwrap().re.into_ff64().0 - 1.0)
+                            .abs()
+                            < 1.0e-8
+                    );
+                }
+                // Opposite graph pieces at the SAME physical channel point
+                // cancel before abs, including the imaginary component.
+                let mut grouped = absolute_runtime.clone();
+                grouped
+                    .data
+                    .graph_terms
+                    .push(grouped.data.graph_terms[0].clone());
+                grouped.data.graph_to_group_id.push(0);
+                let mut grouped_draw = draw.clone();
+                for row in &draw.groups[0].1 {
+                    let mut partner = row.clone();
+                    partner.graph_id = 1;
+                    grouped_draw.groups[0].1.push(partner);
+                }
+                signed_probe.alternating_graph_sign = true;
+                let canceled = super::evaluate_single(
+                    &mut grouped,
+                    EvaluationTarget::SamplingLaw(&signed_probe),
+                    &grouped_draw,
+                    &identity,
+                    &mut metadata,
+                    Some(&grouped_draw),
+                )?;
+                signed_probe.alternating_graph_sign = false;
+                assert_eq!(canceled.integrand_result, Complex::new_re(draw.zero()));
+                assert_eq!(
+                    canceled.absolute_integrand_result,
+                    Some(Complex::new_re(draw.zero()))
+                );
+            }
+            let unavailable = super::sampling_maps::SamplingEvaluationError::Unrepresentable {
+                operation: "test-only fixed source poison",
+                detail: "cannot redraw at Arb".into(),
+            };
+            let setup = integrand.get_graph_mut(0).sampling_setup_mut();
+            if fixed256 {
+                setup.sampling_bridge_fixed256.set(Err(unavailable));
+            } else {
+                setup.sampling_bridge_quad.set(Err(unavailable));
+            }
+            let failure = evaluate_from_source_precise(
+                integrand,
+                EvaluationTarget::SamplingLaw(&probe),
+                EvaluationSource::XSpace(source),
+                F(1.0),
+                false,
+                Complex::new_zero(),
+            )
+            .unwrap_err();
+            assert!(format!("{failure:#}").contains("fixed source precision"));
+            assert!(
+                probe
+                    .calls
+                    .iter()
+                    .all(|calls| calls.load(Ordering::Relaxed) == 0)
+            );
+            let input = super::MomentumSpaceEvaluationInput {
+                loop_momenta: vec![ThreeMomentum::new(F(0.1), F(0.2), F(0.3))],
+                integrator_weight: F(1.0),
+                graph_id: Some(0),
+                group_id: None,
+                orientation: None,
+                channel_id: None,
+            };
+            let raw = EvaluationSource::Momentum(&input)
+                .prepare_draw(integrand, &mut metadata)?
+                .unwrap();
+            assert_eq!(
+                raw.get_default_sample().loop_moms().0[0].px,
+                F(0.1).to_arb_exact()?
+            );
+            let selected_input = super::MomentumSpaceEvaluationInput {
+                channel_id: Some(SamplingChannelId(0)),
+                ..input
+            };
+            assert!(
+                EvaluationSource::Momentum(&selected_input)
+                    .prepare_draw(integrand, &mut metadata)
+                    .is_err()
+            );
+        }
+        runtime.get_mut_settings().sampling = original_sampling;
+        // Fixed inputs and accuracy select an epoch, never an active point.
+        let floor = F::<QuadFloat>::default().epsilon().sqrt().into_ff64().0;
+        let settings = runtime.get_mut_settings();
+        for level in &mut settings.stability.levels {
+            level.required_precision_for_re = floor * 10.0;
+            level.required_precision_for_im = floor * 10.0;
+        }
+        runtime.warm_up(model)?;
+        let ProcessIntegrand::CrossSection(integrand) = runtime else {
+            unreachable!()
+        };
+        let (precision, budget) = integrand.sampling_source_policy()?;
+        assert!(budget >= floor);
+        assert_eq!(precision, SamplingPrecision::Quad);
+        runtime.get_mut_settings().stability.levels[2].required_precision_for_re = 1.0e-20;
+        runtime.warm_up(model)?;
+        let ProcessIntegrand::CrossSection(integrand) = runtime else {
+            unreachable!()
+        };
+        assert_eq!(
+            integrand
+                .get_graph(0)
+                .sampling_setup()
+                .sampling_source
+                .as_ref()
+                .unwrap()
+                .0,
+            SamplingPrecision::Fixed256
+        );
+        let fixed256_floor = F::<SamplingFloat>::default().epsilon().sqrt().into_ff64().0;
+        runtime.get_mut_settings().stability.levels[2].required_precision_for_re = fixed256_floor;
+        runtime.warm_up(model)?;
+        let ProcessIntegrand::CrossSection(integrand) = runtime else {
+            unreachable!()
+        };
+        assert_eq!(
+            integrand.sampling_source_policy()?.0,
+            SamplingPrecision::Arb
+        );
+        assert!(
+            integrand
+                .get_graph(0)
+                .sampling_setup()
+                .sampling_bridge_fixed256
+                .as_ref()
+                .is_none()
+        );
+        Ok(())
+    }
+
     /// Exercise source-private lifetime boundaries from the generated host fixture.
     pub(crate) fn check_host_source_transport<I: super::ProcessIntegrandImpl>(
         integrand: &mut I,
@@ -4850,6 +5484,17 @@ pub(crate) mod tests {
         };
         use symbolica::numerical_integration::Sample;
 
+        assert_eq!(
+            integrand
+                .get_graph(0)
+                .sampling_setup()
+                .sampling_source
+                .as_ref()
+                .unwrap()
+                .0,
+            super::SamplingPrecision::Fixed256,
+        );
+        integrand.prepare_sampling_precision::<super::ArbPrec>()?;
         let mut metadata = EvaluationMetaData::new_empty();
         // Seed an existing physical occurrence so successful and failed source
         // preparation/debug operations must preserve nonempty history as well.
@@ -4876,6 +5521,50 @@ pub(crate) mod tests {
         assert!(sampling_preparation_time > std::time::Duration::ZERO);
         assert_eq!(metadata.parameterization_time, sampling_preparation_time);
         anchor.prepare_physical_overlaps(integrand, model, &mut metadata)?;
+        // Clear only the test control's retained host so the physical owner must
+        // solve its original Arb cut equation independently at this same point.
+        let mut independent = anchor.clone();
+        for (_, rows) in &mut independent.groups {
+            for row in rows {
+                row.prepared_lu_hosts.clear();
+                row.physical_overlaps = None;
+            }
+        }
+        let mut independent_metadata = EvaluationMetaData::new_empty();
+        independent.prepare_physical_overlaps(integrand, model, &mut independent_metadata)?;
+        let identity = Rotation::new(RotationMethod::Identity);
+        let adopted_arb = super::evaluate_single(
+            integrand,
+            super::EvaluationTarget::Physical(model),
+            &anchor,
+            &identity,
+            &mut EvaluationMetaData::new_empty(),
+            Some(&anchor),
+        )?;
+        let independent_arb = super::evaluate_single(
+            integrand,
+            super::EvaluationTarget::Physical(model),
+            &independent,
+            &identity,
+            &mut independent_metadata,
+            Some(&independent),
+        )?;
+        for (adopted, solved) in [
+            (
+                &adopted_arb.integrand_result.re,
+                &independent_arb.integrand_result.re,
+            ),
+            (
+                &adopted_arb.integrand_result.im,
+                &independent_arb.integrand_result.im,
+            ),
+        ] {
+            let scale = adopted
+                .abs()
+                .max(solved.abs())
+                .max(adopted.one() / adopted.from_usize(10).powi(25));
+            assert!((adopted - solved).abs() <= scale / adopted.from_usize(10).powi(12));
+        }
         assert_eq!(metadata.generated_event_count, 0);
         assert_eq!(metadata.accepted_event_count, 0);
         let preparation_time = metadata.canonical_physical_preparation_time;
@@ -5265,6 +5954,8 @@ pub(crate) mod tests {
             channel_id: joint_id,
             radial_coordinate: 3,
             retry_lower_half: true,
+            sign_coordinate: None,
+            alternating_graph_sign: false,
             calls: std::array::from_fn(|_| AtomicUsize::new(0)),
         };
         for graph in amplitude.get_terms_mut() {
@@ -5478,7 +6169,7 @@ pub(crate) mod tests {
         amplitude
             .get_graph_mut(0)
             .sampling_setup_mut()
-            .sampling_bridge_arb
+            .sampling_bridge_fixed256
             .set(Err(
                 super::sampling_maps::SamplingEvaluationError::Unrepresentable {
                     operation: "test-only canonical map poison",
@@ -5495,7 +6186,7 @@ pub(crate) mod tests {
         )
         .unwrap_err();
         assert!(
-            format!("{failure:#}").contains("fixed 1000-bit budget"),
+            format!("{failure:#}").contains("fixed source precision"),
             "{failure:?}"
         );
         assert!(
@@ -5787,6 +6478,11 @@ pub(crate) mod tests {
             F(1.0)
         );
         assert_eq!(result.event_groups[0][0].weight, result.integrand_result);
+        // Cancellation can leave a finite signed result while the physical
+        // absolute channel sum exceeds the ordinary reporting range.
+        let mut excessive_absolute = result.clone();
+        excessive_absolute.absolute_integrand_result = Some(Complex::new_re(large.clone()));
+        assert!(excessive_absolute.try_into_f64().is_err());
         for extreme in [large.clone(), small] {
             let mut extreme_level = level.clone();
             extreme_level.result = Complex::new_re(extreme.clone());
@@ -5823,6 +6519,46 @@ pub(crate) mod tests {
             },
         ];
         assert!(cancelling_events.try_into_f64().is_err());
+    }
+
+    #[test]
+    fn absolute_channel_instability_cannot_hide_behind_signed_cancellation() {
+        use crate::settings::runtime::StabilityLevelSetting;
+        use spenso::algebra::complex::Complex;
+
+        let settings = RuntimeSettings::default();
+        let level = StabilityLevelSetting::default_double();
+        let signed = [Complex::new_zero(), Complex::new_zero()];
+        let absolute = [Complex::new(F(2.0), F(4.0)), Complex::new(F(3.0), F(6.0))];
+        for check in [
+            super::stability_check::<f64>,
+            super::stability_check_on_norm::<f64>,
+        ] {
+            assert!(
+                check(
+                    &settings,
+                    &signed,
+                    &level,
+                    Complex::new_zero(),
+                    F(1.0),
+                    false,
+                    false
+                )
+                .2
+            );
+            assert!(
+                !check(
+                    &settings,
+                    &absolute,
+                    &level,
+                    Complex::new_zero(),
+                    F(1.0),
+                    false,
+                    false
+                )
+                .2
+            );
+        }
     }
 
     #[test]
@@ -5901,6 +6637,14 @@ pub(crate) mod tests {
                 .expect("runtime cache should decode");
         assert_eq!(consumed, 0);
         assert!(decoded.as_ref().is_none());
+        let mut source = RuntimeCache::default();
+        source.set((super::Precision::Quad, 1.0e-13));
+        let encoded_source = bincode::encode_to_vec(&source, bincode::config::standard()).unwrap();
+        assert!(encoded_source.is_empty());
+        let (decoded_source, consumed): (RuntimeCache<(super::Precision, f64)>, usize) =
+            bincode::decode_from_slice(&encoded_source, bincode::config::standard()).unwrap();
+        assert_eq!(consumed, 0);
+        assert!(decoded_source.as_ref().is_none());
         // Cached preparation failures are as transient as compiled bridges;
         // neither payload needs a codec or may enter a saved state.
         let mut failure: RuntimeCache<
@@ -6005,7 +6749,9 @@ pub(crate) mod tests {
         let setup = LmbMultiChannelingSetup {
             sampling_bridge: Default::default(),
             sampling_bridge_quad: Default::default(),
+            sampling_bridge_fixed256: Default::default(),
             sampling_bridge_arb: Default::default(),
+            sampling_source: Default::default(),
             sampling_catalogue: Default::default(),
             sampling_programs: Default::default(),
             lmb_basis_ids: vec![LmbIndex::from(2), LmbIndex::from(0)].into(),
@@ -6222,7 +6968,9 @@ pub(crate) mod tests {
         let setup = LmbMultiChannelingSetup {
             sampling_bridge: Default::default(),
             sampling_bridge_quad: Default::default(),
+            sampling_bridge_fixed256: Default::default(),
             sampling_bridge_arb: Default::default(),
+            sampling_source: Default::default(),
             sampling_catalogue: Default::default(),
             sampling_programs: Default::default(),
             lmb_basis_ids: vec![LmbIndex::from(0), LmbIndex::from(1)].into(),
@@ -6378,7 +7126,9 @@ pub(crate) mod tests {
         let setup = LmbMultiChannelingSetup {
             sampling_bridge: Default::default(),
             sampling_bridge_quad: Default::default(),
+            sampling_bridge_fixed256: Default::default(),
             sampling_bridge_arb: Default::default(),
+            sampling_source: Default::default(),
             sampling_catalogue: Default::default(),
             sampling_programs: Default::default(),
             lmb_basis_ids: vec![LmbIndex::from(0)].into(),

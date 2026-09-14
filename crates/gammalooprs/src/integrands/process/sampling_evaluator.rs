@@ -106,8 +106,8 @@ impl SamplingExpressionEvaluator {
                 return Err(eyre!("sampling derivative parameters must be unique"));
             }
         }
-        let compile = |dual_config| {
-            GenericEvaluator::new_from_raw_params(
+        let compile = |dual_config| -> Result<GenericEvaluator> {
+            let mut evaluator = GenericEvaluator::new_from_raw_params(
                 expressions.clone(),
                 &parameters,
                 &FunctionMap::new(),
@@ -115,7 +115,17 @@ impl SamplingExpressionEvaluator {
                 OptimizationSettings::default(),
                 dual_config,
                 &EvaluatorSettings::default(),
-            )
+            )?;
+            // Map rational coefficients once, before any source draw. Physical
+            // evaluators retain an empty cache and their existing three lanes.
+            let program = evaluator
+                .rational
+                .as_ref()
+                .expect("new sampling evaluators retain their rational program")
+                .clone()
+                .map_coeff(&|r| Complex::new(F::from(&r.re), F::from(&r.im)));
+            evaluator.sampling_fixed256.set(program);
+            Ok(evaluator)
         };
         let evaluator = compile(None)?;
         let derivative_evaluator = if derivative_parameters.is_empty() {
@@ -170,6 +180,8 @@ impl SamplingExpressionEvaluator {
     /// stable tails: every evaluated exponential has a nonpositive argument.
     /// Inputs are log(t), log(R), log(beta), focused sign and broad sign;
     /// outputs are fitted log-scale, shape, CDF, survival and log(raw radius).
+    /// Only log(t) is active in the radial Jacobian; root, scale and stable-tail
+    /// signs remain runtime inputs without unused dual derivative components.
     pub(crate) fn new_lu_h_profile(
         profile: &SamplingRadialProfile,
         h: &HFunctionSettings,
@@ -258,7 +270,7 @@ impl SamplingExpressionEvaluator {
                 .map(|parameter| try_parse!(*parameter))
                 .collect::<std::result::Result<Vec<_>, _>>()
                 .map_err(|error| eyre!(error))?,
-            &[0, 1, 2, 3, 4],
+            &[0],
         )
     }
 
@@ -634,6 +646,78 @@ mod tests {
         assert_eq!(values.len(), 2);
         assert_eq!(values[0], Complex::new_re(F(5.0)));
         assert_eq!(values[1], Complex::new_re(F(6.0)));
+    }
+
+    #[test]
+    fn fixed256_sampling_eager_and_duals_share_warmed_rational_programs() {
+        use crate::utils::{RuntimeCache, SamplingFloat};
+
+        test_initialise().unwrap();
+        let x = try_parse!("sampling_fixed256::x").unwrap();
+        let y = try_parse!("sampling_fixed256::y").unwrap();
+        let mut evaluator = SamplingExpressionEvaluator::new(
+            [try_parse!(
+                "sampling_fixed256::x/7+sin(sampling_fixed256::x)+exp(sampling_fixed256::y)"
+            )
+            .unwrap()],
+            [x, y],
+            &[0, 1],
+        )
+        .unwrap();
+        assert!(evaluator.evaluator.sampling_fixed256.as_ref().is_some());
+        assert!(
+            evaluator
+                .derivative_evaluator
+                .as_ref()
+                .unwrap()
+                .sampling_fixed256
+                .as_ref()
+                .is_some()
+        );
+        let bytes = bincode::encode_to_vec(
+            &evaluator.evaluator.sampling_fixed256,
+            bincode::config::standard(),
+        )
+        .unwrap();
+        assert!(bytes.is_empty());
+        let (decoded, _): (
+            RuntimeCache<ExpressionEvaluator<Complex<F<SamplingFloat>>>>,
+            _,
+        ) = bincode::decode_from_slice(&bytes, bincode::config::standard()).unwrap();
+        assert!(decoded.as_ref().is_none());
+
+        let one = F::<SamplingFloat>::default().one();
+        let x = one.from_usize(2) / one.from_usize(3);
+        let y = &one / one.from_usize(5);
+        let expected = &x / one.from_usize(7) + x.sin() + y.exp();
+        let expected_derivatives = [&one / one.from_usize(7) + x.cos(), y.exp()];
+        let input = [x.0.clone(), y.0.clone()];
+        let scalar = evaluator.evaluate(&input).unwrap();
+        let dual = evaluator.evaluate_with_derivatives(&input).unwrap();
+        let tolerance = one.epsilon() * one.from_usize(128);
+        assert!((&scalar[0].re - &expected).abs() < tolerance);
+        assert!((&dual[0].value.re - &expected).abs() < tolerance);
+        assert_eq!(scalar[0].im, one.zero());
+        assert_eq!(dual[0].value.im, one.zero());
+        for (actual, expected) in dual[0].derivatives.iter().zip(expected_derivatives) {
+            assert!((&actual.re - expected).abs() < tolerance);
+            assert_eq!(actual.im, one.zero());
+        }
+        let mut independent = evaluator.clone();
+        independent
+            .evaluate(&[one.0.clone(), one.0.clone()])
+            .unwrap();
+        independent
+            .evaluate_with_derivatives(&[one.0.clone(), one.0.clone()])
+            .unwrap();
+        assert_eq!(evaluator.evaluate(&input).unwrap(), scalar);
+        assert_eq!(evaluator.evaluate_with_derivatives(&input).unwrap(), dual);
+        assert_eq!(
+            <SamplingFloat as GenericEvaluatorFloat>::get_evaluator_single(
+                &mut evaluator.evaluator
+            )(&[Complex::new_re(x), Complex::new_re(y)]),
+            scalar[0]
+        );
     }
 
     #[test]

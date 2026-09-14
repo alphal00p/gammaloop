@@ -19,7 +19,7 @@ use crate::{
     },
     settings::runtime::kinematic::improvement::{PhaseSpaceImprovementSettings, improve_ps},
     utils::{
-        ArbPrec, F, FloatLike, RuntimeCache, f128,
+        ArbPrec, F, FloatLike, RuntimeCache, SamplingPrecision, f128,
         serde_utils::{IsDefault, is_float},
     },
 };
@@ -303,6 +303,24 @@ impl Externals {
     {
         if let Some(cached) = T::try_extract_externals_from_cache(self) {
             return Ok(cached.clone());
+        }
+        // Sampling has no separate improved-kinematics cache. Round the original
+        // Arb authority once, so its surface geometry uses the same improved
+        // externals as the canonical physical draw, including after rotations.
+        if T::sampling_precision() == SamplingPrecision::Fixed256
+            && let Some(cached) = ArbPrec::try_extract_externals_from_cache(self)
+        {
+            return cached
+                .iter()
+                .map(|p| {
+                    Ok(FourMomentum::from([
+                        F::from_arb(&p.temporal.value.0)?,
+                        F::from_arb(&p.spatial.px.0)?,
+                        F::from_arb(&p.spatial.py.0)?,
+                        F::from_arb(&p.spatial.pz.0)?,
+                    ]))
+                })
+                .collect();
         }
 
         match self {

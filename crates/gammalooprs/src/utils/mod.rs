@@ -353,6 +353,179 @@ mod tests {
     }
 
     #[test]
+    fn canonical_native_embedding_requires_finite_singleton_enclosures() {
+        use super::{F, QuadFloat, SamplingEvaluationError};
+        use rug::Float;
+        use symbolica::domains::float::DoubleFloat;
+        for sign in [-1.0, 1.0] {
+            let low = sign * 2.0_f64.powi(-400);
+            let native = F(QuadFloat::from(DoubleFloat::from_compensated_sum(
+                sign, low,
+            )));
+            let exact = Float::with_val(1000, sign) + Float::with_val(1000, low);
+            assert_eq!(native.to_arb_exact().unwrap().0.float, exact);
+            // The exact sum spans 1075 bits, although both binary64 limbs are
+            // finite. Rounding it to the container would change the source.
+            let separated = F(QuadFloat::from(DoubleFloat::from_compensated_sum(
+                sign,
+                sign * f64::from_bits(1),
+            )));
+            assert!(matches!(
+                separated
+                    .to_arb_exact()
+                    .unwrap_err()
+                    .downcast_ref::<SamplingEvaluationError>(),
+                Some(SamplingEvaluationError::Unrepresentable {
+                    operation: "canonical source embedding",
+                    ..
+                })
+            ));
+        }
+        for value in [0.0, -0.0, f64::from_bits(1), f64::MAX] {
+            assert_eq!(
+                F(value).to_arb_exact().unwrap().0.float,
+                Float::with_val(1000, value)
+            );
+        }
+        assert!(F(-0.0).to_arb_exact().unwrap().0.float.is_sign_negative());
+        for zero in [0.0, -0.0] {
+            let native = F(QuadFloat::from_f64_exact_binary(zero));
+            assert_eq!(
+                native.to_arb_exact().unwrap().0.float.is_sign_negative(),
+                native.0.as_f64().is_sign_negative()
+            );
+        }
+        for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            assert!(F(value).to_arb_exact().is_err());
+        }
+    }
+
+    #[test]
+    fn fixed256_source_scalar_embeds_exactly_without_binary64_range_limits() {
+        use super::{ArbPrec, F, FloatLike, SamplingFloat, SamplingPrecision};
+        use crate::settings::runtime::Precision;
+        use rug::Float;
+
+        assert_eq!(
+            SamplingFloat::sampling_precision(),
+            SamplingPrecision::Fixed256
+        );
+        for (physical, sampling) in [
+            (Precision::Double, SamplingPrecision::Double),
+            (Precision::Quad, SamplingPrecision::Quad),
+            (Precision::Arb, SamplingPrecision::Arb),
+        ] {
+            assert_eq!(SamplingPrecision::from(physical), sampling);
+        }
+        let one = F::<SamplingFloat>::default().one();
+        assert_eq!(one.epsilon(), one.from_i64(2).powi(-255));
+        for exponent in [-4096, -255, 0, 255, 4096] {
+            for sign in [-1, 1] {
+                let native = one.from_i64(sign)
+                    * one.from_i64(2).powi(exponent)
+                    * (&one + one.from_i64(2).powi(-254));
+                let promoted = native.to_arb_exact().unwrap();
+                assert_eq!(promoted.0.float, native.0.float);
+                assert_eq!(F::<SamplingFloat>::from_arb(&promoted.0).unwrap(), native);
+                assert_eq!(promoted.0.float.prec(), 1000);
+                assert_eq!(native.0.float.prec(), 256);
+            }
+        }
+        for zero in [0.0, -0.0] {
+            let native = F(SamplingFloat::from_f64_exact_binary(zero));
+            assert_eq!(
+                native.to_arb_exact().unwrap().0.float.is_sign_negative(),
+                zero.is_sign_negative()
+            );
+        }
+        for invalid in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            assert!(
+                F(SamplingFloat::from(Float::with_val(256, invalid)))
+                    .to_arb_exact()
+                    .is_err()
+            );
+        }
+        // Physical inputs remain Arb values; constructing proposal externals at
+        // 256 bits does not redefine the original higher-precision kinematics.
+        let physical =
+            F::<ArbPrec>::default().one() + F::<ArbPrec>::default().from_i64(2).powi(-300);
+        assert_eq!(F::<SamplingFloat>::from_arb(&physical.0).unwrap(), one);
+        assert_ne!(physical, one.to_arb_exact().unwrap());
+    }
+
+    #[test]
+    fn fixed_mpfr_rational_coefficients_are_rounded_once() {
+        use super::VarFloat;
+        use rug::{Float, Integer, Rational};
+        use symbolica::domains::rational::Rational as SymbolicaRational;
+
+        fn check<const N: u32>() {
+            for (numerator, denominator) in [(0, 7), (1, 7), (-7, 3), (7, -3), (-7, -3)] {
+                let exact = Rational::from((numerator, denominator));
+                let rational = SymbolicaRational::from(exact.clone());
+                let actual = VarFloat::<N>::from(&rational);
+                assert_eq!(actual.float, Float::with_val(N, exact));
+                assert_eq!(actual.float.prec(), N);
+            }
+            // Exercise Symbolica's Double and Large integer storage, with
+            // either sign. The N-bit boundary also has an analytic rounding
+            // result: (2^N+3)/(2^N+1) rounds to 1+2^(1-N), not 1+2^(2-N).
+            for bits in [80, N] {
+                let power = Integer::from(1) << bits;
+                for sign in [-1, 1] {
+                    let exact = Rational::from(((power.clone() + 3) * sign, power.clone() + 1));
+                    let rational = SymbolicaRational::from(exact.clone());
+                    let actual = VarFloat::<N>::from(&rational);
+                    assert_eq!(actual.float, Float::with_val(N, exact));
+                    if bits == N {
+                        let expected =
+                            (Float::with_val(N, 1) + (Float::with_val(N, 1) >> (N - 1))) * sign;
+                        assert_eq!(actual.float, expected);
+                    }
+                }
+            }
+        }
+        check::<256>();
+        check::<1000>();
+    }
+
+    #[test]
+    fn fixed_mpfr_symbolica_inputs_use_declared_precision_for_later_arithmetic() {
+        use super::{SymbolicaFloat, VarFloat};
+        use rug::Float;
+
+        fn check<const N: u32>() {
+            for input_precision in [53, N + 31] {
+                let input = Float::with_val(input_precision, 1);
+                let native = VarFloat::<N>::from(SymbolicaFloat::from(input.clone()));
+                assert_eq!(native.float.prec(), N);
+                assert_eq!(native.float, input);
+                // Expanding a represented 53-bit input does not restore lost
+                // information, but subsequent arithmetic must use all N bits.
+                let small = VarFloat::<N>::from(Float::with_val(N, 1) >> 200_u32);
+                let expected = Float::with_val(N, 1) + &small.float;
+                assert_eq!((native + small).float, expected);
+            }
+            let precise = Float::with_val(N + 31, 1) + (Float::with_val(N + 31, 1) >> (N + 10));
+            let native = VarFloat::<N>::from(SymbolicaFloat::from(precise.clone()));
+            assert_eq!(native.float, Float::with_val(N, precise));
+            assert_eq!(native.float.prec(), N);
+            for value in [0.0, -0.0, f64::INFINITY, f64::NEG_INFINITY, f64::NAN] {
+                let native = VarFloat::<N>::from(SymbolicaFloat::from(Float::with_val(53, value)));
+                assert_eq!(native.float.prec(), N);
+                if value.is_nan() {
+                    assert!(native.float.is_nan());
+                } else {
+                    assert_eq!(native.float, value);
+                    assert_eq!(native.float.is_sign_negative(), value.is_sign_negative());
+                }
+            }
+        }
+        check::<256>();
+        check::<1000>();
+    }
+
+    #[test]
     fn canonical_scalar_relative_budget_is_directed_and_signed() {
         use super::{ArbPrec, F, FloatLike, QuadFloat, SamplingEvaluationError};
         fn check<T: FloatLike>() {
@@ -583,27 +756,9 @@ impl<const N: u32> From<Float> for VarFloat<N> {
 
 impl<const N: u32> From<&Rational> for VarFloat<N> {
     fn from(x: &Rational) -> Self {
-        let n = x.numerator();
-
-        let n = match n {
-            Integer::Double(f) => Float::with_val(N, f),
-            Integer::Large(f) => Float::with_val(N, f),
-            Integer::Single(f) => Float::with_val(N, f),
-        };
-
-        let d = x.denominator();
-
-        let d = match d {
-            Integer::Double(f) => Float::with_val(N, f),
-            Integer::Large(f) => Float::with_val(N, f),
-            Integer::Single(f) => Float::with_val(N, f),
-        };
-
-        let r = n / d;
-
-        VarFloat {
-            float: rug::Float::with_val(N, r),
-        }
+        // Round the exact rational once; separately rounded numerator and
+        // denominator can change the result by an ulp.
+        Self::from(x.to_multi_prec_float(N))
     }
 }
 
@@ -1105,9 +1260,9 @@ impl<const N: u32> From<&VarFloat<N>> for SymbolicaFloat {
 
 impl<const N: u32> From<SymbolicaFloat> for VarFloat<N> {
     fn from(value: SymbolicaFloat) -> Self {
-        Self {
-            float: value.into_inner(),
-        }
+        // Preserve the represented input at this lane's precision so later
+        // owned arithmetic cannot silently retain the input's smaller precision.
+        Self::from(value.into_inner())
     }
 }
 
@@ -1401,8 +1556,8 @@ impl FloatLike for f128 {
         Self::from(value.float.clone())
     }
 
-    fn sampling_precision() -> crate::settings::runtime::Precision {
-        crate::settings::runtime::Precision::Quad
+    fn sampling_precision() -> SamplingPrecision {
+        SamplingPrecision::Quad
     }
 
     fn sampling_bridge_cache(
@@ -1460,113 +1615,136 @@ impl FloatLike for f128 {
     }
 }
 
-impl FloatLike for ArbPrec {
-    fn mpfr_enclosure(&self, precision: u32) -> (Float, Float) {
-        (
-            Float::with_val_round(precision, &self.float, Round::Down).0,
-            Float::with_val_round(precision, &self.float, Round::Up).0,
-        )
-    }
+// Only the runtime cache hooks differ between the two fixed MPFR lanes.
+macro_rules! impl_mpfr_float_like {
+    ($scalar:ty, $precision:ident, $bridge:ident, $externals:ident => $external_cache:expr) => {
+        impl FloatLike for $scalar {
+            fn mpfr_enclosure(&self, precision: u32) -> (Float, Float) {
+                (
+                    Float::with_val_round(precision, &self.float, Round::Down).0,
+                    Float::with_val_round(precision, &self.float, Round::Up).0,
+                )
+            }
 
-    fn E(&self) -> Self {
-        Self::E()
-    }
+            fn E(&self) -> Self {
+                Self::E()
+            }
 
-    fn PIHALF(&self) -> Self {
-        Self::PIHALF()
-    }
+            fn PIHALF(&self) -> Self {
+                Self::PIHALF()
+            }
 
-    fn SQRT_2(&self) -> Self {
-        Self::from_f64(2.0).sqrt()
-    }
+            fn SQRT_2(&self) -> Self {
+                self.from_i64(2).sqrt()
+            }
 
-    fn SQRT_2_HALF(&self) -> Self {
-        Self::from_f64(2.0).sqrt() / Self::from_f64(2.0)
-    }
+            fn SQRT_2_HALF(&self) -> Self {
+                self.from_i64(2).sqrt() / self.from_i64(2)
+            }
 
-    fn rem_euclid(&self, rhs: &Self) -> Self {
-        let r = self.ref_rem(rhs);
-        if r < r.zero() { r + rhs } else { r }
-    }
+            fn rem_euclid(&self, rhs: &Self) -> Self {
+                let r = self.ref_rem(rhs);
+                if r < r.zero() { r + rhs } else { r }
+            }
 
-    fn FRAC_1_PI(&self) -> Self {
-        Self::FRAC_1_PI()
-    }
+            fn FRAC_1_PI(&self) -> Self {
+                Self::FRAC_1_PI()
+            }
 
-    fn PI(&self) -> Self {
-        Self::PI()
-    }
+            fn PI(&self) -> Self {
+                Self::PI()
+            }
 
-    fn TAU(&self) -> Self {
-        Self::TAU()
-    }
+            fn TAU(&self) -> Self {
+                Self::TAU()
+            }
 
-    fn from_f64_exact_binary(x: f64) -> Self {
-        Self::from_f64_exact_binary(x)
-    }
+            fn from_f64_exact_binary(x: f64) -> Self {
+                Self::from_f64_exact_binary(x)
+            }
 
-    fn from_arb(value: &ArbPrec) -> Self {
-        value.clone()
-    }
+            fn from_arb(value: &ArbPrec) -> Self {
+                Self::from(value.float.clone())
+            }
 
-    fn sampling_precision() -> crate::settings::runtime::Precision {
-        crate::settings::runtime::Precision::Arb
-    }
+            fn sampling_precision() -> SamplingPrecision {
+                SamplingPrecision::$precision
+            }
 
-    fn sampling_bridge_cache(
-        setup: &LmbMultiChannelingSetup,
-    ) -> &RuntimeCache<std::result::Result<SamplingChannelBridge<Self>, SamplingEvaluationError>>
-    {
-        &setup.sampling_bridge_arb
-    }
+            fn sampling_bridge_cache(
+                setup: &LmbMultiChannelingSetup,
+            ) -> &RuntimeCache<
+                std::result::Result<SamplingChannelBridge<Self>, SamplingEvaluationError>,
+            > {
+                &setup.$bridge
+            }
 
-    fn sampling_bridge_cache_mut(
-        setup: &mut LmbMultiChannelingSetup,
-    ) -> &mut RuntimeCache<std::result::Result<SamplingChannelBridge<Self>, SamplingEvaluationError>>
-    {
-        &mut setup.sampling_bridge_arb
-    }
+            fn sampling_bridge_cache_mut(
+                setup: &mut LmbMultiChannelingSetup,
+            ) -> &mut RuntimeCache<
+                std::result::Result<SamplingChannelBridge<Self>, SamplingEvaluationError>,
+            > {
+                &mut setup.$bridge
+            }
 
-    fn from_f64(x: f64) -> Self {
-        // There are two reasonable f64 -> higher-precision policies:
-        // preserve the exact binary64 value or reinterpret the visible decimal
-        // spelling of the f64. GammaLoop currently chooses the decimal route here
-        // because these upcasts are overwhelmingly user-authored settings, and
-        // values like 0.1 are less surprising when they retain their decimal
-        // semantics instead of exposing the hidden binary64 tail. The exact-binary
-        // helper is kept alongside this for callers that need a faithful embedding
-        // of an already-computed f64.
-        VarFloat::from_f64(x)
-    }
+            fn from_f64(x: f64) -> Self {
+                // There are two reasonable f64 -> higher-precision policies:
+                // preserve the exact binary64 value or reinterpret the visible decimal
+                // spelling of the f64. GammaLoop currently chooses the decimal route here
+                // because these upcasts are overwhelmingly user-authored settings, and
+                // values like 0.1 are less surprising when they retain their decimal
+                // semantics instead of exposing the hidden binary64 tail. The exact-binary
+                // helper is kept alongside this for callers that need a faithful embedding
+                // of an already-computed f64.
+                VarFloat::from_f64(x)
+            }
 
-    fn into_f64(&self) -> f64 {
-        self.to_f64()
-    }
+            fn into_f64(&self) -> f64 {
+                self.to_f64()
+            }
 
-    fn is_nan(&self) -> bool {
-        self.float.is_nan()
-    }
+            fn is_nan(&self) -> bool {
+                self.float.is_nan()
+            }
 
-    fn is_infinite(&self) -> bool {
-        self.float.is_infinite()
-    }
+            fn is_infinite(&self) -> bool {
+                self.float.is_infinite()
+            }
 
-    fn floor(&self) -> Self {
-        self.float.clone().floor().into()
-    }
+            fn floor(&self) -> Self {
+                self.float.clone().floor().into()
+            }
 
-    fn try_extract_externals_from_cache(
-        externals: &Externals,
-    ) -> Option<&TiVec<ExternalIndex, FourMomentum<F<Self>>>> {
-        match externals {
-            Externals::Constant { arb_cache, .. } => arb_cache.as_ref(),
+            fn try_extract_externals_from_cache(
+                $externals: &Externals,
+            ) -> Option<&TiVec<ExternalIndex, FourMomentum<F<Self>>>> {
+                $external_cache
+            }
+
+            fn epsilon(&self) -> Self {
+                self.machine_epsilon()
+            }
         }
-    }
 
-    fn epsilon(&self) -> Self {
-        self.machine_epsilon()
-    }
+        impl PrecisionUpgradable for $scalar {
+            type Higher = ArbPrec;
+            type Lower = f128;
+
+            fn higher(&self) -> Self::Higher {
+                ArbPrec::from(self.float.clone())
+            }
+
+            fn lower(&self) -> Self::Lower {
+                f128::from(self.float.clone())
+            }
+        }
+    };
 }
+
+impl_mpfr_float_like!(ArbPrec, Arb, sampling_bridge_arb, externals => match externals {
+    Externals::Constant { arb_cache, .. } => arb_cache.as_ref(),
+});
+impl_mpfr_float_like!(SamplingFloat, Fixed256, sampling_bridge_fixed256, _externals => None);
 
 impl<const N: u32> VarFloat<N> {
     fn machine_epsilon(&self) -> Self {
@@ -1796,19 +1974,6 @@ impl PrecisionUpgradable for f128 {
     }
 }
 
-impl PrecisionUpgradable for ArbPrec {
-    type Higher = ArbPrec;
-    type Lower = f128;
-
-    fn higher(&self) -> Self::Higher {
-        self.clone()
-    }
-
-    fn lower(&self) -> Self::Lower {
-        f128::from(self.float.clone())
-    }
-}
-
 impl<T: Real + PrecisionUpgradable, H: Real, L: Real> PrecisionUpgradable for Complex<T>
 where
     T: PrecisionUpgradable<Higher = H, Lower = L>,
@@ -1904,8 +2069,8 @@ pub trait FloatLike:
     /// is a certificate boundary, unlike ordinary nearest-rounded conversion.
     fn mpfr_enclosure(&self, precision: u32) -> (Float, Float);
 
-    /// Runtime stability level represented by this native scalar type.
-    fn sampling_precision() -> crate::settings::runtime::Precision;
+    /// Native sampling lane, distinct from the allowed physical stability levels.
+    fn sampling_precision() -> SamplingPrecision;
     fn sampling_bridge_cache(setup: &LmbMultiChannelingSetup) -> &RuntimeCache<std::result::Result<SamplingChannelBridge<Self>, SamplingEvaluationError>>;
     fn sampling_bridge_cache_mut(setup: &mut LmbMultiChannelingSetup) -> &mut RuntimeCache<std::result::Result<SamplingChannelBridge<Self>, SamplingEvaluationError>>;
 
@@ -2497,6 +2662,31 @@ impl<T: FloatLike> F<T> {
         F(T::from_f64(x))
     }
 
+    /// Embed the exact represented native value in the canonical Arb container.
+    /// In particular, two separated Quad limbs need not fit in 1000 bits.
+    pub(crate) fn to_arb_exact(&self) -> eyre::Result<F<ArbPrec>> {
+        let (lower, upper) = self.0.mpfr_enclosure(1000);
+        if !lower.is_finite() || !upper.is_finite() || lower != upper {
+            return Err(SamplingEvaluationError::Unrepresentable {
+                operation: "canonical source embedding",
+                detail: format!(
+                    "{:?} scalar {self} is not exactly representable at 1000 bits",
+                    T::sampling_precision()
+                ),
+            }
+            .into());
+        }
+        // Opposite signed zeros compare equal in the directed enclosure. At
+        // exact zero only, the binary64 sign extraction is itself lossless and
+        // preserves the native signed-zero convention; nonzero values never narrow.
+        let exact = if lower == 0 {
+            Float::with_val(1000, self.0.into_f64())
+        } else {
+            lower
+        };
+        Ok(F(ArbPrec::from(exact)))
+    }
+
     /// Materialize one canonical scalar without accepting lost range as zero.
     /// Relative factor accuracy and physical positivity belong to their owners.
     pub(crate) fn from_arb(value: &ArbPrec) -> eyre::Result<Self> {
@@ -2932,8 +3122,8 @@ impl FloatLike for f64 {
         value.float.to_f64()
     }
 
-    fn sampling_precision() -> crate::settings::runtime::Precision {
-        crate::settings::runtime::Precision::Double
+    fn sampling_precision() -> SamplingPrecision {
+        SamplingPrecision::Double
     }
 
     fn sampling_bridge_cache(
@@ -3001,11 +3191,45 @@ impl From<F<f64>> for Rational {
 #[allow(non_camel_case_types)]
 // Keep this one-line fallback close to the active alias: `VarFloat<113>` is a
 // slower but safe binary128-like replacement when debugging `DoubleFloat`
-// issues, and the `f128` trait impls/effective epsilon logic are written so
-// flipping this alias remains a valid drop-in escape hatch.
+// issues. The effective epsilon follows the scalar, but the explicit native
+// evaluator/parameter implementations must also be reviewed when flipping it.
 // pub type f128 = VarFloat<113>;
 pub type f128 = QuadFloat;
 pub type ArbPrec = VarFloat<1000>;
+/// Fixed source arithmetic; completed values embed exactly in the Arb container.
+pub type SamplingFloat = VarFloat<256>;
+
+/// Numerical sampling lanes include a source-only precision which never becomes
+/// a physical stability level or a persisted runtime setting.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum SamplingPrecision {
+    Double,
+    Quad,
+    Fixed256,
+    Arb,
+}
+
+impl From<crate::settings::runtime::Precision> for SamplingPrecision {
+    fn from(precision: crate::settings::runtime::Precision) -> Self {
+        use crate::settings::runtime::Precision;
+        match precision {
+            Precision::Double => Self::Double,
+            Precision::Quad => Self::Quad,
+            Precision::Arb => Self::Arb,
+        }
+    }
+}
+
+impl Display for SamplingPrecision {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Double => "f64",
+            Self::Quad => "f128",
+            Self::Fixed256 => "fixed256",
+            Self::Arb => "arb1000",
+        })
+    }
+}
 
 /// An iterator which iterates two other iterators simultaneously
 #[derive(Clone, Debug)]

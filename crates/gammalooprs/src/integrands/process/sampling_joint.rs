@@ -829,6 +829,26 @@ impl<T: FloatLike> SamplingMapComponent<T> for SharedEnergyJointMap<T> {
         point: &[T],
         context: &mut SamplingMapContext<'_, T>,
     ) -> Result<Option<SamplingMapEvaluation<T>>> {
+        self.inverse_evaluation(point, context, true)
+    }
+
+    fn inverse_density(
+        &self,
+        point: &[T],
+        context: &mut SamplingMapContext<'_, T>,
+    ) -> Result<Option<T>> {
+        self.inverse_evaluation(point, context, false)
+            .map(|evaluation| evaluation.map(|evaluation| evaluation.inverse_jacobian))
+    }
+}
+
+impl<T: FloatLike> SharedEnergyJointMap<T> {
+    fn inverse_evaluation(
+        &self,
+        point: &[T],
+        context: &mut SamplingMapContext<'_, T>,
+        reconstruct: bool,
+    ) -> Result<Option<SamplingMapEvaluation<T>>> {
         if point.len() != 3 {
             return Err(eyre!("joint chart point must have three components"));
         }
@@ -906,24 +926,28 @@ impl<T: FloatLike> SamplingMapComponent<T> for SharedEnergyJointMap<T> {
         let jacobian =
             tau.square() * F(radius.clone()) * &r * &energies[0] * &energies[1] * &energies[2]
                 / (F(self.normal_scale.clone()) * &circle.cross_norm * circle.k.sqrt());
-        // Reconstruction is diagnostic only: the density above is evaluated
-        // at the original supplied point, including its original normal radius.
-        let reconstructed = self
-            .program
-            .lock()
-            .map_err(|_| eyre!("joint evaluator poisoned"))?
-            .evaluate(&self.parameters(&geometry, &radius, &coordinates))?;
+        // A density-only query discards this private diagnostic field; full
+        // inverses always fill it from the independent forward reconstruction.
         let mut residual = r.zero();
-        for (actual, expected) in reconstructed.iter().zip(point) {
-            if !actual.re.is_finite() || actual.im != actual.im.zero() {
-                return Err(SamplingEvaluationError::Unrepresentable {
-                    operation: "joint inverse reconstruction",
-                    detail: "recovered cube does not produce finite real Cartesian coordinates"
-                        .into(),
+        if reconstruct {
+            // Reconstruction is diagnostic only: the density above is evaluated
+            // at the original supplied point, including its original normal radius.
+            let reconstructed = self
+                .program
+                .lock()
+                .map_err(|_| eyre!("joint evaluator poisoned"))?
+                .evaluate(&self.parameters(&geometry, &radius, &coordinates))?;
+            for (actual, expected) in reconstructed.iter().zip(point) {
+                if !actual.re.is_finite() || actual.im != actual.im.zero() {
+                    return Err(SamplingEvaluationError::Unrepresentable {
+                        operation: "joint inverse reconstruction",
+                        detail: "recovered cube does not produce finite real Cartesian coordinates"
+                            .into(),
+                    }
+                    .into());
                 }
-                .into());
+                residual = residual.max((&actual.re - F(expected.clone())).abs());
             }
-            residual = residual.max((&actual.re - F(expected.clone())).abs());
         }
         let evaluation = SamplingMapEvaluation {
             coordinates,
@@ -1417,6 +1441,11 @@ mod tests {
             .inverse(&output.point, &mut SamplingMapContext::detached(&[]))
             .unwrap()
             .unwrap();
+        assert_eq!(
+            map.inverse_density(&output.point, &mut SamplingMapContext::detached(&[]))
+                .unwrap(),
+            Some(inverse.inverse_jacobian),
+        );
         assert!((output.jacobian * inverse.inverse_jacobian - 1.0).abs() < 1e-12);
         assert_eq!(map.contract().support, SamplingSupport::Restricted);
         let boundary = map
@@ -1464,5 +1493,14 @@ mod tests {
             .unwrap_err();
         assert!(error.downcast_ref::<SamplingEvaluationError>().is_some());
         assert!(error.to_string().contains("R=0"), "{error}");
+        let density_error = map
+            .inverse_density(&[0.0, 0.0, 3.0], &mut SamplingMapContext::detached(&[]))
+            .unwrap_err();
+        assert!(
+            density_error
+                .downcast_ref::<SamplingEvaluationError>()
+                .is_some()
+        );
+        assert_eq!(density_error.to_string(), error.to_string());
     }
 }

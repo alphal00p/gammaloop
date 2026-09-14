@@ -488,6 +488,20 @@ evaluation apply `J_c w_c` once per graph result and event at native precision,
 before reporting, and retain a separate grid probability. Stability rotations
 act on the resulting mapped point and external frame together.
 
+Both execution modes prepare each channel on the graph-group master and reuse
+that point for every group member. The absolute monitor first sums all physical
+cuts, counterterms, orientations and group members at that point, then takes
+the componentwise absolute value. Explicitly summed channels add these positive
+contributions before one outer-cube statistics update, retaining channel
+covariance. The signed channel sum is not passed through `abs` afterward.
+Graph groups remain separate integration domains; if orientations themselves
+are sampled, the absolute monitor describes that sampled-orientation domain,
+not the absolute value of an orientation sum. GL638 studies sum orientations.
+Native, precise and Python evaluation outputs expose the separate
+`absolute_integrand_result` payload before the outer grid weight. Integration
+workspace version 3 rejects older checkpoints whose absolute moments used the
+previous convention, requiring a fresh run.
+
 The existing graph sampling setup retains a nonserialized canonical catalogue,
 compiled programs and native Double/Quad/Arb bridges. Process warmup constructs
 the configured precisions transactionally after numeric masses/externals are ready;

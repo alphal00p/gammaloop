@@ -1316,6 +1316,14 @@ impl PySampleEvaluationResult {
     }
 
     #[getter]
+    fn absolute_integrand_result<'py>(&self, py: Python<'py>) -> Option<Bound<'py, PyComplex>> {
+        self.inner
+            .evaluation
+            .absolute_integrand_result
+            .map(|value| PyComplex::from_doubles(py, value.re.0, value.im.0))
+    }
+
+    #[getter]
     fn integrator_weight(&self) -> f64 {
         self.inner.evaluation.integrator_weight.0
     }
@@ -1424,6 +1432,11 @@ impl PyEvaluationResult {
     #[getter]
     fn integrand_result<'py>(&self, py: Python<'py>) -> Bound<'py, PyComplex> {
         self.sample().integrand_result(py)
+    }
+
+    #[getter]
+    fn absolute_integrand_result<'py>(&self, py: Python<'py>) -> Option<Bound<'py, PyComplex>> {
+        self.sample().absolute_integrand_result(py)
     }
 
     #[getter]

@@ -118,6 +118,8 @@ use super::{
 
 pub mod export;
 pub mod load;
+#[cfg(test)]
+mod sampling_state_tests;
 
 #[allow(clippy::excessive_precision)]
 const PICOBARN_CONVERSION: F<f64> = F(3.89379372171859372125651613062e8);
@@ -1427,7 +1429,9 @@ impl CrossSectionGraphTerm {
                 multi_channeling_setup: LmbMultiChannelingSetup {
                     sampling_bridge: Default::default(),
                     sampling_bridge_quad: Default::default(),
+                    sampling_bridge_fixed256: Default::default(),
                     sampling_bridge_arb: Default::default(),
+                    sampling_source: Default::default(),
                     sampling_catalogue: Default::default(),
                     sampling_programs: Default::default(),
                     lmb_basis_ids: TiVec::new(),

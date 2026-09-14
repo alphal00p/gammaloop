@@ -36,6 +36,9 @@ use crate::{
 #[derive(Clone, Debug)]
 pub struct GraphEvaluationResult<T: FloatLike> {
     pub integrand_result: Complex<F<T>>,
+    /// Componentwise absolute values after physical cancellation at each point,
+    /// summed over distinct sampling-channel points of the same outer draw.
+    pub absolute_integrand_result: Option<Complex<F<T>>>,
     pub reference_moments: Option<ReferenceMoments<T>>,
     pub event_groups: GenericEventGroupList<T>,
     pub event_processing_time: Duration,
@@ -47,6 +50,7 @@ impl<T: FloatLike> GraphEvaluationResult<T> {
     pub fn zero(zero: F<T>) -> Self {
         Self {
             integrand_result: Complex::new_re(zero),
+            absolute_integrand_result: None,
             reference_moments: None,
             event_groups: GenericEventGroupList::default(),
             event_processing_time: Duration::ZERO,
@@ -57,6 +61,13 @@ impl<T: FloatLike> GraphEvaluationResult<T> {
 
     pub fn merge_in_place(&mut self, mut other: Self) {
         self.integrand_result += other.integrand_result;
+        if let Some(absolute) = other.absolute_integrand_result {
+            if let Some(current) = &mut self.absolute_integrand_result {
+                *current += absolute;
+            } else {
+                self.absolute_integrand_result = Some(absolute);
+            }
+        }
         if let Some(moments) = other.reference_moments {
             if let Some(current) = &mut self.reference_moments {
                 current.merge_in_place(moments);
@@ -74,6 +85,9 @@ impl<T: FloatLike> GraphEvaluationResult<T> {
     /// value/moments at the same boundary. Channel sums must not reweight a
     /// moment reconstructed from just one representative momentum point.
     pub(crate) fn apply_sampling_factor(&mut self, factor: F<T>) {
+        if let Some(absolute) = &mut self.absolute_integrand_result {
+            *absolute *= factor.abs();
+        }
         if let Some(moments) = &mut self.reference_moments {
             moments.rescale(&factor);
         }
@@ -94,6 +108,10 @@ pub struct EvaluationResult {
     /// sampling channels likewise include their individual
     /// map Jacobians and partition factors and report a unit top-level Jacobian.
     pub integrand_result: Complex<F<f64>>,
+    /// Unweighted by the outer grid. Distinct channel points contribute their
+    /// absolute physical values before summing, preserving their covariance.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub absolute_integrand_result: Option<Complex<F<f64>>>,
     pub parameterization_jacobian: Option<F<f64>>,
     /// Monte Carlo sample weight supplied by the integrator/grid, excluding the parameterization Jacobian.
     pub integrator_weight: F<f64>,
@@ -104,6 +122,8 @@ pub struct EvaluationResult {
 #[derive(Clone, Serialize, Debug)]
 pub struct EvaluationResultOutput {
     pub integrand_result: Complex<F<f64>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub absolute_integrand_result: Option<Complex<F<f64>>>,
     pub parameterization_jacobian: Option<F<f64>>,
     pub integrator_weight: F<f64>,
     pub event_groups: EventGroupList,
@@ -116,6 +136,7 @@ pub struct GenericEvaluationResult<T: FloatLike> {
     /// has passed both value and moment checks. Physical output schemas omit it.
     pub(crate) reference_moments: Option<ReferenceMoments<T>>,
     pub integrand_result: Complex<F<T>>,
+    pub absolute_integrand_result: Option<Complex<F<T>>>,
     pub parameterization_jacobian: Option<F<T>>,
     pub integrator_weight: F<T>,
     pub event_groups: GenericEventGroupList<T>,
@@ -125,6 +146,7 @@ pub struct GenericEvaluationResult<T: FloatLike> {
 #[derive(Clone, Debug)]
 pub struct GenericEvaluationResultOutput<T: FloatLike> {
     pub integrand_result: Complex<F<T>>,
+    pub absolute_integrand_result: Option<Complex<F<T>>>,
     pub parameterization_jacobian: Option<F<T>>,
     pub integrator_weight: F<T>,
     pub event_groups: GenericEventGroupList<T>,
@@ -135,13 +157,13 @@ impl<T: FloatLike> GenericEvaluationResult<T> {
     /// Narrow only the final native map/partition/physics contribution at the
     /// ordinary integration/reporting boundary. Precise APIs retain this value.
     pub(crate) fn try_into_f64(self) -> eyre::Result<EvaluationResult> {
-        let weights = std::iter::once(&self.integrand_result).chain(
-            self.event_groups.iter().flat_map(|group| {
+        let weights = std::iter::once(&self.integrand_result)
+            .chain(self.absolute_integrand_result.iter())
+            .chain(self.event_groups.iter().flat_map(|group| {
                 group.iter().flat_map(|event| {
                     std::iter::once(&event.weight).chain(event.additional_weights.weights.values())
                 })
-            }),
-        );
+            }));
         for value in weights.flat_map(|weight| [&weight.re, &weight.im]) {
             let reported = value.into_f64();
             if value.0.is_finite()
@@ -157,6 +179,9 @@ impl<T: FloatLike> GenericEvaluationResult<T> {
                 self.integrand_result.re.into_ff64(),
                 self.integrand_result.im.into_ff64(),
             ),
+            absolute_integrand_result: self
+                .absolute_integrand_result
+                .map(|value| Complex::new(value.re.into_ff64(), value.im.into_ff64())),
             parameterization_jacobian: self
                 .parameterization_jacobian
                 .map(|value| value.into_ff64()),
@@ -169,6 +194,7 @@ impl<T: FloatLike> GenericEvaluationResult<T> {
     pub fn into_output(self, minimal_output: bool) -> GenericEvaluationResultOutput<T> {
         GenericEvaluationResultOutput {
             integrand_result: self.integrand_result,
+            absolute_integrand_result: self.absolute_integrand_result,
             parameterization_jacobian: self.parameterization_jacobian,
             integrator_weight: self.integrator_weight,
             event_groups: self.event_groups,
@@ -237,6 +263,7 @@ impl EvaluationResult {
     pub fn zero() -> Self {
         Self {
             integrand_result: Complex::new_zero(),
+            absolute_integrand_result: None,
             parameterization_jacobian: None,
             integrator_weight: F(0.0),
             event_groups: EventGroupList::default(),
@@ -247,6 +274,7 @@ impl EvaluationResult {
     pub fn into_output(self, minimal_output: bool) -> EvaluationResultOutput {
         EvaluationResultOutput {
             integrand_result: self.integrand_result,
+            absolute_integrand_result: self.absolute_integrand_result,
             parameterization_jacobian: self.parameterization_jacobian,
             integrator_weight: self.integrator_weight,
             event_groups: self.event_groups,
@@ -259,6 +287,7 @@ fn fmt_evaluation_result_output<T: FloatLike>(
     f: &mut std::fmt::Formatter<'_>,
     precision: Option<Precision>,
     integrand_result: &Complex<F<T>>,
+    absolute_integrand_result: Option<&Complex<F<T>>>,
     parameterization_jacobian: Option<&F<T>>,
     integrator_weight: &F<T>,
     event_groups: &GenericEventGroupList<T>,
@@ -290,6 +319,16 @@ fn fmt_evaluation_result_output<T: FloatLike>(
         },
     ]);
 
+    if let Some(absolute) = absolute_integrand_result {
+        summary_rows.push(EvaluationSummaryRow {
+            field: "absolute physical contribution (|Re|, |Im|)".to_string(),
+            value: format!(
+                "({}, {})",
+                format_real_generic(&absolute.re),
+                format_real_generic(&absolute.im)
+            ),
+        });
+    }
     writeln!(f, "{}", "Evaluation result".bold().bright_green())?;
     writeln!(f, "{}", Table::new(summary_rows).with(Style::rounded()))?;
     if let Some(metadata) = evaluation_metadata {
@@ -380,6 +419,7 @@ impl Display for EvaluationResultOutput {
             f,
             None,
             &self.integrand_result,
+            self.absolute_integrand_result.as_ref(),
             self.parameterization_jacobian.as_ref(),
             &self.integrator_weight,
             &self.event_groups,
@@ -394,6 +434,7 @@ impl<T: FloatLike> Display for GenericEvaluationResultOutput<T> {
             f,
             None,
             &self.integrand_result,
+            self.absolute_integrand_result.as_ref(),
             self.parameterization_jacobian.as_ref(),
             &self.integrator_weight,
             &self.event_groups,
@@ -409,6 +450,7 @@ impl Display for PreciseEvaluationResultOutput {
                 f,
                 Some(Precision::Double),
                 &result.integrand_result,
+                result.absolute_integrand_result.as_ref(),
                 result.parameterization_jacobian.as_ref(),
                 &result.integrator_weight,
                 &result.event_groups,
@@ -418,6 +460,7 @@ impl Display for PreciseEvaluationResultOutput {
                 f,
                 Some(Precision::Quad),
                 &result.integrand_result,
+                result.absolute_integrand_result.as_ref(),
                 result.parameterization_jacobian.as_ref(),
                 &result.integrator_weight,
                 &result.event_groups,
@@ -427,6 +470,7 @@ impl Display for PreciseEvaluationResultOutput {
                 f,
                 Some(Precision::Arb),
                 &result.integrand_result,
+                result.absolute_integrand_result.as_ref(),
                 result.parameterization_jacobian.as_ref(),
                 &result.integrator_weight,
                 &result.event_groups,
