@@ -1,0 +1,63 @@
+{
+  "status": "completed fixed-deck compiler benchmark; no new MC estimate",
+  "intended_repository_directory": "docs/research/advanced_sampling/gl638_hosted_joint_gate/runtime_build8",
+  "source": {
+    "head": "33156a1c97f21b4c7569cc9f01837221b3e82a3f",
+    "patch_sha256": "7e6d27b3673e92bb9a2c87b726b95db85c4adecd0fb2838529b773c2f8824799",
+    "scope": "Frozen build8: adaptive 128-to-2048-bit joint support certification, inclusive evaluator and canonical sampling timers, SymJIT 2.25.6. All canonical source draws remain Arb1000. Later fixed-Quad changes are not measured or validated here."
+  },
+  "physics": {
+    "e_cm_GeV": 1000,
+    "mu_r_GeV": 91.188,
+    "m_uv_GeV": 91.188,
+    "orientations": 936,
+    "cuts": 6,
+    "threshold_variants": 19,
+    "channels": "six standalone LU cuts plus composed Cut1 joint HZ; no explicit soft LMB"
+  },
+  "protocol": {
+    "sample_deck_sha256": "ceed799cd0df77ed44edd781fe410f4a96c3ac099923e5757df7dd0c9c87e4a4",
+    "unique_samples": 512,
+    "repetitions": 3,
+    "workers": [
+      1,
+      20
+    ],
+    "timed_calls_per_profile": 3072,
+    "precision": "all timed calls accepted Double",
+    "arms": [
+      "eager",
+      "symjit_o2_compress_off",
+      "symjit_o2_compress_on",
+      "symjit_o2_compress_on_stack16m"
+    ]
+  },
+  "validation": {
+    "native_control_points_per_profile": 2,
+    "native_control_calls_per_profile": 4,
+    "native_control_scope": "Exact canonical point/J/partition; ordinary and forced-Arb total/six-cut complex norms. Four near-zero Cut2 real-relative comparison misses per profile are retained.",
+    "state_files_unchanged": 35,
+    "all_standard_profiles_analysis_checks": 28632,
+    "all_standard_profiles_numeric_comparisons": 8704,
+    "all_standard_profiles_relative_component_misses": 12,
+    "all_standard_profiles_analysis": "analysis-all-standard-build8/analysis.json",
+    "historical_pairwise_analyses": {
+      "eager_compressed_checks": 19090,
+      "eager_compressed_stack16m_checks": 19093,
+      "numeric_comparisons_each": 5632,
+      "relative_component_misses_each": 6
+    },
+    "native_control_real_relative_misses_per_profile": 4
+  },
+  "archive": {
+    "logical_records": 87,
+    "new_compressed_payloads": 77,
+    "deduplicated_records": 10,
+    "lossless_checks_passed": 87,
+    "hash_scope": "SHA256 and bytes of original uncompressed bytes; stored_path may reference an existing committed archive or another record here.",
+    "excluded": "Executables, rlibs, crate archives, generated saved-state payloads, license values and unrelated later fixed-Quad artifacts.",
+    "extension_preserves_original_records": 80
+  },
+  "timing_limits": "One run per compiler profile, three replays of one common fixed deck; shared-host unrelated workloads remain and are recorded in run JSON. Worker Duration sums and dispatch wall are distinct. No confidence interval for throughput or new MC variance/rate claim. Four profiles: Eager, uncompressed O2, compressed O2, and compressed O2 with16MiB stack. Standard-profile comparison now includes the independently completed uncompressed run; earlier pairwise analyses remain historical.",
+  "reproduction": "Restore artifact_hashes logical files to their original paths (or consistently remap requests and hashes), reconstruct source at recorded HEAD plus frozen patch, use captured cargo/link commands and configs. The source-patch identity, captured dependency hashes and exact Samples are preserved. Re-run archived analysis scripts using the archived requests/results. The state is external and identified by 35 before/after hashes."
+}

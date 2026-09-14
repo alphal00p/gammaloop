@@ -19,7 +19,10 @@ use crate::{
     GammaLoopContext,
     cff::esurface::Esurface,
     graph::{LmbIndex, LoopMomentumBasis},
-    integrands::process::GenericEvaluator,
+    integrands::{
+        evaluation::EvaluationMetaData,
+        process::{GenericEvaluator, evaluators::evaluate_evaluator},
+    },
     momentum::{
         Energy, FourMomentum,
         sample::{MomentumSample, SubspaceData},
@@ -172,6 +175,7 @@ impl RstarTDependenceEvaluator {
     fn evaluate_alpha<T: FloatLike>(
         &mut self,
         input: RstarTDependenceInput<'_, T>,
+        evaluation_metadata: &mut EvaluationMetaData,
     ) -> HyperDual<F<T>> {
         let RstarTDependenceInput {
             t_star,
@@ -279,11 +283,13 @@ impl RstarTDependenceEvaluator {
 
         debug!("Parameters for implicit function theorem: {:#?}", params);
 
-        let result = T::get_evaluator(
+        let result = evaluate_evaluator(
             self.implicit_function_theorem
                 .as_mut()
                 .expect("alpha(t) evaluator requested without t-derivative support"),
-        )(&params)
+            &params,
+            evaluation_metadata,
+        )
         .into_iter()
         .map(DualOrNot::unwrap_real)
         .collect_vec();

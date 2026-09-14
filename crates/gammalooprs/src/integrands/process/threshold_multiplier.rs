@@ -684,7 +684,6 @@ impl ThresholdMultiplierEvaluator {
         &mut self,
         values: &ThresholdMultiplierInputValues<T>,
         evaluation_metadata: &mut EvaluationMetaData,
-        record_primary_timing: bool,
     ) -> Result<F<T>> {
         if values.len() != self.input_count {
             return Err(eyre!(
@@ -693,12 +692,8 @@ impl ThresholdMultiplierEvaluator {
                 values.len()
             ));
         }
-        let value = evaluate_evaluator_single(
-            &mut self.evaluator,
-            values.as_slice(),
-            evaluation_metadata,
-            record_primary_timing,
-        );
+        let value =
+            evaluate_evaluator_single(&mut self.evaluator, values.as_slice(), evaluation_metadata);
         if !value.re.is_finite() || !value.im.is_finite() {
             return Err(eyre!(
                 "threshold multiplier evaluated to non-finite value {value}"
@@ -1562,7 +1557,7 @@ mod tests {
                 .unwrap();
         }
         let result = evaluator
-            .evaluate(&values, &mut EvaluationMetaData::new_empty(), false)
+            .evaluate(&values, &mut EvaluationMetaData::new_empty())
             .unwrap();
         assert_eq!(result, F(-49.0));
     }
@@ -1596,7 +1591,7 @@ mod tests {
             }
         }
         let result = evaluator
-            .evaluate(&values, &mut EvaluationMetaData::new_empty(), false)
+            .evaluate(&values, &mut EvaluationMetaData::new_empty())
             .unwrap();
         assert_eq!(result, F(7.0));
     }
@@ -1659,13 +1654,13 @@ mod tests {
         let mut metadata = EvaluationMetaData::new_empty();
         assert_eq!(
             collection.evaluators_mut()[0]
-                .evaluate(&values, &mut metadata, false)
+                .evaluate(&values, &mut metadata)
                 .unwrap(),
             F(3.0),
         );
         assert_eq!(
             collection.evaluators_mut()[1]
-                .evaluate(&values, &mut metadata, false)
+                .evaluate(&values, &mut metadata)
                 .unwrap(),
             F(4.0),
         );
@@ -1738,7 +1733,7 @@ mod tests {
             values.set_real(index, F(value)).unwrap();
         }
         let result = evaluator
-            .evaluate(&values, &mut EvaluationMetaData::new_empty(), false)
+            .evaluate(&values, &mut EvaluationMetaData::new_empty())
             .unwrap();
         assert_eq!(result, F(12.0));
     }
@@ -1801,14 +1796,12 @@ mod tests {
         }
         let mut metadata = EvaluationMetaData::new_empty();
         assert_eq!(
-            evaluator
-                .evaluate(&f64_values, &mut metadata, false)
-                .unwrap(),
+            evaluator.evaluate(&f64_values, &mut metadata).unwrap(),
             F(23.0)
         );
         assert_eq!(
             evaluator
-                .evaluate(&f128_values, &mut metadata, false)
+                .evaluate(&f128_values, &mut metadata)
                 .unwrap()
                 .0
                 .into_f64(),
@@ -1816,12 +1809,20 @@ mod tests {
         );
         assert_eq!(
             evaluator
-                .evaluate(&arb_values, &mut metadata, false)
+                .evaluate(&arb_values, &mut metadata)
                 .unwrap()
                 .0
                 .into_f64(),
             23.0
         );
+
+        let completed_time = metadata.evaluator_evaluation_time;
+        assert!(completed_time > std::time::Duration::ZERO);
+        // The evaluator ran even when its scalar result fails validation.
+        f64_values.set(0, Complex::new(F(2.0), F(1.0))).unwrap();
+        let error = evaluator.evaluate(&f64_values, &mut metadata).unwrap_err();
+        assert!(error.to_string().contains("non-real value"));
+        assert!(metadata.evaluator_evaluation_time > completed_time);
 
         let duplicate = ThresholdMultiplierLayout::new(
             Vec::new(),
@@ -1966,14 +1967,12 @@ mod tests {
             let evaluator = &mut decoded.evaluators_mut()[0];
             let mut metadata = EvaluationMetaData::new_empty();
             assert_eq!(
-                evaluator
-                    .evaluate(&f64_values, &mut metadata, false)
-                    .unwrap(),
+                evaluator.evaluate(&f64_values, &mut metadata).unwrap(),
                 F(7.0)
             );
             assert_eq!(
                 evaluator
-                    .evaluate(&f128_values, &mut metadata, false)
+                    .evaluate(&f128_values, &mut metadata)
                     .unwrap()
                     .0
                     .into_f64(),
@@ -1981,7 +1980,7 @@ mod tests {
             );
             assert_eq!(
                 evaluator
-                    .evaluate(&arb_values, &mut metadata, false)
+                    .evaluate(&arb_values, &mut metadata)
                     .unwrap()
                     .0
                     .into_f64(),
@@ -2142,7 +2141,7 @@ mod tests {
             })
             .fold(F(0.0), |sum, (index, _)| sum + values.as_slice()[index].re);
         let result = evaluator
-            .evaluate(values, &mut EvaluationMetaData::new_empty(), false)
+            .evaluate(values, &mut EvaluationMetaData::new_empty())
             .unwrap();
         assert!((result.0 - expected.0).abs() < 1.0e-12);
 

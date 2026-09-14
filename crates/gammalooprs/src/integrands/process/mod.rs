@@ -3286,7 +3286,6 @@ struct EvaluationContext<'a, 'm> {
     settings: &'a RuntimeSettings,
     rotation: &'a Rotation,
     evaluation_metadata: &'m mut EvaluationMetaData,
-    record_primary_timing: bool,
 }
 
 pub struct GraphTermEvaluationContext<'a, 'm, T: FloatLike> {
@@ -3295,7 +3294,6 @@ pub struct GraphTermEvaluationContext<'a, 'm, T: FloatLike> {
     pub event_processing_runtime: Option<&'m mut EventProcessingRuntime>,
     pub rotation: &'a Rotation,
     pub evaluation_metadata: &'m mut EvaluationMetaData,
-    pub record_primary_timing: bool,
     /// The canonical channel which mapped this point into the parent frame.
     /// Its sampling partition is applied outside the physical graph evaluation.
     pub sampling_channel: Option<SamplingChannelId>,
@@ -3341,8 +3339,8 @@ fn evaluate_graph_term<T: FloatLike, I: ProcessIntegrandImpl>(
         // its selected host records. Physical lanes only adopt these records;
         // native map binding is not a prerequisite for evaluating the point.
     }
-    // Every actual target call counts, including failed attempts and probe
-    // rotations. Evaluator subset diagnostics retain their primary-call flag.
+    // Every actual target and evaluator call counts, including failed attempts
+    // and probe rotations. Physical diagnostic/event selection stays separate.
     // Host adoption is sampling work even though it runs inside this body.
     let sampling_before = context.evaluation_metadata.parameterization_time;
     let started = Instant::now();
@@ -3391,7 +3389,6 @@ fn evaluate_graph_term<T: FloatLike, I: ProcessIntegrandImpl>(
                 event_processing_runtime: event_processing_runtime.as_mut(),
                 rotation: context.rotation,
                 evaluation_metadata: context.evaluation_metadata,
-                record_primary_timing: context.record_primary_timing,
                 sampling_channel: sampling_channel.map(|(channel_id, _)| channel_id),
                 graph_id,
                 prepared_lu_hosts: sampling_channel.map_or(&[], |(_, hosts)| hosts),
@@ -3457,7 +3454,6 @@ fn evaluate_all_rotations<T: FloatLike, I: ProcessIntegrandImpl>(
     target: EvaluationTarget<'_>,
     gammaloop_sample: &GammaLoopSample<T>,
     evaluation_metadata: &mut EvaluationMetaData,
-    is_primary_stability_level: bool,
     record_rotated_results: bool,
     canonical_sample: Option<&GammaLoopSample<ArbPrec>>,
 ) -> Result<(Vec<GraphEvaluationResult<T>>, usize, Vec<RotatedEvaluation>)> {
@@ -3495,30 +3491,19 @@ fn evaluate_all_rotations<T: FloatLike, I: ProcessIntegrandImpl>(
         .iter()
         .position(Rotation::is_identity)
         .unwrap_or(0);
-    let mut original_call_timed = false;
     let mut evaluation_results: Vec<GraphEvaluationResult<T>> =
         Vec::with_capacity(gammaloop_samples.len());
-    for (rotation_index, (gammaloop_sample, rotation)) in
-        gammaloop_samples.iter().zip(rotations.iter()).enumerate()
-    {
+    for (gammaloop_sample, rotation) in gammaloop_samples.iter().zip(rotations.iter()) {
         debug!("Evaluating rotation: {}", rotation.method);
-        let record_primary_timing = is_primary_stability_level
-            && !original_call_timed
-            && rotation_index == primary_rotation_index;
-
         let result = evaluate_single(
             integrand,
             target,
             gammaloop_sample,
             rotation,
             evaluation_metadata,
-            record_primary_timing,
             canonical_sample,
         )?;
 
-        if record_primary_timing {
-            original_call_timed = true;
-        }
         evaluation_results.push(result);
     }
 
@@ -3550,7 +3535,6 @@ struct StabilityEvaluationContext<'a, 'm> {
     wgt: F<f64>,
     check_on_norm: bool,
     is_final_level: bool,
-    is_primary_stability_level: bool,
     evaluation_metadata: &'m mut EvaluationMetaData,
     record_rotated_results: bool,
     precision_label: &'static str,
@@ -3576,7 +3560,6 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
         context.target,
         &gammaloop_sample,
         context.evaluation_metadata,
-        context.is_primary_stability_level,
         context.record_rotated_results,
         context.source.canonical_sample(),
     )?;
@@ -3799,7 +3782,6 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
     gammaloop_sample: &GammaLoopSample<T>,
     rotation: &Rotation,
     evaluation_metadata: &mut EvaluationMetaData,
-    record_primary_timing: bool,
     canonical_sample: Option<&GammaLoopSample<ArbPrec>>,
 ) -> Result<GraphEvaluationResult<T>> {
     let settings = integrand.get_settings().clone();
@@ -3809,7 +3791,6 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
         settings: &settings,
         rotation,
         evaluation_metadata,
-        record_primary_timing,
     };
     let mut result = GraphEvaluationResult::zero(zero.clone());
     for (group_index, (group_id, rows)) in gammaloop_sample.groups.iter().enumerate() {
@@ -4036,7 +4017,9 @@ impl<'a> EvaluationSource<'a> {
         // retry occurrences. Preserve the discrete decisions and inclusive cost.
         metadata.radial_root_diagnostics = history;
         metadata.sampling_proposal_policies.seal();
-        metadata.parameterization_time += started.elapsed();
+        let elapsed = started.elapsed();
+        metadata.canonical_sampling_preparation_time += elapsed;
+        metadata.parameterization_time += elapsed;
         result
             .map(Some)
             .wrap_err("canonical sampling preparation failed at the fixed 1000-bit budget")
@@ -4439,7 +4422,6 @@ fn evaluate_from_source_precise<I: ProcessIntegrandImpl>(
             .recording
             .map(|recording| recording.record_rotated_results)
             .unwrap_or(false);
-        let is_primary_stability_level = level_index == 0;
         let mut context = StabilityEvaluationContext {
             target,
             source: &source,
@@ -4448,7 +4430,6 @@ fn evaluate_from_source_precise<I: ProcessIntegrandImpl>(
             wgt,
             check_on_norm: integrand.get_settings().stability.check_on_norm,
             is_final_level,
-            is_primary_stability_level,
             evaluation_metadata: &mut evaluation_metadata,
             record_rotated_results,
             precision_label: match stability_level.precision {
@@ -4567,6 +4548,8 @@ fn evaluate_from_source_precise<I: ProcessIntegrandImpl>(
     // A last unstable-level debug replay occurs after its result was cloned.
     // Copy the sole source owner's accumulated counters, never one lane's time.
     metadata.parameterization_time = evaluation_metadata.parameterization_time;
+    metadata.canonical_sampling_preparation_time =
+        evaluation_metadata.canonical_sampling_preparation_time;
     metadata.integrand_evaluation_time = evaluation_metadata.integrand_evaluation_time;
     metadata.loop_momenta_escalation = loop_momenta_escalation;
     metadata.stability_results = stability_results;
@@ -4889,6 +4872,9 @@ pub(crate) mod tests {
         let mut anchor = original_source
             .prepare_draw(integrand, &mut metadata)?
             .unwrap();
+        let sampling_preparation_time = metadata.canonical_sampling_preparation_time;
+        assert!(sampling_preparation_time > std::time::Duration::ZERO);
+        assert_eq!(metadata.parameterization_time, sampling_preparation_time);
         anchor.prepare_physical_overlaps(integrand, model, &mut metadata)?;
         assert_eq!(metadata.generated_event_count, 0);
         assert_eq!(metadata.accepted_event_count, 0);
@@ -4897,7 +4883,16 @@ pub(crate) mod tests {
             sample: &anchor,
             original: &original_source,
         };
+        assert!(
+            prepared_source
+                .prepare_draw(integrand, &mut metadata)?
+                .is_none()
+        );
         let original = prepared_source.build_gamma_sample::<f64, _>(integrand, &mut metadata)?;
+        assert_eq!(
+            metadata.canonical_sampling_preparation_time,
+            sampling_preparation_time
+        );
         let prepared_lu_hosts = &original.groups[0].1[0].prepared_lu_hosts;
         assert_eq!(original.groups[0].1[0].channel_id, Some(channel_id));
         assert!(!prepared_lu_hosts.is_empty());
@@ -4957,7 +4952,6 @@ pub(crate) mod tests {
             &original,
             &Rotation::new(RotationMethod::Identity),
             &mut baseline_metadata,
-            false,
             Some(&anchor),
         )?;
         let mut rotated_metadata = metadata.clone();
@@ -4967,7 +4961,6 @@ pub(crate) mod tests {
             &rotated,
             &rotation,
             &mut rotated_metadata,
-            false,
             Some(&anchor),
         )?;
         assert_eq!(
@@ -4978,6 +4971,17 @@ pub(crate) mod tests {
             rotated_metadata.canonical_physical_preparation_time,
             preparation_time
         );
+        // Both identity and stability-probe evaluator work contributes to E;
+        // preparing or adopting the retained source does not repeat C_S.
+        for physical_metadata in [&baseline_metadata, &rotated_metadata] {
+            assert!(
+                physical_metadata.evaluator_evaluation_time > metadata.evaluator_evaluation_time
+            );
+            assert_eq!(
+                physical_metadata.canonical_sampling_preparation_time,
+                sampling_preparation_time
+            );
+        }
         for result in [&baseline, &physical_rotated] {
             assert!(result.integrand_result.re.0.is_finite());
             assert!(result.integrand_result.im.0.is_finite());
@@ -5034,7 +5038,6 @@ pub(crate) mod tests {
             &original,
             &Rotation::new(RotationMethod::Identity),
             &mut incomplete_metadata,
-            false,
             Some(&incomplete),
         )
         .unwrap_err();
@@ -5066,7 +5069,6 @@ pub(crate) mod tests {
             &corrupted,
             &rotation,
             &mut metadata,
-            false,
             None,
         )
         .unwrap_err();
@@ -5097,7 +5099,6 @@ pub(crate) mod tests {
                 &corrupted,
                 &rotation,
                 &mut metadata,
-                false,
                 None,
             )
             .unwrap_err();
@@ -5763,12 +5764,19 @@ pub(crate) mod tests {
             rotated_results: Vec::new(),
         };
         let mut metadata = EvaluationMetaData::new_empty();
+        metadata.canonical_sampling_preparation_time = Duration::from_micros(7);
         metadata.parameterization_time = Duration::from_micros(7) + Duration::from_micros(11);
         metadata.integrand_evaluation_time = Duration::from_micros(19) + Duration::from_micros(23);
         let result = super::finalize_precise_evaluation_result(level.clone(), F(1.0), metadata);
         assert_eq!(
             result.evaluation_metadata.parameterization_time,
             Duration::from_micros(18)
+        );
+        assert_eq!(
+            result
+                .evaluation_metadata
+                .canonical_sampling_preparation_time,
+            Duration::from_micros(7)
         );
         assert_eq!(
             result.evaluation_metadata.integrand_evaluation_time,

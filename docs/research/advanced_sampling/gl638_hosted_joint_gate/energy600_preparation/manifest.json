@@ -1,0 +1,92 @@
+{
+  "scope": "Static preparation only; no GammaLoop state load, warmup, evaluation, build, integration, or repository edit.",
+  "state": "/common/dev/gl638_checkpoint_06d470409/all/state",
+  "cards": [
+    {
+      "source": "/tmp/gl638-physics-comparison/leading-real-soft-cut3/cards/cuts_joint_soft_p2.toml",
+      "source_sha256": "ddfb133e11f9e9819eed1e0b4a7cef7e92f842aad1d30742e952019f29e697a9",
+      "target": "/tmp/gl638-physics-comparison/leading-real-soft-cut3-600/cards/cuts_joint_soft_p2_muv91p188.toml",
+      "target_sha256": "47fca0c85ecb9de20e3fa63f83283244ef51c0371c306d75f89ee8d73bc44f06",
+      "sqrt_s_GeV": 600.0,
+      "m_uv_GeV": 91.188,
+      "mu_r_GeV": 91.188,
+      "channel_count": 8,
+      "only_changed_fields": [
+        "kinematics.e_cm",
+        "kinematics.externals.data.momenta"
+      ]
+    },
+    {
+      "source": "/tmp/gl638-physics-comparison/leading-real-soft-cut3/cards/cuts_joint_soft_p2.toml",
+      "source_sha256": "ddfb133e11f9e9819eed1e0b4a7cef7e92f842aad1d30742e952019f29e697a9",
+      "target": "/tmp/gl638-physics-comparison/leading-real-soft-cut3-600/cards/cuts_joint_soft_p2_muv50.toml",
+      "target_sha256": "39f2b72a4d30905fcff8696601c04a0245529eefd843b1ce8de426f28845fd2c",
+      "sqrt_s_GeV": 600.0,
+      "m_uv_GeV": 50.0,
+      "mu_r_GeV": 91.188,
+      "channel_count": 8,
+      "only_changed_fields": [
+        "kinematics.e_cm",
+        "kinematics.externals.data.momenta",
+        "general.m_uv"
+      ]
+    },
+    {
+      "source": "/tmp/gl638-physics-comparison/leading-real-soft-cut3/cards/cuts_joint_cut3_soft_p2.toml",
+      "source_sha256": "5fe409d4bcc32e93d0c07096d43ca1d67a00512982300e36d55cc22db8e3229d",
+      "target": "/tmp/gl638-physics-comparison/leading-real-soft-cut3-600/cards/cuts_joint_cut3_soft_p2_muv91p188.toml",
+      "target_sha256": "e377e15d0d1abff13e46dba18bec895be17ae84d25e7f938defb0b98a680f3da",
+      "sqrt_s_GeV": 600.0,
+      "m_uv_GeV": 91.188,
+      "mu_r_GeV": 91.188,
+      "channel_count": 9,
+      "only_changed_fields": [
+        "kinematics.e_cm",
+        "kinematics.externals.data.momenta"
+      ]
+    },
+    {
+      "source": "/tmp/gl638-physics-comparison/leading-real-soft-cut3/cards/cuts_joint_cut3_soft_p2.toml",
+      "source_sha256": "5fe409d4bcc32e93d0c07096d43ca1d67a00512982300e36d55cc22db8e3229d",
+      "target": "/tmp/gl638-physics-comparison/leading-real-soft-cut3-600/cards/cuts_joint_cut3_soft_p2_muv50.toml",
+      "target_sha256": "23fcb72e40c105c45dadb98e8d8a7ff5ceed23e7787122e187b757cd208d0d33",
+      "sqrt_s_GeV": 600.0,
+      "m_uv_GeV": 50.0,
+      "mu_r_GeV": 91.188,
+      "channel_count": 9,
+      "only_changed_fields": [
+        "kinematics.e_cm",
+        "kinematics.externals.data.momenta",
+        "general.m_uv"
+      ]
+    }
+  ],
+  "metadata": {
+    "repo_dot": "/common/dev/gammaloop_ir_safe_thresholds/examples/cli/epem_a_ttxh/NNLO/graphs/GL638.dot",
+    "repo_sha256": "1354c6d854ea66a6298eb1ac9eaad31c3bf8744f0033e83b6e510d0f64602279",
+    "state_dot": "/common/dev/gl638_checkpoint_06d470409/all/state/processes/cross_sections/epem_a_tth/NNLO/GL638.dot",
+    "state_dot_sha256": "7fd875ea567fa04e009f20015b14ddaea1f89b3915294858313abc3b062e0942",
+    "threshold_metadata_raw_equal": false,
+    "threshold_metadata_parsed_equal": true,
+    "raw_difference": "Saved serialization expands arrays and removes comments; parsed TOML including expressions is identical.",
+    "parsed_metadata_sha256": "22b9a0f752eac6a0fe3a46eeaf666eb6883706970e03188130f3392fb7c65a22",
+    "literal_1000_present": false,
+    "dynamic_energy_sum_occurrences": 34
+  },
+  "state_settings_sha256": "cdb28893b036e54f3a36b5ce18c1b58caa3ecc92525a2a9794153ee39ed4f022",
+  "state_model_parameters_sha256": "5cf4b422cfe328559dd3cc9322e5e66c264faba54d5d44b4f5772c3a53a43572",
+  "production_threshold_GeV": 471,
+  "energy_above_threshold_GeV": 129,
+  "cut3_right_origin_sphere_radius_GeV": {
+    "1000": 469.11725613112975,
+    "600": 245.09385957220553
+  },
+  "pending": [
+    "Native card parse and warmup against frozen state; verify all 936 orientations, six cuts, and 19 variants.",
+    "Source-map normalization and inverse/forward/native precision controls for each 600 GeV catalogue.",
+    "Rebuild HZ anchors, roots, and normal geometry at 600 GeV; do not reuse or linearly scale 1000 GeV extrema.",
+    "Real and absolute-real matched fixed-sample MC comparisons for 8/9 channels at both m_uv values.",
+    "At fixed catalogue, energy, and mu_r, integrate the paired sample real difference F(m_uv=50)-F(m_uv=91.188) with a covariance-aware error; require consistency with zero and inspect UV/cut partitions if not.",
+    "Report real and absolute-real MC errors, rescue rates, maxima, and soft/tail probes; no pretest improvement claim."
+  ]
+}

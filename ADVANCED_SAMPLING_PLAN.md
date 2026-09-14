@@ -41,9 +41,14 @@ threshold intersections at the new energy; do not reuse old H/Z rays or centers.
 Use matched sampling settings and budgets for the UV-scale comparison. Central
 values must agree within statistical uncertainty; compare real/absolute-real
 errors, second moments, maxima and stability outcomes before choosing a scale.
-Keep the pending Eager/SymJIT timing deck at its original energy for a controlled
+Keep the completed Eager/SymJIT timing deck at its original energy as the controlled
 compiler comparison. Reduced energy is a proposed stability improvement, not an
 established result.
+The [prepared cards and runtime audit](docs/research/advanced_sampling/gl638_hosted_joint_gate/energy600_preparation/STATIC_AUDIT.md)
+confirm dynamic external-energy and UV-mass slots in the retained state. Use
+common Samples for the paired real difference between the two UV scales, with
+its covariance-aware error; UV-scale independence is an integral test, not a
+pointwise identity.
 
 1. Finish the maximum-weight attribution and test single- and double-soft
    gluon limits without an explicit gluon LMB channel. Include a catalogue that
@@ -139,6 +144,18 @@ real maximum locally from 12.219 to 5.782 pb after its extra channel probability
 is included. The combined eight/nine-channel soft/joint/Cut 3 cards are prepared;
 their normalization, joint local checks and statistical comparisons remain
 pending. These observations do not establish a global bound or variance gain.
+The [matched compiler comparison](docs/research/advanced_sampling/GL638_COMPRESSED_SYMJIT_TIMING.md)
+is complete on the frozen Arb1000 source: at 20 workers, mean evaluator times are
+47.96 ms for Eager, 27.59 ms for uncompressed SymJIT O2, and 22.29 ms for compressed
+SymJIT O2. The three-backend audit passes 28,632 checks and 8,704 complete-estimator
+comparisons under the existing complex-norm criterion; twelve repeated near-zero
+real-component disagreements are retained and do not establish real-only accuracy.
+The best measured throughput remains 95.415 samples/s with compressed SymJIT,
+while canonical sampling still takes 38.40 ms per draw. SymJIT 2.25.6 is pinned;
+raising the JIT stack limit removed scalar-fallback warnings but did not improve
+this run. Directed support certification now starts at 128 bits and escalates on
+uncertainty without changing the represented point. Lowering proposal arithmetic
+is a separate, still-unvalidated optimization; no timing gain is attributed to it.
 See also the [center audit](docs/research/advanced_sampling/CANONICAL_CT_CENTERS.md).
 
 Current implementation status: there is one `SamplingChannelCatalogue` and one
@@ -1517,8 +1534,9 @@ rescue behavior.
 
 Final GL638 acceptance requires the complete six-cut sum, all 936 orientations,
 direct 3D local UV with orientation localization, integrated UV and current
-threshold metadata. Report the warmed sampling cost honestly; the user's latest
-direction accepts present performance and supersedes the former 10% cost gate.
+threshold metadata. Report the warmed sampling cost honestly. The renewed runtime
+investigation at the beginning of this plan supersedes the earlier instruction
+to accept present performance; the former 10% target has not been met.
 A local finite-variance or bounded-leading-weight result
 for one regular H/Z patch is reported as such, not promoted to a global theorem.
 Defaults change only after the full matrix and independent-pilot evidence show

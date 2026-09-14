@@ -92,17 +92,18 @@ struct JointRange {
 
 impl JointRange {
     const PRECISION: u32 = 2048;
+    const PRECISIONS: [u32; 5] = [128, 256, 512, 1024, Self::PRECISION];
 
-    fn native<T: FloatLike>(value: &T) -> Self {
-        let (lo, hi) = value.mpfr_enclosure(Self::PRECISION);
+    fn native<T: FloatLike>(value: &T, precision: u32) -> Self {
+        let (lo, hi) = value.mpfr_enclosure(precision);
         Self {
             lower: [lo.clone(), hi.clone()],
             upper: [lo, hi],
         }
     }
 
-    fn integer(value: i32) -> Self {
-        let value = Float::with_val(Self::PRECISION, value);
+    fn integer(value: i32, precision: u32) -> Self {
+        let value = Float::with_val(precision, value);
         Self {
             lower: [value.clone(), value.clone()],
             upper: [value.clone(), value],
@@ -118,18 +119,18 @@ impl JointRange {
 
     fn add_bound(a: &[Float; 2], b: &[Float; 2]) -> [Float; 2] {
         [
-            Float::with_val_round(Self::PRECISION, &a[0] + &b[0], Round::Down).0,
-            Float::with_val_round(Self::PRECISION, &a[1] + &b[1], Round::Up).0,
+            Float::with_val_round(a[0].prec(), &a[0] + &b[0], Round::Down).0,
+            Float::with_val_round(a[0].prec(), &a[1] + &b[1], Round::Up).0,
         ]
     }
 
     fn mul_bound(a: &[Float; 2], b: &[Float; 2]) -> [Float; 2] {
         let products = a.iter().flat_map(|x| b.iter().map(move |y| (x, y)));
-        let mut lower = Float::with_val(Self::PRECISION, Special::Infinity);
+        let mut lower = Float::with_val(a[0].prec(), Special::Infinity);
         let mut upper = -lower.clone();
         for (x, y) in products {
-            lower = lower.min(&Float::with_val_round(Self::PRECISION, x * y, Round::Down).0);
-            upper = upper.max(&Float::with_val_round(Self::PRECISION, x * y, Round::Up).0);
+            lower = lower.min(&Float::with_val_round(a[0].prec(), x * y, Round::Down).0);
+            upper = upper.max(&Float::with_val_round(a[0].prec(), x * y, Round::Up).0);
         }
         [lower, upper]
     }
@@ -158,7 +159,7 @@ impl JointRange {
                 .into_iter()
                 .map(move |b| Self::mul_bound(a, b))
         });
-        let infinity = Float::with_val(Self::PRECISION, Special::Infinity);
+        let infinity = Float::with_val(self.lower[0].prec(), Special::Infinity);
         let mut lower = [infinity.clone(), infinity.clone()];
         let mut upper = [-infinity.clone(), -infinity];
         for product in products {
@@ -173,7 +174,7 @@ impl JointRange {
     fn square(&self) -> Self {
         // The dependency-aware lower square avoids artificially negative
         // lower bounds when a normal coordinate crosses zero.
-        let zero = Float::with_val(Self::PRECISION, 0);
+        let zero = Float::with_val(self.lower[0].prec(), 0);
         let a = Self::mul_bound(&self.lower, &self.lower);
         let b = Self::mul_bound(&self.upper, &self.upper);
         let upper = [a[0].clone().max(&b[0]), a[1].clone().max(&b[1])];
@@ -197,8 +198,8 @@ impl JointRange {
         }
         let reciprocal = |bound: &[Float; 2]| {
             [
-                Float::with_val_round(Self::PRECISION, 1 / &bound[1], Round::Down).0,
-                Float::with_val_round(Self::PRECISION, 1 / &bound[0], Round::Up).0,
+                Float::with_val_round(self.lower[0].prec(), 1 / &bound[1], Round::Down).0,
+                Float::with_val_round(self.lower[0].prec(), 1 / &bound[0], Round::Up).0,
             ]
         };
         Ok(Self {
@@ -267,14 +268,27 @@ impl<T: FloatLike> SharedEnergyJointGeometry<T> {
     /// Only this call's radius trials share them; each new conditional point
     /// prepares its own ranges. Keep the original arithmetic association and
     /// lower-endpoint predicate order when evaluating each candidate disk.
-    fn prepare_certificate(&self, scale: &T) -> Result<impl Fn(&T) -> Result<bool> + use<T>> {
-        let a = self.shifts[0].each_ref().map(JointRange::native);
-        let b = self.shifts[1].each_ref().map(JointRange::native);
-        let m = self.masses.each_ref().map(JointRange::native);
+    fn prepare_certificate(
+        &self,
+        scale: &T,
+        precision: u32,
+    ) -> Result<impl Fn(&T) -> Result<bool> + use<T>> {
+        let a = self.shifts[0]
+            .each_ref()
+            .map(|value| JointRange::native(value, precision));
+        let b = self.shifts[1]
+            .each_ref()
+            .map(|value| JointRange::native(value, precision));
+        let m = self
+            .masses
+            .each_ref()
+            .map(|value| JointRange::native(value, precision));
         let dot = |a: &[JointRange; 3], b: &[JointRange; 3]| {
             a.iter()
                 .zip(b)
-                .fold(JointRange::integer(0), |sum, (a, b)| sum.add(&a.mul(b)))
+                .fold(JointRange::integer(0, precision), |sum, (a, b)| {
+                    sum.add(&a.mul(b))
+                })
         };
         let aa = dot(&a, &a);
         let ab = dot(&a, &b);
@@ -284,16 +298,19 @@ impl<T: FloatLike> SharedEnergyJointGeometry<T> {
         // denominator. The caller still performs all native radius halvings
         // and their underflow checks before recording the ordinary decision.
         let fixed = if gram.lower_positive()? {
-            let inverse_scale = JointRange::native(scale).reciprocal_positive()?;
-            let energy_sums = self.energy_sums.each_ref().map(JointRange::native);
-            let inverse_two = JointRange::integer(2).reciprocal_positive()?;
+            let inverse_scale = JointRange::native(scale, precision).reciprocal_positive()?;
+            let energy_sums = self
+                .energy_sums
+                .each_ref()
+                .map(|value| JointRange::native(value, precision));
+            let inverse_two = JointRange::integer(2, precision).reciprocal_positive()?;
             let mass_squares = m.each_ref().map(JointRange::square);
             let inverse_gram = gram.reciprocal_positive()?;
             Some((
                 energy_sums,
                 mass_squares,
                 [inverse_scale, inverse_two, inverse_gram],
-                JointRange::integer(1),
+                JointRange::integer(1, precision),
             ))
         } else {
             None
@@ -304,7 +321,7 @@ impl<T: FloatLike> SharedEnergyJointGeometry<T> {
             else {
                 return Ok(false);
             };
-            let r = JointRange::native(radius);
+            let r = JointRange::native(radius, precision);
             let z = r.mul(inverse_scale);
             let s = energy_sums[0].add(&JointRange::bounds(r.neg(), r));
             let t = energy_sums[1].add(&JointRange::bounds(z.neg(), z));
@@ -383,38 +400,59 @@ impl<T: FloatLike> SharedEnergyJointGeometry<T> {
     }
 
     fn support_relation(&self, point: &[T], radius: &T, scale: &T) -> Result<std::cmp::Ordering> {
-        let energies = (0..3)
-            .map(|index| {
-                let square = point.iter().enumerate().fold(
-                    JointRange::native(&self.masses[index]).square(),
-                    |sum, (component, x)| {
-                        let x = JointRange::native(x);
-                        let shifted = if index == 0 {
-                            x
-                        } else {
-                            x.add(&JointRange::native(&self.shifts[index - 1][component]))
-                        };
-                        sum.add(&shifted.square())
-                    },
-                );
-                square.sqrt_point()
-            })
-            .collect::<Result<Vec<_>>>()?;
-        let h = energies[0]
-            .add(&energies[1])
-            .sub(&JointRange::native(&self.energy_sums[0]));
-        let z = energies[0]
-            .add(&energies[2])
-            .sub(&JointRange::native(&self.energy_sums[1]));
-        let difference = h
-            .square()
-            .add(&z.mul(&JointRange::native(scale)).square())
-            .sub(&JointRange::native(radius).square());
-        if difference.lower[0] > 0 {
-            return Ok(std::cmp::Ordering::Greater);
-        }
-        if difference.upper[1] < 0 {
-            return Ok(std::cmp::Ordering::Less);
+        // Refine only arithmetic at the identical point and disk. An unresolved
+        // boundary cannot decline support or change the native source law.
+        let evaluate = |precision| -> Result<Option<std::cmp::Ordering>> {
+            let energies = (0..3)
+                .map(|index| {
+                    let square = point.iter().enumerate().fold(
+                        JointRange::native(&self.masses[index], precision).square(),
+                        |sum, (component, x)| {
+                            let x = JointRange::native(x, precision);
+                            let shifted = if index == 0 {
+                                x
+                            } else {
+                                x.add(&JointRange::native(
+                                    &self.shifts[index - 1][component],
+                                    precision,
+                                ))
+                            };
+                            sum.add(&shifted.square())
+                        },
+                    );
+                    square.sqrt_point()
+                })
+                .collect::<Result<Vec<_>>>()?;
+            let h = energies[0]
+                .add(&energies[1])
+                .sub(&JointRange::native(&self.energy_sums[0], precision));
+            let z = energies[0]
+                .add(&energies[2])
+                .sub(&JointRange::native(&self.energy_sums[1], precision));
+            let difference = h
+                .square()
+                .add(&z.mul(&JointRange::native(scale, precision)).square())
+                .sub(&JointRange::native(radius, precision).square());
+            if difference.lower[0] > 0 {
+                return Ok(Some(std::cmp::Ordering::Greater));
+            }
+            if difference.upper[1] < 0 {
+                return Ok(Some(std::cmp::Ordering::Less));
+            }
+            Ok(None)
+        };
+        for precision in JointRange::PRECISIONS {
+            match evaluate(precision) {
+                Ok(Some(relation)) => return Ok(relation),
+                Ok(None) => {}
+                Err(error)
+                    if precision != JointRange::PRECISION
+                        && matches!(
+                            error.downcast_ref::<SamplingEvaluationError>(),
+                            Some(SamplingEvaluationError::UncertainGeometry { .. })
+                        ) => {}
+                Err(error) => return Err(error),
+            }
         }
         Err(SamplingEvaluationError::UncertainGeometry {
             detail: "joint inverse lies on an uncertified normal-disk boundary".into(),
@@ -545,12 +583,50 @@ impl<T: FloatLike> SharedEnergyJointMap<T> {
         let two = radius.from_usize(2);
         let mut compact = None;
         {
-            let certificate = geometry.prepare_certificate(&self.normal_scale)?;
+            let mut precisions = JointRange::PRECISIONS.into_iter().peekable();
+            let mut certificate = geometry.prepare_certificate(
+                &self.normal_scale,
+                *precisions
+                    .peek()
+                    .expect("joint precision ladder is nonempty"),
+            );
             // A deterministic complement-only policy, not a claim of absence.
-            // Arithmetic ambiguity in a lower-endpoint sign is propagated before
+            // Refine arithmetic ambiguity at this same native radius before
             // halving; exhausted geometric boxes use the normalized ordinary map.
+            // Fixed terms live only in this preparation. Once refinement is
+            // needed, later radius trials reuse that more precise certificate.
             for dyadic_exponent in 0..32 {
-                if certificate(&radius.0)? {
+                let admitted = loop {
+                    let precision = *precisions.peek().expect("joint precision ceiling retained");
+                    match certificate {
+                        Ok(prepared) => {
+                            let result = prepared(&radius.0);
+                            certificate = Ok(prepared);
+                            match result {
+                                Err(error)
+                                    if precision != JointRange::PRECISION
+                                        && matches!(
+                                            error.downcast_ref::<SamplingEvaluationError>(),
+                                            Some(SamplingEvaluationError::UncertainGeometry { .. })
+                                        ) => {}
+                                result => break result?,
+                            }
+                        }
+                        Err(error)
+                            if precision != JointRange::PRECISION
+                                && matches!(
+                                    error.downcast_ref::<SamplingEvaluationError>(),
+                                    Some(SamplingEvaluationError::UncertainGeometry { .. })
+                                ) => {}
+                        Err(error) => return Err(error),
+                    }
+                    precisions.next();
+                    certificate = geometry.prepare_certificate(
+                        &self.normal_scale,
+                        *precisions.peek().expect("joint precision ceiling retained"),
+                    );
+                };
+                if admitted {
                     compact = Some((dyadic_exponent, radius.0));
                     break;
                 }
@@ -900,13 +976,13 @@ mod tests {
         let geometry = geometry::<f64>();
         // Independently reduced exact-rational oracle at h=z=0:
         // Gram=144,k=1985/144,D=7829/36, all six energy-sign bounds >0.
-        let certificate = geometry.prepare_certificate(&1.5).unwrap();
+        let certificate = geometry.prepare_certificate(&1.5, 2048).unwrap();
         assert!(certificate(&0.0).unwrap());
         assert!(certificate(&0.0001).unwrap());
         assert!(!certificate(&100.0).unwrap());
         let mut collinear = geometry.clone();
         collinear.shifts[1] = [6.0, 0.0, 0.0];
-        assert!(!collinear.prepare_certificate(&1.5).unwrap()(&0.01).unwrap());
+        assert!(!collinear.prepare_certificate(&1.5, 2048).unwrap()(&0.01).unwrap());
 
         // The outer endpoint enclosure separates a failing conservative box
         // from an arithmetic sign that cannot be decided at this precision.
@@ -921,7 +997,8 @@ mod tests {
                 .downcast_ref::<SamplingEvaluationError>()
                 .is_some()
         );
-        let negative = JointRange::bounds(JointRange::integer(-1), JointRange::integer(1));
+        let negative =
+            JointRange::bounds(JointRange::integer(-1, 2048), JointRange::integer(1, 2048));
         assert!(!negative.lower_positive().unwrap());
     }
 
@@ -931,7 +1008,7 @@ mod tests {
             let geometry = geometry::<T>();
             let one = F::<T>::default().one();
             let scale = one.from_usize(3) / one.from_usize(2);
-            let certificate = geometry.prepare_certificate(&scale.0).unwrap();
+            let certificate = geometry.prepare_certificate(&scale.0, 2048).unwrap();
             let mut accepted = 0;
             let mut declined = 0;
             // Revisit large and small radii in both orders, including the
@@ -952,8 +1029,18 @@ mod tests {
                 let result = certificate(&radius.0).unwrap();
                 assert_eq!(
                     result,
-                    geometry.prepare_certificate(&scale.0).unwrap()(&radius.0).unwrap()
+                    geometry.prepare_certificate(&scale.0, 2048).unwrap()(&radius.0).unwrap()
                 );
+                // Lower working precision certifies the same conservative
+                // endpoint signs; it must not define a different box policy.
+                for precision in JointRange::PRECISIONS {
+                    assert_eq!(
+                        result,
+                        geometry.prepare_certificate(&scale.0, precision).unwrap()(&radius.0)
+                            .unwrap(),
+                        "working precision {precision}, radius {radius}"
+                    );
+                }
                 if result {
                     accepted += 1;
                 } else {
@@ -963,19 +1050,116 @@ mod tests {
             assert!(accepted > 0 && declined > 0);
             let mut changed = geometry.clone();
             changed.energy_sums[0] = one.0.clone();
-            let changed_certificate = changed.prepare_certificate(&scale.0).unwrap();
+            let changed_certificate = changed.prepare_certificate(&scale.0, 2048).unwrap();
             // E0+E1 >= m0+m1=5 independently excludes this changed C1=1
             // zero-radius disk; the original rational fixture remains regular.
             assert!(!changed_certificate(&one.zero().0).unwrap());
             assert!(certificate(&one.zero().0).unwrap());
-            assert!(geometry.prepare_certificate(&one.zero().0).is_err());
+            assert!(geometry.prepare_certificate(&one.zero().0, 2048).is_err());
             changed.shifts[1] = [one.from_usize(6).0, one.zero().0, one.zero().0];
             // False Gram still precedes the scale denominator check.
-            assert!(!changed.prepare_certificate(&one.zero().0).unwrap()(&one.0).unwrap());
+            assert!(!changed.prepare_certificate(&one.zero().0, 2048).unwrap()(&one.0).unwrap());
         }
         check::<f64>();
         check::<QuadFloat>();
         check::<ArbPrec>();
+    }
+
+    #[test]
+    fn joint_sampling_certificate_refines_before_changing_the_native_radius() {
+        crate::initialisation::test_initialise().unwrap();
+        fn check<T: FloatLike>(program: SamplingExpressionEvaluator) {
+            let one = F::<T>::default().one();
+            let two = one.from_usize(2);
+            let delta = two.powi(-100);
+            let radius = two.powi(-250);
+            let geometry = SharedEnergyJointGeometry {
+                shifts: [
+                    [one.from_usize(4).0, one.zero().0, one.zero().0],
+                    [one.from_usize(4).0, delta.0, one.zero().0],
+                ],
+                masses: [one.zero().0, one.zero().0, one.zero().0],
+                energy_sums: [one.from_usize(8).0, one.from_usize(8).0],
+            };
+            // The exact Gram is 16*2^-200 > 0; at 128 bits the subtraction
+            // cannot certify its sign. For h=z=0 the limiting k=3 and D=36
+            // are positive, and the fixed2048 owner admits this tiny disk.
+            let error = match geometry.prepare_certificate(&one.0, 128) {
+                Ok(_) => panic!("the unresolved low-precision Gram was accepted"),
+                Err(error) => error,
+            };
+            assert!(matches!(
+                error.downcast_ref::<SamplingEvaluationError>(),
+                Some(SamplingEvaluationError::UncertainGeometry { .. })
+            ));
+            assert!(geometry.prepare_certificate(&one.0, 2048).unwrap()(&radius.0).unwrap());
+            let mut chart = map(geometry, program);
+            chart.normal_scale = one.0;
+            chart.max_radius = radius.0.clone();
+            let (_, selected) = chart
+                .prepare(&mut SamplingMapContext::detached(&[]))
+                .unwrap();
+            assert_eq!(
+                selected,
+                Some(radius.0),
+                "uncertainty must not halve the disk"
+            );
+        }
+        let program = SharedEnergyJointMap::<f64>::compile_program().unwrap();
+        check::<f64>(program.clone());
+        check::<QuadFloat>(program.clone());
+        check::<ArbPrec>(program);
+    }
+
+    #[test]
+    fn joint_sampling_support_refines_separated_native_bits_without_moving_the_boundary() {
+        use symbolica::domains::float::DoubleFloat;
+
+        fn check<T: FloatLike>(energy_sum: T) {
+            let one = F::<T>::default().one();
+            let delta = one.from_usize(2).powi(-400);
+            let geometry = SharedEnergyJointGeometry {
+                shifts: [
+                    [one.from_usize(4).0, one.zero().0, one.zero().0],
+                    [one.zero().0, one.from_usize(4).0, one.zero().0],
+                ],
+                masses: [one.zero().0, one.zero().0, one.zero().0],
+                energy_sums: [energy_sum, one.from_usize(8).0],
+            };
+            let point = [one.zero().0, one.zero().0, one.from_usize(3).0];
+            // Exact energies are (3,5,5), hence H=-2^-400 and Z=0. The
+            // original low limb is unresolved at 128 bits and must survive
+            // refinement from the native input, including a separated Quad limb.
+            let low_h =
+                JointRange::integer(8, 128).sub(&JointRange::native(&geometry.energy_sums[0], 128));
+            assert!(low_h.lower[0] < 0 && low_h.lower[1] == 0);
+            for (factor, expected) in [
+                (-1, std::cmp::Ordering::Greater),
+                (1, std::cmp::Ordering::Less),
+            ] {
+                let radius = &delta * one.from_usize(2).powi(factor);
+                assert_eq!(
+                    geometry
+                        .support_relation(&point, &radius.0, &one.0)
+                        .unwrap(),
+                    expected
+                );
+            }
+            let error = geometry
+                .support_relation(&point, &delta.0, &one.0)
+                .unwrap_err();
+            assert!(matches!(
+                error.downcast_ref::<SamplingEvaluationError>(),
+                Some(SamplingEvaluationError::UncertainGeometry { detail })
+                    if detail.contains("normal-disk boundary")
+            ));
+        }
+        check(QuadFloat::from(DoubleFloat::from_compensated_sum(
+            8.0,
+            2.0_f64.powi(-400),
+        )));
+        let one = F::<ArbPrec>::default().one();
+        check((one.from_usize(8) + one.from_usize(2).powi(-400)).0);
     }
 
     #[test]
@@ -1175,7 +1359,7 @@ mod tests {
         // would silently replace the normalized law for this original draw.
         assert!(
             enlarged
-                .prepare_certificate(&canonical.normal_scale)
+                .prepare_certificate(&canonical.normal_scale, 2048)
                 .unwrap()(&radius)
             .unwrap()
         );

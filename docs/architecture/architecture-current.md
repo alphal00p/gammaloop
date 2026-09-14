@@ -667,6 +667,17 @@ verification charged to sampling time. Evaluator and event timings
 are subsets removed from the benchmark's residual integrand row. Final metadata
 retains accumulated costs, including replays after its earlier result snapshot.
 These are measurement counters, not evidence that the GL638 10% budget is met.
+The inclusive evaluator timing update counts every physical evaluator wrapper
+call across probes and rescues, including completed calls before a failure and
+the raised-threshold IFT alpha helper. Earlier reports counted only the primary
+rotation at the first precision and cannot supply this new E split. The
+`canonical_sampling_preparation_time` subset uses the same elapsed interval as
+its contribution to S; the existing canonical physical preparation remains a
+subset of P. Bench rows subtract these subsets once and reject inconsistent
+subset durations. These additions are per-evaluation metadata only; the serialized
+`StatisticsCounter` and integration checkpoint layouts are unchanged. Multiworker
+benchmarks must report summed worker costs separately from elapsed wall time.
+
 
 The native host handoff is implemented and its combined gates pass. The existing
 runtime context owns one native record vector; the initial selected forward or
