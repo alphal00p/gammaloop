@@ -1,0 +1,54 @@
+{
+  "status": "frozen_pre_results_protocol_only_confirmation_running_no_outcomes_included",
+  "intended_repository_directory": "docs/research/advanced_sampling/gl638_hosted_joint_gate/mc_confirmation/protocol_build7",
+  "protocol": {
+    "methods": [
+      "optimized_lmb",
+      "cuts",
+      "cuts_combined_joint"
+    ],
+    "seeds": [
+      10007,
+      20011,
+      30013,
+      40009,
+      50021
+    ],
+    "samples_per_run": 32768,
+    "workers": 20,
+    "batch_size": 256,
+    "iterations": 1,
+    "runs": 15,
+    "total_draws": 491520
+  },
+  "manifest_sha256": "7156be88199220e834f0a5b6dcb109747e4e0e25cd64b7c1170c24e43a585580",
+  "lineage_sha256": "f026da977ca0831193635be90f8b7ca00a86c6478dc19092f66b6905bd4886f4",
+  "validator_sha256": "d21c4765d2fed2a747dcce77331bf7df2fe215d60c85ba8d76fef91847631148",
+  "validator_proof": {
+    "passed": true,
+    "authenticated_input_hashes": 127,
+    "artifact_tests": 57,
+    "artifact_tests_passed": true,
+    "tests_scope": "Synthetic schema/build bytes exercise the guard; they are not a build or physics acceptance. The script regenerates those tiny fixture files."
+  },
+  "source": {
+    "build_base": "3e68f16588b8272c0f88513c0c43305b5d67a059",
+    "committed_head": "7818ffcb887aeed4f8fd2baa484897b69603d2af",
+    "patch_sha256": "3f5669ae1de62c09b26d4aa3888cecd47058a786f00e0893bac7bfd191910588",
+    "committed_source_equality": true
+  },
+  "maximum_replayer": {
+    "status": "linked_not_run_on_current_confirmation",
+    "source_sha256": "29b9c6a48448935aee70159787063bb8a2c1cdd5b6a762ff596fd2d9061ca498",
+    "binary_sha256": "256bd2d51471fbdae92ac38a4095e67e39ba2c507817f4652114e36a18b74c2e",
+    "same_original_29b_source": true,
+    "included_support_sha256": "b53df2b439845729dd5a9c898c9cece83c28426457ec18701cf9787756310306"
+  },
+  "scientific_scope": "Narrow canonical-LU endpoint certification repair. Previous accepted solver paths, sampling/physical formulas, old seven-mode preflight, 21-run screen selection and common scales remain unchanged. All 15 fresh confirmation runs must complete and pass the existing acceptance before statistics; the interrupted first attempt is excluded.",
+  "lifecycle": "The prepared command and manifest statuses are preserved verbatim. This archive contains no live result, run log, resource file, workspace, partial statistical result or maximum replay from the running confirmation. The commit proof was produced after source publication and establishes exact source equality, not a new numerical outcome.",
+  "deduplication": "Prior immutable source/gate/replay/screen and maximum sources are relative references to committed archives. Every new .log/.patch and raw artifact is gzip; hashes/sizes are uncompressed. No executable, generated-process saved state or compiled library is copied.",
+  "reproduction": "Driver/build records preserve the actual compiler commands and linked dependency hashes. The validator audit uses original absolute artifact paths and recreates explicitly synthetic tiny bytes; restore referenced inputs before rerunning it. No Gamma helper or new statistics formula is introduced.",
+  "results_status": null,
+  "confirmation_passed": null,
+  "maximum_accuracy_passed": null
+}
