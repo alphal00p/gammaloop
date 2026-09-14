@@ -1178,7 +1178,6 @@ let
       ];
       "packages.${system}.workspaceBuildArtifacts" = [ "packages.${system}.cargoArtifacts" ];
       "checks.${system}.gammaloop-nextest-binaries-core" = nextestArchiveDependenciesFor "core";
-      "checks.${system}.gammaloop-nextest-binaries-docs" = nextestArchiveDependenciesFor "docs";
       "checks.${system}.gammaloop-nextest-binaries-clinnet" = nextestArchiveDependenciesFor "clinnet";
       "checks.${system}.gammaloop-nextest-binaries-docs" = nextestArchiveDependenciesFor "docs";
       "checks.${system}.gammaloop-nextest-binaries-integration" =
