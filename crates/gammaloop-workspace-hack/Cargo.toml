@@ -42,7 +42,6 @@ num-integer = { version = "0.1", features = ["i128"] }
 num-traits = { version = "0.2", features = ["i128", "libm"] }
 once_cell = { version = "1" }
 papergrid = { version = "0.18", default-features = false, features = ["ansi", "std"] }
-pyo3-stub-gen = { version = "0.17", default-features = false, features = ["numpy"] }
 rand = { version = "0.9" }
 rand_chacha = { version = "0.9", default-features = false, features = ["std"] }
 regex = { version = "1" }
@@ -97,7 +96,6 @@ num-integer = { version = "0.1", features = ["i128"] }
 num-traits = { version = "0.2", features = ["i128", "libm"] }
 once_cell = { version = "1" }
 papergrid = { version = "0.18", default-features = false, features = ["ansi", "std"] }
-pyo3-stub-gen = { version = "0.17", default-features = false, features = ["numpy"] }
 rand = { version = "0.9" }
 rand_chacha = { version = "0.9", default-features = false, features = ["std"] }
 regex = { version = "1" }

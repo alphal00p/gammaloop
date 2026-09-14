@@ -43,6 +43,7 @@ third-party = [
     { name = "pyo3" },
     { name = "pyo3-build-config" },
     { name = "pyo3-ffi" },
+    { name = "pyo3-stub-gen" },
 ]
 
 # Proc-macro crates build on the host side and should not carry the workspace
