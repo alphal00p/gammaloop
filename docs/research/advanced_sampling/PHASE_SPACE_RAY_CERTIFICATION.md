@@ -7,8 +7,9 @@ scaling resolves that point with the **same solver and residual budget** and
 satisfies a directed check of the original graph equation.
 
 The production change is confined to `phase_space(cut(...))` callbacks. The
-rebuilt GL638 point replay now passes; complete seven-candidate acceptance is
-still pending. The original failed preflight remains preserved. No physical
+rebuilt GL638 point replay now passes. The subsequent
+[complete seven-candidate acceptance](GL638_HOSTED_JOINT_GATE.md#completed-cut-matched-acceptance)
+also passes; the original failed preflight remains preserved. No physical
 tolerance, root policy, LU-h profile, channel definition or proposal precision
 changed.
 
@@ -107,7 +108,7 @@ confirms these comparisons. The run completed in 81.800 s with one worker. The s
 finite and returns zero Gaussian weight at this far-tail ordinary-fallback
 point. This establishes the repaired pointwise pipeline; it supplies neither
 a one-point normalization check nor a physical-integrand acceptance result.
-The full seven-candidate preflight is a separate, still-pending gate.
+The subsequent full seven-candidate preflight passes as a separate gate.
 
 ## Evidence and reproduction
 
@@ -132,6 +133,7 @@ The minimal old-binary replay exits successfully because it records all
 independent outcomes; its selected and summed joint rows still report failure.
 The core reproduction is
 `cff::esurface::tests::phase_space_cut_root_replays_canonical_foreign_inverse_cancellation`.
-The rebuilt binder replay passes. The full seven-candidate preflight must also
-pass before the equal-N physics comparison proceeds. This correctness repair supplies no
-new cost, variance, integral or global boundedness result.
+The rebuilt binder replay and subsequent full seven-candidate preflight pass,
+allowing the separately preregistered equal-N physics comparison to proceed.
+This correctness repair supplies no new cost, variance, integral or global
+boundedness result.

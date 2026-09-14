@@ -1,0 +1,47 @@
+{
+  "optimized_lmb.settings.toml": {
+    "stored_path": "../local_cut_matched_hz/shared/optimized_lmb.settings.toml",
+    "sha256_uncompressed": "123b6faaa533a5ccc3aa53ce2d7a7d7a018a02195cd517f2a6296678f2f8144e",
+    "bytes_uncompressed": 1365
+  },
+  "cuts.settings.toml": {
+    "stored_path": "../local_cut_matched_hz/shared/cuts.settings.toml",
+    "sha256_uncompressed": "1e4615ad7880a59702f3eabe3950334bb63a075bfa0a97b53ecc2b129c09a198",
+    "bytes_uncompressed": 3183
+  },
+  "cuts_joint.settings.toml": {
+    "stored_path": "../local_cut_matched_hz/shared/cuts_joint.settings.toml",
+    "sha256_uncompressed": "b7cf7b8bc621d5093dfe469deb1a4d7259c0db4ed354f0d2b7dc9d0733ea5b68",
+    "bytes_uncompressed": 3451
+  },
+  "cuts_soft.settings.toml": {
+    "stored_path": "../local_cut_matched_hz/shared/cuts_soft.settings.toml",
+    "sha256_uncompressed": "653babfc065286afb3fb9329904bccc5affc1802a66a2795628176cdb20cd0d2",
+    "bytes_uncompressed": 3351
+  },
+  "cuts_joint_soft.settings.toml": {
+    "stored_path": "../local_cut_matched_hz/shared/cuts_joint_soft.settings.toml",
+    "sha256_uncompressed": "6770bf3c884c73e2c5149e9f268a7d738f6be919f83d2b726eebf853e694f1f9",
+    "bytes_uncompressed": 3619
+  },
+  "cuts_combined_joint.settings.toml": {
+    "stored_path": "../local_cut_matched_hz/shared/cuts_combined_joint.settings.toml",
+    "sha256_uncompressed": "02e34ab77d42a9bba05e1a6a2c5b1228e3c54eba9214bb62b390ccdee6682a0a",
+    "bytes_uncompressed": 3587
+  },
+  "cuts_combined_joint_soft.settings.toml": {
+    "stored_path": "../local_cut_matched_hz/shared/cuts_combined_joint_soft.settings.toml",
+    "sha256_uncompressed": "2e14226a9455900a483381c4494cabd040038de9642c37e741aeb68fb7eb0894",
+    "bytes_uncompressed": 3755
+  },
+  "state_before.json": {
+    "stored_path": "../local_cut_matched_hz/shared/state_hashes.json",
+    "sha256_uncompressed": "eea5232cd0b55f5c3e507b26a4ef9ee00fffcac19532601e34b8a0d6186f5f1f",
+    "bytes_uncompressed": 4106
+  },
+  "state_after.json": {
+    "stored_path": "../local_cut_matched_hz/shared/state_hashes.json",
+    "sha256_uncompressed": "eea5232cd0b55f5c3e507b26a4ef9ee00fffcac19532601e34b8a0d6186f5f1f",
+    "bytes_uncompressed": 4106
+  }
+}

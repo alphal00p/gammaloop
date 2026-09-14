@@ -1,0 +1,28 @@
+{
+  "scope": "Repeated artifact-only compatibility checks against the current frozen full-screen declaration. No GammaLoop, current pilot output or state read; historical retained X2 scalars only. This does not claim an end-to-end current pilot collection audit.",
+  "verified_utc": "2026-09-14T10:42:59.193364+00:00",
+  "previous_record": {
+    "path": "/tmp/gl638-hosted-joint-gate/analyzer_multidir_compatibility.json",
+    "sha256": "b176b736983344199001dcdc1ebd9f161ef706f34ea2291d91041348189863d5",
+    "retained_unchanged": true,
+    "limitation": "Prior record names an earlier manifest hash; exact earlier manifest bytes are not available. This independent record verifies the current declaration directly."
+  },
+  "pool_function_text_unchanged": true,
+  "pool_score_maxima_comparison_text_unchanged_except_worker_authentication": true,
+  "confirmation_workers_must_match_frozen_screen": true,
+  "all_pool_output_fields_equal_old_version": true,
+  "historical_means_errors_matched": 32,
+  "historical_relative_tolerance": 2e-15,
+  "duplicate_real_directory_rejected": true,
+  "included_excluded_same_real_directory_rejected": true,
+  "diagnostics": [
+    "duplicate or simultaneously included/excluded real pilot directory",
+    "duplicate or simultaneously included/excluded real pilot directory"
+  ],
+  "input_sha256": {
+    "/tmp/gl638-hosted-joint-gate/analyze_physics_pilots.py": "b836da2d71462ff2ad83ec6d4daba02457b2535448c0851da8762a441c78f6b5",
+    "/tmp/gl638-hosted-joint-gate/analyze_physics_pilots_before_multidir.py": "c35e5b53c42d3769f3677c1283c4f1c0d0b47e3328b18448677d5fb0aefd3cf7",
+    "/tmp/gl638-x2-pilot/pilot-audit.json": "c83f50b29521d38eb422bb214812d23e5cea6b99867d2c7cd65d9ae20b94495a",
+    "/tmp/gl638-hosted-joint-gate/manifest-screen-full-build5.json": "598175f17094dabdf0a22d78b97a58876f7f37cebeb919982650fad720b85251"
+  }
+}

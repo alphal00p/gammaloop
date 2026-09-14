@@ -1,0 +1,548 @@
+{
+  "status": "prepared_seven_mode_cut_and_sequential_joint_preflight_not_run",
+  "source_base_commit": "22eb17a6e389636c26fa7135f90abe421fbbded7",
+  "candidate_binary": "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/gammaloop",
+  "candidate_binary_sha256": "5d3f6d86a975664f8b42262f2e9f1028fe54dc7b4a9ddf9edd98193907f17522",
+  "candidate_driver_sha256": "2fd035e87812264837a6cb0feb752a6abb63f827a90d1b461285442fd0dd311d",
+  "state": "/common/dev/gl638_checkpoint_06d470409/all/state",
+  "process_name": "epem_a_tth",
+  "integrand_name": "NNLO",
+  "graph_name": "GL638",
+  "production_orientations": 936,
+  "physical_cuts": 6,
+  "exposed_summed_orientation_selectors": 1,
+  "generation_parent_lmb": [
+    3,
+    4,
+    7,
+    10
+  ],
+  "host_cut": {
+    "id": 1,
+    "edges": [
+      2,
+      6,
+      10
+    ]
+  },
+  "joint": {
+    "name": "direct_joint_HZ",
+    "original_targets": [
+      [
+        2,
+        4,
+        12
+      ],
+      [
+        3,
+        10,
+        13
+      ]
+    ],
+    "parent_lmb": [
+      3,
+      6,
+      7,
+      10
+    ],
+    "active_lmb": [
+      3
+    ],
+    "preceding_lmb": [
+      6,
+      7,
+      10
+    ],
+    "alpha": 1,
+    "rho_max_GeV": 300,
+    "note": "Actual dyadic compact policy and fallback are determined by the canonical bridge. No cut-energy substitution or CT-star projection."
+  },
+  "cards": {
+    "optimized_lmb": "/tmp/gl638-physics-comparison/cut-matched/cards/optimized_lmb.toml",
+    "cuts": "/tmp/gl638-physics-comparison/cut-matched/cards/cuts.toml",
+    "cuts_joint": "/tmp/gl638-physics-comparison/cut-matched/cards/cuts_joint.toml",
+    "cuts_soft": "/tmp/gl638-physics-comparison/cut-matched/cards/cuts_soft.toml",
+    "cuts_joint_soft": "/tmp/gl638-physics-comparison/cut-matched/cards/cuts_joint_soft.toml",
+    "cuts_combined_joint": "/tmp/gl638-physics-comparison/cut-matched/cards/cuts_combined_joint.toml",
+    "cuts_combined_joint_soft": "/tmp/gl638-physics-comparison/cut-matched/cards/cuts_combined_joint_soft.toml"
+  },
+  "proposal_order": [
+    "cuts",
+    "cuts_joint",
+    "cuts_soft",
+    "cuts_joint_soft",
+    "cuts_combined_joint",
+    "cuts_combined_joint_soft"
+  ],
+  "expected_channels": {
+    "optimized_lmb": 6,
+    "cuts": 6,
+    "cuts_joint": 7,
+    "cuts_soft": 7,
+    "cuts_joint_soft": 8,
+    "cuts_combined_joint": 7,
+    "cuts_combined_joint_soft": 8
+  },
+  "channel_id_rule": "Resolve labels from actual canonical catalogue after each warmup. Never reinterpret saved IDs from a different catalogue.",
+  "reference": {
+    "width_GeV": 300,
+    "center_GeV": [
+      30,
+      -20,
+      10,
+      30,
+      -20,
+      10,
+      30,
+      -20,
+      10,
+      30,
+      -20,
+      10
+    ],
+    "expected_raw_second_moment_GeV2": 1085600,
+    "smoke_points": 8,
+    "halton_points": 8192,
+    "allowed_refinement_if_only_quadrature_miss": 32768,
+    "normalization_absolute_tolerance": 0.06,
+    "second_moment_relative_tolerance": 0.08,
+    "sum_channels_per_draw": true,
+    "note": "Deterministic-Halton IID dispersion is diagnostic, not a QMC confidence interval. Finite smoke moments are not normalization acceptance."
+  },
+  "timing": {
+    "cores": 20,
+    "representative_draws_per_worker": 16,
+    "warmup_draws_per_worker": 2,
+    "repetitions": 3,
+    "cap_sampling_over_physical": 0.1,
+    "primary_bound": "sum(max(W-P,0))/sum(P)",
+    "also_report": "sum(parameterization_time)/sum(P)",
+    "hard_set": "Separate all eight H/Z raw points, soft22, and prior maxima. Raw inverse diagnostics do not replace new-catalogue forward-source timing.",
+    "failure_rule": "Exhausted Err or invalid result fails; retain elapsed wall time and source. Never discard failed draws.",
+    "hard_selection": "ordinary stack only: joint hz00/hz03 (support unverified until actual inverse), explicit full LMB soft22; separate bare/selected summaries; no forcedArb denominator mixing",
+    "maximum_replay": "each worker replays exact maximum-ranked complete representative Sample, same fresh iteration1 max_eval=0",
+    "clock_scope": "aggregate elapsed precise-call durations across workers, not CPU time; Grid/RNG sampling excluded; baseline denominator actual all936 bodies/probes/retries",
+    "user_steering": "Finish this round, then stop performance optimization irrespective of the recorded historical 10% metric. Cost exceedance is no longer a physics-study blocker. Invalid physics remains a correctness failure."
+  },
+  "paired_seeds": [
+    11113
+  ],
+  "samples_per_run": 2048,
+  "iterations": 1,
+  "cores": null,
+  "total_physical_pilot_draws": 43008,
+  "one_load_rule": "One read-only StateLoadOption owner for inventory/reference/raw/timing/pilot in the staged API driver. Compose existing snippets before execution; do not launch provenance drivers sequentially as separate state loads.",
+  "gates_pending": [
+    "Actual seven-catalogue native inventory; sequential Cut1+HZ dependency/profile/prior binding; reference-check1vs2 first8",
+    "Full existing Gaussian reference8192/32768 acceptance for all seven catalogues",
+    "All declared candidate/baseline raw and selected ordinary/Arb physics audit",
+    "Equal-N signed/absolute screen only after complete preflight acceptance"
+  ],
+  "driver_status": "Compiled and independently hash-verified against build5; numerical replay/preflight not yet run.",
+  "historical_archive": "/common/dev/gammaloop_ir_safe_thresholds/docs/research/advanced_sampling/GL638_X2_PHYSICAL_PILOT.json",
+  "historical_archive_sha256": "c7f6146181376e0db2116523c3f6dd3bc628e3510610f060179c3d4aea8546de",
+  "historical_source_commit": "f2f64fb17dd5dab588eca298dc61f1100fa4962d",
+  "historical_binary": {
+    "status": "complete",
+    "source_worktree": "/common/dev/gammaloop_advanced_sampling_x2",
+    "source_commit": "f2f64fb17dd5dab588eca298dc61f1100fa4962d",
+    "source_tracked_status_before": "",
+    "cache_seed": "cp -a --reflink=auto of X1 target; distinct inodes; no hardlinks",
+    "target_directory": "/common/dev/gammaloop_advanced_sampling_x2/target",
+    "command": [
+      "cargo",
+      "build",
+      "--profile",
+      "dev-optim",
+      "--locked",
+      "-p",
+      "gammaloop-api",
+      "--bin",
+      "gammaloop",
+      "--features",
+      "ufo_support"
+    ],
+    "jobs": 2,
+    "source_environment": "/tmp/gammaloop-rebase-dev-env.sh",
+    "profile": "dev-optim: core/API opt2, dependencies opt3, no fatLTO",
+    "selected_build_environment": {
+      "RUSTFLAGS": "-C linker=/nix/store/vdaz6sk455r8sbpi7wzaf9vlz5i9yyvx-gcc-wrapper-15.2.0/bin/gcc",
+      "CARGO_ENCODED_RUSTFLAGS": null,
+      "CARGO_TARGET_DIR": "/common/dev/gammaloop_advanced_sampling_x2/target",
+      "CARGO_BUILD_JOBS": "2"
+    },
+    "x1_source_commit": "3f9b1a28473f313d6242a556ada2e8dbcd6f6477",
+    "x1_tracked_status_before": "",
+    "x1_binary_sha256_before": "f700ee575153067ccc77894ea776a96f139105812a15014d094dd67ba7db6d61",
+    "binary": "/common/dev/gammaloop_advanced_sampling_x2/target/dev-optim/gammaloop",
+    "build_log": "/tmp/gl638-x2-build/build.log",
+    "started_utc": "2026-09-13T18:42:19.912387+00:00",
+    "returncode": 0,
+    "elapsed_seconds": 932.0206227939343,
+    "finished_utc": "2026-09-13T18:57:51.933308+00:00",
+    "source_tracked_status_after": "",
+    "x1_tracked_status_after": "",
+    "x1_binary_sha256_after": "f700ee575153067ccc77894ea776a96f139105812a15014d094dd67ba7db6d61",
+    "build_log_sha256": "ec9f340954d00b1c7c7f80150432b3ff66ccbf95b1a0107c1c036d889e2d5fde",
+    "frozen_x1_unchanged": true,
+    "binary_sha256": "a37b5b27e1fde706e585be9f9c5e10894152cb02aab962ef13ff2dd751f0ee8f",
+    "matching_libraries": {
+      "gammalooprs": {
+        "path": "/common/dev/gammaloop_advanced_sampling_x2/target/dev-optim/deps/libgammalooprs-0618db2a28011153.rlib",
+        "sha256": "745a2617f84a940eae4538b1f1d8e87cad86e7746538d70efdd75e51f4f28d8b",
+        "size_bytes": 1408924756,
+        "mtime_utc": "2026-09-13T18:53:14.787467+00:00"
+      },
+      "gammaloop_api": {
+        "path": "/common/dev/gammaloop_advanced_sampling_x2/target/dev-optim/deps/libgammaloop_api.rlib",
+        "sha256": "feddab73b6cdf2922024bd3b26caee343240431eb66a03ab672768bf8d4392fa",
+        "size_bytes": 719005260,
+        "mtime_utc": "2026-09-13T18:57:26.857967+00:00"
+      }
+    },
+    "cli_version_smoke": "gammaLoop 0.1.0"
+  },
+  "saved_state_hashes": "/tmp/gl638-hosted-joint-gate/provenance/state_sha256_expected.json",
+  "max_replay_rule": "Candidate maximum Samples replay under their own candidate catalogue. Historical samples retain original law/probabilities for provenance; use archived raw points for new-density comparisons. No exact historical-estimator equality claim after canonical-law change.",
+  "no_changes": [
+    "DOT threshold metadata",
+    "model masses/couplings",
+    "UV generation",
+    "CT multipliers/grouping",
+    "stability stack",
+    "local CT profile",
+    "LU h-function",
+    "physical cut/orientation filtering"
+  ],
+  "artifact_sha256": {
+    "README.md": "7f9830d7c51681e4a56c6d65cb0ba4684e666fcc8324e207f9c1671e199c1695",
+    "audit_physical.py": "72212d101563b92733cd4d8586e2a5dc7148eddf285ccc7dd9e257caf469e737",
+    "audit_physical_before_cut_matched.py": "22b1acf7e4c41cb17e889a8426a093bea2972917cb5061d57307619c1bc1481c",
+    "cards/direct_h_p2.toml": "a135fbca4644daf6ebe07d2697add69093ba83b980588dbde0a7b3068486e743",
+    "cards/events_overlay.toml": "955a153797ad5fd680d805f4d349bcd0ff567f560a4050951229f05d42077190",
+    "cards/joint_hz_plus_lmb.toml": "7d4d40c692da56fcf9855bb4bde90dfd2faeab05eb93e188b928aac0753c08f2",
+    "cards/optimized_lmb.toml": "05c384bc1ce55ab23891b6e8937d392b2c30be2a2634ff54047f5f1fb5f41d67",
+    "compile_driver.py": "6fc0bf0146e5823532de2b1fe87d58690261c7cf5e5205fc9e0c2a2c05d46b8c",
+    "drivers/driver_migration.rs": "1206e99d2493787f5aca1c246f78e44d1b40d72fde55904a4fabd20e39cf771d",
+    "drivers/gate-before-physics.rs": "7b5e474ea21b0dd20fa12181cd8b8dc635c7d5db0d17d6400d1e1c47b406123e",
+    "drivers/gate-before-reference-point.rs": "b53df2b439845729dd5a9c898c9cece83c28426457ec18701cf9787756310306",
+    "drivers/gate-max-support.rs": "b53df2b439845729dd5a9c898c9cece83c28426457ec18701cf9787756310306",
+    "drivers/gate-physics-build5.build.json": "f282367a82689abf1d2cbc592ccf8091b0e16ef1ece88db1c31fe7547d6e56a8",
+    "drivers/gate.rs": "254a7465209162a8f5214329fab849ad5c32f5e3c6cc5c1c5eed32ba2ef3c1a2",
+    "drivers/max_replay_current.rs": "29b9c6a48448935aee70159787063bb8a2c1cdd5b6a762ff596fd2d9061ca498",
+    "pilot_argv.json": "4f7c8710fad6824948ddf091aa389fdf58dfd4ae32929973b1eec1f2de4c1eef",
+    "pilot_commands.txt": "26438b44ecf81eac78c9c7e7c786ca5ad9bcb601dc6e6f7887fba280c2a7f477",
+    "provenance/all_hz_inputs.json": "2f0a4d8e46e08ad9d6d8b9e079fe17f12123ab21413545acf3d34cd37f188f42",
+    "provenance/audit_physical.py": "37ca873fba3f98e4d9b55d46f8efb5849a4a0d611bfe5868637a3193f6b6dd1d",
+    "provenance/audit_results.py": "5428666cfe337ac6a124becd654082674922f6b0d1ccb173615bd7c2d859988e",
+    "provenance/max_replay.rs": "e4de863611605471166658eb649d3f74cca33c3c178b1fb0bd17665f00087fc8",
+    "provenance/physical_native.rs": "d91559abe6dfc3b4d88ced7970fc555bfb67d11b45c1434b8fcc3c688a6233e8",
+    "provenance/raw_baseline_cases.json": "5a86c44d6f180c0c339a939d985e096efdb25e330d4cbfa251f53482c1e24e3f",
+    "provenance/reference_batch.rs": "bc0e35585d5a693c1699e6476513e97a95dca7da45c8e4b0e0bda90f1c31a3a4",
+    "provenance/run.py": "4133ffa83b53819ae6e63cbbb6ab1fe19ce7fde04c36bdd71942f05ccbd4b2bb",
+    "provenance/state_sha256_expected.json": "97c7ade14d828bcc2b049a2b696fffabb9052021638d736782313776f1bb6f3f",
+    "raw_smoke_requests.json": "d9211cfe677f4a729a606b13209ccc1b4e47f2a754b9acf86c4eb3a983dd9881",
+    "selected_host_requests.json": "cb9e159b702588aebcdf0554b451471e8eee212d277db1208d03d3b9b819f13d",
+    "watch_rustc.py": "ba8aaf51591abd530f86dce3705404394eca04ad6664ed59fa19a3bee4fbf4df"
+  },
+  "candidate_driver_source_sha256": "b53df2b439845729dd5a9c898c9cece83c28426457ec18701cf9787756310306",
+  "source_candidate_commit": null,
+  "driver_stages": [
+    "inventory",
+    "smoke",
+    "reference",
+    "replay",
+    "timing",
+    "preflight",
+    "pilot",
+    "diagnostic-pilot"
+  ],
+  "generic_gates": {
+    "unique_passed": 137,
+    "hosted_and_conditional_acceptance_seconds": 515.547,
+    "full18_amplitude": "passed",
+    "all_target_check": "passed",
+    "clippy_changed_line_diagnostics": 0,
+    "full18_amplitude_seconds": 877.365,
+    "certificate_tests_passed": 8,
+    "certificate_check_seconds": 14.66,
+    "certificate_clippy_changed_line_diagnostics": 0,
+    "center_repair": {
+      "focused_passed": 14,
+      "broader_passed": 27,
+      "broader_seconds": 424.896,
+      "check": "passed",
+      "clippy_changed_line_warnings": 0,
+      "note": "Counted test executions, not a claim of disjoint tests; final changes only Clippy if-collapse and local test type alias, checked again."
+    }
+  },
+  "candidate_build": {
+    "head": "22eb17a6e389636c26fa7135f90abe421fbbded7",
+    "started_utc": "2026-09-14T08:59:45.967029+00:00",
+    "profile": "dev-optim",
+    "jobs": 2,
+    "purpose": "phase-space LU ray cancellation correctness fix",
+    "source_patch_sha256": "667a91d23c759c1a2fe02355569dbc3d64866af681428c40213b8e335b5dfd65",
+    "argv": [
+      "cargo",
+      "build",
+      "--profile",
+      "dev-optim",
+      "--locked",
+      "--offline",
+      "-p",
+      "gammaloop-api",
+      "--bin",
+      "gammaloop",
+      "--features",
+      "ufo_support",
+      "--message-format=json"
+    ],
+    "environment": {
+      "RUSTFLAGS": "-C linker=/nix/store/vdaz6sk455r8sbpi7wzaf9vlz5i9yyvx-gcc-wrapper-15.2.0/bin/gcc",
+      "CARGO_ENCODED_RUSTFLAGS": null,
+      "CARGO_TARGET_DIR": null,
+      "CARGO_BUILD_JOBS": "2"
+    },
+    "cargo_pid": 3595293,
+    "returncode": 0,
+    "watcher_returncode": 0,
+    "elapsed_seconds": 426.39208210399374,
+    "finished_utc": "2026-09-14T09:06:52.359212+00:00",
+    "source_unchanged": true
+  },
+  "candidate_driver_build_record": "/tmp/gl638-hosted-joint-gate/drivers/gate-physics-build5.build.json",
+  "source_candidate_patch_sha256": "667a91d23c759c1a2fe02355569dbc3d64866af681428c40213b8e335b5dfd65",
+  "source_candidate_patch": "/tmp/hosted-joint-optimized-build5-source.patch",
+  "prior_072_gl_gates": {
+    "smoke1_physical_audit": "results-smoke1/physics_audit.json",
+    "native_replay_rows": 16,
+    "physical_checks_passed": 53,
+    "all936_sixcuts_verified": true,
+    "saved_state_unchanged": true,
+    "full_reference_pending": true,
+    "smoke1_driver_failure": "LMB label lookup; fixed using existing catalogue kind query"
+  },
+  "completed_gl_gates": {
+    "CT_off_Euler": "passed Quad and Arb",
+    "canonical_invariants": "passed",
+    "all_Gaussian_cases": "passed",
+    "CT_on_Euler": "same retained failed source now valid: Quad2.200848788466276e-21, Arb4.2692671432208616e-290",
+    "center_matrix": "all6physical rows valid; same6cuts, sourcepoint/J/w invariants andstatehashes passed"
+  },
+  "trace_scope": "Local physics diagnostic, not timing or MonteCarlo convergence evidence.",
+  "source_commit_proof": null,
+  "candidate_driver_source": "/tmp/gl638-hosted-joint-gate/drivers/gate-before-reference-point.rs",
+  "primary_channels": {
+    "cuts": "lu_cut_1",
+    "cuts_joint": "direct_joint_HZ",
+    "cuts_soft": "lu_cut_1",
+    "cuts_joint_soft": "direct_joint_HZ",
+    "cuts_combined_joint": "cut1_joint_HZ",
+    "cuts_combined_joint_soft": "cut1_joint_HZ"
+  },
+  "physics_audit": {
+    "baseline": "optimized_lmb",
+    "candidates": [
+      "cuts",
+      "cuts_joint",
+      "cuts_soft",
+      "cuts_joint_soft",
+      "cuts_combined_joint",
+      "cuts_combined_joint_soft"
+    ],
+    "allowed_sampling_differences": [
+      "channel_selection",
+      "channel_definitions"
+    ],
+    "script": "/tmp/gl638-hosted-joint-gate/audit_physical.py",
+    "sha256": "72212d101563b92733cd4d8586e2a5dc7148eddf285ccc7dd9e257caf469e737",
+    "preserved_previous_script": "/tmp/gl638-hosted-joint-gate/audit_physical_before_cut_matched.py",
+    "preserved_previous_sha256": "22b1acf7e4c41cb17e889a8426a093bea2972917cb5061d57307619c1bc1481c"
+  },
+  "card_manifest": "/tmp/gl638-physics-comparison/cut-matched/cards_combined_seven_manifest.json",
+  "source_equivalent_commit": null,
+  "source_equivalence_scope": "Exact frozen build5 base+patch lineage; no later committed equivalence asserted.",
+  "matched_comparisons": [
+    [
+      "cuts",
+      "cuts_joint"
+    ],
+    [
+      "cuts_soft",
+      "cuts_joint_soft"
+    ],
+    [
+      "cuts",
+      "cuts_combined_joint"
+    ],
+    [
+      "cuts_soft",
+      "cuts_combined_joint_soft"
+    ]
+  ],
+  "soft_comparisons": [
+    [
+      "cuts",
+      "cuts_soft"
+    ],
+    [
+      "cuts_joint",
+      "cuts_joint_soft"
+    ],
+    [
+      "cuts_combined_joint",
+      "cuts_combined_joint_soft"
+    ]
+  ],
+  "cut_matched_scope": "Six LU-h cut channels unchanged in every advanced candidate; joint added rather than replacing cut1, paired with fixed soft coverage. All936 sixcut fullUV physics unchanged. This is the GL638 graph contribution, not the complete ttH process.",
+  "combined_scope": "cut1_joint_HZ composes a phase_space cut1 LU-h prior over[6,10], then complement7, then hosted joint active3. Six independent cut siblings remain unchanged. Compare against cuts_joint only after actual native binding/reference/physical gates.",
+  "card_manifest_sha256": "86e43d4b335524723d8921c34ba56ef937ed20372e1cee58d7cd5ece55235a67",
+  "card_sha256": {
+    "/tmp/gl638-physics-comparison/cut-matched/cards/optimized_lmb.toml": "c4d99ba8507ab73a5c754e1480c0e37978bd5489b31692f66e0ea030aff5b3e6",
+    "/tmp/gl638-physics-comparison/cut-matched/cards/cuts.toml": "71ce4efcf492a51393075382816f8ded9ee79f93dbb1023f590b7b391f29f751",
+    "/tmp/gl638-physics-comparison/cut-matched/cards/cuts_joint.toml": "62afd2a032e956759c5f9a3404857e9eb8442feb1bdd6c0c197d5c1d6ea829d6",
+    "/tmp/gl638-physics-comparison/cut-matched/cards/cuts_soft.toml": "041ed87209898600035b7dd46f049d708cb8244ba38c5cc2380831574f9d25ee",
+    "/tmp/gl638-physics-comparison/cut-matched/cards/cuts_joint_soft.toml": "d92938edd474476914f12a19c414e732cf6338469ef7f30f7cd7b955530e0c5a",
+    "/tmp/gl638-physics-comparison/cut-matched/cards/cuts_combined_joint.toml": "e7c61f30d4e117c53bdd0bcb15ca116ab7bdd3b6005c299c7b828ea0de4f1c9b",
+    "/tmp/gl638-physics-comparison/cut-matched/cards/cuts_combined_joint_soft.toml": "ab492e6e29e6fc275b6d9e99f5c353470e3b59db78fd7248b8ae5b8a9d9b09bb"
+  },
+  "combined_comparisons": [
+    [
+      "cuts_joint",
+      "cuts_combined_joint"
+    ],
+    [
+      "cuts_joint_soft",
+      "cuts_combined_joint_soft"
+    ]
+  ],
+  "historical_artifact_sha256": {
+    "README.md": "7f9830d7c51681e4a56c6d65cb0ba4684e666fcc8324e207f9c1671e199c1695",
+    "audit_physical.py": "22b1acf7e4c41cb17e889a8426a093bea2972917cb5061d57307619c1bc1481c",
+    "cards/direct_h_p2.toml": "a135fbca4644daf6ebe07d2697add69093ba83b980588dbde0a7b3068486e743",
+    "cards/events_overlay.toml": "955a153797ad5fd680d805f4d349bcd0ff567f560a4050951229f05d42077190",
+    "cards/joint_hz_plus_lmb.toml": "7d4d40c692da56fcf9855bb4bde90dfd2faeab05eb93e188b928aac0753c08f2",
+    "cards/optimized_lmb.toml": "05c384bc1ce55ab23891b6e8937d392b2c30be2a2634ff54047f5f1fb5f41d67",
+    "compile_driver.py": "a79378eb99e08bc10639a744d7f9f21b778d51bd3e518852b9752d65e0cd9cad",
+    "drivers/driver_migration.rs": "1206e99d2493787f5aca1c246f78e44d1b40d72fde55904a4fabd20e39cf771d",
+    "drivers/gate.rs": "ab24de37c1e028d1bf40ef159140537b8c69fcb85a5a73f8fc2f1ea99ca513b0",
+    "pilot_argv.json": "4f7c8710fad6824948ddf091aa389fdf58dfd4ae32929973b1eec1f2de4c1eef",
+    "pilot_commands.txt": "26438b44ecf81eac78c9c7e7c786ca5ad9bcb601dc6e6f7887fba280c2a7f477",
+    "provenance/all_hz_inputs.json": "2f0a4d8e46e08ad9d6d8b9e079fe17f12123ab21413545acf3d34cd37f188f42",
+    "provenance/audit_physical.py": "37ca873fba3f98e4d9b55d46f8efb5849a4a0d611bfe5868637a3193f6b6dd1d",
+    "provenance/audit_results.py": "5428666cfe337ac6a124becd654082674922f6b0d1ccb173615bd7c2d859988e",
+    "provenance/max_replay.rs": "e4de863611605471166658eb649d3f74cca33c3c178b1fb0bd17665f00087fc8",
+    "provenance/physical_native.rs": "d91559abe6dfc3b4d88ced7970fc555bfb67d11b45c1434b8fcc3c688a6233e8",
+    "provenance/raw_baseline_cases.json": "5a86c44d6f180c0c339a939d985e096efdb25e330d4cbfa251f53482c1e24e3f",
+    "provenance/reference_batch.rs": "bc0e35585d5a693c1699e6476513e97a95dca7da45c8e4b0e0bda90f1c31a3a4",
+    "provenance/run.py": "4133ffa83b53819ae6e63cbbb6ab1fe19ce7fde04c36bdd71942f05ccbd4b2bb",
+    "provenance/state_sha256_expected.json": "97c7ade14d828bcc2b049a2b696fffabb9052021638d736782313776f1bb6f3f",
+    "raw_smoke_requests.json": "d9211cfe677f4a729a606b13209ccc1b4e47f2a754b9acf86c4eb3a983dd9881",
+    "selected_host_requests.json": "cb9e159b702588aebcdf0554b451471e8eee212d277db1208d03d3b9b819f13d",
+    "drivers/gate-before-physics.rs": "7b5e474ea21b0dd20fa12181cd8b8dc635c7d5db0d17d6400d1e1c47b406123e"
+  },
+  "artifact_hash_scope": "Current ancillary paths hashed at build5 handoff; candidate_driver_source names the exact linked frozen source (254a or b53). Prior artifact and source/build lineage remain separate. Original cards unchanged.",
+  "inherited_build4_lineage": {
+    "manifest": "/tmp/gl638-hosted-joint-gate/manifest-cut-combined-seven-physics.json",
+    "manifest_sha256": "4a74150da6c7e711d34d3df9cf6e8109618c4b0969bc8438db9ca5373cb3d566",
+    "source_base_commit": "6e9bf401db75cb13ec20e18377a444bc2fcd4f33",
+    "candidate_binary": "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/gammaloop",
+    "candidate_binary_sha256": "3837034b29e85742a665825609f1ba79dba31c4fd495f773645a96ccf35115e8",
+    "candidate_driver_sha256": "d027b92debfd626a0269b639b9a3f78ebe78911609f0129f66c45ec929d66492",
+    "driver_status": "Compiled extension against exact optimized build4 libraries; four new native anchors from two original rays, all candidate inverses and actual source-forward points separately retained.",
+    "candidate_driver_source_sha256": "b53df2b439845729dd5a9c898c9cece83c28426457ec18701cf9787756310306",
+    "source_candidate_commit": null,
+    "candidate_build": {
+      "head": "6e9bf401db75cb13ec20e18377a444bc2fcd4f33",
+      "started_utc": "2026-09-14T07:02:00.386161+00:00",
+      "profile": "dev-optim",
+      "jobs": 2,
+      "purpose": "canonical physical overlap center correctness repair",
+      "source_patch_sha256": "1d78e98b73e6a8dafaf6e446353c2a1607dc0724f8ea7d1c2d88c4962b81bba7",
+      "argv": [
+        "cargo",
+        "build",
+        "--profile",
+        "dev-optim",
+        "--locked",
+        "--offline",
+        "-p",
+        "gammaloop-api",
+        "--bin",
+        "gammaloop",
+        "--features",
+        "ufo_support",
+        "--message-format=json"
+      ],
+      "cargo_pid": 1607990,
+      "returncode": 0,
+      "elapsed_seconds": 666.0481724970741,
+      "finished_utc": "2026-09-14T07:13:06.434411+00:00",
+      "source_unchanged": true
+    },
+    "candidate_driver_build_record": "/tmp/gl638-hosted-joint-gate/drivers/gate-physics-extended.build.json",
+    "source_candidate_patch_sha256": "1d78e98b73e6a8dafaf6e446353c2a1607dc0724f8ea7d1c2d88c4962b81bba7",
+    "source_candidate_patch": "/tmp/hosted-joint-optimized-build4-source.patch",
+    "source_commit_proof": null,
+    "candidate_driver_source": "/tmp/gl638-hosted-joint-gate/drivers/gate.rs",
+    "source_equivalent_commit": "800666228",
+    "source_equivalence_scope": "Root-verified equivalent committed program; linked libraries retain exact base6e9+patch1d78 source lineage and build4 artifacts."
+  },
+  "candidate_build_record": "/tmp/hosted-joint-optimized-build5-manifest.json",
+  "candidate_driver": "/tmp/gl638-hosted-joint-gate/drivers/gate-physics-build5",
+  "build5_driver_verification": "/tmp/gl638-hosted-joint-gate/build5-driver-verification.json",
+  "build5_driver_verification_sha256": "5582c578965619ed36204c57974cc7628237c99f48283a9a09ca4dcd3aa303f6",
+  "inherited_build4_artifact_sha256": {
+    "README.md": "7f9830d7c51681e4a56c6d65cb0ba4684e666fcc8324e207f9c1671e199c1695",
+    "audit_physical.py": "72212d101563b92733cd4d8586e2a5dc7148eddf285ccc7dd9e257caf469e737",
+    "cards/direct_h_p2.toml": "a135fbca4644daf6ebe07d2697add69093ba83b980588dbde0a7b3068486e743",
+    "cards/events_overlay.toml": "955a153797ad5fd680d805f4d349bcd0ff567f560a4050951229f05d42077190",
+    "cards/joint_hz_plus_lmb.toml": "7d4d40c692da56fcf9855bb4bde90dfd2faeab05eb93e188b928aac0753c08f2",
+    "cards/optimized_lmb.toml": "05c384bc1ce55ab23891b6e8937d392b2c30be2a2634ff54047f5f1fb5f41d67",
+    "compile_driver.py": "a79378eb99e08bc10639a744d7f9f21b778d51bd3e518852b9752d65e0cd9cad",
+    "drivers/driver_migration.rs": "1206e99d2493787f5aca1c246f78e44d1b40d72fde55904a4fabd20e39cf771d",
+    "drivers/gate.rs": "b53df2b439845729dd5a9c898c9cece83c28426457ec18701cf9787756310306",
+    "pilot_argv.json": "4f7c8710fad6824948ddf091aa389fdf58dfd4ae32929973b1eec1f2de4c1eef",
+    "pilot_commands.txt": "26438b44ecf81eac78c9c7e7c786ca5ad9bcb601dc6e6f7887fba280c2a7f477",
+    "provenance/all_hz_inputs.json": "2f0a4d8e46e08ad9d6d8b9e079fe17f12123ab21413545acf3d34cd37f188f42",
+    "provenance/audit_physical.py": "37ca873fba3f98e4d9b55d46f8efb5849a4a0d611bfe5868637a3193f6b6dd1d",
+    "provenance/audit_results.py": "5428666cfe337ac6a124becd654082674922f6b0d1ccb173615bd7c2d859988e",
+    "provenance/max_replay.rs": "e4de863611605471166658eb649d3f74cca33c3c178b1fb0bd17665f00087fc8",
+    "provenance/physical_native.rs": "d91559abe6dfc3b4d88ced7970fc555bfb67d11b45c1434b8fcc3c688a6233e8",
+    "provenance/raw_baseline_cases.json": "5a86c44d6f180c0c339a939d985e096efdb25e330d4cbfa251f53482c1e24e3f",
+    "provenance/reference_batch.rs": "bc0e35585d5a693c1699e6476513e97a95dca7da45c8e4b0e0bda90f1c31a3a4",
+    "provenance/run.py": "4133ffa83b53819ae6e63cbbb6ab1fe19ce7fde04c36bdd71942f05ccbd4b2bb",
+    "provenance/state_sha256_expected.json": "97c7ade14d828bcc2b049a2b696fffabb9052021638d736782313776f1bb6f3f",
+    "raw_smoke_requests.json": "d9211cfe677f4a729a606b13209ccc1b4e47f2a754b9acf86c4eb3a983dd9881",
+    "selected_host_requests.json": "cb9e159b702588aebcdf0554b451471e8eee212d277db1208d03d3b9b819f13d",
+    "drivers/gate-before-physics.rs": "7b5e474ea21b0dd20fa12181cd8b8dc635c7d5db0d17d6400d1e1c47b406123e",
+    "audit_physical_before_cut_matched.py": "22b1acf7e4c41cb17e889a8426a093bea2972917cb5061d57307619c1bc1481c"
+  },
+  "build5_maximum_replay": {
+    "driver": "/tmp/gl638-hosted-joint-gate/drivers/max-replay-build5",
+    "binary_sha256": "12172b64cd64a5e9aa1871e923d453db56c776dbf9b0b6da3c689fb20aac7eca",
+    "build_record": "/tmp/gl638-hosted-joint-gate/drivers/max-replay-build5.build.json",
+    "source_sha256": "29b9c6a48448935aee70159787063bb8a2c1cdd5b6a762ff596fd2d9061ca498",
+    "included_source": "/tmp/gl638-hosted-joint-gate/drivers/gate-max-support.rs",
+    "included_source_sha256": "b53df2b439845729dd5a9c898c9cece83c28426457ec18701cf9787756310306"
+  },
+  "preflight_summary": "/tmp/gl638-hosted-joint-gate/results-cut-combined-seven-preflight-build5/summary.json",
+  "screen_protocol": "/tmp/gl638-physics-comparison/MC_ANALYSIS_PROTOCOL.md",
+  "screen_protocol_sha256": "822949897fd398e88224d4bf841eab7afff8de131e88cab47792d9e7546f114a",
+  "execution_prerequisite": "PENDING: exact build5 seven-method preflight summary must pass source/state/reference/physics checks before physics-pilot; frozen b53 runner enforces these checks.",
+  "planned_stage": "physics-pilot",
+  "planned_batch_size": 256,
+  "batch_purpose": "six advanced methods at first seed; same frozen worker choice as the selected baseline",
+  "worker_selection": "Choose30 only if valid throughput30/throughput20>=1.35 (90% of ideal1.5 scaling) and peak resident memory<=300GB; otherwise20. Use the existing Integrate elapsed interval including its warmup, report whole-process wall separately, freeze choice before advanced outcomes, count chosen baseline once and retain the other control excluded.",
+  "screen_base_manifest": "/tmp/gl638-hosted-joint-gate/manifest-cut-combined-seven-physics-build5.json",
+  "screen_base_manifest_sha256": "9f6cb48cd8826f89753a183f11c6093aab1868c9b750d2b1325ca6518f4886ce",
+  "expected_screen_samples": 43008,
+  "throughput_control_extra_samples": 2048,
+  "worker_selection_threshold": {
+    "throughput_ratio_min": 1.35,
+    "ideal_ratio": 1.5,
+    "minimum_scaling_efficiency": 0.9,
+    "maximum_resident_bytes": 300000000000
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "current_manifest": "manifest-screen-full-build5.json",
+  "current_sha256": "598175f17094dabdf0a22d78b97a58876f7f37cebeb919982650fad720b85251",
+  "historical_compatibility_manifest_sha256": "4ae23c0509434138ed0badeba309832cc85e63d57aa84645e3f7bd1c621a0145",
+  "exact_reconstruction_verified": true,
+  "changes_only": [
+    "worker_selection",
+    "worker_selection_threshold"
+  ],
+  "prior_worker_selection": "Use one fixed worker count,20or30, selected solely from the equal-N throughput/RSS control before advanced screen results; discard the other baseline control from statistical screen but retain its evidence.",
+  "reconstruction": "Replace worker_selection with prior_worker_selection, remove worker_selection_threshold, serialize with json.dumps(indent=2) plus newline. The resulting bytes match the historical compatibility input hash.",
+  "prior_text_source": "Recovered by B from the original manifest-creation command; C independently reproduced the exact hash.",
+  "scope": "Declaration/provenance only. No pilot outcomes inspected; pool/score/N/seeds/card fields unchanged."
+}

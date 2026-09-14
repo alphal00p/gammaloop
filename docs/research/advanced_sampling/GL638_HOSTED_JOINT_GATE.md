@@ -11,8 +11,61 @@ The later seven-candidate cut-matched preflight exposed a foreign Cut1 inverse
 failure at an ordinary-fallback point. Its exact reproduction and narrowly
 scoped prepared-ray fix are recorded in
 [PHASE_SPACE_RAY_CERTIFICATION.md](PHASE_SPACE_RAY_CERTIFICATION.md).
-The rebuilt exact GL638 point replay passes with unchanged native forwards;
-the complete seven-candidate preflight remains pending.
+The rebuilt exact GL638 point replay passes with unchanged native forwards.
+The complete seven-candidate preflight now also passes, as recorded below.
+
+## Completed cut-matched acceptance
+
+Optimized build5, with Rust source equal to commit `4d192b5be`, accepts all seven
+unchanged candidate catalogues. Every mode passes the summed Gaussian
+normalization and raw second-moment criteria at 32,768 indexed Halton points.
+The targets are 1 and 1,085,600 GeV²; the fixed limits are 0.06 absolute and
+0.08 relative. Earlier finite 8/8,192-point results remain in the reports;
+the eight-point check is only a smoke/parallel-consistency test. Halton
+dispersion is diagnostic, not a confidence interval.
+
+| Catalogue | Channels | Normalization | Raw-moment relative error |
+| --- | ---: | ---: | ---: |
+| Optimized LMB | 6 | 1.006498 | −2.9234% |
+| Six cuts | 6 | 1.031806 | +3.8081% |
+| Six cuts + direct joint | 7 | 1.039626 | +4.6613% |
+| Six cuts + soft LMB | 7 | 1.047922 | +5.8060% |
+| Six cuts + direct joint + soft LMB | 8 | 1.051237 | +6.1107% |
+| Six cuts + composed Cut1 LU-h→joint | 7 | 1.040412 | +4.6479% |
+| Six cuts + composed Cut1 LU-h→joint + soft LMB | 8 | 1.048940 | +5.7802% |
+
+All 56 retained physical rows pass the 221 independent comparison checks,
+including ordinary/forced-Arb, unchanged bare physics across proposals,
+six-cut event sums and the selected raw `bare × canonical partition` oracle.
+Acceptance follows the declared complex-norm criterion. The audit retains
+28 small-component relative misses; it does not promise separate relative
+accuracy for every negligible real or imaginary component. All 35 saved-file
+hashes, 936 orientations, six physical cuts and CT metadata remain unchanged.
+
+The run completes in 4,255.332 s with 20 workers and peak process RSS
+63,645,268 KiB. Part of it overlaps the local diagnostic runs, so these numbers
+are not a sampling-cost or scaling comparison. The
+[acceptance archive](gl638_hosted_joint_gate/cut_matched_acceptance/artifact_hashes.json)
+retains exact reports, the reproduced physical audit, independent acceptance
+summary and build/card/source links. The original failed preflight remains
+preserved in the phase-space-ray archive.
+
+The [cut-matched local study](LOCAL_CUT_MATCHED_HZ.md) separately establishes
+plateaus on two regular hard directions. MC variance, maximum-weight origins
+and a supported central estimate remain pending. Their
+[predeclared protocol](gl638_hosted_joint_gate/cut_matched_acceptance/mc/MC_ANALYSIS_PROTOCOL.md)
+screens all seven with three seeds and 2,048 samples per seed, then freezes
+the ordinary baseline, matched non-joint control and selected joint candidate
+before an independent five-seed, 32,768-sample confirmation.
+
+The [execution declaration](gl638_hosted_joint_gate/cut_matched_acceptance/mc/SCREEN_BUILD5_COMMANDS.md)
+fixes the 20/30-worker choice using throughput and memory before advanced
+outcomes. The chosen baseline appears once in the screen; the other worker
+control is retained but excluded. The archived multi-directory analyzer keeps
+the existing pooling/selection formulas and authenticates unique mode/seed,
+source, card, preflight, N and chosen workers. Its compatibility checks preserve
+32 historical pooled means/errors and reject duplicate input directories.
+This archive contains no pilot outcomes or inferred winner.
 
 ## Fixed physical calculation and proposal
 

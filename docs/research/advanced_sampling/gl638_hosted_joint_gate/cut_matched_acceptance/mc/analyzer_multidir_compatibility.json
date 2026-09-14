@@ -1,0 +1,21 @@
+{
+  "scope": "Artifact-only analysis compatibility; no GammaLoop runs and no synthetic Integrate results. Full seven-screen input files are not available yet.",
+  "pool_function_text_unchanged": true,
+  "all_pool_output_fields_equal_old_version": true,
+  "historical_means_errors_matched": 32,
+  "historical_relative_tolerance": 2e-15,
+  "duplicate_real_directory_rejected": true,
+  "included_excluded_same_real_directory_rejected": true,
+  "diagnostics": [
+    "duplicate or simultaneously included/excluded real pilot directory",
+    "duplicate or simultaneously included/excluded real pilot directory"
+  ],
+  "input_sha256": {
+    "/tmp/gl638-hosted-joint-gate/analyze_physics_pilots.py": "b836da2d71462ff2ad83ec6d4daba02457b2535448c0851da8762a441c78f6b5",
+    "/tmp/gl638-hosted-joint-gate/analyze_physics_pilots_before_multidir.py": "c35e5b53c42d3769f3677c1283c4f1c0d0b47e3328b18448677d5fb0aefd3cf7",
+    "/tmp/gl638-x2-pilot/pilot-audit.json": "c83f50b29521d38eb422bb214812d23e5cea6b99867d2c7cd65d9ae20b94495a",
+    "/tmp/gl638-hosted-joint-gate/manifest-screen-full-build5.json": "4ae23c0509434138ed0badeba309832cc85e63d57aa84645e3f7bd1c621a0145"
+  },
+  "pool_score_maxima_comparison_text_unchanged_except_worker_authentication": true,
+  "confirmation_workers_must_match_frozen_screen": true
+}

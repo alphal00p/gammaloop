@@ -27,9 +27,12 @@ checks. Cut-only mixtures retain `1/R` growth; direct joint and genuinely
 composed Cut1 LU-h to H/Z channels plateau, with the composed endpoint norms
 about 7.9 times lower on these two rays. Soft coverage increases these local
 joint weights by approximately `8/7`; its global benefit is unmeasured.
-Seven-candidate full-state reference preflight is underway. Matched-count MC
-errors, maximum attribution and a supported central estimate remain pending. See also the
-[center audit](docs/research/advanced_sampling/CANONICAL_CT_CENTERS.md).
+The [seven-candidate full-state preflight](docs/research/advanced_sampling/GL638_HOSTED_JOINT_GATE.md#completed-cut-matched-acceptance)
+now passes: every mode meets the 32,768-point Gaussian criteria and all 221
+physical comparison checks pass, with 35 saved-file hashes unchanged. The
+predeclared screen is running. Matched-count MC
+errors, maximum attribution and a supported central estimate remain pending.
+See also the [center audit](docs/research/advanced_sampling/CANONICAL_CT_CENTERS.md).
 
 Current implementation status: there is one `SamplingChannelCatalogue` and one
 `SamplingChannelId` domain. The Symbolica selection parser, explicit parent-LMB
