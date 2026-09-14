@@ -509,6 +509,21 @@ active coordinates back to raw coordinates with the complete affine shift and
 determinant. Every foreign inverse prepares its own supplied raw point. The
 complete native map is routed to the master frame once. The combined generated
 fixture gates pass; general nested mixed compositions remain rejected.
+Explicit pairs of original graph surfaces can share one active three-dimensional
+joint block under a physical cut. Binding and adoption resolve the same original
+equations, retaining side-qualified associations, masses and temporal shifts.
+The common-energy shift is composed with the existing LU affine pullback; its
+active determinant includes `tau^-3`. At physical adoption, the shared directed
+ray arithmetic encloses those original equations on the actual canonical and
+native completed points. Normal displacement and the native host residual each
+have half of the sampling-accuracy budget relative to the canonical normal
+radius. Amplitude joints use the same check with zero host residual. Errors
+trigger physical precision rescue from the retained source, without redrawing
+maps or partitions. These checks belong to sampling time, including rotations
+and failed attempts. They do not certify arbitrary CT multipliers, higher
+raised jets or projected CT-star targets. The
+[hosted-joint audit](../research/advanced_sampling/HOSTED_JOINT_NORMAL_ALIGNMENT.md)
+records the concrete geometry and acceptance gates.
 The old LMB-specific partition implementation is removed.
 Default single-basis routing and obsolete weight settings remain migration work.
 

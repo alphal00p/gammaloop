@@ -1,7 +1,10 @@
 use crate::{
     DependentMomentaConstructor, GammaLoopContext, GammaLoopContextContainer,
     cff::{
-        CutCFFIndex, esurface::Esurface, expression::OrientationID, orientations::GraphOrientation,
+        CutCFFIndex,
+        esurface::{Esurface, EsurfaceRay},
+        expression::OrientationID,
+        orientations::GraphOrientation,
         surface::HybridSurfaceID,
     },
     graph::{
@@ -14,6 +17,7 @@ use crate::{
         process::{
             GraphTermEvaluationContext, ParamBuilder, SamplingChannelBridge,
             SamplingChannelCompileContext, SamplingChannelId, SamplingCutSide,
+            SharedEnergyJointMap,
             evaluators::{ActiveF64Backend, EvaluatorStack, evaluate_evaluator_single},
             graph_to_group_id_for_group_structure,
             param_builder::LUParams,
@@ -62,7 +66,7 @@ use crate::{
         },
     },
     utils::{
-        F, FloatLike, RuntimeCache, h, h_dual,
+        ArbPrec, F, FloatLike, RuntimeCache, h, h_dual,
         hyperdual_utils::{
             DualOrNot, extract_t_derivatives, extract_t_derivatives_complex,
             shape_from_cut_cff_index, simple_n_deriv_shape,
@@ -634,6 +638,63 @@ struct DeferredCutEvaluation<T: FloatLike> {
 impl CrossSectionGraphTerm {
     pub fn threshold_counterterm_metadata(&self) -> Option<&ThresholdCountertermMetadataRegistry> {
         self.counterterm.metadata_registry.as_ref()
+    }
+
+    // Binding and physical alignment resolve the same original equation. A
+    // direct target need not be present in the active threshold CT catalogue.
+    fn sampling_target_surface(
+        &self,
+        cut_id: CutId,
+        side: Option<SamplingCutSide>,
+        edges: &[usize],
+    ) -> Result<&Esurface> {
+        let associations = match side {
+            Some(SamplingCutSide::Left) => Some(&self.cut_threshold_associations[cut_id].left),
+            Some(SamplingCutSide::Right) => Some(&self.cut_threshold_associations[cut_id].right),
+            None => None,
+        };
+        let candidates = self
+            .topological_threshold_esurfaces
+            .iter_enumerated()
+            .filter(|(id, surface)| {
+                surface
+                    .energies
+                    .iter()
+                    .map(|edge| edge.0)
+                    .sorted()
+                    .eq(edges.iter().copied())
+                    && associations.is_none_or(|associations| {
+                        associations
+                            .iter()
+                            .any(|entry| entry.topological_threshold_id == *id)
+                    })
+            })
+            .collect_vec();
+        let (_, surface) = candidates.first().ok_or_else(|| {
+            eyre!(
+                "graph '{}' has no {:?} target {:?} on host cut {}; topological candidates {:?}",
+                self.graph.name,
+                side,
+                edges,
+                cut_id.0,
+                self.topological_threshold_esurfaces
+                    .iter_enumerated()
+                    .map(|(id, surface)| (id, &surface.energies, &surface.external_shift))
+                    .collect_vec()
+            )
+        })?;
+        if candidates.iter().any(|(_, candidate)| {
+            candidate.external_shift.iter().sorted().collect_vec()
+                != surface.external_shift.iter().sorted().collect_vec()
+        }) {
+            return Err(eyre!(
+                "graph '{}' target {:?} is ambiguous across topological equations {:?}",
+                self.graph.name,
+                edges,
+                candidates
+            ));
+        }
+        Ok(surface)
     }
 
     fn build_threshold_multiplier_collection(
@@ -1768,7 +1829,19 @@ impl GraphTerm for CrossSectionGraphTerm {
                 }
             }
             let mut host_plans: BTreeMap<CutGroupId, Arc<SamplingLUHostPlan>> = BTreeMap::new();
-            for channel in catalogue.named_entries() {
+            for (channel, joint_program) in
+                catalogue
+                    .entries
+                    .iter()
+                    .zip(programs)
+                    .filter_map(|(entry, programs)| {
+                        if let SamplingCatalogueEntry::Named(channel) = entry {
+                            Some((channel, &programs.2))
+                        } else {
+                            None
+                        }
+                    })
+            {
                 let parent = &channel.definition.parent_lmb;
                 let lmbs = TiVec::from(vec![
                     self.multi_channeling_setup.sampling_parent_lmb(parent)?,
@@ -1791,12 +1864,11 @@ impl GraphTerm for CrossSectionGraphTerm {
                     if energy_sets.is_empty() {
                         continue;
                     }
-                    let [edges] = energy_sets.as_slice() else {
-                        return Err(eyre!(
-                            "cross-section joint sampling channel '{}' is not enabled: routed-energy matching, physical host reconciliation and proposal-policy retention across native retries must be bound before production intersect targets can be used",
-                            channel.name
-                        ));
-                    };
+                    // Joint proposals share the canonical source and the
+                    // original-equation accuracy gate at physical adoption.
+                    if energy_sets.len() > 2 {
+                        return Err(eyre!("hosted joint sampling requires exactly two surfaces"));
+                    }
                     if context
                         .geometry_maps
                         .contains_key(&block.geometry_key(parent))
@@ -2008,51 +2080,24 @@ impl GraphTerm for CrossSectionGraphTerm {
                             &active.iter().chain(&remaining).copied().collect_vec(),
                             "host cut",
                         )?;
-                        let associations = match block.target.cut_side() {
-                            Some(SamplingCutSide::Left) => {
-                                Some(&self.cut_threshold_associations[cut_id].left)
-                            }
-                            Some(SamplingCutSide::Right) => {
-                                Some(&self.cut_threshold_associations[cut_id].right)
-                            }
-                            None => None,
-                        };
                         // The full-graph equation includes fixed other-side cut
                         // energies. Resolving only runtime CTs would wrongly omit
                         // direct sampling targets whose subtraction is inactive.
-                        let candidates = self
-                            .topological_threshold_esurfaces
-                            .iter_enumerated()
-                            .filter(|(id, surface)| {
-                                surface
-                                    .energies
-                                    .iter()
-                                    .map(|edge| edge.0)
-                                    .sorted()
-                                    .eq(edges.iter().copied())
-                                    && associations.is_none_or(|associations| {
-                                        associations
-                                            .iter()
-                                            .any(|entry| entry.topological_threshold_id == *id)
-                                    })
+                        let surfaces = energy_sets
+                            .iter()
+                            .map(|edges| {
+                                let surface = self
+                                    .sampling_target_surface(cut_id, block.target.cut_side(), edges)
+                                    .wrap_err_with(|| {
+                                        format!(
+                                            "sampling channel '{}' target {:?}",
+                                            channel.name, block.target
+                                        )
+                                    })?;
+                                certify_independent(surface, &remaining, "threshold target")?;
+                                Ok(surface)
                             })
-                            .collect_vec();
-                        let (_, surface) = candidates.first().ok_or_else(|| eyre!(
-                            "sampling channel '{}' has no {:?} target {:?} on host cut {} {:?}; topological candidates {:?}",
-                            channel.name, block.target.cut_side(), edges, cut_id.0, host_edges,
-                            self.topological_threshold_esurfaces.iter_enumerated().map(|(id, surface)| (id, &surface.energies, &surface.external_shift)).collect_vec()))?;
-                        if candidates.iter().any(|(_, candidate)| {
-                            candidate.external_shift.iter().sorted().collect_vec()
-                                != surface.external_shift.iter().sorted().collect_vec()
-                        }) {
-                            return Err(eyre!(
-                                "sampling channel '{}' target {:?} is ambiguous across topological equations {:?}",
-                                channel.name,
-                                block.target,
-                                candidates
-                            ));
-                        }
-                        certify_independent(surface, &remaining, "threshold target")?;
+                            .collect::<Result<Vec<_>>>()?;
                         let subspace = SubspaceData::new_from_parent_basis_edges(
                             &block
                                 .active_lmb
@@ -2069,17 +2114,42 @@ impl GraphTerm for CrossSectionGraphTerm {
                             .map(LoopIndex)
                             .filter(|index| !active.contains(index))
                             .collect_vec();
-                        let fiber = surface.sampling_radial_map_in_subspace(
-                            &subspace,
-                            &lmbs,
-                            &self.graph,
-                            &masses,
-                            &externals,
-                            &complement,
-                            settings,
-                            e_cm * parameterization_settings.b,
-                            parameterization_settings.power,
-                        )?;
+                        let beta = e_cm * parameterization_settings.b;
+                        let (fiber, common) = if let [left, right] = surfaces.as_slice() {
+                            let (geometry, common) = left.sampling_joint_geometry_in_subspace(
+                                right,
+                                &subspace,
+                                &lmbs,
+                                &self.graph,
+                                &masses,
+                                &externals,
+                                &complement,
+                            )?;
+                            let joint = SharedEnergyJointMap::new(
+                                geometry, 3 * complement.len(), F::<T>::from_f64(beta).0,
+                                zero.one().0, beta,
+                                joint_program.as_ref().ok_or_else(|| eyre!(
+                                    "hosted joint channel '{}' has no cached compiled program", channel.name))?.clone(),
+                            )?;
+                            (CompiledSamplingMap::Joint(joint), Some(common))
+                        } else {
+                            (
+                                CompiledSamplingMap::ImplicitSurface(
+                                    surfaces[0].sampling_radial_map_in_subspace(
+                                        &subspace,
+                                        &lmbs,
+                                        &self.graph,
+                                        &masses,
+                                        &externals,
+                                        &complement,
+                                        settings,
+                                        beta,
+                                        parameterization_settings.power,
+                                    )?,
+                                ),
+                                None,
+                            )
+                        };
                         let required = (0..parent.len())
                             .map(LoopIndex)
                             .filter(|index| {
@@ -2124,6 +2194,11 @@ impl GraphTerm for CrossSectionGraphTerm {
                         let externals = externals.clone();
                         let origin = origin.clone();
                         let origin_loops = origin_loops.clone();
+                        let spatial = externals
+                            .iter()
+                            .map(|p| p.spatial.clone())
+                            .collect::<crate::momentum::sample::ExternalThreeMomenta<F<T>>>(
+                        );
                         let active_dimension = 3 * active.len();
                         let active = active.clone();
                         let preceding = preceding.clone();
@@ -2222,7 +2297,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                                         .collect()
                                 })
                                 .collect();
-                            let translation = active
+                            let mut translation = active
                                 .iter()
                                 .flat_map(|index| {
                                     origin[3 * index.0..3 * index.0 + 3].iter().map(|value| {
@@ -2230,6 +2305,32 @@ impl GraphTerm for CrossSectionGraphTerm {
                                     })
                                 })
                                 .collect_vec();
+                            if let Some(common) = &common {
+                                // The joint kernel emits x=L_active+c0, in the
+                                // physical host frame. Compose its -c0 with the
+                                // same I/tau pullback; no extra map/host solve.
+                                let mut physical_loops =
+                                    LoopMomenta::from_iter((0..lmb.loop_edges.len()).map(|_| {
+                                        ThreeMomentum::new(zero.clone(), zero.clone(), zero.clone())
+                                    }));
+                                for (&index, p) in
+                                    complement.iter().zip(physical_prior.chunks_exact(3))
+                                {
+                                    physical_loops[index] = ThreeMomentum::new(
+                                        F(p[0].clone()),
+                                        F(p[1].clone()),
+                                        F(p[2].clone()),
+                                    );
+                                }
+                                let offset: ThreeMomentum<F<T>> =
+                                    common.compute_momentum(&physical_loops, &spatial);
+                                for (value, offset) in translation
+                                    .iter_mut()
+                                    .zip([offset.px, offset.py, offset.pz])
+                                {
+                                    *value = (F(value.clone()) - &inverse_tau * offset).0;
+                                }
+                            }
                             if physical_prior
                                 .iter()
                                 .chain(&translation)
@@ -2646,6 +2747,95 @@ impl GraphTerm for CrossSectionGraphTerm {
                             self.graph.name, plan, host.source, context.rotation.method
                         )
                     })?;
+                for block in &channel.blocks {
+                    let energy_sets = block.target.energy_edge_sets();
+                    let [left, right] = energy_sets.as_slice() else {
+                        continue;
+                    };
+                    let Some(host_edges) = block.target.host_cut() else {
+                        continue;
+                    };
+                    let Some(cut_id) = group.cuts.iter().find(|id| {
+                        (channel.definition.on_cut.is_empty()
+                            || channel.definition.on_cut.contains(&id.0))
+                            && self.cut_esurface[**id]
+                                .energies
+                                .iter()
+                                .map(|edge| edge.0)
+                                .sorted()
+                                .eq(host_edges.iter().copied())
+                    }) else {
+                        continue;
+                    };
+                    let targets = [
+                        self.sampling_target_surface(*cut_id, block.target.cut_side(), left)?,
+                        self.sampling_target_surface(*cut_id, block.target.cut_side(), right)?,
+                    ];
+                    let original_host = canonical
+                        .prepared_lu_hosts
+                        .iter()
+                        .find(|original| {
+                            original.plan == host.plan && original.source == host.source
+                        })
+                        .expect("unique canonical host authenticated above");
+                    // Use the same rounded scalar rescaling as physical LU.
+                    // Enclosing mathematical tau*K would miss that rounding.
+                    // The canonical source is never remapped in a native attempt.
+                    let canonical_point = canonical.sample.rotate(context.rotation, 0, 0);
+                    let canonical_loops = canonical_point
+                        .loop_moms()
+                        .rescale(&original_host.solution.solution, Subspace::None);
+                    let native_loops = momentum_sample
+                        .loop_moms()
+                        .rescale(&host.solution.solution, Subspace::None);
+                    let cached_masses = self
+                        .real_mass_vec
+                        .as_ref()
+                        .ok_or_else(|| eyre!("joint host alignment requires warmup mass data"))?;
+                    let canonical_masses = self.graph.new_edgevec(|_, edge, _| {
+                        cached_masses[edge]
+                            .map(F::<ArbPrec>::from_ff64)
+                            .unwrap_or_else(|| F::<ArbPrec>::default().zero())
+                    });
+                    let original = |target: &Esurface| {
+                        target.evaluate_routed_enclosed(
+                            &canonical_point.one(),
+                            &canonical_loops,
+                            canonical_point.external_moms(),
+                            &canonical_masses,
+                            &self.graph.loop_momentum_basis,
+                        )
+                    };
+                    let materialized = |target: &Esurface| {
+                        target.evaluate_routed_enclosed(
+                            &momentum_sample.one(),
+                            &native_loops,
+                            momentum_sample.external_moms(),
+                            &masses,
+                            &self.graph.loop_momentum_basis,
+                        )
+                    };
+                    // Original h/z are preserved at finite host residual. The
+                    // second half-budget is a generic on-cut requirement, not
+                    // a replacement of either equation by a cut identity or a
+                    // bound on arbitrary CT multipliers/raised derivative jets.
+                    EsurfaceRay::<T>::verify_normal_alignment(
+                        [original(targets[0])?, original(targets[1])?],
+                        [materialized(targets[0])?, materialized(targets[1])?],
+                        materialized(surface)?,
+                        context.sampling_accuracy_budget,
+                    )
+                    .wrap_err_with(|| {
+                        format!(
+                            "graph '{}' channel '{}' target {:?}, host {:?}, rotation {}",
+                            self.graph.name,
+                            channel.name,
+                            block.target,
+                            plan,
+                            context.rotation.method,
+                        )
+                    })?;
+                }
                 if adopted
                     .insert(plan.cut_group_id, (ray, host.solution.clone()))
                     .is_some()

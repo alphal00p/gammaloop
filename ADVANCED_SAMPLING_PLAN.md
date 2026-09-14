@@ -726,6 +726,23 @@ GL638 activation. These timings are unoptimized acceptance costs, not the
 production 10% budget measurement. CT-star
 center/alpha work remains a separate dependency of the projected channels.
 
+The next [hosted-joint milestone](docs/research/advanced_sampling/HOSTED_JOINT_NORMAL_ALIGNMENT.md)
+now binds explicit pairs of original graph surfaces under a physical LU host.
+The same directed arithmetic checks the original two normals at the completed
+canonical and native points, including actual scalar rescaling and rotations.
+Both normal displacement and the remaining host residual must fit separate
+half-budgets relative to the canonical normal radius. Physical rescue retains
+the one source point, partition and host solution. The common-energy offset
+is included in the existing affine pullback and its determinant.
+The full hosted six-dimensional reference test passes in 616.215 s at 8192
+draws with unchanged 6% normalization and 8% raw-moment bounds. All 214 selected
+core regressions pass after a diagnostic-only assertion update. All-target
+core/API clippy and checking pass. The all-18-orientation amplitude rerun also
+passes in 954.918 s, completing 216 unique core tests with the hosted fixture.
+These are generic correctness gates. Optimized all-936 GL638
+normalization, physical replay, the 10% cost bound and variance improvement
+remain unmeasured for this milestone. CT-star targets remain separate work.
+
 In parallel, the subtraction owner has separated representative overlap
 kinematics from the raised derivative packets, using the existing sample and
 group types. The foreign-cut/radial-derivative regression and generated raised

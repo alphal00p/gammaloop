@@ -65,6 +65,13 @@ filter = "test(=processes::raised_cross_section_tests::conditional_cut_sampling_
 slow-timeout = { period = "1m", terminate-after = 5 }
 
 [[profile.default.overrides]]
+# The hosted kite checks 8192 summed joint/ordinary draws after its bounded
+# physical and native-retry gates. The initial probe projects about eight
+# minutes for fixed-Arb preparation in the unoptimized build; allow headroom.
+filter = "test(=processes::raised_cross_section_tests::hosted_joint_kite_preserves_original_equations_and_physical_sum)"
+slow-timeout = { period = "1m", terminate-after = 15 }
+
+[[profile.default.overrides]]
 # The generated kite checks 8192 summed joint-map draws, including fixed-Arb
 # proposal preparation and directed domain certificates, in the unoptimized build.
 filter = "test(=integrands::process::amplitude::sampling_tests::generated_kite_sampling_uses_physical_six_dimensional_surfaces)"
