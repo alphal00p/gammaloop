@@ -123,3 +123,103 @@ The pending conversion proposal, failure triage, and independent audit are in
 physics context remain in [GL638_COMPRESSED_SYMJIT_TIMING.md](GL638_COMPRESSED_SYMJIT_TIMING.md),
 [GL638_HOSTED_JOINT_GATE.md](GL638_HOSTED_JOINT_GATE.md), and
 [GL638_SOFT_AND_CUT3_LOCAL_REAL.md](GL638_SOFT_AND_CUT3_LOCAL_REAL.md).
+
+## Build11 follow-up: suppressed real-component instability
+
+The reporting correction described above was subsequently approved and applied.
+The identical 600 GeV, m_uv=50 GeV, mu_r=91.188 GeV screen then completed all
+4096 draws but retained 16 native instability flags and no NaNs. It used seed
+60101, 20 workers, compressed SymJIT O2, all 936 orientations, six cuts and
+19 threshold variants. This is diagnostic evidence, not an accepted final
+cross-section estimate.
+
+An independent replay reconstructed the original initial Grid/RNG stream,
+including complete Sample weights and contiguous worker ranges. The native
+slot seed was `16511191977557783548`; all saved checkpoint maxima matched
+exact Samples at indices 2290 and 3991. The replay reproduced all 16 failures,
+the precision counts (3778 Double, 155 Quad, 163 Arb), and the signed mean/error
+exactly. Imaginary and absolute-real aggregates agreed within `4e-16` relative.
+Native follow-ups selected the existing rotation objects individually; their
+averages reproduced the full Arb calls. Input/state hashes stayed unchanged.
+The first follow-up's missing clone warmup was retained as a failed diagnostic;
+the corrected continuation evaluated only the authenticated 16 failing Samples.
+
+Every flag came from real or absolute-real components. Imaginary probes agreed
+to roughly `1e-294` relative or better, so loosening imaginary precision would
+not address the failure. Nine cases had every complete real probe round to
+binary64 zero; fifteen had every probe below its minimum normal value.
+Draw 3559 exposed why requiring *every* probe to be subnormal was unnecessarily
+restrictive: its complete real probes were `+1.26070e-308` and `-3.03194e-308`,
+but their mean absolute magnitude was `2.14632e-308`, below
+`f64::MIN_POSITIVE = 2^-1022 ≈ 2.22507e-308`.
+
+The implemented componentwise criterion is
+
+```text
+mean_j |remaining_weight × native_probe[j].component| < f64::MIN_POSITIVE
+```
+
+The triangle inequality bounds the returned rotation average without relying
+on cancellation. Every remaining factor is multiplied in native arithmetic
+before this test; map Jacobians and channel partitions are already included
+at this boundary. Real/imaginary and signed/absolute observables are checked
+independently. No imaginary scale or arbitrary absolute floor is borrowed.
+All 16 recorded failures satisfy this fixed normal-range bound. Nonfinite
+probes/products cannot qualify, and amplifying outer weights can remove the
+waiver. Norm checking also bounds its returned primary probe, because that
+owner returns the primary rather than the rotation average.
+
+Only the relative-error rejection is waived. Native values, counterterms,
+events, and measured relative discrepancies remain intact. Consequently a
+stable suppressed component may still report a large native relative error;
+that status does not claim accurate relative digits for its tiny value.
+
+Check, clippy, and six focused tests passed. The optimized build12 replay also
+passed: all 4096 original draws completed with zero unstable evaluations and
+zero NaNs, using the identical card, seed, backend and 20-worker partition.
+The new tests are
+`stability_checks_bound_complete_underflow_without_cancellation` and
+`stability_underflow_waivers_are_componentwise`; they cover the straddling probe,
+outer-weight amplification, normal cancellation, mixed components, nonfinite
+weights and norm-primary ordering. Existing finite/nonfinite, reporting-range
+and independent absolute-observable checks remain applicable.
+
+An independent artifact audit found exact equality of the build11/build12
+signed and absolute Re/Im means, errors, zero counts, channel breakdowns and
+maxima, including their complete stored coordinates. Precision counts remain
+3778 Double, 155 Quad and 163 Arb. The real signed estimate is
+`-6.381323993097482e-5 ± 4.2697958507087165e-5`; the absolute-real estimate is
+`2.0483568597702613e-4 ± 4.2589482332175714e-5`. These are the small regression
+stream's unchanged estimates, not the final production result. No changed
+subnormal aggregate is observed; the integration report does not retain every
+per-draw value, so this is not a new per-draw equality claim. Only instability
+counts, timings and workspace paths differ in the native result. All four
+recorded before/after state hash maps agree on the same 35 files, and the
+optimized build completed with unchanged sources. Timing differences are not
+used to claim a performance improvement.
+
+All paths below are under `/tmp/gl638-final-physics-screen/unstable-replay/`:
+
+| Evidence | Relative artifact path | SHA256 |
+|---|---|---|
+| Exact 4096-draw replay, including retained failed follow-up | `results-build11/summary.json` | `75d07b3329e3dde923463ccfa322b3384eaca1f856fb0e2be0e1a56e2639463a` |
+| Corrected native capture of all 16 failures | `results-native-only-build11/summary.json` | `71fb1c0671708fae9af5efe3c1cca45f516130fe73e64167ea13fc78f15962dc` |
+| Complete probe/aggregate classification | `analysis-native-only-build11-normal-range.json` | `7e67195d34c98f49ec6bf289f4b3fc5a81f4c0ef7c4ca367cf52d48360dbbe95` |
+| Mean absolute bound for every failing component | `mean-absolute-bound-audit-build11.json` | `bf2e926d047c1ef4f927a9e144a8f585f43ad378bc4ad7a3dcfe0378fa48c2e8` |
+| Independent post-fix regression audit and full provenance | `postfix-regression-audit-build12.json` | `62bbb44ebfc91f8b5df353e90711c9b146bbd17c65d306dd03200d68bae50e3d` |
+
+The successful integration report is
+`/tmp/gl638-final-physics-screen/results-underflow-replay-o2-build12/summary.json`
+(SHA256 `96690391cddb76d34771f78ef8d8692954524824bded2220688c2cc87c8382ed`).
+The audit records hashes for its request, execution, native result, driver link,
+source build and six-test log; the source-build manifest is
+`/tmp/hosted-joint-optimized-build12-manifest.json`
+(SHA256 `df8b1f614730003b61628f66ad94c0fd5a66e790cd0388f7c0212b19401277b3`).
+
+`RESULTS_BUILD11.md` contains the 16-row magnitude table. The authenticated
+source hashes are `553b202946e5f2a3fa11893d0ce63f57af66bfaf7ab7afa3076b2ff3916b5951`
+for `unstable_replay.rs` and
+`ecd1b0a156aea8a4c5367364a6664cd9b437d567e89a34c6ae221fef1d5718aa`
+for `unstable_native_replay.rs`; their link and execution records are retained
+beside the captures. This correction changes no sampling map or threshold
+metadata and establishes no new variance or bounded-weight claim.

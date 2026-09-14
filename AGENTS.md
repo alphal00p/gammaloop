@@ -31,6 +31,10 @@ including when this makes stability comparisons trivially pass. Apply routine
 underflow-to-zero corrections and update their test expectations without asking
 again. Preserve meaningful contributions by combining numerical factors before
 rounding; overflow and invalid numerical operations remain separate issues.
+For stability of an averaged component, its mean absolute fully weighted probe
+value may establish underflow below binary64's smallest normal value. Keep this
+bound separate for each component and observable; never borrow an imaginary
+component's scale to accept a meaningful real discrepancy.
 
 Before adding helper functions, structs, or methods, check the codebase for
 similar use cases, and whether the functionality is already provided by the

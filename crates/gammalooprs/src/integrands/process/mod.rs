@@ -1819,6 +1819,22 @@ fn stability_check<T: FloatLike>(
         .fold(results[0].clone(), |acc, x| acc + x)
         / F::<T>::from_f64(results.len() as f64);
 
+    // Bound the reported rotation average without cancellation, applying the
+    // remaining weight before any normal-range test. Native values and their
+    // measured relative errors remain intact; only suppressed final components
+    // may waive a relative-error failure at binary64's normal boundary.
+    let weighted_absolute_average = results
+        .iter()
+        .fold(Complex::new_re(average.re.zero()), |sum, result| {
+            sum + Complex::new((&result.re * &wgt).abs(), (&result.im * &wgt).abs())
+        })
+        / F::<T>::from_f64(results.len() as f64);
+    let minimum_normal = F::<T>::from_f64(f64::MIN_POSITIVE);
+    let real_underflow =
+        weighted_absolute_average.re.0.is_finite() && weighted_absolute_average.re < minimum_normal;
+    let imag_underflow =
+        weighted_absolute_average.im.0.is_finite() && weighted_absolute_average.im < minimum_normal;
+
     let errors = results.iter().map(|res| {
         let error_re = if IsZero::is_zero(&res.re) && IsZero::is_zero(&average.re) {
             F::<T>::from_f64(0.0)
@@ -1849,8 +1865,10 @@ fn stability_check<T: FloatLike>(
             break;
         }
 
-        if error.re > F::<T>::from_f64(stability_settings.required_precision_for_re)
-            || error.im > F::<T>::from_f64(stability_settings.required_precision_for_im)
+        if (error.re > F::<T>::from_f64(stability_settings.required_precision_for_re)
+            && !real_underflow)
+            || (error.im > F::<T>::from_f64(stability_settings.required_precision_for_im)
+                && !imag_underflow)
         {
             unstable_reason = Some(StabilityFailureReason::ErrorThreshold);
             unstable_sample = Some(index);
@@ -1941,6 +1959,20 @@ fn stability_check_on_norm<T: FloatLike>(
         acc + x.norm_squared().sqrt()
     }) / F::<T>::from_f64(results.len() as f64);
 
+    // The norm owner returns the primary probe, so bound it as well as the
+    // average. Componentwise L1 magnitudes avoid squaring tiny weighted values.
+    let weighted_magnitude =
+        |result: &Complex<F<T>>| (&result.re * &wgt).abs() + (&result.im * &wgt).abs();
+    let weighted_absolute_average = results.iter().fold(average.zero(), |sum, result| {
+        sum + weighted_magnitude(result)
+    }) / F::<T>::from_f64(results.len() as f64);
+    let primary_magnitude = weighted_magnitude(&results[0]);
+    let minimum_normal = F::<T>::from_f64(f64::MIN_POSITIVE);
+    let underflow = weighted_absolute_average.0.is_finite()
+        && primary_magnitude.0.is_finite()
+        && weighted_absolute_average < minimum_normal
+        && primary_magnitude < minimum_normal;
+
     let errors = results.iter().map(|res| {
         let res = res.norm_squared().sqrt();
         if IsZero::is_zero(&res) && IsZero::is_zero(&average) {
@@ -1965,7 +1997,7 @@ fn stability_check_on_norm<T: FloatLike>(
             break;
         }
 
-        if error > F::<T>::from_f64(stability_settings.required_precision_for_re) {
+        if error > F::<T>::from_f64(stability_settings.required_precision_for_re) && !underflow {
             unstable_reason = Some(StabilityFailureReason::ErrorThreshold);
             unstable_sample = Some(index);
             break;
@@ -6447,6 +6479,135 @@ pub(crate) mod tests {
                     } else {
                         Complex::new(F(3.0), F(4.5))
                     }
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn stability_checks_bound_complete_underflow_without_cancellation() {
+        use crate::{settings::runtime::StabilityLevelSetting, utils::ArbPrec};
+        use spenso::algebra::complex::Complex;
+
+        let settings = RuntimeSettings::default();
+        let level = StabilityLevelSetting::default_arb();
+        let one = F::<ArbPrec>::default().one();
+        let minimum = F::<ArbPrec>::from_f64(f64::MIN_POSITIVE);
+        // One probe is normal-sized, but the cancellation-free bound on the
+        // returned average is 7/8 of MIN_POSITIVE, as in GL638 sample 3559.
+        let probes = [
+            Complex::new_re(&minimum / one.from_usize(2)),
+            Complex::new_re(-&minimum * one.from_usize(5) / one.from_usize(4)),
+        ];
+        let average = (&probes[0] + &probes[1]) / one.from_usize(2);
+        for norm in [false, true] {
+            let check = if norm {
+                super::stability_check_on_norm::<ArbPrec>
+            } else {
+                super::stability_check::<ArbPrec>
+            };
+            for (weight, expected) in [
+                (one.clone(), true),
+                (one.from_usize(2), false),
+                (one.from_usize(10).powi(100), false),
+            ] {
+                let (result, accuracy, stable, _) = check(
+                    &settings,
+                    &probes,
+                    &level,
+                    Complex::new_re(one.zero()),
+                    weight,
+                    true,
+                    false,
+                );
+                assert_eq!(stable, expected);
+                assert!(accuracy.unwrap() > F::from_f64(level.required_precision_for_re));
+                assert_eq!(
+                    result,
+                    if norm {
+                        probes[0].clone()
+                    } else {
+                        average.clone()
+                    }
+                );
+            }
+            // Norm checking returns the primary rather than the average, so a
+            // normal-sized primary cannot inherit the average's waiver.
+            assert_eq!(
+                check(
+                    &settings,
+                    &[probes[1].clone(), probes[0].clone()],
+                    &level,
+                    Complex::new_re(one.zero()),
+                    one.clone(),
+                    true,
+                    false,
+                )
+                .2,
+                !norm,
+            );
+            for invalid_weight in [f64::NAN, f64::INFINITY] {
+                assert!(
+                    !check(
+                        &settings,
+                        &probes,
+                        &level,
+                        Complex::new_re(one.zero()),
+                        F::from_f64(invalid_weight),
+                        true,
+                        false,
+                    )
+                    .2
+                );
+            }
+        }
+        // A small signed average does not bound large cancelling probes.
+        assert!(
+            !super::stability_check(
+                &settings,
+                &[Complex::new_re(one.clone()), Complex::new_re(-one.clone())],
+                &level,
+                Complex::new_re(one.zero()),
+                one,
+                true,
+                false,
+            )
+            .2
+        );
+    }
+
+    #[test]
+    fn stability_underflow_waivers_are_componentwise() {
+        use crate::{settings::runtime::StabilityLevelSetting, utils::ArbPrec};
+        use spenso::algebra::complex::Complex;
+
+        let settings = RuntimeSettings::default();
+        let level = StabilityLevelSetting::default_arb();
+        let one = F::<ArbPrec>::default().one();
+        let tiny = F::<ArbPrec>::from_f64(f64::MIN_POSITIVE) / one.from_usize(4);
+        for swap in [false, true] {
+            for (second_normal, expected) in [(1, true), (2, false)] {
+                let mut probes = [
+                    Complex::new(tiny.clone(), one.clone()),
+                    Complex::new(-tiny.clone(), one.from_usize(second_normal)),
+                ];
+                if swap {
+                    for probe in &mut probes {
+                        std::mem::swap(&mut probe.re, &mut probe.im);
+                    }
+                }
+                assert_eq!(
+                    super::stability_check(
+                        &settings,
+                        &probes,
+                        &level,
+                        Complex::new_re(one.zero()),
+                        one.clone(),
+                        true,
+                        false,
+                    )
+                    .2,
+                    expected,
                 );
             }
         }
