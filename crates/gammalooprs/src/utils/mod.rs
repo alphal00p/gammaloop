@@ -24,7 +24,7 @@ use linnet::half_edge::involution::EdgeIndex;
 
 use rand::Rng;
 use ref_ops::{RefAdd, RefDiv, RefMul, RefNeg, RefRem, RefSub};
-use rug::float::{Constant, ParseFloatError};
+use rug::float::{Constant, ParseFloatError, Round};
 use rug::ops::{CompleteRound, Pow};
 use rug::{Assign, Float};
 use schemars::JsonSchema;
@@ -305,6 +305,129 @@ pub mod tracing;
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn canonical_arb_materialization_preserves_native_bits_and_checks_range() {
+        use super::{ArbPrec, F, FloatLike, QuadFloat, SamplingEvaluationError};
+        use rug::Float;
+
+        let low = Float::with_val(1000, 1) >> 400;
+        let source = ArbPrec {
+            float: Float::with_val(1000, 1) + &low,
+        };
+        let quad = F::<QuadFloat>::from_arb(&source).unwrap();
+        let (lower, upper) = quad.0.mpfr_enclosure(1000);
+        assert_eq!(lower, source.float);
+        assert_eq!(upper, source.float);
+        assert_eq!(
+            F::<ArbPrec>::from_arb(&source).unwrap().0.float,
+            source.float
+        );
+        assert_eq!(F::<f64>::from_arb(&source).unwrap().0, 1.0);
+
+        let one = F::<ArbPrec>::default().one();
+        let large = one.from_i64(2).powi(2000);
+        for value in [large.clone(), -large.clone(), large.inv(), -large.inv()] {
+            assert!(value.0.float.is_finite() && value != one.zero());
+            for error in [
+                F::<f64>::from_arb(&value.0).unwrap_err(),
+                F::<QuadFloat>::from_arb(&value.0).unwrap_err(),
+            ] {
+                assert!(matches!(
+                    error.downcast_ref::<SamplingEvaluationError>(),
+                    Some(SamplingEvaluationError::Unrepresentable { .. })
+                ));
+            }
+            assert_eq!(F::<ArbPrec>::from_arb(&value.0).unwrap(), value);
+        }
+        assert_eq!(F::<f64>::from_arb(&one.zero().0).unwrap().0, 0.0);
+        let invalid = ArbPrec {
+            float: Float::with_val(1000, f64::NAN),
+        };
+        assert!(matches!(
+            F::<ArbPrec>::from_arb(&invalid)
+                .unwrap_err()
+                .downcast_ref::<SamplingEvaluationError>(),
+            Some(SamplingEvaluationError::Unrepresentable { .. })
+        ));
+    }
+
+    #[test]
+    fn canonical_scalar_relative_budget_is_directed_and_signed() {
+        use super::{ArbPrec, F, FloatLike, QuadFloat, SamplingEvaluationError};
+        fn check<T: FloatLike>() {
+            let one = F::<ArbPrec>::default().one();
+            let source = &one - one.from_i64(2).powi(-54);
+            let tolerance = 2.0_f64.powi(-54);
+            let loose = f64::from_bits(tolerance.to_bits() + 1);
+            for sign in [-1, 1] {
+                let native = F::<T>::default().from_i64(sign);
+                let source = &source * one.from_i64(sign);
+                // |native-source|=2^-54, but tolerance*|source| is strictly
+                // smaller by 2^-108. Nearest rounding must not erase that gap.
+                let error = native
+                    .verify_arb_materialization(&source.0, tolerance)
+                    .unwrap_err();
+                assert!(matches!(
+                    error.downcast_ref::<SamplingEvaluationError>(),
+                    Some(SamplingEvaluationError::UncertainGeometry { .. })
+                ));
+                native.verify_arb_materialization(&source.0, loose).unwrap();
+            }
+            let zero = F::<T>::default().zero();
+            zero.verify_arb_materialization(&one.zero().0, tolerance)
+                .unwrap();
+            assert!(
+                zero.one()
+                    .verify_arb_materialization(&one.zero().0, tolerance)
+                    .is_err()
+            );
+            for budget in [0.0, -1.0, f64::INFINITY, f64::NAN] {
+                assert!(
+                    zero.verify_arb_materialization(&one.zero().0, budget)
+                        .is_err()
+                );
+            }
+        }
+        check::<f64>();
+        check::<QuadFloat>();
+        check::<ArbPrec>();
+    }
+
+    #[test]
+    fn native_mpfr_enclosures_preserve_separated_limbs_and_signs() {
+        use super::{ArbPrec, FloatLike, QuadFloat};
+        use rug::Float;
+        use symbolica::domains::float::DoubleFloat;
+
+        for sign in [-1.0, 1.0] {
+            let low = sign * 2.0_f64.powi(-400);
+            let quad = QuadFloat(DoubleFloat::from_compensated_sum(sign, low));
+            let exact = Float::with_val(512, sign) + Float::with_val(512, low);
+            for precision in [24, 106, 512] {
+                let (lower, upper) = quad.mpfr_enclosure(precision);
+                assert!(lower <= exact && upper >= exact);
+                if precision == 512 {
+                    assert_eq!(lower, exact);
+                    assert_eq!(upper, exact);
+                } else {
+                    assert!(
+                        lower < upper,
+                        "a separated limb cannot disappear from a certificate"
+                    );
+                }
+                let arb = ArbPrec {
+                    float: exact.clone(),
+                };
+                let (lower, upper) = arb.mpfr_enclosure(precision);
+                assert!(lower <= exact && upper >= exact);
+                let native = sign * 1.23456789012345;
+                let (lower, upper) = native.mpfr_enclosure(precision);
+                let exact_native = Float::with_val(53, native);
+                assert!(lower <= exact_native && upper >= exact_native);
+            }
+        }
+    }
+
     #[test]
     fn debug_tags_macro_supports_tags_and_regular_fields() {
         crate::debug_tags!(#integration, #summary;
@@ -1229,6 +1352,16 @@ impl Real for QuadFloat {
 }
 
 impl FloatLike for f128 {
+    fn mpfr_enclosure(&self, precision: u32) -> (Float, Float) {
+        let limbs = self.0.into_inner();
+        let high = Float::with_val(53, limbs.hi());
+        let low = Float::with_val(53, limbs.lo());
+        (
+            Float::with_val_round(precision, &high + &low, Round::Down).0,
+            Float::with_val_round(precision, &high + &low, Round::Up).0,
+        )
+    }
+
     fn E(&self) -> Self {
         Self::E()
     }
@@ -1264,6 +1397,10 @@ impl FloatLike for f128 {
 
     fn from_f64_exact_binary(x: f64) -> Self {
         Self::from_f64_exact_binary(x)
+    }
+
+    fn from_arb(value: &ArbPrec) -> Self {
+        Self::from(value.float.clone())
     }
 
     fn sampling_precision() -> crate::settings::runtime::Precision {
@@ -1326,6 +1463,13 @@ impl FloatLike for f128 {
 }
 
 impl FloatLike for ArbPrec {
+    fn mpfr_enclosure(&self, precision: u32) -> (Float, Float) {
+        (
+            Float::with_val_round(precision, &self.float, Round::Down).0,
+            Float::with_val_round(precision, &self.float, Round::Up).0,
+        )
+    }
+
     fn E(&self) -> Self {
         Self::E()
     }
@@ -1361,6 +1505,10 @@ impl FloatLike for ArbPrec {
 
     fn from_f64_exact_binary(x: f64) -> Self {
         Self::from_f64_exact_binary(x)
+    }
+
+    fn from_arb(value: &ArbPrec) -> Self {
+        value.clone()
     }
 
     fn sampling_precision() -> crate::settings::runtime::Precision {
@@ -1748,6 +1896,15 @@ pub trait FloatLike:
     /// Preserve the exact stored binary64 value of an original Monte Carlo
     /// coordinate. User-authored settings retain the existing decimal policy.
     fn from_f64_exact_binary(x: f64) -> Self;
+
+    /// Round directly from the canonical Arb draw, never through another lane.
+    /// Materialization uses the checked F::from_arb boundary below.
+    fn from_arb(value: &ArbPrec) -> Self;
+
+    /// Enclose the exact represented native value at the requested MPFR
+    /// precision. Directed rounding includes both separated Quad limbs; this
+    /// is a certificate boundary, unlike ordinary nearest-rounded conversion.
+    fn mpfr_enclosure(&self, precision: u32) -> (Float, Float);
 
     /// Runtime stability level represented by this native scalar type.
     fn sampling_precision() -> crate::settings::runtime::Precision;
@@ -2342,6 +2499,72 @@ impl<T: FloatLike> F<T> {
         F(T::from_f64(x))
     }
 
+    /// Materialize one canonical scalar without accepting lost range as zero.
+    /// Relative factor accuracy and physical positivity belong to their owners.
+    pub(crate) fn from_arb(value: &ArbPrec) -> eyre::Result<Self> {
+        if !value.float.is_finite() {
+            return Err(SamplingEvaluationError::Unrepresentable {
+                operation: "canonical draw materialization",
+                detail: "nonfinite canonical scalar".into(),
+            }
+            .into());
+        }
+        let native = T::from_arb(value);
+        if !native.is_finite() || (native == native.zero() && value.float != 0) {
+            return Err(SamplingEvaluationError::Unrepresentable {
+                operation: "canonical draw materialization",
+                detail: format!(
+                    "canonical scalar {value} is outside {:?} range",
+                    T::sampling_precision()
+                ),
+            }
+            .into());
+        }
+        Ok(F(native))
+    }
+
+    /// Bound materialization error against the original represented scalar.
+    /// Sign/positivity requirements of a weight or root remain with its owner.
+    pub(crate) fn verify_arb_materialization(
+        &self,
+        source: &ArbPrec,
+        tolerance: f64,
+    ) -> eyre::Result<()> {
+        const PRECISION: u32 = 2048;
+        if !tolerance.is_finite() || tolerance <= 0.0 {
+            return Err(eyre::eyre!(
+                "materialization requires a finite positive relative budget"
+            ));
+        }
+        if !self.0.is_finite() || !source.float.is_finite() {
+            return Err(SamplingEvaluationError::Unrepresentable {
+                operation: "canonical draw materialization",
+                detail: "nonfinite source or native scalar in relative check".into(),
+            }
+            .into());
+        }
+        let (source_lo, source_hi) = source.mpfr_enclosure(PRECISION);
+        let (native_lo, native_hi) = self.0.mpfr_enclosure(PRECISION);
+        let error = Float::with_val_round(PRECISION, &native_hi - &source_lo, Round::Up)
+            .0
+            .max(&Float::with_val_round(PRECISION, &source_hi - &native_lo, Round::Up).0);
+        let magnitude = if source_lo >= 0 {
+            source_lo
+        } else if source_hi <= 0 {
+            -source_hi
+        } else {
+            Float::with_val(PRECISION, 0)
+        };
+        // Borrowed operands keep arithmetic unevaluated until directed rounding.
+        let allowed = Float::with_val_round(PRECISION, &magnitude * tolerance, Round::Down).0;
+        if !error.is_finite() || !allowed.is_finite() || error > allowed {
+            return Err(SamplingEvaluationError::UncertainGeometry {
+                detail: format!("canonical scalar {source} materialized as {self} exceeds relative budget {tolerance} in {:?}", T::sampling_precision()),
+            }.into());
+        }
+        Ok(())
+    }
+
     #[allow(clippy::wrong_self_convention)]
     pub(crate) fn into_ff64(&self) -> F<f64> {
         F(self.0.into_f64())
@@ -2668,6 +2891,13 @@ impl PrecisionUpgradable for f64 {
 }
 
 impl FloatLike for f64 {
+    fn mpfr_enclosure(&self, precision: u32) -> (Float, Float) {
+        (
+            Float::with_val_round(precision, *self, Round::Down).0,
+            Float::with_val_round(precision, *self, Round::Up).0,
+        )
+    }
+
     fn PI(&self) -> Self {
         std::f64::consts::PI
     }
@@ -2698,6 +2928,10 @@ impl FloatLike for f64 {
 
     fn from_f64_exact_binary(x: f64) -> Self {
         x
+    }
+
+    fn from_arb(value: &ArbPrec) -> Self {
+        value.float.to_f64()
     }
 
     fn sampling_precision() -> crate::settings::runtime::Precision {

@@ -8,7 +8,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use super::sampling_context::PreparedSurfaceStatus;
+use super::sampling_context::{PreparedSurfaceStatus, SamplingMapContext};
 use super::sampling_evaluator::{SamplingDualValue, SamplingExpressionEvaluator};
 use crate::momentum::ThreeMomentum;
 use crate::momentum::sample::LoopMomenta;
@@ -169,16 +169,25 @@ impl SamplingMapDefinition {
         }
     }
 
-    /// Physical energy edges are distinct from the active coordinate block.
-    pub fn energy_edges(&self) -> Option<&[usize]> {
+    /// Physical equations are distinct from the active coordinate block. A
+    /// supported intersection keeps its two energy sets in normal-coordinate
+    /// order; their union would lose the equations and their shared energy.
+    pub fn energy_edge_sets(&self) -> Vec<&[usize]> {
         match self {
-            Self::Surface(edges) | Self::Cut(edges) => Some(edges),
+            Self::Surface(edges) | Self::Cut(edges) => vec![edges],
+            Self::Intersect(maps)
+                if maps.len() == 2
+                    && maps[0] != maps[1]
+                    && maps.iter().all(|map| matches!(map, Self::Surface(_))) =>
+            {
+                maps.iter().flat_map(Self::energy_edge_sets).collect()
+            }
             Self::PhaseSpace(map)
             | Self::Left(map)
             | Self::Right(map)
             | Self::AtCut { map, .. }
-            | Self::Block { map, .. } => map.energy_edges(),
-            _ => None,
+            | Self::Block { map, .. } => map.energy_edge_sets(),
+            _ => Vec::new(),
         }
     }
 
@@ -296,10 +305,8 @@ impl SamplingMapDefinition {
 pub enum SamplingSupport {
     /// The map covers the full raw domain, including absent-surface fallback data.
     Full,
-    /// The map is valid only after an earlier conditional map has prepared data.
-    Conditional,
-    /// The map has explicitly enumerated regular branches.
-    Branched,
+    /// The map covers a certified subset and needs a full-support sibling.
+    Restricted,
 }
 
 /// Contract for the Jacobian supplied by a map kernel.
@@ -313,10 +320,15 @@ pub enum SamplingJacobian {
     ProxyOnly,
 }
 
-/// Static contract carried by a future compiled sampling-map kernel.
+/// Static domain, prerequisite, and Jacobian contract of a compiled map kernel.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct SamplingMapContract {
     pub support: SamplingSupport,
+    /// An earlier conditional map must prepare data before this map is valid.
+    /// Supplying those prerequisites does not enlarge a restricted domain.
+    pub requires_context: bool,
+    /// The original-draw phase must freeze this map's proposal decisions.
+    pub requires_proposal_policy: bool,
     pub jacobian: SamplingJacobian,
 }
 
@@ -437,16 +449,34 @@ impl<T: FloatLike> SamplingMapEvaluation<T> {
 }
 
 /// A graph-independent map component which can participate in a product or
-/// ordered conditional composition.  `context` contains previously produced
-/// raw coordinates for `then` maps and is empty for independent products.
-pub trait SamplingMapComponent<T: FloatLike = f64>: std::fmt::Debug + Send + Sync {
+/// ordered conditional composition. The borrowed context carries previously
+/// produced raw coordinates for `then` maps (empty for independent products)
+/// together with the original-draw proposal access and stable compiled path.
+pub trait SamplingMapComponent<T: FloatLike = f64>:
+    std::fmt::Debug + Send + Sync + dyn_clone::DynClone
+{
     fn dimensions(&self) -> usize;
     fn output_dimensions(&self) -> usize;
     fn contract(&self) -> SamplingMapContract;
     fn name(&self) -> &'static str;
-    fn forward(&self, coordinates: &[T], context: &[T]) -> Result<SamplingMapEvaluation<T>>;
-    fn inverse(&self, point: &[T], context: &[T]) -> Result<SamplingMapEvaluation<T>>;
+    fn forward(
+        &self,
+        coordinates: &[T],
+        context: &mut SamplingMapContext<'_, T>,
+    ) -> Result<SamplingMapEvaluation<T>>;
+    /// Return None only for certified exclusion from the map's support. An
+    /// uncertain boundary, non-finite density, or failed solve remains an error.
+    /// Regular branches must have a unique inverse under the map's coordinate
+    /// convention; overlapping inverse branches require complete density
+    /// accounting before they can enter this component interface.
+    fn inverse(
+        &self,
+        point: &[T],
+        context: &mut SamplingMapContext<'_, T>,
+    ) -> Result<Option<SamplingMapEvaluation<T>>>;
 }
+
+dyn_clone::clone_trait_object!(<T> SamplingMapComponent<T> where T: FloatLike);
 
 /// An exact affine change of coordinates between two equal-dimensional frames.
 ///
@@ -600,6 +630,33 @@ impl<T: FloatLike> SamplingMapAffine<T> {
         &self.translation
     }
 
+    /// Invert the complete affine frame with its exact determinant. The shared
+    /// component adapter adds support metadata without another numerical path.
+    pub fn inverse(&self, point: &[T], _context: &[T]) -> Result<SamplingMapEvaluation<T>> {
+        self.validate_dimension(point, "point")?;
+        let translated = point
+            .iter()
+            .zip(&self.translation)
+            .map(|(value, shift)| (F(value.clone()) - F(shift.clone())).0)
+            .collect::<Vec<_>>();
+        let coordinates = self.apply(
+            &self.inverse_matrix,
+            &translated,
+            &vec![self.determinant.zero(); self.dimension],
+        );
+        let recovered = self.apply(&self.matrix, &coordinates, &self.translation);
+        SamplingMapEvaluation {
+            coordinates,
+            point: point.to_vec(),
+            jacobian: self.determinant.clone(),
+            inverse_jacobian: (F(self.determinant.one()) / F(self.determinant.clone())).0,
+            residual: max_coordinate_residual_scalar(&recovered, point),
+            support: SamplingSupport::Full,
+            diagnostics: vec![format!("affine dimension={}", self.dimension)],
+        }
+        .validate("affine map")
+    }
+
     fn apply(&self, matrix: &[T], input: &[T], translation: &[T]) -> Vec<T> {
         (0..self.dimension)
             .map(|row| {
@@ -643,6 +700,8 @@ impl<T: FloatLike> SamplingMapComponent<T> for SamplingMapAffine<T> {
     fn contract(&self) -> SamplingMapContract {
         SamplingMapContract {
             support: SamplingSupport::Full,
+            requires_context: false,
+            requires_proposal_policy: false,
             jacobian: SamplingJacobian::ExactForward,
         }
     }
@@ -651,7 +710,11 @@ impl<T: FloatLike> SamplingMapComponent<T> for SamplingMapAffine<T> {
         "affine"
     }
 
-    fn forward(&self, coordinates: &[T], _context: &[T]) -> Result<SamplingMapEvaluation<T>> {
+    fn forward(
+        &self,
+        coordinates: &[T],
+        _context: &mut SamplingMapContext<'_, T>,
+    ) -> Result<SamplingMapEvaluation<T>> {
         self.validate_dimension(coordinates, "input")?;
         let point = self.apply(&self.matrix, coordinates, &self.translation);
         let translated = point
@@ -676,29 +739,12 @@ impl<T: FloatLike> SamplingMapComponent<T> for SamplingMapAffine<T> {
         .validate("affine map")
     }
 
-    fn inverse(&self, point: &[T], _context: &[T]) -> Result<SamplingMapEvaluation<T>> {
-        self.validate_dimension(point, "point")?;
-        let translated = point
-            .iter()
-            .zip(&self.translation)
-            .map(|(value, shift)| (F(value.clone()) - F(shift.clone())).0)
-            .collect::<Vec<_>>();
-        let coordinates = self.apply(
-            &self.inverse_matrix,
-            &translated,
-            &vec![self.determinant.zero(); self.dimension],
-        );
-        let recovered = self.apply(&self.matrix, &coordinates, &self.translation);
-        SamplingMapEvaluation {
-            coordinates,
-            point: point.to_vec(),
-            jacobian: self.determinant.clone(),
-            inverse_jacobian: (F(self.determinant.one()) / F(self.determinant.clone())).0,
-            residual: max_coordinate_residual_scalar(&recovered, point),
-            support: SamplingSupport::Full,
-            diagnostics: vec![format!("affine dimension={}", self.dimension)],
-        }
-        .validate("affine map")
+    fn inverse(
+        &self,
+        point: &[T],
+        context: &mut SamplingMapContext<'_, T>,
+    ) -> Result<Option<SamplingMapEvaluation<T>>> {
+        self.inverse(point, context.previous).map(Some)
     }
 }
 
@@ -760,7 +806,7 @@ impl SamplingMapAcceptanceReport {
             let coordinates = (0..map.dimensions())
                 .map(|dimension| halton(sample, prime(dimension)))
                 .collect::<Vec<_>>();
-            let evaluation = map.forward(&coordinates, &[])?;
+            let evaluation = map.forward(&coordinates, &mut SamplingMapContext::detached(&[]))?;
             let value = evaluation
                 .point
                 .iter()
@@ -815,6 +861,9 @@ fn halton(mut index: usize, base: u64) -> f64 {
 /// determinants.  Ordered compositions pass all previous output blocks as
 /// context to each child; their derivative is block triangular, so the exact
 /// determinant is still the product of the diagonal child determinants.
+/// Cloning recurses into each child's warmed evaluator buffers; immutable
+/// geometry callbacks retain their existing shared ownership.
+#[derive(Clone)]
 pub struct SamplingMapComposition<T: FloatLike = f64> {
     kind: SamplingCompositionKind,
     children: Vec<Box<dyn SamplingMapComponent<T>>>,
@@ -830,12 +879,16 @@ pub struct SamplingMapComposition<T: FloatLike = f64> {
 /// absolute determinant, so the product Jacobian is unchanged. A conditional
 /// frame transform first prepares the actual preceding outputs, then converts
 /// the active physical output back to raw coordinates with its exact determinant.
-pub type SamplingMapContextTransform<T> =
-    Arc<dyn Fn(&[T]) -> Result<(Vec<T>, SamplingMapAffine<T>)> + Send + Sync + 'static>;
+pub type SamplingMapContextTransform<T> = Arc<
+    dyn Fn(&mut SamplingMapContext<'_, T>) -> Result<(Vec<T>, SamplingMapAffine<T>)>
+        + Send
+        + Sync
+        + 'static,
+>;
 
 #[derive(Clone)]
 pub struct SamplingMapEmbedding<T: FloatLike = f64> {
-    map: Arc<SamplingMapComposition<T>>,
+    map: Box<SamplingMapComposition<T>>,
     /// Product-output index -> master-frame output index.
     output_indices: Vec<usize>,
     context_transform: Option<SamplingMapContextTransform<T>>,
@@ -884,7 +937,7 @@ impl<T: FloatLike> SamplingMapEmbedding<T> {
             *slot = true;
         }
         Ok(Self {
-            map: Arc::new(map),
+            map: Box::new(map),
             output_indices,
             context_transform: None,
         })
@@ -897,11 +950,14 @@ impl<T: FloatLike> SamplingMapEmbedding<T> {
         self
     }
 
-    fn transformed_context(&self, context: &[T]) -> Result<Option<(Vec<T>, SamplingMapAffine<T>)>> {
+    fn transformed_context(
+        &self,
+        context: &mut SamplingMapContext<'_, T>,
+    ) -> Result<Option<(Vec<T>, SamplingMapAffine<T>)>> {
         self.context_transform
             .as_ref()
             .map(|transform| {
-                if context.iter().any(|value| !value.is_finite()) {
+                if context.previous.iter().any(|value| !value.is_finite()) {
                     return Err(eyre!(
                         "conditional frame needs finite raw prerequisite coordinates"
                     ));
@@ -968,9 +1024,7 @@ impl<T: FloatLike> SamplingMapComponent<T> for SamplingMapEmbedding<T> {
 
     fn contract(&self) -> SamplingMapContract {
         let mut contract = self.map.contract();
-        if self.context_transform.is_some() && contract.support == SamplingSupport::Full {
-            contract.support = SamplingSupport::Conditional;
-        }
+        contract.requires_context |= self.context_transform.is_some();
         contract
     }
 
@@ -978,14 +1032,21 @@ impl<T: FloatLike> SamplingMapComponent<T> for SamplingMapEmbedding<T> {
         "embedded_product"
     }
 
-    fn forward(&self, coordinates: &[T], context: &[T]) -> Result<SamplingMapEvaluation<T>> {
+    fn forward(
+        &self,
+        coordinates: &[T],
+        context: &mut SamplingMapContext<'_, T>,
+    ) -> Result<SamplingMapEvaluation<T>> {
         let prepared = self.transformed_context(context)?;
-        let mut evaluation = self.map.forward(
-            coordinates,
-            prepared.as_ref().map_or(context, |(physical, _)| physical),
-        )?;
+        let previous = prepared
+            .as_ref()
+            .map_or(context.previous, |(physical, _)| physical);
+        let mut evaluation = self
+            .map
+            .forward(coordinates, &mut context.reborrow(previous, Some(0)))?;
         if let Some((_, frame)) = prepared {
-            let transformed = frame.forward(&evaluation.point, &[])?;
+            let transformed =
+                frame.forward(&evaluation.point, &mut context.reborrow(&[], Some(1)))?;
             evaluation.point = transformed.point;
             evaluation.jacobian = (F(evaluation.jacobian) * F(transformed.jacobian)).0;
             evaluation.inverse_jacobian =
@@ -1001,7 +1062,11 @@ impl<T: FloatLike> SamplingMapComponent<T> for SamplingMapEmbedding<T> {
         evaluation.validate("embedded conditional map")
     }
 
-    fn inverse(&self, point: &[T], context: &[T]) -> Result<SamplingMapEvaluation<T>> {
+    fn inverse(
+        &self,
+        point: &[T],
+        context: &mut SamplingMapContext<'_, T>,
+    ) -> Result<Option<SamplingMapEvaluation<T>>> {
         if point.len() != self.output_dimensions() {
             return Err(eyre!(
                 "sampling-map embedding inverse received output dimension {}, expected {}",
@@ -1015,12 +1080,18 @@ impl<T: FloatLike> SamplingMapComponent<T> for SamplingMapEmbedding<T> {
             .as_ref()
             .map(|(_, frame)| frame.inverse(&raw, &[]))
             .transpose()?;
-        let mut evaluation = self.map.inverse(
+        let previous = prepared
+            .as_ref()
+            .map_or(context.previous, |(physical, _)| physical);
+        let Some(mut evaluation) = self.map.inverse(
             transformed
                 .as_ref()
                 .map_or(raw.as_slice(), |mapped| &mapped.coordinates),
-            prepared.as_ref().map_or(context, |(physical, _)| physical),
-        )?;
+            &mut context.reborrow(previous, Some(0)),
+        )?
+        else {
+            return Ok(None);
+        };
         if let Some(transformed) = transformed {
             evaluation.jacobian = (F(evaluation.jacobian) * F(transformed.jacobian)).0;
             evaluation.inverse_jacobian =
@@ -1034,7 +1105,9 @@ impl<T: FloatLike> SamplingMapComponent<T> for SamplingMapEmbedding<T> {
         evaluation
             .diagnostics
             .push("unit-determinant master-frame embedding".to_owned());
-        evaluation.validate("embedded conditional inverse")
+        evaluation
+            .validate("embedded conditional inverse")
+            .map(Some)
     }
 }
 
@@ -1140,22 +1213,23 @@ impl<T: FloatLike> SamplingMapComposition<T> {
     fn evaluate_forward(
         &self,
         coordinates: &[T],
-        initial_context: &[T],
+        initial_context: &mut SamplingMapContext<'_, T>,
     ) -> Result<SamplingMapEvaluation<T>> {
         self.validate_input(coordinates.len(), "composition")?;
         let mut offset = 0;
         let mut context = if self.is_then() {
-            initial_context.to_vec()
+            initial_context.previous.to_vec()
         } else {
             Vec::new()
         };
         let mut evaluations = Vec::with_capacity(self.children.len());
-        for child in &self.children {
+        for (index, child) in self.children.iter().enumerate() {
             let end = offset + child.dimensions();
             let child_coordinates = &coordinates[offset..end];
             let evaluation = child.forward(
                 child_coordinates,
-                if self.is_then() { &context } else { &[] },
+                &mut initial_context
+                    .reborrow(if self.is_then() { &context } else { &[] }, Some(index)),
             )?;
             if self.is_then() {
                 context.extend_from_slice(&evaluation.point);
@@ -1171,12 +1245,12 @@ impl<T: FloatLike> SamplingMapComposition<T> {
     fn evaluate_inverse(
         &self,
         point: &[T],
-        initial_context: &[T],
-    ) -> Result<SamplingMapEvaluation<T>> {
+        initial_context: &mut SamplingMapContext<'_, T>,
+    ) -> Result<Option<SamplingMapEvaluation<T>>> {
         self.validate_output(point.len())?;
         let mut offset = 0;
         let mut context = if self.is_then() {
-            initial_context.to_vec()
+            initial_context.previous.to_vec()
         } else {
             Vec::new()
         };
@@ -1184,11 +1258,17 @@ impl<T: FloatLike> SamplingMapComposition<T> {
         // In a triangular map, prior output blocks are known before later
         // blocks are inverted, so inverse traversal remains in declaration
         // order even though the determinant is block triangular.
-        for child in &self.children {
+        for (index, child) in self.children.iter().enumerate() {
             let end = offset + child.output_dimensions();
             let child_point = &point[offset..end];
-            let evaluation =
-                child.inverse(child_point, if self.is_then() { &context } else { &[] })?;
+            let Some(evaluation) = child.inverse(
+                child_point,
+                &mut initial_context
+                    .reborrow(if self.is_then() { &context } else { &[] }, Some(index)),
+            )?
+            else {
+                return Ok(None);
+            };
             if self.is_then() {
                 context.extend_from_slice(child_point);
             }
@@ -1197,7 +1277,7 @@ impl<T: FloatLike> SamplingMapComposition<T> {
         }
         let mut evaluation = combine_evaluations(evaluations)?;
         evaluation.support = self.contract().support;
-        Ok(evaluation)
+        Ok(Some(evaluation))
     }
 }
 
@@ -1214,28 +1294,17 @@ impl<T: FloatLike> SamplingMapComponent<T> for SamplingMapComposition<T> {
         let mut contract = self.children.iter().map(|child| child.contract()).fold(
             SamplingMapContract {
                 support: SamplingSupport::Full,
+                requires_context: false,
+                requires_proposal_policy: false,
                 jacobian: SamplingJacobian::ExactForward,
             },
             combine_contracts,
         );
         if self.is_then() {
-            // A conditional child is fully supported once a preceding full
-            // block supplies its context. A conditional first block still
-            // requires external preparation and remains conditional.
-            contract.support = SamplingSupport::Full;
-            for (index, child) in self.children.iter().enumerate() {
-                match child.contract().support {
-                    SamplingSupport::Branched => {
-                        contract.support = SamplingSupport::Branched;
-                    }
-                    SamplingSupport::Conditional
-                        if index == 0 && contract.support == SamplingSupport::Full =>
-                    {
-                        contract.support = SamplingSupport::Conditional;
-                    }
-                    _ => {}
-                }
-            }
+            // Earlier output blocks supply later children's declared context.
+            // A conditional first block still needs external preparation;
+            // satisfying either dependency never expands restricted coverage.
+            contract.requires_context = self.children[0].contract().requires_context;
         }
         contract
     }
@@ -1247,11 +1316,19 @@ impl<T: FloatLike> SamplingMapComponent<T> for SamplingMapComposition<T> {
         }
     }
 
-    fn forward(&self, coordinates: &[T], context: &[T]) -> Result<SamplingMapEvaluation<T>> {
+    fn forward(
+        &self,
+        coordinates: &[T],
+        context: &mut SamplingMapContext<'_, T>,
+    ) -> Result<SamplingMapEvaluation<T>> {
         self.evaluate_forward(coordinates, context)
     }
 
-    fn inverse(&self, point: &[T], context: &[T]) -> Result<SamplingMapEvaluation<T>> {
+    fn inverse(
+        &self,
+        point: &[T],
+        context: &mut SamplingMapContext<'_, T>,
+    ) -> Result<Option<SamplingMapEvaluation<T>>> {
         self.evaluate_inverse(point, context)
     }
 }
@@ -1261,11 +1338,8 @@ pub(crate) fn combine_contracts(
     right: SamplingMapContract,
 ) -> SamplingMapContract {
     let support = match (left.support, right.support) {
-        (SamplingSupport::Branched, _) | (_, SamplingSupport::Branched) => {
-            SamplingSupport::Branched
-        }
-        (SamplingSupport::Conditional, _) | (_, SamplingSupport::Conditional) => {
-            SamplingSupport::Conditional
+        (SamplingSupport::Restricted, _) | (_, SamplingSupport::Restricted) => {
+            SamplingSupport::Restricted
         }
         _ => SamplingSupport::Full,
     };
@@ -1278,7 +1352,12 @@ pub(crate) fn combine_contracts(
         }
         _ => SamplingJacobian::ExactForward,
     };
-    SamplingMapContract { support, jacobian }
+    SamplingMapContract {
+        support,
+        requires_context: left.requires_context || right.requires_context,
+        requires_proposal_policy: left.requires_proposal_policy || right.requires_proposal_policy,
+        jacobian,
+    }
 }
 
 fn combine_evaluations<T: FloatLike>(
@@ -1299,11 +1378,8 @@ fn combine_evaluations<T: FloatLike>(
         inverse_jacobian *= F(evaluation.inverse_jacobian);
         residual = residual.max(F(evaluation.residual));
         support = match (support, evaluation.support) {
-            (SamplingSupport::Branched, _) | (_, SamplingSupport::Branched) => {
-                SamplingSupport::Branched
-            }
-            (SamplingSupport::Conditional, _) | (_, SamplingSupport::Conditional) => {
-                SamplingSupport::Conditional
+            (SamplingSupport::Restricted, _) | (_, SamplingSupport::Restricted) => {
+                SamplingSupport::Restricted
             }
             _ => SamplingSupport::Full,
         };
@@ -1512,9 +1588,14 @@ impl<T: FloatLike> ImplicitSurfaceRadialMap<T> {
         }
         if program.parameter_count() != 5
             || program.output_count() != 5
-            || !program.has_derivatives()
+            || program.derivative_parameters() != [0, 1, 2, 3, 4]
         {
-            return Err(eyre!("invalid compiled LU-h profile program"));
+            return Err(eyre!(
+                "invalid compiled LU-h profile program: expected five inputs/outputs and ordered derivative columns [0, 1, 2, 3, 4], got {} inputs, {} outputs and {:?}",
+                program.parameter_count(),
+                program.output_count(),
+                program.derivative_parameters(),
+            ));
         }
         let zero = self.center[0].zero();
         let fit = program.evaluate(&vec![zero; 5])?;
@@ -1648,11 +1729,9 @@ impl<T: FloatLike> ImplicitSurfaceRadialMap<T> {
 
     pub fn contract(&self) -> SamplingMapContract {
         SamplingMapContract {
-            support: if self.context_evaluator.is_some() || self.context_preparer.is_some() {
-                SamplingSupport::Conditional
-            } else {
-                SamplingSupport::Full
-            },
+            support: SamplingSupport::Full,
+            requires_context: self.context_evaluator.is_some() || self.context_preparer.is_some(),
+            requires_proposal_policy: false,
             jacobian: SamplingJacobian::ExactImplicit,
         }
     }
@@ -2282,6 +2361,8 @@ impl<T: FloatLike> SurfaceRadialMap<T> {
     pub fn contract(&self) -> SamplingMapContract {
         SamplingMapContract {
             support: SamplingSupport::Full,
+            requires_context: false,
+            requires_proposal_policy: false,
             jacobian: SamplingJacobian::ExactForward,
         }
     }
@@ -2659,6 +2740,8 @@ impl SamplingMapKernel {
     pub fn contract(&self) -> SamplingMapContract {
         SamplingMapContract {
             support: SamplingSupport::Full,
+            requires_context: false,
+            requires_proposal_policy: false,
             jacobian: SamplingJacobian::ExactForward,
         }
     }
@@ -2792,7 +2875,11 @@ impl<T: FloatLike> SamplingMapComponent<T> for SamplingMapKernel {
         "lmb"
     }
 
-    fn forward(&self, coordinates: &[T], _context: &[T]) -> Result<SamplingMapEvaluation<T>> {
+    fn forward(
+        &self,
+        coordinates: &[T],
+        _context: &mut SamplingMapContext<'_, T>,
+    ) -> Result<SamplingMapEvaluation<T>> {
         let coordinates = coordinates.iter().cloned().map(F).collect::<Vec<_>>();
         let evaluation = SamplingMapKernel::forward(self, &coordinates)?;
         let point = evaluation
@@ -2822,7 +2909,11 @@ impl<T: FloatLike> SamplingMapComponent<T> for SamplingMapKernel {
         })
     }
 
-    fn inverse(&self, point: &[T], _context: &[T]) -> Result<SamplingMapEvaluation<T>> {
+    fn inverse(
+        &self,
+        point: &[T],
+        _context: &mut SamplingMapContext<'_, T>,
+    ) -> Result<Option<SamplingMapEvaluation<T>>> {
         if point.len() != self.dimensions() {
             return Err(eyre!(
                 "lmb sampling-map inverse received output dimension {}, expected {}",
@@ -2855,7 +2946,7 @@ impl<T: FloatLike> SamplingMapComponent<T> for SamplingMapKernel {
                 ]
             })
             .collect();
-        Ok(SamplingMapEvaluation {
+        Ok(Some(SamplingMapEvaluation {
             coordinates: evaluation
                 .coordinates
                 .into_iter()
@@ -2867,7 +2958,7 @@ impl<T: FloatLike> SamplingMapComponent<T> for SamplingMapKernel {
             residual: evaluation.residual.0,
             support: self.contract().support,
             diagnostics: Vec::new(),
-        })
+        }))
     }
 }
 
@@ -2888,7 +2979,11 @@ impl<T: FloatLike> SamplingMapComponent<T> for SurfaceRadialMap<T> {
         "surface"
     }
 
-    fn forward(&self, coordinates: &[T], _context: &[T]) -> Result<SamplingMapEvaluation<T>> {
+    fn forward(
+        &self,
+        coordinates: &[T],
+        _context: &mut SamplingMapContext<'_, T>,
+    ) -> Result<SamplingMapEvaluation<T>> {
         let coordinates = coordinates.iter().cloned().map(F).collect::<Vec<_>>();
         let evaluation = SurfaceRadialMap::forward(self, &coordinates)?;
         Ok(SamplingMapEvaluation {
@@ -2906,10 +3001,14 @@ impl<T: FloatLike> SamplingMapComponent<T> for SurfaceRadialMap<T> {
         })
     }
 
-    fn inverse(&self, point: &[T], _context: &[T]) -> Result<SamplingMapEvaluation<T>> {
+    fn inverse(
+        &self,
+        point: &[T],
+        _context: &mut SamplingMapContext<'_, T>,
+    ) -> Result<Option<SamplingMapEvaluation<T>>> {
         let point_f = point.iter().cloned().map(F).collect::<Vec<_>>();
         let evaluation = SurfaceRadialMap::inverse(self, &point_f)?;
-        Ok(SamplingMapEvaluation {
+        Ok(Some(SamplingMapEvaluation {
             coordinates: evaluation
                 .coordinates
                 .into_iter()
@@ -2921,7 +3020,7 @@ impl<T: FloatLike> SamplingMapComponent<T> for SurfaceRadialMap<T> {
             residual: evaluation.residual.0,
             support: self.contract().support,
             diagnostics: Vec::new(),
-        })
+        }))
     }
 }
 
@@ -2942,12 +3041,20 @@ impl<T: FloatLike> SamplingMapComponent<T> for ImplicitSurfaceRadialMap<T> {
         "implicit_surface"
     }
 
-    fn forward(&self, coordinates: &[T], context: &[T]) -> Result<SamplingMapEvaluation<T>> {
-        ImplicitSurfaceRadialMap::forward_with_context(self, coordinates, context)
+    fn forward(
+        &self,
+        coordinates: &[T],
+        context: &mut SamplingMapContext<'_, T>,
+    ) -> Result<SamplingMapEvaluation<T>> {
+        ImplicitSurfaceRadialMap::forward_with_context(self, coordinates, context.previous)
     }
 
-    fn inverse(&self, point: &[T], context: &[T]) -> Result<SamplingMapEvaluation<T>> {
-        ImplicitSurfaceRadialMap::inverse_with_context(self, point, context)
+    fn inverse(
+        &self,
+        point: &[T],
+        context: &mut SamplingMapContext<'_, T>,
+    ) -> Result<Option<SamplingMapEvaluation<T>>> {
+        ImplicitSurfaceRadialMap::inverse_with_context(self, point, context.previous).map(Some)
     }
 }
 
@@ -3097,6 +3204,40 @@ mod tests {
             .unwrap()
             .join()
             .unwrap();
+    }
+
+    #[test]
+    fn lu_h_radial_profile_rejects_incompatible_derivative_columns() -> Result<()> {
+        crate::initialisation::test_initialise()?;
+        let parameters = ["y", "r", "b", "f", "s"]
+            .map(|name| Atom::var(symbol!(&format!("lu_column_contract::{name}"))));
+        for columns in [&[][..], &[1], &[1, 0, 2, 3, 4]] {
+            // The fit itself is finite with positive shape. Reject missing or
+            // reordered derivatives before derivative[0] can mean another input.
+            let program = SamplingExpressionEvaluator::new(
+                [
+                    "0",
+                    "1",
+                    "lu_column_contract::y",
+                    "1-lu_column_contract::y",
+                    "-lu_column_contract::y",
+                ]
+                .map(|expression| try_parse!(expression).unwrap()),
+                parameters.clone(),
+                columns,
+            )?;
+            let error = ImplicitSurfaceRadialMap::new(
+                3,
+                vec![0.0; 3],
+                1.0,
+                1.0,
+                Arc::new(|_, radius| Ok((radius - 1.0, 1.0))),
+            )?
+            .with_lu_h_profile(program, &SamplingRadialProfile::default(), 1)
+            .unwrap_err();
+            assert!(error.to_string().contains("ordered derivative columns"));
+        }
+        Ok(())
     }
 
     #[test]
@@ -3345,7 +3486,7 @@ mod tests {
             let mut evaluator = SamplingExpressionEvaluator::new(
                 [try_parse!(expression).unwrap()],
                 [coordinate.clone(), power.clone()],
-                true,
+                &[0, 1],
             )
             .unwrap();
             for power in [1.0, 1.5, 2.0, 3.0] {
@@ -3377,18 +3518,26 @@ mod tests {
             let coordinate = (&one / one.from_i64(4)).0;
             assert!(
                 first
-                    .forward(std::slice::from_ref(&coordinate), &[])?
+                    .forward(
+                        std::slice::from_ref(&coordinate),
+                        &mut SamplingMapContext::detached(&[])
+                    )?
                     .jacobian
                     .is_finite()
             );
             assert!(
                 second
-                    .forward(std::slice::from_ref(&coordinate), &[])?
+                    .forward(
+                        std::slice::from_ref(&coordinate),
+                        &mut SamplingMapContext::detached(&[])
+                    )?
                     .jacobian
                     .is_finite()
             );
-            SamplingMapComposition::product(vec![Box::new(first), Box::new(second)])?
-                .forward(&[coordinate.clone(), coordinate], &[])
+            SamplingMapComposition::product(vec![Box::new(first), Box::new(second)])?.forward(
+                &[coordinate.clone(), coordinate],
+                &mut SamplingMapContext::detached(&[]),
+            )
         }
         let error = evaluate::<f64>().unwrap_err();
         assert!(error.downcast_ref::<SamplingEvaluationError>().is_some());
@@ -3531,7 +3680,9 @@ mod tests {
         assert_eq!(map.contract().support, SamplingSupport::Full);
         assert_eq!(map.contract().jacobian, SamplingJacobian::ExactForward);
 
-        let forward = map.forward(&[0.2, -0.4], &[]).unwrap();
+        let forward = map
+            .forward(&[0.2, -0.4], &mut SamplingMapContext::detached(&[]))
+            .unwrap();
         assert!(forward.residual < 1.0e-14, "{}", forward.residual);
         assert!((forward.jacobian - 5.0).abs() < 1.0e-14);
         assert!((forward.inverse_jacobian - 0.2).abs() < 1.0e-14);
@@ -3578,7 +3729,8 @@ mod tests {
             let calls = Arc::new(AtomicUsize::new(0));
             let transform: SamplingMapContextTransform<T> = Arc::new({
                 let calls = calls.clone();
-                move |prior: &[T]| {
+                move |context: &mut SamplingMapContext<'_, T>| {
+                    let prior = context.previous;
                     calls.fetch_add(1, Ordering::Relaxed);
                     if prior.len() != 3 {
                         return Err(eyre!("missing prior block"));
@@ -3617,9 +3769,11 @@ mod tests {
                 (0..6).collect(),
             )?;
             let cube = [17, 31, 63, 29, 43, 71].map(|n| (one.from_i64(n) / one.from_i64(100)).0);
-            let mapped = full.forward(&cube, &[])?;
+            let mapped = full.forward(&cube, &mut SamplingMapContext::detached(&[]))?;
             assert_eq!(calls.load(Ordering::Relaxed), 1);
-            let inverse = full.inverse(&mapped.point, &[])?;
+            let inverse = full
+                .inverse(&mapped.point, &mut SamplingMapContext::detached(&[]))?
+                .expect("full-support inverse");
             assert_eq!(calls.load(Ordering::Relaxed), 2);
             let tolerance = one.epsilon().sqrt() * one.from_i64(64);
             assert!(
@@ -3634,8 +3788,13 @@ mod tests {
                 .iter()
                 .map(|x| (F(x.clone()) / one.from_i64(2)).0)
                 .collect::<Vec<_>>();
-            let foreign = active.inverse(&mapped.point[3..], &foreign_prior)?;
-            let (fixed, frame) = transform(&foreign_prior)?;
+            let foreign = active
+                .inverse(
+                    &mapped.point[3..],
+                    &mut SamplingMapContext::detached(&foreign_prior),
+                )?
+                .expect("full-support inverse");
+            let (fixed, frame) = transform(&mut SamplingMapContext::detached(&foreign_prior))?;
             let pullback = frame.inverse(&mapped.point[3..], &[])?;
             let expected = physical.inverse_with_context(&pullback.coordinates, &fixed)?;
             assert!(
@@ -3652,8 +3811,8 @@ mod tests {
                 let mut minus = cube.clone();
                 plus[column] = (F(plus[column].clone()) + &step).0;
                 minus[column] = (F(minus[column].clone()) - &step).0;
-                let plus = full.forward(&plus, &[])?;
-                let minus = full.forward(&minus, &[])?;
+                let plus = full.forward(&plus, &mut SamplingMapContext::detached(&[]))?;
+                let minus = full.forward(&minus, &mut SamplingMapContext::detached(&[]))?;
                 for (row, values) in matrix.iter_mut().enumerate() {
                     values[column] = ((F(plus.point[row].clone()) - F(minus.point[row].clone()))
                         / (&step * step.from_i64(2)))
@@ -3698,7 +3857,9 @@ mod tests {
                 )?,
             ))
         }));
-        let error = numerical.forward(&[0.2, 0.3, 0.6], &[1.0]).unwrap_err();
+        let error = numerical
+            .forward(&[0.2, 0.3, 0.6], &mut SamplingMapContext::detached(&[1.0]))
+            .unwrap_err();
         assert!(matches!(
             error.downcast_ref::<SamplingEvaluationError>(),
             Some(SamplingEvaluationError::Unrepresentable { .. })
@@ -3709,7 +3870,9 @@ mod tests {
                 SamplingMapAffine::new(vec![vec![1.0, 0.0], vec![0.0, 1.0]], vec![0.0; 2])?,
             ))
         }));
-        let error = structural.forward(&[0.2, 0.3, 0.6], &[1.0]).unwrap_err();
+        let error = structural
+            .forward(&[0.2, 0.3, 0.6], &mut SamplingMapContext::detached(&[1.0]))
+            .unwrap_err();
         assert!(error.downcast_ref::<SamplingEvaluationError>().is_none());
         assert!(error.to_string().contains("dimension 3"));
         for (center, numeric) in [(vec![f64::INFINITY; 3], true), (vec![0.0; 2], false)] {
@@ -3742,7 +3905,20 @@ mod tests {
             map
         );
         assert_eq!(map.host_cut(), Some([2, 9].as_slice()));
-        assert_eq!(map.energy_edges(), Some([4, 6].as_slice()));
+        assert_eq!(map.energy_edge_sets(), vec![[4, 6].as_slice()]);
+        let joint = SamplingMapDefinition::parse(
+            "block(lmb(7),at_cut(cut(9,2),intersect(surface(6,4),surface(6,3))))",
+        )
+        .unwrap();
+        assert_eq!(
+            SamplingMapDefinition::from_atom(joint.to_atom().as_view()).unwrap(),
+            joint
+        );
+        assert_eq!(joint.host_cut(), Some([2, 9].as_slice()));
+        assert_eq!(
+            joint.energy_edge_sets(),
+            vec![[4, 6].as_slice(), [3, 6].as_slice()]
+        );
         for invalid in [
             "block(surface(1),surface(2))",
             "at_cut(lmb(1),surface(2))",
@@ -4044,9 +4220,16 @@ mod tests {
         )
         .unwrap();
         for map in [&kernel as &dyn SamplingMapComponent, &surface, &implicit] {
-            let original = map.forward(&[1.0, 0.3, 0.6], &[]).unwrap_err();
+            let original = map
+                .forward(&[1.0, 0.3, 0.6], &mut SamplingMapContext::detached(&[]))
+                .unwrap_err();
             assert!(original.downcast_ref::<SamplingEvaluationError>().is_none());
-            let recovered = map.inverse(&[1.0e20, 2.0e20, 3.0e20], &[]).unwrap_err();
+            let recovered = map
+                .inverse(
+                    &[1.0e20, 2.0e20, 3.0e20],
+                    &mut SamplingMapContext::detached(&[]),
+                )
+                .unwrap_err();
             assert!(
                 matches!(
                     recovered.downcast_ref::<SamplingEvaluationError>(),
@@ -4261,7 +4444,8 @@ mod tests {
             let shift = context.first().copied().unwrap_or(0.0);
             Ok((radius - (1.0 + shift), 1.0))
         }));
-        assert_eq!(map.contract().support, SamplingSupport::Conditional);
+        assert_eq!(map.contract().support, SamplingSupport::Full);
+        assert!(map.contract().requires_context);
         let coordinates = [0.2, 0.27, 0.61];
         let mapped = map.forward_with_context(&coordinates, &[0.5]).unwrap();
         let radius = mapped
@@ -4304,7 +4488,8 @@ mod tests {
             Ok((radius - (1.0 + shift), 1.0))
         }));
 
-        assert_eq!(map.contract().support, SamplingSupport::Conditional);
+        assert_eq!(map.contract().support, SamplingSupport::Full);
+        assert!(map.contract().requires_context);
         let context = [0.5];
         let coordinates = [0.23, 0.31, 0.67];
         let forward = map
@@ -4409,13 +4594,15 @@ mod tests {
             SamplingMapComposition::then(vec![Box::new(preceding), Box::new(surface)])
                 .expect("ordered conditional composition");
         assert_eq!(composition.contract().support, SamplingSupport::Full);
+        assert!(!composition.contract().requires_context);
         let coordinates = [0.5, 0.23, 0.31, 0.67];
         let forward = composition
-            .forward(&coordinates, &[])
+            .forward(&coordinates, &mut SamplingMapContext::detached(&[]))
             .expect("forward ordered composition");
         let inverse = composition
-            .inverse(&forward.point, &[])
-            .expect("inverse ordered composition");
+            .inverse(&forward.point, &mut SamplingMapContext::detached(&[]))
+            .expect("inverse ordered composition")
+            .expect("full-support inverse");
         assert!(inverse.residual < 1.0e-9, "{}", inverse.residual);
         assert!(
             inverse
@@ -4580,13 +4767,18 @@ mod tests {
         let composition = SamplingMapComposition::product(vec![Box::new(first), Box::new(second)])
             .expect("valid product");
         let coordinates = [0.2, 0.4, 0.7, 0.3, 0.6];
-        let mapped = composition.forward(&coordinates, &[]).unwrap();
+        let mapped = composition
+            .forward(&coordinates, &mut SamplingMapContext::detached(&[]))
+            .unwrap();
         assert_eq!(mapped.coordinates.len(), 5);
         assert_eq!(mapped.point.len(), 5);
         assert!((mapped.jacobian - first_jacobian * second_jacobian).abs() < 1.0e-10);
         assert!((mapped.jacobian * mapped.inverse_jacobian - 1.0).abs() < 1.0e-10);
         assert!(mapped.residual < 1.0e-11);
-        let inverse = composition.inverse(&mapped.point, &[]).unwrap();
+        let inverse = composition
+            .inverse(&mapped.point, &mut SamplingMapContext::detached(&[]))
+            .unwrap()
+            .expect("full-support inverse");
         assert!(inverse.residual < 1.0e-10);
         assert!(
             inverse
@@ -4607,24 +4799,35 @@ mod tests {
             1,
         )
         .unwrap();
-        let first_eval =
-            <SurfaceRadialMap as SamplingMapComponent>::forward(&first, &[0.23, 0.71], &[])
-                .unwrap();
-        let second_eval =
-            <SamplingMapKernel as SamplingMapComponent>::forward(&second, &[0.17, 0.43, 0.89], &[])
-                .unwrap();
+        let first_eval = <SurfaceRadialMap as SamplingMapComponent>::forward(
+            &first,
+            &[0.23, 0.71],
+            &mut SamplingMapContext::detached(&[]),
+        )
+        .unwrap();
+        let second_eval = <SamplingMapKernel as SamplingMapComponent>::forward(
+            &second,
+            &[0.17, 0.43, 0.89],
+            &mut SamplingMapContext::detached(&[]),
+        )
+        .unwrap();
         let embedding = SamplingMapEmbedding::product(
             vec![Box::new(first), Box::new(second)],
             vec![2, 3, 0, 1, 4],
         )
         .expect("valid master-frame permutation");
         let coordinates = [0.23, 0.71, 0.17, 0.43, 0.89];
-        let mapped = embedding.forward(&coordinates, &[]).unwrap();
+        let mapped = embedding
+            .forward(&coordinates, &mut SamplingMapContext::detached(&[]))
+            .unwrap();
         assert_eq!(mapped.point[0..2], second_eval.point[0..2]);
         assert_eq!(mapped.point[2..4], first_eval.point[0..2]);
         assert_eq!(mapped.point[4], second_eval.point[2]);
         assert!((mapped.jacobian - first_eval.jacobian * second_eval.jacobian).abs() < 1.0e-10);
-        let inverse = embedding.inverse(&mapped.point, &[]).unwrap();
+        let inverse = embedding
+            .inverse(&mapped.point, &mut SamplingMapContext::detached(&[]))
+            .unwrap()
+            .expect("full-support inverse");
         assert!(inverse.residual < 1.0e-10);
         assert!(
             inverse
@@ -4635,7 +4838,111 @@ mod tests {
         );
     }
 
-    #[derive(Debug)]
+    #[test]
+    fn embedded_worker_clone_owns_nested_eager_buffers() -> Result<()> {
+        use std::{sync::mpsc, time::Duration};
+
+        crate::initialisation::test_initialise()?;
+        // Retain the parent's buffer handle to test ownership through two
+        // embedded compositions. Leaf maps already clone their eager buffers;
+        // a shared outer composition must not prevent that clone from running.
+        struct EagerProbe(Arc<Mutex<SamplingExpressionEvaluator>>);
+
+        impl std::fmt::Debug for EagerProbe {
+            fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("EagerProbe")
+            }
+        }
+
+        impl Clone for EagerProbe {
+            fn clone(&self) -> Self {
+                Self(Arc::new(Mutex::new(self.0.lock().unwrap().clone())))
+            }
+        }
+
+        impl SamplingMapComponent for EagerProbe {
+            fn dimensions(&self) -> usize {
+                1
+            }
+            fn output_dimensions(&self) -> usize {
+                1
+            }
+            fn contract(&self) -> SamplingMapContract {
+                SamplingMapContract {
+                    support: SamplingSupport::Full,
+                    requires_context: false,
+                    requires_proposal_policy: false,
+                    jacobian: SamplingJacobian::ExactForward,
+                }
+            }
+            fn name(&self) -> &'static str {
+                "eager_clone_probe"
+            }
+            fn forward(
+                &self,
+                coordinates: &[f64],
+                _context: &mut SamplingMapContext<'_, f64>,
+            ) -> Result<SamplingMapEvaluation> {
+                let evaluated = self
+                    .0
+                    .lock()
+                    .unwrap()
+                    .evaluate_with_real_jacobian(coordinates, None)?;
+                Ok(SamplingMapEvaluation {
+                    coordinates: coordinates.to_vec(),
+                    point: evaluated.values,
+                    jacobian: evaluated.determinant,
+                    inverse_jacobian: evaluated.determinant.recip(),
+                    residual: 0.0,
+                    support: SamplingSupport::Full,
+                    diagnostics: Vec::new(),
+                })
+            }
+            fn inverse(
+                &self,
+                point: &[f64],
+                context: &mut SamplingMapContext<'_, f64>,
+            ) -> Result<Option<SamplingMapEvaluation>> {
+                self.forward(&[(point[0] - 1.0) / 3.0], context).map(Some)
+            }
+        }
+
+        let program = Arc::new(Mutex::new(SamplingExpressionEvaluator::new(
+            [try_parse!("3*embedded_clone::x+1").map_err(|error| eyre!(error))?],
+            [try_parse!("embedded_clone::x").map_err(|error| eyre!(error))?],
+            &[0],
+        )?));
+        let inner =
+            SamplingMapEmbedding::product(vec![Box::new(EagerProbe(program.clone()))], vec![0])?;
+        let parent = SamplingMapEmbedding::from_composition(
+            SamplingMapComposition::then(vec![Box::new(inner)])?,
+            vec![0],
+        )?;
+        let worker = parent.clone();
+        let parent_lock = program.lock().unwrap();
+        let (sender, receiver) = mpsc::channel();
+        let handle = std::thread::spawn(move || -> Result<()> {
+            let mapped = worker.forward(&[0.25], &mut SamplingMapContext::detached(&[]))?;
+            let inverse = worker
+                .inverse(&mapped.point, &mut SamplingMapContext::detached(&[]))?
+                .unwrap();
+            sender.send((mapped, inverse))?;
+            Ok(())
+        });
+        let result = receiver.recv_timeout(Duration::from_secs(5));
+        // Always release the parent before joining, including a regression
+        // timeout, so a shared mutex produces a bounded failure rather than a hang.
+        drop(parent_lock);
+        handle.join().unwrap()?;
+        let (mapped, inverse) = result.expect("worker used its parent's eager buffer");
+        assert_eq!(mapped.point, [1.75]);
+        assert_eq!(mapped.jacobian, 3.0);
+        assert_eq!(inverse.coordinates, [0.25]);
+        assert_eq!(mapped.jacobian * inverse.inverse_jacobian, 1.0);
+        Ok(())
+    }
+
+    #[derive(Clone, Debug)]
     struct ContextShiftMap;
 
     impl SamplingMapComponent for ContextShiftMap {
@@ -4649,7 +4956,9 @@ mod tests {
 
         fn contract(&self) -> SamplingMapContract {
             SamplingMapContract {
-                support: SamplingSupport::Conditional,
+                support: SamplingSupport::Full,
+                requires_context: true,
+                requires_proposal_policy: false,
                 jacobian: SamplingJacobian::ExactForward,
             }
         }
@@ -4658,8 +4967,12 @@ mod tests {
             "context_shift"
         }
 
-        fn forward(&self, coordinates: &[f64], context: &[f64]) -> Result<SamplingMapEvaluation> {
-            let shift = context.first().copied().unwrap_or(0.0);
+        fn forward(
+            &self,
+            coordinates: &[f64],
+            context: &mut SamplingMapContext<'_>,
+        ) -> Result<SamplingMapEvaluation> {
+            let shift = context.previous.first().copied().unwrap_or(0.0);
             let point = coordinates[0] + shift;
             Ok(SamplingMapEvaluation {
                 coordinates: coordinates.to_vec(),
@@ -4672,10 +4985,14 @@ mod tests {
             })
         }
 
-        fn inverse(&self, point: &[f64], context: &[f64]) -> Result<SamplingMapEvaluation> {
-            let shift = context.first().copied().unwrap_or(0.0);
+        fn inverse(
+            &self,
+            point: &[f64],
+            context: &mut SamplingMapContext<'_>,
+        ) -> Result<Option<SamplingMapEvaluation>> {
+            let shift = context.previous.first().copied().unwrap_or(0.0);
             let coordinate = point[0] - shift;
-            Ok(SamplingMapEvaluation {
+            Ok(Some(SamplingMapEvaluation {
                 coordinates: vec![coordinate],
                 point: point.to_vec(),
                 jacobian: 1.0,
@@ -4683,7 +5000,7 @@ mod tests {
                 residual: 0.0,
                 support: self.contract().support,
                 diagnostics: vec![format!("shift={shift}")],
-            })
+            }))
         }
     }
 
@@ -4695,8 +5012,11 @@ mod tests {
         ])
         .expect("valid conditional composition");
         assert!(composition.is_then());
-        assert_eq!(composition.contract().support, SamplingSupport::Conditional);
-        let mapped = composition.forward(&[0.2, 0.4], &[]).unwrap();
+        assert_eq!(composition.contract().support, SamplingSupport::Full);
+        assert!(composition.contract().requires_context);
+        let mapped = composition
+            .forward(&[0.2, 0.4], &mut SamplingMapContext::detached(&[]))
+            .unwrap();
         assert!(
             mapped
                 .point
@@ -4705,7 +5025,10 @@ mod tests {
                 .all(|(actual, expected)| (actual - expected).abs() < 1.0e-15)
         );
         assert_eq!(mapped.diagnostics, vec!["shift=0", "shift=0.2"]);
-        let inverse = composition.inverse(&mapped.point, &[]).unwrap();
+        let inverse = composition
+            .inverse(&mapped.point, &mut SamplingMapContext::detached(&[]))
+            .unwrap()
+            .expect("full-support inverse");
         assert!(
             inverse
                 .coordinates
@@ -4722,7 +5045,9 @@ mod tests {
             Box::new(ContextShiftMap),
         ])
         .expect("valid conditional composition");
-        let mapped = composition.forward(&[0.2, 0.4], &[0.1]).unwrap();
+        let mapped = composition
+            .forward(&[0.2, 0.4], &mut SamplingMapContext::detached(&[0.1]))
+            .unwrap();
         assert!(
             mapped
                 .point
@@ -4730,7 +5055,10 @@ mod tests {
                 .zip([0.3, 0.5])
                 .all(|(actual, expected)| (actual - expected).abs() < 1.0e-15)
         );
-        let inverse = composition.inverse(&mapped.point, &[0.1]).unwrap();
+        let inverse = composition
+            .inverse(&mapped.point, &mut SamplingMapContext::detached(&[0.1]))
+            .unwrap()
+            .expect("full-support inverse");
         assert!(
             inverse
                 .coordinates
@@ -4758,7 +5086,9 @@ mod tests {
             SamplingMapComposition::then(vec![Box::new(ContextShiftMap), Box::new(implicit)])
                 .expect("valid conditional surface composition");
         let coordinates = [0.2, 0.3, 0.27, 0.61];
-        let mapped = composition.forward(&coordinates, &[]).unwrap();
+        let mapped = composition
+            .forward(&coordinates, &mut SamplingMapContext::detached(&[]))
+            .unwrap();
         let surface_radius = mapped.point[1..]
             .iter()
             .map(|value| value * value)
@@ -4771,8 +5101,12 @@ mod tests {
                 .iter()
                 .any(|diagnostic| diagnostic == "implicit_surface:regular_root")
         );
-        assert_eq!(mapped.support, SamplingSupport::Conditional);
-        let inverse = composition.inverse(&mapped.point, &[]).unwrap();
+        assert_eq!(mapped.support, SamplingSupport::Full);
+        assert!(composition.contract().requires_context);
+        let inverse = composition
+            .inverse(&mapped.point, &mut SamplingMapContext::detached(&[]))
+            .unwrap()
+            .expect("full-support inverse");
         assert!(inverse.residual < 1.0e-10);
         assert!(
             inverse
@@ -4789,12 +5123,12 @@ mod tests {
         let composition = SamplingMapComposition::product(vec![Box::new(ContextShiftMap)])
             .expect("valid product");
         let error = composition
-            .forward(&[0.2, 0.3], &[])
+            .forward(&[0.2, 0.3], &mut SamplingMapContext::detached(&[]))
             .unwrap_err()
             .to_string();
         assert!(error.contains("received dimension 2, expected 1"));
         let error = composition
-            .inverse(&[0.2, 0.3], &[])
+            .inverse(&[0.2, 0.3], &mut SamplingMapContext::detached(&[]))
             .unwrap_err()
             .to_string();
         assert!(error.contains("received output dimension 2, expected 1"));

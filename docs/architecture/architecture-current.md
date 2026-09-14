@@ -509,6 +509,21 @@ active coordinates back to raw coordinates with the complete affine shift and
 determinant. Every foreign inverse prepares its own supplied raw point. The
 complete native map is routed to the master frame once. The combined generated
 fixture gates pass; general nested mixed compositions remain rejected.
+Explicit pairs of original graph surfaces can share one active three-dimensional
+joint block under a physical cut. Binding and adoption resolve the same original
+equations, retaining side-qualified associations, masses and temporal shifts.
+The common-energy shift is composed with the existing LU affine pullback; its
+active determinant includes `tau^-3`. At physical adoption, the shared directed
+ray arithmetic encloses those original equations on the actual canonical and
+native completed points. Normal displacement and the native host residual each
+have half of the sampling-accuracy budget relative to the canonical normal
+radius. Amplitude joints use the same check with zero host residual. Errors
+trigger physical precision rescue from the retained source, without redrawing
+maps or partitions. These checks belong to sampling time, including rotations
+and failed attempts. They do not certify arbitrary CT multipliers, higher
+raised jets or projected CT-star targets. The
+[hosted-joint audit](../research/advanced_sampling/HOSTED_JOINT_NORMAL_ALIGNMENT.md)
+records the concrete geometry and acceptance gates.
 The old LMB-specific partition implementation is removed.
 Default single-basis routing and obsolete weight settings remain migration work.
 
@@ -543,10 +558,11 @@ the actual native energy residual must certify an interior point. Conservative
 sign tolerances include cancelling routed inputs. Empty-complement preparation
 is frozen at warmup. Certified absence or explicit pinched status retains a
 normalized full-support fallback; a failed solve or numerically ambiguous sign
-requires a typed numerical error. Per-draw preparation participates in precision
-rescue. Frozen-binding successes and typed numerical failures use the same
-native runtime caches. Warmup requires one configured precision usable for all
-graphs; structural errors and failure at every precision invalidate the epoch.
+requires a typed numerical error. Production preparation now uses one fixed-Arb
+proposal; only subsequent physical materialization/evaluation participates in
+precision rescue. Frozen-binding successes and typed numerical failures use the
+same native runtime caches. Warmup requires the canonical Arb binding for all
+graphs; optional native component failures cannot reject a valid canonical draw.
 This is not an interval certificate. Automatic discovery remains unfinished.
 The combined X2 numerical gates for conditional cuts and frozen-binding rescue
 pass, including the broader 141-test core/API run. The selected UV-finite two-loop amplitude benchmarks are recorded in
@@ -557,6 +573,133 @@ The shared radial profile focuses on both signed distances to the threshold
 with a common analytic inverse. Native kernel tests cover Quad and arbitrary
 precision. Components, affine/composed maps, conditional cut data, eager/dual
 evaluations and foreign-density partitions now retain native values throughout.
+The existing eager Jacobian evaluator can select ordered active parameter
+columns while other prepared parameters remain fixed. Its single compiled
+first-derivative program receives the statically zero components of the
+identity seeds through Symbolica's `Dualizer`. This prevents an unused
+derivative of a prepared-only expression such as `sqrt(m)` at `m=0` from
+contaminating a valid active derivative. Requested singular derivatives and
+singular intermediates involving active inputs still produce typed numerical
+errors. The constructor change preserves the stored evaluator layout and the
+empty-mask behavior of existing physical evaluators.
+The graph-independent shared-energy joint component supplies a compact
+three-dimensional full-circle map for two energy sums with one common routed
+energy. It uses that eager Jacobian owner, a directed MPFR enclosure certificate
+for the residual disk, and an inverse density evaluated at the supplied point.
+The existing block resolver now treats two distinct plain surfaces under
+`intersect` as one three-dimensional block, with qualifiers on the pair. Their
+separate equations remain in the same geometry key, and the canonical program
+cache compiles one neutral joint expression for all participating channels.
+The graph matcher has prior coverage against actual routed amplitude equations.
+The current source adds an amplitude binder for that supported class, retaining
+the native shared-energy translation. Empty-prior blocks bind once at warmup
+through static `Affine`; only nonempty priors use the existing ordered embedding.
+Its trial disk radius is `e_cm * sampling.b`, with isotropic normal scale one;
+the component's conditional fallback retains the existing normalized radial map.
+The binder and source transport pass combined numerical gates: all-18-orientation
+kite Gaussian/moment acceptance, actual physical map/partition consistency and
+controlled Double-to-Quad body retry, plus the generated triangle's empty-prior
+binder, nonzero offset, compact roundtrip and production reference evaluation.
+These joint fixtures clear rotation probes; nonidentity-probe behavior and
+GL638 runtime improvement are not established by this milestone.
+
+The original-source preparation phase now retains the complete 1000-bit Arb
+draw, including graph-parent coordinates, combined factors and selected host
+records. Selected, summed and default/LMB routes prepare before norm-based
+lane selection or physical targets. The existing Gamma/Discrete owners hold
+completed rows with their event-group boundaries; the old cube-only summed
+placeholders and physical LMB reinterpretation are removed. Physical attempts
+materialize directly from the same anchor without maps, partitions or sampling
+root solves. Direct selected momentum input prepares only its partition; direct
+unselected input needs no map phase. Norm and debug access do not redraw.
+`EvaluationMetaData` retains discrete component decisions and root diagnostics,
+while `EvaluationSource` borrows the immutable draw. Warmed maps have no mutable
+draw cache. This fixes the continuous-map switching gap described in the
+[canonical source contract](../research/advanced_sampling/CANONICAL_DRAW_SOURCE.md).
+The correction passes 214 core tests and three API gates, including the complete
+generated-amplitude and saved-state acceptance runs. Hosted joint binding and
+completed-point normal accuracy were the next cross-section gate; their later
+implemented ownership is described above.
+
+Physical cross-section overlaps now also have an immutable source authority.
+Before lane selection, the existing Gamma row traversal prepares complete
+accepted-cut representatives from the canonical Arb point through the physical
+LU root owner, then chooses identity-frame SOCP/forced centers once. Bare raw
+input retains its real absent channel; selected, summed and nonmaster rows use
+the same physical convention. Selector-only events carry the source's actual
+optional channel ID, so an explicit channel-ID predicate may change the accepted
+cut set. Geometry is channel-independent for the same accepted physical cuts.
+Reference targets and CT-off skip this preparation; amplitudes retain their
+existing center behavior.
+
+Rows retain the original-frame overlap authority across casts and rotations.
+Native consumers preserve per-cut complements, LU/alpha solves and raised
+packets, validating complete group membership, solve signatures and ordered
+parents before using the retained centers. A mismatch fails without choosing a
+replacement center. Both consumers promote binary64 center bits exactly before
+rotating in native arithmetic. Canonical event/runtime and radial history are
+isolated from physical probes and restored on errors. The
+`canonical_physical_preparation_time` metadata field exposes this work as a
+subset of physical time, counted once; map/adoption costs retain their separate
+sampling attribution. The [center audit](../research/advanced_sampling/CANONICAL_CT_CENTERS.md)
+records the generated gates and successful actual GL638 failure replay, without
+claiming amplitude covariance or numerical coverage of every selector/group.
+
+The geometry and timing source passes 175 selected core tests, including the
+complete 8192-draw kite rerun and its physical/retry checks, plus three API gates.
+`Esurface::solve_lu_cut` returns the native ordered energy ray together with its
+root, and physical raised eta jets evaluate that ray. Explicit LU now routes
+before scaling; other scalar CT/fiber evaluators retain their prior operation
+order and seed convention. Those gates predate the native host handoff described
+below and do not validate its adoption checks.
+Three [GL638 LU-ray replay evaluations](../research/advanced_sampling/GL638_LU_RAY_REPLAY.md)
+retain all 936 orientations, six physical event weights and the unchanged saved
+state. They establish a bounded physical regression, not improved precision or
+variance; GL638's six simple cuts do not exercise higher raised eta derivatives.
+
+The accompanying timing change passes core/API checks. `parameterization_time`
+accumulates map/source/partition and replay costs across attempts; canonical
+preparation is charged once. `integrand_evaluation_time` counts actual target
+bodies across all lanes and probes, excluding maps and nested host-adoption
+verification charged to sampling time. Evaluator and event timings
+are subsets removed from the benchmark's residual integrand row. Final metadata
+retains accumulated costs, including replays after its earlier result snapshot.
+These are measurement counters, not evidence that the GL638 10% budget is met.
+
+The native host handoff is implemented and its combined gates pass. The existing
+runtime context owns one native record vector; the initial selected forward or
+direct inverse freezes its authoritative prefix before partition inverses.
+Only identical plans and exact represented priors reuse a record. Selected/summed
+samples lend that prefix to the physical owner. The subsequent source correction
+materializes it directly from Arb, and rotations retain the original-frame
+payload. Metadata contains discrete policies and root history, with canonical
+preparation history isolated. Graph-group masters authenticate their records before ordinary foreign
+graphs receive an empty payload. Physical adoption rotates the ray once and
+authenticates its parent/host against the selected immutable channel, then
+compares it with independently routed completed data using a fixed directed
+2048-bit scalar/root/first-derivative/inverse-volume check. This does not certify
+vector-coordinate error, higher raised jets or full conditional density.
+The final source passes 184 unique core tests and three API gates (106.024 s).
+The conditional fixture's nonidentity physical totals agree within the fixed
+1e-8 tolerance; probes retain no event buffer/counts under existing ownership.
+The complete 8192-draw kite passes in 1504.601 s with its 6%/8% reference bounds;
+this unoptimized complete-fixture timing is not a production budget measurement.
+Combined checking (12.56 s), clippy (57.76 s; no changed-line warnings), formatting
+and diff checks pass. The optimized GL638 10% budget remains unmeasured.
+
+That native-host milestone preceded hosted joint binding. The subsequent
+fixed-external routing, retained canonical law and original-normal adoption
+checks are described above; CT-star maps still need to consume the actual common
+center and projection alpha through their own dependency-certified handoff.
+Map coverage is `Full` or `Restricted`, independently of `requires_context` and
+the new `requires_proposal_policy` preparation flag.
+Certified inverse exclusion propagates through the existing compositions,
+embeddings and affine frames as `None`, becoming zero in the existing partition.
+Numerical uncertainty and underflow remain errors. Exact and proxy partitions
+gate restricted channels by their actual support, and bridge admission requires
+an explicitly selected full-support sibling. A direct-momentum request outside
+its selected channel gives an explicit diagnostic; generated selected points
+must still have positive density and satisfy forward/inverse consistency.
 Typed numerical errors distinguish unrepresentable derived coordinates/scores
 from invalid original inputs. The implicit root uses the existing native
 safeguarded solver, with callback errors preserved. Production retries rebuild

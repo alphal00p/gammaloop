@@ -23,7 +23,9 @@ use crate::observables::{
     events::{format_complex_generic, format_optional_real_generic, format_real_generic},
 };
 use crate::{
-    integrands::process::sampling_reference::ReferenceMoments,
+    integrands::process::{
+        sampling_context::SamplingProposalPolicies, sampling_reference::ReferenceMoments,
+    },
     settings::runtime::{IntegrationStatisticsSnapshot, Precision},
     utils::{
         ArbPrec, F, FloatLike, duration_from_secs_f64_saturating, f128, format_evaluation_time,
@@ -994,8 +996,19 @@ pub struct LoopMomentaEscalationMetrics {
 #[derive(Clone, Serialize, Debug)]
 pub struct EvaluationMetaData {
     pub total_timing: Duration,
+    /// All actual target calls across native attempts and rotations; includes
+    /// evaluator/event work and excludes separately timed sampling maps and
+    /// host-adoption certificates, even when these run inside a target body.
     pub integrand_evaluation_time: Duration,
+    /// Subset of physical time: one canonical representative-cut/overlap prepass.
+    /// Report separately while native primal roots are still solved again, so
+    /// repeated preparation cannot inflate the sampling-budget denominator.
+    pub canonical_physical_preparation_time: Duration,
+    /// Existing primary-call evaluator subset of integrand_evaluation_time.
     pub evaluator_evaluation_time: Duration,
+    /// Source/map/partition work across all attempts and replays. Canonical
+    /// policy preparation is inclusive and charged once, never again per child.
+    /// Host-only adoption work is included here and excluded from physical time.
     pub parameterization_time: Duration,
     pub event_processing_time: Duration,
     pub generated_event_count: usize,
@@ -1008,6 +1021,8 @@ pub struct EvaluationMetaData {
     pub(crate) threshold_counterterm_error: Option<String>,
     #[serde(skip)]
     pub(crate) radial_root_diagnostics: RadialRootDiagnostics,
+    #[serde(skip)]
+    pub(crate) sampling_proposal_policies: SamplingProposalPolicies,
 }
 
 impl Display for EvaluationMetaData {
@@ -1076,6 +1091,7 @@ impl EvaluationMetaData {
         Self {
             total_timing: Duration::ZERO,
             integrand_evaluation_time: Duration::ZERO,
+            canonical_physical_preparation_time: Duration::ZERO,
             evaluator_evaluation_time: Duration::ZERO,
             parameterization_time: Duration::ZERO,
             event_processing_time: Duration::ZERO,
@@ -1087,6 +1103,7 @@ impl EvaluationMetaData {
             stability_results: Vec::new(),
             threshold_counterterm_error: None,
             radial_root_diagnostics: RadialRootDiagnostics::default(),
+            sampling_proposal_policies: SamplingProposalPolicies::default(),
         }
     }
 

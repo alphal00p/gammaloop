@@ -595,10 +595,11 @@ fn bench_batch_timing(
     let inv_sample_count = 1.0 / sample_count as f64;
     let parameterization = parameterization * inv_sample_count;
     let evaluator = evaluator * inv_sample_count;
-    // integrand_evaluation_time is inclusive of evaluator calls. Keep the
-    // displayed rows disjoint by showing the non-evaluator integrand residual.
-    let integrand = (integrand_inclusive * inv_sample_count - evaluator).max(0.0);
+    // integrand_evaluation_time includes evaluator and event work. Keep the
+    // displayed rows disjoint by showing the residual after both subsets.
     let event_processing = event_processing * inv_sample_count;
+    let integrand =
+        (integrand_inclusive * inv_sample_count - evaluator - event_processing).max(0.0);
     // Keep Total as the wall-clock time around evaluate_samples. The metadata
     // rows below are subtracted from that wrapper timing so other/overhead
     // captures unclassified evaluation work plus evaluate_samples overhead.
@@ -981,10 +982,18 @@ mod tests {
 
         assert_close(timing.total, 15.0e-6);
         assert_close(timing.parameterization, 1.5e-6);
-        assert_close(timing.integrand, 2.0e-6);
+        assert_close(timing.integrand, 0.5e-6);
         assert_close(timing.event_processing, 1.5e-6);
         assert_close(timing.evaluator, 3.5e-6);
-        assert_close(timing.other, 6.5e-6);
+        assert_close(timing.other, 8.0e-6);
+        assert_close(
+            timing.parameterization
+                + timing.integrand
+                + timing.event_processing
+                + timing.evaluator
+                + timing.other,
+            timing.total,
+        );
     }
 
     fn sample_with_metadata(

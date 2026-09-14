@@ -151,7 +151,9 @@ impl OverlapStructure {
                         &FunctionMap::new(),
                         vec![],
                         optimization_settings.clone(),
-                        (order_index > 0).then(|| simple_n_deriv_shape(order_index)),
+                        (order_index > 0)
+                            .then(|| simple_n_deriv_shape(order_index))
+                            .map(|shape| (shape, Vec::new())),
                         &EvaluatorSettings::default(),
                     )
                     .map(RefCell::new)
