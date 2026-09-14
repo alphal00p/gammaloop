@@ -66,7 +66,7 @@ check: build check-wasm-features
     set -euo pipefail
     cd "{{ justfile_directory() }}/tydenso"
     tymbolica_checkout="${TYMBOLICA_CHECKOUT:-../../tymbolica}"
-    tymbolica_revision="e85233dd3d99e5fb458913d0d49f99d83466025b"
+    tymbolica_revision="32ae00483b4845161401afac8be755cc336cb2bb"
     if [ ! -f "$tymbolica_checkout/typst.toml" ]; then
       echo "set TYMBOLICA_CHECKOUT to the pinned lcnbr/tymbolica checkout" >&2
       exit 1
@@ -76,7 +76,7 @@ check: build check-wasm-features
       echo "TYMBOLICA_CHECKOUT must be at $tymbolica_revision; found ${checkout_revision:-no Git HEAD}" >&2
       exit 1
     fi
-    symbolica_revision="ba3737137c2a2ccd7bb39f0441837d38ec867e78"
+    symbolica_revision="4f1323185fe5e0c0f8c864ab89edd1905e7adef1"
     expected_source="source = \"git+https://github.com/symbolica-dev/symbolica?rev=$symbolica_revision#$symbolica_revision\""
     for lock in ../Cargo.lock Cargo.lock "$tymbolica_checkout/Cargo.lock"; do
       for package in symbolica numerica graphica; do

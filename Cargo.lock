@@ -2439,7 +2439,7 @@ dependencies = [
 [[package]]
 name = "graphica"
 version = "3.0.0"
-source = "git+https://github.com/symbolica-dev/symbolica?rev=ba3737137c2a2ccd7bb39f0441837d38ec867e78#ba3737137c2a2ccd7bb39f0441837d38ec867e78"
+source = "git+https://github.com/symbolica-dev/symbolica?rev=4f1323185fe5e0c0f8c864ab89edd1905e7adef1#4f1323185fe5e0c0f8c864ab89edd1905e7adef1"
 dependencies = [
  "ahash 0.8.12",
  "dyn-clone",
@@ -4089,7 +4089,7 @@ dependencies = [
 [[package]]
 name = "numerica"
 version = "3.0.0"
-source = "git+https://github.com/symbolica-dev/symbolica?rev=ba3737137c2a2ccd7bb39f0441837d38ec867e78#ba3737137c2a2ccd7bb39f0441837d38ec867e78"
+source = "git+https://github.com/symbolica-dev/symbolica?rev=4f1323185fe5e0c0f8c864ab89edd1905e7adef1#4f1323185fe5e0c0f8c864ab89edd1905e7adef1"
 dependencies = [
  "ahash 0.8.12",
  "astro-float",
@@ -6335,7 +6335,7 @@ dependencies = [
 [[package]]
 name = "symbolica"
 version = "2.2.0"
-source = "git+https://github.com/symbolica-dev/symbolica?rev=ba3737137c2a2ccd7bb39f0441837d38ec867e78#ba3737137c2a2ccd7bb39f0441837d38ec867e78"
+source = "git+https://github.com/symbolica-dev/symbolica?rev=4f1323185fe5e0c0f8c864ab89edd1905e7adef1#4f1323185fe5e0c0f8c864ab89edd1905e7adef1"
 dependencies = [
  "ahash 0.8.12",
  "append-only-vec",
@@ -7141,7 +7141,7 @@ dependencies = [
 [[package]]
 name = "tymbolica-atom-payload"
 version = "0.1.0"
-source = "git+https://github.com/lcnbr/tymbolica?rev=e85233dd3d99e5fb458913d0d49f99d83466025b#e85233dd3d99e5fb458913d0d49f99d83466025b"
+source = "git+https://github.com/lcnbr/tymbolica?rev=32ae00483b4845161401afac8be755cc336cb2bb#32ae00483b4845161401afac8be755cc336cb2bb"
 dependencies = [
  "ciborium",
  "symbolica",

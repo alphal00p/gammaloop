@@ -81,7 +81,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: lcnbr/tymbolica
-          ref: e85233dd3d99e5fb458913d0d49f99d83466025b
+          ref: 32ae00483b4845161401afac8be755cc336cb2bb
           path: tymbolica-pinned
 
       - name: Install Wasm build tools

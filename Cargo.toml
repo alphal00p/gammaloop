@@ -68,7 +68,7 @@ tracing = "0.1.44"
 tracing-appender = "0.2.4"
 tracing-indicatif = "0.3.13"
 tracing-subscriber = "0.3.23"
-tymbolica-atom-payload = { git = "https://github.com/lcnbr/tymbolica", rev = "e85233dd3d99e5fb458913d0d49f99d83466025b", default-features = false }
+tymbolica-atom-payload = { git = "https://github.com/lcnbr/tymbolica", rev = "32ae00483b4845161401afac8be755cc336cb2bb", default-features = false }
 typed-index-collections = "3.5.0"
 vakint = { path = "crates/vakint/" }
 walkdir = "2.5.0"
@@ -76,9 +76,9 @@ walkdir = "2.5.0"
 which = "8.0.0"
 
 [patch.crates-io]
-graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "ba3737137c2a2ccd7bb39f0441837d38ec867e78" }
-numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "ba3737137c2a2ccd7bb39f0441837d38ec867e78" }
-symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "ba3737137c2a2ccd7bb39f0441837d38ec867e78" }
+graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "4f1323185fe5e0c0f8c864ab89edd1905e7adef1" }
+numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "4f1323185fe5e0c0f8c864ab89edd1905e7adef1" }
+symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "4f1323185fe5e0c0f8c864ab89edd1905e7adef1" }
 
 [profile.bench]
 opt-level = 3

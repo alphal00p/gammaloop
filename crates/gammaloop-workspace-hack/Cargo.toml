@@ -29,7 +29,7 @@ criterion = { version = "0.5", features = ["html_reports"] }
 crossterm = { version = "0.28", features = ["serde"] }
 either = { version = "1", features = ["use_std"] }
 fastrand = { version = "2" }
-graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "ba3737137c2a2ccd7bb39f0441837d38ec867e78", default-features = false, features = ["float-mpfr", "integer-gmp"] }
+graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "4f1323185fe5e0c0f8c864ab89edd1905e7adef1", default-features = false, features = ["float-mpfr", "integer-gmp"] }
 hashbrown = { version = "0.17", default-features = false, features = ["default-hasher", "raw-entry"] }
 indexmap = { version = "2", features = ["rayon", "serde"] }
 insta = { version = "1", features = ["json", "ron", "toml", "yaml"] }
@@ -40,7 +40,7 @@ num-bigint = { version = "0.4" }
 num-complex = { version = "0.4" }
 num-integer = { version = "0.1", features = ["i128"] }
 num-traits = { version = "0.2", features = ["i128", "libm"] }
-numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "ba3737137c2a2ccd7bb39f0441837d38ec867e78", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "serde"] }
+numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "4f1323185fe5e0c0f8c864ab89edd1905e7adef1", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "serde"] }
 papergrid = { version = "0.18", default-features = false, features = ["ansi", "std"] }
 phf_shared = { version = "0.13", default-features = false, features = ["std"] }
 rand = { version = "0.8", features = ["small_rng"] }
@@ -60,7 +60,7 @@ smallvec = { version = "1", default-features = false, features = ["const_new", "
 smartstring = { version = "1", features = ["serde"] }
 stable_deref_trait = { version = "1", default-features = false, features = ["alloc"] }
 strum = { version = "0.27", features = ["derive"] }
-symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "ba3737137c2a2ccd7bb39f0441837d38ec867e78", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "native_code_generation", "serde"] }
+symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "4f1323185fe5e0c0f8c864ab89edd1905e7adef1", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "native_code_generation", "serde"] }
 tabled = { version = "0.22", features = ["ansi"] }
 testing_table = { version = "0.3", default-features = false, features = ["ansi", "std"] }
 time = { version = "0.3", features = ["formatting", "local-offset", "macros", "parsing"] }
@@ -94,7 +94,7 @@ criterion = { version = "0.5", features = ["html_reports"] }
 crossterm = { version = "0.28", features = ["serde"] }
 either = { version = "1", features = ["use_std"] }
 fastrand = { version = "2" }
-graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "ba3737137c2a2ccd7bb39f0441837d38ec867e78", default-features = false, features = ["float-mpfr", "integer-gmp"] }
+graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "4f1323185fe5e0c0f8c864ab89edd1905e7adef1", default-features = false, features = ["float-mpfr", "integer-gmp"] }
 hashbrown = { version = "0.17", default-features = false, features = ["default-hasher", "raw-entry"] }
 indexmap = { version = "2", features = ["rayon", "serde"] }
 insta = { version = "1", features = ["json", "ron", "toml", "yaml"] }
@@ -105,7 +105,7 @@ num-bigint = { version = "0.4" }
 num-complex = { version = "0.4" }
 num-integer = { version = "0.1", features = ["i128"] }
 num-traits = { version = "0.2", features = ["i128", "libm"] }
-numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "ba3737137c2a2ccd7bb39f0441837d38ec867e78", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "serde"] }
+numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "4f1323185fe5e0c0f8c864ab89edd1905e7adef1", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "serde"] }
 papergrid = { version = "0.18", default-features = false, features = ["ansi", "std"] }
 phf_shared = { version = "0.13", default-features = false, features = ["std"] }
 rand = { version = "0.8", features = ["small_rng"] }
@@ -126,7 +126,7 @@ smallvec = { version = "1", default-features = false, features = ["const_new", "
 smartstring = { version = "1", features = ["serde"] }
 stable_deref_trait = { version = "1", default-features = false, features = ["alloc"] }
 strum = { version = "0.27", features = ["derive"] }
-symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "ba3737137c2a2ccd7bb39f0441837d38ec867e78", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "native_code_generation", "serde"] }
+symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "4f1323185fe5e0c0f8c864ab89edd1905e7adef1", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "native_code_generation", "serde"] }
 syn-7b89eefb6aaa9bf3 = { package = "syn", version = "3", features = ["extra-traits"] }
 syn-f595c2ba2a3f28df = { package = "syn", version = "2", features = ["extra-traits", "fold", "full", "visit", "visit-mut"] }
 tabled = { version = "0.22", features = ["ansi"] }

@@ -15,7 +15,7 @@ just tydenso::manual
 ```
 
 The interop tests require `TYMBOLICA_CHECKOUT` to have Git HEAD
-`e85233dd3d99e5fb458913d0d49f99d83466025b`, the exact Tymbolica revision pinned
+`32ae00483b4845161401afac8be755cc336cb2bb`, the exact Tymbolica revision pinned
 by the nested Rust workspace. The checkout only supplies Tymbolica's Typst
 package files to those tests; the Rust payload dependency itself comes from the
 same pinned Git revision.
