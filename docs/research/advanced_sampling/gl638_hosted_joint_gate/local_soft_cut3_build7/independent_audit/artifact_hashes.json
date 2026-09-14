@@ -1,0 +1,14 @@
+{
+  "audit.py": {
+    "original_path": "/tmp/gl638-hosted-joint-gate/soft-local-independent-spot-audit/audit.py",
+    "stored_path": "audit.py.gz",
+    "sha256_uncompressed": "a8c203e50ec64117bb97ab3f9d7f4aaeae757fdde3b1f7fccd70247915a89f0a",
+    "bytes_uncompressed": 8449
+  },
+  "summary.json": {
+    "original_path": "/tmp/gl638-hosted-joint-gate/soft-local-independent-spot-audit/summary.json",
+    "stored_path": "summary.json.gz",
+    "sha256_uncompressed": "a1208e5f5e39d04b173a1c7f2fb0c48a31e74bad8a8d034de0908c085edb1584",
+    "bytes_uncompressed": 50030
+  }
+}
