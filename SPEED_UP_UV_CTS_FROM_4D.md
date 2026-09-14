@@ -2683,3 +2683,25 @@ The maximum observed test process-tree peak is 1.010 GB. The initial scalar
 list receipt has no descriptive group fields; subsequent stale fields are the
 metadata limitation above. The ignored independent audit receipt is hashed in
 the tracked correctness report.
+
+
+### 2026-09-14 — Faithful GL262 evaluator panic reproduced independently
+
+- User requested reopening the diagnostic only with a 500 GB guard, H1/CPE5,
+  full unchanged builder input and progressive 4, 5, 6, … minute checks.
+- Diagnostic branch `codex/gl262-symbolica-reproduction` preserves the completed
+  UV PR's head and adds opt-in capture immediately before the existing builder.
+- Live GL262 again fails at the original Symbolica byte-buffer panic after
+  3640.592 s; the complete 19,982,016,710-byte expression and actual mapping
+  context were saved successfully. Peak VmHWM 121.099 GB, before-build RSS
+  46.674 GB, before-build peak VmHWM 69.168 GB; capture time 7.479 s.
+- A standalone Symbolica Rust replay now reproduces the exact panic and stack
+  in 179.911 s including loading. It passes identity-registry and raw FunctionMap
+  certificates; sampled peak tree RSS 93.856 GB. The guard did not intervene.
+- GL00 validates the loader: 214 ordered parameters and all four live operation
+  counts match. There is no evaluator C++/JIT compilation in either replay.
+- Pinned Symbolica revision remains 4d0a833eb8e059d1f95bdae5abed2559830b235f.
+  User requested testing both the big replay and tiny nonsymmetric import case
+  on official upstream main; that comparison is now in progress in a separate
+  standalone package, without changing GammaLoop's dependency lock.
+- See `tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre/evidence/exact_gl262_failure_20260914.md`.

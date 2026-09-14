@@ -1,6 +1,6 @@
 # Standalone Symbolica evaluator-construction diagnostic
 
-This package has one direct dependency, Symbolica. It imports a supplied scalar
+This package uses Symbolica, bincode and serde_json. It imports a supplied scalar
 expression and its exact ordered parameters/function definitions, then calls
 `expression.evaluator(&params).function_map(map).optimization_settings(settings).build()`.
 There are no GammaLoop or Spenso dependencies, tensor processing, numerator
@@ -9,12 +9,13 @@ the Rust diagnostic executable; it does not compile the generated evaluator.
 The enabled `native_code_generation` library feature matches the original
 environment, but this program never calls that capability.
 
-Status: the full-input evaluator panic has **not yet been reproduced by this
-standalone program**. A separate, 2480-byte Symbolica import regression is
-reproduced below. The original supplied-context path encounters that import
-problem on the 19 MB physical control; it is not validated for physical replay.
-Successful subsets are controls, not reproducers. Preserve the actual failing
-input and logs before calling a case an evaluator-construction MRE.
+Status (2026-09-14): the complete GL262 evaluator panic is now **reproduced
+in standalone Symbolica** using `--exact-builder`. The unchanged 19,982,016,710-byte
+input fails with the same `advance out of bounds` lengths and Horner/normalization
+stack as the live GammaLoop run. See `evidence/exact_gl262_failure_20260914.md`.
+The earlier supplied-context and reduced-input attempts below are historical;
+they do not replace the validated raw builder capture. A separate, 2480-byte
+nonsymmetric-function import regression is also reproduced on this pinned version.
 
 Investigation was deferred by the user on 2026-09-13 so the UV feature could
 proceed to merge. All 3,050 physical scalar components were recovered. A
@@ -284,4 +285,9 @@ The preserved r1/r2 loader attempts stopped at nonidentity registration; r3
 identified the native callback redefinition constraint; r4 isolated the
 callback-presence metadata difference. None is the original large-input panic.
 The validated immutable replay is in the local `gl262_faithful_20260914` package.
-The new complete GL262 generation is running with full builder capture enabled.
+The complete GL262 generation and standalone replay both finished with the same
+Symbolica evaluator-build panic. Their original logs, hashes and memory samples
+are preserved in `../gl262_faithful_20260914`; the live run used 121.1 GB peak
+VmHWM and the standalone watchdog sampled 93.9 GB peak process-tree RSS.
+The replay completed in 179.911 s including 29.703 s of loading before `.build()`.
+The 500 GB guard did not intervene. No generated evaluator compilation occurred.
