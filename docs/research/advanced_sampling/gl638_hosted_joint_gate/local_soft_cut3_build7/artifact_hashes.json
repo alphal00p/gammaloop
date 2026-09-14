@@ -1,0 +1,1358 @@
+{
+  "soft/results/cuts.json": {
+    "sha256_uncompressed": "d2edee784146c007d12d5d52ec164019a055089e9ef20cbc46f9c81049579322",
+    "bytes_uncompressed": 21935787,
+    "stored_path": "soft/results/cuts.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts.json"
+  },
+  "soft/results/cuts.real_composed_double_r0.approach.json": {
+    "sha256_uncompressed": "b1b008a80b7808106a769dd4225a19c97b9567bb82b0ed4271d56c164098e355",
+    "bytes_uncompressed": 623787,
+    "stored_path": "soft/results/cuts.real_composed_double_r0.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts.real_composed_double_r0.approach.json"
+  },
+  "soft/results/cuts.real_composed_double_r1.approach.json": {
+    "sha256_uncompressed": "e4ea27dc5ef9deb20f7d12eaab222a3e4364ae8b05ebf5406a04e03772e60106",
+    "bytes_uncompressed": 610057,
+    "stored_path": "soft/results/cuts.real_composed_double_r1.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts.real_composed_double_r1.approach.json"
+  },
+  "soft/results/cuts.real_composed_double_r2.approach.json": {
+    "sha256_uncompressed": "3240fae71c50f547450372dc58fcae50be755a7f353ee624e197bc4f0d6efac3",
+    "bytes_uncompressed": 544009,
+    "stored_path": "soft/results/cuts.real_composed_double_r2.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts.real_composed_double_r2.approach.json"
+  },
+  "soft/results/cuts.real_composed_double_r3.approach.json": {
+    "sha256_uncompressed": "4161e5dff3db2781ba01bc6f76b37b7960727881ded56b0a9aa2b9d6389924a5",
+    "bytes_uncompressed": 556540,
+    "stored_path": "soft/results/cuts.real_composed_double_r3.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts.real_composed_double_r3.approach.json"
+  },
+  "soft/results/cuts.real_composed_double_r4.approach.json": {
+    "sha256_uncompressed": "ef26454c804a049c21125cdcdc33b104742c13a3f7d99b389fcfc08f6aaa9e22",
+    "bytes_uncompressed": 556737,
+    "stored_path": "soft/results/cuts.real_composed_double_r4.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts.real_composed_double_r4.approach.json"
+  },
+  "soft/results/cuts.real_composed_single13_r0.approach.json": {
+    "sha256_uncompressed": "f74c304588045ba4c7e95fd477bbfeac1ed70c3697f68294ef1653814a95bcc2",
+    "bytes_uncompressed": 627895,
+    "stored_path": "soft/results/cuts.real_composed_single13_r0.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts.real_composed_single13_r0.approach.json"
+  },
+  "soft/results/cuts.real_composed_single13_r1.approach.json": {
+    "sha256_uncompressed": "36394d3f2b38acfd12bef89900cc5ffd5dd73cd3523711ff634cca9039347184",
+    "bytes_uncompressed": 633161,
+    "stored_path": "soft/results/cuts.real_composed_single13_r1.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts.real_composed_single13_r1.approach.json"
+  },
+  "soft/results/cuts.real_composed_single13_r2.approach.json": {
+    "sha256_uncompressed": "35f06f528fd0c438c525e4e8dedd5579153140475a99cb0d90b212426ad37d0e",
+    "bytes_uncompressed": 630639,
+    "stored_path": "soft/results/cuts.real_composed_single13_r2.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts.real_composed_single13_r2.approach.json"
+  },
+  "soft/results/cuts.real_composed_single13_r3.approach.json": {
+    "sha256_uncompressed": "ee1652b60c716a6d09ed389467d6a21b069ed360bbd64d8774406453b31da35c",
+    "bytes_uncompressed": 902779,
+    "stored_path": "soft/results/cuts.real_composed_single13_r3.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts.real_composed_single13_r3.approach.json"
+  },
+  "soft/results/cuts.real_composed_single13_r4.approach.json": {
+    "sha256_uncompressed": "22f290d6e6f19bfb07cc3e88e159d11d963a2fdda5ce897c4f6a50eb158ba72b",
+    "bytes_uncompressed": 902638,
+    "stored_path": "soft/results/cuts.real_composed_single13_r4.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts.real_composed_single13_r4.approach.json"
+  },
+  "soft/results/cuts.real_composed_single14_r0.approach.json": {
+    "sha256_uncompressed": "6c0e164420bef635d5f5a45586e4617f038dbc3340e3ec216335d44e888eae2a",
+    "bytes_uncompressed": 636118,
+    "stored_path": "soft/results/cuts.real_composed_single14_r0.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts.real_composed_single14_r0.approach.json"
+  },
+  "soft/results/cuts.real_composed_single14_r1.approach.json": {
+    "sha256_uncompressed": "cca88c624c6dc97715a5a53f79467e440476b8e9a375bd74c664393f7889abe6",
+    "bytes_uncompressed": 632572,
+    "stored_path": "soft/results/cuts.real_composed_single14_r1.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts.real_composed_single14_r1.approach.json"
+  },
+  "soft/results/cuts.real_composed_single14_r2.approach.json": {
+    "sha256_uncompressed": "186739376281c039a7441509ef351ab68bcf20ad2332b9a678bd7999913026d4",
+    "bytes_uncompressed": 633446,
+    "stored_path": "soft/results/cuts.real_composed_single14_r2.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts.real_composed_single14_r2.approach.json"
+  },
+  "soft/results/cuts.real_composed_single14_r3.approach.json": {
+    "sha256_uncompressed": "d39dd623ca5c7c63e4240aef9453b45b4099af1775d64810b812cf96f2c9b456",
+    "bytes_uncompressed": 633146,
+    "stored_path": "soft/results/cuts.real_composed_single14_r3.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts.real_composed_single14_r3.approach.json"
+  },
+  "soft/results/cuts.real_composed_single14_r4.approach.json": {
+    "sha256_uncompressed": "c3ebeebe6c6e0a8d3d102877de6998e86db60bc5b4220bef2ec381af715262da",
+    "bytes_uncompressed": 633423,
+    "stored_path": "soft/results/cuts.real_composed_single14_r4.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts.real_composed_single14_r4.approach.json"
+  },
+  "soft/results/cuts.real_ordinary_double_r0.approach.json": {
+    "sha256_uncompressed": "904aab1df36e35fb51edd94696c93828072107b3e32d5270f2176b86ef8bb5e4",
+    "bytes_uncompressed": 624067,
+    "stored_path": "soft/results/cuts.real_ordinary_double_r0.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts.real_ordinary_double_r0.approach.json"
+  },
+  "soft/results/cuts.real_ordinary_double_r1.approach.json": {
+    "sha256_uncompressed": "b0de0ba488d9f9111a0b767fc11b573c14c59a286f4f419a1a7cd3ba23265545",
+    "bytes_uncompressed": 582511,
+    "stored_path": "soft/results/cuts.real_ordinary_double_r1.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts.real_ordinary_double_r1.approach.json"
+  },
+  "soft/results/cuts.real_ordinary_double_r2.approach.json": {
+    "sha256_uncompressed": "f60d3c6b12cdb229991da321242e13c833b4be2943e73b69fe9c5c648104ff83",
+    "bytes_uncompressed": 544340,
+    "stored_path": "soft/results/cuts.real_ordinary_double_r2.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts.real_ordinary_double_r2.approach.json"
+  },
+  "soft/results/cuts.real_ordinary_double_r3.approach.json": {
+    "sha256_uncompressed": "c2d1ca71831de0010eca3b65a91bbdfc5647a4973a72755213952c5c62edc838",
+    "bytes_uncompressed": 556584,
+    "stored_path": "soft/results/cuts.real_ordinary_double_r3.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts.real_ordinary_double_r3.approach.json"
+  },
+  "soft/results/cuts.real_ordinary_double_r4.approach.json": {
+    "sha256_uncompressed": "f31b3a5296a2646a0e2f97346a3dd113301b39d0b70bfca186de9e9b3d294d55",
+    "bytes_uncompressed": 557046,
+    "stored_path": "soft/results/cuts.real_ordinary_double_r4.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts.real_ordinary_double_r4.approach.json"
+  },
+  "soft/results/cuts.real_ordinary_single13_r0.approach.json": {
+    "sha256_uncompressed": "d7af1a1df3453605df05e6e7a09ddf8167128ee7e169925ad85b3724e3328967",
+    "bytes_uncompressed": 627822,
+    "stored_path": "soft/results/cuts.real_ordinary_single13_r0.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts.real_ordinary_single13_r0.approach.json"
+  },
+  "soft/results/cuts.real_ordinary_single13_r1.approach.json": {
+    "sha256_uncompressed": "4a230c7ac2dc5a28bcfefbff71aa91fc2114aea32e17cd37ca3f9518910af778",
+    "bytes_uncompressed": 635680,
+    "stored_path": "soft/results/cuts.real_ordinary_single13_r1.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts.real_ordinary_single13_r1.approach.json"
+  },
+  "soft/results/cuts.real_ordinary_single13_r2.approach.json": {
+    "sha256_uncompressed": "84081c0c12be0fd1004bc0630496ca8a51343df1ea315a1eee5bce8d2fdbede6",
+    "bytes_uncompressed": 630968,
+    "stored_path": "soft/results/cuts.real_ordinary_single13_r2.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts.real_ordinary_single13_r2.approach.json"
+  },
+  "soft/results/cuts.real_ordinary_single13_r3.approach.json": {
+    "sha256_uncompressed": "979138e63e37febf40be0d12b7a82e5dca46eff0bdebf042e3dfa37675ecaed0",
+    "bytes_uncompressed": 902779,
+    "stored_path": "soft/results/cuts.real_ordinary_single13_r3.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts.real_ordinary_single13_r3.approach.json"
+  },
+  "soft/results/cuts.real_ordinary_single13_r4.approach.json": {
+    "sha256_uncompressed": "b17a604cf73656fce2f2a57cbbddb5a69e6246eba87d2662fac20ca1c7e1c66a",
+    "bytes_uncompressed": 903009,
+    "stored_path": "soft/results/cuts.real_ordinary_single13_r4.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts.real_ordinary_single13_r4.approach.json"
+  },
+  "soft/results/cuts.real_ordinary_single14_r0.approach.json": {
+    "sha256_uncompressed": "ff84f2706df72ff4b0089b8307cb03ab05f2c5561955fbf7bf800e48816f1df4",
+    "bytes_uncompressed": 617912,
+    "stored_path": "soft/results/cuts.real_ordinary_single14_r0.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts.real_ordinary_single14_r0.approach.json"
+  },
+  "soft/results/cuts.real_ordinary_single14_r1.approach.json": {
+    "sha256_uncompressed": "de0597884f3d661ca971d3c59fa0345e5c0570c4441e4071d02182090f93372c",
+    "bytes_uncompressed": 625782,
+    "stored_path": "soft/results/cuts.real_ordinary_single14_r1.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts.real_ordinary_single14_r1.approach.json"
+  },
+  "soft/results/cuts.real_ordinary_single14_r2.approach.json": {
+    "sha256_uncompressed": "f912bdb249ec39398ff6368a4da28a43eb2eca2da009ae4b89117d6a135903b1",
+    "bytes_uncompressed": 626055,
+    "stored_path": "soft/results/cuts.real_ordinary_single14_r2.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts.real_ordinary_single14_r2.approach.json"
+  },
+  "soft/results/cuts.real_ordinary_single14_r3.approach.json": {
+    "sha256_uncompressed": "81981a6500800c33d9f36680153a4111958eb16fc383304f0e8c1d4eefec7d84",
+    "bytes_uncompressed": 900671,
+    "stored_path": "soft/results/cuts.real_ordinary_single14_r3.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts.real_ordinary_single14_r3.approach.json"
+  },
+  "soft/results/cuts.real_ordinary_single14_r4.approach.json": {
+    "sha256_uncompressed": "08f45b3d8eb6b1e3c7e86229a3d739d57ba41ad44fbb81b3503c1ca2573f10d8",
+    "bytes_uncompressed": 900957,
+    "stored_path": "soft/results/cuts.real_ordinary_single14_r4.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts.real_ordinary_single14_r4.approach.json"
+  },
+  "soft/results/cuts.settings.toml": {
+    "sha256_uncompressed": "1e4615ad7880a59702f3eabe3950334bb63a075bfa0a97b53ecc2b129c09a198",
+    "bytes_uncompressed": 3183,
+    "stored_path": "../local_cut_matched_hz/shared/cuts.settings.toml",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts.settings.toml"
+  },
+  "soft/results/cuts_combined_joint.json": {
+    "sha256_uncompressed": "4869eca9e82124bbd92a740b6d53c89d42faaf0da9aa8c2710f9a27a5ecc73c6",
+    "bytes_uncompressed": 21937913,
+    "stored_path": "soft/results/cuts_combined_joint.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_combined_joint.json"
+  },
+  "soft/results/cuts_combined_joint.real_composed_double_r0.approach.json": {
+    "sha256_uncompressed": "97c95e0b3aa60a7dd0d30c7ecbc7acf24e82426136b4eb1764252d73cf856e2c",
+    "bytes_uncompressed": 623815,
+    "stored_path": "soft/results/cuts_combined_joint.real_composed_double_r0.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_combined_joint.real_composed_double_r0.approach.json"
+  },
+  "soft/results/cuts_combined_joint.real_composed_double_r1.approach.json": {
+    "sha256_uncompressed": "fecd8d81c17285c0344891a5091079cb698587c1b4ae640cb1c7c1bc367088d8",
+    "bytes_uncompressed": 610088,
+    "stored_path": "soft/results/cuts_combined_joint.real_composed_double_r1.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_combined_joint.real_composed_double_r1.approach.json"
+  },
+  "soft/results/cuts_combined_joint.real_composed_double_r2.approach.json": {
+    "sha256_uncompressed": "2bd7176e07dd594ed809be7bedf7f85ce29f313983a937655dfabc173b132c86",
+    "bytes_uncompressed": 544072,
+    "stored_path": "soft/results/cuts_combined_joint.real_composed_double_r2.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_combined_joint.real_composed_double_r2.approach.json"
+  },
+  "soft/results/cuts_combined_joint.real_composed_double_r3.approach.json": {
+    "sha256_uncompressed": "c88502d1472574e14a42ed01f5f08f172f5d1e9f2130fdd75258494191fdce57",
+    "bytes_uncompressed": 556587,
+    "stored_path": "soft/results/cuts_combined_joint.real_composed_double_r3.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_combined_joint.real_composed_double_r3.approach.json"
+  },
+  "soft/results/cuts_combined_joint.real_composed_double_r4.approach.json": {
+    "sha256_uncompressed": "30a359e155dd4d42d1e3b8692e029693afdab02e984392927bdb70e09b38f319",
+    "bytes_uncompressed": 556768,
+    "stored_path": "soft/results/cuts_combined_joint.real_composed_double_r4.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_combined_joint.real_composed_double_r4.approach.json"
+  },
+  "soft/results/cuts_combined_joint.real_composed_single13_r0.approach.json": {
+    "sha256_uncompressed": "462b4c0c538c4250521a83524dc10b2e018f3ed75390008963c3a58258a822ae",
+    "bytes_uncompressed": 627927,
+    "stored_path": "soft/results/cuts_combined_joint.real_composed_single13_r0.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_combined_joint.real_composed_single13_r0.approach.json"
+  },
+  "soft/results/cuts_combined_joint.real_composed_single13_r1.approach.json": {
+    "sha256_uncompressed": "ba712afcb60f1b4c6481448f4b8ad2468aac4843936f86b97f004a50f164156c",
+    "bytes_uncompressed": 633193,
+    "stored_path": "soft/results/cuts_combined_joint.real_composed_single13_r1.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_combined_joint.real_composed_single13_r1.approach.json"
+  },
+  "soft/results/cuts_combined_joint.real_composed_single13_r2.approach.json": {
+    "sha256_uncompressed": "8b6720c130d3e42ddb3a17aa1c0eec6d68ca41a3855a0e3a32a7c4a5dec0ca00",
+    "bytes_uncompressed": 630663,
+    "stored_path": "soft/results/cuts_combined_joint.real_composed_single13_r2.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_combined_joint.real_composed_single13_r2.approach.json"
+  },
+  "soft/results/cuts_combined_joint.real_composed_single13_r3.approach.json": {
+    "sha256_uncompressed": "0da010a73b20dbef585533d79fd2312fcb6e3d0d7342b02a8118d6596397e225",
+    "bytes_uncompressed": 902827,
+    "stored_path": "soft/results/cuts_combined_joint.real_composed_single13_r3.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_combined_joint.real_composed_single13_r3.approach.json"
+  },
+  "soft/results/cuts_combined_joint.real_composed_single13_r4.approach.json": {
+    "sha256_uncompressed": "50153b0326dcb13f96da0cb5dec422558fd7666ce75f735e3b8ce2038e489c43",
+    "bytes_uncompressed": 902669,
+    "stored_path": "soft/results/cuts_combined_joint.real_composed_single13_r4.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_combined_joint.real_composed_single13_r4.approach.json"
+  },
+  "soft/results/cuts_combined_joint.real_composed_single14_r0.approach.json": {
+    "sha256_uncompressed": "a02e8d44583006e3c6806fc65b178d0dc32622c26bb6f0760d56f6b35717d2ed",
+    "bytes_uncompressed": 636127,
+    "stored_path": "soft/results/cuts_combined_joint.real_composed_single14_r0.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_combined_joint.real_composed_single14_r0.approach.json"
+  },
+  "soft/results/cuts_combined_joint.real_composed_single14_r1.approach.json": {
+    "sha256_uncompressed": "75a7c259f715d15971b342fec782e85ed458e857f1cf41f1f622871e4ff542c5",
+    "bytes_uncompressed": 632601,
+    "stored_path": "soft/results/cuts_combined_joint.real_composed_single14_r1.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_combined_joint.real_composed_single14_r1.approach.json"
+  },
+  "soft/results/cuts_combined_joint.real_composed_single14_r2.approach.json": {
+    "sha256_uncompressed": "eaa110e6d6b20a10b8c9253ce7f6c41d5015ac771f97ea7488fa3c5d2a028d45",
+    "bytes_uncompressed": 633481,
+    "stored_path": "soft/results/cuts_combined_joint.real_composed_single14_r2.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_combined_joint.real_composed_single14_r2.approach.json"
+  },
+  "soft/results/cuts_combined_joint.real_composed_single14_r3.approach.json": {
+    "sha256_uncompressed": "97807e5bec0da07094accd2e5b3fe0b1c51554124792ebe5442f434643db2a0f",
+    "bytes_uncompressed": 633177,
+    "stored_path": "soft/results/cuts_combined_joint.real_composed_single14_r3.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_combined_joint.real_composed_single14_r3.approach.json"
+  },
+  "soft/results/cuts_combined_joint.real_composed_single14_r4.approach.json": {
+    "sha256_uncompressed": "207f684a7cc4de7b5875eb3f11bab8cb8128b05bc0b20d1a0a46d9d4a3ded335",
+    "bytes_uncompressed": 633478,
+    "stored_path": "soft/results/cuts_combined_joint.real_composed_single14_r4.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_combined_joint.real_composed_single14_r4.approach.json"
+  },
+  "soft/results/cuts_combined_joint.real_ordinary_double_r0.approach.json": {
+    "sha256_uncompressed": "dd627e53ca1cb49fd80915f8c3fb3cdde22e94067ffbadc102aec8ac00a67dec",
+    "bytes_uncompressed": 624107,
+    "stored_path": "soft/results/cuts_combined_joint.real_ordinary_double_r0.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_combined_joint.real_ordinary_double_r0.approach.json"
+  },
+  "soft/results/cuts_combined_joint.real_ordinary_double_r1.approach.json": {
+    "sha256_uncompressed": "08e0f9fa3a93e59dbe784a9a54034e00e53bcd44d179fc96e85674af0d4ad22d",
+    "bytes_uncompressed": 582542,
+    "stored_path": "soft/results/cuts_combined_joint.real_ordinary_double_r1.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_combined_joint.real_ordinary_double_r1.approach.json"
+  },
+  "soft/results/cuts_combined_joint.real_ordinary_double_r2.approach.json": {
+    "sha256_uncompressed": "a9a16a3c19d6b2f4982cb83e4a30a7de4c63315e5ac0a9a624de54138ce8ea5e",
+    "bytes_uncompressed": 544406,
+    "stored_path": "soft/results/cuts_combined_joint.real_ordinary_double_r2.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_combined_joint.real_ordinary_double_r2.approach.json"
+  },
+  "soft/results/cuts_combined_joint.real_ordinary_double_r3.approach.json": {
+    "sha256_uncompressed": "c5546e800a008b61bf304209b510c91ce3fd10807e8ea638b9f3035e56683475",
+    "bytes_uncompressed": 556622,
+    "stored_path": "soft/results/cuts_combined_joint.real_ordinary_double_r3.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_combined_joint.real_ordinary_double_r3.approach.json"
+  },
+  "soft/results/cuts_combined_joint.real_ordinary_double_r4.approach.json": {
+    "sha256_uncompressed": "7ee0fee58f6c7ff5399d7ecd9a8fb8724e2ccf7abc927ff72de24c14efe53419",
+    "bytes_uncompressed": 557100,
+    "stored_path": "soft/results/cuts_combined_joint.real_ordinary_double_r4.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_combined_joint.real_ordinary_double_r4.approach.json"
+  },
+  "soft/results/cuts_combined_joint.real_ordinary_single13_r0.approach.json": {
+    "sha256_uncompressed": "854645e8855e85cc9693a83a72bdf2d4dcfd8fedf22c05ee90e2b90fc6bae25c",
+    "bytes_uncompressed": 627864,
+    "stored_path": "soft/results/cuts_combined_joint.real_ordinary_single13_r0.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_combined_joint.real_ordinary_single13_r0.approach.json"
+  },
+  "soft/results/cuts_combined_joint.real_ordinary_single13_r1.approach.json": {
+    "sha256_uncompressed": "238ceaf3fe73590ee01372aec3c5ce7e57ad8bd5f5c22a965474c4f1f0166b8d",
+    "bytes_uncompressed": 635721,
+    "stored_path": "soft/results/cuts_combined_joint.real_ordinary_single13_r1.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_combined_joint.real_ordinary_single13_r1.approach.json"
+  },
+  "soft/results/cuts_combined_joint.real_ordinary_single13_r2.approach.json": {
+    "sha256_uncompressed": "d4094cb1061ae8ace9a407ef104d22929cb0f129b5f40c904074e177b8d56c59",
+    "bytes_uncompressed": 630995,
+    "stored_path": "soft/results/cuts_combined_joint.real_ordinary_single13_r2.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_combined_joint.real_ordinary_single13_r2.approach.json"
+  },
+  "soft/results/cuts_combined_joint.real_ordinary_single13_r3.approach.json": {
+    "sha256_uncompressed": "46f50d84a1e7af5fc7963cfc0c32cd9bb8fe55ceea32a95812ab8993389a2caf",
+    "bytes_uncompressed": 902801,
+    "stored_path": "soft/results/cuts_combined_joint.real_ordinary_single13_r3.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_combined_joint.real_ordinary_single13_r3.approach.json"
+  },
+  "soft/results/cuts_combined_joint.real_ordinary_single13_r4.approach.json": {
+    "sha256_uncompressed": "6072d3480c854a960718cc35891c63a74d9f9933faaf7f0db3a1020b1d243868",
+    "bytes_uncompressed": 903044,
+    "stored_path": "soft/results/cuts_combined_joint.real_ordinary_single13_r4.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_combined_joint.real_ordinary_single13_r4.approach.json"
+  },
+  "soft/results/cuts_combined_joint.real_ordinary_single14_r0.approach.json": {
+    "sha256_uncompressed": "86fb5b692995abe3176ba82745480fbcafe54e9ed982078cf318a224a648fabe",
+    "bytes_uncompressed": 617960,
+    "stored_path": "soft/results/cuts_combined_joint.real_ordinary_single14_r0.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_combined_joint.real_ordinary_single14_r0.approach.json"
+  },
+  "soft/results/cuts_combined_joint.real_ordinary_single14_r1.approach.json": {
+    "sha256_uncompressed": "8c8dad6b27320b35b1cd25b9e6410f6ca0ee6a11fa20ab2c02936e5f24a0e211",
+    "bytes_uncompressed": 625812,
+    "stored_path": "soft/results/cuts_combined_joint.real_ordinary_single14_r1.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_combined_joint.real_ordinary_single14_r1.approach.json"
+  },
+  "soft/results/cuts_combined_joint.real_ordinary_single14_r2.approach.json": {
+    "sha256_uncompressed": "e02465b05e5d38be49526a41186c372b236899ac6e60f3c1acfbdc088e1fbbc4",
+    "bytes_uncompressed": 626105,
+    "stored_path": "soft/results/cuts_combined_joint.real_ordinary_single14_r2.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_combined_joint.real_ordinary_single14_r2.approach.json"
+  },
+  "soft/results/cuts_combined_joint.real_ordinary_single14_r3.approach.json": {
+    "sha256_uncompressed": "31290bdd2c71c7edda8d2f4ce317f309e115e021b0325334fd9b2739364ff446",
+    "bytes_uncompressed": 900699,
+    "stored_path": "soft/results/cuts_combined_joint.real_ordinary_single14_r3.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_combined_joint.real_ordinary_single14_r3.approach.json"
+  },
+  "soft/results/cuts_combined_joint.real_ordinary_single14_r4.approach.json": {
+    "sha256_uncompressed": "fcacece3654c599d08a7147e7b53adca29b302c6a78648236ffc34a0b42e68e6",
+    "bytes_uncompressed": 900993,
+    "stored_path": "soft/results/cuts_combined_joint.real_ordinary_single14_r4.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_combined_joint.real_ordinary_single14_r4.approach.json"
+  },
+  "soft/results/cuts_combined_joint.settings.toml": {
+    "sha256_uncompressed": "02e34ab77d42a9bba05e1a6a2c5b1228e3c54eba9214bb62b390ccdee6682a0a",
+    "bytes_uncompressed": 3587,
+    "stored_path": "../local_cut_matched_hz/shared/cuts_combined_joint.settings.toml",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_combined_joint.settings.toml"
+  },
+  "soft/results/cuts_replaced_joint.json": {
+    "sha256_uncompressed": "06c48f0456e8d67f31815e232f9a186c74685808a2509eea7989f12d38ec085a",
+    "bytes_uncompressed": 21917928,
+    "stored_path": "soft/results/cuts_replaced_joint.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_replaced_joint.json"
+  },
+  "soft/results/cuts_replaced_joint.real_composed_double_r0.approach.json": {
+    "sha256_uncompressed": "90a0a09b7c69445c8781eb5c2bc3d877486a7216110226f54ddc3310255fc53e",
+    "bytes_uncompressed": 623185,
+    "stored_path": "soft/results/cuts_replaced_joint.real_composed_double_r0.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_replaced_joint.real_composed_double_r0.approach.json"
+  },
+  "soft/results/cuts_replaced_joint.real_composed_double_r1.approach.json": {
+    "sha256_uncompressed": "21ef8c727c0d0bde7f3cb718c535bd4b069074759c8a752ba0a9bb3269d0bc15",
+    "bytes_uncompressed": 609450,
+    "stored_path": "soft/results/cuts_replaced_joint.real_composed_double_r1.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_replaced_joint.real_composed_double_r1.approach.json"
+  },
+  "soft/results/cuts_replaced_joint.real_composed_double_r2.approach.json": {
+    "sha256_uncompressed": "54048c67c33d157c3b90a3c3579614a47a7e512b19eb0047f14eb159c4eb619e",
+    "bytes_uncompressed": 543426,
+    "stored_path": "soft/results/cuts_replaced_joint.real_composed_double_r2.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_replaced_joint.real_composed_double_r2.approach.json"
+  },
+  "soft/results/cuts_replaced_joint.real_composed_double_r3.approach.json": {
+    "sha256_uncompressed": "bd17c7009c8a856e91b3a948770a98fc6118a96b3cf00e97b2a231f85aab3c9b",
+    "bytes_uncompressed": 555945,
+    "stored_path": "soft/results/cuts_replaced_joint.real_composed_double_r3.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_replaced_joint.real_composed_double_r3.approach.json"
+  },
+  "soft/results/cuts_replaced_joint.real_composed_double_r4.approach.json": {
+    "sha256_uncompressed": "43dde4d4369b3c896fc5e901a771037c6673318402089d1c6cd7bcc4ee9ec9f1",
+    "bytes_uncompressed": 556140,
+    "stored_path": "soft/results/cuts_replaced_joint.real_composed_double_r4.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_replaced_joint.real_composed_double_r4.approach.json"
+  },
+  "soft/results/cuts_replaced_joint.real_composed_single13_r0.approach.json": {
+    "sha256_uncompressed": "709c68a53582c92f151379b8db1226e649575b2cd122464dd0fb2913015def50",
+    "bytes_uncompressed": 627292,
+    "stored_path": "soft/results/cuts_replaced_joint.real_composed_single13_r0.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_replaced_joint.real_composed_single13_r0.approach.json"
+  },
+  "soft/results/cuts_replaced_joint.real_composed_single13_r1.approach.json": {
+    "sha256_uncompressed": "fc7a200067fc81d6c8d0197557e3cef6f81b1b677cb41a8bc18e69e0ef92147f",
+    "bytes_uncompressed": 632569,
+    "stored_path": "soft/results/cuts_replaced_joint.real_composed_single13_r1.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_replaced_joint.real_composed_single13_r1.approach.json"
+  },
+  "soft/results/cuts_replaced_joint.real_composed_single13_r2.approach.json": {
+    "sha256_uncompressed": "82434125049841aa85c455140d0a3c06ba20453a65b3d224c064580690c76be6",
+    "bytes_uncompressed": 630043,
+    "stored_path": "soft/results/cuts_replaced_joint.real_composed_single13_r2.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_replaced_joint.real_composed_single13_r2.approach.json"
+  },
+  "soft/results/cuts_replaced_joint.real_composed_single13_r3.approach.json": {
+    "sha256_uncompressed": "1c6c7998c107326b98ee36258b34a591e24f1d919f5d109a6119894d12a970c8",
+    "bytes_uncompressed": 902181,
+    "stored_path": "soft/results/cuts_replaced_joint.real_composed_single13_r3.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_replaced_joint.real_composed_single13_r3.approach.json"
+  },
+  "soft/results/cuts_replaced_joint.real_composed_single13_r4.approach.json": {
+    "sha256_uncompressed": "561a3c2e12e9a3b77e703041c249b7ccf60398c7763e93ad4b86bfa232aadd73",
+    "bytes_uncompressed": 902037,
+    "stored_path": "soft/results/cuts_replaced_joint.real_composed_single13_r4.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_replaced_joint.real_composed_single13_r4.approach.json"
+  },
+  "soft/results/cuts_replaced_joint.real_composed_single14_r0.approach.json": {
+    "sha256_uncompressed": "2773fb4d1983d920791f24eb1df5e294907ecb1705cdb3391b0201c63dea2174",
+    "bytes_uncompressed": 635478,
+    "stored_path": "soft/results/cuts_replaced_joint.real_composed_single14_r0.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_replaced_joint.real_composed_single14_r0.approach.json"
+  },
+  "soft/results/cuts_replaced_joint.real_composed_single14_r1.approach.json": {
+    "sha256_uncompressed": "f34e4228e38f6f4fdc5fb58bf1b51e3eb4541173d0d47bff77950c2380708f87",
+    "bytes_uncompressed": 631965,
+    "stored_path": "soft/results/cuts_replaced_joint.real_composed_single14_r1.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_replaced_joint.real_composed_single14_r1.approach.json"
+  },
+  "soft/results/cuts_replaced_joint.real_composed_single14_r2.approach.json": {
+    "sha256_uncompressed": "ffcc8aa18ce67388a4f529bbb06f78e6417650fb843df96629def85f0171ddcf",
+    "bytes_uncompressed": 632851,
+    "stored_path": "soft/results/cuts_replaced_joint.real_composed_single14_r2.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_replaced_joint.real_composed_single14_r2.approach.json"
+  },
+  "soft/results/cuts_replaced_joint.real_composed_single14_r3.approach.json": {
+    "sha256_uncompressed": "6dad32bcd32db991f96e87b22b446ef865adb44c76765494baf092124dba66ff",
+    "bytes_uncompressed": 632537,
+    "stored_path": "soft/results/cuts_replaced_joint.real_composed_single14_r3.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_replaced_joint.real_composed_single14_r3.approach.json"
+  },
+  "soft/results/cuts_replaced_joint.real_composed_single14_r4.approach.json": {
+    "sha256_uncompressed": "199573153f8b1ebd1c2d142411825bcf8eb1365e61ac7e9b74ebd583c901d9c1",
+    "bytes_uncompressed": 632836,
+    "stored_path": "soft/results/cuts_replaced_joint.real_composed_single14_r4.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_replaced_joint.real_composed_single14_r4.approach.json"
+  },
+  "soft/results/cuts_replaced_joint.real_ordinary_double_r0.approach.json": {
+    "sha256_uncompressed": "d9fd62562a673df1f385a6d41365d6ba03a695b6e3390e2ba163ca6d31db7c06",
+    "bytes_uncompressed": 623474,
+    "stored_path": "soft/results/cuts_replaced_joint.real_ordinary_double_r0.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_replaced_joint.real_ordinary_double_r0.approach.json"
+  },
+  "soft/results/cuts_replaced_joint.real_ordinary_double_r1.approach.json": {
+    "sha256_uncompressed": "fa3734da86289da10baef6ea31e9e78b0e5239cec72012c22afdced26825dd94",
+    "bytes_uncompressed": 581933,
+    "stored_path": "soft/results/cuts_replaced_joint.real_ordinary_double_r1.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_replaced_joint.real_ordinary_double_r1.approach.json"
+  },
+  "soft/results/cuts_replaced_joint.real_ordinary_double_r2.approach.json": {
+    "sha256_uncompressed": "8ec0d3da41069f5e7e479855cdc521cf67753b68a139503cf5d9b1a84daa16b4",
+    "bytes_uncompressed": 543765,
+    "stored_path": "soft/results/cuts_replaced_joint.real_ordinary_double_r2.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_replaced_joint.real_ordinary_double_r2.approach.json"
+  },
+  "soft/results/cuts_replaced_joint.real_ordinary_double_r3.approach.json": {
+    "sha256_uncompressed": "3e807c6edc87fb650a4f97b055c99ee82862c3716ae552298d14e97bad698197",
+    "bytes_uncompressed": 555992,
+    "stored_path": "soft/results/cuts_replaced_joint.real_ordinary_double_r3.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_replaced_joint.real_ordinary_double_r3.approach.json"
+  },
+  "soft/results/cuts_replaced_joint.real_ordinary_double_r4.approach.json": {
+    "sha256_uncompressed": "5c4bff0f72d4948dd1f50cb6d053fc03dd7836914a2d009ef8a8484900da591f",
+    "bytes_uncompressed": 556454,
+    "stored_path": "soft/results/cuts_replaced_joint.real_ordinary_double_r4.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_replaced_joint.real_ordinary_double_r4.approach.json"
+  },
+  "soft/results/cuts_replaced_joint.real_ordinary_single13_r0.approach.json": {
+    "sha256_uncompressed": "c4c10430f89a750650360ee92dea1590df71fd75c64280be2b5656bfbe91668d",
+    "bytes_uncompressed": 627213,
+    "stored_path": "soft/results/cuts_replaced_joint.real_ordinary_single13_r0.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_replaced_joint.real_ordinary_single13_r0.approach.json"
+  },
+  "soft/results/cuts_replaced_joint.real_ordinary_single13_r1.approach.json": {
+    "sha256_uncompressed": "07d3ec9d244268c1c95648778fb3b655c2fcad5907add56c6a364a07d0e86241",
+    "bytes_uncompressed": 635084,
+    "stored_path": "soft/results/cuts_replaced_joint.real_ordinary_single13_r1.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_replaced_joint.real_ordinary_single13_r1.approach.json"
+  },
+  "soft/results/cuts_replaced_joint.real_ordinary_single13_r2.approach.json": {
+    "sha256_uncompressed": "f1d021fc116cb830cb964046829a814f0ab5a576c5ddbb9c32396e6f27920593",
+    "bytes_uncompressed": 630371,
+    "stored_path": "soft/results/cuts_replaced_joint.real_ordinary_single13_r2.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_replaced_joint.real_ordinary_single13_r2.approach.json"
+  },
+  "soft/results/cuts_replaced_joint.real_ordinary_single13_r3.approach.json": {
+    "sha256_uncompressed": "ae77ed927b758c57c0918eed6cb142fecb2e0aa69bac9f59f19e92f8c93e7ca5",
+    "bytes_uncompressed": 902176,
+    "stored_path": "soft/results/cuts_replaced_joint.real_ordinary_single13_r3.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_replaced_joint.real_ordinary_single13_r3.approach.json"
+  },
+  "soft/results/cuts_replaced_joint.real_ordinary_single13_r4.approach.json": {
+    "sha256_uncompressed": "cfb09cfab734047daf71feab3f55ea742f552b2340ba751ffc004494cc4d9408",
+    "bytes_uncompressed": 902421,
+    "stored_path": "soft/results/cuts_replaced_joint.real_ordinary_single13_r4.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_replaced_joint.real_ordinary_single13_r4.approach.json"
+  },
+  "soft/results/cuts_replaced_joint.real_ordinary_single14_r0.approach.json": {
+    "sha256_uncompressed": "c4bb442cfe676d3664aa94104de2e9f9fedd972fe5ae37981c5843aaf15e6419",
+    "bytes_uncompressed": 617315,
+    "stored_path": "soft/results/cuts_replaced_joint.real_ordinary_single14_r0.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_replaced_joint.real_ordinary_single14_r0.approach.json"
+  },
+  "soft/results/cuts_replaced_joint.real_ordinary_single14_r1.approach.json": {
+    "sha256_uncompressed": "144f42b7849152ca24941651e647dbbaee2d022d7e290439c24556582e666a7b",
+    "bytes_uncompressed": 625178,
+    "stored_path": "soft/results/cuts_replaced_joint.real_ordinary_single14_r1.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_replaced_joint.real_ordinary_single14_r1.approach.json"
+  },
+  "soft/results/cuts_replaced_joint.real_ordinary_single14_r2.approach.json": {
+    "sha256_uncompressed": "5ad969ff699e69712d9e9c1c2e45f9c981969fa2393336aeab7a4dc808054106",
+    "bytes_uncompressed": 625468,
+    "stored_path": "soft/results/cuts_replaced_joint.real_ordinary_single14_r2.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_replaced_joint.real_ordinary_single14_r2.approach.json"
+  },
+  "soft/results/cuts_replaced_joint.real_ordinary_single14_r3.approach.json": {
+    "sha256_uncompressed": "03092745dda04bd018d717960f7288be0b2fbe2f71c038e45119cae5254892db",
+    "bytes_uncompressed": 900066,
+    "stored_path": "soft/results/cuts_replaced_joint.real_ordinary_single14_r3.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_replaced_joint.real_ordinary_single14_r3.approach.json"
+  },
+  "soft/results/cuts_replaced_joint.real_ordinary_single14_r4.approach.json": {
+    "sha256_uncompressed": "50f17fbb0c6d3d69c138602564b21e79479b8425307cceb81f33ac4da40c628b",
+    "bytes_uncompressed": 900362,
+    "stored_path": "soft/results/cuts_replaced_joint.real_ordinary_single14_r4.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_replaced_joint.real_ordinary_single14_r4.approach.json"
+  },
+  "soft/results/cuts_replaced_joint.settings.toml": {
+    "sha256_uncompressed": "05ccbdbb6fab998d6a7dbcdb8d3a8d9333ec33999378b944b16bcfb01c4177b7",
+    "bytes_uncompressed": 3283,
+    "stored_path": "soft/results/cuts_replaced_joint.settings.toml.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_replaced_joint.settings.toml"
+  },
+  "soft/results/cuts_soft.json": {
+    "sha256_uncompressed": "5c5c3fa798ceae4bdbe349a1ac6325f766df9fb49dd89002589a21d706edc771",
+    "bytes_uncompressed": 21972023,
+    "stored_path": "soft/results/cuts_soft.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_soft.json"
+  },
+  "soft/results/cuts_soft.real_composed_double_r0.approach.json": {
+    "sha256_uncompressed": "d6f225d1bdda0581006634e0fef8fab818e65e9f0ced20af1157b4d84448431d",
+    "bytes_uncompressed": 625050,
+    "stored_path": "soft/results/cuts_soft.real_composed_double_r0.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_soft.real_composed_double_r0.approach.json"
+  },
+  "soft/results/cuts_soft.real_composed_double_r1.approach.json": {
+    "sha256_uncompressed": "973ddf47d204805520fbc8ba88ab5553b8f1d9d1b4b391bc7fecc4dd578785f6",
+    "bytes_uncompressed": 611212,
+    "stored_path": "soft/results/cuts_soft.real_composed_double_r1.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_soft.real_composed_double_r1.approach.json"
+  },
+  "soft/results/cuts_soft.real_composed_double_r2.approach.json": {
+    "sha256_uncompressed": "777b97381b97260f35fde7035c3e121052f5895e05055c4b224db13bc8b4dd8d",
+    "bytes_uncompressed": 544504,
+    "stored_path": "soft/results/cuts_soft.real_composed_double_r2.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_soft.real_composed_double_r2.approach.json"
+  },
+  "soft/results/cuts_soft.real_composed_double_r3.approach.json": {
+    "sha256_uncompressed": "180f527a7ff161abcb8934a353e57086a2e6670e671d578daecd714f3294dd76",
+    "bytes_uncompressed": 557232,
+    "stored_path": "soft/results/cuts_soft.real_composed_double_r3.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_soft.real_composed_double_r3.approach.json"
+  },
+  "soft/results/cuts_soft.real_composed_double_r4.approach.json": {
+    "sha256_uncompressed": "18b4c9a7711bea33686baa7f9e65f07a7e742e03f66efd65959c502df48df166",
+    "bytes_uncompressed": 557547,
+    "stored_path": "soft/results/cuts_soft.real_composed_double_r4.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_soft.real_composed_double_r4.approach.json"
+  },
+  "soft/results/cuts_soft.real_composed_single13_r0.approach.json": {
+    "sha256_uncompressed": "b64e288cd09d330efe5c080c0d061463f90c93bf7d15bdf0efe384f448962de4",
+    "bytes_uncompressed": 629375,
+    "stored_path": "soft/results/cuts_soft.real_composed_single13_r0.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_soft.real_composed_single13_r0.approach.json"
+  },
+  "soft/results/cuts_soft.real_composed_single13_r1.approach.json": {
+    "sha256_uncompressed": "418a0a43382bcc2136bfae6034f83c643e57c197c472bd3df3474869f6464f6d",
+    "bytes_uncompressed": 634122,
+    "stored_path": "soft/results/cuts_soft.real_composed_single13_r1.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_soft.real_composed_single13_r1.approach.json"
+  },
+  "soft/results/cuts_soft.real_composed_single13_r2.approach.json": {
+    "sha256_uncompressed": "02836ab6ed28e0bb7e189ee6c8b91981286285aa7f37aef2b503bef16f4edc05",
+    "bytes_uncompressed": 631694,
+    "stored_path": "soft/results/cuts_soft.real_composed_single13_r2.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_soft.real_composed_single13_r2.approach.json"
+  },
+  "soft/results/cuts_soft.real_composed_single13_r3.approach.json": {
+    "sha256_uncompressed": "59095aabff2b0d96eef76c3d811355a8894f39633c6d686d398fb7b2f8d54ca8",
+    "bytes_uncompressed": 903872,
+    "stored_path": "soft/results/cuts_soft.real_composed_single13_r3.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_soft.real_composed_single13_r3.approach.json"
+  },
+  "soft/results/cuts_soft.real_composed_single13_r4.approach.json": {
+    "sha256_uncompressed": "7b12b7dca3e533fab2665a56c6a5ab68ba5255dbf8be52a51959e69a61d31ad4",
+    "bytes_uncompressed": 903716,
+    "stored_path": "soft/results/cuts_soft.real_composed_single13_r4.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_soft.real_composed_single13_r4.approach.json"
+  },
+  "soft/results/cuts_soft.real_composed_single14_r0.approach.json": {
+    "sha256_uncompressed": "fac0d234898b95f180610528919bbd27911fe251cc5adbd1a44f7c70c6ee98cb",
+    "bytes_uncompressed": 637947,
+    "stored_path": "soft/results/cuts_soft.real_composed_single14_r0.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_soft.real_composed_single14_r0.approach.json"
+  },
+  "soft/results/cuts_soft.real_composed_single14_r1.approach.json": {
+    "sha256_uncompressed": "93a900d42ed065adc723e9d0001eac17652971debf2f783f54457e239cd707bd",
+    "bytes_uncompressed": 635077,
+    "stored_path": "soft/results/cuts_soft.real_composed_single14_r1.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_soft.real_composed_single14_r1.approach.json"
+  },
+  "soft/results/cuts_soft.real_composed_single14_r2.approach.json": {
+    "sha256_uncompressed": "d2b04527927ad0b121e781105f7f4a93f48ff33eea1c6053469311d86c798645",
+    "bytes_uncompressed": 634709,
+    "stored_path": "soft/results/cuts_soft.real_composed_single14_r2.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_soft.real_composed_single14_r2.approach.json"
+  },
+  "soft/results/cuts_soft.real_composed_single14_r3.approach.json": {
+    "sha256_uncompressed": "d2fe9ca9b2bda72cfd469a5edeb0a9a2290366d8cf4dec3c3a71511f17984366",
+    "bytes_uncompressed": 634419,
+    "stored_path": "soft/results/cuts_soft.real_composed_single14_r3.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_soft.real_composed_single14_r3.approach.json"
+  },
+  "soft/results/cuts_soft.real_composed_single14_r4.approach.json": {
+    "sha256_uncompressed": "c8f17456d0e083bba2f8f5504090716f23581ac57350e1b0008fd74c23ac2e3f",
+    "bytes_uncompressed": 634736,
+    "stored_path": "soft/results/cuts_soft.real_composed_single14_r4.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_soft.real_composed_single14_r4.approach.json"
+  },
+  "soft/results/cuts_soft.real_ordinary_double_r0.approach.json": {
+    "sha256_uncompressed": "4ed788eb0c9822d97b4db4cc081758c5aee5b82404b68e645ce6bd2bf0e62e6f",
+    "bytes_uncompressed": 625469,
+    "stored_path": "soft/results/cuts_soft.real_ordinary_double_r0.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_soft.real_ordinary_double_r0.approach.json"
+  },
+  "soft/results/cuts_soft.real_ordinary_double_r1.approach.json": {
+    "sha256_uncompressed": "c87bb6627b2c5fe9d237f959bd9dccfae4cd25ffca8f7e004b3d95047bac6d1a",
+    "bytes_uncompressed": 583846,
+    "stored_path": "soft/results/cuts_soft.real_ordinary_double_r1.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_soft.real_ordinary_double_r1.approach.json"
+  },
+  "soft/results/cuts_soft.real_ordinary_double_r2.approach.json": {
+    "sha256_uncompressed": "3bdef6b4d7498ad7807420506d4d714f1920692c20acabaf2418affa36d89b77",
+    "bytes_uncompressed": 545035,
+    "stored_path": "soft/results/cuts_soft.real_ordinary_double_r2.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_soft.real_ordinary_double_r2.approach.json"
+  },
+  "soft/results/cuts_soft.real_ordinary_double_r3.approach.json": {
+    "sha256_uncompressed": "ea9a953550683669d67bd98e50f697db2683f8b6533a9cc0894668afc223c018",
+    "bytes_uncompressed": 557338,
+    "stored_path": "soft/results/cuts_soft.real_ordinary_double_r3.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_soft.real_ordinary_double_r3.approach.json"
+  },
+  "soft/results/cuts_soft.real_ordinary_double_r4.approach.json": {
+    "sha256_uncompressed": "79b1327630352b2f5beb4505aa63e07142051e069545a40781f4d50a1c1df2fa",
+    "bytes_uncompressed": 557884,
+    "stored_path": "soft/results/cuts_soft.real_ordinary_double_r4.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_soft.real_ordinary_double_r4.approach.json"
+  },
+  "soft/results/cuts_soft.real_ordinary_single13_r0.approach.json": {
+    "sha256_uncompressed": "594f59a1a39439486e3a1cb7823f4bee26da6b46d0834f6328df7c9731faec9e",
+    "bytes_uncompressed": 629415,
+    "stored_path": "soft/results/cuts_soft.real_ordinary_single13_r0.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_soft.real_ordinary_single13_r0.approach.json"
+  },
+  "soft/results/cuts_soft.real_ordinary_single13_r1.approach.json": {
+    "sha256_uncompressed": "f878db3a08ad7d7a60bcd3571a7af80d13fafb9960121fc04857a7c5ad8bef7d",
+    "bytes_uncompressed": 636691,
+    "stored_path": "soft/results/cuts_soft.real_ordinary_single13_r1.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_soft.real_ordinary_single13_r1.approach.json"
+  },
+  "soft/results/cuts_soft.real_ordinary_single13_r2.approach.json": {
+    "sha256_uncompressed": "426f2fe162f05aa8e6e77fbe7ae0250f8b7417ef7a3f434e20670a1fef78b5dd",
+    "bytes_uncompressed": 632013,
+    "stored_path": "soft/results/cuts_soft.real_ordinary_single13_r2.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_soft.real_ordinary_single13_r2.approach.json"
+  },
+  "soft/results/cuts_soft.real_ordinary_single13_r3.approach.json": {
+    "sha256_uncompressed": "e42cb699e7f7ed41f515d29f649c7130c7a37d682b7bf1ea2f02e47a2a4893fa",
+    "bytes_uncompressed": 903842,
+    "stored_path": "soft/results/cuts_soft.real_ordinary_single13_r3.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_soft.real_ordinary_single13_r3.approach.json"
+  },
+  "soft/results/cuts_soft.real_ordinary_single13_r4.approach.json": {
+    "sha256_uncompressed": "79bdea6ce0cf39deefb6a348149b444eaa24357ef5af81a92f6145d083a96051",
+    "bytes_uncompressed": 904069,
+    "stored_path": "soft/results/cuts_soft.real_ordinary_single13_r4.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_soft.real_ordinary_single13_r4.approach.json"
+  },
+  "soft/results/cuts_soft.real_ordinary_single14_r0.approach.json": {
+    "sha256_uncompressed": "46bafa15e46a732d4f83f6345045543f8bdd902ad40b47a18ac78166a88ecf13",
+    "bytes_uncompressed": 619630,
+    "stored_path": "soft/results/cuts_soft.real_ordinary_single14_r0.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_soft.real_ordinary_single14_r0.approach.json"
+  },
+  "soft/results/cuts_soft.real_ordinary_single14_r1.approach.json": {
+    "sha256_uncompressed": "5a1dd2de1ab19d7c6f41f941a10ae1bfc2c31cd325eedd03d850df000d8fc4d6",
+    "bytes_uncompressed": 626867,
+    "stored_path": "soft/results/cuts_soft.real_ordinary_single14_r1.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_soft.real_ordinary_single14_r1.approach.json"
+  },
+  "soft/results/cuts_soft.real_ordinary_single14_r2.approach.json": {
+    "sha256_uncompressed": "b7d8097760b7ad72ce2eac7e240535d6fc6202bc74eab0a5af207547c7f97e5e",
+    "bytes_uncompressed": 627233,
+    "stored_path": "soft/results/cuts_soft.real_ordinary_single14_r2.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_soft.real_ordinary_single14_r2.approach.json"
+  },
+  "soft/results/cuts_soft.real_ordinary_single14_r3.approach.json": {
+    "sha256_uncompressed": "07fd05ec494dcfa4ea12c9cadad33c8f4f19d385e9acefb983a0024d93e7a965",
+    "bytes_uncompressed": 901877,
+    "stored_path": "soft/results/cuts_soft.real_ordinary_single14_r3.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_soft.real_ordinary_single14_r3.approach.json"
+  },
+  "soft/results/cuts_soft.real_ordinary_single14_r4.approach.json": {
+    "sha256_uncompressed": "e5ae4cdef1eb83442f2cc8069a76d811f358b18da4e1265c559676053138e54b",
+    "bytes_uncompressed": 902222,
+    "stored_path": "soft/results/cuts_soft.real_ordinary_single14_r4.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_soft.real_ordinary_single14_r4.approach.json"
+  },
+  "soft/results/cuts_soft.settings.toml": {
+    "sha256_uncompressed": "653babfc065286afb3fb9329904bccc5affc1802a66a2795628176cdb20cd0d2",
+    "bytes_uncompressed": 3351,
+    "stored_path": "../local_cut_matched_hz/shared/cuts_soft.settings.toml",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/cuts_soft.settings.toml"
+  },
+  "soft/results/state_after.json": {
+    "sha256_uncompressed": "eea5232cd0b55f5c3e507b26a4ef9ee00fffcac19532601e34b8a0d6186f5f1f",
+    "bytes_uncompressed": 4106,
+    "stored_path": "../results-timing1/state_before.json",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/state_after.json"
+  },
+  "soft/results/state_before.json": {
+    "sha256_uncompressed": "eea5232cd0b55f5c3e507b26a4ef9ee00fffcac19532601e34b8a0d6186f5f1f",
+    "bytes_uncompressed": 4106,
+    "stored_path": "../results-timing1/state_before.json",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/state_before.json"
+  },
+  "soft/results/summary.json": {
+    "sha256_uncompressed": "bec3a77820631c76e4a50e222d2ae3af46117171a4b1b9be112e7878b12dad71",
+    "bytes_uncompressed": 91789105,
+    "stored_path": "soft/results/summary.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7/summary.json"
+  },
+  "cut3/results/composed_cut3_p2.cut3_sphere_0p1.approach.json": {
+    "sha256_uncompressed": "b4071fe80faf72a7065e893e470ff956777ddecb413430cfddfcd321291c15fd",
+    "bytes_uncompressed": 637014,
+    "stored_path": "cut3/results/composed_cut3_p2.cut3_sphere_0p1.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut3-right-local-build7/composed_cut3_p2.cut3_sphere_0p1.approach.json"
+  },
+  "cut3/results/composed_cut3_p2.cut3_sphere_1.approach.json": {
+    "sha256_uncompressed": "cd719ca0d87250ad5ead33ad42757a2ce1cee42d56827450c73a7a287cfea38e",
+    "bytes_uncompressed": 636865,
+    "stored_path": "cut3/results/composed_cut3_p2.cut3_sphere_1.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut3-right-local-build7/composed_cut3_p2.cut3_sphere_1.approach.json"
+  },
+  "cut3/results/composed_cut3_p2.cut3_sphere_10.approach.json": {
+    "sha256_uncompressed": "78e8a002a362eadcbea4767a08d5d0312093635e5ad7becc6b23a3e56ad81d62",
+    "bytes_uncompressed": 636817,
+    "stored_path": "cut3/results/composed_cut3_p2.cut3_sphere_10.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut3-right-local-build7/composed_cut3_p2.cut3_sphere_10.approach.json"
+  },
+  "cut3/results/composed_cut3_p2.cut3_sphere_minus0p1.approach.json": {
+    "sha256_uncompressed": "6b3a8e67b976baa3fca9d6b8bdb3b401e547fb8046e005bf9c528dd8b95fe6c3",
+    "bytes_uncompressed": 636920,
+    "stored_path": "cut3/results/composed_cut3_p2.cut3_sphere_minus0p1.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut3-right-local-build7/composed_cut3_p2.cut3_sphere_minus0p1.approach.json"
+  },
+  "cut3/results/composed_cut3_p2.cut3_sphere_minus1.approach.json": {
+    "sha256_uncompressed": "fb6514b671dfb7a7835ebbcd1dbee6cac5dd5e210289d52c50c0e0cfba857af6",
+    "bytes_uncompressed": 636893,
+    "stored_path": "cut3/results/composed_cut3_p2.cut3_sphere_minus1.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut3-right-local-build7/composed_cut3_p2.cut3_sphere_minus1.approach.json"
+  },
+  "cut3/results/composed_cut3_p2.cut3_sphere_minus10.approach.json": {
+    "sha256_uncompressed": "61826928fbaf3418b3daea745d3f0a2b31dcdc9efacb8c2e4c203dd3df0e9f98",
+    "bytes_uncompressed": 636794,
+    "stored_path": "cut3/results/composed_cut3_p2.cut3_sphere_minus10.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut3-right-local-build7/composed_cut3_p2.cut3_sphere_minus10.approach.json"
+  },
+  "cut3/results/composed_cut3_p2.json": {
+    "sha256_uncompressed": "9cdb844f5a8c5c4fee666f156f403b6d0f2a339687db1b7b65edcc1548ca382f",
+    "bytes_uncompressed": 5261209,
+    "stored_path": "cut3/results/composed_cut3_p2.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut3-right-local-build7/composed_cut3_p2.json"
+  },
+  "cut3/results/composed_cut3_p2.settings.toml": {
+    "sha256_uncompressed": "04c4ee6f5e74838ea4d728a591e24e8bb898e73b6f55be7e36c740b538ab6992",
+    "bytes_uncompressed": 3979,
+    "stored_path": "cut3/results/composed_cut3_p2.settings.toml.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut3-right-local-build7/composed_cut3_p2.settings.toml"
+  },
+  "cut3/results/composed_cut3_p2.shared_real_maximum.approach.json": {
+    "sha256_uncompressed": "d847adddc1f1eaef35c42ac127fd103b0e4cb0ce8502af9b76039b8c2579fd8d",
+    "bytes_uncompressed": 636205,
+    "stored_path": "cut3/results/composed_cut3_p2.shared_real_maximum.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut3-right-local-build7/composed_cut3_p2.shared_real_maximum.approach.json"
+  },
+  "cut3/results/composed_p1.cut3_sphere_0p1.approach.json": {
+    "sha256_uncompressed": "104b7606b9904817b0ea69120aa760f9155fda515270332f1692ab2bca10297f",
+    "bytes_uncompressed": 635899,
+    "stored_path": "cut3/results/composed_p1.cut3_sphere_0p1.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut3-right-local-build7/composed_p1.cut3_sphere_0p1.approach.json"
+  },
+  "cut3/results/composed_p1.cut3_sphere_1.approach.json": {
+    "sha256_uncompressed": "52b0480ce83573f9a1d184b81fc39313d30faea2240bc749cb850eaba0919e3c",
+    "bytes_uncompressed": 635874,
+    "stored_path": "cut3/results/composed_p1.cut3_sphere_1.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut3-right-local-build7/composed_p1.cut3_sphere_1.approach.json"
+  },
+  "cut3/results/composed_p1.cut3_sphere_10.approach.json": {
+    "sha256_uncompressed": "8ccc917cccd3aaa3490edb603bfcf62f9874338252c472f7fcd07d543fe1d742",
+    "bytes_uncompressed": 636053,
+    "stored_path": "cut3/results/composed_p1.cut3_sphere_10.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut3-right-local-build7/composed_p1.cut3_sphere_10.approach.json"
+  },
+  "cut3/results/composed_p1.cut3_sphere_minus0p1.approach.json": {
+    "sha256_uncompressed": "2f7c7fbd1862274443d819eaf88e56510541be3ca3b4517c8868f6f07c22d88a",
+    "bytes_uncompressed": 635802,
+    "stored_path": "cut3/results/composed_p1.cut3_sphere_minus0p1.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut3-right-local-build7/composed_p1.cut3_sphere_minus0p1.approach.json"
+  },
+  "cut3/results/composed_p1.cut3_sphere_minus1.approach.json": {
+    "sha256_uncompressed": "9bb772e4ac533f7adcedee3632604f343c69feae6b0fdf2c1258f4d634d5f088",
+    "bytes_uncompressed": 635890,
+    "stored_path": "cut3/results/composed_p1.cut3_sphere_minus1.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut3-right-local-build7/composed_p1.cut3_sphere_minus1.approach.json"
+  },
+  "cut3/results/composed_p1.cut3_sphere_minus10.approach.json": {
+    "sha256_uncompressed": "28e5dcfd522775d47985233044c39e423d8685cb3841566515ba8e7b3b12c40c",
+    "bytes_uncompressed": 635942,
+    "stored_path": "cut3/results/composed_p1.cut3_sphere_minus10.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut3-right-local-build7/composed_p1.cut3_sphere_minus10.approach.json"
+  },
+  "cut3/results/composed_p1.json": {
+    "sha256_uncompressed": "221f396a49d3f707f4bde8807f259c9c4f6ca9c0184bfa43ac32fda8f133e93d",
+    "bytes_uncompressed": 5253861,
+    "stored_path": "cut3/results/composed_p1.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut3-right-local-build7/composed_p1.json"
+  },
+  "cut3/results/composed_p1.settings.toml": {
+    "sha256_uncompressed": "02e34ab77d42a9bba05e1a6a2c5b1228e3c54eba9214bb62b390ccdee6682a0a",
+    "bytes_uncompressed": 3587,
+    "stored_path": "../local_cut_matched_hz/shared/cuts_combined_joint.settings.toml",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut3-right-local-build7/composed_p1.settings.toml"
+  },
+  "cut3/results/composed_p1.shared_real_maximum.approach.json": {
+    "sha256_uncompressed": "2db36aeb4b4f7e7c96f263e31a44a3d64665fc3faef2820f91da26f6a4a9ac5d",
+    "bytes_uncompressed": 635422,
+    "stored_path": "cut3/results/composed_p1.shared_real_maximum.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut3-right-local-build7/composed_p1.shared_real_maximum.approach.json"
+  },
+  "cut3/results/composed_p2.cut3_sphere_0p1.approach.json": {
+    "sha256_uncompressed": "d10b198a38f95f5a5a7e92cf42ec233362853a10c866db047553d701c7dc932b",
+    "bytes_uncompressed": 635881,
+    "stored_path": "cut3/results/composed_p2.cut3_sphere_0p1.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut3-right-local-build7/composed_p2.cut3_sphere_0p1.approach.json"
+  },
+  "cut3/results/composed_p2.cut3_sphere_1.approach.json": {
+    "sha256_uncompressed": "e5512c1beb42f0a2eba881e3123c563e0bd59efc3cc87f93cee62fbef66d4a39",
+    "bytes_uncompressed": 635881,
+    "stored_path": "cut3/results/composed_p2.cut3_sphere_1.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut3-right-local-build7/composed_p2.cut3_sphere_1.approach.json"
+  },
+  "cut3/results/composed_p2.cut3_sphere_10.approach.json": {
+    "sha256_uncompressed": "98aa7ee81de2eef357582f749c12ff18b66243d95e13703a2c4a0a1a0c9ec957",
+    "bytes_uncompressed": 636035,
+    "stored_path": "cut3/results/composed_p2.cut3_sphere_10.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut3-right-local-build7/composed_p2.cut3_sphere_10.approach.json"
+  },
+  "cut3/results/composed_p2.cut3_sphere_minus0p1.approach.json": {
+    "sha256_uncompressed": "e8348d5c8254b8f8b22c7524db2010075e61f1e46234601989408dcf9e14a0f9",
+    "bytes_uncompressed": 635793,
+    "stored_path": "cut3/results/composed_p2.cut3_sphere_minus0p1.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut3-right-local-build7/composed_p2.cut3_sphere_minus0p1.approach.json"
+  },
+  "cut3/results/composed_p2.cut3_sphere_minus1.approach.json": {
+    "sha256_uncompressed": "e152d82ec9469271a3668db6610edc1dd3855eccec64a9a60d91d6931cb6d4a1",
+    "bytes_uncompressed": 635897,
+    "stored_path": "cut3/results/composed_p2.cut3_sphere_minus1.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut3-right-local-build7/composed_p2.cut3_sphere_minus1.approach.json"
+  },
+  "cut3/results/composed_p2.cut3_sphere_minus10.approach.json": {
+    "sha256_uncompressed": "8b4eb7ac70217328afeeb04e6069c07e4fa32ac95e0e5b14ae7b27f55b41ad37",
+    "bytes_uncompressed": 635926,
+    "stored_path": "cut3/results/composed_p2.cut3_sphere_minus10.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut3-right-local-build7/composed_p2.cut3_sphere_minus10.approach.json"
+  },
+  "cut3/results/composed_p2.json": {
+    "sha256_uncompressed": "fcd56ef634a20f0b9ea8e3630a431a8c5649f15a62703dd07f461af94b3bf26e",
+    "bytes_uncompressed": 5253841,
+    "stored_path": "cut3/results/composed_p2.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut3-right-local-build7/composed_p2.json"
+  },
+  "cut3/results/composed_p2.settings.toml": {
+    "sha256_uncompressed": "16ae8d442470db402abde1f94b8fd0584418fbe619395708db761b418c4937de",
+    "bytes_uncompressed": 3599,
+    "stored_path": "cut3/results/composed_p2.settings.toml.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut3-right-local-build7/composed_p2.settings.toml"
+  },
+  "cut3/results/composed_p2.shared_real_maximum.approach.json": {
+    "sha256_uncompressed": "8b55f32366fafce387fe9d0645658ff6343dbdb58a594b3c687964c2e611b3b6",
+    "bytes_uncompressed": 635429,
+    "stored_path": "cut3/results/composed_p2.shared_real_maximum.approach.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut3-right-local-build7/composed_p2.shared_real_maximum.approach.json"
+  },
+  "cut3/results/state_after.json": {
+    "sha256_uncompressed": "eea5232cd0b55f5c3e507b26a4ef9ee00fffcac19532601e34b8a0d6186f5f1f",
+    "bytes_uncompressed": 4106,
+    "stored_path": "../results-timing1/state_before.json",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut3-right-local-build7/state_after.json"
+  },
+  "cut3/results/state_before.json": {
+    "sha256_uncompressed": "eea5232cd0b55f5c3e507b26a4ef9ee00fffcac19532601e34b8a0d6186f5f1f",
+    "bytes_uncompressed": 4106,
+    "stored_path": "../results-timing1/state_before.json",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut3-right-local-build7/state_before.json"
+  },
+  "cut3/results/summary.json": {
+    "sha256_uncompressed": "cf72f5c7be5edf3ce0bd866c465b61f40cea6db5f33ea9a0efe2caae741b2dd7",
+    "bytes_uncompressed": 16508794,
+    "stored_path": "cut3/results/summary.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut3-right-local-build7/summary.json"
+  },
+  "soft/analysis/analysis.json": {
+    "sha256_uncompressed": "33650951043376970164fdbda398a53669fa3af6d97cb303c7e4d9834e0e6083",
+    "bytes_uncompressed": 26560235,
+    "stored_path": "soft/analysis/analysis.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/soft-replacement-local-analysis-final-qualified-build7/analysis.json"
+  },
+  "soft/analysis/analysis.md": {
+    "sha256_uncompressed": "e0c2d3e655d5e1c0bc6a321d4d6cfb88c54432fd1d5cbd84fe70a4bd7cb45f44",
+    "bytes_uncompressed": 14915,
+    "stored_path": "soft/analysis/analysis.md.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/soft-replacement-local-analysis-final-qualified-build7/analysis.md"
+  },
+  "soft/analysis/diagnostic_corrections.json": {
+    "sha256_uncompressed": "ff8fbe8634e1b370a697fd50c8238b9623da4993b5ffaf4537ecb9a3468e9156",
+    "bytes_uncompressed": 6214,
+    "stored_path": "soft/analysis/diagnostic_corrections.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/soft-replacement-local-analysis-final-qualified-build7/diagnostic_corrections.json"
+  },
+  "diagnostics/pre_unresolved_ratio_qualification/analysis.json": {
+    "sha256_uncompressed": "ffb24a0a30ac351323b47a2d53b4e7aaad253561239c2425018dbec2ef7b2bd0",
+    "bytes_uncompressed": 26571195,
+    "stored_path": "diagnostics/pre_unresolved_ratio_qualification/analysis.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/soft-replacement-local-analysis-qualified-build7/analysis.json"
+  },
+  "diagnostics/pre_unresolved_ratio_qualification/analysis.md": {
+    "sha256_uncompressed": "7fa235113de2b83d12e828aa2ce5915ea4eaa83a1501b7ca0315e66c49812b5b",
+    "bytes_uncompressed": 14678,
+    "stored_path": "diagnostics/pre_unresolved_ratio_qualification/analysis.md.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/soft-replacement-local-analysis-qualified-build7/analysis.md"
+  },
+  "diagnostics/pre_unresolved_ratio_qualification/diagnostic_corrections.json": {
+    "sha256_uncompressed": "39bf83b900900f9da80bfc1c3f95d273101e34d585df9f7dbdb055c16a116d5f",
+    "bytes_uncompressed": 5668,
+    "stored_path": "diagnostics/pre_unresolved_ratio_qualification/diagnostic_corrections.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/soft-replacement-local-analysis-qualified-build7/diagnostic_corrections.json"
+  },
+  "cut3/analysis/analysis.json": {
+    "sha256_uncompressed": "8cb217f0848cad806a38e629d4ea9e7432e6fa3c64419313990363306fa60e36",
+    "bytes_uncompressed": 4286287,
+    "stored_path": "cut3/analysis/analysis.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/cut3-right-local-analysis-final-build7/analysis.json"
+  },
+  "cut3/analysis/analysis.md": {
+    "sha256_uncompressed": "a7ab509bf28e840bc86d180afd2259ad02aafc0ed8bd4af0c65543c1be79272f",
+    "bytes_uncompressed": 1939,
+    "stored_path": "cut3/analysis/analysis.md.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/cut3-right-local-analysis-final-build7/analysis.md"
+  },
+  "diagnostics/initial_ieee_quad_assumption/analysis.json": {
+    "sha256_uncompressed": "6ceb27efe8c96e5f3598135699b539f091cd0c590a69aecf6c88a8fd773128f7",
+    "bytes_uncompressed": 24071120,
+    "stored_path": "diagnostics/initial_ieee_quad_assumption/analysis.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/soft-replacement-local-analysis-build7/analysis.json"
+  },
+  "diagnostics/initial_ieee_quad_assumption/analysis.md": {
+    "sha256_uncompressed": "2d872ce322747a6af53954ae430b5469a68fc10ac97b6e5a4595092e260edd3f",
+    "bytes_uncompressed": 14119,
+    "stored_path": "diagnostics/initial_ieee_quad_assumption/analysis.md.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/soft-replacement-local-analysis-build7/analysis.md"
+  },
+  "diagnostics/precision_unit_corrected/analysis.json": {
+    "sha256_uncompressed": "882272bf39b3ee3219a226d8fc285ee5cd6733964fe6a609106a2571306e2306",
+    "bytes_uncompressed": 26085333,
+    "stored_path": "diagnostics/precision_unit_corrected/analysis.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/soft-replacement-local-analysis-final-build7/analysis.json"
+  },
+  "diagnostics/precision_unit_corrected/analysis.md": {
+    "sha256_uncompressed": "804305a97c25e304f850a6b1fd2e0b218d00db6c4762c7f9b091049ae386e8e9",
+    "bytes_uncompressed": 14611,
+    "stored_path": "diagnostics/precision_unit_corrected/analysis.md.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/soft-replacement-local-analysis-final-build7/analysis.md"
+  },
+  "soft/execution/run.json": {
+    "sha256_uncompressed": "5420236f1d4ed16bf40f2d0cbea0a7b2ece6cfb017b3db0eea44a2e05ed8435c",
+    "bytes_uncompressed": 830,
+    "stored_path": "soft/execution/run.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/soft-replacement-local-build7-run.json"
+  },
+  "soft/execution/run.log": {
+    "sha256_uncompressed": "a0257869f9fa61f853b6cb98c8e6337e317b54debe7cae318aff54c06da24c44",
+    "bytes_uncompressed": 142,
+    "stored_path": "../cut_matched_acceptance/run.log.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7.log"
+  },
+  "soft/execution/resources.txt": {
+    "sha256_uncompressed": "c29daa790a00bf216e87bf51ddb91bafbd56babc5b9be7347a9bedd503c841ae",
+    "bytes_uncompressed": 967,
+    "stored_path": "soft/execution/resources.txt.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-soft-replacement-local-build7.resources.txt"
+  },
+  "cut3/execution/run.json": {
+    "sha256_uncompressed": "effe8311250031dd12bdcdcaa2c93340fd4089d1eed7bdda3abeb0f5bc979025",
+    "bytes_uncompressed": 854,
+    "stored_path": "cut3/execution/run.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/cut3-right-local-build7-run.json"
+  },
+  "cut3/execution/run.log": {
+    "sha256_uncompressed": "a0257869f9fa61f853b6cb98c8e6337e317b54debe7cae318aff54c06da24c44",
+    "bytes_uncompressed": 142,
+    "stored_path": "../cut_matched_acceptance/run.log.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut3-right-local-build7.log"
+  },
+  "cut3/execution/resources.txt": {
+    "sha256_uncompressed": "71a9168ecf08b5f986632d2f5e0b590bc4a0367e2fde51ec74e71c2c5df9aa24",
+    "bytes_uncompressed": 949,
+    "stored_path": "cut3/execution/resources.txt.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut3-right-local-build7.resources.txt"
+  },
+  "drivers/gate_soft_local.rs": {
+    "sha256_uncompressed": "090ce653c400d0f67ac6c09c533e0dd068d7180a13e1c53091e95674b82486ab",
+    "bytes_uncompressed": 116288,
+    "stored_path": "drivers/gate_soft_local.rs.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/drivers/gate_soft_local.rs"
+  },
+  "drivers/gate-soft-local-build7.build.json": {
+    "sha256_uncompressed": "34d01596afa847afd067f3cef09ddb41928c5c2edf6c04f299c7f87cb8232a57",
+    "bytes_uncompressed": 42295,
+    "stored_path": "drivers/gate-soft-local-build7.build.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/drivers/gate-soft-local-build7.build.json"
+  },
+  "protocol/audit_physical.py": {
+    "sha256_uncompressed": "72212d101563b92733cd4d8586e2a5dc7148eddf285ccc7dd9e257caf469e737",
+    "bytes_uncompressed": 17147,
+    "stored_path": "../cut_matched_acceptance/audit_physical.py.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/audit_physical.py"
+  },
+  "protocol/analyze_local_raw_cases.py": {
+    "sha256_uncompressed": "4da70a97d7a91db0622f117f7b8b57199f8333d0d5599d8fad95edfa098644de",
+    "bytes_uncompressed": 25798,
+    "stored_path": "protocol/analyze_local_raw_cases.py.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/analyze_local_raw_cases.py"
+  },
+  "protocol/analyze_local_raw_cases_cut3_frozen.py": {
+    "sha256_uncompressed": "4ab42fbdb20c54c9a751585a5995ef652b6f4514879e520f2bd086a1c83cc284",
+    "bytes_uncompressed": 21898,
+    "stored_path": "protocol/analyze_local_raw_cases_cut3_frozen.py.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/analyze_local_raw_cases_cut3_frozen.py"
+  },
+  "protocol/analyze_local_raw_cases_initial.py": {
+    "sha256_uncompressed": "934515cd029f4f9786734b17c78d939ba6591004ea294e312dd7a5d062013db9",
+    "bytes_uncompressed": 18874,
+    "stored_path": "protocol/analyze_local_raw_cases_initial.py.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/analyze_local_raw_cases_initial.py"
+  },
+  "protocol/analyze_local_raw_cases_before_quad_correction.py": {
+    "sha256_uncompressed": "ffd1ca740ae0a591fd62766e9a615db72c4f1208695640e6a22914b4173447de",
+    "bytes_uncompressed": 21944,
+    "stored_path": "protocol/analyze_local_raw_cases_before_quad_correction.py.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/analyze_local_raw_cases_before_quad_correction.py"
+  },
+  "protocol/analyze_local_raw_cases_before_real_resolution.py": {
+    "sha256_uncompressed": "09317890e58e924521d308ce8bc79a0b032f893b02854f892196b07b31c1113b",
+    "bytes_uncompressed": 22094,
+    "stored_path": "protocol/analyze_local_raw_cases_before_real_resolution.py.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/analyze_local_raw_cases_before_real_resolution.py"
+  },
+  "protocol/analyze_local_raw_cases_before_formatting_allowance.py": {
+    "sha256_uncompressed": "be6abf799518a714d42ad9daa3c60f722acf1669771303715573ea279e8c07d3",
+    "bytes_uncompressed": 24092,
+    "stored_path": "protocol/analyze_local_raw_cases_before_formatting_allowance.py.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/analyze_local_raw_cases_before_formatting_allowance.py"
+  },
+  "protocol/analyze_local_raw_cases_before_unresolved_ratio.py": {
+    "sha256_uncompressed": "d8747f1839aa32831fd7cb0f191b2635d5454a6ec962bf17a85593cf1e76cc00",
+    "bytes_uncompressed": 25368,
+    "stored_path": "protocol/analyze_local_raw_cases_before_unresolved_ratio.py.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/analyze_local_raw_cases_before_unresolved_ratio.py"
+  },
+  "protocol/manifest-soft-replacement-local-build7.json": {
+    "sha256_uncompressed": "fc8f8edaaf8ec74b3567b9e54ef5f7b6efd62b5133b42f46de147c5ffcdf4563",
+    "bytes_uncompressed": 5830,
+    "stored_path": "protocol/manifest-soft-replacement-local-build7.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/manifest-soft-replacement-local-build7.json"
+  },
+  "protocol/manifest-cut3-right-local-build7.json": {
+    "sha256_uncompressed": "cdc752c4e08c2582568e08a3708d2f7386aae23f6dd8a52115cec0a9638edd4a",
+    "bytes_uncompressed": 5226,
+    "stored_path": "protocol/manifest-cut3-right-local-build7.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/manifest-cut3-right-local-build7.json"
+  },
+  "protocol/soft-replacement-local-build7-commands.json": {
+    "sha256_uncompressed": "83c5b83ee5249bbde4596eedb71541bd3df2ccce481303b767569112760b4d20",
+    "bytes_uncompressed": 1008,
+    "stored_path": "protocol/soft-replacement-local-build7-commands.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/soft-replacement-local-build7-commands.json"
+  },
+  "protocol/CUT3_RIGHT_LOCAL_REAL_RESULTS.md": {
+    "sha256_uncompressed": "b4a03e6076d726d603811c4a654e2c890032bc32f3b69cb99000c207ac351027",
+    "bytes_uncompressed": 4553,
+    "stored_path": "protocol/CUT3_RIGHT_LOCAL_REAL_RESULTS.md.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/CUT3_RIGHT_LOCAL_REAL_RESULTS.md"
+  },
+  "cases/soft-local/cards/cuts.toml": {
+    "sha256_uncompressed": "71ce4efcf492a51393075382816f8ded9ee79f93dbb1023f590b7b391f29f751",
+    "bytes_uncompressed": 3483,
+    "stored_path": "../phase_space_ray/cards/cuts.toml",
+    "original_path": "/tmp/gl638-physics-comparison/soft-local/cards/cuts.toml"
+  },
+  "cases/soft-local/cards/cuts_combined_joint.toml": {
+    "sha256_uncompressed": "e7c61f30d4e117c53bdd0bcb15ca116ab7bdd3b6005c299c7b828ea0de4f1c9b",
+    "bytes_uncompressed": 4149,
+    "stored_path": "../phase_space_ray/cards/cuts_combined_joint.toml",
+    "original_path": "/tmp/gl638-physics-comparison/soft-local/cards/cuts_combined_joint.toml"
+  },
+  "cases/soft-local/cards/cuts_replaced_joint.toml": {
+    "sha256_uncompressed": "0a8c067021c9e1e73b2499700dbe5c7dd3679f1fb8e24a402bfa9f0763b6d7e1",
+    "bytes_uncompressed": 3895,
+    "stored_path": "cases/soft-local/cards/cuts_replaced_joint.toml.gz",
+    "original_path": "/tmp/gl638-physics-comparison/soft-local/cards/cuts_replaced_joint.toml"
+  },
+  "cases/soft-local/cards/cuts_soft.toml": {
+    "sha256_uncompressed": "041ed87209898600035b7dd46f049d708cb8244ba38c5cc2380831574f9d25ee",
+    "bytes_uncompressed": 3673,
+    "stored_path": "../phase_space_ray/cards/cuts_soft.toml",
+    "original_path": "/tmp/gl638-physics-comparison/soft-local/cards/cuts_soft.toml"
+  },
+  "cases/soft-local/raw_soft_cases.json": {
+    "sha256_uncompressed": "d8198fe79a95c54deb6a1aa28f937789137b793877c8f7ad68bae0ea62766840",
+    "bytes_uncompressed": 178823,
+    "stored_path": "cases/soft-local/raw_soft_cases.json.gz",
+    "original_path": "/tmp/gl638-physics-comparison/soft-local/raw_soft_cases.json"
+  },
+  "cases/cut3-right/candidate_static_audit.json": {
+    "sha256_uncompressed": "c5537b7856da8b893d0f4cfac0702e8e06bae49cafaebbd5643ba0ca7ec80c35",
+    "bytes_uncompressed": 1608,
+    "stored_path": "cases/cut3-right/candidate_static_audit.json.gz",
+    "original_path": "/tmp/gl638-physics-comparison/cut3-right/candidate_static_audit.json"
+  },
+  "cases/cut3-right/cards/composed_cut3_p2.toml": {
+    "sha256_uncompressed": "517b6efb43ad96c7b6e5c441853991889ba983e25601d00d2e6404c52ccd5c16",
+    "bytes_uncompressed": 4571,
+    "stored_path": "cases/cut3-right/cards/composed_cut3_p2.toml.gz",
+    "original_path": "/tmp/gl638-physics-comparison/cut3-right/cards/composed_cut3_p2.toml"
+  },
+  "cases/cut3-right/cards/composed_p1.toml": {
+    "sha256_uncompressed": "e7c61f30d4e117c53bdd0bcb15ca116ab7bdd3b6005c299c7b828ea0de4f1c9b",
+    "bytes_uncompressed": 4149,
+    "stored_path": "../phase_space_ray/cards/cuts_combined_joint.toml",
+    "original_path": "/tmp/gl638-physics-comparison/cut3-right/cards/composed_p1.toml"
+  },
+  "cases/cut3-right/cards/composed_p2.toml": {
+    "sha256_uncompressed": "2aacd5e3fb053e222693dcebf2e6587aef0157bca680529af235a206f7d4c5df",
+    "bytes_uncompressed": 4149,
+    "stored_path": "cases/cut3-right/cards/composed_p2.toml.gz",
+    "original_path": "/tmp/gl638-physics-comparison/cut3-right/cards/composed_p2.toml"
+  },
+  "cases/cut3-right/raw_cut3_cases.json": {
+    "sha256_uncompressed": "ecaf181a0bdf2b3b82a108671f715016f2e86e15c4e9cb84084576356e3b5e50",
+    "bytes_uncompressed": 38083,
+    "stored_path": "cases/cut3-right/raw_cut3_cases.json.gz",
+    "original_path": "/tmp/gl638-physics-comparison/cut3-right/raw_cut3_cases.json"
+  },
+  "cases/leading-real-soft-cut3/cards/cuts_joint_cut3_soft_p2.toml": {
+    "sha256_uncompressed": "5fe409d4bcc32e93d0c07096d43ca1d67a00512982300e36d55cc22db8e3229d",
+    "bytes_uncompressed": 4845,
+    "stored_path": "cases/leading-real-soft-cut3/cards/cuts_joint_cut3_soft_p2.toml.gz",
+    "original_path": "/tmp/gl638-physics-comparison/leading-real-soft-cut3/cards/cuts_joint_cut3_soft_p2.toml"
+  },
+  "cases/leading-real-soft-cut3/cards/cuts_joint_soft_p2.toml": {
+    "sha256_uncompressed": "ddfb133e11f9e9819eed1e0b4a7cef7e92f842aad1d30742e952019f29e697a9",
+    "bytes_uncompressed": 4423,
+    "stored_path": "cases/leading-real-soft-cut3/cards/cuts_joint_soft_p2.toml.gz",
+    "original_path": "/tmp/gl638-physics-comparison/leading-real-soft-cut3/cards/cuts_joint_soft_p2.toml"
+  },
+  "cases/leading-real-soft-cut3/leading_cards_manifest.json": {
+    "sha256_uncompressed": "a3ad0af2d9ffa8f881c503a18f3d953580643560478fc0898dc0c5af862dae9d",
+    "bytes_uncompressed": 3034,
+    "stored_path": "cases/leading-real-soft-cut3/leading_cards_manifest.json.gz",
+    "original_path": "/tmp/gl638-physics-comparison/leading-real-soft-cut3/leading_cards_manifest.json"
+  },
+  "cards/cuts.toml": {
+    "sha256_uncompressed": "71ce4efcf492a51393075382816f8ded9ee79f93dbb1023f590b7b391f29f751",
+    "bytes_uncompressed": 3483,
+    "stored_path": "../phase_space_ray/cards/cuts.toml",
+    "original_path": "/tmp/gl638-physics-comparison/soft-local/cards/cuts.toml"
+  },
+  "cards/cuts_combined_joint.toml": {
+    "sha256_uncompressed": "e7c61f30d4e117c53bdd0bcb15ca116ab7bdd3b6005c299c7b828ea0de4f1c9b",
+    "bytes_uncompressed": 4149,
+    "stored_path": "../phase_space_ray/cards/cuts_combined_joint.toml",
+    "original_path": "/tmp/gl638-physics-comparison/soft-local/cards/cuts_combined_joint.toml"
+  },
+  "cards/cuts_replaced_joint.toml": {
+    "sha256_uncompressed": "0a8c067021c9e1e73b2499700dbe5c7dd3679f1fb8e24a402bfa9f0763b6d7e1",
+    "bytes_uncompressed": 3895,
+    "stored_path": "cases/soft-local/cards/cuts_replaced_joint.toml.gz",
+    "original_path": "/tmp/gl638-physics-comparison/soft-local/cards/cuts_replaced_joint.toml"
+  },
+  "cards/cuts_soft.toml": {
+    "sha256_uncompressed": "041ed87209898600035b7dd46f049d708cb8244ba38c5cc2380831574f9d25ee",
+    "bytes_uncompressed": 3673,
+    "stored_path": "../phase_space_ray/cards/cuts_soft.toml",
+    "original_path": "/tmp/gl638-physics-comparison/soft-local/cards/cuts_soft.toml"
+  },
+  "cards/joint_hz_plus_lmb.toml": {
+    "sha256_uncompressed": "7d4d40c692da56fcf9855bb4bde90dfd2faeab05eb93e188b928aac0753c08f2",
+    "bytes_uncompressed": 2401,
+    "stored_path": "../cards/joint_hz_plus_lmb.toml.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/cards/joint_hz_plus_lmb.toml"
+  },
+  "build/hosted-joint-optimized-build7-manifest.json": {
+    "sha256_uncompressed": "592e3e3eaca93de76b9429388ff77f9a060059200adbde2b3a30ab7c4cc07370",
+    "bytes_uncompressed": 1226,
+    "stored_path": "../mc_confirmation_root/endpoint_repair/build7/manifest.json.gz",
+    "original_path": "/tmp/hosted-joint-optimized-build7-manifest.json"
+  },
+  "build/root-endpoint-source-build7.patch": {
+    "sha256_uncompressed": "3f5669ae1de62c09b26d4aa3888cecd47058a786f00e0893bac7bfd191910588",
+    "bytes_uncompressed": 24036,
+    "stored_path": "../mc_confirmation_root/endpoint_repair/source/final.patch.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/root-endpoint-source-build7.patch"
+  },
+  "cards/composed_p1.toml": {
+    "sha256_uncompressed": "e7c61f30d4e117c53bdd0bcb15ca116ab7bdd3b6005c299c7b828ea0de4f1c9b",
+    "bytes_uncompressed": 4149,
+    "stored_path": "../phase_space_ray/cards/cuts_combined_joint.toml",
+    "original_path": "/tmp/gl638-physics-comparison/cut3-right/cards/composed_p1.toml"
+  },
+  "cards/composed_p2.toml": {
+    "sha256_uncompressed": "2aacd5e3fb053e222693dcebf2e6587aef0157bca680529af235a206f7d4c5df",
+    "bytes_uncompressed": 4149,
+    "stored_path": "cases/cut3-right/cards/composed_p2.toml.gz",
+    "original_path": "/tmp/gl638-physics-comparison/cut3-right/cards/composed_p2.toml"
+  },
+  "cards/composed_cut3_p2.toml": {
+    "sha256_uncompressed": "517b6efb43ad96c7b6e5c441853991889ba983e25601d00d2e6404c52ccd5c16",
+    "bytes_uncompressed": 4571,
+    "stored_path": "cases/cut3-right/cards/composed_cut3_p2.toml.gz",
+    "original_path": "/tmp/gl638-physics-comparison/cut3-right/cards/composed_cut3_p2.toml"
+  },
+  "anchors/cuts_combined_joint.attribution_1.json": {
+    "sha256_uncompressed": "8860a0e6edbdcfb71df0158c9a99bcfe8968b40a4b9976a28959d066733138fe",
+    "bytes_uncompressed": 254574,
+    "stored_path": "../mc_confirmation/maximum_build7/cuts_combined_joint.attribution_1.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-max-confirmation-build7/cuts_combined_joint.attribution_1.json"
+  },
+  "anchors/optimized_lmb.attribution_1.json": {
+    "sha256_uncompressed": "838dd3fce621303e5bdd76cf7603ebf31248b2371d61903e29e81dc80dc41ea2",
+    "bytes_uncompressed": 248902,
+    "stored_path": "../mc_confirmation/maximum_build7/optimized_lmb.attribution_1.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-max-confirmation-build7/optimized_lmb.attribution_1.json"
+  },
+  "anchors/composed_seed40009_lu_cut1.json": {
+    "sha256_uncompressed": "18bbb24fc7979ca53f8ba07e41a881690a5878ee4116b2ad89462708a0441c3d",
+    "bytes_uncompressed": 1327609,
+    "stored_path": "../mc_confirmation/maximum_extension_build7/traces/two_points/composed_seed40009_lu_cut1.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-max-native-trace-confirmation-build7/composed_seed40009_lu_cut1.json"
+  },
+  "anchors/results-max-native-trace-confirmation-build7/composed_seed40009_lu_cut1.json": {
+    "sha256_uncompressed": "18bbb24fc7979ca53f8ba07e41a881690a5878ee4116b2ad89462708a0441c3d",
+    "bytes_uncompressed": 1327609,
+    "stored_path": "../mc_confirmation/maximum_extension_build7/traces/two_points/composed_seed40009_lu_cut1.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-max-native-trace-confirmation-build7/composed_seed40009_lu_cut1.json"
+  },
+  "anchors/confirmation-max-native-trace-analysis-build7/analysis.json": {
+    "sha256_uncompressed": "c37e8c423142987fd8bbf93688efd61d240262c1cf2b832d08adc154289dfe90",
+    "bytes_uncompressed": 1561188,
+    "stored_path": "../mc_confirmation/maximum_extension_build7/analysis/two_points/analysis.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/confirmation-max-native-trace-analysis-build7/analysis.json"
+  },
+  "diagnostics/formatting_owner/double.rs": {
+    "sha256_uncompressed": "9687cd4a07b635ec66a417485d593e0037cf7030fe782cab88f6b5723d18099b",
+    "bytes_uncompressed": 15988,
+    "stored_path": "diagnostics/formatting_owner/double.rs.gz",
+    "original_path": "/home/codex-1/.cargo/git/checkouts/symbolica-7e92af2066df6214/a277a8d/lib/numerica/src/domains/float/double.rs"
+  },
+  "diagnostics/formatting_owner/multiprecision.rs": {
+    "sha256_uncompressed": "68b4fa711c7bcfac7907f38d8918a9ffc088b5160ded4527981dac8247219654",
+    "bytes_uncompressed": 24055,
+    "stored_path": "diagnostics/formatting_owner/multiprecision.rs.gz",
+    "original_path": "/home/codex-1/.cargo/git/checkouts/symbolica-7e92af2066df6214/a277a8d/lib/numerica/src/domains/float/multiprecision.rs"
+  },
+  "build/hosted-joint-optimized-build7.jsonl": {
+    "sha256_uncompressed": "715a10d9d97c123bbf913f9753ad4c3751a87f18a10d87e4c462264c44ccf4bf",
+    "bytes_uncompressed": 409188,
+    "stored_path": "../mc_confirmation_root/endpoint_repair/build7/cargo.jsonl.gz",
+    "original_path": "/tmp/hosted-joint-optimized-build7.jsonl"
+  },
+  "GL638_SOFT_AND_CUT3_LOCAL_REAL.md": {
+    "sha256_uncompressed": "eb7bdfafa8032c75a97fdd5335bda10fa0bf38f0d698445142140bd344fc2b78",
+    "bytes_uncompressed": 10566,
+    "stored_path": "GL638_SOFT_AND_CUT3_LOCAL_REAL.md.gz",
+    "original_path": "/tmp/gl638-soft-cut3-draft/GL638_SOFT_AND_CUT3_LOCAL_REAL.md"
+  },
+  "assemble_local_soft_cut3.py": {
+    "sha256_uncompressed": "b3efe3b244ca6462ed05cfee04757c7cbe5060d80cf36b294a4263153968efb8",
+    "bytes_uncompressed": 6819,
+    "stored_path": "assemble_local_soft_cut3.py.gz",
+    "original_path": "/tmp/gl638-soft-cut3-draft/assemble_local_soft_cut3.py"
+  }
+}

@@ -12,10 +12,49 @@ maximum-weight origins, and the best supported cross-section estimate with
 uncertainty. The first joint-certificate optimization and the fresh five-seed
 confirmation are complete. The user's subsequent execution order is:
 
+Future physics comparisons and channel decisions focus on the real graph
+contribution and its absolute value. The imaginary contribution cancels when
+combined with the CP-symmetric forward graph and is not a further optimization
+objective. Preserve the completed complex results and use both components when
+validating evaluator correctness; do not rewrite the earlier frozen selection.
+
+The leading configuration must retain explicit soft-gluon coverage through
+LMB `[6,12,13,14]`. The completed single-soft approaches show unbounded real
+weights without it, despite directional integrability after including the
+three-dimensional measure. The user's priority is to eliminate as many known
+regions with unbounded real weights as possible, ideally all; a smaller pilot
+variance alone cannot justify dropping coverage of a demonstrated divergence.
+Keep no-soft configurations as diagnostic controls. Double-soft real values at
+the arbitrary-precision cancellation floor remain unresolved and cannot support
+a fitted power or a boundedness claim. Validate the combined cut, joint H/Z,
+Cut 3 right-threshold and soft catalogue before new long integrations.
+Keep a positive channel-probability floor during adaptive channel selection:
+retaining a channel by name is insufficient if its sampling probability can
+vanish. For each claimed local cure, record the physical real scaling, the
+complete density and outer channel factor, and the resulting real-weight
+scaling; distinguish a finite integral or variance from bounded weights.
+
+The completed GL638 studies and frozen compiler benchmark use `sqrt(s)=1000 GeV`.
+The next physics setup starts at `600 GeV`, keeping `mu_r=91.188 GeV` and comparing
+`m_uv=50 GeV` against `91.188 GeV`. Rebuild runtime geometry and verify the active
+threshold intersections at the new energy; do not reuse old H/Z rays or centers.
+Use matched sampling settings and budgets for the UV-scale comparison. Central
+values must agree within statistical uncertainty; compare real/absolute-real
+errors, second moments, maxima and stability outcomes before choosing a scale.
+Keep the pending Eager/SymJIT timing deck at its original energy for a controlled
+compiler comparison. Reduced energy is a proposed stability improvement, not an
+established result.
+
 1. Finish the maximum-weight attribution and test single- and double-soft
    gluon limits without an explicit gluon LMB channel. Include a catalogue that
    replaces standalone Cut 1 with its composed joint channel, keeping the other
    five cut channels, to distinguish replacement from adding a seventh channel.
+   For the remaining real maximum, also assess a Cut 3 plus right-threshold
+   `[5,10]` channel with parent `[4,5,7,12]` and active `[5]`. Its current surface
+   profile uses global `sampling.power`, so a power-2 test requires a matching
+   control. Distinguish concentration near that surface from concentration near
+   a counterterm's projected intersection; the latter is not yet a generic map
+   primitive and no mitigation claim precedes the measured density/weight test.
 2. Before further long integrations, research and implement a safe alternative
    to unconditional Arb1000 proposal construction and 2048-bit support checks.
    Preserve one immutable complete point/Jacobian/partition across physical
@@ -90,7 +129,16 @@ replay exactly, with higher-precision controls and unchanged saved inputs. The
 now covers all three distinct b/c real and imaginary extrema with native traces.
 The shared real point acquires exactly 7/6 more weight when an inactive joint
 channel is added; other maxima probe projected threshold terms with finite gluon
-energies. The added soft-limit and Cut 1 replacement checks remain in progress.
+energies. The [soft-limit, Cut 1 replacement and Cut 3 channel checks](docs/research/advanced_sampling/GL638_SOFT_AND_CUT3_LOCAL_REAL.md)
+are complete: 120 soft rows and 21 Cut 3 rows preserve the actual common points,
+with 15,050 and 2,681 checks passing respectively. Single-soft real weights grow
+without the explicit soft LMB and are suppressed with it. Cut 1 replacement
+worsens these paths. Double-soft real values remain unresolved at the Arb
+cancellation scale. The extra Cut 3 right `[5,10]` channel reduces the recorded
+real maximum locally from 12.219 to 5.782 pb after its extra channel probability
+is included. The combined eight/nine-channel soft/joint/Cut 3 cards are prepared;
+their normalization, joint local checks and statistical comparisons remain
+pending. These observations do not establish a global bound or variance gain.
 See also the [center audit](docs/research/advanced_sampling/CANONICAL_CT_CENTERS.md).
 
 Current implementation status: there is one `SamplingChannelCatalogue` and one

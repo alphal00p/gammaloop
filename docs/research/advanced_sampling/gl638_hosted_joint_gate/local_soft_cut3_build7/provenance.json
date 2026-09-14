@@ -1,0 +1,22 @@
+{
+  "status": "completed_local_diagnostics_lossless_archive",
+  "purpose": "Real-only bounded soft/replacement and supported Cut3-channel local comparison; no new Monte Carlo samples or historical selection change",
+  "controls": {
+    "soft_rows": 120,
+    "soft_native_calls": 480,
+    "soft_checks": 15050,
+    "cut3_rows": 21,
+    "cut3_native_calls": 84,
+    "cut3_checks": 2681,
+    "failed_or_missing_rows": 0,
+    "double_soft_real_curves_suppressed": 8,
+    "arithmetic_only_formatting_miss_retained": 1
+  },
+  "historical_diagnostics": "Initial arithmetic assumptions and unqualified real-ratio drafts are retained as superseded diagnostics; only soft/analysis is the final qualified analysis. No real slopes or ratios are inferred from unresolved double-soft signals.",
+  "leading_cards_status": "Static eight/nine-channel power2 cards retain soft and Cut1; all new combined-catalogue native/local/reference gates pending, no statistical selection.",
+  "scope": "Actual common forwarded points, complete original Sample/grid/map factors, real d3 finite-direction evidence; d6 real at numerical floor. New catalogue normalization and integrated variance comparison remain pending. No global maximum bound.",
+  "archive_convention": "Existing lossless gzip convention with exact original uncompressed hashes/sizes; byte-identical files reference prior immutable records. No state payload, executable or compiled library copied. Original result directories remain unchanged.",
+  "records": 226,
+  "stored_gzip_files": 195,
+  "stored_bytes": 81557652
+}
