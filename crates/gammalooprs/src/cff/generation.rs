@@ -1,5 +1,12 @@
-use std::collections::BTreeMap;
+use std::{
+    collections::{BTreeMap, BTreeSet, VecDeque},
+    hash::Hash,
+    mem::{size_of, size_of_val},
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
+use crate::utils::GS;
 use crate::{
     cff::{
         VertexSet,
@@ -8,16 +15,26 @@ use crate::{
             HybridSurfaceID, LinearEnergyExpr, LinearSurface, LinearSurfaceID, LinearSurfaceKind,
         },
     },
-    graph::{FeynmanGraph, Graph, GraphThreeDSource},
+    graph::{
+        ExactUvSubLmbFrame, FeynmanGraph, FourDDenominator, Graph, GraphThreeDSource,
+        LoopMomentumBasis,
+    },
     numerator::energy_degree::EnergyPowerAssignmentPlan,
     settings::global::{GenerationSettings, UniformNumeratorSamplingScale},
+    uv::approx::{
+        local_4d::{CanonicalUvDenominatorClass, CanonicalUvSector, FourDSector},
+        projected_4d::Local4dProjectionContext,
+    },
 };
-use ahash::HashSet;
+use ahash::{AHashMap, HashSet};
 use color_eyre::Result;
 use itertools::Itertools;
-use linnet::half_edge::involution::EdgeIndex;
+use linnet::half_edge::{
+    involution::{EdgeIndex, Hedge},
+    subgraph::{SuBitGraph, SubSetLike},
+};
 use linnet::num_traits::SignOrZero;
-use symbolica::atom::Atom;
+use symbolica::atom::{Atom, AtomCore, AtomView};
 use symbolica::domains::rational::Rational;
 use three_dimensional_reps::{
     CffEnergyFactorOwnership, CffGenerationContext, EnergyEdgeIndexMap,
@@ -29,7 +46,7 @@ use three_dimensional_reps::{
 use tracing::debug;
 
 use super::{
-    CffEnergyBoundSourceKind, CffEnergyDegreeBoundReport,
+    CffEnergyBoundSourceKind, CffEnergyDegreeBoundReport, PlannedExactSourceNumerator,
     esurface::{Esurface, EsurfaceID, ExternalShift},
     expression::CFFExpression,
 };
@@ -52,23 +69,365 @@ struct RemappedDenominatorTree {
     denominator: Tree<HybridSurfaceID>,
 }
 
-type ExactCffGenerationKey = (ParsedGraph, EnergyEdgeIndexMap, Generate3DExpressionOptions);
+/// Generation-local, deterministic LRU retention. Callers charge owned keys,
+/// containers and symbolic payload at insertion; this is not a process RSS cap.
+/// Cache state changes work only, never the admitted plans or their semantics.
+pub(crate) struct GenerationCache<K, V> {
+    entries: AHashMap<K, GenerationCacheEntry<V>>,
+    recency: BTreeMap<u64, K>,
+    clock: u64,
+    max_bytes: usize,
+    max_entries: usize,
+    retained_bytes: usize,
+    pub(crate) hits: usize,
+    pub(crate) misses: usize,
+    pub(crate) evictions: usize,
+    // Callers include key construction and accounting, excluding value work.
+    pub(crate) cache_time: Duration,
+}
 
-#[derive(Default)]
+struct GenerationCacheEntry<V> {
+    value: V,
+    bytes: usize,
+    used: u64,
+}
+
+impl<K: Clone + Eq + Hash, V> GenerationCache<K, V> {
+    pub(crate) fn new(max_bytes: usize, max_entries: usize) -> Self {
+        Self {
+            entries: AHashMap::new(),
+            recency: BTreeMap::new(),
+            clock: 0,
+            max_bytes,
+            max_entries,
+            retained_bytes: 0,
+            hits: 0,
+            misses: 0,
+            evictions: 0,
+            cache_time: Duration::ZERO,
+        }
+    }
+
+    pub(crate) fn get(&mut self, key: &K) -> Option<&V> {
+        let Some(entry) = self.entries.get_mut(key) else {
+            self.misses += 1;
+            return None;
+        };
+        self.hits += 1;
+        self.clock = self
+            .clock
+            .checked_add(1)
+            .expect("generation cache access counter exhausted");
+        let retained_key = self
+            .recency
+            .remove(&entry.used)
+            .expect("LRU index and cache entries agree");
+        entry.used = self.clock;
+        self.recency.insert(self.clock, retained_key);
+        Some(&entry.value)
+    }
+
+    pub(crate) fn insert(&mut self, key: K, value: V, accounted_bytes: usize) {
+        if let Some(previous) = self.entries.remove(&key) {
+            self.retained_bytes -= previous.bytes;
+            self.recency.remove(&previous.used);
+        }
+        if self.max_entries == 0 || self.max_bytes == 0 || accounted_bytes > self.max_bytes {
+            return;
+        }
+        while self.entries.len() >= self.max_entries
+            || accounted_bytes > self.max_bytes - self.retained_bytes
+        {
+            let Some((_, oldest)) = self.recency.pop_first() else {
+                break;
+            };
+            let removed = self
+                .entries
+                .remove(&oldest)
+                .expect("LRU index and cache entries agree");
+            self.retained_bytes -= removed.bytes;
+            self.evictions += 1;
+        }
+        self.clock = self
+            .clock
+            .checked_add(1)
+            .expect("generation cache access counter exhausted");
+        self.retained_bytes += accounted_bytes;
+        self.recency.insert(self.clock, key.clone());
+        self.entries.insert(
+            key,
+            GenerationCacheEntry {
+                value,
+                bytes: accounted_bytes,
+                used: self.clock,
+            },
+        );
+    }
+
+    pub(crate) fn clear(&mut self) {
+        let started = Instant::now();
+        self.entries.clear();
+        self.recency.clear();
+        self.retained_bytes = 0;
+        self.cache_time += started.elapsed();
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.entries.len()
+    }
+    pub(crate) fn can_retain(&self, accounted_bytes: usize) -> bool {
+        self.max_entries != 0 && self.max_bytes != 0 && accounted_bytes <= self.max_bytes
+    }
+    pub(crate) fn retained_bytes(&self) -> usize {
+        self.retained_bytes
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, Hash)]
+struct ExactCffGenerationKey {
+    topology: ParsedGraph,
+    internal_energy_edges: BTreeMap<usize, usize>,
+    external_energy_edges: BTreeMap<usize, usize>,
+    orientation_edge_count: usize,
+    options: Generate3DExpressionOptions,
+}
+
+struct ExactCffGenerationEntry {
+    count: usize,
+    payload: Option<GeneratedThreeDExpression>,
+}
+
+impl ExactCffGenerationKey {
+    fn accounted_bytes(&self) -> usize {
+        let graph = &self.topology;
+        size_of::<Self>()
+            + ExactCffGenerationCache::vector_bytes(&graph.internal_edges)
+            + graph
+                .internal_edges
+                .iter()
+                .map(|edge| {
+                    edge.label.capacity()
+                        + edge.mass_key.as_ref().map_or(0, String::capacity)
+                        + ExactCffGenerationCache::vector_bytes(&edge.signature.loop_signature)
+                        + ExactCffGenerationCache::vector_bytes(&edge.signature.external_signature)
+                })
+                .sum::<usize>()
+            + ExactCffGenerationCache::vector_bytes(&graph.external_edges)
+            + graph
+                .external_edges
+                .iter()
+                .map(|edge| {
+                    edge.label.capacity()
+                        + ExactCffGenerationCache::vector_bytes(&edge.external_coefficients)
+                })
+                .sum::<usize>()
+            + ExactCffGenerationCache::vector_bytes(&graph.initial_state_cut_edges)
+            + ExactCffGenerationCache::vector_bytes(&graph.loop_names)
+            + ExactCffGenerationCache::vector_bytes(&graph.external_names)
+            + graph
+                .loop_names
+                .iter()
+                .chain(&graph.external_names)
+                .map(String::capacity)
+                .sum::<usize>()
+            + graph
+                .node_name_to_internal
+                .keys()
+                .map(|name| size_of::<String>() + name.capacity() + size_of::<usize>() + 32)
+                .sum::<usize>()
+            + (self.internal_energy_edges.len() + self.external_energy_edges.len())
+                * (2 * size_of::<usize>() + 32)
+            + self
+                .options
+                .energy_degree_bounds
+                .as_ref()
+                .map_or(0, ExactCffGenerationCache::vector_bytes)
+            + ExactCffGenerationCache::vector_bytes(
+                &self.options.preserve_internal_edges_as_four_d_denominators,
+            )
+    }
+}
+
 pub(crate) struct ExactCffGenerationCache {
     // Keep each occurrence's requested capacity, even when source provenance
     // identifies equal physical energies. Reuse requires canonical topology
     // and identical per-edge bounds; independent terms must not combine into
     // a larger Cartesian capacity or redistribute their numerator ownership.
-    entries: BTreeMap<ExactCffGenerationKey, GeneratedThreeDExpression>,
     // Losing trials keep only their count, so repeated terms can compare the
     // same complete source capacity without retaining or rebuilding its trees.
-    map_counts: BTreeMap<ExactCffGenerationKey, usize>,
+    entries: GenerationCache<ExactCffGenerationKey, ExactCffGenerationEntry>,
+    pub(crate) native_generations: usize,
+}
+
+impl Default for ExactCffGenerationCache {
+    fn default() -> Self {
+        Self {
+            entries: GenerationCache::new(64 * 1024 * 1024, 4096),
+            native_generations: 0,
+        }
+    }
 }
 
 impl ExactCffGenerationCache {
+    pub(crate) fn statistics(&self) -> (usize, usize, usize, usize) {
+        (
+            self.entries.hits,
+            self.entries.misses,
+            self.entries.evictions,
+            self.entries.retained_bytes(),
+        )
+    }
+
     pub(crate) fn len(&self) -> usize {
-        self.entries.len()
+        self.entries
+            .entries
+            .values()
+            .filter(|entry| entry.value.payload.is_some())
+            .count()
+    }
+
+    fn count(&mut self, key: &ExactCffGenerationKey) -> Option<usize> {
+        self.entries.get(key).map(|entry| entry.count)
+    }
+
+    fn record_count(&mut self, key: ExactCffGenerationKey, count: usize) {
+        let bytes = key.accounted_bytes() * 2 + size_of::<ExactCffGenerationEntry>() + 64;
+        self.entries.insert(
+            key,
+            ExactCffGenerationEntry {
+                count,
+                payload: None,
+            },
+            bytes,
+        );
+    }
+
+    fn record_payload(&mut self, key: ExactCffGenerationKey, payload: &GeneratedThreeDExpression) {
+        let count = payload.expression.orientations.len();
+        let bytes = key.accounted_bytes() * 2
+            + size_of::<ExactCffGenerationEntry>()
+            + 64
+            + Self::payload_bytes(payload);
+        if bytes > self.entries.max_bytes {
+            self.record_count(key, count);
+        } else {
+            self.entries.insert(
+                key,
+                ExactCffGenerationEntry {
+                    count,
+                    payload: Some(payload.clone()),
+                },
+                bytes,
+            );
+        }
+    }
+
+    fn rational_bytes(value: &Rational) -> usize {
+        [value.numerator_ref(), value.denominator_ref()]
+            .into_iter()
+            .map(|integer| {
+                if let symbolica::domains::integer::Integer::Large(value) = integer {
+                    value.significant_bits().div_ceil(8) as usize
+                } else {
+                    0
+                }
+            })
+            .sum()
+    }
+
+    fn vector_bytes<T>(values: &Vec<T>) -> usize {
+        values.capacity() * size_of::<T>()
+    }
+
+    fn energy_bytes(energy: &LinearEnergyExpr) -> usize {
+        Self::vector_bytes(&energy.internal_terms)
+            + Self::vector_bytes(&energy.external_terms)
+            + energy
+                .internal_terms
+                .iter()
+                .chain(&energy.external_terms)
+                .map(|(_, coefficient)| Self::rational_bytes(coefficient))
+                .sum::<usize>()
+            + Self::rational_bytes(&energy.constant)
+            + Self::rational_bytes(&energy.uniform_scale_coeff)
+    }
+
+    fn payload_bytes(payload: &GeneratedThreeDExpression) -> usize {
+        // Native payloads contain rational data and owned trees, not mapped
+        // numerator Atoms. Count owned vector/string capacity once at insertion;
+        // the private tree/EdgeVec containers are cloned to their live length.
+        // No printing, serialization or per-hit traversal is necessary.
+        let expression = &payload.expression;
+        size_of_val(payload)
+            + Self::vector_bytes(&payload.source_energy_degree_bounds)
+            + Self::vector_bytes(&payload.energy_factor_components)
+            + payload
+                .energy_factor_components
+                .iter()
+                .map(|component| Self::vector_bytes(&component.internal_edge_ids))
+                .sum::<usize>()
+            + expression.surfaces.linear_surface_cache.capacity() * size_of::<LinearSurface>()
+            + expression
+                .surfaces
+                .linear_surface_cache
+                .iter()
+                .map(|surface| Self::energy_bytes(&surface.expression))
+                .sum::<usize>()
+            + Self::vector_bytes(&expression.residual_denominators)
+            + expression
+                .residual_denominators
+                .iter()
+                .map(|denominator| denominator.origin.as_ref().map_or(0, String::capacity))
+                .sum::<usize>()
+            + expression.orientations.capacity()
+                * size_of::<three_dimensional_reps::expression::OrientationExpression>()
+            + expression
+                .orientations
+                .iter()
+                .map(|orientation| {
+                    orientation.data.orientation.iter().count()
+                        * size_of::<linnet::half_edge::involution::Orientation>()
+                        + orientation.data.label.as_ref().map_or(0, String::capacity)
+                        + Self::vector_bytes(&orientation.loop_energy_map)
+                        + Self::vector_bytes(&orientation.edge_energy_map)
+                        + orientation
+                            .loop_energy_map
+                            .iter()
+                            .chain(&orientation.edge_energy_map)
+                            .map(Self::energy_bytes)
+                            .sum::<usize>()
+                        + Self::vector_bytes(&orientation.variants)
+                        + orientation
+                            .variants
+                            .iter()
+                            .map(|variant| {
+                                variant.origin.as_ref().map_or(0, String::capacity)
+                                    + Self::rational_bytes(&variant.prefactor)
+                                    + Self::vector_bytes(&variant.half_edges)
+                                    + Self::vector_bytes(&variant.denominator_edges)
+                                    + Self::vector_bytes(&variant.numerator_surfaces)
+                                    + variant.denominator_surface_signs.len()
+                                        * (size_of::<(HybridSurfaceID, i64)>() + 32)
+                                    + variant
+                                        .denominator_edge_support_signs
+                                        .keys()
+                                        .map(|support| {
+                                            size_of::<(Vec<EdgeIndex>, i64)>()
+                                                + Self::vector_bytes(support)
+                                                + 32
+                                        })
+                                        .sum::<usize>()
+                                    + variant
+                                        .denominator
+                                        .iter_nodes()
+                                        .map(|node| {
+                                            size_of_val(node) + Self::vector_bytes(&node.children)
+                                        })
+                                        .sum::<usize>()
+                            })
+                            .sum::<usize>()
+                })
+                .sum::<usize>()
     }
 
     fn generation_key(
@@ -91,26 +450,145 @@ impl ExactCffGenerationCache {
             .into_iter()
             .map(|node| (format!("__gammaloop_exact_node_{node}"), node))
             .collect();
-        (topology, energy_edges.clone(), options.clone())
+        ExactCffGenerationKey {
+            topology,
+            internal_energy_edges: energy_edges.internal.clone(),
+            external_energy_edges: energy_edges.external.clone(),
+            orientation_edge_count: energy_edges.orientation_edge_count,
+            options: options.clone(),
+        }
     }
 }
 
-struct ExactCffGenerationPreparation {
+/// These disjoint identities share one preparation budget and LRU order.
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub(crate) enum PreparationKey {
+    Canonical(Arc<FourDSector>),
+    Source(Arc<ExactCffPreparationKey>),
+    Numerator(super::ExactNumeratorTemplateKey),
+}
+
+pub(crate) enum PreparationValue {
+    Canonical(Arc<CanonicalUvSector>),
+    Source(Arc<ExactCffGenerationPreparation>),
+    Numerator(Arc<super::PlannedExactSourceNumerator>),
+}
+
+#[derive(PartialEq, Eq, Hash)]
+pub(crate) struct ExactCffPreparationKey {
+    pub(super) denominators: Vec<FourDDenominator>,
+    pub(super) uv_edges: Vec<EdgeIndex>,
+    pub(super) boundary_hedges: Vec<Hedge>,
+    pub(super) coordinates: Option<(LoopMomentumBasis, ExactUvSubLmbFrame)>,
+    pub(super) classes: Vec<CanonicalUvDenominatorClass>,
+    pub(super) numerator: Atom,
+    pub(super) options: Generate3DExpressionOptions,
+}
+
+impl ExactCffPreparationKey {
+    pub(super) fn accounted_bytes(&self) -> usize {
+        size_of::<Self>()
+            + self.denominators.capacity() * size_of::<FourDDenominator>()
+            + self
+                .denominators
+                .iter()
+                .map(FourDDenominator::accounted_bytes)
+                .sum::<usize>()
+            + self.uv_edges.capacity() * size_of::<EdgeIndex>()
+            + self.boundary_hedges.capacity() * size_of::<Hedge>()
+            + self
+                .coordinates
+                .as_ref()
+                .map_or(0, |(lmb, _)| lmb.accounted_bytes())
+            + self.classes.capacity() * size_of::<CanonicalUvDenominatorClass>()
+            + self
+                .classes
+                .iter()
+                .map(CanonicalUvDenominatorClass::accounted_bytes)
+                .sum::<usize>()
+            + self.numerator.as_view().get_byte_size()
+            + self
+                .options
+                .energy_degree_bounds
+                .as_ref()
+                .map_or(0, ExactCffGenerationCache::vector_bytes)
+            + ExactCffGenerationCache::vector_bytes(
+                &self.options.preserve_internal_edges_as_four_d_denominators,
+            )
+    }
+}
+
+pub(crate) struct ExactCffGenerationPreparation {
     parsed: ParsedGraph,
     energy_edges: EnergyEdgeIndexMap,
     source_options: Generate3DExpressionOptions,
-    exact_source_energy_mapper: crate::graph::three_d_source::ExactSourceEnergyMapper,
-    energy_assignment_plans: Vec<EnergyPowerAssignmentPlan>,
+    exact_source_energy_mapper: Arc<crate::graph::three_d_source::ExactSourceEnergyMapper>,
+    energy_assignment_plans: Vec<Arc<EnergyPowerAssignmentPlan>>,
     physical_energy_degree_bounds: Vec<(usize, usize)>,
+    pub(super) physical_energy_edges: EnergyEdgeIndexMap,
+    pub(super) physical_cut_support_edges: BTreeMap<usize, Vec<EdgeIndex>>,
+    pub(super) physical_surface_edges: BTreeSet<usize>,
+    pub(super) inverse_energy_product: Atom,
+    pub(super) active_loop_count: usize,
+    pub(super) contract_subgraph: SuBitGraph,
+}
+
+impl ThreeDGraphSource for ExactCffGenerationPreparation {
+    fn to_three_d_parsed_graph(&self) -> three_dimensional_reps::graph_io::Result<ParsedGraph> {
+        Ok(self.parsed.clone())
+    }
+
+    fn energy_edge_index_map(&self, _: &ParsedGraph) -> Option<EnergyEdgeIndexMap> {
+        Some(self.energy_edges.clone())
+    }
+}
+
+impl ExactCffGenerationPreparation {
+    pub(super) fn accounted_bytes(&self) -> Result<usize> {
+        // Charge every Arc payload reachable from this entry independently.
+        // Another preparation may retain the same payload after this is evicted.
+        Ok(size_of::<Self>()
+            + 128
+            + ExactCffGenerationKey {
+                topology: self.parsed.clone(),
+                internal_energy_edges: self.energy_edges.internal.clone(),
+                external_energy_edges: self.energy_edges.external.clone(),
+                orientation_edge_count: self.energy_edges.orientation_edge_count,
+                options: self.source_options.clone(),
+            }
+            .accounted_bytes()
+            + self.exact_source_energy_mapper.accounted_bytes()?
+            + self.energy_assignment_plans.capacity() * size_of::<Arc<EnergyPowerAssignmentPlan>>()
+            + self
+                .energy_assignment_plans
+                .iter()
+                .map(|plan| 32 + plan.accounted_bytes())
+                .sum::<usize>()
+            + self.physical_energy_degree_bounds.capacity() * size_of::<(usize, usize)>()
+            + (self.physical_energy_edges.internal.len()
+                + self.physical_energy_edges.external.len())
+                * 64
+            + self
+                .physical_cut_support_edges
+                .values()
+                .map(|edges| 64 + edges.capacity() * size_of::<EdgeIndex>())
+                .sum::<usize>()
+            + self.physical_surface_edges.len() * 48
+            + self.inverse_energy_product.as_view().get_byte_size()
+            + self.contract_subgraph.size().div_ceil(8)
+            + 32)
+    }
 }
 
 impl Graph {
-    fn prepare_3d_expression_for_4d_term(
+    pub(crate) fn prepare_3d_expression_for_4d_term(
         &self,
         source: &GraphThreeDSource<'_>,
         options: &Generate3DExpressionOptions,
         analysis_numerator: &Atom,
+        classes: &[CanonicalUvDenominatorClass],
     ) -> Result<ExactCffGenerationPreparation> {
+        let preparation_started = Instant::now();
         let source_options = options.clone();
         let initial_state_cut_edges = self
             .iter_edges_of(&self.initial_state_cut)
@@ -146,31 +624,69 @@ impl Graph {
                 ));
             }
         }
+        // This report lives in the physical parent's namespace. Canonical
+        // classes are expanded only for degree reporting, never for dispatch;
+        // remote component classes carry no energy of this source.
+        let degree_analysis_started = Instant::now();
+        let (prepared_numerator, fixed_affine_blocks) =
+            source.prepare_affine_numerator(analysis_numerator)?;
+        let analysis_numerator = &prepared_numerator;
+        let physical_report_numerator = analysis_numerator.replace_map(|view, _, output| {
+            if let AtomView::Fun(denominator) = view
+                && denominator.get_symbol() == GS.den
+                && denominator.get_nargs() == 4
+            {
+                **output = denominator.get(3).to_owned();
+            }
+        });
+        let physical_report_numerator = physical_report_numerator.replace_map(|view, _, output| {
+            let AtomView::Fun(momentum) = view else {
+                return;
+            };
+            if momentum.get_symbol() != GS.emr_mom || momentum.get_nargs() < 2 {
+                return;
+            }
+            let Some(id) = GS.uv_class_data(momentum.get(0)) else {
+                return;
+            };
+            **output = classes
+                .iter()
+                .find(|class| class.id == id)
+                .map_or(Atom::Zero, |class| {
+                    class.momentum_with_indices(
+                        &momentum
+                            .iter()
+                            .skip(1)
+                            .map(|index| index.to_owned())
+                            .collect::<Vec<_>>(),
+                    )
+                });
+        });
         let physical_energy_degree_bounds = self
             .automatic_numerator_energy_degree_bounds_in_atoms_excluding_with_min_degree(
-                [analysis_numerator],
+                [&physical_report_numerator],
                 excluded_numerator_edges.iter().copied(),
                 1,
             )
             .map_err(|error| {
                 eyre::eyre!("could not analyze numerator in physical EMR energy variables: {error}")
             })?;
+        let degree_analysis_ms = degree_analysis_started.elapsed().as_secs_f64() * 1000.0;
         // Parse first so a malformed exact rational source returns its
         // structural error instead of being hidden behind the mapper's
         // optional convenience API.
+        let source_mapping_started = Instant::now();
         let parsed = source.to_three_d_parsed_graph()?;
         let energy_edges = source
             .energy_edge_index_map(&parsed)
             .expect("exact 4D source has an occurrence-local energy map");
-        let exact_source_energy_mapper = source
-            .exact_source_energy_mapper()
-            .expect("exact 4D source has an owned parent-energy mapper");
-        // Exact sources have occurrence-local denominator IDs. Original
-        // factors retain their base occurrence; only denominator-derived hard
-        // factors may use serial copies of that owner. Analyze all physical
-        // active edges first so unused, unrelated candidate groups cannot
-        // reject a constant numerator.
-        let candidates = exact_source_energy_mapper
+        let exact_source_energy_mapper = source.exact_source_energy_mapper(classes)?;
+        // Exact sources have occurrence-local denominator IDs. Physical
+        // originals retain their base occurrence and their derived factors may
+        // use serial copies; canonical UV classes use their certified pools.
+        // Analyze all physical active edges first so unused, unrelated
+        // candidate groups cannot reject a constant numerator.
+        let mut candidates = exact_source_energy_mapper
             .equivalent_energy_candidates(
                 physical_energy_degree_bounds
                     .iter()
@@ -182,11 +698,14 @@ impl Graph {
                     self.name,
                 )
             })?;
+        candidates.fixed_affine_blocks = fixed_affine_blocks;
+        let source_mapping_ms = source_mapping_started.elapsed().as_secs_f64() * 1000.0;
         // Each immutable factor-local plan owns both its exact bounds and the
         // later numerator substitutions. This keeps the numerator factorized
         // and prevents generation from understating the expression actually
         // sampled in a residue or contact sector. Rank proposes a bounded set
         // of plans; the real source map count chooses between them below.
+        let allocation_started = Instant::now();
         let energy_assignment_plans = self
             .plan_numerator_energy_assignment_proposals_in_atom_excluding(
                 analysis_numerator,
@@ -199,6 +718,7 @@ impl Graph {
                     self.name,
                 )
             })?;
+        let allocation_ms = allocation_started.elapsed().as_secs_f64() * 1000.0;
         debug!(
             graph = %self.name,
             physical_energy_degree_bounds = ?physical_energy_degree_bounds,
@@ -206,36 +726,64 @@ impl Graph {
             candidate_bounds = ?energy_assignment_plans.iter().map(|plan| plan.energy_degree_bounds()).collect::<Vec<_>>(),
             "planned factorized exact-CFF numerator energy assignment proposals"
         );
-        Ok(ExactCffGenerationPreparation {
+        let preparation = ExactCffGenerationPreparation {
+            parsed,
+            energy_edges,
+            source_options,
+            exact_source_energy_mapper: Arc::new(exact_source_energy_mapper),
+            energy_assignment_plans: energy_assignment_plans.into_iter().map(Arc::new).collect(),
+            physical_energy_degree_bounds,
+            physical_energy_edges: source
+                .physical_energy_edge_index_map()
+                .expect("exact source has a physical energy projection"),
+            physical_cut_support_edges: source
+                .physical_cut_support_edge_index_map()
+                .expect("exact source has a cut-support projection"),
+            physical_surface_edges: source.physical_surface_energy_edges(),
+            inverse_energy_product: source
+                .exact_inverse_energy_product()
+                .expect("exact source has an inverse energy product"),
+            active_loop_count: source.active_loop_count(),
+            contract_subgraph: source.contract_subgraph(),
+        };
+        crate::debug_tags!(#generation, #uv, #local, #four_d, #cff, #profile;
+            stage = "exact_cff_preparation",
+            graph = %self.name,
+            elapsed_ms = preparation_started.elapsed().as_secs_f64() * 1000.0,
+            degree_analysis_ms,
+            source_mapping_ms,
+            allocation_ms,
+            proposal_count = preparation.energy_assignment_plans.len(),
+            "Prepared factorized energy assignments and certified source mapping"
+        );
+        Ok(preparation)
+    }
+
+    pub(crate) fn generate_3d_expression_for_4d_term(
+        &self,
+        preparation: &ExactCffGenerationPreparation,
+        mut context: Option<&mut Local4dProjectionContext>,
+    ) -> Result<(
+        GeneratedThreeDExpression,
+        Arc<PlannedExactSourceNumerator>,
+        Arc<EnergyPowerAssignmentPlan>,
+        CffEnergyDegreeBoundReport,
+    )> {
+        let ExactCffGenerationPreparation {
             parsed,
             energy_edges,
             source_options,
             exact_source_energy_mapper,
             energy_assignment_plans,
             physical_energy_degree_bounds,
-        })
-    }
-
-    pub(crate) fn generate_3d_expression_for_4d_term(
-        &self,
-        source: &GraphThreeDSource<'_>,
-        options: &Generate3DExpressionOptions,
-        analysis_numerator: &Atom,
-        mut cache: Option<&mut ExactCffGenerationCache>,
-    ) -> Result<(
-        GeneratedThreeDExpression,
-        crate::graph::three_d_source::ExactSourceEnergyMapper,
-        EnergyPowerAssignmentPlan,
-        CffEnergyDegreeBoundReport,
-    )> {
-        let ExactCffGenerationPreparation {
-            parsed,
-            energy_edges,
-            mut source_options,
-            exact_source_energy_mapper,
-            energy_assignment_plans,
-            physical_energy_degree_bounds,
-        } = self.prepare_3d_expression_for_4d_term(source, options, analysis_numerator)?;
+            ..
+        } = preparation;
+        let mut source_options = source_options.clone();
+        let selection_started = std::time::Instant::now();
+        let mut certificate_time = std::time::Duration::ZERO;
+        let mut native_times = BTreeMap::new();
+        let mut template_build_times = BTreeMap::new();
+        let mut template_time = Duration::ZERO;
         let generate = |source_options: &Generate3DExpressionOptions| {
             crate::debug_tags!(#generation, #uv, #local, #four_d, #cff, #profile;
                 graph = %self.name,
@@ -243,30 +791,72 @@ impl Graph {
                 file.parsed_source = ?parsed,
                 "Generating exact CFF at its term-local capacity"
             );
-            three_dimensional_reps::generate_3d_expression(source, source_options).map_err(
+            three_dimensional_reps::generate_3d_expression(preparation, source_options).map_err(
                 |error| {
                     eyre::eyre!(
                         "generalized CFF expression generation failed for exact 4D source in graph `{}` with physical EMR bounds {:?} and term-local exact-occurrence bounds {:?}: {error}\n{}",
                         self.name,
                         physical_energy_degree_bounds,
                         source_options.energy_degree_bounds,
-                        three_d_source_summary(&parsed),
+                        three_d_source_summary(parsed),
                     )
                 },
             )
         };
-        let mut selected: Option<(
+        type Candidate = (
             usize,
-            EnergyPowerAssignmentPlan,
+            Vec<usize>,
+            Arc<PlannedExactSourceNumerator>,
             Option<GeneratedThreeDExpression>,
-        )> = None;
-        for (proposal, plan) in energy_assignment_plans.into_iter().enumerate() {
+        );
+        let mut selected: Option<Candidate> = None;
+        let mut pending = VecDeque::from(energy_assignment_plans.clone());
+        let mut seen_bounds = Vec::new();
+        let mut challenged = false;
+        loop {
+            if pending.is_empty() && !challenged {
+                challenged = true;
+                if let Some((_, _, best, _)) = &selected
+                    && let Some(challenger) = best
+                        .binding
+                        .binding
+                        .assignment
+                        .placement_challenger(&seen_bounds)?
+                {
+                    pending.push_back(Arc::new(challenger));
+                }
+            }
+            let Some(plan) = pending.pop_front() else {
+                break;
+            };
+            let proposal = seen_bounds.len();
+            let certificate_started = std::time::Instant::now();
+            exact_source_energy_mapper.certify_assignment(&plan)?;
+            certificate_time += certificate_started.elapsed();
+            // Preparing the immutable mapper also certifies its exact signed
+            // diagonal, including affine shifts, before any native CFF trial.
+            // A complete binding cache hit reuses that same certified template.
+            let (numerator, build_time, cache_time) = PlannedExactSourceNumerator::prepare(
+                Arc::clone(exact_source_energy_mapper),
+                Arc::clone(&plan),
+                context.as_deref_mut(),
+            )?;
+            template_time += build_time + cache_time;
+            template_build_times.insert(plan.energy_degree_bounds().to_vec(), build_time);
+            seen_bounds.push(plan.energy_degree_bounds().to_vec());
+            let mut rank_envelope = plan
+                .energy_degree_bounds()
+                .iter()
+                .map(|(_, degree)| *degree)
+                .collect::<Vec<_>>();
+            rank_envelope.sort_unstable_by(|left, right| right.cmp(left));
             source_options.energy_degree_bounds = Some(plan.energy_degree_bounds().to_vec());
             let key =
-                ExactCffGenerationCache::generation_key(&parsed, &energy_edges, &source_options);
-            let known_count = cache
-                .as_deref()
-                .and_then(|cache| cache.map_counts.get(&key).copied());
+                ExactCffGenerationCache::generation_key(parsed, energy_edges, &source_options);
+            let known_count = context
+                .as_deref_mut()
+                .map(|context| &mut context.generation_cache)
+                .and_then(|cache| cache.count(&key));
             let started = std::time::Instant::now();
             // A known contender needs no expression until it wins. Generated
             // expressions clone their tree containers; count-only loser records
@@ -274,7 +864,19 @@ impl Graph {
             let generated = if known_count.is_some() {
                 None
             } else {
-                Some(generate(&source_options)?)
+                if let Some(cache) = context
+                    .as_deref_mut()
+                    .map(|context| &mut context.generation_cache)
+                {
+                    cache.native_generations += 1;
+                }
+                let native_started = std::time::Instant::now();
+                let generated = generate(&source_options)?;
+                native_times.insert(
+                    plan.energy_degree_bounds().to_vec(),
+                    native_started.elapsed(),
+                );
+                Some(generated)
             };
             let map_count = known_count.unwrap_or_else(|| {
                 generated
@@ -284,8 +886,12 @@ impl Graph {
                     .orientations
                     .len()
             });
-            if let Some(cache) = cache.as_deref_mut() {
-                cache.map_counts.insert(key, map_count);
+            if known_count.is_none()
+                && let Some(cache) = context
+                    .as_deref_mut()
+                    .map(|context| &mut context.generation_cache)
+            {
+                cache.record_count(key, map_count);
             }
             crate::debug_tags!(#generation, #uv, #local, #four_d, #cff, #profile;
                 graph = %self.name,
@@ -296,21 +902,30 @@ impl Graph {
                 elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
                 "Scored bounded exact-CFF assignment proposal"
             );
-            // Proposal order is the whole-envelope/deterministic tie break.
-            // This finds the best of the bounded proposals, not a global optimum.
+            // Native rows are primary; the descending envelope starts with
+            // maximum rank and supplies the remaining deterministic tie break.
+            // Equal scores retain the earlier admitted candidate. This bounded
+            // search does not claim a global minimum.
             if selected
                 .as_ref()
-                .is_none_or(|(best, _, _)| map_count < *best)
+                .is_none_or(|(best_count, best_envelope, _, _)| {
+                    (map_count, &rank_envelope) < (*best_count, best_envelope)
+                })
             {
-                selected = Some((map_count, plan, generated));
+                selected = Some((map_count, rank_envelope, numerator, generated));
             }
         }
-        let (selected_count, energy_assignment_plan, generated) =
+        let (selected_count, _, numerator, generated) =
             selected.expect("rank planning always provides a baseline assignment");
+        let energy_assignment_plan = Arc::clone(&numerator.binding.binding.assignment);
         source_options.energy_degree_bounds =
             Some(energy_assignment_plan.energy_degree_bounds().to_vec());
-        let key = ExactCffGenerationCache::generation_key(&parsed, &energy_edges, &source_options);
-        let cached = cache.as_deref().and_then(|cache| cache.entries.get(&key));
+        let key = ExactCffGenerationCache::generation_key(parsed, energy_edges, &source_options);
+        let cached = context
+            .as_deref_mut()
+            .map(|context| &mut context.generation_cache)
+            .and_then(|cache| cache.entries.get(&key))
+            .and_then(|entry| entry.payload.as_ref());
         let cache_hit = cached.is_some();
         let generated = if let Some(generated) = generated {
             generated
@@ -319,23 +934,61 @@ impl Graph {
         } else {
             // A previous losing key can win against a different proposal set.
             // Its count was enough to select it; obtain its payload only now.
-            generate(&source_options)?
+            if let Some(cache) = context
+                .as_deref_mut()
+                .map(|context| &mut context.generation_cache)
+            {
+                cache.native_generations += 1;
+            }
+            let native_started = std::time::Instant::now();
+            let generated = generate(&source_options)?;
+            *native_times
+                .entry(energy_assignment_plan.energy_degree_bounds().to_vec())
+                .or_default() += native_started.elapsed();
+            generated
         };
         debug_assert_eq!(generated.expression.orientations.len(), selected_count);
-        if !cache_hit && let Some(cache) = cache {
+        if !cache_hit && let Some(context) = context {
+            let cache = &mut context.generation_cache;
             // Reuse requires both canonical topology and identical occurrence
             // capacity; keep the term's assignment plan unchanged. Retain
-            // only the winner: trial losers never enter the shared cache.
-            cache.entries.insert(key, generated.clone());
+            // only the winning native payload. Losing counts and certified
+            // templates have their own bounded retention.
+            cache.record_payload(key, &generated);
         }
+        let winning_native_time = native_times
+            .get(energy_assignment_plan.energy_degree_bounds())
+            .copied()
+            .unwrap_or_default();
+        let native_time = native_times.values().copied().sum::<std::time::Duration>();
+        let winning_template_build_time = template_build_times
+            .get(energy_assignment_plan.energy_degree_bounds())
+            .copied()
+            .unwrap_or_default();
+        let template_build_time = template_build_times.values().copied().sum::<Duration>();
+        let selection_time = selection_started.elapsed();
+        crate::debug_tags!(#generation, #uv, #local, #four_d, #cff, #profile;
+            stage = "exact_cff_assignment_selection",
+            graph = %self.name,
+            admitted_candidates = seen_bounds.len(),
+            native_rows = selected_count,
+            candidate_certificate_ms = certificate_time.as_secs_f64() * 1000.0,
+            winning_native_ms = winning_native_time.as_secs_f64() * 1000.0,
+            losing_native_ms = (native_time - winning_native_time).as_secs_f64() * 1000.0,
+            winning_template_build_ms = winning_template_build_time.as_secs_f64() * 1000.0,
+            losing_template_build_ms = (template_build_time - winning_template_build_time).as_secs_f64() * 1000.0,
+            selection_overhead_ms = selection_time.saturating_sub(winning_native_time).saturating_sub(certificate_time).saturating_sub(template_time).as_secs_f64() * 1000.0,
+            native_payload_cache_hit = cache_hit,
+            "Selected a certified exact CFF assignment; losing trials count as selection overhead"
+        );
         let energy_degree_bound_report = CffEnergyDegreeBoundReport {
             source_kind: CffEnergyBoundSourceKind::ExactFourD,
-            physical_parent_bounds: physical_energy_degree_bounds,
+            physical_parent_bounds: physical_energy_degree_bounds.clone(),
             assigned_cff_source_bounds: energy_assignment_plan.energy_degree_bounds().to_vec(),
         };
         Ok((
             generated,
-            exact_source_energy_mapper,
+            numerator,
             energy_assignment_plan,
             energy_degree_bound_report,
         ))
@@ -372,6 +1025,7 @@ impl Graph {
         options: &Generate3DExpressionOptions,
         analysis_numerator: Option<&Atom>,
     ) -> Result<GeneratedThreeDExpression> {
+        let request_started = Instant::now();
         let initial_state_cut_edges = self
             .iter_edges_of(&self.initial_state_cut)
             .map(|(_, edge_id, _)| edge_id)
@@ -384,7 +1038,9 @@ impl Graph {
                 source_contract_edges.len()
             );
         }
+        let reconstruction_started = Instant::now();
         let source = GraphThreeDSource::new(self, &source_contract_edges)?;
+        let reconstruction_time = reconstruction_started.elapsed();
         let bridge_edges = self
             .iter_edges_of(&self.tree_edges)
             .map(|(_, edge_id, _)| edge_id)
@@ -457,6 +1113,10 @@ impl Graph {
                 usize::from(edge_id),
             ));
         }
+        let preparation_time = request_started
+            .elapsed()
+            .saturating_sub(reconstruction_time);
+        let native_started = Instant::now();
         let mut generated = {
             let result = three_dimensional_reps::generate_3d_expression(&source, &source_options);
             result.map_err(|error| {
@@ -473,6 +1133,7 @@ impl Graph {
                     )
                 })
         }?;
+        let native_time = native_started.elapsed();
 
         // Generic edge-index remapping leaves omitted parent edges at zero. A
         // contracted edge can still have an exact outer-energy map when its
@@ -526,6 +1187,18 @@ impl Graph {
             }
         }
 
+        let elapsed = request_started.elapsed();
+        crate::debug_tags!(#generation, #cff, #profile;
+            stage = "raw_cff_generation",
+            graph = %self.name,
+            native_source_maps = generated.expression.orientations.len(),
+            elapsed_ms = elapsed.as_secs_f64() * 1000.0,
+            source_reconstruction_ms = reconstruction_time.as_secs_f64() * 1000.0,
+            preparation_ms = preparation_time.as_secs_f64() * 1000.0,
+            native_generation_ms = native_time.as_secs_f64() * 1000.0,
+            postprocessing_ms = elapsed.saturating_sub(reconstruction_time + preparation_time + native_time).as_secs_f64() * 1000.0,
+            "Generated a raw CFF request before surface conversion"
+        );
         Ok(generated)
     }
 
@@ -1144,6 +1817,190 @@ mod tests {
     use symbolica::atom::{AtomCore, FunctionBuilder};
 
     #[test]
+    fn generation_cache_obeys_byte_entry_and_access_order_limits() {
+        let mut cache = GenerationCache::new(10, 2);
+        cache.insert(1, "first", 4);
+        cache.insert(2, "second", 4);
+        assert_eq!(cache.get(&1), Some(&"first"));
+        cache.insert(3, "third", 4);
+        assert_eq!(cache.get(&2), None);
+        assert_eq!(cache.get(&1), Some(&"first"));
+        assert_eq!(cache.get(&3), Some(&"third"));
+
+        cache.insert(4, "oversized", 11);
+        assert_eq!(cache.get(&4), None);
+        cache.insert(3, "replacement", 7);
+        assert_eq!(cache.get(&1), None);
+        assert_eq!(cache.get(&3), Some(&"replacement"));
+        cache.clear();
+        assert_eq!(cache.get(&3), None);
+
+        let mut disabled = GenerationCache::new(0, 10);
+        disabled.insert(1, "uncached", 0);
+        assert_eq!(disabled.get(&1), None);
+    }
+
+    #[test]
+    fn canonical_sunset_allocator_matches_native_small_oracle() -> Result<()> {
+        use crate::{
+            cff::surface::GammaLoopLinearEnergyExpr,
+            numerator::energy_degree::{EnergyPowerAnalyzer, EquivalentEnergyCandidates},
+            utils::symbols::UvDenominatorClassId,
+        };
+        use three_dimensional_reps::{
+            CffGlobalPrefactorSign, MomentumSignature, graph_io::ParsedGraphInternalEdge,
+        };
+
+        test_initialise()?;
+        // Fixed source incidence: two short channels and five serial copies of
+        // the third. This polynomial diagnostic is independent of reconstruction.
+        let parsed = ParsedGraph {
+            internal_edges: [(0, 1, vec![1, 0]), (0, 1, vec![-1, 1])]
+                .into_iter()
+                .chain((1..6).map(|tail| (tail, (tail + 1) % 6, vec![0, 1])))
+                .enumerate()
+                .map(
+                    |(edge_id, (tail, head, loop_signature))| ParsedGraphInternalEdge {
+                        edge_id,
+                        tail,
+                        head,
+                        label: format!("q{edge_id}"),
+                        mass_key: Some("m_uv".into()),
+                        signature: MomentumSignature {
+                            loop_signature,
+                            external_signature: Vec::new(),
+                        },
+                        had_pow: false,
+                    },
+                )
+                .collect(),
+            external_edges: Vec::new(),
+            initial_state_cut_edges: Vec::new(),
+            loop_names: vec!["K0".into(), "K1".into()],
+            external_names: Vec::new(),
+            node_name_to_internal: (0..6).map(|node| (format!("n{node}"), node)).collect(),
+        };
+        let mut options = Generate3DExpressionOptions {
+            cff_generation_context: CffGenerationContext::EmbeddedCffFactor,
+            ..Default::default()
+        };
+        let mut requests = Vec::new();
+        for a in 0..=5 {
+            for b in 0..=5 - a {
+                for c in 0..=5 - a - b {
+                    for d in 0..=5 - a - b - c {
+                        let loads = [a, b, c, d, 5 - a - b - c - d];
+                        let bounds = std::iter::once((0, 1))
+                            .chain(loads.iter().enumerate().filter_map(|(index, degree)| {
+                                (*degree > 0).then_some((index + 2, *degree))
+                            }))
+                            .collect::<Vec<_>>();
+                        requests.push((5, bounds));
+                    }
+                }
+            }
+        }
+        requests.push((7, vec![(0, 1), (2, 7)]));
+
+        let classes = [UvDenominatorClassId(0), UvDenominatorClassId(1)];
+        let mut candidates = EquivalentEnergyCandidates::try_from_source_occurrences([])?;
+        candidates.add_uv_classes([(classes[0], vec![0]), (classes[1], (2..7).collect())])?;
+        let q0 = FunctionBuilder::new(GS.emr_mom)
+            .add_arg(GS.uv_class_ref(classes[0]))
+            .add_arg(GS.cind(0))
+            .finish();
+        let q1 = FunctionBuilder::new(GS.emr_mom)
+            .add_arg(GS.uv_class_ref(classes[1]))
+            .add_arg(GS.cind(0))
+            .finish();
+        let analyzer = EnergyPowerAnalyzer::for_physical_emr_edges([]);
+        for degree in [5, 7] {
+            let plans =
+                analyzer.plan_atom_assignment_proposals(&(&q0 * q1.pow(degree)), &candidates)?;
+            assert!(!plans.is_empty());
+            let seen = plans
+                .iter()
+                .map(|plan| plan.energy_degree_bounds().to_vec())
+                .collect::<Vec<_>>();
+            for plan in plans {
+                requests.push((degree, plan.energy_degree_bounds().to_vec()));
+                if let Some(challenger) = plan.placement_challenger(&seen)? {
+                    requests.push((degree, challenger.energy_degree_bounds().to_vec()));
+                }
+            }
+        }
+        // Compare the complete signed contour for every degree distribution,
+        // including the bounded allocator's proposals. Native row counts and
+        // proposal ordering may change without changing this public value.
+        let energy_replacements = (0..7)
+            .map(|edge| {
+                symbolica::id::Replacement::new(
+                    GS.ose(EdgeIndex(edge)).to_pattern(),
+                    Atom::num(match edge {
+                        0 => 2,
+                        1 => 3,
+                        _ => 7,
+                    })
+                    .to_pattern(),
+                )
+            })
+            .collect::<Vec<_>>();
+        // Integrating k0 first gives -k1/[2 E1 (k1²-(E0+E1)²)].
+        // The remaining Below contour is the negative sum of the simple pole
+        // at E0+E1 and the fifth-order pole at E2. At (E0,E1,E2)=(2,3,7),
+        // these independent residues give the exact values below.
+        for (degree, bounds) in requests {
+            options.energy_degree_bounds = Some(bounds.clone());
+            let generated = three_dimensional_reps::generate_3d_expression(&parsed, &options)?;
+            let surfaces = generated.expression.surfaces.get_all_replacements_gs(&[]);
+            let mut contour = Atom::Zero;
+            for orientation in &generated.expression.orientations {
+                let numerator = bounds
+                    .iter()
+                    .map(|(edge, exponent)| {
+                        orientation.edge_energy_map[*edge]
+                            .to_atom_gs(&[])
+                            .replace_multiple(&energy_replacements)
+                            .pow(*exponent as u64)
+                    })
+                    .product::<Atom>();
+                contour += orientation
+                    .to_atom_gs()
+                    .replace_multiple(&surfaces)
+                    .replace_multiple(&energy_replacements)
+                    * numerator;
+            }
+            let source_sign =
+                generated
+                    .energy_factor_components
+                    .iter()
+                    .fold(1, |sign, component| {
+                        let frame = match component.ownership {
+                            CffEnergyFactorOwnership::GlobalSourceProduct => {
+                                component.core_global_prefactor_sign
+                            }
+                            CffEnergyFactorOwnership::VariantLocal => {
+                                component.denominator_only_global_prefactor_sign
+                            }
+                        };
+                        sign * CffGlobalPrefactorSign::from_exponent(
+                            component.internal_edge_ids.len(),
+                        )
+                        .product(frame)
+                        .factor()
+                    });
+            contour *= Atom::num(source_sign);
+            let expected = match degree {
+                5 => Atom::num(1213) / Atom::num(16_387_080_192i64),
+                7 => -Atom::num(365) / Atom::num(47_775_744),
+                _ => unreachable!(),
+            };
+            assert_eq!(contour, expected, "degree {degree}, bounds {bounds:?}");
+        }
+        Ok(())
+    }
+
+    #[test]
     fn projected_denominator_chains_preserve_occurrence_multiplicity() {
         let local_surfaces = [0, 1, 2, 3].map(LinearSurfaceID);
         let physical_surfaces = [
@@ -1262,16 +2119,15 @@ mod tests {
         let left = GS.emr_mom(owners[0], GS.cind(0));
         let right = GS.emr_mom(owners[1], GS.cind(0));
         let numerators = [left.clone().pow(2), right.clone().pow(2), left * right];
-        let mut cache = ExactCffGenerationCache::default();
+        let mut cache = Local4dProjectionContext::default();
         for numerator in numerators.iter().cycle().take(2 * numerators.len()) {
             let mut values = Vec::new();
             for generation_cache in [Some(&mut cache), None] {
-                let (generated, mapper, plan, _) = graph.generate_3d_expression_for_4d_term(
-                    &source,
-                    &options,
-                    numerator,
-                    generation_cache,
-                )?;
+                let preparation =
+                    graph.prepare_3d_expression_for_4d_term(&source, &options, numerator, &[])?;
+                let (generated, mapper, plan, _) =
+                    graph.generate_3d_expression_for_4d_term(&preparation, generation_cache)?;
+                let mapper = &mapper.mapper;
                 let surfaces = generated.expression.surfaces.get_all_replacements_gs(&[]);
                 let mut value = Atom::Zero;
                 for orientation in &generated.expression.orientations {
@@ -1320,7 +2176,7 @@ mod tests {
         relabelled[1].source_edge = EdgeIndex(0);
         let options = graph.denominator_only_cff_3d_expression_options();
 
-        let mut cache = ExactCffGenerationCache::default();
+        let mut cache = crate::uv::approx::projected_4d::Local4dProjectionContext::default();
         let cutset = CutSet::empty(graph.n_hedges());
         let mut values = Vec::new();
         for denominators in [&denominators, &relabelled] {
@@ -1335,12 +2191,13 @@ mod tests {
                     &options,
                     &Atom::one(),
                     generation_cache,
+                    &[],
                 )?;
                 let mut value = Atom::Zero;
                 for term in cff.terms.values() {
                     for orientation in &term.orientations {
                         value += &orientation.expression
-                            * term.map_exact_source_numerator(&orientation.orientation)?;
+                            * term.map_exact_source_numerator(&orientation.orientation, None)?;
                     }
                 }
                 values.push(value * Atom::num(cff.production_prefactor_factor()));
@@ -1448,14 +2305,29 @@ mod tests {
             // Exercise both source topologies without constraining tie resolution.
             // Compare their complete contours against the independent analytic
             // residues below, rather than mock costs or an envelope formula.
-            let mut cache = ExactCffGenerationCache::default();
-            for phase in ["fresh", "cached", "uncached"] {
+            let mut cache = Local4dProjectionContext::default();
+            for phase in ["fresh", "cached", "uncached", "disabled", "evicted"] {
+                if phase == "disabled" {
+                    cache.generation_cache.entries = GenerationCache::new(0, 0);
+                } else if phase == "evicted" {
+                    cache.generation_cache.entries = GenerationCache::new(64 * 1024 * 1024, 1);
+                    let parsed = source.to_three_d_parsed_graph()?;
+                    let key = ExactCffGenerationCache::generation_key(
+                        &parsed,
+                        &source.energy_edge_index_map(&parsed).unwrap(),
+                        &options,
+                    );
+                    // A different, denominator-only request occupies the sole
+                    // retention slot; the tested bounded request must evict it.
+                    cache.generation_cache.record_count(key, 0);
+                }
+                let preparation =
+                    graph.prepare_3d_expression_for_4d_term(&source, &options, &numerator, &[])?;
                 let (generated, mapper, plan, _) = graph.generate_3d_expression_for_4d_term(
-                    &source,
-                    &options,
-                    &numerator,
+                    &preparation,
                     (phase != "uncached").then_some(&mut cache),
                 )?;
+                let mapper = &mapper.mapper;
 
                 let replacements = generated.expression.surfaces.get_all_replacements_gs(&[]);
                 let mut contour = Atom::Zero;
@@ -1929,7 +2801,7 @@ mod tests {
         );
         let source = GraphThreeDSource::from_exact_denominators(&graph, &denominators)?;
         let mapper = source
-            .exact_source_energy_mapper()
+            .exact_source_energy_mapper(&[])
             .expect("exact source has a physical EMR mapper");
         let candidates = mapper.equivalent_energy_candidates([EdgeIndex(1)])?;
         let plan = graph.plan_numerator_energy_assignment_in_atom_excluding(
@@ -1975,7 +2847,7 @@ mod tests {
                 Ok(&orientation.expression
                     * selected
                         .1
-                        .map_exact_source_numerator(&orientation.orientation)?)
+                        .map_exact_source_numerator(&orientation.orientation, None)?)
             })
             .collect::<Result<Vec<_>>>()?
             .into_iter()

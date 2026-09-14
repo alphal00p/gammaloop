@@ -1,6 +1,7 @@
 #[cfg(test)]
 use crate::cff::CutCFFIndex;
 use crate::{
+    cff::expression::OrientationID,
     debug_tags,
     graph::Graph,
     utils::{GS, W_},
@@ -23,10 +24,12 @@ use idenso::{
     shorthands::metric::MetricSimplifier,
 };
 use linnet::half_edge::subgraph::{Inclusion, SuBitGraph, SubSetLike, SubSetOps};
+use spenso::network::parsing::{AtomStructureExt, StrictTensorFilter};
 use symbolica::{
-    atom::{Atom, AtomCore},
+    atom::{Atom, AtomCore, AtomType, AtomView, Symbol},
     function,
     id::Replacement,
+    symbol,
 };
 use three_dimensional_reps::CffGenerationContext;
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -44,11 +47,75 @@ impl FinalIntegrands {
     }
 
     pub(crate) fn zip_add(self, other: Self) -> Result<Self> {
-        Ok(Self(self.0.zip_add(other.0)?))
+        Ok(Self(self.0.zip_add([other.0])?))
     }
 
+    /// Recover shared numerator factors after all selected forests are assembled.
+    /// Denominator powers and function arguments stay opaque at this boundary.
     pub(crate) fn into_integrands(self) -> Integrands {
-        self.0
+        self.0.map(|atom| {
+            // Collect only complete factors after Taylor and residue mapping.
+            // Opaque powers keep distinct inverse denominators, their owners,
+            // and numerator powers intact; functions keep their arguments intact.
+            // Wrap original functions too so an input using the temporary head
+            // is restored verbatim by the single outer unwrapping pass.
+            let opaque = symbol!("gammalooprs::uv::opaque_factor");
+            let mut occurrence = 0usize;
+            let mut protected = atom.replace_map(|view, context, out| {
+                // Sharing a summed vector across contractions can distribute a
+                // vanishing contracted factor across separately evaluated terms.
+                // Keep these tensor sums local to their original occurrences.
+                let tensor_sum = matches!(view, AtomView::Add(_))
+                    && context.parent_type == Some(AtomType::Mul)
+                    && view.is_tensorial(StrictTensorFilter::ContainsReps);
+                if tensor_sum || matches!(view, AtomView::Pow(_) | AtomView::Fun(_)) {
+                    let mut branch_local = tensor_sum;
+                    view.visitor(&mut |part| {
+                        branch_local |= match part {
+                            AtomView::Pow(power) => !i64::try_from(power.get_base_exp().1)
+                                .is_ok_and(|exponent| exponent >= 0),
+                            AtomView::Fun(fun) => [
+                                OrientationID::symbol(),
+                                GS.theta,
+                                GS.orientation_delta,
+                                Symbol::IF,
+                            ]
+                            .contains(&fun.get_symbol()),
+                            _ => false,
+                        };
+                        !branch_local
+                    });
+                    // Identical inverses must remain inside their branch guards,
+                    // including inverses nested in a function or numerator power.
+                    // Selectors stay with their contributions so independent
+                    // scalar contractions do not become one combined network.
+                    **out = if branch_local {
+                        occurrence += 1;
+                        function!(opaque, view, occurrence)
+                    } else {
+                        function!(opaque, view)
+                    };
+                }
+            });
+            loop {
+                let collected = protected.collect_factors();
+                if collected == protected {
+                    break;
+                }
+                protected = collected;
+            }
+            protected.replace_map(|view, _, out| {
+                if let AtomView::Fun(fun) = view
+                    && fun.get_symbol() == opaque
+                {
+                    out.set_from_view(
+                        &fun.iter()
+                            .next()
+                            .expect("opaque factor has an expression argument"),
+                    );
+                }
+            })
+        })
     }
 }
 
@@ -88,11 +155,25 @@ impl<'a> FinalIntegrandBuilder<'a> {
             "Computed global numerator"
         );
 
+        // Resolve the cograph's color algebra before residue mapping repeats its
+        // momentum numerator. The final pass still closes attached UV/projector
+        // color indices that remain open at this boundary.
         let resnum = graph
             .numerator(&reduced, current.subgraph())
             .get_single_atom()
             .expect("graph numerator should be available")
+            .simplify_color_with(ColorSimplifySettings {
+                simplify_non_color: false,
+                ..Default::default()
+            })
             * global_num;
+        debug_tags!(#generation, #profile, #uv, #numerator, #dump;
+            stage = "final_cograph_numerator_ready",
+            graph = %graph.name,
+            numerator_bytes = resnum.as_view().get_byte_size(),
+            file.atom = %resnum.to_canonical_string(),
+            "Cograph numerator before residue mapping"
+        );
         let localized_integrated = self
             .localizer
             .localize(
@@ -153,8 +234,19 @@ impl<'a> FinalIntegrandBuilder<'a> {
             .numerator(&reduced, current.subgraph())
             .get_single_atom()
             .expect("graph numerator should be available")
+            .simplify_color_with(ColorSimplifySettings {
+                simplify_non_color: false,
+                ..Default::default()
+            })
             * global_num;
         let localizer = self.localizer.with_independent_source_sum();
+        debug_tags!(#generation, #profile, #uv, #numerator, #dump;
+            stage = "final_cograph_numerator_ready",
+            graph = %graph.name,
+            numerator_bytes = resnum.as_view().get_byte_size(),
+            file.atom = %resnum.to_canonical_string(),
+            "Cograph numerator before residue mapping"
+        );
         // Only the projected local-4D route reaches this assembly boundary.
         // Its child Taylor coefficient deliberately omits the untouched
         // cograph; choose its outer CFF per independent sector here, converting
@@ -188,14 +280,14 @@ impl<'a> FinalIntegrandBuilder<'a> {
                 .then_some(edge)
             })
             .collect::<Vec<_>>();
-        let mut selector_free: Option<Integrands> = None;
+        let mut selector_free: Option<Vec<Integrands>> = None;
         for sector in active_sectors {
             if sector.coefficient.is_zero() {
                 // A disabled integrated prefix can deliberately retain a
                 // typed zero sector for later forest replay. Preserve all
                 // allowed cut orders without asking the outer CFF to resolve
                 // a map for an identically zero coefficient.
-                selector_free.get_or_insert_with(|| allowed_zero.clone());
+                selector_free.get_or_insert_with(Vec::new);
                 continue;
             }
             // Choose the soft Taylor routing once with the untouched cograph
@@ -230,8 +322,9 @@ impl<'a> FinalIntegrandBuilder<'a> {
             // branches carry maps and cut orders; consume each map once before
             // adding its value, checking the complete allowed cut-key shape.
             for (_, _, integrands) in localized.iter_orientations() {
-                let sum = selector_free.take().unwrap_or_else(|| allowed_zero.clone());
-                selector_free = Some(sum.zip_add(integrands.clone())?);
+                selector_free
+                    .get_or_insert_with(Vec::new)
+                    .push(integrands.clone());
             }
         }
         // The integrated addback is shared with the direct route. Its localizer
@@ -255,13 +348,14 @@ impl<'a> FinalIntegrandBuilder<'a> {
         // lane: sum them explicitly without ever materializing a selector or
         // traversing another numerator map.
         for (_, _, integrands) in localized_integrated.iter_orientations() {
-            let sum = selector_free.take().unwrap_or_else(|| allowed_zero.clone());
-            selector_free = Some(sum.zip_add(integrands.clone())?);
+            selector_free
+                .get_or_insert_with(Vec::new)
+                .push(integrands.clone());
         }
         let selector_free = selector_free.ok_or_else(|| {
             eyre::eyre!("final 3D UV integrand contains no production energy maps")
         })?;
-        Self::simplify_final(graph, &reduced, selector_free)
+        Self::simplify_final(graph, &reduced, allowed_zero.zip_add(selector_free)?)
     }
 
     /// Normalize an already mapped and selector-assembled final integrand. This
@@ -287,10 +381,15 @@ impl<'a> FinalIntegrandBuilder<'a> {
                 .with(W_.prop_);
             // Preserve the sum of CFF denominators after residue mapping, just
             // as the Taylor stage preserves its separate propagator topologies.
+            atom = atom.replace(GS.dim).with(4).simplify_metrics();
+            debug_tags!(#generation, #profile, #uv, #numerator, #dump;
+                stage = "final_integrand_before_color",
+                graph = %graph.name,
+                numerator_bytes = atom.as_view().get_byte_size(),
+                file.atom = %atom.to_canonical_string(),
+                "Mapped factorized integrand before final color simplification"
+            );
             atom = atom
-                .replace(GS.dim)
-                .with(4)
-                .simplify_metrics()
                 .simplify_color_with(
                     ColorSimplifySettings::default().with_cof_dimension_invariants(),
                 )
@@ -329,6 +428,277 @@ mod tests {
         },
     };
     use linnet::half_edge::subgraph::InternalSubGraph;
+
+    #[test]
+    fn final_integrand_collects_tensor_factors_without_merging_denominators() -> Result<()> {
+        test_initialise()?;
+        let graph: Graph = dot!(digraph factorized_final {
+            edge [num=1 mass=1];
+            node [num=1];
+            a -> b [id=0 lmb_id=0];
+            a -> b [id=1];
+        })?;
+        let index = CutCFFIndex::new_all_none();
+        let (a, b, d1, d2) = symbol!(
+            "final_factor_test::a",
+            "final_factor_test::b",
+            "final_factor_test::D1",
+            "final_factor_test::D2"
+        );
+        let tensor = spenso::tensor!(final_factor_test, spenso::mink!(4, mu));
+        let numerator = &tensor * (Atom::var(a) + b).pow(3);
+        let first = Atom::var(a) / Atom::var(d1).pow(2);
+        let second = Atom::var(b) / Atom::var(d2).pow(3);
+        let distinct = &numerator * &first - &numerator * &second;
+        let factored = &numerator * (&first - &second);
+        let selector = OrientationID(4).atom();
+        // Final expressions expose shared tensor numerators while the original
+        // inverse powers remain separate. Opaque arguments and powers retain
+        // their exact representation, including an input using our local head.
+        // A shared selector belongs to each contribution, not its numerator.
+        for (input, expected) in [
+            (distinct.clone(), factored.clone()),
+            (
+                &numerator * &selector * &first - &numerator * &selector * &second,
+                &numerator * (&selector * &first - &selector * &second),
+            ),
+            (
+                &distinct + &numerator * (&first + &second).pow(2),
+                &numerator * (&first - &second + (&first + &second).pow(2)),
+            ),
+            (
+                function!(symbol!("gammalooprs::uv::opaque_factor"), &distinct),
+                function!(symbol!("gammalooprs::uv::opaque_factor"), &distinct),
+            ),
+            (
+                &tensor * (&first + &second).pow(-1),
+                &tensor * (&first + &second).pow(-1),
+            ),
+            (
+                &tensor * &first
+                    + spenso::tensor!(other_factor_test, spenso::mink!(4, mu)) * &second,
+                &tensor * &first
+                    + spenso::tensor!(other_factor_test, spenso::mink!(4, mu)) * &second,
+            ),
+        ] {
+            let output = FinalIntegrandBuilder::simplify_final(
+                &graph,
+                &graph.full_filter(),
+                [(index, input)].into_iter().collect(),
+            )?
+            .into_integrands();
+            assert_eq!(output, [(index, expected)].into_iter().collect());
+            assert_eq!(
+                FinalIntegrandBuilder::simplify_final(
+                    &graph,
+                    &graph.full_filter(),
+                    output.clone()
+                )?
+                .into_integrands(),
+                output
+            );
+        }
+        let first_forest = FinalIntegrandBuilder::simplify_final(
+            &graph,
+            &graph.full_filter(),
+            [(index, &numerator * &first)].into_iter().collect(),
+        )?;
+        let second_forest = FinalIntegrandBuilder::simplify_final(
+            &graph,
+            &graph.full_filter(),
+            [(index, -&numerator * &second)].into_iter().collect(),
+        )?;
+        assert_eq!(
+            first_forest.zip_add(second_forest)?.into_integrands(),
+            [(index, factored)].into_iter().collect()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn final_factor_collection_preserves_inactive_singular_branches() -> Result<()> {
+        use crate::{
+            cff::expression::OrientationID,
+            integrands::process::{
+                evaluators::{EvaluatorStack, GenericEvaluatorFloat},
+                param_builder::{ParamBuilder, ParamValuePairs},
+            },
+            processes::EvaluatorSettings,
+            settings::global::CompilationOptimizationLevel,
+            utils::F,
+        };
+        use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
+        use spenso::algebra::complex::Complex;
+
+        test_initialise()?;
+        let x = Atom::var(symbol!("final_factor_test::guarded_x"));
+        let wrapper = symbol!("final_factor_test::guarded_wrapper");
+        let argument = symbol!("final_factor_test::guarded_argument");
+        let numerator = (&x + 1).pow(3);
+        let production_ids = [OrientationID(4), OrientationID(9), OrientationID(17)];
+        let orientations = vec![EdgeVec::from_iter([Orientation::Default]); 3];
+        let mut builder = ParamBuilder::new_empty();
+        builder.pairs.residue_map_id = ParamValuePairs::default_from_symbol(GS.residue_map_id);
+        builder.pairs.orientations = [GS.sign(EdgeIndex(0))].into_iter().collect();
+        builder.pairs.additional_params = [x.clone()].into_iter().collect();
+        builder
+            .add_function(wrapper, vec![argument], Atom::var(argument))
+            .map_err(|error| eyre::eyre!(error))?;
+        let parameter_count = builder.pairs.update_ranges();
+        builder.values = vec![vec![Complex::new_re(F(0.0)); parameter_count]];
+
+        // This cut has no contribution from map 17. A shared inverse must stay
+        // within the guards of maps 4 and 9 even when x vanishes on map 17.
+        for (factor, factor_at_two) in [
+            (x.pow(-1), 0.5),
+            ((x.pow(-1) + 1).pow(2), 2.25),
+            (function!(wrapper, x.pow(-1)), 0.5),
+        ] {
+            let source = &numerator
+                * (production_ids[0].atom() * 2 * &factor + production_ids[1].atom() * 3 * &factor);
+            let collected = FinalIntegrands(
+                [(CutCFFIndex::new_all_none(), source.clone())]
+                    .into_iter()
+                    .collect(),
+            )
+            .into_integrands();
+            let finalized = collected.iter().next().unwrap().1;
+            for atom in [&source, finalized] {
+                let (mut stack, _) = EvaluatorStack::new_with_timings(
+                    std::slice::from_ref(atom),
+                    &builder,
+                    &orientations,
+                    &production_ids,
+                    None,
+                    &EvaluatorSettings::default(),
+                )?;
+                for compiled in [false, true] {
+                    if compiled {
+                        stack
+                            .single_parametric
+                            .activate_symjit(CompilationOptimizationLevel::O0)?;
+                    }
+                    for (map_id, input_x, expected) in [
+                        (4, 2.0, 54.0 * factor_at_two),
+                        (9, 2.0, 81.0 * factor_at_two),
+                        (17, 2.0, 0.0),
+                        (17, 0.0, 0.0),
+                    ] {
+                        let mut values = vec![Complex::new_re(F(1.0)); parameter_count];
+                        values[builder.pairs.residue_map_id.value_range.start] =
+                            Complex::new_re(F(map_id as f64));
+                        values[builder.pairs.additional_params.value_range.start] =
+                            Complex::new_re(F(input_x));
+                        assert_eq!(
+                            <f64 as GenericEvaluatorFloat>::get_evaluator_single(
+                                &mut stack.single_parametric
+                            )(&values),
+                            Complex::new_re(F(expected))
+                        );
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn final_factor_collection_preserves_closed_tensor_pairs() -> Result<()> {
+        use crate::{
+            cff::expression::OrientationID,
+            integrands::process::{
+                evaluators::{EvaluatorStack, GenericEvaluatorFloat},
+                param_builder::{ParamBuilder, ParamValuePairs},
+            },
+            processes::EvaluatorSettings,
+            settings::global::CompilationOptimizationLevel,
+            utils::F,
+        };
+        use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
+        use spenso::algebra::complex::Complex;
+        use symbolica::parse_lit;
+
+        test_initialise()?;
+        let index = parse_lit!(spenso::mink(4, 1));
+        let temporal = GS.energy_delta(index.as_view());
+        let v1 = GS.emr_vec_index(EdgeIndex(1), index.as_view()) + GS.ose(EdgeIndex(1)) * &temporal;
+        let v2_minus =
+            GS.emr_vec_index(EdgeIndex(2), index.as_view()) - GS.ose(EdgeIndex(2)) * &temporal;
+        let v2_plus =
+            GS.emr_vec_index(EdgeIndex(2), index.as_view()) + GS.ose(EdgeIndex(2)) * &temporal;
+        let d = Atom::var(symbol!("final_factor_test::closed_pair_denominator"));
+        let numerator = (&d + 1).pow(3);
+        let production_ids = [OrientationID(4), OrientationID(9), OrientationID(17)];
+        let orientations = vec![EdgeVec::from_iter([Orientation::Default]); 3];
+        let first = production_ids[0].atom() * &v1 * &v2_minus * d.pow(-1);
+        let second = production_ids[1].atom() * &v1 * &v2_plus * 3 * d.pow(-2);
+        let source = &numerator * &first + &numerator * &second;
+        let collected = FinalIntegrands(
+            [(CutCFFIndex::new_all_none(), source.clone())]
+                .into_iter()
+                .collect(),
+        )
+        .into_integrands();
+        let finalized = collected.iter().next().unwrap().1;
+        // Recover the shared scalar numerator while each vector pair still
+        // closes within its own branch before finite component evaluation.
+        assert_eq!(*finalized, &numerator * (&first + &second));
+
+        let mut builder = ParamBuilder::new_empty();
+        builder.pairs.residue_map_id = ParamValuePairs::default_from_symbol(GS.residue_map_id);
+        builder.pairs.orientations = [GS.sign(EdgeIndex(0))].into_iter().collect();
+        builder.pairs.additional_params = std::iter::once(d)
+            .chain((1..=2).flat_map(|edge| {
+                (1..=3).map(move |component| GS.emr_mom(EdgeIndex(edge), GS.cind(component)))
+            }))
+            .chain([GS.ose(EdgeIndex(1)), GS.ose(EdgeIndex(2))])
+            .collect();
+        let parameter_count = builder.pairs.update_ranges();
+        builder.values = vec![vec![Complex::new_re(F(0.0)); parameter_count]];
+        for atom in [&source, finalized] {
+            let (mut stack, _) = EvaluatorStack::new_with_timings(
+                std::slice::from_ref(atom),
+                &builder,
+                &orientations,
+                &production_ids,
+                None,
+                &EvaluatorSettings::default(),
+            )?;
+            for compiled in [false, true] {
+                if compiled {
+                    stack
+                        .single_parametric
+                        .activate_symjit(CompilationOptimizationLevel::O0)?;
+                }
+                // For q1=(3,4,0), q2=(-3,-4,0), E1=5, the contractions
+                // are 25-5*E2 and 25+5*E2. The scalar numerator at D=2 is 27.
+                for (map_id, input_d, e2, expected) in [
+                    (4, 2.0, 5.0, 0.0),
+                    (4, 2.0, 4.0, 67.5),
+                    (9, 2.0, 5.0, 1012.5),
+                    (17, 2.0, 5.0, 0.0),
+                    (17, 0.0, 5.0, 0.0),
+                ] {
+                    let mut values = vec![Complex::new_re(F(1.0)); parameter_count];
+                    values[builder.pairs.residue_map_id.value_range.start] =
+                        Complex::new_re(F(map_id as f64));
+                    for (slot, value) in values[builder.pairs.additional_params.value_range.clone()]
+                        .iter_mut()
+                        .zip([input_d, 3.0, 4.0, 0.0, -3.0, -4.0, 0.0, 5.0, e2])
+                    {
+                        *slot = Complex::new_re(F(value));
+                    }
+                    assert_eq!(
+                        <f64 as GenericEvaluatorFloat>::get_evaluator_single(
+                            &mut stack.single_parametric
+                        )(&values),
+                        Complex::new_re(F(expected))
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
 
     #[test]
     fn projected_zero_sectors_preserve_cut_orders_without_energy_maps() -> Result<()> {
@@ -406,7 +776,10 @@ mod tests {
         )?;
         assert!(zero_local.atom().is_zero());
         let produced = Projected4dApproximation::new(localizer, &mut graph, &settings)
-            .project_local_4d(&zero_local)?;
+            .project_local_4d(
+                &zero_local,
+                &mut crate::uv::approx::projected_4d::Local4dProjectionContext::default(),
+            )?;
         assert_eq!(
             builder
                 .build_projected(&mut graph, &current, &produced, &IntegratedCts::root())?
@@ -420,7 +793,10 @@ mod tests {
             "a pruned local zero must preserve every allowed cut order without energy maps",
         );
         let missing_maps = Projected4dApproximation::new(localizer, &mut graph, &settings)
-            .project_local_4d(&Local4dCts::root())
+            .project_local_4d(
+                &Local4dCts::root(),
+                &mut crate::uv::approx::projected_4d::Local4dProjectionContext::default(),
+            )
             .expect_err("a nonzero local source still requires production maps");
         assert!(
             missing_maps

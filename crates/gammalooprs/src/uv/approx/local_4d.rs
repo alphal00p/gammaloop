@@ -1,17 +1,15 @@
-use std::ops::Neg;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    ops::Neg,
+    time::{Duration, Instant},
+};
 
 use color_eyre::Result;
 use eyre::eyre;
 use gammaloop_tracing_filter::debug_instrument;
 use idenso::{
-    color::ColorSimplifier,
-    dirac::{AGS, GammaSimplifier},
-    representations::Bispinor,
-    shorthands::{
-        chain::Chain,
-        metric::MetricSimplifier,
-        schoonschip::{Schoonschip, SchoonschipSettings},
-    },
+    dirac::AGS,
+    shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip},
 };
 
 #[cfg(test)]
@@ -20,17 +18,16 @@ use linnet::half_edge::{
     involution::EdgeIndex,
     subgraph::{Inclusion, InternalSubGraph, SuBitGraph, SubSetLike},
 };
-use spenso::shadowing::TensorCollectExt;
 use symbolica::{
     atom::{AtomCore, AtomView},
     prelude::*,
 };
 
-use crate::utils::symbols::UvMomentumProvenanceRole;
+use crate::utils::symbols::{UvDenominatorClassId, UvMomentumProvenanceRole};
 use crate::{
     debug_tags,
     graph::{FourDDenominator, Graph, LMBext, LoopMomentumBasis},
-    numerator::{aind::Aind, ufo::UFO},
+    numerator::ufo::UFO,
     utils::{GS, W_},
     uv::{
         ApproximationType, UltravioletGraph,
@@ -38,6 +35,7 @@ use crate::{
         marker::{UvMarker, UvOperation},
     },
 };
+use three_dimensional_reps::MomentumSignature;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct FourDSector {
@@ -69,7 +67,184 @@ pub(crate) struct FourDTerm {
     pub(crate) denominators: Vec<FourDDenominator>,
 }
 
+/// Representation-neutral algebra of a completed sector. Raw Taylor sectors
+/// remain authoritative for subsequent outer Taylor operations.
+#[derive(Clone, Debug)]
+pub(crate) struct CanonicalUvSector {
+    pub(crate) terms: Vec<CanonicalUvTerm>,
+    pub(crate) classes: Vec<CanonicalUvDenominatorClass>,
+    pub(crate) active_components: Vec<(SuBitGraph, SuBitGraph, LoopMomentumBasis)>,
+    pub(crate) frozen_lmbs: Vec<LoopMomentumBasis>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct CanonicalUvDenominatorClass {
+    pub(crate) id: UvDenominatorClassId,
+    pub(crate) component: usize,
+    pub(crate) momentum: Atom,
+    pub(crate) signature: MomentumSignature,
+    pub(crate) mass_squared: Atom,
+    /// The exact denominator polynomial also distinguishes any prescription
+    /// carried by the input. The current UV source uses the shared Feynman
+    /// prescription; canonicalization introduces no new prescription convention.
+    pub(crate) full_expr: Atom,
+    pub(crate) members: BTreeSet<EdgeIndex>,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct CanonicalUvTerm {
+    pub(crate) numerator: Atom,
+    /// Factorized raw numerator witness, used only for the exact projection
+    /// certificate and physical-parent diagnostics. Its provenance does not
+    /// participate in canonical algebra or occurrence allocation.
+    pub(crate) source_numerator: Atom,
+    pub(crate) powers: BTreeMap<UvDenominatorClassId, usize>,
+    /// Physical incidence is independent of algebraic class identity. Equal
+    /// buckets retain one witness, never concatenate their denominator lists.
+    pub(crate) source_witness: Vec<FourDDenominator>,
+    /// Aligned with `source_witness`; sign means raw momentum = sign * class
+    /// momentum. None denotes a residual or component-loop-independent factor.
+    pub(crate) source_classes: Vec<Option<(UvDenominatorClassId, i32)>>,
+}
+
+type CanonicalUvAlgebraKey = (
+    BTreeMap<UvDenominatorClassId, usize>,
+    Vec<(EdgeIndex, Atom, Atom, Atom)>,
+);
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct UvDenominatorClassKey {
+    component: usize,
+    signature: MomentumSignature,
+    mass_squared: Atom,
+    full_expr: Atom,
+}
+
+impl CanonicalUvDenominatorClass {
+    pub(crate) fn accounted_bytes(&self) -> usize {
+        std::mem::size_of::<Self>()
+            + [&self.momentum, &self.mass_squared, &self.full_expr]
+                .into_iter()
+                .map(|atom| atom.as_view().get_byte_size())
+                .sum::<usize>()
+            + (self.signature.loop_signature.capacity()
+                + self.signature.external_signature.capacity())
+                * std::mem::size_of::<i32>()
+            + self.members.len() * 48
+    }
+
+    pub(crate) fn momentum(signature: &MomentumSignature, lmb: &LoopMomentumBasis) -> Atom {
+        signature
+            .loop_signature
+            .iter()
+            .zip(&lmb.loop_edges)
+            .chain(signature.external_signature.iter().zip(&lmb.ext_edges))
+            .filter(|(coefficient, _)| **coefficient != 0)
+            .fold(Atom::Zero, |sum, (coefficient, edge)| {
+                sum + Atom::num(*coefficient) * function!(GS.emr_mom, usize::from(*edge))
+            })
+    }
+
+    pub(crate) fn momentum_with_indices(&self, indices: &[Atom]) -> Atom {
+        GS.indexed_momentum(&self.momentum, indices)
+    }
+
+    fn polynomial_in_class(&self, lmb: &LoopMomentumBasis) -> Result<Atom> {
+        let (axis, coefficient) = self
+            .signature
+            .loop_signature
+            .iter()
+            .enumerate()
+            .find(|(_, coefficient)| **coefficient != 0)
+            .ok_or_else(|| eyre!("UV class {} has no active loop coordinate", self.id.0))?;
+        let carrier = usize::from(lmb.loop_edges[crate::momentum::sample::LoopIndex(axis)]);
+        let remainder = &self.momentum - Atom::num(*coefficient) * function!(GS.emr_mom, carrier);
+        // This invertible coordinate change acts only on the denominator
+        // polynomial. It recovers one formal H even when D(H) was expanded in
+        // physical loop coordinates, without splitting a numerator factor.
+        let polynomial = self
+            .full_expr
+            .replace_map(|view, _, output| {
+                let AtomView::Fun(momentum) = view else {
+                    return;
+                };
+                if momentum.get_symbol() != GS.emr_mom
+                    || momentum.get_nargs() == 0
+                    || usize::try_from(momentum.get(0)).ok() != Some(carrier)
+                {
+                    return;
+                }
+                let indices = momentum
+                    .iter()
+                    .skip(1)
+                    .map(|index| index.to_owned())
+                    .collect::<Vec<_>>();
+                let mut reference =
+                    FunctionBuilder::new(GS.emr_mom).add_arg(GS.uv_class_ref(self.id));
+                for index in &indices {
+                    reference = reference.add_arg(index);
+                }
+                **output = (reference.finish() - GS.indexed_momentum(&remainder, &indices))
+                    / Atom::num(*coefficient);
+            })
+            .normalize_dots()
+            .expand();
+        let mut residual = false;
+        let collapsed = polynomial
+            .replace_map(|view, _, output| {
+                let AtomView::Fun(momentum) = view else {
+                    return;
+                };
+                if momentum.get_symbol() != GS.emr_mom || momentum.get_nargs() == 0 {
+                    return;
+                }
+                if GS.uv_class_data(momentum.get(0)) != Some(self.id) {
+                    residual = true;
+                    return;
+                }
+                let indices = momentum
+                    .iter()
+                    .skip(1)
+                    .map(|index| index.to_owned())
+                    .collect::<Vec<_>>();
+                **output = self.momentum_with_indices(&indices);
+            })
+            .normalize_dots()
+            .expand();
+        if residual || collapsed != self.full_expr {
+            return Err(eyre!(
+                "positive denominator for UV class {} is not a polynomial solely in its certified momentum channel",
+                self.id.0
+            ));
+        }
+        Ok(polynomial)
+    }
+}
+
 impl FourDSector {
+    pub(crate) fn accounted_bytes(&self) -> usize {
+        std::mem::size_of::<Self>()
+            + self.atom.as_view().get_byte_size()
+            + self.active_components.capacity()
+                * std::mem::size_of::<(SuBitGraph, SuBitGraph, LoopMomentumBasis)>()
+            + self
+                .active_components
+                .iter()
+                .map(|(owners, scope, lmb)| {
+                    owners.size().div_ceil(8)
+                        + scope.size().div_ceil(8)
+                        + 64
+                        + lmb.accounted_bytes()
+                })
+                .sum::<usize>()
+            + self.frozen_lmbs.capacity() * std::mem::size_of::<LoopMomentumBasis>()
+            + self
+                .frozen_lmbs
+                .iter()
+                .map(LoopMomentumBasis::accounted_bytes)
+                .sum::<usize>()
+    }
+
     pub(crate) fn new(
         atom: Atom,
         active_components: Vec<(SuBitGraph, SuBitGraph, LoopMomentumBasis)>,
@@ -82,6 +257,7 @@ impl FourDSector {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn frozen_lmbs(&self) -> &[LoopMomentumBasis] {
         &self.frozen_lmbs
     }
@@ -92,6 +268,528 @@ impl FourDSector {
             .replace(GS.integrated_loop_scale)
             .with(Atom::one());
         FourDTerm::from_view(physical_atom.as_view())
+    }
+
+    /// Normalize only a projection-owned copy, with class membership resolved
+    /// separately in each rational term and independent component frame.
+    pub(crate) fn canonical_projection(&self, graph: &Graph) -> Result<CanonicalUvSector> {
+        let terms = self.physical_terms()?;
+        let mut classes = BTreeMap::<UvDenominatorClassKey, BTreeSet<EdgeIndex>>::new();
+        let mut term_keys = Vec::with_capacity(terms.len());
+        for term in &terms {
+            let mut keys = Vec::with_capacity(term.denominators.len());
+            for denominator in &term.denominators {
+                let components = self
+                    .active_components
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, (owners, _, _))| {
+                        owners.includes(&graph[&denominator.source_edge].1)
+                    })
+                    .map(|(component, _)| component)
+                    .collect::<Vec<_>>();
+                let component = match components.as_slice() {
+                    [] => {
+                        keys.push(None);
+                        continue;
+                    }
+                    [component] => *component,
+                    _ => {
+                        return Err(eyre!(
+                            "4D denominator owner {} belongs to overlapping active Taylor components {:?}",
+                            usize::from(denominator.source_edge),
+                            components
+                        ));
+                    }
+                };
+                let signature = denominator
+                    .momentum_signature_in_lmb(&self.active_components[component].2, true)?;
+                if signature
+                    .loop_signature
+                    .iter()
+                    .all(|coefficient| *coefficient == 0)
+                {
+                    keys.push(None);
+                    continue;
+                }
+                let (signature, sign) = signature.canonical_up_to_sign();
+                let key = UvDenominatorClassKey {
+                    component,
+                    signature,
+                    mass_squared: denominator.mass_squared.clone(),
+                    full_expr: denominator
+                        .polynomial_in_lmb(&self.active_components[component].2)?,
+                };
+                classes
+                    .entry(key.clone())
+                    .or_default()
+                    .insert(denominator.source_edge);
+                keys.push(Some((key, sign)));
+            }
+            term_keys.push(keys);
+        }
+        let ids = classes
+            .keys()
+            .cloned()
+            .enumerate()
+            .map(|(index, key)| (key, UvDenominatorClassId(index)))
+            .collect::<BTreeMap<_, _>>();
+        let classes = classes
+            .into_iter()
+            .map(|(key, members)| CanonicalUvDenominatorClass {
+                id: ids[&key],
+                component: key.component,
+                momentum: CanonicalUvDenominatorClass::momentum(
+                    &key.signature,
+                    &self.active_components[key.component].2,
+                ),
+                signature: key.signature,
+                mass_squared: key.mass_squared,
+                full_expr: key.full_expr,
+                members,
+            })
+            .collect();
+        let mut canonical = CanonicalUvSector {
+            terms: Vec::new(),
+            classes,
+            active_components: self.active_components.clone(),
+            frozen_lmbs: self.frozen_lmbs.clone(),
+        };
+        for (term, keys) in terms.into_iter().zip(term_keys) {
+            let source_classes = keys
+                .into_iter()
+                .map(|key| key.map(|(key, sign)| (ids[&key], sign)))
+                .collect::<Vec<_>>();
+            let mut powers = BTreeMap::new();
+            for (class, _) in source_classes.iter().flatten() {
+                *powers.entry(*class).or_default() += 1;
+            }
+            let mut term = CanonicalUvTerm {
+                source_numerator: term.numerator.clone(),
+                numerator: term.numerator,
+                powers,
+                source_witness: term.denominators,
+                source_classes,
+            };
+            let neutral = canonical.neutral_numerator(&term.numerator, graph)?;
+            term.numerator = canonical.normalize_numerator(&term.numerator, &term, graph)?;
+            let projected_neutral = canonical.neutral_numerator(&term.numerator, graph)?;
+            // A signed linear momentum can acquire a factored minus sign at
+            // this boundary. Normalize each operand independently only when
+            // their structural forms differ. Distribute numeric coefficients
+            // only; products and powers of graph numerators remain factorized.
+            if projected_neutral != neutral
+                && projected_neutral.expand_num().collect_factors()
+                    != neutral.expand_num().collect_factors()
+            {
+                crate::debug_tags!(#generation, #uv, #local, #four_d, #trace;
+                    file.source_numerator = %neutral,
+                    file.projected_numerator = %projected_neutral,
+                    "Canonical UV numerator certificate failed"
+                );
+                return Err(eyre!(
+                    "canonical UV numerator does not reproduce its source in the component frame"
+                ));
+            }
+            canonical.terms.push(term);
+        }
+        canonical.merge_terms();
+        for term in &canonical.terms {
+            let projected_neutral = canonical.neutral_numerator(&term.numerator, graph)?;
+            let neutral = canonical.neutral_numerator(&term.source_numerator, graph)?;
+            if projected_neutral != neutral
+                && projected_neutral.expand_num().collect_factors()
+                    != neutral.expand_num().collect_factors()
+            {
+                return Err(eyre!(
+                    "merged canonical UV numerator does not reproduce its source bucket"
+                ));
+            }
+        }
+        Ok(canonical)
+    }
+}
+
+impl CanonicalUvSector {
+    pub(crate) fn accounted_bytes(&self) -> usize {
+        std::mem::size_of::<Self>()
+            + self.terms.capacity() * std::mem::size_of::<CanonicalUvTerm>()
+            + self
+                .terms
+                .iter()
+                .map(|term| {
+                    term.numerator.as_view().get_byte_size()
+                        + term.source_numerator.as_view().get_byte_size()
+                        + term.powers.len() * 64
+                        + term.source_witness.capacity() * std::mem::size_of::<FourDDenominator>()
+                        + term
+                            .source_witness
+                            .iter()
+                            .map(FourDDenominator::accounted_bytes)
+                            .sum::<usize>()
+                        + term.source_classes.capacity()
+                            * std::mem::size_of::<Option<(UvDenominatorClassId, i32)>>()
+                })
+                .sum::<usize>()
+            + self.classes.capacity() * std::mem::size_of::<CanonicalUvDenominatorClass>()
+            + self
+                .classes
+                .iter()
+                .map(CanonicalUvDenominatorClass::accounted_bytes)
+                .sum::<usize>()
+            + self.active_components.capacity()
+                * std::mem::size_of::<(SuBitGraph, SuBitGraph, LoopMomentumBasis)>()
+            + self
+                .active_components
+                .iter()
+                .map(|(owners, scope, lmb)| {
+                    owners.size().div_ceil(8)
+                        + scope.size().div_ceil(8)
+                        + 64
+                        + lmb.accounted_bytes()
+                })
+                .sum::<usize>()
+            + self.frozen_lmbs.capacity() * std::mem::size_of::<LoopMomentumBasis>()
+            + self
+                .frozen_lmbs
+                .iter()
+                .map(LoopMomentumBasis::accounted_bytes)
+                .sum::<usize>()
+    }
+
+    pub(crate) fn class(&self, id: UvDenominatorClassId) -> &CanonicalUvDenominatorClass {
+        &self.classes[id.0]
+    }
+
+    /// Exact diagonal certificate in the retained component frames. Positive
+    /// typed denominators unwrap only in this proof copy, never in the source.
+    pub(crate) fn neutral_numerator(&self, atom: &Atom, graph: &Graph) -> Result<Atom> {
+        let mut error = None;
+        let result = atom.replace_map(|view, _, output| {
+            let AtomView::Fun(momentum) = view else {
+                return;
+            };
+            if momentum.get_symbol() != GS.emr_mom || momentum.get_nargs() < 2 {
+                return;
+            }
+            let indices = momentum
+                .iter()
+                .skip(1)
+                .map(|index| index.to_owned())
+                .collect::<Vec<_>>();
+            if let Some(class) = GS.uv_class_data(momentum.get(0)) {
+                if let Some(class) = self.classes.get(class.0) {
+                    **output = class.momentum_with_indices(&indices);
+                } else {
+                    error = Some(eyre!(
+                        "canonical UV numerator refers to an unknown class {}",
+                        class.0
+                    ));
+                }
+                return;
+            }
+            let Some((owner, role, hard)) = GS.uv_momentum_provenance_data(momentum.get(0)) else {
+                return;
+            };
+            if role == UvMomentumProvenanceRole::DenominatorDerivedSoft {
+                return;
+            }
+            let components = self
+                .active_components
+                .iter()
+                .filter(|(owners, _, _)| owners.includes(&graph[&owner].1))
+                .collect::<Vec<_>>();
+            let [(_, _, lmb)] = components.as_slice() else {
+                return;
+            };
+            let descriptor = FourDDenominator {
+                source_edge: owner,
+                momentum: hard,
+                mass_squared: Atom::Zero,
+                full_expr: Atom::Zero,
+            };
+            match descriptor.momentum_signature_in_lmb(lmb, true) {
+                Ok(signature) => {
+                    **output = GS.indexed_momentum(
+                        &CanonicalUvDenominatorClass::momentum(&signature, lmb),
+                        &indices,
+                    )
+                }
+                Err(err) => error = Some(err.into()),
+            }
+        });
+        if let Some(error) = error {
+            return Err(error);
+        }
+        let result = result.replace_map(|view, _, output| {
+            let AtomView::Fun(denominator) = view else {
+                return;
+            };
+            if denominator.get_symbol() != GS.den || denominator.get_nargs() != 4 {
+                return;
+            }
+            let component = if let Some(class) = GS.uv_class_data(denominator.get(0)) {
+                self.classes.get(class.0).map(|class| class.component)
+            } else if let Ok(owner) = usize::try_from(denominator.get(0)).map(EdgeIndex) {
+                self.active_components
+                    .iter()
+                    .position(|(owners, _, _)| owners.includes(&graph[&owner].1))
+            } else {
+                None
+            };
+            let full_expr = denominator.get(3).to_owned();
+            **output = if let Some(component) = component {
+                let descriptor = FourDDenominator {
+                    source_edge: EdgeIndex(0),
+                    momentum: Atom::Zero,
+                    mass_squared: Atom::Zero,
+                    full_expr,
+                };
+                match descriptor.polynomial_in_lmb(&self.active_components[component].2) {
+                    Ok(full_expr) => full_expr,
+                    Err(err) => {
+                        error = Some(err);
+                        return;
+                    }
+                }
+            } else {
+                full_expr
+            };
+        });
+        // Signed frame changes can leave opposite additive factors, including
+        // bases of integer powers. Choose one literal base without expanding
+        // numerator products or powers. Power bases are handled at the power
+        // node so fractional powers retain their branch-sensitive original form.
+        let mut result = result;
+        loop {
+            let normalized = result.replace_map_bottom_up(|view, context, output| {
+                if matches!(view, AtomView::Add(_))
+                    && context.parent_type != Some(symbolica::atom::AtomType::Pow)
+                {
+                    let base = view.to_owned().expand_num();
+                    let opposite = (-&base).expand_num();
+                    **output = if opposite < base { -opposite } else { base };
+                    return;
+                }
+                let AtomView::Pow(power) = view else {
+                    return;
+                };
+                let Ok(exponent) = i64::try_from(power.get_exp()) else {
+                    return;
+                };
+                if !matches!(power.get_base(), AtomView::Add(_)) {
+                    return;
+                }
+                let base = power.get_base().to_owned().expand_num();
+                let opposite = (-&base).expand_num();
+                if opposite < base {
+                    **output =
+                        Atom::num(if exponent % 2 == 0 { 1 } else { -1 }) * opposite.pow(exponent);
+                }
+            });
+            // An extracted sign can expose numerical content to its parent on
+            // the next pass. Stop at structural equality, retaining products
+            // and compressed powers throughout normalization.
+            if normalized == result {
+                break;
+            }
+            result = normalized;
+        }
+        match error {
+            Some(error) => Err(error),
+            None => Ok(result),
+        }
+    }
+
+    fn normalize_numerator(
+        &self,
+        atom: &Atom,
+        term: &CanonicalUvTerm,
+        graph: &Graph,
+    ) -> Result<Atom> {
+        let normalize = |view: AtomView<'_>| -> Result<Option<Atom>> {
+            let AtomView::Fun(function) = view else {
+                return Ok(None);
+            };
+            if function.get_symbol() == GS.den && function.get_nargs() == 4 {
+                let Ok(owner) = usize::try_from(function.get(0)).map(EdgeIndex) else {
+                    return Ok(None);
+                };
+                let descriptor = FourDDenominator {
+                    source_edge: owner,
+                    momentum: GS.erase_uv_momentum_provenance(&function.get(1).to_owned()),
+                    mass_squared: function.get(2).to_owned(),
+                    full_expr: GS.erase_uv_momentum_provenance(&function.get(3).to_owned()),
+                };
+                for class in term.powers.keys().map(|class| self.class(*class)) {
+                    let (owners, _, lmb) = &self.active_components[class.component];
+                    if !owners.includes(&graph[&owner].1)
+                        || class.mass_squared != descriptor.mass_squared
+                    {
+                        continue;
+                    }
+                    let signature = descriptor
+                        .momentum_signature_in_lmb(lmb, true)?
+                        .canonical_up_to_sign()
+                        .0;
+                    if signature == class.signature
+                        && descriptor.polynomial_in_lmb(lmb)? == class.full_expr
+                    {
+                        let full_expr = class.polynomial_in_class(lmb)?;
+                        return Ok(Some(GS.den(
+                            GS.uv_class_ref(class.id),
+                            &class.momentum,
+                            &class.mass_squared,
+                            full_expr,
+                        )));
+                    }
+                }
+                // An unmatched positive block keeps its physical owner and
+                // polynomial together, including all existing provenance.
+                return Ok(Some(view.to_owned()));
+            }
+            if function.get_symbol() != GS.emr_mom || function.get_nargs() < 2 {
+                return Ok(None);
+            }
+            let (owner, role, hard) = if let Some(provenance) =
+                GS.uv_momentum_provenance_data(function.get(0))
+            {
+                provenance
+            } else {
+                if matches!(function.get(0), AtomView::Fun(tag) if tag.get_symbol() == GS.uv_momentum_provenance)
+                {
+                    return Err(eyre!(
+                        "unfinished or malformed UV momentum provenance in completed projection: {}",
+                        function.get(0).to_owned()
+                    ));
+                }
+                return Ok(None);
+            };
+            if !matches!(
+                role,
+                UvMomentumProvenanceRole::TaylorFixed
+                    | UvMomentumProvenanceRole::DenominatorDerived
+            ) {
+                return Ok(None);
+            }
+            let components = self
+                .active_components
+                .iter()
+                .enumerate()
+                .filter(|(_, (owners, _, _))| owners.includes(&graph[&owner].1))
+                .map(|(component, _)| component)
+                .collect::<Vec<_>>();
+            let [component] = components.as_slice() else {
+                return Ok(None);
+            };
+            let descriptor = FourDDenominator {
+                source_edge: owner,
+                momentum: hard,
+                mass_squared: Atom::Zero,
+                full_expr: Atom::Zero,
+            };
+            let signature = descriptor
+                .momentum_signature_in_lmb(&self.active_components[*component].2, true)?;
+            let (signature, sign) = signature.canonical_up_to_sign();
+            let candidates = term
+                .powers
+                .keys()
+                .copied()
+                .filter(|class| {
+                    self.class(*class).component == *component
+                        && self.class(*class).signature == signature
+                })
+                .collect::<BTreeSet<_>>();
+            let matching = if candidates.len() <= 1 {
+                candidates
+            } else {
+                // Equal channels with different masses remain different pools.
+                // Prefer the original surviving owner;
+                // an ambiguous pinched factor stays a fixed affine carrier.
+                term.source_witness
+                    .iter()
+                    .zip(&term.source_classes)
+                    .filter(|(denominator, _)| denominator.source_edge == owner)
+                    .filter_map(|(_, class)| class.map(|(id, _)| id))
+                    .filter(|class| candidates.contains(class))
+                    .collect::<BTreeSet<_>>()
+            };
+            let reference = if matching.len() == 1 {
+                GS.uv_class_ref(*matching.first().unwrap())
+            } else {
+                // A pinched hard carrier has no pole family. Keep its exact
+                // affine payload fixed for the source-coordinate mapper.
+                let hard = CanonicalUvDenominatorClass::momentum(
+                    &signature,
+                    &self.active_components[*component].2,
+                );
+                GS.uv_momentum_provenance_tag(
+                    usize::from(owner),
+                    UvMomentumProvenanceRole::PhysicalSourceFixed,
+                    &hard,
+                )
+            };
+            let mut momentum = FunctionBuilder::new(GS.emr_mom).add_arg(reference);
+            for index in function.iter().skip(1) {
+                momentum = momentum.add_arg(index);
+            }
+            Ok(Some(Atom::num(sign) * momentum.finish()))
+        };
+        let mut error = None;
+        let normalized = atom.replace_map(|view, _, output| {
+            if error.is_none() {
+                match normalize(view) {
+                    Ok(Some(value)) => **output = value,
+                    Ok(None) => {}
+                    Err(err) => error = Some(err),
+                }
+            }
+        });
+        match error {
+            Some(error) => Err(error),
+            None => Ok(normalized),
+        }
+    }
+
+    fn merge_terms(&mut self) {
+        let mut buckets = BTreeMap::new();
+        for term in std::mem::take(&mut self.terms) {
+            let key = term.algebra_key();
+            match buckets.entry(key) {
+                std::collections::btree_map::Entry::Vacant(entry) => {
+                    entry.insert(term);
+                }
+                std::collections::btree_map::Entry::Occupied(mut entry) => {
+                    entry.get_mut().numerator += term.numerator;
+                    entry.get_mut().source_numerator += term.source_numerator;
+                }
+            }
+        }
+        self.terms = buckets
+            .into_values()
+            .filter(|term| !term.numerator.is_zero())
+            .collect();
+    }
+}
+
+impl CanonicalUvTerm {
+    fn algebra_key(&self) -> CanonicalUvAlgebraKey {
+        let mut residual = self
+            .source_witness
+            .iter()
+            .zip(&self.source_classes)
+            .filter(|(_, class)| class.is_none())
+            .map(|(denominator, _)| {
+                (
+                    denominator.source_edge,
+                    denominator.momentum.clone(),
+                    denominator.mass_squared.clone(),
+                    denominator.full_expr.clone(),
+                )
+            })
+            .collect::<Vec<_>>();
+        residual.sort();
+        (self.powers.clone(), residual)
     }
 }
 
@@ -336,6 +1034,24 @@ impl Local4dCts {
         &self.0.active
     }
 
+    /// Combine only identical integration bindings, retaining raw recursive
+    /// sectors for the next Taylor operation. First occurrence order is stable.
+    pub(crate) fn projection_sectors(&self) -> Vec<FourDSector> {
+        let mut sectors: Vec<FourDSector> = Vec::new();
+        let mut indices = std::collections::HashMap::<_, usize>::new();
+        for sector in &self.0.active {
+            let key = (&sector.active_components, &sector.frozen_lmbs);
+            if let Some(index) = indices.get(&key).copied() {
+                sectors[index].atom += &sector.atom;
+            } else {
+                indices.insert(key, sectors.len());
+                sectors.push(sector.clone());
+            }
+        }
+        sectors.retain(|sector| !sector.atom.is_zero());
+        sectors
+    }
+
     #[cfg(test)]
     pub(crate) fn recursive_completion(&self) -> &[FourDSector] {
         &self.0.recursive_completion
@@ -354,6 +1070,44 @@ impl FourDTerm {
         left.numerator *= right.numerator;
         left.denominators.extend(right.denominators);
         left
+    }
+
+    fn group(terms: impl IntoIterator<Item = Self>) -> Vec<Self> {
+        let mut buckets = BTreeMap::new();
+        for mut term in terms {
+            term.denominators.sort_by_cached_key(|denominator| {
+                (
+                    denominator.source_edge,
+                    denominator.momentum.clone(),
+                    denominator.mass_squared.clone(),
+                    denominator.full_expr.clone(),
+                )
+            });
+            let key = term
+                .denominators
+                .iter()
+                .map(|denominator| {
+                    (
+                        denominator.source_edge,
+                        denominator.momentum.clone(),
+                        denominator.mass_squared.clone(),
+                        denominator.full_expr.clone(),
+                    )
+                })
+                .collect::<Vec<_>>();
+            match buckets.entry(key) {
+                std::collections::btree_map::Entry::Vacant(entry) => {
+                    entry.insert(term);
+                }
+                std::collections::btree_map::Entry::Occupied(mut entry) => {
+                    entry.get_mut().numerator += term.numerator;
+                }
+            }
+        }
+        buckets
+            .into_values()
+            .filter(|term| !term.numerator.is_zero())
+            .collect()
     }
 
     pub(super) fn from_view(view: AtomView<'_>) -> Result<Vec<Self>> {
@@ -377,34 +1131,43 @@ impl FourDTerm {
                     .into_iter()
                     .flatten()
                     .collect::<Vec<_>>();
-                let common_denominators = terms[0].denominators.clone();
-                if terms
-                    .iter()
-                    .all(|term| term.denominators == common_denominators)
-                {
-                    Ok(vec![Self {
-                        numerator: terms
-                            .into_iter()
-                            .fold(Atom::Zero, |sum, term| sum + term.numerator),
-                        denominators: common_denominators,
-                    }])
-                } else {
-                    Ok(terms)
-                }
+                Ok(Self::group(terms))
             }
             AtomView::Mul(mul) => {
                 let mut products = vec![Self::numerator(Atom::one())];
                 for factor in mul.iter() {
                     let factor_terms = Self::from_view(factor)?;
-                    products = products
-                        .into_iter()
-                        .flat_map(|left| {
-                            factor_terms
-                                .iter()
-                                .cloned()
-                                .map(move |right| Self::product(left.clone(), right))
-                        })
-                        .collect();
+                    products = Self::group(products.into_iter().flat_map(|left| {
+                        factor_terms
+                            .iter()
+                            .cloned()
+                            .map(move |right| Self::product(left.clone(), right))
+                    }));
+                }
+                Ok(products)
+            }
+            AtomView::Pow(power) if power.get_base().contains_symbol(GS.den) => {
+                let (base, exponent) = power.get_base_exp();
+                if !matches!(base, AtomView::Add(_) | AtomView::Mul(_)) {
+                    return Ok(vec![Self::from_factorized_term(view)?]);
+                }
+                let Ok(exponent) = usize::try_from(exponent) else {
+                    return Ok(vec![Self::from_factorized_term(view)?]);
+                };
+                let factors = Self::from_view(base)?;
+                if factors.iter().all(|term| term.denominators.is_empty()) {
+                    return Ok(vec![Self::numerator(view.to_owned())]);
+                }
+                // Multiply rational shells only. Positive denominator blocks
+                // and denominator-free numerator powers remain opaque above.
+                let mut products = vec![Self::numerator(Atom::one())];
+                for _ in 0..exponent {
+                    products = Self::group(products.into_iter().flat_map(|left| {
+                        factors
+                            .iter()
+                            .cloned()
+                            .map(move |right| Self::product(left.clone(), right))
+                    }));
                 }
                 Ok(products)
             }
@@ -441,6 +1204,47 @@ impl FourDTerm {
 }
 
 impl FourDDenominator {
+    pub(crate) fn polynomial_in_lmb(&self, lmb: &LoopMomentumBasis) -> Result<Atom> {
+        let mut error = None;
+        let normalized = self.full_expr.replace_map(|view, _, output| {
+            let AtomView::Fun(momentum) = view else {
+                return;
+            };
+            if momentum.get_symbol() != GS.emr_mom || momentum.get_nargs() < 1 {
+                return;
+            }
+            let Ok(owner) = usize::try_from(momentum.get(0)).map(EdgeIndex) else {
+                return;
+            };
+            let descriptor = FourDDenominator {
+                source_edge: owner,
+                momentum: function!(GS.emr_mom, usize::from(owner)),
+                mass_squared: Atom::Zero,
+                full_expr: Atom::Zero,
+            };
+            match descriptor.momentum_signature_in_lmb(lmb, true) {
+                Ok(signature) => {
+                    let indices = momentum
+                        .iter()
+                        .skip(1)
+                        .map(|index| index.to_owned())
+                        .collect::<Vec<_>>();
+                    **output = GS.indexed_momentum(
+                        &CanonicalUvDenominatorClass::momentum(&signature, lmb),
+                        &indices,
+                    );
+                }
+                Err(err) => error = Some(err.into()),
+            }
+        });
+        if let Some(error) = error {
+            return Err(error);
+        }
+        // Only the small denominator polynomial is expanded. Graph numerator
+        // sums and products never pass through this denominator certificate.
+        Ok(normalized.normalize_dots().expand())
+    }
+
     fn from_view(view: AtomView<'_>) -> Result<Option<Self>> {
         let AtomView::Fun(function) = view else {
             return Ok(None);
@@ -788,6 +1592,7 @@ fn grow<S: super::ForestNodeLike>(
         .graph
         .numerator(&reduced, given.subgraph())
         .to_d_dim(GS.dim)
+        .color_simplify()
         .get_single_atom()
         .unwrap();
 
@@ -863,52 +1668,10 @@ fn t<S: super::ForestNodeLike>(
     let evalutated = series.replace(GS.rescale).with(Atom::num(1));
     debug_tags!(#uv,#integrated,#series;log.res = evalutated, "Evaluated at t = 1");
 
-    let collected = evalutated
-        .simplify_metrics()
-        .collect_rep((Bispinor {}).into())
-        .collect_gamma_chains();
-    debug_tags!(#uv,#integrated,#collect;log.expr = collected, "After gamma chain collection");
-
-    let schoonschip = collected
-        .schoonschip_with_settings(&SchoonschipSettings {
-            simplify_chain_like_functions: true,
-            schoonschip_rank1_tensors: true,
-            ..Default::default()
-        })
-        .normalize_chains();
-    debug_tags!(#uv, #integrated, #profile, #trace, #start, #collect;
-        log.expr = schoonschip,
-        "After gamma schoonschip"
-    );
-    // Keep each Taylor term's propagator powers. Collecting factors across the
-    // sum clears denominators and manufactures higher-rank numerator factors.
-    let collected = schoonschip
-        .collect_chains_and_traces()
-        .simplify_metrics()
-        .collect_gamma_chains()
-        .collect_color();
-    debug_tags!(#uv, #integrated, #profile, #trace, #start, #collect;
-        log.expr = collected,
-        "After gamma collection"
-    );
-
-    let simplified = collected.simplify_gamma();
-    debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #start, #gamma;
-        log.expr = simplified,
-        "After gamma simplification"
-    );
-    let schoonschipped = simplified.schoonschip_net::<Aind>()?;
-    debug_tags!(#uv, #integrated, #vakint, #profile, #trace,#schoonschip, #start;
-        log.expr = schoonschipped,
-        "After Schoonschip net"
-    );
-    let dotted = schoonschipped.to_dots().normalize_dots();
-    debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #dots;
-        log.expr = dotted,
-        "After dots"
-    );
-
-    Ok((dotted, lmb.clone()))
+    // Keep the local Taylor numerator factorized through exact CFF projection.
+    // Analytic integration owns its Dirac algebra in integrated::simplify;
+    // numerical evaluation contracts the retained tensors after residue mapping.
+    Ok((evalutated.simplify_metrics(), lmb.clone()))
 }
 
 pub(crate) fn uv_limit<S: ForestNodeLike, M: ForestNodeLike>(
@@ -919,6 +1682,8 @@ pub(crate) fn uv_limit<S: ForestNodeLike, M: ForestNodeLike>(
     marker_current: &M,
     marker_given: &M,
 ) -> Result<Local4dCts> {
+    let started = Instant::now();
+    let mut taylor_time = Duration::ZERO;
     match current.renormalization_scheme() {
         ApproximationType::MUV | ApproximationType::PolePart => {
             if ctx.settings.generate_integrated {
@@ -1023,6 +1788,7 @@ pub(crate) fn uv_limit<S: ForestNodeLike, M: ForestNodeLike>(
                         retained_loop_edges.len()
                     ));
                 }
+                let taylor_started = Instant::now();
                 let (result, coordinate_lmb) = t(
                     &grown,
                     ctx,
@@ -1031,6 +1797,7 @@ pub(crate) fn uv_limit<S: ForestNodeLike, M: ForestNodeLike>(
                     &retained_loop_edges,
                     expected_prefix_loops,
                 )?;
+                taylor_time += taylor_started.elapsed();
                 // Exact residues must use the very coordinates in which T
                 // produced their hard momenta. Rebuilding a canonical quotient
                 // LMB here can choose an equivalent but differently spelled
@@ -1103,7 +1870,21 @@ pub(crate) fn uv_limit<S: ForestNodeLike, M: ForestNodeLike>(
             // T is linear. Summing the individually framed sectors preserves the
             // aggregate compatibility atom without inventing one coordinate LMB
             // for a disconnected product.
-            Ok(Local4dCts(FourDSectors::new(sectors, Vec::new())))
+            let local = Local4dCts(FourDSectors::new(sectors, Vec::new()));
+            let elapsed = started.elapsed();
+            debug_tags!(#generation, #uv, #local, #four_d, #profile;
+                stage = "local_4d_construction",
+                graph = %ctx.graph.name,
+                current = %current.log_display(),
+                given = %given.log_display(),
+                elapsed_ms = elapsed.as_secs_f64() * 1000.0,
+                taylor_ms = taylor_time.as_secs_f64() * 1000.0,
+                construction_overhead_ms = elapsed.saturating_sub(taylor_time).as_secs_f64() * 1000.0,
+                input_sectors = integrand.0.active.len() + integrand.0.recursive_completion.len(),
+                output_sectors = local.0.active.len() + local.0.recursive_completion.len(),
+                "Constructed factorized local-4D Taylor sectors"
+            );
+            Ok(local)
         }
         atype => Err(eyre!("Not yet implemented {:?}", atype)),
     }
@@ -1115,17 +1896,476 @@ mod tests {
 
     use super::*;
     use crate::{
-        cff::generation::ExactCffGenerationCache,
         dot,
         graph::{Graph, GraphThreeDSource, parse::IntoGraph},
         initialisation::test_initialise,
-        numerator::energy_degree::EnergyPowerAnalyzer,
+        numerator::{aind::Aind, energy_degree::EnergyPowerAnalyzer},
+        uv::approx::projected_4d::Local4dProjectionContext,
         uv::{Spinney, UVgenerationSettings, hedge_poset::OwnedForestNode},
+    };
+    use idenso::{
+        color::ColorSimplifier,
+        dirac::GammaSimplifier,
+        representations::{Bispinor, ColorAdjoint},
     };
     use linnet::half_edge::involution::EdgeIndex;
     use linnet::half_edge::subgraph::{InternalSubGraph, SubSetOps};
     use spenso::structure::representation::{LibraryRep, Minkowski, RepName};
     use symbolica::{domains::rational::Rational, function, symbol};
+
+    #[test]
+    fn rational_shell_groups_mixed_multisets_without_expanding_numerators() -> Result<()> {
+        test_initialise()?;
+        let (a, b, c, x) = symbol!(
+            "uv_bucket::a",
+            "uv_bucket::b",
+            "uv_bucket::c",
+            "uv_bucket::x"
+        );
+        let denominator = GS.den(0, function!(GS.emr_mom, 0), 1, Atom::var(x));
+        let factorized = (Atom::var(a) + b).pow(5) * (Atom::var(c) + x);
+        let expression = (Atom::var(a) / denominator.pow(2) + Atom::var(b) / denominator.pow(3))
+            * &factorized
+            + Atom::var(c) / denominator.pow(2);
+        let square = (Atom::var(a) / denominator.pow(2) + Atom::var(b) / denominator.pow(3)).pow(2);
+        let other = GS.den(1, function!(GS.emr_mom, 1), 1, Atom::var(x));
+        let mut first =
+            FourDTerm::from_view((Atom::var(a) / (&denominator * &other)).as_view())?.remove(0);
+        let mut opposite = first.clone();
+        opposite.denominators.reverse();
+        opposite.numerator = -&opposite.numerator;
+        let cancelled = FourDTerm::group([first.clone(), opposite]);
+        first.numerator = factorized.clone();
+        for (terms, expected) in [
+            (
+                FourDTerm::from_view(expression.as_view())?,
+                (Atom::var(a) * &factorized + c) / denominator.pow(2)
+                    + Atom::var(b) * &factorized / denominator.pow(3),
+            ),
+            (
+                FourDTerm::from_view(square.as_view())?,
+                Atom::var(a).pow(2) / denominator.pow(4)
+                    + Atom::num(2) * a * b / denominator.pow(5)
+                    + Atom::var(b).pow(2) / denominator.pow(6),
+            ),
+            (cancelled, Atom::Zero),
+            (
+                FourDTerm::group([first]),
+                factorized / (&denominator * other),
+            ),
+        ] {
+            let reconstructed = terms.into_iter().fold(Atom::Zero, |sum, term| {
+                let denominators =
+                    term.denominators
+                        .into_iter()
+                        .fold(Atom::one(), |product, denominator| {
+                            product
+                                * GS.den(
+                                    usize::from(denominator.source_edge),
+                                    denominator.momentum,
+                                    denominator.mass_squared,
+                                    denominator.full_expr,
+                                )
+                        });
+                sum + term.numerator / denominators
+            });
+            assert_eq!(reconstructed, expected);
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn canonical_uv_classes_certify_signed_aliases_and_preserve_raw_sectors() -> Result<()> {
+        test_initialise()?;
+        let graph: Graph = dot!(digraph canonical_signed_triangle {
+            edge [num=1 mass=1]
+            node [num=1]
+            a -> b [id=0 lmb_id=0]
+            b -> c [id=1]
+            c -> a [id=2]
+        })?;
+        let owners = graph.full_filter();
+        let hard = |owner| function!(GS.emr_mom, owner);
+        let component = |owner| function!(GS.emr_mom, owner, GS.cind(0));
+        let tagged = |owner, sign, role| {
+            function!(
+                GS.emr_mom,
+                GS.uv_momentum_provenance_tag(owner, role, Atom::num(sign) * hard(owner)),
+                GS.cind(0)
+            )
+        };
+        let den = |owner, sign, mass| {
+            GS.den(
+                owner,
+                Atom::num(sign) * hard(owner),
+                mass,
+                component(owner).pow(2) - mass,
+            )
+        };
+        let positive = den(0, 1, 1);
+        let negative = den(1, -1, 1);
+        let fixed = tagged(0, 1, UvMomentumProvenanceRole::TaylorFixed);
+        let derived = tagged(1, -1, UvMomentumProvenanceRole::DenominatorDerived);
+        let soft = tagged(2, 1, UvMomentumProvenanceRole::DenominatorDerivedSoft);
+        let physical = tagged(2, 1, UvMomentumProvenanceRole::PhysicalSourceFixed);
+        let spectator = &soft + &physical;
+        let atom = (&fixed + &spectator) / &positive + (-derived + &spectator) / &negative;
+        let sector = FourDSector::new(
+            atom.clone(),
+            vec![(owners.clone(), owners, graph.loop_momentum_basis.clone())],
+            vec![],
+        );
+        let projection = sector.canonical_projection(&graph)?;
+        assert_eq!(sector.atom, atom);
+        let expected =
+            Atom::num(2) * (Atom::num(2) * component(0) + soft) / (component(0).pow(2) - 1);
+        let unequal = FourDSector::new(
+            fixed / positive + tagged(1, 1, UvMomentumProvenanceRole::TaylorFixed) / den(1, 1, 2),
+            sector.active_components.clone(),
+            vec![],
+        )
+        .canonical_projection(&graph)?;
+        let unequal_expected =
+            component(0) / (component(0).pow(2) - 1) + component(0) / (component(0).pow(2) - 2);
+        for (projection, expected) in [(projection, expected), (unequal, unequal_expected)] {
+            let reconstructed =
+                projection
+                    .terms
+                    .iter()
+                    .try_fold(Atom::Zero, |sum, term| -> Result<Atom> {
+                        let denominator =
+                            term.powers
+                                .iter()
+                                .fold(Atom::one(), |product, (id, power)| {
+                                    product * projection.class(*id).full_expr.pow(*power)
+                                });
+                        Ok(sum
+                            + projection.neutral_numerator(&term.numerator, &graph)? / denominator)
+                    })?;
+            assert!(
+                (reconstructed - expected)
+                    .expand_num()
+                    .collect_factors()
+                    .is_zero()
+            );
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn canonical_uv_signed_multiloop_carriers_preserve_factorized_numerators() -> Result<()> {
+        test_initialise()?;
+        let graph: Graph = dot!(digraph canonical_signed_sunset {
+            edge [num=1 mass=1]
+            node [num=1]
+            a -> b [id=0 lmb_id=0]
+            a -> b [id=1 lmb_id=1]
+            a -> b [id=2]
+        })?;
+        let hard = -function!(GS.emr_mom, 0) - function!(GS.emr_mom, 1);
+        let component = GS.indexed_momentum(&hard, &[GS.cind(0)]);
+        let opaque =
+            (Atom::var(symbol!("signed_multiloop::a")) + symbol!("signed_multiloop::b")).pow(5);
+        let tagged = |sign| {
+            function!(
+                GS.emr_mom,
+                GS.uv_momentum_provenance_tag(
+                    2,
+                    UvMomentumProvenanceRole::TaylorFixed,
+                    Atom::num(sign) * &hard,
+                ),
+                GS.cind(0)
+            )
+        };
+        let positive = GS.den(2, &hard, 1, component.pow(2) - 1);
+        let negative = GS.den(2, -&hard, 1, (-&component).pow(2) - 1);
+        let atom = tagged(1) * &opaque / positive.pow(2) - tagged(-1) * &opaque / negative.pow(2);
+        let owners = graph.full_filter();
+        let sector = FourDSector::new(
+            atom,
+            vec![(owners.clone(), owners, graph.loop_momentum_basis.clone())],
+            vec![],
+        );
+        let canonical = sector.canonical_projection(&graph)?;
+        let reconstructed =
+            canonical
+                .terms
+                .iter()
+                .try_fold(Atom::Zero, |sum, term| -> Result<Atom> {
+                    let denominator = term
+                        .powers
+                        .iter()
+                        .fold(Atom::one(), |product, (id, power)| {
+                            product * canonical.class(*id).full_expr.pow(*power)
+                        });
+                    Ok(sum + canonical.neutral_numerator(&term.numerator, &graph)? / denominator)
+                })?;
+        let expected = Atom::num(2) * &component * opaque / (component.pow(2).expand() - 1).pow(2);
+        assert_eq!(
+            reconstructed.collect_factors(),
+            canonical
+                .neutral_numerator(&expected, &graph)?
+                .collect_factors()
+        );
+        let base = Atom::var(symbol!("signed_multiloop::a")) - symbol!("signed_multiloop::b");
+        let factor =
+            (Atom::var(symbol!("signed_multiloop::c")) + symbol!("signed_multiloop::d")).pow(5);
+        let left = Atom::num(2) * &factor * &base + Atom::num(3) * &factor;
+        let right = -Atom::num(2) * &factor * (-&base).expand_num() + Atom::num(3) * &factor;
+        let normalized = canonical.neutral_numerator(&left, &graph)?;
+        assert_eq!(normalized, canonical.neutral_numerator(&right, &graph)?);
+        assert_eq!(
+            normalized,
+            canonical.neutral_numerator(&normalized, &graph)?
+        );
+        for exponent in [-3_i64, 2, 3, 500_000] {
+            let first = canonical.neutral_numerator(&base.pow(exponent), &graph)?;
+            let opposite = Atom::num(if exponent % 2 == 0 { 1 } else { -1 })
+                * (-&base).expand_num().pow(exponent);
+            assert_eq!(first, canonical.neutral_numerator(&opposite, &graph)?);
+            assert_eq!(first, canonical.neutral_numerator(&first, &graph)?);
+        }
+        let fractional = base.pow(Atom::num(1) / Atom::num(2));
+        assert_eq!(
+            fractional,
+            canonical.neutral_numerator(&fractional, &graph)?
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn canonical_uv_positive_blocks_and_absent_poles_keep_their_roles() -> Result<()> {
+        test_initialise()?;
+        let graph: Graph = dot!(digraph canonical_positive_triangle {
+            edge [num=1 mass=1]
+            node [num=1]
+            a -> b [id=0 lmb_id=0]
+            b -> c [id=1]
+            c -> a [id=2]
+        })?;
+        let owners = graph.full_filter();
+        let den = |owner| {
+            GS.den(
+                owner,
+                function!(GS.emr_mom, owner),
+                1,
+                function!(GS.emr_mom, owner, GS.cind(0)).pow(2) - 1,
+            )
+        };
+        let tag = GS.uv_momentum_provenance_tag(
+            2,
+            UvMomentumProvenanceRole::TaylorFixed,
+            function!(GS.emr_mom, 2),
+        );
+        let tagged = function!(GS.emr_mom, tag, GS.cind(0));
+        let bindings = vec![(owners.clone(), owners, graph.loop_momentum_basis.clone())];
+        let projection = FourDSector::new((den(0) + 1) / den(1).pow(2), bindings.clone(), vec![])
+            .canonical_projection(&graph)?;
+        let q = function!(GS.emr_mom, 0, GS.cind(0));
+        let expected = q.pow(2) / (q.pow(2) - 1).pow(2);
+        let no_pole = FourDSector::new(tagged, bindings, vec![]).canonical_projection(&graph)?;
+        for (projection, expected) in [(projection, expected), (no_pole, q)] {
+            let reconstructed =
+                projection
+                    .terms
+                    .iter()
+                    .try_fold(Atom::Zero, |sum, term| -> Result<Atom> {
+                        let denominator =
+                            term.powers
+                                .iter()
+                                .fold(Atom::one(), |product, (id, power)| {
+                                    product * projection.class(*id).full_expr.pow(*power)
+                                });
+                        Ok(sum
+                            + projection.neutral_numerator(&term.numerator, &graph)? / denominator)
+                    })?;
+            assert_eq!(reconstructed, expected);
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn canonical_positive_denominator_recovers_one_class_from_expanded_coordinates() -> Result<()> {
+        test_initialise()?;
+        let graph: Graph = dot!(digraph canonical_positive_sunset {
+            edge [num=1 mass=1]
+            node [num=1]
+            a -> b [id=0 lmb_id=0]
+            a -> b [id=1 lmb_id=1]
+            a -> b [id=2]
+        })?;
+        let owners = graph.full_filter();
+        let bindings = vec![(owners.clone(), owners, graph.loop_momentum_basis.clone())];
+        let momentum = function!(GS.emr_mom, 2);
+        let q = |owner| function!(GS.emr_mom, owner, GS.cind(0));
+        // Expand only this denominator polynomial; the numerator's outer
+        // positive block remains opaque throughout projection.
+        let expanded = (q(0) + q(1)).pow(2).expand() - 1;
+        let positive = GS.den(2, &momentum, 1, &expanded);
+        let negative = GS.den(2, &momentum, 1, q(2).pow(2) - 1);
+        let projection =
+            FourDSector::new((positive + 1) / negative.pow(2), bindings.clone(), vec![])
+                .canonical_projection(&graph)?;
+        let reconstructed =
+            projection
+                .terms
+                .iter()
+                .try_fold(Atom::Zero, |sum, term| -> Result<Atom> {
+                    let denominator =
+                        term.powers
+                            .iter()
+                            .fold(Atom::one(), |product, (id, power)| {
+                                product * projection.class(*id).full_expr.pow(*power)
+                            });
+                    Ok(sum + projection.neutral_numerator(&term.numerator, &graph)? / denominator)
+                })?;
+        // Normalize numeric coefficients while keeping numerator products and powers factorized.
+        assert_eq!(
+            reconstructed.expand_num(),
+            ((&expanded + 1) / expanded.pow(2)).expand_num()
+        );
+
+        let inconsistent = GS.den(2, momentum, 1, q(0).pow(2) - 1);
+        let error = FourDSector::new((&inconsistent + 1) / inconsistent.pow(2), bindings, vec![])
+            .canonical_projection(&graph)
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("not a polynomial solely in its certified momentum channel")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn projection_sector_grouping_preserves_frozen_domains_and_recursion() -> Result<()> {
+        test_initialise()?;
+        let graph: Graph = dot!(digraph canonical_sector_triangle {
+            edge [num=1 mass=1]
+            node [num=1]
+            a -> b [id=0 lmb_id=0]
+            b -> c [id=1]
+            c -> a [id=2]
+        })?;
+        let owners = graph.full_filter();
+        let bindings = vec![(owners.clone(), owners, graph.loop_momentum_basis.clone())];
+        let first = FourDSector::new(Atom::num(2), bindings.clone(), vec![]);
+        let second = FourDSector::new(Atom::num(3), bindings.clone(), vec![]);
+        let frozen = FourDSector::new(
+            Atom::num(7),
+            bindings,
+            vec![graph.loop_momentum_basis.clone()],
+        );
+        let completion = FourDSector::new(Atom::num(11), vec![], vec![]);
+        let local = Local4dCts(FourDSectors::new(
+            vec![first.clone(), second, frozen.clone()],
+            vec![completion.clone()],
+        ));
+        let projection = local.projection_sectors();
+        let projected_value = projection.iter().fold(Atom::Zero, |sum, sector| {
+            let frozen_factor = sector.frozen_lmbs.iter().fold(Atom::one(), |product, lmb| {
+                product * GS.localizing_integrand(lmb)
+            });
+            sum + &sector.atom * frozen_factor
+        });
+        assert_eq!(
+            projected_value,
+            Atom::num(5) + Atom::num(7) * GS.localizing_integrand(&graph.loop_momentum_basis)
+        );
+        assert_eq!(local.atom(), &Atom::num(23));
+        assert_eq!(
+            Full4dCts::from_factorized_local(&local)
+                .0
+                .all()
+                .fold(Atom::Zero, |sum, sector| sum + &sector.atom),
+            Atom::num(23)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn cancelling_projection_sectors_preserve_final_cut_orders_without_energy_maps() -> Result<()> {
+        use crate::{
+            cff::esurface::RaisedEsurfaceGroup,
+            graph::cuts::CutSet,
+            settings::global::OrientationPattern,
+            uv::approx::{
+                OrientationProjection, final_integrand::FinalIntegrandBuilder,
+                integrated::IntegratedCts, local_3d::Localizer,
+                projected_4d::Projected4dApproximation,
+            },
+        };
+
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph cancelling_projection_sectors {
+            edge [num=1 mass=1];
+            node [num=1];
+            a -> b [id=0 lmb_id=0];
+            a -> b [id=1];
+        })?;
+        let owners = graph.full_filter();
+        let current = OwnedForestNode {
+            spinney: Spinney::new(
+                InternalSubGraph::cleaned_filter_optimist(owners.clone(), graph.as_ref()),
+                &graph,
+                &graph.loop_momentum_basis,
+            )
+            .expect("the bubble has a compatible UV spinney"),
+            topo_order: 1,
+        };
+        let coefficient = (GS.emr_mom(EdgeIndex(0), GS.cind(0)).pow(2) + Atom::one())
+            / graph.denominator(&owners, |_| 1);
+        let bindings = vec![(owners.clone(), owners, graph.loop_momentum_basis.clone())];
+        let cancelled = Local4dCts(FourDSectors::new(
+            vec![
+                FourDSector::new(coefficient.clone(), bindings.clone(), Vec::new()),
+                FourDSector::new(-coefficient, bindings, Vec::new()),
+            ],
+            Vec::new(),
+        ));
+        let zero = Local4dCts(FourDSectors::new(Vec::new(), Vec::new()));
+        let mut cutset = CutSet::empty(graph.n_hedges());
+        // The complete zero result must retain both allowed cut orders even
+        // when cancellation leaves no energy contour to generate or select.
+        cutset.residue_selector.left_th_cut = Some(RaisedEsurfaceGroup {
+            esurface_ids: Vec::new(),
+            max_occurence: 2,
+        });
+        let production = Default::default();
+        let pattern = OrientationPattern::default();
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let localizer = Localizer::new(
+            &cutset,
+            OrientationProjection::exact(&production, &options, &pattern, true),
+        );
+        let settings = UVgenerationSettings {
+            local_uv_cts_from_expanded_4d_integrands: true,
+            ..Default::default()
+        };
+        for local in [cancelled, zero] {
+            let projected = Projected4dApproximation::new(localizer, &mut graph, &settings)
+                .project_local_4d(&local, &mut Local4dProjectionContext::default())?;
+            let finalized = FinalIntegrandBuilder::new(localizer, &settings).build_projected(
+                &mut graph,
+                &current,
+                &projected,
+                &IntegratedCts::root(),
+            )?;
+            assert_eq!(
+                finalized.into_integrands(),
+                cutset
+                    .residue_selector
+                    .generate_allowed_keys()
+                    .into_iter()
+                    .map(|index| (index, Atom::Zero))
+                    .collect(),
+            );
+        }
+        Ok(())
+    }
 
     #[test]
     fn analytic_uv_rejects_gamma5_before_simplification_with_subgraph_scope() -> Result<()> {
@@ -2114,7 +3354,7 @@ mod tests {
         assert!((expanded.collect_factors() - independent.collect_factors()).is_zero());
 
         let options = graph.denominator_only_cff_3d_expression_options();
-        let mut cache = ExactCffGenerationCache::default();
+        let mut context = Local4dProjectionContext::default();
         let active_denominators = terms
             .iter()
             .map(|term| {
@@ -2137,12 +3377,9 @@ mod tests {
             })
             .collect::<Result<Vec<_>, _>>()?;
         for (source, term) in sources.iter().zip(&terms) {
-            graph.generate_3d_expression_for_4d_term(
-                source,
-                &options,
-                &term.numerator,
-                Some(&mut cache),
-            )?;
+            let preparation =
+                graph.prepare_3d_expression_for_4d_term(source, &options, &term.numerator, &[])?;
+            graph.generate_3d_expression_for_4d_term(&preparation, Some(&mut context))?;
         }
         // Undotted and dotted sources have different occurrence counts;
         // compatible dotted owner relabellings may share a canonical CFF.
@@ -2151,7 +3388,7 @@ mod tests {
         let mut has_nonzero_residue = false;
         for (denominators, term) in active_denominators.iter().zip(&terms) {
             let mut values = Vec::new();
-            for generation_cache in [Some(&mut cache), None] {
+            for generation_cache in [Some(&mut context), None] {
                 let (cff, _) = graph.clone().cff_from_4d_denominators_in_uv_edges(
                     denominators,
                     owners,
@@ -2164,7 +3401,7 @@ mod tests {
                 for term in cff.terms.values() {
                     for orientation in &term.orientations {
                         value += &orientation.expression
-                            * term.map_exact_source_numerator(&orientation.orientation)?;
+                            * term.map_exact_source_numerator(&orientation.orientation, None)?;
                     }
                 }
                 values.push(value * Atom::num(cff.production_prefactor_factor()));
@@ -2476,6 +3713,174 @@ mod tests {
                     .is_zero()
                 );
             }
+        }
+        Ok(())
+    }
+    #[test]
+    fn early_color_simplification_preserves_open_and_nested_numerator_boundaries() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph nested_open_color_bubble {
+            edge [num=1 mass=1]
+            node [num=1]
+            a -> b [id=0 lmb_id=0]
+            a -> b [id=1]
+            b -> c [id=2 lmb_id=1]
+            c -> a [id=3]
+        })?;
+        let [a, b, c, d, u, v]: [Atom; 6] =
+            std::array::from_fn(|i| idenso::coad!(8, Atom::from(Aind::Normal(80 + i))));
+        let spectator = (GS.emr_mom(EdgeIndex(0), GS.cind(0)) + Atom::one())
+            * (GS.emr_mom(EdgeIndex(1), GS.cind(0)) + Atom::num(2));
+        graph.underlying[EdgeIndex(0)].num.value =
+            idenso::color_f!(&a, &u, &v) * (GS.emr_mom(EdgeIndex(0), GS.cind(0)) + Atom::one());
+        graph.underlying[EdgeIndex(1)].num.value =
+            idenso::color_f!(&b, &u, &v) * (GS.emr_mom(EdgeIndex(1), GS.cind(0)) + Atom::num(2));
+        graph.underlying[EdgeIndex(2)].num.value = spenso::g!(&a, &c);
+        graph.underlying[EdgeIndex(3)].num.value = spenso::g!(&b, &d);
+        let bubble = graph
+            .get_edge_subgraph(EdgeIndex(0))
+            .union(&graph.get_edge_subgraph(EdgeIndex(1)));
+        let nodes = [bubble, graph.full_filter()].map(|filter| OwnedForestNode {
+            spinney: Spinney::with_scheme(
+                InternalSubGraph::cleaned_filter_optimist(filter, graph.as_ref()),
+                &graph,
+                &graph.loop_momentum_basis,
+                ApproximationType::MUV,
+                0,
+            )
+            .expect("the nested bubble has a compatible loop-momentum basis"),
+            topo_order: 0,
+        });
+        let [inner, outer] = &nodes;
+        let empty = OwnedForestNode {
+            spinney: Spinney::empty(&graph),
+            topo_order: 0,
+        };
+        let settings = UVgenerationSettings::default();
+        let ctx = UVCtx::new(&graph, &settings);
+        let raw_inner = graph
+            .numerator(inner.subgraph(), empty.subgraph())
+            .get_single_atom()?;
+        let casimir = idenso::color_cas!(2, &ColorAdjoint {}.new_rep(8));
+        let expected_inner = &casimir * spenso::g!(&a, &b) * &spectator;
+        // The same existing numerator operation is used by direct 3D. The
+        // complete open metric, including both boundary labels, stays explicit.
+        let prepared_inner = graph
+            .numerator(inner.subgraph(), empty.subgraph())
+            .color_simplify()
+            .get_single_atom()?;
+        assert_eq!(prepared_inner, expected_inner);
+        let grown_inner = grow(&Atom::one(), &ctx, inner, &empty)?;
+        assert_eq!(
+            &grown_inner * graph.denominator(inner.subgraph(), |_| 1),
+            expected_inner
+        );
+
+        let raw_remainder = graph
+            .numerator(&outer.reduced_subgraph(inner), inner.subgraph())
+            .get_single_atom()?;
+        let raw_full = graph
+            .numerator(outer.subgraph(), empty.subgraph())
+            .get_single_atom()?;
+        assert_eq!(&raw_inner * &raw_remainder, raw_full);
+        let nested =
+            grow(&grown_inner, &ctx, outer, inner)? * graph.denominator(outer.subgraph(), |_| 1);
+        let late = raw_full.simplify_color().simplify_metrics();
+        assert_eq!(nested, late);
+        assert_eq!(nested, casimir * spenso::g!(&c, &d) * &spectator);
+        // Closing the remaining boundary commutes with both preparations;
+        // the factorized momentum spectator is never distributed.
+        let closure = spenso::g!(&c, &d);
+        assert_eq!(
+            (&nested * &closure).simplify_color(),
+            (raw_full * closure).simplify_color()
+        );
+        assert_eq!(
+            graph
+                .numerator(inner.subgraph(), empty.subgraph())
+                .get_single_atom()?,
+            raw_inner
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn local_taylor_retains_dirac_traces_with_or_without_analytic_addbacks() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph factorized_local_spin {
+            edge [num=1 mass=1]
+            node [num=1]
+            incoming [style=invis]
+            outgoing [style=invis]
+            incoming -> a [id=0]
+            a -> b [id=1 lmb_id=0]
+            b -> a [id=2]
+            b -> outgoing [id=3]
+        })?;
+        let filter = graph
+            .get_edge_subgraph(EdgeIndex(1))
+            .union(&graph.get_edge_subgraph(EdgeIndex(2)));
+        let current = OwnedForestNode {
+            spinney: Spinney::with_scheme(
+                InternalSubGraph::cleaned_filter_optimist(filter, graph.as_ref()),
+                &graph,
+                &graph.loop_momentum_basis,
+                ApproximationType::MUV,
+                0,
+            )
+            .expect("the bubble has a compatible UV loop-momentum basis"),
+            topo_order: 0,
+        };
+        let given = OwnedForestNode {
+            spinney: Spinney::empty(&graph),
+            topo_order: 0,
+        };
+        let index = spenso::mink!(4, Atom::from(Aind::Normal(23)));
+        let trace = spenso::trace!(
+            Bispinor {}.new_rep(4).to_symbolic([]),
+            idenso::gamma!(&index),
+            idenso::gamma!(&index),
+        );
+        let (a, b, c, d) = symbol!(
+            "local_spin_a",
+            "local_spin_b",
+            "local_spin_c",
+            "local_spin_d"
+        );
+        let spectator = (Atom::var(a) + b) * (Atom::var(c) + d);
+        graph.underlying[EdgeIndex(1)].num.value = &spectator * trace;
+        let input = Full4dCts(FourDSectors::active_atom(Atom::one()));
+        let mut previous = None;
+        for generate_integrated in [false, true] {
+            let settings = UVgenerationSettings {
+                generate_integrated,
+                ..Default::default()
+            };
+            let local = uv_limit(
+                &input,
+                &UVCtx::new(&graph, &settings),
+                &current,
+                &given,
+                &current,
+                &given,
+            )?;
+            assert!(local.atom().contains_symbol(AGS.gamma));
+            assert!(
+                local
+                    .atom()
+                    .contains_symbol(spenso::network::tags::SPENSO_TAG.trace)
+            );
+            assert!(
+                local
+                    .atom()
+                    .pattern_match(&spectator.to_pattern(), None, None)
+                    .next()
+                    .is_some()
+            );
+            if let Some(previous) = &previous {
+                assert_eq!(local.atom(), previous);
+            }
+            previous = Some(local.atom().clone());
         }
         Ok(())
     }

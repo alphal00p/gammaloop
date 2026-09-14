@@ -2,6 +2,7 @@ use std::sync::LazyLock;
 
 use color_eyre::Result;
 use eyre::eyre;
+use idenso::color::{ColorSimplifier, ColorSimplifySettings};
 use itertools::Itertools;
 use linnet::half_edge::{
     involution::HedgePair,
@@ -269,7 +270,11 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
         .graph
         .numerator(&reduced, given.subgraph())
         .get_single_atom()
-        .expect("graph numerator should be available");
+        .expect("graph numerator should be available")
+        .simplify_color_with(ColorSimplifySettings {
+            simplify_non_color: false,
+            ..Default::default()
+        });
     let mapped_numerator = key.map_numerator(orientation, ctx.graph, &numerator)?;
     debug_tags!(#generation, #profile, #uv, #local, #direct, #trace;
         stage = "direct_3d_taylor_mapped_numerator",
