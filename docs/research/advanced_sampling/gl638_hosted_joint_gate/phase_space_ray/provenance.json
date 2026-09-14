@@ -1,0 +1,170 @@
+{
+  "scope": "Failure, exact-source diagnosis, narrow phase_space callback fix and successful rebuilt GL point replay; full seven-mode acceptance remains separate.",
+  "physical_source": {
+    "base_commit": "6e9bf401db75cb13ec20e18377a444bc2fcd4f33",
+    "source_patch_sha256": "1d78e98b73e6a8dafaf6e446353c2a1607dc0724f8ea7d1c2d88c4962b81bba7",
+    "equivalent_committed_source": "8006662289c17f177469c67a10a274b190aa2ccf",
+    "existing_build_manifest": "../canonical_centers/build.json",
+    "existing_source_patch": "../canonical_centers/source.patch.gz",
+    "existing_build_source_proof": "../local_hz/source_commit_proof.json"
+  },
+  "drivers": {
+    "failed_preflight_source": "../local_hz/extension/gate.rs.gz",
+    "failed_preflight_source_sha256": "b53df2b439845729dd5a9c898c9cece83c28426457ec18701cf9787756310306",
+    "minimal_source": "minimal_point/gate.rs.gz",
+    "minimal_source_sha256": "254a7465209162a8f5214329fab849ad5c32f5e3c6cc5c1c5eed32ba2ef3c1a2",
+    "repaired_minimal_source": "minimal_point/gate.rs.gz",
+    "repaired_minimal_build": "replay_build5/driver_build.json",
+    "build5_verification": "build5/driver_verification.json"
+  },
+  "environment": {
+    "common_setup": "source /tmp/gammaloop-rebase-dev-env.sh; user-authorized SYMBOLICA_LICENSE supplied (value omitted)",
+    "failed_preflight": {
+      "RAYON_NUM_THREADS": "20",
+      "GL_DISPLAY_FILTER": "off"
+    },
+    "minimal_point": {
+      "RAYON_NUM_THREADS": "1",
+      "GL_DISPLAY_FILTER": "off"
+    },
+    "fixture2": {
+      "CARGO_BUILD_JOBS": "2",
+      "GL_DISPLAY_FILTER": "gammalooprs::cff::esurface=debug",
+      "RAYON_NUM_THREADS": "no explicit override"
+    },
+    "fixture_command": [
+      "cargo",
+      "nextest",
+      "run",
+      "--locked",
+      "--offline",
+      "-p",
+      "gammalooprs",
+      "--lib",
+      "--profile",
+      "test_gammaloop",
+      "-E",
+      "test(cff::esurface::tests::phase_space_cut_root_replays_canonical_foreign_inverse_cancellation)",
+      "--success-output",
+      "immediate",
+      "--failure-output",
+      "immediate"
+    ],
+    "production_tests": {
+      "CARGO_BUILD_JOBS": "2",
+      "RAYON_NUM_THREADS": "4",
+      "GL_DISPLAY_FILTER": "off"
+    },
+    "clippy": {
+      "CARGO_BUILD_JOBS": "2",
+      "RAYON_NUM_THREADS": "no explicit override"
+    },
+    "replay_build5": {
+      "RAYON_NUM_THREADS": "1",
+      "GL_DISPLAY_FILTER": "off"
+    }
+  },
+  "limitations": [
+    "No binaries or state payloads copied.",
+    "Fixture port_correction.log failed before callbacks because 4 ports were supplied to an actual 2-port LMB; corrected to the exact recorded external inputs without changing numerical expectations.",
+    "Driver summary exit0 means diagnostics completed: selected and summed joint references still fail in the old binary.",
+    "The new directed original-equation interval is positive; it certifies residual accuracy, not an exact zero.",
+    "No performance, Monte Carlo or new compact H/Z boundedness claim."
+  ],
+  "fix_source_snapshot": {
+    "base_commit": "22eb17a6e389636c26fa7135f90abe421fbbded7",
+    "patch_sha256": "667a91d23c759c1a2fe02355569dbc3d64866af681428c40213b8e335b5dfd65",
+    "patch": "fix_source.patch.gz",
+    "scope": "Frozen Rust change, including exact fixture and original-equation assertion; optimized build5 and exact GL point replay passed with this patch unchanged."
+  },
+  "completed_source_gates": {
+    "production_tests": {
+      "command": [
+        "cargo",
+        "nextest",
+        "run",
+        "--locked",
+        "--offline",
+        "-p",
+        "gammalooprs",
+        "--lib",
+        "--profile",
+        "test_gammaloop",
+        "--test-threads",
+        "4",
+        "-E",
+        "test(phase_space_cut_root_) | test(radial_guesses_and_lu_roots_) | test(routed_enclosure_preserves_) | test(implicit_sampling_map_uses_) | test(implicit_surface_solver_certifies_) | test(exhausted_bracket_) | test(lu_h_radial_profile_) | test(standalone_cut_sampling_) | test(lu_h_sampling_preserves_) | test(conditional_cut_sampling_) | test(hosted_joint_kite_)",
+        "--failure-output",
+        "immediate"
+      ],
+      "tests_passed": 15,
+      "tests_failed": 0,
+      "elapsed_seconds": 451.96,
+      "compile_seconds_reported": 88,
+      "log": "fixture/production_tests.log.gz"
+    },
+    "core_check": {
+      "passed": true,
+      "elapsed_seconds": 10.16,
+      "log": "fixture/production_check.log.gz"
+    },
+    "clippy": {
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--offline",
+        "-p",
+        "gammalooprs",
+        "--lib",
+        "--tests",
+        "--message-format=json"
+      ],
+      "passed": true,
+      "elapsed_seconds": 51.37,
+      "diagnostics": 52,
+      "changed_line_diagnostics": 0,
+      "log": "fixture/clippy.log.gz",
+      "messages": "fixture/clippy.jsonl.gz",
+      "audit": "fixture/clippy_audit.json"
+    },
+    "format": {
+      "passed": true,
+      "log": "fixture/format.log.gz"
+    },
+    "git_diff_check": {
+      "passed": true,
+      "source": "root report; no separate log retained"
+    },
+    "optimized_build5": {
+      "manifest": "build5/manifest.json",
+      "log": "build5/build.log.gz",
+      "messages": "build5/build.jsonl.gz",
+      "rustc_captures": "build5/rustc/",
+      "source_patch": "fix_source.patch.gz",
+      "passed": true,
+      "source_unchanged": true,
+      "elapsed_seconds": 426.39208210399374,
+      "driver_links_and_gl_validation": "All three drivers linked; exact GL point replay passed. Full seven-mode preflight remains pending."
+    }
+  },
+  "completed_gl_gates": {
+    "exact_point_3363": {
+      "run": "replay_build5/run.json",
+      "manifest": "replay_build5/manifest.json",
+      "summary": "replay_build5/summary.json",
+      "log": "replay_build5/run.log.gz",
+      "passed": true,
+      "forward_rows_unchanged": 13,
+      "foreign_cut1_inverse_successes": 13,
+      "summed_reference_successes": 2,
+      "selected_joint_reference_successes": 1,
+      "saved_state_hashes_unchanged": 35,
+      "scope": "Same binary64 cube and exact native forward rows; single-point reference pipeline only, no physical or normalization acceptance claim.",
+      "independent_analysis": "replay_build5/independent_matrix_analysis.json",
+      "independent_script": "replay_build5/independent_analysis.py.gz",
+      "portable_audit": "analyze.py"
+    },
+    "full_seven_mode_preflight": "pending; no running output archived"
+  }
+}

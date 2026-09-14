@@ -1,0 +1,9 @@
+{
+  "status": "captured",
+  "cargo_pid": 3595293,
+  "captured": {
+    "gammalooprs": 3595311,
+    "gammaloop_api": 3724876
+  },
+  "elapsed_seconds": 372.2623544780072
+}

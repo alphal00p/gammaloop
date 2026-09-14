@@ -1,0 +1,18 @@
+{
+  "argv": [
+    "/tmp/gl638-hosted-joint-gate/drivers/gate-reference-point-fixed",
+    "/tmp/gl638-hosted-joint-gate/manifest-reference-point-3363.json",
+    "/tmp/gl638-hosted-joint-gate/results-reference-point-3363",
+    "cuts,cuts_joint",
+    "reference-point",
+    "1",
+    "1",
+    "1",
+    "1337"
+  ],
+  "started_utc": "2026-09-14T08:22:45.919639+00:00",
+  "pid": 2739606,
+  "returncode": 0,
+  "elapsed_seconds": 79.50048183801118,
+  "max_rss_KiB": 5257608
+}

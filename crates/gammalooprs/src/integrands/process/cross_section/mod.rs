@@ -1981,6 +1981,9 @@ impl GraphTerm for CrossSectionGraphTerm {
                         certify_independent(host, &outside, "phase-space cut")?;
                         // This ray is centered at the actual LU fixed point, not
                         // a generic SOCP center. Only then does t*=R(direction)/r.
+                        // Use LU's prepared routing before radial scaling: large
+                        // host-null master components must cancel in the fixed
+                        // velocity, rather than in each rounded scaled point.
                         let zero_velocity =
                             LoopMomenta::from_iter((0..parent.len()).map(|_| {
                                 ThreeMomentum::new(zero.clone(), zero.clone(), zero.clone())
@@ -2022,14 +2025,9 @@ impl GraphTerm for CrossSectionGraphTerm {
                                     F(v[2].clone()),
                                 );
                             }
-                            let (value, derivative) = surface.compute_self_and_r_derivative(
-                                &radius,
-                                &velocity,
-                                &origin_loops,
-                                &externals,
-                                &masses,
-                                &lmb,
-                            );
+                            let (value, derivative) = surface
+                                .routed_ray(&velocity, &origin_loops, &externals, &masses, &lmb)
+                                .evaluate(&radius);
                             Ok((value.0, derivative.0))
                         });
                         let map =

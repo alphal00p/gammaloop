@@ -499,6 +499,8 @@ numeric caches before rebuilding from directly edited inputs.
 
 Standalone `phase_space(cut(...))` maps use the real graph's cut equation,
 warmup masses and fixed external data through the shared implicit radial kernel.
+Their fixed directions use the existing LU ray: route signed velocities before
+radial scaling so large host-null master components cancel before multiplication.
 They retain the auxiliary raw radial variable. Conditional cut/left/right maps
 now share the Symbolica-resolved ordered block plan and one geometry registry.
 The registry key includes qualified target, native parent, active edges and
