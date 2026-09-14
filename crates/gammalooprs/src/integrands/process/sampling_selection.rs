@@ -995,6 +995,35 @@ impl<T: FloatLike> SamplingMapComponent<T> for CompiledSamplingMap<T> {
             }
         }
     }
+
+    fn inverse_density(
+        &self,
+        point: &[T],
+        context: &mut SamplingMapContext<'_, T>,
+    ) -> Result<Option<T>> {
+        match self {
+            Self::Lmb(map) => map.inverse_density(point, context),
+            Self::Surface(map) => map.inverse_density(point, context),
+            Self::ImplicitSurface(map) => map.inverse_density(point, context),
+            Self::Joint(map) => map.inverse_density(point, context),
+            Self::Embedded(map) => map.inverse_density(point, context),
+            Self::Affine { map, frame } => {
+                let previous = context.previous;
+                let transformed = frame.inverse(point, previous)?;
+                let Some(density) = map.inverse_density(
+                    &transformed.coordinates,
+                    &mut context.reborrow(previous, Some(0)),
+                )?
+                else {
+                    return Ok(None);
+                };
+                SamplingMapEvaluation::validate_inverse_density(
+                    (F(density) * F(transformed.inverse_jacobian)).0,
+                )
+                .map(Some)
+            }
+        }
+    }
 }
 
 /// A compiled graph channel and the master-graph raw-frame block it occupies.
@@ -1721,6 +1750,7 @@ impl<T: FloatLike> SamplingChannelBridge<T> {
                 self.channels.len()
             ));
         }
+        let generating_channel = contexts.generating_channel;
         SamplingPartition::from_log_scores(
             self.partition_mode,
             raw_coordinates,
@@ -1730,12 +1760,20 @@ impl<T: FloatLike> SamplingChannelBridge<T> {
                 let mut context = contexts.for_channel(SamplingChannelId(index))?;
                 match self.partition_mode {
                     SamplingPartitionMode::MapDensity => {
-                        let Some(evaluation) =
-                            channel.inverse_with_context(raw_coordinates, &mut context)?
-                        else {
+                        // Keep the selected independent inverse and its full
+                        // diagnostics. Foreign scores need the exact density
+                        // and support, not an additional forward reconstruction.
+                        let density = if index == generating_channel.index() {
+                            channel
+                                .inverse_with_context(raw_coordinates, &mut context)?
+                                .map(|evaluation| evaluation.inverse_jacobian)
+                        } else {
+                            channel.inverse_density_with_context(raw_coordinates, &mut context)?
+                        };
+                        let Some(density) = density else {
                             return Ok(None);
                         };
-                        let density = F(evaluation.inverse_jacobian);
+                        let density = F(density);
                         if !density.0.is_finite() || density <= density.zero() {
                             return Err(SamplingEvaluationError::Unrepresentable {
                                 operation: "inverse map density",
@@ -1984,6 +2022,19 @@ impl<T: FloatLike> CompiledSamplingChannel<T> {
                 )
             })
     }
+
+    fn inverse_density_with_context(
+        &self,
+        point: &[T],
+        context: &mut SamplingMapContext<'_, T>,
+    ) -> Result<Option<T>> {
+        self.map.inverse_density(point, context).wrap_err_with(|| {
+            format!(
+                "sampling graph '{}' channel '{}' target {:?}, master-frame edges {:?}",
+                self.master_graph, self.name, self.definition, self.embedded_edges,
+            )
+        })
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -2195,6 +2246,30 @@ impl SamplingChannelCatalogue {
             SamplingCatalogueEntry::Named(_) => None,
             SamplingCatalogueEntry::Surface { .. } => None,
         })
+    }
+
+    /// The first fixed-Quad source class excludes hosted/composed geometry and
+    /// user proxies. A single incompatible entry requires Fixed256 or Arb for
+    /// the entire epoch, according to the requested accuracy budget.
+    pub(crate) fn supports_fixed_quad_source(&self) -> bool {
+        !self.entries.is_empty()
+            && self.entries.iter().all(|entry| match entry {
+                SamplingCatalogueEntry::Lmb { .. } => true,
+                SamplingCatalogueEntry::Named(channel) => {
+                    matches!(&channel.map, SamplingMapDefinition::PhaseSpace(map)
+                    if matches!(map.as_ref(), SamplingMapDefinition::Cut(_)))
+                        && channel.singularity_proxy.is_none()
+                        && channel
+                            .definition
+                            .radial_profile
+                            .as_ref()
+                            .is_none_or(|profile| {
+                                profile
+                                    == &crate::settings::runtime::SamplingRadialProfile::default()
+                            })
+                }
+                SamplingCatalogueEntry::Surface { .. } => false,
+            })
     }
 
     pub fn named_entries(&self) -> impl Iterator<Item = &ResolvedNamedSamplingChannel> {
@@ -2955,6 +3030,64 @@ mod tests {
     use crate::settings::runtime::ParameterizationSettings;
 
     #[test]
+    fn fixed_quad_source_classifies_complete_catalogue_without_names() -> Result<()> {
+        use crate::settings::runtime::SamplingRadialProfile;
+        let ordinary = SamplingCatalogueEntry::Lmb {
+            basis_id: 0,
+            edges: vec![1, 2],
+            preset: SamplingChannelPreset::Lmb,
+        };
+        let mut catalogue = SamplingChannelCatalogue {
+            graph_name: "any topology".into(),
+            selectors: vec![],
+            entries: vec![ordinary.clone()],
+        };
+        assert!(catalogue.supports_fixed_quad_source());
+        let channel = ResolvedNamedSamplingChannel {
+            name: "not a cut label".into(),
+            definition: definition("phase_space(cut(3,4))"),
+            map: SamplingMapDefinition::parse("phase_space(cut(3,4))")?,
+            singularity_proxy: None,
+            blocks: vec![],
+        };
+        catalogue
+            .entries
+            .push(SamplingCatalogueEntry::Named(channel.clone()));
+        assert!(catalogue.supports_fixed_quad_source());
+        let mut profiled = channel.clone();
+        profiled.definition.radial_profile = Some(SamplingRadialProfile::default());
+        catalogue.entries[1] = SamplingCatalogueEntry::Named(profiled.clone());
+        assert!(catalogue.supports_fixed_quad_source());
+        profiled.definition.radial_profile.as_mut().unwrap().scale = Some(1.8);
+        catalogue.entries[1] = SamplingCatalogueEntry::Named(profiled);
+        assert!(!catalogue.supports_fixed_quad_source());
+        for expression in [
+            "lmb(1,2)",
+            "surface(3,4)",
+            "soft(1)",
+            "then(phase_space(cut(3,4)),surface(5,6))",
+            "intersect(surface(3,4),surface(4,5))",
+        ] {
+            let mut unsupported = channel.clone();
+            unsupported.map = SamplingMapDefinition::parse(expression)?;
+            catalogue.entries[1] = SamplingCatalogueEntry::Named(unsupported);
+            assert!(!catalogue.supports_fixed_quad_source(), "{expression}");
+        }
+        let mut proxy = channel;
+        proxy.singularity_proxy = Some(Atom::one());
+        catalogue.entries[1] = SamplingCatalogueEntry::Named(proxy);
+        assert!(!catalogue.supports_fixed_quad_source());
+        catalogue.entries[1] = SamplingCatalogueEntry::Surface {
+            edges: vec![3, 4],
+            parent_lmb: vec![1, 2],
+        };
+        assert!(!catalogue.supports_fixed_quad_source());
+        catalogue.entries.clear();
+        assert!(!catalogue.supports_fixed_quad_source());
+        Ok(())
+    }
+
+    #[test]
     fn native_lu_host_reuses_exact_sources_without_replacing_selected_authority() -> Result<()> {
         use super::super::sampling_context::SamplingLUHostPlan;
         use crate::{
@@ -3178,6 +3311,16 @@ mod tests {
                 mode,
             )?;
             let mapped = bridge.forward(SamplingChannelId(0), &[0.43, 0.31, 0.37])?;
+            for channel in bridge.channels() {
+                let inverse = channel.inverse(&mapped.raw_coordinates)?;
+                assert_eq!(
+                    channel.inverse_density_with_context(
+                        &mapped.raw_coordinates,
+                        &mut SamplingMapContext::detached(&[]),
+                    )?,
+                    inverse.map(|evaluation| evaluation.inverse_jacobian),
+                );
+            }
             assert!(
                 mapped
                     .map
@@ -3201,6 +3344,14 @@ mod tests {
             let z = e0 + (1.0 + 0.2_f64.powi(2) + 1.3_f64.powi(2) + 0.4_f64.powi(2)).sqrt() - 4.0;
             assert!(h.hypot(z) > 0.125);
             assert!(bridge.inverse(SamplingChannelId(0), &outside)?.is_none());
+            assert!(
+                bridge.channels()[0]
+                    .inverse_density_with_context(
+                        &outside,
+                        &mut SamplingMapContext::detached(&[]),
+                    )?
+                    .is_none()
+            );
             assert_eq!(bridge.partition(&outside)?.weights, vec![0.0, 1.0]);
             assert!(bridge.inverse(SamplingChannelId(1), &outside)?.is_some());
             if mode == SamplingPartitionMode::MapDensity {
@@ -3437,6 +3588,16 @@ mod tests {
             for selected in 0..2 {
                 let cube = [0.1, 0.31, 0.43, 0.47, 0.29, 0.37];
                 let mapped = bridge.forward(SamplingChannelId(selected), &cube)?;
+                for channel in bridge.channels() {
+                    let inverse = channel.inverse(&mapped.raw_coordinates)?;
+                    assert_eq!(
+                        channel.inverse_density_with_context(
+                            &mapped.raw_coordinates,
+                            &mut SamplingMapContext::detached(&[]),
+                        )?,
+                        inverse.map(|evaluation| evaluation.inverse_jacobian),
+                    );
+                }
                 assert!(
                     mapped
                         .map
@@ -5438,6 +5599,12 @@ mod tests {
             .inverse(&point.point)
             .unwrap()
             .expect("full-support inverse");
+        assert_eq!(
+            compiled[0]
+                .inverse_density_with_context(&point.point, &mut SamplingMapContext::detached(&[]),)
+                .unwrap(),
+            Some(inverse.inverse_jacobian),
+        );
         assert!(inverse.residual < 1.0e-10);
         for (recovered, original) in inverse.coordinates.iter().zip(&point.coordinates) {
             assert!((recovered - original).abs() < 1.0e-10);
@@ -5523,6 +5690,15 @@ mod tests {
             .inverse(&mapped.point)
             .unwrap()
             .expect("full-support inverse");
+        assert_eq!(
+            shifted[0]
+                .inverse_density_with_context(
+                    &mapped.point,
+                    &mut SamplingMapContext::detached(&[]),
+                )
+                .unwrap(),
+            Some(inverse.inverse_jacobian),
+        );
         for (actual, expected) in inverse.coordinates.iter().zip(coordinates) {
             assert!((F(*actual) - F(expected)).abs() < one.from_i64(10).powi(-25));
         }

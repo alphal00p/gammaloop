@@ -615,7 +615,9 @@ impl AmplitudeGraphTerm {
                 multi_channeling_setup: LmbMultiChannelingSetup {
                     sampling_bridge: Default::default(),
                     sampling_bridge_quad: Default::default(),
+                    sampling_bridge_fixed256: Default::default(),
                     sampling_bridge_arb: Default::default(),
+                    sampling_source: Default::default(),
                     sampling_catalogue: Default::default(),
                     sampling_programs: Default::default(),
                     lmb_basis_ids: TiVec::new(),
@@ -1829,6 +1831,7 @@ impl GraphTerm for AmplitudeGraphTerm {
         if !prepared_event.selectors_pass {
             return Ok(GraphEvaluationResult {
                 reference_moments: None,
+                absolute_integrand_result: None,
                 integrand_result: Complex::new_re(momentum_sample.zero()),
                 event_groups: crate::observables::GenericEventGroupList::default(),
                 event_processing_time: prepared_event.event_processing_time,
@@ -1897,6 +1900,7 @@ impl GraphTerm for AmplitudeGraphTerm {
 
         Ok(GraphEvaluationResult {
             reference_moments: None,
+            absolute_integrand_result: None,
             integrand_result,
             event_groups,
             event_processing_time: prepared_event.event_processing_time,
@@ -4424,7 +4428,8 @@ parent_lmb = [4,6]
                 let tiny_result = tiny(&[zero.0.clone(), zero.0.clone(), zero.0.clone()]);
                 if matches!(
                     T::sampling_precision(),
-                    crate::settings::runtime::Precision::Arb
+                    crate::utils::SamplingPrecision::Fixed256
+                        | crate::utils::SamplingPrecision::Arb
                 ) {
                     let sum = F(tiny_result?.energy_sums[0].clone());
                     assert_eq!(sum, tiny_masses[EdgeIndex(4)]);

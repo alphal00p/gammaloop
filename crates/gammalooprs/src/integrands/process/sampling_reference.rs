@@ -321,6 +321,9 @@ impl GaussianReferenceFunction {
                         "native normalized reference moment is not representable"
                     ));
                 }
+                if let Some(absolute) = &mut result.absolute_integrand_result {
+                    absolute.im = normalized.abs();
+                }
                 result.integrand_result.im = normalized;
                 result.try_into_f64()
             }};
@@ -468,6 +471,7 @@ mod tests {
                 jacobian_max: 1.0,
             }),
             integrand_result: Complex::new_re(one.clone()),
+            absolute_integrand_result: Some(Complex::new_re(one.clone())),
             parameterization_jacobian: Some(one.clone()),
             integrator_weight: one.from_usize(7),
             event_groups: Default::default(),

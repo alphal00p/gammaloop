@@ -5,6 +5,28 @@ design and current implementation status. It is the implementation authority
 and applies to arbitrary loop order and topology, to amplitudes and
 cross sections, and to both ordinary and threshold-adapted sampling.
 
+Latest execution milestone: after completing the native-source acceptance and
+the compiled-backend checks, screen the GL638 threshold localization settings,
+IR-compatible threshold-metadata weight functions, sampling channel choices,
+Monte Carlo versus explicit channel summation, and UV mass. Keep
+`sqrt(s)=600 GeV`, `mu_r=91.188 GeV`, all orientations, the physical subtraction
+prescription, and explicit soft coverage. Test compressed SymJIT O3 as an
+additional backend candidate. Use matched exploratory budgets and independent
+confirmation samples to select a promising configuration, then run it for
+approximately one hour on **50 cores**, within the existing 300 GB memory
+budget. This production request supersedes the previous 30-core limit.
+
+Report both the real integral and the integral of the absolute real integrand,
+with their errors, sample counts, stability outcomes, maximum weights and
+iteration history. In explicit sampling-channel sums, take the absolute value
+after the complete physical cut/CT cancellation at each sampled point and
+before summing different channel points; retain covariance by accumulating one
+combined observation per outer draw. Compare channel modes at both equal draw
+counts and equal physical evaluation work. Separately measure advanced sampling,
+physical integrand overhead and evaluator time in the selected production
+configuration. Preserve failed candidates and distinguish exploratory selection
+from the independent final estimate.
+
 Current execution goal: establish the physics on all-orientation GL638 through
 H/Z-corner weight scaling, matched-count signed and absolute-integral errors
 for ordinary, simpler advanced and joint channel combinations, remaining
@@ -82,8 +104,9 @@ pointwise identity.
    finite-sample tail effects without assuming either estimator is biased.
 
 Use agents for precision research, evaluator/dependency investigation and
-independent numerical audits. The current limit remains 30 cores and 300 GB;
-the measured production worker choice is 20. Correctness repairs remain required.
+independent numerical audits. The current limit is 50 cores and 300 GB;
+20 workers was the earlier measured choice, and the requested final run uses
+50 after a fresh scaling check. Correctness repairs remain required.
 This renewed optimization request supersedes the earlier instruction to stop
 runtime tuning; further long runs wait for the measurements above.
 

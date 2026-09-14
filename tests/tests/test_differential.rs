@@ -570,6 +570,7 @@ fn graph_evaluation_result_merges_native_groups() {
     let mut lhs = GraphEvaluationResult {
         integrand_result: Complex::new(F::<f128>::from_f64(1.0), F::<f128>::from_f64(2.0)),
         reference_moments: None,
+        absolute_integrand_result: None,
         event_groups: GenericEventGroupList::<f128>::from_f64(&singleton_groups(first_event)),
         event_processing_time: Duration::from_millis(5),
         generated_event_count: 1,
@@ -578,6 +579,7 @@ fn graph_evaluation_result_merges_native_groups() {
     let rhs = GraphEvaluationResult {
         integrand_result: Complex::new(F::<f128>::from_f64(3.0), F::<f128>::from_f64(-4.0)),
         reference_moments: None,
+        absolute_integrand_result: None,
         event_groups: GenericEventGroupList::<f128>::from_f64(&singleton_groups(second_event)),
         event_processing_time: Duration::from_millis(7),
         generated_event_count: 2,
