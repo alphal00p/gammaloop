@@ -2797,11 +2797,10 @@ impl TypstGraph {
         let label_radii = self.edge_label_radii();
         let node_radii = self.node_layout_radii();
 
-        let base_labels: EdgeVec<Point2<f64>> = self.new_edgevec(|_e, idx, _pair| {
+        let mut labels: EdgeVec<Point2<f64>> = self.new_edgevec(|_e, idx, _pair| {
             let edge_pos = self.graph[idx].pos;
             edge_pos + axes[idx] * label_length
         });
-        let mut labels = base_labels.clone();
 
         for _ in 0..cfg.label_steps {
             let mut max_move: f64 = 0.0;
@@ -2912,21 +2911,15 @@ impl TypstGraph {
         }
 
         let label_gap = (spring_length * 0.08).max(0.04);
-        let mut measured_labels = base_labels;
+        // Resolve measured-box collisions from the relaxed positions so the
+        // separation pass preserves repulsion wherever no correction is needed.
         self.separate_edge_label_positions_from_boxes(
-            &mut measured_labels,
+            &mut labels,
             &axes,
             label_length,
             label_gap,
             spring_length,
         );
-        for i in 0..labels.len().0 {
-            let idx = EdgeIndex(i);
-            let (half_width, half_height) = self.edge_label_route_half_extents(idx, label_gap);
-            if half_width > label_gap || half_height > label_gap {
-                labels[idx] = measured_labels[idx];
-            }
-        }
 
         for i in 0..labels.len().0 {
             let idx = EdgeIndex(i);

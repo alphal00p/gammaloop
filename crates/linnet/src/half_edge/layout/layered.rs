@@ -288,15 +288,24 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         included: &NodeVec<bool>,
         groups: &[Vec<NodeIndex>],
     ) -> NodeVec<Option<usize>> {
-        let mut group_by_node = self.new_nodevec(|_, _, _| None);
+        let mut group_by_node = self.new_nodevec(|_, _, _| None::<usize>);
+        let mut merged: Vec<_> = (0..groups.len()).collect();
         for (group_index, group) in groups.iter().enumerate() {
             for &node in group {
                 if node.0 < self.n_nodes() && included[node] {
+                    // Same-rank constraints are transitive across overlapping groups.
+                    if let Some(previous) = group_by_node[node] {
+                        let current_root = find_disjoint_root(&mut merged, group_index);
+                        let previous_root = find_disjoint_root(&mut merged, previous);
+                        merged[previous_root] = current_root;
+                    }
                     group_by_node[node] = Some(group_index);
                 }
             }
         }
-        group_by_node
+        self.new_nodevec(|node, _, _| {
+            group_by_node[node].map(|group| find_disjoint_root(&mut merged, group))
+        })
     }
 
     fn layered_ranks(

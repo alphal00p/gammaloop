@@ -1,26 +1,22 @@
-#import "crates/linnest/typst/src/lib.typ": (
-  draw, graph, layout as apply-layout, subgraph,
-)
+#import "crates/linnest/typst/src/lib.typ": graph
+#import "crates/linnest/typst/src/render/layout.typ" as renderer
 #import "physics-edge-style.typ" as physics
 #import "edge-style.typ" as edge-style
 #import "layout-core.typ": bind-layout, bind-render
 
 // Save-dot adapter: bind the extracted Linnest package and the model-specific
-// edge style to GammaLoop's shared layout algorithm.
+// particle styles. Linnest owns the shared measurement and layout pipeline.
 #let layout = bind-layout(
-  draw: draw,
   graph: graph,
-  subgraph: subgraph,
-  apply-layout: apply-layout,
+  renderer: renderer,
   physics: physics,
   edge-style: edge-style,
+  diagram-options: (title: none),
 )
-
 #let render-layout = bind-render(
-  draw: draw,
   graph: graph,
-  subgraph: subgraph,
-  apply-layout: apply-layout,
+  renderer: renderer,
   physics: physics,
   edge-style: edge-style,
+  diagram-options: (title: none),
 )

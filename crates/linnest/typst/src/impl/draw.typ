@@ -80,6 +80,7 @@
 )
 
 #let _edge-label-defaults = (
+  label-only: false,
   label: none,
   label-style: (:),
   label-shift: 0,
@@ -258,21 +259,64 @@
   _style-dictionary(base) + _style-dictionary(patch)
 }
 
-#let _edge-style-layers(default, endpoint, data) = {
-  let style = _call(default, data)
-  if style == none {
-    return ()
+#let _half-edge-style(record, side) = {
+  let half-edge = record.at(side + "-half-edge", default: none)
+  if half-edge == none { return (:) }
+  let data = half-edge.at("data", default: none)
+  if type(data) != dictionary { return (:) }
+  let routing = (:)
+  if data.keys().contains("anchor") {
+    routing.insert(side + "-anchor", data.anchor)
   }
-  if style == auto {
-    style = (:)
+  if data.keys().contains("routing") {
+    routing.insert("route", data.routing)
   }
+  _overlay-style(routing, _call(
+    data.at(side + "-style", default: data.at("style", default: (:))), record,
+  ))
+}
+
+#let _edge-style-layers(defaults, options, data) = {
+  // Resolve logical-edge callbacks once, before composing the two endpoints.
+  let base = _call(defaults.at("edge-style", default: (:)), data)
+  let configured = _call(options.edge-style, data)
   let local = _call(data.at("edge-style", default: auto), data)
-  if local == none {
-    return ()
+  if base == none or configured == none or local == none {
+    return (source: (), sink: ())
   }
-  style = _overlay-style(style, local)
-  style = _overlay-style(style, _call(endpoint, data))
-  if type(style) == array { style } else { (style,) }
+  if base == auto { base = (:) }
+  let routing = if data.keys().contains("routing") {
+    (route: data.routing)
+  } else { (:) }
+  let decoration = if data.keys().contains("decoration") {
+    let value = _call(data.decoration, data)
+    if value == none { (pattern: none) }
+    else if type(value) in (dictionary, array) { value }
+    else { (pattern: value) }
+  } else { auto }
+  let result = (:)
+  for side in ("source", "sink") {
+    let style = _overlay-style(base, _call(
+      defaults.at(side + "-style", default: (:)), data,
+    ))
+    style = _overlay-style(style, configured)
+    style = _overlay-style(style, routing)
+    style = _overlay-style(style, local)
+    style = _overlay-style(style, _call(options.at(side + "-style"), data))
+    style = _overlay-style(style, _call(data.at(side + "-style", default: (:)), data))
+    style = _overlay-style(style, _half-edge-style(data, side))
+    let layers = if type(style) == array { style } else { (style,) }
+    // Per-edge decoration patches the base layer. Multiple explicit decorations
+    // create multiple decorated layers while retaining any later custom layers.
+    if decoration != auto {
+      let patches = if type(decoration) == array { decoration } else { (decoration,) }
+      let first = layers.at(0, default: (:))
+      layers = (patches.map(patch => _overlay-style(first, patch))
+        + layers.slice(calc.min(1, layers.len())))
+    }
+    result.insert(side, layers)
+  }
+  result
 }
 
 #let _style-layer(layers, index) = {
@@ -317,10 +361,13 @@
 
 #let _has-pattern(style) = {
   let pattern = _pattern-name(style)
-  pattern != none and pattern != "normal" and pattern != "curve"
+  (not _style-value(style, "label-only")
+    and pattern != none and pattern != "normal" and pattern != "curve")
 }
 
-#let _has-mark(style) = style.at("mark", default: none) != none
+#let _has-mark(style) = (
+  not _style-value(style, "label-only") and style.at("mark", default: none) != none
+)
 
 #let _mark-position(style) = _style-value(style, "mark-position")
 
@@ -499,7 +546,9 @@
   } else {
     _same-layer-geometry(source-style, sink-style)
   }
-  same-path-geometry and _draw-style(source-style) == _draw-style(sink-style)
+  (same-path-geometry
+    and _style-value(source-style, "label-only") == _style-value(sink-style, "label-only")
+    and _draw-style(source-style) == _draw-style(sink-style))
 }
 
 #let _center-outset(base-length, style, source-outset, sink-outset) = {
@@ -1280,6 +1329,7 @@
 }
 
 #let _segments-elements(segments, style, phase, anchor-start, anchor-end) = {
+  if _style-value(style, "label-only") { return (elements: (), length: 0) }
   if _has-mark(style) {
     return _derived-path-elements(
       _segments-path(segments),
@@ -2356,12 +2406,13 @@
 }
 
 #let _has-crossing-style(style) = (
-  style != none and style.at("crossing-under", default: none) != none
+  style != none and not _style-value(style, "label-only")
+    and style.at("crossing-under", default: none) != none
 )
 
 #let _has-crossing-layer(layers) = layers.any(_has-crossing-style)
 
-#let _has-visible-stroke(style) = if style == none {
+#let _has-visible-stroke(style) = if style == none or _style-value(style, "label-only") {
   false
 } else {
   let stroke = style.at("stroke", default: none)
@@ -2531,7 +2582,6 @@
   let node-label = options.node-label
   let draw-node = options.draw-node
   let edge-stroke = options.edge-stroke
-  let edge-style = options.edge-style
   let edge-offset = options.edge-offset
   let edge-length = options.edge-length
   let edge-ratio = options.edge-ratio
@@ -2540,8 +2590,6 @@
   let edge-optimize = options.edge-optimize
   let edge-split-gap = options.edge-split-gap
   let edge-dangling-tangent = options.edge-dangling-tangent
-  let source-style = options.source-style
-  let sink-style = options.sink-style
   let edge-label = options.edge-label
   let edge-label-style = options.edge-label-style
   let edge-omega = options.edge-omega
@@ -2722,22 +2770,46 @@
             record.sink-half-edge,
             record.edge-data,
           )
-          let source-style-layers = _edge-style-layers(
-            edge-style,
-            source-style,
-            record.edge-data,
+          let layers = _edge-style-layers(graph-style, options, record.edge-data)
+          let hidden = layers.source.len() == 0 and layers.sink.len() == 0
+          let ordinary-label = if hidden { none } else {
+            _content(edge-label, record.edge-data, _as-content(record.data-label))
+          }
+          let edge-label-draw-style = (
+            _style(graph-edge-label-style, record.edge-data)
+              + _style(edge-label-style, record.edge-data)
           )
-          let sink-style-layers = _edge-style-layers(
-            edge-style,
-            sink-style,
-            record.edge-data,
-          )
-          let hidden = (
-            source-style-layers.len() == 0 and sink-style-layers.len() == 0
-          )
+          for side in ("source", "sink") {
+            layers.at(side) = layers.at(side).map(layer => {
+              // With no label direction, both the offset and label use the
+              // signed offset instead of inferring sides from curve-fit noise.
+              if (
+                _style-value(layer, "offset-side") == "label"
+                  and _point-distance(record.label-pos, record.edge.pos) <= 1e-9
+              ) {
+                layer.offset-side = none
+                if _style-value(layer, "label-side") == auto {
+                  let offset = layer.at("offset", default: geometry-style.offset)
+                  layer.label-side = if offset < 0 { "right" } else { "left" }
+                }
+              }
+              let label = _call(_style-value(layer, "label"), record.edge-data)
+              if label == auto {
+                layer + (
+                  label: ordinary-label,
+                  label-style: edge-label-draw-style
+                    + _style(_style-value(layer, "label-style"), record.edge-data),
+                )
+              } else { layer + (label: _as-content(label)) }
+            })
+          }
+          let source-style-layers = layers.source
+          let sink-style-layers = layers.sink
           let has-attached-label = (
-            _has-layer-label(source-style-layers, record.edge-data)
-              or _has-layer-label(sink-style-layers, record.edge-data)
+            (record.source-half-edge != none
+              and _has-layer-label(source-style-layers, record.edge-data))
+              or (record.sink-half-edge != none
+                and _has-layer-label(sink-style-layers, record.edge-data))
           )
           edge-records.push(
             record
@@ -2755,14 +2827,9 @@
                 ev-label: if hidden or has-attached-label {
                   none
                 } else {
-                  _content(edge-label, record.edge-data, _as-content(
-                    record.data-label,
-                  ))
+                  ordinary-label
                 },
-                edge-label-draw-style: (
-                  _style(graph-edge-label-style, record.edge-data)
-                    + _style(edge-label-style, record.edge-data)
-                ),
+                edge-label-draw-style: edge-label-draw-style,
               ),
           )
         }
@@ -2834,7 +2901,10 @@
             }
             let source-draw-style = if source-style-value == none {
               none
-            } else if source-in-subgraph and not subgraph-edge-underlay {
+            } else if (
+              source-in-subgraph and not subgraph-edge-underlay
+                and not _style-value(source-style-value, "label-only")
+            ) {
               source-style-value + _last-style(source-subgraph-styles)
             } else {
               source-style-value
@@ -2846,7 +2916,10 @@
             )
             let sink-draw-style = if sink-style-value == none {
               none
-            } else if sink-in-subgraph and not subgraph-edge-underlay {
+            } else if (
+              sink-in-subgraph and not subgraph-edge-underlay
+                and not _style-value(sink-style-value, "label-only")
+            ) {
               sink-style-value + _last-style(sink-subgraph-styles)
             } else {
               sink-style-value
@@ -2856,12 +2929,12 @@
               edge-data,
               "sink",
             )
-            let source-crossing-under = if source-draw-style == none {
+            let source-crossing-under = if not _has-crossing-style(source-draw-style) {
               none
             } else {
               _style-value(source-draw-style, "crossing-under")
             }
-            let sink-crossing-under = if sink-draw-style == none {
+            let sink-crossing-under = if not _has-crossing-style(sink-draw-style) {
               none
             } else {
               _style-value(sink-draw-style, "crossing-under")
@@ -2922,6 +2995,7 @@
               }
               if (
                 source-style-value != none
+                  and not _style-value(source-style-value, "label-only")
                   and source-in-subgraph
                   and subgraph-edge-underlay
               ) {
@@ -2944,6 +3018,7 @@
               }
               if (
                 sink-style-value != none
+                  and not _style-value(sink-style-value, "label-only")
                   and sink-in-subgraph
                   and subgraph-edge-underlay
               ) {
@@ -3146,6 +3221,7 @@
               }
               if (
                 source-style-value != none
+                  and not _style-value(source-style-value, "label-only")
                   and source-in-subgraph
                   and subgraph-edge-underlay
               ) {
@@ -3171,7 +3247,7 @@
                   edge-data.eid,
                 )
                 let drawn = if (
-                  _style-value(draw-style, "crossing-under") == none
+                  not _has-crossing-style(draw-style)
                 ) {
                   _pattern-dangling(dangling-path, draw-style, label-pos)
                 } else {
@@ -3243,6 +3319,7 @@
               }
               if (
                 sink-style-value != none
+                  and not _style-value(sink-style-value, "label-only")
                   and sink-in-subgraph
                   and subgraph-edge-underlay
               ) {
@@ -3268,7 +3345,7 @@
                   edge-data.eid,
                 )
                 let drawn = if (
-                  _style-value(draw-style, "crossing-under") == none
+                  not _has-crossing-style(draw-style)
                 ) {
                   _pattern-dangling(dangling-path, draw-style, label-pos)
                 } else {

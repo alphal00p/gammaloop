@@ -1,12 +1,11 @@
 #import "../../../../assets/embedded/drawing/templates/physics-edge-style.typ": (
-  coil, dashed, dotted, mi, sink-stroke, source-stroke, style, wave, zigzag,
+  coil, dashed, dotted, fermion-arrow-mark, massive, massless, mi, sink-stroke,
+  source-stroke, style, wave, zigzag,
 )
 #import "../theme.typ": palette
 
-// Website-local weights: deliberately a little heavier than Linnest's
-// general-purpose 0.55pt/1pt defaults so the diagrams survive at hero scale.
-#let massless = 1.0pt
-#let massive = 1.55pt
+// The weights first used for website hero diagrams are now GammaLoop's shared
+// physics defaults. Website-specific colors still follow the light/dark theme.
 
 // The About illustration is shown as a single editorial figure rather than a
 // compact catalogue thumbnail, so its graph and arrows can carry more weight.
@@ -15,16 +14,14 @@
 
 #let particle-flow = (
   fermion-arrow: true,
-  fermion-arrow-mark: (
-    end: (
-      symbol: ">",
-      fill: palette.ink,
-      stroke: palette.ink + 0.3pt,
-      anchor: "center",
-      shorten-to: auto,
+  fermion-arrow-mark: fermion-arrow-mark
+    + (
+      end: fermion-arrow-mark.end
+        + (
+          fill: palette.ink,
+          stroke: palette.ink + 0.3pt,
+        ),
     ),
-    scale: 1.05,
-  ),
 )
 
 #let about-particle-flow = (
@@ -59,7 +56,8 @@
     source: source-stroke(c: palette.accent, thickness: about-massive),
     sink: sink-stroke(c: palette.accent, thickness: about-massive),
     label: none,
-  ) + about-particle-flow,
+  )
+    + about-particle-flow,
   "about-gluon": (
     source: source-stroke(c: palette.ink, thickness: about-massless) + coil,
     sink: sink-stroke(c: palette.ink, thickness: about-massless) + coil,

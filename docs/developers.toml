@@ -208,7 +208,7 @@ review_triggers = ["crates/gammaloop-api/src/commands/save.rs", "crates/gammaloo
 path = "crates/gammaloop-api/src/templates.rs"
 symbol = "gammaloop_api::templates::Assets::extract_templates"
 anchor = "pub fn extract_templates<P: AsRef<Path>>"
-digest = "c3d1ef9ba1d26c5bfdca07d92433afa0cb9d83ab"
+digest = "040793fcba3b6f372a03187cfe82cfacc32fa953"
 
 [[section.note]]
 id = "gammaloop-drawing-architecture"

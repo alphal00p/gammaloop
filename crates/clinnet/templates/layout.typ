@@ -8,6 +8,7 @@
     panic("render config requires data-path")
   }
   for parsed in graph.parse(read(path)) {
-    layout-graph(config, parsed)
+    let g = attach-elements(parsed, config.at("elements", default: (:)))
+    layout-graph(config, g)
   }
 }

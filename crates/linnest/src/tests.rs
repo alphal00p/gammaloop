@@ -1120,6 +1120,52 @@ fn fixed_length_label_layout_keeps_label_radius() {
 }
 
 #[test]
+fn measured_label_collision_pass_preserves_repulsion() {
+    for label_size in [0.0, 0.2] {
+        let dot = format!(
+            r#"digraph {{
+                a [pos="-2,0!" "layout-width"="0.2" "layout-height"="0.2"]
+                b [pos="2,0!" "layout-width"="0.2" "layout-height"="0.2"]
+                a -> b [pos="0,0!" "label-width"="{label_size}" "label-height"="{label_size}"]
+            }}"#
+        );
+        let graph = decode_graphs(&parse_dot_graphs_bytes(dot.as_bytes()).unwrap()).remove(0);
+
+        for (charge, expected_y) in [("0", 1.0), ("100", 1.1)] {
+            let config = BTreeMap::from([
+                ("layout-algo", "tree"),
+                ("layout-nodes", "fixed"),
+                ("viewport-w", "2"),
+                ("viewport-h", "1"),
+                ("length-scale", "1"),
+                ("label-layout", "normal"),
+                ("label-length-scale", "1"),
+                ("label-spring", "0"),
+                ("label-charge", charge),
+                ("label-steps", "1"),
+                ("label-step", "1"),
+                ("label-max-delta-scale", "0.1"),
+            ]);
+            let laid_out = layout_parsed_graph_bytes(&graph, &encode_cbor(&config)).unwrap();
+            let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&laid_out).unwrap());
+            assert_point_close(
+                edges[0].pos.as_ref().unwrap(),
+                &TypstPoint { x: 0.0, y: 0.0 },
+            );
+            // Symmetric repulsion moves the label upward by the configured step cap.
+            // Its measured box is collision-free, so placement must retain that move.
+            assert_point_close(
+                edges[0].label_pos.as_ref().unwrap(),
+                &TypstPoint {
+                    x: 0.0,
+                    y: expected_y,
+                },
+            );
+        }
+    }
+}
+
+#[test]
 fn dangling_tangent_label_layout_keeps_paired_labels_normal() {
     let graph = graph_from_spec_bytes(&encode_graph_spec(&TestPlacementGraphSpec {
         name: "dangling-tangent-label".to_string(),
@@ -1590,6 +1636,128 @@ fn test_graph_structural_patch_updates_edge_position() {
     assert!(dot.contains("bend=\"0.75rad\""), "{dot}");
     assert!(dot.contains("\"pos-x-set\"=\"true\""), "{dot}");
     assert!(dot.contains("\"pos-y-set\"=\"true\""), "{dot}");
+}
+
+#[test]
+fn test_graph_structural_axis_merge_preserves_edge_positions_and_constraints() {
+    use ciborium::Value;
+
+    let parsed = parse_dot_graphs_bytes(
+        br#"digraph {
+            a -> b [id=0 pos="x:4!"]
+            a -> b [id=1 pos="y:6"]
+            a -> b [id=2 pos="x:@+column!,y:2!"]
+        }"#,
+    )
+    .unwrap();
+    let graph = decode_graphs(&parsed).remove(0);
+    let before = crate::graph_api::decode_typst_graph(&graph).unwrap();
+    assert!(matches!(
+        before[EdgeIndex(0)].constraints.x,
+        Constraint::Fixed
+    ));
+    assert!(matches!(
+        before[EdgeIndex(1)].constraints.y,
+        Constraint::Free
+    ));
+    assert!(matches!(
+        before[EdgeIndex(2)].constraints.x,
+        Constraint::Grouped(_, ShiftDirection::PositiveOnly)
+    ));
+
+    let patches = [
+        (0, "y", Value::Integer(7.into()), "start"),
+        (
+            1,
+            "x",
+            Value::Map(vec![
+                (Value::Text("kind".into()), Value::Text("group".into())),
+                (Value::Text("name".into()), Value::Text("left".into())),
+                (Value::Text("side".into()), Value::Text("-".into())),
+            ]),
+            "pin",
+        ),
+        (2, "y", Value::Integer(9.into()), "pin"),
+    ]
+    .map(|(index, axis, value, mode)| {
+        BTreeMap::from([
+            ("index", Value::Integer(index.into())),
+            (
+                "pos",
+                Value::Map(vec![
+                    (Value::Text("merge-axes".into()), Value::Bool(true)),
+                    (Value::Text("mode".into()), Value::Text(mode.into())),
+                    (Value::Text(axis.into()), value),
+                ]),
+            ),
+        ])
+    });
+    let patched = graph_apply_structural_patches_bytes(
+        &graph,
+        &encode_cbor(&BTreeMap::from([("edges", patches)])),
+    )
+    .unwrap();
+    let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&patched).unwrap());
+    assert!(edges.iter().all(|edge| edge.pos_x_set && edge.pos_y_set));
+    let patched = crate::graph_api::decode_typst_graph(&patched).unwrap();
+    let pinned = &patched[EdgeIndex(0)];
+    assert_eq!((pinned.pos.x, pinned.pos.y), (4.0, 7.0));
+    assert!(matches!(pinned.constraints.x, Constraint::Fixed));
+    assert!(matches!(pinned.constraints.y, Constraint::Free));
+    let started = &patched[EdgeIndex(1)];
+    assert_eq!(started.pos.y, 6.0);
+    assert!(matches!(started.constraints.y, Constraint::Free));
+    assert!(matches!(
+        started.constraints.x,
+        Constraint::Grouped(_, ShiftDirection::NegativeOnly)
+    ));
+    let grouped = &patched[EdgeIndex(2)];
+    assert_eq!(grouped.pos.y, 9.0);
+    assert!(matches!(grouped.constraints.y, Constraint::Fixed));
+    assert!(matches!(
+        grouped.constraints.x,
+        Constraint::Grouped(_, ShiftDirection::PositiveOnly)
+    ));
+    assert!(grouped.statements["pin"].contains("x:@+column"));
+}
+
+#[test]
+fn test_graph_structural_axis_merge_updates_same_batch_node_references() {
+    use ciborium::Value;
+
+    let parsed = parse_dot_graphs_bytes(br#"digraph { a [pos="4,5!"]; b; a -> b; }"#).unwrap();
+    let graph = decode_graphs(&parsed).remove(0);
+    let patches = [
+        vec![(Value::Text("x".into()), Value::Integer(8.into()))],
+        vec![
+            (Value::Text("ref".into()), Value::Integer(0.into())),
+            (Value::Text("dx".into()), Value::Integer(2.into())),
+        ],
+    ]
+    .into_iter()
+    .enumerate()
+    .map(|(index, mut pos)| {
+        pos.push((Value::Text("merge-axes".into()), Value::Bool(true)));
+        BTreeMap::from([
+            ("index", Value::Integer(index.into())),
+            ("pos", Value::Map(pos)),
+        ])
+    })
+    .collect::<Vec<_>>();
+    let patched = graph_apply_structural_patches_bytes(
+        &graph,
+        &encode_cbor(&BTreeMap::from([("nodes", patches)])),
+    )
+    .unwrap();
+    let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&patched).unwrap());
+    assert_eq!(nodes[0].pos, Some(TypstPoint { x: 8.0, y: 5.0 }));
+    assert_eq!(nodes[1].pos, Some(TypstPoint { x: 10.0, y: 5.0 }));
+    assert!(nodes.iter().all(|node| node.pos_x_set && node.pos_y_set));
+    let patched = crate::graph_api::decode_typst_graph(&patched).unwrap();
+    for index in [NodeIndex(0), NodeIndex(1)] {
+        assert!(matches!(patched[index].constraints.x, Constraint::Fixed));
+        assert!(matches!(patched[index].constraints.y, Constraint::Fixed));
+    }
 }
 
 #[test]
@@ -2747,6 +2915,38 @@ fn test_dot_layout_accepts_typst_rank_same_subgraph() {
 
     assert_eq!(by_name["a"].y, by_name["b"].y);
     assert_eq!(by_name["b"].y, by_name["c"].y);
+}
+
+#[test]
+fn test_layered_layout_merges_overlapping_same_rank_groups() {
+    use ciborium::value::Value;
+
+    let parsed =
+        parse_dot_graphs_bytes(br#"digraph { a:0 -> b:1 [id=0]; b:2 -> c:3 [id=1]; }"#).unwrap();
+    let graph = decode_graphs(&parsed).remove(0);
+    let mut groups: Vec<Value> = [vec![true, true, true, false], vec![false, true, true, true]]
+        .iter()
+        .map(|bits| {
+            let label: String =
+                decode_cbor(&graph_subgraph_bytes(&graph, &encode_cbor(bits)).unwrap());
+            Value::Text(label)
+        })
+        .collect();
+    for algorithm in ["dot", "stable-layered"] {
+        for _ in 0..2 {
+            let options = BTreeMap::from([
+                ("layout-algo", Value::Text(algorithm.into())),
+                ("rank-same", Value::Array(groups.clone())),
+                ("label-steps", Value::Text("0".into())),
+            ]);
+            let laid_out = layout_parsed_graph_bytes(&graph, &encode_cbor(&options)).unwrap();
+            let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&laid_out).unwrap());
+            assert!(nodes
+                .iter()
+                .all(|node| node.pos.as_ref().unwrap().y == nodes[0].pos.as_ref().unwrap().y));
+            groups.reverse();
+        }
+    }
 }
 
 #[test]

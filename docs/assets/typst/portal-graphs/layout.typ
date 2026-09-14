@@ -1,6 +1,5 @@
-#import "../../../../crates/linnest/typst/src/lib.typ": (
-  draw, graph, layout as apply-layout,
-)
+#import "../../../../crates/linnest/typst/src/lib.typ": graph
+#import "../../../../crates/linnest/typst/src/render/layout.typ" as renderer
 #import "@preview/cetz:0.5.1" as cetz
 #import "../../../../assets/embedded/drawing/templates/layout-core.typ": (
   bind-layout,
@@ -9,7 +8,9 @@
 #import "edge-style.typ" as edge-style
 #import "../theme.typ": palette
 
-#let portal-node-style(node) = if node.at("hidden", default: false) in (true, "true") {
+#let portal-node-style(node) = if (
+  node.at("hidden", default: false) in (true, "true")
+) {
   (radius: 0, fill: none, stroke: none)
 } else {
   (:)
@@ -49,12 +50,11 @@
   }
 }
 
-// Website adapter: the graph algorithm is exactly GammaLoop's save-dot core;
-// only the transparent, theme-aware presentation differs.
+// Website adapter: GammaLoop supplies the same particle and external-edge
+// policy as save-dot; Linnest owns layout and the transparent presentation.
 #let layout = bind-layout(
-  draw: draw,
   graph: graph,
-  apply-layout: apply-layout,
+  renderer: renderer,
   physics: physics,
   edge-style: edge-style,
   diagram-options: (
@@ -66,15 +66,15 @@
 )
 
 #let layout-with-cut-curves = bind-layout(
-  draw: draw,
   graph: graph,
-  apply-layout: apply-layout,
+  renderer: renderer,
   physics: physics,
   edge-style: edge-style,
   diagram-options: (
     title: none,
     node-fill: none,
     node-stroke: palette.ink + 1.7pt,
+    node-radius: 0.2,
     node-style: portal-node-style,
     draw-node: portal-draw-node,
   ),

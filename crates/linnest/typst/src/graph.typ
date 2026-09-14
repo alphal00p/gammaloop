@@ -785,6 +785,8 @@
 }
 
 /// Map graph records with native-data and structural patches.
+/// Position patches merge supplied axes: omitted coordinates retain their
+/// existing values, pin/start modes and coordinate groups.
 ///
 /// `node` and `edge` accept either a callback for every record or a name-keyed
 /// dictionary. Dictionary keys are exact string names: `a` matches `<a>`, and
@@ -865,7 +867,7 @@
 /// Node style is measured immediately and stored as `layout-width` /
 /// `layout-height` statements for later layout calls. Edge labels are measured
 /// as `label-width` / `label-height` statements for label placement. `draw`
-/// uses the stored node and edge-label style by default.
+/// uses the stored node, edge, endpoint, and label styles by default.
 /// -> dictionary
 #let style(
   /// Graph object to style. -> dictionary
@@ -884,6 +886,16 @@
   /// CeTZ node shape style or callback. Explicit numeric radii contribute to
   /// measured node size. -> dictionary | function | none
   node-style: (:),
+  /// Logical-edge style dictionary, layers, or callback used as drawing defaults.
+  /// Explicit draw and record styles override these defaults. `none` hides edges.
+  /// -> dictionary | array | function | none
+  edge-style: (:),
+  /// Source endpoint defaults, composed before explicit draw and record styles.
+  /// -> dictionary | array | function | none
+  source-style: (:),
+  /// Sink endpoint defaults, composed before explicit draw and record styles.
+  /// -> dictionary | array | function | none
+  sink-style: (:),
   /// Edge label content or callback. `none` leaves edge labels unstyled and
   /// unmeasured. -> content | string | function | none
   edge-label: none,
@@ -897,6 +909,9 @@
     node-label: node-label,
     node-label-style: node-label-style,
     node-style: node-style,
+    edge-style: edge-style,
+    source-style: source-style,
+    sink-style: sink-style,
     edge-label: edge-label,
     edge-label-style: edge-label-style,
   ))
