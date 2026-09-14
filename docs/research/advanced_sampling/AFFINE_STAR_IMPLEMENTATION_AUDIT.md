@@ -131,9 +131,11 @@ The current routes first diverge before subtraction. In
 selected-channel mapping and its foreign inverses run in the identity frame,
 then the physical sample is rotated. Summed channels replay the identity-frame
 map inside each probe before rotating its output. Each physical cross-section
-probe subsequently solves its own cuts and prepares its own overlap centers.
+probe prepares its own overlap centers. The native handoff below now lets it
+adopt authenticated selected cut roots; unrelated cuts still solve normally.
 
-The common host-root entry was consolidated as `Esurface::solve_lu_cut`,
+The common host-root entry was consolidated as `Esurface::solve_lu_cut`
+(now delegating the same solve policy to the retained `EsurfaceRay`),
 preserving the seed policy and existing settings: inside zero, tolerance
 factor 1, 2,000 iterations, 64 bracket expansions and native epsilon times Ecm.
 The removed sampling-only wrapper's massless-origin right derivative applies
@@ -162,14 +164,13 @@ higher raised jets. The complete kite rerun passes in 1550.337 s with the fixed
 completing 175 selected core tests and three API gates. This unoptimized fixture
 duration is not a production sampling-budget measurement.
 
-This consolidation still does not supply identical numerical host data. The
-conditional `SamplingMapContextTransform` uses a certified null-direction
-representative, discards its returned ray and uses fresh diagnostics; physical
-LU uses the complete sample
-and the evaluation's persistent diagnostics. The safeguarded solver ignores
-the derivative at its inside endpoint. Sharing its entry therefore removes
-duplicate routing and policy setup without reconciling those different input
-points or diagnostic histories.
+That consolidation alone did not supply identical numerical host data: the
+conditional transform discarded its ray and used fresh diagnostics, whereas
+physical LU routed the complete sample with persistent diagnostics. The native
+handoff now retains the selected ray/root and shares the existing diagnostic
+owner; its combined validation now passes. The safeguarded solver still
+ignores the derivative at its inside endpoint. Sharing its entry alone cannot
+reconcile different inputs or diagnostic histories.
 
 Common equation and solve entry points therefore guarantee the same result
 only for the same native inputs and diagnostics. `RadialRootDiagnostics` also
@@ -208,9 +209,9 @@ preparation and `LUCounterTerm::prepare_shared_overlaps` owners together:
 - Retain that preparation for primary physical evaluation and all probes. Warm
   bridge caches contain immutable bindings, not this per-point geometry. The
   current typed map context carries numerical prerequisites and discrete policy
-  access, but no native host handoff: this requires
-  extending `SamplingChannelRuntimeContexts<T>` with typed physical data and
-  transporting it through the map/bridge result, selected
+  access. The handoff now extends `SamplingChannelRuntimeContexts<T>` with
+  lane-local native records and transports its selected prefix through the
+  map/bridge result, selected
   `DiscreteGraphSample::SamplingChannel` or direct summed branch, and a native
   borrowed `GraphTermEvaluationContext`. The existing physical `lu_solutions`
   loop adopts matching preparations before events and raised packets. Local
@@ -221,13 +222,14 @@ preparation and `LUCounterTerm::prepare_shared_overlaps` owners together:
   the completed mapped point, not merely memoize speculative map preparation.
   In particular, retained native priors do not repair information lost when
   the completed master point undergoes affine cancellation. Check that it
-  represents those priors within the supported geometry budget; otherwise
-  request native original-draw rescue or report failure.
+  represents the retained scalar host equation within the supported budget;
+  otherwise request native original-draw rescue or report failure. This scalar
+  check does not establish coordinate-vector or full conditional-density accuracy.
   Exact group invariance excludes every active or future dependency; construct
   a full physical sample only after its actual coordinates are available.
 
-The agreed first handoff class remains **unimplemented**. It requires the same
-ordered resolved parent and canonical host-required prior subset for each
+The agreed first handoff class is **implemented, with combined gates passing**.
+It requires the same ordered resolved parent and canonical host-required prior subset for each
 sharing consumer, with every omitted energy coefficient exactly zero. This
 restricts certified sampling pullbacks, not user threshold metadata: physical
 groups, solve signatures and centers remain unchanged. Ordered permutations
@@ -249,6 +251,45 @@ consistency check and the separate completed-point physical-adoption check.
 Partition-only work has no authority and each summed generating row is separate.
 This is bookkeeping in the existing bridge/context, not another registry,
 catalogue, helper engine or retry owner.
+
+Physical adoption authenticates the actual graph/group/representative and ordered
+parent/prior plan against the selected immutable named-channel definition before
+events; a different valid graph LMB is not sufficient. The group master is validated first; intentional
+foreign grouped graphs receive no authority. Retained rays stay unrotated through
+sample rotation, then rotate once for comparison with independently routed
+completed data. A fixed directed 2048-bit certificate checks negative origin,
+opposite endpoint signs, positive energies/derivative, candidate residual error,
+first-derivative ratio and both explicit inverse-volume ratio conventions. It
+proves only these factors for the two represented equations. It does not enclose
+coefficient-vector differences, higher raised jets or target/future H/Z density
+sensitivity. Shared jet provenance and existing native stability remain distinct
+from interval accuracy. Canonical, norm and debug passes save/restore root history
+on success and error; they cannot consume physical retry occurrences. Obsolete
+Gamma/Discrete precision casts are removed: original-source replay alone rebuilds
+native host data. Host-only adoption verification/rotation/routing is charged to
+sampling time, and its nested delta is subtracted from physical-body time.
+
+The generated raised-cut fixture exercises original-source host retention under
+nonidentity rotation, native Quad redraw, and norm/debug history restoration on
+success and error. Forged graph IDs, ordered parents and active representatives
+are checked through existing dispatch/physical adoption. The direct verifier
+fixture distinguishes shallow positive slopes and tiny nonzero energies from a
+true zero-energy endpoint; the former checks do not claim that an underflowing
+native Newton evaluation succeeds.
+
+The final source passes 184 unique core tests: the 176-test focused gate
+(118.591 s), seven Gamma sample tests and the complete kite (1504.601 s).
+The conditional fixture was rerun after its final test-only update (56.996 s),
+comparing successful nonidentity physical adoption with the identity probe:
+finite nonzero totals agree within the fixed 1e-8 tolerance. Existing event
+ownership deliberately buffers/counts only identity probes; the test checks
+this rule, while surrounding selected/direct event identities and weights agree.
+The complete kite retains its 8192-draw 6% normalization/8% moment bounds; its
+unoptimized complete-fixture duration is not production sampling cost. Three API
+gates pass in 106.024 s, combined checking in 12.56 s and clippy in 57.76 s with
+68 existing warnings and none on changed lines. Formatting and diff checks pass.
+The optimized GL638 10% budget, hosted joint binding and full H/Z sensitivity
+propagation remain open.
 
 Prepare automatic and forced centers once in the identity frame. Convert the
 actual stored f64 center to native arithmetic, then rotate its active vectors
@@ -377,7 +418,7 @@ These source checks and the all-18-orientation physical consistency and
 and fallback retain their existing coverage. Current joint source fixtures
 clear rotation probes. These gates are separate from
 the kernel's fixed-context normalization and `F=1/R` bounded-weight tests, and
-do not complete cross-section host or CT-center/alpha authority. The complete
+predate native host adoption and do not complete CT-center/alpha authority. The complete
 kite test takes 1537.369 s in the unoptimized test profile; the optimized GL638
 10% sampling-cost budget remains unmeasured.
 
@@ -388,7 +429,7 @@ Actual target bodies have disjoint inclusive timing across lanes and rotations;
 their evaluator/event counters remain subsets. Final metadata refresh includes
 post-snapshot debug work. Terminal error-only returns still expose no counters.
 This enables measurement; it supplies neither shared-host attribution nor a
-passing 10% budget before native transport/adoption is implemented and timed.
+passing 10% budget before the new native transport/adoption is validated and timed.
 
 ## Resolve a star without requiring user threshold directives
 

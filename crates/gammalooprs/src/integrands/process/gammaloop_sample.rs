@@ -1,4 +1,5 @@
 use crate::graph::GroupId;
+use crate::integrands::evaluation::EvaluationMetaData;
 use crate::integrands::process::{GraphTerm, SamplingMomentumSampleContext};
 use crate::momentum::sample::MomentumSample;
 use crate::momentum::{Rotation, ThreeMomentum};
@@ -17,7 +18,7 @@ use symbolica::numerical_integration::Sample;
 
 use super::{
     ProcessIntegrandImpl, SamplingChannelId, SamplingChannelRuntimeContexts,
-    resolve_discrete_selection_for_sampling, sampling_context::SamplingProposalPolicies,
+    resolve_discrete_selection_for_sampling, sampling_context::PreparedLUHost,
 };
 
 // discrete dimensions, continious dimensions
@@ -57,7 +58,7 @@ fn unwrap_sample_impl<T: FloatLike>(
 
 /// Sample whose structure depends on the sampling settings, and enforces these settings.
 #[derive(Debug, Clone)]
-pub enum GammaLoopSample<T: FloatLike> {
+pub(crate) enum GammaLoopSample<T: FloatLike> {
     Default {
         sample: MomentumSample<T>,
         use_lmb_basis: bool,
@@ -137,115 +138,6 @@ impl<T: FloatLike> GammaLoopSample<T> {
         }
     }
 
-    /// Cast the sample to a different precision
-    #[allow(dead_code)]
-    #[inline]
-    fn cast_sample<T2: FloatLike>(&self) -> GammaLoopSample<T2>
-    where
-        F<T2>: From<F<T>>,
-    {
-        match self {
-            GammaLoopSample::Default {
-                sample,
-                use_lmb_basis,
-            } => GammaLoopSample::Default {
-                sample: sample.cast_sample(),
-                use_lmb_basis: *use_lmb_basis,
-            },
-            GammaLoopSample::Graph { graph_id, sample } => GammaLoopSample::Graph {
-                graph_id: *graph_id,
-                sample: sample.cast_sample(),
-            },
-            GammaLoopSample::MultiChanneling {
-                sampling_coordinates,
-                sample,
-            } => GammaLoopSample::MultiChanneling {
-                sampling_coordinates: sampling_coordinates
-                    .as_ref()
-                    .map(|coordinates| coordinates.iter().cloned().map(F::<T2>::from).collect()),
-                sample: sample.cast_sample(),
-            },
-            GammaLoopSample::DiscreteGraph { group_id, sample } => GammaLoopSample::DiscreteGraph {
-                group_id: *group_id,
-                sample: sample.cast_sample(),
-            },
-        }
-    }
-
-    #[allow(unused)]
-    fn higher_precision(&self) -> GammaLoopSample<T::Higher>
-    where
-        T::Lower: FloatLike + Default,
-        T::Higher: FloatLike + Default,
-    {
-        match self {
-            GammaLoopSample::Default {
-                sample,
-                use_lmb_basis,
-            } => GammaLoopSample::Default {
-                sample: sample.higher_precision(),
-                use_lmb_basis: *use_lmb_basis,
-            },
-            GammaLoopSample::Graph { graph_id, sample } => GammaLoopSample::Graph {
-                graph_id: *graph_id,
-                sample: sample.higher_precision(),
-            },
-            GammaLoopSample::MultiChanneling {
-                sampling_coordinates,
-                sample,
-            } => GammaLoopSample::MultiChanneling {
-                sampling_coordinates: sampling_coordinates.as_ref().map(|coordinates| {
-                    coordinates
-                        .iter()
-                        .map(|coordinate| coordinate.higher())
-                        .collect()
-                }),
-                sample: sample.higher_precision(),
-            },
-            GammaLoopSample::DiscreteGraph { group_id, sample } => GammaLoopSample::DiscreteGraph {
-                group_id: *group_id,
-                sample: sample.higher_precision(),
-            },
-        }
-    }
-
-    #[allow(dead_code)]
-    fn lower_precision(&self) -> GammaLoopSample<T::Lower>
-    where
-        T::Lower: FloatLike + Default,
-        T::Higher: FloatLike + Default,
-    {
-        match self {
-            GammaLoopSample::Default {
-                sample,
-                use_lmb_basis,
-            } => GammaLoopSample::Default {
-                sample: sample.lower_precision(),
-                use_lmb_basis: *use_lmb_basis,
-            },
-            GammaLoopSample::Graph { graph_id, sample } => GammaLoopSample::Graph {
-                graph_id: *graph_id,
-                sample: sample.lower_precision(),
-            },
-            GammaLoopSample::MultiChanneling {
-                sampling_coordinates,
-                sample,
-            } => GammaLoopSample::MultiChanneling {
-                sampling_coordinates: sampling_coordinates.as_ref().map(|coordinates| {
-                    coordinates
-                        .iter()
-                        .map(|coordinate| coordinate.lower())
-                        .collect()
-                }),
-                sample: sample.lower_precision(),
-            },
-            GammaLoopSample::DiscreteGraph { group_id, sample } => GammaLoopSample::DiscreteGraph {
-                group_id: *group_id,
-                sample: sample.lower_precision(),
-            },
-        }
-    }
-
     /// Retrieve the default sample which is contained in all types
     #[inline]
     pub(crate) fn get_default_sample(&self) -> &MomentumSample<T> {
@@ -260,7 +152,7 @@ impl<T: FloatLike> GammaLoopSample<T> {
 
 /// This sample is used when importance sampling over graphs is used.
 #[derive(Debug, Clone)]
-pub enum DiscreteGraphSample<T: FloatLike> {
+pub(crate) enum DiscreteGraphSample<T: FloatLike> {
     Default {
         sample: MomentumSample<T>,
         use_lmb_basis: bool,
@@ -281,8 +173,8 @@ pub enum DiscreteGraphSample<T: FloatLike> {
     SamplingChannel {
         channel_id: SamplingChannelId,
         /// Original unit-cube coordinates used by the canonical channel map.
-        /// They are preserved so a future physical channel can run its
-        /// per-sample LU/t* preparation before applying a conditional map.
+        /// Native retries replay the original source before preparing LU/t*
+        /// data and applying the conditional map; derived data is never cast.
         /// Direct momentum evaluations have no such coordinates and store
         /// `None`.
         sampling_coordinates: Option<Vec<F<T>>>,
@@ -291,6 +183,10 @@ pub enum DiscreteGraphSample<T: FloatLike> {
         /// graph term is evaluated. X-space samples fold this factor into the
         /// map Jacobian and leave this field unset.
         partition_weight: Option<F<T>>,
+        /// Initial selected-map authority, retained in its original native frame.
+        /// Stability rotations rotate the completed sample; physical adoption
+        /// rotates these rays once and verifies them against that sample.
+        prepared_lu_hosts: Vec<PreparedLUHost<T>>,
         sample: MomentumSample<T>,
     },
 }
@@ -347,150 +243,14 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
                 channel_id,
                 sampling_coordinates,
                 partition_weight,
+                prepared_lu_hosts,
                 sample,
             } => DiscreteGraphSample::SamplingChannel {
                 channel_id: *channel_id,
                 sampling_coordinates: sampling_coordinates.clone(),
                 partition_weight: partition_weight.clone(),
+                prepared_lu_hosts: prepared_lu_hosts.clone(),
                 sample: sample.rotate(rotation, loop_mom_cache_id, external_mom_cache_id),
-            },
-        }
-    }
-
-    /// Cast the sample to a different precision
-    #[inline]
-    fn cast_sample<T2: FloatLike>(&self) -> DiscreteGraphSample<T2>
-    where
-        F<T2>: From<F<T>>,
-    {
-        match self {
-            DiscreteGraphSample::Default {
-                sample,
-                use_lmb_basis,
-            } => DiscreteGraphSample::Default {
-                sample: sample.cast_sample(),
-                use_lmb_basis: *use_lmb_basis,
-            },
-            DiscreteGraphSample::MultiChanneling {
-                sampling_coordinates,
-                sample,
-            } => DiscreteGraphSample::MultiChanneling {
-                sampling_coordinates: sampling_coordinates
-                    .as_ref()
-                    .map(|coordinates| coordinates.iter().cloned().map(F::<T2>::from).collect()),
-                sample: sample.cast_sample(),
-            },
-            DiscreteGraphSample::Tropical(sample) => {
-                DiscreteGraphSample::Tropical(sample.cast_sample())
-            }
-            DiscreteGraphSample::SamplingChannel {
-                channel_id,
-                sampling_coordinates,
-                partition_weight,
-                sample,
-            } => DiscreteGraphSample::SamplingChannel {
-                channel_id: *channel_id,
-                sampling_coordinates: sampling_coordinates
-                    .as_ref()
-                    .map(|coordinates| coordinates.iter().cloned().map(F::<T2>::from).collect()),
-                partition_weight: partition_weight
-                    .as_ref()
-                    .map(|weight| F::<T2>::from(weight.clone())),
-                sample: sample.cast_sample(),
-            },
-        }
-    }
-
-    fn higher_precision(&self) -> DiscreteGraphSample<T::Higher>
-    where
-        T::Higher: FloatLike + Default,
-        T::Lower: FloatLike + Default,
-    {
-        match self {
-            DiscreteGraphSample::Default {
-                sample,
-                use_lmb_basis,
-            } => DiscreteGraphSample::Default {
-                sample: sample.higher_precision(),
-                use_lmb_basis: *use_lmb_basis,
-            },
-            DiscreteGraphSample::MultiChanneling {
-                sampling_coordinates,
-                sample,
-            } => DiscreteGraphSample::MultiChanneling {
-                sampling_coordinates: sampling_coordinates.as_ref().map(|coordinates| {
-                    coordinates
-                        .iter()
-                        .map(|coordinate| coordinate.higher())
-                        .collect()
-                }),
-                sample: sample.higher_precision(),
-            },
-            DiscreteGraphSample::Tropical(sample) => {
-                DiscreteGraphSample::Tropical(sample.higher_precision())
-            }
-            DiscreteGraphSample::SamplingChannel {
-                channel_id,
-                sampling_coordinates,
-                partition_weight,
-                sample,
-            } => DiscreteGraphSample::SamplingChannel {
-                channel_id: *channel_id,
-                sampling_coordinates: sampling_coordinates.as_ref().map(|coordinates| {
-                    coordinates
-                        .iter()
-                        .map(|coordinate| coordinate.higher())
-                        .collect()
-                }),
-                partition_weight: partition_weight.as_ref().map(|weight| weight.higher()),
-                sample: sample.higher_precision(),
-            },
-        }
-    }
-
-    fn lower_precision(&self) -> DiscreteGraphSample<T::Lower>
-    where
-        T::Higher: FloatLike + Default,
-        T::Lower: FloatLike + Default,
-    {
-        match self {
-            DiscreteGraphSample::Default {
-                sample,
-                use_lmb_basis,
-            } => DiscreteGraphSample::Default {
-                sample: sample.lower_precision(),
-                use_lmb_basis: *use_lmb_basis,
-            },
-            DiscreteGraphSample::MultiChanneling {
-                sampling_coordinates,
-                sample,
-            } => DiscreteGraphSample::MultiChanneling {
-                sampling_coordinates: sampling_coordinates.as_ref().map(|coordinates| {
-                    coordinates
-                        .iter()
-                        .map(|coordinate| coordinate.lower())
-                        .collect()
-                }),
-                sample: sample.lower_precision(),
-            },
-            DiscreteGraphSample::Tropical(sample) => {
-                DiscreteGraphSample::Tropical(sample.lower_precision())
-            }
-            DiscreteGraphSample::SamplingChannel {
-                channel_id,
-                sampling_coordinates,
-                partition_weight,
-                sample,
-            } => DiscreteGraphSample::SamplingChannel {
-                channel_id: *channel_id,
-                sampling_coordinates: sampling_coordinates.as_ref().map(|coordinates| {
-                    coordinates
-                        .iter()
-                        .map(|coordinate| coordinate.lower())
-                        .collect()
-                }),
-                partition_weight: partition_weight.as_ref().map(|weight| weight.lower()),
-                sample: sample.lower_precision(),
             },
         }
     }
@@ -529,7 +289,7 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
 pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
     sample_point: &Sample<F<f64>>,
     integrand: &mut I,
-    policies: &mut SamplingProposalPolicies,
+    metadata: &mut EvaluationMetaData,
 ) -> Result<GammaLoopSample<T>> {
     integrand.prepare_sampling_precision::<T>()?;
     let (discrete_indices, xs) = unwrap_sample(sample_point);
@@ -705,7 +465,7 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
                         bridge.channels().len(),
                         integrand.get_group(group_id).master(),
                         channel_id,
-                        policies,
+                        metadata,
                     );
                     let mapped = bridge.forward_with_runtime_contexts(
                         channel_id,
@@ -727,6 +487,7 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
                             channel_id,
                             sampling_coordinates: Some(xs.clone()),
                             partition_weight: None,
+                            prepared_lu_hosts: mapped.prepared_lu_hosts,
                             sample,
                         },
                     })
@@ -834,46 +595,28 @@ mod tests {
     }
 
     #[test]
-    fn sampling_channel_coordinates_survive_precision_conversion() {
-        let sample = MomentumSample::new(
-            LoopMomenta::from(vec![]),
-            0,
-            &Externals::default(),
-            0,
-            F(1.0),
-            DependentMomentaConstructor::CrossSection,
-            None,
-        )
-        .expect("empty cross-section sample is valid for metadata test");
-        let coordinates = vec![F(0.125), F(0.625), F(0.875)];
-        let sampling_channel = DiscreteGraphSample::SamplingChannel {
-            channel_id: SamplingChannelId::from(3),
-            sampling_coordinates: Some(coordinates.clone()),
-            partition_weight: None,
-            sample,
-        };
+    fn sampling_channel_coordinates_replay_at_native_precision() {
+        use crate::utils::{ArbPrec, FloatLike, QuadFloat};
 
-        assert_eq!(
-            sampling_channel.sampling_coordinates(),
-            Some(coordinates.as_slice())
+        // Cast the original sample coordinates to each precision. Prepared
+        // rays, roots and Jacobians must instead be rebuilt from this source.
+        let coordinates = vec![F(0.1), F(0.625), F(0.875)];
+        let source = symbolica::numerical_integration::Sample::Uniform(
+            F(1.0),
+            vec![4, 2, 3],
+            coordinates.clone(),
         );
-        let cast = sampling_channel.cast_sample::<f64>();
-        assert_eq!(cast.sampling_coordinates(), Some(coordinates.as_slice()));
-        let higher = sampling_channel.higher_precision();
-        assert_eq!(
-            higher
-                .sampling_coordinates()
-                .expect("higher precision keeps coordinates")
-                .iter()
-                .map(|coordinate| coordinate.into_f64())
-                .collect::<Vec<_>>(),
-            coordinates
-                .iter()
-                .map(|coordinate| coordinate.into_f64())
-                .collect::<Vec<_>>()
-        );
-        let lower = higher.lower_precision();
-        assert_eq!(lower.sampling_coordinates(), Some(coordinates.as_slice()));
+        fn check<T: FloatLike>(source: &symbolica::numerical_integration::Sample<F<f64>>) {
+            let (selection, replay) = unwrap_sample::<T>(source);
+            assert_eq!(selection, vec![4, 2, 3]);
+            let (_, original) = unwrap_sample::<f64>(source);
+            for (native, original) in replay.iter().zip(original) {
+                assert_eq!(native.0, T::from_f64_exact_binary(original.0));
+            }
+        }
+        check::<f64>(&source);
+        check::<QuadFloat>(&source);
+        check::<ArbPrec>(&source);
     }
 
     #[test]
@@ -894,6 +637,7 @@ mod tests {
             channel_id: SamplingChannelId::from(0),
             sampling_coordinates: None,
             partition_weight: None,
+            prepared_lu_hosts: vec![],
             sample,
         };
         assert!(sampling_channel.sampling_coordinates().is_none());
@@ -916,6 +660,7 @@ mod tests {
             channel_id: SamplingChannelId::from(11),
             sampling_coordinates: Some(coordinates.clone()),
             partition_weight: None,
+            prepared_lu_hosts: vec![],
             sample: sample.clone(),
         };
         assert_eq!(
@@ -973,9 +718,6 @@ mod tests {
             sampling_coordinates: Some(coordinates.clone()),
             sample,
         };
-        assert_eq!(
-            summed.cast_sample::<f64>().sampling_coordinates(),
-            Some(coordinates.as_slice())
-        );
+        assert_eq!(summed.sampling_coordinates(), Some(coordinates.as_slice()));
     }
 }

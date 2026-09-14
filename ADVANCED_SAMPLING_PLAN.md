@@ -658,9 +658,8 @@ preparation now retains its native ordered energy ray with the root; physical
 raised eta jets use those same coefficients. Routing before scaling deliberately
 changes finite-precision association in this LU path. Amplitude/static CT and
 fiber scalar evaluation remain unchanged, as does their external-only seed
-convention. The conditional map still discards its ray: authoritative transport
-through the native context and physical adoption, with a completed-point and
-rotation accuracy budget, remain required before hosted joint enablement.
+convention. At that milestone the conditional map still discarded its ray;
+the subsequent native handoff implementation below addresses this boundary.
 The run passes 174 focused core tests in 124.853 s and three API regressions
 in 103.571 s, including timing-counter checks; combined checking and clippy pass
 with no changed-line warnings. The full kite rerun also passes in 1550.337 s,
@@ -672,6 +671,34 @@ also passes three native evaluations at two stored hard/soft points, each with
 all 936 orientations and six event weights; all 35 saved-state hashes remain
 unchanged. This bounded regression is neither an isolated attribution to the
 ray change nor an accuracy, variance or sampling-runtime improvement claim.
+
+The native host handoff is implemented and its combined gates **pass**.
+Existing runtime rows retain native ray/root records and freeze selected authority
+before inverse partition work. Selected/direct samples and explicit summed rows
+carry only that prefix; native retries rebuild from the original source and
+rotations retain unrotated payloads. Canonical, norm and debug remaps isolate
+root diagnostic occurrences while preserving policy decisions and timing.
+Physical adoption authenticates the master graph, cut group, ordered parent and
+required priors against the selected immutable channel, rotates the retained ray
+once and independently routes the completed point. A fixed directed 2048-bit check bounds represented scalar roots,
+first derivatives and explicit inverse-volume factors. It does not bound vector
+coefficient differences, higher raised jets or the full conditional/future H/Z
+density. Those sensitivity checks, exact GL638 routing, hosted joint binding and
+CT center/alpha handoff remain required. Adoption verification is charged to
+sampling time even inside the physical body, then excluded from physical time;
+shared preparation is counted once. No new GL638 gain or 10% budget claim follows.
+
+The final source passes 184 unique core tests: the 176-test focused gate
+(118.591 s), seven Gamma sample tests, and the complete kite (1504.601 s).
+The conditional fixture's final test-only rerun passes in 56.996 s with strict
+1e-8 nonidentity physical-total agreement. Probe event suppression follows the
+existing identity-only buffering/counting rule; the surrounding fixture retains
+identity selected/direct event comparisons. The full kite again satisfies its
+8192-draw 6% normalization/8% moment bounds; its unoptimized complete-fixture
+duration is not a production sampling benchmark. Three API gates pass in
+106.024 s, combined checking in 12.56 s and clippy in 57.76 s with 68 existing
+warnings and none on changed lines. Formatting and diff checks pass. The optimized
+GL638 10% budget remains unmeasured, and hosted GL638 joint binding remains open.
 
 In parallel, the subtraction owner has separated representative overlap
 kinematics from the raised derivative packets, using the existing sample and

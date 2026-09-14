@@ -1002,26 +1002,23 @@ mod tests {
 
     #[test]
     fn joint_sampling_policy_rejects_another_valid_radius_and_ordinary_branch() {
-        use crate::integrands::process::{
-            SamplingChannelId, SamplingChannelRuntimeContexts,
-            sampling_context::SamplingProposalPolicies,
-        };
+        use crate::integrands::process::{SamplingChannelId, SamplingChannelRuntimeContexts};
         crate::initialisation::test_initialise().unwrap();
         let program = SharedEnergyJointMap::<f64>::compile_program().unwrap();
         let mut canonical = map(geometry::<ArbPrec>(), program.clone());
         canonical.max_radius = F::<ArbPrec>::default().from_usize(100).0;
-        let mut policies = SamplingProposalPolicies::default();
-        policies.begin_collection();
+        let mut metadata = crate::integrands::evaluation::EvaluationMetaData::new_empty();
+        metadata.sampling_proposal_policies.begin_collection();
         let (_, radius) = {
             let mut rows =
-                SamplingChannelRuntimeContexts::for_draw(1, 0, SamplingChannelId(0), &mut policies);
+                SamplingChannelRuntimeContexts::for_draw(1, 0, SamplingChannelId(0), &mut metadata);
             canonical
                 .prepare(&mut rows.for_channel(SamplingChannelId(0)).unwrap())
                 .unwrap()
         };
         let radius = radius.unwrap();
         assert!(radius < canonical.max_radius);
-        policies.seal();
+        metadata.sampling_proposal_policies.seal();
         let mut enlarged = geometry::<ArbPrec>();
         let two = F::<ArbPrec>::default().from_usize(2);
         for value in enlarged
@@ -1052,7 +1049,7 @@ mod tests {
         let ordinary = map(ordinary_geometry, program);
         for changed in [&changed, &ordinary] {
             let mut rows =
-                SamplingChannelRuntimeContexts::for_draw(1, 0, SamplingChannelId(0), &mut policies);
+                SamplingChannelRuntimeContexts::for_draw(1, 0, SamplingChannelId(0), &mut metadata);
             let error = changed
                 .prepare(&mut rows.for_channel(SamplingChannelId(0)).unwrap())
                 .unwrap_err();
@@ -1062,11 +1059,11 @@ mod tests {
             );
         }
         let mut rows =
-            SamplingChannelRuntimeContexts::for_draw(1, 0, SamplingChannelId(0), &mut policies);
+            SamplingChannelRuntimeContexts::for_draw(1, 0, SamplingChannelId(0), &mut metadata);
         canonical
             .prepare(&mut rows.for_channel(SamplingChannelId(0)).unwrap())
             .unwrap();
-        assert_eq!(policies.len(), 1);
+        assert_eq!(metadata.sampling_proposal_policies.len(), 1);
     }
 
     #[test]

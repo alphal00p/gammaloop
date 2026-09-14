@@ -92,8 +92,8 @@ use super::{
     GraphTerm, GraphTermEvaluationContext, LmbMultiChannelingSetup, ProcessIntegrandImpl,
     create_grid, evaluate_sample, filtered_orientation_count, format_orientation_label,
     format_sampling_channel_label, histogram_process_info_for_integrand, prepare_buffered_event,
-    resolve_visible_orientation_id, validate_group_orientation_catalogs,
-    validate_process_runtime_settings,
+    resolve_visible_orientation_id, sampling_context::SamplingMapContext,
+    validate_group_orientation_catalogs, validate_process_runtime_settings,
 };
 
 #[derive(Clone, Encode, Decode)]
@@ -818,7 +818,7 @@ impl AmplitudeGraphTerm {
     fn evaluate_impl<T: FloatLike>(
         &mut self,
         momentum_sample: &MomentumSample<T>,
-        context: &mut GraphTermEvaluationContext<'_, '_>,
+        context: &mut GraphTermEvaluationContext<'_, '_, T>,
     ) -> Result<AmplitudeGraphTermEvaluation<T>> {
         let prefactor = momentum_sample.one();
 
@@ -1480,7 +1480,8 @@ impl GraphTerm for AmplitudeGraphTerm {
                         .map(|p| p.spatial.clone())
                         .collect::<crate::momentum::sample::ExternalThreeMomenta<F<T>>>();
                     let native_zero = zero.clone();
-                    let transform = Arc::new(move |previous: &[T]| {
+                    let transform = Arc::new(move |context: &mut SamplingMapContext<'_, T>| {
+                        let previous = context.previous;
                         if previous.len() != 3 * prior_indices.len() {
                             return Err(eyre!(
                                 "joint affine context has {} components, expected {}",
@@ -1531,7 +1532,7 @@ impl GraphTerm for AmplitudeGraphTerm {
                     let map = if complement.is_empty() {
                         // With no prior coordinates the complete common-energy
                         // shift is immutable: bind the existing affine owner once.
-                        let (_, frame) = transform(&[])?;
+                        let (_, frame) = transform(&mut SamplingMapContext::detached(&[]))?;
                         CompiledSamplingMap::Affine {
                             map: Box::new(CompiledSamplingMap::Joint(joint)),
                             frame,
@@ -1693,7 +1694,7 @@ impl GraphTerm for AmplitudeGraphTerm {
     fn evaluate<T: FloatLike>(
         &mut self,
         momentum_sample: &MomentumSample<T>,
-        mut context: GraphTermEvaluationContext<'_, '_>,
+        mut context: GraphTermEvaluationContext<'_, '_, T>,
     ) -> Result<GraphEvaluationResult<T>> {
         let event_channel_id = context.sampling_channel;
         let prepared_event = prepare_buffered_event(
@@ -3170,9 +3171,7 @@ impl HasIntegrand for AmplitudeIntegrand {
 #[cfg(test)]
 mod sampling_tests {
     use super::*;
-    use crate::integrands::process::sampling_context::{
-        SamplingMapContext, SamplingProposalPolicies,
-    };
+    use crate::integrands::evaluation::EvaluationMetaData;
     use crate::{
         initialisation::test_initialise,
         integrands::process::{
@@ -3446,8 +3445,8 @@ sampling_multichanneling = false
         let ProcessIntegrand::Amplitude(integrand) = integrand else {
             unreachable!()
         };
-        let mut policies = SamplingProposalPolicies::default();
-        let sample = parameterize::<QuadFloat, _>(&continuous, integrand, &mut policies)?;
+        let mut metadata = EvaluationMetaData::new_empty();
+        let sample = parameterize::<QuadFloat, _>(&continuous, integrand, &mut metadata)?;
         let rotation = Rotation::new(RotationMethod::Pi2X);
         let rotated = sample.rotate(&rotation, 100, 101);
         let result = evaluate_single(

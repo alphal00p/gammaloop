@@ -606,9 +606,8 @@ complete 8192-draw kite rerun and its physical/retry checks, plus three API gate
 `Esurface::solve_lu_cut` returns the native ordered energy ray together with its
 root, and physical raised eta jets evaluate that ray. Explicit LU now routes
 before scaling; other scalar CT/fiber evaluators retain their prior operation
-order and seed convention. A conditional map still discards its ray, so this
-does not establish authority over the physical host's completed-point equation.
-Native selected/summed transport and validated physical adoption remain next.
+order and seed convention. Those gates predate the native host handoff described
+below and do not validate its adoption checks.
 Three [GL638 LU-ray replay evaluations](../research/advanced_sampling/GL638_LU_RAY_REPLAY.md)
 retain all 936 orientations, six physical event weights and the unchanged saved
 state. They establish a bounded physical regression, not improved precision or
@@ -617,13 +616,35 @@ variance; GL638's six simple cuts do not exercise higher raised eta derivatives.
 The accompanying timing change passes core/API checks. `parameterization_time`
 accumulates map/source/partition and replay costs across attempts; canonical
 preparation is charged once. `integrand_evaluation_time` counts actual target
-bodies across all lanes and probes, excluding maps. Evaluator and event timings
+bodies across all lanes and probes, excluding maps and nested host-adoption
+verification charged to sampling time. Evaluator and event timings
 are subsets removed from the benchmark's residual integrand row. Final metadata
 retains accumulated costs, including replays after its earlier result snapshot.
 These are measurement counters, not evidence that the GL638 10% budget is met.
 
+The native host handoff is implemented and its combined gates pass. The existing
+runtime context owns one native record vector; the initial selected forward or
+direct inverse freezes its authoritative prefix before partition inverses.
+Only identical plans and exact represented priors reuse a record. Selected/summed
+samples lend that prefix to the physical owner; native precision retries redraw
+the source, and rotations retain the original-frame payload. Metadata contains
+only discrete policies and root history; canonical/norm/debug histories are
+isolated. Graph-group masters authenticate their records before ordinary foreign
+graphs receive an empty payload. Physical adoption rotates the ray once and
+authenticates its parent/host against the selected immutable channel, then
+compares it with independently routed completed data using a fixed directed
+2048-bit scalar/root/first-derivative/inverse-volume check. This does not certify
+vector-coordinate error, higher raised jets or full conditional density.
+The final source passes 184 unique core tests and three API gates (106.024 s).
+The conditional fixture's nonidentity physical totals agree within the fixed
+1e-8 tolerance; probes retain no event buffer/counts under existing ownership.
+The complete 8192-draw kite passes in 1504.601 s with its 6%/8% reference bounds;
+this unoptimized complete-fixture timing is not a production budget measurement.
+Combined checking (12.56 s), clippy (57.76 s; no changed-line warnings), formatting
+and diff checks pass. The optimized GL638 10% budget remains unmeasured.
+
 Hosted cross-section joint binding remains disabled. It still needs certified
-fixed-external routing and authoritative physical cut `t*` preparation; CT-star
+fixed-external routing and propagation of host uncertainty into its density; CT-star
 maps additionally need the actual common center and projection alpha handoff.
 Map coverage is `Full` or `Restricted`, independently of `requires_context` and
 the new `requires_proposal_policy` preparation flag.
