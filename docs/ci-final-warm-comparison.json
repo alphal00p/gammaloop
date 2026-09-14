@@ -1,0 +1,87 @@
+{
+  "sha": "dd6ba768692302ca4855727110c4d8422b0979f9",
+  "suiteUrl": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-lazy-check-runners/dd6ba768692302ca4855727110c4d8422b0979f9",
+  "baselineSuiteUrl": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-clan-cache-fixed-validation/f1ed70f585d293ecb851cf39f28821a69b33ac05",
+  "status": "success",
+  "requiredPassed": true,
+  "comparison": [
+    {
+      "metric": "requiredSeconds",
+      "before": 506,
+      "after": 226,
+      "changePercent": -55.33596837944664
+    },
+    {
+      "metric": "suiteSeconds",
+      "before": 517,
+      "after": 245,
+      "changePercent": -52.61121856866537
+    },
+    {
+      "metric": "finalAggregateTailSeconds",
+      "before": 11,
+      "after": 19,
+      "changePercent": 72.72727272727273
+    },
+    {
+      "metric": "observedWorkerMinutes",
+      "before": 6.9779058843333335,
+      "after": 3.960075060350001,
+      "changePercent": -43.248373853234554
+    },
+    {
+      "metric": "downloadReportedBytes",
+      "before": 1403013488,
+      "after": 8160,
+      "changePercent": -99.99941839475744
+    },
+    {
+      "metric": "downloadWorkerSeconds",
+      "before": 107.454,
+      "after": 1.68,
+      "changePercent": -98.43654028700654
+    },
+    {
+      "metric": "cachedJobs",
+      "before": 53,
+      "after": 53,
+      "changePercent": 0.0
+    },
+    {
+      "metric": "cargoFinishedSeconds",
+      "before": 0,
+      "after": 0,
+      "changePercent": null
+    },
+    {
+      "metric": "compilationMessages",
+      "before": 0,
+      "after": 0,
+      "changePercent": null
+    }
+  ],
+  "buildJobsCached": 53,
+  "buildJobsSelected": 53,
+  "successfulTestJobs": 8,
+  "successfulTestChecksWithZeroBuildOneCopyIndicator": 4,
+  "successfulTestChecksWithSmallCopyIndicator": 2,
+  "successfulTestChecksWithoutFinalCopyCounter": 2,
+  "compilationMessages": 0,
+  "executedTestSummaries": 0,
+  "testWorkerSecondsBefore": 339.52281853700003,
+  "testWorkerSecondsAfter": 160.83446509499998,
+  "innerDownloadProgressOutsideArtifactCounterMiB": 13.4,
+  "noObservedWorkerGapSeconds": 78.031482,
+  "cacheRootsMissingBeforeRepublish": 46,
+  "logReplacements": 0,
+  "repeatedDerivations": 0,
+  "transferErrors": 0,
+  "interpretation": "One warm cached-result comparison. Artifact-transfer removal is directly observed; whole-suite timing also reflects different worker scheduling. Restored artifact sizes exclude cloning and inner source-download progress and are not wire bytes. Observed worker minutes are not billed minutes or CHF.",
+  "localRunnerClosure": {
+    "beforeNarBytes": 2229397640,
+    "afterNarBytes": 166850040,
+    "cachedChecksPassedWithoutCompilerArtifactsOrDownloads": 8,
+    "cacheMissTestsPassed": 5,
+    "missingLicenseFailurePropagated": true
+  }
+}
