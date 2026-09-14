@@ -85,8 +85,12 @@ native trace totals/events. Remaining large weights include ordinary projected
 threshold terms and materially moved CT-star normals; the soft-labelled maximum
 is not at a soft-gluon endpoint. These are finite-point observations, not a global
 bound or variance cure. The final confirmation's 60 retained extrema also
-replay exactly, with higher-precision controls and unchanged saved inputs;
-their new physical attribution and the added soft-limit checks remain in progress.
+replay exactly, with higher-precision controls and unchanged saved inputs. The
+[new maximum attribution](docs/research/advanced_sampling/GL638_CONFIRMATION_MAXIMUM_PHYSICS.md)
+now covers all three distinct b/c real and imaginary extrema with native traces.
+The shared real point acquires exactly 7/6 more weight when an inactive joint
+channel is added; other maxima probe projected threshold terms with finite gluon
+energies. The added soft-limit and Cut 1 replacement checks remain in progress.
 See also the [center audit](docs/research/advanced_sampling/CANONICAL_CT_CENTERS.md).
 
 Current implementation status: there is one `SamplingChannelCatalogue` and one

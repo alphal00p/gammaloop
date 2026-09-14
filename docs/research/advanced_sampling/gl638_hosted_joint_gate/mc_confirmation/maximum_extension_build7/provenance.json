@@ -1,0 +1,22 @@
+{
+  "status": "completed_lossless_artifact_extension",
+  "original_confirmation": "../results_build7/provenance.json",
+  "original_maximum_replay": "../maximum_build7/provenance.json",
+  "purpose": "Complete true imaginary maximum Arb control and three unique final b/c point geometries; no added Monte Carlo samples or statistics changes",
+  "controls": {
+    "old_top2": 6,
+    "actual_top4": 12,
+    "top4_metric_checks": 605,
+    "control_reuse_checks": 78,
+    "native_trace_cases": 3,
+    "exact_trace_controls": true,
+    "reconstructed_single_stars": 56,
+    "reconstructed_merged_points": 12,
+    "checked_actual_A_U_multipliers": 12
+  },
+  "scope": "Retained signed extrema, identity-probe native reconstruction, pointwise geometry only; no unrecorded global normmaximum or global boundedness claim",
+  "archive_convention": "Lossless gzip with exact original uncompressed hashes/sizes; identical bytes reference prior immutable records. No state payload, executable or compiled library copied. Original pilot/maximum/trace directories remain unchanged.",
+  "records": 63,
+  "stored_gzip_files": 58,
+  "stored_bytes": 5021406
+}
