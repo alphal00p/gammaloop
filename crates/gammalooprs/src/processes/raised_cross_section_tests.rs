@@ -1242,8 +1242,10 @@ fn standalone_cut_sampling_compiles_from_production_cut_and_mass_data() {
                 }
 
                 // The same actual cut chart is used by the complete physical
-                // source/stability route. Keep the draw binary64 and reconstruct
-                // it natively after the focused radius collapses in Double.
+                // source/stability route. The binary64 draw is mapped once in Arb,
+                // so a collapsed Double map radius no longer requires a Quad
+                // physical body. Compare the retained draw with Double-only
+                // evaluation, including the complete physical event weights.
                 {
                     use crate::{
                         integrands::evaluation::{PreciseEvaluationResult, StabilityStatus},
@@ -1251,7 +1253,6 @@ fn standalone_cut_sampling_compiles_from_production_cut_and_mass_data() {
                             MultiChannelingSettings, SamplingSettings, StabilityLevelSetting,
                         },
                     };
-                    use symbolica::prelude::SingleFloat;
                     let mut runtime = ProcessIntegrand::CrossSection(integrand.clone());
                     let mut focused = parameterization.clone();
                     focused.power = 2.0;
@@ -1271,7 +1272,7 @@ fn standalone_cut_sampling_compiles_from_production_cut_and_mass_data() {
                         F(1.0),
                         vec![F(shell_coordinate + 1.0e-10), F(0.31), F(0.47)],
                     );
-                    let rescued = runtime
+                    let evaluated = runtime
                         .evaluate_sample_precise(
                             &source,
                             &model,
@@ -1280,30 +1281,31 @@ fn standalone_cut_sampling_compiles_from_production_cut_and_mass_data() {
                             Complex::new_zero(),
                         )
                         .unwrap();
-                    let PreciseEvaluationResult::Quad(rescued) = rescued else {
-                        panic!("the actual cut chart must reconstruct at Quad precision")
+                    let PreciseEvaluationResult::Double(evaluated) = evaluated else {
+                        panic!("the canonical cut draw must allow its regular Double physical body")
                     };
-                    assert_eq!(rescued.evaluation_metadata.stability_results.len(), 2);
+                    assert_eq!(evaluated.evaluation_metadata.stability_results.len(), 1);
+                    assert!(!evaluated.evaluation_metadata.is_nan);
                     assert!(matches!(
-                        rescued.evaluation_metadata.stability_results[0].status,
-                        StabilityStatus::Unstable(0)
+                        evaluated.evaluation_metadata.stability_results[0].status,
+                        StabilityStatus::Unknown
                     ));
                     assert!(
-                        rescued.integrand_result.re.0.is_finite()
-                            && rescued.integrand_result.im.0.is_finite()
+                        evaluated.integrand_result.re.0.is_finite()
+                            && evaluated.integrand_result.im.0.is_finite()
                     );
                     assert_ne!(
-                        rescued.integrand_result,
-                        Complex::new_re(rescued.integrand_result.re.zero())
+                        evaluated.integrand_result,
+                        Complex::new_re(evaluated.integrand_result.re.zero())
                     );
                     assert!(
-                        rescued
+                        evaluated
                             .parameterization_jacobian
                             .as_ref()
                             .is_some_and(|jacobian| jacobian == &jacobian.one())
                     );
                     runtime.get_mut_settings().stability.levels =
-                        vec![StabilityLevelSetting::default_quad()];
+                        vec![StabilityLevelSetting::default_double()];
                     runtime.warm_up(&model).unwrap();
                     let direct = runtime
                         .evaluate_sample_precise(
@@ -1314,11 +1316,12 @@ fn standalone_cut_sampling_compiles_from_production_cut_and_mass_data() {
                             Complex::new_zero(),
                         )
                         .unwrap();
-                    let PreciseEvaluationResult::Quad(direct) = direct else {
+                    let PreciseEvaluationResult::Double(direct) = direct else {
                         unreachable!()
                     };
-                    assert_eq!(rescued.integrand_result, direct.integrand_result);
-                    let rescued_events = rescued
+                    assert!(!direct.evaluation_metadata.is_nan);
+                    assert_eq!(evaluated.integrand_result, direct.integrand_result);
+                    let evaluated_events = evaluated
                         .event_groups
                         .iter()
                         .flat_map(|group| group.iter())
@@ -1328,14 +1331,14 @@ fn standalone_cut_sampling_compiles_from_production_cut_and_mass_data() {
                         .iter()
                         .flat_map(|group| group.iter())
                         .collect::<Vec<_>>();
-                    assert!(!rescued_events.is_empty());
-                    assert_eq!(rescued_events.len(), direct_events.len());
-                    for (rescued, direct) in rescued_events.iter().zip(direct_events) {
-                        assert_eq!(rescued.cut_info.sampling_channel_id, Some(0));
-                        assert_eq!(rescued.cut_info.sampling_channel_edge_ids, None);
-                        assert_eq!(rescued.weight, direct.weight);
+                    assert!(!evaluated_events.is_empty());
+                    assert_eq!(evaluated_events.len(), direct_events.len());
+                    for (evaluated, direct) in evaluated_events.iter().zip(direct_events) {
+                        assert_eq!(evaluated.cut_info.sampling_channel_id, Some(0));
+                        assert_eq!(evaluated.cut_info.sampling_channel_edge_ids, None);
+                        assert_eq!(evaluated.weight, direct.weight);
                         assert_eq!(
-                            rescued.additional_weights.weights,
+                            evaluated.additional_weights.weights,
                             direct.additional_weights.weights
                         );
                     }

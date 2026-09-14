@@ -16,11 +16,14 @@ and cross sections. The `LegacyLmb` request and its LMB-only partition/prefactor
 implementation have been removed. Summed sampling applies `J_c w_c` once per
 channel to the graph result and event weight, with outer Jacobian one. Monte
 Carlo also combines its selected map/partition factor with the physical value
-at native precision, keeping only grid probability separate. Mapping is
-performed before applying each stability rotation. Direct momentum input retains
-its supplied raw point. The remaining default single-basis reinterpretation and
-obsolete weight-setting aliases still require cleanup; they are not an
-alternative multichannel enumeration.
+at physical precision, keeping only grid probability separate. The new source
+implementation prepares complete graph rows once at fixed Arb precision;
+physical attempts and rotations consume direct materializations of that draw.
+This includes the default single-basis affine conversion and explicit channel
+sums. Direct momentum input retains its supplied binary64 point exactly across
+lanes. The correction passes 214 core tests and three API gates, including full
+generated-amplitude and saved-state acceptance. Obsolete weight-setting
+aliases still require cleanup; they are not another multichannel enumeration.
 
 The map kernels include exact eager/dual Symbolica Jacobians, affine LMB maps,
 regular and implicit radial maps, bounded products and ordered `then` maps.
@@ -40,19 +43,20 @@ preparation at warmup. Two-energy rank-one fibers use their analytic convex
 minimum, while general fibers can reuse the existing SOCP center solver. An
 SOCP result is only a candidate: its actual native energy residual must be
 strictly negative. Failed solves or ambiguous minimum signs produce typed
-numerical errors rather than certifying absence. Per-draw errors enter precision
-rescue. The X2 source also retains typed frozen-binding failures in the existing
-native caches. Warmup requires one configured precision usable for every graph;
-structural errors or failure at every configured precision invalidate the epoch.
+numerical errors rather than certifying absence. Canonical map-preparation errors
+fail before physical evaluation; physical materialization/adoption errors may
+use the existing rescue stack. Native component caches retain their typed
+binding diagnostics. Warmup now requires the fixed-Arb binding for every graph;
+optional physical-lane map bindings do not determine proposal validity.
 The focused and broader X2 core/API numerical gates pass.
 Soft/collinear primitives and general joint normal/star charts remain unfinished.
 
 The bounded shared-energy joint chart now has an amplitude run-card binder and
-an original-source proposal preparation phase. Its typed context preserves
-compact/fallback and dyadic-radius choices across native retries. Validation
-now passes on the generated all-18-orientation kite, including Gaussian/moment
-acceptance, physical map/partition consistency and controlled body retry.
-This validates the supported amplitude class; it establishes no GL638 improvement.
+an original-source proposal preparation phase. Its earlier discrete-policy
+transport passed the generated all-18-orientation kite Gaussian/moment and
+physical checks, but did not cover continuous map switching under rescue.
+The fixed-draw correction below addresses that gap and passes its numerical
+gates. No GL638 improvement follows from these amplitude results.
 
 A standalone `phase_space(cut(...))` channel now uses the actual graph energy
 equation, warmup masses, fixed external momenta and full parent-frame radial
@@ -700,6 +704,28 @@ duration is not a production sampling benchmark. Three API gates pass in
 warnings and none on changed lines. Formatting and diff checks pass. The optimized
 GL638 10% budget remains unmeasured, and hosted GL638 joint binding remains open.
 
+The subsequent source audit identifies a correctness gap in the preceding
+discrete-policy-only transport: continuous map changes selected by physical
+precision rescue can change the proposal law even with identical decisions,
+Jacobians and density values. The
+[fixed canonical draw contract](docs/research/advanced_sampling/CANONICAL_DRAW_SOURCE.md)
+therefore replaces native redraws with one immutable 1000-bit Arb proposal,
+materialized directly into each physical lane. This applies to selected,
+summed and default/LMB unit-cube sampling, and selected direct partitions.
+Implementation and its acceptance gates now pass. The 214 unique core tests
+include the complete all-18-orientation kite in 937.885 s, retaining its
+8192-draw 6% normalization and 8% moment criteria, physical Double-to-Quad rescue,
+and exact agreement with forced Quad. Three API gates pass; the saved-state
+acceptance took 502.151 s with unchanged sample counts and numerical criteria.
+Its targeted nextest allowance is now fifteen minutes, while the conditional
+fixture retains five minutes. Core/API checks, formatting and diff checks pass;
+all-target clippy takes 56.86 s with 50 existing warnings and none on changed
+lines. An exact directed external-frame matcher is included. A generic hosted
+joint fixture and completed-point normal accuracy remain the next gate before
+GL638 activation. These timings are unoptimized acceptance costs, not the
+production 10% budget measurement. CT-star
+center/alpha work remains a separate dependency of the projected channels.
+
 In parallel, the subtraction owner has separated representative overlap
 kinematics from the raised derivative packets, using the existing sample and
 group types. The foreign-cut/radial-derivative regression and generated raised
@@ -1121,9 +1147,10 @@ report remaining `Other` work, and do not use the benchmark's residual
 
 The runtime budget is `T_sampling / T_physical <= 0.10`, measured conservatively
 in a warmed optimized build at matched actual GL638 samples and physical
-settings. `T_sampling` includes the fixed-Arb proposal-policy pass, all native
-forward maps and Jacobians, foreign inverses, proxies/partition, support and
-root certificates, and sampling work repeated during precision rescue.
+settings. `T_sampling` includes the fixed-Arb forward maps and Jacobians,
+foreign inverses, proxies/partition, support and root certificates, plus direct
+materialization and physical adoption checks during precision rescue. Physical
+attempts must not redraw maps or recompute partitions.
 `T_physical` is the complete six-cut/all-936-orientation physical evaluation
 with the actual UV, threshold, selector and stability settings. Attribute shared
 preparation exactly once: conservatively charge it to sampling and exclude it

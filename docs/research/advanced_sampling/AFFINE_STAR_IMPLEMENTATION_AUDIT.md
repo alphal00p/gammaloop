@@ -324,8 +324,13 @@ square underflows in Double/Quad but remains representable in Arb.
 
 ### Proposal policy across native retries
 
-Implemented and validated in the current supported amplitude class. The complete
-generated kite gate passes alongside 170 focused core tests and two API regressions.
+The following records the discrete-policy transport milestone and its original
+validation: the generated kite gate, 170 focused core tests and two API
+regressions. Its native-redraw rule is superseded by the
+[fixed canonical draw contract](CANONICAL_DRAW_SOURCE.md), whose implementation
+passes 214 core tests and three API gates. A periodic-map counterexample shows that
+continuous map changes can bias physical rescue even with identical policies,
+Jacobians and densities. The earlier gates did not test that stronger invariant.
 
 For each target block b, define its proposal decision as `P_b(y_b)`, where y_b
 contains only that block's ordered raw prerequisites. The decision may select
