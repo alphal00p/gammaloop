@@ -1,0 +1,16 @@
+{
+  "committed_source": "8006662289c17f177469c67a10a274b190aa2ccf",
+  "base_commit": "6e9bf401db75cb13ec20e18377a444bc2fcd4f33",
+  "command": [
+    "git",
+    "diff",
+    "6e9bf401db75cb13ec20e18377a444bc2fcd4f33",
+    "8006662289c17f177469c67a10a274b190aa2ccf",
+    "--",
+    "crates"
+  ],
+  "sha256": "1d78e98b73e6a8dafaf6e446353c2a1607dc0724f8ea7d1c2d88c4962b81bba7",
+  "equals_optimized_build4_archived_source_patch": true,
+  "build_record": "../canonical_centers/build.json",
+  "scope": "Byte equality of committed Rust changes and exact optimized-build4 source patch; docs are outside build source."
+}

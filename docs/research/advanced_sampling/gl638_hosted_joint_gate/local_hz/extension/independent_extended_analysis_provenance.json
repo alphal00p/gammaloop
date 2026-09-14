@@ -1,0 +1,17 @@
+{
+  "operation": "retained-artifact Decimal postprocessing only; no state load/map/physics evaluation",
+  "argv": [
+    "python",
+    "/tmp/gl638-hosted-joint-gate/analyze_local_approach_extension.py",
+    "/tmp/gl638-hosted-joint-gate/results-local-approach1",
+    "/tmp/gl638-hosted-joint-gate/results-local-approach-extension1"
+  ],
+  "hashes": {
+    "/tmp/gl638-hosted-joint-gate/analyze_local_approach_extension.py": "78ecdec3375d7ff7d881d9a94909ac2b3779416afe5d42487350e379114d4f02",
+    "/tmp/gl638-hosted-joint-gate/results-local-approach-extension1/independent_extended_approach_analysis.json": "29278c5b125457500122fd60969965d60e94276f90508575c1f9d2c3dd5d0c00",
+    "/tmp/gl638-hosted-joint-gate/results-local-approach-extension1/independent_extended_approach_analysis.md": "5f5bdbbcb07c16bb2df13f62615afa9ed2d51199ca541943f0bd3c44fcba8a35",
+    "/tmp/gl638-hosted-joint-gate/results-local-approach-extension1/independent_analysis.log": "17b1382e62f522c3faa31b5bcb11029fef929b17630d75e1e80402520e0ce525",
+    "/tmp/gl638-hosted-joint-gate/provenance/local-eight-frozen.json": "9202751fdb4e26c404549a3ca90afca8088aae1e7ed383440d7911f44f0a40d8"
+  },
+  "scope": "36 point rows/144 physical results retained from two completed root-only runs; all original24 point artifacts preserved; native budgets unchanged; rounding oracle Quad epsilon follows actual106-bit backend; all actual ordinary rows are Double"
+}
