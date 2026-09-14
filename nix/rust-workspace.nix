@@ -330,7 +330,7 @@
       )
     );
 
-  workspacePackageProductionExtraSourceRoots = {
+  workspacePackageExtraSourceRoots.production = {
     "gammaloop-api" = [
       "assets/embedded"
       "assets/models"
@@ -362,13 +362,13 @@
     ];
   };
 
-  workspacePackageTestCompileTimeExtraSourceRoots = {
+  workspacePackageExtraSourceRoots.compileTimeTest = {
     gammalooprs = [
       "tests/resources/graphs/scalar/dod2_bubble.dot"
     ];
   };
 
-  workspacePackageRuntimeTestExtraSourceRoots = {
+  workspacePackageExtraSourceRoots.runtimeTest = {
     "gammaloop-api" = [
       "tests/resources/graphs/scalar_bubble.dot"
     ];
@@ -387,7 +387,7 @@
     ];
   };
 
-  workspacePackageOwnTestSourceRoots = {
+  workspacePackageExtraSourceRoots.ownTest = {
     gammalooprs = [
       "crates/gammalooprs/src/feyngen/test.rs"
       "crates/gammalooprs/src/graph/parse/tests.rs"
@@ -423,29 +423,11 @@
     ];
   };
 
-  workspacePackageExtraSourceRootsForSourcePackages = sourcePackages:
-    sortedUnique (lib.concatMap (sourcePackage: workspacePackageProductionExtraSourceRoots.${sourcePackage} or []) sourcePackages);
+  workspacePackageExtraSourceRootsForSourcePackages = kind: sourcePackages:
+    sortedUnique (lib.concatMap (sourcePackage: workspacePackageExtraSourceRoots.${kind}.${sourcePackage} or []) sourcePackages);
 
-  workspacePackageTestCompileTimeExtraSourceRootsForSourcePackages = sourcePackages:
-    sortedUnique (lib.concatMap (sourcePackage: workspacePackageTestCompileTimeExtraSourceRoots.${sourcePackage} or []) sourcePackages);
-
-  workspacePackageRuntimeTestExtraSourceRootsForSourcePackages = sourcePackages:
-    sortedUnique (lib.concatMap (sourcePackage: workspacePackageRuntimeTestExtraSourceRoots.${sourcePackage} or []) sourcePackages);
-
-  workspacePackageExtraFilesetsForSourcePackages = sourcePackages:
-    map (sourceRoot: workspaceRoot + "/${sourceRoot}") (workspacePackageExtraSourceRootsForSourcePackages sourcePackages);
-
-  workspacePackageTestCompileTimeExtraFilesetsForSourcePackages = sourcePackages:
-    map (sourceRoot: workspaceRoot + "/${sourceRoot}") (workspacePackageTestCompileTimeExtraSourceRootsForSourcePackages sourcePackages);
-
-  workspacePackageRuntimeTestExtraFilesetsForSourcePackages = sourcePackages:
-    map (sourceRoot: workspaceRoot + "/${sourceRoot}") (workspacePackageRuntimeTestExtraSourceRootsForSourcePackages sourcePackages);
-
-  workspacePackageOwnTestSourceRootsForSourcePackages = sourcePackages:
-    sortedUnique (lib.concatMap (sourcePackage: workspacePackageOwnTestSourceRoots.${sourcePackage} or []) sourcePackages);
-
-  workspacePackageOwnTestFilesetsForSourcePackages = sourcePackages:
-    map (sourceRoot: workspaceRoot + "/${sourceRoot}") (workspacePackageOwnTestSourceRootsForSourcePackages sourcePackages);
+  workspacePackageExtraFilesetsForSourcePackages = kind: sourcePackages:
+    map (sourceRoot: workspaceRoot + "/${sourceRoot}") (workspacePackageExtraSourceRootsForSourcePackages kind sourcePackages);
 
   workspacePackageExtraSourceRestoreInDummySrcScriptFor = sourcePackages:
     ''
@@ -458,7 +440,7 @@
         cp -R --no-preserve=ownership ${source} "$out"/${lib.escapeShellArg sourceRoot}
         chmod -R u+w "$out"/${lib.escapeShellArg sourceRoot}
       '')
-      (workspacePackageExtraSourceRootsForSourcePackages sourcePackages)}
+      (workspacePackageExtraSourceRootsForSourcePackages "production" sourcePackages)}
     '';
 
   workspacePackageSrcForSourcePackages = {
@@ -468,7 +450,7 @@
     runtimeTestSourcePackages ? [],
     extraFilesets ? [],
   }: let
-    productionSourceFilesets = map (sourcePackage: let
+    packageSources = lib.genAttrs (sourcePackages ++ packageSourcePackages ++ testSourcePackages ++ runtimeTestSourcePackages) (sourcePackage: let
       packageRoot = workspaceRoot + "/${workspaceMemberPackageDirs.${sourcePackage}}";
       libraryTargetPath = workspacePackageLibTargetRelPath sourcePackage;
       testRoots = lib.filter builtins.pathExists (map (root: packageRoot + "/${root}") [
@@ -482,50 +464,28 @@
             && path != libraryTargetPath
         )
         workspaceCargoTargetRelPaths);
-      ownTestSources = workspacePackageOwnTestFilesetsForSourcePackages [sourcePackage];
+      ownTestSources = workspacePackageExtraFilesetsForSourcePackages "ownTest" [sourcePackage];
       rustSources = lib.fileset.fileFilter (file: file.hasExt "rs") packageRoot;
-    in
-      lib.fileset.difference rustSources (lib.fileset.unions (testRoots ++ nonLibraryTargetEntrypoints ++ ownTestSources)))
-    sourcePackages;
-    packageSourceFilesets = map (sourcePackage: let
-      libraryTargetPath = workspacePackageLibTargetRelPath sourcePackage;
-    in
-      map (path: workspaceRoot + "/${path}") (lib.filter (
-          path:
-            lib.hasPrefix "${workspaceMemberPackageDirs.${sourcePackage}}/" path
-            && path != libraryTargetPath
-        )
-        workspaceCargoTargetRelPaths))
-    packageSourcePackages;
-    testSourceFilesets = map (sourcePackage: let
-      packageRoot = workspaceRoot + "/${workspaceMemberPackageDirs.${sourcePackage}}";
-      testRoots = lib.filter builtins.pathExists (map (root: packageRoot + "/${root}") [
-        "benches"
-        "examples"
-        "tests"
-      ]);
-    in
-      map (testRoot: lib.fileset.fileFilter (file: file.hasExt "rs") testRoot) testRoots)
-    testSourcePackages;
-    runtimeTestSourceFilesets = map (sourcePackage: let
-      packageRoot = workspaceRoot + "/${workspaceMemberPackageDirs.${sourcePackage}}";
-    in
-      lib.fileset.fileFilter (file: file.hasExt "snap") packageRoot)
-    runtimeTestSourcePackages;
+    in {
+      production = lib.fileset.difference rustSources (lib.fileset.unions (testRoots ++ nonLibraryTargetEntrypoints ++ ownTestSources));
+      targets = nonLibraryTargetEntrypoints;
+      tests = map (testRoot: lib.fileset.fileFilter (file: file.hasExt "rs") testRoot) testRoots;
+      snapshots = lib.fileset.fileFilter (file: file.hasExt "snap") packageRoot;
+    });
   in
     lib.fileset.toSource {
       root = workspaceRoot;
       fileset = lib.fileset.unions (
         workspaceDependencyManifestFiles
         ++ (workspacePackageBuildScriptsForSourcePackages sourcePackages)
-        ++ productionSourceFilesets
-        ++ lib.concatLists packageSourceFilesets
-        ++ lib.concatLists testSourceFilesets
-        ++ runtimeTestSourceFilesets
-        ++ (workspacePackageExtraFilesetsForSourcePackages sourcePackages)
-        ++ (workspacePackageTestCompileTimeExtraFilesetsForSourcePackages testSourcePackages)
-        ++ (workspacePackageRuntimeTestExtraFilesetsForSourcePackages runtimeTestSourcePackages)
-        ++ (workspacePackageOwnTestFilesetsForSourcePackages testSourcePackages)
+        ++ map (package: packageSources.${package}.production) sourcePackages
+        ++ lib.concatMap (package: packageSources.${package}.targets) packageSourcePackages
+        ++ lib.concatMap (package: packageSources.${package}.tests) testSourcePackages
+        ++ map (package: packageSources.${package}.snapshots) runtimeTestSourcePackages
+        ++ (workspacePackageExtraFilesetsForSourcePackages "production" sourcePackages)
+        ++ (workspacePackageExtraFilesetsForSourcePackages "compileTimeTest" testSourcePackages)
+        ++ (workspacePackageExtraFilesetsForSourcePackages "runtimeTest" runtimeTestSourcePackages)
+        ++ (workspacePackageExtraFilesetsForSourcePackages "ownTest" testSourcePackages)
         ++ extraFilesets
       );
     };
@@ -714,11 +674,8 @@
         sourcePackages
       ) [workspaceHackPackage];
     featurePackages = sortedUnique (sourcePackages ++ anchorPackages);
-    features = lib.listToAttrs (map (package: {
-        name = package;
-        value = sortedUnique (craneTestContextFeaturesFor sourcePackages package ++ (extraFeatures.${package} or []));
-      })
-      featurePackages);
+    features = lib.genAttrs featurePackages (package:
+      sortedUnique (craneTestContextFeaturesFor sourcePackages package ++ (extraFeatures.${package} or [])));
     resolvedFeatureVector = map (package: {
         inherit package;
         features = features.${package};
@@ -845,24 +802,7 @@
     if lib.hasPrefix "crates/" packageDir
     then "../${lib.removePrefix "crates/" packageDir}"
     else "../../${packageDir}";
-  workspacePrebuildCargoToml = pkgs.writeText "${workspacePrebuildPackage}-Cargo.toml" ''
-    [package]
-    name = "${workspacePrebuildPackage}"
-    version = "0.1.0"
-    edition = "2024"
-    publish = false
-
-    [lib]
-    path = "src/lib.rs"
-
-    [dependencies]
-    ${lib.concatMapStringsSep "\n" (package: let
-      features = lib.filter (feature: !lib.hasInfix "/" feature) (craneTestFeaturesFor package);
-      featureEntry = lib.optionalString (features != []) ", features = ${builtins.toJSON features}";
-    in ''
-      ${package} = { path = "${workspacePrebuildDependencyPathFor package}"${featureEntry} }
-    '') workspacePrebuildDependencyPackages}
-  '';
+  workspacePrebuildCargoToml = workspaceAnchorCargoTomlFor workspacePrebuildPackage workspacePrebuildDependencyPackages craneTestFeaturesFor;
   workspacePrebuildSourceScript = ''
     install -D -m 0644 ${workspacePrebuildCargoToml} "$out/${workspacePrebuildPackageDir}/Cargo.toml"
     install -D -m 0644 ${dummyCargoTarget} "$out/${workspacePrebuildPackageDir}/src/lib.rs"
@@ -878,9 +818,9 @@
     );
   workspaceConsumerPackageFor = package: "gammaloop-ci-consumer-${package}";
   workspaceConsumerPackageDirFor = package: "crates/${workspaceConsumerPackageFor package}";
-  workspaceConsumerCargoTomlFor = package: dependencyPackages: pkgs.writeText "${workspaceConsumerPackageFor package}-Cargo.toml" ''
+  workspaceAnchorCargoTomlFor = name: dependencyPackages: featuresFor: pkgs.writeText "${name}-Cargo.toml" ''
     [package]
-    name = "${workspaceConsumerPackageFor package}"
+    name = "${name}"
     version = "0.1.0"
     edition = "2024"
     publish = false
@@ -890,14 +830,14 @@
 
     [dependencies]
     ${lib.concatMapStringsSep "\n" (dependencyPackage: let
-      features = lib.filter (feature: !lib.hasInfix "/" feature) (craneCiFeaturesFor dependencyPackage);
+      features = lib.filter (feature: !lib.hasInfix "/" feature) (featuresFor dependencyPackage);
       featureEntry = lib.optionalString (features != []) ", features = ${builtins.toJSON features}";
     in ''
       ${dependencyPackage} = { path = "${workspacePrebuildDependencyPathFor dependencyPackage}"${featureEntry} }
     '') dependencyPackages}
   '';
   workspaceConsumerSourceScriptFor = package: dependencyPackages: ''
-    install -D -m 0644 ${workspaceConsumerCargoTomlFor package dependencyPackages} "$out/${workspaceConsumerPackageDirFor package}/Cargo.toml"
+    install -D -m 0644 ${workspaceAnchorCargoTomlFor (workspaceConsumerPackageFor package) dependencyPackages craneCiFeaturesFor} "$out/${workspaceConsumerPackageDirFor package}/Cargo.toml"
     install -D -m 0644 ${dummyCargoTarget} "$out/${workspaceConsumerPackageDirFor package}/src/lib.rs"
   '';
   cargoPackageDependencyModeArgsFor = package: let
@@ -927,24 +867,9 @@
   testDependencyFeatureAnchorPackageDirFor = context: "crates/${testDependencyFeatureAnchorPackageFor context}";
   testDependencyFeatureAnchorDependencyPackagesFor = context:
     lib.filter workspacePackageHasLibTarget context.sourcePackages;
-  testDependencyFeatureAnchorCargoTomlFor = context: pkgs.writeText "${testDependencyFeatureAnchorPackageFor context}-Cargo.toml" ''
-    [package]
-    name = "${testDependencyFeatureAnchorPackageFor context}"
-    version = "0.1.0"
-    edition = "2024"
-    publish = false
-
-    [lib]
-    path = "src/lib.rs"
-
-    [dependencies]
-    ${lib.concatMapStringsSep "\n" (package: let
-      features = lib.filter (feature: !lib.hasInfix "/" feature) context.features.${package};
-      featureEntry = lib.optionalString (features != []) ", features = ${builtins.toJSON features}";
-    in ''
-      ${package} = { path = "${workspacePrebuildDependencyPathFor package}"${featureEntry} }
-    '') (testDependencyFeatureAnchorDependencyPackagesFor context)}
-  '';
+  testDependencyFeatureAnchorCargoTomlFor = context:
+    workspaceAnchorCargoTomlFor (testDependencyFeatureAnchorPackageFor context)
+    (testDependencyFeatureAnchorDependencyPackagesFor context) (package: context.features.${package});
   testDependencyFeatureAnchorSourceScriptFor = context: prefix: ''
     install -D -m 0644 ${testDependencyFeatureAnchorCargoTomlFor context} "${prefix}${testDependencyFeatureAnchorPackageDirFor context}/Cargo.toml"
     install -D -m 0644 ${dummyCargoTarget} "${prefix}${testDependencyFeatureAnchorPackageDirFor context}/src/lib.rs"
@@ -987,11 +912,9 @@
     };
   };
   testBinaryFeatureAnchorDependenciesFor = context: let
-    inheritedDependencies = lib.listToAttrs (map (package: {
-        name = package;
-        value.path = workspacePrebuildDependencyPathFor package;
-      })
-      (lib.subtractLists context.componentPackages (testDependencyFeatureAnchorDependencyPackagesFor context)));
+    inheritedDependencies = lib.genAttrs
+      (lib.subtractLists context.componentPackages (testDependencyFeatureAnchorDependencyPackagesFor context))
+      (package: {path = workspacePrebuildDependencyPathFor package;});
     rawDependencies =
       inheritedDependencies
       // (testBinaryFeatureAnchorDevDependenciesFor context)
@@ -1003,7 +926,7 @@
     crossFeatures = testBinaryFeatureAnchorCrossFeaturesFor context;
     dependencyNames = sortedUnique (builtins.attrNames rawDependencies ++ builtins.attrNames crossFeatures);
   in
-    lib.listToAttrs (map (dependency: let
+    lib.genAttrs dependencyNames (dependency: let
         rawDependency = rawDependencies.${dependency} or {workspace = true;};
         dependencyAttrs =
           if builtins.isAttrs rawDependency
@@ -1014,13 +937,9 @@
           ++ lib.filter (feature: !lib.hasInfix "/" feature) (context.features.${dependency} or [])
           ++ (crossFeatures.${dependency} or [])
         );
-      in {
-        name = dependency;
-        value =
-          dependencyAttrs
-          // lib.optionalAttrs (features != []) {inherit features;};
-      })
-      dependencyNames);
+      in
+        dependencyAttrs
+        // lib.optionalAttrs (features != []) {inherit features;});
   testBinaryFeatureAnchorCargoTomlFor = context:
     (pkgs.formats.toml {}).generate "${testBinaryFeatureAnchorPackageFor context}-Cargo.toml" ({
       package = {
@@ -1102,11 +1021,7 @@
     );
 
   guppyFeatureMapFor = featuresFor:
-    builtins.toJSON (lib.listToAttrs (map (package: {
-        name = package;
-        value = featuresFor package;
-      })
-      workspaceMemberPackages));
+    builtins.toJSON (lib.genAttrs workspaceMemberPackages featuresFor);
 
   src = workspaceBuildSrc;
 
@@ -2055,15 +1970,12 @@
         hostAnchorPackageDir = "crates/${hostAnchorPackage}";
         anchorConsumerDependencies = {
           ${testBinaryFeatureAnchorPackageFor context}.path = "../${testBinaryFeatureAnchorPackageFor context}";
-        } // lib.listToAttrs (map (package: let
+        } // lib.genAttrs procMacroPackages (package: let
             features = lib.filter (feature: feature != "default" && !lib.hasInfix "/" feature) context.features.${package};
-          in {
-            name = package;
-            value = {
+          in
+            {
               path = workspacePrebuildDependencyPathFor package;
-            } // lib.optionalAttrs (features != []) {inherit features;};
-          })
-          procMacroPackages);
+            } // lib.optionalAttrs (features != []) {inherit features;});
         hostAnchorCargoToml = (pkgs.formats.toml {}).generate "${hostAnchorPackage}-Cargo.toml" {
           package = {
             name = hostAnchorPackage;
