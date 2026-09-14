@@ -1,0 +1,51 @@
+{
+  "calculation_commit": "1f83233dd79b5c7b8b09aef38ad5acdd5fde932c",
+  "argv": [
+    "/tmp/gl638-hosted-joint-gate/drivers/gate-performance",
+    "/tmp/gl638-hosted-joint-gate/manifest-performance-timing.json",
+    "/tmp/gl638-hosted-joint-gate/results-performance-timing1",
+    "optimized_lmb,joint_hz_plus_lmb",
+    "timing",
+    "20",
+    "16",
+    "3",
+    "1337"
+  ],
+  "environment": {
+    "GL_DISPLAY_FILTER": "off"
+  },
+  "returncode": 1,
+  "traced": false,
+  "runtime_budget_evidence": true,
+  "summary_without_repeated_reports": {
+    "cold_load_seconds": 44.829262024,
+    "draws_per_worker": 16,
+    "error": "joint_hz_plus_lmb: exhausted/invalid timing result retained; no pilot can hide numerical failures",
+    "mode": [
+      "optimized_lmb",
+      "joint_hz_plus_lmb"
+    ],
+    "repetitions": 3,
+    "saved_state_unchanged": true,
+    "scope": {
+      "finite_smoke_is_not_normalization": true,
+      "gain_claim": false,
+      "maps_scope": "completed-point hosted joint; CT-star density cure remains pending",
+      "precision_scope": "fresh first iteration max_eval=0; trained-iteration rescue history not certified",
+      "runtime_cap": "representative, stored hard selected/bare and replayed representative maxima, each reported separately"
+    },
+    "seed": 1337,
+    "stage": "timing",
+    "status": "failed",
+    "workers": 20
+  },
+  "omitted_duplicate_reports": {
+    "summary.json": {
+      "sha256_uncompressed": "dd6dfcc9a3559c9d74b7a2c0e33a38938290f26c53f787ae82c740103d13215b",
+      "bytes_uncompressed": 12550293
+    }
+  },
+  "source_build_proof": "../source-commit-proof.json",
+  "driver_build": "../gate.build.json",
+  "note": "Completion of a diagnostic stage does not establish numerical or performance acceptance; invalid rows remain in the progress JSON."
+}

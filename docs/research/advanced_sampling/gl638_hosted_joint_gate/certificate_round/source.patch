@@ -1,0 +1,326 @@
+diff --git a/crates/gammalooprs/src/integrands/process/sampling_joint.rs b/crates/gammalooprs/src/integrands/process/sampling_joint.rs
+index d8810f251..3efa8f7c5 100644
+--- a/crates/gammalooprs/src/integrands/process/sampling_joint.rs
++++ b/crates/gammalooprs/src/integrands/process/sampling_joint.rs
+@@ -188,8 +188,8 @@ impl JointRange {
+         Self { lower, upper }
+     }
+ 
+-    fn div_positive(&self, rhs: &Self) -> Result<Self> {
+-        if rhs.lower[0] <= 0 {
++    fn reciprocal_positive(&self) -> Result<Self> {
++        if self.lower[0] <= 0 {
+             return Err(SamplingEvaluationError::UncertainGeometry {
+                 detail: "joint certificate denominator is not certified positive".into(),
+             }
+@@ -201,10 +201,10 @@ impl JointRange {
+                 Float::with_val_round(Self::PRECISION, 1 / &bound[0], Round::Up).0,
+             ]
+         };
+-        Ok(self.mul(&Self {
+-            lower: reciprocal(&rhs.upper),
+-            upper: reciprocal(&rhs.lower),
+-        }))
++        Ok(Self {
++            lower: reciprocal(&self.upper),
++            upper: reciprocal(&self.lower),
++        })
+     }
+ 
+     /// Sign of the mathematical conservative lower endpoint. A negative
+@@ -263,7 +263,11 @@ impl<T: FloatLike> SharedEnergyJointGeometry<T> {
+         Ok(())
+     }
+ 
+-    fn certificate(&self, radius: &T, scale: &T) -> Result<bool> {
++    /// Prepare radius-independent directed ranges for one native geometry.
++    /// Only this call's radius trials share them; each new conditional point
++    /// prepares its own ranges. Keep the original arithmetic association and
++    /// lower-endpoint predicate order when evaluating each candidate disk.
++    fn prepare_certificate(&self, scale: &T) -> Result<impl Fn(&T) -> Result<bool> + use<T>> {
+         let a = self.shifts[0].each_ref().map(JointRange::native);
+         let b = self.shifts[1].each_ref().map(JointRange::native);
+         let m = self.masses.each_ref().map(JointRange::native);
+@@ -276,59 +280,80 @@ impl<T: FloatLike> SharedEnergyJointGeometry<T> {
+         let ab = dot(&a, &b);
+         let bb = dot(&b, &b);
+         let gram = aa.mul(&bb).sub(&ab.square());
+-        if !gram.lower_positive()? {
+-            return Ok(false);
+-        }
+-        let r = JointRange::native(radius);
+-        let z = r.div_positive(&JointRange::native(scale))?;
+-        let s = JointRange::native(&self.energy_sums[0]).add(&JointRange::bounds(r.neg(), r));
+-        let t = JointRange::native(&self.energy_sums[1]).add(&JointRange::bounds(z.neg(), z));
+-        let two = JointRange::integer(2);
+-        let da = s
+-            .square()
+-            .add(&m[0].square())
+-            .sub(&m[1].square())
+-            .sub(&aa)
+-            .div_positive(&two)?;
+-        let db = t
+-            .square()
+-            .add(&m[0].square())
+-            .sub(&m[2].square())
+-            .sub(&bb)
+-            .div_positive(&two)?;
+-        let d = [
+-            bb.mul(&da).sub(&ab.mul(&db)).div_positive(&gram)?,
+-            aa.mul(&db).sub(&ab.mul(&da)).div_positive(&gram)?,
+-        ];
+-        let e = [
+-            ab.mul(&t).sub(&bb.mul(&s)).div_positive(&gram)?,
+-            ab.mul(&s).sub(&aa.mul(&t)).div_positive(&gram)?,
+-        ];
+-        let plane_dot = |x: &[JointRange; 2], y: &[JointRange; 2]| {
+-            aa.mul(&x[0])
+-                .mul(&y[0])
+-                .add(&ab.mul(&x[0].mul(&y[1]).add(&x[1].mul(&y[0]))))
+-                .add(&bb.mul(&x[1]).mul(&y[1]))
++        // A nonpositive Gram declines every candidate before checking any
++        // denominator. The caller still performs all native radius halvings
++        // and their underflow checks before recording the ordinary decision.
++        let fixed = if gram.lower_positive()? {
++            let inverse_scale = JointRange::native(scale).reciprocal_positive()?;
++            let energy_sums = self.energy_sums.each_ref().map(JointRange::native);
++            let inverse_two = JointRange::integer(2).reciprocal_positive()?;
++            let mass_squares = m.each_ref().map(JointRange::square);
++            let inverse_gram = gram.reciprocal_positive()?;
++            Some((
++                energy_sums,
++                mass_squares,
++                [inverse_scale, inverse_two, inverse_gram],
++                JointRange::integer(1),
++            ))
++        } else {
++            None
+         };
+-        let k = plane_dot(&e, &e).sub(&JointRange::integer(1));
+-        let b = plane_dot(&d, &e);
+-        let c = m[0].square().add(&plane_dot(&d, &d));
+-        let discriminant = b.square().sub(&k.mul(&c));
+-        let limits = [
+-            b.neg().sub(&k.mul(&m[0])),
+-            k.mul(&s.sub(&m[1])).add(&b),
+-            k.mul(&t.sub(&m[2])).add(&b),
+-        ];
+-        for predicate in [k, discriminant.clone()].into_iter().chain(
+-            limits
+-                .into_iter()
+-                .flat_map(|l| [l.clone(), l.square().sub(&discriminant)]),
+-        ) {
+-            if !predicate.lower_positive()? {
++        Ok(move |radius: &T| {
++            let Some((energy_sums, mass_squares, [inverse_scale, inverse_two, inverse_gram], one)) =
++                &fixed
++            else {
+                 return Ok(false);
++            };
++            let r = JointRange::native(radius);
++            let z = r.mul(inverse_scale);
++            let s = energy_sums[0].add(&JointRange::bounds(r.neg(), r));
++            let t = energy_sums[1].add(&JointRange::bounds(z.neg(), z));
++            let da = s
++                .square()
++                .add(&mass_squares[0])
++                .sub(&mass_squares[1])
++                .sub(&aa)
++                .mul(inverse_two);
++            let db = t
++                .square()
++                .add(&mass_squares[0])
++                .sub(&mass_squares[2])
++                .sub(&bb)
++                .mul(inverse_two);
++            let d = [
++                bb.mul(&da).sub(&ab.mul(&db)).mul(inverse_gram),
++                aa.mul(&db).sub(&ab.mul(&da)).mul(inverse_gram),
++            ];
++            let e = [
++                ab.mul(&t).sub(&bb.mul(&s)).mul(inverse_gram),
++                ab.mul(&s).sub(&aa.mul(&t)).mul(inverse_gram),
++            ];
++            let plane_dot = |x: &[JointRange; 2], y: &[JointRange; 2]| {
++                aa.mul(&x[0])
++                    .mul(&y[0])
++                    .add(&ab.mul(&x[0].mul(&y[1]).add(&x[1].mul(&y[0]))))
++                    .add(&bb.mul(&x[1]).mul(&y[1]))
++            };
++            let k = plane_dot(&e, &e).sub(one);
++            let b = plane_dot(&d, &e);
++            let c = mass_squares[0].add(&plane_dot(&d, &d));
++            let discriminant = b.square().sub(&k.mul(&c));
++            let limits = [
++                b.neg().sub(&k.mul(&m[0])),
++                k.mul(&s.sub(&m[1])).add(&b),
++                k.mul(&t.sub(&m[2])).add(&b),
++            ];
++            for predicate in [k, discriminant.clone()].into_iter().chain(
++                limits
++                    .into_iter()
++                    .flat_map(|l| [l.clone(), l.square().sub(&discriminant)]),
++            ) {
++                if !predicate.lower_positive()? {
++                    return Ok(false);
++                }
+             }
+-        }
+-        Ok(true)
++            Ok(true)
++        })
+     }
+ 
+     fn residuals(&self, point: &[T]) -> ([F<T>; 2], [F<T>; 3]) {
+@@ -519,21 +544,24 @@ impl<T: FloatLike> SharedEnergyJointMap<T> {
+         let mut radius = F(self.max_radius.clone());
+         let two = radius.from_usize(2);
+         let mut compact = None;
+-        // A deterministic complement-only policy, not a claim of absence.
+-        // Arithmetic ambiguity in a lower-endpoint sign is propagated before
+-        // halving; exhausted geometric boxes use the normalized ordinary map.
+-        for dyadic_exponent in 0..32 {
+-            if geometry.certificate(&radius.0, &self.normal_scale)? {
+-                compact = Some((dyadic_exponent, radius.0));
+-                break;
+-            }
+-            radius /= &two;
+-            if !radius.is_finite() || radius <= radius.zero() {
+-                return Err(SamplingEvaluationError::Unrepresentable {
+-                    operation: "joint disk",
+-                    detail: "dyadic radius underflow".into(),
++        {
++            let certificate = geometry.prepare_certificate(&self.normal_scale)?;
++            // A deterministic complement-only policy, not a claim of absence.
++            // Arithmetic ambiguity in a lower-endpoint sign is propagated before
++            // halving; exhausted geometric boxes use the normalized ordinary map.
++            for dyadic_exponent in 0..32 {
++                if certificate(&radius.0)? {
++                    compact = Some((dyadic_exponent, radius.0));
++                    break;
++                }
++                radius /= &two;
++                if !radius.is_finite() || radius <= radius.zero() {
++                    return Err(SamplingEvaluationError::Unrepresentable {
++                        operation: "joint disk",
++                        detail: "dyadic radius underflow".into(),
++                    }
++                    .into());
+                 }
+-                .into());
+             }
+         }
+         let decision = compact.as_ref().map_or(
+@@ -872,12 +900,13 @@ mod tests {
+         let geometry = geometry::<f64>();
+         // Independently reduced exact-rational oracle at h=z=0:
+         // Gram=144,k=1985/144,D=7829/36, all six energy-sign bounds >0.
+-        assert!(geometry.certificate(&0.0, &1.5).unwrap());
+-        assert!(geometry.certificate(&0.0001, &1.5).unwrap());
+-        assert!(!geometry.certificate(&100.0, &1.5).unwrap());
++        let certificate = geometry.prepare_certificate(&1.5).unwrap();
++        assert!(certificate(&0.0).unwrap());
++        assert!(certificate(&0.0001).unwrap());
++        assert!(!certificate(&100.0).unwrap());
+         let mut collinear = geometry.clone();
+         collinear.shifts[1] = [6.0, 0.0, 0.0];
+-        assert!(!collinear.certificate(&0.01, &1.5).unwrap());
++        assert!(!collinear.prepare_certificate(&1.5).unwrap()(&0.01).unwrap());
+ 
+         // The outer endpoint enclosure separates a failing conservative box
+         // from an arithmetic sign that cannot be decided at this precision.
+@@ -896,6 +925,59 @@ mod tests {
+         assert!(!negative.lower_positive().unwrap());
+     }
+ 
++    #[test]
++    fn joint_sampling_prepared_certificate_reuses_only_fixed_geometry() {
++        fn check<T: FloatLike>() {
++            let geometry = geometry::<T>();
++            let one = F::<T>::default().one();
++            let scale = one.from_usize(3) / one.from_usize(2);
++            let certificate = geometry.prepare_certificate(&scale.0).unwrap();
++            let mut accepted = 0;
++            let mut declined = 0;
++            // Revisit large and small radii in both orders, including the
++            // admitted 1/10000 disk and declined radius 100 from the rational
++            // fixture above. A prepared closure must agree with fresh
++            // preparation and cannot retain a previous candidate's ranges or
++            // outcome.
++            for (numerator, denominator) in [
++                (100, 1),
++                (1, 1),
++                (1, 10000),
++                (0, 1),
++                (1, 10000),
++                (1, 1),
++                (100, 1),
++            ] {
++                let radius = one.from_usize(numerator) / one.from_usize(denominator);
++                let result = certificate(&radius.0).unwrap();
++                assert_eq!(
++                    result,
++                    geometry.prepare_certificate(&scale.0).unwrap()(&radius.0).unwrap()
++                );
++                if result {
++                    accepted += 1;
++                } else {
++                    declined += 1;
++                }
++            }
++            assert!(accepted > 0 && declined > 0);
++            let mut changed = geometry.clone();
++            changed.energy_sums[0] = one.0.clone();
++            let changed_certificate = changed.prepare_certificate(&scale.0).unwrap();
++            // E0+E1 >= m0+m1=5 independently excludes this changed C1=1
++            // zero-radius disk; the original rational fixture remains regular.
++            assert!(!changed_certificate(&one.zero().0).unwrap());
++            assert!(certificate(&one.zero().0).unwrap());
++            assert!(geometry.prepare_certificate(&one.zero().0).is_err());
++            changed.shifts[1] = [one.from_usize(6).0, one.zero().0, one.zero().0];
++            // False Gram still precedes the scale denominator check.
++            assert!(!changed.prepare_certificate(&one.zero().0).unwrap()(&one.0).unwrap());
++        }
++        check::<f64>();
++        check::<QuadFloat>();
++        check::<ArbPrec>();
++    }
++
+     #[test]
+     fn joint_sampling_full_circle_eager_jacobian_matches_cartesian_difference() {
+         crate::initialisation::test_initialise().unwrap();
+@@ -1093,8 +1175,9 @@ mod tests {
+         // would silently replace the normalized law for this original draw.
+         assert!(
+             enlarged
+-                .certificate(&radius, &canonical.normal_scale)
+-                .unwrap()
++                .prepare_certificate(&canonical.normal_scale)
++                .unwrap()(&radius)
++            .unwrap()
+         );
+         let mut changed = map(enlarged, program.clone());
+         changed.max_radius = canonical.max_radius.clone();
+@@ -1161,6 +1244,22 @@ mod tests {
+                 .to_string()
+                 .contains("ordinary fallback angular boundary")
+         );
++
++        // A cached false Gram must not bypass the original native halving
++        // guard, even though every candidate would decline focusing.
++        let mut tiny = map.clone();
++        let mut collinear = (tiny.geometry)(&[]).unwrap();
++        collinear.shifts[1] = [6.0, 0.0, 0.0];
++        tiny.geometry = Arc::new(move |_| Ok(collinear.clone()));
++        tiny.max_radius = f64::from_bits(1);
++        let error = tiny
++            .prepare(&mut SamplingMapContext::detached(&[]))
++            .unwrap_err();
++        assert!(matches!(
++            error.downcast_ref::<SamplingEvaluationError>(),
++            Some(SamplingEvaluationError::Unrepresentable { operation: "joint disk", detail })
++                if detail.contains("underflow")
++        ));
+     }
+ 
+     #[test]

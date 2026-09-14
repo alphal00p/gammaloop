@@ -1,0 +1,14 @@
+{
+  "source_commit": "1f83233dd79b5c7b8b09aef38ad5acdd5fde932c",
+  "manifest": "/tmp/gl638-hosted-joint-gate/manifest-performance-timing.json",
+  "manifest_sha256": "eb688481f3db4da782b182a32514ffa6f1f48157f570ac3eaf4ce094fb99eeef",
+  "stage": "failure-diagnostic",
+  "workers": 1,
+  "draws": 1,
+  "repetitions": 1,
+  "seed": 1337,
+  "GL_DISPLAY_FILTER": "off,gammalooprs::integrands::process=debug,gammalooprs::subtraction::lu_counterterm=debug",
+  "traced": true,
+  "runtime_budget_evidence": false,
+  "note": "The reused immutable timing manifest supplies unchanged physical/sampling inputs. Its prior prose trace_scope is superseded by this execution record and the actual diagnostic stage/environment."
+}

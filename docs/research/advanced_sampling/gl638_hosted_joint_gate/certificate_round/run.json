@@ -1,0 +1,17 @@
+{
+  "argv": [
+    "/tmp/gl638-hosted-joint-gate/drivers/gate-certificate",
+    "/tmp/gl638-hosted-joint-gate/manifest-certificate-timing.json",
+    "/tmp/gl638-hosted-joint-gate/results-certificate-timing1",
+    "optimized_lmb,joint_hz_plus_lmb",
+    "timing",
+    "20",
+    "16",
+    "3",
+    "1337"
+  ],
+  "returncode": 1,
+  "interpretation": "Same retained physical stability failure; former10% target recorded but further optimization waived by user. No invalid rows discarded.",
+  "state_sha256_unchanged": true,
+  "summary_uncompressed_sha256": "07dd9df562686094b81d9fd95be1cf9a1ad24fd5a7da0599699b3a599dee30f8"
+}
