@@ -1,0 +1,184 @@
+{
+  "results/optimized_lmb.json": {
+    "sha256_uncompressed": "4cab2d713b075307e7fb04bc00189f53294d4a4db6860f00b02383cca1bccc73",
+    "bytes_uncompressed": 534476,
+    "stored_path": "results/optimized_lmb.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut-combined-seven-preflight-build5/optimized_lmb.json"
+  },
+  "results/cuts.json": {
+    "sha256_uncompressed": "77430e810787e939c7352aba89115e0b06a214fd9dc819075bd2b069c9e7a2aa",
+    "bytes_uncompressed": 536290,
+    "stored_path": "results/cuts.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut-combined-seven-preflight-build5/cuts.json"
+  },
+  "results/cuts_joint.json": {
+    "sha256_uncompressed": "6eccd20b487e19906087c08a560e542c5c2c3bf8cdf66fdfc8c95b865a223222",
+    "bytes_uncompressed": 536841,
+    "stored_path": "results/cuts_joint.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut-combined-seven-preflight-build5/cuts_joint.json"
+  },
+  "results/cuts_soft.json": {
+    "sha256_uncompressed": "4e97cd533e9b5c0057d2d48684d9021b6bdb623ac33cf36370d66883a77810d0",
+    "bytes_uncompressed": 536728,
+    "stored_path": "results/cuts_soft.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut-combined-seven-preflight-build5/cuts_soft.json"
+  },
+  "results/cuts_joint_soft.json": {
+    "sha256_uncompressed": "43bba230c4b53e06a03c7f38d957c34fb88b1b825b12ff4e7251b2a94a6d5e9c",
+    "bytes_uncompressed": 537270,
+    "stored_path": "results/cuts_joint_soft.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut-combined-seven-preflight-build5/cuts_joint_soft.json"
+  },
+  "results/cuts_combined_joint.json": {
+    "sha256_uncompressed": "4762941f699d4cc41126c5caf66578ed4ced05e37f6e16b0d9141e5db3bb82fc",
+    "bytes_uncompressed": 537079,
+    "stored_path": "results/cuts_combined_joint.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut-combined-seven-preflight-build5/cuts_combined_joint.json"
+  },
+  "results/cuts_combined_joint_soft.json": {
+    "sha256_uncompressed": "52d7c3f6a052cc299d4b560977655e34458cc94ca8f9f6a3505c30c5caefeeab",
+    "bytes_uncompressed": 537476,
+    "stored_path": "results/cuts_combined_joint_soft.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut-combined-seven-preflight-build5/cuts_combined_joint_soft.json"
+  },
+  "physics_audit.json": {
+    "sha256_uncompressed": "c655b2e4ce97b1ec703e1f01d25ad9b6cdcdd0e2a6c0aa61b8330689eb59d4c8",
+    "bytes_uncompressed": 3124187,
+    "stored_path": "physics_audit.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut-combined-seven-preflight-build5/physics_audit.json"
+  },
+  "independent_audit.json": {
+    "sha256_uncompressed": "5d961974e5f7b68d9e874ce80dc2f88db41f9ca188e80f5644406715a537ca1b",
+    "bytes_uncompressed": 8112,
+    "stored_path": "independent_audit.json",
+    "original_path": "/tmp/gl638-hosted-joint-gate/full-seven-build5-independent-audit/summary.json"
+  },
+  "run.json": {
+    "sha256_uncompressed": "6b62d64f0a6298ad74ad3862ba696bc565aa1166a35fb22df7c2818975e70fc7",
+    "bytes_uncompressed": 480,
+    "stored_path": "run.json",
+    "original_path": "/tmp/gl638-hosted-joint-gate/cut-combined-seven-preflight-build5-run.json"
+  },
+  "run.log": {
+    "sha256_uncompressed": "a0257869f9fa61f853b6cb98c8e6337e317b54debe7cae318aff54c06da24c44",
+    "bytes_uncompressed": 142,
+    "stored_path": "run.log.gz",
+    "original_path": "/tmp/gl638-cut-combined-seven-preflight-build5.log"
+  },
+  "manifest.json": {
+    "sha256_uncompressed": "9f6cb48cd8826f89753a183f11c6093aab1868c9b750d2b1325ca6518f4886ce",
+    "bytes_uncompressed": 27038,
+    "stored_path": "manifest.json",
+    "original_path": "/tmp/gl638-hosted-joint-gate/manifest-cut-combined-seven-physics-build5.json"
+  },
+  "summary.json": {
+    "sha256_uncompressed": "139c2ab348dd3c92c0f65261387ffe0682000a5272a5029ae9f72ca9794123db",
+    "bytes_uncompressed": 5930,
+    "stored_path": "summary.json"
+  },
+  "audit_physical.py": {
+    "sha256_uncompressed": "72212d101563b92733cd4d8586e2a5dc7148eddf285ccc7dd9e257caf469e737",
+    "bytes_uncompressed": 17147,
+    "stored_path": "audit_physical.py.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/audit_physical.py"
+  },
+  "mc/analyze_physics_pilots.py": {
+    "sha256_uncompressed": "b836da2d71462ff2ad83ec6d4daba02457b2535448c0851da8762a441c78f6b5",
+    "bytes_uncompressed": 22773,
+    "stored_path": "mc/analyze_physics_pilots.py.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/analyze_physics_pilots.py"
+  },
+  "mc/analyze_physics_pilots_before_multidir.py": {
+    "sha256_uncompressed": "c35e5b53c42d3769f3677c1283c4f1c0d0b47e3328b18448677d5fb0aefd3cf7",
+    "bytes_uncompressed": 18077,
+    "stored_path": "mc/analyze_physics_pilots_before_multidir.py.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/analyze_physics_pilots_before_multidir.py"
+  },
+  "mc/analyzer_multidir_compatibility.json": {
+    "sha256_uncompressed": "b176b736983344199001dcdc1ebd9f161ef706f34ea2291d91041348189863d5",
+    "bytes_uncompressed": 1301,
+    "stored_path": "mc/analyzer_multidir_compatibility.json",
+    "original_path": "/tmp/gl638-hosted-joint-gate/analyzer_multidir_compatibility.json"
+  },
+  "mc/MC_ANALYSIS_PROTOCOL.md": {
+    "sha256_uncompressed": "822949897fd398e88224d4bf841eab7afff8de131e88cab47792d9e7546f114a",
+    "bytes_uncompressed": 4836,
+    "stored_path": "mc/MC_ANALYSIS_PROTOCOL.md",
+    "original_path": "/tmp/gl638-physics-comparison/MC_ANALYSIS_PROTOCOL.md"
+  },
+  "mc/SCREEN_BUILD5_COMMANDS.md": {
+    "sha256_uncompressed": "768b5979bc9acc208e779fd04ded4833022f0c2f19f237b3bdcb12b5660126b9",
+    "bytes_uncompressed": 5835,
+    "stored_path": "mc/SCREEN_BUILD5_COMMANDS.md",
+    "original_path": "/tmp/gl638-hosted-joint-gate/SCREEN_BUILD5_COMMANDS.md"
+  },
+  "mc/screen-build5-commands.json": {
+    "sha256_uncompressed": "51417b64da5a29642bc123e8a216d7563e61e69eb6a130a22353768292bde25e",
+    "bytes_uncompressed": 4710,
+    "stored_path": "mc/screen-build5-commands.json",
+    "original_path": "/tmp/gl638-hosted-joint-gate/screen-build5-commands.json"
+  },
+  "mc/manifest-screen-throughput20-build5.json": {
+    "sha256_uncompressed": "1c7b232957467839042ae118069efc81c0085fbcc1ae0dc589b45f7597248614",
+    "bytes_uncompressed": 28396,
+    "stored_path": "mc/manifest-screen-throughput20-build5.json",
+    "original_path": "/tmp/gl638-hosted-joint-gate/manifest-screen-throughput20-build5.json"
+  },
+  "mc/manifest-screen-throughput30-build5.json": {
+    "sha256_uncompressed": "b4b82e53f435aac925ebda2e67c873a37f9800465040d8530cf71b6655b29a0c",
+    "bytes_uncompressed": 28396,
+    "stored_path": "mc/manifest-screen-throughput30-build5.json",
+    "original_path": "/tmp/gl638-hosted-joint-gate/manifest-screen-throughput30-build5.json"
+  },
+  "mc/manifest-screen-advanced-firstseed-build5.json": {
+    "sha256_uncompressed": "f46e5b4c9acb73743074019c64d9d751913e455dc3c1a8194fa2685b226b586e",
+    "bytes_uncompressed": 28480,
+    "stored_path": "mc/manifest-screen-advanced-firstseed-build5.json",
+    "original_path": "/tmp/gl638-hosted-joint-gate/manifest-screen-advanced-firstseed-build5.json"
+  },
+  "mc/manifest-screen-all-remaining-seeds-build5.json": {
+    "sha256_uncompressed": "05ffe25cb64ca733f4eaaffd5bf998f09ca741f4768075a0df5ddc83591ba9f6",
+    "bytes_uncompressed": 28497,
+    "stored_path": "mc/manifest-screen-all-remaining-seeds-build5.json",
+    "original_path": "/tmp/gl638-hosted-joint-gate/manifest-screen-all-remaining-seeds-build5.json"
+  },
+  "mc/manifest-screen-full-build5.json": {
+    "sha256_uncompressed": "598175f17094dabdf0a22d78b97a58876f7f37cebeb919982650fad720b85251",
+    "bytes_uncompressed": 28557,
+    "stored_path": "mc/manifest-screen-full-build5.json",
+    "original_path": "/tmp/gl638-hosted-joint-gate/manifest-screen-full-build5.json"
+  },
+  "mc/max_replay_current.rs": {
+    "sha256_uncompressed": "29b9c6a48448935aee70159787063bb8a2c1cdd5b6a762ff596fd2d9061ca498",
+    "bytes_uncompressed": 26397,
+    "stored_path": "mc/max_replay_current.rs.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/drivers/max_replay_current.rs"
+  },
+  "mc/max_replay_build.json": {
+    "sha256_uncompressed": "eb178db72deb47f812c7eaf0f31548fbca542855136c27069651f8168cb9e95b",
+    "bytes_uncompressed": 43285,
+    "stored_path": "mc/max_replay_build.json",
+    "original_path": "/tmp/gl638-hosted-joint-gate/drivers/max-replay-build5.build.json"
+  },
+  "shared_artifact_references.json": {
+    "sha256_uncompressed": "01086709939d40b7956ae4e35aec5ab128d21661119412f64d07c24e8995cfbb",
+    "bytes_uncompressed": 2191,
+    "stored_path": "shared_artifact_references.json"
+  },
+  "provenance.json": {
+    "sha256_uncompressed": "65f598da32c79f5c8ea56dcc9f75f3fa8ea2771ce4f9ec79b889850ed80cfb39",
+    "bytes_uncompressed": 4272,
+    "stored_path": "provenance.json"
+  },
+  "mc/analyzer_multidir_compatibility_current_manifest.json": {
+    "sha256_uncompressed": "5fffa964ec68f356717e675216401c6e4e63eefc64057a78712bfcb743aa9ee0",
+    "bytes_uncompressed": 1862,
+    "stored_path": "mc/analyzer_multidir_compatibility_current_manifest.json",
+    "original_path": "/tmp/gl638-hosted-joint-gate/analyzer_multidir_compatibility_current_manifest.json"
+  },
+  "mc/manifest_compatibility_delta.json": {
+    "sha256_uncompressed": "a1892c356ad022c6c22f5a58c2ad51470836a0e8852b3162ff7dcd0b236ac9b4",
+    "bytes_uncompressed": 1096,
+    "stored_path": "mc/manifest_compatibility_delta.json"
+  }
+}

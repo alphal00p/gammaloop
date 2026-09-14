@@ -1,0 +1,121 @@
+{
+  "status": "prepared_not_run; actual build5 seven-mode preflight is still a mandatory runtime prerequisite",
+  "protocol": "/tmp/gl638-physics-comparison/MC_ANALYSIS_PROTOCOL.md",
+  "driver_source": "b53df2b439845729dd5a9c898c9cece83c28426457ec18701cf9787756310306",
+  "driver_sha256": "2fd035e87812264837a6cb0feb752a6abb63f827a90d1b461285442fd0dd311d",
+  "commands": [
+    {
+      "name": "throughput20",
+      "argv": [
+        "/tmp/gl638-hosted-joint-gate/drivers/gate-physics-build5",
+        "/tmp/gl638-hosted-joint-gate/manifest-screen-throughput20-build5.json",
+        "/tmp/gl638-hosted-joint-gate/results-screen-throughput20-build5",
+        "all",
+        "physics-pilot",
+        "20",
+        "1",
+        "1",
+        "1337"
+      ],
+      "resource_prefix": [
+        "/run/current-system/sw/bin/time",
+        "-v",
+        "-o",
+        "/tmp/gl638-hosted-joint-gate/results-screen-throughput20-build5.resources.txt"
+      ],
+      "combined_log": "/tmp/gl638-hosted-joint-gate/results-screen-throughput20-build5.log"
+    },
+    {
+      "name": "throughput30",
+      "argv": [
+        "/tmp/gl638-hosted-joint-gate/drivers/gate-physics-build5",
+        "/tmp/gl638-hosted-joint-gate/manifest-screen-throughput30-build5.json",
+        "/tmp/gl638-hosted-joint-gate/results-screen-throughput30-build5",
+        "all",
+        "physics-pilot",
+        "30",
+        "1",
+        "1",
+        "1337"
+      ],
+      "resource_prefix": [
+        "/run/current-system/sw/bin/time",
+        "-v",
+        "-o",
+        "/tmp/gl638-hosted-joint-gate/results-screen-throughput30-build5.resources.txt"
+      ],
+      "combined_log": "/tmp/gl638-hosted-joint-gate/results-screen-throughput30-build5.log"
+    },
+    {
+      "name": "advanced-firstseed",
+      "argv": [
+        "/tmp/gl638-hosted-joint-gate/drivers/gate-physics-build5",
+        "/tmp/gl638-hosted-joint-gate/manifest-screen-advanced-firstseed-build5.json",
+        "/tmp/gl638-hosted-joint-gate/results-screen-advanced-firstseed-build5",
+        "all",
+        "physics-pilot",
+        "CHOSEN_WORKERS",
+        "1",
+        "1",
+        "1337"
+      ],
+      "resource_prefix": [
+        "/run/current-system/sw/bin/time",
+        "-v",
+        "-o",
+        "/tmp/gl638-hosted-joint-gate/results-screen-advanced-firstseed-build5.resources.txt"
+      ],
+      "combined_log": "/tmp/gl638-hosted-joint-gate/results-screen-advanced-firstseed-build5.log"
+    },
+    {
+      "name": "all-remaining-seeds",
+      "argv": [
+        "/tmp/gl638-hosted-joint-gate/drivers/gate-physics-build5",
+        "/tmp/gl638-hosted-joint-gate/manifest-screen-all-remaining-seeds-build5.json",
+        "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5",
+        "all",
+        "physics-pilot",
+        "CHOSEN_WORKERS",
+        "1",
+        "1",
+        "1337"
+      ],
+      "resource_prefix": [
+        "/run/current-system/sw/bin/time",
+        "-v",
+        "-o",
+        "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5.resources.txt"
+      ],
+      "combined_log": "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5.log"
+    }
+  ],
+  "selection": "Choose30 only if valid throughput30/throughput20>=1.35 (90% of ideal1.5 scaling) and peak resident memory<=300GB; otherwise20. Use the existing Integrate elapsed interval including its warmup, report whole-process wall separately, freeze choice before advanced outcomes, count chosen baseline once and retain the other control excluded.",
+  "analysis_inputs": [
+    "CHOSEN_BASELINE_DIRECTORY",
+    "/tmp/gl638-hosted-joint-gate/results-screen-advanced-firstseed-build5",
+    "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5"
+  ],
+  "analysis_manifest": "/tmp/gl638-hosted-joint-gate/manifest-screen-full-build5.json",
+  "screen_draws": 43008,
+  "excluded_control_draws": 2048,
+  "analysis_argv": [
+    "python",
+    "/tmp/gl638-hosted-joint-gate/analyze_physics_pilots.py",
+    "/tmp/gl638-hosted-joint-gate/manifest-screen-full-build5.json",
+    "CHOSEN_BASELINE_DIRECTORY",
+    "--pilot-directory",
+    "/tmp/gl638-hosted-joint-gate/results-screen-advanced-firstseed-build5",
+    "--pilot-directory",
+    "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5",
+    "--workers",
+    "CHOSEN_WORKERS",
+    "--exclude-pilot-directory",
+    "OTHER_THROUGHPUT_DIRECTORY"
+  ],
+  "analysis_source_sha256": "b836da2d71462ff2ad83ec6d4daba02457b2535448c0851da8762a441c78f6b5",
+  "analysis_compatibility_record": "/tmp/gl638-hosted-joint-gate/analyzer_multidir_compatibility.json",
+  "worker_selection_threshold": {
+    "throughput_ratio_min": 1.35,
+    "maximum_resident_bytes": 300000000000
+  }
+}

@@ -1,0 +1,160 @@
+{
+  "status": "passed",
+  "scope": "Independent completed full7 reference/physical acceptance audit. This is no Monte Carlo estimate, method ranking, global boundedness or timing claim. Pilot outputs were not read or modified.",
+  "run": {
+    "argv": [
+      "/tmp/gl638-hosted-joint-gate/drivers/gate-physics-build5",
+      "/tmp/gl638-hosted-joint-gate/manifest-cut-combined-seven-physics-build5.json",
+      "/tmp/gl638-hosted-joint-gate/results-cut-combined-seven-preflight-build5",
+      "all",
+      "physics-preflight",
+      "20",
+      "1",
+      "1",
+      "1337"
+    ],
+    "started_utc": "2026-09-14T09:20:43.033340+00:00",
+    "pid": 4038974,
+    "returncode": 0,
+    "elapsed_seconds": 4255.331522231922,
+    "max_rss_KiB": 63645268
+  },
+  "build_identity": {
+    "driver_sha256": "2fd035e87812264837a6cb0feb752a6abb63f827a90d1b461285442fd0dd311d",
+    "source_base_commit": "22eb17a6e389636c26fa7135f90abe421fbbded7",
+    "source_candidate_commit": null,
+    "source_candidate_patch_sha256": "667a91d23c759c1a2fe02355569dbc3d64866af681428c40213b8e335b5dfd65",
+    "candidate_binary_sha256": "5d3f6d86a975664f8b42262f2e9f1028fe54dc7b4a9ddf9edd98193907f17522"
+  },
+  "saved_state_hashes_unchanged": 35,
+  "orientations": 936,
+  "cuts": 6,
+  "physical_inventory_equal_all_modes": true,
+  "candidate_card_hashes_match": true,
+  "reference_acceptance_limits": {
+    "normalization_absolute": 0.06,
+    "raw_second_moment_relative": 0.08
+  },
+  "reference": [
+    {
+      "mode": "optimized_lmb",
+      "channels": 6,
+      "reference_points": 32768,
+      "normalization": 1.0064979354396142,
+      "normalization_absolute_error": 0.006497935439614189,
+      "raw_second_moment_GeV2": 1053863.7421270972,
+      "raw_second_moment_relative_error": -0.029233841076734324,
+      "reference_finite": true,
+      "parallel_8point_1_vs_2_exact": true,
+      "physical_replay_rows": 8
+    },
+    {
+      "mode": "cuts",
+      "channels": 6,
+      "reference_points": 32768,
+      "normalization": 1.031805855606959,
+      "normalization_absolute_error": 0.03180585560695892,
+      "raw_second_moment_GeV2": 1126940.3665015993,
+      "raw_second_moment_relative_error": 0.038080661847456954,
+      "reference_finite": true,
+      "parallel_8point_1_vs_2_exact": true,
+      "physical_replay_rows": 8
+    },
+    {
+      "mode": "cuts_joint",
+      "channels": 7,
+      "reference_points": 32768,
+      "normalization": 1.0396261004712102,
+      "normalization_absolute_error": 0.03962610047121018,
+      "raw_second_moment_GeV2": 1136202.962217993,
+      "raw_second_moment_relative_error": 0.04661289813742919,
+      "reference_finite": true,
+      "parallel_8point_1_vs_2_exact": true,
+      "physical_replay_rows": 8
+    },
+    {
+      "mode": "cuts_soft",
+      "channels": 7,
+      "reference_points": 32768,
+      "normalization": 1.0479224961766698,
+      "normalization_absolute_error": 0.04792249617666977,
+      "raw_second_moment_GeV2": 1148630.3828776772,
+      "raw_second_moment_relative_error": 0.058060411641191134,
+      "reference_finite": true,
+      "parallel_8point_1_vs_2_exact": true,
+      "physical_replay_rows": 8
+    },
+    {
+      "mode": "cuts_joint_soft",
+      "channels": 8,
+      "reference_points": 32768,
+      "normalization": 1.051236997596914,
+      "normalization_absolute_error": 0.051236997596914025,
+      "raw_second_moment_GeV2": 1151937.2256768534,
+      "raw_second_moment_relative_error": 0.0611065085453697,
+      "reference_finite": true,
+      "parallel_8point_1_vs_2_exact": true,
+      "physical_replay_rows": 8
+    },
+    {
+      "mode": "cuts_combined_joint",
+      "channels": 7,
+      "reference_points": 32768,
+      "normalization": 1.0404117140531568,
+      "normalization_absolute_error": 0.0404117140531568,
+      "raw_second_moment_GeV2": 1136057.1865178477,
+      "raw_second_moment_relative_error": 0.046478616910323955,
+      "reference_finite": true,
+      "parallel_8point_1_vs_2_exact": true,
+      "physical_replay_rows": 8
+    },
+    {
+      "mode": "cuts_combined_joint_soft",
+      "channels": 8,
+      "reference_points": 32768,
+      "normalization": 1.0489398668565866,
+      "normalization_absolute_error": 0.04893986685658658,
+      "raw_second_moment_GeV2": 1148349.5121074696,
+      "raw_second_moment_relative_error": 0.05780168764505311,
+      "reference_finite": true,
+      "parallel_8point_1_vs_2_exact": true,
+      "physical_replay_rows": 8
+    }
+  ],
+  "physical_audit_reproduced_exactly": true,
+  "physical_counts": {
+    "retained_rows": 56,
+    "checks": 221,
+    "failed_checks": 0,
+    "component_relative_misses": 28
+  },
+  "native_precision_counts": {
+    "Double": 21,
+    "Arb": 28,
+    "Quad": 7
+  },
+  "component_relative_miss_scope": "All28 retained misses are subordinate diagnostics; total/cut complex-norm acceptance checks pass.",
+  "input_sha256": {
+    "/tmp/gl638-hosted-joint-gate/manifest-cut-combined-seven-physics-build5.json": "9f6cb48cd8826f89753a183f11c6093aab1868c9b750d2b1325ca6518f4886ce",
+    "/tmp/gl638-hosted-joint-gate/cut-combined-seven-preflight-build5-run.json": "6b62d64f0a6298ad74ad3862ba696bc565aa1166a35fb22df7c2818975e70fc7",
+    "/tmp/gl638-hosted-joint-gate/audit_physical.py": "72212d101563b92733cd4d8586e2a5dc7148eddf285ccc7dd9e257caf469e737",
+    "/tmp/gl638-hosted-joint-gate/results-cut-combined-seven-preflight-build5/summary.json": "447e356f67f7fb452dc916ca764142ba0fc7ceedffe6f31328afe598ee442ef6",
+    "/tmp/gl638-hosted-joint-gate/results-cut-combined-seven-preflight-build5/physics_audit.json": "c655b2e4ce97b1ec703e1f01d25ad9b6cdcdd0e2a6c0aa61b8330689eb59d4c8",
+    "/tmp/gl638-hosted-joint-gate/results-cut-combined-seven-preflight-build5/state_before.json": "eea5232cd0b55f5c3e507b26a4ef9ee00fffcac19532601e34b8a0d6186f5f1f",
+    "/tmp/gl638-hosted-joint-gate/results-cut-combined-seven-preflight-build5/state_after.json": "eea5232cd0b55f5c3e507b26a4ef9ee00fffcac19532601e34b8a0d6186f5f1f",
+    "/tmp/gl638-hosted-joint-gate/results-cut-combined-seven-preflight-build5/optimized_lmb.json": "4cab2d713b075307e7fb04bc00189f53294d4a4db6860f00b02383cca1bccc73",
+    "/tmp/gl638-physics-comparison/cut-matched/cards/optimized_lmb.toml": "c4d99ba8507ab73a5c754e1480c0e37978bd5489b31692f66e0ea030aff5b3e6",
+    "/tmp/gl638-hosted-joint-gate/results-cut-combined-seven-preflight-build5/cuts.json": "77430e810787e939c7352aba89115e0b06a214fd9dc819075bd2b069c9e7a2aa",
+    "/tmp/gl638-physics-comparison/cut-matched/cards/cuts.toml": "71ce4efcf492a51393075382816f8ded9ee79f93dbb1023f590b7b391f29f751",
+    "/tmp/gl638-hosted-joint-gate/results-cut-combined-seven-preflight-build5/cuts_joint.json": "6eccd20b487e19906087c08a560e542c5c2c3bf8cdf66fdfc8c95b865a223222",
+    "/tmp/gl638-physics-comparison/cut-matched/cards/cuts_joint.toml": "62afd2a032e956759c5f9a3404857e9eb8442feb1bdd6c0c197d5c1d6ea829d6",
+    "/tmp/gl638-hosted-joint-gate/results-cut-combined-seven-preflight-build5/cuts_soft.json": "4e97cd533e9b5c0057d2d48684d9021b6bdb623ac33cf36370d66883a77810d0",
+    "/tmp/gl638-physics-comparison/cut-matched/cards/cuts_soft.toml": "041ed87209898600035b7dd46f049d708cb8244ba38c5cc2380831574f9d25ee",
+    "/tmp/gl638-hosted-joint-gate/results-cut-combined-seven-preflight-build5/cuts_joint_soft.json": "43bba230c4b53e06a03c7f38d957c34fb88b1b825b12ff4e7251b2a94a6d5e9c",
+    "/tmp/gl638-physics-comparison/cut-matched/cards/cuts_joint_soft.toml": "d92938edd474476914f12a19c414e732cf6338469ef7f30f7cd7b955530e0c5a",
+    "/tmp/gl638-hosted-joint-gate/results-cut-combined-seven-preflight-build5/cuts_combined_joint.json": "4762941f699d4cc41126c5caf66578ed4ced05e37f6e16b0d9141e5db3bb82fc",
+    "/tmp/gl638-physics-comparison/cut-matched/cards/cuts_combined_joint.toml": "e7c61f30d4e117c53bdd0bcb15ca116ab7bdd3b6005c299c7b828ea0de4f1c9b",
+    "/tmp/gl638-hosted-joint-gate/results-cut-combined-seven-preflight-build5/cuts_combined_joint_soft.json": "52d7c3f6a052cc299d4b560977655e34458cc94ca8f9f6a3505c30c5caefeeab",
+    "/tmp/gl638-physics-comparison/cut-matched/cards/cuts_combined_joint_soft.toml": "ab492e6e29e6fc275b6d9e99f5c353470e3b59db78fd7248b8ae5b8a9d9b09bb"
+  }
+}

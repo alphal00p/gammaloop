@@ -1,0 +1,63 @@
+{
+  "scope": "Completed seven-candidate reference/physical acceptance and frozen MC protocol before candidate statistics. No pilot outputs included or inspected.",
+  "build": {
+    "source_commit": "4d192b5be",
+    "source_proof": "../local_cut_matched_hz/source_commit_proof.json",
+    "build_manifest": "../phase_space_ray/build5/manifest.json",
+    "source_patch": "../phase_space_ray/fix_source.patch.gz",
+    "driver_source": "../local_hz/extension/gate.rs.gz",
+    "driver_build": "../local_cut_matched_hz/driver_build.json",
+    "driver_verification": "../phase_space_ray/build5/driver_verification.json",
+    "cards": "../phase_space_ray/cards/",
+    "settings_and_state_hashes": "shared_artifact_references.json"
+  },
+  "execution": {
+    "run": "run.json",
+    "manifest": "manifest.json",
+    "log": "run.log.gz",
+    "environment_setup": "source /tmp/gammaloop-rebase-dev-env.sh; user-authorized SYMBOLICA_LICENSE supplied (value omitted)",
+    "environment": {
+      "RAYON_NUM_THREADS": "20",
+      "GL_DISPLAY_FILTER": "off"
+    },
+    "workers": 20,
+    "elapsed_seconds": 4255.331522231922,
+    "max_rss_KiB": 63645268,
+    "timing_scope": "Acceptance wall time and process peak only; local diagnostics overlapped part of this run, so no throughput/scaling comparison."
+  },
+  "acceptance": {
+    "reference_points_per_mode": 32768,
+    "expected_normalization": 1,
+    "normalization_absolute_tolerance": 0.06,
+    "expected_raw_second_moment_GeV2": 1085600,
+    "raw_second_moment_relative_tolerance": 0.08,
+    "reference_modes_passed": 7,
+    "physical_rows": 56,
+    "physical_checks_passed": 221,
+    "component_relative_misses_retained": 28,
+    "physical_criterion": "Complex norm with documented total/cut scale, not independent relative accuracy for negligible components.",
+    "state_hashes_unchanged": 35,
+    "independent_audit": "independent_audit.json",
+    "physical_audit": "physics_audit.json.gz"
+  },
+  "mc_preregistration": {
+    "protocol": "mc/MC_ANALYSIS_PROTOCOL.md",
+    "resource_and_input_protocol": "mc/SCREEN_BUILD5_COMMANDS.md",
+    "exact_commands": "mc/screen-build5-commands.json",
+    "analyzer": "mc/analyze_physics_pilots.py.gz",
+    "before_multidir_analyzer": "mc/analyze_physics_pilots_before_multidir.py.gz",
+    "compatibility": "mc/analyzer_multidir_compatibility_current_manifest.json",
+    "score_choice_scope": "Frozen common baseline absolute scales; worst of four normalized empirical variances selects joint c; matched b retains its soft policy. Confirmation uses fresh seeds and no reselection.",
+    "worker_choice": "Before advanced outcomes: choose 30 only if valid equal-N throughput ratio is at least 1.35 and peak RSS is at most 300,000,000,000 bytes; otherwise 20. Throughput uses 2048/pilots[0].elapsed_seconds including Integrate warmup.",
+    "screen_baseline": "Chosen worker baseline seed 11113 appears once; the losing 2,048-draw control is retained but excluded, not an extra seed.",
+    "compatibility_scope": "32 historical pooled means/errors preserved; duplicate/included-excluded directory checks passed. Full new screen results are not claimed.",
+    "max_replay_source": "mc/max_replay_current.rs.gz",
+    "max_replay_build": "mc/max_replay_build.json",
+    "max_replay_support_source": "../local_hz/extension/gate.rs.gz (copy as gate-max-support.rs when reconstructing source layout)",
+    "status": "Pilot execution has begun; this archive contains declarations only, no pilot outcomes or worker decision.",
+    "historical_compatibility_manifest_scope": "The earlier record names declaration 4ae23c05. A separate record validates current declaration 598175f1 with unchanged analyzer b836da2d. Later exact reconstruction shows only worker_selection prose and worker_selection_threshold changed; no numerical/proposal/seed fields differ. The earlier audit records remain unchanged.",
+    "historical_compatibility": "mc/analyzer_multidir_compatibility.json",
+    "manifest_delta": "mc/manifest_compatibility_delta.json"
+  },
+  "archive_convention": "Exact individual mode/physics reports are gzip copies. Summary omits only their repeated payloads and retains its original hash/size. Existing cards/settings/build/state hashes are linked; no binary or saved-state payload copied."
+}
