@@ -102,11 +102,71 @@ Arb retry must not be used to make the sampling-cost denominator look better.
 
 The source point, Jacobian and partition remain fixed through the higher lanes,
 and their native normal-accuracy checks pass. This excludes a proposal redraw
-as the explanation. It does not establish the cause of the physical rotation
-discrepancy. The next comparison retains exactly this source and varies CT
-activation, rotation and the Gaussian reference independently before inspecting
-the first differing physical contribution. A public binary64 raw replay is a
-secondary oracle, not an identical replacement for the canonical Arb source.
+as the explanation. The following diagnostic varies CT activation, rotation
+and the Gaussian reference independently at this exact source. A public
+binary64 raw replay remains a secondary oracle, not an identical replacement
+for the canonical Arb source.
+
+## Same-source rotation diagnostic on frozen 072
+
+The [diagnostic archive](gl638_hosted_joint_gate/diagnostics_072/run.json)
+retains worker 12/draw 12's original nested Sample, including its binary64 cube
+and outer weight 7. The public bridge checks promote those exact binary64
+coordinates to Arb1000. The physical calls use the original Sample through
+the existing canonical-source and stability owners. All 936 orientations and
+six cuts remain active. No tolerance changed. Each physical case has three
+ordinary calls and one forced-Arb call; each Gaussian case has one ordinary call.
+
+| Target and second probe | Ordinary stack | Forced Arb |
+| --- | --- | --- |
+| CT on, Euler `(0.1,0.2,0.3)` | Invalid; Quad and Arb discrepancy `2.168501393203e-10` | Invalid; `2.1685013932032444e-10` |
+| CT on, Pi/2 about z | Valid in Quad; `5.329944811107988e-14` | Valid; `5.329945071257791e-14` |
+| Gaussian reference, Euler | Valid in Double; `5.001898468563083e-16` | Not requested |
+| Gaussian reference, Pi/2 about z | Valid in Double; zero reported discrepancy | Not requested |
+
+The metric is the existing norm discrepancy across the two probes. Gaussian
+rows are single-point diagnostics, reported through the checked f64 reference
+API; they do not establish normalization.
+
+Native comparisons of the Arb raw point, Jacobian and every partition weight
+are exactly equal across these settings and before/after evaluation. The
+forced-Arb identity totals and all six identity cut weights also have identical
+retained full native decimal values. The first differing boundary is therefore
+the **second physical stability probe**. The Euler failure also reproduces in
+both a warmed clone and a clone explicitly rewarmed; the valid joint control
+(worker 0/draw 9) remains valid in both. These checks do not yet distinguish
+threshold-center geometry from other physical rotation-dependent operations.
+
+CT-off ran last and hit an empty-cache panic before returning a physical
+result. The frozen 072 code collects counterterm representative samples even
+when CT-off has deliberately left their cache empty. The source fix moves
+that collection into the existing CT-enabled branch. Its generated conditional
+cut regression has passed, including actual CT-off direct and selected calls,
+per-cut original-weight comparisons, and rest/boosted parent frames. **Actual
+GL638 CT-off remains unverified until the new build runs.** The archived exit-1
+status and panic are preserved; they are not a CT-off numerical result.
+
+The diagnostic also contains one-worker detached map timings. Direct hosted
+channel forwards and joint inverses reject the missing runtime row context;
+their elapsed times are unusable as completed component timings. Complete
+bridge forwards, complete partitions and ordinary LMB inverses succeed, but
+those operations overlap and are **nonadditive**. They provide no new 20-worker
+cost or 10% budget claim.
+
+`diagnostics_072/` stores the exact progress JSON and driver source compressed,
+the exact build/library hashes, the production settings, log, and unchanged
+35-file before/after state hashes. Its compact `run.json` preserves the run
+error and provenance without duplicating the large repeated summary inventory.
+Driver source SHA256 is
+`7b5e474ea21b0dd20fa12181cd8b8dc635c7d5db0d17d6400d1e1c47b406123e`.
+No binary is archived. The reproducible invocation was:
+
+```sh
+/tmp/gl638-hosted-joint-gate/drivers/gate-diagnostic-z-072 \
+  /tmp/gl638-hosted-joint-gate/manifest.json \
+  /tmp/gl638-hosted-joint-gate/results-failure-diagnostic2 \
+  joint_hz_plus_lmb failure-diagnostic 1 1 3 1337
+```
 
 ## Follow-up and reproducibility
 

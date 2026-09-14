@@ -1487,6 +1487,7 @@ fn conditional_cut_sampling_preserves_both_sides_and_raised_sum() {
                     newton_solver::{RadialRootDiagnostics, RadialRootIdentity},
                 },
             };
+            use crate::{integrands::evaluation::StabilityStatus, observables::AdditionalWeightKey};
             use itertools::Itertools;
             use symbolica::prelude::SingleFloat;
             use typed_index_collections::TiVec;
@@ -2135,6 +2136,59 @@ fn conditional_cut_sampling_preserves_both_sides_and_raised_sum() {
                     (explicit_sum.im.0 - summed.integrand_result.im.0).abs()
                         < 1.0e-8 * summed.integrand_result.im.0.abs().max(1.0e-25)
                 );
+
+                // CT-off never fills the overlap sample cache. Its actual
+                // raised-cut result must still equal the retained original
+                // cut weights, with the same direct/selected sampling factors.
+                let mut ct_off = integrand.clone();
+                ct_off.get_mut_settings().subtraction.disable_threshold_subtraction = true;
+                ct_off.warm_up(&model).unwrap();
+                let bare = ct_off.evaluate_momentum_configuration(
+                    &model,
+                    &MomentumSpaceEvaluationInput {
+                        loop_momenta: to_loops(&mapped.raw_coordinates).0,
+                        integrator_weight: F(1.0), graph_id: Some(0), group_id: None,
+                        orientation: None, channel_id: None,
+                    },
+                    false,
+                ).unwrap();
+                let selected = ct_off.evaluate_samples_raw(
+                    EvaluationTarget::Physical(&model),
+                    &[Sample::Discrete(F(1.0), 0, Some(Box::new(Sample::Discrete(
+                        F(1.0), channel.0, Some(Box::new(sample.clone())),
+                    ))))],
+                    0, false, false, Complex::new(F(0.0), F(0.0)),
+                ).unwrap().samples.remove(0);
+                for result in [&bare, &selected] {
+                    assert!(!result.evaluation_metadata.is_nan);
+                    assert!(result.integrand_result.re.0.is_finite() && result.integrand_result.im.0.is_finite());
+                    assert!(result.integrand_result.re.0.abs() + result.integrand_result.im.0.abs() > 0.0);
+                    assert!(!matches!(result.evaluation_metadata.stability_results.last().unwrap().status, StabilityStatus::Unstable(_)));
+                }
+                let original_events = direct_results[channel.0].0.event_groups.iter().flat_map(|group| group.iter()).collect_vec();
+                let bare_events = bare.event_groups.iter().flat_map(|group| group.iter()).collect_vec();
+                assert_eq!(bare_events.len(), original_events.len());
+                assert!(!bare_events.is_empty());
+                let mut original_sum = Complex::new(F(0.0), F(0.0));
+                for (event, original) in bare_events.iter().zip(original_events) {
+                    assert_eq!(event.cut_info.cut_id, original.cut_info.cut_id);
+                    let weights = &original.additional_weights.weights;
+                    let expected = weights[&AdditionalWeightKey::Original]
+                        * weights[&AdditionalWeightKey::FullMultiplicativeFactor];
+                    original_sum += expected;
+                    for (actual, expected) in [(event.weight.re.0, expected.re.0), (event.weight.im.0, expected.im.0)] {
+                        assert!((actual - expected).abs() <= 1.0e-8 * actual.abs().max(expected.abs()).max(1.0e-25), "cut {}: {actual} != {expected}", event.cut_info.cut_id);
+                    }
+                }
+                let factor = direct_results[channel.0].1;
+                for (actual, expected) in [
+                    (bare.integrand_result.re.0, original_sum.re.0),
+                    (bare.integrand_result.im.0, original_sum.im.0),
+                    (selected.integrand_result.re.0, bare.integrand_result.re.0 * factor),
+                    (selected.integrand_result.im.0, bare.integrand_result.im.0 * factor),
+                ] {
+                    assert!((actual - expected).abs() <= 1.0e-8 * actual.abs().max(expected.abs()).max(1.0e-25), "{actual} != {expected}");
+                }
             }
         }).unwrap().join().unwrap();
 }

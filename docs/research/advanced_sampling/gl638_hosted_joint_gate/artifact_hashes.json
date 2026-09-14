@@ -73,5 +73,45 @@
     "sha256_uncompressed": "a46d6d1ddf274b3425f0171c09dc11cb56ddf14250d6d91950cc218dd72d8394",
     "bytes_uncompressed": 775977,
     "stored_path": "results-smoke1/physics_audit.json.gz"
+  },
+  "diagnostics_072/failure-diagnostic-progress.json": {
+    "sha256_uncompressed": "c0bce3e5963b84c7ac297c906b5c1770980141fcdad1031de0528c2aae8043eb",
+    "bytes_uncompressed": 1112360,
+    "stored_path": "diagnostics_072/failure-diagnostic-progress.json.gz"
+  },
+  "diagnostics_072/gate.rs": {
+    "sha256_uncompressed": "7b5e474ea21b0dd20fa12181cd8b8dc635c7d5db0d17d6400d1e1c47b406123e",
+    "bytes_uncompressed": 69568,
+    "stored_path": "diagnostics_072/gate.rs.gz"
+  },
+  "diagnostics_072/gate.build.json": {
+    "sha256_uncompressed": "4daa15a776d0772a9602740f86ab10f0d33ab5cef7aaba7e9a1c20e95187cc54",
+    "bytes_uncompressed": 42014,
+    "stored_path": "diagnostics_072/gate.build.json"
+  },
+  "diagnostics_072/state_before.json": {
+    "sha256_uncompressed": "eea5232cd0b55f5c3e507b26a4ef9ee00fffcac19532601e34b8a0d6186f5f1f",
+    "bytes_uncompressed": 4106,
+    "stored_path": "diagnostics_072/state_before.json"
+  },
+  "diagnostics_072/state_after.json": {
+    "sha256_uncompressed": "eea5232cd0b55f5c3e507b26a4ef9ee00fffcac19532601e34b8a0d6186f5f1f",
+    "bytes_uncompressed": 4106,
+    "stored_path": "diagnostics_072/state_after.json"
+  },
+  "diagnostics_072/joint_hz_plus_lmb.settings.toml": {
+    "sha256_uncompressed": "d16f5e2a11ec3672ed66a17bd5ed709379f43bf71b0e0a515510cb57b839bf2d",
+    "bytes_uncompressed": 1640,
+    "stored_path": "diagnostics_072/joint_hz_plus_lmb.settings.toml"
+  },
+  "diagnostics_072/run.log": {
+    "sha256_uncompressed": "659ba25518df7071b130b98f277728f7206f77686f78ec2d7548628cb4269131",
+    "bytes_uncompressed": 8067,
+    "stored_path": "diagnostics_072/run.log.gz"
+  },
+  "diagnostics_072/run.json": {
+    "sha256_uncompressed": "8eb892242e7aa390fda3d1c5c71593ada8431c32e87a7f6272e06a96caeab4a5",
+    "bytes_uncompressed": 17045,
+    "stored_path": "diagnostics_072/run.json"
   }
 }

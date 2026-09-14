@@ -415,9 +415,12 @@ impl<T: FloatLike> SharedEnergyJointMap<T> {
                 "joint normal radius and scale must be positive and finite"
             ));
         }
-        if program.parameter_count() != 17 || program.output_count() != 3 {
+        if program.parameter_count() != 17
+            || program.output_count() != 3
+            || program.derivative_parameters() != [0, 1, 2]
+        {
             return Err(eyre!(
-                "joint chart requires its three-output, seventeen-parameter eager program"
+                "joint chart requires its three-output, seventeen-parameter eager program with active columns [0, 1, 2]"
             ));
         }
         let fallback = SurfaceRadialMap::absent(3, vec![max_radius.zero(); 3], beta, 1.0)?;
@@ -434,6 +437,12 @@ impl<T: FloatLike> SharedEnergyJointMap<T> {
     /// Compile the neutral map once; native bindings and worker clones reuse
     /// these programs. Prepared inputs occupy inactive derivative columns.
     pub fn compile_program() -> Result<SamplingExpressionEvaluator> {
+        Self::compile_program_with_derivatives(&[0, 1, 2])
+    }
+
+    fn compile_program_with_derivatives(
+        derivative_parameters: &[usize],
+    ) -> Result<SamplingExpressionEvaluator> {
         let names = [
             "jr", "jt", "jp", "rho", "alpha", "tau", "ax", "ay", "az", "bx", "by", "bz", "m0",
             "m1", "m2", "c1", "c2",
@@ -484,7 +493,7 @@ impl<T: FloatLike> SharedEnergyJointMap<T> {
         let w = k.sqrt() * delta * phi.sin();
         let outputs =
             (0..3).map(|i| (&d1 + &e1 * &u) * &ea[i] + (&d2 + &e2 * &u) * &eb[i] + &w * &normal[i]);
-        SamplingExpressionEvaluator::new(outputs, p.clone(), true)
+        SamplingExpressionEvaluator::new(outputs, p.clone(), derivative_parameters)
     }
 
     fn prepare(
@@ -949,6 +958,55 @@ mod tests {
             .unwrap()
             .is_none()
         );
+    }
+
+    #[test]
+    fn joint_sampling_active_program_matches_full_dual_at_arb_precision() {
+        crate::initialisation::test_initialise().unwrap();
+        let mut active = SharedEnergyJointMap::<ArbPrec>::compile_program().unwrap();
+        let mut full = SharedEnergyJointMap::<ArbPrec>::compile_program_with_derivatives(
+            &(0..17).collect::<Vec<_>>(),
+        )
+        .unwrap();
+        let one = F::<ArbPrec>::default().one();
+        let mut geometry = geometry::<ArbPrec>();
+        geometry.energy_sums[0] =
+            (F(geometry.energy_sums[0].clone()) + &one / one.from_usize(10).powi(25)).0;
+        let chart = map(geometry, active.clone());
+        let (geometry, radius) = chart
+            .prepare(&mut SamplingMapContext::detached(&[]))
+            .unwrap();
+        let radius = radius.unwrap();
+        assert_eq!(geometry.masses[2], one.zero().0);
+        for numerator in [0, 13, 50, 83] {
+            let cube = [41, 27, numerator].map(|n| (one.from_usize(n) / one.from_usize(100)).0);
+            let parameters = chart.parameters(&geometry, &radius, &cube);
+            let scalar = active.evaluate(&parameters).unwrap();
+            let reduced = active
+                .evaluate_with_real_jacobian(&parameters, None)
+                .unwrap();
+            let previous = full
+                .evaluate_with_real_jacobian(&parameters, Some(&[0, 1, 2]))
+                .unwrap();
+            // The old seventeen-direction program is compiled from the same
+            // factory. Require bit-identical primals, active derivatives and
+            // determinant at identical Arb inputs, including a massless edge
+            // and both circle seams. Scalar reconstruction skips vectorization
+            // and its instruction regrouping: the observed difference is one
+            // Arb ulp, so only this separately compiled primal has a small
+            // native-rounding bound. Physical and J*q tolerances are unchanged.
+            assert_eq!(reduced, previous, "circle fraction {numerator}/100");
+            for (value, previous) in scalar.iter().zip(previous.values) {
+                let previous = F(previous);
+                let difference = (&value.re - &previous).abs();
+                let bound = one.epsilon() * previous.abs().max(one.clone()) * one.from_usize(8);
+                assert!(
+                    difference <= bound,
+                    "circle fraction {numerator}/100: scalar difference {difference}, native bound {bound}"
+                );
+                assert_eq!(value.im, one.zero());
+            }
+        }
     }
 
     #[test]

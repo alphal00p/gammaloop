@@ -134,6 +134,31 @@ The partition borrows map/proxy evaluators at each point; it must not clone
 their new worker-local buffers per draw. No reparse, recompilation or second
 evaluator engine is introduced by worker cloning.
 
+Nested embedded compositions follow the same ownership rule: their boxed
+components clone through the existing `dyn-clone` facility, reaching each leaf's
+buffer-copying `Clone`. Immutable geometry and context callbacks remain shared.
+An outer shared composition must not bypass the leaf clone; production workers
+can clone warmed integrands without another warmup. Forward and inverse calls
+borrow those components and do not clone programs per draw.
+
+The expression owner retains a scalar eager program and, when requested, a dual
+program with an explicit ordered list of derivative columns. Both compile from
+the same expressions at warmup. Joint maps need only columns `[0,1,2]` of their
+17 inputs; inverse scalar reconstruction executes no derivative program. LU-h
+maps retain their five required columns. Both bindings validate their exact
+column contract. Scalar and dual instruction grouping may differ at native
+roundoff, so mathematical agreement does not imply bit-identical scalar values.
+The reduced and full joint dual programs retain an exact comparison test, while
+the scalar comparison has an explicit native-roundoff bound.
+
+The specialization and nested-clone update pass 137 focused/generated core
+tests, including the unchanged 8192-point hosted normalization check and the
+complete 18-orientation amplitude acceptance. The separate CT-disabled
+cross-section regression also passes in both tested native frames. All-target
+core/API checking and clippy pass, with no diagnostics on changed lines. The
+optimized build succeeds; these correctness gates do not establish the GL638
+10% runtime budget, which requires the separate matched physical benchmark.
+
 ## Future conditional maps
 
 Cache routing, channel definitions, expression/dual programs, derivative shape,
