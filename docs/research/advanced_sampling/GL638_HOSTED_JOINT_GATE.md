@@ -65,7 +65,12 @@ control is retained but excluded. The archived multi-directory analyzer keeps
 the existing pooling/selection formulas and authenticates unique mode/seed,
 source, card, preflight, N and chosen workers. Its compatibility checks preserve
 32 historical pooled means/errors and reject duplicate input directories.
-This archive contains no pilot outcomes or inferred winner.
+That pre-results archive contains no pilot outcomes or inferred winner. The
+separate [completed screen](GL638_MC_SCREEN.md) now retains all 21 stable runs
+and 43,008 draws, freezes optimized LMB/cuts/composed joint for confirmation,
+and preserves the excluded worker control. Its tiny direct/composed score
+separation is not a demonstrated variance improvement between those variants.
+Confirmation and physical maximum attribution remain separate follow-ups.
 
 ## Fixed physical calculation and proposal
 

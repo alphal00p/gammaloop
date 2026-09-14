@@ -1,0 +1,41 @@
+{
+  "created_utc": "2026-09-14T10:40:11.265706+00:00",
+  "criterion": "30 only if throughput ratio >=1.35 and peak RSS <=300GB; else20, predefined before probes",
+  "scope": "existing Integrate interval including its warmup; source schedule same, parallel accumulation order may differ",
+  "rows": [
+    {
+      "cores": 20,
+      "integrate_seconds": 82.142147559,
+      "samples_per_second": 24.93238928929864,
+      "peak_rss_bytes": 70070792192,
+      "directory": "/tmp/gl638-hosted-joint-gate/results-screen-throughput20-build5",
+      "pilots_sha256": "8b42d9601f9019ac5eec71784d29f52cc4f0cc9055506c5c6937da45ed0cc269",
+      "build_identity": {
+        "candidate_binary_sha256": "5d3f6d86a975664f8b42262f2e9f1028fe54dc7b4a9ddf9edd98193907f17522",
+        "driver_sha256": "2fd035e87812264837a6cb0feb752a6abb63f827a90d1b461285442fd0dd311d",
+        "source_base_commit": "22eb17a6e389636c26fa7135f90abe421fbbded7",
+        "source_candidate_commit": null,
+        "source_candidate_patch_sha256": "667a91d23c759c1a2fe02355569dbc3d64866af681428c40213b8e335b5dfd65"
+      }
+    },
+    {
+      "cores": 30,
+      "integrate_seconds": 110.546574665,
+      "samples_per_second": 18.526128070510126,
+      "peak_rss_bytes": 100482981888,
+      "directory": "/tmp/gl638-hosted-joint-gate/results-screen-throughput30-build5",
+      "pilots_sha256": "2243189560b20d58e7f71474502744bcfb763ba3656eceec88fc004512a7f50d",
+      "build_identity": {
+        "candidate_binary_sha256": "5d3f6d86a975664f8b42262f2e9f1028fe54dc7b4a9ddf9edd98193907f17522",
+        "driver_sha256": "2fd035e87812264837a6cb0feb752a6abb63f827a90d1b461285442fd0dd311d",
+        "source_base_commit": "22eb17a6e389636c26fa7135f90abe421fbbded7",
+        "source_candidate_commit": null,
+        "source_candidate_patch_sha256": "667a91d23c759c1a2fe02355569dbc3d64866af681428c40213b8e335b5dfd65"
+      }
+    }
+  ],
+  "throughput_ratio_30_over_20": 0.7430546609691282,
+  "chosen_workers": 20,
+  "excluded_control_workers": 30,
+  "advanced_statistics_used_for_choice": false
+}
