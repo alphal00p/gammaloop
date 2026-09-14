@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/linnet/src/parser/hedge.rs`."><title>hedge.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-1ed95124.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="linnet" data-themes="" data-resource-suffix="" data-rustdoc-version="1.98.0 (88d9e12ae 2026-08-18)" data-channel="1.98.0" data-search-js="search-9944d736.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-417ebf0a.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="stylesheet" href="../../../theme.css"><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="alphal00p-rustdoc-bar" aria-label="αLoop documentation"><a href="https://alphal00p.github.io/gammaloop/">αLoop docs</a><span aria-hidden="true">/</span><span>Linnet · Rust API</span></nav>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/linnet/src/parser/hedge.rs`."><title>hedge.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-1ed95124.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="linnet" data-themes="" data-resource-suffix="" data-rustdoc-version="1.98.1 (48a229cea 2026-09-01)" data-channel="1.98.1" data-search-js="search-9944d736.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-417ebf0a.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="stylesheet" href="../../../theme.css"><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="alphal00p-rustdoc-bar" aria-label="αLoop documentation"><a href="https://alphal00p.github.io/gammaloop/">αLoop docs</a><span aria-hidden="true">/</span><span>Linnet · Rust API</span></nav>
 <nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">linnet/parser/</div>hedge.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span>std::fmt::Display;
 <a href=#2 id=2 data-nosnippet>2</a>
 <a href=#3 id=3 data-nosnippet>3</a><span class="kw">use </span>dot_parser::ast::{CompassPt, Port};
@@ -11,7 +11,7 @@
 <a href=#10 id=10 data-nosnippet>10</a>    Archive, Archived, Deserialize, Fallible, Resolver, Serialize,
 <a href=#11 id=11 data-nosnippet>11</a>};
 <a href=#12 id=12 data-nosnippet>12</a>
-<a href=#13 id=13 data-nosnippet>13</a><span class="kw">use super</span>::{strip_quotes, subgraph_free::PortExt};
+<a href=#13 id=13 data-nosnippet>13</a><span class="kw">use super</span>::{strip_quotes, subgraph_free::PortExt, DotParseError, ExplicitIdKind};
 <a href=#14 id=14 data-nosnippet>14</a>
 <a href=#15 id=15 data-nosnippet>15</a><span class="attr">#[cfg(feature = <span class="string">"rkyv"</span>)]
 <a href=#16 id=16 data-nosnippet>16</a></span><span class="kw">struct </span>CompassPtRkyv;
@@ -100,91 +100,107 @@
 <a href=#99 id=99 data-nosnippet>99</a>}
 <a href=#100 id=100 data-nosnippet>100</a>
 <a href=#101 id=101 data-nosnippet>101</a><span class="kw">impl </span>DotHedgeData {
-<a href=#102 id=102 data-nosnippet>102</a>    <span class="kw">pub fn </span>is_none(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
-<a href=#103 id=103 data-nosnippet>103</a>        <span class="self">self</span>.statement.is_none()
-<a href=#104 id=104 data-nosnippet>104</a>            &amp;&amp; <span class="self">self</span>.id.is_none()
-<a href=#105 id=105 data-nosnippet>105</a>            &amp;&amp; <span class="self">self</span>.payload.is_none()
-<a href=#106 id=106 data-nosnippet>106</a>            &amp;&amp; <span class="self">self</span>.port_label.is_none()
-<a href=#107 id=107 data-nosnippet>107</a>            &amp;&amp; <span class="self">self</span>.compasspt.is_none()
-<a href=#108 id=108 data-nosnippet>108</a>    }
-<a href=#109 id=109 data-nosnippet>109</a>
-<a href=#110 id=110 data-nosnippet>110</a>    <span class="attr">#[allow(clippy::useless_asref)]
-<a href=#111 id=111 data-nosnippet>111</a>    </span><span class="kw">pub fn </span>dot_serialize(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;String&gt; {
-<a href=#112 id=112 data-nosnippet>112</a>        <span class="kw">let </span><span class="kw-2">mut </span>out = String::new();
-<a href=#113 id=113 data-nosnippet>113</a>        <span class="kw">let </span><span class="kw-2">mut </span>info = <span class="bool-val">false</span>;
-<a href=#114 id=114 data-nosnippet>114</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(statement) = <span class="kw-2">&amp;</span><span class="self">self</span>.statement {
-<a href=#115 id=115 data-nosnippet>115</a>            info = <span class="bool-val">true</span>;
-<a href=#116 id=116 data-nosnippet>116</a>            out.push_str(statement);
-<a href=#117 id=117 data-nosnippet>117</a>        }
-<a href=#118 id=118 data-nosnippet>118</a>
-<a href=#119 id=119 data-nosnippet>119</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(id) = <span class="kw-2">&amp;</span><span class="self">self</span>.id {
-<a href=#120 id=120 data-nosnippet>120</a>            info = <span class="bool-val">true</span>;
-<a href=#121 id=121 data-nosnippet>121</a>            out.push_str(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">" [id={id}]"</span>));
-<a href=#122 id=122 data-nosnippet>122</a>        }
-<a href=#123 id=123 data-nosnippet>123</a>        <span class="kw">if </span>info {
-<a href=#124 id=124 data-nosnippet>124</a>            <span class="prelude-val">Some</span>(out)
-<a href=#125 id=125 data-nosnippet>125</a>        } <span class="kw">else </span>{
-<a href=#126 id=126 data-nosnippet>126</a>            <span class="prelude-val">None
-<a href=#127 id=127 data-nosnippet>127</a>        </span>}
-<a href=#128 id=128 data-nosnippet>128</a>    }
-<a href=#129 id=129 data-nosnippet>129</a>
-<a href=#130 id=130 data-nosnippet>130</a>    <span class="kw">pub fn </span>with_statement(<span class="kw-2">mut </span><span class="self">self</span>, statement: String) -&gt; <span class="self">Self </span>{
-<a href=#131 id=131 data-nosnippet>131</a>        <span class="self">self</span>.statement = <span class="prelude-val">Some</span>(statement);
-<a href=#132 id=132 data-nosnippet>132</a>        <span class="self">self
-<a href=#133 id=133 data-nosnippet>133</a>    </span>}
-<a href=#134 id=134 data-nosnippet>134</a>
-<a href=#135 id=135 data-nosnippet>135</a>    <span class="kw">pub fn </span>with_port(<span class="kw-2">mut </span><span class="self">self</span>, port: <span class="kw-2">&amp;</span>Port) -&gt; <span class="self">Self </span>{
-<a href=#136 id=136 data-nosnippet>136</a>        <span class="self">self</span>.port_label = port.id().map(|a| a.to_string());
-<a href=#137 id=137 data-nosnippet>137</a>        <span class="self">self</span>.compasspt = port.compass().cloned();
-<a href=#138 id=138 data-nosnippet>138</a>        <span class="self">self</span>.id = port.hedge();
-<a href=#139 id=139 data-nosnippet>139</a>        <span class="self">self
-<a href=#140 id=140 data-nosnippet>140</a>    </span>}
-<a href=#141 id=141 data-nosnippet>141</a>
-<a href=#142 id=142 data-nosnippet>142</a>    <span class="kw">pub fn </span>with_id(<span class="kw-2">mut </span><span class="self">self</span>, id: Hedge) -&gt; <span class="self">Self </span>{
-<a href=#143 id=143 data-nosnippet>143</a>        <span class="self">self</span>.id = <span class="prelude-val">Some</span>(id);
-<a href=#144 id=144 data-nosnippet>144</a>        <span class="self">self
-<a href=#145 id=145 data-nosnippet>145</a>    </span>}
-<a href=#146 id=146 data-nosnippet>146</a>}
-<a href=#147 id=147 data-nosnippet>147</a>
-<a href=#148 id=148 data-nosnippet>148</a><span class="kw">impl </span>Display <span class="kw">for </span>DotHedgeData {
-<a href=#149 id=149 data-nosnippet>149</a>    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>std::fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; std::fmt::Result {
-<a href=#150 id=150 data-nosnippet>150</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(statement) = <span class="kw-2">&amp;</span><span class="self">self</span>.statement {
-<a href=#151 id=151 data-nosnippet>151</a>            <span class="macro">write!</span>(f, <span class="string">"{statement}"</span>)<span class="question-mark">?</span>;
-<a href=#152 id=152 data-nosnippet>152</a>        }
-<a href=#153 id=153 data-nosnippet>153</a>        <span class="prelude-val">Ok</span>(())
+<a href=#102 id=102 data-nosnippet>102</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>from_parser(port: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>Port&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, DotParseError&gt; {
+<a href=#103 id=103 data-nosnippet>103</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(port) = port <span class="kw">else </span>{
+<a href=#104 id=104 data-nosnippet>104</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="self">Self</span>::default());
+<a href=#105 id=105 data-nosnippet>105</a>        };
+<a href=#106 id=106 data-nosnippet>106</a>
+<a href=#107 id=107 data-nosnippet>107</a>        <span class="kw">let </span>data = <span class="self">Self</span>::default().with_port(port);
+<a href=#108 id=108 data-nosnippet>108</a>        <span class="kw">if </span>data.id.is_none() {
+<a href=#109 id=109 data-nosnippet>109</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(value) = port.id() {
+<a href=#110 id=110 data-nosnippet>110</a>                <span class="kw">let </span>digits = value
+<a href=#111 id=111 data-nosnippet>111</a>                    .strip_prefix(<span class="string">'+'</span>)
+<a href=#112 id=112 data-nosnippet>112</a>                    .or_else(|| value.strip_prefix(<span class="string">'-'</span>))
+<a href=#113 id=113 data-nosnippet>113</a>                    .unwrap_or(value);
+<a href=#114 id=114 data-nosnippet>114</a>                <span class="kw">if </span>!digits.is_empty() &amp;&amp; digits.bytes().all(|byte| byte.is_ascii_digit()) {
+<a href=#115 id=115 data-nosnippet>115</a>                    <span class="kw">if let </span><span class="prelude-val">Err</span>(source) = value.parse::&lt;usize&gt;() {
+<a href=#116 id=116 data-nosnippet>116</a>                        <span class="kw">return </span><span class="prelude-val">Err</span>(DotParseError::InvalidExplicitId {
+<a href=#117 id=117 data-nosnippet>117</a>                            kind: ExplicitIdKind::Hedge,
+<a href=#118 id=118 data-nosnippet>118</a>                            value: value.to_string(),
+<a href=#119 id=119 data-nosnippet>119</a>                            source,
+<a href=#120 id=120 data-nosnippet>120</a>                        });
+<a href=#121 id=121 data-nosnippet>121</a>                    }
+<a href=#122 id=122 data-nosnippet>122</a>                }
+<a href=#123 id=123 data-nosnippet>123</a>            }
+<a href=#124 id=124 data-nosnippet>124</a>        }
+<a href=#125 id=125 data-nosnippet>125</a>        <span class="prelude-val">Ok</span>(data)
+<a href=#126 id=126 data-nosnippet>126</a>    }
+<a href=#127 id=127 data-nosnippet>127</a>
+<a href=#128 id=128 data-nosnippet>128</a>    <span class="kw">pub fn </span>is_none(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#129 id=129 data-nosnippet>129</a>        <span class="self">self</span>.statement.is_none()
+<a href=#130 id=130 data-nosnippet>130</a>            &amp;&amp; <span class="self">self</span>.id.is_none()
+<a href=#131 id=131 data-nosnippet>131</a>            &amp;&amp; <span class="self">self</span>.payload.is_none()
+<a href=#132 id=132 data-nosnippet>132</a>            &amp;&amp; <span class="self">self</span>.port_label.is_none()
+<a href=#133 id=133 data-nosnippet>133</a>            &amp;&amp; <span class="self">self</span>.compasspt.is_none()
+<a href=#134 id=134 data-nosnippet>134</a>    }
+<a href=#135 id=135 data-nosnippet>135</a>
+<a href=#136 id=136 data-nosnippet>136</a>    <span class="attr">#[allow(clippy::useless_asref)]
+<a href=#137 id=137 data-nosnippet>137</a>    </span><span class="kw">pub fn </span>dot_serialize(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;String&gt; {
+<a href=#138 id=138 data-nosnippet>138</a>        <span class="kw">let </span><span class="kw-2">mut </span>out = String::new();
+<a href=#139 id=139 data-nosnippet>139</a>        <span class="kw">let </span><span class="kw-2">mut </span>info = <span class="bool-val">false</span>;
+<a href=#140 id=140 data-nosnippet>140</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(statement) = <span class="kw-2">&amp;</span><span class="self">self</span>.statement {
+<a href=#141 id=141 data-nosnippet>141</a>            info = <span class="bool-val">true</span>;
+<a href=#142 id=142 data-nosnippet>142</a>            out.push_str(statement);
+<a href=#143 id=143 data-nosnippet>143</a>        }
+<a href=#144 id=144 data-nosnippet>144</a>
+<a href=#145 id=145 data-nosnippet>145</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(id) = <span class="kw-2">&amp;</span><span class="self">self</span>.id {
+<a href=#146 id=146 data-nosnippet>146</a>            info = <span class="bool-val">true</span>;
+<a href=#147 id=147 data-nosnippet>147</a>            out.push_str(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">" [id={id}]"</span>));
+<a href=#148 id=148 data-nosnippet>148</a>        }
+<a href=#149 id=149 data-nosnippet>149</a>        <span class="kw">if </span>info {
+<a href=#150 id=150 data-nosnippet>150</a>            <span class="prelude-val">Some</span>(out)
+<a href=#151 id=151 data-nosnippet>151</a>        } <span class="kw">else </span>{
+<a href=#152 id=152 data-nosnippet>152</a>            <span class="prelude-val">None
+<a href=#153 id=153 data-nosnippet>153</a>        </span>}
 <a href=#154 id=154 data-nosnippet>154</a>    }
-<a href=#155 id=155 data-nosnippet>155</a>}
-<a href=#156 id=156 data-nosnippet>156</a>
-<a href=#157 id=157 data-nosnippet>157</a><span class="kw">impl </span>From&lt;<span class="prelude-ty">Option</span>&lt;String&gt;&gt; <span class="kw">for </span>DotHedgeData {
-<a href=#158 id=158 data-nosnippet>158</a>    <span class="kw">fn </span>from(statement: <span class="prelude-ty">Option</span>&lt;String&gt;) -&gt; <span class="self">Self </span>{
-<a href=#159 id=159 data-nosnippet>159</a>        DotHedgeData {
-<a href=#160 id=160 data-nosnippet>160</a>            statement: statement.map(|s| strip_quotes(<span class="kw-2">&amp;</span>s).to_string()),
-<a href=#161 id=161 data-nosnippet>161</a>            ..Default::default()
-<a href=#162 id=162 data-nosnippet>162</a>        }
-<a href=#163 id=163 data-nosnippet>163</a>    }
-<a href=#164 id=164 data-nosnippet>164</a>}
-<a href=#165 id=165 data-nosnippet>165</a>
-<a href=#166 id=166 data-nosnippet>166</a><span class="kw">impl </span>From&lt;<span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>Port&gt;&gt; <span class="kw">for </span>DotHedgeData {
-<a href=#167 id=167 data-nosnippet>167</a>    <span class="kw">fn </span>from(port: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>Port&gt;) -&gt; <span class="self">Self </span>{
-<a href=#168 id=168 data-nosnippet>168</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(port) = port {
-<a href=#169 id=169 data-nosnippet>169</a>            DotHedgeData::default().with_port(port)
-<a href=#170 id=170 data-nosnippet>170</a>        } <span class="kw">else </span>{
-<a href=#171 id=171 data-nosnippet>171</a>            DotHedgeData::default()
-<a href=#172 id=172 data-nosnippet>172</a>        }
-<a href=#173 id=173 data-nosnippet>173</a>    }
-<a href=#174 id=174 data-nosnippet>174</a>}
-<a href=#175 id=175 data-nosnippet>175</a>
-<a href=#176 id=176 data-nosnippet>176</a><span class="kw">pub enum </span>ParsingHedgePair {
-<a href=#177 id=177 data-nosnippet>177</a>    Unpaired {
-<a href=#178 id=178 data-nosnippet>178</a>        hedge: <span class="prelude-ty">Option</span>&lt;Hedge&gt;,
-<a href=#179 id=179 data-nosnippet>179</a>        flow: Flow,
-<a href=#180 id=180 data-nosnippet>180</a>        data: DotHedgeData,
-<a href=#181 id=181 data-nosnippet>181</a>    },
-<a href=#182 id=182 data-nosnippet>182</a>    Paired {
-<a href=#183 id=183 data-nosnippet>183</a>        source: <span class="prelude-ty">Option</span>&lt;Hedge&gt;,
-<a href=#184 id=184 data-nosnippet>184</a>        source_data: DotHedgeData,
-<a href=#185 id=185 data-nosnippet>185</a>        sink: <span class="prelude-ty">Option</span>&lt;Hedge&gt;,
-<a href=#186 id=186 data-nosnippet>186</a>        sink_data: DotHedgeData,
-<a href=#187 id=187 data-nosnippet>187</a>    },
-<a href=#188 id=188 data-nosnippet>188</a>}
+<a href=#155 id=155 data-nosnippet>155</a>
+<a href=#156 id=156 data-nosnippet>156</a>    <span class="kw">pub fn </span>with_statement(<span class="kw-2">mut </span><span class="self">self</span>, statement: String) -&gt; <span class="self">Self </span>{
+<a href=#157 id=157 data-nosnippet>157</a>        <span class="self">self</span>.statement = <span class="prelude-val">Some</span>(statement);
+<a href=#158 id=158 data-nosnippet>158</a>        <span class="self">self
+<a href=#159 id=159 data-nosnippet>159</a>    </span>}
+<a href=#160 id=160 data-nosnippet>160</a>
+<a href=#161 id=161 data-nosnippet>161</a>    <span class="kw">pub fn </span>with_port(<span class="kw-2">mut </span><span class="self">self</span>, port: <span class="kw-2">&amp;</span>Port) -&gt; <span class="self">Self </span>{
+<a href=#162 id=162 data-nosnippet>162</a>        <span class="self">self</span>.port_label = port.id().map(|a| a.to_string());
+<a href=#163 id=163 data-nosnippet>163</a>        <span class="self">self</span>.compasspt = port.compass().cloned();
+<a href=#164 id=164 data-nosnippet>164</a>        <span class="self">self</span>.id = port.hedge();
+<a href=#165 id=165 data-nosnippet>165</a>        <span class="self">self
+<a href=#166 id=166 data-nosnippet>166</a>    </span>}
+<a href=#167 id=167 data-nosnippet>167</a>
+<a href=#168 id=168 data-nosnippet>168</a>    <span class="kw">pub fn </span>with_id(<span class="kw-2">mut </span><span class="self">self</span>, id: Hedge) -&gt; <span class="self">Self </span>{
+<a href=#169 id=169 data-nosnippet>169</a>        <span class="self">self</span>.id = <span class="prelude-val">Some</span>(id);
+<a href=#170 id=170 data-nosnippet>170</a>        <span class="self">self
+<a href=#171 id=171 data-nosnippet>171</a>    </span>}
+<a href=#172 id=172 data-nosnippet>172</a>}
+<a href=#173 id=173 data-nosnippet>173</a>
+<a href=#174 id=174 data-nosnippet>174</a><span class="kw">impl </span>Display <span class="kw">for </span>DotHedgeData {
+<a href=#175 id=175 data-nosnippet>175</a>    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>std::fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; std::fmt::Result {
+<a href=#176 id=176 data-nosnippet>176</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(statement) = <span class="kw-2">&amp;</span><span class="self">self</span>.statement {
+<a href=#177 id=177 data-nosnippet>177</a>            <span class="macro">write!</span>(f, <span class="string">"{statement}"</span>)<span class="question-mark">?</span>;
+<a href=#178 id=178 data-nosnippet>178</a>        }
+<a href=#179 id=179 data-nosnippet>179</a>        <span class="prelude-val">Ok</span>(())
+<a href=#180 id=180 data-nosnippet>180</a>    }
+<a href=#181 id=181 data-nosnippet>181</a>}
+<a href=#182 id=182 data-nosnippet>182</a>
+<a href=#183 id=183 data-nosnippet>183</a><span class="kw">impl </span>From&lt;<span class="prelude-ty">Option</span>&lt;String&gt;&gt; <span class="kw">for </span>DotHedgeData {
+<a href=#184 id=184 data-nosnippet>184</a>    <span class="kw">fn </span>from(statement: <span class="prelude-ty">Option</span>&lt;String&gt;) -&gt; <span class="self">Self </span>{
+<a href=#185 id=185 data-nosnippet>185</a>        DotHedgeData {
+<a href=#186 id=186 data-nosnippet>186</a>            statement: statement.map(|s| strip_quotes(<span class="kw-2">&amp;</span>s)),
+<a href=#187 id=187 data-nosnippet>187</a>            ..Default::default()
+<a href=#188 id=188 data-nosnippet>188</a>        }
+<a href=#189 id=189 data-nosnippet>189</a>    }
+<a href=#190 id=190 data-nosnippet>190</a>}
+<a href=#191 id=191 data-nosnippet>191</a>
+<a href=#192 id=192 data-nosnippet>192</a><span class="kw">pub enum </span>ParsingHedgePair {
+<a href=#193 id=193 data-nosnippet>193</a>    Unpaired {
+<a href=#194 id=194 data-nosnippet>194</a>        hedge: <span class="prelude-ty">Option</span>&lt;Hedge&gt;,
+<a href=#195 id=195 data-nosnippet>195</a>        flow: Flow,
+<a href=#196 id=196 data-nosnippet>196</a>        data: DotHedgeData,
+<a href=#197 id=197 data-nosnippet>197</a>    },
+<a href=#198 id=198 data-nosnippet>198</a>    Paired {
+<a href=#199 id=199 data-nosnippet>199</a>        source: <span class="prelude-ty">Option</span>&lt;Hedge&gt;,
+<a href=#200 id=200 data-nosnippet>200</a>        source_data: DotHedgeData,
+<a href=#201 id=201 data-nosnippet>201</a>        sink: <span class="prelude-ty">Option</span>&lt;Hedge&gt;,
+<a href=#202 id=202 data-nosnippet>202</a>        sink_data: DotHedgeData,
+<a href=#203 id=203 data-nosnippet>203</a>    },
+<a href=#204 id=204 data-nosnippet>204</a>}
 </code></pre></div></section></main></body></html>

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["force_directed_layout"],"struct":["ForceLayoutConfig"]};
+window.SIDEBAR_ITEMS = {"fn":["force_directed_layout"],"struct":["ForceLayoutConfig","ForceLayoutSession","ForceLayoutSnapshot"]};

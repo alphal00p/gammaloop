@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["HedgeParseError"],"trait":["HedgeParseExt","MapGlobal"]};
+window.SIDEBAR_ITEMS = {"enum":["DotParseError","ExplicitIdKind","HedgeParseError"],"trait":["HedgeParseExt","MapGlobal"]};

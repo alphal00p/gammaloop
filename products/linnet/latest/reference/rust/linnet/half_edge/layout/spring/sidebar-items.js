@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["Constraint","ShiftDirection"],"struct":["LayoutNeighbor","LayoutState","ParamTuning","PinnedLayoutNeighbor","PointConstraint","SpringChargeEnergy"],"trait":["HasPointConstraint","Shiftable"]};
+window.SIDEBAR_ITEMS = {"enum":["Constraint","LayoutPointIndex","ShiftDirection"],"struct":["LayoutNeighbor","LayoutState","ParamTuning","PinnedLayoutNeighbor","PointConstraint","SpringChargeEnergy"],"trait":["HasPointConstraint"]};

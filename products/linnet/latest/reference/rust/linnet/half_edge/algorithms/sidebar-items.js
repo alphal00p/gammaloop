@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["topological_order","trace_unfold","transitive_ops"]};
+window.SIDEBAR_ITEMS = {"enum":["DirectionBasis"],"mod":["topological_order","trace_unfold","transitive_ops"]};

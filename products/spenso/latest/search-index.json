@@ -1735,7 +1735,7 @@
   {
     "title": "symbolica.community.spenso.set_symbolica_rayon_enabled",
     "summary": "Configure whether Spenso may use Rayon for Symbolica operations.",
-    "href": "reference/python/spynso3/set_symbolica_rayon_enabled/",
+    "href": "reference/python/spynso3/set_symbolica_rayon_enabled-function/",
     "kind": "python-api",
     "text": "Configure whether Spenso may use Rayon for Symbolica operations. Configure whether Spenso may use Rayon for Symbolica operations.\n\n`Auto` checks the Symbolica license once during this call. When licensed,\noperations may use Rayon and apply workload heuristics where available;\nwhen unlicensed, symbolic operations remain serial. The returned boolean\nreports whether the resolved policy permits Rayon, not whether every\noperation will use it. def set_symbolica_rayon_enabled(policy: SymbolicParallelism) -> bool:"
   }

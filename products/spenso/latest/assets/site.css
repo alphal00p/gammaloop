@@ -1178,3 +1178,117 @@ button[data-copy-target] { display: none; }
   .docs-shell { display: block; padding: 0; }
   .docs-main { width: 100%; max-width: none; padding: 0; }
 }
+
+/* Live notebooks initialize near the viewport; the authored example remains readable. */
+.live-notebook {
+  --marimo-monospace-font: var(--font-mono);
+  --marimo-text-font: var(--font-sans);
+  --marimo-heading-font: var(--font-sans);
+  --notebook-link: var(--link);
+  margin-block: 1.5rem;
+  min-width: 0;
+}
+.live-notebook:is([data-notebook-state="loading"], [data-notebook-state="active"]) > .live-notebook-fallback { display: none; }
+.live-notebook > [role="status"] {
+  position: sticky;
+  top: var(--header-height);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  margin: 0;
+  padding: .65rem .8rem;
+  border: 1px solid var(--hairline);
+  border-radius: .35rem;
+  background: var(--surface);
+  color: var(--ink-muted);
+  font-size: .85rem;
+}
+.live-notebook > [role="status"]::before {
+  content: "";
+  flex: 0 0 .8rem;
+  height: .8rem;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+}
+.live-notebook > [role="status"][data-state="busy"]::before {
+  border-right-color: transparent;
+  animation: notebook-spin .8s linear infinite;
+}
+@keyframes notebook-spin { to { transform: rotate(360deg); } }
+.live-notebook-cells { min-width: 0; }
+.reference-copy-row:has(+ .live-notebook[data-linnet-notebook="python_quickstart"][data-notebook-state="active"]) { display: none; }
+/* Keep Typst artwork on light paper without recoloring its drawing semantics. */
+:is(.live-notebook, :host) :is(svg[width$="pt"], img[src^="data:image/svg+xml;"]) { display: block; max-width: 100%; height: auto; margin: 1rem auto; padding: .75rem; border-radius: .35rem; background: white; }
+.live-notebook marimo-island { display: block; min-width: 0; margin-block: .8rem; }
+
+/* Marimo 0.24 copies this same-origin stylesheet into its widget shadow roots.
+   Font variables are public; the scoped palette and editor selectors follow the pinned runtime. */
+:is(.live-notebook, :host) .marimo {
+  --background: var(--canvas);
+  --foreground: var(--ink);
+  --muted: var(--surface-soft);
+  --muted-foreground: var(--ink-muted);
+  --popover: var(--surface);
+  --popover-foreground: var(--ink);
+  --card: var(--surface);
+  --card-foreground: var(--ink);
+  --border: var(--hairline);
+  --input: var(--hairline);
+  --primary: var(--notebook-link);
+  --primary-foreground: var(--canvas);
+  --secondary: var(--surface-soft);
+  --secondary-foreground: var(--ink-strong);
+  --accent: var(--accent-soft);
+  --accent-foreground: var(--ink-strong);
+  --link: var(--notebook-link);
+  --link-visited: var(--notebook-link);
+  --ring: var(--notebook-link);
+  --radius: .35rem;
+  --cm-background: var(--surface);
+  --cm-comment: var(--syntax-comment);
+  --cm-selection-background-light: var(--accent-soft);
+  --cm-selection-background-dark: var(--accent-soft);
+  color-scheme: inherit;
+  font-family: var(--marimo-text-font);
+}
+:is(.live-notebook, :host) .marimo .prose {
+  --tw-prose-bold: var(--ink-strong);
+  --tw-prose-headings: var(--ink-strong);
+  --tw-prose-links: var(--notebook-link);
+}
+:is(.live-notebook, :host) .cm-editor {
+  min-width: 0;
+  border-color: var(--hairline);
+  background: var(--surface);
+  color: var(--ink);
+}
+:is(.live-notebook, :host) .cm-scroller { font: .82rem/1.65 var(--marimo-monospace-font); }
+:is(.live-notebook, :host) .cm-gutters { border-color: var(--hairline); background: var(--surface-soft); color: var(--ink-muted); }
+:is(.live-notebook, :host) .cm-cursor { border-left-color: var(--ink); }
+:is(.live-notebook, :host) .cm-activeLine, :is(.live-notebook, :host) .cm-activeLineGutter { background: transparent; }
+:is(.live-notebook, :host) .marimo button { border-color: var(--hairline); box-shadow: none; }
+
+/* The streaming widget also runs outside the docs, where its inline defaults apply. */
+:is(.live-notebook, :host) [data-linnet-render-ready="stream"] {
+  border-color: var(--hairline) !important;
+  border-radius: .35rem !important;
+  background: var(--surface) !important;
+  color: var(--ink) !important;
+}
+:is(.live-notebook, :host) [data-linnet-render-ready="stream"] > div {
+  flex-wrap: wrap;
+  border-color: var(--hairline) !important;
+  font-family: var(--marimo-text-font) !important;
+}
+:is(.live-notebook, :host) [data-linnet-render-ready="stream"] button {
+  background: var(--canvas) !important;
+  color: var(--ink-strong) !important;
+}
+:is(.live-notebook, :host) [data-linnet-render-ready="stream"] svg text { fill: var(--ink); font-family: var(--marimo-text-font); }
+:is(.live-notebook, :host) [data-linnet-render-ready="stream"] svg path { stroke: var(--ink-muted); }
+:is(.live-notebook, :host) [data-linnet-render-ready="stream"] svg circle[stroke] { stroke: var(--surface); }
+
+@media (max-width: 40rem) {
+  :host(marimo-accordion) [style*="flex-flow: row"] { flex-direction: column !important; gap: .5rem !important; }
+}

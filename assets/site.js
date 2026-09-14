@@ -61,6 +61,10 @@
   const preferredTheme = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   const applyTheme = (theme) => {
     root.dataset.theme = theme;
+    // Embedded editors accept theme changes through a JSON widget property.
+    document.querySelectorAll(".live-notebook marimo-code-editor").forEach((editor) => {
+      editor.dataset.theme = JSON.stringify(theme);
+    });
     const nextTheme = theme === "dark" ? "light" : "dark";
     themeButton?.setAttribute("aria-label", `Switch to ${nextTheme} theme`);
     themeButton?.setAttribute("aria-pressed", String(theme === "dark"));
@@ -76,6 +80,67 @@
   productSelect?.addEventListener("change", (event) => {
     if (event.target.value) window.location.assign(event.target.value);
   });
+
+  let notebookRuntime;
+  const notebookObserver = new IntersectionObserver(async (entries, observer) => {
+    for (const { target: container, isIntersecting } of entries) {
+      if (!isIntersecting) continue;
+      observer.unobserve(container);
+      container.dataset.notebookState = "loading";
+      const status = document.createElement("p");
+      status.setAttribute("role", "status");
+      status.setAttribute("aria-atomic", "true");
+      status.dataset.state = "busy";
+      status.textContent = "Loading notebook and Python…";
+      container.append(status);
+      const notebook = document.createElement("div");
+      notebook.className = "live-notebook-cells";
+      notebook.setAttribute("aria-busy", "true");
+      let started = false;
+      // Marimo 0.24 mirrors actual cell execution to each island's data-status.
+      // Initial idle cells precede Python startup, so wait for the first run.
+      const executionObserver = new MutationObserver(() => {
+        const busy = Boolean(notebook.querySelector('marimo-island:is([data-status="queued"], [data-status="running"])'));
+        started ||= busy;
+        if (!started) return;
+        status.dataset.state = busy ? "busy" : "ready";
+        const message = busy ? "Running notebook…" : "Ready";
+        if (status.textContent !== message) status.textContent = message;
+        notebook.setAttribute("aria-busy", String(busy));
+      });
+      executionObserver.observe(notebook, { subtree: true, attributes: true, attributeFilter: ["data-status"] });
+      try {
+        const url = new URL(`${docsRoot}assets/notebooks/${container.dataset.linnetNotebook}.json`, document.baseURI);
+        const response = await fetch(url);
+        if (!response.ok) throw new Error("This documentation build does not include the browser notebook assets.");
+        const payload = await response.json();
+        // Islands run Python in a worker, whose URL can belong to the CDN.
+        // Resolve our wheel against the version-local asset URL on this page.
+        const wheel = new URL(payload.wheel, url).href;
+        notebook.innerHTML = payload.body.replaceAll("__LINNET_WHEEL_URL__", wheel);
+        notebook.querySelectorAll("marimo-code-editor").forEach((editor) => {
+          editor.dataset.theme = JSON.stringify(root.dataset.theme === "dark" ? "dark" : "light");
+          if (container.dataset.linnetNotebook === "rendering_api") editor.dataset.maxHeight = "360";
+        });
+        container.append(notebook);
+        if (!notebookRuntime) {
+          const head = new DOMParser().parseFromString(payload.head, "text/html");
+          head.querySelectorAll("link").forEach((link) => document.head.append(link));
+          notebookRuntime = import(head.querySelector('script[type="module"]').src);
+        }
+        await notebookRuntime;
+        container.dataset.notebookState = "active";
+      } catch (error) {
+        executionObserver.disconnect();
+        notebook.remove();
+        notebookRuntime = undefined;
+        container.dataset.notebookState = "error";
+        status.dataset.state = "error";
+        status.textContent = `${error.message} Reload this page to retry.`;
+      }
+    }
+  }, { rootMargin: "200px" });
+  document.querySelectorAll("[data-linnet-notebook]").forEach((container) => notebookObserver.observe(container));
 
   let indexPromise;
   const getIndex = () => indexPromise ||= fetch(searchIndex)
@@ -198,8 +263,10 @@
       }
       return;
     }
-    const shortcut = (event.key === "/" && !/input|textarea/i.test(document.activeElement?.tagName)) ||
-      (event.key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey));
+    const shortcut = !event.composedPath().some((target) => target.isContentEditable) && (
+      (event.key === "/" && !/input|textarea/i.test(document.activeElement?.tagName)) ||
+      (event.key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey))
+    );
     if (shortcut && openSearch()) {
       event.preventDefault();
     }

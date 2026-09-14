@@ -540,9 +540,15 @@
     "kind": "developer current partially current · reviewed 2026-08-18 heading"
   },
   {
-    "title": "Current Callback Precedence And Eval Mode",
+    "title": "Typed Render Configuration And Precedence",
     "summary": "GammaLoop Drawing Architecture",
-    "href": "architecture/gammaloop-drawing-architecture/#current-callback-precedence-and-eval-mode",
+    "href": "architecture/gammaloop-drawing-architecture/#typed-render-configuration-and-precedence",
+    "kind": "developer current partially current · reviewed 2026-08-18 heading"
+  },
+  {
+    "title": "GammaLoop Physics Styles And External Placement",
+    "summary": "GammaLoop Drawing Architecture",
+    "href": "architecture/gammaloop-drawing-architecture/#gammaloop-physics-styles-and-external-placement",
     "kind": "developer current partially current · reviewed 2026-08-18 heading"
   },
   {
