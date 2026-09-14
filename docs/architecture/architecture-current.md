@@ -601,6 +601,27 @@ conflicting choices produce existing typed retry/error handling. Ordinary
 catalogues need no extra phase. This finite-budget comparison concerns
 represented source data; it does not certify an exact physical host root.
 
+The geometry and timing source passes 175 selected core tests, including the
+complete 8192-draw kite rerun and its physical/retry checks, plus three API gates.
+`Esurface::solve_lu_cut` returns the native ordered energy ray together with its
+root, and physical raised eta jets evaluate that ray. Explicit LU now routes
+before scaling; other scalar CT/fiber evaluators retain their prior operation
+order and seed convention. A conditional map still discards its ray, so this
+does not establish authority over the physical host's completed-point equation.
+Native selected/summed transport and validated physical adoption remain next.
+Three [GL638 LU-ray replay evaluations](../research/advanced_sampling/GL638_LU_RAY_REPLAY.md)
+retain all 936 orientations, six physical event weights and the unchanged saved
+state. They establish a bounded physical regression, not improved precision or
+variance; GL638's six simple cuts do not exercise higher raised eta derivatives.
+
+The accompanying timing change passes core/API checks. `parameterization_time`
+accumulates map/source/partition and replay costs across attempts; canonical
+preparation is charged once. `integrand_evaluation_time` counts actual target
+bodies across all lanes and probes, excluding maps. Evaluator and event timings
+are subsets removed from the benchmark's residual integrand row. Final metadata
+retains accumulated costs, including replays after its earlier result snapshot.
+These are measurement counters, not evidence that the GL638 10% budget is met.
+
 Hosted cross-section joint binding remains disabled. It still needs certified
 fixed-external routing and authoritative physical cut `t*` preparation; CT-star
 maps additionally need the actual common center and projection alpha handoff.

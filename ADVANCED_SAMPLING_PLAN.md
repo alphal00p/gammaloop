@@ -1,6 +1,6 @@
 # Advanced sampling channels for GammaLoop
 
-Status: implementation in progress, 2026-09-13. This document records the accepted
+Status: implementation in progress, 2026-09-14. This document records the accepted
 design and current implementation status. It is the implementation authority
 and applies to arbitrary loop order and topology, to amplitudes and
 cross sections, and to both ordinary and threshold-adapted sampling.
@@ -653,6 +653,26 @@ discovery nor completed CT-star maps blocks the direct joint witness. Final
 physical validation still covers all
 orientations and tests the previously unbounded corner explicitly.
 
+The geometry and timing milestone now passes its complete selected gates. Explicit LU
+preparation now retains its native ordered energy ray with the root; physical
+raised eta jets use those same coefficients. Routing before scaling deliberately
+changes finite-precision association in this LU path. Amplitude/static CT and
+fiber scalar evaluation remain unchanged, as does their external-only seed
+convention. The conditional map still discards its ray: authoritative transport
+through the native context and physical adoption, with a completed-point and
+rotation accuracy budget, remain required before hosted joint enablement.
+The run passes 174 focused core tests in 124.853 s and three API regressions
+in 103.571 s, including timing-counter checks; combined checking and clippy pass
+with no changed-line warnings. The full kite rerun also passes in 1550.337 s,
+bringing this milestone to 175 core tests. Its 8192-draw 6%/8% Gaussian/moment
+bounds and physical/retry/timing checks pass; this unoptimized complete-fixture
+duration is not a production sampling-cost measurement. The
+[GL638 LU-ray replay](docs/research/advanced_sampling/GL638_LU_RAY_REPLAY.md)
+also passes three native evaluations at two stored hard/soft points, each with
+all 936 orientations and six event weights; all 35 saved-state hashes remain
+unchanged. This bounded regression is neither an isolated attribution to the
+ray change nor an accuracy, variance or sampling-runtime improvement claim.
+
 In parallel, the subtraction owner has separated representative overlap
 kinematics from the raised derivative packets, using the existing sample and
 group types. The foreign-cut/radial-derivative regression and generated raised
@@ -1059,6 +1079,18 @@ Test that repeated samples reuse the programs and that changed settings rebuild
 the relevant geometry without stale roots or masses. Record compilation/warmup
 cost separately from per-point root, inverse-density and physical evaluation
 cost in the amplitude and GL638 variance benchmarks.
+
+The new timing source passes its core/API gates and accumulates `parameterization_time` over
+source construction, direct inverses, summed maps/partitions, failed lanes and
+norm/debug remaps. Canonical policy preparation has one inclusive timer with
+nested map timers suppressed. `integrand_evaluation_time` counts actual target
+bodies across attempts and rotations, excluding those map intervals; evaluator
+and event timings are subsets. Final metadata refresh preserves costs accrued
+after a lane's result snapshot. Exhausted error-only returns still emit no
+timing metadata. These counters support the budget measurement below; they do
+not establish it. Warm every required native binding per worker separately,
+report remaining `Other` work, and do not use the benchmark's residual
+"Integrand" row alone as the full physical denominator.
 
 The runtime budget is `T_sampling / T_physical <= 0.10`, measured conservatively
 in a warmed optimized build at matched actual GL638 samples and physical

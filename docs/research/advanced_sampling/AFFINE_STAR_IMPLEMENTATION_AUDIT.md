@@ -133,18 +133,39 @@ then the physical sample is rotated. Summed channels replay the identity-frame
 map inside each probe before rotating its output. Each physical cross-section
 probe subsequently solves its own cuts and prepares its own overlap centers.
 
-The common host-root entry is now implemented as `Esurface::solve_lu_cut`,
-preserving `get_radius_guess` and the existing settings: inside zero, tolerance
+The common host-root entry was consolidated as `Esurface::solve_lu_cut`,
+preserving the seed policy and existing settings: inside zero, tolerance
 factor 1, 2,000 iterations, 64 bracket expansions and native epsilon times Ecm.
-Both callers use `compute_self_and_r_derivative`; the removed sampling-only
-ray wrapper's massless-origin right derivative now lives in that same energy
-loop. It applies only when radius, actual mass and all three routed momentum
-components are exactly zero. A computed energy of zero alone may underflow.
-Native endpoint, shifted massive, underflow and unchanged-policy checks pass.
+The removed sampling-only wrapper's massless-origin right derivative applies
+only when radius, actual mass and all three routed momentum components are
+exactly zero; a computed energy of zero alone may underflow. The earlier native
+endpoint, shifted massive, underflow and unchanged-policy checks passed.
+
+The new geometry source passes focused validation and returns `(EsurfaceRay<T>,
+NewtonIterationResult<T>)` from this entry. Its ordered edge occurrences retain
+native velocities, offsets, masses and temporal shift; physical raised eta jets
+use that same ray. Only explicit LU changes from scale-then-route to
+route-then-scale. The unchanged scalar owner is an independent comparison:
+binary64 `k=[1e16,-1e16+2]`, `t=0.1` gives routed momentum 0.125 before this
+reassociation and 0.2 after it. This is a deliberate represented-equation
+difference, not solver equivalence. Amplitude/static CT and fiber scalar
+evaluation stay unchanged. One common seed reduction retains their external-only
+offset convention; the subspace seed remains untouched. New gates exercise
+this discrepancy, repeated energies, eta derivatives and endpoint underflow.
+The [bounded GL638 replay](GL638_LU_RAY_REPLAY.md) passes three native calls at
+the stored hard `hz_03` and double-soft `soft22` points, retaining all 936
+orientations, six event identities/weights and all 35 saved-state hashes.
+Intervening changes prevent isolated attribution to LU-ray reassociation;
+no precision or variance gain is claimed. Its simple cuts do not exercise
+higher raised jets. The complete kite rerun passes in 1550.337 s with the fixed
+8192-draw 6% normalization/8% moment bounds and physical/retry/timing checks,
+completing 175 selected core tests and three API gates. This unoptimized fixture
+duration is not a production sampling-budget measurement.
 
 This consolidation still does not supply identical numerical host data. The
 conditional `SamplingMapContextTransform` uses a certified null-direction
-representative and fresh diagnostics; physical LU uses the complete sample
+representative, discards its returned ray and uses fresh diagnostics; physical
+LU uses the complete sample
 and the evaluation's persistent diagnostics. The safeguarded solver ignores
 the derivative at its inside endpoint. Sharing its entry therefore removes
 duplicate routing and policy setup without reconciling those different input
@@ -186,7 +207,8 @@ preparation and `LUCounterTerm::prepare_shared_overlaps` owners together:
   Do not key geometry by stringified floats, current center ordinal or counters.
 - Retain that preparation for primary physical evaluation and all probes. Warm
   bridge caches contain immutable bindings, not this per-point geometry. The
-  current scalar-only map contexts/results carry no such handoff: this requires
+  current typed map context carries numerical prerequisites and discrete policy
+  access, but no native host handoff: this requires
   extending `SamplingChannelRuntimeContexts<T>` with typed physical data and
   transporting it through the map/bridge result, selected
   `DiscreteGraphSample::SamplingChannel` or direct summed branch, and a native
@@ -204,14 +226,29 @@ preparation and `LUCounterTerm::prepare_shared_overlaps` owners together:
   Exact group invariance excludes every active or future dependency; construct
   a full physical sample only after its actual coordinates are available.
 
-The first reconciliation class can require one common resolved native
-parent/quotient routing plan, allowing ordered permutations through existing
-frame machinery and certifying every omitted coefficient as zero. A-star map
-certification must reject unsupported reconciliation explicitly. This is a
-restriction on which sampling pullbacks can be certified, not on user threshold
-metadata: physical group membership, solve signatures, centers and their
-evaluation remain unchanged. A general canonical quotient construction needs
-its own existing-owner design; it cannot be assumed by a cache lookup.
+The agreed first handoff class remains **unimplemented**. It requires the same
+ordered resolved parent and canonical host-required prior subset for each
+sharing consumer, with every omitted energy coefficient exactly zero. This
+restricts certified sampling pullbacks, not user threshold metadata: physical
+groups, solve signatures and centers remain unchanged. Ordered permutations
+or a general quotient reconciliation require explicit existing-frame proof;
+they cannot be assumed by a cache lookup. Native ray/root payloads live only
+in the current runtime row and lane. Canonical preparation discards them and
+each retry reconstructs them from the original source; metadata retains only
+discrete policies and diagnostic history across lanes.
+
+The initial selected forward, or initial selected inverse for direct momentum
+input, freezes its authoritative record prefix **before** partition evaluation.
+Only this prefix reaches the physical body; repeated selected consumers with
+inconsistent priors error rather than create competing authority. Reuse requires
+the same plan and exactly equal canonical native source values. If the selected
+channel's own inverse or a foreign inverse reconstructs different rounded priors,
+it prepares the actual-point ray/density independently and cannot overwrite or
+borrow the selected authority through a tolerance. Keep the existing `J*q`
+consistency check and the separate completed-point physical-adoption check.
+Partition-only work has no authority and each summed generating row is separate.
+This is bookkeeping in the existing bridge/context, not another registry,
+catalogue, helper engine or retry owner.
 
 Prepare automatic and forced centers once in the identity frame. Convert the
 actual stored f64 center to native arithmetic, then rotate its active vectors
@@ -343,6 +380,15 @@ the kernel's fixed-context normalization and `F=1/R` bounded-weight tests, and
 do not complete cross-section host or CT-center/alpha authority. The complete
 kite test takes 1537.369 s in the unoptimized test profile; the optimized GL638
 10% sampling-cost budget remains unmeasured.
+
+The accompanying timing source passes core/API checks and the full kite rerun. It charges
+canonical preparation once and accumulates native source/map/partition,
+failed-attempt and norm/debug remapping costs in the existing metadata owner.
+Actual target bodies have disjoint inclusive timing across lanes and rotations;
+their evaluator/event counters remain subsets. Final metadata refresh includes
+post-snapshot debug work. Terminal error-only returns still expose no counters.
+This enables measurement; it supplies neither shared-host attribution nor a
+passing 10% budget before native transport/adoption is implemented and timed.
 
 ## Resolve a star without requiring user threshold directives
 
