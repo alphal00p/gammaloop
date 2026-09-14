@@ -164,6 +164,25 @@ impl Display for LoopMomentumBasis {
 }
 
 impl LoopMomentumBasis {
+    pub(crate) fn accounted_bytes(&self) -> usize {
+        // Cached LMBs are cloned to their live lengths. Allow a word of slack
+        // for the bitset and charge the owned coordinate vectors explicitly.
+        std::mem::size_of::<Self>()
+            + self.tree.size().div_ceil(8)
+            + 32
+            + (self.loop_edges.capacity() + self.ext_edges.capacity())
+                * std::mem::size_of::<EdgeIndex>()
+            + self.edge_signatures.capacity() * std::mem::size_of::<LoopExtSignature>()
+            + self
+                .edge_signatures
+                .iter()
+                .map(|(_, signature)| {
+                    (signature.internal.len() + signature.external.len())
+                        * std::mem::size_of::<SignOrZero>()
+                })
+                .sum::<usize>()
+    }
+
     pub(crate) fn ext_from(&self, eid: EdgeIndex) -> Option<ExternalIndex> {
         self.ext_edges
             .iter()

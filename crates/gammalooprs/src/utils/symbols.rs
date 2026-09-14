@@ -32,11 +32,13 @@ use crate::{cff::orientations::GraphOrientation, graph::LoopMomentumBasis, numer
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(i64)]
 pub(crate) enum UvMomentumProvenanceRole {
-    /// A pre-existing numerator factor fixed to its owner's canonical exact
-    /// denominator occurrence. It is never minimax-dispatched.
+    /// A pre-existing numerator factor fixed to its original owner during raw
+    /// Taylor recursion. Completed UV projection may certify a denominator
+    /// class and transfer this factor to that class's occurrence pool.
     TaylorFixed = 0,
-    /// A hard numerator factor created by differentiating a denominator. It may be
-    /// minimax-dispatched only over degenerate copies of the same owner.
+    /// A hard numerator factor created by differentiating a denominator. Raw
+    /// provenance permits copies of the same owner; completed UV projection
+    /// may certify equivalent signed channels before class-wide dispatch.
     DenominatorDerived = 1,
     /// A physical source momentum reconstructed from its stored hard lift,
     /// independently of occurrence-local contact samples.
@@ -46,6 +48,11 @@ pub(crate) enum UvMomentumProvenanceRole {
     /// it is not an occurrence of the differentiated hard denominator.
     DenominatorDerivedSoft = 4,
 }
+
+/// An algebraic denominator channel in one completed UV projection view.
+/// This namespace is distinct from physical source edges and CFF occurrences.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct UvDenominatorClassId(pub usize);
 
 impl From<bool> for UvMomentumProvenanceRole {
     fn from(denominator_derived: bool) -> Self {
@@ -228,6 +235,8 @@ pub struct GammaloopSymbols {
     /// retain their complete projection in the frozen child LMB; newly derived
     /// soft factors retain their crown carrier until outer-CFF routing.
     pub uv_momentum_provenance: Symbol,
+    /// Projection-owned denominator class, never a physical edge identifier.
+    pub uv_class: Symbol,
     pub emr_vec: Symbol,
     pub dot: Symbol,
     pub external_mom: Symbol,
@@ -977,6 +986,7 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
         tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
     ),
     uv_momentum_provenance: symbol!("gammalooprs::uv::momentum_provenance"),
+    uv_class: symbol!("gammalooprs::uv::class"),
     orientation_delta: symbol!("orientation_delta"),
     emr_vec: symbol!(
         "Q3",
@@ -1221,6 +1231,35 @@ impl GammaloopSymbols {
         Some((edge, role, provenance.get(2).to_owned()))
     }
 
+    pub(crate) fn uv_class_ref(&self, class: UvDenominatorClassId) -> Atom {
+        self.uv_class.call(class.0)
+    }
+
+    pub(crate) fn uv_class_data(&self, argument: AtomView<'_>) -> Option<UvDenominatorClassId> {
+        let AtomView::Fun(class) = argument else {
+            return None;
+        };
+        (class.get_symbol() == self.uv_class && class.get_nargs() == 1)
+            .then(|| usize::try_from(class.get(0)).ok().map(UvDenominatorClassId))
+            .flatten()
+    }
+
+    /// Attach the same component indices to every vector in a linear momentum.
+    pub(crate) fn indexed_momentum(&self, momentum: &Atom, indices: &[Atom]) -> Atom {
+        momentum.replace_map(|view, _, output| {
+            let AtomView::Fun(vector) = view else {
+                return;
+            };
+            if vector.get_symbol() == self.emr_mom && vector.get_nargs() == 1 {
+                let mut component = FunctionBuilder::new(self.emr_mom).add_arg(vector.get(0));
+                for index in indices {
+                    component = component.add_arg(index);
+                }
+                **output = component.finish();
+            }
+        })
+    }
+
     /// Remove only the UV Taylor provenance from EMR tags. This is used at
     /// algebraic boundaries such as Vakint and by exact test oracles; the local
     /// 4D-to-CFF route deliberately retains the tag until energy ownership has
@@ -1245,23 +1284,7 @@ impl GammaloopSymbols {
                 .skip(1)
                 .map(|index| index.to_owned())
                 .collect::<Vec<_>>();
-            **output = provenance
-                .get(2)
-                .to_owned()
-                .replace_map(|hard_view, _, hard_output| {
-                    let AtomView::Fun(hard_momentum) = hard_view else {
-                        return;
-                    };
-                    if hard_momentum.get_symbol() == self.emr_mom && hard_momentum.get_nargs() == 1
-                    {
-                        let mut component =
-                            FunctionBuilder::new(self.emr_mom).add_arg(hard_momentum.get(0));
-                        for index in &indices {
-                            component = component.add_arg(index.as_view());
-                        }
-                        **hard_output = component.finish();
-                    }
-                });
+            **output = self.indexed_momentum(&provenance.get(2).to_owned(), &indices);
         })
     }
 
@@ -1402,6 +1425,31 @@ mod tests {
             / (Atom::var(x) + Atom::one()).pow(2);
         assert_eq!(GS.collect_orientation_if(expression.clone()), expression);
         assert_eq!(GS.collect_orientation_if(expression.as_view()), expression);
+    }
+
+    #[test]
+    fn canonical_uv_class_references_are_distinct_from_physical_owners() {
+        let class = UvDenominatorClassId(7);
+        assert_eq!(
+            GS.uv_class_data(GS.uv_class_ref(class).as_view()),
+            Some(class)
+        );
+        assert_eq!(GS.uv_class_data(Atom::num(7).as_view()), None);
+        assert_eq!(GS.uv_class_data(GS.uv_class.call(-1).as_view()), None);
+        assert_eq!(
+            GS.uv_class_data(
+                GS.uv_class
+                    .call_args([Atom::num(7), Atom::num(8)])
+                    .as_view()
+            ),
+            None
+        );
+        let provenance = GS.uv_momentum_provenance_tag(
+            7,
+            UvMomentumProvenanceRole::TaylorFixed,
+            GS.emr_mom.call(7),
+        );
+        assert_eq!(GS.uv_class_data(provenance.as_view()), None);
     }
 
     #[test]
