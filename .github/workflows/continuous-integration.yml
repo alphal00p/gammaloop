@@ -116,6 +116,7 @@ jobs:
       - name: Build and validate Tydenso
         env:
           TYMBOLICA_CHECKOUT: ${{ github.workspace }}/tymbolica-pinned
+          TYPST_IGNORE_SYSTEM_FONTS: 'true'
         run: |
           just --unstable check-symbolica-feature-isolation
           just --unstable tydenso::check
