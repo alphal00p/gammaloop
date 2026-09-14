@@ -202,6 +202,35 @@ from the rendered PDF.
   symbol, try building with `EXTRA_MACOS_LIBS_FOR_GNU_GCC=T`; see `build.rs`
   for the impact of this setting.
 
+## NixCI Cache
+
+Run `just ci-checks` for the selected local CI checks. To run them and then
+publish their outputs to NixCI, use `just ci-checks-and-upload`. Licensed tests
+need `SYMBOLICA_LICENSE` in the environment. `nix flake check --impure` additionally
+builds the CLI, documentation and WASM checks exported by the flake.
+
+Put your NixCI token in `~/.netrc`, or point `NIXCI_NETRC` at an existing file;
+see [the NixCI cache documentation](https://nix-ci.com/documentation/nix-ci-cache).
+Uploads run as your user and need no additional Nix privileges. Entering the dev
+shell enables no upload hook. Bare Cargo builds do not populate this cache.
+An untrusted daemon may warn that it ignores `netrc-file`; the upload client
+still uses that file to authenticate with the destination cache.
+
+The upload command first requires successful checks, then realizes the outputs
+selected by `nix/ci.nix` and publishes their runtime closures. These explicit
+producer targets retain the binaries and compiler artifacts that test-result
+outputs alone would omit. Existing local outputs are published too. It does not
+select packaging, documentation, WASM, dev shells or unrelated repositories.
+Required shared dependencies can still be part of the uploaded closures.
+
+Check time, publication preparation and upload time are reported separately.
+An upload failure returns a nonzero status; the successful checks remain cached.
+Use plain `just ci-checks` for local benchmarks without publishing.
+
+The flake retains NixCI's substituter and signing-key settings for downloads.
+On a shared daemon, an administrator must configure the cache's trust and access
+credentials for substitution; enabling user uploads does not configure downloads.
+
 ## Version Control Workflow
 
 ### jj

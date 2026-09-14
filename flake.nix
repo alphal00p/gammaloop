@@ -1,11 +1,25 @@
 {
   description = "Gammaloop";
 
+  # Substitute what NixCI has already built instead of building it again.
+  # Reading from this cache needs a token in your netrc as well, and Nix asks
+  # before it trusts these settings; see CONTRIBUTING.md.
+  nixConfig = {
+    extra-substituters = ["https://cache.nix-ci.com"];
+    extra-trusted-public-keys = ["nix-ci:g3xV5BDTLtIBZr/A00IU1x0EtKKlb7YLgBN2SgYgM6A="];
+  };
+
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
 
     crane = {
       url = "github:ipetkov/crane";
+    };
+
+    # Refresh deliberately with `just ci-cache-base REVISION` after a green run.
+    ci-cache-base = {
+      url = "github:alphal00p/gammaloop/5181661ec340ebfb181a0045dac79fcec4f35525";
+      flake = false;
     };
 
     fenix = {
@@ -37,20 +51,12 @@
       pkgs = nixpkgs.legacyPackages.${system};
       inherit (pkgs) lib;
 
-      nixCiBarrierRevision =
-        if self ? dirtyRev
-        then self.dirtyRev
-        else if self ? rev
-        then self.rev
-        else if self ? narHash
-        then self.narHash
-        else "local";
       # NixCI memoizes successful top-level derivations across commits without
-      # re-realizing their closures. Salt only this zero-copy scheduling
-      # wrapper so each commit primes the stable artifact in the shared cache.
+      # re-realizing their closures. Keep publication stable so an unchanged
+      # commit does not restore and upload the same compilation artifacts again.
       nixCiArtifactBarrier = name: artifact:
         pkgs.runCommand "nix-ci-artifact-barrier-${name}" {
-          NIX_CI_BARRIER_REVISION = nixCiBarrierRevision;
+          passthru = {inherit artifact;};
         } ''
           ln -s ${artifact} "$out"
         '';
@@ -89,17 +95,22 @@
       workspace = import ./nix/rust-workspace.nix {
         inherit pkgs craneLib wasmCraneLib ciToolchain wasmTarget system nixCiArtifactBarrier;
         workspaceRoot = ./.;
+        incrementalBaselineRoot = /. + builtins.unsafeDiscardStringContext self.inputs.ci-cache-base.outPath;
       };
-      inherit (workspace)
+      inherit
+        (workspace)
         allChecks
         hestiaChecks
         gammaloop-cli
         clinnet-cli
         gammaloop-python-module
+        nixCiConfiguration
         guppyWorkspaceGraphJson
         linnest-wasm
         linnestWasmCargoArtifacts
         cargoArtifacts
+        cargoCheckArtifacts
+        ciCompilerState
         gammaloopApiPackageArtifacts
         workspaceBuildArtifacts
         nixCiPassed
@@ -196,7 +207,6 @@
 
           packages = devShellPackages ++ extraPackages;
         };
-
     in {
       checks = allChecks;
 
@@ -210,11 +220,14 @@
           inherit clinnet-cli;
           "gammaloop-python-module" = nixCiArtifactBarrier "gammaloop-python-module" gammaloop-python-module;
           "ci-workspace-graph-json" = guppyWorkspaceGraphJson;
+          "nix-ci-config" = nixCiConfiguration;
           inherit linnest-wasm;
           linnestWasmCargoArtifacts =
             nixCiArtifactBarrier "linnest-wasm-cargo-artifacts" linnestWasmCargoArtifacts;
           "crane-ci-prebuild" = cargoArtifacts;
           cargoArtifacts = nixCiArtifactBarrier "cargo-artifacts" cargoArtifacts;
+          cargoCheckArtifacts = nixCiArtifactBarrier "cargo-check-artifacts" cargoCheckArtifacts;
+          ci-compiler-state = ciCompilerState;
           gammaloopApiPackageArtifacts =
             nixCiArtifactBarrier "gammaloop-api-package-artifacts" gammaloopApiPackageArtifacts;
           inherit workspaceBuildArtifacts;
@@ -236,6 +249,13 @@
         };
 
       apps = {
+        ci-report = flake-utils.lib.mkApp {
+          drv = pkgs.writeShellApplication {
+            name = "ci-report";
+            runtimeInputs = [pkgs.nodejs];
+            text = ''exec node ${./.github/scripts/ci-report.mjs} "$@"'';
+          };
+        };
         default = flake-utils.lib.mkApp {
           drv = gammaloop-cli;
           exePath = "/bin/gammaloop";
