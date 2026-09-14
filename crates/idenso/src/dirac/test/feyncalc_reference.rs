@@ -64,11 +64,11 @@ fn dirac_simplify_id4_slash_sandwich() {
     let p = p!(r.mink4);
     let q = q!(r.mink4);
     let expr = Atom::var(s!(m))
-        * gamma!(slot!(r.bis4, i), slot!(r.bis4, a), p.clone())
-        * gamma!(slot!(r.bis4, a), slot!(r.bis4, j), p.clone())
-        - gamma!(slot!(r.bis4, i), slot!(r.bis4, a), p.clone())
-            * gamma!(slot!(r.bis4, a), slot!(r.bis4, b), q.clone())
-            * gamma!(slot!(r.bis4, b), slot!(r.bis4, j), p.clone());
+        * chain!(slot!(r.bis4, i), slot!(r.bis4, a), gamma!(p.clone()))
+        * chain!(slot!(r.bis4, a), slot!(r.bis4, j), gamma!(p.clone()))
+        - chain!(slot!(r.bis4, i), slot!(r.bis4, a), gamma!(p.clone()))
+            * chain!(slot!(r.bis4, a), slot!(r.bis4, b), gamma!(q.clone()))
+            * chain!(slot!(r.bis4, b), slot!(r.bis4, j), gamma!(p.clone()));
 
     assert_snapshot!(expr.simplify_gamma().expand().to_bare_ordered_string(), @"-2*chain(bis(4,i),bis(4,j),gamma(in,out,p(mink(4))))*g(p(mink(4)),q(mink(4)))+chain(bis(4,i),bis(4,j),gamma(in,out,q(mink(4))))*g(p(mink(4)),p(mink(4)))+g(bis(4,i),bis(4,j))*g(p(mink(4)),p(mink(4)))*m");
 }
@@ -183,7 +183,7 @@ fn dirac_simplify_id40_repeated_gamma_and_two_trace() {
     let p = p!(&r.mink4);
     let open = Atom::var(s!(c1))
         * gamma!(slot!(r.bis4, i), slot!(r.bis4, a), mu)
-        * gamma!(slot!(r.bis4, a), slot!(r.bis4, b), p.clone())
+        * chain!(slot!(r.bis4, a), slot!(r.bis4, b), gamma!(p.clone()))
         * gamma!(slot!(r.bis4, b), slot!(r.bis4, j), mu)
         + Atom::var(s!(c1))
             * Atom::var(s!(m))
@@ -227,10 +227,10 @@ fn dirac_simplify_id46_d_dim_repeated_gamma_slash_sum() {
     let p = p!(&r.mink_d);
     let q = q!(&r.mink_d);
     let expr = gamma!(slot!(r.bis_d, i), slot!(r.bis_d, a), slot!(r.mink_d, mu))
-        * gamma!(slot!(r.bis_d, a), slot!(r.bis_d, b), p.clone())
+        * chain!(slot!(r.bis_d, a), slot!(r.bis_d, b), gamma!(p.clone()))
         * gamma!(slot!(r.bis_d, b), slot!(r.bis_d, j), slot!(r.mink_d, mu))
         + gamma!(slot!(r.bis_d, i), slot!(r.bis_d, a), slot!(r.mink_d, mu))
-            * gamma!(slot!(r.bis_d, a), slot!(r.bis_d, b), q.clone())
+            * chain!(slot!(r.bis_d, a), slot!(r.bis_d, b), gamma!(q.clone()))
             * gamma!(slot!(r.bis_d, b), slot!(r.bis_d, j), slot!(r.mink_d, mu))
         + Atom::var(s!(m))
             * gamma!(slot!(r.bis_d, i), slot!(r.bis_d, a), slot!(r.mink_d, mu))

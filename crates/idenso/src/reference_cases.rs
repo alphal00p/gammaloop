@@ -181,11 +181,19 @@ fn dirac_feyncalc_slash_sandwich_id4() -> Atom {
     let p = p!(&r.mink4);
     let q = q!(&r.mink4);
     Atom::var(s!(m))
-        * crate::gamma!(slot!(r.bis4, i), slot!(r.bis4, a), p.clone())
-        * crate::gamma!(slot!(r.bis4, a), slot!(r.bis4, j), p.clone())
-        - crate::gamma!(slot!(r.bis4, i), slot!(r.bis4, a), p.clone())
-            * crate::gamma!(slot!(r.bis4, a), slot!(r.bis4, b), q.clone())
-            * crate::gamma!(slot!(r.bis4, b), slot!(r.bis4, j), p.clone())
+        * chain!(
+            slot!(r.bis4, i),
+            slot!(r.bis4, j),
+            crate::gamma!(p.clone()),
+            crate::gamma!(p.clone()),
+        )
+        - chain!(
+            slot!(r.bis4, i),
+            slot!(r.bis4, j),
+            crate::gamma!(p.clone()),
+            crate::gamma!(q),
+            crate::gamma!(p),
+        )
 }
 
 fn dirac_feyncalc_gamma5_anticommutes_id5() -> Atom {
