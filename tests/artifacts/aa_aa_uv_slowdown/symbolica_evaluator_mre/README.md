@@ -225,3 +225,44 @@ panic remain unvalidated in this standalone package. The 5.36 GB abstract
 combined-input control passed as recorded above. The supplied-context
 import issue is unresolved; no physical equivalence is claimed for the
 abstract-parameter mode.
+
+## Faithful builder capture — 2026-09-14
+
+The new diagnostic branch captures each actual evaluator input after all
+GammaLoop expression preparation, immediately before the unchanged Symbolica
+builder call. Set `GL_SYMBOLICA_CAPTURE_DIR` to a fresh directory when running
+the generation. Evaluator compilation must be disabled. Every capture contains:
+
+- The complete `expression.raw`, written directly from the live Atom buffer.
+- The ordered raw parameter buffers and the actual serialized FunctionMap,
+  including aliases, internal definition IDs, tags and formal arguments.
+- The complete Symbolica registry and actual optimization settings.
+- A manifest written and synced last, with synchronous before-capture and
+  before-build memory observations. Successful builds add operation counts.
+
+Replay a completed capture with:
+
+```sh
+target/dev-optim/symbolica-evaluator-mre --exact-builder /path/to/build_PID_INDEX
+```
+
+This mode imports the registry before defining any symbols and requires an
+empty remapping table. It loads the full raw expression and parameters using
+Symbolica's existing `AtomView::from` API, without normalization, abstraction,
+component recombination or textual parsing. After loading the actual FunctionMap,
+it verifies all serialized fields and raw Atom bytes against the original,
+sorting only the two container hash maps for comparison. A mismatch stops replay.
+Optimization settings round-trip exactly; the interrupt callback returns false
+as during uninterrupted live construction. No evaluator compilation occurs.
+
+This uses unmodified pinned Symbolica 2.2.0. Registry exports cannot preserve
+arbitrary application callbacks; the manifest inventories those symbols, and
+physical controls must verify that this limitation does not affect this input.
+Hash-map allocation/iteration layout and prior process allocation history are
+not serialized. Only a matching standalone failure establishes reproduction.
+The large dump and its command/hash receipts remain outside version control.
+
+The RAM watchdog retains its 500 GB process-tree limit. Its `ps` snapshot timeout
+is increased from two to thirty seconds to tolerate brief host scheduling delays;
+monitoring errors still stop the run. Generation checks follow the requested
+4, 5, 6, ... minute intervals.

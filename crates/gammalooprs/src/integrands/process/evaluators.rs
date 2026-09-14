@@ -1521,6 +1521,81 @@ impl GenericEvaluator {
 
         let mut tree: Option<ExpressionEvaluator<SymComplex<Fraction<IntegerRing>>>> = None;
         for (atom_index, n) in exprs.iter().enumerate() {
+            // Diagnostic capture at the actual builder boundary. Raw bytes avoid
+            // import-time renaming/normalization of the potentially failing Atom.
+            // Preserve the real FunctionMap, including its internal definition IDs.
+            let capture = if let Some(root) = std::env::var_os("GL_SYMBOLICA_CAPTURE_DIR") {
+                use std::io::Write;
+                use std::sync::atomic::{AtomicUsize, Ordering};
+                static CAPTURE_INDEX: AtomicUsize = AtomicUsize::new(0);
+                eyre::ensure!(
+                    !settings.compile,
+                    "Capture requires evaluator compilation disabled"
+                );
+                let directory = std::path::PathBuf::from(root).join(format!(
+                    "build_{}_{}",
+                    std::process::id(),
+                    CAPTURE_INDEX.fetch_add(1, Ordering::Relaxed)
+                ));
+                std::fs::create_dir_all(directory.parent().unwrap())?;
+                std::fs::create_dir(&directory)?;
+                let write = |name: &str, bytes: &[u8]| -> Result<()> {
+                    let mut file = std::fs::File::create_new(directory.join(name))?;
+                    file.write_all(bytes)?;
+                    file.sync_all()?;
+                    Ok(())
+                };
+                let capture_started = std::time::Instant::now();
+                let before = std::fs::read_to_string("/proc/self/status").unwrap_or_default();
+                let raw_params = params
+                    .iter()
+                    .map(|a| a.as_view().get_data())
+                    .collect::<Vec<_>>();
+                write(
+                    "params.bin",
+                    &bincode::encode_to_vec(raw_params, bincode::config::standard())?,
+                )?;
+                write(
+                    "function_map.bin",
+                    &bincode::encode_to_vec(&fn_map, bincode::config::standard())?,
+                )?;
+                write(
+                    "optimization.json",
+                    &serde_json::to_vec_pretty(&optimization_settings)?,
+                )?;
+                let mut state = Vec::new();
+                symbolica::state::State::export(&mut state)?;
+                write("state.bin", &state)?;
+                write("expression.raw", n.as_view().get_data())?;
+                write(
+                    "manifest.json",
+                    &serde_json::to_vec_pretty(&serde_json::json!({
+                        "format": "symbolica-exact-builder-v1",
+                        "atom_index": atom_index,
+                        "atom_count": exprs.len(),
+                        "atom_bytes": n.as_view().get_byte_size(),
+                        "parameter_count": params.len(),
+                        "capture_seconds": capture_started.elapsed().as_secs_f64(),
+                        "before_capture_status": before,
+                        "before_build_status": std::fs::read_to_string("/proc/self/status").unwrap_or_default(),
+                        "compile": settings.compile,
+                        "abort_callback": "GammaLoop interrupt flag; false during uninterrupted build",
+                        "custom_symbols": symbolica::state::State::symbol_iter()
+                            .filter(|(s, _)| !s.is_exportable())
+                            .map(|(s, _)| serde_json::json!({"name": s.to_string(), "id": s.get_id(),
+                                "normalization": s.get_normalization_function().is_some(),
+                                "derivative": s.get_derivative_function().is_some()})).collect::<Vec<_>>()
+                    }))?,
+                )?;
+                crate::debug_tags!(#generation, #profile, #compile, #summary;
+                    stage = "evaluator_capture_complete",
+                    directory = %directory.display(),
+                    "Exact Symbolica builder input captured"
+                );
+                Some(directory)
+            } else {
+                None
+            };
             let build_started = std::time::Instant::now();
             crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
                 stage = "evaluator_symbolica_build_start",
@@ -1553,6 +1628,17 @@ impl GenericEvaluator {
                             .join(", "),
                     )
                 })?;
+
+            if let Some(directory) = capture {
+                std::fs::write(
+                    directory.join("build_success.json"),
+                    serde_json::to_vec_pretty(&serde_json::json!({
+                        "elapsed_seconds": build_started.elapsed().as_secs_f64(),
+                        "operations": format!("{:?}", eval.count_operations()),
+                        "after_build_status": std::fs::read_to_string("/proc/self/status").unwrap_or_default()
+                    }))?,
+                )?;
+            }
 
             crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
                 stage = "evaluator_symbolica_build_done",

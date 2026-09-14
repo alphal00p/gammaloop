@@ -42,8 +42,10 @@ class RusageInfoV2(ctypes.Structure):
 
 
 def snapshot(known, groups, proc_pid_rusage):
+    # Large symbolic builds can briefly delay ps on a busy host. Keep monitoring
+    # failures fatal, but allow the snapshot to finish through a scheduling pause.
     rows = subprocess.check_output(
-        ["ps", "-axo", "pid=,ppid=,pgid=,rss="], text=True, timeout=2
+        ["ps", "-axo", "pid=,ppid=,pgid=,rss="], text=True, timeout=30
     )
     processes = {}
     for row in rows.splitlines():

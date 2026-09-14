@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeMap,
     error::Error,
     fs::{self, File},
     io::{BufReader, BufWriter, Write},
@@ -8,8 +9,44 @@ use std::{
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, Indeterminate, Symbol},
     evaluate::{FunctionMap, OptimizationSettings},
-    function, symbol,
+    function,
+    state::State,
+    symbol,
 };
+
+// Audit the pinned FunctionMap binary format without normalizing its Atoms.
+// Sorting only the two serialized hash maps preserves definition IDs, argument
+// order and every raw byte; it does not sort or rewrite symbolic expressions.
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct RawAtom(Vec<u8>);
+bincode::impl_borrow_decode!(RawAtom);
+
+impl<C> bincode::Decode<C> for RawAtom {
+    fn decode<D: bincode::de::Decoder<Context = C>>(
+        decoder: &mut D,
+    ) -> Result<Self, bincode::error::DecodeError> {
+        use bincode::de::read::Reader;
+        let reader = decoder.reader();
+        let mut header = [0; 9];
+        reader.read(&mut header)?;
+        assert_eq!(header[0], 0);
+        let size = u64::from_le_bytes(header[1..].try_into().unwrap()) as usize;
+        let mut bytes = vec![0; size];
+        reader.read(&mut bytes)?;
+        Ok(Self(bytes))
+    }
+}
+
+#[derive(bincode::Decode, Debug, PartialEq, Eq)]
+enum RawIndeterminate {
+    Symbol(Vec<u8>, ([u8; 16], u8)),
+    Function(Vec<u8>, RawAtom),
+}
+
+type RawFunctionMap = (
+    BTreeMap<(Vec<u8>, Vec<RawAtom>), (usize, usize, Vec<RawIndeterminate>, RawAtom)>,
+    BTreeMap<Vec<u8>, usize>,
+);
 
 fn stage(started: Instant, name: &str) {
     let status = fs::read_to_string("/proc/self/status").unwrap_or_default();
@@ -51,6 +88,80 @@ fn main() -> Result<(), Box<dyn Error>> {
     let args = std::env::args().skip(1).collect::<Vec<_>>();
     let started = Instant::now();
     stage(started, "start");
+    if args.first().is_some_and(|a| a == "--exact-builder") {
+        assert_eq!(args.len(), 2, "usage: --exact-builder CAPTURE_DIRECTORY");
+        let directory = Path::new(&args[1]);
+        let manifest: serde_json::Value =
+            serde_json::from_reader(File::open(directory.join("manifest.json"))?)?;
+        assert_eq!(manifest["format"], "symbolica-exact-builder-v1");
+        assert_eq!(manifest["compile"], false);
+        // Import the complete registry first, before registering any user symbol.
+        // Refuse remapping: the raw expression must retain its original IDs.
+        let state_map = State::import(
+            &mut BufReader::new(File::open(directory.join("state.bin"))?),
+            None,
+        )?;
+        assert!(state_map.is_empty(), "Symbol registry is not identical");
+        stage(started, "exact_registry_ready");
+        let config = bincode::config::standard();
+        let parameter_bytes = fs::read(directory.join("params.bin"))?;
+        let (raw_params, consumed): (Vec<Vec<u8>>, _) =
+            bincode::decode_from_slice(&parameter_bytes, config)?;
+        assert_eq!(consumed, parameter_bytes.len());
+        assert_eq!(raw_params.len() as u64, manifest["parameter_count"]);
+        let params = raw_params
+            .iter()
+            .map(|p| AtomView::from(p))
+            .collect::<Vec<_>>();
+        let map_bytes = fs::read(directory.join("function_map.bin"))?;
+        let (fn_map, consumed): (FunctionMap, _) =
+            bincode::decode_from_slice_with_context(&map_bytes, config, state_map)?;
+        assert_eq!(consumed, map_bytes.len());
+        let (before, consumed): (RawFunctionMap, _) =
+            bincode::decode_from_slice(&map_bytes, config)?;
+        assert_eq!(consumed, map_bytes.len());
+        let restored_map = bincode::encode_to_vec(&fn_map, config)?;
+        let (after, consumed): (RawFunctionMap, _) =
+            bincode::decode_from_slice(&restored_map, config)?;
+        assert_eq!(consumed, restored_map.len());
+        assert_eq!(before, after, "FunctionMap changed during loading");
+        stage(started, "exact_function_map_verified");
+        let settings_value: serde_json::Value =
+            serde_json::from_reader(File::open(directory.join("optimization.json"))?)?;
+        let settings: OptimizationSettings = serde_json::from_value(settings_value.clone())?;
+        assert_eq!(serde_json::to_value(&settings)?, settings_value);
+        assert!(
+            settings_value["hot_start"].is_null(),
+            "Replay expects no hot start"
+        );
+        // The live interrupt callback returns false throughout uninterrupted
+        // construction. No generated evaluator compilation is performed here.
+        let settings = settings.abort_check(Some(Box::new(|| false)));
+        let bytes = fs::read(directory.join("expression.raw"))?;
+        assert_eq!(bytes.len() as u64, manifest["atom_bytes"]);
+        let expression = AtomView::from(&bytes);
+        stage(started, "exact_expression_loaded_without_normalization");
+        println!("settings={settings_value}");
+        stage(started, "symbolica_build_start");
+        let evaluator = expression
+            .evaluator(&params)
+            .function_map(fn_map)
+            .optimization_settings(settings)
+            .build()?;
+        stage(started, "symbolica_build_done");
+        let operations = format!("{:?}", evaluator.count_operations());
+        println!("operations={operations}");
+        let success = directory.join("build_success.json");
+        if success.exists() {
+            let original: serde_json::Value = serde_json::from_reader(File::open(success)?)?;
+            assert_eq!(
+                operations, original["operations"],
+                "Live/replayed operation counts differ"
+            );
+            stage(started, "live_operation_counts_match");
+        }
+        return Ok(());
+    }
     if args.first().is_some_and(|a| a == "--combine") {
         assert!(
             args.len() >= 3,

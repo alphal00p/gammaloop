@@ -7,7 +7,9 @@ publish = false
 [workspace]
 
 [dependencies]
-symbolica = { git = "https://github.com/alphal00p/symbolica", rev = "4d0a833eb8e059d1f95bdae5abed2559830b235f", default-features = false, features = ["gmp", "native_code_generation"] }
+symbolica = { git = "https://github.com/alphal00p/symbolica", rev = "4d0a833eb8e059d1f95bdae5abed2559830b235f", default-features = false, features = ["gmp", "native_code_generation", "bincode", "serde"] }
+bincode = "2.0.1"
+serde_json = "1.0"
 
 [patch.crates-io]
 numerica = { git = "https://github.com/alphal00p/symbolica", rev = "4d0a833eb8e059d1f95bdae5abed2559830b235f" }
