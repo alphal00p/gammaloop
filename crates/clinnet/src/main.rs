@@ -273,9 +273,12 @@ fn run() -> Result<()> {
         style_files.push(canonical);
     }
     style_files.extend(collect_template_dependency_files(
-        &build_dir.join(DEFAULT_TEMPLATE_SUBDIR),
         &figure_template,
-        &[grid_template.clone(), fig_index_path.clone()],
+        &[
+            grid_template.clone(),
+            grid_template.with_file_name("grid-entrypoint.typ"),
+            fig_index_path.clone(),
+        ],
     )?);
     style_files.sort();
     style_files.dedup();
@@ -844,6 +847,11 @@ fn typst_native_value(value: &str) -> TypstValue {
     ) {
         return TypstValue::NamedColor(value.to_owned());
     }
+    if value.strip_prefix('#').is_some_and(|hex| {
+        matches!(hex.len(), 3 | 4 | 6 | 8) && hex.bytes().all(|byte| byte.is_ascii_hexdigit())
+    }) {
+        return TypstValue::HexColor(value.to_owned());
+    }
     if let Ok(value) = value.parse::<i64>() {
         return TypstValue::Integer(value);
     }
@@ -1082,9 +1090,8 @@ fn write_fig_index(records: &[FigureRecord], index_path: &Path, grid_dir: &Path)
     Ok(())
 }
 
-/// Gather figure-render dependencies while excluding the selected grid and index paths.
+/// Gather the selected figure template tree, excluding the grid and generated grid files.
 fn collect_template_dependency_files(
-    template_dir: &Path,
     figure_template: &Path,
     excluded_paths: &[PathBuf],
 ) -> Result<Vec<PathBuf>> {
@@ -1102,7 +1109,7 @@ fn collect_template_dependency_files(
         }
     }
 
-    if template_dir.exists() {
+    if let Some(template_dir) = figure_template.parent() {
         for entry in WalkDir::new(template_dir).into_iter() {
             let entry = entry?;
             if entry.file_type().is_file() && should_hash_template_dependency(entry.path()) {
@@ -1300,6 +1307,63 @@ mod tests {
         assert!(should_hash_template_dependency(Path::new("grid.typ")));
         assert!(should_hash_template_dependency(Path::new("fig-index.typ")));
         assert!(!should_hash_template_dependency(Path::new("figure.pdf")));
+    }
+
+    #[test]
+    fn selected_template_tree_invalidates_figures_without_hashing_generated_outputs() -> Result<()>
+    {
+        let temp = tempfile::tempdir()?;
+        let templates = temp.path().join("drawings/templates");
+        let nested = templates.join("crates/linnest/typst/src/impl/draw.typ");
+        fs::create_dir_all(nested.parent().unwrap())?;
+        let figure = templates.join("figure.typ");
+        let grid = templates.join("grid.typ");
+        let index = templates.join("fig-index.typ");
+        let wasm = templates.join("crates/linnest/typst/linnest.wasm");
+        let pdf = templates.join("figure.pdf");
+        let data = temp.path().join("graph.dot");
+        for path in [&figure, &grid, &index, &nested, &wasm, &pdf, &data] {
+            fs::write(path, "original")?;
+        }
+        let excluded = [grid.clone(), index.clone()];
+        let mut dependencies = collect_template_dependency_files(&figure, &excluded)?;
+        dependencies.sort();
+        let mut expected = [&figure, &nested, &wasm]
+            .into_iter()
+            .map(|path| canonicalize_existing(path))
+            .collect::<Result<Vec<_>>>()?;
+        expected.sort();
+        assert_eq!(dependencies, expected);
+        let original = compute_hash(&data, &figure, &dependencies, &[])?;
+
+        for path in [&grid, &index, &pdf] {
+            fs::write(path, "regenerated")?;
+        }
+        assert_eq!(original, compute_hash(&data, &figure, &dependencies, &[])?);
+
+        fs::write(&nested, "changed rendering implementation")?;
+        let changed_source = compute_hash(&data, &figure, &dependencies, &[])?;
+        assert_ne!(original, changed_source);
+        fs::write(&wasm, "changed native implementation")?;
+        assert_ne!(
+            changed_source,
+            compute_hash(&data, &figure, &dependencies, &[])?
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn palette_color_inputs_preserve_native_types() {
+        for color in ["#abc", "#abcd", "#3d2645", "#3d264580"] {
+            assert_eq!(
+                typst_native_value(color),
+                TypstValue::HexColor(color.to_owned())
+            );
+        }
+        assert_eq!(
+            typst_native_value("#graph-name"),
+            TypstValue::String("#graph-name".to_owned())
+        );
     }
 
     #[test]

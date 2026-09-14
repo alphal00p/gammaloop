@@ -478,14 +478,15 @@ A custom rendering template is a Typst module with one mandatory V1 export:
 
 The bundled generic template uses this contract and ignores unknown domain concepts. A custom
 template that needs the native topology can import Linnest's `graph.typ` and call
-`graph.from-spec(read(config.at("graph-spec-path"), encoding: none))`. GammaLoop's separately
-selected template uses the same contract and owns its mode presets, particle decoration,
-momentum arrowheads and index labels, amplitude edge ordering and side labels, cut-ID-matched
-cross-section side labels, directional placement, and label-aware sizing. Python selects that
-template explicitly and passes its template-specific settings through `template_options`.
-Within GammaLoop's template, explicit element or configuration values override generated values,
-which override template defaults. Final labels and styles are applied before layout so their
-measured sizes affect spacing.
+`graph.from-spec(read(config.at("graph-spec-path"), encoding: none))`, attach native values with
+Linnest's `attach-elements(g, config.elements)`, and delegate to `layout-graph(config, g)`.
+Final labels and styles are measured before layout so their sizes affect spacing.
+
+GammaLoop's separate `figure.typ` consumes DOT through `data-path`; it cannot be selected directly
+by this Python graph-spec adapter. GammaLoop supplies ordinary Typst particle/momentum callbacks
+and optional external-edge placement without Python. Python callers retain this API's own drawing
+records and selectors, or import styling through `TypstModule`; the physics notebook is an
+independent example of that interface.
 
 === Explicit DOT codecs
 

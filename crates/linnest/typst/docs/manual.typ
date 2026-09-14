@@ -1004,10 +1004,22 @@
   `label-layout: "normal"` uses a perpendicular offset target. With
   `label-layout: "dangling-tangent"`, paired edges still use that perpendicular
   target, but dangling half-edge labels are offset along the edge direction away
-  from the attached node. With `label-layout: "fixed-length"`, the label remains
-  at distance $L_l$ from the edge point and only rotates around it under repulsive
-  forces. `label-steps`, `label-step`, `label-early-tol`, and
+  from the attached node. With `label-layout: "fixed-length"`, relaxation keeps
+  the label at distance $L_l$ from the edge point and only rotates it under
+  repulsive forces. `label-steps`, `label-step`, `label-early-tol`, and
   `label-max-delta-scale` control the label relaxation iteration.
+
+  `graph.style` measures node and label sizes before layout; those sizes enter
+  repulsion during label relaxation. For labels with measured width and height,
+  a subsequent box-collision pass starts from the relaxed positions. It keeps
+  each position when its box clears node boxes and previously placed label
+  boxes, otherwise searching nearby candidates. This correction may change the
+  distance from the edge point, including in `"fixed-length"` mode.
+
+  Repulsion considers edge layout points, and box correction considers nodes
+  and labels; neither guarantees clearance from complete edge curves or drawing
+  layers such as momentum arrows. Attached path labels may also be positioned
+  again during drawing, as described above.
 ]
 
 #let subgraph-concepts = [

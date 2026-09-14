@@ -11,6 +11,7 @@ drawing_templates := "--figure-template drawings/templates/figure.typ --grid-tem
 
 # Output names used by the drawing mode demo recipes
 draw_default_output := "drawings-default.pdf"
+draw_debug_output := "drawings-debug.pdf"
 draw_momentum_output := "drawings-momentum.pdf"
 draw_momentum_labels_output := "drawings-momentum-labels.pdf"
 draw_momentum_lines_output := "drawings-momentum-lines.pdf"
@@ -19,14 +20,14 @@ draw_momentum_lines_output := "drawings-momentum-lines.pdf"
 #   just momentum_mark=none momentum_paint=red draw-momentum
 momentum_arrows := "true"
 momentum_mark := "auto"
-momentum_paint := "black"
-momentum_thickness := "0.55pt"
+momentum_paint := "#3d2645"
+momentum_thickness := "1.0pt"
 show_edge_index := "true"
 show_node_index := "true"
 show_half_edge_index := "false"
-# Keep the model's mapped math labels by default; set this to true to show raw
-# particle identifiers instead.
-show_particle := "false"
+# Keep the model's mapped particle labels by default; set this to false to hide
+# the particle portion of combined particle and momentum labels.
+show_particle := "true"
 
 # Defaults for the highlighted momentum-line demo. Override
 # `momentum_line_mark=none` to draw the offset lines without arrowheads.
@@ -38,30 +39,31 @@ momentum_line_thickness := "1.0pt"
 # recipes below can demonstrate drawing modes without hiding the underlying CLI.
 _draw-output OUTPUT *EXTRA_INPUTS:
 	linnet \
-	  --build-dir drawings draw . {{EXTRA_INPUTS}} \
+	  --build-dir drawings draw . \
 	  {{drawing_templates}} \
 	  {{drawing_styles}} \
 	  --input steps={{steps}} \
 	  --input seed={{seed}} \
 	  --input columns={{columns}} \
 	  --input rows={{rows}} \
-	  -o {{OUTPUT}}
+	  -o {{OUTPUT}} {{EXTRA_INPUTS}}
 
 # Generate drawings from dot files taking into account steps and columns.
 # Amplitudes order external legs by edge id. Cross sections pair both sides by
 # their `is_cut` tag. Override detection by passing `--input` with
 # `amplitude-mode=true|false` or `cross-section-mode=true|false`.
-draw *EXTRA_INPUTS:
-	just _draw-output drawings.pdf {{EXTRA_INPUTS}}
+draw *EXTRA_INPUTS: (_draw-output "drawings.pdf" EXTRA_INPUTS)
 
 # Generate the plain particle-style drawings.
-draw-default *EXTRA_INPUTS:
-	just _draw-output {{draw_default_output}} {{EXTRA_INPUTS}}
+draw-default *EXTRA_INPUTS: (_draw-output draw_default_output EXTRA_INPUTS)
 
-# Generate drawings with source-to-sink momentum arrows and p_i/n_i identifiers.
+# Show Linnest node and half-edge IDs without enabling momentum arrows.
+draw-debug *EXTRA_INPUTS: (_draw-output draw_debug_output "--input debug=true" EXTRA_INPUTS)
+
+# Generate drawings with source-to-sink momentum arrows and q_(eid)/n_i identifiers.
 draw-momentum *EXTRA_INPUTS:
 	linnet \
-	  --build-dir drawings draw . {{EXTRA_INPUTS}} \
+	  --build-dir drawings draw . \
 	  {{drawing_templates}} \
 	  --input 'momentum-arrows={{momentum_arrows}}' \
 	  --input 'momentum-arrow-mark={{momentum_mark}}' \
@@ -73,12 +75,12 @@ draw-momentum *EXTRA_INPUTS:
 	  --input seed={{seed}} \
 	  --input columns={{columns}} \
 	  --input rows={{rows}} \
-	  -o {{draw_momentum_output}}
+	  -o {{draw_momentum_output}} {{EXTRA_INPUTS}}
 
-# Generate drawings with momentum arrows plus particle and p_i/n_i labels.
+# Generate drawings with momentum arrows plus particle and q_(eid)/n_i labels.
 draw-momentum-labels *EXTRA_INPUTS:
 	linnet \
-	  --build-dir drawings draw . {{EXTRA_INPUTS}} \
+	  --build-dir drawings draw . \
 	  {{drawing_templates}} \
 	  --input 'momentum-arrows={{momentum_arrows}}' \
 	  --input 'momentum-arrow-mark={{momentum_mark}}' \
@@ -93,12 +95,12 @@ draw-momentum-labels *EXTRA_INPUTS:
 	  --input seed={{seed}} \
 	  --input columns={{columns}} \
 	  --input rows={{rows}} \
-	  -o {{draw_momentum_labels_output}}
+	  -o {{draw_momentum_labels_output}} {{EXTRA_INPUTS}}
 
-# Generate drawings with highlighted momentum lines, arrowheads, and p_i/n_i identifiers.
+# Generate drawings with highlighted momentum lines, arrowheads, and q_(eid)/n_i identifiers.
 draw-momentum-lines *EXTRA_INPUTS:
 	linnet \
-	  --build-dir drawings draw . {{EXTRA_INPUTS}} \
+	  --build-dir drawings draw . \
 	  {{drawing_templates}} \
 	  --input 'momentum-arrows={{momentum_arrows}}' \
 	  --input 'momentum-arrow-mark={{momentum_line_mark}}' \
@@ -110,23 +112,19 @@ draw-momentum-lines *EXTRA_INPUTS:
 	  --input seed={{seed}} \
 	  --input columns={{columns}} \
 	  --input rows={{rows}} \
-	  -o {{draw_momentum_lines_output}}
+	  -o {{draw_momentum_lines_output}} {{EXTRA_INPUTS}}
 
 # Build one PDF per bundled drawing mode.
-draw-modes:
-	just draw-default
-	just draw-momentum
-	just draw-momentum-labels
-	just draw-momentum-lines
+draw-modes: draw-default draw-momentum draw-momentum-labels draw-momentum-lines
 
 # Generate a single figure from dot files
 draw-single FIGURE *EXTRA_INPUTS:
 	linnet \
-	  --build-dir drawings redraw-figure {{FIGURE}} {{EXTRA_INPUTS}} \
+	  --build-dir drawings redraw-figure {{FIGURE}} \
 	  --input seed={{seed}} \
-	  --input steps={{steps}}
+	  --input steps={{steps}} {{EXTRA_INPUTS}}
 	linnet \
-	  --build-dir drawings redraw-grid {{EXTRA_INPUTS}} \
+	  --build-dir drawings redraw-grid \
 	  --input columns={{columns}} \
 	  --input rows={{rows}} \
-	  -o drawings.pdf
+	  -o drawings.pdf {{EXTRA_INPUTS}}

@@ -1021,6 +1021,10 @@
           }
         }
       } else {
+        // Structural maps preserve coordinates and constraints on omitted axes.
+        if key == "pos" and type(value) == dictionary {
+          value += (merge-axes: true)
+        }
         structural.insert(key, value)
       }
     }
@@ -1392,6 +1396,9 @@
     node-label: options.node-label,
     node-label-style: options.node-label-style,
     node-style: options.node-style,
+    edge-style: options.edge-style,
+    source-style: options.source-style,
+    sink-style: options.sink-style,
     edge-label: options.edge-label,
     edge-label-style: options.edge-label-style,
     scope: options.scope,

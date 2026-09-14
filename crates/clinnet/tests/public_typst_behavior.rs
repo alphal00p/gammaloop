@@ -311,6 +311,332 @@ fn public_linnest_layout_and_drawing_behavior_is_observable() {
             assert_close(position.1 + 0.5 * unit, stroke_y, 1e-3);
         }
     }
+
+    let fixture = base
+        .path()
+        .join(".clinnet/templates/style-defaults-behavior.typ");
+    let mut style_outputs = std::collections::BTreeMap::new();
+    for mode in [
+        "defaults",
+        "draw-edge",
+        "record-edge",
+        "draw-endpoint",
+        "record-endpoint",
+        "half-endpoint",
+        "delegate",
+        "hidden",
+        "decoration",
+        "carrier-clean",
+        "carrier-hostile",
+        "carrier-removed",
+        "ordinary",
+        "carrier-source",
+        "carrier-sink",
+        "carrier-auto",
+        "carrier-left",
+        "carrier-auto-right",
+        "carrier-right",
+    ] {
+        let output = base.path().join(format!("style-{mode}.svg"));
+        fs::write(
+            &fixture,
+            include_str!("resources/style-defaults-behavior.typ")
+                .replace("default: \"defaults\"", &format!("default: \"{mode}\"")),
+        )
+        .unwrap();
+        renderer.compile_template(&fixture, &output, &[]).unwrap();
+        style_outputs.insert(mode, fs::read_to_string(output).unwrap());
+    }
+    // Observe precedence in the final painted paths, through public graph.style/draw.
+    for (mode, colors) in [
+        ("defaults", vec!["#2563eb"]),
+        ("draw-edge", vec!["#16a34a"]),
+        ("record-edge", vec!["#ea580c"]),
+        ("draw-endpoint", vec!["#0891b2", "#ea580c"]),
+        ("record-endpoint", vec!["#9333ea", "#ea580c"]),
+        ("half-endpoint", vec!["#dc2626", "#ea580c"]),
+        ("hidden", vec![]),
+        ("decoration", vec!["#16a34a", "#0891b2", "#9333ea"]),
+    ] {
+        let svg = &style_outputs[mode];
+        for color in [
+            "#2563eb", "#16a34a", "#ea580c", "#0891b2", "#9333ea", "#dc2626",
+        ] {
+            assert_eq!(
+                !paths_with_attr(svg, "stroke", color).is_empty(),
+                colors.contains(&color),
+                "unexpected {color} in {mode}",
+            );
+        }
+    }
+    assert_eq!(style_outputs["defaults"], style_outputs["delegate"]);
+    // Painting overrides and subgraph underlays cannot expose a label-only carrier.
+    assert_eq!(
+        style_outputs["carrier-clean"],
+        style_outputs["carrier-hostile"]
+    );
+    // Unlaid-out curved graphs choose the same side for carrier and label.
+    assert_eq!(style_outputs["carrier-auto"], style_outputs["carrier-left"]);
+    assert_eq!(
+        style_outputs["carrier-auto-right"],
+        style_outputs["carrier-right"]
+    );
+    // Removing carriers restores the ordinary measured label for all three edge kinds.
+    assert_eq!(style_outputs["carrier-removed"], style_outputs["ordinary"]);
+    for mode in [
+        "carrier-clean",
+        "carrier-removed",
+        "carrier-source",
+        "carrier-sink",
+    ] {
+        let svg = &style_outputs[mode];
+        assert_eq!(paths_with_attr(svg, "fill", "#ea580c").len(), 3, "{mode}");
+        if mode == "carrier-source" || mode == "carrier-sink" {
+            assert_eq!(paths_with_attr(svg, "stroke", "#2563eb").len(), 2, "{mode}");
+        }
+    }
+
+    let templates = base.path().join(".clinnet/templates");
+    fs::create_dir_all(templates.join("impl")).unwrap();
+    fs::write(
+        templates.join("gamma-physics-edge-style.typ"),
+        include_str!("../../../assets/embedded/drawing/templates/physics-edge-style.typ"),
+    )
+    .unwrap();
+    fs::write(
+        templates.join("impl/physics-edge-style.typ"),
+        include_str!("../../../assets/embedded/drawing/templates/impl/physics-edge-style.typ"),
+    )
+    .unwrap();
+    fs::write(
+        templates.join("gamma-layout-core.typ"),
+        include_str!("../../../assets/embedded/drawing/templates/layout-core.typ"),
+    )
+    .unwrap();
+    let fixture = templates.join("gamma-momentum-behavior.typ");
+    let mut momentum_outputs = std::collections::BTreeMap::new();
+    let mut label_positions = std::collections::BTreeMap::new();
+    for mode in [
+        "short",
+        "long",
+        "arrow-shift",
+        "label-shift",
+        "label-default",
+        "anchor-center",
+        "right",
+        "no-mark",
+        "reverse",
+        "undirected",
+        "incoming",
+        "outgoing",
+        "fallback",
+        "ordinary",
+        "curved-short",
+        "curved-long",
+        "default-mark",
+    ] {
+        let output = base.path().join(format!("momentum-{mode}.svg"));
+        fs::write(
+            &fixture,
+            include_str!("resources/gamma-momentum-behavior.typ")
+                .replace("default: \"short\"", &format!("default: \"{mode}\"")),
+        )
+        .unwrap();
+        renderer.compile_template(&fixture, &output, &[]).unwrap();
+        let svg = fs::read_to_string(output).unwrap();
+        let labels = paths_with_attr(&svg, "fill", "#ea580c");
+        // The native label replaces generated particle/q content and appears once.
+        assert_eq!(labels.len(), 1, "{mode}");
+        label_positions.insert(mode, preceding_group_translation(&svg, labels[0].0));
+        assert_eq!(
+            paths_with_attr(&svg, "fill", "#16a34a").len(),
+            usize::from(mode != "undirected"),
+            "{mode}"
+        );
+        assert_eq!(
+            paths_with_attr(&svg, "fill", "#dc2626").len(),
+            usize::from(!["no-mark", "fallback", "ordinary", "default-mark"].contains(&mode)),
+            "{mode}"
+        );
+        momentum_outputs.insert(mode, svg);
+    }
+    // Test the GammaLoop callbacks themselves, independently of the Xbox example.
+    for mode in [
+        "long",
+        "arrow-shift",
+        "label-default",
+        "no-mark",
+        "reverse",
+        "undirected",
+    ] {
+        assert_eq!(label_positions["short"], label_positions[mode], "{mode}");
+    }
+    assert_eq!(
+        label_positions["curved-short"],
+        label_positions["curved-long"]
+    );
+    assert_eq!(momentum_outputs["short"], momentum_outputs["label-default"]);
+    assert_eq!(momentum_outputs["fallback"], momentum_outputs["ordinary"]);
+    assert_close(
+        label_positions["label-shift"].0 - label_positions["short"].0,
+        -15.0,
+        0.02,
+    );
+    for (mode, length, shift, side, gap) in [
+        ("short", 6.0, 5.0, -1.0, 6.0),
+        ("long", 24.0, 5.0, -1.0, 6.0),
+        ("arrow-shift", 6.0, 10.0, -1.0, 6.0),
+        ("label-shift", 6.0, 5.0, -1.0, 6.0),
+        ("anchor-center", 6.0, 5.0, -1.0, 4.5),
+        ("right", 6.0, 5.0, 1.0, 6.0),
+        ("incoming", 6.0, 5.0, -1.0, 6.0),
+        ("outgoing", 6.0, 5.0, -1.0, 6.0),
+    ] {
+        let svg = &momentum_outputs[mode];
+        let reference = stroke_spans(svg, "#2563eb");
+        let shafts = stroke_spans(svg, "#dc2626");
+        assert_eq!(reference.len(), 1, "{mode}");
+        assert_eq!(shafts.len(), 1, "{mode}");
+        assert_close(shafts[0].1 - shafts[0].0, length, 0.02);
+        assert_close(
+            (shafts[0].0 + shafts[0].1 - reference[0].0 - reference[0].1) / 2.0,
+            shift,
+            0.02,
+        );
+        let shaft_y = own_translation(paths_with_attr(svg, "stroke", "#dc2626")[0].1).1;
+        let reference_y = own_translation(paths_with_attr(svg, "stroke", "#2563eb")[0].1).1;
+        assert_close(shaft_y - reference_y, side * 6.2, 0.02);
+        assert_close(label_positions[mode].1 + 1.5 - shaft_y, side * gap, 0.02);
+    }
+    let forward = &momentum_outputs["short"];
+    let reversed = &momentum_outputs["reverse"];
+    let forward_fermion = paths_with_attr(forward, "fill", "#16a34a")[0].1;
+    let reversed_fermion = paths_with_attr(reversed, "fill", "#16a34a")[0].1;
+    // The triangle's first relative move locates its tip: right for forward,
+    // left for reversed. Momentum remains source-to-sink in every orientation.
+    assert!(svg_numbers(svg_attr(forward_fermion, "d").unwrap())[2] > 2.0);
+    assert_close(
+        svg_numbers(svg_attr(reversed_fermion, "d").unwrap())[2],
+        0.0,
+        1e-6,
+    );
+    for mode in ["reverse", "undirected", "incoming", "outgoing"] {
+        assert_eq!(
+            svg_attr(
+                paths_with_attr(&momentum_outputs[mode], "fill", "#dc2626")[0].1,
+                "d"
+            ),
+            svg_attr(paths_with_attr(forward, "fill", "#dc2626")[0].1, "d")
+        );
+    }
+    let default_marks = paths_with_attr(&momentum_outputs["default-mark"], "stroke", "#dc2626");
+    assert_eq!(default_marks.len(), 2);
+    assert!(
+        default_marks
+            .iter()
+            .all(|(_, tag)| svg_attr(tag, "stroke-width") == Some("0.4"))
+    );
+
+    let mut outside_positions = std::collections::BTreeMap::new();
+    for mode in [
+        "outside-incoming",
+        "outside-incoming-ordinary",
+        "outside-outgoing",
+        "outside-outgoing-ordinary",
+        "outside-unmatched",
+        "outside-unmatched-ordinary",
+        "outside-incoming-shift",
+        "outside-outgoing-label-shift",
+        "outside-outgoing-anchor",
+    ] {
+        let output = base.path().join(format!("momentum-{mode}.svg"));
+        fs::write(
+            &fixture,
+            include_str!("resources/gamma-momentum-behavior.typ")
+                .replace("default: \"short\"", &format!("default: \"{mode}\"")),
+        )
+        .unwrap();
+        renderer.compile_template(&fixture, &output, &[]).unwrap();
+        let svg = fs::read_to_string(output).unwrap();
+        let labels = paths_with_attr(&svg, "fill", "#ea580c");
+        assert_eq!(labels.len(), 1, "{mode}");
+        let label_position = preceding_group_translation(&svg, labels[0].0);
+        let reference = stroke_spans(&svg, "#2563eb")[0];
+        let reference_y = own_translation(paths_with_attr(&svg, "stroke", "#2563eb")[0].1).1;
+        let position = (
+            label_position.0 - reference.0,
+            label_position.1 - reference_y,
+        );
+        outside_positions.insert(mode, position);
+        assert_eq!(
+            paths_with_attr(&svg, "fill", "#dc2626").len(),
+            usize::from(!mode.ends_with("-ordinary")),
+            "{mode}"
+        );
+        if mode == "outside-incoming" {
+            // The fixture's label is a rectangular box around actual particle/q content.
+            let width = svg_numbers(svg_attr(labels[0].1, "d").unwrap())[3];
+            assert_close(position.0 + width, -10.0, 0.02);
+        } else if mode == "outside-outgoing" || mode == "outside-unmatched" {
+            assert_close(label_position.0 - reference.1, 10.0, 0.02);
+        }
+    }
+    // Ordered external labels retain the ordinary outside position when arrows
+    // are enabled, including cut tags with no matching counterpart.
+    for (mode, ordinary) in [
+        ("outside-incoming", "outside-incoming-ordinary"),
+        ("outside-outgoing", "outside-outgoing-ordinary"),
+        ("outside-unmatched", "outside-unmatched-ordinary"),
+    ] {
+        assert_close(
+            outside_positions[mode].0,
+            outside_positions[ordinary].0,
+            1e-6,
+        );
+        assert_close(
+            outside_positions[mode].1,
+            outside_positions[ordinary].1,
+            1e-6,
+        );
+    }
+    // Explicit momentum placement retains the path carrier. An arrow shift
+    // still supplies the omitted label shift, even for prepared external legs.
+    for mode in [
+        "outside-incoming-shift",
+        "outside-outgoing-label-shift",
+        "outside-outgoing-anchor",
+    ] {
+        assert!(outside_positions[mode].1 < outside_positions["outside-outgoing"].1 - 5.0);
+    }
+
+    fs::write(
+        templates.join("epemttbar.dot"),
+        include_str!("../../../tests/resources/graphs/epemttbar.dot"),
+    )
+    .unwrap();
+    let fixture = templates.join("gamma-cross-section-behavior.typ");
+    fs::write(
+        &fixture,
+        include_str!("resources/gamma-cross-section-behavior.typ"),
+    )
+    .unwrap();
+    renderer
+        .compile_template(&fixture, base.path().join("gamma-cross-section.pdf"), &[])
+        .unwrap();
+    fs::write(
+        templates.join("gamma-debug.dot"),
+        r#"digraph {
+            a [pos="0,0!"]; b [pos="4,0!"]; incoming [style=invis];
+            incoming -> a [particle=fermion, pos="-2,0!"];
+            a -> b [particle=fermion];
+        }"#,
+    )
+    .unwrap();
+    let fixture = templates.join("gamma-debug-behavior.typ");
+    fs::write(&fixture, include_str!("resources/gamma-debug-behavior.typ")).unwrap();
+    renderer
+        .compile_template(&fixture, base.path().join("gamma-debug.pdf"), &[])
+        .unwrap();
 }
 
 #[test]
@@ -549,4 +875,142 @@ fn public_weighted_cut_rejects_invalid_selections_and_stale_topology() {
             "{name}: expected diagnostic {expected:?}, got {error}"
         );
     }
+}
+
+#[test]
+fn public_gammaloop_momentum_geometry_ignores_label_visibility() {
+    let configured_typst = std::env::var_os("TYPST_TEST_EXECUTABLE").map(PathBuf::from);
+    let typst = configured_typst
+        .clone()
+        .unwrap_or_else(|| PathBuf::from("typst"));
+    match Command::new(&typst).arg("--version").output() {
+        Ok(version) if version.status.success() => {
+            let version = String::from_utf8_lossy(&version.stdout);
+            if !version.starts_with("typst 0.15.") {
+                assert!(
+                    configured_typst.is_none(),
+                    "SVG fixture requires Typst 0.15.x, found {version}"
+                );
+                return;
+            }
+        }
+        result if configured_typst.is_some() => {
+            panic!("configured Typst executable failed: {result:?}")
+        }
+        _ => return,
+    }
+    let base = tempfile::tempdir().unwrap();
+    let renderer = TypstRenderer::new(base.path()).typst_executable(typst);
+    renderer.check_version().unwrap();
+    renderer.stage_default_assets().unwrap();
+    let templates = base.path().join(".clinnet/templates");
+    fs::create_dir_all(templates.join("impl")).unwrap();
+    fs::write(
+        templates.join("gamma-physics-edge-style.typ"),
+        include_str!("../../../assets/embedded/drawing/templates/physics-edge-style.typ"),
+    )
+    .unwrap();
+    fs::write(
+        templates.join("impl/physics-edge-style.typ"),
+        include_str!("../../../assets/embedded/drawing/templates/impl/physics-edge-style.typ"),
+    )
+    .unwrap();
+    let fixture = templates.join("gamma-momentum-side-behavior.typ");
+    let mut baseline: Option<Vec<(String, (f64, f64))>> = None;
+    for mode in [
+        "full-above",
+        "full-below",
+        "particle-above",
+        "particle-below",
+        "none-above",
+        "none-below",
+    ] {
+        fs::write(
+            &fixture,
+            include_str!("resources/gamma-momentum-side-behavior.typ")
+                .replace("default: \"full-above\"", &format!("default: \"{mode}\"")),
+        )
+        .unwrap();
+        let output = base.path().join(format!("momentum-side-{mode}.svg"));
+        renderer.compile_template(&fixture, &output, &[]).unwrap();
+        let svg = fs::read_to_string(output).unwrap();
+        let particle = paths_with_attr(&svg, "stroke", "#2563eb");
+        assert!(!particle.is_empty(), "{mode}");
+        assert_eq!(paths_with_attr(&svg, "fill", "#dc2626").len(), 9, "{mode}");
+        let origin = own_translation(particle[0].1);
+        // Text changes the canvas bounds. Compare actual shafts, arrowheads,
+        // and particle paths relative to the first underlying particle path.
+        let geometry = svg_paths(&svg)
+            .into_iter()
+            .filter(|(_, tag)| {
+                matches!(svg_attr(tag, "stroke"), Some("#2563eb" | "#dc2626"))
+                    || svg_attr(tag, "fill") == Some("#dc2626")
+            })
+            .map(|(_, tag)| {
+                let position = own_translation(tag);
+                (
+                    svg_attr(tag, "d").unwrap().to_owned(),
+                    (position.0 - origin.0, position.1 - origin.1),
+                )
+            })
+            .collect::<Vec<_>>();
+        if let Some(expected) = &baseline {
+            assert_eq!(geometry.len(), expected.len(), "{mode}");
+            for (actual, expected) in geometry.iter().zip(expected) {
+                assert_eq!(actual.0, expected.0, "{mode}");
+                assert_close(actual.1.0, expected.1.0, 1e-4);
+                assert_close(actual.1.1, expected.1.1, 1e-4);
+            }
+        } else {
+            baseline = Some(geometry);
+        }
+    }
+}
+
+#[test]
+fn public_gammaloop_external_order_tracks_physical_indices() {
+    let configured_typst = std::env::var_os("TYPST_TEST_EXECUTABLE").map(PathBuf::from);
+    let typst = configured_typst
+        .clone()
+        .unwrap_or_else(|| PathBuf::from("typst"));
+    match Command::new(&typst).arg("--version").output() {
+        Ok(version) if version.status.success() => {}
+        result if configured_typst.is_some() => {
+            panic!("configured Typst executable failed: {result:?}")
+        }
+        _ => return,
+    }
+    let base = tempfile::tempdir().unwrap();
+    let renderer = TypstRenderer::new(base.path()).typst_executable(typst);
+    renderer.check_version().unwrap();
+    renderer.stage_default_assets().unwrap();
+    let templates = base.path().join(".clinnet/templates");
+    fs::create_dir_all(templates.join("impl")).unwrap();
+    for (name, source) in [
+        (
+            "gamma-physics-edge-style.typ",
+            include_str!("../../../assets/embedded/drawing/templates/physics-edge-style.typ"),
+        ),
+        (
+            "impl/physics-edge-style.typ",
+            include_str!("../../../assets/embedded/drawing/templates/impl/physics-edge-style.typ"),
+        ),
+        (
+            "gamma-layout-core.typ",
+            include_str!("../../../assets/embedded/drawing/templates/layout-core.typ"),
+        ),
+        (
+            "gamma-external-order-behavior.typ",
+            include_str!("resources/gamma-external-order-behavior.typ"),
+        ),
+    ] {
+        fs::write(templates.join(name), source).unwrap();
+    }
+    renderer
+        .compile_template(
+            templates.join("gamma-external-order-behavior.typ"),
+            base.path().join("gamma-external-order.pdf"),
+            &[],
+        )
+        .unwrap();
 }

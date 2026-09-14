@@ -19,24 +19,13 @@
   none
 }
 
-#let _drawing-patch(value, structural-keys) = {
-  if value == none {
-    return none
-  }
-  let drawing = _dictionary(value, "config.elements entry")
-  let patch = (data: drawing)
-  for key in structural-keys {
-    if drawing.keys().contains(key) {
-      patch.insert(key, drawing.at(key))
-    }
-  }
-  patch
-}
-
 // Native drawing values are correlated by the Rust graph indices before any
-// generated style or layout pass runs. Structural positions are patched into
-// the graph while the complete dictionary remains available as record data.
-#let _attach-elements(g, elements) = {
+// generated style or layout pass runs. graph.map normalizes structural fields
+// and merges the remaining native values into each record's existing data.
+/// Attach indexed graph, node, edge and half-edge drawing values to a graph.
+/// Call this before domain preparation and layout-graph. Entries are sparse
+/// graph.map patches; omitted entries preserve the graph's native data.
+#let attach-elements(g, elements) = {
   let elements = _dictionary(elements, "config.elements")
   let graph-data = elements.at("graph", default: none)
   let nodes = elements.at("nodes", default: ())
@@ -44,23 +33,11 @@
   let hedges = elements.at("hedges", default: ())
   graph.map(
     g,
-    graph: if graph-data == none { none } else { _ => (data: graph-data) },
-    node: node => _drawing-patch(
-      _indexed(nodes, node.node),
-      ("pos", "shift", "statements"),
-    ),
-    edge: edge => _drawing-patch(
-      _indexed(edges, edge.edge),
-      ("pos", "shift", "label-pos", "label-angle", "bend", "statements"),
-    ),
-    source: half-edge => _drawing-patch(
-      _indexed(hedges, half-edge.hedge),
-      ("statement", "port-label", "compass"),
-    ),
-    sink: half-edge => _drawing-patch(
-      _indexed(hedges, half-edge.hedge),
-      ("statement", "port-label", "compass"),
-    ),
+    graph: if graph-data == none { none } else { _ => graph-data },
+    node: node => _indexed(nodes, node.node),
+    edge: edge => _indexed(edges, edge.edge),
+    source: half-edge => _indexed(hedges, half-edge.hedge),
+    sink: half-edge => _indexed(hedges, half-edge.hedge),
   )
 }
 
@@ -72,43 +49,13 @@
   if value == none { (:) } else { value }
 }
 #let _record-style(record, key) = _style(record.at(key, default: (:)), record)
-#let _record-drawing-style(record, key) = _record-style(record, key)
 #let _record-data(record) = {
   let data = record.at("data", default: none)
   if type(data) == dictionary { data } else { (:) }
 }
 
-#let _base-layers(style, patch, record) = {
-  let patch = _call(patch, record)
-  let patches = if type(patch) == array { patch } else { (patch,) }
-  let layers = if type(style) == array { style } else { (style,) }
-  let base = layers.at(0, default: (:))
-  let decorated = patches.map(patch => _overlay-style(
-    base,
-    _dictionary(patch, "EdgeDrawing.decoration layer"),
-  ))
-  decorated + layers.slice(calc.min(1, layers.len()))
-}
-
-// Per-edge decoration patches the base layer. Multiple explicit decorations
-// create multiple decorated layers while retaining any later custom layers.
-#let _element-edge-style(style, record) = {
-  let data = _record-data(record)
-  if data.keys().contains("decoration") {
-    let decoration = _call(data.at("decoration"), record)
-    let patch = if decoration == none {
-      (pattern: none)
-    } else if type(decoration) in (dictionary, array) {
-      decoration
-    } else {
-      (pattern: decoration)
-    }
-    style = _base-layers(style, patch, record)
-  }
-  style
-}
 #let _merged-style(value, record, key) = {
-  _overlay-style(_style(value, record), _record-drawing-style(record, key))
+  _overlay-style(_style(value, record), _record-style(record, key))
 }
 #let _label(value, record, fallback) = {
   let data = record.at("data", default: none)
@@ -396,45 +343,6 @@
   if multiple { result } else { result.first() }
 }
 
-#let _half-edge-style(record, side) = {
-  let half-edge = record.at(side + "-half-edge", default: none)
-  if (
-    half-edge == none or type(half-edge.at("data", default: none)) != dictionary
-  ) {
-    (:)
-  } else {
-    let data = half-edge.data
-    let routing = (:)
-    if data.keys().contains("anchor") {
-      routing.insert(side + "-anchor", data.at("anchor"))
-    }
-    if data.keys().contains("routing") {
-      routing.insert("route", data.at("routing"))
-    }
-    let explicit = _style(
-      data.at(side + "-style", default: data.at("style", default: (:))),
-      record,
-    )
-    _overlay-style(routing, explicit)
-  }
-}
-
-#let _endpoint-style(
-  configured,
-  has-configured,
-  record,
-  side,
-) = {
-  let style = if has-configured { _style(configured, record) } else { (:) }
-  let data = record.at("data", default: none)
-  if type(data) == dictionary and data.keys().contains("routing") {
-    style = _overlay-style(style, (route: data.at("routing")))
-  }
-  style = _overlay-style(style, _record-style(record, side + "-style"))
-  style = _overlay-style(style, _half-edge-style(record, side))
-  _element-edge-style(style, record)
-}
-
 #let _effective-options(defaults, style-options, draw-options) = {
   let result = defaults + style-options
   for key in (
@@ -480,22 +388,6 @@
   if options.keys().contains("subgraph") {
     options.subgraph = _draw-subgraph(g, options.subgraph)
   }
-  let has-source-style = options.keys().contains("source-style")
-  let has-sink-style = options.keys().contains("sink-style")
-  let source-style = options.at("source-style", default: (:))
-  let sink-style = options.at("sink-style", default: (:))
-  options.source-style = edge => _endpoint-style(
-    source-style,
-    has-source-style,
-    edge,
-    "source",
-  )
-  options.sink-style = edge => _endpoint-style(
-    sink-style,
-    has-sink-style,
-    edge,
-    "sink",
-  )
   if not options.keys().contains("title") {
     options.title = config.at("title", default: auto)
   }
@@ -511,6 +403,7 @@
 
 // Apply final style before layout so native labels, custom node shapes and
 // label padding contribute to the measured layout dimensions.
+// Element attachment and domain preparation are explicit preceding operations.
 #let layout-graph(config, g) = {
   let style-options = _dictionary(
     config.at("style", default: (:)),
@@ -523,7 +416,6 @@
     ((:),)
   })
 
-  let g = _attach-elements(g, config.at("elements", default: (:)))
   let defaults = (
     scope: (:),
     unit: 1.5,
@@ -533,12 +425,27 @@
     edge-label: edge => [$e_(#edge.eid)$],
     edge-label-style: (:),
   )
-  let effective = _effective-options(defaults, style-options, draw-options)
+  let prepared-style = _record-data(graph.info(g)).at(
+    "linnest-style",
+    default: (:),
+  )
+  let effective = _effective-options(
+    defaults + prepared-style,
+    style-options,
+    draw-options,
+  )
   let callbacks = _callbacks(effective)
   g = graph.style(g, ..(effective + callbacks))
   g = _apply-element-layout-constraints(g)
+  let layout-defaults = _dictionary(
+    config.at("layout-defaults", default: (:)),
+    "config.layout-defaults",
+  )
   for pass in passes {
-    g = apply-layout(g, .._layout-pass(g, pass))
+    g = apply-layout(g, .._layout-pass(
+      g,
+      layout-defaults + _dictionary(pass, "config.layouts entry"),
+    ))
   }
   g = _apply-label-offsets(g)
   draw(g, .._draw-options(config, g))
@@ -549,5 +456,7 @@
   if path == none {
     panic("render config requires graph-spec-path")
   }
-  layout-graph(config, graph.from-spec(read(path, encoding: none)))
+  let g = graph.from-spec(read(path, encoding: none))
+  let g = attach-elements(g, config.at("elements", default: (:)))
+  layout-graph(config, g)
 }

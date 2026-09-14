@@ -1,7 +1,7 @@
 = GammaLoop Drawing Architecture
 
 #quote(block: true)[
-#strong[Status:] Current contract; audited against the implementation on 2026-08-31
+#strong[Status:] Current contract; audited against the implementation on 2026-09-10
 
 The pipeline, ownership, DOT parser fields, typed rendering data, path styles, and subgraph
 sections describe the implemented drawing stack. The superseded `*-eval` and
@@ -12,7 +12,7 @@ placeholder-interpolation design is preserved separately in
 This document describes the drawing path used by GammaLoop and the DOT syntax
 that matters at each layer. The important boundary is:
 
-- GammaLoop owns physics graph data, model-to-style policy, and its domain render template.
+- GammaLoop owns physics graph data, particle and momentum styling, and optional external-edge ordering or placement.
 - Linnet/Linnest owns DOT parsing, half-edge graph shape, layout, and generic drawing primitives.
 - Kurvst owns Bezier splitting, trimming, and path patterns.
 - User-authored render templates are an optional drawing feature, not part of
@@ -49,11 +49,14 @@ rendering run has these steps:
    or cross-section mode. The GammaLoop path supplies its generated template bundle instead,
    binding the model-specific `edge-style.typ` callbacks and interpreting GammaLoop-owned options
    for its generic, amplitude, and cross-section presets.
-+ The generic renderer receives a native graph from either `graph.from-spec` or Clinnet's DOT
-   adapter, attaches the typed node, edge, and half-edge records from `config.elements`, and patches
-   half-edge statements, port labels, and compass points by topology index. It applies final labels
-   and styles with `graph.style`, and only then runs the ordered layout passes and `draw`. Label and
-   node measurements therefore participate in spacing.
++ The DOT and Python adapters first construct a native Linnest graph, then call the shared
+   `attach-elements(g, elements)` operation. This uses `graph.map` normalization for structural
+   fields such as positions and spring lengths while preserving native Typst data.
++ GammaLoop optionally prepares the dangling endpoints, then supplies ordinary physics style
+   callbacks and mode-specific `layout-defaults` to Linnest's `layout-graph(config, g)`.
+   Linnest applies final labels and styles with `graph.style`, measures them, translates generic
+   constraints and subgraphs, executes layout passes, adjusts label offsets, and draws. Explicit
+   pass options override the mode defaults. GammaLoop has no duplicate rendering pipeline.
 + `draw` uses ordinary Linnest node and edge styles for a model-neutral graph. GammaLoop's selected
    template installs the particle and momentum callbacks from `edge-style.typ`. It draws edges and
    labels first, then nodes last so nodes sit on top of edges.
@@ -99,11 +102,11 @@ Python strings remain data.
   package. It shares Linnest's renderer with Clinnet but owns its native preparation and package
   staging.
 
-GammaLoop's particle policy is not part of Clinnet's generic embedded template. Python callers
-that want GammaLoop particle colors, labels, path decorations, or mode presets select the
-GammaLoop `figure.typ` entry point, pass its settings through `RenderConfig.template_options`,
-and keep its imported template bundle together. Callers implementing another domain can instead
-use generic `DrawingSelectors` to derive typed drawing records from arbitrary Python data.
+GammaLoop's particle policy is ordinary Typst styling and has no Python dependency. Its exported
+`figure.typ` is a DOT adapter requiring `data-path`; Python's renderer supplies `graph-spec-path`
+instead, so selecting that figure directly from Python is not supported. Python callers can use
+generic `DrawingSelectors` or an imported Typst styling module, and retain Python's separate data
+model. The editable Python physics example is an independent example, not GammaLoop infrastructure.
 
 == Data Ownership
 
@@ -319,12 +322,11 @@ and generated bundle select GammaLoop's `figure.typ` and provide its mode and pa
 template-owned options. Another application can select another template without teaching Linnet
 its domain vocabulary.
 
-The renderer correlates every typed node, edge, and half-edge record with its topology index
-before GammaLoop mode generation. Explicit element or configuration values override generated
-amplitude/cross-section values, which override template defaults. This preserves particle styles,
-momentum arrowheads and index labels, amplitude edge ordering and side labels, cut-ID-matched
-cross-section side labels, and directional placement without converting drawing values to DOT
-strings.
+Attachment correlates node, edge, and half-edge records by topology index before optional domain
+preparation. Linnest composes edge layers once: graph defaults, explicit draw edge styles, record
+edge styles, draw endpoint styles, then endpoint-local styles. Native labels and callbacks remain
+Typst values. Explicit XY placement remains authoritative; GammaLoop's external preparation always
+replaces dangling depth with a hard zero pin, including unmatched cuts and pre-positioned legs.
 
 Generic Python selectors run before staging and may inspect arbitrary element `.data`. They return
 detached `NodeDrawing`, `EdgeDrawing`, or `HalfEdgeDrawing` values and fill only fields that the
@@ -343,6 +345,76 @@ These rules complement the generated particle callback implementation in
 implementation]; its public callback API lives in
 #link("../../assets/embedded/drawing/templates/physics-edge-style.typ")[the same GammaLoop
 template bundle].
+
+== GammaLoop Physics Styles And External Placement
+
+The generated model map supplies line geometry and particle labels. The same callbacks work with
+DOT graphs and graphs built directly in Typst:
+
+```typst
+#import "physics-edge-style.typ" as physics
+#import "layout-core.typ": autogen-external-edge-fields
+#import "crates/linnest/typst/src/lib.typ": graph
+#import "crates/linnest/typst/src/render/layout.typ" as renderer
+
+#context {
+  let g = graph.build({
+    graph.node(<interaction>)
+    graph.edge(graph.sink(<interaction>), particle: "g")
+  })
+  g = renderer.attach-elements(g, (:))
+  g = autogen-external-edge-fields(g, graph: graph)
+  g = graph.style(g, ..physics.style(momentum-arrows: true))
+  renderer.layout-graph((:), g)
+}
+```
+
+Momentum arrows are opt-in. Their default combined label is the particle-map label followed by
+`$q_(#edge.eid)$`, in 10pt text by default; explicit labels take precedence. `show-momentum: false` and
+`show-particle: false` suppress the corresponding portion. Neither a cut sewing tag nor a
+momentum expression renumbers the edge ID.
+
+The momentum geometry follows the Xbox example: offset `0.35`, visible length `1.0`, and no ratio cap.
+GammaLoop uses a rounded `1pt` stroke and a straight arrowhead at scale `1.1`. Its ink and accent
+colors are available through `physics.palette`; nodes use a transparent fill and a `1.45pt` outline.
+The label gap is `0.20`, reduced to `0.10` when momentum labels are disabled. Use
+`momentum-arrow-side: auto`, `"left"`, or `"right"` relative to source-to-sink flow.
+Automatic sides follow the edge's bend relative to its source-to-sink chord, independently of
+label visibility, size, or relaxed position. Straight edges, dangling legs, and closed chords
+use the signed offset as a deterministic fallback. The label carrier uses that same side;
+turning momentum labels off never selects the opposite side of the edge.
+`momentum-arrow-shift` moves the arrow; `momentum-label-shift` defaults to that shift but can be
+set independently. `momentum-label-anchor` controls label anchoring. These options also accept
+per-edge `momentum-*` fields. A full-path `label-only: true, label: auto` carrier reuses the
+ordinary measured label, preventing arrow-length changes from clamping its location. Explicit
+style arrays can remove the carrier; the ordinary edge label then supplies the fallback.
+Prepared external legs keep their combined labels outside the free endpoint. Their automatic
+anchor follows the actual direction from the attached node to that endpoint, so explicit
+placements can put incoming or outgoing legs on either side. Left endpoints anchor east, right
+endpoints west, and vertical endpoints anchor south or north; explicit user anchors take precedence.
+Their default momentum style leaves Linnest's solved label position intact; explicit momentum
+shifts or `momentum-label-anchor` select the path-relative placement instead. Unmatched cut legs receive the same outward anchors.
+Amplitude and cross-section layout presets use label length scale `0.45` with momentum labels
+and `0.30` without them; explicit layout-pass settings still take precedence.
+
+Use `just draw --input debug=true` to show Linnest's ordinary node IDs `$n_i$` and all half-edge
+IDs `$h_i$`, independently of momentum arrows. The `just draw-debug` shortcut writes
+`drawings-debug.pdf`. This selects ID labels without CeTZ canvas debug guides. Native
+`style.node-label` and `draw.show-half-edge-ids` overrides remain authoritative, and explicit
+endpoint labels retain Linnest's normal precedence over the generated half-edge IDs.
+The typed GammaLoop entrypoint accepts the same flag as `config.options.debug`; the direct
+`layout` adapter accepts `debug: true`.
+
+CLI paint overrides accept named colors and hex colors, for example
+`just momentum_paint='#3d2645' draw-momentum`.
+
+Amplitude preparation orders incoming and outgoing edges by edge ID and places their columns.
+Cross-section preparation pairs sides through `is_cut`, places incoming legs in the left column
+and outgoing legs in the right column, and hard-pins each pair to the same Y coordinate.
+Explicit user XY placements retain precedence over automatic placement; supplying one axis
+does not disable automatic placement of the other.
+Whenever preparation runs, every dangling edge receives `graph.pos(z: graph.pin(0))`, even if
+already placed or missing a matching cut tag. Internal edges and node depths are untouched.
 
 == Pattern Style Dictionaries
 
@@ -415,7 +487,7 @@ For GammaLoop-generated diagrams:
 
 - Put physics data in canonical GammaLoop fields.
 - Let GammaLoop generate `edge-style.typ`.
-- Select the GammaLoop V1 template when rendering through Python or Clinnet directly.
+- Use the GammaLoop DOT template through Clinnet, or its styling callbacks directly in Typst.
 - Put executable custom styles in an imported Typst module, not in DOT strings.
 
 For manually edited drawing DOT:
