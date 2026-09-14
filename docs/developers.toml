@@ -763,7 +763,10 @@ anchor = "alphal00pDocsCargoArtifacts = craneLib.mkCargoDerivation"
 # Roboto package, and renamed Typst-plugin features leave the reusable
 # Cargo producer ownership unchanged. The note separately records the Pages
 # workflow's new notebook export after the static Nix documentation build.
-digest = "557a992ce9afc85c956fc0251205f7abf8c5796b"
+# No-impact attestation 2026-09-14: the only change since the verified flake
+# adds gitMinimal to the development shell for documentation provenance lookup.
+# Cargo producer inputs, artifact ownership, and cache boundaries are unchanged.
+digest = "be5ee104413aadeeb99cd19a4cec4339d2f04b5c"
 
 [[section.note.scope]]
 path = "crates/alphal00p-docs-builder/src/typst_render.rs"
