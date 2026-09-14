@@ -213,6 +213,8 @@
     graph.map(g, node: nodes, edge: edges)
   }
 
+
+  
   $
     #diagram(xbox, cut-x: -1, initial-cut: 0, draw-after: (g, bounds) => {
       if draw-initials {

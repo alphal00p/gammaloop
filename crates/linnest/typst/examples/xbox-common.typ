@@ -27,7 +27,7 @@
 ).map(style => (thickness: 1pt) + style)
 
 #let base-layout = layouts.options(
-  spring: (strength: 18, length: 0.25),
+  spring: (strength: 18, length: 0.15),
   repulsion: (
     strength: 12,
     centering: 0.005,
@@ -93,7 +93,10 @@
   draw(
     layout(graph.style(g, ..graph-style), ..options),
     ..feynman.draw-style,
-    edge-style: feynman.edge-style.with(show-momentum: show-momentum),
+    edge-style: edge => feynman.edge-style(
+      edge,
+      show-momentum: show-momentum and (edge.ext or edge.momentum == [$k$]),
+    ),
     padding: diagram-style.padding,
     draw-after: (g, bounds) => {
       // Group signed external momenta explicitly, including the through-gluon's

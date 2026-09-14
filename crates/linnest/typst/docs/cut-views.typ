@@ -18,6 +18,9 @@ The example consists of three independent, single-page documents:
 
 `examples/xbox-common.typ` shares the renderer, layout presets, vertex builders,
 and drawing conventions; `examples/map-style.typ` supplies the Feynman styles.
+Momentum arrows and labels are drawn only on dangling external edges and edges
+carrying exactly $k$, including the through-gluon. Other momentum data remains
+in the graph; `show-momentum: false` suppresses all momentum drawing on page 3.
 Each document sets its own page dimensions and font size. From the repository
 root, compile a document directly to its corresponding PDF, for example:
 
