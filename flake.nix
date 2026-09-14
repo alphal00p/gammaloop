@@ -3,7 +3,7 @@
 
   # Substitute what NixCI has already built instead of building it again.
   # Reading from this cache needs a token in your netrc as well, and Nix asks
-  # before it trusts these settings; see CONTRIBUTING.md.
+  # before it trusts these settings; see CONTRIBUTING.typ.
   nixConfig = {
     extra-substituters = ["https://cache.nix-ci.com"];
     extra-trusted-public-keys = ["nix-ci:g3xV5BDTLtIBZr/A00IU1x0EtKKlb7YLgBN2SgYgM6A="];
@@ -11,6 +11,9 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+
+    # Keep generated documentation assets stable across general Nixpkgs updates.
+    nixpkgs-docs.url = "github:NixOS/nixpkgs/716c7a2664ca8325617b8a7fbb609273f2c4cae7";
 
     crane = {
       url = "github:ipetkov/crane";
@@ -34,6 +37,7 @@
   outputs = {
     self,
     nixpkgs,
+    nixpkgs-docs,
     crane,
     fenix,
     flake-utils,
@@ -49,6 +53,7 @@
   in
     flake-utils.lib.eachSystem supportedSystems (system: let
       pkgs = nixpkgs.legacyPackages.${system};
+      docsPkgs = nixpkgs-docs.legacyPackages.${system};
       inherit (pkgs) lib;
 
       # NixCI memoizes successful top-level derivations across commits without
@@ -93,12 +98,17 @@
         wasmToolchain;
 
       workspace = import ./nix/rust-workspace.nix {
-        inherit pkgs craneLib wasmCraneLib ciToolchain wasmTarget system nixCiArtifactBarrier;
+        inherit self pkgs docsPkgs craneLib wasmCraneLib ciToolchain wasmTarget system nixCiArtifactBarrier;
         workspaceRoot = ./.;
         incrementalBaselineRoot = /. + builtins.unsafeDiscardStringContext self.inputs.ci-cache-base.outPath;
       };
       inherit
         (workspace)
+        docsTypst
+        docsFontPath
+        alphal00pDocsCargoArtifacts
+        alphal00pDocsPages
+        alphal00pDocsSnapshotFixture
         allChecks
         hestiaChecks
         gammaloop-cli
@@ -144,6 +154,8 @@
           cargo-flamegraph
           yaml-language-server
           just
+          gitMinimal
+          jujutsu
           dot-language-server
           cargo-insta
           cargo-udeps
@@ -157,7 +169,8 @@
           gnum4
           nickel
           nls
-          typst
+          docsTypst
+          docsPkgs.roboto
           cargo-nextest
           pkg-config
           cargo-deny
@@ -190,6 +203,10 @@
 
           RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
           GLIBC_TUNABLES = "glibc.rtld.optional_static_tls=10000";
+          TYPST_FONT_PATHS = docsFontPath;
+          # `typst.withPackages` injects this only into its executable wrapper.
+          # The persistent Rust renderer needs the same package tree directly.
+          TYPST_PACKAGE_CACHE_PATH = "${docsTypst}/lib/typst/packages";
 
           CC = nixCc;
           CXX = nixCxx;
@@ -219,6 +236,9 @@
           gammaloop = gammaloop-cli;
           inherit clinnet-cli;
           "gammaloop-python-module" = nixCiArtifactBarrier "gammaloop-python-module" gammaloop-python-module;
+          "alphal00p-docs-cargo-artifacts" = alphal00pDocsCargoArtifacts;
+          "alphal00p-docs-pages" = alphal00pDocsPages;
+          "alphal00p-docs-snapshot-fixture" = alphal00pDocsSnapshotFixture;
           "ci-workspace-graph-json" = guppyWorkspaceGraphJson;
           "nix-ci-config" = nixCiConfiguration;
           inherit linnest-wasm;

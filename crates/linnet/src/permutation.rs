@@ -124,7 +124,7 @@ impl Permutation {
     }
 
     /// Creates a permutation from a inverse mapping vector.
-    /// The `inv` vector states that index `i` is actually inv[i]
+    /// The `inv` vector states that index `i` is actually `inv[i]`.
     pub fn from_inv(inv: Vec<usize>) -> Self {
         let mut map = vec![0; inv.len()];
         for (i, &j) in inv.iter().enumerate() {
@@ -970,7 +970,7 @@ impl fmt::Display for Permutation {
 
 impl Permutation {
     /// Creates a permutation from a set of disjoint cycles.
-    /// Each cycle should be a Vec<usize> representing indices in the cycle.
+    /// Each cycle should be a `Vec<usize>` representing indices in the cycle.
     /// The cycles must be disjoint (no shared elements).
     ///
     /// # Examples

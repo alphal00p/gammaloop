@@ -23,16 +23,21 @@ use crate::{
 #[trait_decode(trait= GammaLoopContext)]
 #[serde(default, deny_unknown_fields)]
 pub struct GlobalSettings {
+    /// Tracing filter applied to the optional log-file sink; `off` disables that sink.
     #[serde(skip_serializing_if = "is_default_logfile_directive")]
     #[serde(default = "default_logfile_directive")]
     pub logfile_directive: String,
+    /// Tracing filter applied to terminal output shown by the interactive session.
     #[serde(skip_serializing_if = "is_default_display_directive")]
     #[serde(default = "default_display_directive")]
     pub display_directive: String,
+    /// Formatting choices shared by terminal and file tracing subscribers.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub log_style: LogStyle,
+    /// Diagram, numerator, counterterm, evaluator, and compilation settings used during generation.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub generation: GenerationSettings,
+    /// Per-stage worker counts for diagram generation, evaluator construction, compilation, and integration.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub n_cores: Parallelisation,
 }
@@ -46,29 +51,41 @@ pub struct GlobalSettings {
 #[serde(default, deny_unknown_fields)]
 pub struct RuntimeSettings {
     // Runtime settings
+    /// Evaluation scales, backend, caching, event generation, and output-unit controls.
     #[serde(rename = "general", skip_serializing_if = "IsDefault::is_default")]
     pub general: GeneralSettings,
+    /// Per-integrand overrides for external model parameters.
     #[serde(rename = "model", skip_serializing_if = "IsDefault::is_default")]
     pub model: RuntimeModelSettings,
+    /// Optional built-in test integrand used instead of a generated process integrand.
     #[serde(rename = "integrand", skip_serializing_if = "IsDefault::is_default")]
     pub hard_coded_integrand: Option<IntegrandSettings>,
+    /// Center-of-mass energy, external momenta, helicities, and phase-space improvement.
     #[serde(rename = "kinematics", skip_serializing_if = "IsDefault::is_default")]
     pub kinematics: KinematicsSettings,
+    /// Adaptive Monte Carlo iteration, accuracy, learning, and output controls.
     #[serde(rename = "integrator", skip_serializing_if = "IsDefault::is_default")]
     pub integrator: IntegratorSettings,
+    /// Named derived quantities available to selectors and observables.
     #[serde(rename = "quantities", skip_serializing_if = "IsDefault::is_default")]
     pub quantities: QuantitiesSettings,
+    /// Named histograms and other observable accumulators.
     #[serde(rename = "observables", skip_serializing_if = "IsDefault::is_default")]
     pub observables: ObservablesSettings,
+    /// Named event-selection predicates applied before observable accumulation.
     #[serde(rename = "selectors", skip_serializing_if = "IsDefault::is_default")]
     pub selectors: SelectorsSettings,
+    /// Precision escalation, rotated checks, and optional stability diagnostics.
     #[serde(rename = "stability")]
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub stability: StabilitySettings,
+    /// Continuous parameterization and discrete graph/orientation/channel sampling strategy.
     #[serde(rename = "sampling", skip_serializing_if = "IsDefault::is_default")]
     pub sampling: SamplingSettings,
+    /// Local and integrated threshold/ultraviolet subtraction controls.
     #[serde(rename = "subtraction", skip_serializing_if = "IsDefault::is_default")]
     pub subtraction: SubtractionSettings,
+    /// Damping profile shared by Local Unitarity threshold terms.
     #[serde(rename = "h_function", skip_serializing_if = "IsDefault::is_default")]
     pub lu_h_function: HFunctionSettings,
 }

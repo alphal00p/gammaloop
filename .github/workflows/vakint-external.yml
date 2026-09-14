@@ -1,0 +1,73 @@
+name: Vakint external-backend acceptance
+
+on:
+  schedule:
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
+    inputs:
+      pysecdec:
+        description: Install pySecDec and run numerical acceptance
+        required: true
+        default: true
+        type: boolean
+      extended:
+        description: Run the complete pySecDec comparison suite
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vakint-external-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  SYMBOLICA_LICENSE: ${{ secrets.SYMBOLICA_LICENSE || 'GAMMALOOP_USER' }}
+
+jobs:
+  form:
+    name: FORM, MATAD, and FMFT examples
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: NixOS/nix-installer-action@main
+
+      - name: Run provisioned FORM examples
+        run: nix develop --command just docs-vakint-form-check
+
+  pysecdec:
+    name: pySecDec comparisons
+    if: github.event_name == 'schedule' || inputs.pysecdec == true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    env:
+      EXTENDED: ${{ inputs.extended || false }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: NixOS/nix-installer-action@main
+
+      - name: Install pySecDec in an isolated environment
+        run: |
+          nix develop --command bash -euo pipefail -c '
+            python3 -m venv target/pysecdec-venv
+            target/pysecdec-venv/bin/python -m pip install --upgrade pip
+            target/pysecdec-venv/bin/python -m pip install "pySecDec>=1.6.4,<2"
+          '
+
+      - name: Run numerical comparisons
+        run: |
+          set -euo pipefail
+          if [ "$EXTENDED" = true ]; then
+            recipe=docs-vakint-pysecdec-full-check
+          else
+            recipe=docs-vakint-pysecdec-smoke-check
+          fi
+          nix develop --command env \
+            "PYTHON_BIN_PATH=$GITHUB_WORKSPACE/target/pysecdec-venv/bin/python" \
+            just "$recipe"

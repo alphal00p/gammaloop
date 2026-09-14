@@ -30,8 +30,10 @@ use color_eyre::{Result, Section};
 #[trait_decode(trait= GammaLoopContext)]
 #[serde(default, deny_unknown_fields)]
 pub struct KinematicsSettings {
+    /// Center-of-mass energy used to normalize and construct external momenta.
     #[serde(skip_serializing_if = "is_float::<64>")]
     pub e_cm: f64,
+    /// External momentum and helicity configuration evaluated by the integrand.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub externals: Externals,
 }
@@ -80,10 +82,14 @@ impl Default for KinematicsSettings {
 #[serde(tag = "type", content = "data")]
 #[serde(deny_unknown_fields)]
 pub enum Externals {
+    /// Use one fixed list of external momenta and helicities for every evaluation.
     #[serde(rename = "constant")]
     Constant {
+        /// External four-momenta; exactly one entry may be marked dependent.
         momenta: Vec<ExternalMomenta<F<f64>>>,
+        /// Helicity assigned to each external particle in process order.
         helicities: Vec<Helicity>,
+        /// Optional on-shell phase-space improvement applied before evaluation.
         #[serde(default, skip_serializing_if = "IsDefault::is_default")]
         improvement_settings: PhaseSpaceImprovementSettings,
         // must be set in warmup, but is tied to the constant

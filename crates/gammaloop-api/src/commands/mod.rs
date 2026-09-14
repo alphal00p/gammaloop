@@ -1,6 +1,13 @@
+//! Typed command definitions and command-execution results.
+//!
+//! Commands share the CLI's stateful behavior even when executed through
+//! [`crate::session::CliSession`]. Most communicate through state/settings mutations, logs, or
+//! explicitly requested files. [`CommandOutput`] is reserved for results that the embedded Rust
+//! caller should consume directly.
+
 use std::{ops::ControlFlow, path::PathBuf, str::FromStr};
 
-use clap::Subcommand;
+use clap::{builder::ArgExt, Arg, Subcommand};
 use color_eyre::Report;
 use gammalooprs::settings::RuntimeSettings;
 use save::SaveState;
@@ -50,17 +57,68 @@ pub mod profile;
 pub use profile::Profile;
 pub(crate) mod process_settings;
 
+/// Export metadata for Clap settings without public introspection APIs.
+#[doc(hidden)]
+#[derive(Clone, Debug, Default)]
+pub struct CliArgumentMetadata {
+    pub requires: Vec<&'static str>,
+    pub default_missing_values: Vec<&'static str>,
+}
+
+impl ArgExt for CliArgumentMetadata {}
+
+pub(crate) trait CliArgumentMetadataExt {
+    fn cli_requires(self, id: &'static str) -> Self;
+    fn cli_default_missing_value(self, value: &'static str) -> Self;
+}
+
+impl CliArgumentMetadataExt for Arg {
+    fn cli_requires(self, id: &'static str) -> Self {
+        let mut metadata = self
+            .get::<CliArgumentMetadata>()
+            .cloned()
+            .unwrap_or_default();
+        metadata.requires.push(id);
+        self.requires(id).add(metadata)
+    }
+
+    fn cli_default_missing_value(self, value: &'static str) -> Self {
+        let mut metadata = self
+            .get::<CliArgumentMetadata>()
+            .cloned()
+            .unwrap_or_default();
+        metadata.default_missing_values.push(value);
+        self.default_missing_value(value).add(metadata)
+    }
+}
+
+/// Structured value returned by a command, when that command has an embedded result.
+///
+/// Most commands return [`None`](CommandOutput::None); this does not mean that they had no effect.
+/// They may have changed the in-memory state or settings, emitted diagnostics, or written an
+/// explicitly requested file.
 #[derive(Debug, Clone, Default)]
 pub enum CommandOutput {
+    /// No direct Rust value; inspect the mutated state, settings, logs, or requested output file.
     #[default]
     None,
+    /// Symbolic result produced by an [`Evaluate`](Commands::Evaluate) command.
     Evaluate(Atom),
+    /// Estimate, uncertainty, and integration metadata produced by an
+    /// [`Integrate`](Commands::Integrate) command.
     Integrate(IntegrationOutput),
 }
 
+/// Control-flow request and optional structured value produced by one command.
+///
+/// Callers must inspect `flow` even when they do not need `output`. A break carries the
+/// [`SaveState`] policy requested by save/quit handling; it does not persist the state merely by
+/// being dropped.
 #[derive(Debug, Clone)]
 pub struct CommandExecution {
+    /// Continue the session or return the requested save/quit policy to the embedding caller.
     pub flow: ControlFlow<SaveState>,
+    /// Embedded result for evaluation/integration, otherwise [`CommandOutput::None`].
     pub output: CommandOutput,
 }
 
@@ -87,52 +145,65 @@ impl CommandExecution {
 #[allow(clippy::large_enum_variant)]
 #[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub enum Commands {
+    /// Inspect models, processes, integrands, settings, and named session data.
     #[clap(subcommand)]
     Display(Display),
+    /// Copy generated data to a new process or integrand name.
     #[clap(subcommand)]
     Duplicate(Duplicate),
+    /// Change global, runtime, model, or process settings.
     #[clap(subcommand)]
     Set(Set),
+    /// Import models or previously generated graphs into the active state.
     #[clap(subcommand)]
     Import(Import),
+    /// Export graph data, standalone evaluators, schemas, or the current state.
     #[clap(subcommand)]
     Save(Save),
 
+    /// Execute a stored command block or an inline command list.
     Run(Run),
+    /// Begin recording subsequent commands under a reusable block name.
     #[command(name = "start_commands_block")]
     StartCommandsBlock(StartCommandsBlock),
+    /// Stop recording commands and store the active command block.
     #[command(name = "finish_commands_block")]
     FinishCommandsBlock,
 
+    /// Remove generated processes from the active state.
     #[command(name = "remove")]
     #[clap(subcommand)]
     Remove(Remove),
 
+    /// Integrate one or more generated process integrands.
     Integrate(Integrate),
 
     Generate(Generate),
 
+    /// Select graph groups and write the selection to a new process or integrand.
     Select(Select),
 
-    /// Quit gammaloop
+    /// End the interactive GammaLoop session without executing further commands.
     Quit(SaveState),
-    /// Inspect a single phase‑space point / momentum configuration
+    /// Inspect integrand contributions at one phase-space point or momentum configuration.
     // #[clap(subcommand)]
     Inspect(Inspect),
 
-    /// Approach a phase-space point along one or more axes
+    /// Sample an integrand while approaching a phase-space point along selected scaling axes.
     Approach(Approach),
 
+    /// Evaluate a vacuum amplitude analytically or numerically with Vakint.
     Evaluate(Evaluate),
 
+    /// Compute and export ultraviolet renormalization contributions for an amplitude.
     Renormalize(Renormalize),
 
-    /// Benchmark raw integrand evaluation speed
+    /// Measure raw integrand evaluation throughput over random samples and selected worker counts.
     Bench {
         /// Number of random samples to evaluate
         #[arg(short = 's', long, value_name = "SAMPLES")]
         samples: usize,
-        /// Process reference: #<id>, name:<name>, or <id>/<name>
+        /// Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`
         #[arg(
             short = 'p',
             long = "process",
@@ -153,20 +224,26 @@ pub enum Commands {
         #[arg(short = 'c', long)]
         n_cores: usize,
     },
+    /// Profile ultraviolet or infrared scaling limits of a generated integrand.
     #[clap(subcommand)]
     Profile(Profile),
 
-    /// HPC batch evaluation branch
+    /// Evaluate a process-definition file against an HPC batch input and write named results.
     Batch {
+        /// Process-definition file used to construct the batch evaluator.
         #[arg(value_name = "PROCESS_FILE", value_hint = clap::ValueHint::FilePath)]
         process_file: PathBuf,
+        /// Batch input file containing the evaluation points or jobs to execute.
         #[arg(value_name = "BATCH_INPUT_FILE", value_hint = clap::ValueHint::FilePath)]
         batch_input_file: PathBuf,
+        /// Logical batch name used in generated output metadata.
         #[arg(short = 'n', long, value_name = "NAME")]
         name: String,
+        /// Base name assigned to the batch result output.
         #[arg(value_name = "NAME")]
         output_name: String,
     },
+    /// Run an operating-system shell command from the interactive GammaLoop session.
     #[command(name = "!")]
     Shell(Shell),
 }
@@ -417,13 +494,13 @@ mod tests {
 
     #[test]
     fn approach_command_parses_momentum_space_selectors() {
-        let command: Commands = "approach -p #0 -i default -x 1.0,-7.0e-2,0.0,1.0 --approach-axis=-1.0e-3,0.0,0.0,1.0 --n-points 1 --linear --n-cores 1 --momentum-space --graph-id 2 --orientation-id 1"
+        let command: Commands = "approach -p #0 -i default -x 1.0,-7.0e-2,0.0,-0.2,0.3,0.4 --approach-axis=-1.0e-3,0.0,0.0,0.0,0.0,0.0 --n-points 1 --linear --n-cores 1 --momentum-space --graph-id 2 --orientation-id 1"
             .parse()
             .unwrap();
         match command {
             Commands::Approach(approach) => {
-                assert_eq!(approach.point, vec![1.0, -7.0e-2, 0.0, 1.0]);
-                assert_eq!(approach.approach_axes, vec!["-1.0e-3,0.0,0.0,1.0"]);
+                assert_eq!(approach.point, vec![1.0, -7.0e-2, 0.0, -0.2, 0.3, 0.4]);
+                assert_eq!(approach.approach_axes, vec!["-1.0e-3,0.0,0.0,0.0,0.0,0.0"]);
                 assert!(approach.momentum_space);
                 assert!(approach.linear);
                 assert_eq!(approach.graph_id, Some(2));

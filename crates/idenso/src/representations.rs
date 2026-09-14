@@ -124,9 +124,13 @@ pub struct Bispinor {}
 #[representation(name = "coad", self_dual)] // Specify the dual name
 pub struct ColorAdjoint {}
 
+/// Register Idenso's built-in representations and algebra symbols with Symbolica.
+///
+/// Symbolica calls this during community-module initialization. Calling it again
+/// is safe and ensures the standard Lorentz, spinor, and color objects exist.
 #[cfg_attr(
     feature = "python_stubgen",
-    gen_stub_pyfunction(module = "symbolica.community.spenso")
+    gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[cfg_attr(feature = "python", pyfunction)]
 pub fn initialize() {

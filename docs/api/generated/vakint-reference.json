@@ -1,0 +1,164 @@
+{
+  "schema_version": 3,
+  "sources": [
+    {
+      "kind": "runtime-topology-generator",
+      "path": "crates/vakint/src/topologies.rs",
+      "symbol": "vakint::topologies::Topologies::generate_topologies"
+    },
+    {
+      "kind": "source-version-constant",
+      "path": "crates/vakint/src/lib.rs",
+      "symbol": "MINIMAL_FORM_VERSION, MINIMAL_PYSECDEC_VERSION"
+    }
+  ],
+  "dependencies": [
+    {
+      "name": "FORM",
+      "minimum_version": "4.2.1",
+      "source_symbol": "MINIMAL_FORM_VERSION"
+    },
+    {
+      "name": "pySecDec",
+      "minimum_version": "1.6.4",
+      "source_symbol": "MINIMAL_PYSECDEC_VERSION"
+    }
+  ],
+  "topologies": [
+    {
+      "name": "I1L",
+      "loops": 1,
+      "propagator_slots": 1
+    },
+    {
+      "name": "I2L",
+      "loops": 2,
+      "propagator_slots": 3
+    },
+    {
+      "name": "I2L_pinch_3",
+      "loops": 2,
+      "propagator_slots": 3
+    },
+    {
+      "name": "I3L",
+      "loops": 3,
+      "propagator_slots": 6
+    },
+    {
+      "name": "I3L_pinch_6",
+      "loops": 3,
+      "propagator_slots": 6
+    },
+    {
+      "name": "I3L_pinch_1_6",
+      "loops": 3,
+      "propagator_slots": 6
+    },
+    {
+      "name": "I3L_pinch_3_6",
+      "loops": 3,
+      "propagator_slots": 6
+    },
+    {
+      "name": "I3L_pinch_1_3_6",
+      "loops": 3,
+      "propagator_slots": 6
+    },
+    {
+      "name": "I4L_H",
+      "loops": 4,
+      "propagator_slots": 9
+    },
+    {
+      "name": "I4L_X",
+      "loops": 4,
+      "propagator_slots": 9
+    },
+    {
+      "name": "I4L_BMW",
+      "loops": 4,
+      "propagator_slots": 8
+    },
+    {
+      "name": "I4L_FG",
+      "loops": 4,
+      "propagator_slots": 8
+    },
+    {
+      "name": "I4L_FG_pinch_2",
+      "loops": 4,
+      "propagator_slots": 8
+    },
+    {
+      "name": "I4L_FG_pinch_3",
+      "loops": 4,
+      "propagator_slots": 8
+    },
+    {
+      "name": "I4L_FG_pinch_4",
+      "loops": 4,
+      "propagator_slots": 8
+    },
+    {
+      "name": "I4L_FG_pinch_7",
+      "loops": 4,
+      "propagator_slots": 8
+    },
+    {
+      "name": "I4L_FG_pinch_8",
+      "loops": 4,
+      "propagator_slots": 8
+    },
+    {
+      "name": "I4L_FG_pinch_1_8",
+      "loops": 4,
+      "propagator_slots": 8
+    },
+    {
+      "name": "I4L_FG_pinch_2_4",
+      "loops": 4,
+      "propagator_slots": 8
+    },
+    {
+      "name": "I4L_FG_pinch_4_7",
+      "loops": 4,
+      "propagator_slots": 8
+    },
+    {
+      "name": "I4L_FG_pinch_4_8",
+      "loops": 4,
+      "propagator_slots": 8
+    },
+    {
+      "name": "I4L_FG_pinch_7_8",
+      "loops": 4,
+      "propagator_slots": 8
+    },
+    {
+      "name": "I4L_FG_pinch_2_4_7",
+      "loops": 4,
+      "propagator_slots": 8
+    },
+    {
+      "name": "I4L_FG_pinch_3_4_8",
+      "loops": 4,
+      "propagator_slots": 8
+    },
+    {
+      "name": "I4L_FG_pinch_4_7_8",
+      "loops": 4,
+      "propagator_slots": 8
+    },
+    {
+      "name": "I4L_FG_pinch_6_7_8",
+      "loops": 4,
+      "propagator_slots": 8
+    },
+    {
+      "name": "I4L_FG_pinch_4_6_7_8",
+      "loops": 4,
+      "propagator_slots": 8
+    }
+  ]
+}

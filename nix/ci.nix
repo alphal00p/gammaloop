@@ -16,6 +16,17 @@
       ];
     }
     {
+      name = "docs";
+      packages = [
+        "alphal00p-docs-builder"
+        "alphal00p-docs-catalogs"
+        "alphal00p-docs-examples"
+        "alphal00p-docs-macros"
+        "alphal00p-docs-python-exporter"
+        "alphal00p-docs-schema"
+      ];
+    }
+    {
       name = "integration";
       packages = ["gammaloop-integration-tests"];
       filter = "package(gammaloop-integration-tests) & not binary(test_python_api)";
@@ -238,6 +249,12 @@
       "checks.${system}.gammaloop-clippy" = ["packages.${system}.cargoCheckArtifacts"];
       "checks.${system}.gammaloop-doc" = ["packages.${system}.cargoCheckArtifacts"];
       "checks.${system}.gammaloop-doctest" = ["packages.${system}.cargoCheckArtifacts"];
+      "packages.${system}.alphal00p-docs-pages" = ["packages.${system}.alphal00p-docs-cargo-artifacts"];
+      "packages.${system}.alphal00p-docs-snapshot-fixture" = ["packages.${system}.alphal00p-docs-cargo-artifacts"];
+      "checks.${system}.alphal00p-docs" = [
+        "packages.${system}.alphal00p-docs-pages"
+        "packages.${system}.alphal00p-docs-snapshot-fixture"
+      ];
       "packages.${system}.workspaceBuildArtifacts" = ["packages.${system}.cargoArtifacts"];
       "checks.${system}.gammaloop-nextest-binaries" = nextestBinaryChecks;
       "packages.${system}.linnest-wasm" = ["packages.${system}.linnestWasmCargoArtifacts"];

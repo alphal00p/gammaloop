@@ -1,0 +1,7 @@
+error: #[alphal00p_docs::ty] requires a struct or enum
+ --> tests/ui/wrong-target.rs:3:1
+  |
+3 | #[ty]
+  | ^^^^^
+  |
+  = note: this error originates in the attribute macro `ty` (in Nightly builds, run with -Z macro-backtrace for more info)

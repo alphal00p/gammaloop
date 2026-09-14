@@ -78,13 +78,25 @@ impl OrientationProfileMode {
     }
 }
 
+/// Direct input for evaluating an integrand at explicit spatial loop momenta.
+///
+/// `loop_momenta` contains one `(px, py, pz)` value per independent loop momentum;
+/// energies are reconstructed by the integrand and external momenta come from its
+/// kinematics settings. The selected graph or graph group determines the required
+/// loop count and evaluation rejects a different number of entries.
 #[derive(Debug, Clone)]
 pub struct MomentumSpaceEvaluationInput {
+    /// Spatial loop momenta in loop-basis order.
     pub loop_momenta: Vec<ThreeMomentum<F<f64>>>,
+    /// Multiplicative integration weight associated with this explicit point.
     pub integrator_weight: F<f64>,
+    /// Optional graph selected within a non-discrete sampling setup.
     pub graph_id: Option<usize>,
+    /// Optional graph group selected within a discrete sampling setup.
     pub group_id: Option<GroupId>,
+    /// Optional orientation within the selected graph or graph group.
     pub orientation: Option<usize>,
+    /// Optional loop-momentum-basis channel selected by discrete sampling.
     pub channel_id: Option<ChannelIndex>,
 }
 
@@ -1584,13 +1596,13 @@ fn create_stability_iterator(
     use_arb_prec: bool,
 ) -> Vec<StabilityLevelSetting> {
     if use_arb_prec {
-        // overwrite the stability settings if use_f128 is enabled, but attempt to use user defined settings for f128
-        if let Some(f128_settings_position) = settings
+        // Force arbitrary precision, reusing the configured Arb thresholds when available.
+        if let Some(arb_settings_position) = settings
             .levels
             .iter()
             .position(|stability_level_setting| stability_level_setting.precision == Precision::Arb)
         {
-            vec![settings.levels[f128_settings_position]]
+            vec![settings.levels[arb_settings_position]]
         } else {
             vec![StabilityLevelSetting {
                 precision: Precision::Arb,
@@ -4083,7 +4095,7 @@ fn evaluate_momentum_configuration_precise<I: ProcessIntegrandImpl>(
 mod tests {
     use super::{
         ChannelIndex, LmbChannelWeightingSettings, LmbMultiChannelingSetup, RuntimeCache,
-        filtered_orientation_count, resolve_visible_orientation_id,
+        create_stability_iterator, filtered_orientation_count, resolve_visible_orientation_id,
     };
     use crate::cff::expression::OrientationID;
     use crate::{
@@ -4095,7 +4107,9 @@ mod tests {
             sample::{BareMomentumSample, ExternalFourMomenta, LoopMomenta, MomentumSample},
             signature::LoopExtSignature,
         },
-        settings::runtime::{LmbChannelWeight, ParameterizationSettings},
+        settings::runtime::{
+            LmbChannelWeight, ParameterizationSettings, Precision, StabilitySettings,
+        },
         utils::{F, load_generic_model},
     };
     use linnet::half_edge::{
@@ -4119,6 +4133,24 @@ mod tests {
                 .expect("runtime cache should decode");
         assert_eq!(consumed, 0);
         assert!(decoded.0.is_none());
+    }
+
+    #[test]
+    fn arbitrary_precision_override_prefers_the_configured_arb_level() {
+        let mut settings = StabilitySettings::default();
+        let arb_level = settings
+            .levels
+            .iter_mut()
+            .find(|level| level.precision == Precision::Arb)
+            .expect("default stability settings should include Arb");
+        arb_level.required_precision_for_re = 2.5e-7;
+        let configured_arb_level = *arb_level;
+
+        assert_eq!(
+            create_stability_iterator(&settings, true),
+            vec![configured_arb_level]
+        );
+        assert_eq!(create_stability_iterator(&settings, false), settings.levels);
     }
 
     #[test]

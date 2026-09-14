@@ -1,0 +1,230 @@
+schema = 1
+
+[[talk]]
+id = "hirschi-esi-2026"
+date = "2026-08-18"
+speaker = "valentin-hirschi"
+title = "Local Unitarity and momentum-space numerical integration for perturbative QFT"
+event = "New Directions in QCD"
+location = "Erwin Schrödinger International Institute, Vienna"
+event_url = "https://www.esi.ac.at/events/e588/"
+
+[[talk]]
+id = "huber-ijclab-2026"
+date = "2026-06-10"
+speaker = "lucien-huber"
+title = "The GammaLoop ecosystem: making loop computations easier with Rust"
+event = "Progress in algorithms and numerical tools for QCD"
+location = "IJCLab, Orsay"
+event_url = "https://indico.ijclab.in2p3.fr/event/13525/"
+
+[[talk]]
+id = "hirschi-ijclab-2026"
+date = "2026-06-10"
+speaker = "valentin-hirschi"
+title = "Local Unitarity and momentum-space loop integration techniques"
+event = "Progress in algorithms and numerical tools for QCD"
+location = "IJCLab, Orsay"
+event_url = "https://indico.ijclab.in2p3.fr/event/13525/"
+
+[[talk]]
+id = "capatti-loopfest-2026"
+date = "2026-03-20"
+speaker = "zeno-capatti"
+title = "The KLN theorem meets collinear factorisation"
+event = "LoopFest XXIV"
+location = "Brookhaven National Laboratory"
+event_url = "https://indico.bnl.gov/event/30891/"
+
+[[talk]]
+id = "capatti-numerical-perturbation-2025"
+date = "2025-11-20"
+speaker = "zeno-capatti"
+title = "Factorisable Local Unitarity for hadronic cross-sections"
+event = "Numerical Perturbation Theory"
+location = "ETH Zürich"
+event_url = "https://indico.cern.ch/event/1607635/contributions/6774197/"
+
+[[talk]]
+id = "seppanen-numerical-perturbation-2025"
+date = "2025-11-20"
+speaker = "kaapo-seppanen"
+title = "Loop–Tree Duality at finite temperature and density"
+event = "Numerical Perturbation Theory"
+location = "ETH Zürich"
+event_url = "https://indico.cern.ch/event/1607635/contributions/6774212/"
+
+[[talk]]
+id = "huber-numerical-perturbation-2025"
+date = "2025-11-20"
+speaker = "lucien-huber"
+title = "Localized renormalization and graph-based tooling"
+event = "Numerical Perturbation Theory"
+location = "ETH Zürich"
+event_url = "https://indico.cern.ch/event/1607635/contributions/6774210/"
+
+[[talk]]
+id = "fraaije-numerical-perturbation-2025"
+date = "2025-11-20"
+speaker = "mathijs-fraaije"
+title = "The art of constructing and sampling cut integrals"
+event = "Numerical Perturbation Theory"
+location = "ETH Zürich"
+event_url = "https://indico.cern.ch/event/1607635/contributions/6774211/"
+
+[[talk]]
+id = "hirschi-numerical-perturbation-2025"
+date = "2025-11-20"
+speaker = "valentin-hirschi"
+title = "Applications and challenges in numerical methods for perturbative QFT"
+event = "Numerical Perturbation Theory"
+location = "ETH Zürich"
+event_url = "https://indico.cern.ch/event/1607635/contributions/6774205/"
+
+[[talk]]
+id = "hirschi-form-2025"
+date = "2025-06-12"
+speaker = "valentin-hirschi"
+title = "A modern take on high-energy physics tooling"
+event = "FORM Developer's Workshop 2025"
+location = "University of Liverpool"
+event_url = "https://conference.ippp.dur.ac.uk/event/1459/contributions/8142/"
+slides_url = "https://conference.ippp.dur.ac.uk/event/1459/contributions/8142/attachments/6453/8767/12_05_2025_FORM_workshop.pdf"
+
+[[talk]]
+id = "huber-madgraph-2025"
+date = "2025-02-04"
+speaker = "lucien-huber"
+title = "Spenso: compiled concrete contractions"
+event = "MadGraph5_aMC@NLO meeting 2025"
+location = "CERN"
+event_url = "https://indico.cern.ch/event/1452599/contributions/6300995/"
+
+[[talk]]
+id = "hirschi-madgraph-2025"
+date = "2025-02-04"
+speaker = "valentin-hirschi"
+title = "Automation of beyond-NLO numerical calculations"
+event = "MadGraph5_aMC@NLO meeting 2025"
+location = "CERN"
+event_url = "https://indico.cern.ch/event/1452599/contributions/6301189/"
+
+[[talk]]
+id = "hirschi-ras-2024"
+date = "2024-08-22"
+speaker = "valentin-hirschi"
+title = "Local Unitarity"
+event = "Frontiers in precision phenomenology: Resummation, Amplitudes, and Subtraction"
+location = "CERN"
+event_url = "https://indico.cern.ch/event/1354833/contributions/6066554/"
+
+[[talk]]
+id = "capatti-slac-2024"
+date = "2024-08-09"
+speaker = "zeno-capatti"
+title = "Developments in 3D representations and Local Unitarity"
+event = "SLAC Theory Seminar"
+location = "SLAC National Accelerator Laboratory"
+event_url = "https://theory.slac.stanford.edu/events/2024-08-06-developments-3d-representations-and-local-unitarity-zeno-capatti-bern"
+
+[[talk]]
+id = "hirschi-mpp-2024"
+date = "2024-06-05"
+speaker = "valentin-hirschi"
+title = "Local Unitarity: unite and conquer infrared divergences"
+event = "TUM/MPP Seminar"
+location = "Max Planck Institute for Physics, Garching"
+event_url = "https://indico.mpp.mpg.de/event/10178/"
+
+[[talk]]
+id = "capatti-dis-2024"
+date = "2024-05-09"
+speaker = "zeno-capatti"
+title = "KLN cancellation of initial-state singularities in deep-inelastic scattering"
+event = "Theory seminar"
+location = "University of Zurich"
+event_url = "https://indico.global/event/7549/"
+
+[[talk]]
+id = "capatti-milano-2023"
+date = "2023-04-06"
+speaker = "zeno-capatti"
+title = "Local structure of threshold singularities in Feynman diagrams and differential observables"
+event = "Joint INFN–UNIMI–UNIMIB Phenomenology Seminar"
+location = "University of Milan"
+event_url = "https://indico.global/event/7512/"
+
+[[talk]]
+id = "capatti-acat-2022"
+date = "2022-10-25"
+speaker = "zeno-capatti"
+title = "First results of Local Unitarity at N3LO"
+event = "ACAT 2022"
+location = "Bari"
+event_url = "https://indico.cern.ch/event/1106990/contributions/4997218/"
+
+[[talk]]
+id = "capatti-hp2-2022"
+date = "2022-09-22"
+speaker = "zeno-capatti"
+title = "First applications of Local Unitarity at N3LO"
+event = "High Precision for Hard Processes (HP² 2022)"
+location = "Newcastle upon Tyne"
+event_url = "https://conference.ippp.dur.ac.uk/event/1100/"
+
+[[talk]]
+id = "hirschi-loopfest-2022"
+date = "2022-05-14"
+speaker = "valentin-hirschi"
+title = "Local Unitarity: a locally infrared-finite representation of differential cross-sections"
+event = "LoopFest XX"
+location = "University of Pittsburgh"
+event_url = "https://indico.global/event/793/"
+slides_url = "https://indico.global/event/793/contributions/21845/attachments/9604/14558/ValentinHirschi_LoopFestXX.pdf"
+
+[[talk]]
+id = "capatti-cern-2021"
+date = "2021-10-15"
+speaker = "zeno-capatti"
+title = "Local Unitarity and infrared safety"
+event = "CERN Theory Seminar"
+location = "CERN"
+event_url = "https://indico.cern.ch/event/1081056/"
+
+[[talk]]
+id = "capatti-radcor-2021"
+date = "2021-05-19"
+speaker = "zeno-capatti"
+title = "Local Unitarity and infrared safety"
+event = "RADCOR–LoopFest 2021"
+location = "Online"
+event_url = "https://indico.global/event/1279/"
+
+[[talk]]
+id = "ruijl-nikhef-2020"
+date = "2020-11-20"
+speaker = "ben-ruijl"
+title = "Local Unitarity: a new approach to perturbative computations in quantum field theory"
+event = "Nikhef Theory Seminar"
+location = "Nikhef, Amsterdam"
+event_url = "https://indico.cern.ch/event/978127/contributions/4119963/"
+slides_url = "https://indico.cern.ch/event/978127/contributions/4119963/attachments/2151372/3627384/ltd.pdf"
+
+[[talk]]
+id = "capatti-lund-2020"
+date = "2020-11-05"
+speaker = "zeno-capatti"
+title = "Local Unitarity: a representation of differential cross-sections locally free of infrared singularities"
+event = "Science Coffee"
+location = "Lund University / online"
+event_url = "https://indico.fysik.lu.se/event/1770/"
+recording_url = "https://indico.fysik.lu.se/event/1770/material/0/"
+
+[[talk]]
+id = "hirschi-cern-2020"
+date = "2020-10-30"
+speaker = "valentin-hirschi"
+title = "Loop–Tree Duality and Local Unitarity: local cancellation of infrared singularities"
+event = "CERN QCD Seminar"
+location = "CERN / online"
+event_url = "https://indico.cern.ch/event/966663/"

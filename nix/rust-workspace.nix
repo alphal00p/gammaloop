@@ -1,4 +1,6 @@
 {
+  self,
+  docsPkgs,
   pkgs,
   craneLib,
   wasmCraneLib,
@@ -11,6 +13,13 @@
   incrementalBaselineRoot ? null,
 }: let
   inherit (pkgs) lib;
+
+  documentation = import ./documentation.nix {
+    inherit self pkgs docsPkgs craneLib workspaceRoot cargoSources nonCargoBuildSources
+      commonArgs dummyCargoTarget normalizeWorkspaceHackBuildScriptTimestampScript
+      workspacePackageSrcFor workspaceMissingCargoTargetsScript;
+  };
+  inherit (documentation) docsTypst docsFontPath documentationDeveloperScopeSources;
 
   ci = import ./ci.nix {
     inherit workspaceGraph;
@@ -95,6 +104,10 @@
       snapshotSources
       (workspaceRoot + "/tests")
       (workspaceRoot + "/examples/cli")
+      (workspaceRoot + "/docs/api/python")
+      (workspaceRoot + "/docs/examples.toml")
+      (workspaceRoot + "/docs/products")
+      (workspaceRoot + "/crates/linnet-py/linnet_py.pyi")
     ];
   };
 
@@ -155,7 +168,7 @@
     if incrementalBaselineRoot == null
     then null
     else import ./rust-workspace.nix {
-      inherit pkgs craneLib wasmCraneLib ciToolchain wasmTarget system nixCiArtifactBarrier workspaceGraph;
+      inherit self pkgs docsPkgs craneLib wasmCraneLib ciToolchain wasmTarget system nixCiArtifactBarrier workspaceGraph;
       workspaceRoot = incrementalBaselineRoot;
     };
   compatibleIncrementalBaseline =
@@ -330,7 +343,27 @@
       )
     );
 
+  documentationCatalogAnnotatedItemSourcePaths =
+    let
+      sourceLines = lib.filter (line: lib.hasInfix "source =" line) (
+        lib.splitString "\n" (builtins.readFile (workspaceRoot + "/crates/alphal00p-docs-catalogs/src/annotated_items.rs"))
+      );
+      sourceMatches = map (
+        line: builtins.match ''[[:space:]]*source = "([^"]+)",[[:space:]]*'' line
+      ) sourceLines;
+    in
+    assert builtins.all (match: match != null) sourceMatches;
+    sortedUnique (map builtins.head sourceMatches);
+
   workspacePackageExtraSourceRoots.production = {
+    "alphal00p-docs-catalogs" = documentationCatalogAnnotatedItemSourcePaths;
+    "alphal00p-docs-examples" = [
+      "crates/linnet-py/pyproject.toml"
+      "docs/api/python"
+      "docs/examples.toml"
+      "docs/products"
+      "pyproject.toml"
+    ];
     "gammaloop-api" = [
       "assets/embedded"
       "assets/models"
@@ -363,12 +396,37 @@
   };
 
   workspacePackageExtraSourceRoots.compileTimeTest = {
+    "alphal00p-docs-macros" = ["crates/alphal00p-docs-macros/tests/ui"];
+    "alphal00p-docs-python-exporter" = ["crates/linnet-py/linnet_py.pyi" "docs/api/python"];
     gammalooprs = [
       "tests/resources/graphs/scalar/dod2_bubble.dot"
     ];
   };
 
   workspacePackageExtraSourceRoots.runtimeTest = {
+    "alphal00p-docs-builder" = [
+      "assets/embedded/drawing/templates"
+      "assets/gammalooplogo-dark.svg"
+      "assets/gammalooplogo-light.svg"
+      "crates/clinnet/CHANGELOG.typ"
+      "crates/idenso/CHANGELOG.typ"
+      "crates/kurvst/typst/docs"
+      "crates/linnest/typst/docs"
+      "crates/linnet/CHANGELOG.typ"
+      "crates/spenso-hep-lib/CHANGELOG.typ"
+      "crates/spenso-macros/CHANGELOG.typ"
+      "crates/spenso/CHANGELOG.typ"
+      "crates/spynso3/CHANGELOG.typ"
+      "docs"
+      "examples/cli/aa_aa/2L/graphs"
+      "examples/cli/gg_hhh/3L/3L_graph.dot"
+      "flake.nix"
+      "scripts/render-docs-svg-assets.sh"
+      "tests/resources/graphs"
+    ];
+    "alphal00p-docs-catalogs" = [
+      "docs/api/python"
+    ];
     "gammaloop-api" = [
       "tests/resources/graphs/scalar_bubble.dot"
     ];
@@ -615,6 +673,7 @@
   };
 
   workspaceFeatureUnificationExcludedPackages = [
+    "alphal00p-docs-python-exporter"
     "linnet-py"
     "spynso3"
   ];
@@ -1006,6 +1065,10 @@
       [
         "--locked"
         "--no-default-features"
+        # The extension artifact only needs library targets. Building the
+        # CLI with pyo3/extension-module would intentionally omit libpython
+        # linkage from an executable target.
+        "--lib"
       ]
       ++ map (package: "-p ${lib.escapeShellArg package}") selectedPackages
       ++ lib.optional (featureArgs != "") featureArgs
@@ -1655,26 +1718,30 @@
   in
     [(targetNameForCargo (libManifest.name or manifest.package.name))];
 
-  stripSelectedWorkspaceCargoArtifactsScript = packagesToStrip: let
+  stripSelectedWorkspaceCargoArtifactsScript = {
+    cargoTargetDir ? "target",
+    packagesToStrip,
+  }: let
+    targetDir = if cargoTargetDir == "target" then "target" else lib.escapeShellArg cargoTargetDir;
     stripPackageScript = package: let
       artifactNames = workspacePackageCargoArtifactNames package;
       fingerprintNames = sortedUnique ([package] ++ artifactNames);
     in ''
       ${lib.concatMapStringsSep "\n" (name: ''
-          rm -f target/${ciCargoProfile}/deps/${lib.escapeShellArg name}
-          rm -f target/${ciCargoProfile}/deps/${lib.escapeShellArg name}.d
-          rm -f target/${ciCargoProfile}/deps/${lib.escapeShellArg name}-*
-          rm -f target/${ciCargoProfile}/deps/lib${lib.escapeShellArg name}.*
-          rm -f target/${ciCargoProfile}/deps/lib${lib.escapeShellArg name}-*
-          rm -f target/${ciCargoProfile}/${lib.escapeShellArg name}
-          rm -f target/${ciCargoProfile}/${lib.escapeShellArg name}.d
-          rm -f target/${ciCargoProfile}/lib${lib.escapeShellArg name}.*
-          rm -f target/${ciCargoProfile}/lib${lib.escapeShellArg name}-*
+          rm -f ${targetDir}/${ciCargoProfile}/deps/${lib.escapeShellArg name}
+          rm -f ${targetDir}/${ciCargoProfile}/deps/${lib.escapeShellArg name}.d
+          rm -f ${targetDir}/${ciCargoProfile}/deps/${lib.escapeShellArg name}-*
+          rm -f ${targetDir}/${ciCargoProfile}/deps/lib${lib.escapeShellArg name}.*
+          rm -f ${targetDir}/${ciCargoProfile}/deps/lib${lib.escapeShellArg name}-*
+          rm -f ${targetDir}/${ciCargoProfile}/${lib.escapeShellArg name}
+          rm -f ${targetDir}/${ciCargoProfile}/${lib.escapeShellArg name}.d
+          rm -f ${targetDir}/${ciCargoProfile}/lib${lib.escapeShellArg name}.*
+          rm -f ${targetDir}/${ciCargoProfile}/lib${lib.escapeShellArg name}-*
         '')
         artifactNames}
       ${lib.concatMapStringsSep "\n" (name: ''
           # Match the whole hash so stripping feynkit preserves feynkit-cff.
-          for artifact in target/${ciCargoProfile}/{.fingerprint,build}/${lib.escapeShellArg name}-*; do
+          for artifact in ${targetDir}/${ciCargoProfile}/{.fingerprint,build}/${lib.escapeShellArg name}-*; do
             if [[ "''${artifact##*/}" =~ ^${lib.escapeShellArg "${name}-"}[0-9a-f]+$ ]]; then
               rm -rf "$artifact"
             fi
@@ -1707,7 +1774,10 @@
     ];
     postBuildScriptText = (args.postBuild or "")
       + lib.optionalString (args.stripWorkspaceArtifacts or false)
-        (stripSelectedWorkspaceCargoArtifactsScript (lib.subtractLists preservedWorkspaceArtifactPackages workspacePackages));
+        (stripSelectedWorkspaceCargoArtifactsScript {
+          cargoTargetDir = args.CARGO_TARGET_DIR or "target";
+          packagesToStrip = lib.subtractLists preservedWorkspaceArtifactPackages workspacePackages;
+        });
     unseeded = (craneLib.buildDepsOnly (
       cleanedArgs
       // lib.optionalAttrs keepIncrementalState {
@@ -1732,7 +1802,10 @@
             mkdir -p target
             find target -name '.cargo*lock' -delete
           ''
-          + lib.optionalString (preBuildWorkspaceArtifactStripPackages != []) (stripSelectedWorkspaceCargoArtifactsScript preBuildWorkspaceArtifactStripPackages);
+          + lib.optionalString (preBuildWorkspaceArtifactStripPackages != []) (stripSelectedWorkspaceCargoArtifactsScript {
+            cargoTargetDir = args.CARGO_TARGET_DIR or "target";
+            packagesToStrip = preBuildWorkspaceArtifactStripPackages;
+          });
 
         postBuild =
           postBuildScriptText
@@ -2152,7 +2225,7 @@
     check = "cargoWithProfile check ${ciArgs.cargoExtraArgs} --all-targets";
     clippy = "cargoWithProfile clippy ${ciArgs.cargoExtraArgs} --all-targets --no-deps -- --deny warnings";
     doc = "cargoWithProfile doc ${ciArgs.cargoExtraArgs} --no-deps";
-    doctest = "cargoWithProfile test --doc ${ciArgs.cargoExtraArgs}";
+    doctest = "cargoWithProfile test --doc ${ciArgs.cargoExtraArgs} --exclude alphal00p-docs-python-exporter";
   };
 
   cranePythonDependencyArtifacts =
@@ -2254,7 +2327,9 @@
       '';
     });
 
-  nextestPackageGroups = ci.groups;
+  nextestPackageGroups = map (target: target // lib.optionalAttrs (target.name == "docs") {
+    runtimeTools = [docsTypst nextestPython pkgs.git pkgs.jujutsu];
+  }) ci.groups;
 
   sortedUnique = list: lib.sort (left: right: left < right) (lib.unique list);
 
@@ -2308,7 +2383,8 @@
       packageSourcePackages = target.packages;
       testSourcePackages = target.packages;
       runtimeTestSourcePackages = target.runtimeTestSourcePackages or target.packages;
-      extraFilesets = [(workspaceRoot + "/.config/nextest.toml")];
+      extraFilesets = [(workspaceRoot + "/.config/nextest.toml")]
+        ++ lib.optionals (target.name == "docs") documentationDeveloperScopeSources;
     };
 
   nextestFeatureArgsFor = target:
@@ -2344,6 +2420,9 @@
         pname = "gammaloop-nextest-binaries-${target.name}-${package}";
         src = nextestSrcFor packageTarget;
         cargoArtifacts = packageCargoArtifacts;
+        # A changed transitive workspace source can make Cargo refresh an
+        # inherited artifact while constructing the terminal archive.
+        doNotLinkInheritedArtifacts = true;
         CARGO_BUILD_INCREMENTAL = packageCargoArtifacts.CARGO_BUILD_INCREMENTAL or "false";
         doCheck = false;
         doInstallCargoArtifacts = false;
@@ -2451,7 +2530,8 @@
         pkgs.form
         pkgs.gcc
         nextestFailureSummary
-      ] ++ lib.optionals (nextestUsesPythonModule target) [nextestPython];
+      ] ++ lib.optionals (nextestUsesPythonModule target) [nextestPython]
+      ++ (target.runtimeTools or []);
       CC = nixCc;
       CXX = nixCxx;
       "${cargoLinkerVar}" = nixCc;
@@ -2471,10 +2551,29 @@
       cp -R ${nextestRuntimeSrcFor target}/. /build/source/
       chmod -R u+w /build/source
       cd /build/source
+      # Tests such as trybuild invoke Cargo again at runtime. Point
+      # those nested invocations at the same vendored dependency
+      # graph used to compile the archived test binaries.
+      export CARGO_HOME="$PWD/.cargo-home"
+      mkdir -p "$CARGO_HOME"
+      cp ${cargoVendorDir}/config.toml "$CARGO_HOME/config.toml"
+      export CARGO_NET_OFFLINE=true
       # Workspace-root discovery checks these directories even for test
       # targets that do not consume any files from them.
       mkdir -p tests/resources examples/cli
       ${workspaceMissingCargoTargetsScript}
+    '' + lib.optionalString (target.name == "docs") ''
+      # The remapped Nix test source deliberately has no .git directory.
+      # Give generated test pages stable, explicitly non-publishing
+      # provenance rather than making the runner depend on repository
+      # metadata outside its declared source closure.
+      export ALPHAL00P_DOCS_GIT_COMMIT=0000000000000000000000000000000000000000
+      export ALPHAL00P_DOCS_GIT_TIMESTAMP=1
+      # Nix's TMPDIR is normally /build, which also contains the copied
+      # workspace. Isolate tempfile-based containment tests so /build is
+      # not mistaken for a general persistent-cache namespace.
+      export TMPDIR="$PWD/target/nix-ci-tmp"
+      mkdir -p "$TMPDIR"
     '' + lib.optionalString (nextestUsesPythonModule target) ''
       export PYO3_PYTHON=${nextestPython}/bin/python3
       export PYTHON=${nextestPython}/bin/python3
@@ -2499,6 +2598,8 @@
           rm -f ${lib.escapeShellArg nextestJunitPath}
           cargo nextest run \
             --archive-file ${nextestBinarySetForTarget target}/${nextestArchiveNameFor target package} \
+            --extract-to . \
+            --extract-overwrite \
             --workspace-remap . \
             ${nextestBaseExtraArgs}
           package_status=$?
@@ -2586,6 +2687,8 @@
       gammaloop-clippy = workspaceChecks.clippy;
 
       gammaloop-doc = workspaceChecks.doc;
+      alphal00p-docs = documentation.alphal00pDocsCheck;
+      alphal00p-docs-persistent-typst = documentation.persistentTypstCheck;
 
       gammaloop-doctest = workspaceChecks.doctest;
 
@@ -2631,6 +2734,8 @@
     ++ map (target: "gammaloop-nextest-binaries-${target.name}") checkedNextestPackageGroups
   );
 in {
+  inherit (documentation) docsTypst docsFontPath alphal00pDocsCargoArtifacts
+    alphal00pDocsPages alphal00pDocsSnapshotFixture;
   inherit
     workspaceDependencySrc
     craneTestDependencyArtifacts

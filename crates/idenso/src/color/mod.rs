@@ -611,8 +611,8 @@ impl ColorCasimirSettings {
 
 /// Trait for applying SU(N) color algebra simplification rules to a symbolic expression.
 ///
-/// Implementors provide a method to simplify expressions containing color factors
-/// like structure constants (`f_abc`), generators (`T^a`), traces (`TR`), and the
+/// Implementors simplify expressions containing color factors such as structure constants
+/// (`f_abc`), generators (`T^a`), closed traces, the trace normalization (`TR`), and the
 /// number of colors (`Nc`).
 pub trait ColorSimplifier {
     /// Attempts to simplify the color structure of the expression.
@@ -620,11 +620,8 @@ pub trait ColorSimplifier {
     /// Applies various identities of SU(N) algebra, including Fierz identities,
     /// Casimir relations, and contractions involving `f_abc` and `T^a`.
     ///
-    /// # Returns
-    /// - `Ok(Atom)`: The simplified expression, ideally with only color-scalar factors remaining.
-    /// - `Err(ColorError::NotFully(Atom))`: If the simplification could not fully remove all
-    ///   explicit color index structures (like `cof(...)`, `coad(...)`). The partially
-    ///   simplified `Atom` is included in the error.
+    /// Returns a rewritten atom. Unsupported or open indexed structures may remain in the
+    /// result; their presence is not reported as an error.
     fn simplify_color(&self) -> Atom;
 
     /// Simplifies color structures with explicit chain/trace settings.

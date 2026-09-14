@@ -24,6 +24,7 @@ pub struct GraphSet<E, V, H, G, S: NodeStorage<NodeData = V>> {
     pub set: Vec<HedgeGraph<E, V, H, S>>,
 }
 
+/// A collection of DOT graphs parsed from a file or string containing multiple graphs.
 pub type DotGraphSet =
     GraphSet<DotEdgeData, DotVertexData, DotHedgeData, GlobalData, DefaultNodeStore<DotVertexData>>;
 

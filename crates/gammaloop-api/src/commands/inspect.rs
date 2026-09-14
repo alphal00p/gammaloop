@@ -8,6 +8,7 @@ use tracing::info;
 
 use crate::{
     commands::evaluate_samples::{evaluate_sample, EvaluateSamples},
+    commands::CliArgumentMetadataExt,
     completion::CompletionArgExt,
     state::{ProcessRef, State},
 };
@@ -17,7 +18,7 @@ use gammalooprs::utils::F;
 
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq, Default)]
 pub struct Inspect {
-    /// Process reference: #<id>, name:<name>, or <id>/<name>
+    /// Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`
     #[arg(
         short = 'p',
         long = "process",
@@ -33,7 +34,7 @@ pub struct Inspect {
         completion_integrand_selector(crate::completion::SelectorKind::Any)
     )]
     pub integrand_name: Option<String>,
-    /// The point to inspect (x y) or (p0 px ...)
+    /// Integration coordinates, or flattened loop momenta `(px, py, pz) ...` with `--momentum-space`
     #[arg(
         short = 'x',
         long = "point",
@@ -44,11 +45,11 @@ pub struct Inspect {
     )]
     pub point: Vec<f64>,
 
-    /// Evaluate in f128 precision
+    /// Force arbitrary-precision (Arb) internal evaluation; output remains f64
     #[arg(short = 'f', long = "use_arb_prec")]
     pub use_arb_prec: bool,
 
-    /// Interpret point as momentum-space coordinates
+    /// Interpret `--point` as spatial loop-momentum triplets; energy components are not accepted
     #[arg(short = 'm', long)]
     pub momentum_space: bool,
 
@@ -71,7 +72,7 @@ pub struct Inspect {
     #[arg(
         long = "orientation-id",
         value_name = "ORIENTATION_ID",
-        requires = "graph_id",
+        cli_requires("graph_id"),
         conflicts_with = "discrete_dim"
     )]
     pub orientation_id: Option<usize>,

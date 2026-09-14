@@ -1,0 +1,163 @@
+:root[data-theme="light"],
+:root:not([data-theme]) {
+  --font-family: "Fira Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --alphal00p-heading-color: #3d2645;
+  --main-background-color: #f9f6f0;
+  --main-color: #333;
+  --sidebar-background-color: #f2ede5;
+  --sidebar-background-color-hover: #eadff0;
+  --sidebar-border-color: #d9cfd9;
+  --sidebar-link-color: #625b63;
+  --sidebar-current-link-background-color: #eadff0;
+  --code-block-background-color: #fff;
+  --headings-border-bottom-color: #d9cfd9;
+  --border-color: #d9cfd9;
+  --button-background-color: #fff;
+  --link-color: #745080;
+  --mod-link-color: #745080;
+  --attribute-link-color: #745080;
+  --search-input-focused-border-color: #745080;
+  --search-result-link-focus-background-color: #eadff0;
+  --search-tab-button-selected-border-top-color: #745080;
+  --search-tab-button-selected-background: #fff;
+  --table-alt-row-background-color: #f2ede5;
+  --target-background-color: #eadff0;
+  --target-border-color: #745080;
+  --scrape-example-code-wrapper-background-start: rgb(249 246 240);
+  --scrape-example-code-wrapper-background-end: rgb(249 246 240 / 0%);
+}
+
+:root[data-theme="dark"] {
+  --font-family: "Fira Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --alphal00p-heading-color: #f8effa;
+  --main-background-color: #211a23;
+  --main-color: #eee8ef;
+  --sidebar-background-color: #2d2430;
+  --sidebar-background-color-hover: #382d3b;
+  --sidebar-border-color: #57475b;
+  --sidebar-link-color: #d8b9e3;
+  --sidebar-current-link-background-color: #4a3750;
+  --code-block-background-color: #2d2430;
+  --headings-border-bottom-color: #57475b;
+  --border-color: #57475b;
+  --button-background-color: #2d2430;
+  --right-side-color: #c7bdc9;
+  --link-color: #d8b9e3;
+  --type-link-color: #d7a6f2;
+  --trait-link-color: #b9a1ff;
+  --assoc-item-link-color: #9cb5ff;
+  --function-link-color: #e7b66f;
+  --macro-link-color: #71d083;
+  --keyword-link-color: #9cb5ff;
+  --attribute-link-color: #d8b9e3;
+  --mod-link-color: #d8b9e3;
+  --search-input-focused-border-color: #d8b9e3;
+  --search-result-link-focus-background-color: #4a3750;
+  --search-tab-button-selected-border-top-color: #d8b9e3;
+  --search-tab-button-selected-background: #2d2430;
+  --table-alt-row-background-color: #2d2430;
+  --target-background-color: #4a3750;
+  --target-border-color: #d8b9e3;
+  --scrape-example-code-wrapper-background-start: rgb(33 26 35);
+  --scrape-example-code-wrapper-background-end: rgb(33 26 35 / 0%);
+}
+
+body.rustdoc {
+  font-family: var(--font-family);
+  line-height: 1.58;
+}
+
+body.rustdoc :where(h1, h2, h3, h4, h5, h6) {
+  color: var(--alphal00p-heading-color);
+}
+
+body.rustdoc :where(a, button, input, select, summary):focus-visible {
+  border-radius: 2px;
+  outline: 2px solid var(--search-input-focused-border-color);
+  outline-offset: 2px;
+}
+
+.alphal00p-rustdoc-bar {
+  align-items: center;
+  background: var(--main-background-color);
+  border-bottom: 1px solid var(--border-color);
+  color: var(--main-color);
+  display: flex;
+  font: 0.8125rem/1.2 "Fira Sans", Arial, sans-serif;
+  gap: 0.55rem;
+  height: 2.25rem;
+  left: 0;
+  padding: 0 1.5rem;
+  position: fixed;
+  right: 0;
+  top: 0;
+  z-index: calc(var(--desktop-sidebar-z-index) + 2);
+}
+
+.alphal00p-rustdoc-bar a {
+  color: var(--link-color);
+  font-weight: 500;
+}
+
+.alphal00p-rustdoc-bar a:hover {
+  text-decoration: underline;
+}
+
+body.rustdoc main {
+  padding-top: 3.1rem;
+}
+
+body.rustdoc .width-limiter {
+  max-width: 60rem;
+}
+
+body.rustdoc .main-heading {
+  border-bottom: 1px solid var(--headings-border-bottom-color);
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.8rem;
+}
+
+body.rustdoc .content h2,
+body.rustdoc .top-doc .docblock > h3,
+body.rustdoc .top-doc .docblock > h4 {
+  padding-bottom: 0.4rem;
+}
+
+body.rustdoc pre,
+body.rustdoc .item-decl,
+body.rustdoc .example-wrap pre {
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  box-shadow: none;
+}
+
+body.rustdoc .item-table > dt,
+body.rustdoc .item-table > dd {
+  border-top: 1px solid var(--border-color);
+  padding-block: 0.65rem;
+}
+
+body.rustdoc .sidebar {
+  box-shadow: none;
+  padding-top: 2.25rem;
+}
+
+@media (max-width: 700px) {
+  .alphal00p-rustdoc-bar {
+    height: auto;
+    left: auto;
+    min-height: 2.25rem;
+    padding-inline: 1rem;
+    position: relative;
+    right: auto;
+    width: 100%;
+  }
+
+  body.rustdoc .sidebar {
+    padding-top: 0;
+  }
+
+  body.rustdoc main {
+    padding-top: 0;
+  }
+}

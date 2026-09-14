@@ -95,11 +95,11 @@ macro_rules! lor {
 
 /// Builds a symbolic tensor function from a name and tensor arguments.
 ///
-/// Identifier heads are created with [`tensor_symbol!`], so they keep the
+/// Identifier heads are created with [`tensor_symbol!`](crate::tensor_symbol), so they keep the
 /// caller's symbol namespace and carry the generic Spenso tensor tag. Pass an
 /// explicit `Symbol` expression when the head was built elsewhere.
 ///
-/// Arguments are converted through [`IntoAtom`], so callers can mix scalar
+/// Arguments are converted through [`IntoAtom`](crate::shadowing::IntoAtom), so callers can mix scalar
 /// literal arguments, atoms, slots, and stripped representations. Passing a
 /// representation, for example `tensor!(p, rep)`, emits compact Schoonschip
 /// syntax; passing a slot, for example `tensor!(p, slot!(rep, i))`, emits an
@@ -139,7 +139,7 @@ macro_rules! tensor {
 
 /// Builds a symbolic vector function from a name and tensor arguments.
 ///
-/// The head is created with [`vector_symbol!`], so `vector!(p, ...)` is a
+/// The head is created with [`vector_symbol!`](crate::vector_symbol), so `vector!(p, ...)` is a
 /// rank-one tensor in the caller's symbol namespace.
 #[macro_export]
 macro_rules! vector {
@@ -306,7 +306,7 @@ macro_rules! chain_factor {
 ///
 /// The resulting `sym(...)` is canonicalized through Symbolica's symmetric
 /// function attribute. It expands only when explicitly passed through
-/// [`ProjectorExpander::expand_projectors`].
+/// [`ProjectorExpander::expand_projectors`](crate::shadowing::ProjectorExpander::expand_projectors).
 ///
 /// # Examples
 ///
@@ -330,7 +330,7 @@ macro_rules! sym {
 ///
 /// The resulting `antisym(...)` is canonicalized through Symbolica's
 /// antisymmetric function attribute. It expands only when explicitly passed
-/// through [`ProjectorExpander::expand_projectors`].
+/// through [`ProjectorExpander::expand_projectors`](crate::shadowing::ProjectorExpander::expand_projectors).
 ///
 /// # Examples
 ///
@@ -377,7 +377,7 @@ macro_rules! cyclic {
 /// Builds a symbolic open chain with a start slot, an end slot, and any number
 /// of factors.
 ///
-/// Arguments are converted through [`IntoAtom`], so callers can pass Spenso
+/// Arguments are converted through [`IntoAtom`](crate::shadowing::IntoAtom), so callers can pass Spenso
 /// slots, atoms, atom views, or symbols. This macro is only the variadic surface
 /// for [`SPENSO_TAG.chain`](crate::network::tags::SPENSO_TAG); it does not
 /// simplify or normalize the expression.
@@ -435,7 +435,7 @@ macro_rules! chain {
 
 /// Builds a symbolic trace with a representation and any number of factors.
 ///
-/// The representation and factors are converted through [`IntoAtom`]. Empty
+/// The representation and factors are converted through [`IntoAtom`](crate::shadowing::IntoAtom). Empty
 /// traces are emitted as `trace(rep)`. Non-empty traces are emitted in the
 /// canonical cyclic form `trace(rep, cyclic(factors...))`.
 ///
