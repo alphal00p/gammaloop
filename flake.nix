@@ -1817,6 +1817,7 @@
             yaml-language-server
             just
             gitMinimal
+            jujutsu
             dot-language-server
             cargo-insta
             cargo-udeps
@@ -3126,6 +3127,7 @@
           nativeBuildInputs = (alphal00pDocsCargoArgs.nativeBuildInputs or [ ]) ++ [
             docsTypst
             pkgs.gitMinimal
+            pkgs.jujutsu
             pkgs.maturin
             docsPkgs.roboto
             pkgs.uv
@@ -3635,6 +3637,7 @@
               docsTypst
               nextestPython
               pkgs.git
+              pkgs.jujutsu
             ];
             packages = [
               "alphal00p-docs-builder"

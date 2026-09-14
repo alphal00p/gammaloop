@@ -4,14 +4,18 @@ mod server;
 mod typst_render;
 mod watch;
 
+#[cfg(test)]
+mod provenance_tests;
+
 pub use watch::WatchRequest;
 
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     env, fs,
+    io::Write,
     ops::Range,
     path::{Component, Path, PathBuf},
-    process::Command,
+    process::{Command, Stdio},
 };
 
 use alphal00p_docs_schema::{
@@ -422,6 +426,8 @@ struct DeveloperScope {
     path: PathBuf,
     symbol: String,
     anchor: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    end_anchor: Option<String>,
     digest: String,
 }
 
@@ -617,8 +623,12 @@ struct LeadingDeveloperTitle {
     range: std::ops::Range<usize>,
 }
 
+#[derive(Clone)]
 pub struct SiteBuilder {
     root: PathBuf,
+    documented_commit: Option<String>,
+    documented_timestamp: Option<u64>,
+    watching: bool,
     api_root: PathBuf,
     registry: ProductRegistry,
     portal: PortalConfig,
@@ -685,6 +695,9 @@ impl SiteBuilder {
             .unwrap_or_else(|| root.join("docs/api"));
         Ok(Self {
             root,
+            documented_commit: None,
+            documented_timestamp: None,
+            watching: false,
             api_root,
             registry,
             portal,
@@ -710,7 +723,8 @@ impl SiteBuilder {
     }
 
     fn check_with_catalogs(&self, catalogs: ComponentCatalogSource<'_>) -> Result<Vec<String>> {
-        // Builds enforce validity; the explicit check command reports maintenance debt.
+        // Builds enforce validity; watch reports scope drift as a warning.
+        // The explicit check command also reports maintenance debt.
         let mut warnings = Vec::new();
         ensure!(
             self.registry.schema == SCHEMA_VERSION,
@@ -922,28 +936,62 @@ impl SiteBuilder {
                         scope.symbol,
                         scope.path.display()
                     );
-                    let digest = Command::new("git")
+                    let reviewed = if let Some(end_anchor) = &scope.end_anchor {
+                        ensure!(
+                            !end_anchor.trim().is_empty()
+                                && source.matches(end_anchor).count() == 1,
+                            "developer note {} scope end anchor is missing or ambiguous in {}",
+                            note.id,
+                            scope.path.display()
+                        );
+                        let start = source.find(&scope.anchor).expect("anchor was checked");
+                        let end = source.find(end_anchor).expect("end anchor was checked");
+                        ensure!(
+                            end >= start + scope.anchor.len(),
+                            "developer note {} scope end anchor must follow its start in {}",
+                            note.id,
+                            scope.path.display()
+                        );
+                        &source[start..end]
+                    } else {
+                        source.as_str()
+                    };
+                    let mut hash = Command::new("git")
                         .current_dir(&self.root)
-                        .args(["hash-object", "--"])
-                        .arg(&scope.path)
-                        .output()
+                        .args(["hash-object", "--stdin"])
+                        .stdin(Stdio::piped())
+                        .stdout(Stdio::piped())
+                        .spawn()
                         .wrap_err_with(|| {
                             format!("failed to hash verified scope {}", scope.path.display())
                         })?;
+                    let written = hash
+                        .stdin
+                        .take()
+                        .expect("hash input was piped")
+                        .write_all(reviewed.as_bytes());
+                    let digest = hash.wait_with_output()?;
+                    written?;
                     ensure!(
                         digest.status.success(),
                         "git hash-object failed for verified scope {}",
                         scope.path.display()
                     );
                     let digest = String::from_utf8(digest.stdout)?;
-                    ensure!(
-                        digest.trim() == scope.digest,
-                        "developer note {} verified scope {} changed (expected {}, found {}); owner review or an explicit no-impact attestation is required",
-                        note.id,
-                        scope.path.display(),
-                        scope.digest,
-                        digest.trim()
-                    );
+                    if digest.trim() != scope.digest {
+                        let message = format!(
+                            "developer note {} verified scope {} changed (expected {}, found {}); owner review or an explicit no-impact attestation is required",
+                            note.id,
+                            scope.path.display(),
+                            scope.digest,
+                            digest.trim()
+                        );
+                        if self.watching {
+                            eprintln!("warning: {message}");
+                        } else {
+                            bail!(message);
+                        }
+                    }
                 }
                 ensure!(
                     note.lifecycle != "current" || !note.scope.is_empty(),
@@ -1745,7 +1793,11 @@ impl SiteBuilder {
         reference_cache: ReferencePageCache<'_>,
         renderer: &mut dyn TypstRenderer,
     ) -> Result<()> {
-        let result = self.build_inner(request, catalog_cache, reference_cache, renderer);
+        // Keep one provenance pair throughout a generation, even if JJ or Git advances.
+        let mut generation = self.clone();
+        generation.documented_commit = Some(self.git_commit()?);
+        generation.documented_timestamp = Some(generation.git_timestamp()?);
+        let result = generation.build_inner(request, catalog_cache, reference_cache, renderer);
         renderer.finish_generation();
         result
     }
@@ -2154,12 +2206,12 @@ impl SiteBuilder {
             product.id,
             channel_path.to_string_lossy()
         );
-        let git_commit = self.git_commit();
+        let git_commit = self.git_commit()?;
         ensure!(
             git_commit != "unknown",
             "cannot determine the documented Git commit; set ALPHAL00P_DOCS_GIT_COMMIT"
         );
-        let git_timestamp = self.git_timestamp();
+        let git_timestamp = self.git_timestamp()?;
         ensure!(
             git_timestamp > 0,
             "cannot determine the documented commit timestamp; set SOURCE_DATE_EPOCH"
@@ -4155,12 +4207,12 @@ impl SiteBuilder {
         }
 
         let bundle = work.path().join("bundle");
-        let timestamp = self.git_timestamp();
+        let timestamp = self.git_timestamp()?;
         ensure!(
             timestamp > 0,
             "cannot determine the documented commit timestamp; set SOURCE_DATE_EPOCH"
         );
-        let commit = self.git_commit();
+        let commit = self.git_commit()?;
         renderer.render(TypstRenderJob {
             key: "developers".to_owned(),
             label: "developer notes".to_owned(),
@@ -4198,7 +4250,7 @@ impl SiteBuilder {
         fs::create_dir_all(&developer_root)?;
         self.write_site_assets(&developer_root)?;
 
-        let commit = self.git_commit();
+        let commit = self.git_commit()?;
         ensure!(
             commit != "unknown",
             "cannot determine the documented Git commit; set ALPHAL00P_DOCS_GIT_COMMIT"
@@ -4333,8 +4385,16 @@ impl SiteBuilder {
                     .scope
                     .iter()
                     .map(|scope| {
+                        let range = scope.end_anchor.as_ref().map_or_else(
+                            || "entire file".to_owned(),
+                            |end| format!(
+                                "from <code>{}</code> up to <code>{}</code> (excluded)",
+                                escape_html(&scope.anchor),
+                                escape_html(end),
+                            ),
+                        );
                         format!(
-                            "<li><code>{}</code><br><span>{}</span> · digest <code>{}</code></li>",
+                            "<li><code>{}</code><br><span>{}</span> · digest <code>{}</code><br>{range}</li>",
                             escape_html(&scope.symbol),
                             escape_html(&scope.path.to_string_lossy()),
                             escape_html(&scope.digest.chars().take(12).collect::<String>()),
@@ -4584,7 +4644,7 @@ impl SiteBuilder {
             .prefix("alphal00p-portal-typst-")
             .tempdir_in(target)?;
         let bundle = work.path().join("bundle");
-        let timestamp = self.git_timestamp();
+        let timestamp = self.git_timestamp()?;
         ensure!(
             timestamp > 0,
             "cannot determine the documented commit timestamp; set SOURCE_DATE_EPOCH"
@@ -4699,7 +4759,7 @@ impl SiteBuilder {
         snapshot_tag: Option<&str>,
     ) -> Result<()> {
         let patterns = LinkValidationPatterns::new()?;
-        let documented_revision = self.git_commit();
+        let documented_revision = self.git_commit()?;
         let mut failures = vec![];
         let mut linked_pages = HashMap::new();
         let mut link_rewrites = LinkRewriteIndex::new();
@@ -5034,42 +5094,99 @@ impl SiteBuilder {
         Ok(())
     }
 
-    fn git_commit(&self) -> String {
+    fn git_commit(&self) -> Result<String> {
+        if let Some(commit) = &self.documented_commit {
+            return Ok(commit.clone());
+        }
         if let Some(commit) = ["ALPHAL00P_DOCS_GIT_COMMIT", "GITHUB_SHA"]
             .iter()
-            .find_map(|name| env::var(name).ok())
-            .filter(|commit| !commit.trim().is_empty())
+            .filter_map(|name| env::var(name).ok())
+            .find(|commit| !commit.trim().is_empty())
         {
-            return commit.trim().to_owned();
+            return Ok(commit.trim().to_owned());
         }
-        Command::new("git")
+        let (program, args): (&str, &[&str]) = if self.root.join(".jj").is_dir() {
+            (
+                "jj",
+                &[
+                    "--ignore-working-copy",
+                    "log",
+                    "-r",
+                    "@",
+                    "--no-graph",
+                    "-T",
+                    "commit_id",
+                ],
+            )
+        } else {
+            ("git", &["rev-parse", "HEAD"])
+        };
+        let command = format!("{program} {}", args.join(" "));
+        let output = Command::new(program)
             .current_dir(&self.root)
-            .args(["rev-parse", "HEAD"])
+            .args(args)
             .output()
-            .ok()
-            .filter(|output| output.status.success())
-            .and_then(|output| String::from_utf8(output.stdout).ok())
-            .map(|commit| commit.trim().to_owned())
-            .unwrap_or_else(|| "unknown".to_owned())
+            .wrap_err_with(|| format!("failed to run {command} in {}", self.root.display()))?;
+        ensure!(
+            output.status.success(),
+            "{command} failed in {}: {}; source archives must set ALPHAL00P_DOCS_GIT_COMMIT",
+            self.root.display(),
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+        Ok(String::from_utf8(output.stdout)?.trim().to_owned())
     }
 
-    fn git_timestamp(&self) -> u64 {
+    fn git_timestamp(&self) -> Result<u64> {
+        if let Some(timestamp) = self.documented_timestamp {
+            return Ok(timestamp);
+        }
         if let Some(timestamp) = ["ALPHAL00P_DOCS_GIT_TIMESTAMP", "SOURCE_DATE_EPOCH"]
             .iter()
-            .find_map(|name| env::var(name).ok())
-            .and_then(|timestamp| timestamp.trim().parse().ok())
+            .filter_map(|name| env::var(name).ok())
+            .find_map(|timestamp| timestamp.trim().parse().ok())
         {
-            return timestamp;
+            return Ok(timestamp);
         }
-        Command::new("git")
+        let (program, args): (&str, &[&str]) = if self.root.join(".jj").is_dir() {
+            (
+                "jj",
+                &[
+                    "--ignore-working-copy",
+                    "log",
+                    "-r",
+                    self.documented_commit.as_deref().unwrap_or("@"),
+                    "--no-graph",
+                    "-T",
+                    "committer.timestamp().format(\"%s\")",
+                ],
+            )
+        } else {
+            (
+                "git",
+                &[
+                    "log",
+                    "-1",
+                    "--format=%ct",
+                    self.documented_commit.as_deref().unwrap_or("HEAD"),
+                ],
+            )
+        };
+        let command = format!("{program} {}", args.join(" "));
+        let output = Command::new(program)
             .current_dir(&self.root)
-            .args(["log", "-1", "--format=%ct"])
+            .args(args)
             .output()
-            .ok()
-            .filter(|output| output.status.success())
-            .and_then(|output| String::from_utf8(output.stdout).ok())
-            .and_then(|timestamp| timestamp.trim().parse().ok())
-            .unwrap_or(0)
+            .wrap_err_with(|| format!("failed to run {command} in {}", self.root.display()))?;
+        ensure!(
+            output.status.success(),
+            "{command} failed in {}: {}; source archives must set SOURCE_DATE_EPOCH",
+            self.root.display(),
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+        String::from_utf8(output.stdout)?
+            .trim()
+            .parse()
+            .wrap_err_with(|| format!("{command} returned an invalid documented commit timestamp"))
     }
 }
 
@@ -10973,7 +11090,7 @@ mod tests {
     fn repository_source_links_are_checked_against_the_workspace() {
         let builder = SiteBuilder::discover().unwrap();
         let output = tempfile::tempdir().unwrap();
-        let revision = builder.git_commit();
+        let revision = builder.git_commit().unwrap();
         fs::write(
             output.path().join("index.html"),
             format!(
@@ -12124,6 +12241,84 @@ mod tests {
 
         let error = builder.check().unwrap_err();
         assert!(format!("{error:#}").contains("PDF manual chapter order differs"));
+    }
+
+    #[test]
+    fn developer_scope_ranges_ignore_unrelated_edits_and_warn_only_while_watching() {
+        let mut builder = SiteBuilder::discover().unwrap();
+        let directory = tempfile::tempdir_in(builder.root.join("target")).unwrap();
+        let path = directory.path().join("scope.rs");
+        let scope = &mut builder.developers.section[0].note[0].scope[0];
+        scope.path = path.strip_prefix(&builder.root).unwrap().to_path_buf();
+        scope.anchor = "review-start\n".to_owned();
+        scope.end_anchor = Some("review-end\n".to_owned());
+        scope.digest = "42446349c33c38def204961159a7530e81db9dbc".to_owned();
+
+        for outside in ["original", "unrelated edit"] {
+            fs::write(
+                &path,
+                format!("{outside}\nreview-start\nowned declaration\nreview-end\n{outside}\n"),
+            )
+            .unwrap();
+            builder.check().unwrap();
+        }
+        fs::write(&path, "review-start\nchanged declaration\nreview-end\n").unwrap();
+        let error = builder.check().unwrap_err();
+        assert!(format!("{error:#}").contains("owner review or an explicit no-impact attestation"));
+        let error = builder
+            .build(BuildRequest {
+                product: "linnet".to_owned(),
+                channel: BuildChannel::Latest,
+                output: directory.path().join("site"),
+                snapshot_tag: None,
+                include_rustdoc: false,
+                include_typst: false,
+                rustdoc_target_root: None,
+                rustdoc_cache: RustdocCacheMode::Disabled,
+                dependency_output: None,
+            })
+            .unwrap_err();
+        assert!(format!("{error:#}").contains("owner review or an explicit no-impact attestation"));
+
+        builder.watching = true;
+        builder.check().unwrap();
+    }
+
+    #[test]
+    fn developer_scope_boundaries_remain_required_while_watching() {
+        let mut builder = SiteBuilder::discover().unwrap();
+        let directory = tempfile::tempdir_in(builder.root.join("target")).unwrap();
+        let path = directory.path().join("scope.rs");
+        let scope = &mut builder.developers.section[0].note[0].scope[0];
+        scope.path = path.strip_prefix(&builder.root).unwrap().to_path_buf();
+        scope.anchor = "review-start".to_owned();
+        scope.end_anchor = Some("review-end".to_owned());
+        builder.watching = true;
+
+        for (source, diagnostic) in [
+            ("review-start\n", "end anchor is missing or ambiguous"),
+            (
+                "review-start\nreview-end\nreview-end",
+                "end anchor is missing or ambiguous",
+            ),
+            (
+                "review-end\nreview-start",
+                "end anchor must follow its start",
+            ),
+            ("review-end", "anchor is missing or ambiguous"),
+            (
+                "review-start\nreview-start\nreview-end",
+                "anchor is missing or ambiguous",
+            ),
+        ] {
+            fs::write(&path, source).unwrap();
+            let error = builder.check().unwrap_err();
+            assert!(format!("{error:#}").contains(diagnostic), "{error:#}");
+        }
+        fs::write(&path, "review-start\nreview-end").unwrap();
+        builder.developers.section[0].note[0].scope[0].end_anchor = Some(String::new());
+        let error = builder.check().unwrap_err();
+        assert!(format!("{error:#}").contains("end anchor is missing or ambiguous"));
     }
 
     #[test]

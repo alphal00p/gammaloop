@@ -1478,6 +1478,17 @@ keeps the compiler in the watcher process. Typst's source-independent feature
 notices are emitted once per watcher; source warnings and errors remain visible
 on each compilation. Non-blocking developer-note maintenance reminders are
 reported by `docs-check`, while every build still enforces registry validity.
+Verified-scope content drift is also reported as a warning during `docs-watch`,
+so an architectural edit does not block its own preview. Ordinary checks and
+site builds retain the review gate; unreadable sources and invalid scope
+boundaries still fail in watch mode.
+
+The verified Nix scopes select the documentation source filters, reusable
+producer inputs and commands, per-package source ownership, and terminal
+render/test consumers. Each range has a unique start and exclusive end
+anchor in `docs/developers.toml`; development-shell package additions outside
+those ranges do not require a cache-architecture attestation. Broader review
+triggers remain recorded for changes to the surrounding build graph.
 
 The watcher now owns one stable Typst entrypoint and `World` for each selected
 project, plus a developer-notes world for an all-project build. It no longer

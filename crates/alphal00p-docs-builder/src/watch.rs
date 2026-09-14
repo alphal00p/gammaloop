@@ -561,6 +561,7 @@ impl SiteBuilder {
         let rustdoc_target = session.join("rustdoc");
         let mut builder = SiteBuilder::load(self.root.clone())?;
         builder.api_root = api_root;
+        builder.watching = true;
         builder.build_with_renderer(
             BuildRequest {
                 product: request.product.clone(),

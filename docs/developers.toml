@@ -729,8 +729,9 @@ review_triggers = ["flake.nix", "flake.lock", "nix-ci.nix", ".github/workflows/*
 # extracting archives into the reconstructed workspace root, and isolating the
 # Python stub exporter from the feature-unified workspace doctest pass.
 path = "flake.nix"
-symbol = "alphal00pDocsCargoArtifacts"
-anchor = "alphal00pDocsCargoArtifacts = craneLib.mkCargoDerivation"
+symbol = "documentationRegistry and alphal00pDocsCargoArtifacts"
+anchor = "documentationRegistry = builtins.fromTOML"
+end_anchor = "guppyWorkspaceGraphNativeBuildInputs ="
 # Reviewed after terminal archives gained writable artifacts and runtime Cargo
 # gained the same vendored graph as their compile phase. The docs archive now
 # carries its authored runtime inputs and rendering/provenance tools. Latest and
@@ -766,22 +767,75 @@ anchor = "alphal00pDocsCargoArtifacts = craneLib.mkCargoDerivation"
 # No-impact attestation 2026-09-14: the only change since the verified flake
 # adds gitMinimal to the development shell for documentation provenance lookup.
 # Cargo producer inputs, artifact ownership, and cache boundaries are unchanged.
-digest = "be5ee104413aadeeb99cd19a4cec4339d2f04b5c"
+# Reviewed 2026-09-14: verified ranges now cover the documentation producer,
+# its source ownership and terminal consumers separately. Development-shell
+# packages fall outside those ranges; broader review triggers remain advisory.
+digest = "26bb57850fdf4591960d8a177e3cb05c7d8aedf5"
+
+[[section.note.scope]]
+path = "flake.nix"
+symbol = "documentation source ownership"
+anchor = "cargoSources = craneLib.fileset.commonCargoSources workspaceRoot;"
+end_anchor = "snapshotSources = lib.fileset.unions ["
+digest = "7a7787a4b9113a442b6b18e8100e415ebf9195d4"
+
+[[section.note.scope]]
+path = "flake.nix"
+symbol = "workspaceDependencySrc and documentationWorkspaceBuildSrc"
+anchor = "workspaceDependencyManifestFiles = ["
+end_anchor = "cargoGraphGenerationSrc = lib.fileset.toSource {"
+digest = "3274e081c395b07e79a588a9b64c614e877d16d8"
+
+[[section.note.scope]]
+path = "flake.nix"
+symbol = "workspace package source ownership"
+anchor = "workspacePackageProductionExtraSourceRoots = {"
+end_anchor = "workspacePackageIsProcMacro ="
+digest = "5bdf5e706966e098e6293458effa0253756699ab"
+
+[[section.note.scope]]
+path = "flake.nix"
+symbol = "alphal00pDocsDerivationArgs and terminal documentation consumers"
+anchor = "alphal00pDocsDerivationArgs = alphal00pDocsRealCargoArgs"
+end_anchor = "workspaceDoctestCheck = craneLib.mkCargoDerivation ("
+# Reviewed 2026-09-14: Git and Jujutsu provide checkout provenance;
+# archive builds retain explicit revision and timestamp inputs.
+digest = "c6bf134a93c98d4fa7a04a28ce72a646ba50148d"
+
+[[section.note.scope]]
+path = "flake.nix"
+symbol = "nextestPackageGroups documentation runtime tools"
+anchor = 'name = "docs";'
+end_anchor = 'name = "integration";'
+# Reviewed 2026-09-14: documentation provenance tests exercise standalone
+# Jujutsu workspaces; the terminal test closure supplies both Git and Jujutsu.
+digest = "1463fb351b5d50aef9af8e293c07550c6141a677"
+
+[[section.note.scope]]
+path = "flake.nix"
+symbol = "nextestRuntimeSrcFor"
+anchor = "nextestRuntimeSrcFor ="
+end_anchor = "nextestFeatureArgsFor ="
+digest = "6167f2464faf168abd92838c18fe66c4d90cfcd1"
 
 [[section.note.scope]]
 path = "crates/alphal00p-docs-builder/src/typst_render.rs"
 symbol = "alphal00p_docs_builder::typst_render::PersistentTypstRenderer"
 anchor = "pub(crate) struct PersistentTypstRenderer {"
+end_anchor = "    #[cfg(test)]\n    mod tests {"
 # Reviewed feature-notice deduplication; source diagnostics still emit every time.
-digest = "7b8bcfca055d90701dd741b497cf5a3ed331a246"
+digest = "9e60895405ff95f51fc80b64c90ec08fcb124f72"
 
 [[section.note.scope]]
 path = "crates/alphal00p-docs-builder/src/watch.rs"
 symbol = "alphal00p_docs_builder::SiteBuilder::build_generation"
 anchor = "fn build_generation("
+end_anchor = "fn refresh_initial_api("
 # Reviewed cache-only execution change: Typst edits retain exhaustive
 # validation while reusing atomically published component catalogues.
-digest = "f4bad7daa517f604cefd7f3ee54a8036fdab0dc0"
+# Reviewed 2026-09-14: watch generations now warn on verified-content drift;
+# malformed scopes and ordinary check/build publication remain strict.
+digest = "424eac149bd4dbf3be82b19f746d6f003829cf61"
 
 [[section]]
 id = "documentation"
@@ -805,8 +859,9 @@ review_triggers = ["docs/developers.toml", "crates/alphal00p-docs-builder/src/li
 
 [[section.note.scope]]
 path = "crates/alphal00p-docs-builder/src/lib.rs"
-symbol = "alphal00p_docs_builder::SiteBuilder::check"
-anchor = "pub fn check(&self) -> Result<()> {"
+symbol = "alphal00p_docs_builder::SiteBuilder::check_with_catalogs (developer registry validation)"
+anchor = "self.developers.schema == DEVELOPER_SCHEMA_VERSION,"
+end_anchor = "!self.portal.title.trim().is_empty()"
 # Reviewed snapshot-link and Rustdoc-normalization changes: semantic Typst pages
 # remain separate from presentation; Rust resolves channels and validates links.
 # Reviewed citation-page removal: the documented route inventory is updated;
@@ -829,7 +884,10 @@ anchor = "pub fn check(&self) -> Result<()> {"
 # rendering tests and exclude top-level generated dist exports from authored
 # prose discovery. Verified-scope enforcement and developer HTML restrictions
 # remain byte-identical to the previous reviewed implementation.
-digest = "08d7b0f2679d4c02a9fca64de4e003a8f3b88b98"
+# Reviewed 2026-09-14: verified ranges hash exact selected content. Watch
+# generations warn on digest drift while check/build still reject it; malformed
+# scopes, missing symbols, and invalid metadata remain errors in every mode.
+digest = "947d9b81a8cf58b29e83da1ccb75fb015517c0eb"
 
 [[section.note]]
 id = "documentation-improvement-plan"
