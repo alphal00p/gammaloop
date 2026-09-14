@@ -1,0 +1,111 @@
+{
+  "correctness_settings": {
+    "general": {
+      "integral_unit": "picobarn",
+      "m_uv": 91.188,
+      "mu_r": 91.188
+    },
+    "h_function": {
+      "power": 3
+    },
+    "integrator": {
+      "continuous_dim_learning_rate": 0.25,
+      "discrete_dim_learning_rate": 0.25,
+      "min_samples_for_update": 64,
+      "n_bins": 16
+    },
+    "kinematics": {
+      "e_cm": 1000.0,
+      "externals": {
+        "data": {
+          "helicities": [
+            "summed_averaged",
+            "summed_averaged"
+          ],
+          "momenta": [
+            [
+              500.0,
+              0.0,
+              0.0,
+              500.0
+            ],
+            [
+              500.0,
+              0.0,
+              0.0,
+              -500.0
+            ]
+          ]
+        },
+        "type": "constant"
+      }
+    },
+    "sampling": {
+      "b": 0.3,
+      "channel_selection": {
+        "GL638": [
+          "auto:optimized_lmb"
+        ]
+      },
+      "default_channel_selection": [
+        "auto:optimized_lmb"
+      ],
+      "graphs": "monte_carlo",
+      "sampling_channels": "monte_carlo",
+      "sampling_multichanneling": true
+    },
+    "stability": {
+      "escalate_if_exact_zero": false,
+      "levels": [
+        {
+          "escalate_for_large_weight_threshold": 0.9,
+          "precision": "Double",
+          "required_precision_for_im": 1e-06,
+          "required_precision_for_re": 1e-06
+        },
+        {
+          "escalate_for_large_weight_threshold": -1.0,
+          "precision": "Quad",
+          "required_precision_for_im": 1e-10,
+          "required_precision_for_re": 1e-10
+        },
+        {
+          "escalate_for_large_weight_threshold": -1.0,
+          "precision": "Arb",
+          "required_precision_for_im": 1e-12,
+          "required_precision_for_re": 1e-12
+        }
+      ]
+    },
+    "subtraction": {
+      "esurface_existence_threshold": 1e-14
+    }
+  },
+  "error": null,
+  "local_approach": {
+    "all_actual_forward_points_compact": true,
+    "complete": true,
+    "extension": null,
+    "scope": "local two-direction physical approach only; no Gaussianacceptance, globalboundedness or MCvariance claim; archived points or explicitly retained native-source extensions, with actual radii at each representation boundary"
+  },
+  "mode": "optimized_lmb",
+  "preflight_accepted": false,
+  "preflight_reused": false,
+  "warmup_seconds": 0.00258256,
+  "archived_references": {
+    "inventory": "../shared/optimized_lmb.inventory.json.gz",
+    "local_approach_rows": [
+      "optimized_lmb.hz_00_stack.approach.json",
+      "optimized_lmb.hz_01_stack.approach.json",
+      "optimized_lmb.hz_02_stack.approach.json",
+      "optimized_lmb.hz_03_stack.approach.json",
+      "optimized_lmb.hz_04_stack.approach.json",
+      "optimized_lmb.hz_05_stack.approach.json",
+      "optimized_lmb.hz_06_stack.approach.json",
+      "optimized_lmb.hz_07_stack.approach.json"
+    ],
+    "original_report_sha256": "a529aa3f9dc647bf167091e2279f7a443eb0cba1237bf637f1688cf64e1f4ee3",
+    "original_report_bytes": 5087116,
+    "reason": "Repeated native point rows and the same catalogue inventory are stored separately."
+  }
+}

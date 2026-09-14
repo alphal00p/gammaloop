@@ -1,0 +1,278 @@
+{
+  "correctness_settings": {
+    "general": {
+      "integral_unit": "picobarn",
+      "m_uv": 91.188,
+      "mu_r": 91.188
+    },
+    "h_function": {
+      "power": 3
+    },
+    "integrator": {
+      "continuous_dim_learning_rate": 0.25,
+      "discrete_dim_learning_rate": 0.25,
+      "min_samples_for_update": 64,
+      "n_bins": 16
+    },
+    "kinematics": {
+      "e_cm": 1000.0,
+      "externals": {
+        "data": {
+          "helicities": [
+            "summed_averaged",
+            "summed_averaged"
+          ],
+          "momenta": [
+            [
+              500.0,
+              0.0,
+              0.0,
+              500.0
+            ],
+            [
+              500.0,
+              0.0,
+              0.0,
+              -500.0
+            ]
+          ]
+        },
+        "type": "constant"
+      }
+    },
+    "sampling": {
+      "b": 0.3,
+      "channel_definitions": {
+        "GL638": {
+          "direct_joint_HZ": {
+            "around": "then(complement(6,7,10),block(lmb(3),at_cut(cut(2,6,10),intersect(surface(2,4,12),surface(3,10,13)))))",
+            "on_cut": [
+              1
+            ],
+            "parent_lmb": [
+              3,
+              6,
+              7,
+              10
+            ],
+            "subspace_lmb": []
+          },
+          "lu_cut_0": {
+            "around": "phase_space(cut(2,6,12,13))",
+            "on_cut": [
+              0
+            ],
+            "parent_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "radial_profile": {
+              "broad_fraction": 0.02,
+              "kind": "lu_h"
+            },
+            "subspace_lmb": [
+              3,
+              4,
+              7,
+              10
+            ]
+          },
+          "lu_cut_1": {
+            "around": "phase_space(cut(2,6,10))",
+            "on_cut": [
+              1
+            ],
+            "parent_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "radial_profile": {
+              "broad_fraction": 0.02,
+              "kind": "lu_h"
+            },
+            "subspace_lmb": [
+              3,
+              4,
+              7,
+              10
+            ]
+          },
+          "lu_cut_2": {
+            "around": "phase_space(cut(2,6,7,13,14))",
+            "on_cut": [
+              2
+            ],
+            "parent_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "radial_profile": {
+              "broad_fraction": 0.02,
+              "kind": "lu_h"
+            },
+            "subspace_lmb": [
+              3,
+              4,
+              7,
+              10
+            ]
+          },
+          "lu_cut_3": {
+            "around": "phase_space(cut(2,4,12))",
+            "on_cut": [
+              3
+            ],
+            "parent_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "radial_profile": {
+              "broad_fraction": 0.02,
+              "kind": "lu_h"
+            },
+            "subspace_lmb": [
+              3,
+              4,
+              7,
+              10
+            ]
+          },
+          "lu_cut_4": {
+            "around": "phase_space(cut(2,4,10,13))",
+            "on_cut": [
+              4
+            ],
+            "parent_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "radial_profile": {
+              "broad_fraction": 0.02,
+              "kind": "lu_h"
+            },
+            "subspace_lmb": [
+              3,
+              4,
+              7,
+              10
+            ]
+          },
+          "lu_cut_5": {
+            "around": "phase_space(cut(2,4,7,14))",
+            "on_cut": [
+              5
+            ],
+            "parent_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "radial_profile": {
+              "broad_fraction": 0.02,
+              "kind": "lu_h"
+            },
+            "subspace_lmb": [
+              3,
+              4,
+              7,
+              10
+            ]
+          },
+          "soft_6_12": {
+            "around": "lmb(6,12,13,14)",
+            "on_cut": [],
+            "parent_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "subspace_lmb": []
+          }
+        }
+      },
+      "channel_selection": {
+        "GL638": [
+          "lu_cut_0",
+          "lu_cut_1",
+          "lu_cut_2",
+          "lu_cut_3",
+          "lu_cut_4",
+          "lu_cut_5",
+          "direct_joint_HZ",
+          "soft_6_12"
+        ]
+      },
+      "default_channel_selection": [
+        "auto:optimized_lmb"
+      ],
+      "graphs": "monte_carlo",
+      "sampling_channels": "monte_carlo",
+      "sampling_multichanneling": true
+    },
+    "stability": {
+      "escalate_if_exact_zero": false,
+      "levels": [
+        {
+          "escalate_for_large_weight_threshold": 0.9,
+          "precision": "Double",
+          "required_precision_for_im": 1e-06,
+          "required_precision_for_re": 1e-06
+        },
+        {
+          "escalate_for_large_weight_threshold": -1.0,
+          "precision": "Quad",
+          "required_precision_for_im": 1e-10,
+          "required_precision_for_re": 1e-10
+        },
+        {
+          "escalate_for_large_weight_threshold": -1.0,
+          "precision": "Arb",
+          "required_precision_for_im": 1e-12,
+          "required_precision_for_re": 1e-12
+        }
+      ]
+    },
+    "subtraction": {
+      "esurface_existence_threshold": 1e-14
+    }
+  },
+  "error": null,
+  "local_approach": {
+    "all_actual_forward_points_compact": true,
+    "complete": true,
+    "extension": null,
+    "scope": "local two-direction physical approach only; no Gaussianacceptance, globalboundedness or MCvariance claim; archived points or explicitly retained native-source extensions, with actual radii at each representation boundary"
+  },
+  "mode": "cuts_joint_soft",
+  "preflight_accepted": false,
+  "preflight_reused": false,
+  "warmup_seconds": 0.054060379,
+  "archived_references": {
+    "inventory": "../shared/cuts_joint_soft.inventory.json.gz",
+    "local_approach_rows": [
+      "cuts_joint_soft.hz_00_stack.approach.json",
+      "cuts_joint_soft.hz_01_stack.approach.json",
+      "cuts_joint_soft.hz_02_stack.approach.json",
+      "cuts_joint_soft.hz_03_stack.approach.json",
+      "cuts_joint_soft.hz_04_stack.approach.json",
+      "cuts_joint_soft.hz_05_stack.approach.json",
+      "cuts_joint_soft.hz_06_stack.approach.json",
+      "cuts_joint_soft.hz_07_stack.approach.json"
+    ],
+    "original_report_sha256": "0766d5e877fccddf52b8b03bf56b2d97d06df276fd9a9f7f7168adc3cf1c2eaa",
+    "original_report_bytes": 5106485,
+    "reason": "Repeated native point rows and the same catalogue inventory are stored separately."
+  }
+}

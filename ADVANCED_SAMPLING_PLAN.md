@@ -21,9 +21,14 @@ are complete: two hard directions over five decades, compared through optimized
 LMB, direct-H and joint channels using actual forwarded points and native inverse
 diagnostics. The [local result](docs/research/advanced_sampling/LOCAL_HZ_BOUNDING.md)
 shows nearly constant joint weights on these directions, without a global bound
-or variance claim. Seven-candidate preflight is underway, including genuinely
-composed Cut1 LU-h to H/Z maps with and without the soft LMB. Full-state reference
-and Monte Carlo integration comparisons remain pending. See also the
+or variance claim. The [seven-candidate local comparison](docs/research/advanced_sampling/LOCAL_CUT_MATCHED_HZ.md)
+now also passes: 84 point rows, 336 native evaluations and 4,952 independent
+checks. Cut-only mixtures retain `1/R` growth; direct joint and genuinely
+composed Cut1 LU-h to H/Z channels plateau, with the composed endpoint norms
+about 7.9 times lower on these two rays. Soft coverage increases these local
+joint weights by approximately `8/7`; its global benefit is unmeasured.
+Seven-candidate full-state reference preflight is underway. Matched-count MC
+errors, maximum attribution and a supported central estimate remain pending. See also the
 [center audit](docs/research/advanced_sampling/CANONICAL_CT_CENTERS.md).
 
 Current implementation status: there is one `SamplingChannelCatalogue` and one
