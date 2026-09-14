@@ -76,7 +76,8 @@ also remain separate integration domains. See the implemented conventions in
 Shared process SymJIT activation now passes the requested O0–O3 level
 through, including genuine O3 instead of clamping it to O2. Compression remains
 separately configurable. This establishes support, not an O3 speed advantage.
-The matched build10 evaluator/whole-sample benchmark is still pending. The
+The matched build10 evaluator/whole-sample benchmark is recorded in
+[GL638_BUILD10_BACKEND_TIMING.md](GL638_BUILD10_BACKEND_TIMING.md). The
 previous build9 map-only measurement was **7.569 ms per call**, one worker,
 384 calls with native checks passing; it excludes the physical prepass and
 evaluators. It must not be substituted for a production timing breakdown.
