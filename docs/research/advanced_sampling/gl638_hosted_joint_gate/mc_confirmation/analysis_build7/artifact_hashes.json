@@ -1,0 +1,74 @@
+{
+  "independent/audit.py": {
+    "sha256_uncompressed": "dfb0162d4de97def344a667339958c53acbafa6b37088b36736c336235bee49f",
+    "bytes_uncompressed": 15249,
+    "stored_path": "independent/audit.py.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/confirmation-build7-independent-audit/audit.py"
+  },
+  "independent/summary.json": {
+    "sha256_uncompressed": "d3ba217996198c1f8dbf15dcb4386cea9beda17cacb39ff389669419993f521c",
+    "bytes_uncompressed": 39150,
+    "stored_path": "independent/summary.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/confirmation-build7-independent-audit/summary.json"
+  },
+  "independent/summary.md": {
+    "sha256_uncompressed": "422ee8b199e20604aa5869c2015800ba977010eff3a54c09fc28c9c69b10cd27",
+    "bytes_uncompressed": 2171,
+    "stored_path": "independent/summary.md.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/confirmation-build7-independent-audit/summary.md"
+  },
+  "physics_pilot_analysis.json": {
+    "sha256_uncompressed": "b632d594d5931a372c13cdbac27555dd9b19abd1e7ded037aaa575e3fd26e429",
+    "bytes_uncompressed": 375440,
+    "stored_path": "../results_build7/physics_pilot_analysis.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-confirmation-build7/physics_pilot_analysis.json"
+  },
+  "physics_pilot_analysis.md": {
+    "sha256_uncompressed": "34a5612efbda6d9a5d2a50fa033bbc3d092d19aa416983b7cf0ca2521e83440c",
+    "bytes_uncompressed": 2423,
+    "stored_path": "../results_build7/physics_pilot_analysis.md.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-confirmation-build7/physics_pilot_analysis.md"
+  },
+  "analyze_physics_pilots.py": {
+    "sha256_uncompressed": "d21c4765d2fed2a747dcce77331bf7df2fe215d60c85ba8d76fef91847631148",
+    "bytes_uncompressed": 42807,
+    "stored_path": "../protocol_build7/analysis/analyze_physics_pilots.py.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/analyze_physics_pilots.py"
+  },
+  "first_seed_invariance/audit.py": {
+    "sha256_uncompressed": "a60b9afba9ba85e92f5d8a662114c83a6055026f01d66cb838e42312c990069c",
+    "bytes_uncompressed": 8993,
+    "stored_path": "first_seed_invariance/audit.py.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/audit_successful_source_invariance.py"
+  },
+  "first_seed_invariance/cuts.json": {
+    "sha256_uncompressed": "7eb5672eacfcaeb73e931241e0982e32b91b747204abd3bfbb51c1e2f1a085a5",
+    "bytes_uncompressed": 9508,
+    "stored_path": "first_seed_invariance/cuts.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/successful-source-invariance-build7/cuts.json"
+  },
+  "first_seed_invariance/cuts_combined_joint.json": {
+    "sha256_uncompressed": "9fbe949003e64e9bfd869e734187002e3409d6889713d2ff1550bb7a59820384",
+    "bytes_uncompressed": 10244,
+    "stored_path": "first_seed_invariance/cuts_combined_joint.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/successful-source-invariance-build7/cuts_combined_joint.json"
+  },
+  "first_seed_invariance/optimized_lmb.json": {
+    "sha256_uncompressed": "a08ed1589dfb29cf2930ca4865db4e5a8855d9cdaed683b572fc999392966fa2",
+    "bytes_uncompressed": 10873,
+    "stored_path": "first_seed_invariance/optimized_lmb.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/successful-source-invariance-build7/optimized_lmb.json"
+  },
+  "first_seed_invariance/summary.json": {
+    "sha256_uncompressed": "b1164f7c084db05807177c7e710d9902fa70b00de3b21a9029c16da15083fd68",
+    "bytes_uncompressed": 2478,
+    "stored_path": "first_seed_invariance/summary.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/successful-source-invariance-build7/summary.json"
+  },
+  "assemble_final_archive.py": {
+    "sha256_uncompressed": "12c4e6509dbadb2ee146f3f036a72ba013295c0c4e33d000908df7734bfd5b45",
+    "bytes_uncompressed": 5398,
+    "stored_path": "assemble_final_archive.py.gz",
+    "original_path": "/tmp/gl638-confirmation-build7-draft/assemble_final_archive.py"
+  }
+}

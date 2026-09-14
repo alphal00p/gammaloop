@@ -1,0 +1,31 @@
+{
+  "status": "completed_frozen_artifact_archive",
+  "source_commit": "7818ffcb887aeed4f8fd2baa484897b69603d2af",
+  "source_patch_sha256": "3f5669ae1de62c09b26d4aa3888cecd47058a786f00e0893bac7bfd191910588",
+  "protocol": "../protocol_build7/provenance.json",
+  "archive_convention": "Every logical record has its original path, SHA256 and size of uncompressed content. New raw artifacts are losslessly gzip-compressed; identical bytes reference prior immutable archives. No generated-process saved-state payload, executable or compiled library is copied. Complete IntegrationState checkpoints are intentionally retained for original Sample replay.",
+  "writes": "All assembly and audits write only outside the frozen pilot and maximum directories. No Gamma calls, state deserialization, builds or source changes.",
+  "protocol_lifecycle": "The protocol archive preserves its pre-results preparation status verbatim; this completed evidence supersedes no original bytes.",
+  "intended_repository_directory": "docs/research/advanced_sampling/gl638_hosted_joint_gate/mc_confirmation/results_build7",
+  "original_directory": "/tmp/gl638-hosted-joint-gate/results-confirmation-build7",
+  "passed": true,
+  "complete_runs": 15,
+  "samples_per_method": 163840,
+  "total_samples": 491520,
+  "workers": 20,
+  "seeds": [
+    10007,
+    20011,
+    30013,
+    40009,
+    50021
+  ],
+  "original_files": 222,
+  "complete_integration_checkpoints": 15,
+  "unchanged_state_hashes": 35,
+  "elapsed_seconds": 3820.512174894917,
+  "peak_rss_kib": 69037992,
+  "excluded_attempt": "../../mc_confirmation_root/attempt1/provenance.json",
+  "result_scope": "Fresh three-method confirmation only; no screen or interrupted-attempt pooling.",
+  "analysis": "../analysis_build7/provenance.json"
+}

@@ -1,0 +1,194 @@
+{
+  "manifest.json": {
+    "sha256_uncompressed": "7156be88199220e834f0a5b6dcb109747e4e0e25cd64b7c1170c24e43a585580",
+    "bytes_uncompressed": 13561,
+    "stored_path": "manifest.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/manifest-confirmation-build7.json"
+  },
+  "commands.json": {
+    "sha256_uncompressed": "4d726b3d172e818502d2fefcbb4a6305c2c9b6b1b37fce3664d7406b6c8ec31f",
+    "bytes_uncompressed": 2392,
+    "stored_path": "commands.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/confirmation-build7-commands.json"
+  },
+  "lineage.json": {
+    "sha256_uncompressed": "f026da977ca0831193635be90f8b7ca00a86c6478dc19092f66b6905bd4886f4",
+    "bytes_uncompressed": 2990,
+    "stored_path": "lineage.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/endpoint-repair-lineage-build7.json"
+  },
+  "validator_proof.json": {
+    "sha256_uncompressed": "82610b619bf93240673cf0861d4574fdbd7991d7e7ed539f57e435a57c8235b8",
+    "bytes_uncompressed": 22678,
+    "stored_path": "validator_proof.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/endpoint-repair-validation-build7.json"
+  },
+  "validator.log": {
+    "sha256_uncompressed": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes_uncompressed": 0,
+    "stored_path": "../../phase_space_ray/fixture/format.log.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/endpoint-repair-validation-build7.log"
+  },
+  "build_identity.json": {
+    "sha256_uncompressed": "c30c57b87af520828bccc3cf1832b047e30a0b51bbfce5add89d9e4ac330e28f",
+    "bytes_uncompressed": 393,
+    "stored_path": "build_identity.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/build-identity-confirmation-build7.json"
+  },
+  "source_commit_proof.json": {
+    "sha256_uncompressed": "65ccc0b312e2c4d0dc57d4e171e871c66d929aaba44320f2d7ad979f809c7680",
+    "bytes_uncompressed": 601,
+    "stored_path": "source_commit_proof.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/build7-source-commit-proof.json"
+  },
+  "analysis/analyze_physics_pilots.py": {
+    "sha256_uncompressed": "d21c4765d2fed2a747dcce77331bf7df2fe215d60c85ba8d76fef91847631148",
+    "bytes_uncompressed": 42807,
+    "stored_path": "analysis/analyze_physics_pilots.py.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/analyze_physics_pilots.py"
+  },
+  "analysis/analyze_physics_pilots_before_endpoint_repair.py": {
+    "sha256_uncompressed": "b836da2d71462ff2ad83ec6d4daba02457b2535448c0851da8762a441c78f6b5",
+    "bytes_uncompressed": 22773,
+    "stored_path": "../../cut_matched_acceptance/mc/analyze_physics_pilots.py.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/analyze_physics_pilots_before_endpoint_repair.py"
+  },
+  "analysis/validator_artifact_test.py": {
+    "sha256_uncompressed": "ae09064b67a5b1c8f82d13c56b47e64615732a7265b2eac7aa83818fa564deb2",
+    "bytes_uncompressed": 16775,
+    "stored_path": "analysis/validator_artifact_test.py.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/endpoint-validator-artifact-audit/audit.py"
+  },
+  "analysis/validator_artifact_results.json": {
+    "sha256_uncompressed": "c0d4ce59a37d107a571436b3b683a2f74ff614c7ba022be5331d672b2041d99a",
+    "bytes_uncompressed": 13811,
+    "stored_path": "analysis/validator_artifact_results.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/endpoint-validator-artifact-audit/results.json"
+  },
+  "driver/gate_endpoint_repair.rs": {
+    "sha256_uncompressed": "8714822b07a9449c908df604c7512bb1ef8739793e2e516be99c1ca9fb3f6cc5",
+    "bytes_uncompressed": 113106,
+    "stored_path": "driver/gate_endpoint_repair.rs.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/drivers/gate_endpoint_repair.rs"
+  },
+  "driver/build.json": {
+    "sha256_uncompressed": "cbd146ba67cc4766e2af97d6c153faa4dec2ffba0f358f0c6b7728ceda9fbe22",
+    "bytes_uncompressed": 42297,
+    "stored_path": "driver/build.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/drivers/gate-physics-build7.build.json"
+  },
+  "driver/link.log": {
+    "sha256_uncompressed": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes_uncompressed": 0,
+    "stored_path": "../../phase_space_ray/fixture/format.log.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/physics-driver-build7-link.log"
+  },
+  "driver/compile_driver.py": {
+    "sha256_uncompressed": "6fc0bf0146e5823532de2b1fe87d58690261c7cf5e5205fc9e0c2a2c05d46b8c",
+    "bytes_uncompressed": 6384,
+    "stored_path": "driver/compile_driver.py.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/compile_driver.py"
+  },
+  "maximum/max_replay_current.rs": {
+    "sha256_uncompressed": "29b9c6a48448935aee70159787063bb8a2c1cdd5b6a762ff596fd2d9061ca498",
+    "bytes_uncompressed": 26397,
+    "stored_path": "../../cut_matched_acceptance/mc/max_replay_current.rs.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/drivers/max_replay_current.rs"
+  },
+  "maximum/gate-max-support.rs": {
+    "sha256_uncompressed": "b53df2b439845729dd5a9c898c9cece83c28426457ec18701cf9787756310306",
+    "bytes_uncompressed": 111002,
+    "stored_path": "../../local_hz/extension/gate.rs.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/drivers/gate-max-support.rs"
+  },
+  "maximum/build.json": {
+    "sha256_uncompressed": "f7731f9dddf570db3990f7f9d86a3bac38d80aea6e96ca8d8f08e06f56b7e72f",
+    "bytes_uncompressed": 43285,
+    "stored_path": "maximum/build.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/drivers/max-replay-build7.build.json"
+  },
+  "maximum/link.log": {
+    "sha256_uncompressed": "9417be9fc55463fe624b6c6937935ab9872752c697ea642c8479381f6b0d8121",
+    "bytes_uncompressed": 2275,
+    "stored_path": "../../mc_confirmation_root/endpoint_repair/replay/link.log.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/max-replay-build7-link.log"
+  },
+  "maximum/audit_maximum_results.py": {
+    "sha256_uncompressed": "9e95c3c6a029a92339c70207d11209702a28c316c3c17001a01045027c5f2f12",
+    "bytes_uncompressed": 8130,
+    "stored_path": "../../mc_maximum_replay/sources/audit_maximum_results.py.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/audit_maximum_results.py"
+  },
+  "maximum/after_confirmation_recipe.md": {
+    "sha256_uncompressed": "b9b9c4c0a343aeb78567691b649c6074ae282a853ceee38ab71728d098df4edb",
+    "bytes_uncompressed": 3268,
+    "stored_path": "../../mc_maximum_replay/maximum_after_confirmation.md",
+    "original_path": "/tmp/gl638-hosted-joint-gate/MAXIMUM_AFTER_CONFIRMATION_NEXT.md"
+  },
+  "historical/preflight.json": {
+    "sha256_uncompressed": "447e356f67f7fb452dc916ca764142ba0fc7ceedffe6f31328afe598ee442ef6",
+    "bytes_uncompressed": 7098737,
+    "stored_path": "../../mc_screen/preflight_summary.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut-combined-seven-preflight-build5/summary.json"
+  },
+  "historical/screen.json": {
+    "sha256_uncompressed": "ecad2ada9b4b3f29a1f6a6d66e53dfca64b44a1bd8e534b901b062ad87c8c19e",
+    "bytes_uncompressed": 511356,
+    "stored_path": "../../mc_screen/batches/throughput20/physics_pilot_analysis.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/screen-selection-frozen-build5.json"
+  },
+  "historical/confirmation_manifest.json": {
+    "sha256_uncompressed": "3cd2e7b0416d8a6ee11161231c51832b5a30e0b5ec60747b97358885a669e3a7",
+    "bytes_uncompressed": 29145,
+    "stored_path": "../../mc_screen/confirmation/manifest.json",
+    "original_path": "/tmp/gl638-hosted-joint-gate/manifest-confirmation-build5.json"
+  },
+  "evidence/source_patch.patch": {
+    "sha256_uncompressed": "3f5669ae1de62c09b26d4aa3888cecd47058a786f00e0893bac7bfd191910588",
+    "bytes_uncompressed": 24036,
+    "stored_path": "../../mc_confirmation_root/endpoint_repair/source/final.patch.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/root-endpoint-source-build7.patch"
+  },
+  "evidence/source_audit.json": {
+    "sha256_uncompressed": "2917466ebe85071d3ae2e314b42ed06ea17e9ee5181bbbbb132e54d21358fa51",
+    "bytes_uncompressed": 2509,
+    "stored_path": "../../mc_confirmation_root/endpoint_repair/source_audit.json",
+    "original_path": "/tmp/gl638-hosted-joint-gate/endpoint-repair-evidence/source_audit.json"
+  },
+  "evidence/source_gates.json": {
+    "sha256_uncompressed": "f61459286679925d957186b39f1afb54ee53dda9877a16426610a0e675f0e1ca",
+    "bytes_uncompressed": 3466,
+    "stored_path": "../../mc_confirmation_root/endpoint_repair/gates/summary.json",
+    "original_path": "/tmp/gl638-hosted-joint-gate/endpoint-repair-evidence/source_gates.json"
+  },
+  "evidence/captured_source_replay.json": {
+    "sha256_uncompressed": "c52b7a23da4606ee232ea6d62134c9e609fc6738bab2575e526006cf591b465c",
+    "bytes_uncompressed": 116940,
+    "stored_path": "../../mc_confirmation_root/endpoint_repair/replay/accuracy_audit.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-captured-source-replay-build7/captured_source_accuracy_audit.json"
+  },
+  "evidence/driver_build.json": {
+    "sha256_uncompressed": "cbd146ba67cc4766e2af97d6c153faa4dec2ffba0f358f0c6b7728ceda9fbe22",
+    "bytes_uncompressed": 42297,
+    "stored_path": "driver/build.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/drivers/gate-physics-build7.build.json"
+  },
+  "evidence/core_build.json": {
+    "sha256_uncompressed": "592e3e3eaca93de76b9429388ff77f9a060059200adbde2b3a30ab7c4cc07370",
+    "bytes_uncompressed": 1226,
+    "stored_path": "../../mc_confirmation_root/endpoint_repair/build7/manifest.json.gz",
+    "original_path": "/tmp/hosted-joint-optimized-build7-manifest.json"
+  },
+  "provenance.json": {
+    "sha256_uncompressed": "9ea3b40e0dba05c8c429f8b15f7d91f1df062fe4a6add54b6bbad97f33db44c8",
+    "bytes_uncompressed": 3216,
+    "stored_path": "provenance.json",
+    "origin": "new archive scope and unchanged-protocol interpretation"
+  },
+  "maximum/build7_recipe.md": {
+    "sha256_uncompressed": "9bbead419bf4693566a94eb7db702b6e95f27f12fec3edff0231346d5a26ff97",
+    "bytes_uncompressed": 6430,
+    "stored_path": "maximum/build7_recipe.md.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/MAXIMUM_CONFIRMATION_BUILD7.md"
+  }
+}

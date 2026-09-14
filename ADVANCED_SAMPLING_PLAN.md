@@ -9,9 +9,34 @@ Current execution goal: establish the physics on all-orientation GL638 through
 H/Z-corner weight scaling, matched-count signed and absolute-integral errors
 for ordinary, simpler advanced and joint channel combinations, remaining
 maximum-weight origins, and the best supported cross-section estimate with
-uncertainty. The final joint-certificate optimization is complete and runtime
-tuning has stopped. Correctness repairs remain required. The comparison and
-resource limits below supersede the earlier 10% optimization stopping rule.
+uncertainty. The first joint-certificate optimization and the fresh five-seed
+confirmation are complete. The user's subsequent execution order is:
+
+1. Finish the maximum-weight attribution and test single- and double-soft
+   gluon limits without an explicit gluon LMB channel. Include a catalogue that
+   replaces standalone Cut 1 with its composed joint channel, keeping the other
+   five cut channels, to distinguish replacement from adding a seventh channel.
+2. Before further long integrations, research and implement a safe alternative
+   to unconditional Arb1000 proposal construction and 2048-bit support checks.
+   Preserve one immutable complete point/Jacobian/partition across physical
+   rescue, certified support decisions and fallback on numerical uncertainty.
+   Reuse the existing owners and precision regressions; reduced precision must
+   not silently change the proposal or classify uncertain support as absent.
+3. Check the latest SymJIT version and benchmark compressed SymJIT O2 against
+   the current eager evaluator at both one and 20 concurrent workers. Preserve
+   the higher-precision rescue evaluators and use identical physical inputs.
+   Pin any dependency update explicitly, validate physics and report separate
+   evaluator, integrand-overhead and sampling times for the best measured setup.
+4. Only after that optimization round, compare explicit sums over channels with
+   importance-sampled channel selection, including both equal-work and
+   equal-sample accounting. Retain the same subtraction prescription and report
+   finite-sample tail effects without assuming either estimator is biased.
+
+Use agents for precision research, evaluator/dependency investigation and
+independent numerical audits. The current limit remains 30 cores and 300 GB;
+the measured production worker choice is 20. Correctness repairs remain required.
+This renewed optimization request supersedes the earlier instruction to stop
+runtime tuning; further long runs wait for the measurements above.
 
 The canonical physical-center repair now passes its generated gates and the
 actual retained GL638 failure: CT-on Euler accepts Quad and Arb without changing
@@ -26,7 +51,8 @@ now also passes: 84 point rows, 336 native evaluations and 4,952 independent
 checks. Cut-only mixtures retain `1/R` growth; direct joint and genuinely
 composed Cut1 LU-h to H/Z channels plateau, with the composed endpoint norms
 about 7.9 times lower on these two rays. Soft coverage increases these local
-joint weights by approximately `8/7`; its global benefit is unmeasured.
+joint weights by approximately `8/7`; the later global screen retains its
+large outliers and does not establish a benefit from adding that soft channel.
 The [seven-candidate full-state preflight](docs/research/advanced_sampling/GL638_HOSTED_JOINT_GATE.md#completed-cut-matched-acceptance)
 now passes: every mode meets the 32,768-point Gaussian criteria and all 221
 physical comparison checks pass, with 35 saved-file hashes unchanged. The
@@ -44,14 +70,23 @@ confirmation is pooled. The [captured source](docs/research/advanced_sampling/GL
 reproduces that exact error. The [endpoint repair](docs/research/advanced_sampling/CANONICAL_LU_ENDPOINT_CERTIFICATION.md)
 now passes 35 broader tests, the final strengthened fixture, build7 and all 25
 checks of the exact-source Double/Arb six-cut replay, without changing its canonical
-point/J/partition or the numerical tolerance. A fresh complete confirmation is
-still required. The
+point/J/partition or the numerical tolerance. The [fresh complete confirmation](docs/research/advanced_sampling/GL638_MC_CONFIRMATION.md)
+now passes: all 15 runs and 491,520 draws, with 163,840 draws per method and
+135 independent statistical checks. It gives a mixed result: the joint method's
+real variance is 10.8% higher than cuts alone, while its imaginary variance is
+35.1% lower; the corresponding absolute-component variances behave similarly.
+The frozen primary graph estimate is Re `(1.15444 ± 1.07450) × 10^-4 pb` and
+Im `(-0.0135545 ± 0.892727) × 10^-4 pb`, with empirical pooled errors.
+Rare weights dominate those errors, and confidence in convergence remains
+unestablished. The
 [maximum replay and three-point attribution](docs/research/advanced_sampling/GL638_SCREEN_MAXIMUM_REPLAY.md)
 now pass: 84 signed extrema, 59 distinct Samples, 28 Arb controls, and unchanged
 native trace totals/events. Remaining large weights include ordinary projected
 threshold terms and materially moved CT-star normals; the soft-labelled maximum
 is not at a soft-gluon endpoint. These are finite-point observations, not a global
-bound or variance cure. A supported confirmation estimate remains pending.
+bound or variance cure. The final confirmation's 60 retained extrema also
+replay exactly, with higher-precision controls and unchanged saved inputs;
+their new physical attribution and the added soft-limit checks remain in progress.
 See also the [center audit](docs/research/advanced_sampling/CANONICAL_CT_CENTERS.md).
 
 Current implementation status: there is one `SamplingChannelCatalogue` and one

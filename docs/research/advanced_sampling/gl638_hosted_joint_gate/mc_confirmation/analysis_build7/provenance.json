@@ -1,0 +1,19 @@
+{
+  "status": "completed_frozen_artifact_archive",
+  "source_commit": "7818ffcb887aeed4f8fd2baa484897b69603d2af",
+  "source_patch_sha256": "3f5669ae1de62c09b26d4aa3888cecd47058a786f00e0893bac7bfd191910588",
+  "protocol": "../protocol_build7/provenance.json",
+  "archive_convention": "Every logical record has its original path, SHA256 and size of uncompressed content. New raw artifacts are losslessly gzip-compressed; identical bytes reference prior immutable archives. No generated-process saved-state payload, executable or compiled library is copied. Complete IntegrationState checkpoints are intentionally retained for original Sample replay.",
+  "writes": "All assembly and audits write only outside the frozen pilot and maximum directories. No Gamma calls, state deserialization, builds or source changes.",
+  "protocol_lifecycle": "The protocol archive preserves its pre-results preparation status verbatim; this completed evidence supersedes no original bytes.",
+  "intended_repository_directory": "docs/research/advanced_sampling/gl638_hosted_joint_gate/mc_confirmation/analysis_build7",
+  "passed": true,
+  "final_report": "physics_pilot_analysis.json",
+  "independent_checks": 135,
+  "validated_input_hashes": 168,
+  "primary_estimate_mode": "cuts_combined_joint",
+  "selection_unchanged": true,
+  "scope": "Signed and absolute component means with pooled empirical errors; seed dispersion and tail diagnostics retained. Mixed result: c/b variance ratios 1.107544754839828 Re and 0.6493117272949616 Im. No calibrated convergence, finite variance or global bound.",
+  "limited_first_seed_invariance": "Only three old successful seed10007 runs compared by exact JSON numerical fields. Integrals/absolute moments/extrema/grids unchanged; baseline precision count shifts one Quad to Double and two methods have isolated stability-histogram bin changes. Opaque checkpoint bytes differ; no full metadata/bincode equality or statistical pooling claimed.",
+  "reproduction": "Existing analyzer owner unchanged numerically; final exact command is retained in protocol/commands.json. Independent audit and original workspace/input hashes are retained. Artifact-only audits use original absolute paths; restore logical records before rerunning."
+}
