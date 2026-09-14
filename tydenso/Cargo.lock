@@ -1620,8 +1620,6 @@ version = "0.3.2"
 dependencies = [
  "proc-macro2",
  "quote",
- "serde",
- "symbolica",
  "syn 2.0.119",
 ]
 

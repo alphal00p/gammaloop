@@ -87,7 +87,11 @@ jobs:
       - name: Install Wasm build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y binaryen just
+          sudo apt-get install -y binaryen
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
 
       - uses: dtolnay/rust-toolchain@stable
         with:

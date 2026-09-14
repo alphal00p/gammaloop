@@ -32,7 +32,7 @@ features = ["macros"]
 [dependencies.symbolica]
 workspace = true
 default-features = false
-features = ["tracing_max_level_info"]
+features = ["integer-gmp", "float-mpfr", "tracing_max_level_info"]
 
 [dev-dependencies]
 test-log = "0.2.19"
