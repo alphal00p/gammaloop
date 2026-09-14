@@ -11,6 +11,12 @@ Ask for approval before changing a test expectation only when the change is
 non-trivial or deep. Fix routine fixture mistakes and straightforward obsolete
 expectations without asking, preserving the test's validation purpose.
 
+Floating-point underflow in exponentially suppressed tails may round to zero,
+including when this makes stability comparisons trivially pass. Apply routine
+underflow-to-zero corrections and update their test expectations without asking
+again. Preserve meaningful contributions by combining numerical factors before
+rounding; overflow and invalid numerical operations remain separate issues.
+
 Before adding helper functions, structs, or methods, check the codebase for
 similar use cases, and whether the functionality is already provided by the
 existing code or only needs a small adjustment/API change. When adding a new

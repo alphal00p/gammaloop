@@ -11,10 +11,25 @@ IR-compatible threshold-metadata weight functions, sampling channel choices,
 Monte Carlo versus explicit channel summation, and UV mass. Keep
 `sqrt(s)=600 GeV`, `mu_r=91.188 GeV`, all orientations, the physical subtraction
 prescription, and explicit soft coverage. Test compressed SymJIT O3 as an
-additional backend candidate. Use matched exploratory budgets and independent
-confirmation samples to select a promising configuration, then run it for
-approximately one hour on **50 cores**, within the existing 300 GB memory
-budget. This production request supersedes the previous 30-core limit.
+additional backend candidate. Use matched exploratory budgets to prune the
+matrix, then run several distinct channel/integration configurations for
+approximately **15 minutes each on 50 cores**, within the existing 300 GB memory
+budget. Investigate the largest real and absolute-real weights after every
+pilot, using its actual settings and complete saved Sample. Include the option
+of replacing the standalone Cut-1 channel with the composed joint channel,
+while retaining explicit soft coverage, and compare Monte Carlo channel
+selection with explicit sums at equal physical work.
+
+Launch an hours-long run only after the pilots support a setup likely to reach
+less than 10% relative error on the real integral. Check independent seeds,
+iteration consistency, absolute-integral convergence and the influence of
+new maxima before extrapolating errors as the inverse square root of work.
+If the signed central value is accidentally close to zero, report its absolute
+error and assess convergence of the absolute integral separately; do not claim
+relative convergence or promise a runtime from an unresolved cancellation.
+Calibrate budgets with the production integrator's complete iteration timings,
+including per-iteration worker cloning. This staging supersedes the earlier
+unconditional one-hour run and the previous 30-core limit.
 
 Report both the real integral and the integral of the absolute real integrand,
 with their errors, sample counts, stability outcomes, maximum weights and
@@ -1519,8 +1534,9 @@ The matched candidate matrix uses optimized LMB as the baseline. Every advanced
 candidate includes sampling channels for all six physical cuts, with the direct
 H/Z joint channel switched on or off and the explicit soft LMB `[6,12,13,14]`
 independently included or omitted. Thus compare cuts, cuts+soft, cuts+joint, and
-cuts+joint+soft against the same baseline. Keep the cut-1 radial channel when
-adding its hosted joint channel; selecting a proposal never restricts the
+cuts+joint+soft against the same baseline. Compare retaining the cut-1 radial
+channel with replacing it by the composed Cut-1 joint channel; selecting a
+proposal never restricts the
 physical six-cut sum. Preserve normalized full-support coverage in each case.
 
 The seven-candidate preflight adds cuts+combined-joint and

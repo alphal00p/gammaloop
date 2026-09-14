@@ -6483,7 +6483,7 @@ pub(crate) mod tests {
         let mut excessive_absolute = result.clone();
         excessive_absolute.absolute_integrand_result = Some(Complex::new_re(large.clone()));
         assert!(excessive_absolute.try_into_f64().is_err());
-        for extreme in [large.clone(), small] {
+        for extreme in [large.clone(), small.clone()] {
             let mut extreme_level = level.clone();
             extreme_level.result = Complex::new_re(extreme.clone());
             extreme_level.graph_result.integrand_result = extreme_level.result.clone();
@@ -6497,14 +6497,111 @@ pub(crate) mod tests {
             };
             assert_eq!(value.integrand_result.re, extreme);
             assert!(!value.evaluation_metadata.is_nan);
-            assert!(
-                precise
-                    .try_into_f64()
-                    .unwrap_err()
-                    .to_string()
-                    .contains("f64 integration/reporting boundary")
-            );
+            if extreme == large {
+                assert!(
+                    format!("{:#}", precise.try_into_f64().unwrap_err())
+                        .contains("f64 integration/reporting boundary")
+                );
+            } else {
+                assert_eq!(precise.try_into_f64().unwrap().integrand_result.re, F(0.0));
+            }
         }
+        // Correct final rounding is allowed for signed and absolute values,
+        // including fully weighted event totals, while precise output stays native.
+        let mut underflow = result.clone();
+        underflow.integrand_result = Complex::new(small.clone(), -small.clone());
+        underflow.absolute_integrand_result = Some(Complex::new(small.clone(), small.clone()));
+        underflow.event_groups[0][0].weight = underflow.integrand_result.clone();
+        let rounded = underflow.clone().try_into_f64().unwrap();
+        assert_eq!(rounded.integrand_result, Complex::new_zero());
+        assert_eq!(rounded.absolute_integrand_result, Some(Complex::new_zero()));
+        assert_eq!(rounded.event_groups[0][0].weight, Complex::new_zero());
+        assert_eq!(underflow.integrand_result.re, small);
+
+        let mut subnormal = result.clone();
+        subnormal.integrand_result = Complex::new_re(one.from_usize(10).powi(320).inv());
+        let subnormal_value = subnormal.integrand_result.re.into_ff64();
+        assert!(subnormal_value.0 > 0.0 && subnormal_value.0 < f64::MIN_POSITIVE);
+        assert_eq!(
+            subnormal.try_into_f64().unwrap().integrand_result.re,
+            subnormal_value
+        );
+
+        // An outer-grid factor can rescue an otherwise underflowed intermediate;
+        // reject that loss rather than silently returning a zero observation.
+        underflow.integrator_weight = one.from_usize(10).powi(100);
+        let error = format!("{:#}", underflow.clone().try_into_f64().unwrap_err());
+        assert!(error.contains("integrand_result.re"));
+        assert!(error.contains("complete contribution"));
+        underflow.integrand_result = Complex::new_re(one.zero());
+        assert!(
+            format!("{:#}", underflow.clone().try_into_f64().unwrap_err())
+                .contains("absolute_integrand_result.re")
+        );
+        underflow.absolute_integrand_result = None;
+        // Event totals are already weighted; do not apply the outer weight twice.
+        assert_eq!(
+            underflow.clone().try_into_f64().unwrap().event_groups[0][0].weight,
+            Complex::new_zero()
+        );
+        underflow.integrator_weight = one.clone();
+        underflow.parameterization_jacobian = Some(one.from_usize(10).powi(100));
+        underflow.integrand_result = Complex::new_im(-small.clone());
+        assert!(
+            format!("{:#}", underflow.clone().try_into_f64().unwrap_err())
+                .contains("integrand_result.im")
+        );
+
+        // Separately reported factors must themselves survive conversion: a
+        // final underflow does not excuse an infinite serialized Jacobian.
+        let mut unrepresentable_factor = result.clone();
+        unrepresentable_factor.integrand_result = Complex::new_re(&small * &small);
+        unrepresentable_factor.parameterization_jacobian = Some(large.clone());
+        assert!(
+            format!(
+                "{:#}",
+                unrepresentable_factor.clone().try_into_f64().unwrap_err()
+            )
+            .contains("parameterization_jacobian")
+        );
+        unrepresentable_factor.parameterization_jacobian = Some(small.clone());
+        assert!(
+            format!(
+                "{:#}",
+                unrepresentable_factor.clone().try_into_f64().unwrap_err()
+            )
+            .contains("parameterization_jacobian")
+        );
+        unrepresentable_factor.parameterization_jacobian = None;
+        unrepresentable_factor.integrator_weight = large.clone();
+        assert!(
+            format!(
+                "{:#}",
+                unrepresentable_factor.clone().try_into_f64().unwrap_err()
+            )
+            .contains("integrator_weight")
+        );
+        unrepresentable_factor.integrator_weight = small.clone();
+        assert!(
+            format!("{:#}", unrepresentable_factor.try_into_f64().unwrap_err())
+                .contains("integrator_weight")
+        );
+
+        // Auxiliary event entries deliberately remain factorized. Their raw
+        // components cannot be rounded away before the stored multiplier acts.
+        let mut auxiliary = result.clone();
+        auxiliary.event_groups[0][0]
+            .additional_weights
+            .weights
+            .insert(
+                crate::observables::AdditionalWeightKey::Original,
+                Complex::new_re(small.clone()),
+            );
+        assert!(
+            format!("{:#}", auxiliary.try_into_f64().unwrap_err())
+                .contains("additional_weights[Original].re")
+        );
+
         // A cancelling total does not make individually unrepresentable event
         // weights representable. Native APIs retain them; ordinary output errors.
         let mut cancelling_events = result;

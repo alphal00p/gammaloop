@@ -157,21 +157,78 @@ impl<T: FloatLike> GenericEvaluationResult<T> {
     /// Narrow only the final native map/partition/physics contribution at the
     /// ordinary integration/reporting boundary. Precise APIs retain this value.
     pub(crate) fn try_into_f64(self) -> eyre::Result<EvaluationResult> {
-        let weights = std::iter::once(&self.integrand_result)
-            .chain(self.absolute_integrand_result.iter())
-            .chain(self.event_groups.iter().flat_map(|group| {
-                group.iter().flat_map(|event| {
-                    std::iter::once(&event.weight).chain(event.additional_weights.weights.values())
-                })
-            }));
-        for value in weights.flat_map(|weight| [&weight.re, &weight.im]) {
+        use eyre::WrapErr;
+
+        let one = self.integrator_weight.one();
+        let remaining_factor =
+            self.parameterization_jacobian.as_ref().unwrap_or(&one) * &self.integrator_weight;
+        eyre::ensure!(
+            remaining_factor.0.is_finite(),
+            "nonfinite remaining native integration factor {remaining_factor}"
+        );
+        // Ordinary final rounding may yield zero. A small intermediate must still
+        // be retained if any unapplied factor can promote its contribution.
+        // None keeps the strict policy for separately stored factors and auxiliary
+        // factorized event entries.
+        let check = |value: &F<T>, remaining: Option<&F<T>>| -> eyre::Result<()> {
             let reported = value.into_f64();
-            if value.0.is_finite()
-                && (!reported.is_finite() || (reported == 0.0 && value != &value.zero()))
-            {
-                return Err(eyre::eyre!(
-                    "native sampling contribution or event weight {value} cannot be represented by the f64 integration/reporting boundary"
-                ));
+            if value.0.is_finite() {
+                if !reported.is_finite() {
+                    return Err(eyre::eyre!(
+                        "native value {value} overflows the f64 integration/reporting boundary"
+                    ));
+                }
+                if reported == 0.0 && value != &value.zero() {
+                    let complete = remaining.map(|factor| value * factor);
+                    if complete.as_ref().is_none_or(|weighted| {
+                        !weighted.0.is_finite() || weighted.into_f64() != 0.0
+                    }) {
+                        return Err(eyre::eyre!(
+                            "native value {value} rounds to zero before remaining factor {}; complete contribution {} cannot be preserved at the f64 integration/reporting boundary",
+                            remaining.map_or_else(
+                                || "separately stored factorized component".to_owned(),
+                                ToString::to_string
+                            ),
+                            complete
+                                .as_ref()
+                                .map_or_else(|| "not combined".to_owned(), ToString::to_string)
+                        ));
+                    }
+                }
+            }
+            Ok(())
+        };
+        // These factors remain separate in ordinary output. Each must survive
+        // conversion even when their complete native product rounds to zero.
+        check(&self.integrator_weight, None).wrap_err("integrator_weight")?;
+        if let Some(jacobian) = &self.parameterization_jacobian {
+            check(jacobian, None).wrap_err("parameterization_jacobian")?;
+        }
+        for (field, weight) in std::iter::once(("integrand_result", &self.integrand_result)).chain(
+            self.absolute_integrand_result
+                .iter()
+                .map(|weight| ("absolute_integrand_result", weight)),
+        ) {
+            for (component, value) in [("re", &weight.re), ("im", &weight.im)] {
+                check(value, Some(&remaining_factor))
+                    .wrap_err_with(|| format!("{field}.{component}"))?;
+            }
+        }
+        for (group_index, group) in self.event_groups.iter().enumerate() {
+            for (event_index, event) in group.iter().enumerate() {
+                // Event totals already contain their full native sampling factor.
+                for (component, value) in [("re", &event.weight.re), ("im", &event.weight.im)] {
+                    check(value, Some(&one)).wrap_err_with(|| {
+                        format!("event_groups[{group_index}][{event_index}].weight.{component}")
+                    })?;
+                }
+                for (key, weight) in &event.additional_weights.weights {
+                    for (component, value) in [("re", &weight.re), ("im", &weight.im)] {
+                        check(value, None).wrap_err_with(|| {
+                            format!("event_groups[{group_index}][{event_index}].additional_weights[{key:?}].{component}")
+                        })?;
+                    }
+                }
             }
         }
         Ok(EvaluationResult {
