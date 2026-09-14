@@ -1,0 +1,47 @@
+{
+  "command": [
+    "flock",
+    "/tmp/gammaloop-aa-aa-uv-benchmark.lock",
+    "python3",
+    "bin/ram_watchdog.py",
+    "--limit-gb",
+    "30",
+    "--log",
+    "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/symbolica_upstream_20260914/GL00_exact_r3/watchdog.jsonl",
+    "--",
+    "/tmp/raised-stack/run",
+    "env",
+    "SYMBOLICA_LICENSE=<corrected S-format key>",
+    "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/symbolica_upstream_20260914/immutable_exact_r1/symbolica-upstream-exact-builder",
+    "--exact-builder",
+    "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/gl262_faithful_20260914/GL00_capture_r1/capture/build_1507611_0"
+  ],
+  "license_sha256": "f972d241f8eaecec04777d34f5797d5120c00343b0edb8baffc79346c03416af",
+  "actual_environment_variable": "SYMBOLICA_LICENSE",
+  "started_utc": "2026-09-14T08:42:36.045805+00:00",
+  "symbolica_revision": "ba3737137c2a2ccd7bb39f0441837d38ec867e78",
+  "complete": true,
+  "available_memory_before_bytes": 672870146048,
+  "memory_guard_bytes": 30000000000,
+  "binary_source_identities": {
+    "Cargo.toml": {
+      "bytes": 774,
+      "sha256": "49bf3e5ff763c0f138b805f632ad7dae3505e9109ed9fcf22a548910a8137b00"
+    },
+    "symbolica-upstream-exact-builder": {
+      "bytes": 470706192,
+      "sha256": "9a06fc6808ba8ff095d970ab222a93217491b665f93f49c8080a911c74ad5aae"
+    },
+    "Cargo.lock": {
+      "bytes": 35230,
+      "sha256": "2cad3c3d910dc0d48f7ce94d13b76c89db39cdefbc762de26aa8a6c1a7941ccc"
+    },
+    "main.rs": {
+      "bytes": 11153,
+      "sha256": "bf07a5cfdd760245d01d0d7bffabd139309850e5a6bd0b0d84aa1b5141bb1a6c"
+    }
+  },
+  "exit_code": 0,
+  "wall_seconds": 2.00044292898383,
+  "completed_utc": "2026-09-14T08:42:38.046581+00:00"
+}

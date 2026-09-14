@@ -291,3 +291,13 @@ are preserved in `../gl262_faithful_20260914`; the live run used 121.1 GB peak
 VmHWM and the standalone watchdog sampled 93.9 GB peak process-tree RSS.
 The replay completed in 179.911 s including 29.703 s of loading before `.build()`.
 The 500 GB guard did not intervene. No generated evaluator compilation occurred.
+
+## Official upstream comparison — 2026-09-14
+
+The full GL262 raw-input replay also reproduces the exact panic on unmodified
+[official main at ba3737137c2a2ccd7bb39f0441837d38ec867e78](https://github.com/symbolica-dev/symbolica/tree/ba3737137c2a2ccd7bb39f0441837d38ec867e78),
+using the corrected S-format license: 186.136 s wall, 94.133 GB sampled peak RSS,
+500 GB guard, H1/CPE5, assertions enabled and no evaluator compilation.
+The tiny nonsymmetric import regression passes unchanged on that revision.
+See `../symbolica_upstream_20260914/RESULTS.md` and the complete portable folder
+`../symbolica_gl262_reproducer_20260914` for sources, inputs and run instructions.

@@ -1,0 +1,439 @@
+{"stage":"start","elapsed_seconds":0.00006547,"pid":3227564,"rss_bytes":4026368,"vmhwm_bytes":4026368}
+2026-09-14T08:42:38.265895Z  WARN symbolica::atom: Imported symbol spenso::♭ was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.265961Z  WARN symbolica::atom: Imported symbol spenso::chain was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.265977Z  WARN symbolica::atom: Imported symbol spenso::trace was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.266036Z  WARN symbolica::atom: Imported symbol spenso::dot was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.266087Z  WARN symbolica::atom: Imported symbol spenso::δ was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.266101Z  WARN symbolica::atom: Imported symbol spenso::g was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.266153Z  WARN symbolica::atom: Imported symbol gammalooprs::killing_func was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.266167Z  WARN symbolica::atom: Imported symbol UFO::ZERO was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.266187Z  WARN symbolica::atom: Imported symbol gammalooprs::uvind was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.266206Z  WARN symbolica::atom: Imported symbol gammalooprs::edge was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.266220Z  WARN symbolica::atom: Imported symbol gammalooprs::vertex was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.266243Z  WARN symbolica::atom: Imported symbol gammalooprs::dummy was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.266258Z  WARN symbolica::atom: Imported symbol gammalooprs::hedge was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.266273Z  WARN symbolica::atom: Imported symbol gammalooprs::uv::subgraph was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.266291Z  WARN symbolica::atom: Imported symbol gammalooprs::Approx was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.266306Z  WARN symbolica::atom: Imported symbol gammalooprs::Integrate was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.266320Z  WARN symbolica::atom: Imported symbol gammalooprs::Series was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.266339Z  WARN symbolica::atom: Imported symbol gammalooprs::Truncate was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.266353Z  WARN symbolica::atom: Imported symbol gammalooprs::CT was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.266416Z  WARN symbolica::atom: Imported symbol gammalooprs::linearize was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.266435Z  WARN symbolica::atom: Imported symbol gammalooprs::broadcasting_sqrt was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.266560Z  WARN symbolica::atom: Imported symbol gammalooprs::mUVexp was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.266574Z  WARN symbolica::atom: Imported symbol gammalooprs::mUV was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.266593Z  WARN symbolica::atom: Imported symbol gammalooprs::μᵣ² was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.266613Z  WARN symbolica::atom: Imported symbol gammalooprs::expr was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.266638Z  WARN symbolica::atom: Imported symbol gammalooprs::denom was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.266653Z  WARN symbolica::atom: Imported symbol gammalooprs::ubar was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.266668Z  WARN symbolica::atom: Imported symbol gammalooprs::vbar was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.266697Z  WARN symbolica::atom: Imported symbol gammalooprs::v was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.266711Z  WARN symbolica::atom: Imported symbol gammalooprs::u was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.266728Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.266777Z  WARN symbolica::atom: Imported symbol gammalooprs::Q3 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.266792Z  WARN symbolica::atom: Imported symbol gammalooprs::OSE was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.266808Z  WARN symbolica::atom: Imported symbol gammalooprs::E was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.266829Z  WARN symbolica::atom: Imported symbol gammalooprs::P was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.266844Z  WARN symbolica::atom: Imported symbol gammalooprs::K was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.266858Z  WARN symbolica::atom: Imported symbol gammalooprs::ϵ was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.266882Z  WARN symbolica::atom: Imported symbol gammalooprs::ϵbar was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.266974Z  WARN symbolica::atom: Imported symbol UFO::complexconjugate was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.267104Z  WARN symbolica::atom: Imported symbol UFO::complex was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.267123Z  WARN symbolica::atom: Imported symbol spenso::euc was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.267137Z  WARN symbolica::atom: Imported symbol spenso::mink was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.267155Z  WARN symbolica::atom: Imported symbol spenso::lor was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.267169Z  WARN symbolica::atom: Imported symbol spenso::spf was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.267183Z  WARN symbolica::atom: Imported symbol spenso::bis was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.267205Z  WARN symbolica::atom: Imported symbol spenso::coad was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.267219Z  WARN symbolica::atom: Imported symbol spenso::cof was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.267726Z  WARN symbolica::atom: Imported symbol spenso::gamma was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.267753Z  WARN symbolica::atom: Imported symbol spenso::projp was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.267781Z  WARN symbolica::atom: Imported symbol spenso::projm was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.267796Z  WARN symbolica::atom: Imported symbol spenso::gamma5 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.267821Z  WARN symbolica::atom: Imported symbol spenso::gamma0 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.267849Z  WARN symbolica::atom: Imported symbol spenso::t was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.267864Z  WARN symbolica::atom: Imported symbol spenso::f was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.267881Z  WARN symbolica::atom: Imported symbol spenso::CA was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.267895Z  WARN symbolica::atom: Imported symbol spenso::CF was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.267915Z  WARN symbolica::atom: Imported symbol spenso::gram was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.267933Z  WARN symbolica::atom: Imported symbol spenso::cas was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.267949Z  WARN symbolica::atom: Imported symbol spenso::idx was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.267980Z  WARN symbolica::atom: Imported symbol idenso::NA was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.267998Z  WARN symbolica::atom: Imported symbol spenso::TR was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.268011Z  WARN symbolica::atom: Imported symbol spenso::Nc was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.268025Z  WARN symbolica::atom: Imported symbol spenso::conj was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.268056Z  WARN symbolica::atom: Imported symbol spenso::cyclic was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.268082Z  WARN symbolica::atom: Imported symbol spenso::cind was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.268096Z  WARN symbolica::atom: Imported symbol spenso::find was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.268122Z  WARN symbolica::atom: Imported symbol spenso::uind was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.268137Z  WARN symbolica::atom: Imported symbol spenso::dind was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.268150Z  WARN symbolica::atom: Imported symbol spenso::sind was previously defined with user-defined functions, but the imported version does not have any.
+registered_symbols=292
+2026-09-14T08:42:38.269341Z  WARN symbolica::state: Imported symbol UFO::aEWM1 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269358Z  WARN symbolica::state: Imported symbol UFO::Gf was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269367Z  WARN symbolica::state: Imported symbol UFO::aS was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269386Z  WARN symbolica::state: Imported symbol UFO::lamWS was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269440Z  WARN symbolica::state: Imported symbol UFO::AWS was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269450Z  WARN symbolica::state: Imported symbol UFO::rhoWS was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269463Z  WARN symbolica::state: Imported symbol UFO::etaWS was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269472Z  WARN symbolica::state: Imported symbol UFO::ymc was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269484Z  WARN symbolica::state: Imported symbol UFO::ymb was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269493Z  WARN symbolica::state: Imported symbol UFO::ymt was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269502Z  WARN symbolica::state: Imported symbol UFO::yme was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269517Z  WARN symbolica::state: Imported symbol UFO::ymm was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269526Z  WARN symbolica::state: Imported symbol UFO::ymtau was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269535Z  WARN symbolica::state: Imported symbol UFO::MZ was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269548Z  WARN symbolica::state: Imported symbol UFO::MC was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269557Z  WARN symbolica::state: Imported symbol UFO::MT was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269565Z  WARN symbolica::state: Imported symbol UFO::MB was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269578Z  WARN symbolica::state: Imported symbol UFO::MH was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269589Z  WARN symbolica::state: Imported symbol UFO::Me was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269597Z  WARN symbolica::state: Imported symbol UFO::MM was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269610Z  WARN symbolica::state: Imported symbol UFO::MTA was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269619Z  WARN symbolica::state: Imported symbol UFO::WZ was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269627Z  WARN symbolica::state: Imported symbol UFO::WW was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269653Z  WARN symbolica::state: Imported symbol UFO::WT was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269663Z  WARN symbolica::state: Imported symbol UFO::WH was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269674Z  WARN symbolica::state: Imported symbol UFO::WTau was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269696Z  WARN symbolica::state: Imported symbol UFO::CKM3x3 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269705Z  WARN symbolica::state: Imported symbol UFO::CKM1x1 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269714Z  WARN symbolica::state: Imported symbol UFO::CKM1x2 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269727Z  WARN symbolica::state: Imported symbol UFO::CKM1x3 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269736Z  WARN symbolica::state: Imported symbol UFO::CKM2x1 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269744Z  WARN symbolica::state: Imported symbol UFO::CKM2x2 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269759Z  WARN symbolica::state: Imported symbol UFO::CKM2x3 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269783Z  WARN symbolica::state: Imported symbol UFO::CKM3x1 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269791Z  WARN symbolica::state: Imported symbol UFO::CKM3x2 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269804Z  WARN symbolica::state: Imported symbol UFO::aEW was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269813Z  WARN symbolica::state: Imported symbol UFO::G was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269822Z  WARN symbolica::state: Imported symbol UFO::MW was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269834Z  WARN symbolica::state: Imported symbol UFO::ee was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269846Z  WARN symbolica::state: Imported symbol UFO::sw2 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269855Z  WARN symbolica::state: Imported symbol UFO::cw was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269867Z  WARN symbolica::state: Imported symbol UFO::sw was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269876Z  WARN symbolica::state: Imported symbol UFO::g1 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269885Z  WARN symbolica::state: Imported symbol UFO::gw was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269897Z  WARN symbolica::state: Imported symbol UFO::vev was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269906Z  WARN symbolica::state: Imported symbol UFO::lam was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269917Z  WARN symbolica::state: Imported symbol UFO::yb was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269930Z  WARN symbolica::state: Imported symbol UFO::yc was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269939Z  WARN symbolica::state: Imported symbol UFO::ye was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269947Z  WARN symbolica::state: Imported symbol UFO::ym was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269960Z  WARN symbolica::state: Imported symbol UFO::yt was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269969Z  WARN symbolica::state: Imported symbol UFO::ytau was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269977Z  WARN symbolica::state: Imported symbol UFO::muH was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.269992Z  WARN symbolica::state: Imported symbol UFO::I1x31 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270001Z  WARN symbolica::state: Imported symbol UFO::I1x32 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270010Z  WARN symbolica::state: Imported symbol UFO::I1x33 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270022Z  WARN symbolica::state: Imported symbol UFO::I2x12 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270031Z  WARN symbolica::state: Imported symbol UFO::I2x13 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270041Z  WARN symbolica::state: Imported symbol UFO::I2x22 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270054Z  WARN symbolica::state: Imported symbol UFO::I2x23 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270065Z  WARN symbolica::state: Imported symbol UFO::I2x32 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270074Z  WARN symbolica::state: Imported symbol UFO::I2x33 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270087Z  WARN symbolica::state: Imported symbol UFO::I3x21 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270096Z  WARN symbolica::state: Imported symbol UFO::I3x22 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270114Z  WARN symbolica::state: Imported symbol UFO::I3x23 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270127Z  WARN symbolica::state: Imported symbol UFO::I3x31 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270136Z  WARN symbolica::state: Imported symbol UFO::I3x32 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270149Z  WARN symbolica::state: Imported symbol UFO::I3x33 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270158Z  WARN symbolica::state: Imported symbol UFO::I4x13 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270166Z  WARN symbolica::state: Imported symbol UFO::I4x23 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270186Z  WARN symbolica::state: Imported symbol UFO::I4x33 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270262Z  WARN symbolica::state: Imported symbol UFO::GC_1 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270271Z  WARN symbolica::state: Imported symbol UFO::GC_2 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270313Z  WARN symbolica::state: Imported symbol UFO::GC_3 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270324Z  WARN symbolica::state: Imported symbol UFO::GC_4 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270333Z  WARN symbolica::state: Imported symbol UFO::GC_5 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270346Z  WARN symbolica::state: Imported symbol UFO::GC_6 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270355Z  WARN symbolica::state: Imported symbol UFO::GC_7 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270364Z  WARN symbolica::state: Imported symbol UFO::GC_8 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270377Z  WARN symbolica::state: Imported symbol UFO::GC_9 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270389Z  WARN symbolica::state: Imported symbol UFO::GC_10 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270398Z  WARN symbolica::state: Imported symbol UFO::GC_11 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270411Z  WARN symbolica::state: Imported symbol UFO::GC_12 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270419Z  WARN symbolica::state: Imported symbol UFO::GC_13 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270428Z  WARN symbolica::state: Imported symbol UFO::GC_14 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270441Z  WARN symbolica::state: Imported symbol UFO::GC_15 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270450Z  WARN symbolica::state: Imported symbol UFO::GC_16 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270461Z  WARN symbolica::state: Imported symbol UFO::GC_17 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270474Z  WARN symbolica::state: Imported symbol UFO::GC_18 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270483Z  WARN symbolica::state: Imported symbol UFO::GC_19 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270492Z  WARN symbolica::state: Imported symbol UFO::GC_20 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270505Z  WARN symbolica::state: Imported symbol UFO::GC_21 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270513Z  WARN symbolica::state: Imported symbol UFO::GC_22 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270522Z  WARN symbolica::state: Imported symbol UFO::GC_23 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270537Z  WARN symbolica::state: Imported symbol UFO::GC_24 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270546Z  WARN symbolica::state: Imported symbol UFO::GC_25 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270555Z  WARN symbolica::state: Imported symbol UFO::GC_26 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270567Z  WARN symbolica::state: Imported symbol UFO::GC_27 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270576Z  WARN symbolica::state: Imported symbol UFO::GC_28 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270585Z  WARN symbolica::state: Imported symbol UFO::GC_29 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270598Z  WARN symbolica::state: Imported symbol UFO::GC_30 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270609Z  WARN symbolica::state: Imported symbol UFO::GC_31 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270617Z  WARN symbolica::state: Imported symbol UFO::GC_32 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270630Z  WARN symbolica::state: Imported symbol UFO::GC_33 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270639Z  WARN symbolica::state: Imported symbol UFO::GC_34 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270648Z  WARN symbolica::state: Imported symbol UFO::GC_35 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270661Z  WARN symbolica::state: Imported symbol UFO::GC_36 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270670Z  WARN symbolica::state: Imported symbol UFO::GC_37 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270685Z  WARN symbolica::state: Imported symbol UFO::GC_38 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270694Z  WARN symbolica::state: Imported symbol UFO::GC_39 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270703Z  WARN symbolica::state: Imported symbol UFO::GC_40 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270716Z  WARN symbolica::state: Imported symbol UFO::GC_41 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270725Z  WARN symbolica::state: Imported symbol UFO::GC_42 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270734Z  WARN symbolica::state: Imported symbol UFO::GC_43 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270747Z  WARN symbolica::state: Imported symbol UFO::GC_44 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270758Z  WARN symbolica::state: Imported symbol UFO::GC_45 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270781Z  WARN symbolica::state: Imported symbol UFO::GC_46 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270806Z  WARN symbolica::state: Imported symbol UFO::GC_47 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270815Z  WARN symbolica::state: Imported symbol UFO::GC_48 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270824Z  WARN symbolica::state: Imported symbol UFO::GC_49 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270850Z  WARN symbolica::state: Imported symbol UFO::GC_50 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270859Z  WARN symbolica::state: Imported symbol UFO::GC_51 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270872Z  WARN symbolica::state: Imported symbol UFO::GC_52 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270885Z  WARN symbolica::state: Imported symbol UFO::GC_53 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270894Z  WARN symbolica::state: Imported symbol UFO::GC_54 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270903Z  WARN symbolica::state: Imported symbol UFO::GC_55 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270916Z  WARN symbolica::state: Imported symbol UFO::GC_56 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270925Z  WARN symbolica::state: Imported symbol UFO::GC_57 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270935Z  WARN symbolica::state: Imported symbol UFO::GC_58 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270951Z  WARN symbolica::state: Imported symbol UFO::GC_59 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270960Z  WARN symbolica::state: Imported symbol UFO::GC_60 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270969Z  WARN symbolica::state: Imported symbol UFO::GC_61 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270982Z  WARN symbolica::state: Imported symbol UFO::GC_62 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.270991Z  WARN symbolica::state: Imported symbol UFO::GC_63 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271000Z  WARN symbolica::state: Imported symbol UFO::GC_64 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271013Z  WARN symbolica::state: Imported symbol UFO::GC_65 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271025Z  WARN symbolica::state: Imported symbol UFO::GC_66 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271035Z  WARN symbolica::state: Imported symbol UFO::GC_67 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271048Z  WARN symbolica::state: Imported symbol UFO::GC_68 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271058Z  WARN symbolica::state: Imported symbol UFO::GC_69 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271067Z  WARN symbolica::state: Imported symbol UFO::GC_70 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271080Z  WARN symbolica::state: Imported symbol UFO::GC_71 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271089Z  WARN symbolica::state: Imported symbol UFO::GC_72 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271101Z  WARN symbolica::state: Imported symbol UFO::GC_73 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271114Z  WARN symbolica::state: Imported symbol UFO::GC_74 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271124Z  WARN symbolica::state: Imported symbol UFO::GC_75 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271137Z  WARN symbolica::state: Imported symbol UFO::GC_76 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271146Z  WARN symbolica::state: Imported symbol UFO::GC_77 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271155Z  WARN symbolica::state: Imported symbol UFO::GC_78 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271169Z  WARN symbolica::state: Imported symbol UFO::GC_79 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271181Z  WARN symbolica::state: Imported symbol UFO::GC_80 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271190Z  WARN symbolica::state: Imported symbol UFO::GC_81 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271203Z  WARN symbolica::state: Imported symbol UFO::GC_82 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271212Z  WARN symbolica::state: Imported symbol UFO::GC_83 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271222Z  WARN symbolica::state: Imported symbol UFO::GC_84 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271235Z  WARN symbolica::state: Imported symbol UFO::GC_85 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271244Z  WARN symbolica::state: Imported symbol UFO::GC_86 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271256Z  WARN symbolica::state: Imported symbol UFO::GC_87 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271270Z  WARN symbolica::state: Imported symbol UFO::GC_88 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271278Z  WARN symbolica::state: Imported symbol UFO::GC_89 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271287Z  WARN symbolica::state: Imported symbol UFO::GC_90 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271301Z  WARN symbolica::state: Imported symbol UFO::GC_91 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271310Z  WARN symbolica::state: Imported symbol UFO::GC_92 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271319Z  WARN symbolica::state: Imported symbol UFO::GC_93 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271335Z  WARN symbolica::state: Imported symbol UFO::GC_94 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271344Z  WARN symbolica::state: Imported symbol UFO::GC_95 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271353Z  WARN symbolica::state: Imported symbol UFO::GC_96 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271366Z  WARN symbolica::state: Imported symbol UFO::GC_97 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271375Z  WARN symbolica::state: Imported symbol UFO::GC_98 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271384Z  WARN symbolica::state: Imported symbol UFO::GC_99 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271397Z  WARN symbolica::state: Imported symbol UFO::GC_100 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271408Z  WARN symbolica::state: Imported symbol UFO::GC_101 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271417Z  WARN symbolica::state: Imported symbol UFO::GC_102 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271431Z  WARN symbolica::state: Imported symbol UFO::GC_103 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271440Z  WARN symbolica::state: Imported symbol UFO::GC_104 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271449Z  WARN symbolica::state: Imported symbol UFO::GC_105 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271463Z  WARN symbolica::state: Imported symbol UFO::GC_106 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271472Z  WARN symbolica::state: Imported symbol UFO::GC_107 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271483Z  WARN symbolica::state: Imported symbol UFO::GC_108 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271599Z  WARN symbolica::state: Imported symbol linnet::S_11vs was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271610Z  WARN symbolica::state: Imported symbol linnet::S_18OWF was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.271997Z  WARN symbolica::state: Imported symbol linnet::S_18OW0 was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272010Z  WARN symbolica::state: Imported symbol linnet::S_12nI was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272024Z  WARN symbolica::state: Imported symbol linnet::S_18NfM was previously defined with user-defined functions, but the imported version does not have any.
+{"stage":"exact_registry_ready","elapsed_seconds":0.137804968,"pid":3227564,"rss_bytes":7032832,"vmhwm_bytes":7032832}
+2026-09-14T08:42:38.272288Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272307Z  WARN symbolica::atom: Imported symbol spenso::TR was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272319Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272349Z  WARN symbolica::atom: Imported symbol gammalooprs::OSE was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272361Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272378Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272389Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272401Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272417Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272428Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272442Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272458Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272470Z  WARN symbolica::atom: Imported symbol spenso::CA was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272481Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272496Z  WARN symbolica::atom: Imported symbol spenso::CF was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272507Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272518Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272533Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272545Z  WARN symbolica::atom: Imported symbol gammalooprs::broadcasting_sqrt was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272557Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272572Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272583Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272595Z  WARN symbolica::atom: Imported symbol gammalooprs::OSE was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272611Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272622Z  WARN symbolica::atom: Imported symbol gammalooprs::OSE was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272644Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272657Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272668Z  WARN symbolica::atom: Imported symbol gammalooprs::OSE was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272692Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272703Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272714Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272730Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272741Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272752Z  WARN symbolica::atom: Imported symbol gammalooprs::OSE was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272780Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272792Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272803Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272819Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272831Z  WARN symbolica::atom: Imported symbol spenso::Nc was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272841Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272856Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272867Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272878Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272896Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272908Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272919Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272935Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272946Z  WARN symbolica::atom: Imported symbol gammalooprs::OSE was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272963Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272974Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.272985Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.273001Z  WARN symbolica::atom: Imported symbol gammalooprs::OSE was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.273012Z  WARN symbolica::atom: Imported symbol gammalooprs::OSE was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.273024Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.273040Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.273051Z  WARN symbolica::atom: Imported symbol gammalooprs::OSE was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.273062Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.273079Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.273090Z  WARN symbolica::atom: Imported symbol gammalooprs::OSE was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.273101Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.273118Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.273130Z  WARN symbolica::atom: Imported symbol gammalooprs::OSE was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.273140Z  WARN symbolica::atom: Imported symbol gammalooprs::Q was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.273156Z  WARN symbolica::atom: Imported symbol gammalooprs::broadcasting_sqrt was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.273167Z  WARN symbolica::atom: Imported symbol spenso::CF was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.273177Z  WARN symbolica::atom: Imported symbol spenso::CA was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.273192Z  WARN symbolica::atom: Imported symbol spenso::TR was previously defined with user-defined functions, but the imported version does not have any.
+2026-09-14T08:42:38.273201Z  WARN symbolica::atom: Imported symbol spenso::Nc was previously defined with user-defined functions, but the imported version does not have any.
+{"stage":"exact_function_map_verified","elapsed_seconds":0.139263332,"pid":3227564,"rss_bytes":7303168,"vmhwm_bytes":7303168}
+{"stage":"exact_expression_loaded_without_normalization","elapsed_seconds":31.309660011,"pid":3227564,"rss_bytes":19989336064,"vmhwm_bytes":19989336064}
+settings={"abort_level":0,"cpe_iterations":5,"direct_translation":true,"horner_iterations":1,"hot_start":null,"max_common_pair_cache_entries":1000000,"max_common_pair_distance":1000,"max_horner_scheme_variables":500,"n_cores":1,"verbose":false}
+{"stage":"symbolica_build_start","elapsed_seconds":31.309846422,"pid":3227564,"rss_bytes":19989340160,"vmhwm_bytes":19989340160}
+
+thread 'main' (3227564) panicked at /home/codex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bytes-1.12.1/src/lib.rs:207:5:
+advance out of bounds: the len is 1721315294 but advancing by 10311249876
+stack backtrace:
+   0:     0x5e152008e528 - std[bcb96dfbba0ab899]::backtrace_rs::backtrace::libunwind::trace
+                               at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/std/src/../../backtrace/src/backtrace/libunwind.rs:117:9
+   1:     0x5e152008e528 - std[bcb96dfbba0ab899]::backtrace_rs::backtrace::trace_unsynchronized::<std[bcb96dfbba0ab899]::sys::backtrace::_print_fmt::{closure#1}>
+                               at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/std/src/../../backtrace/src/backtrace/mod.rs:66:14
+   2:     0x5e152008e528 - std[bcb96dfbba0ab899]::sys::backtrace::_print_fmt
+                               at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/std/src/sys/backtrace.rs:74:9
+   3:     0x5e152008e528 - <<std[bcb96dfbba0ab899]::sys::backtrace::BacktraceLock>::print::DisplayBacktrace as core[940e698046960fd5]::fmt::Display>::fmt
+                               at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/std/src/sys/backtrace.rs:44:26
+   4:     0x5e15200a569a - <core[940e698046960fd5]::fmt::rt::Argument>::fmt
+                               at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/core/src/fmt/rt.rs:152:76
+   5:     0x5e15200a569a - core[940e698046960fd5]::fmt::write
+   6:     0x5e15200935c2 - std[bcb96dfbba0ab899]::io::default_write_fmt::<std[bcb96dfbba0ab899]::sys::stdio::unix::Stderr>
+                               at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/std/src/io/mod.rs:622:11
+   7:     0x5e15200935c2 - <std[bcb96dfbba0ab899]::sys::stdio::unix::Stderr as std[bcb96dfbba0ab899]::io::Write>::write_fmt
+                               at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/std/src/io/mod.rs:1977:13
+   8:     0x5e1520073c8a - <std[bcb96dfbba0ab899]::sys::backtrace::BacktraceLock>::print
+                               at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/std/src/sys/backtrace.rs:47:9
+   9:     0x5e1520073c8a - std[bcb96dfbba0ab899]::panicking::default_hook::{closure#0}
+                               at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/std/src/panicking.rs:292:27
+  10:     0x5e15200865ae - std[bcb96dfbba0ab899]::panicking::default_hook
+                               at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/std/src/panicking.rs:319:9
+  11:     0x5e152008676b - std[bcb96dfbba0ab899]::panicking::panic_with_hook
+                               at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/std/src/panicking.rs:825:13
+  12:     0x5e1520073d42 - std[bcb96dfbba0ab899]::panicking::panic_handler::{closure#0}
+                               at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/std/src/panicking.rs:698:13
+  13:     0x5e152006ba59 - std[bcb96dfbba0ab899]::sys::backtrace::__rust_end_short_backtrace::<std[bcb96dfbba0ab899]::panicking::panic_handler::{closure#0}, !>
+                               at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/std/src/sys/backtrace.rs:182:18
+  14:     0x5e1520074b4d - __rustc[6c289b9f9c454d21]::rust_begin_unwind
+                               at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/std/src/panicking.rs:689:5
+  15:     0x5e151f17ea6c - core[940e698046960fd5]::panicking::panic_fmt
+                               at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/core/src/panicking.rs:80:14
+  16:     0x5e151f17856c - bytes[13cb93d132f5a7c5]::panic_advance
+                               at /home/codex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bytes-1.12.1/src/lib.rs:207:5
+  17:     0x5e151f2d2f3e - <&[u8] as bytes[13cb93d132f5a7c5]::buf::buf_impl::Buf>::advance
+                               at /home/codex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bytes-1.12.1/src/buf/buf_impl.rs:2908:13
+  18:     0x5e151f2d2f3e - <symbolica[e7d9af6a7be34ff]::atom::representation::ListIterator as core[940e698046960fd5]::iter::traits::iterator::Iterator>::next
+  19:     0x5e151f2d2f3e - <symbolica[e7d9af6a7be34ff]::atom::AtomView>::normalize
+                               at /home/codex/.cargo/git/checkouts/symbolica-db3dbb7e8d40efb5/ba37371/src/normalize.rs:664:26
+  20:     0x5e151f2d09e8 - <symbolica[e7d9af6a7be34ff]::atom::AtomView>::normalize
+                               at /home/codex/.cargo/git/checkouts/symbolica-db3dbb7e8d40efb5/ba37371/src/normalize.rs:1542:27
+  21:     0x5e151f38e86d - <symbolica[e7d9af6a7be34ff]::atom::AtomView>::horner_scheme_impl::{closure#0}
+                               at /home/codex/.cargo/git/checkouts/symbolica-db3dbb7e8d40efb5/ba37371/src/collect.rs:1530:25
+  22:     0x5e151f38e86d - <std[bcb96dfbba0ab899]::thread::local::LocalKey<symbolica[e7d9af6a7be34ff]::state::Workspace>>::try_with::<<symbolica[e7d9af6a7be34ff]::atom::AtomView>::horner_scheme_impl::{closure#0}, symbolica[e7d9af6a7be34ff]::atom::Atom>
+                               at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/std/src/thread/local.rs:462:12
+  23:     0x5e151f38e86d - <std[bcb96dfbba0ab899]::thread::local::LocalKey<symbolica[e7d9af6a7be34ff]::state::Workspace>>::with::<<symbolica[e7d9af6a7be34ff]::atom::AtomView>::horner_scheme_impl::{closure#0}, symbolica[e7d9af6a7be34ff]::atom::Atom>
+                               at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/std/src/thread/local.rs:426:20
+  24:     0x5e151f29019b - <symbolica[e7d9af6a7be34ff]::atom::AtomView>::horner_scheme_impl
+                               at /home/codex/.cargo/git/checkouts/symbolica-db3dbb7e8d40efb5/ba37371/src/collect.rs:1526:32
+  25:     0x5e151f29019b - <symbolica[e7d9af6a7be34ff]::atom::AtomView>::horner_scheme
+                               at /home/codex/.cargo/git/checkouts/symbolica-db3dbb7e8d40efb5/ba37371/src/collect.rs:1498:18
+  26:     0x5e151fdb7b8f - <symbolica[e7d9af6a7be34ff]::atom::AtomView>::optimize_horner_scheme_multiple::{closure#1}::{closure#0}::{closure#1}
+                               at /home/codex/.cargo/git/checkouts/symbolica-db3dbb7e8d40efb5/ba37371/src/evaluate/tree.rs:470:40
+  27:     0x5e151fdb7b8f - core[940e698046960fd5]::iter::adapters::map::map_fold::<&symbolica[e7d9af6a7be34ff]::atom::AtomView, symbolica[e7d9af6a7be34ff]::atom::Atom, (), <symbolica[e7d9af6a7be34ff]::atom::AtomView>::optimize_horner_scheme_multiple::{closure#1}::{closure#0}::{closure#1}, core[940e698046960fd5]::iter::traits::iterator::Iterator::for_each::call<symbolica[e7d9af6a7be34ff]::atom::Atom, <alloc[2ea6bcb46fca0c42]::vec::Vec<symbolica[e7d9af6a7be34ff]::atom::Atom>>::extend_trusted<core[940e698046960fd5]::iter::adapters::map::Map<core[940e698046960fd5]::slice::iter::Iter<symbolica[e7d9af6a7be34ff]::atom::AtomView>, <symbolica[e7d9af6a7be34ff]::atom::AtomView>::optimize_horner_scheme_multiple::{closure#1}::{closure#0}::{closure#1}>>::{closure#0}>::{closure#0}>::{closure#0}
+                               at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/core/src/iter/adapters/map.rs:88:28
+  28:     0x5e151fdb7b8f - <core[940e698046960fd5]::slice::iter::Iter<symbolica[e7d9af6a7be34ff]::atom::AtomView> as core[940e698046960fd5]::iter::traits::iterator::Iterator>::fold::<(), core[940e698046960fd5]::iter::adapters::map::map_fold<&symbolica[e7d9af6a7be34ff]::atom::AtomView, symbolica[e7d9af6a7be34ff]::atom::Atom, (), <symbolica[e7d9af6a7be34ff]::atom::AtomView>::optimize_horner_scheme_multiple::{closure#1}::{closure#0}::{closure#1}, core[940e698046960fd5]::iter::traits::iterator::Iterator::for_each::call<symbolica[e7d9af6a7be34ff]::atom::Atom, <alloc[2ea6bcb46fca0c42]::vec::Vec<symbolica[e7d9af6a7be34ff]::atom::Atom>>::extend_trusted<core[940e698046960fd5]::iter::adapters::map::Map<core[940e698046960fd5]::slice::iter::Iter<symbolica[e7d9af6a7be34ff]::atom::AtomView>, <symbolica[e7d9af6a7be34ff]::atom::AtomView>::optimize_horner_scheme_multiple::{closure#1}::{closure#0}::{closure#1}>>::{closure#0}>::{closure#0}>::{closure#0}>
+                               at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/core/src/slice/iter/macros.rs:279:27
+  29:     0x5e151fdb7b8f - <core[940e698046960fd5]::iter::adapters::map::Map<core[940e698046960fd5]::slice::iter::Iter<symbolica[e7d9af6a7be34ff]::atom::AtomView>, <symbolica[e7d9af6a7be34ff]::atom::AtomView>::optimize_horner_scheme_multiple::{closure#1}::{closure#0}::{closure#1}> as core[940e698046960fd5]::iter::traits::iterator::Iterator>::fold::<(), core[940e698046960fd5]::iter::traits::iterator::Iterator::for_each::call<symbolica[e7d9af6a7be34ff]::atom::Atom, <alloc[2ea6bcb46fca0c42]::vec::Vec<symbolica[e7d9af6a7be34ff]::atom::Atom>>::extend_trusted<core[940e698046960fd5]::iter::adapters::map::Map<core[940e698046960fd5]::slice::iter::Iter<symbolica[e7d9af6a7be34ff]::atom::AtomView>, <symbolica[e7d9af6a7be34ff]::atom::AtomView>::optimize_horner_scheme_multiple::{closure#1}::{closure#0}::{closure#1}>>::{closure#0}>::{closure#0}>
+                               at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/core/src/iter/adapters/map.rs:128:19
+  30:     0x5e151fdb7b8f - <core[940e698046960fd5]::iter::adapters::map::Map<core[940e698046960fd5]::slice::iter::Iter<symbolica[e7d9af6a7be34ff]::atom::AtomView>, <symbolica[e7d9af6a7be34ff]::atom::AtomView>::optimize_horner_scheme_multiple::{closure#1}::{closure#0}::{closure#1}> as core[940e698046960fd5]::iter::traits::iterator::Iterator>::for_each::<<alloc[2ea6bcb46fca0c42]::vec::Vec<symbolica[e7d9af6a7be34ff]::atom::Atom>>::extend_trusted<core[940e698046960fd5]::iter::adapters::map::Map<core[940e698046960fd5]::slice::iter::Iter<symbolica[e7d9af6a7be34ff]::atom::AtomView>, <symbolica[e7d9af6a7be34ff]::atom::AtomView>::optimize_horner_scheme_multiple::{closure#1}::{closure#0}::{closure#1}>>::{closure#0}>
+                               at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/core/src/iter/traits/iterator.rs:887:14
+  31:     0x5e151fdb7b8f - <alloc[2ea6bcb46fca0c42]::vec::Vec<symbolica[e7d9af6a7be34ff]::atom::Atom>>::extend_trusted::<core[940e698046960fd5]::iter::adapters::map::Map<core[940e698046960fd5]::slice::iter::Iter<symbolica[e7d9af6a7be34ff]::atom::AtomView>, <symbolica[e7d9af6a7be34ff]::atom::AtomView>::optimize_horner_scheme_multiple::{closure#1}::{closure#0}::{closure#1}>>
+                               at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/alloc/src/vec/mod.rs:4062:26
+  32:     0x5e151fdb7b8f - <alloc[2ea6bcb46fca0c42]::vec::Vec<symbolica[e7d9af6a7be34ff]::atom::Atom> as alloc[2ea6bcb46fca0c42]::vec::spec_extend::SpecExtend<symbolica[e7d9af6a7be34ff]::atom::Atom, core[940e698046960fd5]::iter::adapters::map::Map<core[940e698046960fd5]::slice::iter::Iter<symbolica[e7d9af6a7be34ff]::atom::AtomView>, <symbolica[e7d9af6a7be34ff]::atom::AtomView>::optimize_horner_scheme_multiple::{closure#1}::{closure#0}::{closure#1}>>>::spec_extend
+                               at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/alloc/src/vec/spec_extend.rs:27:14
+  33:     0x5e151fdb7b8f - <alloc[2ea6bcb46fca0c42]::vec::Vec<symbolica[e7d9af6a7be34ff]::atom::Atom> as alloc[2ea6bcb46fca0c42]::vec::spec_from_iter_nested::SpecFromIterNested<symbolica[e7d9af6a7be34ff]::atom::Atom, core[940e698046960fd5]::iter::adapters::map::Map<core[940e698046960fd5]::slice::iter::Iter<symbolica[e7d9af6a7be34ff]::atom::AtomView>, <symbolica[e7d9af6a7be34ff]::atom::AtomView>::optimize_horner_scheme_multiple::{closure#1}::{closure#0}::{closure#1}>>>::from_iter
+                               at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/alloc/src/vec/spec_from_iter_nested.rs:60:16
+  34:     0x5e151f2b42c9 - <alloc[2ea6bcb46fca0c42]::vec::Vec<symbolica[e7d9af6a7be34ff]::atom::Atom> as alloc[2ea6bcb46fca0c42]::vec::spec_from_iter::SpecFromIter<symbolica[e7d9af6a7be34ff]::atom::Atom, core[940e698046960fd5]::iter::adapters::map::Map<core[940e698046960fd5]::slice::iter::Iter<symbolica[e7d9af6a7be34ff]::atom::AtomView>, <symbolica[e7d9af6a7be34ff]::atom::AtomView>::to_evaluator::{closure#3}>>>::from_iter
+                               at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/alloc/src/vec/spec_from_iter.rs:33:9
+  35:     0x5e151f2b42c9 - <alloc[2ea6bcb46fca0c42]::vec::Vec<symbolica[e7d9af6a7be34ff]::atom::Atom> as core[940e698046960fd5]::iter::traits::collect::FromIterator<symbolica[e7d9af6a7be34ff]::atom::Atom>>::from_iter::<core[940e698046960fd5]::iter::adapters::map::Map<core[940e698046960fd5]::slice::iter::Iter<symbolica[e7d9af6a7be34ff]::atom::AtomView>, <symbolica[e7d9af6a7be34ff]::atom::AtomView>::to_evaluator::{closure#3}>>
+                               at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/alloc/src/vec/mod.rs:3926:9
+  36:     0x5e151f2b42c9 - <core[940e698046960fd5]::iter::adapters::map::Map<core[940e698046960fd5]::slice::iter::Iter<symbolica[e7d9af6a7be34ff]::atom::AtomView>, <symbolica[e7d9af6a7be34ff]::atom::AtomView>::to_evaluator::{closure#3}> as core[940e698046960fd5]::iter::traits::iterator::Iterator>::collect::<alloc[2ea6bcb46fca0c42]::vec::Vec<symbolica[e7d9af6a7be34ff]::atom::Atom>>
+                               at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/core/src/iter/traits/iterator.rs:2090:9
+  37:     0x5e151f2b42c9 - <symbolica[e7d9af6a7be34ff]::atom::AtomView>::to_evaluator
+                               at /home/codex/.cargo/git/checkouts/symbolica-db3dbb7e8d40efb5/ba37371/src/evaluate/tree.rs:312:14
+  38:     0x5e151f4d9866 - <symbolica[e7d9af6a7be34ff]::evaluate::function_map::EvaluatorBuilder>::build
+                               at /home/codex/.cargo/git/checkouts/symbolica-db3dbb7e8d40efb5/ba37371/src/evaluate/function_map.rs:461:13
+  39:     0x5e151f1c3283 - symbolica_upstream_exact_builder[8de8af41b38b840]::main
+                               at /common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/symbolica_upstream_20260914/exact_builder/src/main.rs:237:14
+  40:     0x5e151f1c5dc3 - <fn() -> core[940e698046960fd5]::result::Result<(), alloc[2ea6bcb46fca0c42]::boxed::Box<dyn core[940e698046960fd5]::error::Error>> as core[940e698046960fd5]::ops::function::FnOnce<()>>::call_once
+                               at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/core/src/ops/function.rs:250:5
+  41:     0x5e151f1c5dc3 - std[bcb96dfbba0ab899]::sys::backtrace::__rust_begin_short_backtrace::<fn() -> core[940e698046960fd5]::result::Result<(), alloc[2ea6bcb46fca0c42]::boxed::Box<dyn core[940e698046960fd5]::error::Error>>, core[940e698046960fd5]::result::Result<(), alloc[2ea6bcb46fca0c42]::boxed::Box<dyn core[940e698046960fd5]::error::Error>>>
+                               at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/std/src/sys/backtrace.rs:166:18
+  42:     0x5e151f1b109d - std[bcb96dfbba0ab899]::rt::lang_start::<core[940e698046960fd5]::result::Result<(), alloc[2ea6bcb46fca0c42]::boxed::Box<dyn core[940e698046960fd5]::error::Error>>>::{closure#0}
+                               at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/std/src/rt.rs:206:18
+  43:     0x5e1520085947 - <&dyn core[940e698046960fd5]::ops::function::Fn<(), Output = i32> + core[940e698046960fd5]::marker::Sync + core[940e698046960fd5]::panic::unwind_safe::RefUnwindSafe as core[940e698046960fd5]::ops::function::FnOnce<()>>::call_once
+                               at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/core/src/ops/function.rs:287:21
+  44:     0x5e1520085947 - std[bcb96dfbba0ab899]::panicking::catch_unwind::do_call::<&dyn core[940e698046960fd5]::ops::function::Fn<(), Output = i32> + core[940e698046960fd5]::marker::Sync + core[940e698046960fd5]::panic::unwind_safe::RefUnwindSafe, i32>
+                               at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/std/src/panicking.rs:581:40
+  45:     0x5e1520085947 - std[bcb96dfbba0ab899]::panicking::catch_unwind::<i32, &dyn core[940e698046960fd5]::ops::function::Fn<(), Output = i32> + core[940e698046960fd5]::marker::Sync + core[940e698046960fd5]::panic::unwind_safe::RefUnwindSafe>
+                               at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/std/src/panicking.rs:544:19
+  46:     0x5e1520085947 - std[bcb96dfbba0ab899]::panic::catch_unwind::<&dyn core[940e698046960fd5]::ops::function::Fn<(), Output = i32> + core[940e698046960fd5]::marker::Sync + core[940e698046960fd5]::panic::unwind_safe::RefUnwindSafe, i32>
+                               at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/std/src/panic.rs:359:14
+  47:     0x5e1520085947 - std[bcb96dfbba0ab899]::rt::lang_start_internal::{closure#0}
+                               at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/std/src/rt.rs:175:24
+  48:     0x5e1520085947 - std[bcb96dfbba0ab899]::panicking::catch_unwind::do_call::<std[bcb96dfbba0ab899]::rt::lang_start_internal::{closure#0}, isize>
+                               at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/std/src/panicking.rs:581:40
+  49:     0x5e1520085947 - std[bcb96dfbba0ab899]::panicking::catch_unwind::<isize, std[bcb96dfbba0ab899]::rt::lang_start_internal::{closure#0}>
+                               at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/std/src/panicking.rs:544:19
+  50:     0x5e1520085947 - std[bcb96dfbba0ab899]::panic::catch_unwind::<std[bcb96dfbba0ab899]::rt::lang_start_internal::{closure#0}, isize>
+                               at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/std/src/panic.rs:359:14
+  51:     0x5e1520085947 - std[bcb96dfbba0ab899]::rt::lang_start_internal
+                               at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/std/src/rt.rs:171:5
+  52:     0x5e151f1c543c - main
+  53:     0x71e862082285 - __libc_start_call_main
+  54:     0x71e862082338 - __libc_start_main_alias_2
+  55:     0x5e151f18a515 - _start
+  56:                0x0 - <unknown>

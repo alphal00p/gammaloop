@@ -1,0 +1,24 @@
+[package]
+name = "symbolica-upstream-exact-builder"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "ba3737137c2a2ccd7bb39f0441837d38ec867e78", default-features = false, features = ["integer-gmp", "float-mpfr", "native_code_generation", "bincode", "serde"] }
+bincode = "2.0.1"
+serde_json = "1.0"
+
+[patch.crates-io]
+numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "ba3737137c2a2ccd7bb39f0441837d38ec867e78" }
+graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "ba3737137c2a2ccd7bb39f0441837d38ec867e78" }
+
+[profile.dev-optim]
+inherits = "dev"
+opt-level = 2
+debug-assertions = true
+
+[profile.dev-optim.package."*"]
+opt-level = 3

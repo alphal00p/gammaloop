@@ -1,0 +1,85 @@
+{
+  "command": [
+    "flock",
+    "/tmp/gammaloop-aa-aa-uv-benchmark.lock",
+    "python3",
+    "bin/ram_watchdog.py",
+    "--limit-gb",
+    "500",
+    "--log",
+    "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/symbolica_upstream_20260914/GL262_exact_r3/watchdog.jsonl",
+    "--",
+    "/tmp/raised-stack/run",
+    "env",
+    "SYMBOLICA_LICENSE=<corrected S-format key>",
+    "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/symbolica_upstream_20260914/immutable_exact_r1/symbolica-upstream-exact-builder",
+    "--exact-builder",
+    "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/gl262_faithful_20260914/GL262_capture_r1/capture/build_1602207_0"
+  ],
+  "license_sha256": "f972d241f8eaecec04777d34f5797d5120c00343b0edb8baffc79346c03416af",
+  "actual_environment_variable": "SYMBOLICA_LICENSE",
+  "started_utc": "2026-09-14T08:42:38.047619+00:00",
+  "symbolica_revision": "ba3737137c2a2ccd7bb39f0441837d38ec867e78",
+  "complete": true,
+  "available_memory_before_bytes": 672477286400,
+  "memory_guard_bytes": 500000000000,
+  "binary_source_identities": {
+    "Cargo.toml": {
+      "bytes": 774,
+      "sha256": "49bf3e5ff763c0f138b805f632ad7dae3505e9109ed9fcf22a548910a8137b00"
+    },
+    "symbolica-upstream-exact-builder": {
+      "bytes": 470706192,
+      "sha256": "9a06fc6808ba8ff095d970ab222a93217491b665f93f49c8080a911c74ad5aae"
+    },
+    "Cargo.lock": {
+      "bytes": 35230,
+      "sha256": "2cad3c3d910dc0d48f7ce94d13b76c89db39cdefbc762de26aa8a6c1a7941ccc"
+    },
+    "main.rs": {
+      "bytes": 11153,
+      "sha256": "bf07a5cfdd760245d01d0d7bffabd139309850e5a6bd0b0d84aa1b5141bb1a6c"
+    }
+  },
+  "original_input_identities": {
+    "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/gl262_faithful_20260914/GL262_capture_r1/capture/build_1602207_0/optimization.json": {
+      "bytes": 276,
+      "sha256": "ef17e64ebd597922d700261d08eefacf44217dda64698feaa93d56e6f494d0dc"
+    },
+    "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/gl262_faithful_20260914/GL262_capture_r1/capture/build_1602207_0/manifest.json": {
+      "bytes": 34605,
+      "sha256": "66e9973f787bf351750c7b63f7bce5f765f66a53bc5e6edb04afb3690b539f0d"
+    },
+    "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/gl262_faithful_20260914/GL262_capture_r1/capture/build_1602207_0/function_map.bin": {
+      "bytes": 11002,
+      "sha256": "95b0b61f4641947c8b3efa5220c1db8f3fd6b4ac2790b28142af920c3a3101dc"
+    },
+    "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/gl262_faithful_20260914/GL262_capture_r1/capture/build_1602207_0/state.bin": {
+      "bytes": 52561,
+      "sha256": "7a66629754c126ff580001fe259c59c4338583de5c205e9083c49cd6dec7b9fe"
+    },
+    "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/gl262_faithful_20260914/GL262_capture_r1/capture/build_1602207_0/expression.raw": {
+      "bytes": 19982016710,
+      "sha256": "f3f36f029ae973d75a8238b4654be4a30c8a1e1210d0441f9368bc8b7c31b3a6"
+    },
+    "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/gl262_faithful_20260914/GL262_capture_r1/capture/build_1602207_0/params.bin": {
+      "bytes": 1860,
+      "sha256": "6fb91d4c36f62e13a0b12b64144e3c5dd08a11b52948566255ba33bab129f527"
+    },
+    "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/gl262_faithful_20260914/immutable_replay_r5/symbolica-evaluator-mre": {
+      "bytes": 360979200,
+      "sha256": "8c9fa746d13c5379eace12bd72fe3942693c9201d6d191c2e207fdb3c80f3134"
+    },
+    "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/gl262_faithful_20260914/immutable_replay_r5/main.rs": {
+      "bytes": 19715,
+      "sha256": "21ff24f2be4998b225128c81b70b762d285ab284e9fc7fdb04b4490ed507a3c3"
+    },
+    "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/gl262_faithful_20260914/immutable_replay_r5/Cargo.lock": {
+      "bytes": 31600,
+      "sha256": "e3e671b72026bd252336a44b354f75471006716d6f08a0b7670b801befe58c2f"
+    }
+  },
+  "exit_code": 101,
+  "wall_seconds": 186.13613006600644,
+  "completed_utc": "2026-09-14T08:45:44.184266+00:00"
+}

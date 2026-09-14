@@ -1,0 +1,56 @@
+{
+  "started_utc": "2026-09-14T08:26:32.741243+00:00",
+  "revision": "ba3737137c2a2ccd7bb39f0441837d38ec867e78",
+  "commands": [
+    {
+      "stage": "check",
+      "command": [
+        "cargo",
+        "check",
+        "--manifest-path",
+        "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/symbolica_upstream_20260914/import_remap/Cargo.toml",
+        "--profile",
+        "dev-optim",
+        "--bin",
+        "import_remap"
+      ],
+      "exit_code": 0,
+      "wall_seconds": 39.16307768994011
+    },
+    {
+      "stage": "build",
+      "command": [
+        "cargo",
+        "build",
+        "--manifest-path",
+        "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/symbolica_upstream_20260914/import_remap/Cargo.toml",
+        "--profile",
+        "dev-optim",
+        "--bin",
+        "import_remap"
+      ],
+      "exit_code": 0,
+      "wall_seconds": 390.8334349920042
+    },
+    {
+      "stage": "clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--manifest-path",
+        "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/symbolica_upstream_20260914/import_remap/Cargo.toml",
+        "--profile",
+        "dev-optim",
+        "--bin",
+        "import_remap",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "wall_seconds": 0.3140273039462045
+    }
+  ],
+  "rustc": "rustc 1.97.0 (2d8144b78 2026-07-07)",
+  "completed_utc": "2026-09-14T08:33:43.064275+00:00"
+}

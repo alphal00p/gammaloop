@@ -1,0 +1,50 @@
+{
+  "revision": "ba3737137c2a2ccd7bb39f0441837d38ec867e78",
+  "commands": [
+    {
+      "stage": "check",
+      "command": [
+        "cargo",
+        "check",
+        "--manifest-path",
+        "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/symbolica_upstream_20260914/exact_builder/Cargo.toml",
+        "--profile",
+        "dev-optim"
+      ],
+      "exit_code": 0,
+      "wall_seconds": 190.02100218005944
+    },
+    {
+      "stage": "build",
+      "command": [
+        "cargo",
+        "build",
+        "--manifest-path",
+        "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/symbolica_upstream_20260914/exact_builder/Cargo.toml",
+        "--profile",
+        "dev-optim"
+      ],
+      "exit_code": 0,
+      "wall_seconds": 7.914416435989551
+    },
+    {
+      "stage": "clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--manifest-path",
+        "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/symbolica_upstream_20260914/exact_builder/Cargo.toml",
+        "--profile",
+        "dev-optim",
+        "--all-targets",
+        "--no-deps",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "wall_seconds": 0.3832029430195689
+    }
+  ],
+  "started_utc": "2026-09-14T08:30:32.959147+00:00"
+}

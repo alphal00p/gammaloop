@@ -1,0 +1,10 @@
+{
+  "observed_utc": "2026-09-14T08:26:12.544747+00:00",
+  "repository": "https://github.com/symbolica-dev/symbolica",
+  "ref": "refs/heads/main",
+  "revision": "ba3737137c2a2ccd7bb39f0441837d38ec867e78",
+  "version": "2.2.0",
+  "read_only_inspection_checkout": "/tmp/symbolica-upstream-ba373713",
+  "source_test": "tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre/examples/import_remap.rs",
+  "source_test_modified": false
+}

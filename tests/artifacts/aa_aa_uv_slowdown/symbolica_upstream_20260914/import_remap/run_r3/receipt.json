@@ -1,0 +1,32 @@
+{
+  "completed_utc": "2026-09-14T08:42:04.245573+00:00",
+  "revision": "ba3737137c2a2ccd7bb39f0441837d38ec867e78",
+  "commands": [
+    {
+      "command": [
+        "/tmp/raised-stack/run",
+        "env",
+        "SYMBOLICA_LICENSE=<corrected S-format key>",
+        "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/symbolica_upstream_20260914/target/dev-optim/import_remap",
+        "write",
+        "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/symbolica_upstream_20260914/import_remap/run_r3/tiny.symbolica"
+      ],
+      "exit_code": 0,
+      "seconds": 0.03859504603315145
+    },
+    {
+      "command": [
+        "/tmp/raised-stack/run",
+        "env",
+        "SYMBOLICA_LICENSE=<corrected S-format key>",
+        "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/symbolica_upstream_20260914/target/dev-optim/import_remap",
+        "read",
+        "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/symbolica_upstream_20260914/import_remap/run_r3/tiny.symbolica"
+      ],
+      "exit_code": 0,
+      "seconds": 0.01725316804368049
+    }
+  ],
+  "license_sha256": "f972d241f8eaecec04777d34f5797d5120c00343b0edb8baffc79346c03416af",
+  "actual_environment_variable": "SYMBOLICA_LICENSE"
+}

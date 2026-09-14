@@ -2705,3 +2705,35 @@ the tracked correctness report.
   on official upstream main; that comparison is now in progress in a separate
   standalone package, without changing GammaLoop's dependency lock.
 - See `tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre/evidence/exact_gl262_failure_20260914.md`.
+
+
+### 2026-09-14 — Official upstream comparison and portable reproducer
+
+- Tested official Symbolica main at ba3737137c2a2ccd7bb39f0441837d38ec867e78
+  (https://github.com/symbolica-dev/symbolica/tree/ba3737137c2a2ccd7bb39f0441837d38ec867e78),
+  independently of GammaLoop's pinned fork. Neither Symbolica checkout is patched.
+- The unchanged nonsymmetric `import_remap.rs` passes in two fresh processes:
+  `f(x,y)` imports as `f(x,y)`. The original fork's argument-remapping bug is fixed.
+- The complete GL00 control passes on main, with the same four operation counts.
+  The adapter adds only the new default Always-inlining field to function-map
+  definitions and verifies the original IDs, fields and raw Atom bytes. The
+  19,982,016,710-byte large input and all parameter buffers remain unchanged.
+- The complete GL262 input reproduces the exact original byte-buffer panic on
+  main with the corrected S-format license. Wall 186.136 s including loading;
+  builder reached at 31.310 s; pre-builder RSS 19.989 GB; sampled peak tree RSS
+  94.133 GB; exit101. The 500 GB guard did not intervene. No evaluator compilation.
+- Earlier hash-delimited keys were rejected by main. A first run was deliberately
+  stopped at 39 s; a completed restricted-single-thread replay also reproduced
+  the panic. Final GL00, GL262 and tiny-import results were repeated with the
+  accepted key under `SYMBOLICA_LICENSE` (with the final A), and retain separate
+  receipts. License values are not recorded in the bundle.
+- Source inspection identifies a strong 32-bit product-length-overflow hypothesis:
+  Mul::extend stores byte length via `as u32`, while a nested sum can exceed4GiB.
+  The panic lengths differ by `2 * 2^32 - 10`. This narrowing remains on main;
+  the original write site is not yet instrumented, so the cause remains a
+  strong hypothesis rather than a demonstrated write-site diagnosis.
+- Standalone format/check/build/clippy pass. The portable local folder
+  `tests/artifacts/aa_aa_uv_slowdown/symbolica_gl262_reproducer_20260914` includes
+  both revisions' Rust source/locks, full input, GL00 control, commands, full
+  backtraces and SHA256 checksums. Small source/evidence is versioned; large
+  input and the sharing archive remain outside git.
