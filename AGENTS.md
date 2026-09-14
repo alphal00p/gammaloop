@@ -26,6 +26,18 @@ CI. Preserve the run/commit identity and logs, and resume on completion, failure
 or required input. Never claim a completion wake-up is configured unless it is;
 see [CONTRIBUTING.typ](CONTRIBUTING.typ#ci-completion).
 
+Floating-point underflow in exponentially suppressed tails may round to zero,
+including when this makes stability comparisons trivially pass. Apply routine
+underflow-to-zero corrections and update their test expectations without asking
+again. Preserve meaningful contributions by combining numerical factors before
+rounding; overflow and invalid numerical operations remain separate issues.
+
+Before adding helper functions, structs, or methods, check the codebase for
+similar use cases, and whether the functionality is already provided by the
+existing code or only needs a small adjustment/API change. When adding a new
+helper, confirm with the codebase maintainers that the functionality is not
+already provided by an existing helper.
+
 Search existing abstractions before adding helpers. Preserve useful comments
 and test coverage; follow the shared guidance when their intent is unclear.
 Before finishing, review the diff for concise, idiomatic code and duplication.
