@@ -53,10 +53,29 @@ slow-timeout = { period = "5m", terminate-after = 2 }
 
 [[profile.default.overrides]]
 # Saved-state acceptance evaluates 8192 points per fixture, including two LU-h
-# mixture inverses. The conditional nine-dimensional cut fixture also evaluates
-# 8192 points in each native frame. These exceed the generic one-minute timeout.
-filter = "test(=state::tests::saved_generated_process_runs_reference_acceptance_after_reload) or test(=processes::raised_cross_section_tests::conditional_cut_sampling_preserves_both_sides_and_raised_sum)"
+# mixture inverses at the fixed-Arb proposal budget. Its measured unoptimized
+# runtime is over eight minutes; retain the sample counts and numerical criteria.
+filter = "test(=state::tests::saved_generated_process_runs_reference_acceptance_after_reload)"
+slow-timeout = { period = "1m", terminate-after = 15 }
+
+[[profile.default.overrides]]
+# The conditional nine-dimensional cut fixture evaluates 8192 points in each
+# native frame, exceeding the generic one-minute timeout.
+filter = "test(=processes::raised_cross_section_tests::conditional_cut_sampling_preserves_both_sides_and_raised_sum)"
 slow-timeout = { period = "1m", terminate-after = 5 }
+
+[[profile.default.overrides]]
+# The hosted kite checks 8192 summed joint/ordinary draws after its bounded
+# physical and native-retry gates. The initial probe projects about eight
+# minutes for fixed-Arb preparation in the unoptimized build; allow headroom.
+filter = "test(=processes::raised_cross_section_tests::hosted_joint_kite_preserves_original_equations_and_physical_sum)"
+slow-timeout = { period = "1m", terminate-after = 15 }
+
+[[profile.default.overrides]]
+# The generated kite checks 8192 summed joint-map draws, including fixed-Arb
+# proposal preparation and directed domain certificates, in the unoptimized build.
+filter = "test(=integrands::process::amplitude::sampling_tests::generated_kite_sampling_uses_physical_six_dimensional_surfaces)"
+slow-timeout = { period = "5m", terminate-after = 6 }
 
 [profile.default.junit]
 # Default JUnit output location

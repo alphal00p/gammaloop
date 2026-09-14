@@ -18,21 +18,28 @@ use color_eyre::eyre::{Result, WrapErr, eyre};
 use serde::{Deserialize, Serialize};
 use symbolica::{atom::Atom, symbol, try_parse};
 
-use super::sampling_maps::combine_contracts;
+use super::sampling_context::{
+    PreparedLUHost, SamplingMapContext, SamplingProposalKey, SamplingProposalPolicies,
+};
+use super::sampling_maps::{SamplingEvaluationError, combine_contracts};
 use super::{
     ImplicitSurfaceRadialMap, SamplingExpressionEvaluator, SamplingMapAffine, SamplingMapComponent,
     SamplingMapComposition, SamplingMapContract, SamplingMapDefinition, SamplingMapEmbedding,
     SamplingMapEvaluation, SamplingMapKernel, SamplingPartition, SamplingPartitionMode,
-    SamplingScoreFunction, SamplingSupport, SurfaceRadialMap,
+    SamplingScoreFunction, SamplingSupport, SharedEnergyJointMap, SurfaceRadialMap,
 };
+use crate::integrands::evaluation::EvaluationMetaData;
 use crate::momentum::sample::{LoopMomenta, MomentumSample};
 use crate::settings::runtime::ParameterizationSettings;
 use crate::settings::runtime::kinematic::Externals;
+use crate::utils::newton_solver::RadialRootDiagnostics;
 use crate::utils::{F, FloatLike};
 use crate::{DependentMomentaConstructor, momentum::ThreeMomentum};
 
-/// Precision-independent proxy and radial-profile programs in canonical order.
+/// Precision-independent proxy, radial-profile and joint programs in canonical
+/// order. Entries reuse the one neutral joint program compiled for the catalogue.
 pub(crate) type SamplingChannelPrograms = (
+    Option<SamplingExpressionEvaluator>,
     Option<SamplingExpressionEvaluator>,
     Option<SamplingExpressionEvaluator>,
 );
@@ -217,7 +224,9 @@ impl ResolvedNamedSamplingChannel {
                 )
                 .map(CompiledSamplingMap::Lmb)
                 .map_err(|error| invalid(error.to_string()))?,
-                target if target.energy_edges().is_some() && !matches!(target, Map::Cut(_)) => {
+                target
+                    if !target.energy_edge_sets().is_empty() && !matches!(target, Map::Cut(_)) =>
+                {
                     if let Some(host) = target.host_cut() {
                         let ids = context.physical_cut_ids.get(host).ok_or_else(|| {
                             invalid(format!(
@@ -239,12 +248,12 @@ impl ResolvedNamedSamplingChannel {
                         )));
                     }
                     context
-                        .surface_maps
+                        .geometry_maps
                         .get(&block.geometry_key(parent))
                         .cloned()
-                        .ok_or_else(|| SamplingChannelCompileError::MissingSurfaceGeometry {
+                        .ok_or_else(|| SamplingChannelCompileError::MissingGeometry {
                             channel: self.name.clone(),
-                            edges: target.energy_edges().unwrap().to_vec(),
+                            target: target.clone(),
                             subspace_lmb: block.active_lmb.clone(),
                         })?
                 }
@@ -265,9 +274,7 @@ impl ResolvedNamedSamplingChannel {
                     block.active_lmb
                 )));
             }
-            if map.contract().support == SamplingSupport::Conditional
-                && (!ordered || block.preceding_lmb.is_empty())
-            {
+            if map.contract().requires_context && (!ordered || block.preceding_lmb.is_empty()) {
                 return Err(invalid(format!(
                     "conditional surface {:?} requires then(...) with declared preceding coordinates, received {:?}",
                     block.target, block.preceding_lmb
@@ -406,7 +413,7 @@ impl ResolvedNamedSamplingChannel {
                     )?;
                     if !blocks[start..]
                         .iter()
-                        .any(|block| block.target.energy_edges().is_some())
+                        .any(|block| !block.target.energy_edge_sets().is_empty())
                     {
                         return Err(eyre!(
                             "at_cut requires a physical target; an ordinary LMB has no cut host"
@@ -482,7 +489,12 @@ impl ResolvedNamedSamplingChannel {
                     Ok(())
                 }
                 _ => {
-                    let physical = map.energy_edges().is_some();
+                    if matches!(map, Map::Intersect(_)) && map.energy_edge_sets().len() != 2 {
+                        return Err(eyre!(
+                            "intersect currently requires exactly two distinct surface(...) targets; qualify the whole joint block with its host or side"
+                        ));
+                    }
+                    let physical = !map.energy_edge_sets().is_empty();
                     let requested = match map {
                         Map::Lmb(edges) | Map::Complement(edges) => {
                             if active.is_some_and(|active| active != edges) {
@@ -520,6 +532,11 @@ impl ResolvedNamedSamplingChannel {
                     } else {
                         requested.to_vec()
                     };
+                    if matches!(map, Map::Intersect(_)) && active_lmb.len() != 1 {
+                        return Err(eyre!(
+                            "intersect requires one three-dimensional active LMB cycle, received {active_lmb:?}"
+                        ));
+                    }
                     let mut target = map.clone();
                     if let Some(side) = side {
                         target = match side {
@@ -575,7 +592,7 @@ impl ResolvedNamedSamplingChannel {
         )?;
         let parent = &self.definition.parent_lmb;
         if blocks.len() == 1
-            && blocks[0].target.energy_edges().is_some()
+            && !blocks[0].target.energy_edge_sets().is_empty()
             && blocks[0].active_lmb.len() < parent.len()
         {
             let complement = parent
@@ -693,7 +710,7 @@ pub struct SamplingChannelCompileContext<T: FloatLike = f64> {
     pub parameterization_settings: ParameterizationSettings,
     pub e_cm: f64,
     pub n_loop_momenta: usize,
-    pub surface_maps: BTreeMap<SamplingGeometryKey, CompiledSamplingMap<T>>,
+    pub geometry_maps: BTreeMap<SamplingGeometryKey, CompiledSamplingMap<T>>,
     /// Physical cut identities, independently of the sampling catalogue.
     pub physical_cut_ids: BTreeMap<Vec<usize>, Vec<usize>>,
     /// Highest physical residue order across all equivalent active cut groups.
@@ -718,7 +735,7 @@ impl<T: FloatLike> SamplingChannelCompileContext<T> {
             parameterization_settings,
             e_cm,
             n_loop_momenta,
-            surface_maps: BTreeMap::new(),
+            geometry_maps: BTreeMap::new(),
             physical_cut_ids: BTreeMap::new(),
             physical_cut_max_occurrences: BTreeMap::new(),
             orientation: None,
@@ -729,7 +746,7 @@ impl<T: FloatLike> SamplingChannelCompileContext<T> {
 
     /// Register one native physical block transactionally. Distinct host, parent
     /// and active-cycle choices cannot overwrite each other's geometry.
-    pub fn insert_surface_map(
+    pub fn insert_geometry_map(
         &mut self,
         target: SamplingMapDefinition,
         parent_lmb: Vec<usize>,
@@ -739,9 +756,12 @@ impl<T: FloatLike> SamplingChannelCompileContext<T> {
     ) -> Result<()> {
         let unique =
             |edges: &[usize]| edges.iter().copied().collect::<BTreeSet<_>>().len() == edges.len();
-        if target
-            .energy_edges()
-            .is_none_or(|edges| edges.is_empty() || !unique(edges))
+        let energy_sets = target.energy_edge_sets();
+        if energy_sets.is_empty()
+            || energy_sets
+                .iter()
+                .any(|edges| edges.is_empty() || !unique(edges))
+            || (energy_sets.len() == 2 && subspace_lmb.len() != 1)
             || parent_lmb.len() != self.n_loop_momenta
             || !unique(&parent_lmb)
             || subspace_lmb.is_empty()
@@ -753,18 +773,18 @@ impl<T: FloatLike> SamplingChannelCompileContext<T> {
                 .any(|edge| !parent_lmb.contains(edge) || subspace_lmb.contains(edge))
         {
             return Err(eyre!(
-                "surface map needs a physical target, complete unique parent and nonempty active subset: target={target:?}, parent={parent_lmb:?}, active={subspace_lmb:?}"
+                "geometry map needs a supported physical target, complete unique parent and nonempty active subset (one cycle for intersect): target={target:?}, parent={parent_lmb:?}, active={subspace_lmb:?}"
             ));
         }
         if map.dimensions() != 3 * subspace_lmb.len() {
             return Err(eyre!(
-                "surface map has dimension {}, expected {} for active {:?}",
+                "geometry map has dimension {}, expected {} for active {:?}",
                 map.dimensions(),
                 3 * subspace_lmb.len(),
                 subspace_lmb
             ));
         }
-        self.surface_maps
+        self.geometry_maps
             .insert((target, parent_lmb, subspace_lmb, preceding_lmb), map);
         Ok(())
     }
@@ -783,6 +803,7 @@ pub enum CompiledSamplingMap<T: FloatLike = f64> {
     },
     Surface(SurfaceRadialMap<T>),
     ImplicitSurface(ImplicitSurfaceRadialMap<T>),
+    Joint(SharedEnergyJointMap<T>),
     Embedded(SamplingMapEmbedding<T>),
 }
 
@@ -816,6 +837,7 @@ impl<T: FloatLike> CompiledSamplingMap<T> {
             Self::Affine { map, frame } => combine_contracts(map.contract(), frame.contract()),
             Self::Surface(map) => map.contract(),
             Self::ImplicitSurface(map) => map.contract(),
+            Self::Joint(map) => map.contract(),
             Self::Embedded(map) => map.contract(),
         }
     }
@@ -826,6 +848,7 @@ impl<T: FloatLike> CompiledSamplingMap<T> {
             Self::Affine { map, .. } => map.dimensions(),
             Self::Surface(map) => map.dimension(),
             Self::ImplicitSurface(map) => map.dimension(),
+            Self::Joint(map) => map.dimensions(),
             Self::Embedded(map) => map.dimensions(),
         }
     }
@@ -835,26 +858,26 @@ impl<T: FloatLike> CompiledSamplingMap<T> {
     }
 
     pub fn forward(&self, coordinates: &[T]) -> Result<SamplingMapEvaluation<T>> {
-        self.forward_with_context(coordinates, &[])
+        self.forward_with_context(coordinates, &mut SamplingMapContext::detached(&[]))
     }
 
     pub fn forward_with_context(
         &self,
         coordinates: &[T],
-        context: &[T],
+        context: &mut SamplingMapContext<'_, T>,
     ) -> Result<SamplingMapEvaluation<T>> {
         <Self as SamplingMapComponent<T>>::forward(self, coordinates, context)
     }
 
-    pub fn inverse(&self, point: &[T]) -> Result<SamplingMapEvaluation<T>> {
-        self.inverse_with_context(point, &[])
+    pub fn inverse(&self, point: &[T]) -> Result<Option<SamplingMapEvaluation<T>>> {
+        self.inverse_with_context(point, &mut SamplingMapContext::detached(&[]))
     }
 
     pub fn inverse_with_context(
         &self,
         point: &[T],
-        context: &[T],
-    ) -> Result<SamplingMapEvaluation<T>> {
+        context: &mut SamplingMapContext<'_, T>,
+    ) -> Result<Option<SamplingMapEvaluation<T>>> {
         <Self as SamplingMapComponent<T>>::inverse(self, point, context)
     }
 }
@@ -878,21 +901,34 @@ impl<T: FloatLike> SamplingMapComponent<T> for CompiledSamplingMap<T> {
             Self::Affine { .. } => "affine",
             Self::Surface(_) => "surface",
             Self::ImplicitSurface(_) => "implicit_surface",
+            Self::Joint(_) => "joint",
             Self::Embedded(_) => "embedded",
         }
     }
 
-    fn forward(&self, coordinates: &[T], context: &[T]) -> Result<SamplingMapEvaluation<T>> {
+    fn forward(
+        &self,
+        coordinates: &[T],
+        context: &mut SamplingMapContext<'_, T>,
+    ) -> Result<SamplingMapEvaluation<T>> {
         match self {
             Self::Lmb(map) => SamplingMapComponent::forward(map, coordinates, context),
             Self::Surface(map) => SamplingMapComponent::forward(map, coordinates, context),
             Self::ImplicitSurface(map) => SamplingMapComponent::forward(map, coordinates, context),
+            Self::Joint(map) => SamplingMapComponent::forward(map, coordinates, context),
             Self::Embedded(map) => SamplingMapComponent::forward(map, coordinates, context),
             Self::Affine { map, frame } => {
-                let lmb_evaluation =
-                    SamplingMapComponent::forward(map.as_ref(), coordinates, context)?;
-                let frame_evaluation =
-                    SamplingMapComponent::forward(frame, &lmb_evaluation.point, context)?;
+                let previous = context.previous;
+                let lmb_evaluation = SamplingMapComponent::forward(
+                    map.as_ref(),
+                    coordinates,
+                    &mut context.reborrow(previous, Some(0)),
+                )?;
+                let frame_evaluation = SamplingMapComponent::forward(
+                    frame,
+                    &lmb_evaluation.point,
+                    &mut context.reborrow(previous, Some(1)),
+                )?;
                 SamplingMapEvaluation {
                     coordinates: lmb_evaluation.coordinates,
                     point: frame_evaluation.point,
@@ -915,19 +951,28 @@ impl<T: FloatLike> SamplingMapComponent<T> for CompiledSamplingMap<T> {
         }
     }
 
-    fn inverse(&self, point: &[T], context: &[T]) -> Result<SamplingMapEvaluation<T>> {
+    fn inverse(
+        &self,
+        point: &[T],
+        context: &mut SamplingMapContext<'_, T>,
+    ) -> Result<Option<SamplingMapEvaluation<T>>> {
         match self {
             Self::Lmb(map) => SamplingMapComponent::inverse(map, point, context),
             Self::Surface(map) => SamplingMapComponent::inverse(map, point, context),
             Self::ImplicitSurface(map) => SamplingMapComponent::inverse(map, point, context),
+            Self::Joint(map) => SamplingMapComponent::inverse(map, point, context),
             Self::Embedded(map) => SamplingMapComponent::inverse(map, point, context),
             Self::Affine { map, frame } => {
-                let frame_evaluation = SamplingMapComponent::inverse(frame, point, context)?;
-                let lmb_evaluation = SamplingMapComponent::inverse(
+                let previous = context.previous;
+                let frame_evaluation = frame.inverse(point, previous)?;
+                let Some(lmb_evaluation) = SamplingMapComponent::inverse(
                     map.as_ref(),
                     &frame_evaluation.coordinates,
-                    context,
-                )?;
+                    &mut context.reborrow(previous, Some(0)),
+                )?
+                else {
+                    return Ok(None);
+                };
                 SamplingMapEvaluation {
                     coordinates: lmb_evaluation.coordinates,
                     point: point.to_vec(),
@@ -945,7 +990,8 @@ impl<T: FloatLike> SamplingMapComponent<T> for CompiledSamplingMap<T> {
                         .chain(frame_evaluation.diagnostics)
                         .collect(),
                 }
-                .validate("compiled affine map")
+                .validate("compiled affine inverse")
+                .map(Some)
             }
         }
     }
@@ -1008,17 +1054,76 @@ pub struct SamplingChannelBridge<T: FloatLike = f64> {
 /// inverse-density score in a common partition.  Contexts are indexed by the
 /// canonical catalogue position; they are never compacted into a second
 /// channel list.  An absent context means the ordinary empty context and is
-/// valid for maps which do not depend on earlier blocks.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct SamplingChannelRuntimeContexts<T: FloatLike = f64> {
+/// valid for maps which do not depend on earlier blocks. Production also borrows
+/// the sole original-draw policy owner; detached numerical fixtures opt out
+/// explicitly, without installing a mutable cache on a warmed bridge.
+#[derive(Debug)]
+pub struct SamplingChannelRuntimeContexts<'a, T: FloatLike = f64> {
     contexts: Vec<Option<Vec<T>>>,
+    policies: Option<&'a mut SamplingProposalPolicies>,
+    graph_id: usize,
+    generating_channel: SamplingChannelId,
+    prepared_lu_hosts: Vec<PreparedLUHost<T>>,
+    /// None only during the initial selected operation; later inverse work
+    /// cannot extend the frozen source authority exported to the physical body.
+    selected_host_count: Option<usize>,
+    radial_root_diagnostics: Option<&'a mut RadialRootDiagnostics>,
+    detached_root_diagnostics: RadialRootDiagnostics,
 }
 
-impl<T: FloatLike> SamplingChannelRuntimeContexts<T> {
+impl<'a, T: FloatLike> SamplingChannelRuntimeContexts<'a, T> {
+    /// Detached represented-geometry evaluation, without production decisions.
     pub fn new(channel_count: usize) -> Self {
         Self {
             contexts: vec![None; channel_count],
+            policies: None,
+            graph_id: 0,
+            generating_channel: SamplingChannelId(0),
+            prepared_lu_hosts: Vec::new(),
+            selected_host_count: Some(0),
+            radial_root_diagnostics: None,
+            detached_root_diagnostics: RadialRootDiagnostics::default(),
         }
+    }
+
+    /// Bind one generating row to collecting or sealed original-draw records.
+    pub(crate) fn for_draw(
+        channel_count: usize,
+        graph_id: usize,
+        generating_channel: SamplingChannelId,
+        metadata: &'a mut EvaluationMetaData,
+    ) -> Self {
+        Self {
+            contexts: vec![None; channel_count],
+            policies: Some(&mut metadata.sampling_proposal_policies),
+            graph_id,
+            generating_channel,
+            prepared_lu_hosts: Vec::new(),
+            selected_host_count: Some(0),
+            radial_root_diagnostics: Some(&mut metadata.radial_root_diagnostics),
+            detached_root_diagnostics: RadialRootDiagnostics::default(),
+        }
+    }
+
+    fn begin_selected(&mut self, channel_id: SamplingChannelId) -> Result<()> {
+        if self.policies.is_some() && self.generating_channel != channel_id {
+            return Err(eyre!(
+                "selected channel {channel_id:?} does not match generating row {:?}",
+                self.generating_channel
+            ));
+        }
+        self.generating_channel = channel_id;
+        self.prepared_lu_hosts.clear();
+        self.selected_host_count = None;
+        Ok(())
+    }
+
+    fn seal_selected(&mut self) {
+        self.selected_host_count = Some(self.prepared_lu_hosts.len());
+    }
+
+    fn selected_hosts(&self) -> Vec<PreparedLUHost<T>> {
+        self.prepared_lu_hosts[..self.selected_host_count.unwrap_or(0)].to_vec()
     }
 
     pub fn channel_count(&self) -> usize {
@@ -1043,8 +1148,12 @@ impl<T: FloatLike> SamplingChannelRuntimeContexts<T> {
         Ok(())
     }
 
-    fn get(&self, channel_id: SamplingChannelId) -> Result<&[T]> {
-        self.contexts
+    pub(crate) fn for_channel(
+        &mut self,
+        channel_id: SamplingChannelId,
+    ) -> Result<SamplingMapContext<'_, T>> {
+        let previous = self
+            .contexts
             .get(channel_id.0)
             .ok_or_else(|| {
                 eyre!(
@@ -1053,13 +1162,30 @@ impl<T: FloatLike> SamplingChannelRuntimeContexts<T> {
                     self.contexts.len()
                 )
             })
-            .map(|context| context.as_deref().unwrap_or(&[]))
+            .map(|context| context.as_deref().unwrap_or(&[]))?;
+        Ok(SamplingMapContext {
+            previous,
+            policies: self.policies.as_deref_mut(),
+            key: SamplingProposalKey {
+                graph_id: self.graph_id,
+                generating_channel: self.generating_channel,
+                target_channel: channel_id,
+                block_path: Vec::new(),
+            },
+            prepared_lu_hosts: Some(&mut self.prepared_lu_hosts),
+            radial_root_diagnostics: Some(
+                self.radial_root_diagnostics
+                    .as_deref_mut()
+                    .unwrap_or(&mut self.detached_root_diagnostics),
+            ),
+            selecting_lu_hosts: self.selected_host_count.is_none(),
+        })
     }
 }
 
 /// One push-forward/inverse result together with the common raw-frame
 /// multichannel partition.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct SamplingChannelBridgeEvaluation<T: FloatLike = f64> {
     pub channel_id: SamplingChannelId,
     pub channel_name: String,
@@ -1067,6 +1193,7 @@ pub struct SamplingChannelBridgeEvaluation<T: FloatLike = f64> {
     pub raw_coordinates: Vec<T>,
     pub map: SamplingMapEvaluation<T>,
     pub partition: SamplingPartition<T>,
+    pub(crate) prepared_lu_hosts: Vec<PreparedLUHost<T>>,
 }
 
 /// Summary of a deterministic acceptance run through a complete channel
@@ -1175,7 +1302,9 @@ impl SamplingChannelBridgeAcceptanceReport {
                 // catches a channel whose forward determinant is finite while
                 // its inverse uses a different branch or frame, which would
                 // invalidate the graph-level map-density estimator.
-                let inverse = bridge.inverse(channel_id, &evaluation.raw_coordinates)?;
+                let inverse = bridge
+                    .inverse(channel_id, &evaluation.raw_coordinates)?
+                    .ok_or_else(|| eyre!("accepted forward point has no selected inverse"))?;
                 let coordinate_residual = inverse
                     .map
                     .coordinates
@@ -1380,10 +1509,10 @@ pub enum SamplingChannelBridgeError {
         graph: String,
         expected: String,
     },
-    PartialSupport {
+    UnpreparedContext {
         channel: String,
-        support: super::SamplingSupport,
     },
+    MissingFullSupport,
     InexactJacobian {
         channel: String,
         jacobian: super::SamplingJacobian,
@@ -1427,9 +1556,12 @@ impl fmt::Display for SamplingChannelBridgeError {
                 formatter,
                 "sampling channel `{channel}` belongs to master graph `{graph}`, but the bridge frame is `{expected}`"
             ),
-            Self::PartialSupport { channel, support } => write!(
+            Self::UnpreparedContext { channel } => write!(
                 formatter,
-                "sampling channel `{channel}` has {support:?} support; partial/conditional surface maps cannot be passed to the graph evaluator"
+                "sampling channel `{channel}` requires unprovided context; conditional maps must be completed before graph evaluation"
+            ),
+            Self::MissingFullSupport => formatter.write_str(
+                "restricted sampling channels require an explicitly selected full-support sibling; compact-only selections omit raw volume",
             ),
             Self::InexactJacobian { channel, jacobian } => write!(
                 formatter,
@@ -1455,9 +1587,10 @@ impl fmt::Display for SamplingChannelBridgeError {
 impl std::error::Error for SamplingChannelBridgeError {}
 
 impl<T: FloatLike> SamplingChannelBridge<T> {
-    /// Construct an exact map-density bridge.  Every map must cover the full
-    /// raw frame and have an exact forward determinant; this rejects partial
-    /// surface maps before they can reach graph evaluation.
+    /// Construct an exact map-density bridge. Every map must span the complete
+    /// raw frame with discharged prerequisites and an exact determinant. The
+    /// selected catalogue must include a full-support map so restricted charts
+    /// cannot silently omit raw volume.
     pub fn new(
         channels: Vec<CompiledSamplingChannel<T>>,
     ) -> std::result::Result<Self, SamplingChannelBridgeError> {
@@ -1501,10 +1634,9 @@ impl<T: FloatLike> SamplingChannelBridge<T> {
                 });
             }
             let contract = channel.contract();
-            if contract.support != super::SamplingSupport::Full {
-                return Err(SamplingChannelBridgeError::PartialSupport {
+            if contract.requires_context {
+                return Err(SamplingChannelBridgeError::UnpreparedContext {
                     channel: channel.name.clone(),
-                    support: contract.support,
                 });
             }
             if matches!(contract.jacobian, super::SamplingJacobian::ProxyOnly) {
@@ -1513,6 +1645,12 @@ impl<T: FloatLike> SamplingChannelBridge<T> {
                     jacobian: contract.jacobian,
                 });
             }
+        }
+        if !channels
+            .iter()
+            .any(|channel| channel.contract().support == SamplingSupport::Full)
+        {
+            return Err(SamplingChannelBridgeError::MissingFullSupport);
         }
         Ok(Self {
             channels,
@@ -1534,6 +1672,12 @@ impl<T: FloatLike> SamplingChannelBridge<T> {
         Ok(self)
     }
 
+    pub(crate) fn relative_density_tolerance(&self, precision: &F<T>) -> F<T> {
+        self.relative_density_tolerance
+            .map(F::<T>::from_f64)
+            .unwrap_or_else(|| precision.epsilon().sqrt())
+    }
+
     pub fn channels(&self) -> &[CompiledSamplingChannel<T>] {
         &self.channels
     }
@@ -1545,7 +1689,7 @@ impl<T: FloatLike> SamplingChannelBridge<T> {
     pub fn partition(&self, raw_coordinates: &[T]) -> Result<SamplingPartition<T>> {
         self.partition_with_contexts(
             raw_coordinates,
-            &SamplingChannelRuntimeContexts::new(self.channels.len()),
+            &mut SamplingChannelRuntimeContexts::new(self.channels.len()),
         )
     }
 
@@ -1556,8 +1700,13 @@ impl<T: FloatLike> SamplingChannelBridge<T> {
     pub fn partition_with_contexts(
         &self,
         raw_coordinates: &[T],
-        contexts: &SamplingChannelRuntimeContexts<T>,
+        contexts: &mut SamplingChannelRuntimeContexts<'_, T>,
     ) -> Result<SamplingPartition<T>> {
+        if contexts.selected_host_count.is_none() {
+            return Err(eyre!(
+                "sampling partition cannot run before selected host authority is sealed"
+            ));
+        }
         if raw_coordinates.len() != self.dimensions {
             return Err(color_eyre::eyre::eyre!(
                 "raw sampling frame has {}, expected {} dimensions",
@@ -1575,16 +1724,26 @@ impl<T: FloatLike> SamplingChannelBridge<T> {
         SamplingPartition::from_log_scores(
             self.partition_mode,
             raw_coordinates,
-            self.channels.iter().enumerate().map(|(index, channel)| {
-                let score = move || match self.partition_mode {
+            self.channels.iter().map(|channel| channel.name.as_str()),
+            |index| {
+                let channel = &self.channels[index];
+                let mut context = contexts.for_channel(SamplingChannelId(index))?;
+                match self.partition_mode {
                     SamplingPartitionMode::MapDensity => {
-                        let context = contexts.get(SamplingChannelId::from(index))?;
-                        let evaluation = channel.map.inverse_with_context(raw_coordinates, context)?;
+                        let Some(evaluation) =
+                            channel.inverse_with_context(raw_coordinates, &mut context)?
+                        else {
+                            return Ok(None);
+                        };
                         let density = F(evaluation.inverse_jacobian);
                         if !density.0.is_finite() || density <= density.zero() {
-                            return Err(eyre!(
-                                "inverse map density is not finite and positive: {density}"
-                            ));
+                            return Err(SamplingEvaluationError::Unrepresentable {
+                                operation: "inverse map density",
+                                detail: format!(
+                                    "supported density is not finite and positive: {density}"
+                                ),
+                            }
+                            .into());
                         }
                         Ok(Some(density.ln().0))
                     }
@@ -1595,11 +1754,20 @@ impl<T: FloatLike> SamplingChannelBridge<T> {
                                 channel.name
                             )
                         })?;
+                        // Proxy scores cannot give a compact chart weight at a
+                        // point with no preimage. Full maps keep the cheap proxy
+                        // path; each restricted inverse uses its own context.
+                        if channel.contract().support == SamplingSupport::Restricted
+                            && channel
+                                .inverse_with_context(raw_coordinates, &mut context)?
+                                .is_none()
+                        {
+                            return Ok(None);
+                        }
                         proxy.evaluate(raw_coordinates)
                     }
-                };
-                (channel.name.as_str(), score)
-            }),
+                }
+            },
         )
     }
 
@@ -1621,14 +1789,14 @@ impl<T: FloatLike> SamplingChannelBridge<T> {
     ) -> Result<SamplingChannelBridgeEvaluation<T>> {
         let mut contexts = SamplingChannelRuntimeContexts::new(self.channels.len());
         contexts.set(channel_id, context.to_vec())?;
-        self.forward_with_runtime_contexts(channel_id, coordinates, &contexts)
+        self.forward_with_runtime_contexts(channel_id, coordinates, &mut contexts)
     }
 
     pub fn forward_with_runtime_contexts(
         &self,
         channel_id: SamplingChannelId,
         coordinates: &[T],
-        contexts: &SamplingChannelRuntimeContexts<T>,
+        contexts: &mut SamplingChannelRuntimeContexts<'_, T>,
     ) -> Result<SamplingChannelBridgeEvaluation<T>> {
         let channel_index = channel_id.0;
         let channel =
@@ -1637,7 +1805,10 @@ impl<T: FloatLike> SamplingChannelBridge<T> {
                 .ok_or(SamplingChannelBridgeError::UnknownChannel {
                     channel: channel_id,
                 })?;
-        let map = channel.forward_with_context(coordinates, contexts.get(channel_id)?)?;
+        contexts.begin_selected(channel_id)?;
+        let map =
+            channel.forward_with_context(coordinates, &mut contexts.for_channel(channel_id)?)?;
+        contexts.seal_selected();
         if map.point.len() != self.dimensions {
             return Err(SamplingChannelBridgeError::DimensionMismatch {
                 channel: channel.name.clone(),
@@ -1650,25 +1821,32 @@ impl<T: FloatLike> SamplingChannelBridge<T> {
         // A small Cartesian round-trip residual does not certify the density
         // near a focused shell. Compare the selected determinant to the inverse
         // density at the actual generated point, reusing the partition score
-        // when it already evaluates that inverse. Proxy partitions need only
-        // the selected inverse, never every foreign map's inverse.
+        // when it already evaluates that inverse. Proxy partitions additionally
+        // invert restricted foreign maps to establish their actual support.
         let log_density = match self.partition_mode {
             SamplingPartitionMode::MapDensity => F(partition.log_scores[channel_index]
                 .clone()
-                .ok_or_else(|| eyre!("selected sampling channel has no inverse density"))?),
+                .ok_or_else(|| SamplingEvaluationError::UncertainGeometry {
+                    detail: format!(
+                        "forward point is outside selected channel '{}' inverse support",
+                        channel.name
+                    ),
+                })?),
             SamplingPartitionMode::SingularityProxy => {
                 let inverse = channel
-                    .map
-                    .inverse_with_context(&map.point, contexts.get(channel_id)?)?;
+                    .inverse_with_context(&map.point, &mut contexts.for_channel(channel_id)?)?
+                    .ok_or_else(|| SamplingEvaluationError::UncertainGeometry {
+                        detail: format!(
+                            "forward point is outside selected channel '{}' inverse support",
+                            channel.name
+                        ),
+                    })?;
                 F(inverse.inverse_jacobian).ln()
             }
         };
         let jacobian = F(map.jacobian.clone());
         let one = jacobian.one();
-        let tolerance = self
-            .relative_density_tolerance
-            .map(F::<T>::from_f64)
-            .unwrap_or_else(|| one.epsilon().sqrt());
+        let tolerance = self.relative_density_tolerance(&one);
         let log_ratio = jacobian.ln() + log_density;
         let two = &one + &one;
         // log(1 +/- tolerance) must retain a sub-epsilon budget. The atanh
@@ -1705,6 +1883,7 @@ impl<T: FloatLike> SamplingChannelBridge<T> {
             raw_coordinates: map.point.clone(),
             map,
             partition,
+            prepared_lu_hosts: contexts.selected_hosts(),
         })
     }
 
@@ -1712,7 +1891,7 @@ impl<T: FloatLike> SamplingChannelBridge<T> {
         &self,
         channel_id: SamplingChannelId,
         raw_coordinates: &[T],
-    ) -> Result<SamplingChannelBridgeEvaluation<T>> {
+    ) -> Result<Option<SamplingChannelBridgeEvaluation<T>>> {
         self.inverse_with_context(channel_id, raw_coordinates, &[])
     }
 
@@ -1721,18 +1900,18 @@ impl<T: FloatLike> SamplingChannelBridge<T> {
         channel_id: SamplingChannelId,
         raw_coordinates: &[T],
         context: &[T],
-    ) -> Result<SamplingChannelBridgeEvaluation<T>> {
+    ) -> Result<Option<SamplingChannelBridgeEvaluation<T>>> {
         let mut contexts = SamplingChannelRuntimeContexts::new(self.channels.len());
         contexts.set(channel_id, context.to_vec())?;
-        self.inverse_with_runtime_contexts(channel_id, raw_coordinates, &contexts)
+        self.inverse_with_runtime_contexts(channel_id, raw_coordinates, &mut contexts)
     }
 
     pub fn inverse_with_runtime_contexts(
         &self,
         channel_id: SamplingChannelId,
         raw_coordinates: &[T],
-        contexts: &SamplingChannelRuntimeContexts<T>,
-    ) -> Result<SamplingChannelBridgeEvaluation<T>> {
+        contexts: &mut SamplingChannelRuntimeContexts<'_, T>,
+    ) -> Result<Option<SamplingChannelBridgeEvaluation<T>>> {
         let channel_index = channel_id.0;
         let channel =
             self.channels
@@ -1740,15 +1919,22 @@ impl<T: FloatLike> SamplingChannelBridge<T> {
                 .ok_or(SamplingChannelBridgeError::UnknownChannel {
                     channel: channel_id,
                 })?;
-        let map = channel.inverse_with_context(raw_coordinates, contexts.get(channel_id)?)?;
+        contexts.begin_selected(channel_id)?;
+        let Some(map) = channel
+            .inverse_with_context(raw_coordinates, &mut contexts.for_channel(channel_id)?)?
+        else {
+            return Ok(None);
+        };
+        contexts.seal_selected();
         let partition = self.partition_with_contexts(raw_coordinates, contexts)?;
-        Ok(SamplingChannelBridgeEvaluation {
+        Ok(Some(SamplingChannelBridgeEvaluation {
             channel_id,
             channel_name: channel.name.clone(),
             raw_coordinates: raw_coordinates.to_vec(),
             map,
             partition,
-        })
+            prepared_lu_hosts: contexts.selected_hosts(),
+        }))
     }
 }
 
@@ -1762,27 +1948,41 @@ impl<T: FloatLike> CompiledSamplingChannel<T> {
     }
 
     pub fn forward(&self, coordinates: &[T]) -> Result<SamplingMapEvaluation<T>> {
-        self.forward_with_context(coordinates, &[])
+        self.forward_with_context(coordinates, &mut SamplingMapContext::detached(&[]))
     }
 
     pub fn forward_with_context(
         &self,
         coordinates: &[T],
-        context: &[T],
+        context: &mut SamplingMapContext<'_, T>,
     ) -> Result<SamplingMapEvaluation<T>> {
-        self.map.forward_with_context(coordinates, context)
+        self.map
+            .forward_with_context(coordinates, context)
+            .wrap_err_with(|| {
+                format!(
+                    "sampling graph '{}' channel '{}' target {:?}, master-frame edges {:?}",
+                    self.master_graph, self.name, self.definition, self.embedded_edges,
+                )
+            })
     }
 
-    pub fn inverse(&self, point: &[T]) -> Result<SamplingMapEvaluation<T>> {
-        self.inverse_with_context(point, &[])
+    pub fn inverse(&self, point: &[T]) -> Result<Option<SamplingMapEvaluation<T>>> {
+        self.inverse_with_context(point, &mut SamplingMapContext::detached(&[]))
     }
 
     pub fn inverse_with_context(
         &self,
         point: &[T],
-        context: &[T],
-    ) -> Result<SamplingMapEvaluation<T>> {
-        self.map.inverse_with_context(point, context)
+        context: &mut SamplingMapContext<'_, T>,
+    ) -> Result<Option<SamplingMapEvaluation<T>>> {
+        self.map
+            .inverse_with_context(point, context)
+            .wrap_err_with(|| {
+                format!(
+                    "sampling graph '{}' channel '{}' target {:?}, master-frame edges {:?}",
+                    self.master_graph, self.name, self.definition, self.embedded_edges,
+                )
+            })
     }
 }
 
@@ -1803,9 +2003,9 @@ pub enum SamplingChannelCompileError {
         primitive: String,
         reason: String,
     },
-    MissingSurfaceGeometry {
+    MissingGeometry {
         channel: String,
-        edges: Vec<usize>,
+        target: SamplingMapDefinition,
         subspace_lmb: Vec<usize>,
     },
     MissingLmbFrameMap {
@@ -1843,13 +2043,13 @@ impl fmt::Display for SamplingChannelCompileError {
                 formatter,
                 "sampling channel `{channel}` uses singular primitive `{primitive}`, which is not compiled: {reason}"
             ),
-            Self::MissingSurfaceGeometry {
+            Self::MissingGeometry {
                 channel,
-                edges,
+                target,
                 subspace_lmb,
             } => write!(
                 formatter,
-                "sampling channel `{channel}` has no prepared surface geometry for energy edges {edges:?} in subspace_lmb {subspace_lmb:?}"
+                "sampling channel `{channel}` has no prepared geometry for target {target:?} in subspace_lmb {subspace_lmb:?}"
             ),
             Self::MissingLmbFrameMap {
                 channel,
@@ -2050,8 +2250,9 @@ impl SamplingChannelCatalogue {
         }
     }
 
-    /// Compile user supplied proxies and radial profiles once in canonical
-    /// channel order. Native geometry bindings borrow these same programs.
+    /// Compile user supplied proxies, radial profiles and the neutral joint map
+    /// once in canonical channel order. Native geometry bindings borrow these
+    /// same programs; distinct joint channels clone the compiled expression.
     /// Proxy expressions use the complete master raw frame's x0, x1, ...;
     /// LU profiles inherit the actual physical runtime h-function settings.
     pub fn compile_programs(
@@ -2059,8 +2260,18 @@ impl SamplingChannelCatalogue {
         dimensions: usize,
         lu_h: &HFunctionSettings,
     ) -> Result<Vec<SamplingChannelPrograms>> {
+        let joint_program = self
+            .named_entries()
+            .any(|channel| {
+                channel
+                    .blocks
+                    .iter()
+                    .any(|block| block.target.energy_edge_sets().len() == 2)
+            })
+            .then(SharedEnergyJointMap::<f64>::compile_program)
+            .transpose()?;
         self.entries.iter().map(|entry| {
-            let SamplingCatalogueEntry::Named(channel) = entry else { return Ok((None,None)); };
+            let SamplingCatalogueEntry::Named(channel) = entry else { return Ok((None,None,None)); };
             let proxy = channel.singularity_proxy.as_ref().map(|expression| {
                 if dimensions == 0 {
                     return Err(eyre!("sampling singularity proxy requires a non-empty raw coordinate frame"));
@@ -2076,15 +2287,20 @@ impl SamplingChannelCatalogue {
                 }
                 SamplingExpressionEvaluator::new_lu_h_profile(profile, lu_h)
             }).transpose()?;
-            Ok((proxy,radial))
+            let joint = if channel.blocks.iter().any(|block| block.target.energy_edge_sets().len() == 2) {
+                joint_program.clone()
+            } else { None };
+            Ok((proxy,radial,joint))
         }).collect()
     }
 
     /// Compile the resolved block catalogue against native graph geometry.
     /// Qualified target, parent, active and preceding edges identify each
     /// binding. Cut and side maps prepare their auxiliary LU scale and physical
-    /// prerequisites at the actual point. Bare `cut`, `intersect` and missing
-    /// kinematics remain rejected, avoiding plausible maps in an incorrect frame.
+    /// prerequisites at the actual point. A joint target is one registered 3D
+    /// block; bare `cut` and missing kinematics remain rejected, avoiding
+    /// plausible maps in an incorrect frame. Production joint binding remains
+    /// gated by its graph matcher and retained proposal policy.
     /// Structural diagnostics remain typed; native binding failures propagate
     /// unchanged so warmup and stability can retry another precision.
     pub fn compile<T: FloatLike>(
@@ -2122,7 +2338,7 @@ impl SamplingChannelCatalogue {
             .into());
         }
         let mut compiled = Vec::with_capacity(self.entries.len());
-        for (entry, (proxy, radial)) in self.entries.iter().zip(programs) {
+        for (entry, (proxy, radial, joint)) in self.entries.iter().zip(programs) {
             let (name, basis_id, definition, map, singularity_proxy) = match entry {
                 SamplingCatalogueEntry::Lmb {
                     basis_id, edges, ..
@@ -2160,10 +2376,10 @@ impl SamplingChannelCatalogue {
                         parent_lmb.clone(),
                         Vec::new(),
                     );
-                    let map = context.surface_maps.get(&key).cloned().ok_or_else(|| {
-                        SamplingChannelCompileError::MissingSurfaceGeometry {
+                    let map = context.geometry_maps.get(&key).cloned().ok_or_else(|| {
+                        SamplingChannelCompileError::MissingGeometry {
                             channel: format!("surface:{edges:?}"),
-                            edges: edges.clone(),
+                            target: definition.clone(),
                             subspace_lmb: parent_lmb.clone(),
                         }
                     })?;
@@ -2171,6 +2387,17 @@ impl SamplingChannelCatalogue {
                 }
                 SamplingCatalogueEntry::Named(channel) => {
                     let definition = channel.map.clone();
+                    if joint.is_some()
+                        != channel
+                            .blocks
+                            .iter()
+                            .any(|block| block.target.energy_edge_sets().len() == 2)
+                    {
+                        return Err(SamplingChannelCompileError::InvalidChannel {
+                            channel: channel.name.clone(),
+                            error: "compiled joint program presence does not match the canonical definition".into(),
+                        }.into());
+                    }
                     let map = channel.compile_map(context, radial.as_ref())?;
                     if proxy.is_some() != channel.singularity_proxy.is_some() {
                         return Err(SamplingChannelCompileError::InvalidChannel {
@@ -2728,6 +2955,589 @@ mod tests {
     use crate::settings::runtime::ParameterizationSettings;
 
     #[test]
+    fn native_lu_host_reuses_exact_sources_without_replacing_selected_authority() -> Result<()> {
+        use super::super::sampling_context::SamplingLUHostPlan;
+        use crate::{
+            cff::{VertexSet, esurface::Esurface},
+            dot,
+            graph::{Graph, parse::from_dot::IntoGraph},
+            momentum::{FourMomentum, sample::ExternalFourMomenta},
+            processes::{CutGroupId, CutId},
+            utils::{ArbPrec, QuadFloat},
+        };
+        use linnet::half_edge::involution::EdgeIndex;
+        use std::cell::Cell;
+
+        test_initialise()?;
+        let graph: Graph = dot!(digraph host_source {
+            ext [style=invis]
+            node [num=1]
+            edge [num=1 mass=1]
+            ext -> a:0 [id=0]
+            a -> b [id=1 lmb_id=0]
+            a -> b [id=2]
+            b:1 -> ext [id=3]
+        })?;
+        let surface = Esurface {
+            energies: vec![EdgeIndex(1), EdgeIndex(2)],
+            external_shift: vec![(EdgeIndex(0), -1)],
+            vertex_set: VertexSet::dummy(),
+        };
+        fn check<T: FloatLike>(graph: &Graph, surface: &Esurface) -> Result<()> {
+            let one = F::<T>::default().one();
+            let zero = one.zero();
+            let e_cm = one.from_usize(4);
+            let masses = graph.underlying.new_edgevec_from_iter([
+                zero.clone(),
+                one.clone(),
+                one.clone(),
+                zero.clone(),
+            ])?;
+            let externals = ExternalFourMomenta::from_iter((0..2).map(|_| {
+                FourMomentum::from_args(e_cm.clone(), zero.clone(), zero.clone(), zero.clone())
+            }));
+            let plan = Arc::new(SamplingLUHostPlan {
+                graph_name: "host_source".into(),
+                cut_group_id: CutGroupId::from(0),
+                representative_cut_id: CutId(0),
+                parent_lmb: graph
+                    .loop_momentum_basis
+                    .loop_edges
+                    .iter()
+                    .map(|edge| edge.0)
+                    .collect(),
+                required_prior_lmb: graph
+                    .loop_momentum_basis
+                    .loop_edges
+                    .iter()
+                    .map(|edge| edge.0)
+                    .collect(),
+            });
+            let calls = Cell::new(0);
+            let identities = std::cell::RefCell::new(Vec::new());
+            let prepare =
+                |prior: &[T],
+                 diagnostics: &mut RadialRootDiagnostics,
+                 identity: &crate::utils::newton_solver::RadialRootIdentity| {
+                    calls.set(calls.get() + 1);
+                    identities.borrow_mut().push(identity.to_string());
+                    let loops = LoopMomenta::from_iter([ThreeMomentum::new(
+                        F(prior[0].clone()),
+                        F(prior[1].clone()),
+                        F(prior[2].clone()),
+                    )]);
+                    surface
+                        .solve_lu_cut(
+                            &loops,
+                            &externals,
+                            &masses,
+                            &graph.loop_momentum_basis,
+                            &e_cm,
+                            diagnostics,
+                            identity,
+                        )
+                        .map_err(|error| eyre!("{error:?}"))
+                };
+            let prior = vec![one.0.clone(), zero.0.clone(), zero.0.clone()];
+            let mut metadata = EvaluationMetaData::new_empty();
+            let mut row =
+                SamplingChannelRuntimeContexts::for_draw(2, 7, SamplingChannelId(0), &mut metadata);
+            row.begin_selected(SamplingChannelId(0))?;
+            {
+                let mut context = row.for_channel(SamplingChannelId(0))?;
+                let host =
+                    context.prepare_lu_host(&plan, prior.clone(), |d, i| prepare(&prior, d, i))?;
+                assert!(
+                    (&host.solution.solution - one.from_usize(3).sqrt()).abs()
+                        < one.epsilon() * one.from_usize(64)
+                );
+                assert_eq!(host.source.graph_id, 7);
+                assert_eq!(host.prior, prior);
+                context
+                    .reborrow(&[], Some(1))
+                    .prepare_lu_host(&plan, prior.clone(), |d, i| prepare(&prior, d, i))?;
+            }
+            assert_eq!(calls.get(), 1);
+            let different = vec![
+                (&one + one.epsilon() * one.from_usize(8)).0,
+                zero.0.clone(),
+                zero.0.clone(),
+            ];
+            assert_ne!(different, prior);
+            let error = row
+                .for_channel(SamplingChannelId(0))?
+                .prepare_lu_host(&plan, different.clone(), |d, i| prepare(&different, d, i))
+                .unwrap_err();
+            assert!(matches!(
+                error.downcast_ref::<SamplingEvaluationError>(),
+                Some(SamplingEvaluationError::UncertainGeometry { .. })
+            ));
+            assert_eq!(calls.get(), 1);
+            row.seal_selected();
+            // A supplied-point inverse has distinct represented prerequisites.
+            // Its actual equation is solved, while selected source authority stays fixed.
+            row.for_channel(SamplingChannelId(0))?.prepare_lu_host(
+                &plan,
+                different.clone(),
+                |d, i| prepare(&different, d, i),
+            )?;
+            row.for_channel(SamplingChannelId(1))?.prepare_lu_host(
+                &plan,
+                different.clone(),
+                |d, i| prepare(&different, d, i),
+            )?;
+            assert_eq!(calls.get(), 2);
+            assert_eq!(row.prepared_lu_hosts.len(), 2);
+            let selected = row.selected_hosts();
+            assert_eq!(selected.len(), 1);
+            assert_eq!(selected[0].prior, prior);
+            assert_eq!(row.prepared_lu_hosts[1].prior, different);
+            let inverse_expected = one.from_usize(3).sqrt() / F(different[0].clone());
+            assert!(
+                (&row.prepared_lu_hosts[1].solution.solution - inverse_expected).abs()
+                    < one.epsilon() * one.from_usize(64)
+            );
+            assert!(identities.borrow()[0].contains("native selected"));
+            assert!(identities.borrow()[1].contains("native inverse"));
+            // A standalone partition owns no selected prefix; a new direct raw
+            // initial inverse establishes its own source, even in this same row object.
+            let mut partition_row = SamplingChannelRuntimeContexts::new(2);
+            partition_row
+                .for_channel(SamplingChannelId(0))?
+                .prepare_lu_host(&plan, prior.clone(), |d, i| prepare(&prior, d, i))?;
+            assert!(partition_row.selected_hosts().is_empty());
+            row.begin_selected(SamplingChannelId(0))?;
+            row.for_channel(SamplingChannelId(0))?.prepare_lu_host(
+                &plan,
+                different.clone(),
+                |d, i| prepare(&different, d, i),
+            )?;
+            row.seal_selected();
+            assert_eq!(row.selected_hosts()[0].prior, different);
+            assert_eq!(calls.get(), 4);
+            Ok(())
+        }
+        check::<f64>(&graph, &surface)?;
+        check::<QuadFloat>(&graph, &surface)?;
+        check::<ArbPrec>(&graph, &surface)
+    }
+
+    #[test]
+    fn joint_bridge_requires_full_coverage_and_gates_actual_inverse_support() -> Result<()> {
+        let program = std::thread::Builder::new()
+            .stack_size(64 * 1024 * 1024)
+            .spawn(|| {
+                test_initialise().unwrap();
+                SharedEnergyJointMap::<f64>::compile_program()
+            })?
+            .join()
+            .unwrap()?;
+        let compact = SharedEnergyJointMap::new(
+            Arc::new(|_| {
+                Ok(super::super::SharedEnergyJointGeometry {
+                    shifts: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+                    masses: [1.0; 3],
+                    energy_sums: [4.0; 2],
+                })
+            }),
+            0,
+            0.125,
+            1.0,
+            1.0,
+            program,
+        )?;
+        let channel = |name: &str, map| CompiledSamplingChannel {
+            name: name.into(),
+            master_graph: "shared-energy-pair".into(),
+            basis_id: None,
+            definition: SamplingMapDefinition::Intersect(vec![
+                SamplingMapDefinition::Surface(vec![0, 1]),
+                SamplingMapDefinition::Surface(vec![0, 2]),
+            ]),
+            embedded_edges: vec![0],
+            map,
+            singularity_proxy: Some(SamplingScoreFunction::from_positive_function(|_| {
+                Ok(Some(1.0))
+            })),
+        };
+        let compact = channel("compact", CompiledSamplingMap::Joint(compact));
+        assert!(matches!(
+            SamplingChannelBridge::new(vec![compact.clone()]),
+            Err(SamplingChannelBridgeError::MissingFullSupport)
+        ));
+        let ordinary = channel(
+            "ordinary",
+            CompiledSamplingMap::Surface(SurfaceRadialMap::absent(3, vec![0.0; 3], 1.0, 1.0)?),
+        );
+        for mode in [
+            SamplingPartitionMode::MapDensity,
+            SamplingPartitionMode::SingularityProxy,
+        ] {
+            let bridge = SamplingChannelBridge::new_with_partition_mode(
+                vec![compact.clone(), ordinary.clone()],
+                mode,
+            )?;
+            let mapped = bridge.forward(SamplingChannelId(0), &[0.43, 0.31, 0.37])?;
+            assert!(
+                mapped
+                    .map
+                    .diagnostics
+                    .iter()
+                    .any(|value| value.contains("certified normal disk"))
+            );
+            assert!(mapped.partition.weights.iter().all(|weight| *weight > 0.0));
+            assert!((mapped.partition.weight_sum() - 1.0).abs() < 1.0e-14);
+            assert!(
+                bridge
+                    .inverse(SamplingChannelId(0), &mapped.raw_coordinates)?
+                    .is_some()
+            );
+
+            // Original energies put this regular raw point far outside the
+            // small normal disk; this is geometric exclusion, not a failed root.
+            let outside: [f64; 3] = [0.2, 0.3, 0.4];
+            let e0 = (1.0 + outside.iter().map(|x| x * x).sum::<f64>()).sqrt();
+            let h = e0 + (1.0 + 1.2_f64.powi(2) + 0.3_f64.powi(2) + 0.4_f64.powi(2)).sqrt() - 4.0;
+            let z = e0 + (1.0 + 0.2_f64.powi(2) + 1.3_f64.powi(2) + 0.4_f64.powi(2)).sqrt() - 4.0;
+            assert!(h.hypot(z) > 0.125);
+            assert!(bridge.inverse(SamplingChannelId(0), &outside)?.is_none());
+            assert_eq!(bridge.partition(&outside)?.weights, vec![0.0, 1.0]);
+            assert!(bridge.inverse(SamplingChannelId(1), &outside)?.is_some());
+            if mode == SamplingPartitionMode::MapDensity {
+                let report = SamplingChannelBridgeAcceptanceReport::normalized_gaussian(
+                    &bridge,
+                    4096,
+                    0.9,
+                    &[0.4, -0.3, 0.2],
+                )?;
+                assert_eq!(report.finite_sample_count, 8192);
+                assert!((report.normalization - 1.0).abs() < 0.02, "{report:?}");
+                assert!(
+                    (report.second_moment / report.expected_second_moment - 1.0).abs() < 0.04,
+                    "{report:?}"
+                );
+            }
+            // The constant proxy checks support only; its corner power is not
+            // sufficient evidence for the density-based damping oracle below.
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn joint_density_partition_bounds_inverse_radius_from_either_channel() -> Result<()> {
+        let program = std::thread::Builder::new()
+            .stack_size(64 * 1024 * 1024)
+            .spawn(|| {
+                test_initialise().unwrap();
+                SharedEnergyJointMap::<f64>::compile_program()
+            })?
+            .join()
+            .unwrap()?;
+        fn check<T: FloatLike>(program: SamplingExpressionEvaluator) -> Result<()> {
+            let one = F::<T>::default().one();
+            let zero = one.zero();
+            let compact = SharedEnergyJointMap::new(
+                Arc::new(|_| {
+                    let one = F::<T>::default().one();
+                    let zero = one.zero();
+                    Ok(super::super::SharedEnergyJointGeometry {
+                        shifts: [
+                            [one.0.clone(), zero.0.clone(), zero.0.clone()],
+                            [zero.0.clone(), one.0.clone(), zero.0],
+                        ],
+                        masses: [one.0.clone(), one.0.clone(), one.0.clone()],
+                        energy_sums: [one.from_usize(4).0, one.from_usize(4).0],
+                    })
+                }),
+                0,
+                (&one / one.from_usize(8)).0,
+                one.0.clone(),
+                1.0,
+                program,
+            )?;
+            let channel = |name: &str, map| CompiledSamplingChannel {
+                name: name.into(),
+                master_graph: "shared-energy-pair".into(),
+                basis_id: None,
+                definition: SamplingMapDefinition::Intersect(vec![
+                    SamplingMapDefinition::Surface(vec![0, 1]),
+                    SamplingMapDefinition::Surface(vec![0, 2]),
+                ]),
+                embedded_edges: vec![0],
+                map,
+                singularity_proxy: None,
+            };
+            let bridge = SamplingChannelBridge::new(vec![
+                channel("compact", CompiledSamplingMap::Joint(compact)),
+                channel(
+                    "ordinary",
+                    CompiledSamplingMap::Surface(SurfaceRadialMap::absent(
+                        3,
+                        vec![zero.0.clone(); 3],
+                        1.0,
+                        1.0,
+                    )?),
+                ),
+            ])?;
+            // Independently evaluate the original two energy equations at the
+            // supplied raw point. Never infer R from a Jacobian or inverse q.
+            let radius = |point: &[T]| {
+                let x = point.iter().cloned().map(F).collect::<Vec<_>>();
+                let e0 = (&one + x.iter().fold(zero.clone(), |sum, x| sum + x.square())).sqrt();
+                let e1 = (&one + (&x[0] + &one).square() + x[1].square() + x[2].square()).sqrt();
+                let e2 = (&one + x[0].square() + (&x[1] + &one).square() + x[2].square()).sqrt();
+                ((&e0 + e1 - one.from_usize(4)).square() + (e0 + e2 - one.from_usize(4)).square())
+                    .sqrt()
+            };
+            let theta = one.from_usize(31) / one.from_usize(100);
+            let phi = one.from_usize(37) / one.from_usize(100);
+            let probe = bridge.forward(
+                SamplingChannelId(0),
+                &[(&one / one.from_usize(2)).0, theta.0.clone(), phi.0.clone()],
+            )?;
+            assert!(
+                probe
+                    .map
+                    .diagnostics
+                    .iter()
+                    .any(|value| value.contains("certified normal disk"))
+            );
+            let rho = radius(&probe.raw_coordinates) * one.from_usize(2);
+            // At h=z=0 the independent circle has k=31, D=163/2,
+            // E0=60/31 + sqrt(D)/31*cos(phi). The limiting product is
+            // 4*pi^2*rho * E0*(4-E0)^2/sqrt(31), for this alpha=1 frame.
+            let pi = F(one.0.pi());
+            let angle = one.from_usize(2) * &pi * &phi;
+            let e0 = (one.from_usize(60)
+                + (one.from_usize(163) / one.from_usize(2)).sqrt() * F(angle.0.cos()))
+                / one.from_usize(31);
+            let limit =
+                one.from_usize(4) * pi.square() * &rho * &e0 * (one.from_usize(4) - &e0).square()
+                    / one.from_usize(31).sqrt();
+            let mut errors = Vec::new();
+            for decade in 1..=4 {
+                let cube = [
+                    (&one / one.from_usize(10).powi(decade)).0,
+                    theta.0.clone(),
+                    phi.0.clone(),
+                ];
+                let point = bridge.forward(SamplingChannelId(0), &cube)?.raw_coordinates;
+                let mut factors = Vec::new();
+                for selected in 0..2 {
+                    let inverse = bridge
+                        .inverse(SamplingChannelId(selected), &point)?
+                        .expect("both regular inverses exist");
+                    let replay =
+                        bridge.forward(SamplingChannelId(selected), &inverse.map.coordinates)?;
+                    let factor = F(replay.selected_factor()?) / radius(&replay.raw_coordinates);
+                    assert!(factor.0.is_finite() && factor > zero);
+                    factors.push(factor);
+                }
+                assert!(
+                    (&factors[0] / &factors[1] - &one).abs()
+                        < one.epsilon().sqrt() * one.from_usize(1024)
+                );
+                errors.push((&factors[0] / &limit - &one).abs());
+            }
+            assert!(errors[3] < &errors[0] / one.from_usize(20), "{errors:?}");
+            assert!(errors[3] < &one / one.from_usize(1000), "{errors:?}");
+            Ok(())
+        }
+        check::<crate::utils::QuadFloat>(program.clone())?;
+        check::<crate::utils::ArbPrec>(program)?;
+        Ok(())
+    }
+
+    #[test]
+    fn conditional_joint_bridge_uses_foreign_context_and_affine_inverse_support() -> Result<()> {
+        let program = std::thread::Builder::new()
+            .stack_size(64 * 1024 * 1024)
+            .spawn(|| {
+                test_initialise().unwrap();
+                SharedEnergyJointMap::<f64>::compile_program()
+            })?
+            .join()
+            .unwrap()?;
+        let conditional = |scale: f64| -> Result<CompiledSamplingMap> {
+            let joint = SharedEnergyJointMap::new(
+                Arc::new(|prior| {
+                    Ok(super::super::SharedEnergyJointGeometry {
+                        shifts: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+                        masses: [1.0; 3],
+                        energy_sums: [4.0 + prior[0] / 5.0, 4.0 + prior[1] / 5.0],
+                    })
+                }),
+                3,
+                0.125,
+                1.0,
+                1.0,
+                program.clone(),
+            )?;
+            let active = SamplingMapEmbedding::from_composition(
+                SamplingMapComposition::then(vec![Box::new(joint)])?,
+                vec![0, 1, 2],
+            )?
+            .with_context_transform(Arc::new(move |context| {
+                let prior = context.previous;
+                if prior.len() != 3 {
+                    return Err(eyre!(
+                        "joint fixture needs its three declared prerequisites"
+                    ));
+                }
+                let physical = prior.iter().map(|x| scale * x).collect::<Vec<_>>();
+                let frame = SamplingMapAffine::new(
+                    vec![
+                        vec![scale, scale / 4.0, 0.0],
+                        vec![0.0, 1.5 * scale, 0.0],
+                        vec![0.0, 0.0, 0.75 * scale],
+                    ],
+                    physical.clone(),
+                )?;
+                Ok((physical, frame))
+            }));
+            assert!(active.contract().requires_context);
+            let map = SamplingMapEmbedding::from_composition(
+                SamplingMapComposition::then(vec![
+                    Box::new(SurfaceRadialMap::absent(3, vec![0.0; 3], 1.0, 1.0)?),
+                    Box::new(active),
+                ])?,
+                vec![3, 4, 5, 0, 1, 2],
+            )?;
+            assert_eq!(map.contract().support, SamplingSupport::Restricted);
+            assert!(!map.contract().requires_context);
+            Ok(CompiledSamplingMap::Embedded(map))
+        };
+        let channel = |name: &str, map| CompiledSamplingChannel {
+            name: name.into(),
+            master_graph: "conditional-shared-energy-pair".into(),
+            basis_id: None,
+            definition: SamplingMapDefinition::Intersect(vec![
+                SamplingMapDefinition::Surface(vec![0, 1]),
+                SamplingMapDefinition::Surface(vec![0, 2]),
+            ]),
+            embedded_edges: vec![0, 1],
+            map,
+            singularity_proxy: Some(SamplingScoreFunction::from_positive_function(|_| {
+                Ok(Some(1.0))
+            })),
+        };
+        let channels = vec![
+            channel("scale-one", conditional(1.0)?),
+            channel("scale-two", conditional(2.0)?),
+            channel(
+                "ordinary",
+                CompiledSamplingMap::Surface(SurfaceRadialMap::absent(6, vec![0.0; 6], 1.0, 1.0)?),
+            ),
+        ];
+        for mode in [
+            SamplingPartitionMode::MapDensity,
+            SamplingPartitionMode::SingularityProxy,
+        ] {
+            let bridge = SamplingChannelBridge::new_with_partition_mode(channels.clone(), mode)?;
+            for selected in 0..2 {
+                let cube = [0.1, 0.31, 0.43, 0.47, 0.29, 0.37];
+                let mapped = bridge.forward(SamplingChannelId(selected), &cube)?;
+                assert!(
+                    mapped
+                        .map
+                        .diagnostics
+                        .iter()
+                        .any(|d| d.contains("certified normal disk"))
+                );
+                let inverse = bridge
+                    .inverse(SamplingChannelId(selected), &mapped.raw_coordinates)?
+                    .expect("selected regular joint inverse");
+                for (actual, expected) in inverse.map.coordinates.iter().zip(cube) {
+                    assert!((actual - expected).abs() < 1.0e-8);
+                }
+                assert!(
+                    bridge
+                        .inverse(SamplingChannelId(1 - selected), &mapped.raw_coordinates)?
+                        .is_none()
+                );
+                assert_eq!(mapped.partition.weights[1 - selected], 0.0);
+                assert!(
+                    mapped.partition.weights[selected] > 0.0 && mapped.partition.weights[2] > 0.0
+                );
+                assert!((mapped.partition.weight_sum() - 1.0).abs() < 1.0e-14);
+
+                // Undo the known shear and permutation independently. Each
+                // chart must use its own scaled raw complement, including in
+                // a foreign inverse; a shared selected context gives the wrong support.
+                let scale = (selected + 1) as f64;
+                let raw = &mapped.raw_coordinates;
+                let y = (raw[1] / scale - raw[4]) / 1.5;
+                let x = raw[0] / scale - raw[3] - y / 4.0;
+                let z = (raw[2] / scale - raw[5]) / 0.75;
+                let e0 = (1.0 + x * x + y * y + z * z).sqrt();
+                let h = e0 + (1.0 + (x + 1.0).powi(2) + y * y + z * z).sqrt()
+                    - (4.0 + scale * raw[3] / 5.0);
+                let zeta = e0 + (1.0 + x * x + (y + 1.0).powi(2) + z * z).sqrt()
+                    - (4.0 + scale * raw[4] / 5.0);
+                assert!(h.hypot(zeta) < 0.125);
+            }
+            // Generating rows remain distinct while each selected/foreign map
+            // revisits the same compiled path in forward and inverse. Sealing
+            // forbids an incidental later lane from filling a missing record.
+            let cube = [0.1, 0.31, 0.43, 0.47, 0.29, 0.37];
+            let mut metadata = EvaluationMetaData::new_empty();
+            metadata.sampling_proposal_policies.begin_collection();
+            for generator in 0..2 {
+                let mut contexts = SamplingChannelRuntimeContexts::for_draw(
+                    3,
+                    7,
+                    SamplingChannelId(generator),
+                    &mut metadata,
+                );
+                bridge.forward_with_runtime_contexts(
+                    SamplingChannelId(generator),
+                    &cube,
+                    &mut contexts,
+                )?;
+            }
+            assert_eq!(metadata.sampling_proposal_policies.len(), 4);
+            metadata.sampling_proposal_policies.seal();
+            let sealed = metadata.sampling_proposal_policies.clone();
+            for generator in 0..2 {
+                let mut contexts = SamplingChannelRuntimeContexts::for_draw(
+                    3,
+                    7,
+                    SamplingChannelId(generator),
+                    &mut metadata,
+                );
+                let mapped = bridge.forward_with_runtime_contexts(
+                    SamplingChannelId(generator),
+                    &cube,
+                    &mut contexts,
+                )?;
+                assert!(
+                    bridge
+                        .inverse_with_runtime_contexts(
+                            SamplingChannelId(generator),
+                            &mapped.raw_coordinates,
+                            &mut contexts
+                        )?
+                        .is_some()
+                );
+            }
+            assert_eq!(metadata.sampling_proposal_policies, sealed);
+            let mut empty = EvaluationMetaData::new_empty();
+            let mut contexts =
+                SamplingChannelRuntimeContexts::for_draw(3, 7, SamplingChannelId(0), &mut empty);
+            let error = bridge
+                .forward_with_runtime_contexts(SamplingChannelId(0), &cube, &mut contexts)
+                .unwrap_err();
+            assert!(matches!(
+                error.downcast_ref::<SamplingEvaluationError>(),
+                Some(SamplingEvaluationError::UncertainGeometry { .. })
+            ));
+            assert!(format!("{error:#}").contains("conditional-shared-energy-pair"));
+            assert!(empty.sampling_proposal_policies.is_empty());
+        }
+        Ok(())
+    }
+
+    #[test]
     fn bridge_certifies_selected_inverse_density_in_both_partition_modes() {
         use super::super::sampling_maps::SamplingEvaluationError;
         use crate::utils::{ArbPrec, QuadFloat};
@@ -2735,7 +3545,7 @@ mod tests {
 
         // Isolate a faulty inverse determinant from coordinate round trips:
         // the underlying affine map remains exactly invertible with zero residual.
-        #[derive(Debug)]
+        #[derive(Clone, Debug)]
         struct InverseDensityProbe<T: FloatLike> {
             map: SamplingMapAffine<T>,
             multiplier: T,
@@ -2758,19 +3568,23 @@ mod tests {
             fn forward(
                 &self,
                 coordinates: &[T],
-                context: &[T],
+                context: &mut SamplingMapContext<'_, T>,
             ) -> Result<SamplingMapEvaluation<T>> {
                 self.map.forward(coordinates, context)
             }
-            fn inverse(&self, point: &[T], context: &[T]) -> Result<SamplingMapEvaluation<T>> {
+            fn inverse(
+                &self,
+                point: &[T],
+                context: &mut SamplingMapContext<'_, T>,
+            ) -> Result<Option<SamplingMapEvaluation<T>>> {
                 self.calls.fetch_add(1, Ordering::Relaxed);
                 if self.unavailable {
                     return Err(eyre!("foreign inverse must not be evaluated"));
                 }
-                let mut inverse = self.map.inverse(point, context)?;
+                let mut inverse = self.map.inverse(point, context.previous)?;
                 inverse.inverse_jacobian =
                     (F(inverse.inverse_jacobian) * F(self.multiplier.clone())).0;
-                Ok(inverse)
+                Ok(Some(inverse))
             }
         }
         fn check<T: FloatLike>(exponent: i32) {
@@ -2884,6 +3698,7 @@ mod tests {
         use super::super::sampling_maps::{SamplingEvaluationError, SamplingSupport};
         use crate::utils::ArbPrec;
         let evaluation = SamplingChannelBridgeEvaluation {
+            prepared_lu_hosts: Vec::new(),
             channel_id: SamplingChannelId(0),
             channel_name: "focused".into(),
             raw_coordinates: vec![1.0; 3],
@@ -2913,6 +3728,7 @@ mod tests {
             Some(SamplingEvaluationError::Unrepresentable { .. })
         ));
         let native = SamplingChannelBridgeEvaluation {
+            prepared_lu_hosts: Vec::new(),
             channel_id: evaluation.channel_id,
             channel_name: evaluation.channel_name,
             raw_coordinates: evaluation
@@ -3051,6 +3867,7 @@ mod tests {
                         channel
                             .inverse(&evaluation.raw_coordinates)
                             .unwrap()
+                            .expect("full-support inverse")
                             .inverse_jacobian
                     })
                     .map(F)
@@ -3065,7 +3882,8 @@ mod tests {
                 }
                 let inverse = bridge
                     .inverse(SamplingChannelId(selected), &evaluation.raw_coordinates)
-                    .unwrap();
+                    .unwrap()
+                    .expect("full-support inverse");
                 for (expected, actual) in coordinates.iter().zip(&inverse.map.coordinates) {
                     assert!((F(actual.clone()) - F(expected.clone())).abs() < tolerance);
                 }
@@ -3192,6 +4010,246 @@ mod tests {
     }
 
     #[test]
+    fn joint_targets_resolve_as_one_ordered_three_dimensional_block() {
+        let mut selection = SamplingChannelSelection {
+            default_channel_selection: vec!["joint".into()],
+            ..Default::default()
+        };
+        for around in [
+            "intersect(surface(6,2),surface(6,3))",
+            "at_cut(cut(9,7),intersect(surface(6,2),surface(6,3)))",
+            "then(complement(4),block(lmb(6),at_cut(cut(9,7),left(intersect(surface(6,2),surface(6,3))))))",
+        ] {
+            selection
+                .channel_definitions
+                .entry("G".into())
+                .or_default()
+                .insert(
+                    "joint".into(),
+                    SamplingChannelDefinition {
+                        parent_lmb: vec![6, 4],
+                        subspace_lmb: vec![6],
+                        ..definition(around)
+                    },
+                );
+            let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+            let blocks = &resolved.named("joint").unwrap().blocks;
+            assert_eq!(blocks.len(), 2);
+            assert_eq!(blocks[0].active_lmb, vec![4]);
+            assert_eq!(blocks[1].active_lmb, vec![6]);
+            assert_eq!(blocks[1].preceding_lmb, vec![4]);
+            assert!(blocks[1].remaining_lmb.is_empty());
+            assert_eq!(
+                blocks[1].target.energy_edge_sets(),
+                vec![[2, 6].as_slice(), [3, 6].as_slice()]
+            );
+            assert_eq!(
+                blocks.iter().map(|b| 3 * b.active_lmb.len()).sum::<usize>(),
+                6
+            );
+            if around.contains("cut") {
+                assert_eq!(blocks[1].target.host_cut(), Some([7, 9].as_slice()));
+            }
+        }
+        for (around, active, expected) in [
+            ("intersect(surface(2))", vec![6], "exactly two distinct"),
+            (
+                "intersect(surface(2),surface(2))",
+                vec![6],
+                "exactly two distinct",
+            ),
+            (
+                "intersect(surface(2),surface(3),surface(5))",
+                vec![6],
+                "exactly two distinct",
+            ),
+            (
+                "intersect(surface(2),soft(3))",
+                vec![6],
+                "exactly two distinct",
+            ),
+            (
+                "intersect(surface(2),at_cut(cut(9),surface(3)))",
+                vec![6],
+                "qualify the whole",
+            ),
+            (
+                "intersect(surface(2),product(surface(3)))",
+                vec![6],
+                "exactly two distinct",
+            ),
+            (
+                "intersect(surface(2),surface(3))",
+                vec![6, 4],
+                "one three-dimensional",
+            ),
+        ] {
+            selection.channel_definitions.get_mut("G").unwrap().insert(
+                "joint".into(),
+                SamplingChannelDefinition {
+                    parent_lmb: vec![6, 4],
+                    subspace_lmb: active,
+                    ..definition(around)
+                },
+            );
+            let error = resolve_sampling_channel_selection("G", &selection).unwrap_err();
+            assert!(error.to_string().contains(expected), "{around}: {error}");
+        }
+    }
+
+    #[test]
+    fn joint_catalogue_programs_and_registry_preserve_qualified_pair_identity() -> Result<()> {
+        test_initialise()?;
+        let pair = "intersect(surface(2,6),surface(3,6))";
+        let selection = SamplingChannelSelection {
+            default_channel_selection: vec!["joint".into(), "hosted".into(), "ordinary".into()],
+            channel_definitions: BTreeMap::from([(
+                "G".into(),
+                BTreeMap::from([
+                    (
+                        "joint".into(),
+                        SamplingChannelDefinition {
+                            parent_lmb: vec![4, 6],
+                            subspace_lmb: vec![6],
+                            ..definition(pair)
+                        },
+                    ),
+                    (
+                        "hosted".into(),
+                        SamplingChannelDefinition {
+                            parent_lmb: vec![4, 6],
+                            subspace_lmb: vec![6],
+                            ..definition(&format!("at_cut(cut(9),{pair})"))
+                        },
+                    ),
+                    (
+                        "ordinary".into(),
+                        SamplingChannelDefinition {
+                            parent_lmb: vec![4, 6],
+                            subspace_lmb: vec![],
+                            ..definition("lmb(4,6)")
+                        },
+                    ),
+                ]),
+            )]),
+            ..Default::default()
+        };
+        let resolved = resolve_sampling_channel_selection("G", &selection)?;
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let programs = std::thread::Builder::new()
+            .stack_size(64 * 1024 * 1024)
+            .spawn({
+                let catalogue = catalogue.clone();
+                move || catalogue.compile_programs(6, &HFunctionSettings::default())
+            })?
+            .join()
+            .unwrap()?;
+        assert_eq!(
+            programs
+                .iter()
+                .filter(|(_, _, joint)| joint.is_some())
+                .count(),
+            2
+        );
+        assert!(
+            programs
+                .iter()
+                .all(|(proxy, radial, _)| proxy.is_none() && radial.is_none())
+        );
+        let program = programs
+            .iter()
+            .find_map(|(_, _, joint)| joint.clone())
+            .unwrap();
+        let map = SharedEnergyJointMap::new(
+            Arc::new(|_| {
+                Ok(super::super::SharedEnergyJointGeometry {
+                    shifts: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+                    masses: [1.0; 3],
+                    energy_sums: [4.0; 2],
+                })
+            }),
+            3,
+            0.125,
+            1.0,
+            1.0,
+            program,
+        )?;
+        let mut context = SamplingChannelCompileContext::<f64>::new(
+            "G",
+            vec![4, 6],
+            ParameterizationSettings::default(),
+            5.0,
+            2,
+        );
+        context.physical_cut_ids.insert(vec![9], vec![0]);
+        let error = catalogue.compile(&context, &programs).unwrap_err();
+        let Some(SamplingChannelCompileError::MissingGeometry { target, .. }) =
+            error.downcast_ref::<SamplingChannelCompileError>()
+        else {
+            panic!("{error}")
+        };
+        assert_eq!(
+            target.energy_edge_sets(),
+            vec![[2, 6].as_slice(), [3, 6].as_slice()]
+        );
+        for channel in catalogue.named_entries() {
+            for block in &channel.blocks {
+                if block.target.energy_edge_sets().len() != 2 {
+                    continue;
+                }
+                context.insert_geometry_map(
+                    block.target.clone(),
+                    channel.definition.parent_lmb.clone(),
+                    block.active_lmb.clone(),
+                    block.preceding_lmb.clone(),
+                    CompiledSamplingMap::Joint(map.clone()),
+                )?;
+                assert!(
+                    context
+                        .geometry_maps
+                        .contains_key(&block.geometry_key(&channel.definition.parent_lmb))
+                );
+            }
+        }
+        assert_eq!(context.geometry_maps.len(), 2);
+        let compiled = catalogue.compile(&context, &programs)?;
+        assert!(compiled.iter().all(|channel| channel.dimensions() == 6));
+        let restricted = compiled
+            .iter()
+            .filter(|channel| channel.map.contract().support == SamplingSupport::Restricted)
+            .cloned()
+            .collect();
+        assert!(matches!(
+            SamplingChannelBridge::new(restricted),
+            Err(SamplingChannelBridgeError::MissingFullSupport)
+        ));
+        let bridge = SamplingChannelBridge::new(compiled)?;
+        let selected = bridge
+            .channels()
+            .iter()
+            .position(|channel| channel.name == "joint")
+            .unwrap();
+        let mapped = bridge.forward(
+            SamplingChannelId(selected),
+            &[0.3, 0.31, 0.37, 0.43, 0.31, 0.37],
+        )?;
+        assert!(
+            mapped
+                .map
+                .diagnostics
+                .iter()
+                .any(|d| d.contains("certified normal disk"))
+        );
+        assert!(
+            bridge
+                .inverse(SamplingChannelId(selected), &mapped.raw_coordinates)?
+                .is_some()
+        );
+        assert!((mapped.partition.weight_sum() - 1.0).abs() < 1.0e-14);
+        Ok(())
+    }
+
+    #[test]
     fn ordinary_lmb_rejects_cut_metadata_and_meaningless_host_qualifiers() {
         let mut selection = SamplingChannelSelection {
             default_channel_selection: vec!["ordinary".into()],
@@ -3229,7 +4287,9 @@ mod tests {
             5.0,
             2,
         );
-        let error = catalogue.compile(&context, &[(None, None)]).unwrap_err();
+        let error = catalogue
+            .compile(&context, &[(None, None, None)])
+            .unwrap_err();
         assert!(matches!(
             error.downcast_ref::<SamplingChannelCompileError>(),
             Some(SamplingChannelCompileError::InvalidChannel { .. })
@@ -3255,7 +4315,7 @@ mod tests {
                 let program = SamplingExpressionEvaluator::new(
                     ["0", "1/10^400", "0", "0", "0"].map(|x| try_parse!(x).unwrap()),
                     parameters,
-                    true,
+                    &[0, 1, 2, 3, 4],
                 )
                 .unwrap();
                 let mut selection = SamplingChannelSelection {
@@ -3283,7 +4343,7 @@ mod tests {
                 context.physical_cut_ids.insert(vec![3], vec![0]);
                 context.physical_cut_max_occurrences.insert(vec![3], 1);
                 context
-                    .insert_surface_map(
+                    .insert_geometry_map(
                         SamplingMapDefinition::PhaseSpace(Box::new(SamplingMapDefinition::Cut(
                             vec![3],
                         ))),
@@ -3303,7 +4363,7 @@ mod tests {
                     )
                     .unwrap();
                 let error = catalogue
-                    .compile(&context, &[(None, Some(program.clone()))])
+                    .compile(&context, &[(None, Some(program.clone()), None)])
                     .unwrap_err();
                 assert!(matches!(
                     error.downcast_ref::<super::super::sampling_maps::SamplingEvaluationError>(),
@@ -3387,7 +4447,7 @@ mod tests {
                 ))
             }));
             context
-                .insert_surface_map(
+                .insert_geometry_map(
                     block.target.clone(),
                     channel.definition.parent_lmb.clone(),
                     block.active_lmb.clone(),
@@ -3396,8 +4456,8 @@ mod tests {
                 )
                 .unwrap();
         }
-        assert_eq!(context.surface_maps.len(), 2);
-        let keys = context.surface_maps.keys().cloned().collect::<Vec<_>>();
+        assert_eq!(context.geometry_maps.len(), 2);
+        let keys = context.geometry_maps.keys().cloned().collect::<Vec<_>>();
         assert_eq!(
             (&keys[0].0, &keys[0].1, &keys[0].2),
             (&keys[1].0, &keys[1].1, &keys[1].2)
@@ -3414,7 +4474,8 @@ mod tests {
         for id in [0, 1] {
             let inverse = bridge
                 .inverse(SamplingChannelId(id), &forward.raw_coordinates)
-                .unwrap();
+                .unwrap()
+                .expect("full-support inverse");
             let again = bridge
                 .forward(SamplingChannelId(id), &inverse.map.coordinates)
                 .unwrap();
@@ -3423,10 +4484,10 @@ mod tests {
                 assert!((actual - expected).abs() < 1.0e-9);
             }
         }
-        let map = context.surface_maps.values().next().unwrap().clone();
+        let map = context.geometry_maps.values().next().unwrap().clone();
         assert!(
             context
-                .insert_surface_map(
+                .insert_geometry_map(
                     SamplingMapDefinition::Surface(vec![3]),
                     vec![1, 2, 4],
                     vec![1],
@@ -3436,7 +4497,7 @@ mod tests {
                 .is_err()
         );
         assert_eq!(
-            context.surface_maps.len(),
+            context.geometry_maps.len(),
             2,
             "invalid registration is transactional"
         );
@@ -3911,7 +4972,7 @@ mod tests {
             2,
         );
         context
-            .insert_surface_map(
+            .insert_geometry_map(
                 SamplingMapDefinition::Surface(vec![1, 2]),
                 context.parent_lmb.clone(),
                 vec![1, 2],
@@ -4024,7 +5085,7 @@ mod tests {
             2,
         );
         context
-            .insert_surface_map(
+            .insert_geometry_map(
                 SamplingMapDefinition::Surface(vec![1, 2]),
                 context.parent_lmb.clone(),
                 vec![1, 2],
@@ -4082,7 +5143,7 @@ mod tests {
             2,
         );
         context
-            .insert_surface_map(
+            .insert_geometry_map(
                 SamplingMapDefinition::Surface(vec![2, 4]),
                 context.parent_lmb.clone(),
                 vec![2],
@@ -4120,7 +5181,11 @@ mod tests {
         let coordinates = [0.31, 0.42, 0.57, 0.23, 0.68, 0.81];
         let mapped = channel.map.forward(&coordinates).unwrap();
         assert_eq!(mapped.support, SamplingSupport::Full);
-        let inverse = channel.map.inverse(&mapped.point).unwrap();
+        let inverse = channel
+            .map
+            .inverse(&mapped.point)
+            .unwrap()
+            .expect("full-support inverse");
         assert!(inverse.residual < 1.0e-9, "{}", inverse.residual);
         assert!(
             inverse
@@ -4159,7 +5224,7 @@ mod tests {
             2,
         );
         context
-            .insert_surface_map(
+            .insert_geometry_map(
                 SamplingMapDefinition::Surface(vec![2, 4]),
                 context.parent_lmb.clone(),
                 vec![2],
@@ -4198,7 +5263,7 @@ mod tests {
         contexts.set(SamplingChannelId::from(1), vec![0.2]).unwrap();
         let coordinates = [0.31, 0.42, 0.57, 0.23, 0.68, 0.81];
         let mapped = bridge
-            .forward_with_runtime_contexts(SamplingChannelId::from(0), &coordinates, &contexts)
+            .forward_with_runtime_contexts(SamplingChannelId::from(0), &coordinates, &mut contexts)
             .unwrap();
         assert!((mapped.partition.weight_sum() - 1.0).abs() < 1.0e-12);
         assert!(mapped.partition.weights.iter().all(|weight| *weight > 0.0));
@@ -4206,9 +5271,10 @@ mod tests {
             .inverse_with_runtime_contexts(
                 SamplingChannelId::from(0),
                 &mapped.raw_coordinates,
-                &contexts,
+                &mut contexts,
             )
-            .unwrap();
+            .unwrap()
+            .expect("full-support inverse");
         assert!(inverse.map.residual < 1.0e-9, "{}", inverse.map.residual);
         assert!(
             inverse
@@ -4244,7 +5310,7 @@ mod tests {
         );
         for edges in [vec![2, 4], vec![3, 10]] {
             context
-                .insert_surface_map(
+                .insert_geometry_map(
                     SamplingMapDefinition::Surface(edges),
                     context.parent_lmb.clone(),
                     vec![1, 2],
@@ -4368,7 +5434,10 @@ mod tests {
             .unwrap();
         assert!(point.residual < 1.0e-10);
         assert!((point.point[0] - 0.5).abs() > 1.0e-6);
-        let inverse = compiled[0].inverse(&point.point).unwrap();
+        let inverse = compiled[0]
+            .inverse(&point.point)
+            .unwrap()
+            .expect("full-support inverse");
         assert!(inverse.residual < 1.0e-10);
         for (recovered, original) in inverse.coordinates.iter().zip(&point.coordinates) {
             assert!((recovered - original).abs() < 1.0e-10);
@@ -4450,7 +5519,10 @@ mod tests {
             F(mapped.jacobian),
             F(original.jacobian) * (one + displacement)
         );
-        let inverse = shifted[0].inverse(&mapped.point).unwrap();
+        let inverse = shifted[0]
+            .inverse(&mapped.point)
+            .unwrap()
+            .expect("full-support inverse");
         for (actual, expected) in inverse.coordinates.iter().zip(coordinates) {
             assert!((F(*actual) - F(expected)).abs() < one.from_i64(10).powi(-25));
         }
@@ -4539,7 +5611,7 @@ mod tests {
             2,
         );
         context
-            .insert_surface_map(
+            .insert_geometry_map(
                 SamplingMapDefinition::Surface(vec![2]),
                 context.parent_lmb.clone(),
                 vec![2],
@@ -4570,7 +5642,10 @@ mod tests {
         let point = compiled[0]
             .forward(&[0.31, 0.42, 0.57, 0.23, 0.68, 0.81])
             .unwrap();
-        let inverse = compiled[0].inverse(&point.point).unwrap();
+        let inverse = compiled[0]
+            .inverse(&point.point)
+            .unwrap()
+            .expect("full-support inverse");
         assert!(inverse.residual < 1.0e-10);
     }
 
@@ -4630,7 +5705,7 @@ mod tests {
         for (edges, cut, radius) in [(vec![4, 7], 3, 2.0), (vec![5, 8], 6, 3.0)] {
             context.physical_cut_ids.insert(edges.clone(), vec![cut]);
             context
-                .insert_surface_map(
+                .insert_geometry_map(
                     SamplingMapDefinition::PhaseSpace(Box::new(SamplingMapDefinition::Cut(edges))),
                     context.parent_lmb.clone(),
                     vec![1],
@@ -4673,6 +5748,7 @@ mod tests {
                 bridge
                     .inverse(SamplingChannelId::from(id), &mapped.raw_coordinates)
                     .unwrap()
+                    .expect("full-support inverse")
                     .map
                     .residual
                     < 1.0e-9
@@ -4742,7 +5818,7 @@ mod tests {
                 )
                 .unwrap_err()
                 .downcast_ref::<SamplingChannelCompileError>(),
-            Some(SamplingChannelCompileError::MissingSurfaceGeometry { .. })
+            Some(SamplingChannelCompileError::MissingGeometry { .. })
         ));
     }
 
@@ -4766,7 +5842,7 @@ mod tests {
         );
         let mut context = context;
         context
-            .insert_surface_map(
+            .insert_geometry_map(
                 SamplingMapDefinition::Surface(vec![1]),
                 context.parent_lmb.clone(),
                 vec![1, 2],
@@ -4817,7 +5893,7 @@ mod tests {
             2,
         );
         context
-            .insert_surface_map(
+            .insert_geometry_map(
                 SamplingMapDefinition::Surface(vec![2]),
                 context.parent_lmb.clone(),
                 vec![2],
@@ -4851,7 +5927,10 @@ mod tests {
         let point = compiled[0]
             .forward(&[0.31, 0.42, 0.57, 0.23, 0.68, 0.81])
             .unwrap();
-        let inverse = compiled[0].inverse(&point.point).unwrap();
+        let inverse = compiled[0]
+            .inverse(&point.point)
+            .unwrap()
+            .expect("full-support inverse");
         assert!(point.residual < 1.0e-10);
         assert!(inverse.residual < 1.0e-10);
         let bridge = SamplingChannelBridge::new(compiled).unwrap();
@@ -4885,7 +5964,7 @@ mod tests {
             2,
         );
         context
-            .insert_surface_map(
+            .insert_geometry_map(
                 SamplingMapDefinition::Surface(vec![2]),
                 context.parent_lmb.clone(),
                 vec![2],
@@ -4958,7 +6037,8 @@ mod tests {
         );
         let inverse = bridge
             .inverse(SamplingChannelId::from(1), &evaluation.raw_coordinates)
-            .unwrap();
+            .unwrap()
+            .expect("full-support inverse");
         assert!(inverse.map.residual < 1.0e-10);
 
         let externals = Externals::default();
@@ -5111,7 +6191,7 @@ mod tests {
             1,
         );
         context
-            .insert_surface_map(
+            .insert_geometry_map(
                 SamplingMapDefinition::Surface(vec![2, 3]),
                 context.parent_lmb.clone(),
                 vec![1],

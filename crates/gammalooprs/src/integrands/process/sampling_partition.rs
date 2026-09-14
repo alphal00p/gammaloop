@@ -272,25 +272,21 @@ impl<T: FloatLike> SamplingPartition<T> {
         Self::from_log_scores(
             mode,
             raw_coordinates,
-            channels.iter().map(|channel| {
-                (channel.name.as_str(), || {
-                    channel.score(mode, raw_coordinates)
-                })
-            }),
+            channels.iter().map(|channel| channel.name.as_str()),
+            |index| channels[index].score(mode, raw_coordinates),
         )
     }
 
     /// Reduce borrowed channel scores after validating names and raw coordinates.
     /// Deferring each evaluation avoids cloning stateful map or proxy programs
-    /// merely to form the partition at one point.
-    pub(crate) fn from_log_scores<'a, S>(
+    /// merely to form the partition at one point. One sequential callback also
+    /// permits ordinary mutable reborrows of the original-draw policy records.
+    pub(crate) fn from_log_scores<'a>(
         mode: SamplingPartitionMode,
         raw_coordinates: &[T],
-        channels: impl IntoIterator<Item = (&'a str, S)>,
-    ) -> Result<Self>
-    where
-        S: FnOnce() -> Result<Option<T>>,
-    {
+        channels: impl IntoIterator<Item = &'a str>,
+        mut score: impl FnMut(usize) -> Result<Option<T>>,
+    ) -> Result<Self> {
         if raw_coordinates
             .iter()
             .any(|coordinate| !coordinate.is_finite())
@@ -301,13 +297,13 @@ impl<T: FloatLike> SamplingPartition<T> {
         if channels.is_empty() {
             return Err(eyre!("sampling partition requires at least one channel"));
         }
-        let mut names = channels.iter().map(|(name, _)| *name);
+        let mut names = channels.iter().copied();
         if let Some(empty) = names.find(|name| name.trim().is_empty()) {
             return Err(eyre!(
                 "sampling partition contains an empty channel name: {empty:?}"
             ));
         }
-        let mut sorted_names = channels.iter().map(|(name, _)| *name).collect::<Vec<_>>();
+        let mut sorted_names = channels.clone();
         sorted_names.sort_unstable();
         if let Some(duplicate) = sorted_names.windows(2).find(|pair| pair[0] == pair[1]) {
             return Err(eyre!(
@@ -318,8 +314,9 @@ impl<T: FloatLike> SamplingPartition<T> {
 
         let log_scores = channels
             .into_iter()
-            .map(|(name, score)| {
-                score().and_then(|score| {
+            .enumerate()
+            .map(|(index, name)| {
+                score(index).and_then(|score| {
                     score
                         .map(|log_score| {
                             if !log_score.is_finite() {
@@ -583,7 +580,7 @@ mod tests {
         let evaluator = SamplingExpressionEvaluator::new(
             [parameter.clone(), parameter.clone()],
             [parameter],
-            false,
+            &[],
         )
         .unwrap();
         let error =
@@ -726,9 +723,8 @@ mod tests {
         let borrowed = SamplingPartition::from_log_scores(
             mode,
             &[0.25],
-            channels
-                .iter()
-                .map(|channel| (channel.name.as_str(), || channel.score(mode, &[0.25]))),
+            channels.iter().map(|channel| channel.name.as_str()),
+            |index| channels[index].score(mode, &[0.25]),
         )
         .unwrap();
         assert_eq!(
@@ -742,16 +738,10 @@ mod tests {
             (["same", "same"], [0.25], "duplicate channel name"),
             (["left", "right"], [f64::NAN], "coordinates must be finite"),
         ] {
-            let error = SamplingPartition::from_log_scores(
-                mode,
-                &coordinates,
-                names.into_iter().map(|name| {
-                    (name, || {
-                        evaluated.set(evaluated.get() + 1);
-                        Ok(Some(0.0))
-                    })
-                }),
-            )
+            let error = SamplingPartition::from_log_scores(mode, &coordinates, names, |_| {
+                evaluated.set(evaluated.get() + 1);
+                Ok(Some(0.0))
+            })
             .unwrap_err();
             assert!(error.to_string().contains(diagnostic), "{error}");
             assert_eq!(evaluated.get(), 0);

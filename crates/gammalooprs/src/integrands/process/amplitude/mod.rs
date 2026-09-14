@@ -2,6 +2,7 @@ use std::{
     collections::HashSet,
     fs::{self},
     path::Path,
+    time::Instant,
 };
 
 use bincode_trait_derive::{Decode, Encode};
@@ -32,8 +33,8 @@ use crate::{
     DependentMomentaConstructor, F, FloatLike, GammaLoopContext, GammaLoopContextContainer,
     cff::{
         esurface::{
-            EsurfaceCollection, ExistingEsurfaces, GroupEsurfaceId, RaisedEsurfaceId,
-            get_representative,
+            Esurface, EsurfaceCollection, EsurfaceRay, ExistingEsurfaces, GroupEsurfaceId,
+            RaisedEsurfaceId, get_representative,
         },
         expression::OrientationID,
         surface::HybridSurfaceID,
@@ -72,7 +73,7 @@ use crate::{
     settings::{
         GlobalSettings, RuntimeSettings,
         global::{CompilationOptimizationLevel, FrozenCompilationMode},
-        runtime::ParameterizationSettings,
+        runtime::{DiscreteGraphSamplingType, ParameterizationSettings, SamplingSettings},
     },
     subtraction::{
         amplitude_counterterm::{
@@ -92,7 +93,8 @@ use super::{
     GraphTerm, GraphTermEvaluationContext, LmbMultiChannelingSetup, ProcessIntegrandImpl,
     create_grid, evaluate_sample, filtered_orientation_count, format_orientation_label,
     format_sampling_channel_label, histogram_process_info_for_integrand, prepare_buffered_event,
-    resolve_visible_orientation_id, validate_group_orientation_catalogs,
+    resolve_visible_orientation_id, sampling_context::SamplingMapContext,
+    sampling_selection::SamplingCatalogueEntry, validate_group_orientation_catalogs,
     validate_process_runtime_settings,
 };
 
@@ -800,10 +802,86 @@ impl AmplitudeGraphTerm {
         Ok(event)
     }
 
+    fn sampling_target_surface<T: FloatLike>(
+        &self,
+        channel_name: &str,
+        edges: &[usize],
+        externals: &ExternalFourMomenta<F<T>>,
+        lmb: &LoopMomentumBasis,
+    ) -> Result<(&Esurface, Option<&Esurface>)> {
+        let zero = F::<T>::default().zero();
+        let candidates = self
+            .esurfaces
+            .iter_enumerated()
+            .filter(|(_, surface)| {
+                surface
+                    .energies
+                    .iter()
+                    .map(|edge| edge.0)
+                    .sorted()
+                    .eq(edges.iter().copied())
+            })
+            .collect_vec();
+        let Some((_, representative)) = candidates.first() else {
+            return Err(eyre!(
+                "amplitude surface channel '{}' for graph '{}' requests unknown energy edges {:?}; catalogue candidates (ID, edges, external shift): {:?}",
+                channel_name,
+                self.graph.name,
+                edges,
+                self.esurfaces
+                    .iter_enumerated()
+                    .map(|(id, surface)| (id.0, &surface.energies, &surface.external_shift))
+                    .collect_vec(),
+            ));
+        };
+        // The catalogue also includes positive-shift counterparts, which
+        // cannot bound a threshold at these kinematics. Keep the named
+        // channel when none is eligible, using a normalized rootless map.
+        let eligible = candidates
+                    .iter()
+                    .copied()
+                    .map(|(id, surface)| {
+                        let shift = surface.compute_shift_part_from_momenta(externals, lmb);
+                        if !shift.0.is_finite() {
+                            return Err(super::sampling_maps::SamplingEvaluationError::Unrepresentable {
+                                operation: "amplitude sampling external shift",
+                                detail: format!("candidate {} with energy edges {:?} has nonfinite derived shift {shift}", id.0, surface.energies),
+                            }.into());
+                        }
+                        Ok((shift < zero).then_some((id, surface)))
+                    })
+                    .collect::<Result<Vec<_>>>()?
+                    .into_iter()
+                    .flatten()
+                    .unique_by(|(_, surface)| surface.external_shift.iter().sorted().collect_vec())
+                    .collect_vec();
+        if eligible.len() > 1 {
+            return Err(eyre!(
+                "amplitude surface channel '{}' for graph '{}' is ambiguous for energy edges {:?}: eligible catalogue candidates (ID, external shift, evaluated shift, equation) {:?}; distinct shifts cannot share an edge-only selector",
+                channel_name,
+                self.graph.name,
+                edges,
+                eligible
+                    .iter()
+                    .map(|(id, surface)| (
+                        id.0,
+                        &surface.external_shift,
+                        surface.compute_shift_part_from_momenta(externals, lmb).0,
+                        surface.to_atom(&[]).to_string(),
+                    ))
+                    .collect_vec(),
+            ));
+        }
+        Ok((
+            *representative,
+            eligible.first().map(|(_, surface)| *surface),
+        ))
+    }
+
     fn evaluate_impl<T: FloatLike>(
         &mut self,
         momentum_sample: &MomentumSample<T>,
-        context: &mut GraphTermEvaluationContext<'_, '_>,
+        context: &mut GraphTermEvaluationContext<'_, '_, T>,
     ) -> Result<AmplitudeGraphTermEvaluation<T>> {
         let prefactor = momentum_sample.one();
 
@@ -1057,6 +1135,27 @@ impl GraphTerm for AmplitudeGraphTerm {
 
         self.param_builder = self.graph.param_builder.clone();
 
+        if matches!(&settings.sampling,
+            SamplingSettings::DiscreteGraphs(discrete)
+                if matches!(discrete.sampling_type, DiscreteGraphSamplingType::TropicalSampling(_)))
+        {
+            // Tropical compensation previously used get_energy_cache, which
+            // rejects complex masses on paired edges. Preserve that contract
+            // before caching only the real parts for canonical preparation.
+            for (pair, edge_id, edge) in self.graph.iter_edges() {
+                if pair.is_paired()
+                    && let Some(mass) = edge.data.mass_value::<f64>(model, &self.param_builder)
+                    && mass.im != mass.im.zero()
+                {
+                    return Err(eyre!(
+                        "tropical sampling graph '{}' requires real masses; edge {} has mass {}",
+                        self.graph.name,
+                        edge_id,
+                        mass
+                    ));
+                }
+            }
+        }
         let masses = self
             .graph
             .new_edgevec(|e, _, _| e.mass_value(model, &self.param_builder).map(|c| c.re));
@@ -1176,13 +1275,21 @@ impl GraphTerm for AmplitudeGraphTerm {
         );
         context.orientation = orientation;
         let surface_channels = catalogue
-            .named_entries()
-            .flat_map(|channel| {
+            .entries
+            .iter()
+            .zip(programs)
+            .filter_map(|(entry, programs)| match entry {
+                super::sampling_selection::SamplingCatalogueEntry::Named(channel) => {
+                    Some((channel, &programs.2))
+                }
+                _ => None,
+            })
+            .flat_map(|(channel, joint_program)| {
                 channel
                     .blocks
                     .iter()
-                    .filter(|block| block.target.energy_edges().is_some())
-                    .map(move |block| (channel, block))
+                    .filter(|block| !block.target.energy_edge_sets().is_empty())
+                    .map(move |block| (channel, block, joint_program))
             })
             .collect_vec();
         if !surface_channels.is_empty() {
@@ -1234,14 +1341,18 @@ impl GraphTerm for AmplitudeGraphTerm {
                 (0..context.n_loop_momenta)
                     .map(|_| ThreeMomentum::new(zero.clone(), zero.clone(), zero.clone())),
             );
-            for (channel, block) in surface_channels {
-                let SamplingMapDefinition::Surface(edges) = &block.target else {
+            for (channel, block, joint_program) in surface_channels {
+                if !matches!(
+                    block.target,
+                    SamplingMapDefinition::Surface(_) | SamplingMapDefinition::Intersect(_)
+                ) {
                     return Err(eyre!(
                         "amplitude sampling channel '{}' cannot use a Cutkosky host or side qualifier: {:?}",
                         channel.name,
-                        block.target
+                        block.target,
                     ));
-                };
+                }
+                let energy_sets = block.target.energy_edge_sets();
                 let lmbs = TiVec::from(vec![
                     self.multi_channeling_setup
                         .sampling_parent_lmb(&channel.definition.parent_lmb)?,
@@ -1281,128 +1392,196 @@ impl GraphTerm for AmplitudeGraphTerm {
                             })
                     })
                     .collect::<Result<Vec<_>>>()?;
-                let candidates = self
-                    .esurfaces
-                    .iter_enumerated()
-                    .filter(|(_, surface)| {
-                        surface
-                            .energies
-                            .iter()
-                            .map(|edge| edge.0)
-                            .sorted()
-                            .eq(edges.iter().copied())
-                    })
-                    .collect_vec();
-                let Some((_, representative)) = candidates.first() else {
-                    return Err(eyre!(
-                        "amplitude surface channel '{}' for graph '{}' requests unknown energy edges {:?}; catalogue candidates (ID, edges, external shift): {:?}",
-                        channel.name,
-                        self.graph.name,
-                        edges,
-                        self.esurfaces
-                            .iter_enumerated()
-                            .map(|(id, surface)| (id.0, &surface.energies, &surface.external_shift))
-                            .collect_vec(),
-                    ));
-                };
-                let unsampled_dependencies = block
-                    .remaining_lmb
-                    .iter()
-                    .filter(|edge| {
-                        let index = lmb
-                            .loop_edges
-                            .iter_enumerated()
-                            .find(|(_, candidate)| candidate.0 == **edge)
-                            .unwrap()
-                            .0;
-                        representative.energies.iter().any(|energy| {
-                            lmb.edge_signatures[*energy].internal[index] != SignOrZero::Zero
-                        })
-                    })
-                    .copied()
-                    .collect_vec();
-                if !unsampled_dependencies.is_empty() {
-                    return Err(eyre!(
-                        "sampling product/ordered block '{}' target {:?} depends on unsampled parent edges {:?}; sample these prerequisites in a preceding block",
-                        channel.name,
-                        block.target,
-                        unsampled_dependencies,
-                    ));
-                }
-                let rows = representative
-                    .energies
-                    .iter()
-                    .map(|edge| {
-                        active
-                            .iter()
-                            .map(|index| match lmb.edge_signatures[*edge].internal[*index] {
-                                SignOrZero::Minus => -1_i64,
-                                SignOrZero::Zero => 0,
-                                SignOrZero::Plus => 1,
+                let resolve_surface = |edges: &[usize]| -> Result<_> {
+                    let (representative, eligible) =
+                        self.sampling_target_surface(&channel.name, edges, &externals, lmb)?;
+                    let unsampled_dependencies = block
+                        .remaining_lmb
+                        .iter()
+                        .filter(|edge| {
+                            let index = lmb
+                                .loop_edges
+                                .iter_enumerated()
+                                .find(|(_, candidate)| candidate.0 == **edge)
+                                .unwrap()
+                                .0;
+                            representative.energies.iter().any(|energy| {
+                                lmb.edge_signatures[*energy].internal[index] != SignOrZero::Zero
                             })
-                            .collect_vec()
-                    })
-                    .collect_vec();
-                let rank = rank_i64(&rows);
-                if rank != active.len() {
-                    return Err(eyre!(
-                        "amplitude surface channel '{}' for graph '{}' has energy edges {:?} with routing rows {:?}, rank {}, but active subspace {:?} requires rank {}; spectator directions belong in a complement block",
-                        channel.name,
-                        self.graph.name,
-                        edges,
-                        rows,
-                        rank,
-                        active_edges,
-                        active.len(),
-                    ));
-                }
-                // The catalogue also includes positive-shift counterparts, which
-                // cannot bound a threshold at these kinematics. Keep the named
-                // channel when none is eligible, using a normalized rootless map.
-                let eligible = candidates
-                    .iter()
-                    .copied()
-                    .map(|(id, surface)| {
-                        let shift = surface.compute_shift_part_from_momenta(&externals, lmb);
-                        if !shift.0.is_finite() {
+                        })
+                        .copied()
+                        .collect_vec();
+                    if !unsampled_dependencies.is_empty() {
+                        return Err(eyre!(
+                            "sampling product/ordered block '{}' target {:?} depends on unsampled parent edges {:?}; sample these prerequisites in a preceding block",
+                            channel.name,
+                            block.target,
+                            unsampled_dependencies,
+                        ));
+                    }
+                    let rows = representative
+                        .energies
+                        .iter()
+                        .map(|edge| {
+                            active
+                                .iter()
+                                .map(|index| match lmb.edge_signatures[*edge].internal[*index] {
+                                    SignOrZero::Minus => -1_i64,
+                                    SignOrZero::Zero => 0,
+                                    SignOrZero::Plus => 1,
+                                })
+                                .collect_vec()
+                        })
+                        .collect_vec();
+                    let rank = rank_i64(&rows);
+                    if rank != active.len() {
+                        return Err(eyre!(
+                            "amplitude surface channel '{}' for graph '{}' has energy edges {:?} with routing rows {:?}, rank {}, but active subspace {:?} requires rank {}; spectator directions belong in a complement block",
+                            channel.name,
+                            self.graph.name,
+                            edges,
+                            rows,
+                            rank,
+                            active_edges,
+                            active.len(),
+                        ));
+                    }
+                    Ok((representative, eligible))
+                };
+                let beta = e_cm * parameterization_settings.b;
+                if energy_sets.len() == 2 {
+                    use super::{
+                        SamplingMapAffine, SamplingMapComposition, SamplingMapEmbedding,
+                        SharedEnergyJointMap,
+                    };
+                    use std::sync::Arc;
+                    let surfaces = energy_sets
+                        .iter()
+                        .map(|edges| {
+                            let (representative, eligible) = resolve_surface(edges)?;
+                            Ok(eligible.unwrap_or(representative))
+                        })
+                        .collect::<Result<Vec<_>>>()?;
+                    let (geometry, common) = surfaces[0].sampling_joint_geometry_in_subspace(
+                        surfaces[1],
+                        &subspace,
+                        &lmbs,
+                        &self.graph,
+                        &masses,
+                        &externals,
+                        &complement,
+                    )?;
+                    // Both normals are energy residuals. The existing b setting
+                    // steers the trial radius and ordinary fallback scale; power
+                    // does not introduce anisotropy or change the uniform-R law.
+                    let joint = SharedEnergyJointMap::new(
+                        geometry,
+                        3 * complement.len(),
+                        F::<T>::from_f64(beta).0,
+                        zero.one().0,
+                        beta,
+                        joint_program
+                            .as_ref()
+                            .ok_or_else(|| {
+                                eyre!(
+                                    "joint channel '{}' has no cached compiled program",
+                                    channel.name,
+                                )
+                            })?
+                            .clone(),
+                    )?;
+                    let prior_indices = complement.clone();
+                    let loop_count = lmb.loop_edges.len();
+                    let spatial = externals
+                        .iter()
+                        .map(|p| p.spatial.clone())
+                        .collect::<crate::momentum::sample::ExternalThreeMomenta<F<T>>>();
+                    let native_zero = zero.clone();
+                    let transform = Arc::new(move |context: &mut SamplingMapContext<'_, T>| {
+                        let previous = context.previous;
+                        if previous.len() != 3 * prior_indices.len() {
+                            return Err(eyre!(
+                                "joint affine context has {} components, expected {}",
+                                previous.len(),
+                                3 * prior_indices.len()
+                            ));
+                        }
+                        let mut loops = LoopMomenta::from_iter((0..loop_count).map(|_| {
+                            ThreeMomentum::new(
+                                native_zero.clone(),
+                                native_zero.clone(),
+                                native_zero.clone(),
+                            )
+                        }));
+                        for (&index, point) in prior_indices.iter().zip(previous.chunks_exact(3)) {
+                            loops[index] = ThreeMomentum::new(
+                                F(point[0].clone()),
+                                F(point[1].clone()),
+                                F(point[2].clone()),
+                            );
+                        }
+                        let offset: ThreeMomentum<F<T>> = common.compute_momentum(&loops, &spatial);
+                        let translation =
+                            [-offset.px, -offset.py, -offset.pz].map(|x| x.0).to_vec();
+                        if translation.iter().any(|x| !x.is_finite()) {
                             return Err(super::sampling_maps::SamplingEvaluationError::Unrepresentable {
-                                operation: "amplitude sampling external shift",
-                                detail: format!("candidate {} with energy edges {:?} has nonfinite derived shift {shift}", id.0, surface.energies),
+                                operation: "joint affine offset", detail: "native shared-energy routing produced a nonfinite translation".into(),
                             }.into());
                         }
-                        Ok((shift < zero).then_some((id, surface)))
-                    })
-                    .collect::<Result<Vec<_>>>()?
-                    .into_iter()
-                    .flatten()
-                    .unique_by(|(_, surface)| surface.external_shift.iter().sorted().collect_vec())
-                    .collect_vec();
-                if eligible.len() > 1 {
-                    return Err(eyre!(
-                        "amplitude surface channel '{}' for graph '{}' is ambiguous for energy edges {:?}: eligible catalogue candidates (ID, external shift, evaluated shift, equation) {:?}; distinct shifts cannot share an edge-only selector",
-                        channel.name,
-                        self.graph.name,
-                        edges,
-                        eligible
-                            .iter()
-                            .map(|(id, surface)| (
-                                id.0,
-                                &surface.external_shift,
-                                surface.compute_shift_part_from_momenta(&externals, lmb).0,
-                                surface.to_atom(&[]).to_string(),
-                            ))
-                            .collect_vec(),
-                    ));
+                        let matrix = (0..3)
+                            .map(|row| {
+                                (0..3)
+                                    .map(|column| {
+                                        if row == column {
+                                            native_zero.one().0
+                                        } else {
+                                            native_zero.0.clone()
+                                        }
+                                    })
+                                    .collect()
+                            })
+                            .collect();
+                        Ok((
+                            previous.to_vec(),
+                            SamplingMapAffine::new(matrix, translation)?,
+                        ))
+                    });
+                    let map = if complement.is_empty() {
+                        // With no prior coordinates the complete common-energy
+                        // shift is immutable: bind the existing affine owner once.
+                        let (_, frame) = transform(&mut SamplingMapContext::detached(&[]))?;
+                        CompiledSamplingMap::Affine {
+                            map: Box::new(CompiledSamplingMap::Joint(joint)),
+                            frame,
+                        }
+                    } else {
+                        CompiledSamplingMap::Embedded(
+                            SamplingMapEmbedding::from_composition(
+                                SamplingMapComposition::then(vec![Box::new(joint)])?,
+                                (0..3).collect(),
+                            )?
+                            .with_context_transform(transform),
+                        )
+                    };
+                    context.insert_geometry_map(
+                        block.target.clone(),
+                        channel.definition.parent_lmb.clone(),
+                        active_edges,
+                        block.preceding_lmb.clone(),
+                        map,
+                    )?;
+                    continue;
                 }
-                let beta = e_cm * parameterization_settings.b;
+                let edges = energy_sets[0];
+                let (_, eligible) = resolve_surface(edges)?;
                 if active.len() < context.n_loop_momenta {
                     // Eligibility fixes the routed equation once; its body and
                     // interior center are classified for each sampled complement.
-                    let Some((_, surface)) = eligible.first() else {
+                    let Some(surface) = eligible else {
                         // Nonnegative external shifts certify no open interior,
                         // including exact massless pinches, without a numerical
                         // rediscovery of the minimum at every complement point.
-                        context.insert_surface_map(
+                        context.insert_geometry_map(
                             block.target.clone(),
                             channel.definition.parent_lmb.clone(),
                             active_edges,
@@ -1428,7 +1607,7 @@ impl GraphTerm for AmplitudeGraphTerm {
                         beta,
                         parameterization_settings.power,
                     )?;
-                    context.insert_surface_map(
+                    context.insert_geometry_map(
                         block.target.clone(),
                         channel.definition.parent_lmb.clone(),
                         active_edges,
@@ -1437,7 +1616,7 @@ impl GraphTerm for AmplitudeGraphTerm {
                     )?;
                     continue;
                 }
-                let existing = eligible.first().filter(|(_, surface)| {
+                let existing = eligible.filter(|surface| {
                     surface
                         .classify_existence(
                             &externals,
@@ -1448,7 +1627,7 @@ impl GraphTerm for AmplitudeGraphTerm {
                         )
                         .is_existing()
                 });
-                if let Some((_, surface)) = existing {
+                if let Some(surface) = existing {
                     let origin_value =
                         surface.compute_from_momenta(lmb, &masses, &origin, &externals);
                     let map = if origin_value.0.is_finite() && origin_value < zero {
@@ -1474,7 +1653,7 @@ impl GraphTerm for AmplitudeGraphTerm {
                             parameterization_settings.power,
                         )?
                     };
-                    context.insert_surface_map(
+                    context.insert_geometry_map(
                         block.target.clone(),
                         channel.definition.parent_lmb.clone(),
                         active_edges,
@@ -1482,7 +1661,7 @@ impl GraphTerm for AmplitudeGraphTerm {
                         CompiledSamplingMap::ImplicitSurface(map),
                     )?;
                 } else {
-                    context.insert_surface_map(
+                    context.insert_geometry_map(
                         block.target.clone(),
                         channel.definition.parent_lmb.clone(),
                         active_edges,
@@ -1532,8 +1711,110 @@ impl GraphTerm for AmplitudeGraphTerm {
     fn evaluate<T: FloatLike>(
         &mut self,
         momentum_sample: &MomentumSample<T>,
-        mut context: GraphTermEvaluationContext<'_, '_>,
+        mut context: GraphTermEvaluationContext<'_, '_, T>,
     ) -> Result<GraphEvaluationResult<T>> {
+        // The canonical row fixes the proposal. Check its original joint
+        // equations before physical evaluation; this work and failures belong
+        // to sampling time, including every native lane and probe rotation.
+        let alignment_start = Instant::now();
+        let alignment =
+            (|| -> Result<()> {
+                let Some(SamplingCatalogueEntry::Named(channel)) =
+                    context.sampling_channel.and_then(|id| {
+                        self.multi_channeling_setup
+                            .sampling_catalogue
+                            .as_ref()
+                            .and_then(|catalogue| catalogue.entries.get(id.index()))
+                    })
+                else {
+                    return Ok(());
+                };
+                let mut blocks = channel
+                    .blocks
+                    .iter()
+                    .filter_map(|block| {
+                        let sets = block.target.energy_edge_sets();
+                        (sets.len() == 2).then_some((block, sets))
+                    })
+                    .peekable();
+                if blocks.peek().is_none() {
+                    return Ok(());
+                }
+                let canonical = context.canonical_sample.ok_or_else(|| {
+                    eyre!("amplitude joint alignment requires its retained canonical row")
+                })?;
+                if canonical.graph_id != context.graph_id
+                    || canonical.channel_id != context.sampling_channel
+                {
+                    return Err(eyre!(
+                        "amplitude joint alignment has an incompatible canonical graph/channel row"
+                    ));
+                }
+                let parent = self
+                    .multi_channeling_setup
+                    .sampling_parent_lmb(&channel.definition.parent_lmb)?;
+                let canonical_point = canonical.sample.rotate(context.rotation, 0, 0);
+                let cached_masses = self
+                    .real_mass_vec
+                    .as_ref()
+                    .ok_or_else(|| eyre!("amplitude joint alignment requires warmup mass data"))?;
+                let canonical_masses = self.graph.new_edgevec(|_, edge, _| {
+                    cached_masses[edge]
+                        .map(F::<ArbPrec>::from_ff64)
+                        .unwrap_or_else(|| canonical_point.zero())
+                });
+                let native_masses = self.graph.get_real_mass_vector(context.model);
+                for (block, sets) in blocks {
+                    let targets = sets
+                        .iter()
+                        .map(|edges| {
+                            // Resolve with the original canonical external data so a
+                            // native retry cannot choose another shift counterpart.
+                            let (representative, eligible) = self.sampling_target_surface(
+                                &channel.name,
+                                edges,
+                                canonical.sample.external_moms(),
+                                &parent,
+                            )?;
+                            Ok(eligible.unwrap_or(representative))
+                        })
+                        .collect::<Result<Vec<_>>>()?;
+                    let original = |target: &Esurface| {
+                        target.evaluate_routed_enclosed(
+                            &canonical_point.one(),
+                            canonical_point.loop_moms(),
+                            canonical_point.external_moms(),
+                            &canonical_masses,
+                            &self.graph.loop_momentum_basis,
+                        )
+                    };
+                    let materialized = |target: &Esurface| {
+                        target.evaluate_routed_enclosed(
+                            &momentum_sample.one(),
+                            momentum_sample.loop_moms(),
+                            momentum_sample.external_moms(),
+                            &native_masses,
+                            &self.graph.loop_momentum_basis,
+                        )
+                    };
+                    // Amplitudes have no LU host constraint. The exact zero defect
+                    // leaves the shared normal half-budget intact.
+                    EsurfaceRay::<T>::verify_normal_alignment(
+                    [original(targets[0])?, original(targets[1])?],
+                    [materialized(targets[0])?, materialized(targets[1])?],
+                    std::array::from_fn(|_| rug::Float::with_val(2048, 0)),
+                    context.sampling_accuracy_budget,
+                ).wrap_err_with(|| format!(
+                    "amplitude graph '{}' channel '{}' target {:?}, parent {:?}, rotation {}",
+                    self.graph.name, channel.name, block.target, channel.definition.parent_lmb,
+                    context.rotation.method,
+                ))?;
+                }
+                Ok(())
+            })();
+        context.evaluation_metadata.parameterization_time += alignment_start.elapsed();
+        alignment?;
+
         let event_channel_id = context.sampling_channel;
         let prepared_event = prepare_buffered_event(
             context.settings,
@@ -3009,6 +3290,7 @@ impl HasIntegrand for AmplitudeIntegrand {
 #[cfg(test)]
 mod sampling_tests {
     use super::*;
+    use crate::integrands::evaluation::EvaluationMetaData;
     use crate::{
         initialisation::test_initialise,
         integrands::process::{
@@ -3020,16 +3302,302 @@ mod sampling_tests {
     use linnet::half_edge::involution::EdgeIndex;
 
     #[test]
+    fn generated_triangle_joint_binds_without_prerequisites() -> Result<()> {
+        use crate::integrands::process::GaussianReferenceFunction;
+        test_initialise()?;
+        let model = load_generic_model("scalars");
+        let graphs = Graph::from_string(
+            r#"digraph joint_triangle {
+            node [num=1]; edge [num=1];
+            incoming_a [style=invis]; incoming_b [style=invis]; outgoing [style=invis];
+            incoming_a -> A:0 [id=0,particle=scalar_0];
+            incoming_b -> B:1 [id=1,particle=scalar_0];
+            C:2 -> outgoing [id=2,particle=scalar_0];
+            A -> B [id=3,particle=scalar_1];
+            B -> C [id=4,particle=scalar_1,lmb_id=0];
+            C -> A [id=5,particle=scalar_1];
+        }"#,
+            &model,
+        )?;
+        let mut amplitude = Amplitude::from_graph_list("joint_triangle", graphs)?;
+        // This generation checks the actual amplitude binder and reference
+        // owner; it makes no physical threshold-subtraction claim.
+        let global: GlobalSettings = toml::from_str(
+            r#"
+[generation]
+override_lmb_heuristics = true
+[generation.uv]
+subtract_uv = false
+generate_integrated = false
+[generation.threshold_subtraction]
+enable_thresholds = false
+[generation.evaluator]
+compile = false
+summed = false
+summed_function_map = true
+iterative_orientation_optimization = false
+"#,
+        )?;
+        let settings: RuntimeSettings = toml::from_str(
+            r#"
+[general]
+evaluator_method = "SummedFunctionMap"
+[kinematics]
+e_cm = 21.0
+[kinematics.externals]
+type = "constant"
+[kinematics.externals.data]
+momenta = [[11.0,-1.0,-4.0,0.0], [10.0,3.0,0.0,0.0], "dependent"]
+helicities = [0,0,0]
+[sampling]
+graphs = "summed"
+orientations = "summed"
+sampling_multichanneling = true
+sampling_channels = "summed"
+default_channel_selection = ["joint", "ordinary"]
+[sampling.channel_definitions.joint_triangle.joint]
+around = "intersect(surface(3,4),surface(3,5))"
+parent_lmb = [4]
+subspace_lmb = [4]
+[sampling.channel_definitions.joint_triangle.ordinary]
+around = "lmb(4)"
+parent_lmb = [4]
+"#,
+        )?;
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(1)
+            .stack_size(256 * 1024 * 1024)
+            .build()?;
+        amplitude.preprocess(&model, &global.generation, &(&settings).into(), &pool)?;
+        amplitude.build_integrand(&model, "joint_triangle", &global, (&settings).into(), &pool)?;
+        let runtime = amplitude.integrand.as_mut().unwrap();
+        runtime.warm_up(&model)?;
+        let ProcessIntegrand::Amplitude(generated) = &*runtime else {
+            unreachable!()
+        };
+        let bridge = generated.data.graph_terms[0]
+            .sampling_setup()
+            .sampling_bridge::<f64>()?;
+        let channel = &bridge.channels()[0];
+        assert!(!channel.contract().requires_context);
+        assert!(channel.contract().requires_proposal_policy);
+        assert!(matches!(channel.map, CompiledSamplingMap::Affine { .. }));
+        let cube = [0.19, 0.31, 0.67];
+        let forward = bridge.forward(SamplingChannelId(0), &cube)?;
+        assert!(
+            forward
+                .map
+                .diagnostics
+                .iter()
+                .any(|d| d.contains("certified normal disk"))
+        );
+        let inverse = bridge
+            .inverse(SamplingChannelId(0), &forward.raw_coordinates)?
+            .expect("selected compact point");
+        assert!((forward.map.jacobian * inverse.map.inverse_jacobian - 1.0).abs() < 1e-9);
+        for (actual, expected) in inverse.map.coordinates.iter().zip(cube) {
+            assert!((actual - expected).abs() < 1e-9);
+        }
+        let reference = GaussianReferenceFunction::new(5.0, vec![0.2, -0.1, 0.3])?;
+        let source = Sample::Continuous(F(1.0), cube.map(F).to_vec());
+        let value = runtime.evaluate_reference_sample_detailed(&source, &reference)?;
+        assert!(!value.evaluation.evaluation_metadata.is_nan);
+        assert!(value.evaluation.integrand_result.re.0 > 0.0);
+        assert!(
+            !value
+                .evaluation
+                .evaluation_metadata
+                .sampling_proposal_policies
+                .is_empty()
+        );
+        {
+            use crate::{
+                integrands::{
+                    evaluation::PreciseEvaluationResult,
+                    process::{
+                        EvaluationTarget, evaluate_single,
+                        gammaloop_sample::{GammaLoopSample, parameterize},
+                        sampling_maps::SamplingEvaluationError,
+                    },
+                },
+                settings::runtime::{Precision, StabilityLevelSetting},
+                utils::QuadFloat,
+            };
+            // The original physical triangle (without threshold CTs) now also
+            // exercises normal materialization through the production boundary.
+            let mut physical = runtime.clone();
+            physical.get_mut_settings().stability.levels = vec![
+                StabilityLevelSetting::default_double(),
+                StabilityLevelSetting::default_quad(),
+            ];
+            physical.get_mut_settings().stability.rotation_axis.clear();
+            physical.warm_up(&model)?;
+            let regular = physical
+                .evaluate_sample_precise(&source, &model, F(1.0), false, Complex::new_zero())?
+                .try_into_f64()?;
+            assert!(!regular.evaluation_metadata.is_nan);
+            let near = Sample::Continuous(F(1.0), vec![F(1.0e-12), F(cube[1]), F(cube[2])]);
+            {
+                let ProcessIntegrand::Amplitude(generated) = &mut physical else {
+                    unreachable!()
+                };
+                let mut metadata = EvaluationMetaData::new_empty();
+                metadata.sampling_proposal_policies.begin_collection();
+                let canonical = parameterize::<ArbPrec, _>(&near, generated, &mut metadata)?;
+                metadata.sampling_proposal_policies.seal();
+                let rotation = Rotation::new(RotationMethod::EulerAngles(0.31, -0.17, 0.23));
+                let double = canonical
+                    .materialize::<f64>(GammaLoopSample::<f64>::relative_accuracy_budget(
+                        generated.get_settings(),
+                    ))?
+                    .rotate(&rotation, 100, 101);
+                let before = metadata.parameterization_time;
+                let error = evaluate_single(
+                    generated,
+                    EvaluationTarget::Physical(&model),
+                    &double,
+                    &rotation,
+                    &mut metadata,
+                    false,
+                    Some(&canonical),
+                )
+                .unwrap_err();
+                assert!(matches!(
+                    error.downcast_ref::<SamplingEvaluationError>(),
+                    Some(SamplingEvaluationError::UncertainGeometry { .. })
+                ));
+                assert!(
+                    format!("{error:#}").contains("normal displacement"),
+                    "{error:#}"
+                );
+                assert!(metadata.parameterization_time > before);
+                let quad = canonical
+                    .materialize::<QuadFloat>(
+                        GammaLoopSample::<QuadFloat>::relative_accuracy_budget(
+                            generated.get_settings(),
+                        ),
+                    )?
+                    .rotate(&rotation, 102, 103);
+                let value = evaluate_single(
+                    generated,
+                    EvaluationTarget::Physical(&model),
+                    &quad,
+                    &rotation,
+                    &mut metadata,
+                    false,
+                    Some(&canonical),
+                )?;
+                assert!(
+                    !value.integrand_result.re.is_nan() && !value.integrand_result.re.is_infinite()
+                );
+                assert!(
+                    !value.integrand_result.im.is_nan() && !value.integrand_result.im.is_infinite()
+                );
+            }
+            let PreciseEvaluationResult::Quad(rescued) = physical.evaluate_sample_precise(
+                &near,
+                &model,
+                F(1.0),
+                false,
+                Complex::new_zero(),
+            )?
+            else {
+                panic!("the original joint normals must rescue this draw at Quad");
+            };
+            assert_eq!(
+                rescued.evaluation_metadata.final_precision(),
+                Some(Precision::Quad)
+            );
+            assert_eq!(rescued.evaluation_metadata.stability_results.len(), 2);
+            assert!(!rescued.evaluation_metadata.is_nan);
+            physical.get_mut_settings().stability.levels =
+                vec![StabilityLevelSetting::default_quad()];
+            physical.warm_up(&model)?;
+            let PreciseEvaluationResult::Quad(forced) = physical.evaluate_sample_precise(
+                &near,
+                &model,
+                F(1.0),
+                false,
+                Complex::new_zero(),
+            )?
+            else {
+                unreachable!()
+            };
+            assert_eq!(rescued.integrand_result, forced.integrand_result);
+            assert_eq!(
+                rescued.parameterization_jacobian,
+                forced.parameterization_jacobian
+            );
+            assert_eq!(
+                rescued.evaluation_metadata.sampling_proposal_policies,
+                forced.evaluation_metadata.sampling_proposal_policies
+            );
+        }
+        {
+            use crate::settings::runtime::DiscreteGraphSamplingSettings;
+            let ProcessIntegrand::Amplitude(generated) = &*runtime else {
+                unreachable!()
+            };
+            let mut term = generated.data.graph_terms[0].clone();
+            let loops = LoopMomenta::from_iter(
+                forward
+                    .raw_coordinates
+                    .chunks_exact(3)
+                    .map(|p| ThreeMomentum::new(F(p[0]), F(p[1]), F(p[2]))),
+            );
+            let externals = settings
+                .kinematics
+                .externals
+                .get_dependent_externals::<f64>(DependentMomentaConstructor::Amplitude(
+                    &generated.data.external_signature,
+                ))?;
+            let old = term.graph.get_energy_cache(
+                &model,
+                &loops,
+                &externals,
+                &term.graph.loop_momentum_basis,
+            );
+            let masses = term.get_real_mass_vector();
+            for (_, edge, _) in term.graph.iter_loop_edges() {
+                let momentum = term.graph.loop_momentum_basis.edge_signatures[edge]
+                    .compute_four_momentum_from_three(&loops, &externals);
+                let current = momentum.spatial.on_shell_energy(masses[edge]).value;
+                assert_eq!(
+                    current, old[edge],
+                    "tropical compensation energy must preserve the old cache equation"
+                );
+            }
+            let mut tropical = settings.clone();
+            tropical.sampling = SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
+                sampling_type: DiscreteGraphSamplingType::TropicalSampling(Default::default()),
+                ..Default::default()
+            });
+            term.warm_up(&tropical, &model)?;
+            let mut complex_model = model.clone();
+            complex_model.get_parameter_mut("mass_scalar_1")?.value =
+                Some(Complex::new(F(1.0), F(0.1)));
+            let error = term.warm_up(&tropical, &complex_model).unwrap_err();
+            assert!(
+                error.to_string().contains("tropical sampling")
+                    && error.to_string().contains("requires real masses"),
+                "{error:#}"
+            );
+        }
+
+        Ok(())
+    }
+
+    #[test]
     fn generated_kite_reference_normalizes_unequal_groups_and_orientations() -> Result<()> {
         use crate::{
             integrands::process::{
                 EvaluationTarget, GaussianReferenceFunction, evaluate_single,
-                gammaloop_sample::parameterize,
+                gammaloop_sample::{GammaLoopSample, parameterize},
             },
             settings::runtime::{
                 DiscreteGraphSamplingSettings, DiscreteGraphSamplingType, SamplingSettings,
             },
-            utils::QuadFloat,
+            utils::{ArbPrec, QuadFloat},
         };
         test_initialise()?;
         let model = load_generic_model("scalars");
@@ -3163,14 +3731,20 @@ sampling_multichanneling = false
             assert!((total / expected - 1.0).abs() < 1.0e-12);
             assert!((total_moment / expected_moment - 1.0).abs() < 1.0e-12);
         }
-        // Exercise the precision-generic reference owner directly; the public
-        // acceptance API reports f64 after checking its native precision-rescue stack.
+        // Exercise the precision-generic reference owner from the canonical
+        // draw; the public acceptance API reports f64 after its physical stack.
         integrand.get_mut_settings().sampling = settings.sampling;
         integrand.warm_up(&model)?;
         let ProcessIntegrand::Amplitude(integrand) = integrand else {
             unreachable!()
         };
-        let sample = parameterize::<QuadFloat, _>(&continuous, integrand)?;
+        let mut metadata = EvaluationMetaData::new_empty();
+        metadata.sampling_proposal_policies.begin_collection();
+        let canonical = parameterize::<ArbPrec, _>(&continuous, integrand, &mut metadata)?;
+        metadata.sampling_proposal_policies.seal();
+        let sample = canonical.materialize::<QuadFloat>(
+            GammaLoopSample::<QuadFloat>::relative_accuracy_budget(integrand.get_settings()),
+        )?;
         let rotation = Rotation::new(RotationMethod::Pi2X);
         let rotated = sample.rotate(&rotation, 100, 101);
         let result = evaluate_single(
@@ -3180,6 +3754,7 @@ sampling_multichanneling = false
             &rotation,
             &mut crate::integrands::evaluation::EvaluationMetaData::new_empty(),
             false,
+            Some(&canonical),
         )?;
         assert!(
             (result.integrand_result.re.into_ff64().0 / summed.evaluation.integrand_result.re.0
@@ -3313,13 +3888,10 @@ parent_lmb = [4,6]
             let Externals::Constant { momenta, .. } =
                 &mut runtime.get_mut_settings().kinematics.externals;
             momenta[0] = ExternalMomenta::Independent([26.0_f64.sqrt(), 0.0, 0.0, 1.0].map(F));
-            assert!(
-                runtime
-                    .evaluate_reference_sample_detailed(&point, &reference)
-                    .unwrap_err()
-                    .to_string()
-                    .contains("call warm_up")
-            );
+            let error = runtime
+                .evaluate_reference_sample_detailed(&point, &reference)
+                .unwrap_err();
+            assert!(format!("{error:#}").contains("call warm_up"), "{error:#}");
             runtime.warm_up(&model)?;
             let ProcessIntegrand::Amplitude(amplitude) = &runtime else {
                 unreachable!()
@@ -3379,13 +3951,10 @@ parent_lmb = [4,6]
                 .sampling_channels
                 .default_channel_selection = vec!["missing_channel".to_string()];
             assert!(runtime.warm_up(&model).is_err());
-            assert!(
-                runtime
-                    .evaluate_reference_sample_detailed(&point, &reference)
-                    .unwrap_err()
-                    .to_string()
-                    .contains("call warm_up")
-            );
+            let error = runtime
+                .evaluate_reference_sample_detailed(&point, &reference)
+                .unwrap_err();
+            assert!(format!("{error:#}").contains("call warm_up"), "{error:#}");
             *runtime.get_mut_settings() = settings.clone();
             runtime.warm_up(&model)?;
             let restored = runtime.evaluate_reference_sample_detailed(&point, &reference)?;
@@ -3400,9 +3969,8 @@ parent_lmb = [4,6]
         // cancellation budget. Quad binds the same physical equation.
         {
             use crate::{
-                integrands::{
-                    evaluation::StabilityStatus,
-                    process::{GaussianReferenceFunction, sampling_maps::SamplingEvaluationError},
+                integrands::process::{
+                    GaussianReferenceFunction, sampling_maps::SamplingEvaluationError,
                 },
                 momentum::ExternalMomenta,
                 settings::runtime::{
@@ -3475,32 +4043,30 @@ parent_lmb = [4,6]
             let rescued = runtime.evaluate_reference_sample_detailed(&source, &reference)?;
             assert_eq!(
                 rescued.evaluation.evaluation_metadata.final_precision(),
-                Some(Precision::Quad)
+                Some(Precision::Double)
             );
-            assert!(matches!(
-                rescued.evaluation.evaluation_metadata.stability_results[0].status,
-                StabilityStatus::Unstable(0)
-            ));
+            assert_eq!(
+                rescued
+                    .evaluation
+                    .evaluation_metadata
+                    .stability_results
+                    .len(),
+                1
+            );
             assert!(rescued.evaluation.integrand_result.re.0 > 0.0);
             assert!(rescued.moments.second_moment.0 > 0.0);
-            let mut quad_only = runtime.clone();
-            quad_only.get_mut_settings().stability.levels =
-                vec![StabilityLevelSetting::default_quad()];
-            quad_only.warm_up(&model)?;
-            let direct = quad_only.evaluate_reference_sample_detailed(&source, &reference)?;
+            let mut double_only = runtime.clone();
+            double_only.get_mut_settings().stability.levels =
+                vec![StabilityLevelSetting::default_double()];
+            double_only.warm_up(&model)?;
+            let direct = double_only.evaluate_reference_sample_detailed(&source, &reference)?;
             assert_eq!(
                 rescued.evaluation.integrand_result,
                 direct.evaluation.integrand_result
             );
             assert_eq!(rescued.moments.second_moment, direct.moments.second_moment);
-            // No configured usable precision must fail warmup with its numerical
-            // cause, rather than publishing an epoch that can never evaluate.
-            let mut double_only = runtime.clone();
-            double_only.get_mut_settings().stability.levels =
-                vec![StabilityLevelSetting::default_double()];
-            let error = double_only.warm_up(&model).unwrap_err();
-            assert!(format!("{error:#}").contains("no wholly usable configured precision"));
-            assert!(format!("{error:#}").contains("sampling binding for graph 'massive_kite'"));
+            // A valid canonical map remains usable with a Double-only physical
+            // stack, even when its optional Double component bridge cannot bind.
             let ProcessIntegrand::Amplitude(amplitude) = &double_only else {
                 unreachable!()
             };
@@ -3509,7 +4075,19 @@ parent_lmb = [4,6]
                     .multi_channeling_setup
                     .sampling_catalogue
                     .as_ref()
-                    .is_none()
+                    .is_some()
+            );
+            assert!(
+                amplitude.data.graph_terms[0]
+                    .multi_channeling_setup
+                    .sampling_bridge::<f64>()
+                    .is_err()
+            );
+            assert!(
+                amplitude.data.graph_terms[0]
+                    .multi_channeling_setup
+                    .sampling_bridge::<ArbPrec>()
+                    .is_ok()
             );
             // A structural bind failure still invalidates all precisions even
             // when the previous epoch contained a usable Quad binding.
@@ -3519,7 +4097,10 @@ parent_lmb = [4,6]
             let masses = amplitude.data.graph_terms[0].real_mass_vec.take();
             let error = amplitude.warm_up_sampling().unwrap_err();
             assert!(error.downcast_ref::<SamplingEvaluationError>().is_none());
-            assert!(error.to_string().contains("warmup mass data"));
+            assert!(
+                format!("{error:#}").contains("warmup mass data"),
+                "{error:#}"
+            );
             assert!(
                 amplitude.data.graph_terms[0]
                     .multi_channeling_setup
@@ -3567,12 +4148,14 @@ parent_lmb = [4,6]
             assert_eq!(first.tree, reversed.tree);
             assert_eq!(first.ext_edges, reversed.ext_edges);
             let external = [[5.0, 0.0, 0.0, 1.0]; 2];
-            let first_point = setup
-                .lmb_frame_map(&first, &external)?
-                .forward(&[1.0, 2.0, 3.0, 4.0, 5.0, 6.0], &[])?;
-            let reversed_point = setup
-                .lmb_frame_map(&reversed, &external)?
-                .forward(&[4.0, 5.0, 6.0, 1.0, 2.0, 3.0], &[])?;
+            let first_point = setup.lmb_frame_map(&first, &external)?.forward(
+                &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+                &mut SamplingMapContext::detached(&[]),
+            )?;
+            let reversed_point = setup.lmb_frame_map(&reversed, &external)?.forward(
+                &[4.0, 5.0, 6.0, 1.0, 2.0, 3.0],
+                &mut SamplingMapContext::detached(&[]),
+            )?;
             assert_eq!(first_point.point, reversed_point.point);
             assert_eq!(first_point.jacobian, reversed_point.jacobian);
             assert_eq!(setup.all_bases, generated);
@@ -3600,13 +4183,498 @@ parent_lmb = [4,6]
                 ));
                 let coordinates = [0.19, 0.27, 0.61, 0.39, 0.72, 0.58];
                 let mapped = bridge.forward(SamplingChannelId(0), &coordinates)?;
-                let inverse = bridge.inverse(SamplingChannelId(0), &mapped.raw_coordinates)?;
+                let inverse = bridge
+                    .inverse(SamplingChannelId(0), &mapped.raw_coordinates)?
+                    .expect("full-support map must contain the supplied point");
                 assert!((mapped.map.jacobian * inverse.map.inverse_jacobian - 1.0).abs() < 1.0e-9);
                 for (actual, expected) in inverse.map.coordinates.iter().zip(coordinates) {
                     assert!((actual - expected).abs() < 1.0e-10);
                 }
             }
         }
+        // This routed factory/component gate supplies the regular point for
+        // the production joint-card and original-source policy checks below.
+        fn check_joint_matcher<T: FloatLike>(
+            term: &AmplitudeGraphTerm,
+            program: crate::integrands::process::SamplingExpressionEvaluator,
+        ) -> Result<Vec<T>> {
+            use crate::integrands::process::{SamplingMapComponent, SharedEnergyJointMap};
+            use crate::momentum::sample::SubspaceData;
+            let one = F::<T>::default().one();
+            let zero = one.zero();
+            let half = &one / one.from_usize(2);
+            // A norm-preserving rotation about the boosted z axis keeps the
+            // energy geometry while avoiding the ordinary inverse's azimuth seam.
+            let transverse = [3, 4].map(|value| one.from_usize(value) / one.from_usize(5));
+            let energy = one.from_usize(26).sqrt();
+            let externals: ExternalFourMomenta<F<T>> = (0..2)
+                .map(|_| {
+                    FourMomentum::from_args(energy.clone(), zero.clone(), zero.clone(), one.clone())
+                })
+                .collect();
+            let spatial = externals
+                .iter()
+                .map(|p| p.spatial.clone())
+                .collect::<crate::momentum::sample::ExternalThreeMomenta<F<T>>>();
+            let masses: EdgeVec<F<T>> = term
+                .real_mass_vec
+                .as_ref()
+                .unwrap()
+                .iter()
+                .map(|(_, m)| m.map(F::<T>::from_ff64).unwrap_or_else(|| zero.clone()))
+                .collect();
+            let mut regular_raw = None;
+            for (parent, active_edge) in [(vec![4, 6], 6), (vec![5, 4], 5)] {
+                let lmbs = TiVec::from(vec![
+                    term.multi_channeling_setup.sampling_parent_lmb(&parent)?,
+                ]);
+                let id = LmbIndex::from(0);
+                let lmb = &lmbs[id];
+                let subspace = SubspaceData::new_from_parent_basis_edges(
+                    &[EdgeIndex(active_edge)],
+                    &term.graph.full_filter(),
+                    id,
+                    &term.graph,
+                    &lmbs,
+                )?;
+                let active = subspace.iter_lmb_indices().next().unwrap();
+                let prior = lmb
+                    .loop_edges
+                    .iter_enumerated()
+                    .find_map(|(i, e)| (*e == EdgeIndex(4)).then_some(i))
+                    .unwrap();
+                let select = |edges: &[usize]| {
+                    term.esurfaces
+                        .iter()
+                        .find(|s| {
+                            s.energies
+                                .iter()
+                                .map(|e| e.0)
+                                .sorted()
+                                .eq(edges.iter().copied())
+                                && s.compute_shift_part_from_momenta(&externals, lmb) < zero
+                        })
+                        .unwrap()
+                        .clone()
+                };
+                let c = select(&[2, 4, 6]);
+                let d = select(&[3, 5, 6]);
+                let (prepare, common) = c.sampling_joint_geometry_in_subspace(
+                    &d,
+                    &subspace,
+                    &lmbs,
+                    &term.graph,
+                    &masses,
+                    &externals,
+                    &[prior],
+                )?;
+                let context = [transverse[0].0.clone(), transverse[1].0.clone(), (-&half).0];
+                let geometry = prepare(&context)?;
+                assert_eq!(
+                    geometry.shifts[0],
+                    [
+                        transverse[0].0.clone(),
+                        transverse[1].0.clone(),
+                        half.0.clone()
+                    ]
+                );
+                assert_eq!(geometry.shifts[1], context);
+                for sum in &geometry.energy_sums {
+                    assert!(
+                        (F(sum.clone()) - (&energy - one.from_usize(3) * &half)).abs()
+                            < one.epsilon().sqrt()
+                    );
+                }
+                let mut loops = LoopMomenta::from_iter(
+                    (0..2).map(|_| ThreeMomentum::new(zero.clone(), zero.clone(), zero.clone())),
+                );
+                loops[prior] = ThreeMomentum::new(
+                    F(context[0].clone()),
+                    F(context[1].clone()),
+                    F(context[2].clone()),
+                );
+                let offset: ThreeMomentum<F<T>> = common.compute_momentum(&loops, &spatial);
+                assert_eq!(
+                    offset.norm_squared() > zero,
+                    active_edge == 5,
+                    "alternate parent must exercise a nonzero shared-energy affine offset"
+                );
+                let kernel = SharedEnergyJointMap::new(
+                    prepare.clone(),
+                    3,
+                    (&one / one.from_usize(8)).0,
+                    one.0.clone(),
+                    5.0,
+                    program.clone(),
+                )?;
+                let cube = [19, 31, 67].map(|v| (one.from_usize(v) / one.from_usize(100)).0);
+                let forward = kernel.forward(&cube, &mut SamplingMapContext::detached(&context))?;
+                if active_edge == 6 {
+                    regular_raw = Some(
+                        context
+                            .iter()
+                            .cloned()
+                            .chain(forward.point.iter().cloned())
+                            .collect(),
+                    );
+                }
+                assert!(
+                    forward
+                        .diagnostics
+                        .iter()
+                        .any(|d| d.contains("certified normal disk"))
+                );
+                let inverse = kernel
+                    .inverse(&forward.point, &mut SamplingMapContext::detached(&context))?
+                    .expect("selected compact point");
+                assert!(
+                    (F(forward.jacobian) * F(inverse.inverse_jacobian) - &one).abs()
+                        < one.epsilon().sqrt() * one.from_usize(100)
+                );
+                for point in [
+                    forward.point,
+                    vec![half.0.clone(), (-&one).0, one.0.clone()],
+                ] {
+                    let x = ThreeMomentum::new(
+                        F(point[0].clone()),
+                        F(point[1].clone()),
+                        F(point[2].clone()),
+                    );
+                    loops[active] = &x - &offset;
+                    let e0 = (x.norm_squared() + F(geometry.masses[0].clone()).square()).sqrt();
+                    for (i, surface) in [&c, &d].into_iter().enumerate() {
+                        let shift = ThreeMomentum::new(
+                            F(geometry.shifts[i][0].clone()),
+                            F(geometry.shifts[i][1].clone()),
+                            F(geometry.shifts[i][2].clone()),
+                        );
+                        let partner = &x + shift;
+                        let expected = &e0
+                            + (partner.norm_squared() + F(geometry.masses[i + 1].clone()).square())
+                                .sqrt()
+                            - F(geometry.energy_sums[i].clone());
+                        let original =
+                            surface.compute_from_momenta(lmb, &masses, &loops, &externals);
+                        assert!(
+                            (original - expected).abs()
+                                < one.epsilon().sqrt() * one.from_usize(100)
+                        );
+                    }
+                }
+                assert!(
+                    c.sampling_joint_geometry_in_subspace(
+                        &d,
+                        &subspace,
+                        &lmbs,
+                        &term.graph,
+                        &masses,
+                        &externals,
+                        &[]
+                    )
+                    .err()
+                    .unwrap()
+                    .to_string()
+                    .contains("unsampled")
+                );
+                assert!(
+                    c.sampling_joint_geometry_in_subspace(
+                        &c,
+                        &subspace,
+                        &lmbs,
+                        &term.graph,
+                        &masses,
+                        &externals,
+                        &[prior]
+                    )
+                    .err()
+                    .unwrap()
+                    .to_string()
+                    .contains("common full signed routing")
+                );
+                let mut repeated = c.clone();
+                repeated.energies.push(EdgeIndex(2));
+                assert!(
+                    repeated
+                        .sampling_joint_geometry_in_subspace(
+                            &d,
+                            &subspace,
+                            &lmbs,
+                            &term.graph,
+                            &masses,
+                            &externals,
+                            &[prior]
+                        )
+                        .err()
+                        .unwrap()
+                        .to_string()
+                        .contains("two varying energy occurrences")
+                );
+                // Diagnostic mass input isolates a fixed-energy range failure;
+                // it does not claim this is a regenerated physical kite model.
+                let mut tiny_masses = masses.clone();
+                tiny_masses[EdgeIndex(4)] = &one / one.from_usize(10).powi(200);
+                let mut tiny_externals = externals.clone();
+                for momentum in &mut tiny_externals {
+                    momentum.temporal.value = &tiny_masses[EdgeIndex(4)] * one.from_usize(2);
+                }
+                let (tiny, _) = c.sampling_joint_geometry_in_subspace(
+                    &d,
+                    &subspace,
+                    &lmbs,
+                    &term.graph,
+                    &tiny_masses,
+                    &tiny_externals,
+                    &[prior],
+                )?;
+                let tiny_result = tiny(&[zero.0.clone(), zero.0.clone(), zero.0.clone()]);
+                if matches!(
+                    T::sampling_precision(),
+                    crate::settings::runtime::Precision::Arb
+                ) {
+                    let sum = F(tiny_result?.energy_sums[0].clone());
+                    assert_eq!(sum, tiny_masses[EdgeIndex(4)]);
+                    assert!(sum > zero);
+                } else {
+                    assert!(tiny_result.err().unwrap().downcast_ref::<crate::integrands::process::sampling_maps::SamplingEvaluationError>().is_some());
+                }
+                let short = ExternalFourMomenta::from_iter(externals.iter().take(1).cloned());
+                assert!(
+                    c.sampling_joint_geometry_in_subspace(
+                        &d,
+                        &subspace,
+                        &lmbs,
+                        &term.graph,
+                        &masses,
+                        &short,
+                        &[prior]
+                    )
+                    .err()
+                    .unwrap()
+                    .to_string()
+                    .contains("external ports")
+                );
+            }
+            Ok(regular_raw.unwrap())
+        }
+        let joint_program =
+            crate::integrands::process::SharedEnergyJointMap::<f64>::compile_program()?;
+        let regular_raw = check_joint_matcher::<f64>(term, joint_program.clone())?;
+        check_joint_matcher::<crate::utils::QuadFloat>(term, joint_program.clone())?;
+        check_joint_matcher::<crate::utils::ArbPrec>(term, joint_program)?;
+        {
+            use crate::{
+                integrands::process::GaussianReferenceFunction,
+                momentum::ExternalMomenta,
+                settings::runtime::{
+                    SamplingSettingsParser, StabilityLevelSetting, kinematic::Externals,
+                },
+            };
+            let mut joint_runtime = runtime_for_rescue.clone();
+            let mut parser: SamplingSettingsParser =
+                toml::from_str(&toml::to_string(&settings.sampling)?)?;
+            parser.default_channel_selection = vec!["joint".into(), "ordinary".into()];
+            let definitions = parser.channel_definitions.get_mut("massive_kite").unwrap();
+            let mut definition = definitions["C"].clone();
+            definition.around =
+                "then(complement(4),block(lmb(6),intersect(surface(2,4,6),surface(3,5,6))))".into();
+            definition.subspace_lmb = vec![6];
+            definitions.insert("joint".into(), definition);
+            let native_settings = joint_runtime.get_mut_settings();
+            native_settings.sampling = toml::from_str(&toml::to_string(&parser)?)?;
+            let Externals::Constant { momenta, .. } = &mut native_settings.kinematics.externals;
+            momenta[0] = ExternalMomenta::Independent([26_f64.sqrt(), 0.0, 0.0, 1.0].map(F));
+            native_settings.stability.rotation_axis.clear();
+            joint_runtime.warm_up(&model)?;
+            assert_eq!(joint_runtime.group_orientation_count(GroupId(0)), Some(18));
+            let ProcessIntegrand::Amplitude(amplitude) = &joint_runtime else {
+                unreachable!()
+            };
+            assert_eq!(
+                amplitude.data.graph_terms[0]
+                    .production_orientation_keys
+                    .len(),
+                18
+            );
+            let bridge = amplitude.data.graph_terms[0]
+                .sampling_setup()
+                .sampling_bridge::<f64>()?;
+            assert!(bridge.channels()[0].map.contract().requires_proposal_policy);
+            assert_eq!(
+                bridge.channels()[0].map.contract().support,
+                SamplingSupport::Restricted
+            );
+            // The factory point comes from a certified regular complement. Use
+            // the complete compiled inverse to recover the original six cube coordinates.
+            let inverse = bridge
+                .inverse(SamplingChannelId(0), &regular_raw)?
+                .expect("regular joint point");
+            let cube = inverse.map.coordinates;
+            let mapped = bridge.forward(SamplingChannelId(0), &cube)?;
+            assert!(
+                mapped
+                    .map
+                    .diagnostics
+                    .iter()
+                    .any(|d| d.contains("certified normal disk"))
+            );
+            assert!((mapped.map.jacobian * inverse.map.inverse_jacobian - 1.0).abs() < 1e-9);
+            assert!(
+                bridge
+                    .inverse(SamplingChannelId(1), &mapped.raw_coordinates)?
+                    .is_some()
+            );
+            let reference =
+                GaussianReferenceFunction::new(1.2, vec![0.4, -0.3, 0.2, -0.2, 0.1, 0.35])?;
+            let point = Sample::Continuous(F(1.0), cube.iter().copied().map(F).collect());
+            let standard = joint_runtime.evaluate_reference_sample_detailed(&point, &reference)?;
+            assert!(!standard.evaluation.evaluation_metadata.is_nan);
+            assert!(standard.evaluation.integrand_result.re.0 > 0.0);
+            for level in [
+                StabilityLevelSetting::default_quad(),
+                StabilityLevelSetting::default_arb(),
+            ] {
+                let mut native = joint_runtime.clone();
+                native.get_mut_settings().stability.levels = vec![level];
+                native.warm_up(&model)?;
+                let value = native.evaluate_reference_sample_detailed(&point, &reference)?;
+                assert!(!value.evaluation.evaluation_metadata.is_nan);
+                assert!(
+                    (value.evaluation.integrand_result.re.0
+                        / standard.evaluation.integrand_result.re.0
+                        - 1.0)
+                        .abs()
+                        < 1e-8
+                );
+                assert!(
+                    (value.moments.second_moment.0 / standard.moments.second_moment.0 - 1.0).abs()
+                        < 1e-8
+                );
+            }
+            // The actual physical body is distinct from the reference and
+            // controlled replay targets. Retain all 18 orientations and CT terms.
+            {
+                use crate::{
+                    integrands::process::MomentumSpaceEvaluationInput, settings::runtime::SumMode,
+                };
+                let mut physical = joint_runtime.clone();
+                let mut selected_settings = parser.clone();
+                selected_settings.graphs = SumMode::MonteCarlo;
+                selected_settings.sampling_channels = SumMode::MonteCarlo;
+                physical.get_mut_settings().sampling =
+                    toml::from_str(&toml::to_string(&selected_settings)?)?;
+                physical.get_mut_settings().stability.levels =
+                    vec![StabilityLevelSetting::default_arb()];
+                physical.warm_up(&model)?;
+                assert_eq!(physical.group_orientation_count(GroupId(0)), Some(18));
+                let selected_source = Sample::Discrete(
+                    F(1.0),
+                    0,
+                    Some(Box::new(Sample::Discrete(
+                        F(1.0),
+                        0,
+                        Some(Box::new(point.clone())),
+                    ))),
+                );
+                let selected_x = physical
+                    .evaluate_sample_precise(
+                        &selected_source,
+                        &model,
+                        F(1.0),
+                        false,
+                        Complex::new_zero(),
+                    )?
+                    .try_into_f64()?;
+                let mut raw_input = MomentumSpaceEvaluationInput {
+                    loop_momenta: mapped
+                        .raw_coordinates
+                        .chunks_exact(3)
+                        .map(|p| ThreeMomentum::new(F(p[0]), F(p[1]), F(p[2])))
+                        .collect(),
+                    integrator_weight: F(1.0),
+                    graph_id: Some(0),
+                    group_id: None,
+                    orientation: None,
+                    channel_id: None,
+                };
+                let raw = physical
+                    .evaluate_momentum_configuration_precise(&model, &raw_input, false)?
+                    .try_into_f64()?;
+                raw_input.graph_id = None;
+                raw_input.group_id = Some(GroupId(0));
+                raw_input.channel_id = Some(SamplingChannelId(0));
+                let selected_raw = physical
+                    .evaluate_momentum_configuration_precise(&model, &raw_input, false)?
+                    .try_into_f64()?;
+                let norm = raw.integrand_result.re.0.hypot(raw.integrand_result.im.0);
+                assert!(norm.is_finite() && norm > 0.0);
+                assert!(!raw.evaluation_metadata.is_nan);
+                // Raw momentum evaluation has no separate parameterization;
+                // X-space reports unity after folding its map into the value.
+                for (result, factor, parameterization) in [
+                    (&selected_x, mapped.selected_factor()?, Some(F(1.0))),
+                    (&selected_raw, mapped.partition.weight(0).unwrap(), None),
+                ] {
+                    assert!(!result.evaluation_metadata.is_nan);
+                    assert_eq!(result.parameterization_jacobian, parameterization);
+                    assert!(
+                        !result
+                            .evaluation_metadata
+                            .sampling_proposal_policies
+                            .is_empty()
+                    );
+                    for (actual, original) in [
+                        (result.integrand_result.re.0, raw.integrand_result.re.0),
+                        (result.integrand_result.im.0, raw.integrand_result.im.0),
+                    ] {
+                        assert!(
+                            (actual - factor * original).abs() < 1e-7 * factor.abs() * norm,
+                            "physical joint accounting: actual {actual}, factor {factor}, raw {original}"
+                        );
+                    }
+                }
+            }
+            // Halton dispersion is diagnostic rather than a randomized error
+            // bar. This summed-channel acceptance tests the complete estimator.
+            let coordinates = (1..=8192)
+                .map(|sample| {
+                    [2, 3, 5, 7, 11, 13]
+                        .map(|base| {
+                            let (mut index, mut fraction, mut value) = (sample, 1.0, 0.0);
+                            while index > 0 {
+                                fraction /= base as f64;
+                                value += (index % base) as f64 * fraction;
+                                index /= base;
+                            }
+                            value
+                        })
+                        .to_vec()
+                })
+                .collect::<Vec<_>>();
+            super::super::tests::check_joint_policy_source_replay(
+                &joint_runtime,
+                &model,
+                SamplingChannelId(0),
+                &cube,
+            )?;
+            let started = std::time::Instant::now();
+            let probe =
+                joint_runtime.evaluate_reference_coordinates(&coordinates[..8], &reference)?;
+            assert_eq!(probe.finite_sample_count, 8);
+            info!(
+                stage = "joint_reference_cost_probe",
+                sample_count = 8,
+                elapsed_seconds = started.elapsed().as_secs_f64(),
+                "all-orientation joint reference preparation and native evaluation cost"
+            );
+            let report = joint_runtime.evaluate_reference_coordinates(&coordinates, &reference)?;
+            assert_eq!(report.finite_sample_count, coordinates.len());
+            assert!((report.normalization - 1.0).abs() < 0.06, "{report:?}");
+            assert!(
+                (report.second_moment / report.expected_second_moment - 1.0).abs() < 0.08,
+                "{report:?}"
+            );
+        }
+
         // The same generated C equation also defines a genuine three-dimensional
         // fiber: k=q4 varies while l=q6 was sampled by the preceding block.
         // This factory/composition gate complements the production command-card
@@ -4008,8 +5076,10 @@ parent_lmb = [4,6]
             )?;
             let coordinates =
                 [13, 23, 47, 19, 31, 67].map(|value| (one.from_i64(value) / one.from_i64(100)).0);
-            let forward = map.forward(&coordinates, &[])?;
-            let inverse = map.inverse(&forward.point, &[])?;
+            let forward = map.forward(&coordinates, &mut SamplingMapContext::detached(&[]))?;
+            let inverse = map
+                .inverse(&forward.point, &mut SamplingMapContext::detached(&[]))?
+                .expect("full-support map must contain the supplied point");
             assert!(
                 (F(forward.jacobian.clone()) * F(inverse.inverse_jacobian) - &one).abs()
                     < one.epsilon().sqrt() * one.from_i64(100)
@@ -4021,8 +5091,8 @@ parent_lmb = [4,6]
                 let mut minus = coordinates.clone();
                 plus[column] = (F(plus[column].clone()) + &step).0;
                 minus[column] = (F(minus[column].clone()) - &step).0;
-                let plus = map.forward(&plus, &[])?;
-                let minus = map.forward(&minus, &[])?;
+                let plus = map.forward(&plus, &mut SamplingMapContext::detached(&[]))?;
+                let minus = map.forward(&minus, &mut SamplingMapContext::detached(&[]))?;
                 for (row, derivatives) in matrix.iter_mut().enumerate() {
                     derivatives[column] = ((F(plus.point[row].clone())
                         - F(minus.point[row].clone()))
@@ -4213,7 +5283,9 @@ parent_lmb = [4,6]
                 let point = reordered.forward(SamplingChannelId(0), &coordinates)?;
                 assert_eq!(point.raw_coordinates, fresh.raw_coordinates);
                 assert_eq!(point.map.jacobian, fresh.map.jacobian);
-                let inverse = reordered.inverse(SamplingChannelId(0), &point.raw_coordinates)?;
+                let inverse = reordered
+                    .inverse(SamplingChannelId(0), &point.raw_coordinates)?
+                    .expect("full-support map must contain the supplied point");
                 for (actual, expected) in inverse.map.coordinates.iter().zip(coordinates) {
                     assert!((actual - expected).abs() < 1.0e-10);
                 }
@@ -4250,8 +5322,9 @@ parent_lmb = [4,6]
             assert!(forward.map.jacobian.is_finite() && forward.map.jacobian > 0.0);
             assert!((forward.partition.weights.iter().sum::<f64>() - 1.0).abs() < 1.0e-13);
             for channel_id in 0..3 {
-                let inverse =
-                    bridge.inverse(SamplingChannelId(channel_id), &forward.raw_coordinates)?;
+                let inverse = bridge
+                    .inverse(SamplingChannelId(channel_id), &forward.raw_coordinates)?
+                    .expect("full-support map must contain the supplied point");
                 assert_eq!(inverse.partition, forward.partition);
                 let recovered =
                     bridge.forward(SamplingChannelId(channel_id), &inverse.map.coordinates)?;
@@ -4385,7 +5458,9 @@ parent_lmb = [4,6]
                             * (1.0 + (delta / beta).sqrt()).powi(2)
                     };
                     assert!((radial / expected - 1.0).abs() < 1.0e-7);
-                    let inverse = bridge.inverse(SamplingChannelId(0), &point.raw_coordinates)?;
+                    let inverse = bridge
+                        .inverse(SamplingChannelId(0), &point.raw_coordinates)?
+                        .expect("full-support map must contain the supplied point");
                     assert!(
                         (point.map.jacobian * inverse.map.inverse_jacobian - 1.0).abs() < 1.0e-7
                     );
@@ -4421,7 +5496,9 @@ parent_lmb = [4,6]
                 CompiledSamplingMap::Surface(_)
             ));
             let forward = bridge.forward(SamplingChannelId(0), &coordinates)?;
-            let inverse = bridge.inverse(SamplingChannelId(0), &forward.raw_coordinates)?;
+            let inverse = bridge
+                .inverse(SamplingChannelId(0), &forward.raw_coordinates)?
+                .expect("full-support map must contain the supplied point");
             for (left, right) in coordinates.iter().zip(&inverse.map.coordinates) {
                 assert!((left - right).abs() < 1.0e-10);
             }
@@ -4473,7 +5550,9 @@ parent_lmb = [4,6]
         );
         for _ in 0..2 {
             let point = boosted.forward(SamplingChannelId(0), &coordinates)?;
-            let inverse = boosted.inverse(SamplingChannelId(0), &point.raw_coordinates)?;
+            let inverse = boosted
+                .inverse(SamplingChannelId(0), &point.raw_coordinates)?
+                .expect("full-support map must contain the supplied point");
             assert!((point.map.jacobian * inverse.map.inverse_jacobian - 1.0).abs() < 1.0e-8);
         }
         let master_lmb = term
@@ -4560,9 +5639,9 @@ parent_lmb = [4,6]
             })
         ), "{error:#}");
         term.esurfaces.pop();
-        // Replay the original binary64 cube draw through the complete physical
-        // host, including every foreign C/D/LMB density and threshold CT. A
-        // Double map collapses the focused distance; Quad must rebuild it.
+        // Prepare the original binary64 cube once, including every foreign
+        // C/D/LMB density and threshold CT. Double physical arithmetic can
+        // collapse the focused distance; Quad evaluates the same retained draw.
         {
             use crate::{
                 integrands::evaluation::{PreciseEvaluationResult, StabilityStatus},
@@ -4593,10 +5672,19 @@ parent_lmb = [4,6]
                 Some(Precision::Quad)
             );
             assert_eq!(rescued.evaluation_metadata.stability_results.len(), 2);
-            assert!(matches!(
+            assert_eq!(
+                rescued.evaluation_metadata.stability_results[0].precision,
+                Precision::Double
+            );
+            // The Double body is evaluated once without rotation probes, so its
+            // nonfinite result has Unknown status; a pre-body map failure used
+            // to record Unstable(0). The second level rescues this same draw.
+            assert_eq!(
                 rescued.evaluation_metadata.stability_results[0].status,
-                StabilityStatus::Unstable(0)
-            ));
+                StabilityStatus::Unknown,
+                "{:?}",
+                rescued.evaluation_metadata.stability_results
+            );
             assert!(
                 rescued.integrand_result.re.0.is_finite()
                     && rescued.integrand_result.im.0.is_finite()
@@ -4620,7 +5708,7 @@ parent_lmb = [4,6]
                     .evaluation
                     .evaluation_metadata
                     .final_precision(),
-                Some(Precision::Quad)
+                Some(Precision::Double)
             );
             assert_eq!(
                 reference_rescued
@@ -4628,7 +5716,7 @@ parent_lmb = [4,6]
                     .evaluation_metadata
                     .stability_results
                     .len(),
-                2
+                1
             );
             runtime_for_rescue.get_mut_settings().stability.levels =
                 vec![StabilityLevelSetting::default_quad()];
@@ -4644,8 +5732,14 @@ parent_lmb = [4,6]
                 unreachable!()
             };
             assert_eq!(rescued.integrand_result, direct.integrand_result);
+            // The smooth reference needs no native map reconstruction or
+            // physical threshold rescue. Compare identical Double evaluations.
+            let mut reference_control = runtime_for_rescue.clone();
+            reference_control.get_mut_settings().stability.levels =
+                vec![StabilityLevelSetting::default_double()];
+            reference_control.warm_up(&model)?;
             let reference_direct =
-                runtime_for_rescue.evaluate_reference_sample_detailed(&source, &reference)?;
+                reference_control.evaluate_reference_sample_detailed(&source, &reference)?;
             assert_eq!(
                 reference_rescued.evaluation.integrand_result,
                 reference_direct.evaluation.integrand_result
@@ -4664,7 +5758,7 @@ parent_lmb = [4,6]
                 "Quad-only warmup must not require Double geometry"
             );
             assert!(setup.sampling_bridge::<QuadFloat>().is_ok());
-            assert!(setup.sampling_bridge::<crate::utils::ArbPrec>().is_err());
+            assert!(setup.sampling_bridge::<crate::utils::ArbPrec>().is_ok());
             let catalogue = setup.sampling_catalogue.as_ref().unwrap() as *const _ as usize;
             let programs = setup.sampling_programs.as_ref().unwrap() as *const _ as usize;
             runtime.prepare_sampling_precision::<crate::utils::ArbPrec>()?;
@@ -4725,7 +5819,8 @@ parent_lmb = [4,6]
                 // Quad point, rather than at the nearby Arb forward point.
                 let arb_inverse = setup
                     .sampling_bridge::<ArbPrec>()?
-                    .inverse(SamplingChannelId(0), &quad_point)?;
+                    .inverse(SamplingChannelId(0), &quad_point)?
+                    .expect("full-support map must contain the supplied point");
                 let ratio = F(quad.map.jacobian).higher() * F(arb_inverse.map.inverse_jacobian);
                 assert!((ratio - &one).abs().into_ff64().0 < 1.0e-6);
             }

@@ -6,7 +6,7 @@ use crate::momentum::{FourMomentum, Polarization, Rotatable, Rotation, SignOrZer
 
 use crate::momentum::signature::LoopSignature;
 use crate::utils::hyperdual_utils::new_constant;
-use crate::utils::{F, FloatLike, Length, PrecisionUpgradable};
+use crate::utils::{ArbPrec, F, FloatLike, Length, PrecisionUpgradable};
 use crate::{DependentMomentaConstructor, define_index, settings::runtime::kinematic::Externals};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
@@ -769,6 +769,55 @@ pub struct MomentumSample<T: FloatLike> {
     // pub uuid: Uuid,
 }
 
+impl MomentumSample<ArbPrec> {
+    /// Materialize the retained canonical point directly in a physical lane.
+    /// This is not a cast of a previously evaluated lower-precision sample.
+    pub(crate) fn materialize<T: FloatLike>(&self) -> Result<MomentumSample<T>> {
+        let sample = &self.sample;
+        if sample.dual_loop_moms.is_some() {
+            return Err(eyre!(
+                "canonical draw materialization requires scalar source momenta"
+            ));
+        }
+        let spatial = |p: &ThreeMomentum<F<ArbPrec>>| -> Result<ThreeMomentum<F<T>>> {
+            Ok(ThreeMomentum::new(
+                F::from_arb(&p.px.0)?,
+                F::from_arb(&p.py.0)?,
+                F::from_arb(&p.pz.0)?,
+            ))
+        };
+        Ok(MomentumSample {
+            sample: BareMomentumSample {
+                loop_moms: sample
+                    .loop_moms
+                    .iter()
+                    .map(spatial)
+                    .collect::<Result<_>>()?,
+                dual_loop_moms: None,
+                loop_mom_cache_id: sample.loop_mom_cache_id,
+                loop_mom_base_cache_id: sample.loop_mom_base_cache_id,
+                external_moms: sample
+                    .external_moms
+                    .iter()
+                    .map(|p| {
+                        Ok(FourMomentum {
+                            temporal: crate::momentum::Energy {
+                                value: F::from_arb(&p.temporal.value.0)?,
+                            },
+                            spatial: spatial(&p.spatial)?,
+                        })
+                    })
+                    .collect::<Result<_>>()?,
+                external_mom_cache_id: sample.external_mom_cache_id,
+                external_mom_base_cache_id: sample.external_mom_base_cache_id,
+                jacobian: F::from_arb(&sample.jacobian.0)?,
+                orientation: sample.orientation,
+                parameterization_branch: sample.parameterization_branch,
+            },
+        })
+    }
+}
+
 impl<T: FloatLike> Display for MomentumSample<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut table = tabled::builder::Builder::new();
@@ -1157,6 +1206,56 @@ mod subspace_tests {
         initialisation::test_initialise,
     };
     use typed_index_collections::ti_vec;
+
+    #[test]
+    fn canonical_momentum_materialization_preserves_source_metadata() {
+        let one = F::<ArbPrec>::default().one();
+        let mut source = MomentumSample {
+            sample: BareMomentumSample {
+                loop_moms: LoopMomenta::from_iter([ThreeMomentum::new(
+                    one.clone(),
+                    -&one,
+                    one.zero(),
+                )]),
+                dual_loop_moms: None,
+                loop_mom_cache_id: 17,
+                loop_mom_base_cache_id: 11,
+                external_moms: ti_vec![FourMomentum::from_args(
+                    one.from_i64(4),
+                    one.zero(),
+                    one.clone(),
+                    one.zero()
+                )],
+                external_mom_cache_id: 23,
+                external_mom_base_cache_id: 19,
+                jacobian: one.from_i64(3),
+                orientation: Some(7),
+                parameterization_branch: Some(2),
+            },
+        };
+        fn check<T: FloatLike>(source: &MomentumSample<ArbPrec>) {
+            let native = source.materialize::<T>().unwrap();
+            assert_eq!(native.sample.loop_mom_cache_id, 17);
+            assert_eq!(native.sample.loop_mom_base_cache_id, 11);
+            assert_eq!(native.sample.external_mom_cache_id, 23);
+            assert_eq!(native.sample.external_mom_base_cache_id, 19);
+            assert_eq!(native.sample.orientation, Some(7));
+            assert_eq!(native.sample.parameterization_branch, Some(2));
+            assert_eq!(native.sample.jacobian, native.one().from_i64(3));
+            assert_eq!(native.sample.loop_moms[LoopIndex(0)].py, -native.one());
+        }
+        check::<f64>(&source);
+        check::<crate::utils::QuadFloat>(&source);
+        check::<ArbPrec>(&source);
+        source.sample.dual_loop_moms = Some(LoopMomenta(vec![]));
+        assert!(
+            source
+                .materialize::<f64>()
+                .unwrap_err()
+                .to_string()
+                .contains("scalar source")
+        );
+    }
 
     #[test]
     fn selected_cycle_identity_and_radial_projection_survive_parent_changes() {

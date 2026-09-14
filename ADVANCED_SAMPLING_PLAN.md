@@ -1,9 +1,28 @@
 # Advanced sampling channels for GammaLoop
 
-Status: implementation in progress, 2026-09-13. This document records the accepted
+Status: implementation in progress, 2026-09-14. This document records the accepted
 design and current implementation status. It is the implementation authority
 and applies to arbitrary loop order and topology, to amplitudes and
 cross sections, and to both ordinary and threshold-adapted sampling.
+
+Current execution goal: establish the physics on all-orientation GL638 through
+H/Z-corner weight scaling, matched-count signed and absolute-integral errors
+for ordinary, simpler advanced and joint channel combinations, remaining
+maximum-weight origins, and the best supported cross-section estimate with
+uncertainty. The final joint-certificate optimization is complete and runtime
+tuning has stopped. Correctness repairs remain required. The comparison and
+resource limits below supersede the earlier 10% optimization stopping rule.
+
+The canonical physical-center repair now passes its generated gates and the
+actual retained GL638 failure: CT-on Euler accepts Quad and Arb without changing
+the canonical point/J/partition, and Pi2Z returns identical native totals and
+six cut weights at each precision. The first local H/Z scan is also complete:
+eight saved points on two hard rays, compared through optimized LMB, direct-H
+and joint channels with actual forwarded points and native inverse diagnostics.
+The next local check extends each direction by two decades; full-state reference
+and matched integration evidence remain pending. These are local/fixed-point
+results, not global boundedness or variance claims. See the
+[center audit](docs/research/advanced_sampling/CANONICAL_CT_CENTERS.md).
 
 Current implementation status: there is one `SamplingChannelCatalogue` and one
 `SamplingChannelId` domain. The Symbolica selection parser, explicit parent-LMB
@@ -16,11 +35,14 @@ and cross sections. The `LegacyLmb` request and its LMB-only partition/prefactor
 implementation have been removed. Summed sampling applies `J_c w_c` once per
 channel to the graph result and event weight, with outer Jacobian one. Monte
 Carlo also combines its selected map/partition factor with the physical value
-at native precision, keeping only grid probability separate. Mapping is
-performed before applying each stability rotation. Direct momentum input retains
-its supplied raw point. The remaining default single-basis reinterpretation and
-obsolete weight-setting aliases still require cleanup; they are not an
-alternative multichannel enumeration.
+at physical precision, keeping only grid probability separate. The new source
+implementation prepares complete graph rows once at fixed Arb precision;
+physical attempts and rotations consume direct materializations of that draw.
+This includes the default single-basis affine conversion and explicit channel
+sums. Direct momentum input retains its supplied binary64 point exactly across
+lanes. The correction passes 214 core tests and three API gates, including full
+generated-amplitude and saved-state acceptance. Obsolete weight-setting
+aliases still require cleanup; they are not another multichannel enumeration.
 
 The map kernels include exact eager/dual Symbolica Jacobians, affine LMB maps,
 regular and implicit radial maps, bounded products and ordered `then` maps.
@@ -40,12 +62,20 @@ preparation at warmup. Two-energy rank-one fibers use their analytic convex
 minimum, while general fibers can reuse the existing SOCP center solver. An
 SOCP result is only a candidate: its actual native energy residual must be
 strictly negative. Failed solves or ambiguous minimum signs produce typed
-numerical errors rather than certifying absence. Per-draw errors enter precision
-rescue. The X2 source also retains typed frozen-binding failures in the existing
-native caches. Warmup requires one configured precision usable for every graph;
-structural errors or failure at every configured precision invalidate the epoch.
+numerical errors rather than certifying absence. Canonical map-preparation errors
+fail before physical evaluation; physical materialization/adoption errors may
+use the existing rescue stack. Native component caches retain their typed
+binding diagnostics. Warmup now requires the fixed-Arb binding for every graph;
+optional physical-lane map bindings do not determine proposal validity.
 The focused and broader X2 core/API numerical gates pass.
 Soft/collinear primitives and general joint normal/star charts remain unfinished.
+
+The bounded shared-energy joint chart now has an amplitude run-card binder and
+an original-source proposal preparation phase. Its earlier discrete-policy
+transport passed the generated all-18-orientation kite Gaussian/moment and
+physical checks, but did not cover continuous map switching under rescue.
+The fixed-draw correction below addresses that gap and passes its numerical
+gates. No GL638 improvement follows from these amplitude results.
 
 A standalone `phase_space(cut(...))` channel now uses the actual graph energy
 equation, warmup masses, fixed external momenta and full parent-frame radial
@@ -318,6 +348,10 @@ soft coverage, local 3D UV orientation localization, integrated UV and all 936
 orientations. A local bounded-weight argument is not a global guarantee: exact
 coincident A/P residues, pinched/tangent strata, UV tails and numerical
 conditioning must remain separately diagnosed.
+The complete warmed sampling cost must also satisfy
+`T_sampling / T_physical <= 0.10` against the actual all-936-orientation GL638
+calculation. Optimize only as needed to meet this budget; stop performance
+work once it is met. The measurement contract below is part of completion.
 
 Threshold subtraction metadata and its automatic construction are outside this
 sampling project. Sampling channels never change threshold groups, SOCP common
@@ -523,21 +557,210 @@ Represent stable overlap-membership branches in the same canonical catalogue,
 with a finite expansion cap and normalized fallback for absent branches. This
 is an unimplemented X4 requirement; direct-H validation does not cover it.
 
+The physical alpha foundation now passes its focused gates. The existing root
+owner solves on the unnormalized displacement, and both raised geometry paths
+derive physical radial quantities from the same alpha packet. An independent
+pre-change regression exposed higher-order IFT factorial conversions; these
+are corrected and covered in Double, Quad and Arb, including mixed derivatives
+and a shifted native parent. Generated raised-component and conditional-cut
+regressions pass. The complete sampling/physical cut, center and alpha handoff
+and stable star branches remain unimplemented. The six simple GL638 cuts do
+not dispatch the higher-order IFT. The subsequent
+[all-936-orientation native replay](docs/research/advanced_sampling/GL638_X4_ALPHA_REPLAY.md)
+passes at the saved hard H/Z point (ordinary stack and forced Arb) and
+soft control (Arb), retaining all six event identities and precision choices.
+The hard-point Double total changes by `6.71e-10` relative; native Arb agreement
+is below `1e-288` for both points. This supports unchanged tested physics, not
+an accuracy or sampling-efficiency gain. All eleven differential regressions
+also pass after this projection change.
+
 The bounded direct-H allocation is complete using frozen optimized `f2f64fb17`:
 reference gates, physical H/Z and soft replays, then optimized LMB, direct-H
 powers 1 and 2, and power 2 mixed with optimized LMB. Each uses three seeds and
 2048 draws on 20 cores. The artifact preserves each maximum's full stored
 integration `Sample`, including its historical grid weight; printed coordinates
 alone are insufficient. Do not extend these runs before the missing geometry
-is ready. The next sequence is shared physical CT-star preparation and
-complement-only projection scale, followed by the generic rank-two H/Z chart
-and its certified star pullbacks. The joint chart must certify the feasible
+is ready. The next work proceeds in parallel: shared physical CT-star
+preparation and complement-only projection scale, and graph binding of the
+generic rank-two H/Z chart. Certified star pullbacks join these two paths.
+The joint chart must certify the feasible
 normal domain, rank, inverse branches and normalized absent/degenerate fallback
 before physical comparisons. Its generic kernel/domain work can proceed
 alongside CT-star preparation: a direct joint chart needs shared host tau but
 does not depend on CT centers or alpha. Only its star pullback adds those
 dependencies. Automatic channel discovery and long adaptive runs are not
 prerequisites for this explicit-chart implementation.
+
+The [joint-chart implementation slice](docs/research/advanced_sampling/TWO_NORMAL_PROPOSAL.md#generic-shared-energy-component-and-remaining-graph-binding)
+now identifies its independent prerequisites: outside-support inverse results
+flowing into the existing zero-score partition, eager differentiation of active
+coordinates with prepared parameters held fixed, a routed shared-energy pair
+matcher and a rigorously certified complement-dependent normal disk. The first
+exact primitive is graph-agnostic but accepts a specified energy-equation class;
+other pairs remain explicit binding errors until the generic implicit rank-two
+component is implemented under the same AST and catalogue. A compact chart
+requires full-support ordinary coverage and deterministic normalized fallback.
+
+The active-Jacobian prerequisite now passes 71 native/eager/map/partition
+checks and the saved-state acceptance fixture, including loaded amplitude and
+conditional-cut maps, ordinary integration and exact workspace resume.
+It uses the existing compiled dual program and determinant owner with
+ordered active columns. Static identity-zero seed information prevents unused
+prepared-parameter singular derivatives from poisoning those columns; the
+`u+sqrt(m)` test at `m=0` gives active derivative one in Double, Quad and Arb.
+Requested singular derivatives and structurally active singular intermediates
+remain typed failures. This is not a general removable-singularity solver.
+
+The represented-geometry joint component and compact-support migration now
+pass all 161 selected core checks. One full-circle map handles the supported
+shared-energy pair, with eager active Jacobians, density evaluated at the
+supplied inverse point, and a directed enclosure certificate for its normal
+disk. The existing partition receives certified outside-support as zero, while
+requiring an explicitly selected full-support sibling. Tests cover unequal and
+massless energies, native Quad/Arb inputs, both circle branches, independent
+Cartesian determinants, normalized Gaussian/raw moments, and foreign support
+through conditional affine/permuted maps. A separate `F=1/R` oracle converges
+to the same finite analytic weight from either selected channel.
+These component tests preceded graph matching and run-card binding. They do
+not certify prerequisite-only compact/fallback and radius decisions during
+active-point-dependent rescue. That transport is now implemented separately
+and passes the source gates below. No GL638 bounded-weight or variance-improvement
+claim follows from the fixed-context component tests.
+The final nine joint/enclosure tests and two saved-state/canonical-channel API
+regressions also pass; core/API checking and changed-line clippy gates are clear.
+
+The graph-expression and factory groundwork passed 168 selected core tests:
+one `intersect` AST block and geometry registry, a shared routed-energy matcher,
+and actual two-loop kite equations in Double, Quad and Arb. The kite uses a
+boosted external momentum and checks a parent with nonzero affine translation;
+a serial-edge fixture checks distinct shared edges and unequal partner masses.
+At that milestone the two saved-state/canonical-channel API regressions,
+core/API checking and changed-line clippy gates also passed.
+The subsequent source milestone now binds the supported pair in amplitudes,
+retaining its native shared-energy translation. Empty-prior blocks bind once
+at warmup through static `Affine`; nonempty priors use the existing ordered
+embedding. The trial disk radius uses `e_cm * sampling.b`; both energy normals
+initially use isotropic scale one. `sampling.power` does not change its uniform
+normal-radius law. A full-support sibling remains mandatory.
+
+The original-source owner first prepares participating rows at the existing
+1000-bit Arb precision, through the same map/partition traversal. It seals only
+discrete choices before norm-based lane selection or final target evaluation.
+Native, debug, direct-momentum and summed replays use the same typed borrowed
+context and compare complete choices; mismatches request the existing retry or
+error. Map-required roots/centers still run during preparation, but physical
+overlap solving, rotations and events do not. Ordinary catalogues bypass this
+phase. Its cost and represented-input limits are recorded in
+[the shared preparation audit](docs/research/advanced_sampling/AFFINE_STAR_IMPLEMENTATION_AUDIT.md#proposal-policy-across-native-retries).
+Validation passes: the generated all-18-orientation kite meets the 6% Gaussian
+normalization and 8% moment bounds at 8192 draws, with actual physical
+`X = raw * J*w` and selected-momentum `raw * w` checks. Controlled Double-to-Quad
+body retry, sealed policy/debug/norm access and ordinary-phase bypass pass. The
+`generated_triangle_joint_binds_without_prerequisites` fixture additionally
+passes actual empty-prior binding with a nonzero offset, compact roundtrip
+and one production reference evaluation. The current joint
+source fixtures clear rotation probes; they do not establish nonidentity-probe
+behavior.
+The combined gate passes 170 focused core tests in 110.864 s and the complete
+kite test in 1537.369 s. Both saved-state/canonical-channel API regressions pass
+in 104.496 s; core/API checks, formatting and diff checks pass. Clippy passes
+with 52 existing warnings and none on changed lines. The full kite duration is
+an unoptimized test-profile measurement, not a production sampling benchmark;
+the optimized all-936-orientation 10% cost gate remains pending.
+GL638 additionally needs certified equality of the
+shared spatial energy routing in the specified external frame and authoritative
+cut kinematics, including its actual `t*`. CT-star channels separately require
+the actual shared center and projection alpha handoff. A centre-of-mass identity
+must not be assumed for arbitrary boosted data. Neither automatic channel
+discovery nor completed CT-star maps blocks the direct joint witness. Final
+physical validation still covers all
+orientations and tests the previously unbounded corner explicitly.
+
+The geometry and timing milestone now passes its complete selected gates. Explicit LU
+preparation now retains its native ordered energy ray with the root; physical
+raised eta jets use those same coefficients. Routing before scaling deliberately
+changes finite-precision association in this LU path. Amplitude/static CT and
+fiber scalar evaluation remain unchanged, as does their external-only seed
+convention. At that milestone the conditional map still discarded its ray;
+the subsequent native handoff implementation below addresses this boundary.
+The run passes 174 focused core tests in 124.853 s and three API regressions
+in 103.571 s, including timing-counter checks; combined checking and clippy pass
+with no changed-line warnings. The full kite rerun also passes in 1550.337 s,
+bringing this milestone to 175 core tests. Its 8192-draw 6%/8% Gaussian/moment
+bounds and physical/retry/timing checks pass; this unoptimized complete-fixture
+duration is not a production sampling-cost measurement. The
+[GL638 LU-ray replay](docs/research/advanced_sampling/GL638_LU_RAY_REPLAY.md)
+also passes three native evaluations at two stored hard/soft points, each with
+all 936 orientations and six event weights; all 35 saved-state hashes remain
+unchanged. This bounded regression is neither an isolated attribution to the
+ray change nor an accuracy, variance or sampling-runtime improvement claim.
+
+The native host handoff is implemented and its combined gates **pass**.
+Existing runtime rows retain native ray/root records and freeze selected authority
+before inverse partition work. Selected/direct samples and explicit summed rows
+carry only that prefix; native retries rebuild from the original source and
+rotations retain unrotated payloads. Canonical, norm and debug remaps isolate
+root diagnostic occurrences while preserving policy decisions and timing.
+Physical adoption authenticates the master graph, cut group, ordered parent and
+required priors against the selected immutable channel, rotates the retained ray
+once and independently routes the completed point. A fixed directed 2048-bit check bounds represented scalar roots,
+first derivatives and explicit inverse-volume factors. It does not bound vector
+coefficient differences, higher raised jets or the full conditional/future H/Z
+density. Those sensitivity checks, exact GL638 routing, hosted joint binding and
+CT center/alpha handoff remain required. Adoption verification is charged to
+sampling time even inside the physical body, then excluded from physical time;
+shared preparation is counted once. No new GL638 gain or 10% budget claim follows.
+
+The final source passes 184 unique core tests: the 176-test focused gate
+(118.591 s), seven Gamma sample tests, and the complete kite (1504.601 s).
+The conditional fixture's final test-only rerun passes in 56.996 s with strict
+1e-8 nonidentity physical-total agreement. Probe event suppression follows the
+existing identity-only buffering/counting rule; the surrounding fixture retains
+identity selected/direct event comparisons. The full kite again satisfies its
+8192-draw 6% normalization/8% moment bounds; its unoptimized complete-fixture
+duration is not a production sampling benchmark. Three API gates pass in
+106.024 s, combined checking in 12.56 s and clippy in 57.76 s with 68 existing
+warnings and none on changed lines. Formatting and diff checks pass. The optimized
+GL638 10% budget remains unmeasured, and hosted GL638 joint binding remains open.
+
+The subsequent source audit identifies a correctness gap in the preceding
+discrete-policy-only transport: continuous map changes selected by physical
+precision rescue can change the proposal law even with identical decisions,
+Jacobians and density values. The
+[fixed canonical draw contract](docs/research/advanced_sampling/CANONICAL_DRAW_SOURCE.md)
+therefore replaces native redraws with one immutable 1000-bit Arb proposal,
+materialized directly into each physical lane. This applies to selected,
+summed and default/LMB unit-cube sampling, and selected direct partitions.
+Implementation and its acceptance gates now pass. The 214 unique core tests
+include the complete all-18-orientation kite in 937.885 s, retaining its
+8192-draw 6% normalization and 8% moment criteria, physical Double-to-Quad rescue,
+and exact agreement with forced Quad. Three API gates pass; the saved-state
+acceptance took 502.151 s with unchanged sample counts and numerical criteria.
+Its targeted nextest allowance is now fifteen minutes, while the conditional
+fixture retains five minutes. Core/API checks, formatting and diff checks pass;
+all-target clippy takes 56.86 s with 50 existing warnings and none on changed
+lines. An exact directed external-frame matcher is included. A generic hosted
+joint fixture and completed-point normal accuracy remain the next gate before
+GL638 activation. These timings are unoptimized acceptance costs, not the
+production 10% budget measurement. CT-star
+center/alpha work remains a separate dependency of the projected channels.
+
+The next [hosted-joint milestone](docs/research/advanced_sampling/HOSTED_JOINT_NORMAL_ALIGNMENT.md)
+now binds explicit pairs of original graph surfaces under a physical LU host.
+The same directed arithmetic checks the original two normals at the completed
+canonical and native points, including actual scalar rescaling and rotations.
+Both normal displacement and the remaining host residual must fit separate
+half-budgets relative to the canonical normal radius. Physical rescue retains
+the one source point, partition and host solution. The common-energy offset
+is included in the existing affine pullback and its determinant.
+The full hosted six-dimensional reference test passes in 616.215 s at 8192
+draws with unchanged 6% normalization and 8% raw-moment bounds. All 214 selected
+core regressions pass after a diagnostic-only assertion update. All-target
+core/API clippy and checking pass. The all-18-orientation amplitude rerun also
+passes in 954.918 s, completing 216 unique core tests with the hosted fixture.
+These are generic correctness gates. Optimized all-936 GL638
+normalization, physical replay, the 10% cost bound and variance improvement
+remain unmeasured for this milestone. CT-star targets remain separate work.
 
 In parallel, the subtraction owner has separated representative overlap
 kinematics from the raised derivative packets, using the existing sample and
@@ -713,11 +936,12 @@ parent_lmb = [3, 6, 7, 10]
 on_cut = [1] # Current CutId filter; physical host edges are cut(2,6,10).
 ```
 
-This is the proposed joint geometry in one three-dimensional p block; H and Z
-are two scalar normals there. The current `on_cut` filter alone does not prepare
-that physical host. Its explicit host/frame binding and the joint-map compiler
-remain implementation work; the runtime must continue to reject this example
-until those contracts are satisfied.
+This remains a proposed GL638 channel: H and Z are two scalar normals in one
+three-dimensional p block. The current `on_cut` filter alone does not prepare
+that physical host. Although the amplitude joint compiler is now implemented,
+this example still requires GL638's certified external-frame specialization
+and authoritative host preparation, and must remain rejected until those
+contracts are satisfied.
 
 The Symbolica vocabulary includes `lmb`, `surface`, `cut`, `soft`, `collinear`,
 `complement`, `product`, `intersect`, `then`, `phase_space`, `left`, `right`,
@@ -945,6 +1169,82 @@ the relevant geometry without stale roots or masses. Record compilation/warmup
 cost separately from per-point root, inverse-density and physical evaluation
 cost in the amplitude and GL638 variance benchmarks.
 
+The new timing source passes its core/API gates and accumulates `parameterization_time` over
+source construction, direct inverses, summed maps/partitions, failed lanes and
+norm/debug remaps. Canonical policy preparation has one inclusive timer with
+nested map timers suppressed. `integrand_evaluation_time` counts actual target
+bodies across attempts and rotations, excluding those map intervals; evaluator
+and event timings are subsets. Final metadata refresh preserves costs accrued
+after a lane's result snapshot. Exhausted error-only returns still emit no
+timing metadata. These counters support the budget measurement below; they do
+not establish it. Warm every required native binding per worker separately,
+report remaining `Other` work, and do not use the benchmark's residual
+"Integrand" row alone as the full physical denominator.
+
+The original runtime target is `T_sampling / T_physical <= 0.10`, measured conservatively
+in a warmed optimized build at matched actual GL638 samples and physical
+settings. `T_sampling` includes the fixed-Arb forward maps and Jacobians,
+foreign inverses, proxies/partition, support and root certificates, plus direct
+materialization and physical adoption checks during precision rescue. Physical
+attempts must not redraw maps or recompute partitions.
+`T_physical` is the complete six-cut/all-936-orientation physical evaluation
+with the actual UV, threshold, selector and stability settings. Attribute shared
+preparation exactly once: conservatively charge it to sampling and exclude it
+from the physical denominator, reporting the attribution explicitly. Do not
+time a second redundant physical preparation to inflate that denominator.
+
+Use representative production draws and stored hard/maximum-weight samples on
+20 cores, with matching concurrency and enough repeated batches to resolve
+timing uncertainty. Report aggregate costs and ratios separately for these sets,
+plus per-draw distributions, high quantiles and extrema; a cheap average must
+not conceal an expensive hard-sample path. Report first compilation/warmup and
+training separately from warmed production. Unoptimized amplitude test timings
+cannot establish this GL638 budget. The
+[all-orientation hosted-joint benchmark](docs/research/advanced_sampling/GL638_HOSTED_JOINT_GATE.md)
+now measures this cost. Scalar/active-column eager specialization and independent
+worker buffers are validated at source `1f83233dd` (137 relevant core checks),
+but that matched 20-worker candidate cost 46.27% conservative overhead
+on valid representative calls and 47.82% on representative-maximum replays.
+Optimized LMB aggregate costs remain below 10%. The same retained source fails
+CT-on Euler stability in Quad and Arb; actual CT-off is stable. Detailed traces
+retain identical complete membership while the independently solved SOCP
+center norms differ by `1.216e−7 GeV`. The final certificate round now reuses
+radius-independent directed data within
+one preparation. Eight focused tests pass, and the matched all-orientation
+replay preserves every represented sample and physical result. Sampling time
+falls by 15.25% in this batch; valid-call conservative overhead is 41.79% and
+maximum-replay overhead is 48.10%. Runtime tuning stops here as requested.
+The separate repair retaining canonical physical centers across rotations and
+rescue passes 14 focused and 27 broader core tests, including full hosted
+8192-draw acceptance, checking and changed-line Clippy. Its actual GL638 replay
+accepts CT-on Euler in Quad (`2.20e-21` probe discrepancy) and Arb (`4.27e-290`).
+Euler/Pi2Z returned native totals and six cut weights are exact within each
+precision, with all canonical source factors unchanged. The overlap authority
+retains complete accepted-cut membership, real optional channel-ID selector
+semantics and native raised packets; CT-off/reference skip it. The
+[archived matrix](docs/research/advanced_sampling/GL638_HOSTED_JOINT_GATE.md#canonical-physical-centers-actual-gl638-failure-resolved)
+does not establish amplitude covariance, global stability, GL638 normalization
+or integration gain.
+Continue reporting sampling cost honestly; exceeding 10% no longer blocks
+physics studies. The first eight-point, two-direction H/Z scan is complete for
+optimized LMB, direct-H and joint configurations. Extend those directions by two
+decades next, retaining actual forward/inverse normal distances and full physical
+values. Then establish actual-state reference correctness and compare the
+candidate combinations below at equal sample counts. Report signed and absolute
+integrals with Monte Carlo errors, maximum weights and their origin, H/Z-corner
+boundedness/scaling tests, and the best defensible GL638 central value and uncertainty. Compare
+the joint combinations' maxima against both optimized LMB and nonjoint advanced
+sampling. Up to 30 cores and 300 GB may be used when scaling is useful. Full-state
+normalization, the two-decade extension and integration comparisons remain pending.
+
+For historical scale only, the optimized
+[X2 physical pilot](docs/research/advanced_sampling/GL638_X2_PHYSICAL_PILOT.md#fixed-budget-pilot)
+recorded 72.04–79.47 ms total per all-orientation draw, with 0.151–0.170 ms
+recorded map time for direct-H selections and 0.075 ms for six optimized LMBs.
+Those earlier timings exclude the new joint/fixed-Arb policy phase and do not
+certify its budget. Neither they nor the current unoptimized amplitude test
+rate establish the current runtime or physics claims.
+
 ### Estimator and adaptive grids
 
 Every selected chart maps unit-cube coordinates into the same raw/master graph
@@ -1051,6 +1351,23 @@ amplitude need not benefit from concentrating on a particular threshold.
 
 ## 6. GL638 validation and completion criteria
 
+The latest candidate matrix uses optimized LMB as the baseline. Every advanced
+candidate includes sampling channels for all six physical cuts, with the direct
+H/Z joint channel switched on or off and the explicit soft LMB `[6,12,13,14]`
+independently included or omitted. Thus compare cuts, cuts+soft, cuts+joint, and
+cuts+joint+soft against the same baseline. Keep the cut-1 radial channel when
+adding its hosted joint channel; selecting a proposal never restricts the
+physical six-cut sum. Preserve normalized full-support coverage in each case.
+
+| Physical cut ID | Exact cut edges | Joint target when enabled |
+| --- | --- | --- |
+| 0 | `[2,6,12,13]` | — |
+| 1 | `[2,6,10]` | Original H=`surface(2,4,12)` and Z=`surface(3,10,13)` in one hosted `[3]` block |
+| 2 | `[2,6,7,13,14]` | — |
+| 3 | `[2,4,12]` | — |
+| 4 | `[2,4,10,13]` | — |
+| 5 | `[2,4,7,14]` | — |
+
 The first manual channels are the direct H surface in the prepared cut-1 p
 block, the certified affine A-star H pullback with its native `[3,7]` context,
 and the rank-two H/Z joint chart in the shared `[3]` p block. The H/Z chart uses
@@ -1075,7 +1392,9 @@ rescue behavior.
 
 Final GL638 acceptance requires the complete six-cut sum, all 936 orientations,
 direct 3D local UV with orientation localization, integrated UV and current
-threshold metadata. A local finite-variance or bounded-leading-weight result
+threshold metadata. Report the warmed sampling cost honestly; the user's latest
+direction accepts present performance and supersedes the former 10% cost gate.
+A local finite-variance or bounded-leading-weight result
 for one regular H/Z patch is reported as such, not promoted to a global theorem.
 Defaults change only after the full matrix and independent-pilot evidence show
 an improvement without loss of ordinary soft/UV coverage or IR cancellation.
