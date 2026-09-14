@@ -5,7 +5,9 @@ baseline at seed 20011, before physical body evaluation. The failing owner was
 canonical physical overlap preparation for cut group 3 at Arb1000. The attempt
 returned exit code 1 after 813.544 s; all 35 saved-file hashes stayed unchanged.
 This failure does not invalidate the separately completed seven-method screen,
-but the attempted confirmation is incomplete and is not pooled.
+but the attempted confirmation is incomplete and is not pooled. The subsequent
+[endpoint repair](CANONICAL_LU_ENDPOINT_CERTIFICATION.md) passes source gates
+and the exact captured-source Double/Arb physical replay.
 
 | Run order | Catalogue | Seed | Requested samples | Outcome |
 | --- | --- | ---: | ---: | --- |
@@ -25,8 +27,9 @@ bracket endpoints and all native digits are retained in `results/pilots.json`.
 These printed diagnostics alone do not establish an acceptable root or its
 failure mechanism. Unlike the earlier foreign phase-space callback failure,
 this path already uses the routed ray and existing radial-root diagnostic
-wrapper. Exact-source capture and a directed original-equation comparison
-are required before changing the certifier.
+wrapper. Exact-source capture and the subsequent directed original-equation
+comparison identify an already represented usable endpoint; the separate repair
+record preserves those measurements.
 
 The failed workspace contains only its manifest and settings: the error
 propagated before the first completed-iteration checkpoint and no exact Sample
@@ -43,9 +46,9 @@ with persistent worker integrands. It stops after the exact error match:
 1,844 sources were evaluated and later workers may evaluate none. This is not
 a complete 32,768-point scan. Whole-process time is 121.452 s; the client's
 internal scope is 108.699 s. Both input and state hash records remain unchanged.
-Fourteen independent record/source checks pass. Repair validation and a
-restored confirmation remain pending; no source-fix gate is claimed by this
-interruption archive.
+Fourteen independent record/source checks pass. This interruption archive
+preserves the original failure; the separate [repair record](CANONICAL_LU_ENDPOINT_CERTIFICATION.md)
+now validates its correction. A restored complete confirmation remains pending.
 
 The [69-record attempt archive](gl638_hosted_joint_gate/mc_confirmation_root/attempt1/artifact_hashes.json)
 preserves all 55 original result files, three completed checkpoints, run/log/

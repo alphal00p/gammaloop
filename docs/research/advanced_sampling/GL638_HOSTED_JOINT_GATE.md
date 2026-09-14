@@ -73,7 +73,9 @@ separation is not a demonstrated variance improvement between those variants.
 The [maximum replay and three-point attribution](GL638_SCREEN_MAXIMUM_REPLAY.md)
 now pass their numerical controls. Confirmation stopped on an ordinary-baseline
 canonical root error; its [retained interruption](GL638_CONFIRMATION_ROOT.md)
-is not pooled and repair validation remains pending.
+is not pooled. The [endpoint repair](CANONICAL_LU_ENDPOINT_CERTIFICATION.md)
+now passes source/build gates and the exact captured Double/Arb replay; a fresh
+complete confirmation remains pending.
 
 ## Fixed physical calculation and proposal
 

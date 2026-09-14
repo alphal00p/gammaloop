@@ -3766,6 +3766,227 @@ mod tests {
     }
 
     #[test]
+    fn canonical_physical_lu_root_resolves_retained_bracket_endpoints() {
+        use crate::graph::FeynmanGraph;
+
+        test_initialise().unwrap();
+        // Baseline seed20011, worker3/local239 (global5156), source path[0,5].
+        // Cut group3 is physical Cut0, with its original ordered four energies.
+        // These are the captured Arb generation momenta, without the radial
+        // normalization used by the separate foreign-inverse fixture below.
+        let point_tokens = [
+            "-4877.19776949134799589974803772414639433359513358235797727662621078949562551592647720875226397943918395045206756176248678175688837208619050791653582445021695271333556149595551567501518142933108041137862389137548159866615474120165599255689473831877256382039353906809830046294831502842769433115811496491403",
+            "-4788.44733559297503338424048189604502643310578502030319826258363405583106128848247171958913511942781252928660066253754883065799513281132098117063664934324987293459853837736080937683626624511055230677016357961716720986212711446609804288980413634695779067271806710579027258896440419592959858535084502130291",
+            "3449.85408446744743054600317691517351068755983604965291557283080813569562933280322362036960861849284721431171841172810290687504905161462871600062758043010601204035005302723970251590824854187235628530596853916572662417827550093988644061689354024522549573776864100886485399680047404526188593294956650329940",
+            "70.3244241810218751702648147574915682722146332904085090192206088762519914112850473659048343153323638641871729435254245633882918549420905038752476781927385371433230303313665642902999745355570884098566729530821574404942919072073238328487435044514999060063382762063688077567584466375120955594649302749638168",
+            "-64.7328550651196388632156519795545666707240287311537237777794147531761978347671932403072110940638881039840834582472804137358931989273824856974894575353144549925155422489503341679707811903159498611335677205735964537298380313103709897338608109368125932232793979426015474979910153144543330056886932939528991",
+            "-169.977204441411724276834141865099406683621147453741490083449379145954509733051600240055550798830052895001473550375457779362103819932642751869589067397325831680056922569024797824237561594653585076675793132823695793970660453958165008987223868047366419040597994417711631570323172275534429627197335733541788",
+            "-5600.61087887521441317726380154507077804125909265810807210495844671671183617788774688843570145751202477847145016280355634030258604974973758865789530484255123560331590332195975778091351865880370425224431732203854524561456548571792312894398114116052933817481418085818812657379218499842947239271592857749704",
+            "-4836.61374618501855280967146959499945066804232727342341015614259662078809271214898964547576447118364148478316361672773076137899768111124298404537445866753685338684537418353640716742530483139927834572180382685089716954278888134794244645196893419036539682711826176677044169785265849490484473737712006654560",
+            "2145.99486696308129706260024015689439317496385917360897844622508358240397624209431777021609681539543126318894513773663359142436896535260327930425968202779550650784950814483566205233631415943233817778512294707166462039932281821355935955750715055287115993275252104683925707031965340569344306593459551977201",
+            "-5604.88372374262804889294640877016787850008172170528245661491078660880869657816973625663719378778526660563427937564485272926173353092285235941079848809391075384808960803275406005472826675962967469084057925785326996659483564308288383384251734955274712244877309369072980850467041673500458058150368522257495",
+            "-4334.45541003902767715452592577800941446238649756064773722205221184221360633788778921553682091482858995046598733903274399368838883790258941797495609397561874360921914142839313072883007139115101612942134481476731356575319298406454126144036222827728908340679754158679444863572311869978356712039675439410147",
+            "2429.79731946564390222685915546149324045671034707482980645420787377878023354031617617014193097522475262733934128132427049128461231717208810751567187554211866137651923930428300030230687501307593042508234180738169107139713264377038173966078706808479870077056431717387171214082081679052824398764469662844001",
+        ];
+        let point = point_tokens
+            .iter()
+            .map(|token| {
+                let value = token.parse::<ArbPrec>().unwrap();
+                assert_eq!(value.to_string(), *token);
+                F(value)
+            })
+            .collect_vec();
+        let one = point[0].one();
+        let zero = one.zero();
+        let model = crate::utils::load_generic_model("sm");
+        let graph: Graph =
+            include_str!("../../../../examples/cli/epem_a_ttxh/NNLO/graphs/GL638.dot")
+                .into_graph(&model)
+                .unwrap();
+        let lmb = &graph.loop_momentum_basis;
+        assert_eq!(
+            lmb.loop_edges.raw,
+            vec![EdgeIndex(3), EdgeIndex(4), EdgeIndex(7), EdgeIndex(10)]
+        );
+        let surface = Esurface {
+            energies: vec![EdgeIndex(2), EdgeIndex(6), EdgeIndex(12), EdgeIndex(13)],
+            external_shift: vec![(EdgeIndex(0), -1), (EdgeIndex(1), -1)],
+            vertex_set: VertexSet::dummy(),
+        };
+        let masses = graph.get_real_mass_vector::<ArbPrec>(&model);
+        for (edge, mass) in [(2, 125), (6, 173), (12, 173), (13, 0)] {
+            assert_eq!(masses[EdgeIndex(edge)], one.from_i64(mass));
+        }
+        let externals = ExternalFourMomenta::from_iter([1, -1].map(|sign| {
+            FourMomentum::from_args(
+                one.from_i64(500),
+                zero.clone(),
+                zero.clone(),
+                one.from_i64(500 * sign),
+            )
+        }));
+        assert_eq!(externals.len(), lmb.ext_edges.len());
+        let momentum = LoopMomenta::from_iter(
+            point
+                .chunks_exact(3)
+                .map(|v| ThreeMomentum::new(v[0].clone(), v[1].clone(), v[2].clone())),
+        );
+        let center = LoopMomenta::from_iter(
+            (0..4).map(|_| ThreeMomentum::new(zero.clone(), zero.clone(), zero.clone())),
+        );
+        let e_cm = one.from_i64(1000);
+        let identity =
+            RadialRootIdentity::new("canonical physical overlap graph 'GL638' cut group 3".into());
+        let ray = surface.routed_ray(&momentum, &center, &externals, &masses, lmb);
+        let guess = Esurface::radius_guess_from_terms(
+            &ray.shift,
+            ray.energies
+                .iter()
+                .map(|(_, v, b, _)| (v.norm_squared(), v.clone() * b)),
+        );
+        let strict = safeguarded_newton_iteration_and_derivative(
+            &zero,
+            &guess,
+            |r| ray.evaluate(r),
+            &one,
+            2000,
+            64,
+            &e_cm,
+        )
+        .unwrap_err();
+        assert_eq!(
+            format!(
+                "sampling root is not certified at the current precision: {identity}: {strict:?}"
+            ),
+            "sampling root is not certified at the current precision: canonical physical overlap graph 'GL638' cut group 3: DidNotConverge { result: NewtonIterationResult { solution: F(VarFloat { float: 4.50096019182270793871156294720615053060112718361364618170932397734514711080987392331940322755100771019674059655008057236752740928154857006112161128562114855544422368074316508870600192219593565649427544978773164779121432253631794038806540811255813327701451237828689832176990555566921873234752788019943785e-2 }), derivative_at_solution: F(VarFloat { float: 15947.7515847915197382229906009716238684820639052766863102939247189292647433796806064815357943825914286672680520425869860307247589322869726693916868899181132224865883496823643904736774712938449859097464691001739892743096176224973672876047140085992981227937651521443373989485856759341750304597183394266484 }), error_of_function: F(VarFloat { float: -2.86698583604188839625755508139156634506370492325388705163790645185321035051758274904404068484469074644867580906595607334158997766559958751695315195045047528315210956637693486164171287342869042640210070772612642749923485444545310860535350764889727519890646541984079814999901126931044646673003826046088028e-298 }), num_iterations_used: 10 }, lower_bound: F(VarFloat { float: 4.50096019182270793871156294720615053060112718361364618170932397734514711080987392331940322755100771019674059655008057236752740928154857006112161128562114855544422368074316508870600192219593565649427544978773164779121432253631794038806540811255813327701451237828689832176990555566921873234752788019943785e-2 }), upper_bound: F(VarFloat { float: 4.50096019182270793871156294720615053060112718361364618170932397734514711080987392331940322755100771019674059655008057236752740928154857006112161128562114855544422368074316508870600192219593565649427544978773164779121432253631794038806540811255813327701451237828689832176990555566921873234752788019943844e-2 }) }"
+        );
+        let (_, certified) = surface
+            .solve_lu_cut(
+                &momentum,
+                &externals,
+                &masses,
+                lmb,
+                &e_cm,
+                &mut RadialRootDiagnostics::default(),
+                &identity,
+            )
+            .unwrap();
+        let SafeguardedNewtonError::DidNotConverge {
+            result,
+            lower_bound,
+            upper_bound,
+        } = strict
+        else {
+            panic!("retained physical source did not reproduce an exhausted bracket");
+        };
+        assert_eq!(result.solution, lower_bound);
+        assert_eq!(result.num_iterations_used, 10);
+        assert!(upper_bound > lower_bound);
+        let midpoint = (&lower_bound + &upper_bound) / one.from_i64(2);
+        assert!(midpoint == lower_bound || midpoint == upper_bound);
+        let width = &upper_bound - &lower_bound;
+        let budget = one.epsilon() * &e_cm;
+        assert_eq!(certified.solution, upper_bound);
+        assert_eq!(certified.num_iterations_used, result.num_iterations_used);
+        let (upper_value, upper_derivative) = ray.evaluate(&upper_bound);
+        assert_eq!(certified.error_of_function, upper_value);
+        assert_eq!(certified.derivative_at_solution, upper_derivative);
+        // Strict native convergence still fails. Only the already represented
+        // upper endpoint satisfies the unchanged bracket-resolution allowance.
+        assert!(
+            result.error_of_function.abs() > &budget + result.derivative_at_solution.abs() * &width
+        );
+        assert!(certified.error_of_function.abs() > budget);
+        assert!(
+            certified.error_of_function.abs()
+                <= &budget + certified.derivative_at_solution.abs() * &width
+        );
+        crate::debug_tags!(#integration, #cut, #solver;
+            stage = "canonical_physical_lu_root_setup",
+            cut_group = 3, physical_cut = 0,
+            initial_guess = %guess, original_residual_budget = %budget,
+            bracket_width = %width, file.ray = ?ray,
+            file.original_momenta = ?momentum, file.original_result = ?result,
+            "actual captured physical ray and unchanged LU solver policy"
+        );
+        for (endpoint, radius) in [("lower", &lower_bound), ("upper", &upper_bound)] {
+            let (value, derivative) = ray.evaluate(radius);
+            let enclosed = surface
+                .evaluate_routed_enclosed(radius, &momentum, &externals, &masses, lmb)
+                .unwrap();
+            assert!(!derivative.is_nan() && !derivative.is_infinite() && derivative > zero);
+            assert!(enclosed.iter().all(|value| value.is_finite()));
+            let resolution_budget = &budget + derivative.abs() * &width;
+            let allowed = budget.0.mpfr_enclosure(2048).0;
+            let native_strict = value.abs() <= budget;
+            let native_resolution = value.abs() <= resolution_budget;
+            let original_strict = enclosed[0] >= -allowed.clone() && enclosed[1] <= allowed;
+            assert!(
+                original_strict,
+                "{endpoint} violates the original equation budget"
+            );
+            crate::debug_tags!(#integration, #cut, #solver;
+                stage = "canonical_physical_lu_root_endpoint", endpoint,
+                radius = %radius, native_residual = %value, derivative = %derivative,
+                original_residual_lower = %enclosed[0], original_residual_upper = %enclosed[1],
+                original_residual_budget = %budget, resolution_budget = %resolution_budget,
+                native_strict, native_resolution, original_strict,
+                "both represented endpoints satisfy the unchanged original equation budget"
+            );
+        }
+
+        // This adversarial callback preserves the actual energy values but deliberately
+        // supplies the wrong derivative only at the alternate endpoint. Its residual
+        // fits the resolution allowance; its own four-probe slope check must reject it.
+        let inconsistent_derivative = |radius: &F<ArbPrec>| {
+            let (value, derivative) = ray.evaluate(radius);
+            let derivative = if radius == &upper_bound {
+                derivative * one.from_i64(8)
+            } else {
+                derivative
+            };
+            (value, derivative)
+        };
+        let invalid_strict = safeguarded_newton_iteration_and_derivative(
+            &zero,
+            &guess,
+            inconsistent_derivative,
+            &one,
+            2000,
+            64,
+            &e_cm,
+        )
+        .unwrap_err();
+        let SafeguardedNewtonError::DidNotConverge {
+            result: invalid_result,
+            lower_bound: invalid_lower,
+            upper_bound: invalid_upper,
+        } = &invalid_strict
+        else {
+            panic!("adversarial callback changed the structural failure");
+        };
+        assert!(invalid_result.num_iterations_used >= 4);
+        assert_eq!(invalid_result.solution, lower_bound);
+        assert_eq!(*invalid_lower, lower_bound);
+        assert_eq!(*invalid_upper, upper_bound);
+        let (alternate_value, wrong_derivative) = inconsistent_derivative(&upper_bound);
+        assert!(alternate_value.abs() <= &budget + wrong_derivative * &width);
+        let rejected = RadialRootDiagnostics::default()
+            .solve(
+                &RadialRootIdentity::new("adversarial alternate endpoint derivative".into()),
+                &zero,
+                &guess,
+                inconsistent_derivative,
+                &one,
+                2000,
+                64,
+                &e_cm,
+            )
+            .unwrap_err();
+        assert_eq!(format!("{rejected:?}"), format!("{invalid_strict:?}"));
+    }
+
+    #[test]
     fn phase_space_cut_root_replays_canonical_foreign_inverse_cancellation() {
         test_initialise().unwrap();
         // GL638 Halton3363: the hosted joint's ordinary fallback generated this

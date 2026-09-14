@@ -54,9 +54,9 @@ impl LocalRootConsistency {
         inside_radius: &F<T>,
         f_x_and_df_x: &impl Fn(&F<T>) -> (F<T>, F<T>),
     ) -> Self {
-        // The two symmetric probes below cost four function evaluations in total. Refuse rescue
-        // without probing when a caller attempted fewer iterations, so this diagnostic can never
-        // evaluate the E-surface more often than the failed Newton solve it is validating.
+        // The two symmetric probes cost four function evaluations per candidate. Refuse this
+        // check when the caller attempted fewer iterations, so each consistency check costs no
+        // more than the failed solve. Alternate-endpoint certification can check both candidates.
         const PROBE_EVALUATIONS: usize = 4;
         if result.num_iterations_used < PROBE_EVALUATIONS {
             return Self::invalid();
@@ -296,6 +296,8 @@ impl RadialRootObservation {
 /// change across that one representable radius interval: `|f| <= tau*epsilon*E_cm + |f'|*width`.
 /// Acceptance also requires local sign/slope consistency. This is a numerical root-resolution check under the solver's
 /// continuity assumption, not a forward-error bound for an arbitrary callback.
+/// If the last candidate remains uncertified, the other exhausted-bracket endpoint
+/// is checked under the same policy, without changing any already accepted result.
 ///
 /// A higher-precision solve may also recover a residual-limited root when it reaches the
 /// original lower-precision accuracy target and clearly improves the same root. All
@@ -421,36 +423,42 @@ impl RadialRootDiagnostics {
         // The exhausted bracket resolves the root only to its endpoint separation.
         // Its Newton correction may therefore exceed the original energy-residual target
         // divided by the derivative by at most that width; no fixed ulp multiplier is used.
-        let resolution_residual_limit = inside_radius.epsilon() * tolerance * e_cm
-            + result.derivative_at_solution.abs() * &bracket_width;
-        if bracket_is_exhausted
-            && is_finite(&resolution_residual_limit)
-            && current.values_are_finite()
-            && current.bracket_is_valid
-            && result.solution > inside_radius.zero()
-            && result.derivative_at_solution > inside_radius.zero()
-            && current
-                .local_consistency
-                .as_ref()
-                .is_some_and(|consistency| consistency.is_valid)
-            && result.error_of_function.abs() <= resolution_residual_limit
-        {
-            debug!(
-                radial_root = %identity,
-                occurrence = call_key.1,
-                current_epsilon = %current.precision_epsilon,
-                current_residual = %current.residual,
-                original_residual_limit = %current.maximum_residual,
-                resolution_residual_limit = %resolution_residual_limit,
-                bracket_width = %bracket_width,
-                solution = %current.solution,
-                derivative = %current.derivative,
-                lower_bound = ?current.lower_bound,
-                upper_bound = ?current.upper_bound,
-                relative_newton_correction = %current.relative_newton_correction,
-                local_consistency = ?current.local_consistency,
-                "accepted a radial root at the representable bracket resolution"
-            );
+        let accepts_resolution =
+            |candidate: &NewtonIterationResult<T>, observation: &RadialRootObservation| {
+                let resolution_residual_limit = inside_radius.epsilon() * tolerance * e_cm
+                    + candidate.derivative_at_solution.abs() * &bracket_width;
+                let accepted = bracket_is_exhausted
+                    && is_finite(&resolution_residual_limit)
+                    && observation.values_are_finite()
+                    && observation.bracket_is_valid
+                    && candidate.solution > inside_radius.zero()
+                    && candidate.derivative_at_solution > inside_radius.zero()
+                    && observation
+                        .local_consistency
+                        .as_ref()
+                        .is_some_and(|consistency| consistency.is_valid)
+                    && candidate.error_of_function.abs() <= resolution_residual_limit;
+                if accepted {
+                    debug!(
+                        radial_root = %identity,
+                        occurrence = call_key.1,
+                        current_epsilon = %observation.precision_epsilon,
+                        current_residual = %observation.residual,
+                        original_residual_limit = %observation.maximum_residual,
+                        resolution_residual_limit = %resolution_residual_limit,
+                        bracket_width = %bracket_width,
+                        solution = %observation.solution,
+                        derivative = %observation.derivative,
+                        lower_bound = ?observation.lower_bound,
+                        upper_bound = ?observation.upper_bound,
+                        relative_newton_correction = %observation.relative_newton_correction,
+                        local_consistency = ?observation.local_consistency,
+                        "accepted a radial root at the representable bracket resolution"
+                    );
+                }
+                accepted
+            };
+        if accepts_resolution(result, &current) {
             self.record_observation(call_key, current);
             return Ok(result.clone());
         }
@@ -499,6 +507,48 @@ impl RadialRootDiagnostics {
             );
             self.record_observation(call_key, current);
             return Ok(result.clone());
+        }
+
+        // Preserve both accepted paths above. Exhaustion may leave the last
+        // candidate at the less accurate endpoint; test the other represented
+        // endpoint with the same residual budget and fresh consistency probes.
+        let alternate_radius = if result.solution == *lower_bound {
+            Some(upper_bound)
+        } else if result.solution == *upper_bound {
+            Some(lower_bound)
+        } else {
+            None
+        };
+        if bracket_is_exhausted
+            && lower_bound < upper_bound
+            && current.values_are_finite()
+            && current.bracket_is_valid
+            && result.solution > inside_radius.zero()
+            && result.derivative_at_solution > inside_radius.zero()
+            && let Some(radius) = alternate_radius
+        {
+            let (value, derivative) = f_x_and_df_x(radius);
+            let alternate = NewtonIterationResult {
+                solution: radius.clone(),
+                derivative_at_solution: derivative,
+                error_of_function: value,
+                num_iterations_used: result.num_iterations_used,
+            };
+            let observation = RadialRootObservation::new(
+                &alternate,
+                Some((lower_bound, upper_bound)),
+                Some(LocalRootConsistency::check(
+                    &alternate,
+                    inside_radius,
+                    &f_x_and_df_x,
+                )),
+                tolerance,
+                e_cm,
+            );
+            if accepts_resolution(&alternate, &observation) {
+                self.record_observation(call_key, observation);
+                return Ok(alternate);
+            }
         }
 
         if let Some(previous) = previous.as_ref() {
@@ -1052,6 +1102,19 @@ mod tests {
             error,
             SafeguardedNewtonError::InvalidDerivative { .. }
         ));
+        let diagnosed = RadialRootDiagnostics::default()
+            .solve(
+                &RadialRootIdentity::new("structurally invalid derivative".into()),
+                &F(0.0),
+                &F(1.0),
+                |x| (x - F(1.0), F(0.0)),
+                &F(8.0),
+                40,
+                64,
+                &F(1.0),
+            )
+            .unwrap_err();
+        assert_eq!(format!("{diagnosed:?}"), format!("{error:?}"));
     }
 
     #[test]

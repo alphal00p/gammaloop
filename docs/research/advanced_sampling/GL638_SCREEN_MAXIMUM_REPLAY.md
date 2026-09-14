@@ -49,5 +49,6 @@ not standalone timing evidence. Source/build5 and physical settings are unchange
 
 The [confirmation interruption](GL638_CONFIRMATION_ROOT.md) is separate:
 three completed runs are retained without pooling after the ordinary baseline
-fails canonical physical root certification at its next seed. A restored
-confirmation and supported cross-section estimate remain pending.
+fails canonical physical root certification at its next seed. Its [endpoint repair](CANONICAL_LU_ENDPOINT_CERTIFICATION.md)
+now passes the exact physical replay. A restored confirmation and supported
+cross-section estimate remain pending.

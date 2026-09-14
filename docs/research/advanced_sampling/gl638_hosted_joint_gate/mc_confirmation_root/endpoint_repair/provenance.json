@@ -1,0 +1,75 @@
+{
+  "status": "completed_source_gates_build7_and_exact_physical_replay",
+  "intended_repository_directory": "docs/research/advanced_sampling/gl638_hosted_joint_gate/mc_confirmation_root/endpoint_repair",
+  "original_interruption": "../attempt1/provenance.json",
+  "source_freeze": {
+    "base_commit": "3e68f16588b8272c0f88513c0c43305b5d67a059",
+    "patch_sha256": "3f5669ae1de62c09b26d4aa3888cecd47058a786f00e0893bac7bfd191910588",
+    "files": {
+      "crates/gammalooprs/src/cff/esurface.rs": "e8e0dac636e02f8098beab808d85edb6ef7575febabebbdb02247c9ae9b3ef03",
+      "crates/gammalooprs/src/utils/newton_solver.rs": "05c829632745d8816862f65371cf87b93524af72e6e94946ca8e02060e56966f"
+    }
+  },
+  "endpoint_evidence": {
+    "precision_bits": 1000,
+    "LU_tolerance": 1,
+    "Ecm_GeV": 1000,
+    "maximum_iterations": 2000,
+    "maximum_bracket_expansions": 64,
+    "analysis": "Audited Decimal700 parsing of exact retained diagnostic log; no standalone parsing script was retained. Original log and pre-repair test source are preserved."
+  },
+  "interrupted_build6": {
+    "status": "intentionally_interrupted_no_success_claim",
+    "returncode": -2,
+    "elapsed_seconds": 38.638457269989885,
+    "reason": "Root stopped this build for two test-only clippy borrow warnings and a stronger negative-case iteration assertion. Production solver source remained identical.",
+    "finished_utc": "2026-09-14T12:06:40.778941+00:00"
+  },
+  "build7": {
+    "status": "completed",
+    "accepted": true,
+    "returncode": 0,
+    "elapsed_seconds": 443.487132797949,
+    "source_unchanged": true,
+    "source_patch_sha256": "3f5669ae1de62c09b26d4aa3888cecd47058a786f00e0893bac7bfd191910588",
+    "build_record": "build7/manifest.json.gz",
+    "finished_utc": "2026-09-14T12:17:56.048822+00:00"
+  },
+  "captured_physics_replay": {
+    "status": "completed_captured_replay",
+    "passed": true,
+    "returncode": 0,
+    "elapsed_seconds": 74.05580940889195,
+    "summary": "replay/summary.json.gz",
+    "accuracy_audit": "replay/accuracy_audit.json.gz",
+    "checks": 25,
+    "failed_checks": 0,
+    "own_component_relative_misses": 1,
+    "precisions": [
+      "Double",
+      "Arb"
+    ],
+    "canonical_map_exact": true,
+    "complete_sample_exact": true,
+    "six_cuts_per_call": true,
+    "unchanged_state_hashes": 35,
+    "total_relative_complex_error": "1.3641134010585204803994099006135249559289560205456654828026975212003752453145121450015150835204150170903437607347098497844785058580756924096466398905086698782958628534750822691398631964194843308183332304583283137053967085512995129373742296987598921507575751740805932187541283867483713203288448270075337273234636339546766649269926653926210061334725674E-13",
+    "pair_tolerance": "0.000001000001",
+    "component_miss_scope": "cut2 Re Double zero versus Arb3.8747858e-565; whole-total-scale cut criterion passes, ordinary lane is Stable.",
+    "request": "replay_preparation/request_build7.json.gz",
+    "old_request_retained": "replay_preparation/request_build6.json.gz",
+    "source_unchanged": true
+  },
+  "archive_convention": {
+    "hashes": "All hashes/sizes refer to uncompressed content; every .log/.patch is gzip. Original input files and prior archives remain unchanged. No executable or generated-process saved-state payload is copied.",
+    "pending_outputs": "Only completed source/build/replay evidence is copied. The earlier source_audit and gates summary retain their snapshot with build/physics pending; this provenance and later records supply completed validation.",
+    "references": "Prior immutable capture records are relative references valid in the intended repository directory."
+  },
+  "limits": [
+    "The captured failure is repaired and both precise calls pass unchanged numerical criteria. This is not a fresh completed confirmation or a final cross-section estimate.",
+    "Original directed endpoint intervals show finite residual accuracy, not exact zero.",
+    "The interrupted confirmation remains unpooled; methods, seeds, sample counts, cards and frozen selection stay unchanged.",
+    "The original native metric is reused. One tiny own-component relative miss is retained, not reclassified as unstable.",
+    "Read-only state calls: one worker, original settings with event-retention overlay only; no timing scalability claim."
+  ]
+}

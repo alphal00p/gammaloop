@@ -1,0 +1,129 @@
+{
+  "status": "completed_source_gates_passed",
+  "source_gates_passed": true,
+  "environment_common": {
+    "source": "/tmp/gammaloop-rebase-dev-env.sh",
+    "SYMBOLICA_LICENSE": "supplied existing license; value not archived",
+    "CARGO_BUILD_JOBS": "2"
+  },
+  "broader": {
+    "passed": 35,
+    "failed": 0,
+    "seconds": 470.16,
+    "run_id": "b9870a75-22ea-4b91-b9b7-b3b822d12092",
+    "source_files": {
+      "crates/gammalooprs/src/cff/esurface.rs": "bfe73772069c99fb76931fba957928c1c8cadb5ac554cf9d3d74d873ece932d1",
+      "crates/gammalooprs/src/utils/newton_solver.rs": "05c829632745d8816862f65371cf87b93524af72e6e94946ca8e02060e56966f"
+    },
+    "argv": [
+      "cargo",
+      "nextest",
+      "run",
+      "--locked",
+      "--offline",
+      "-p",
+      "gammalooprs",
+      "--lib",
+      "--profile",
+      "test_gammaloop",
+      "--test-threads",
+      "4",
+      "-E",
+      "test(utils::newton_solver::tests) | test(canonical_physical_lu_root_) | test(phase_space_cut_root_) | test(radial_guesses_and_lu_roots_) | test(routed_enclosure_preserves_) | test(implicit_sampling_map_uses_) | test(implicit_surface_solver_certifies_) | test(lu_h_radial_profile_) | test(standalone_cut_sampling_) | test(lu_h_sampling_preserves_) | test(conditional_cut_sampling_) | test(hosted_joint_kite_)",
+      "--failure-output",
+      "immediate"
+    ],
+    "environment": {
+      "RAYON_NUM_THREADS": "4",
+      "GL_DISPLAY_FILTER": "off"
+    },
+    "scope": "Production repair final; fixture precedes two borrow cleanups and one strengthened negative assertion."
+  },
+  "final_fixture": {
+    "passed": 1,
+    "failed": 0,
+    "seconds": 1.244,
+    "run_id": "ac88018a-67c6-4239-9519-9d4c232d20fe",
+    "source_files": {
+      "crates/gammalooprs/src/cff/esurface.rs": "e8e0dac636e02f8098beab808d85edb6ef7575febabebbdb02247c9ae9b3ef03",
+      "crates/gammalooprs/src/utils/newton_solver.rs": "05c829632745d8816862f65371cf87b93524af72e6e94946ca8e02060e56966f"
+    },
+    "argv": [
+      "cargo",
+      "nextest",
+      "run",
+      "--locked",
+      "--offline",
+      "-p",
+      "gammalooprs",
+      "--lib",
+      "--profile",
+      "test_gammaloop",
+      "--test-threads",
+      "1",
+      "-E",
+      "test(canonical_physical_lu_root_resolves_retained_bracket_endpoints)",
+      "--success-output",
+      "immediate",
+      "--failure-output",
+      "immediate"
+    ],
+    "environment": {
+      "RAYON_NUM_THREADS": "1",
+      "GL_DISPLAY_FILTER": "off"
+    },
+    "scope": "Final strengthened fixture on final source snapshot; overlaps one broader test rather than adding a 36th unique test."
+  },
+  "format": {
+    "passed": true,
+    "argv": [
+      "cargo",
+      "fmt",
+      "--all",
+      "--",
+      "--check"
+    ]
+  },
+  "check": {
+    "passed": true,
+    "seconds": 12.62,
+    "argv": [
+      "cargo",
+      "check",
+      "--locked",
+      "--offline",
+      "-p",
+      "gammalooprs",
+      "--lib",
+      "--tests"
+    ]
+  },
+  "clippy": {
+    "passed": true,
+    "diagnostics": 52,
+    "changed_line_diagnostics": 0,
+    "argv": [
+      "cargo",
+      "clippy",
+      "--locked",
+      "--offline",
+      "-p",
+      "gammalooprs",
+      "--lib",
+      "--tests",
+      "--message-format=json"
+    ]
+  },
+  "optimized_build7": {
+    "status": "pending",
+    "accepted": null
+  },
+  "captured_source_physics": {
+    "status": "pending",
+    "passed": null
+  },
+  "fresh_confirmation": {
+    "status": "not_started",
+    "passed": null
+  }
+}
