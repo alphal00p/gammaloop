@@ -266,6 +266,7 @@ let
     TYPST_FONT_PATHS = docsFontPath;
     TYPST_PACKAGE_CACHE_PATH = "${docsTypst}/lib/typst/packages";
     ALPHAL00P_DOCS_CARGO_PROFILE = docsCargoProfile;
+    SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
     doNotLinkInheritedArtifacts = true;
     doInstallCargoArtifacts = false;
     checkPhaseCargoCommand = "";
