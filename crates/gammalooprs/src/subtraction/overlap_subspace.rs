@@ -43,8 +43,10 @@ mod regression_tests;
 pub struct OverlapGroup {
     pub existing_esurfaces: Vec<ExistingEsurfaceId>,
     pub complement: Vec<ExistingEsurfaceId>,
-    /// LU overlap centers are stored in the current probe and cut-side LMB frame.
-    /// Solver-derived centers therefore require no further rotation at consumption.
+    /// Centers use the preparation frame and cut-side LMB. Physical LU prepares
+    /// once at canonical identity; consumption promotes the stored bits exactly
+    /// before rotating active vectors in the native precision. Other direct
+    /// solver callers retain their explicitly supplied preparation frame.
     pub center: LoopMomenta<F<f64>>,
 }
 

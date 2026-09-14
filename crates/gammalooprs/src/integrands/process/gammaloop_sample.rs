@@ -3,6 +3,11 @@ use crate::integrands::evaluation::EvaluationMetaData;
 use crate::integrands::process::{GraphTerm, SamplingMomentumSampleContext};
 use crate::momentum::sample::MomentumSample;
 use crate::momentum::{Rotation, ThreeMomentum};
+use crate::processes::CutGroupId;
+use crate::subtraction::lu_counterterm::LUSharedOverlaps;
+use crate::utils::ArbPrec;
+use std::sync::Arc;
+use typed_index_collections::TiVec;
 
 use crate::utils::{self, F, FloatLike, global_parameterize};
 use crate::{
@@ -73,6 +78,9 @@ pub(crate) struct DiscreteGraphSample<T: FloatLike> {
     /// Initial selected-map authority remains unrotated. Physical adoption
     /// rotates its rays once and verifies them against the completed sample.
     pub(crate) prepared_lu_hosts: Vec<PreparedLUHost<T>>,
+    /// Physical center decisions belong to the original point and accepted cut
+    /// set. Native rows retain this unrotated Arb authority across all retries.
+    pub(crate) physical_overlaps: Option<Arc<TiVec<CutGroupId, Option<LUSharedOverlaps<ArbPrec>>>>>,
     pub(crate) sample: MomentumSample<T>,
     /// Tropical compensation historically multiplies only the integrand, while
     /// map/partition factors also multiply events and reference moments.
@@ -191,6 +199,7 @@ impl<T: FloatLike> GammaLoopSample<T> {
                             graph_id,
                             channel_id: None,
                             prepared_lu_hosts: vec![],
+                            physical_overlaps: None,
                             integrand_prefactor: sample.one(),
                             sample,
                         })
@@ -232,6 +241,7 @@ impl<T: FloatLike> GammaLoopSample<T> {
                 integrand_prefactor: sample.one(),
                 // Foreign group members have their own physical cuts and cannot
                 // adopt the master's ray, even when cut IDs happen to coincide.
+                physical_overlaps: None,
                 prepared_lu_hosts: if graph_id == master {
                     prepared_lu_hosts.clone()
                 } else {
@@ -272,7 +282,57 @@ impl<T: FloatLike> GammaLoopSample<T> {
     }
 }
 
-impl GammaLoopSample<crate::utils::ArbPrec> {
+impl GammaLoopSample<ArbPrec> {
+    pub(crate) fn prepare_physical_overlaps<I: ProcessIntegrandImpl>(
+        &mut self,
+        integrand: &mut I,
+        model: &crate::model::Model,
+        metadata: &mut EvaluationMetaData,
+    ) -> Result<()> {
+        let settings = integrand.get_settings().clone();
+        if settings.subtraction.disable_threshold_subtraction {
+            return Ok(());
+        }
+        let rotation = Rotation::new(crate::momentum::RotationMethod::Identity);
+        let mut runtime = integrand.take_event_processing_runtime();
+        let history = std::mem::take(&mut metadata.radial_root_diagnostics);
+        let started = std::time::Instant::now();
+        let result = (|| {
+            for row in self.groups.iter_mut().flat_map(|(_, rows)| rows) {
+                row.physical_overlaps = integrand
+                    .get_graph_mut(row.graph_id)
+                    .prepare_physical_overlaps(
+                        &row.sample,
+                        super::GraphTermEvaluationContext {
+                            model,
+                            settings: &settings,
+                            event_processing_runtime: runtime.as_mut(),
+                            rotation: &rotation,
+                            evaluation_metadata: metadata,
+                            record_primary_timing: false,
+                            // An explicitly channel-dependent selector retains
+                            // its user-requested metadata; geometry never uses it.
+                            sampling_channel: row.channel_id,
+                            graph_id: row.graph_id,
+                            prepared_lu_hosts: &[],
+                            canonical_sample: None,
+                            sampling_accuracy_budget: Self::relative_accuracy_budget(&settings),
+                        },
+                    )?
+                    .map(Arc::new);
+            }
+            Ok(())
+        })();
+        let elapsed = started.elapsed();
+        metadata.integrand_evaluation_time += elapsed;
+        metadata.canonical_physical_preparation_time += elapsed;
+        // These roots describe fixed physical preparation, not native retry
+        // occurrences. Selectors must not consume observable or event counts.
+        metadata.radial_root_diagnostics = history;
+        integrand.restore_event_processing_runtime(runtime);
+        result
+    }
+
     /// Convert directly from the retained canonical output, never from an
     /// earlier physical lane. The combined factor is not recomputed from
     /// separately rounded map and partition values.
@@ -319,6 +379,7 @@ impl GammaLoopSample<crate::utils::ArbPrec> {
                             channel_id: row.channel_id,
                             sample,
                             integrand_prefactor,
+                            physical_overlaps: row.physical_overlaps.clone(),
                             prepared_lu_hosts: row
                                 .prepared_lu_hosts
                                 .iter()
@@ -512,6 +573,7 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
                             graph_id,
                             channel_id: Some(selected),
                             prepared_lu_hosts: mapped.prepared_lu_hosts,
+                            physical_overlaps: None,
                             integrand_prefactor: sample.one(),
                             sample,
                         });
@@ -679,6 +741,7 @@ mod tests {
                     graph_id: 4,
                     channel_id: Some(SamplingChannelId(11)),
                     prepared_lu_hosts: vec![],
+                    physical_overlaps: None,
                     integrand_prefactor: sample.one(),
                     sample,
                 }],
@@ -725,6 +788,7 @@ mod tests {
                     graph_id: 0,
                     channel_id: None,
                     prepared_lu_hosts: vec![],
+                    physical_overlaps: None,
                     integrand_prefactor: sample.one(),
                     sample,
                 }],
@@ -780,6 +844,7 @@ mod tests {
                         graph_id: 0,
                         channel_id: Some(SamplingChannelId(id)),
                         prepared_lu_hosts: vec![],
+                        physical_overlaps: None,
                         integrand_prefactor: sample.one(),
                         sample,
                     })

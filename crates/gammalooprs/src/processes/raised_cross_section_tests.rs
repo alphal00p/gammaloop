@@ -1467,7 +1467,7 @@ fn conditional_cut_sampling_preserves_both_sides_and_raised_sum() {
         .spawn(|| {
             use crate::{
                 DependentMomentaConstructor,
-                graph::LmbIndex,
+                graph::{GroupId, LmbIndex},
                 integrands::process::{
                     GaussianReferenceFunction, GraphTerm, MomentumSpaceEvaluationInput,
                     SamplingChannelBridge, SamplingChannelBridgeAcceptanceReport, SamplingChannelId,
@@ -1990,6 +1990,7 @@ fn conditional_cut_sampling_preserves_both_sides_and_raised_sum() {
                 let summed_reference = integrand
                     .evaluate_reference_sample_detailed(&sample, &reference)
                     .unwrap();
+                assert_eq!(summed_reference.evaluation.evaluation_metadata.canonical_physical_preparation_time, std::time::Duration::ZERO);
                 let summed = integrand
                     .evaluate_samples_raw(
                         EvaluationTarget::Physical(&model),
@@ -2002,6 +2003,8 @@ fn conditional_cut_sampling_preserves_both_sides_and_raised_sum() {
                     .unwrap()
                     .samples
                     .remove(0);
+                assert!(summed.evaluation_metadata.canonical_physical_preparation_time > std::time::Duration::ZERO);
+                assert!(summed.evaluation_metadata.integrand_evaluation_time >= summed.evaluation_metadata.canonical_physical_preparation_time);
                 assert!(
                     !summed.evaluation_metadata.is_nan,
                     "{}",
@@ -2137,6 +2140,40 @@ fn conditional_cut_sampling_preserves_both_sides_and_raised_sum() {
                         < 1.0e-8 * summed.integrand_result.im.0.abs().max(1.0e-25)
                 );
 
+                // Explicit channel selectors retain the source metadata in the
+                // canonical prepass. Bare raw input has no artificial channel;
+                // its empty accepted set must agree in every physical probe.
+                let mut channel_filtered = integrand.clone();
+                channel_filtered.get_mut_settings().quantities.insert(
+                    "source_channel".into(), crate::observables::QuantitySettings::SamplingChannelId {},
+                );
+                channel_filtered.get_mut_settings().selectors.insert(
+                    "source_channel".into(), serde_json::from_value(serde_json::json!({
+                        "quantity": "source_channel", "active": true,
+                        "selector": "discrete_range", "min": channel.0, "max": channel.0,
+                    })).unwrap(),
+                );
+                channel_filtered.warm_up(&model).unwrap();
+                let rejected = channel_filtered.evaluate_momentum_configuration(
+                    &model, &MomentumSpaceEvaluationInput {
+                        loop_momenta: to_loops(&mapped.raw_coordinates).0,
+                        integrator_weight: F(1.0), graph_id: None, group_id: Some(GroupId(0)),
+                        orientation: None, channel_id: None,
+                    }, false,
+                ).unwrap();
+                assert!(!rejected.evaluation_metadata.is_nan);
+                assert_eq!(rejected.integrand_result, Complex::new(F(0.0), F(0.0)));
+                assert_eq!(rejected.evaluation_metadata.accepted_event_count, 0);
+                let accepted = channel_filtered.evaluate_samples_raw(
+                    EvaluationTarget::Physical(&model),
+                    &[Sample::Discrete(F(1.0), 0, Some(Box::new(Sample::Discrete(
+                        F(1.0), channel.0, Some(Box::new(sample.clone())),
+                    ))))], 0, false, false, Complex::new(F(0.0), F(0.0)),
+                ).unwrap().samples.remove(0);
+                assert!(!accepted.evaluation_metadata.is_nan, "{}", accepted.evaluation_metadata);
+                assert!(accepted.integrand_result.re.0.abs() + accepted.integrand_result.im.0.abs() > 0.0);
+                assert!(accepted.evaluation_metadata.accepted_event_count > 0);
+
                 // CT-off never fills the overlap sample cache. Its actual
                 // raised-cut result must still equal the retained original
                 // cut weights, with the same direct/selected sampling factors.
@@ -2160,6 +2197,7 @@ fn conditional_cut_sampling_preserves_both_sides_and_raised_sum() {
                     0, false, false, Complex::new(F(0.0), F(0.0)),
                 ).unwrap().samples.remove(0);
                 for result in [&bare, &selected] {
+                    assert_eq!(result.evaluation_metadata.canonical_physical_preparation_time, std::time::Duration::ZERO);
                     assert!(!result.evaluation_metadata.is_nan);
                     assert!(result.integrand_result.re.0.is_finite() && result.integrand_result.im.0.is_finite());
                     assert!(result.integrand_result.re.0.abs() + result.integrand_result.im.0.abs() > 0.0);

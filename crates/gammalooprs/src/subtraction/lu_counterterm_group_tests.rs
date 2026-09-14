@@ -318,6 +318,7 @@ fn shared_group_weights_preserve_foreign_cut_data_and_radial_derivatives() {
         let mut projection_masses = masses.clone();
         projection_masses[selected] = f(3.0);
         let mut evaluator = generate_rstar_t_dependence_evaluator(3).unwrap();
+        let mut checked_center_rotation = false;
         for native_lmb in [graph.loop_momentum_basis.clone(), alternate] {
             let native_lmbs = ti_vec![native_lmb];
             let native_lmb = &native_lmbs[LmbIndex::from(0)];
@@ -416,6 +417,98 @@ fn shared_group_weights_preserve_foreign_cut_data_and_radial_derivatives() {
                     CutGroupId(0),
                     &shared_context,
                 );
+                if !checked_center_rotation {
+                    checked_center_rotation = true;
+                    // Retain one nonzero identity center with a non-dyadic f64
+                    // coordinate. Both actual consumers must promote its bits
+                    // before rotation, including complete-member validation.
+                    let mut canonical_overlap = overlap.clone();
+                    canonical_overlap.overlap_groups[0].center[normal].py = F(0.1);
+                    type RadialGeometry<T> = (F<T>, F<T>, LoopMomenta<F<T>>);
+                    let mut identity_geometry: Option<RadialGeometry<T>> = None;
+                    for method in [
+                        RotationMethod::Identity,
+                        RotationMethod::EulerAngles(0.1, 0.2, 0.3),
+                        RotationMethod::Pi2Z,
+                    ] {
+                        let rotation = Rotation::new(method);
+                        let mut rotated_point = builder.kinematic_point.clone();
+                        rotated_point.unrescaled_sample =
+                            rotated_point.unrescaled_sample.rotate(&rotation, 0, 0);
+                        for sample in &mut rotated_point.dualized_momentum_sample_cache {
+                            *sample = sample.rotate(&rotation, 0, 0);
+                        }
+                        let rotated_group = Arc::new(ThresholdSolveGroup {
+                            thresholds: shared.thresholds.clone(),
+                            subspace: shared.subspace.clone(),
+                            kinematics: shared
+                                .kinematics
+                                .iter()
+                                .map(|sample| sample.rotate(&rotation, 0, 0))
+                                .collect(),
+                            records: shared.records.clone(),
+                            overlap: canonical_overlap.clone(),
+                            prefactor_power: shared.prefactor_power,
+                        });
+                        let contexts = [(Arc::clone(&rotated_group), 0)];
+                        let rotated_builder = CounterTermBuilder::new(
+                            graph,
+                            &settings,
+                            &rotated_group.thresholds,
+                            rotated_point,
+                            &canonical_overlap,
+                            &projection_masses,
+                            &native_lmbs,
+                            &full_subspace,
+                            None,
+                            &rotation,
+                            CutGroupId(0),
+                            &contexts,
+                        );
+                        let adopted = rotated_builder.new_overlap_builder(0, EsurfaceID(0));
+                        let expected = canonical_overlap.overlap_groups[0].center[normal]
+                            .map(&|value| F(T::from_f64_exact_binary(value.0)))
+                            .rotate(&rotation);
+                        assert_eq!(adopted.center[normal], expected);
+                        if rotation.is_identity() {
+                            assert_eq!(adopted.center[normal].py.0, T::from_f64_exact_binary(0.1));
+                        }
+                        let root = adopted
+                            .new_esurface_builder(ExistingEsurfaceId::from(0))
+                            .solve_rstar(
+                                &mut evaluator,
+                                &RadialRootIdentity::new("native canonical center rotation".into()),
+                                &mut RadialRootDiagnostics::default(),
+                            )
+                            .expect("the same canonical center remains inside the rotated sphere");
+                        let star = root.base_rstar_loop_momenta();
+                        let residual = surface.compute_from_momenta(
+                            native_lmb,
+                            &projection_masses,
+                            &star,
+                            adopted
+                                .transformed_kinematic_point
+                                .representative_sample()
+                                .external_moms(),
+                        );
+                        let tolerance = tau.epsilon().sqrt() * f(100.0);
+                        assert!(residual.abs() < &tolerance * f(10.0));
+                        if let Some((radius, alpha, original_star)) = &identity_geometry {
+                            assert!((&adopted.radius - radius).abs() < &tolerance * radius);
+                            assert!((&root.alpha - alpha).abs() < &tolerance * alpha);
+                            for (actual, expected) in
+                                star.iter().zip(original_star.rotate(&rotation).iter())
+                            {
+                                assert!((&actual.px - &expected.px).abs() < &tolerance * f(100.0));
+                                assert!((&actual.py - &expected.py).abs() < &tolerance * f(100.0));
+                                assert!((&actual.pz - &expected.pz).abs() < &tolerance * f(100.0));
+                            }
+                        } else {
+                            identity_geometry =
+                                Some((adopted.radius.clone(), root.alpha.clone(), star));
+                        }
+                    }
+                }
                 let overlap_builder = builder.new_overlap_builder(0, EsurfaceID(0));
                 let solution = overlap_builder
                     .new_esurface_builder(ExistingEsurfaceId::from(0))

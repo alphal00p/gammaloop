@@ -62,7 +62,7 @@ use crate::{
         generate_rstar_t_dependence_evaluator,
         lu_counterterm::{
             LUCTKinematicPoint, LUCounterTerm, LUCounterTermEvaluators, LUCountertermEvaluation,
-            LUThresholdHelperEvaluators, LUVariantSubspaces,
+            LUSharedOverlaps, LUThresholdHelperEvaluators, LUVariantSubspaces,
         },
     },
     utils::{
@@ -2548,6 +2548,78 @@ impl GraphTerm for CrossSectionGraphTerm {
         Ok(())
     }
 
+    fn prepare_physical_overlaps(
+        &mut self,
+        sample: &MomentumSample<ArbPrec>,
+        mut context: GraphTermEvaluationContext<'_, '_, ArbPrec>,
+    ) -> Result<Option<TiVec<CutGroupId, Option<LUSharedOverlaps<ArbPrec>>>>> {
+        let masses = self.graph.get_real_mass_vector(context.model);
+        let e_cm = F::from_f64(context.settings.kinematics.e_cm);
+        let mut representatives = Vec::new();
+        for (cut_group_id, group) in self.cut_group_data.cut_groups.iter_enumerated() {
+            if !self.counterterm.cut_group_is_active(cut_group_id) {
+                continue;
+            }
+            let cut_id = group.cuts[0];
+            // The center prescription uses the complete physical equation in
+            // the generation parent for every channel, including bare raw input.
+            // Native evaluation keeps its existing host adoption and root owner.
+            let identity = RadialRootIdentity::new(format!(
+                "canonical physical overlap graph '{}' cut group {}",
+                self.graph.name, cut_group_id.0,
+            ));
+            let (_, solution) = self.cut_esurface[cut_id]
+                .solve_lu_cut(
+                    sample.loop_moms(),
+                    sample.external_moms(),
+                    &masses,
+                    &self.graph.loop_momentum_basis,
+                    &e_cm,
+                    &mut context.evaluation_metadata.radial_root_diagnostics,
+                    &identity,
+                )
+                .map_err(|error| SamplingEvaluationError::UncertifiedRoot {
+                    detail: format!("{identity}: {error:?}"),
+                })?;
+            if let Some(runtime) = context.event_processing_runtime.as_deref_mut()
+                && runtime.has_selectors()
+            {
+                let mut event = self.generate_event_for_cut(
+                    CutEventGenerationContext {
+                        model: context.model,
+                        channel_id: context.sampling_channel,
+                    },
+                    &solution,
+                    sample,
+                    cut_id,
+                    &self.cuts[cut_id],
+                )?;
+                if !runtime.process_event_for_selectors(&mut event) {
+                    continue;
+                }
+            }
+            representatives.push((
+                cut_group_id,
+                sample.rescaled_loop_momenta(&solution.solution, Subspace::None),
+            ));
+        }
+        self.counterterm
+            .prepare_shared_overlaps(
+                &representatives
+                    .iter()
+                    .map(|(cut, sample)| (*cut, sample))
+                    .collect_vec(),
+                &self.graph,
+                &masses,
+                &self.reversed_edges,
+                &self.lmbs,
+                context.settings,
+                context.rotation,
+                None,
+            )
+            .map(Some)
+    }
+
     fn evaluate<T: FloatLike>(
         &mut self,
         momentum_sample: &MomentumSample<T>,
@@ -3164,6 +3236,10 @@ impl GraphTerm for CrossSectionGraphTerm {
                 &self.lmbs,
                 context.settings,
                 context.rotation,
+                Some(context.canonical_sample
+                    .filter(|row| row.graph_id == context.graph_id)
+                    .and_then(|row| row.physical_overlaps.as_deref())
+                    .ok_or_else(|| eyre!("physical graph '{}' requires its original-source overlap authority", self.graph.name))?),
             )?
         };
 

@@ -1,0 +1,95 @@
+{
+  "source_base_commit": "6e9bf401db75cb13ec20e18377a444bc2fcd4f33",
+  "source_patch_sha256": "1d78e98b73e6a8dafaf6e446353c2a1607dc0724f8ea7d1c2d88c4962b81bba7",
+  "source_build": "build.json",
+  "driver_build": "driver_build.json",
+  "driver_source": "../diagnostics_072/gate.rs.gz",
+  "driver_source_sha256": "7b5e474ea21b0dd20fa12181cd8b8dc635c7d5db0d17d6400d1e1c47b406123e",
+  "argv": [
+    "/tmp/gl638-hosted-joint-gate/drivers/gate-centers",
+    "/tmp/gl638-hosted-joint-gate/manifest-centers-diagnostic.json",
+    "/tmp/gl638-hosted-joint-gate/results-centers-diagnostic1",
+    "joint_hz_plus_lmb",
+    "failure-diagnostic",
+    "1",
+    "1",
+    "1",
+    "1337"
+  ],
+  "environment": {
+    "setup": "source /tmp/gammaloop-rebase-dev-env.sh",
+    "SYMBOLICA_LICENSE": "authorized user license supplied; value deliberately not archived",
+    "RAYON_NUM_THREADS": "20",
+    "GL_DISPLAY_FILTER": "off,gammalooprs::integrands::process=debug,gammalooprs::subtraction::lu_counterterm=debug"
+  },
+  "process_exit_code": 0,
+  "exit_code_provenance": "root execution session37313",
+  "traced": true,
+  "runtime_budget_evidence": false,
+  "summary_without_repeated_reports": {
+    "cold_load_seconds": 44.592405409,
+    "draws_per_worker": 1,
+    "error": null,
+    "mode": [
+      "joint_hz_plus_lmb"
+    ],
+    "preflight_accepted": false,
+    "repetitions": 1,
+    "saved_state_unchanged": true,
+    "scope": {
+      "finite_smoke_is_not_normalization": true,
+      "gain_claim": false,
+      "maps_scope": "completed-point hosted joint; CT-star density cure remains pending",
+      "precision_scope": "fresh first iteration max_eval=0; trained-iteration rescue history not certified",
+      "runtime_cap": "representative, stored hard selected/bare and replayed representative maxima, each reported separately"
+    },
+    "seed": 1337,
+    "stage": "failure-diagnostic",
+    "status": "completed_requested_stages",
+    "workers": 1
+  },
+  "final_diagnostic_status": {
+    "complete": true,
+    "canonical_invariants_passed": true,
+    "error": null
+  },
+  "omitted_duplicate_reports": {
+    "summary.json": {
+      "sha256_uncompressed": "02b654be5aefe0a95f81e7fc4b1eba410077d26e2557ae866e703f5065a4ff18",
+      "bytes_uncompressed": 1020557
+    },
+    "joint_hz_plus_lmb.json": {
+      "sha256_uncompressed": "e10e8a8ddffc7d2434efa8f3e46bf82efdbe868bc43e8cc994d06b16594c1eb7",
+      "bytes_uncompressed": 989594
+    }
+  },
+  "source_state_file_count": 35,
+  "saved_state_unchanged": true,
+  "interpretation": "One retained failure and one valid control; full physical matrix is preserved in progress JSON. Fresh iteration max_eval=0. Detached public hosted leaf calls lacking runtime context remain errors; successful detached costs overlap. No normalization, integration-gain or runtime-budget claim.",
+  "center_extraction": {
+    "script": "../performance_1f/extract_center_evidence.py",
+    "argv": [
+      "python",
+      "docs/research/advanced_sampling/gl638_hosted_joint_gate/performance_1f/extract_center_evidence.py",
+      "docs/research/advanced_sampling/gl638_hosted_joint_gate/canonical_centers/run.log.gz",
+      "docs/research/advanced_sampling/gl638_hosted_joint_gate/canonical_centers/center_evidence.json"
+    ],
+    "script_sha256": "9cbeb78924408454ab3904b731b36af8461a41f39b7780c34667d9bc4335670d"
+  },
+  "analysis": "summarize.py reproduces audit.json from archived inputs; no physics state load",
+  "verified_inventory": {
+    "graph": "GL638",
+    "generation_parent_lmb": [
+      3,
+      4,
+      7,
+      10
+    ],
+    "production_orientation_key_count": 936,
+    "exposed_orientation_selectors": 1,
+    "physical_cut_count": 6,
+    "sampling_channel_count": 7,
+    "production_orientation_keys_canonical_json_sha256": "54bc55ad023e018ff30b5c69cefbe1d3f0a258d0b449ba87ef14b14870d72422",
+    "scope": "Read from the hashed unmodified mode report; its duplicated full inventory is not archived again."
+  }
+}
