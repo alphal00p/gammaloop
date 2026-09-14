@@ -1789,7 +1789,7 @@ pub mod test {
 
         for g in gs {
             insta::with_settings!({
-                snapshot_suffix=>format!("{}",g.name),
+                snapshot_suffix=>g.name.to_string(),
             }, {
                 insta::assert_snapshot!(g.dot_lmb_of(&g.full_filter(), &g.loop_momentum_basis));
             });

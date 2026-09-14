@@ -16,6 +16,7 @@ publish = false
 ### BEGIN HAKARI SECTION
 [dependencies]
 ahash = { version = "0.8", features = ["compile-time-rng", "serde"] }
+aho-corasick = { version = "1" }
 anstream = { version = "1" }
 bincode = { version = "2", features = ["serde"] }
 bitflags = { version = "2", default-features = false, features = ["serde"] }
@@ -32,21 +33,21 @@ figment = { version = "0.10", default-features = false, features = ["json", "tom
 getrandom = { version = "0.2", default-features = false, features = ["custom", "std"] }
 indexmap = { version = "2", features = ["serde"] }
 insta = { version = "1", features = ["json", "ron", "toml", "yaml"] }
+log = { version = "0.4", default-features = false, features = ["std"] }
 matrixmultiply = { version = "0.3", features = ["cgemm"] }
 memchr = { version = "2" }
 num-bigint = { version = "0.4", features = ["serde"] }
 num-complex = { version = "0.4", features = ["serde"] }
 num-integer = { version = "0.1", features = ["i128"] }
 num-traits = { version = "0.2", features = ["i128", "libm"] }
-numerica = { git = "https://github.com/symbolica-dev/symbolica", branch = "dev", default-features = false, features = ["bincode", "gmp", "serde"] }
 once_cell = { version = "1" }
 papergrid = { version = "0.17", default-features = false, features = ["ansi", "std"] }
 rand = { version = "0.9" }
 rand_chacha = { version = "0.9", default-features = false, features = ["std"] }
 regex = { version = "1" }
-regex-automata = { version = "0.4", default-features = false, features = ["dfa-build", "dfa-onepass", "hybrid", "meta", "nfa-backtrack", "perf-inline", "perf-literal", "std", "unicode"] }
+regex-automata = { version = "0.4", default-features = false, features = ["dfa-build", "dfa-onepass", "hybrid", "meta", "nfa", "perf", "std", "unicode"] }
 regex-syntax = { version = "0.8" }
-rug = { version = "1", features = ["serde"] }
+rust-embed-utils = { version = "8", default-features = false, features = ["debug-embed", "include-exclude"] }
 serde = { version = "1", features = ["alloc", "derive"] }
 serde_core = { version = "1", features = ["alloc"] }
 serde_json = { version = "1", features = ["alloc", "float_roundtrip"] }
@@ -54,7 +55,6 @@ serde_spanned = { version = "1" }
 similar = { version = "2", features = ["inline", "unicode"] }
 smallvec = { version = "1", default-features = false, features = ["const_generics", "serde"] }
 smartstring = { version = "1", features = ["serde"] }
-symbolica = { git = "https://github.com/symbolica-dev/symbolica", branch = "dev", default-features = false, features = ["bincode", "gmp", "native_code_generation", "serde"] }
 tabled = { version = "0.20", features = ["ansi"] }
 testing_table = { version = "0.3", default-features = false, features = ["ansi", "std"] }
 time = { version = "0.3", features = ["formatting", "local-offset", "parsing"] }
@@ -69,6 +69,7 @@ zerocopy = { version = "0.8", default-features = false, features = ["derive", "s
 
 [build-dependencies]
 ahash = { version = "0.8", features = ["compile-time-rng", "serde"] }
+aho-corasick = { version = "1" }
 anstream = { version = "1" }
 bincode = { version = "2", features = ["serde"] }
 bitflags = { version = "2", default-features = false, features = ["serde"] }
@@ -86,21 +87,21 @@ figment = { version = "0.10", default-features = false, features = ["json", "tom
 getrandom = { version = "0.2", default-features = false, features = ["custom", "std"] }
 indexmap = { version = "2", features = ["serde"] }
 insta = { version = "1", features = ["json", "ron", "toml", "yaml"] }
+log = { version = "0.4", default-features = false, features = ["std"] }
 matrixmultiply = { version = "0.3", features = ["cgemm"] }
 memchr = { version = "2" }
 num-bigint = { version = "0.4", features = ["serde"] }
 num-complex = { version = "0.4", features = ["serde"] }
 num-integer = { version = "0.1", features = ["i128"] }
 num-traits = { version = "0.2", features = ["i128", "libm"] }
-numerica = { git = "https://github.com/symbolica-dev/symbolica", branch = "dev", default-features = false, features = ["bincode", "gmp", "serde"] }
 once_cell = { version = "1" }
 papergrid = { version = "0.17", default-features = false, features = ["ansi", "std"] }
 rand = { version = "0.9" }
 rand_chacha = { version = "0.9", default-features = false, features = ["std"] }
 regex = { version = "1" }
-regex-automata = { version = "0.4", default-features = false, features = ["dfa-build", "dfa-onepass", "hybrid", "meta", "nfa-backtrack", "perf-inline", "perf-literal", "std", "unicode"] }
+regex-automata = { version = "0.4", default-features = false, features = ["dfa-build", "dfa-onepass", "hybrid", "meta", "nfa", "perf", "std", "unicode"] }
 regex-syntax = { version = "0.8" }
-rug = { version = "1", features = ["serde"] }
+rust-embed-utils = { version = "8", default-features = false, features = ["debug-embed", "include-exclude"] }
 serde = { version = "1", features = ["alloc", "derive"] }
 serde_core = { version = "1", features = ["alloc"] }
 serde_json = { version = "1", features = ["alloc", "float_roundtrip"] }
@@ -108,7 +109,6 @@ serde_spanned = { version = "1" }
 similar = { version = "2", features = ["inline", "unicode"] }
 smallvec = { version = "1", default-features = false, features = ["const_generics", "serde"] }
 smartstring = { version = "1", features = ["serde"] }
-symbolica = { git = "https://github.com/symbolica-dev/symbolica", branch = "dev", default-features = false, features = ["bincode", "gmp", "native_code_generation", "serde"] }
 syn-dff4ba8e3ae991db = { package = "syn", version = "1", features = ["extra-traits", "full"] }
 syn-f595c2ba2a3f28df = { package = "syn", version = "2", features = ["extra-traits", "fold", "full", "visit", "visit-mut"] }
 tabled = { version = "0.20", features = ["ansi"] }
@@ -159,3 +159,11 @@ features = ["std"]
 [build-dependencies.indenter]
 version = "0.3"
 features = ["std"]
+
+# Keep Symbolica's target-side feature anchor for the shared Nix compiler cache
+# and its explicit tracing feature. No build script needs a host-side copy.
+[dependencies.symbolica]
+git = "https://github.com/symbolica-dev/symbolica"
+branch = "dev"
+default-features = false
+features = ["bincode", "gmp", "native_code_generation", "serde"]

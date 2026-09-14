@@ -1659,6 +1659,7 @@ name = "gammaloop-workspace-hack"
 version = "0.1.0"
 dependencies = [
  "ahash 0.8.12",
+ "aho-corasick",
  "anstream",
  "arrayvec",
  "bincode 2.0.1",
@@ -1679,13 +1680,13 @@ dependencies = [
  "indexmap",
  "insta",
  "libc",
+ "log",
  "matrixmultiply",
  "memchr",
  "num-bigint",
  "num-complex",
  "num-integer",
  "num-traits",
- "numerica",
  "once_cell",
  "papergrid",
  "rand 0.9.4",
@@ -1693,7 +1694,7 @@ dependencies = [
  "regex",
  "regex-automata",
  "regex-syntax",
- "rug",
+ "rust-embed-utils",
  "rustix 1.1.4",
  "serde",
  "serde_core",
@@ -2475,7 +2476,7 @@ dependencies = [
  "insta",
  "itertools 0.14.0",
  "kurbo",
- "linnest",
+ "linnet",
  "paste",
  "proptest",
  "rand 0.8.6",
@@ -4537,12 +4538,8 @@ dependencies = [
 name = "spenso-macros"
 version = "0.3.2"
 dependencies = [
- "linnet",
  "proc-macro2",
  "quote",
- "serde",
- "spenso",
- "symbolica",
  "syn 2.0.117",
 ]
 

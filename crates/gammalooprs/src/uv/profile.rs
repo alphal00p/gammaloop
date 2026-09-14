@@ -108,7 +108,9 @@ impl UVProfileFixedRay {
         }
 
         let directions = directions
-            .chunks_exact(3)
+            .as_chunks::<3>()
+            .0
+            .iter()
             .map(|direction| {
                 let norm = (direction[0] * direction[0]
                     + direction[1] * direction[1]

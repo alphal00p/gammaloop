@@ -1,6 +1,8 @@
 # Nix/Crane Cargo artifact reuse
 
 This note records the cache-reuse audit for the NixCI Rust build graph.
+This is a historical audit. See [CI maintenance and measurements](../ci.md) for
+the current implementation, retained results and reporting workflow.
 
 ## Sources checked
 
@@ -13,9 +15,9 @@ The important Crane contracts are:
 
 - Nix rebuilds a derivation when any direct input changes, including files in
   `src`. Source filtering and narrow source sets prevent unrelated invalidation.
-- `cargoArtifacts` is an existing Cargo `target` directory. Crane inherits it
-  after patching and before build hooks, so Cargo can mark already-built units as
-  fresh.
+- `cargoArtifacts` contains an existing Cargo `target` tree, as a directory or
+  archive. Crane restores it after patching and before build hooks, so Cargo can
+  mark already-built units as fresh.
 - The inherited artifact only avoids compilation when Cargo asks for the same
   unit: same profile, target kind, package graph, and feature set.
 - `doNotLinkInheritedArtifacts = true` does not disable reuse. It asks Crane to
@@ -165,19 +167,28 @@ keep inherited targets writable:
 if [ -e "$artifact.prev" ] || [ -L "$artifact.prev" ]; then
   unpack_artifact "$(realpath "$artifact.prev")"
 fi
-zstd -d "$artifact" --stdout | tar --no-same-permissions -x -C "$out/target"
-rsync -a --chmod=u+w "$artifact/" "$out/target/"
+zstd -d "$artifact" --stdout | tar --no-same-permissions -x -C target
+rsync -a --chmod=u+w "$artifact/" target/
 ```
 
-The merge layer now materializes even a single inherited artifact. This is
-intentional: Crane's single-artifact path does not recursively unpack the
-`target.tar.zst.prev` chain. Returning the single artifact directly made later
-derivations lose the root prebuild and rebuild the heavy dependency stack.
+The merge layer materializes even a single inherited artifact before publishing
+one full compressed archive. This preserves directory-valued
+`target.tar.zst.prev` links as well as the file-valued links Crane follows.
+Returning an artifact with an unhandled directory-valued base previously made
+later derivations lose the root prebuild and rebuild the heavy dependency stack.
+The expanded writable tree now stays in the build directory; the output contains
+only `target.tar.zst`, without a previous-artifact link or expanded target tree.
+CLI packaging restores that archive and declares its runtime library inputs
+explicitly: compression hides embedded store paths, so those inputs must be
+available to Nix when it discovers references in the extracted binaries.
 
 Dependency-only archives also strip dummy workspace artifacts after compiling
 third-party dependencies. The strip logic intentionally ignores binary target
 names: `clinnet` has a binary named `linnet`, and stripping by every target name
-would delete `liblinnet-*`.
+would delete `liblinnet-*`. Stripped producers ask Crane to install a full archive
+of that target directly, so deleted dummy artifacts cannot return through a
+previous-artifact link. This avoids installing a delta and then unpacking,
+stripping, and recompressing its entire inheritance chain during fixup.
 
 The Hakari package needs a real build artifact, not just a dependency-only
 archive. Otherwise downstream Cargo fingerprints point at a different
@@ -324,8 +335,8 @@ Crane's normal single-archive unpack path does not recursively materialize the
 `.prev` chain created by `buildDepsOnlyWithArtifacts`; passing the bare
 `crate-deps-linnest` archive caused the final package build to lose inherited
 root artifacts and recompile third-party crates. The final package derivations
-now receive a merged target directory so the `.prev` chain is expanded before
-Crane copies artifacts.
+now receive a self-contained merged archive with the `.prev` chain already
+materialized before Crane restores it.
 
 The hack timestamp normalization also has to run after unpack in
 `buildDepsOnlyWithArtifacts`. Running it only while constructing a dummy source
@@ -1420,12 +1431,11 @@ Three redundant materialization layers were also removed. Final crate builds
 consume their self-contained, stripped `crate-deps-*` archive directly, and the
 Python build and package phases consume their preceding self-contained archive
 instead of routing it through a one-input `mergeCargoArtifacts`. The terminal
-nextest archives consume the matching package-local incremental artifact, use
-Crane's symlink-heavy inheritance for its materialized base, and overlay its
-writable delta. Crane does not follow a `target.tar.zst.prev` link whose target
-is a directory, so the archive derivation explicitly inherits that base before
-Crane's normal post-patch hook applies the delta. This avoids both a new
-materialized group merge and publication of another Cargo target tree.
+nextest archives consume the matching package-local incremental artifact and
+overlay its writable delta on the compressed base. Its
+`target.tar.zst.prev` link now targets an archive file, so Crane's normal
+post-patch hook restores the entire chain. This avoids both a new materialized
+group merge and publication of another Cargo target tree.
 
 The self-contained archive compaction step uses mtime epoch 1, matching Crane's
 artifact installer and Nix source timestamps. Using epoch 0 for the compacted

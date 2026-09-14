@@ -2,6 +2,7 @@ name: Nix
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
     branches:
       - main
   push:
@@ -14,7 +15,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: nix-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: nix-${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Matrix evaluation embeds this value in derivations registered with Hestia, so
@@ -36,6 +37,7 @@ jobs:
   # running in parallel.
   prepare:
     name: Prepare shared artifacts
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     outputs:
@@ -179,7 +181,7 @@ jobs:
   flake-checks:
     name: Flake checks
     needs: [prepare, build]
-    if: always()
+    if: always() && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     runs-on: ubuntu-latest
     steps:
       - name: Confirm matrix result

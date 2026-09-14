@@ -390,7 +390,6 @@
     ],
     "linnet": [
       "gammaloop-workspace-hack",
-      "linnest",
       "symbolica-utils"
     ],
     "linnet-py": [
@@ -411,12 +410,7 @@
       "spenso-macros",
       "symbolica-utils"
     ],
-    "spenso-macros": [
-      "gammaloop-workspace-hack",
-      "linnet",
-      "spenso",
-      "symbolica-utils"
-    ],
+    "spenso-macros": [],
     "spynso3": [
       "gammaloop-workspace-hack",
       "idenso",
@@ -441,7 +435,6 @@
     "linnet-py",
     "spenso",
     "spenso-hep-lib",
-    "spenso-macros",
     "spynso3",
     "symbolica-utils",
     "vakint"
@@ -458,7 +451,6 @@
     "linnet-py",
     "spenso",
     "spenso-hep-lib",
-    "spenso-macros",
     "spynso3",
     "symbolica-utils",
     "vakint"
@@ -511,7 +503,7 @@
     ],
     "linnet": [
       "gammaloop-workspace-hack",
-      "linnest",
+      "linnet",
       "symbolica-utils"
     ],
     "linnet-py": [
@@ -529,10 +521,7 @@
       "spenso",
       "spenso-macros"
     ],
-    "spenso-macros": [
-      "linnet",
-      "spenso"
-    ],
+    "spenso-macros": [],
     "spynso3": [
       "idenso",
       "spenso",
@@ -618,7 +607,11 @@
     },
     "linnet": {
       "gammaloop-workspace-hack": [],
-      "linnest": [],
+      "linnet": [
+        "drawing",
+        "rkyv",
+        "serde"
+      ],
       "symbolica-utils": []
     },
     "linnet-py": {
@@ -643,10 +636,7 @@
       ],
       "spenso-macros": []
     },
-    "spenso-macros": {
-      "linnet": [],
-      "spenso": []
-    },
+    "spenso-macros": {},
     "spynso3": {
       "idenso": [],
       "spenso": [
