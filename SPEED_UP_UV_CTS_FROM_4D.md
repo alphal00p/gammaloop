@@ -2579,3 +2579,107 @@ If a gate fails, use the measurements to continue the generic implementation, in
 - Final local workspace formatting, all-target `cargo check` and clippy
   with warnings denied pass for this correction. The completed regression
   runner has exited successfully; the build and measurement locks are free.
+
+### 2026-09-14 — Final physical acceptance and evaluator-boundary profiles
+
+- The final numerical source is `911f1824f994611d723dff0f50416cb301718617`.
+  Its immutable CLI is `ef6811aa40114590a0fd72318f99f91850960239ff212abcaf272d7182e48691`;
+  the matching counter is `3e8912fdae918061719b0e8e6e8499ece14ced57a3482d5af7353677e9becaf8`.
+  All three routes were regenerated after the shared analytic/tensor corrections,
+  with assertions enabled, one worker, Horner 1/CPE 5 and compilation disabled.
+- All ten required GL00/GL01 generation/runtime gates now pass, including the
+  unchanged observed-range and within-pass SEM repeat checks. Median ratios are:
+
+  | Graph | Generation | Evaluator base / scaled | Total sample base / scaled | Dispatch fraction |
+  | --- | ---: | ---: | ---: | ---: |
+  | GL00 | 1.044523 | 0.764529 / 0.811538 | 0.791531 / 0.834682 | 4.0057% |
+  | GL01 | 1.008161 | 0.783770 / 0.779277 | 0.810855 / 0.800211 | 4.1579% |
+
+- The final record contains 18 fresh generations, 108 accepted passes, 2,160
+  batches and 54,219,459 samples over 4,364.548388 actual timed seconds. All 36
+  pointwise comparisons pass the unchanged tolerance. Initial shorter rounds
+  had passing medians but inconclusive uncertainty from isolated long batches;
+  their complete data remain preserved. The final result uses complete matched
+  cohorts for every graph/point: GL00/scaled from the uniform fifteen-second
+  confirmation, and the other three graph/point combinations from a predeclared
+  thirty-second confirmation across all routes and saved generations. No
+  outliers, formulas, thresholds or physical inputs were changed.
+- A separate bounded CPU diagnostic did not reproduce the long batches. It
+  recorded 112.10 CPU seconds over 112.92 observed wall seconds, no major faults
+  and no sustained CPU stall. This does not identify the earlier transient cause;
+  none of its samples enter acceptance.
+- Unprofiled expression construction is 37.26%/37.39% faster in direct 4D.
+  Including Spenso but excluding the native evaluator orchestration interval
+  leaves 11.19%/6.31% premiums. Six separate successful profiles isolate literal
+  Symbolica build calls: excluding only those calls gives diagnostic ratios
+  1.05561/1.07635. These profiles do not replace unprofiled generation gates.
+  Every pre/post-Spenso and actual build-entry RSS/HWM observation is retained
+  with its lag, including the 205.917 ms GL01 direct pre-Spenso observation.
+- Complete dispatch accounting charges losing CFF and template preparation and
+  stays below 10% on both graphs. Each direct profile selects 196 hard rows,
+  with at most 62 per request. Final settings, literal graph inputs, source/state
+  identities, phase intervals, cache counts and memory records are published in
+  `docs/architecture/local-4d-uv-performance.md` and its two JSON receipts.
+- Four final integration binaries were frozen from clean `911f1824f` after
+  formatting and Cargo check, with assertions enabled. Their independent hashes
+  were verified before starting the unchanged 183-test selection. That serial
+  run is active in `merge_validation_final_shared_tensor_power`; its result is
+  still required before local acceptance is complete.
+- Main GitHub CI passes 2,140 Linux and 2,139 macOS tests, with existing platform
+  exclusions. The GitHub Nix workflow also passes, including 173 integration
+  tests. A separate external NixCI check fails in post-build cache upload after
+  compilation and archiving succeeded; two supported rerequest API calls returned
+  HTTP 404. No CI configuration or test expectations were changed. The external
+  status and the actual final PR head still require verification before readiness.
+- GL262 remains explicitly deferred by the user's scope change, without a full
+  generation/runtime pass claim. The historical scalar/GL21 assembly regression
+  remains documented separately; these two physical benchmarks do not establish
+  universally faster preparation for every topology.
+
+### 2026-09-14 — Final acceptance rerun and documentation milestone
+
+The complete unchanged **183-test selection passes** on frozen production
+source `911f1824f994611d723dff0f50416cb301718617`, from 01:08 to 01:58 UTC:
+
+| Group | Passed | Nextest summary seconds |
+| --- | ---: | ---: |
+| Scalar | 167 | 2732.365 |
+| Physical GL00/GL01 | 2 | 105.018 |
+| UV composition | 4 | 22.294 |
+| Cut/threshold | 7 | 18.212 |
+| Cut/threshold API | 2 | 3.987 |
+| Analytic | 1 | 0.378 |
+
+All execution receipts exit zero. The run used assertions, one worker, zero
+retries and the 30 GB process-tree guard, with no guard intervention. Exact
+selected names, immutable executable identities, commands, log/receipt hashes,
+observed tree memory and all route timings are retained in
+[`local-4d-uv-correctness.json`](docs/architecture/local-4d-uv-correctness.json).
+The original list receipts after the scalar group carry stale descriptive
+`group`/`expected_tests` fields inherited from the preceding group; their actual
+commands, filters and selected-name files identify the correct group. Execution
+receipts are correctly labeled. Original receipts are preserved and this
+metadata limitation is explicit in the consolidated report.
+
+The 166 scalar route observations span 49 graph labels and have median
+4D/erased generation ratio **0.833248**: 122 are below 1.00 and twelve exceed
+1.15. The largest are GL21/base **1.431860**, GL21/quadratic `q7` **1.376004**,
+and GL17/base **1.368080**. These are descriptive single runs including
+integrated/threshold CTs and evaluator construction, distinct from the matched
+physical acceptance gates. The earlier GL21 profile remains the generic
+assembly/preprocessing diagnosis; no universal speedup is claimed.
+
+The report now includes final physical acceptance, all six phase/RAM profiles,
+the final correctness selection, historical limitations and the user-deferred
+GL262 case. The pending milestone changes documentation only after the measured
+numerical source. The PR body records the current results; final-head CI must
+settle before merge readiness. Per the user's request, when only CI is pending,
+monitor it quietly at fifteen-minute intervals and report meaningful changes.
+
+An independent final audit confirms exact equality of expected, listed,
+selected and actual PASS names, all four executable hashes and sizes, enabled
+assertions, successful nonoverlapping receipts and no guard intervention.
+The maximum observed test process-tree peak is 1.010 GB. The initial scalar
+list receipt has no descriptive group fields; subsequent stale fields are the
+metadata limitation above. The ignored independent audit receipt is hashed in
+the tracked correctness report.

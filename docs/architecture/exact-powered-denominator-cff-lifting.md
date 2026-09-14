@@ -20,10 +20,11 @@ complete the loop-energy integration first and apply every UV Taylor operator
 to the complete/global CFF expression. Their bodies are identical; the
 explicit-sum form only omits the localized form's orientation selectors.
 
-The canonical algebra boundary is under implementation and validation in this
-branch. The policy below specifies its invariants; it does not certify that all
-acceptance tests or performance targets have passed. The remaining gates are
-recorded in [the implementation plan](../../SPEED_UP_UV_CTS_FROM_4D.md).
+The canonical algebra boundary is implemented. The policy below specifies its
+invariants; measured acceptance and remaining limitations, including the
+user-deferred GL262 comparison, are recorded in
+[the performance report](local-4d-uv-performance.md) and
+[the implementation plan](../../SPEED_UP_UV_CTS_FROM_4D.md).
 Recorded owner-provenance regression examples below still exercise raw physical
 inputs. Their original-owner expectations remain valid at that boundary; the
 completed class projection adds an explicit certificate before transferring
