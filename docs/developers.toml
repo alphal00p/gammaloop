@@ -496,7 +496,9 @@ anchor = "pub struct Vakint {"
 # Reviewed 2026-09-14: bind matcher conditions only to present wildcards;
 # reuse registered symbols and index atoms across FORM conversions to preserve metadata.
 # Topology ownership and the documented FORM conversion contracts are unchanged.
-digest = "fa50977bf5e446fad5c9e605e7469be43768f6fc"
+# Reviewed 2026-09-14: stub collection keeps upstream numeric types in Symbolica;
+# Vakint's explicitly registered Python surface and evaluation contracts are unchanged.
+digest = "c6d7a421dcb945bcfe506760598e19e03e093a31"
 
 [[section.note.scope]]
 path = "crates/vakint/src/topologies.rs"
