@@ -1,0 +1,19 @@
+{
+  "passed": true,
+  "script_sha256": "ca107346f85a1ff0e573cbfeb794c208258e14d5ffcb11c0fdeac5b0252f9961",
+  "point_files": 84,
+  "linked_old_seed_files": 2,
+  "checks_passed": 4952,
+  "markdown_byte_identical": true,
+  "json_equal_after_input_directory_relocation": true,
+  "source": "Only archived files decompressed into scratch; no GammaLoop execution or state load.",
+  "command": [
+    "python",
+    "analyze_local_approach_extension.py",
+    "BASE8_DIRECTORY",
+    "EXTENSION4_DIRECTORY",
+    "OUTPUT_DIRECTORY",
+    "base8-frozen.json",
+    "OLD_SEED_DIRECTORY"
+  ]
+}

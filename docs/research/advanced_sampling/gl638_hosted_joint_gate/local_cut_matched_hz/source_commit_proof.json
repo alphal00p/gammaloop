@@ -1,0 +1,16 @@
+{
+  "base_commit": "22eb17a6e389636c26fa7135f90abe421fbbded7",
+  "committed_source": "4d192b5be2590db10513c06464b92fc16b19ca6a",
+  "command": [
+    "git",
+    "diff",
+    "22eb17a6e389636c26fa7135f90abe421fbbded7",
+    "4d192b5be2590db10513c06464b92fc16b19ca6a",
+    "--",
+    "crates"
+  ],
+  "committed_rust_diff_sha256": "667a91d23c759c1a2fe02355569dbc3d64866af681428c40213b8e335b5dfd65",
+  "archived_build_patch": "../phase_space_ray/fix_source.patch.gz",
+  "exact_bytes_equal": true,
+  "scope": "Read-only source equality; existing optimized build5, no rebuild or execution."
+}

@@ -1,0 +1,57 @@
+{
+  "scope": "Seven unchanged candidate catalogues on two hard H/Z directions: 84 map/point rows, 336 native physical results and 4,952 independent checks passed.",
+  "source": {
+    "commit": "4d192b5be2590db10513c06464b92fc16b19ca6a",
+    "proof": "source_commit_proof.json",
+    "build_manifest": "../phase_space_ray/build5/manifest.json",
+    "build_source_patch": "../phase_space_ray/fix_source.patch.gz",
+    "build_driver_verification": "../phase_space_ray/build5/driver_verification.json",
+    "driver_build": "driver_build.json",
+    "driver_source": "../local_hz/extension/gate.rs.gz",
+    "driver_source_sha256": "b53df2b439845729dd5a9c898c9cece83c28426457ec18701cf9787756310306"
+  },
+  "inputs": {
+    "base_anchors": "all_hz_inputs.json",
+    "extension_seed_minus": "../local_hz/scan8/joint_hz_plus_lmb.hz_03_stack.approach.json.gz",
+    "extension_seed_plus": "../local_hz/scan8/joint_hz_plus_lmb.hz_07_stack.approach.json.gz",
+    "frozen_old_scan": "../local_hz/local-eight-frozen.json",
+    "cards": "../phase_space_ray/cards/",
+    "card_manifest": "../phase_space_ray/cards/cards_manifest.json",
+    "state": "/common/dev/gl638_checkpoint_06d470409/all/state",
+    "saved_state_hashes": "shared/state_hashes.json",
+    "state_file_count": 35
+  },
+  "execution": {
+    "base8": "base8/run.json",
+    "extension4": "extension4/run.json",
+    "common_setup": "source /tmp/gammaloop-rebase-dev-env.sh; user-authorized SYMBOLICA_LICENSE supplied (value omitted)",
+    "environment": {
+      "RAYON_NUM_THREADS": "1",
+      "GL_DISPLAY_FILTER": "off"
+    },
+    "actual_driver_workers": 1,
+    "overlap": "Runs overlap the 20-worker normalization preflight; no timing or scaling comparison claimed.",
+    "memory_scope": "Base-run peak 6,083,752 KiB is authoritative. Extension ru_maxrss is the cumulative maximum across sequential children; it bounds that child from above rather than measuring its individual peak."
+  },
+  "archive_convention": "All raw point JSON and logs are byte-preserving gzip. Seven accepted settings and catalogue inventories are shared across both runs. Compact mode records omit only inventories and local_approach.rows, with exact per-point references and original report hashes/sizes. Compact summaries omit repeated reports, retaining original hashes/sizes. No binary or state payload is copied.",
+  "limits": [
+    "Directional finite-range local results, not a global bound, Monte Carlo variance/maxima measurement or cross-section estimate.",
+    "No implicit transfer to moved CT-star normals, soft limits, tangent/Gram boundaries, shrinking support or tails.",
+    "The original LOCAL_HZ_BOUNDING archive is unchanged."
+  ],
+  "analysis": {
+    "script": "analyze_local_approach_extension.py.gz",
+    "result": "analysis.json.gz",
+    "report": "analysis.md",
+    "log": "analysis.log.gz",
+    "frozen_base_hashes": "base8-frozen.json",
+    "retained_base_records": 56,
+    "checks_passed": 4952,
+    "checks_failed": 0,
+    "precision_scope": "QuadFloat wraps pinned Symbolica DoubleFloat with106-bit precision: epsilon2^-105 (the original scan script used a stricter2^-112 rounding oracle; old result files are unchanged). Physical acceptance budgets unchanged.",
+    "reproduction": "Decompress point files and script into scratch, then pass base8,extension4,output,base8-frozen.json,and a separate directory containing the two linked old seed point files. Absolute input-path hash keys reflect the replay location.",
+    "independent_provenance": "analysis_provenance.json",
+    "base_manifest_timing_scope": "All 56 base point files match the retained hash manifest; it was created after the extension and is not evidence of an earlier snapshot.",
+    "archive_reproduction": "archive_reproduction.json"
+  }
+}

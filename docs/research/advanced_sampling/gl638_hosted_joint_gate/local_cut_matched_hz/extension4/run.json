@@ -1,0 +1,19 @@
+{
+  "argv": [
+    "/tmp/gl638-hosted-joint-gate/drivers/gate-physics-build5",
+    "/tmp/gl638-hosted-joint-gate/manifest-local-cut-matched-extension4-build5.json",
+    "/tmp/gl638-hosted-joint-gate/results-local-cut-matched-extension4-build5",
+    "all",
+    "local-approach",
+    "1",
+    "1",
+    "1",
+    "1337"
+  ],
+  "started_utc": "2026-09-14T10:01:32.732171+00:00",
+  "concurrent_run": "20worker normalization preflight; no timing comparison claimed",
+  "pid": 596817,
+  "returncode": 0,
+  "elapsed_seconds": 259.5181677619694,
+  "max_rss_KiB": 6083752
+}
