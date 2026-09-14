@@ -1,0 +1,28 @@
+{
+  "head": "6e9bf401db75cb13ec20e18377a444bc2fcd4f33",
+  "started_utc": "2026-09-14T07:02:00.386161+00:00",
+  "profile": "dev-optim",
+  "jobs": 2,
+  "purpose": "canonical physical overlap center correctness repair",
+  "source_patch_sha256": "1d78e98b73e6a8dafaf6e446353c2a1607dc0724f8ea7d1c2d88c4962b81bba7",
+  "argv": [
+    "cargo",
+    "build",
+    "--profile",
+    "dev-optim",
+    "--locked",
+    "--offline",
+    "-p",
+    "gammaloop-api",
+    "--bin",
+    "gammaloop",
+    "--features",
+    "ufo_support",
+    "--message-format=json"
+  ],
+  "cargo_pid": 1607990,
+  "returncode": 0,
+  "elapsed_seconds": 666.0481724970741,
+  "finished_utc": "2026-09-14T07:13:06.434411+00:00",
+  "source_unchanged": true
+}

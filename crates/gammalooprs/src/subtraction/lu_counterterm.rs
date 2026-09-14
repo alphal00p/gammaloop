@@ -35,13 +35,14 @@ use crate::{
                 evaluate_evaluator_single,
             },
             param_builder::LUParams,
+            sampling_maps::SamplingEvaluationError,
             threshold_multiplier::{
                 ThresholdMultiplierEvaluatorCollection, ThresholdMultiplierInputWorkspace,
             },
         },
     },
     momentum::{
-        Rotation, SignOrZero, ThreeMomentum,
+        Rotatable, Rotation, SignOrZero, ThreeMomentum,
         sample::{
             ExternalFourMomenta, ExternalIndex, LoopIndex, LoopMomenta, MomentumSample,
             SubspaceData,
@@ -65,7 +66,7 @@ use crate::{
         overlap_subspace::{self, OverlapGroup, OverlapInput, OverlapKinematics, OverlapStructure},
     },
     utils::{
-        F, FloatLike,
+        ArbPrec, F, FloatLike,
         hyperdual_utils::{
             DualOrNot, dualize_dual_t_to_dual_r_t, extract_coefficient_t_duals,
             extract_t_derivatives, extract_t_derivatives_complex, new_constant,
@@ -1390,7 +1391,7 @@ pub(crate) struct LUCountertermEvaluation<T: FloatLike> {
     pub components: Option<Vec<GenericThresholdCountertermComponentWeight<T>>>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct GlobalOverlapRecord {
     cut_group_id: CutGroupId,
     side: ThresholdCountertermSide,
@@ -1401,6 +1402,7 @@ struct GlobalOverlapRecord {
 /// One complete solve group. Every sample is expressed in `subspace`'s parent,
 /// while its cut's fixed data remain independent. Raised derivative packets
 /// stay on the cut's `LUCTKinematicPoint`, outside shared center geometry.
+#[derive(Debug)]
 struct ThresholdSolveGroup<T: FloatLike> {
     thresholds: EsurfaceCollection,
     subspace: SubspaceData,
@@ -1410,8 +1412,8 @@ struct ThresholdSolveGroup<T: FloatLike> {
     prefactor_power: usize,
 }
 
-#[derive(Clone)]
-pub(crate) struct LUSharedOverlaps<T: FloatLike> {
+#[derive(Clone, Debug)]
+pub struct LUSharedOverlaps<T: FloatLike> {
     left: OverlapStructure,
     right: OverlapStructure,
     // Local CT dispatch refers back to the complete group and its center. In
@@ -1665,6 +1667,8 @@ impl LUCounterTerm {
     /// retains its raised LU packets for physical residue evaluation. Additional
     /// packets may carry different momenta and derivatives; none of those values
     /// may alter common centers or the foreign-cut data retained by a group.
+    /// Canonical preparation chooses identity-frame centers once; native adoption
+    /// retains those decisions and rebuilds only each member's actual fixed data.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn prepare_shared_overlaps<T: FloatLike>(
         &self,
@@ -1675,7 +1679,38 @@ impl LUCounterTerm {
         all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
         settings: &RuntimeSettings,
         probe_rotation: &Rotation,
+        canonical: Option<&TiVec<CutGroupId, Option<LUSharedOverlaps<ArbPrec>>>>,
     ) -> Result<TiVec<CutGroupId, Option<LUSharedOverlaps<T>>>> {
+        if canonical.is_none() && !probe_rotation.is_identity() {
+            return Err(eyre!(
+                "physical overlap centers must be prepared in the canonical identity frame"
+            ));
+        }
+        // Local dispatch can refer to one complete group more than once. Retain
+        // its canonical occurrence identity, never compare or hash center values.
+        let mut canonical_groups = canonical.map(|locals| {
+            locals
+                .iter()
+                .flatten()
+                .flat_map(|local| local.left_groups.iter().chain(&local.right_groups))
+                .map(|(group, _)| group)
+                .unique_by(|group| Arc::as_ptr(group))
+                .collect_vec()
+        });
+        if let Some(canonical) = canonical
+            && (canonical.len() != self.thresholds.len()
+                || canonical.iter_enumerated().any(|(cut, overlap)| {
+                    overlap.is_some() != cut_samples.iter().any(|(id, _)| *id == cut)
+                }))
+        {
+            return Err(SamplingEvaluationError::UncertainGeometry {
+                detail: format!(
+                    "physical selector/cut membership differs from canonical graph '{}'",
+                    graph.name
+                ),
+            }
+            .into());
+        }
         let mut partitions = BTreeMap::new();
         let e_cm = F::from_f64(settings.kinematics.e_cm);
         let existence_threshold = F::from_f64(settings.subtraction.esurface_existence_threshold);
@@ -1814,33 +1849,50 @@ impl LUCounterTerm {
                 ));
                 records.push(record);
             }
-            let solver_kinematics = kinematics
-                .iter()
-                .map(|sample| OverlapKinematics {
-                    loop_moms: sample.loop_moms().iter().map(|p| p.to_f64()).collect(),
-                    external_momenta: sample.external_moms().iter().map(|p| p.to_f64()).collect(),
-                    edge_masses: None,
-                })
-                .collect_vec();
-            let existing: ExistingThresholds = thresholds.keys().collect();
-            let input = OverlapInput {
-                graph,
-                settings,
-                subspace: &subspace,
-                threshold_subspaces: None,
-                lmbs: all_lmbs,
-                thresholds: &thresholds,
-                edge_masses: masses.iter().map(|(_, mass)| F(mass.to_f64())).collect(),
-                surface_kinematics: Some(&solver_kinematics),
+            let overlap = if let Some(groups) = &mut canonical_groups {
+                let index = groups.iter().position(|group| {
+                    group.records == records
+                        && group.subspace.solve_signature(all_lmbs) == signature
+                        && group.subspace.get_lmb(all_lmbs).loop_edges
+                            == subspace.get_lmb(all_lmbs).loop_edges
+                        && group.prefactor_power == prefactor_power
+                }).ok_or_else(|| SamplingEvaluationError::UncertainGeometry {
+                    detail: format!("physical overlap membership differs from canonical graph '{}' group {:?}, records {:?}", graph.name, group_id, records),
+                })?;
+                groups.remove(index).overlap.clone()
+            } else {
+                let solver_kinematics = kinematics
+                    .iter()
+                    .map(|sample| OverlapKinematics {
+                        loop_moms: sample.loop_moms().iter().map(|p| p.to_f64()).collect(),
+                        external_momenta: sample
+                            .external_moms()
+                            .iter()
+                            .map(|p| p.to_f64())
+                            .collect(),
+                        edge_masses: None,
+                    })
+                    .collect_vec();
+                let existing: ExistingThresholds = thresholds.keys().collect();
+                let input = OverlapInput {
+                    graph,
+                    settings,
+                    subspace: &subspace,
+                    threshold_subspaces: None,
+                    lmbs: all_lmbs,
+                    thresholds: &thresholds,
+                    edge_masses: masses.iter().map(|(_, mass)| F(mass.to_f64())).collect(),
+                    surface_kinematics: Some(&solver_kinematics),
+                };
+                let first = &solver_kinematics[0];
+                overlap_subspace::find_maximal_overlap(
+                    &input,
+                    &existing,
+                    &first.loop_moms,
+                    &first.external_momenta,
+                    probe_rotation,
+                )?
             };
-            let first = &solver_kinematics[0];
-            let overlap = overlap_subspace::find_maximal_overlap(
-                &input,
-                &existing,
-                &first.loop_moms,
-                &first.external_momenta,
-                probe_rotation,
-            )?;
             crate::debug_tags!(#integration, #subtraction, #threshold, #inspect, #center;
                 graph = %graph.name, group_id = ?group_id,
                 file.solve_signature = ?signature,
@@ -1856,6 +1908,18 @@ impl LUCounterTerm {
                 overlap,
                 prefactor_power,
             }));
+        }
+        if canonical_groups
+            .as_ref()
+            .is_some_and(|groups| !groups.is_empty())
+        {
+            return Err(SamplingEvaluationError::UncertainGeometry {
+                detail: format!(
+                    "physical graph '{}' omitted a canonical threshold solve group",
+                    graph.name
+                ),
+            }
+            .into());
         }
         let mut result = ti_vec![None; self.thresholds.len()];
         for &(cut_group_id, _) in cut_samples {
@@ -1917,11 +1981,9 @@ impl LUCounterTerm {
                     }
                 }
             }
-            if !local.left.existing_esurfaces.is_empty()
-                || !local.right.existing_esurfaces.is_empty()
-            {
-                result[cut_group_id] = Some(local);
-            }
+            // Some(empty) retains an accepted physical cut with no existing
+            // thresholds; None denotes a cut excluded before overlap preparation.
+            result[cut_group_id] = Some(local);
         }
         Ok(result)
     }
@@ -3300,7 +3362,8 @@ impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
                 .expect("compatible solve group has the same defining edges");
             center[target_index] = shared_group.overlap.overlap_groups[*shared_center].center
                 [source_index]
-                .map(&F::from_ff64);
+                .map(&|value| F(T::from_f64_exact_binary(value.0)))
+                .rotate(self.probe_rotation);
         }
         let shifted_loop_momenta = transformed_kinematic_point
             .representative_sample()
@@ -3325,8 +3388,8 @@ impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
 struct OverlapBuilder<'a, T: FloatLike> {
     counterterm_builder: &'a CounterTermBuilder<'a, T>,
     subspace: &'a SubspaceData,
-    /// Solver-derived centers already belong to the current probe; only active
-    /// coordinates are transferred to this threshold's native parent LMB.
+    /// Canonical identity-frame centers are promoted exactly and rotated natively
+    /// once; only active coordinates move to this threshold's native parent LMB.
     center: LoopMomenta<F<T>>,
     shifted_loop_momenta: LoopMomenta<F<T>>,
     radius: F<T>,
@@ -3405,7 +3468,9 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
                 let sample = &shared.kinematics[surface_id.0];
                 let mut momenta = sample.loop_moms().clone();
                 for index in shared.subspace.iter_lmb_indices() {
-                    momenta[index] = shared_center.center[index].map(&F::from_ff64);
+                    momenta[index] = shared_center.center[index]
+                        .map(&|value| F(T::from_f64_exact_binary(value.0)))
+                        .rotate(self.overlap_builder.counterterm_builder.probe_rotation);
                 }
                 let value = shared.thresholds[surface_id].compute_from_momenta(
                     shared_lmb,
@@ -3429,7 +3494,7 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
             graph = %graph.name,
             selected_esurface_id = self.esurface_id.0,
             rotation_id = %self.overlap_builder.counterterm_builder.probe_rotation.method,
-            center_provenance = "current_probe_cut_lmb_frame",
+            center_provenance = "canonical_identity_center_promoted_and_rotated_natively",
             subspace_loop_indices = ?subspace.iter_lmb_indices().collect_vec(),
             file.active_center = %format!("{}", self.overlap_builder.center),
             file.center_with_fixed_complement = %format!("{}", center_with_fixed_complement),
@@ -3450,7 +3515,7 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
                 graph = %graph.name,
                 selected_esurface_id = self.esurface_id.0,
                 rotation_id = %self.overlap_builder.counterterm_builder.probe_rotation.method,
-                center_provenance = "current_probe_cut_lmb_frame",
+                center_provenance = "canonical_identity_center_promoted_and_rotated_natively",
                 center = %center_with_fixed_complement,
                 surface_values = %center_surface_values
                     .iter()
@@ -3530,7 +3595,7 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
                     graph = %graph.name,
                     esurface_id = self.esurface_id.0,
                     rotation_id = %self.overlap_builder.counterterm_builder.probe_rotation.method,
-                    center_provenance = "current_probe_cut_lmb_frame",
+                    center_provenance = "canonical_identity_center_promoted_and_rotated_natively",
                     raw_alpha_guess = %raw_alpha_guess,
                     alpha_guess = %alpha_guess,
                     error = %error,

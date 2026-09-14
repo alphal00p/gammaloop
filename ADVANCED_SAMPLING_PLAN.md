@@ -13,6 +13,17 @@ uncertainty. The final joint-certificate optimization is complete and runtime
 tuning has stopped. Correctness repairs remain required. The comparison and
 resource limits below supersede the earlier 10% optimization stopping rule.
 
+The canonical physical-center repair now passes its generated gates and the
+actual retained GL638 failure: CT-on Euler accepts Quad and Arb without changing
+the canonical point/J/partition, and Pi2Z returns identical native totals and
+six cut weights at each precision. The first local H/Z scan is also complete:
+eight saved points on two hard rays, compared through optimized LMB, direct-H
+and joint channels with actual forwarded points and native inverse diagnostics.
+The next local check extends each direction by two decades; full-state reference
+and matched integration evidence remain pending. These are local/fixed-point
+results, not global boundedness or variance claims. See the
+[center audit](docs/research/advanced_sampling/CANONICAL_CT_CENTERS.md).
+
 Current implementation status: there is one `SamplingChannelCatalogue` and one
 `SamplingChannelId` domain. The Symbolica selection parser, explicit parent-LMB
 validation, active `subspace_lmb` metadata, exact affine LMB routing, graph/default
@@ -1204,17 +1215,27 @@ replay preserves every represented sample and physical result. Sampling time
 falls by 15.25% in this batch; valid-call conservative overhead is 41.79% and
 maximum-replay overhead is 48.10%. Runtime tuning stops here as requested.
 The separate repair retaining canonical physical centers across rotations and
-rescue is in validation. No new GL638 normalization or integration gain follows
-from these changes.
+rescue passes 14 focused and 27 broader core tests, including full hosted
+8192-draw acceptance, checking and changed-line Clippy. Its actual GL638 replay
+accepts CT-on Euler in Quad (`2.20e-21` probe discrepancy) and Arb (`4.27e-290`).
+Euler/Pi2Z returned native totals and six cut weights are exact within each
+precision, with all canonical source factors unchanged. The overlap authority
+retains complete accepted-cut membership, real optional channel-ID selector
+semantics and native raised packets; CT-off/reference skip it. The
+[archived matrix](docs/research/advanced_sampling/GL638_HOSTED_JOINT_GATE.md#canonical-physical-centers-actual-gl638-failure-resolved)
+does not establish amplitude covariance, global stability, GL638 normalization
+or integration gain.
 Continue reporting sampling cost honestly; exceeding 10% no longer blocks
-physics studies. Prioritize actual-state Gaussian correctness and the
-fixed-source center repair, then compare at equal sample counts (a) ordinary
-sampling, (b) simpler nonjoint advanced channels, and (c) the best configuration
-including the joint channel. Report signed and absolute integrals with Monte
-Carlo errors, maximum weights and their origin, H/Z-corner boundedness/scaling
-tests, and the best defensible GL638 central value and uncertainty. Compare
-configuration (c)'s maxima against both (a) and (b). Up to 30 cores and 300 GB
-may be used when scaling is useful. These physics results remain pending.
+physics studies. The first eight-point, two-direction H/Z scan is complete for
+optimized LMB, direct-H and joint configurations. Extend those directions by two
+decades next, retaining actual forward/inverse normal distances and full physical
+values. Then establish actual-state reference correctness and compare the
+candidate combinations below at equal sample counts. Report signed and absolute
+integrals with Monte Carlo errors, maximum weights and their origin, H/Z-corner
+boundedness/scaling tests, and the best defensible GL638 central value and uncertainty. Compare
+the joint combinations' maxima against both optimized LMB and nonjoint advanced
+sampling. Up to 30 cores and 300 GB may be used when scaling is useful. Full-state
+normalization, the two-decade extension and integration comparisons remain pending.
 
 For historical scale only, the optimized
 [X2 physical pilot](docs/research/advanced_sampling/GL638_X2_PHYSICAL_PILOT.md#fixed-budget-pilot)
@@ -1330,6 +1351,23 @@ amplitude need not benefit from concentrating on a particular threshold.
 
 ## 6. GL638 validation and completion criteria
 
+The latest candidate matrix uses optimized LMB as the baseline. Every advanced
+candidate includes sampling channels for all six physical cuts, with the direct
+H/Z joint channel switched on or off and the explicit soft LMB `[6,12,13,14]`
+independently included or omitted. Thus compare cuts, cuts+soft, cuts+joint, and
+cuts+joint+soft against the same baseline. Keep the cut-1 radial channel when
+adding its hosted joint channel; selecting a proposal never restricts the
+physical six-cut sum. Preserve normalized full-support coverage in each case.
+
+| Physical cut ID | Exact cut edges | Joint target when enabled |
+| --- | --- | --- |
+| 0 | `[2,6,12,13]` | — |
+| 1 | `[2,6,10]` | Original H=`surface(2,4,12)` and Z=`surface(3,10,13)` in one hosted `[3]` block |
+| 2 | `[2,6,7,13,14]` | — |
+| 3 | `[2,4,12]` | — |
+| 4 | `[2,4,10,13]` | — |
+| 5 | `[2,4,7,14]` | — |
+
 The first manual channels are the direct H surface in the prepared cut-1 p
 block, the certified affine A-star H pullback with its native `[3,7]` context,
 and the rank-two H/Z joint chart in the shared `[3]` p block. The H/Z chart uses
@@ -1354,7 +1392,8 @@ rescue behavior.
 
 Final GL638 acceptance requires the complete six-cut sum, all 936 orientations,
 direct 3D local UV with orientation localization, integrated UV and current
-threshold metadata, and the conservative warmed 10% sampling-cost budget above.
+threshold metadata. Report the warmed sampling cost honestly; the user's latest
+direction accepts present performance and supersedes the former 10% cost gate.
 A local finite-variance or bounded-leading-weight result
 for one regular H/Z patch is reported as such, not promoted to a global theorem.
 Defaults change only after the full matrix and independent-pilot evidence show

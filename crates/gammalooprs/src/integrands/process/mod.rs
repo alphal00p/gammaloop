@@ -17,7 +17,8 @@ use crate::observables::{
     AdditionalWeightKey, EventProcessingRuntime, GenericEvent, HistogramProcessInfo,
     ObservableAccumulatorBundle, ObservableFileFormat, ObservableSnapshotBundle,
 };
-use crate::processes::{GraphGroupSelectionSpec, StandaloneExportSettings};
+use crate::processes::{CutGroupId, GraphGroupSelectionSpec, StandaloneExportSettings};
+use crate::subtraction::lu_counterterm::LUSharedOverlaps;
 use crate::utils::{
     ArbPrec, F, FloatLike, RuntimeCache, f128, format_for_compare_digits,
     get_n_dim_for_n_loop_momenta,
@@ -3103,6 +3104,18 @@ fn get_global_dimension_if_exists<I: ProcessIntegrandImpl>(integrand: &I) -> Opt
 }
 
 pub trait GraphTerm {
+    /// Prepare physical center decisions at the original Arb point. Geometry
+    /// is channel-independent for the same selector-accepted cut set; explicit
+    /// channel selectors retain their source metadata. Amplitudes own their
+    /// separate overlap preparation.
+    fn prepare_physical_overlaps(
+        &mut self,
+        _sample: &MomentumSample<ArbPrec>,
+        _context: GraphTermEvaluationContext<'_, '_, ArbPrec>,
+    ) -> Result<Option<TiVec<CutGroupId, Option<LUSharedOverlaps<ArbPrec>>>>> {
+        Ok(None)
+    }
+
     fn evaluate<T: FloatLike>(
         &mut self,
         sample: &MomentumSample<T>,
@@ -3999,14 +4012,7 @@ impl<'a> EvaluationSource<'a> {
         integrand: &mut I,
         metadata: &mut EvaluationMetaData,
     ) -> Result<Option<GammaLoopSample<ArbPrec>>> {
-        if matches!(
-            self,
-            Self::Prepared { .. }
-                | Self::Momentum(MomentumSpaceEvaluationInput {
-                    channel_id: None,
-                    ..
-                })
-        ) {
+        if matches!(self, Self::Prepared { .. }) {
             return Ok(None);
         }
         let started = Instant::now();
@@ -4014,9 +4020,16 @@ impl<'a> EvaluationSource<'a> {
         metadata.sampling_proposal_policies.begin_collection();
         let result = match self {
             Self::XSpace(sample) => parameterize::<ArbPrec, I>(sample, integrand, metadata),
-            Self::Momentum(input) => integrand
-                .prepare_sampling_precision::<ArbPrec>()
-                .and_then(|_| build_direct_gamma_sample::<ArbPrec, I>(integrand, input, metadata)),
+            Self::Momentum(input) => {
+                let ready = if input.channel_id.is_some() {
+                    integrand.prepare_sampling_precision::<ArbPrec>()
+                } else {
+                    Ok(())
+                };
+                ready.and_then(|_| {
+                    build_direct_gamma_sample::<ArbPrec, I>(integrand, input, metadata)
+                })
+            }
             Self::Prepared { .. } => unreachable!(),
         };
         // Canonical roots and foreign inverses never consume native physical
@@ -4036,29 +4049,20 @@ impl<'a> EvaluationSource<'a> {
     ) -> Result<GammaLoopSample<T>> {
         // Raw callers outside the stability driver still use the same fixed
         // proposal preparation; the production driver retains its output once.
-        let prepared = if matches!(
-            self,
-            Self::XSpace(_)
-                | Self::Momentum(MomentumSpaceEvaluationInput {
-                    channel_id: Some(_),
-                    ..
-                })
-        ) {
+        let prepared = if !matches!(self, Self::Prepared { .. }) {
             self.prepare_draw(integrand, metadata)?
         } else {
             None
         };
         let started = Instant::now();
         let result = (|| {
-            let mut sample = if let Some(sample) = prepared.as_ref().or(self.canonical_sample()) {
-                sample.materialize::<T>(GammaLoopSample::<T>::relative_accuracy_budget(
+            let mut sample = prepared
+                .as_ref()
+                .or(self.canonical_sample())
+                .expect("every original source has a canonical row")
+                .materialize::<T>(GammaLoopSample::<T>::relative_accuracy_budget(
                     integrand.get_settings(),
-                ))?
-            } else if let Self::Momentum(input) = self {
-                build_direct_gamma_sample::<T, I>(integrand, input, metadata)?
-            } else {
-                unreachable!()
-            };
+                ))?;
             // Distinct graph/channel rows may share one evaluator cache. Give
             // every completed point its own identity, including base identities
             // used by rotation-aware caches; retries start with a fresh range.
@@ -4215,6 +4219,7 @@ fn build_direct_gamma_sample<T: FloatLike, I: ProcessIntegrandImpl>(
                     graph_id,
                     channel_id: None,
                     prepared_lu_hosts: vec![],
+                    physical_overlaps: None,
                     integrand_prefactor: sample.one(),
                     sample,
                 }],
@@ -4269,11 +4274,16 @@ fn build_direct_gamma_sample<T: FloatLike, I: ProcessIntegrandImpl>(
                     GammaLoopSample::from_tropical(integrand, group_id, sample)
                 }
                 DiscreteGraphSamplingType::SamplingMultiChanneling(_) => {
-                    let channel_id = input.channel_id.ok_or_else(|| {
-                        eyre!(
-                            "Momentum-space evaluation for discrete multichanneling requires selecting a channel."
-                        )
-                    })?;
+                    let Some(channel_id) = input.channel_id else {
+                        // An unselected raw point evaluates the complete physical
+                        // graph without a proposal partition or artificial channel.
+                        return GammaLoopSample::from_default(
+                            integrand,
+                            sample,
+                            false,
+                            Some(group_id),
+                        );
+                    };
                     let graph = integrand.get_master_graph(group_id);
                     let bridge = graph.sampling_setup().sampling_bridge::<T>()?;
                     let mut contexts = SamplingChannelRuntimeContexts::for_draw(
@@ -4400,7 +4410,10 @@ fn evaluate_from_source_precise<I: ProcessIntegrandImpl>(
             "reference acceptance does not support tropical sampling"
         ));
     }
-    let anchor = source.prepare_draw(integrand, &mut evaluation_metadata)?;
+    let mut anchor = source.prepare_draw(integrand, &mut evaluation_metadata)?;
+    if let (Some(sample), EvaluationTarget::Physical(model)) = (&mut anchor, target) {
+        sample.prepare_physical_overlaps(integrand, model, &mut evaluation_metadata)?;
+    }
     let original_source = source;
     let source = match &anchor {
         Some(sample) => EvaluationSource::Prepared {
@@ -4873,9 +4886,13 @@ pub(crate) mod tests {
             )
             .unwrap();
         let original_source = EvaluationSource::XSpace(source);
-        let anchor = original_source
+        let mut anchor = original_source
             .prepare_draw(integrand, &mut metadata)?
             .unwrap();
+        anchor.prepare_physical_overlaps(integrand, model, &mut metadata)?;
+        assert_eq!(metadata.generated_event_count, 0);
+        assert_eq!(metadata.accepted_event_count, 0);
+        let preparation_time = metadata.canonical_physical_preparation_time;
         let prepared_source = EvaluationSource::Prepared {
             sample: &anchor,
             original: &original_source,
@@ -4893,6 +4910,11 @@ pub(crate) mod tests {
         assert_ne!(history, format!("{:?}", RadialRootDiagnostics::default()));
         let rotation = Rotation::new(RotationMethod::Pi2Z);
         let rotated = original.rotate(&rotation, 17, 23);
+        let canonical_overlaps = anchor.groups[0].1[0].physical_overlaps.as_ref().unwrap();
+        assert!(std::sync::Arc::ptr_eq(
+            canonical_overlaps,
+            rotated.groups[0].1[0].physical_overlaps.as_ref().unwrap(),
+        ));
         let retained = &rotated.groups[0].1[0].prepared_lu_hosts;
         assert_eq!(retained.len(), prepared_lu_hosts.len());
         for (before, after) in prepared_lu_hosts.iter().zip(retained) {
@@ -4948,6 +4970,14 @@ pub(crate) mod tests {
             false,
             Some(&anchor),
         )?;
+        assert_eq!(
+            baseline_metadata.canonical_physical_preparation_time,
+            preparation_time
+        );
+        assert_eq!(
+            rotated_metadata.canonical_physical_preparation_time,
+            preparation_time
+        );
         for result in [&baseline, &physical_rotated] {
             assert!(result.integrand_result.re.0.is_finite());
             assert!(result.integrand_result.im.0.is_finite());
@@ -4985,6 +5015,43 @@ pub(crate) mod tests {
         assert!(physical_rotated.event_groups.is_empty());
         assert_eq!(physical_rotated.generated_event_count, 0);
         assert_eq!(physical_rotated.accepted_event_count, 0);
+
+        // Losing a canonical accepted cut is not a request to choose a new
+        // overlap. The real physical boundary must reject it before CT work.
+        let mut incomplete = anchor.clone();
+        let overlaps = std::sync::Arc::make_mut(
+            incomplete.groups[0].1[0]
+                .physical_overlaps
+                .as_mut()
+                .unwrap(),
+        );
+        let accepted = overlaps.iter_mut().find(|entry| entry.is_some()).unwrap();
+        *accepted = None;
+        let mut incomplete_metadata = metadata.clone();
+        let error = super::evaluate_single(
+            integrand,
+            super::EvaluationTarget::Physical(model),
+            &original,
+            &Rotation::new(RotationMethod::Identity),
+            &mut incomplete_metadata,
+            false,
+            Some(&incomplete),
+        )
+        .unwrap_err();
+        assert!(
+            error
+                .downcast_ref::<super::sampling_maps::SamplingEvaluationError>()
+                .is_some(),
+            "{error:?}"
+        );
+        assert!(
+            error.to_string().contains("selector/cut membership"),
+            "{error:?}"
+        );
+        assert_eq!(
+            incomplete_metadata.canonical_physical_preparation_time,
+            preparation_time
+        );
 
         // A claimed selected record with another graph ID is corruption,
         // not an ordinary graph-group member for which no authority is supplied.
@@ -5100,8 +5167,24 @@ pub(crate) mod tests {
             orientation: None,
         };
         let raw_source = EvaluationSource::Momentum(&direct);
-        assert!(raw_source.prepare_draw(integrand, &mut metadata)?.is_none());
-        let raw_quad = raw_source.build_gamma_sample::<QuadFloat, _>(integrand, &mut metadata)?;
+        let mut raw_anchor = raw_source.prepare_draw(integrand, &mut metadata)?.unwrap();
+        raw_anchor.prepare_physical_overlaps(integrand, model, &mut metadata)?;
+        assert!(
+            raw_anchor
+                .groups
+                .iter()
+                .flat_map(|(_, rows)| rows)
+                .all(|row| {
+                    row.channel_id.is_none()
+                        && row.prepared_lu_hosts.is_empty()
+                        && row.physical_overlaps.is_some()
+                })
+        );
+        let raw_prepared = EvaluationSource::Prepared {
+            sample: &raw_anchor,
+            original: &raw_source,
+        };
+        let raw_quad = raw_prepared.build_gamma_sample::<QuadFloat, _>(integrand, &mut metadata)?;
         assert_eq!(
             raw_quad.get_default_sample().loop_moms().0[0].px.0,
             <QuadFloat as crate::utils::FloatLike>::from_f64_exact_binary(0.1)

@@ -1,9 +1,11 @@
 # GL638 hosted joint gate: first optimized measurements
 
-The original H/Z joint channel runs on the complete GL638 integrand, but it
-does **not** yet meet the sampling-cost or numerical-stability gates. These
-measurements concern commit `072c9999ee928e8e9979f92bd5fb16d4f17ca15f` on
-2026-09-14. They do not establish an integration gain or bounded weights.
+The original H/Z joint channel runs on the complete GL638 integrand. Its
+retained numerical failure now passes after the canonical physical-center repair
+documented below. The original measurements at commit
+`072c9999ee928e8e9979f92bd5fb16d4f17ca15f` failed both cost and stability gates;
+those results remain archived. Performance tuning has stopped at the user's
+request. No integration gain or bounded-weight claim follows from these tests.
 
 ## Fixed physical calculation and proposal
 
@@ -143,7 +145,8 @@ when CT-off has deliberately left their cache empty. The source fix moves
 that collection into the existing CT-enabled branch. Its generated conditional
 cut regression has passed, including actual CT-off direct and selected calls,
 per-cut original-weight comparisons, and rest/boosted parent frames. **Actual
-GL638 CT-off remains unverified until the new build runs.** The archived exit-1
+GL638 CT-off was still unverified at this stage.** The later successful 1f replay
+is recorded below. The archived exit-1
 status and panic are preserved; they are not a CT-off numerical result.
 
 The diagnostic also contains one-worker detached map timings. Direct hosted
@@ -273,7 +276,7 @@ the center printouts as exact decimal values instead changes the norm difference
 by only about `7e−15 GeV`; this is immaterial to the finding. The raw trace,
 line-numbered extraction and script are retained.
 
-The center repair is being implemented separately: choose complete physical
+The center repair, validated in the final section below, chooses complete physical
 overlaps once from each canonical point, independently of the sampling channel,
 then promote the stored center bits exactly and rotate in native precision.
 Native cuts retain their own complements, LU/alpha solves and raised packets.
@@ -282,8 +285,7 @@ physical convention for the same accepted cut set. Explicit channel-ID selectors
 retain the real source annotation and may intentionally change that set; their
 semantics must not be replaced by a fictitious channel or a numerical retry.
 Unexplained native membership disagreement must fail without selecting a
-replacement center. This is pending implementation validation; it is not an
-A-star map, a demonstrated cure, or an amplitude covariance claim.
+replacement center. It is not an A-star map or an amplitude covariance claim.
 
 ## Follow-up archive and replay
 
@@ -362,7 +364,81 @@ remain, and all 35 state hashes are unchanged. The archive retains individual
 hard-point ratios, tails and the complete failed rows.
 
 The user has explicitly accepted present performance. Further runtime tuning
-stops despite exceeding the former 10% target. Work now proceeds to canonical
-physical-center validation and the requested matched physics comparisons.
+stops despite exceeding the former 10% target. Work proceeds to the requested
+matched physics comparisons after the physical-center validation below.
 Neither bounded weights nor a variance improvement is established by this
 performance experiment.
+
+## Canonical physical centers: actual GL638 failure resolved
+
+Optimized build 4 uses base `6e9bf401db75cb13ec20e18377a444bc2fcd4f33` plus
+source patch `1d78e98b73e6a8dafaf6e446353c2a1607dc0724f8ea7d1c2d88c4962b81bba7`.
+It retains complete physical overlaps from the canonical Arb source, then
+promotes the binary64 center bits exactly before each native rotation. The
+[implementation note](CANONICAL_CT_CENTERS.md) describes accepted-cut validation,
+explicit channel selectors, native complements and raised packets. Fourteen
+focused and 27 broader core tests pass, including the full hosted 8192-draw
+fixture; checking and all-target Clippy pass with no changed-line warnings.
+
+The same worker12/draw12 Sample now completes every requested physical branch.
+Each has one ordinary call and one forced-Arb call, with all 936 orientations
+and six retained cut weights. Tolerances, source cube and outer weight 7 are
+unchanged. The values below are the actual final two-probe discrepancies.
+
+| Target and second probe | Ordinary configured stack | Forced Arb |
+| --- | --- | --- |
+| CT on, Euler `(0.1,0.2,0.3)` | Valid Quad; `2.200848788466276e-21` | Valid; `4.2692671432208616e-290` |
+| CT on, Pi/2 about z | Valid Quad; `2.346417869593957e-26` | Valid; zero |
+| CT off, Euler | Valid Quad; `8.814134297321171e-23` | Valid; `1.6901990237284813e-301` |
+| Gaussian reference, either Euler branch | Valid Double; `5.001898468563083e-16` | Not requested |
+| Gaussian reference, Pi/2 about z | Valid Double; zero | Not requested |
+
+All six physical results are finite and valid, with `is_nan=false`; Double
+still fails before the physical body on the retained hard sample, then Quad
+recovers. The valid control remains valid Double in both clone-only and
+rewarmed workers. Gaussian results are checked f64 reports after native
+evaluation, and these single points are not a normalization test.
+
+Euler and Pi2Z return exactly equal native totals and all six cut weights within
+each precision. The ordinary-versus-Arb complex-norm discrepancy is
+`1.77734e-21` with CTs and `1.64143e-22` without. The tiny CT-off real part does
+not have meaningful relative component accuracy; the archived audit retains
+its absolute and norm-scaled discrepancies. Every canonical point, Jacobian and
+partition comparison is exact across branches, workers and before/after calls.
+CT-off forced-Arb totals and cut weights also equal the previous 1f result
+exactly. The new CT-on identity value changes by `1.70996e-17` in complex norm
+from the previous identity prescription; it is not claimed bit-identical.
+
+The formerly differing physical cut3/group0 retains center
+`(-96.7415997053086,234.15172244667613,252.2392543658604)`, membership `[0,1]`
+and parent `LmbIndex(64)`. The table now displays the unrotated canonical center.
+In the actual Arb Euler consumption, both left radii agree exactly and both
+r-star differences are only `-4.8e-299 GeV`; the alpha differences are about
+`-2.3e-302`, with energy residuals at most `1.92e-298`. Right radii/r-star values
+agree exactly. Pi2Z radii, r-star and alpha agree exactly. The display trace
+does not expose `file.active_center`, so equality of the stored center table
+is not presented as a direct measurement of the rotated native vector.
+
+The [archive](gl638_hosted_joint_gate/canonical_centers/run.json) stores the
+unaltered progress JSON and trace compressed, all 35 unchanged state hashes,
+cards, exact source patch, build/dependency provenance, gate logs and repeatable
+analysis. Driver source is the same archived `7b5e474e…` source; no binary or
+physics state is copied. Duplicate full summaries are represented by hashes.
+The `canonical_physical_preparation_time` subset of P is about 3.1–3.3 ms in
+these CT-on calls and exactly zero for CT-off and reference calls. This is a
+traced one-worker diagnostic, not a cost or parallel-scaling measurement;
+rejected detached hosted component calls remain unusable timing observations.
+
+```sh
+RAYON_NUM_THREADS=20 \
+GL_DISPLAY_FILTER=off,gammalooprs::integrands::process=debug,gammalooprs::subtraction::lu_counterterm=debug \
+  /tmp/gl638-hosted-joint-gate/drivers/gate-centers \
+  /tmp/gl638-hosted-joint-gate/manifest-centers-diagnostic.json \
+  /tmp/gl638-hosted-joint-gate/results-centers-diagnostic1 \
+  joint_hz_plus_lmb failure-diagnostic 1 1 1 1337
+```
+
+The process exits zero and the complete matrix is valid. This resolves the
+retained GL638 rotation failure; global numerical stability, CT-star coverage,
+full-state normalization, H/Z boundedness and integration improvement still
+require their own physical evidence.

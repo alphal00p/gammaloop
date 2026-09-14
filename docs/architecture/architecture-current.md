@@ -618,7 +618,32 @@ draw cache. This fixes the continuous-map switching gap described in the
 [canonical source contract](../research/advanced_sampling/CANONICAL_DRAW_SOURCE.md).
 The correction passes 214 core tests and three API gates, including the complete
 generated-amplitude and saved-state acceptance runs. Hosted joint binding and
-completed-point normal accuracy remain the next cross-section gate.
+completed-point normal accuracy were the next cross-section gate; their later
+implemented ownership is described above.
+
+Physical cross-section overlaps now also have an immutable source authority.
+Before lane selection, the existing Gamma row traversal prepares complete
+accepted-cut representatives from the canonical Arb point through the physical
+LU root owner, then chooses identity-frame SOCP/forced centers once. Bare raw
+input retains its real absent channel; selected, summed and nonmaster rows use
+the same physical convention. Selector-only events carry the source's actual
+optional channel ID, so an explicit channel-ID predicate may change the accepted
+cut set. Geometry is channel-independent for the same accepted physical cuts.
+Reference targets and CT-off skip this preparation; amplitudes retain their
+existing center behavior.
+
+Rows retain the original-frame overlap authority across casts and rotations.
+Native consumers preserve per-cut complements, LU/alpha solves and raised
+packets, validating complete group membership, solve signatures and ordered
+parents before using the retained centers. A mismatch fails without choosing a
+replacement center. Both consumers promote binary64 center bits exactly before
+rotating in native arithmetic. Canonical event/runtime and radial history are
+isolated from physical probes and restored on errors. The
+`canonical_physical_preparation_time` metadata field exposes this work as a
+subset of physical time, counted once; map/adoption costs retain their separate
+sampling attribution. The [center audit](../research/advanced_sampling/CANONICAL_CT_CENTERS.md)
+records the generated gates and successful actual GL638 failure replay, without
+claiming amplitude covariance or numerical coverage of every selector/group.
 
 The geometry and timing source passes 175 selected core tests, including the
 complete 8192-draw kite rerun and its physical/retry checks, plus three API gates.
@@ -662,9 +687,10 @@ this unoptimized complete-fixture timing is not a production budget measurement.
 Combined checking (12.56 s), clippy (57.76 s; no changed-line warnings), formatting
 and diff checks pass. The optimized GL638 10% budget remains unmeasured.
 
-Hosted cross-section joint binding remains disabled. It still needs certified
-fixed-external routing and propagation of host uncertainty into its density; CT-star
-maps additionally need the actual common center and projection alpha handoff.
+That native-host milestone preceded hosted joint binding. The subsequent
+fixed-external routing, retained canonical law and original-normal adoption
+checks are described above; CT-star maps still need to consume the actual common
+center and projection alpha through their own dependency-certified handoff.
 Map coverage is `Full` or `Restricted`, independently of `requires_context` and
 the new `requires_proposal_policy` preparation flag.
 Certified inverse exclusion propagates through the existing compositions,

@@ -990,6 +990,10 @@ pub struct EvaluationMetaData {
     /// evaluator/event work and excludes separately timed sampling maps and
     /// host-adoption certificates, even when these run inside a target body.
     pub integrand_evaluation_time: Duration,
+    /// Subset of physical time: one canonical representative-cut/overlap prepass.
+    /// Report separately while native primal roots are still solved again, so
+    /// repeated preparation cannot inflate the sampling-budget denominator.
+    pub canonical_physical_preparation_time: Duration,
     /// Existing primary-call evaluator subset of integrand_evaluation_time.
     pub evaluator_evaluation_time: Duration,
     /// Source/map/partition work across all attempts and replays. Canonical
@@ -1077,6 +1081,7 @@ impl EvaluationMetaData {
         Self {
             total_timing: Duration::ZERO,
             integrand_evaluation_time: Duration::ZERO,
+            canonical_physical_preparation_time: Duration::ZERO,
             evaluator_evaluation_time: Duration::ZERO,
             parameterization_time: Duration::ZERO,
             event_processing_time: Duration::ZERO,
