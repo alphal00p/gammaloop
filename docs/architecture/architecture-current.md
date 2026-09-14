@@ -543,10 +543,11 @@ the actual native energy residual must certify an interior point. Conservative
 sign tolerances include cancelling routed inputs. Empty-complement preparation
 is frozen at warmup. Certified absence or explicit pinched status retains a
 normalized full-support fallback; a failed solve or numerically ambiguous sign
-requires a typed numerical error. Per-draw preparation participates in precision
-rescue. Frozen-binding successes and typed numerical failures use the same
-native runtime caches. Warmup requires one configured precision usable for all
-graphs; structural errors and failure at every precision invalidate the epoch.
+requires a typed numerical error. Production preparation now uses one fixed-Arb
+proposal; only subsequent physical materialization/evaluation participates in
+precision rescue. Frozen-binding successes and typed numerical failures use the
+same native runtime caches. Warmup requires the canonical Arb binding for all
+graphs; optional native component failures cannot reject a valid canonical draw.
 This is not an interval certificate. Automatic discovery remains unfinished.
 The combined X2 numerical gates for conditional cuts and frozen-binding rescue
 pass, including the broader 141-test core/API run. The selected UV-finite two-loop amplitude benchmarks are recorded in
@@ -587,19 +588,22 @@ binder, nonzero offset, compact roundtrip and production reference evaluation.
 These joint fixtures clear rotation probes; nonidentity-probe behavior and
 GL638 runtime improvement are not established by this milestone.
 
-An original-source preparation phase uses existing 1000-bit Arb arithmetic and
-the same graph/channel map traversal to collect discrete compact/fallback and
-dyadic-radius choices. `EvaluationMetaData` owns these transient records, keyed
-by graph, generating channel, target channel and compiled block path.
-`SamplingChannelRuntimeContexts` lends that owner to the component's typed
-prerequisite context; warmed maps retain no mutable draw cache. Preparation runs
-before norm-based lane selection and final target evaluation. Map-required roots
-and centers still run; the physical shared-overlap pipeline, rotations and events
-are skipped. Every native, summed, direct and debug replay rebuilds numerical
-data and compares its complete decision with the sealed choice. Missing or
-conflicting choices produce existing typed retry/error handling. Ordinary
-catalogues need no extra phase. This finite-budget comparison concerns
-represented source data; it does not certify an exact physical host root.
+The original-source preparation phase now retains the complete 1000-bit Arb
+draw, including graph-parent coordinates, combined factors and selected host
+records. Selected, summed and default/LMB routes prepare before norm-based
+lane selection or physical targets. The existing Gamma/Discrete owners hold
+completed rows with their event-group boundaries; the old cube-only summed
+placeholders and physical LMB reinterpretation are removed. Physical attempts
+materialize directly from the same anchor without maps, partitions or sampling
+root solves. Direct selected momentum input prepares only its partition; direct
+unselected input needs no map phase. Norm and debug access do not redraw.
+`EvaluationMetaData` retains discrete component decisions and root diagnostics,
+while `EvaluationSource` borrows the immutable draw. Warmed maps have no mutable
+draw cache. This fixes the continuous-map switching gap described in the
+[canonical source contract](../research/advanced_sampling/CANONICAL_DRAW_SOURCE.md).
+The correction passes 214 core tests and three API gates, including the complete
+generated-amplitude and saved-state acceptance runs. Hosted joint binding and
+completed-point normal accuracy remain the next cross-section gate.
 
 The geometry and timing source passes 175 selected core tests, including the
 complete 8192-draw kite rerun and its physical/retry checks, plus three API gates.
@@ -626,10 +630,10 @@ The native host handoff is implemented and its combined gates pass. The existing
 runtime context owns one native record vector; the initial selected forward or
 direct inverse freezes its authoritative prefix before partition inverses.
 Only identical plans and exact represented priors reuse a record. Selected/summed
-samples lend that prefix to the physical owner; native precision retries redraw
-the source, and rotations retain the original-frame payload. Metadata contains
-only discrete policies and root history; canonical/norm/debug histories are
-isolated. Graph-group masters authenticate their records before ordinary foreign
+samples lend that prefix to the physical owner. The subsequent source correction
+materializes it directly from Arb, and rotations retain the original-frame
+payload. Metadata contains discrete policies and root history, with canonical
+preparation history isolated. Graph-group masters authenticate their records before ordinary foreign
 graphs receive an empty payload. Physical adoption rotates the ray once and
 authenticates its parent/host against the selected immutable channel, then
 compares it with independently routed completed data using a fixed directed

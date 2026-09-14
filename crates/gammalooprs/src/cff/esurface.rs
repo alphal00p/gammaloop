@@ -38,9 +38,10 @@ use crate::utils::newton_solver::{
     NewtonIterationResult, RadialRootDiagnostics, RadialRootIdentity, SafeguardedNewtonError,
 };
 use crate::utils::{
-    DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, ESURFACE_SHIFT_THRESHOLD, F, FloatLike, GS, Length,
-    compute_loop_part, compute_loop_part_subspace, compute_shift_part, compute_shift_part_subspace,
-    compute_t_part_of_shift_part, cut_energy, external_energy_atom_from_index, ose_atom_from_index,
+    ArbPrec, DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, ESURFACE_SHIFT_THRESHOLD, F, FloatLike, GS,
+    Length, compute_loop_part, compute_loop_part_subspace, compute_shift_part,
+    compute_shift_part_subspace, compute_t_part_of_shift_part, cut_energy,
+    external_energy_atom_from_index, ose_atom_from_index,
 };
 use crate::uv::uv_graph::UVE;
 use color_eyre::Result;
@@ -68,6 +69,35 @@ pub(crate) struct EsurfaceRay<T: FloatLike> {
     // map would not. The tuple's fields are documented on EsurfaceRayEnergy.
     energies: Vec<EsurfaceRayEnergy<T>>,
     shift: F<T>,
+}
+
+impl EsurfaceRay<ArbPrec> {
+    /// Retain the canonical ordered equation while materializing its native
+    /// coefficients. Physical adoption still authenticates and checks the ray.
+    pub(crate) fn materialize<T: FloatLike>(&self) -> Result<EsurfaceRay<T>> {
+        let spatial = |p: &ThreeMomentum<F<ArbPrec>>| -> Result<ThreeMomentum<F<T>>> {
+            Ok(ThreeMomentum::new(
+                F::from_arb(&p.px.0)?,
+                F::from_arb(&p.py.0)?,
+                F::from_arb(&p.pz.0)?,
+            ))
+        };
+        Ok(EsurfaceRay {
+            energies: self
+                .energies
+                .iter()
+                .map(|(edge, velocity, offset, mass)| {
+                    Ok((
+                        *edge,
+                        spatial(velocity)?,
+                        spatial(offset)?,
+                        F::from_arb(&mass.0)?,
+                    ))
+                })
+                .collect::<Result<_>>()?,
+            shift: F::from_arb(&self.shift.0)?,
+        })
+    }
 }
 
 impl<T: FloatLike> EsurfaceRay<T> {
@@ -495,8 +525,9 @@ impl Eq for Esurface {}
 
 impl Esurface {
     /// Match two energy sums on one active spatial momentum. Their shared
-    /// energy is identified by a single sign of the complete affine routing
-    /// and the mass expression, never by edge identity or rounded momenta.
+    /// energy is identified by a single sign of the full internal routing,
+    /// exact external spatial shift and mass expression, never by edge identity
+    /// or a rounded-momentum tolerance.
     /// The returned common route has active coefficient +1: the kernel uses
     /// x=L+c0, so the existing affine embedding must return L=x-c0.
     // Physical binders must transport one prerequisite-only disk policy
@@ -598,23 +629,37 @@ impl Esurface {
                 ));
             }
         }
-        let shared = varying[0]
+        // Keep the original global equations. Replacing this shift by a
+        // cut-eliminated identity would move the target by a finite LU residual.
+        let shifts =
+            surfaces.map(|surface| surface.compute_shift_part_from_momenta(external_momenta, lmb));
+        let externals: ExternalThreeMomenta<F<T>> =
+            external_momenta.iter().map(|p| p.spatial.clone()).collect();
+        if shifts
             .iter()
-            .enumerate()
-            .flat_map(|(left, &a)| {
-                varying[1]
-                    .iter()
-                    .enumerate()
-                    .filter_map(move |(right, &b)| {
-                        (lmb.edge_signatures[a].equality_up_to_sign(&lmb.edge_signatures[b])
-                            && graph[a].mass_atom() == graph[b].mass_atom())
-                        .then_some((left, right))
-                    })
-            })
-            .collect_vec();
+            .chain(externals.iter().flat_map(|p| [&p.px, &p.py, &p.pz]))
+            .any(|value| !value.0.is_finite())
+        {
+            return Err(SamplingEvaluationError::Unrepresentable {
+                operation: "joint external data",
+                detail: "non-finite external spatial vector or original energy shift".into(),
+            }
+            .into());
+        }
+        let mut shared = Vec::new();
+        for (left, &a) in varying[0].iter().enumerate() {
+            for (right, &b) in varying[1].iter().enumerate() {
+                if graph[a].mass_atom() == graph[b].mass_atom()
+                    && lmb.edge_signatures[a]
+                        .spatial_equality_up_to_sign(&lmb.edge_signatures[b], &externals)?
+                {
+                    shared.push((left, right));
+                }
+            }
+        }
         let [(left, right)] = shared.as_slice() else {
             return Err(eyre!(
-                "joint energy sampling requires exactly one common full signed routing and mass expression; found {} candidates for {:?}. Distinct external shifts, including fixed-kinematics spatial specializations, are not supported",
+                "joint energy sampling requires exactly one common full signed routing in the supplied spatial frame and mass expression; found {} candidates for {:?}",
                 shared.len(),
                 varying
             ));
@@ -652,23 +697,6 @@ impl Esurface {
                 .filter(|edge| lmb.edge_signatures[*edge].internal[active] == SignOrZero::Zero)
                 .collect_vec()
         });
-        // Keep the original global equations. Replacing this shift by a
-        // cut-eliminated identity would move the target by a finite LU residual.
-        let shifts =
-            surfaces.map(|surface| surface.compute_shift_part_from_momenta(external_momenta, lmb));
-        let externals: ExternalThreeMomenta<F<T>> =
-            external_momenta.iter().map(|p| p.spatial.clone()).collect();
-        if shifts
-            .iter()
-            .chain(externals.iter().flat_map(|p| [&p.px, &p.py, &p.pz]))
-            .any(|value| !value.0.is_finite())
-        {
-            return Err(SamplingEvaluationError::Unrepresentable {
-                operation: "joint external data",
-                detail: "non-finite external spatial vector or original energy shift".into(),
-            }
-            .into());
-        }
         let lmb = lmb.clone();
         let masses = masses.clone();
         let complement = complement.to_vec();
@@ -2534,6 +2562,172 @@ mod tests {
             .to_string()
             .contains("found 0 candidates")
         );
+    }
+
+    #[test]
+    fn joint_sampling_matches_exact_external_cm_relation_only() {
+        test_initialise().unwrap();
+        // The two extra external ports between the distinct common-energy
+        // edges sum to zero spatially in CM, but carry nonzero total energy.
+        let graph: Graph = dot!(digraph joint_external_energy {
+            ext_in [style=invis]
+            ext_out [style=invis]
+            beam_a [style=invis]
+            beam_b [style=invis]
+            node [num=1]
+            edge [num=1 mass=1]
+            ext_in -> A:0 [id=0 mass=0]
+            C:1 -> ext_out [id=1 mass=0]
+            A -> B [id=2 mass=2]
+            B -> C [id=3]
+            C -> D [id=4 lmb_id=0]
+            D -> A [id=5 mass=3]
+            B -> E [id=6 lmb_id=1]
+            D -> E [id=7]
+            beam_a -> E [id=8 mass=0]
+            beam_b -> E [id=9 mass=0]
+        })
+        .unwrap();
+        fn check<T: FloatLike>(graph: &Graph) {
+            let one = F::<T>::default().one();
+            let zero = one.zero();
+            let lmbs = ti_vec![graph.loop_momentum_basis.clone()];
+            let id = LmbIndex::from(0);
+            let lmb = &lmbs[id];
+            let subspace = SubspaceData::new_from_parent_basis_edges(
+                &[EdgeIndex(6)],
+                &graph.full_filter(),
+                id,
+                graph,
+                &lmbs,
+            )
+            .unwrap();
+            let active = subspace.iter_lmb_indices().next().unwrap();
+            let prior = lmb
+                .loop_edges
+                .iter_enumerated()
+                .find_map(|(index, edge)| (*edge == EdgeIndex(4)).then_some(index))
+                .unwrap();
+            let left = Esurface {
+                energies: vec![EdgeIndex(2), EdgeIndex(4), EdgeIndex(6)],
+                external_shift: vec![(EdgeIndex(0), -1)],
+                vertex_set: VertexSet::dummy(),
+            };
+            let right = Esurface {
+                energies: vec![EdgeIndex(3), EdgeIndex(5), EdgeIndex(7)],
+                ..left.clone()
+            };
+            let masses = graph
+                .underlying
+                .new_edgevec_from_iter(
+                    [0, 0, 2, 1, 1, 3, 1, 1, 0, 0].map(|mass| one.from_usize(mass)),
+                )
+                .unwrap();
+            assert!(
+                !lmb.edge_signatures[EdgeIndex(6)]
+                    .equality_up_to_sign(&lmb.edge_signatures[EdgeIndex(7)])
+            );
+            assert!(!lmb.edges_are_raised(EdgeIndex(6), EdgeIndex(7)));
+            for boosted in [false, true] {
+                let externals = ExternalFourMomenta::from_iter(lmb.ext_edges.iter().map(|edge| {
+                    let (energy, z) = match edge.0 {
+                        0 => (20, 0),
+                        1 => (26, 0),
+                        8 => (3, 2),
+                        9 => (3, -2),
+                        _ => unreachable!(),
+                    };
+                    let (energy, z) = (one.from_i64(energy), one.from_i64(z));
+                    // Exact rational Lorentz boost: gamma=5/4, gamma*v=3/4.
+                    let (energy, z) = if boosted {
+                        (
+                            (one.from_i64(5) * &energy + one.from_i64(3) * &z) / one.from_i64(4),
+                            (one.from_i64(3) * energy + one.from_i64(5) * z) / one.from_i64(4),
+                        )
+                    } else {
+                        (energy, z)
+                    };
+                    FourMomentum::from_args(energy, zero.clone(), zero.clone(), z)
+                }));
+                let matched = left.sampling_joint_geometry_in_subspace(
+                    &right,
+                    &subspace,
+                    &lmbs,
+                    graph,
+                    &masses,
+                    &externals,
+                    &[prior],
+                );
+                if boosted {
+                    assert!(
+                        matched
+                            .err()
+                            .unwrap()
+                            .to_string()
+                            .contains("found 0 candidates")
+                    );
+                    continue;
+                }
+                let (prepare, common) = matched.unwrap();
+                let prior_values = [one.clone(), zero.clone(), -(&one / one.from_i64(2))];
+                let geometry = prepare(&prior_values.clone().map(|x| x.0)).unwrap();
+                assert_eq!(
+                    geometry.masses,
+                    [one.0.clone(), one.from_i64(2).0, one.from_i64(3).0]
+                );
+                let mut loops = LoopMomenta::from_iter(
+                    (0..2).map(|_| ThreeMomentum::new(zero.clone(), zero.clone(), zero.clone())),
+                );
+                loops[prior] = ThreeMomentum::new(
+                    prior_values[0].clone(),
+                    prior_values[1].clone(),
+                    prior_values[2].clone(),
+                );
+                let spatial: crate::momentum::sample::ExternalThreeMomenta<F<T>> =
+                    externals.iter().map(|p| p.spatial.clone()).collect();
+                for values in [[1, -2, 3], [-3, 1, -1]] {
+                    let values = values.map(|value| one.from_i64(value) / one.from_i64(4));
+                    loops[active] =
+                        ThreeMomentum::new(values[0].clone(), values[1].clone(), values[2].clone());
+                    let x: ThreeMomentum<F<T>> = common.compute_momentum(&loops, &spatial);
+                    let e0 = (x.norm_squared() + F(geometry.masses[0].clone()).square()).sqrt();
+                    for (index, surface) in [&left, &right].into_iter().enumerate() {
+                        let shift = geometry.shifts[index].each_ref().map(|x| F(x.clone()));
+                        let partner = &x
+                            + &ThreeMomentum::new(
+                                shift[0].clone(),
+                                shift[1].clone(),
+                                shift[2].clone(),
+                            );
+                        let expected = &e0
+                            + (partner.norm_squared()
+                                + F(geometry.masses[index + 1].clone()).square())
+                            .sqrt()
+                            - F(geometry.energy_sums[index].clone());
+                        let original =
+                            surface.compute_from_momenta(lmb, &masses, &loops, &externals);
+                        assert!(
+                            (original - expected).abs() < one.epsilon().sqrt() * one.from_i64(100)
+                        );
+                    }
+                }
+                // External temporal shifts and every fixed occurrence survive
+                // the spatial alias; no on-cut energy substitution is made.
+                let fixed: ThreeMomentum<F<T>> =
+                    lmb.edge_signatures[EdgeIndex(4)].compute_momentum(&loops, &spatial);
+                let fixed_energy = (fixed.norm_squared() + masses[EdgeIndex(4)].square()).sqrt();
+                assert!(
+                    (F(geometry.energy_sums[0].clone())
+                        + fixed_energy
+                        + left.compute_shift_part_from_momenta(&externals, lmb))
+                    .abs()
+                        < one.epsilon().sqrt() * one.from_i64(100)
+                );
+            }
+        }
+        check::<f64>(&graph);
+        check::<QuadFloat>(&graph);
+        check::<ArbPrec>(&graph);
     }
 
     #[test]

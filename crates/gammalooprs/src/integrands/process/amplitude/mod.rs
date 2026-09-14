@@ -72,7 +72,7 @@ use crate::{
     settings::{
         GlobalSettings, RuntimeSettings,
         global::{CompilationOptimizationLevel, FrozenCompilationMode},
-        runtime::ParameterizationSettings,
+        runtime::{DiscreteGraphSamplingType, ParameterizationSettings, SamplingSettings},
     },
     subtraction::{
         amplitude_counterterm::{
@@ -1072,6 +1072,27 @@ impl GraphTerm for AmplitudeGraphTerm {
 
         self.param_builder = self.graph.param_builder.clone();
 
+        if matches!(&settings.sampling,
+            SamplingSettings::DiscreteGraphs(discrete)
+                if matches!(discrete.sampling_type, DiscreteGraphSamplingType::TropicalSampling(_)))
+        {
+            // Tropical compensation previously used get_energy_cache, which
+            // rejects complex masses on paired edges. Preserve that contract
+            // before caching only the real parts for canonical preparation.
+            for (pair, edge_id, edge) in self.graph.iter_edges() {
+                if pair.is_paired()
+                    && let Some(mass) = edge.data.mass_value::<f64>(model, &self.param_builder)
+                    && mass.im != mass.im.zero()
+                {
+                    return Err(eyre!(
+                        "tropical sampling graph '{}' requires real masses; edge {} has mass {}",
+                        self.graph.name,
+                        edge_id,
+                        mass
+                    ));
+                }
+            }
+        }
         let masses = self
             .graph
             .new_edgevec(|e, _, _| e.mass_value(model, &self.param_builder).map(|c| c.re));
@@ -3291,6 +3312,57 @@ parent_lmb = [4]
                 .sampling_proposal_policies
                 .is_empty()
         );
+        {
+            use crate::settings::runtime::DiscreteGraphSamplingSettings;
+            let ProcessIntegrand::Amplitude(generated) = &*runtime else {
+                unreachable!()
+            };
+            let mut term = generated.data.graph_terms[0].clone();
+            let loops = LoopMomenta::from_iter(
+                forward
+                    .raw_coordinates
+                    .chunks_exact(3)
+                    .map(|p| ThreeMomentum::new(F(p[0]), F(p[1]), F(p[2]))),
+            );
+            let externals = settings
+                .kinematics
+                .externals
+                .get_dependent_externals::<f64>(DependentMomentaConstructor::Amplitude(
+                    &generated.data.external_signature,
+                ))?;
+            let old = term.graph.get_energy_cache(
+                &model,
+                &loops,
+                &externals,
+                &term.graph.loop_momentum_basis,
+            );
+            let masses = term.get_real_mass_vector();
+            for (_, edge, _) in term.graph.iter_loop_edges() {
+                let momentum = term.graph.loop_momentum_basis.edge_signatures[edge]
+                    .compute_four_momentum_from_three(&loops, &externals);
+                let current = momentum.spatial.on_shell_energy(masses[edge]).value;
+                assert_eq!(
+                    current, old[edge],
+                    "tropical compensation energy must preserve the old cache equation"
+                );
+            }
+            let mut tropical = settings.clone();
+            tropical.sampling = SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
+                sampling_type: DiscreteGraphSamplingType::TropicalSampling(Default::default()),
+                ..Default::default()
+            });
+            term.warm_up(&tropical, &model)?;
+            let mut complex_model = model.clone();
+            complex_model.get_parameter_mut("mass_scalar_1")?.value =
+                Some(Complex::new(F(1.0), F(0.1)));
+            let error = term.warm_up(&tropical, &complex_model).unwrap_err();
+            assert!(
+                error.to_string().contains("tropical sampling")
+                    && error.to_string().contains("requires real masses"),
+                "{error:#}"
+            );
+        }
+
         Ok(())
     }
 
@@ -3299,12 +3371,12 @@ parent_lmb = [4]
         use crate::{
             integrands::process::{
                 EvaluationTarget, GaussianReferenceFunction, evaluate_single,
-                gammaloop_sample::parameterize,
+                gammaloop_sample::{GammaLoopSample, parameterize},
             },
             settings::runtime::{
                 DiscreteGraphSamplingSettings, DiscreteGraphSamplingType, SamplingSettings,
             },
-            utils::QuadFloat,
+            utils::{ArbPrec, QuadFloat},
         };
         test_initialise()?;
         let model = load_generic_model("scalars");
@@ -3438,15 +3510,20 @@ sampling_multichanneling = false
             assert!((total / expected - 1.0).abs() < 1.0e-12);
             assert!((total_moment / expected_moment - 1.0).abs() < 1.0e-12);
         }
-        // Exercise the precision-generic reference owner directly; the public
-        // acceptance API reports f64 after checking its native precision-rescue stack.
+        // Exercise the precision-generic reference owner from the canonical
+        // draw; the public acceptance API reports f64 after its physical stack.
         integrand.get_mut_settings().sampling = settings.sampling;
         integrand.warm_up(&model)?;
         let ProcessIntegrand::Amplitude(integrand) = integrand else {
             unreachable!()
         };
         let mut metadata = EvaluationMetaData::new_empty();
-        let sample = parameterize::<QuadFloat, _>(&continuous, integrand, &mut metadata)?;
+        metadata.sampling_proposal_policies.begin_collection();
+        let canonical = parameterize::<ArbPrec, _>(&continuous, integrand, &mut metadata)?;
+        metadata.sampling_proposal_policies.seal();
+        let sample = canonical.materialize::<QuadFloat>(
+            GammaLoopSample::<QuadFloat>::relative_accuracy_budget(integrand.get_settings()),
+        )?;
         let rotation = Rotation::new(RotationMethod::Pi2X);
         let rotated = sample.rotate(&rotation, 100, 101);
         let result = evaluate_single(
@@ -3456,6 +3533,7 @@ sampling_multichanneling = false
             &rotation,
             &mut crate::integrands::evaluation::EvaluationMetaData::new_empty(),
             false,
+            Some(&canonical),
         )?;
         assert!(
             (result.integrand_result.re.into_ff64().0 / summed.evaluation.integrand_result.re.0
@@ -3589,13 +3667,10 @@ parent_lmb = [4,6]
             let Externals::Constant { momenta, .. } =
                 &mut runtime.get_mut_settings().kinematics.externals;
             momenta[0] = ExternalMomenta::Independent([26.0_f64.sqrt(), 0.0, 0.0, 1.0].map(F));
-            assert!(
-                runtime
-                    .evaluate_reference_sample_detailed(&point, &reference)
-                    .unwrap_err()
-                    .to_string()
-                    .contains("call warm_up")
-            );
+            let error = runtime
+                .evaluate_reference_sample_detailed(&point, &reference)
+                .unwrap_err();
+            assert!(format!("{error:#}").contains("call warm_up"), "{error:#}");
             runtime.warm_up(&model)?;
             let ProcessIntegrand::Amplitude(amplitude) = &runtime else {
                 unreachable!()
@@ -3655,13 +3730,10 @@ parent_lmb = [4,6]
                 .sampling_channels
                 .default_channel_selection = vec!["missing_channel".to_string()];
             assert!(runtime.warm_up(&model).is_err());
-            assert!(
-                runtime
-                    .evaluate_reference_sample_detailed(&point, &reference)
-                    .unwrap_err()
-                    .to_string()
-                    .contains("call warm_up")
-            );
+            let error = runtime
+                .evaluate_reference_sample_detailed(&point, &reference)
+                .unwrap_err();
+            assert!(format!("{error:#}").contains("call warm_up"), "{error:#}");
             *runtime.get_mut_settings() = settings.clone();
             runtime.warm_up(&model)?;
             let restored = runtime.evaluate_reference_sample_detailed(&point, &reference)?;
@@ -3676,9 +3748,8 @@ parent_lmb = [4,6]
         // cancellation budget. Quad binds the same physical equation.
         {
             use crate::{
-                integrands::{
-                    evaluation::StabilityStatus,
-                    process::{GaussianReferenceFunction, sampling_maps::SamplingEvaluationError},
+                integrands::process::{
+                    GaussianReferenceFunction, sampling_maps::SamplingEvaluationError,
                 },
                 momentum::ExternalMomenta,
                 settings::runtime::{
@@ -3751,32 +3822,30 @@ parent_lmb = [4,6]
             let rescued = runtime.evaluate_reference_sample_detailed(&source, &reference)?;
             assert_eq!(
                 rescued.evaluation.evaluation_metadata.final_precision(),
-                Some(Precision::Quad)
+                Some(Precision::Double)
             );
-            assert!(matches!(
-                rescued.evaluation.evaluation_metadata.stability_results[0].status,
-                StabilityStatus::Unstable(0)
-            ));
+            assert_eq!(
+                rescued
+                    .evaluation
+                    .evaluation_metadata
+                    .stability_results
+                    .len(),
+                1
+            );
             assert!(rescued.evaluation.integrand_result.re.0 > 0.0);
             assert!(rescued.moments.second_moment.0 > 0.0);
-            let mut quad_only = runtime.clone();
-            quad_only.get_mut_settings().stability.levels =
-                vec![StabilityLevelSetting::default_quad()];
-            quad_only.warm_up(&model)?;
-            let direct = quad_only.evaluate_reference_sample_detailed(&source, &reference)?;
+            let mut double_only = runtime.clone();
+            double_only.get_mut_settings().stability.levels =
+                vec![StabilityLevelSetting::default_double()];
+            double_only.warm_up(&model)?;
+            let direct = double_only.evaluate_reference_sample_detailed(&source, &reference)?;
             assert_eq!(
                 rescued.evaluation.integrand_result,
                 direct.evaluation.integrand_result
             );
             assert_eq!(rescued.moments.second_moment, direct.moments.second_moment);
-            // No configured usable precision must fail warmup with its numerical
-            // cause, rather than publishing an epoch that can never evaluate.
-            let mut double_only = runtime.clone();
-            double_only.get_mut_settings().stability.levels =
-                vec![StabilityLevelSetting::default_double()];
-            let error = double_only.warm_up(&model).unwrap_err();
-            assert!(format!("{error:#}").contains("no wholly usable configured precision"));
-            assert!(format!("{error:#}").contains("sampling binding for graph 'massive_kite'"));
+            // A valid canonical map remains usable with a Double-only physical
+            // stack, even when its optional Double component bridge cannot bind.
             let ProcessIntegrand::Amplitude(amplitude) = &double_only else {
                 unreachable!()
             };
@@ -3785,7 +3854,19 @@ parent_lmb = [4,6]
                     .multi_channeling_setup
                     .sampling_catalogue
                     .as_ref()
-                    .is_none()
+                    .is_some()
+            );
+            assert!(
+                amplitude.data.graph_terms[0]
+                    .multi_channeling_setup
+                    .sampling_bridge::<f64>()
+                    .is_err()
+            );
+            assert!(
+                amplitude.data.graph_terms[0]
+                    .multi_channeling_setup
+                    .sampling_bridge::<ArbPrec>()
+                    .is_ok()
             );
             // A structural bind failure still invalidates all precisions even
             // when the previous epoch contained a usable Quad binding.
@@ -3795,7 +3876,10 @@ parent_lmb = [4,6]
             let masses = amplitude.data.graph_terms[0].real_mass_vec.take();
             let error = amplitude.warm_up_sampling().unwrap_err();
             assert!(error.downcast_ref::<SamplingEvaluationError>().is_none());
-            assert!(error.to_string().contains("warmup mass data"));
+            assert!(
+                format!("{error:#}").contains("warmup mass data"),
+                "{error:#}"
+            );
             assert!(
                 amplitude.data.graph_terms[0]
                     .multi_channeling_setup
@@ -5334,9 +5418,9 @@ parent_lmb = [4,6]
             })
         ), "{error:#}");
         term.esurfaces.pop();
-        // Replay the original binary64 cube draw through the complete physical
-        // host, including every foreign C/D/LMB density and threshold CT. A
-        // Double map collapses the focused distance; Quad must rebuild it.
+        // Prepare the original binary64 cube once, including every foreign
+        // C/D/LMB density and threshold CT. Double physical arithmetic can
+        // collapse the focused distance; Quad evaluates the same retained draw.
         {
             use crate::{
                 integrands::evaluation::{PreciseEvaluationResult, StabilityStatus},
@@ -5367,10 +5451,19 @@ parent_lmb = [4,6]
                 Some(Precision::Quad)
             );
             assert_eq!(rescued.evaluation_metadata.stability_results.len(), 2);
-            assert!(matches!(
+            assert_eq!(
+                rescued.evaluation_metadata.stability_results[0].precision,
+                Precision::Double
+            );
+            // The Double body is evaluated once without rotation probes, so its
+            // nonfinite result has Unknown status; a pre-body map failure used
+            // to record Unstable(0). The second level rescues this same draw.
+            assert_eq!(
                 rescued.evaluation_metadata.stability_results[0].status,
-                StabilityStatus::Unstable(0)
-            ));
+                StabilityStatus::Unknown,
+                "{:?}",
+                rescued.evaluation_metadata.stability_results
+            );
             assert!(
                 rescued.integrand_result.re.0.is_finite()
                     && rescued.integrand_result.im.0.is_finite()
@@ -5394,7 +5487,7 @@ parent_lmb = [4,6]
                     .evaluation
                     .evaluation_metadata
                     .final_precision(),
-                Some(Precision::Quad)
+                Some(Precision::Double)
             );
             assert_eq!(
                 reference_rescued
@@ -5402,7 +5495,7 @@ parent_lmb = [4,6]
                     .evaluation_metadata
                     .stability_results
                     .len(),
-                2
+                1
             );
             runtime_for_rescue.get_mut_settings().stability.levels =
                 vec![StabilityLevelSetting::default_quad()];
@@ -5418,8 +5511,14 @@ parent_lmb = [4,6]
                 unreachable!()
             };
             assert_eq!(rescued.integrand_result, direct.integrand_result);
+            // The smooth reference needs no native map reconstruction or
+            // physical threshold rescue. Compare identical Double evaluations.
+            let mut reference_control = runtime_for_rescue.clone();
+            reference_control.get_mut_settings().stability.levels =
+                vec![StabilityLevelSetting::default_double()];
+            reference_control.warm_up(&model)?;
             let reference_direct =
-                runtime_for_rescue.evaluate_reference_sample_detailed(&source, &reference)?;
+                reference_control.evaluate_reference_sample_detailed(&source, &reference)?;
             assert_eq!(
                 reference_rescued.evaluation.integrand_result,
                 reference_direct.evaluation.integrand_result
@@ -5438,7 +5537,7 @@ parent_lmb = [4,6]
                 "Quad-only warmup must not require Double geometry"
             );
             assert!(setup.sampling_bridge::<QuadFloat>().is_ok());
-            assert!(setup.sampling_bridge::<crate::utils::ArbPrec>().is_err());
+            assert!(setup.sampling_bridge::<crate::utils::ArbPrec>().is_ok());
             let catalogue = setup.sampling_catalogue.as_ref().unwrap() as *const _ as usize;
             let programs = setup.sampling_programs.as_ref().unwrap() as *const _ as usize;
             runtime.prepare_sampling_precision::<crate::utils::ArbPrec>()?;

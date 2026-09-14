@@ -2181,17 +2181,6 @@ fn compile_lmb_map<T: FloatLike>(
 }
 
 impl SamplingChannelCatalogue {
-    /// Inspect the already resolved blocks, without requiring a successful
-    /// binding at a precision which may itself need original-source rescue.
-    pub(crate) fn requires_proposal_policy(&self) -> bool {
-        self.named_entries().any(|channel| {
-            channel
-                .blocks
-                .iter()
-                .any(|block| block.target.energy_edge_sets().len() == 2)
-        })
-    }
-
     /// Return generated-LMB metadata carried by canonical catalogue entries.
     ///
     /// The returned `basis_id` is an implementation detail used to prepare

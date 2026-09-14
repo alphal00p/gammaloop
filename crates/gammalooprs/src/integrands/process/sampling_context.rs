@@ -4,26 +4,27 @@
 //! resolved block binding. Each conditional map prepares its actual native t*
 //! and fixed physical coordinates together from the declared raw prerequisites.
 //! Each foreign inverse uses its supplied raw point, reusing a native preparation
-//! only for an identical plan and source. No partially sampled data are labelled a complete MomentumSample,
-//! and precision rescue reconstructs the original cube rather than promoting a
-//! previously mapped point or pairing it with stale cut data.
+//! only for an identical plan and source. No partially sampled data are labelled
+//! a complete MomentumSample. Production prepares one canonical Arb draw;
+//! physical precision attempts materialize directly from that immutable source,
+//! never promoting a previously rounded point or pairing it with stale cut data.
 
 use crate::{
     cff::esurface::EsurfaceRay,
     processes::{CutGroupId, CutId},
     utils::{
-        FloatLike,
+        ArbPrec, F, FloatLike,
         newton_solver::{NewtonIterationResult, RadialRootDiagnostics, RadialRootIdentity},
     },
 };
-use color_eyre::eyre::{Result, eyre};
+use color_eyre::eyre::{Result, WrapErr, eyre};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, sync::Arc};
 
 use super::{sampling_maps::SamplingEvaluationError, sampling_selection::SamplingChannelId};
 
-/// Only the discrete proposal recipe survives native retries. Geometry, roots
-/// and the resulting radius are rebuilt from the original draw in every lane.
+/// A component's discrete recipe is authenticated during canonical preparation.
+/// Physical retries consume the completed draw without selecting another recipe.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum SamplingProposalDecision {
     Compact { dyadic_exponent: u8 },
@@ -51,8 +52,8 @@ pub(crate) struct SamplingLUHostPlan {
     pub(crate) required_prior_lmb: Vec<usize>,
 }
 
-/// Native source authority, never promoted between precision attempts or
-/// replaced by the rounded prerequisites reconstructed during inverse checks.
+/// Native source authority. Physical attempts materialize directly from its
+/// canonical Arb instance; rounded inverse prerequisites cannot replace it.
 #[derive(Clone, Debug)]
 pub(crate) struct PreparedLUHost<T: FloatLike> {
     pub(crate) plan: Arc<SamplingLUHostPlan>,
@@ -60,6 +61,48 @@ pub(crate) struct PreparedLUHost<T: FloatLike> {
     pub(crate) prior: Vec<T>,
     pub(crate) ray: EsurfaceRay<T>,
     pub(crate) solution: NewtonIterationResult<T>,
+}
+
+impl PreparedLUHost<ArbPrec> {
+    /// Convert the canonical authority, retaining its identities and root
+    /// history. This is not a new solve or a native map-preparation observation.
+    pub(crate) fn materialize<T: FloatLike>(&self, tolerance: f64) -> Result<PreparedLUHost<T>> {
+        let positive = |value: &F<ArbPrec>, label: &str| -> Result<F<T>> {
+            let native = F::<T>::from_arb(&value.0)?;
+            if value <= &value.zero() || native <= native.zero() {
+                return Err(SamplingEvaluationError::UncertainGeometry {
+                    detail: format!("LU host materialization requires positive {label}"),
+                }
+                .into());
+            }
+            // Compare to the original represented source, including separated
+            // native limbs. The existing physical adoption subsequently checks
+            // the completed ray, residual, slope and inverse-volume budget.
+            native
+                .verify_arb_materialization(&value.0, tolerance)
+                .wrap_err_with(|| format!("LU host {label} for {:?}", self.source))?;
+            Ok(native)
+        };
+        Ok(PreparedLUHost {
+            plan: Arc::clone(&self.plan),
+            source: self.source.clone(),
+            prior: self
+                .prior
+                .iter()
+                .map(|value| F::<T>::from_arb(value).map(|value| value.0))
+                .collect::<Result<_>>()?,
+            ray: self.ray.materialize()?,
+            solution: NewtonIterationResult {
+                solution: positive(&self.solution.solution, "root")?,
+                derivative_at_solution: positive(
+                    &self.solution.derivative_at_solution,
+                    "root derivative",
+                )?,
+                error_of_function: F::<T>::from_arb(&self.solution.error_of_function.0)?,
+                num_iterations_used: self.solution.num_iterations_used,
+            },
+        })
+    }
 }
 
 /// The original-draw metadata owns these records. Default is sealed and empty:
@@ -314,6 +357,129 @@ fn validate_finite<T: FloatLike>(value: &T, label: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn canonical_lu_host_materializes_directly_without_new_root_history() -> Result<()> {
+        use crate::{
+            cff::{VertexSet, esurface::Esurface},
+            dot,
+            graph::{Graph, parse::from_dot::IntoGraph},
+            initialisation::test_initialise,
+            momentum::{
+                FourMomentum, ThreeMomentum,
+                sample::{ExternalFourMomenta, LoopMomenta},
+            },
+            utils::QuadFloat,
+        };
+        use linnet::half_edge::involution::EdgeIndex;
+
+        test_initialise()?;
+        let graph: Graph = dot!(digraph canonical_host {
+            ext [style=invis]
+            node [num=1]
+            edge [num=1 mass=1]
+            ext -> a:0 [id=0]
+            a -> b [id=1 lmb_id=0]
+            a -> b [id=2]
+            b:1 -> ext [id=3]
+        })?;
+        let surface = Esurface {
+            energies: vec![EdgeIndex(1), EdgeIndex(2)],
+            external_shift: vec![(EdgeIndex(0), -1)],
+            vertex_set: VertexSet::dummy(),
+        };
+        let one = F::<ArbPrec>::default().one();
+        let zero = one.zero();
+        let prior = vec![
+            (&one + &one / one.from_usize(10).powi(25)).0,
+            (&one / one.from_usize(7)).0,
+            (&one / one.from_usize(11)).0,
+        ];
+        let loops = LoopMomenta::from_iter([ThreeMomentum::new(
+            F(prior[0].clone()),
+            F(prior[1].clone()),
+            F(prior[2].clone()),
+        )]);
+        let externals = ExternalFourMomenta::from_iter((0..2).map(|_| {
+            FourMomentum::from_args(one.from_usize(4), zero.clone(), zero.clone(), zero.clone())
+        }));
+        let masses = graph.underlying.new_edgevec_from_iter([
+            zero.clone(),
+            one.clone(),
+            one.clone(),
+            zero.clone(),
+        ])?;
+        let mut history = RadialRootDiagnostics::default();
+        let (ray, solution) = surface
+            .solve_lu_cut(
+                &loops,
+                &externals,
+                &masses,
+                &graph.loop_momentum_basis,
+                &one.from_usize(4),
+                &mut history,
+                &RadialRootIdentity::new("canonical fixture".into()),
+            )
+            .map_err(|error| eyre!("{error:?}"))?;
+        let original_history = format!("{history:?}");
+        let host = PreparedLUHost {
+            plan: Arc::new(SamplingLUHostPlan {
+                graph_name: graph.name.clone(),
+                cut_group_id: CutGroupId::from(0),
+                representative_cut_id: CutId(0),
+                parent_lmb: vec![1],
+                required_prior_lmb: vec![1],
+            }),
+            source: SamplingProposalKey {
+                graph_id: 2,
+                generating_channel: SamplingChannelId(3),
+                target_channel: SamplingChannelId(3),
+                block_path: vec![1, 0],
+            },
+            prior,
+            ray,
+            solution,
+        };
+        let double = host.materialize::<f64>(1e-10)?;
+        let quad = host.materialize::<QuadFloat>(1e-28)?;
+        let arb = host.materialize::<ArbPrec>(1e-90)?;
+        assert_eq!(double.prior[0], 1.0);
+        assert_ne!(
+            quad.prior[0],
+            QuadFloat::from_f64_exact_binary(double.prior[0])
+        );
+        assert_eq!(arb.prior, host.prior);
+        assert_eq!(arb.solution.solution, host.solution.solution);
+        assert_eq!(
+            arb.solution.error_of_function,
+            host.solution.error_of_function
+        );
+        assert!(Arc::ptr_eq(&quad.plan, &host.plan));
+        assert_eq!(quad.source, host.source);
+        assert_eq!(
+            quad.solution.num_iterations_used,
+            host.solution.num_iterations_used
+        );
+        assert_eq!(format!("{history:?}"), original_history);
+        assert!(matches!(
+            host.materialize::<f64>(1e-25)
+                .unwrap_err()
+                .downcast_ref::<SamplingEvaluationError>(),
+            Some(SamplingEvaluationError::UncertainGeometry { .. })
+        ));
+        let mut invalid = host.clone();
+        invalid.solution.solution = -one.clone();
+        assert!(invalid.materialize::<f64>(1e-10).is_err());
+        invalid.solution.solution = &one / one.from_usize(10).powi(400);
+        assert!(matches!(
+            invalid
+                .materialize::<f64>(1e-10)
+                .unwrap_err()
+                .downcast_ref::<SamplingEvaluationError>(),
+            Some(SamplingEvaluationError::Unrepresentable { .. })
+        ));
+        Ok(())
+    }
 
     #[test]
     fn classified_sampling_surface_preserves_normalized_fallback_and_validates_margins() {

@@ -2599,6 +2599,25 @@ impl GraphTerm for CrossSectionGraphTerm {
                     }
                     .into());
                 }
+                let canonical = context
+                    .canonical_sample
+                    .ok_or_else(|| eyre!("LU host adoption requires its retained canonical row"))?;
+                if canonical.graph_id != context.graph_id
+                    || canonical.channel_id != context.sampling_channel
+                    || canonical
+                        .prepared_lu_hosts
+                        .iter()
+                        .filter(|original| {
+                            original.plan == host.plan && original.source == host.source
+                        })
+                        .count()
+                        != 1
+                {
+                    return Err(eyre!(
+                        "LU host {:?} has no unique matching authority in its canonical graph/channel row",
+                        host.source
+                    ));
+                }
                 // Payload remains in the original source frame through all
                 // sample rotations. Rotate its affine coefficients exactly once.
                 let ray = host.ray.rotate(context.rotation);
@@ -2614,10 +2633,9 @@ impl GraphTerm for CrossSectionGraphTerm {
                     &masses,
                     &self.graph.loop_momentum_basis,
                 );
-                let budget = self
-                    .multi_channeling_setup
-                    .sampling_bridge::<T>()?
-                    .relative_density_tolerance(&zero);
+                // Physical attempts materialize the canonical draw; a native
+                // sampling bridge is not needed merely to recover its budget.
+                let budget = F::<T>::from_f64(context.sampling_accuracy_budget);
                 // This worst-case exponent covers every host-null pulled-back
                 // block. It does not certify complete threshold/joint density.
                 let dimension_bound = 3 * (plan.parent_lmb.len() - required.len());

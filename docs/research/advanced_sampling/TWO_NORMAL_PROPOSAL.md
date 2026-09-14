@@ -1,8 +1,11 @@
 # Exact two-normal H/Z proposal and its A-star pullback
 
 Analytic audit begun 12 September 2026; source status updated 14 September.
-The bounded generic component, amplitude binding and proposal transport are
-implemented and validated for the supported class. The hosted GL638 channel and A-star
+The bounded generic component and amplitude binding are implemented and validated
+for the supported class. Discrete proposal transport passed its original tests,
+but a subsequent audit found that continuous map changes during physical rescue
+also require a [fixed canonical draw](CANONICAL_DRAW_SOURCE.md); that correction
+passes 214 core tests and three API gates. The hosted GL638 channel and A-star
 pullback remain proposals. The construction strengthens the one-normal map:
 on a regular compact patch, a density proportional to `1/R` bounds a leading
 `1/R` weight, whereas `|H|^(-beta)`, `0<beta<1`, gives finite local variance but
@@ -219,10 +222,10 @@ host residual. Retain the original global equation during binding.
 Its shared energy is carried by distinct edges 12 and 3. Graph conservation
 gives `q12=q3+Q_in`: their spatial momenta coincide in the specified
 centre-of-mass frame, but their full formal external signatures need not match.
-The first matcher requires identical complete signed routing and a common mass
-expression. A later GL638 binding must also certify this fixed-external spatial
-identity exactly, retaining the original rows; a tolerance comparison or an
-assumption about boosted kinematics is insufficient. This specialization belongs
+The initial matcher required identical complete signed routing and a common mass
+expression. The canonical-draw correction adds an exact directed check of this
+fixed-external spatial identity, retaining the original rows; a tolerance
+comparison or an assumption about boosted kinematics is insufficient. This belongs
 to the sampling matcher, not to the structural raised-edge equivalence rule.
 The kernel receives none of these graph labels. Amplitudes supply the same
 prepared equation class without a cut or projection owner.
