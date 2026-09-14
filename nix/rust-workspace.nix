@@ -1160,7 +1160,7 @@
         pkgs.python313
         pkgs.gnum4
       ]
-      ++ lib.optionals pkgs.stdenv.isDarwin [
+      ++ lib.optionals pkgs.stdenv.hostPlatform.isDarwin [
         pkgs.darwin.cctools
       ];
 
@@ -1174,7 +1174,7 @@
         pkgs.libmpc
         pkgs.python313
       ]
-      ++ lib.optionals pkgs.stdenv.isDarwin [
+      ++ lib.optionals pkgs.stdenv.hostPlatform.isDarwin [
         pkgs.libiconv
       ];
 

@@ -180,7 +180,7 @@
           maturin
           virtualenv
         ]
-        ++ lib.optionals (!pkgs.stdenv.isDarwin) [
+        ++ lib.optionals (!pkgs.stdenv.hostPlatform.isDarwin) [
           valgrind
         ];
 
@@ -239,7 +239,7 @@
         // craneTestBinaryPackageOutputs
         // nextestContextualTestOutputs
         // impureCheckRunnerPackages
-        // lib.optionalAttrs (!pkgs.stdenv.isDarwin) {
+        // lib.optionalAttrs (!pkgs.stdenv.hostPlatform.isDarwin) {
           gammaloop-llvm-coverage = craneLib.cargoLlvmCov (commonArgs
             // {
               src = workspaceTestSrc;
