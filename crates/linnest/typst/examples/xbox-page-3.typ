@@ -4,6 +4,7 @@
 #set text(size: diagram-style.font-size)
 
 #let soft-layout = layouts.options(base: routed-layout, spring: (length: .12))
+#let edge-data = (particle: "d", spring-length: .3, show-momentum: false)
 
 #let in-top = pos(x: in-x, y: top, z: pin(0))
 #let in-mid = pos(x: in-x, y: mid, z: pin(0))
@@ -13,7 +14,7 @@
 #let out-bot = pos(x: out-x, y: bot, z: pin(0))
 
 #let opened = graph.build(
-  default-edge-data: edge-data + (spring-length: .3),
+  default-edge-data: edge-data,
   vertices,
   {
     edge(<D1.1>, sink(<a>), momentum: [], pos: in-bot)
@@ -49,7 +50,7 @@
 )
 
 #let soft = graph.build(
-  default-edge-data: edge-data + (spring-length: .3),
+  default-edge-data: edge-data,
   vertices,
   {
     edge(<D1.1>, sink(<a>), momentum: [], pos: in-bot)
@@ -79,8 +80,8 @@
 )
 
 $
-  #diagram(opened, options: soft-layout, cut-y: .5, cut-x: .3, show-momentum: false) = op("disc")_(p_1^2) op("disc")_(p_2^2)lr(
+  #diagram(opened, options: soft-layout, cut-y: .5, cut-x: .3) = op("disc")_(p_1^2) op("disc")_(p_2^2)lr(
     (#h(-3mm)
-      #box(inset: -2mm, baseline: 45%, diagram(soft, options: soft-layout, cut-y: .5, cut-x: 1., show-momentum: false)))|
+      #box(inset: -2mm, baseline: 45%, diagram(soft, options: soft-layout, cut-y: .5, cut-x: 1.)))|
   )_"soft"
 $

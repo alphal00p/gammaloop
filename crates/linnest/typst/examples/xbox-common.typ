@@ -88,15 +88,10 @@
   cut-y: auto,
   initial-cut: none,
   draw-after: none,
-  show-momentum: true,
 ) = context {
   draw(
     layout(graph.style(g, ..graph-style), ..options),
     ..feynman.draw-style,
-    edge-style: edge => feynman.edge-style(
-      edge,
-      show-momentum: show-momentum and (edge.ext or edge.momentum == [$k$]),
-    ),
     padding: diagram-style.padding,
     draw-after: (g, bounds) => {
       // Group signed external momenta explicitly, including the through-gluon's

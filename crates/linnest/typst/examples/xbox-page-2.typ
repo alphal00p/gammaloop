@@ -48,11 +48,11 @@
   )
   graph.map(g, edge: (
     "D1.1": mom(side: "right", label: (gap: .01)),
-    D2: mom(side: "left", shift: -.4, length: .8, label: (shift: -.3, gap: .2)),
+    D2: (show-momentum: false),
     "D3.1": mom(side: "left", shift: -.4, label: (shift: -.7, gap: .01)),
-    D4: mom(side: "right", label: (gap: .1)),
+    D4: (show-momentum: false),
     "D3.2": mom(side: "left", label: (gap: .2, shift: .4)),
-    D5: mom(side: "left", shift: -.4, length: .8, label: (shift: -1, gap: .1)),
+    D5: (show-momentum: false),
     "D1.2": mom(side: "left", label: (gap: .1)),
     "D6.1": mom(side: "right", label: (gap: .1)),
     "D6.2": mom(side: "left", label: (gap: .2)),
@@ -86,17 +86,12 @@
         gap: .01,
         anchor: "south",
       )),
-      D2: mom(side: "right", length: .8, label: (gap: .1)),
+      D2: (show-momentum: false),
       "D3.1": (spring-length: 1.5, crossing-under: <D6.2>, crossing-gap: .7)
         + mom(side: "right", length: .8, label: (gap: .1)),
-      D4: (spring-length: 1.5)
-        + mom(side: "right", length: .8, label: (
-          shift: .25,
-          gap: .01,
-          anchor: "north",
-        )),
+      D4: (spring-length: 1.5, show-momentum: false),
       "D3.2": (spring-length: 1.5, crossing-under: <D6.1>, crossing-gap: .7),
-      D5: mom(side: "left", length: .8, label: (shift: -.25, gap: .2)),
+      D5: (show-momentum: false),
       "D1.2": mom(side: "left", shift: 1, length: .8, label: (
         shift: 2,
         gap: .2,

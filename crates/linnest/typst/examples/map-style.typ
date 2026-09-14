@@ -86,8 +86,8 @@
   let value = _value(element, key, default)
   if type(value) in (int, float) { value } else { float(str(value).trim("\"")) }
 }
-#let _enabled(element, key) = (
-  _value(element, key, false) in (true, "true", "\"true\"")
+#let _enabled(element, key, default: false) = (
+  _value(element, key, default) in (true, "true", "\"true\"")
 )
 #let _route(edge) = {
   let route = _value(edge, "route", none)
@@ -183,9 +183,11 @@
   )
 }
 
-#let edge-style(edge, show-momentum: true) = (
+#let edge-style(edge) = (
   _particle-layer(edge),
-  ..if show-momentum { _momentum-layers(edge) } else { () },
+  ..if _enabled(edge, "show-momentum", default: true) {
+    _momentum-layers(edge)
+  } else { () },
 )
 
 #let node-style(node) = if _enabled(node, "hidden") {

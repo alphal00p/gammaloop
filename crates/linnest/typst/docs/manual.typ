@@ -663,11 +663,16 @@
   `mom(...)` patches described below, retain priority over inherited edge data
   and keep their arrow/label placement independent of these width options.
 
-  To omit momentum arrows and labels while retaining propagators and fermion
-  arrows, pass `edge-style: feynman.edge-style.with(show-momentum: false)` to
-  `draw`, alongside `..feynman.draw-style`. This only suppresses drawing layers;
-  the hidden labels used by `graph.style` still participate in layout, so the
-  switch does not change the solved graph geometry.
+  Momentum visibility belongs to edge data: set `show-momentum: false` on an
+  `edge(...)` or in a `graph.map` edge patch to omit its momentum arrow and label
+  while retaining the propagator and fermion arrow. It defaults to `true`.
+  Set `default-edge-data: (show-momentum: false)` on `graph.build` to hide all
+  momenta, then opt individual edges back in with `show-momentum: true`.
+  Cut fragments inherit the flag like other edge data. Use `..feynman.draw-style`
+  unchanged; `edge-style` no longer takes a `show-momentum` argument.
+  Only drawing layers are suppressed: physical momentum data is retained, and
+  hidden layout labels still participate, so the switch does not change solved
+  graph geometry.
 
   An edge can sparsely patch the `edge-style` passed to `draw` with
   `style: (...)`, compute the patch with a callback, use `auto` to delegate, or

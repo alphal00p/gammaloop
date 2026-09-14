@@ -1,4 +1,4 @@
-#import "crates/linnest/typst/src/lib.typ": draw, graph, layout
+#import "crates/linnest/typst/src/lib.typ": draw, graph, layout, subgraph
 #import graph: edge, node, pin, pos, sink, source
 #import "map-style.typ" as feynman
 
@@ -205,22 +205,59 @@
   defaults.scope,
 ) {
   let expected = scope.at("feynman", default: defaults.scope.feynman)
-  let particle-only = feynman.edge-style.with(show-momentum: false)
-  assert.eq(particle-only(scope + (fields: (:), momentum: [$k$])), (
-    expected.fermion + (mark-shift: 0),
-  ))
+  for fields in (
+    (:),
+    (show-momentum: true),
+    (show-momentum: "true"),
+    (show-momentum: "\"true\""),
+  ) {
+    assert.eq(feynman.edge-style(scope + (fields: fields, momentum: [$k$])), (
+      expected.fermion + (mark-shift: 0),
+      legacy-arrow
+        + (stroke: expected.momentum-stroke, mark: expected.momentum-mark),
+      legacy-label + (label: [$k$]),
+    ))
+  }
+  // Disabled momentum must not read its text or parse unused placement fields.
+  for show-momentum in (false, "false", "\"false\"") {
+    for fields in (
+      (:),
+      feynman.momentum(
+        side: "unused",
+        offset: "unused",
+        length: "unused",
+        shift: "unused",
+        label: (gap: "unused", shift: "unused", anchor: "unused"),
+      ),
+    ) {
+      assert.eq(
+        feynman.edge-style(
+          scope
+            + (
+              fields: fields + (show-momentum: show-momentum),
+            ),
+        ),
+        (expected.fermion + (mark-shift: 0),),
+      )
+    }
+  }
   for (alias, preset) in expected.particles {
     let layers = feynman.edge-style(
       scope + (fields: (particle: alias), momentum: []),
     )
     assert.eq(layers.first(), preset + (mark-shift: 0), message: alias)
-    assert.eq(
-      feynman.edge-style(
-        scope + (fields: (particle: alias), momentum: [$k$]),
-        show-momentum: false,
-      ),
-      (layers.first(),),
-    )
+    for show-momentum in (false, "false", "\"false\"") {
+      assert.eq(
+        feynman.edge-style(
+          scope
+            + (
+              fields: (particle: alias, show-momentum: show-momentum),
+              momentum: [$k$],
+            ),
+        ),
+        (layers.first(),),
+      )
+    }
   }
   assert.eq(expected.particles.a, expected.particles.photon)
   assert.eq(expected.particles.g, expected.particles.gluon)
@@ -315,6 +352,55 @@
 #assert.eq(feynman.graph-style().scope, defaults.scope)
 #assert.eq(feynman.node-style((fields: (:))), legacy-node)
 #assert.eq(feynman.edge-style(empty-edge), legacy-layers)
+
+// Visibility follows native data through defaults, named maps, and cut fragments.
+#for inherited in (true, false) {
+  let visibility = graph.build(
+    {
+      node(<a>)
+      node(<b>)
+      edge(<inherited>, source(<a>), sink(<b>))
+      edge(<overridden>, source(<a>), sink(<b>), show-momentum: not inherited)
+    },
+    default-edge-data: (
+      show-momentum: inherited,
+      particle: "photon",
+      momentum: [$k$],
+    ),
+  )
+  let mapped = graph.map(visibility, edge: (
+    inherited: (show-momentum: not inherited),
+    overridden: (show-momentum: inherited),
+  ))
+  for (g, visible) in ((visibility, inherited), (mapped, not inherited)) {
+    let opened = graph.cut(
+      g,
+      left: subgraph.select(g, source: (<inherited>, <overridden>)),
+      right: subgraph.select(g, sink: (<inherited>, <overridden>)),
+    )
+    assert.eq(graph.edges(opened).len(), 4)
+    for current in (g, opened) {
+      assert.eq(
+        graph.map(current, edge: edge => {
+          let origin = edge.at("origin", default: none)
+          let name = if origin == none { edge.name } else { origin.name }
+          let show-momentum = if name == <inherited> { visible } else {
+            not visible
+          }
+          assert.eq(edge.data.show-momentum, show-momentum)
+          assert.eq(edge.fields.show-momentum, show-momentum)
+          let layers = feynman.edge-style(edge.fields + (fields: edge.fields))
+          assert.eq(layers.first(), legacy-photon + (mark-shift: 0))
+          assert.eq(layers.len(), if show-momentum { 3 } else { 1 })
+          if show-momentum {
+            assert.eq(layers.last().label, [$k$])
+          }
+        }),
+        current,
+      )
+    }
+  }
+}
 
 #let base = graph.build(
   {
