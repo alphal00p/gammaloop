@@ -124,7 +124,7 @@ mod sampling_state_tests;
 #[allow(clippy::excessive_precision)]
 const PICOBARN_CONVERSION: F<f64> = F(3.89379372171859372125651613062e8);
 
-fn barn_conversion_factor<T: FloatLike>(unit: IntegralUnit, one: F<T>) -> F<T> {
+pub(super) fn barn_conversion_factor<T: FloatLike>(unit: IntegralUnit, one: F<T>) -> F<T> {
     let Some(relative_to_picobarn) = unit.relative_to_picobarn_factor(&one) else {
         return one.one();
     };

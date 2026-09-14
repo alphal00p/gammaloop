@@ -1755,12 +1755,7 @@ fn create_stability_iterator(
         {
             vec![settings.levels[arb_settings_position]]
         } else {
-            vec![StabilityLevelSetting {
-                precision: Precision::Arb,
-                required_precision_for_re: 1e-5,
-                required_precision_for_im: 1e-5,
-                escalate_for_large_weight_threshold: -1.,
-            }]
+            vec![StabilityLevelSetting::default_arb()]
         }
     } else {
         settings.levels.clone()
@@ -1786,7 +1781,7 @@ type StabilityCheckResult<T> = (
 
 #[inline]
 fn stability_check<T: FloatLike>(
-    _settings: &RuntimeSettings,
+    ecm_scale: Option<&F<T>>,
     results: &[Complex<F<T>>],
     stability_settings: &StabilityLevelSetting,
     max_eval: Complex<F<T>>,
@@ -1865,10 +1860,39 @@ fn stability_check<T: FloatLike>(
             break;
         }
 
+        // The optional allowance is dimensionless relative to E_cm, after
+        // every sample factor. Preserve the measured relative discrepancy;
+        // another component's scale must not supply the allowance.
+        let absolute_error = Complex::new(
+            ((&results[index].re - &average.re) * &wgt).abs(),
+            ((&results[index].im - &average.im) * &wgt).abs(),
+        );
+        let real_absolute = stability_settings.ecm_relative_tolerance_for_re > 0.0
+            && wgt.0.is_finite()
+            && weighted_absolute_average.re.0.is_finite()
+            && absolute_error.re.0.is_finite()
+            && ecm_scale.is_some_and(|scale| {
+                scale.0.is_finite()
+                    && scale > &scale.zero()
+                    && &absolute_error.re / scale
+                        <= F::<T>::from_f64(stability_settings.ecm_relative_tolerance_for_re)
+            });
+        let imag_absolute = stability_settings.ecm_relative_tolerance_for_im > 0.0
+            && wgt.0.is_finite()
+            && weighted_absolute_average.im.0.is_finite()
+            && absolute_error.im.0.is_finite()
+            && ecm_scale.is_some_and(|scale| {
+                scale.0.is_finite()
+                    && scale > &scale.zero()
+                    && &absolute_error.im / scale
+                        <= F::<T>::from_f64(stability_settings.ecm_relative_tolerance_for_im)
+            });
         if (error.re > F::<T>::from_f64(stability_settings.required_precision_for_re)
-            && !real_underflow)
+            && !real_underflow
+            && !real_absolute)
             || (error.im > F::<T>::from_f64(stability_settings.required_precision_for_im)
-                && !imag_underflow)
+                && !imag_underflow
+                && !imag_absolute)
         {
             unstable_reason = Some(StabilityFailureReason::ErrorThreshold);
             unstable_sample = Some(index);
@@ -1928,7 +1952,7 @@ fn stability_check<T: FloatLike>(
 
 #[inline]
 fn stability_check_on_norm<T: FloatLike>(
-    _settings: &RuntimeSettings,
+    ecm_scale: Option<&F<T>>,
     results: &[Complex<F<T>>],
     stability_settings: &StabilityLevelSetting,
     max_eval: Complex<F<T>>,
@@ -1973,6 +1997,24 @@ fn stability_check_on_norm<T: FloatLike>(
         && weighted_absolute_average < minimum_normal
         && primary_magnitude < minimum_normal;
 
+    // The E_cm-relative allowance must bound every component against the
+    // primary value returned by this owner, independently of its norm.
+    let absolute_agreement = (stability_settings.ecm_relative_tolerance_for_re > 0.0
+        || stability_settings.ecm_relative_tolerance_for_im > 0.0)
+        && wgt.0.is_finite()
+        && weighted_absolute_average.0.is_finite()
+        && ecm_scale.is_some_and(|scale| scale.0.is_finite() && scale > &scale.zero())
+        && results.iter().all(|result| {
+            let error_re = ((&result.re - &results[0].re) * &wgt).abs();
+            let error_im = ((&result.im - &results[0].im) * &wgt).abs();
+            error_re.0.is_finite()
+                && error_im.0.is_finite()
+                && error_re / ecm_scale.unwrap()
+                    <= F::<T>::from_f64(stability_settings.ecm_relative_tolerance_for_re)
+                && error_im / ecm_scale.unwrap()
+                    <= F::<T>::from_f64(stability_settings.ecm_relative_tolerance_for_im)
+        });
+
     let errors = results.iter().map(|res| {
         let res = res.norm_squared().sqrt();
         if IsZero::is_zero(&res) && IsZero::is_zero(&average) {
@@ -1997,7 +2039,10 @@ fn stability_check_on_norm<T: FloatLike>(
             break;
         }
 
-        if error > F::<T>::from_f64(stability_settings.required_precision_for_re) && !underflow {
+        if error > F::<T>::from_f64(stability_settings.required_precision_for_re)
+            && !underflow
+            && !absolute_agreement
+        {
             unstable_reason = Some(StabilityFailureReason::ErrorThreshold);
             unstable_sample = Some(index);
             break;
@@ -2699,6 +2744,38 @@ pub trait ProcessIntegrandImpl {
 
     fn warm_up(&mut self, model: &Model) -> Result<()>;
 
+    /// Natural E_cm scale of the returned physical quantity. Custom graphs
+    /// declare their integrated energy dimension; raw inputs omit spatial measure.
+    fn stability_reference_scale<T: FloatLike>(
+        &self,
+        graph_id: usize,
+        sample: &MomentumSample<T>,
+        missing_measure_dimension: i32,
+    ) -> Result<F<T>> {
+        let settings = self.get_settings();
+        let dimension = settings.stability.integrated_energy_dimension.ok_or_else(|| {
+            eyre!("E_cm-relative physical stability requires `stability.integrated_energy_dimension` (after flux normalization, before output-unit conversion)")
+        })?;
+        let exponent = dimension.checked_sub(missing_measure_dimension).ok_or_else(|| {
+            eyre!("stability energy dimension overflows after subtracting the missing spatial measure")
+        })?;
+        let mut scale = F::<T>::from_f64(settings.kinematics.e_cm).powi(exponent);
+        if matches!(
+            self.get_dependent_momenta_constructor(),
+            DependentMomentaConstructor::CrossSection
+        ) && !settings.general.disable_flux_factor
+            && sample.external_moms().len() == 2
+        {
+            let graph = self.get_graph(graph_id).get_graph();
+            let unit = settings
+                .general
+                .integral_unit
+                .resolve_for_cross_section(graph.initial_state_cut.iter_edges(graph).count());
+            scale *= cross_section::barn_conversion_factor(unit, sample.one());
+        }
+        Ok(scale)
+    }
+
     /// Choose the complete numerical proposal before any draw or physical retry.
     /// This conservative admission floor is not a pointwise map-error bound;
     /// density/root checks still fail explicitly when the fixed law is unresolved.
@@ -3177,6 +3254,26 @@ pub(crate) fn validate_process_runtime_settings(
     settings: &RuntimeSettings,
     explicit_orientation_sum_only: bool,
 ) -> Result<()> {
+    for (index, level) in settings.stability.levels.iter().enumerate() {
+        for (component, tolerance) in [
+            ("re", level.ecm_relative_tolerance_for_re),
+            ("im", level.ecm_relative_tolerance_for_im),
+        ] {
+            if !tolerance.is_finite() || tolerance < 0.0 {
+                return Err(eyre!(
+                    "`runtime.stability.levels[{index}].ecm_relative_tolerance_for_{component}` must be finite and nonnegative; got {tolerance}"
+                ));
+            }
+        }
+    }
+    if settings.stability.levels.iter().any(|level| {
+        level.ecm_relative_tolerance_for_re > 0.0 || level.ecm_relative_tolerance_for_im > 0.0
+    }) && (!settings.kinematics.e_cm.is_finite() || settings.kinematics.e_cm <= 0.0)
+    {
+        return Err(eyre!(
+            "E_cm-relative stability requires finite positive `runtime.kinematics.e_cm`"
+        ));
+    }
     if settings.general.use_ltd {
         return Err(eyre!(
             "`runtime.general.use_ltd = true` is reserved for deferred proper-LTD support; the current evaluation backend is CFF"
@@ -3740,6 +3837,65 @@ struct StabilityEvaluationContext<'a, 'm> {
     escalate_if_exact_zero: bool,
 }
 
+impl StabilityEvaluationContext<'_, '_> {
+    fn ecm_reference_scale<T: FloatLike, I: ProcessIntegrandImpl>(
+        &self,
+        integrand: &I,
+        sample: &GammaLoopSample<T>,
+    ) -> Result<Option<F<T>>> {
+        if self.stability_level.ecm_relative_tolerance_for_re > 0.0
+            || self.stability_level.ecm_relative_tolerance_for_im > 0.0
+        {
+            let e_cm = integrand.get_settings().kinematics.e_cm;
+            if !e_cm.is_finite() || e_cm <= 0.0 {
+                return Err(eyre!(
+                    "E_cm-relative stability requires finite positive E_cm"
+                ));
+            }
+            let momentum_sample = sample.get_default_sample();
+            let missing_measure_dimension = if self.source.is_x_space() {
+                0
+            } else {
+                let loops = momentum_sample.loop_moms().0.len();
+                if sample
+                    .groups
+                    .iter()
+                    .flat_map(|(_, rows)| rows)
+                    .any(|row| row.sample.loop_moms().0.len() != loops)
+                {
+                    return Err(eyre!(
+                        "E_cm-relative stability cannot compare a raw momentum sum with different spatial dimensions"
+                    ));
+                }
+                i32::try_from(loops)?.checked_mul(3).ok_or_else(|| {
+                    eyre!("missing spatial measure dimension exceeds the supported integer range")
+                })?
+            };
+            let scale = match self.target {
+                EvaluationTarget::Physical(_) => integrand.stability_reference_scale(
+                    sample.groups[0].1[0].graph_id,
+                    momentum_sample,
+                    missing_measure_dimension,
+                )?,
+                EvaluationTarget::Reference(_) => {
+                    F::<T>::from_f64(integrand.get_settings().kinematics.e_cm)
+                        .powi(-missing_measure_dimension)
+                }
+                #[cfg(test)]
+                EvaluationTarget::SamplingLaw(_) => momentum_sample.one(),
+            };
+            if !scale.0.is_finite() || scale <= momentum_sample.zero() {
+                return Err(eyre!(
+                    "E_cm-relative stability scale must be finite and positive"
+                ));
+            }
+            Ok(Some(scale))
+        } else {
+            Ok(None)
+        }
+    }
+}
+
 fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
     integrand: &mut I,
     context: &mut StabilityEvaluationContext<'_, '_>,
@@ -3748,6 +3904,7 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
     let gammaloop_sample = context
         .source
         .build_gamma_sample::<T, I>(integrand, context.evaluation_metadata)?;
+    let ecm_scale = context.ecm_reference_scale(integrand, &gammaloop_sample)?;
     debug!("{} parameterization succeeded", context.precision_label);
     debug!(
         "jacobian: {:+16e}",
@@ -3791,7 +3948,7 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
     let (average_result, mut estimated_relative_accuracy, mut is_stable, _instability_reason) =
         if context.check_on_norm {
             stability_check_on_norm(
-                integrand.get_settings(),
+                ecm_scale.as_ref(),
                 &results,
                 context.stability_level,
                 max_eval,
@@ -3801,7 +3958,7 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
             )
         } else {
             stability_check(
-                integrand.get_settings(),
+                ecm_scale.as_ref(),
                 &results,
                 context.stability_level,
                 max_eval,
@@ -3832,7 +3989,7 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
             stability_check::<T>
         };
         let (absolute, accuracy, stable, _) = check(
-            integrand.get_settings(),
+            ecm_scale.as_ref(),
             &absolute_results,
             context.stability_level,
             Complex::new_re(average_result.re.zero()),
@@ -3866,8 +4023,27 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
             .required_precision_for_re
             .min(moment_level.required_precision_for_im);
         moment_level.required_precision_for_im = moment_level.required_precision_for_re;
+        // Like its relative precision, the independent moment uses the stricter
+        // component allowance: a Re-only allowance does not relax this oracle.
+        moment_level.ecm_relative_tolerance_for_re = moment_level
+            .ecm_relative_tolerance_for_re
+            .min(moment_level.ecm_relative_tolerance_for_im);
+        moment_level.ecm_relative_tolerance_for_im = moment_level.ecm_relative_tolerance_for_re;
+        // The raw second moment has two additional energy dimensions. Its
+        // independent oracle uses E_cm^2 times the reference normalization scale.
+        let moment_scale = ecm_scale.as_ref().map(|scale| {
+            scale * F::<T>::from_f64(integrand.get_settings().kinematics.e_cm).square()
+        });
+        if moment_scale
+            .as_ref()
+            .is_some_and(|scale| !scale.0.is_finite() || scale <= &scale.zero())
+        {
+            return Err(eyre!(
+                "E_cm-relative reference-moment scale must be finite and positive"
+            ));
+        }
         let (moment, accuracy, stable, _) = stability_check(
-            integrand.get_settings(),
+            moment_scale.as_ref(),
             &moments,
             &moment_level,
             Complex::new_re(average_result.re.zero()),
@@ -4693,6 +4869,17 @@ fn evaluate_from_source_precise<I: ProcessIntegrandImpl>(
     use_arb_prec: bool,
     max_eval: Complex<F<f64>>,
 ) -> Result<PreciseEvaluationResult> {
+    let stability = &integrand.get_settings().stability;
+    if matches!(target, EvaluationTarget::Physical(_))
+        && stability.integrated_energy_dimension.is_none()
+        && stability.levels.iter().any(|level| {
+            level.ecm_relative_tolerance_for_re > 0.0 || level.ecm_relative_tolerance_for_im > 0.0
+        })
+    {
+        return Err(eyre!(
+            "E_cm-relative physical stability requires `stability.integrated_energy_dimension` (after flux normalization, before output-unit conversion)"
+        ));
+    }
     let start_eval = std::time::Instant::now();
     let mut escalate_if_exact_zero = integrand.get_settings().stability.escalate_if_exact_zero;
     if escalate_if_exact_zero
@@ -5282,6 +5469,151 @@ pub(crate) mod tests {
             let source_kind = EvaluationSource::XSpace(source);
             let anchor = source_kind.prepare_draw(integrand, &mut metadata)?.unwrap();
             assert_eq!(format!("{anchor:?}"), format!("{expected:?}"));
+            if !fixed256 {
+                use super::{
+                    GaussianReferenceFunction, MomentumSpaceEvaluationInput,
+                    StabilityEvaluationContext,
+                };
+                use crate::settings::runtime::IntegralUnit;
+
+                // Exercise the real source/target scale owners with this already
+                // generated one-incoming cut and its explicitly selected channel.
+                let original_settings = integrand.settings.clone();
+                let mut level = StabilityLevelSetting::default_arb();
+                level.ecm_relative_tolerance_for_re = 1e-4;
+                level.ecm_relative_tolerance_for_im = 1e-4;
+                integrand.settings.stability.levels = vec![level];
+                integrand.settings.stability.integrated_energy_dimension = None;
+                let error = evaluate_from_source_precise(
+                    integrand,
+                    EvaluationTarget::Physical(model),
+                    source_kind,
+                    F(1.0),
+                    false,
+                    Complex::new_zero(),
+                )
+                .unwrap_err();
+                assert!(error.to_string().contains("integrated_energy_dimension"));
+
+                let default_sample = anchor.get_default_sample();
+                assert_eq!(default_sample.external_moms().len(), 1);
+                let loops = default_sample.loop_moms().0.len();
+                let direct = MomentumSpaceEvaluationInput {
+                    loop_momenta: default_sample
+                        .loop_moms()
+                        .iter()
+                        .map(|momentum| {
+                            ThreeMomentum::new(
+                                momentum.px.into_ff64(),
+                                momentum.py.into_ff64(),
+                                momentum.pz.into_ff64(),
+                            )
+                        })
+                        .collect(),
+                    integrator_weight: F(1.0),
+                    graph_id: None,
+                    group_id: Some(GroupId(0)),
+                    orientation: None,
+                    channel_id: Some(SamplingChannelId(0)),
+                };
+                integrand.settings.sampling =
+                    SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
+                        sampling_type: DiscreteGraphSamplingType::SamplingMultiChanneling(
+                            MultiChannelingSettings {
+                                parameterization_settings: original_settings
+                                    .sampling
+                                    .get_parameterization_settings()
+                                    .unwrap(),
+                                ..Default::default()
+                            },
+                        ),
+                        ..Default::default()
+                    });
+                integrand.warm_up(model)?;
+                let raw_source = EvaluationSource::Momentum(&direct);
+                let raw = raw_source.prepare_draw(integrand, &mut metadata)?.unwrap();
+                let prepared_raw = EvaluationSource::Prepared {
+                    sample: &raw,
+                    original: &raw_source,
+                };
+                assert!(!prepared_raw.is_x_space());
+                let reference_function =
+                    GaussianReferenceFunction::centered(original_settings.kinematics.e_cm, loops)?;
+                let maximum = Complex::new_zero();
+                for energy in [
+                    original_settings.kinematics.e_cm,
+                    2.0 * original_settings.kinematics.e_cm,
+                ] {
+                    integrand.settings.kinematics.e_cm = energy;
+                    let e_cm = F::<ArbPrec>::from_f64(energy);
+                    for (evaluation_source, sample, missing) in [
+                        (&source_kind, &anchor, 0),
+                        (&prepared_raw, &raw, 3 * loops as i32),
+                    ] {
+                        let mut context = StabilityEvaluationContext {
+                            target: EvaluationTarget::Reference(&reference_function),
+                            source: evaluation_source,
+                            stability_level: &level,
+                            max_eval: &maximum,
+                            wgt: F(1.0),
+                            check_on_norm: false,
+                            is_final_level: true,
+                            evaluation_metadata: &mut metadata,
+                            record_rotated_results: false,
+                            precision_label: "ArbPrec",
+                            escalate_if_exact_zero: false,
+                        };
+                        integrand.settings.stability.integrated_energy_dimension = None;
+                        assert_eq!(
+                            context.ecm_reference_scale(integrand, sample)?.unwrap(),
+                            e_cm.powi(-missing)
+                        );
+                        context.target = EvaluationTarget::Physical(model);
+                        assert!(context.ecm_reference_scale(integrand, sample).is_err());
+                        for (disabled_flux, dimension) in [(false, 1), (true, 2)] {
+                            integrand.settings.general.disable_flux_factor = disabled_flux;
+                            integrand.settings.stability.integrated_energy_dimension =
+                                Some(dimension);
+                            // The actual decay branch has no barn conversion,
+                            // including when an explicit barn unit was supplied.
+                            for unit in [
+                                IntegralUnit::None,
+                                IntegralUnit::Picobarn,
+                                IntegralUnit::Femtobarn,
+                            ] {
+                                integrand.settings.general.integral_unit = unit;
+                                assert_eq!(
+                                    context.ecm_reference_scale(integrand, sample)?.unwrap(),
+                                    e_cm.powi(dimension - missing)
+                                );
+                            }
+                        }
+                    }
+                }
+                integrand.settings = original_settings.clone();
+                integrand.settings.stability.levels = vec![level];
+                integrand.settings.stability.integrated_energy_dimension = None;
+                integrand.warm_up(model)?;
+                let reference_result = evaluate_from_source_precise(
+                    integrand,
+                    EvaluationTarget::Reference(&reference_function),
+                    source_kind,
+                    F(1.0),
+                    false,
+                    Complex::new_zero(),
+                )?;
+                assert!(match &reference_result {
+                    super::PreciseEvaluationResult::Double(result) =>
+                        result.reference_moments.is_some(),
+                    super::PreciseEvaluationResult::Quad(result) =>
+                        result.reference_moments.is_some(),
+                    super::PreciseEvaluationResult::Arb(result) =>
+                        result.reference_moments.is_some(),
+                });
+                reference_result.try_into_f64()?;
+                integrand.settings = original_settings;
+                integrand.warm_up(model)?;
+            }
             let reference = integrand.get_graph(0).sampling_setup().clone();
             let probe = SamplingLawProbe {
                 reference: &reference,
@@ -6372,7 +6704,6 @@ pub(crate) mod tests {
         use super::{StabilityFailureReason, StabilityLevelSetting};
         use spenso::algebra::complex::Complex;
 
-        let settings = RuntimeSettings::default();
         let level = StabilityLevelSetting::default_double();
         for check_on_norm in [false, true] {
             let check = if check_on_norm {
@@ -6393,7 +6724,7 @@ pub(crate) mod tests {
                                 .map(|(re, im)| Complex::new(F(re), F(im)))
                                 .collect::<Vec<_>>();
                             let (result, accuracy, stable, reason) = check(
-                                &settings,
+                                None,
                                 &results,
                                 &level,
                                 Complex::new_zero(),
@@ -6423,7 +6754,6 @@ pub(crate) mod tests {
         use super::{StabilityFailureReason, StabilityLevelSetting, StabilityStatus};
         use spenso::algebra::complex::Complex;
 
-        let settings = RuntimeSettings::default();
         let level = StabilityLevelSetting::default_double();
         for check_on_norm in [false, true] {
             let check = if check_on_norm {
@@ -6436,7 +6766,7 @@ pub(crate) mod tests {
                     for (re, im) in [(0.0, 0.0), (2.0, 3.0)] {
                         let results = vec![Complex::new(F(re), F(im)); count];
                         let (result, accuracy, stable, reason) = check(
-                            &settings,
+                            None,
                             &results,
                             &level,
                             Complex::new_zero(),
@@ -6461,7 +6791,7 @@ pub(crate) mod tests {
 
                 let results = [Complex::new(F(2.0), F(3.0)), Complex::new(F(4.0), F(6.0))];
                 let (result, accuracy, stable, reason) = check(
-                    &settings,
+                    None,
                     &results,
                     &level,
                     Complex::new_zero(),
@@ -6489,7 +6819,6 @@ pub(crate) mod tests {
         use crate::{settings::runtime::StabilityLevelSetting, utils::ArbPrec};
         use spenso::algebra::complex::Complex;
 
-        let settings = RuntimeSettings::default();
         let level = StabilityLevelSetting::default_arb();
         let one = F::<ArbPrec>::default().one();
         let minimum = F::<ArbPrec>::from_f64(f64::MIN_POSITIVE);
@@ -6512,7 +6841,7 @@ pub(crate) mod tests {
                 (one.from_usize(10).powi(100), false),
             ] {
                 let (result, accuracy, stable, _) = check(
-                    &settings,
+                    None,
                     &probes,
                     &level,
                     Complex::new_re(one.zero()),
@@ -6535,7 +6864,7 @@ pub(crate) mod tests {
             // normal-sized primary cannot inherit the average's waiver.
             assert_eq!(
                 check(
-                    &settings,
+                    None,
                     &[probes[1].clone(), probes[0].clone()],
                     &level,
                     Complex::new_re(one.zero()),
@@ -6549,7 +6878,7 @@ pub(crate) mod tests {
             for invalid_weight in [f64::NAN, f64::INFINITY] {
                 assert!(
                     !check(
-                        &settings,
+                        None,
                         &probes,
                         &level,
                         Complex::new_re(one.zero()),
@@ -6564,7 +6893,7 @@ pub(crate) mod tests {
         // A small signed average does not bound large cancelling probes.
         assert!(
             !super::stability_check(
-                &settings,
+                None,
                 &[Complex::new_re(one.clone()), Complex::new_re(-one.clone())],
                 &level,
                 Complex::new_re(one.zero()),
@@ -6581,7 +6910,6 @@ pub(crate) mod tests {
         use crate::{settings::runtime::StabilityLevelSetting, utils::ArbPrec};
         use spenso::algebra::complex::Complex;
 
-        let settings = RuntimeSettings::default();
         let level = StabilityLevelSetting::default_arb();
         let one = F::<ArbPrec>::default().one();
         let tiny = F::<ArbPrec>::from_f64(f64::MIN_POSITIVE) / one.from_usize(4);
@@ -6598,7 +6926,7 @@ pub(crate) mod tests {
                 }
                 assert_eq!(
                     super::stability_check(
-                        &settings,
+                        None,
                         &probes,
                         &level,
                         Complex::new_re(one.zero()),
@@ -6611,6 +6939,261 @@ pub(crate) mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn stability_ecm_tolerance_preserves_energy_and_unit_scaling() {
+        use crate::settings::runtime::{IntegralUnit, StabilityLevelSetting};
+        use crate::utils::ArbPrec;
+        use spenso::algebra::complex::Complex;
+
+        let one = F::<ArbPrec>::default().one();
+        let mut level = StabilityLevelSetting::default_arb();
+        level.ecm_relative_tolerance_for_re = 1e-5;
+        for energy in [600, 1200] {
+            // Cross sections, widths and a scalar two-loop amplitude have
+            // different dimensions; the decision concerns a dimensionless ratio.
+            for dimension in [-6, -2, 0, 1, 2] {
+                for missing_measure in [0, 6] {
+                    for unit in [
+                        IntegralUnit::None,
+                        IntegralUnit::Picobarn,
+                        IntegralUnit::Femtobarn,
+                    ] {
+                        let scale = one.from_usize(energy).powi(dimension - missing_measure)
+                            * super::cross_section::barn_conversion_factor(unit, one.clone());
+                        let small = &scale / one.from_usize(1_000_000);
+                        let probes = [
+                            Complex::new_re(small.clone()),
+                            Complex::new_re(&small * one.from_usize(3)),
+                        ];
+                        for norm in [false, true] {
+                            let check = if norm {
+                                super::stability_check_on_norm::<ArbPrec>
+                            } else {
+                                super::stability_check::<ArbPrec>
+                            };
+                            for (weight, expected) in [(1, true), (-1, true), (100, false)] {
+                                let (result, accuracy, stable, _) = check(
+                                    Some(&scale),
+                                    &probes,
+                                    &level,
+                                    Complex::new_re(one.zero()),
+                                    one.from_i64(weight),
+                                    true,
+                                    false,
+                                );
+                                assert_eq!(stable, expected);
+                                assert!(
+                                    accuracy.unwrap()
+                                        > F::from_f64(level.required_precision_for_re)
+                                );
+                                assert_eq!(
+                                    result.re,
+                                    if norm {
+                                        small.clone()
+                                    } else {
+                                        &small * one.from_usize(2)
+                                    }
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // A body below binary64 range must be multiplied in native precision:
+        // its huge outer factor can put the disagreement well above the allowance.
+        let tiny = one.from_usize(10).powi(-1000);
+        let probes = [
+            Complex::new_re(tiny.clone()),
+            Complex::new_re(&tiny * one.from_usize(3)),
+        ];
+        level.ecm_relative_tolerance_for_re = 1e-201;
+        assert!(
+            !super::stability_check(
+                Some(&one),
+                &probes,
+                &level,
+                Complex::new_re(one.zero()),
+                one.from_usize(10).powi(800),
+                true,
+                false
+            )
+            .2
+        );
+    }
+
+    #[test]
+    fn stability_ecm_tolerance_bounds_the_returned_components() {
+        use crate::settings::runtime::StabilityLevelSetting;
+        use spenso::algebra::complex::Complex;
+
+        let scale = F(1.0);
+        let mut level = StabilityLevelSetting::default_double();
+        let probes = [Complex::new(F(1.0), F(0.0)), Complex::new(F(3.0), F(0.0))];
+        for (allowance, expected_component, expected_norm) in [
+            (0.0, false, false),
+            (0.5, false, false),
+            (1.0, true, false),
+            (2.0, true, true),
+        ] {
+            level.ecm_relative_tolerance_for_re = allowance;
+            for (norm, expected, returned) in
+                [(false, expected_component, 2.0), (true, expected_norm, 1.0)]
+            {
+                let check = if norm {
+                    super::stability_check_on_norm::<f64>
+                } else {
+                    super::stability_check::<f64>
+                };
+                let (value, accuracy, stable, _) = check(
+                    Some(&scale),
+                    &probes,
+                    &level,
+                    Complex::new_zero(),
+                    F(1.0),
+                    true,
+                    false,
+                );
+                assert_eq!(stable, expected);
+                assert_eq!(value.re, F(returned));
+                assert!(accuracy.unwrap() > F(level.required_precision_for_re));
+            }
+        }
+        // A real allowance cannot excuse an independently unstable imaginary
+        // component; swapping Re and Im swaps the applicable setting too.
+        for swap in [false, true] {
+            let mut mixed = [Complex::new(F(1.0), F(4.0)), Complex::new(F(3.0), F(8.0))];
+            level.ecm_relative_tolerance_for_re = 1.0;
+            level.ecm_relative_tolerance_for_im = 0.0;
+            if swap {
+                for probe in &mut mixed {
+                    std::mem::swap(&mut probe.re, &mut probe.im);
+                }
+                std::mem::swap(
+                    &mut level.ecm_relative_tolerance_for_re,
+                    &mut level.ecm_relative_tolerance_for_im,
+                );
+            }
+            assert!(
+                !super::stability_check(
+                    Some(&scale),
+                    &mixed,
+                    &level,
+                    Complex::new_zero(),
+                    F(1.0),
+                    true,
+                    false
+                )
+                .2
+            );
+        }
+        level.ecm_relative_tolerance_for_re = 0.5;
+        let cancelling = [Complex::new_re(F(1.0)), Complex::new_re(F(-1.0))];
+        assert!(
+            !super::stability_check(
+                Some(&scale),
+                &cancelling,
+                &level,
+                Complex::new_zero(),
+                F(1.0),
+                true,
+                false
+            )
+            .2
+        );
+        for check in [
+            super::stability_check::<f64>,
+            super::stability_check_on_norm::<f64>,
+        ] {
+            level.ecm_relative_tolerance_for_re = 10.0;
+            for invalid in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+                assert!(
+                    !check(
+                        Some(&scale),
+                        &probes,
+                        &level,
+                        Complex::new_zero(),
+                        F(invalid),
+                        true,
+                        false
+                    )
+                    .2
+                );
+                assert!(
+                    !check(
+                        Some(&F(invalid)),
+                        &probes,
+                        &level,
+                        Complex::new_zero(),
+                        F(1.0),
+                        true,
+                        false
+                    )
+                    .2
+                );
+            }
+        }
+        // Finite differences do not make overflowing complete products safe.
+        level.required_precision_for_re = 0.0;
+        let large = [
+            Complex::new_re(F(1e200)),
+            Complex::new_re(F(1e200 * (1.0 - 1e-14))),
+        ];
+        assert!(
+            !super::stability_check(
+                Some(&F(1e308)),
+                &large,
+                &level,
+                Complex::new_zero(),
+                F(1e110),
+                true,
+                false
+            )
+            .2
+        );
+    }
+
+    #[test]
+    fn stability_ecm_runtime_validation_precedes_orientation_checks() {
+        let mut settings = RuntimeSettings::default();
+        for component in ["re", "im"] {
+            for invalid in [-1.0, f64::NAN, f64::INFINITY] {
+                let level = &mut settings.stability.levels[0];
+                level.ecm_relative_tolerance_for_re = 0.0;
+                level.ecm_relative_tolerance_for_im = 0.0;
+                if component == "re" {
+                    level.ecm_relative_tolerance_for_re = invalid;
+                } else {
+                    level.ecm_relative_tolerance_for_im = invalid;
+                }
+                for explicit in [false, true] {
+                    let error = validate_process_runtime_settings(&settings, explicit).unwrap_err();
+                    assert!(
+                        error
+                            .to_string()
+                            .contains(&format!("levels[0].ecm_relative_tolerance_for_{component}"))
+                    );
+                }
+            }
+        }
+        settings.stability.levels[0].ecm_relative_tolerance_for_re = 1e-100;
+        settings.stability.levels[0].ecm_relative_tolerance_for_im = 0.0;
+        for invalid in [0.0, -1.0, f64::NAN, f64::INFINITY] {
+            settings.kinematics.e_cm = invalid;
+            assert!(
+                validate_process_runtime_settings(&settings, false)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("kinematics.e_cm")
+            );
+        }
+        settings.kinematics.e_cm = 600.0;
+        // The physical dimension is admitted at its target boundary; generic
+        // warmup also serves reference functions with their known dimensions.
+        assert!(settings.stability.integrated_energy_dimension.is_none());
+        validate_process_runtime_settings(&settings, false).unwrap();
     }
 
     #[test]
@@ -6885,8 +7468,9 @@ pub(crate) mod tests {
         use crate::settings::runtime::StabilityLevelSetting;
         use spenso::algebra::complex::Complex;
 
-        let settings = RuntimeSettings::default();
-        let level = StabilityLevelSetting::default_double();
+        let mut level = StabilityLevelSetting::default_double();
+        level.ecm_relative_tolerance_for_re = 0.1;
+        level.ecm_relative_tolerance_for_im = 0.1;
         let signed = [Complex::new_zero(), Complex::new_zero()];
         let absolute = [Complex::new(F(2.0), F(4.0)), Complex::new(F(3.0), F(6.0))];
         for check in [
@@ -6895,7 +7479,7 @@ pub(crate) mod tests {
         ] {
             assert!(
                 check(
-                    &settings,
+                    Some(&F(1.0)),
                     &signed,
                     &level,
                     Complex::new_zero(),
@@ -6907,7 +7491,7 @@ pub(crate) mod tests {
             );
             assert!(
                 !check(
-                    &settings,
+                    Some(&F(1.0)),
                     &absolute,
                     &level,
                     Complex::new_zero(),

@@ -591,8 +591,9 @@ whereas the summed mode evaluates all entries of that same catalogue. This
 choice of estimator must never introduce a separate channel index type.
 
 The remaining retirement work is explicit: route default single-basis sampling
-through the same compiled maps, remove its reinterpretation helper, remove
-obsolete OSE/alpha settings and aliases, and replace `LmbMultiChannelingSetup`
+through the same compiled maps, remove its reinterpretation helper, retain
+genuine OSE weighting and `alpha` on the canonical sampling settings while
+removing their duplicate legacy owners and misleading aliases, and replace `LmbMultiChannelingSetup`
 where it still owns generic catalogue behavior. The old LMB partition helpers
 are already removed. The ordinal `SamplingChannelId` remains only as the
 catalogue's stable position, never an independently generated LMB index.
@@ -1529,6 +1530,36 @@ claiming a gain. Report neutral or worse variance too: a smoothly subtracted
 amplitude need not benefit from concentrating on a particular threshold.
 
 ## 6. GL638 validation and completion criteria
+
+The current validation campaign uses `E_cm = 600 GeV`, `mu_r = 91.188 GeV`
+and initially `m_uv = 50 GeV`. Before an hours-long production run, compare
+multiple approximately 15-minute runs on 50 workers, inspect every new maximum
+and require credible progress toward a real-part error below 10%. If the signed
+integral is near zero, assess convergence of the independently accumulated
+integral of `abs(Re f)` instead. Keep the final production seed independent of
+the tuning runs and report sampling, evaluator and remaining integrand costs.
+
+All configurable numerical thresholds must be relative to `E_cm`, with the
+appropriate energy power for the tested quantity. An optional near-zero
+stability allowance is dimensionless: compare fully weighted probe disagreement
+against `U * E_cm^d`, where `d` is the explicitly declared integrated energy
+dimension and `U` is the actual output-unit conversion. Direct momentum
+densities account for their missing spatial measure; reference functions use
+their own known dimensions. Keep real, imaginary and absolute-observable checks
+independent. This allowance defaults to zero and never changes the evaluated
+value. The fixed floating-point representability boundary is a separate
+numerical rule, not a configurable dimensional cutoff.
+
+Retain a genuine OSE partition alongside inverse-map-density weighting in the
+single sampling catalogue. With advanced maps disabled,
+`auto:optimized_lmb` and configurable `alpha` must reproduce the historical
+prefactor proportional to the product of LMB on-shell energies raised to
+`-alpha`; `ose` must not silently select inverse densities. Also compare an
+OSE override for the explicit soft LMB while the advanced channels retain their
+exact densities and support checks. For mixed scores use the common dimension
+`E_cm^(-3L) * product((E_cm/E_edge)^alpha)`, with energies evaluated in the
+master raw frame. Test energy rescaling, partition normalization, soft powers
+and full-process reference integration before physics comparisons.
 
 The matched candidate matrix uses optimized LMB as the baseline. Every advanced
 candidate includes sampling channels for all six physical cuts, with the direct
