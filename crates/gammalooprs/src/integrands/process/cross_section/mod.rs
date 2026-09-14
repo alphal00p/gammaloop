@@ -32,7 +32,7 @@ use crate::{
     },
     model::Model,
     momentum::{
-        Energy, FourMomentum, Rotation, RotationMethod, ThreeMomentum,
+        FourMomentum, Rotation, RotationMethod, ThreeMomentum,
         sample::{
             ExternalFourMomenta, ExternalIndex, LoopIndex, LoopMomenta, MomentumSample, Subspace,
             SubspaceData,
@@ -64,7 +64,7 @@ use crate::{
     utils::{
         F, FloatLike, RuntimeCache, h, h_dual,
         hyperdual_utils::{
-            DualOrNot, extract_t_derivatives, extract_t_derivatives_complex, new_constant,
+            DualOrNot, extract_t_derivatives, extract_t_derivatives_complex,
             shape_from_cut_cff_index, simple_n_deriv_shape,
         },
         newton_solver::{NewtonIterationResult, RadialRootDiagnostics, RadialRootIdentity},
@@ -2077,7 +2077,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                                 )
                             }));
                             let zero = F(native[0].clone()).zero();
-                            let solution = host
+                            let (_ray, solution) = host
                                 .solve_lu_cut(
                                     &loops,
                                     &externals,
@@ -2408,7 +2408,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                 "LU cut graph '{}' cut group {} probe rotation {}",
                 self.graph.name, cut_group_id.0, context.rotation.method,
             ));
-            let solution = match representative_esurface.solve_lu_cut(
+            let prepared_cut = match representative_esurface.solve_lu_cut(
                 momentum_sample.loop_moms(),
                 momentum_sample.external_moms(),
                 &masses,
@@ -2439,10 +2439,10 @@ impl GraphTerm for CrossSectionGraphTerm {
 
             crate::debug_tags!(#integration, #cut, #solver;
                 "solution: {:?}",
-                solution
+                prepared_cut
             );
 
-            lu_solutions.insert(cut_group_id, solution);
+            lu_solutions.insert(cut_group_id, prepared_cut);
         }
         if !lu_root_errors.is_empty() {
             context
@@ -2466,10 +2466,9 @@ impl GraphTerm for CrossSectionGraphTerm {
                 "\n =====START EVALUATION FOR CUT GROUP {}=====",
                 cut_group_id.0
             );
-            let solution = lu_solutions
+            let (ray, solution) = lu_solutions
                 .remove(&cut_group_id)
                 .expect("all active LU cut roots were validated before evaluation");
-            let representative_esurface = &self.cut_esurface[cut_group.cuts[0]];
 
             let prepared_event = prepare_buffered_event(
                 context.settings,
@@ -2543,31 +2542,10 @@ impl GraphTerm for CrossSectionGraphTerm {
 
                         let dual_t_for_esurface =
                             dual_shape_for_esurface.variable(0, solution.solution.clone());
-                        let dual_momenta_for_esurface = momentum_sample
-                            .loop_moms()
-                            .rescale_with_hyper_dual(&dual_t_for_esurface, None);
-
-                        let dual_externals = momentum_sample
-                            .external_moms()
-                            .iter()
-                            .map(|mom| FourMomentum {
-                                temporal: Energy {
-                                    value: new_constant(&dual_t_for_esurface, &mom.temporal.value),
-                                },
-                                spatial: ThreeMomentum {
-                                    px: new_constant(&dual_t_for_esurface, &mom.spatial.px),
-                                    py: new_constant(&dual_t_for_esurface, &mom.spatial.py),
-                                    pz: new_constant(&dual_t_for_esurface, &mom.spatial.pz),
-                                },
-                            })
-                            .collect();
-
-                        let dual_e_surface = representative_esurface.compute_from_dual_momenta(
-                            &self.graph.loop_momentum_basis,
-                            &masses,
-                            &dual_momenta_for_esurface,
-                            &dual_externals,
-                        );
+                        // Reuse the exact represented equation whose root was
+                        // accepted above. Integrand momentum jets remain on their
+                        // existing independent shape and kinematic owner.
+                        let dual_e_surface = ray.evaluate_dual(&dual_t_for_esurface);
 
                         let mut momentum_sample_with_duals = momentum_sample.clone();
                         momentum_sample_with_duals.sample.dual_loop_moms =

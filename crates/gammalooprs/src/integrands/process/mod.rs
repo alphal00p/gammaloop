@@ -2017,7 +2017,6 @@ struct PreciseStabilityLevelResult<T: FloatLike> {
     pub estimated_relative_accuracy: Option<F<T>>,
     pub sample_count: usize,
     pub total_time: Duration,
-    pub parameterization_time: Duration,
     pub parameterization_jacobian: Option<F<T>>,
     pub is_stable: bool,
     pub rotated_results: Vec<RotatedEvaluation>,
@@ -3363,6 +3362,7 @@ fn evaluate_graph_term<T: FloatLike, I: ProcessIntegrandImpl>(
     // same graph-parent point, after the existing affine reinterpretation.
     let mapped_sample;
     let sample = if let Some(lmb_basis_id) = lmb_basis_id {
+        let started = Instant::now();
         mapped_sample = integrand
             .get_graph(graph_id)
             .sampling_setup()
@@ -3371,69 +3371,79 @@ fn evaluate_graph_term<T: FloatLike, I: ProcessIntegrandImpl>(
                 sample,
                 sample.sample.loop_mom_cache_id,
             );
+        context.evaluation_metadata.parameterization_time += started.elapsed();
         &mapped_sample
     } else {
         sample
     };
-    let model = match context.target {
-        EvaluationTarget::Physical(model) => model,
-        #[cfg(test)]
-        EvaluationTarget::SamplingLaw(probe) => return probe.evaluate(sample, context.rotation),
-        EvaluationTarget::Reference(reference) => {
-            // A reference is defined in the original raw frame, including its
-            // nonzero center. Stability rotations must not rotate the target
-            // relative to the integration point.
-            let raw_momenta = sample
-                .loop_moms()
-                .0
-                .iter()
-                .map(|momentum| context.rotation.inverse_rotate_three(momentum))
-                .collect::<LoopMomenta<_>>();
-            let mut value = reference.evaluate(&raw_momenta)?
-                / sample.zero().from_usize(integrand.graph_count());
-            if sample.sample.orientation.is_some() {
-                value /= sample
-                    .zero()
-                    .from_usize(integrand.get_graph(graph_id).get_num_orientations());
+    // Every actual target call counts, including failed attempts and probe
+    // rotations. Evaluator subset diagnostics retain their primary-call flag.
+    let started = Instant::now();
+    let result = (|| -> Result<GraphEvaluationResult<T>> {
+        let model = match context.target {
+            EvaluationTarget::Physical(model) => model,
+            #[cfg(test)]
+            EvaluationTarget::SamplingLaw(probe) => {
+                return probe.evaluate(sample, context.rotation);
             }
-            let radius_squared = raw_momenta.0.iter().fold(sample.zero(), |sum, momentum| {
-                sum + momentum.px.square() + momentum.py.square() + momentum.pz.square()
-            });
-            let mut result = GraphEvaluationResult::zero(sample.zero());
-            result.reference_moments = Some(ReferenceMoments {
-                second_moment: value.clone() * radius_squared,
-                jacobian_min: 1.0,
-                jacobian_max: 1.0,
-            });
-            result.integrand_result = Complex::new_re(value);
-            return Ok(result);
-        }
-    };
-    let mut event_processing_runtime = integrand.take_event_processing_runtime();
-    let result = {
-        let graph_context = GraphTermEvaluationContext {
-            model,
-            settings: context.settings,
-            event_processing_runtime: event_processing_runtime.as_mut(),
-            rotation: context.rotation,
-            evaluation_metadata: context.evaluation_metadata,
-            record_primary_timing: context.record_primary_timing,
-            sampling_channel,
+            EvaluationTarget::Reference(reference) => {
+                // A reference is defined in the original raw frame, including its
+                // nonzero center. Stability rotations must not rotate the target
+                // relative to the integration point.
+                let raw_momenta = sample
+                    .loop_moms()
+                    .0
+                    .iter()
+                    .map(|momentum| context.rotation.inverse_rotate_three(momentum))
+                    .collect::<LoopMomenta<_>>();
+                let mut value = reference.evaluate(&raw_momenta)?
+                    / sample.zero().from_usize(integrand.graph_count());
+                if sample.sample.orientation.is_some() {
+                    value /= sample
+                        .zero()
+                        .from_usize(integrand.get_graph(graph_id).get_num_orientations());
+                }
+                let radius_squared = raw_momenta.0.iter().fold(sample.zero(), |sum, momentum| {
+                    sum + momentum.px.square() + momentum.py.square() + momentum.pz.square()
+                });
+                let mut result = GraphEvaluationResult::zero(sample.zero());
+                result.reference_moments = Some(ReferenceMoments {
+                    second_moment: value.clone() * radius_squared,
+                    jacobian_min: 1.0,
+                    jacobian_max: 1.0,
+                });
+                result.integrand_result = Complex::new_re(value);
+                return Ok(result);
+            }
         };
-        integrand
-            .get_graph_mut(graph_id)
-            .evaluate(sample, graph_context)
-    };
-    integrand.restore_event_processing_runtime(event_processing_runtime);
-    let mut result = result?;
-    let graph_group_id = integrand.graph_group_id_for_graph(graph_id);
-    for event_group in result.event_groups.iter_mut() {
-        for event in event_group.iter_mut() {
-            event.cut_info.graph_id = graph_id;
-            event.cut_info.graph_group_id = graph_group_id;
+        let mut event_processing_runtime = integrand.take_event_processing_runtime();
+        let result = {
+            let graph_context = GraphTermEvaluationContext {
+                model,
+                settings: context.settings,
+                event_processing_runtime: event_processing_runtime.as_mut(),
+                rotation: context.rotation,
+                evaluation_metadata: context.evaluation_metadata,
+                record_primary_timing: context.record_primary_timing,
+                sampling_channel,
+            };
+            integrand
+                .get_graph_mut(graph_id)
+                .evaluate(sample, graph_context)
+        };
+        integrand.restore_event_processing_runtime(event_processing_runtime);
+        let mut result = result?;
+        let graph_group_id = integrand.graph_group_id_for_graph(graph_id);
+        for event_group in result.event_groups.iter_mut() {
+            for event in event_group.iter_mut() {
+                event.cut_info.graph_id = graph_id;
+                event.cut_info.graph_group_id = graph_group_id;
+            }
         }
-    }
-    Ok(result)
+        Ok(result)
+    })();
+    context.evaluation_metadata.integrand_evaluation_time += started.elapsed();
+    result
 }
 
 fn selected_lmb_basis_for_default_sampling<I: ProcessIntegrandImpl>(
@@ -3532,46 +3542,56 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
                     // separately; an explicit sum has no channel-count multiplier.
                     GraphEvaluationResult::zero(zero.clone()),
                     |mut sum, channel_id| {
-                        let bridge = integrand
-                            .get_graph(graph_id)
-                            .sampling_setup()
-                            .sampling_bridge::<T>()?;
-                        let mut contexts = SamplingChannelRuntimeContexts::for_draw(
-                            bridge.channels().len(),
-                            graph_id,
-                            channel_id,
-                            &mut context.evaluation_metadata.sampling_proposal_policies,
-                        );
-                        let mapped = bridge.forward_with_runtime_contexts(
-                            channel_id,
-                            &coordinates,
-                            &mut contexts,
-                        )?;
-                        if context
+                        let collecting = context
                             .evaluation_metadata
                             .sampling_proposal_policies
-                            .is_collecting()
-                        {
-                            // Map-required roots and centers have run, including
-                            // every foreign density. No physical probe or event
-                            // is evaluated during canonical policy collection.
-                            return Ok(sum);
-                        }
-                        let factor = F(mapped.selected_factor()?);
-                        let mapped_sample = mapped
-                            .to_momentum_sample(SamplingMomentumSampleContext {
-                                loop_mom_cache_id: sample.sample.loop_mom_cache_id,
-                                external_moms: &context.settings.kinematics.externals,
-                                external_mom_cache_id: sample.sample.external_mom_cache_id,
-                                dependent_momenta_constructor: integrand
-                                    .get_dependent_momenta_constructor(),
-                                orientation: sample.sample.orientation,
-                            })?
-                            .rotate(
-                                context.rotation,
-                                sample.sample.loop_mom_cache_id,
-                                sample.sample.external_mom_cache_id,
+                            .is_collecting();
+                        let started = Instant::now();
+                        let prepared = (|| -> Result<_> {
+                            let bridge = integrand
+                                .get_graph(graph_id)
+                                .sampling_setup()
+                                .sampling_bridge::<T>()?;
+                            let mut contexts = SamplingChannelRuntimeContexts::for_draw(
+                                bridge.channels().len(),
+                                graph_id,
+                                channel_id,
+                                &mut context.evaluation_metadata.sampling_proposal_policies,
                             );
+                            let mapped = bridge.forward_with_runtime_contexts(
+                                channel_id,
+                                &coordinates,
+                                &mut contexts,
+                            )?;
+                            if collecting {
+                                // Map-required roots and centers have run, including
+                                // every foreign density. No physical probe or event
+                                // is evaluated during canonical policy collection.
+                                return Ok(None);
+                            }
+                            let factor = F(mapped.selected_factor()?);
+                            let mapped_sample = mapped
+                                .to_momentum_sample(SamplingMomentumSampleContext {
+                                    loop_mom_cache_id: sample.sample.loop_mom_cache_id,
+                                    external_moms: &context.settings.kinematics.externals,
+                                    external_mom_cache_id: sample.sample.external_mom_cache_id,
+                                    dependent_momenta_constructor: integrand
+                                        .get_dependent_momenta_constructor(),
+                                    orientation: sample.sample.orientation,
+                                })?
+                                .rotate(
+                                    context.rotation,
+                                    sample.sample.loop_mom_cache_id,
+                                    sample.sample.external_mom_cache_id,
+                                );
+                            Ok(Some((factor, mapped_sample)))
+                        })();
+                        if !collecting {
+                            context.evaluation_metadata.parameterization_time += started.elapsed();
+                        }
+                        let Some((factor, mapped_sample)) = prepared? else {
+                            return Ok(sum);
+                        };
                         let mut result = evaluate_graph_term(
                             integrand,
                             graph_id,
@@ -3744,10 +3764,9 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
     context: &mut StabilityEvaluationContext<'_, '_>,
 ) -> Result<PreciseStabilityLevelResult<T>> {
     let level_start = Instant::now();
-    let (gammaloop_sample, parameterization_time) = context.source.build_gamma_sample::<T, I>(
-        integrand,
-        &mut context.evaluation_metadata.sampling_proposal_policies,
-    )?;
+    let gammaloop_sample = context
+        .source
+        .build_gamma_sample::<T, I>(integrand, context.evaluation_metadata)?;
     debug!("{} parameterization succeeded", context.precision_label);
     debug!(
         "jacobian: {:+16e}",
@@ -3860,7 +3879,6 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
         estimated_relative_accuracy,
         sample_count: results.len(),
         total_time: level_start.elapsed(),
-        parameterization_time,
         parameterization_jacobian: match context.source {
             EvaluationSource::XSpace(_) => Some(gammaloop_sample.get_default_sample().one()),
             EvaluationSource::Momentum(_) => None,
@@ -3989,11 +4007,6 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
     let loop_cache_shift = 0;
     let cache = integrand.get_settings().general.enable_cache;
 
-    let start_integrand_timing = if record_primary_timing {
-        Some(std::time::Instant::now())
-    } else {
-        None
-    };
     let mut context = EvaluationContext {
         target,
         settings: &settings,
@@ -4001,115 +4014,101 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
         evaluation_metadata,
         record_primary_timing,
     };
-    let result = (|| -> Result<GraphEvaluationResult<T>> {
-        let mut result = match &gammaloop_sample {
-            GammaLoopSample::Default {
-                sample,
-                use_lmb_basis,
-            } => {
-                if integrand.groups_default_sample_events_by_graph_group() {
-                    integrand
-                        .get_group_structure()
-                        .iter_enumerated()
-                        .map(|(group_id, _)| group_id)
-                        .collect_vec()
-                        .into_iter()
-                        .try_fold(
-                            GraphEvaluationResult::zero(zero.clone()),
-                            |mut sum, group_id| {
-                                let group_result = evaluate_graph_group(
-                                    integrand,
-                                    group_id,
-                                    &DiscreteGraphSample::Default {
-                                        sample: sample.clone(),
-                                        use_lmb_basis: *use_lmb_basis,
-                                    },
-                                    &mut context,
-                                    &zero,
-                                )?;
-                                sum.merge_in_place(group_result);
-                                Ok::<GraphEvaluationResult<T>, eyre::Report>(sum)
-                            },
-                        )?
-                } else {
-                    (0..integrand.graph_count()).try_fold(
+    let mut result = match &gammaloop_sample {
+        GammaLoopSample::Default {
+            sample,
+            use_lmb_basis,
+        } => {
+            if integrand.groups_default_sample_events_by_graph_group() {
+                integrand
+                    .get_group_structure()
+                    .iter_enumerated()
+                    .map(|(group_id, _)| group_id)
+                    .collect_vec()
+                    .into_iter()
+                    .try_fold(
                         GraphEvaluationResult::zero(zero.clone()),
-                        |mut sum, graph_id| {
-                            let lmb_basis_id = selected_lmb_basis_for_default_sampling(
+                        |mut sum, group_id| {
+                            let group_result = evaluate_graph_group(
                                 integrand,
-                                graph_id,
-                                *use_lmb_basis,
-                            )?;
-                            let graph_result = evaluate_graph_term(
-                                integrand,
-                                graph_id,
-                                sample,
+                                group_id,
+                                &DiscreteGraphSample::Default {
+                                    sample: sample.clone(),
+                                    use_lmb_basis: *use_lmb_basis,
+                                },
                                 &mut context,
-                                None,
-                                lmb_basis_id,
+                                &zero,
                             )?;
-                            sum.merge_in_place(graph_result);
+                            sum.merge_in_place(group_result);
                             Ok::<GraphEvaluationResult<T>, eyre::Report>(sum)
                         },
                     )?
-                }
-            }
-            GammaLoopSample::Graph { graph_id, sample } => {
-                evaluate_graph_term(integrand, *graph_id, sample, &mut context, None, None)?
-            }
-            GammaLoopSample::MultiChanneling {
-                sampling_coordinates,
-                sample,
-            } => integrand
-                .get_group_structure()
-                .iter_enumerated()
-                .map(|(group_id, _)| group_id)
-                .collect_vec()
-                .into_iter()
-                .try_fold(
+            } else {
+                (0..integrand.graph_count()).try_fold(
                     GraphEvaluationResult::zero(zero.clone()),
-                    |mut sum, group_id| {
-                        let result = evaluate_graph_group(
+                    |mut sum, graph_id| {
+                        let lmb_basis_id = selected_lmb_basis_for_default_sampling(
                             integrand,
-                            group_id,
-                            &DiscreteGraphSample::MultiChanneling {
-                                sampling_coordinates: sampling_coordinates.clone(),
-                                sample: sample.clone(),
-                            },
-                            &mut context,
-                            &zero,
+                            graph_id,
+                            *use_lmb_basis,
                         )?;
-                        sum.merge_in_place(result);
-                        Ok::<_, eyre::Report>(sum)
+                        let graph_result = evaluate_graph_term(
+                            integrand,
+                            graph_id,
+                            sample,
+                            &mut context,
+                            None,
+                            lmb_basis_id,
+                        )?;
+                        sum.merge_in_place(graph_result);
+                        Ok::<GraphEvaluationResult<T>, eyre::Report>(sum)
                     },
-                )?,
-            GammaLoopSample::DiscreteGraph { group_id, sample } => {
-                evaluate_graph_group(integrand, *group_id, sample, &mut context, &zero)?
+                )?
             }
-        };
-
-        // Form the complete map/partition/physics contribution at native precision.
-        // The outer reporting Jacobian is unity; event and reference factors pass
-        // through the same owner exactly once, including ordinary sampling.
-        result.apply_sampling_factor(gammaloop_sample.get_default_sample().jacobian());
-        if cache {
-            integrand.increment_loop_cache_id(loop_cache_shift);
         }
+        GammaLoopSample::Graph { graph_id, sample } => {
+            evaluate_graph_term(integrand, *graph_id, sample, &mut context, None, None)?
+        }
+        GammaLoopSample::MultiChanneling {
+            sampling_coordinates,
+            sample,
+        } => integrand
+            .get_group_structure()
+            .iter_enumerated()
+            .map(|(group_id, _)| group_id)
+            .collect_vec()
+            .into_iter()
+            .try_fold(
+                GraphEvaluationResult::zero(zero.clone()),
+                |mut sum, group_id| {
+                    let result = evaluate_graph_group(
+                        integrand,
+                        group_id,
+                        &DiscreteGraphSample::MultiChanneling {
+                            sampling_coordinates: sampling_coordinates.clone(),
+                            sample: sample.clone(),
+                        },
+                        &mut context,
+                        &zero,
+                    )?;
+                    sum.merge_in_place(result);
+                    Ok::<_, eyre::Report>(sum)
+                },
+            )?,
+        GammaLoopSample::DiscreteGraph { group_id, sample } => {
+            evaluate_graph_group(integrand, *group_id, sample, &mut context, &zero)?
+        }
+    };
 
-        Ok(result)
-    })();
-    if record_primary_timing {
-        context.evaluation_metadata.integrand_evaluation_time = context
-            .evaluation_metadata
-            .integrand_evaluation_time
-            .saturating_add(
-                start_integrand_timing
-                    .expect("integrand timing start should exist")
-                    .elapsed(),
-            );
+    // Form the complete map/partition/physics contribution at native precision.
+    // The outer reporting Jacobian is unity; event and reference factors pass
+    // through the same owner exactly once, including ordinary sampling.
+    result.apply_sampling_factor(gammaloop_sample.get_default_sample().jacobian());
+    if cache {
+        integrand.increment_loop_cache_id(loop_cache_shift);
     }
 
-    result
+    Ok(result)
 }
 
 fn create_grid_for_graph<G: GraphTerm>(
@@ -4351,37 +4350,49 @@ impl<'a> EvaluationSource<'a> {
     fn build_gamma_sample<T: FloatLike, I: ProcessIntegrandImpl>(
         &self,
         integrand: &mut I,
-        policies: &mut SamplingProposalPolicies,
-    ) -> Result<(GammaLoopSample<T>, Duration)> {
-        match self {
+        metadata: &mut EvaluationMetaData,
+    ) -> Result<GammaLoopSample<T>> {
+        let started = Instant::now();
+        let result = (|| match self {
             EvaluationSource::XSpace(sample) => {
                 integrand.prepare_sampling_precision::<T>()?;
-                let before_parameterization = std::time::Instant::now();
-                let sample = parameterize::<T, I>(sample, integrand, policies)?;
-                Ok((sample, before_parameterization.elapsed()))
+                parameterize::<T, I>(sample, integrand, &mut metadata.sampling_proposal_policies)
             }
             EvaluationSource::Momentum(input) => {
                 if input.channel_id.is_some() {
                     integrand.prepare_sampling_precision::<T>()?;
                 }
-                Ok((
-                    build_direct_gamma_sample::<T, I>(integrand, input, policies)?,
-                    Duration::ZERO,
-                ))
+                build_direct_gamma_sample::<T, I>(
+                    integrand,
+                    input,
+                    &mut metadata.sampling_proposal_policies,
+                )
             }
+        })();
+        // The canonical phase has one inclusive timer. All other source builds,
+        // including failed native lanes and debug/norm replays, accumulate here.
+        if !metadata.sampling_proposal_policies.is_collecting() {
+            metadata.parameterization_time += started.elapsed();
         }
+        result
     }
 
     fn loop_norm_sum<I: ProcessIntegrandImpl>(
         &self,
         integrand: &mut I,
-        policies: &mut SamplingProposalPolicies,
+        metadata: &mut EvaluationMetaData,
     ) -> Result<F<f64>> {
         match self {
             EvaluationSource::XSpace(sample) => {
-                let sample = parameterize::<f64, I>(sample, integrand, policies)?;
+                let started = Instant::now();
+                let sample = parameterize::<f64, I>(
+                    sample,
+                    integrand,
+                    &mut metadata.sampling_proposal_policies,
+                );
+                metadata.parameterization_time += started.elapsed();
                 Ok(sum_loop_norms(
-                    sample.get_default_sample().loop_moms().0.iter(),
+                    sample?.get_default_sample().loop_moms().0.iter(),
                 ))
             }
             EvaluationSource::Momentum(input) => Ok(sum_loop_norms(input.loop_momenta.iter())),
@@ -4391,10 +4402,9 @@ impl<'a> EvaluationSource<'a> {
     fn debug_sample<I: ProcessIntegrandImpl>(
         &self,
         integrand: &mut I,
-        policies: &mut SamplingProposalPolicies,
+        metadata: &mut EvaluationMetaData,
     ) -> Result<GammaLoopSample<f64>> {
-        self.build_gamma_sample::<f64, I>(integrand, policies)
-            .map(|(sample, _)| sample)
+        self.build_gamma_sample::<f64, I>(integrand, metadata)
     }
 }
 
@@ -4662,16 +4672,14 @@ fn evaluate_from_source_precise<I: ProcessIntegrandImpl>(
         escalate_if_exact_zero = false;
     }
     let mut evaluation_metadata = EvaluationMetaData::new_empty();
-    let preparation_time = if source.requires_proposal_policy(integrand)? {
+    if source.requires_proposal_policy(integrand)? {
         let preparation_start = Instant::now();
         evaluation_metadata
             .sampling_proposal_policies
             .begin_collection();
-        (|| -> Result<()> {
-            let (sample, _) = source.build_gamma_sample::<ArbPrec, I>(
-                integrand,
-                &mut evaluation_metadata.sampling_proposal_policies,
-            )?;
+        let preparation = (|| -> Result<()> {
+            let sample =
+                source.build_gamma_sample::<ArbPrec, I>(integrand, &mut evaluation_metadata)?;
             // Reuse the existing graph/channel traversal. Its collecting phase
             // stops before physical bodies and rotations; this existing warmed
             // descriptor only satisfies the shared traversal context.
@@ -4688,19 +4696,15 @@ fn evaluate_from_source_precise<I: ProcessIntegrandImpl>(
                 false,
             )?;
             Ok(())
-        })()
-        .wrap_err("canonical sampling policy preparation failed at the fixed 1000-bit budget")?;
+        })();
+        evaluation_metadata.parameterization_time += preparation_start.elapsed();
+        preparation.wrap_err(
+            "canonical sampling policy preparation failed at the fixed 1000-bit budget",
+        )?;
         evaluation_metadata.sampling_proposal_policies.seal();
-        preparation_start.elapsed()
-    } else {
-        Duration::ZERO
-    };
-    let (stability_iterator, loop_momenta_escalation) = stability_iterator_for_source(
-        integrand,
-        &source,
-        use_arb_prec,
-        &mut evaluation_metadata.sampling_proposal_policies,
-    );
+    }
+    let (stability_iterator, loop_momenta_escalation) =
+        stability_iterator_for_source(integrand, &source, use_arb_prec, &mut evaluation_metadata);
 
     let mut final_result = None;
 
@@ -4816,10 +4820,7 @@ fn evaluate_from_source_precise<I: ProcessIntegrandImpl>(
             break;
         } else {
             debug!("unstable at level: {}", stability_level.precision);
-            if let Ok(gammaloop_sample) = source.debug_sample(
-                integrand,
-                &mut evaluation_metadata.sampling_proposal_policies,
-            ) {
+            if let Ok(gammaloop_sample) = source.debug_sample(integrand, &mut evaluation_metadata) {
                 log_rotated_samples(integrand, &gammaloop_sample, &rotated_results);
             } else {
                 debug!("failed to reconstruct sample for instability logging");
@@ -4834,7 +4835,10 @@ fn evaluate_from_source_precise<I: ProcessIntegrandImpl>(
         PreciseEvaluationResult::Arb(result) => &mut result.evaluation_metadata,
     };
     metadata.total_timing = start_eval.elapsed();
-    metadata.parameterization_time += preparation_time;
+    // A last unstable-level debug replay occurs after its result was cloned.
+    // Copy the sole source owner's accumulated counters, never one lane's time.
+    metadata.parameterization_time = evaluation_metadata.parameterization_time;
+    metadata.integrand_evaluation_time = evaluation_metadata.integrand_evaluation_time;
     metadata.loop_momenta_escalation = loop_momenta_escalation;
     metadata.stability_results = stability_results;
     Ok(result)
@@ -4863,7 +4867,7 @@ fn stability_iterator_for_source<I: ProcessIntegrandImpl>(
     integrand: &mut I,
     source: &EvaluationSource<'_>,
     use_arb_prec: bool,
-    policies: &mut SamplingProposalPolicies,
+    metadata: &mut EvaluationMetaData,
 ) -> (
     Vec<StabilityLevelSetting>,
     Option<LoopMomentaEscalationMetrics>,
@@ -4883,7 +4887,7 @@ fn stability_iterator_for_source<I: ProcessIntegrandImpl>(
     let mut loop_momenta_escalation = None;
     if escalation_factor > 0.0
         && stability_iterator.len() > 1
-        && let Ok(sum_norm) = source.loop_norm_sum(integrand, policies)
+        && let Ok(sum_norm) = source.loop_norm_sum(integrand, metadata)
     {
         let threshold =
             F::<f64>::from_f64(escalation_factor * integrand.get_settings().kinematics.e_cm);
@@ -4923,7 +4927,6 @@ fn finalize_precise_evaluation_result<T: FloatLike>(
             "process evaluation is nonfinite"
         );
     }
-    evaluation_metadata.parameterization_time = result.parameterization_time;
     evaluation_metadata.generated_event_count = result.graph_result.generated_event_count;
     evaluation_metadata.accepted_event_count = result.graph_result.accepted_event_count;
     evaluation_metadata.relative_instability_error = Complex::new_zero();
@@ -5265,17 +5268,21 @@ mod tests {
             assert!(
                 (result.integrand_result.re.0 * result.integrator_weight.0 - 1.0).abs() < 1.0e-8
             );
-            let mut policies = result
+            let policies = result
                 .evaluation_metadata
                 .sampling_proposal_policies
                 .clone();
             assert!(!policies.is_collecting());
             assert_eq!(policies.len(), 1);
-            EvaluationSource::XSpace(&source).debug_sample(amplitude, &mut policies)?;
+            let mut replay_metadata = result.evaluation_metadata.clone();
+            let before = replay_metadata.parameterization_time;
+            EvaluationSource::XSpace(&source).debug_sample(amplitude, &mut replay_metadata)?;
+            assert!(replay_metadata.parameterization_time >= before);
             assert_eq!(
-                policies,
-                result.evaluation_metadata.sampling_proposal_policies
+                replay_metadata.integrand_evaluation_time,
+                result.evaluation_metadata.integrand_evaluation_time
             );
+            assert_eq!(replay_metadata.sampling_proposal_policies, policies);
 
             let mut quad_only = runtime.clone();
             quad_only.get_mut_settings().stability.levels =
@@ -5667,15 +5674,21 @@ mod tests {
             estimated_relative_accuracy: None,
             sample_count: 1,
             total_time: Duration::ZERO,
-            parameterization_time: Duration::ZERO,
             parameterization_jacobian: Some(one.clone()),
             is_stable: true,
             rotated_results: Vec::new(),
         };
-        let result = super::finalize_precise_evaluation_result(
-            level.clone(),
-            F(1.0),
-            EvaluationMetaData::new_empty(),
+        let mut metadata = EvaluationMetaData::new_empty();
+        metadata.parameterization_time = Duration::from_micros(7) + Duration::from_micros(11);
+        metadata.integrand_evaluation_time = Duration::from_micros(19) + Duration::from_micros(23);
+        let result = super::finalize_precise_evaluation_result(level.clone(), F(1.0), metadata);
+        assert_eq!(
+            result.evaluation_metadata.parameterization_time,
+            Duration::from_micros(18)
+        );
+        assert_eq!(
+            result.evaluation_metadata.integrand_evaluation_time,
+            Duration::from_micros(42)
         );
         assert_eq!(
             result.clone().try_into_f64().unwrap().integrand_result.re,

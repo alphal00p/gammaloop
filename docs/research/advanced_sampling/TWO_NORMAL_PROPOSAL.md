@@ -1,6 +1,6 @@
 # Exact two-normal H/Z proposal and its A-star pullback
 
-Analytic audit begun 12 September 2026; source status updated 13 September.
+Analytic audit begun 12 September 2026; source status updated 14 September.
 The bounded generic component, amplitude binding and proposal transport are
 implemented and validated for the supported class. The hosted GL638 channel and A-star
 pullback remain proposals. The construction strengthens the one-normal map:
@@ -546,3 +546,48 @@ belongs to lane-local typed map/runtime preparation, carrying the native routed
 equation and root into physical adoption and raised jets; metadata retains only
 cross-lane decisions/history. No all-orientation
 GL638 bounded-weight or variance improvement follows from amplitude acceptance.
+
+### Geometry and timing milestone — selected gates pass
+
+Explicit LU preparation now retains an ordered native `EsurfaceRay` beside its
+root; raised eta jets consume those coefficients. This deliberately routes
+before scaling in the LU path. Other scalar CT/fiber evaluators and their
+external-only seed convention remain unchanged. The old and prepared routes
+can differ under finite-precision cancellation; the new tests preserve that
+counterexample rather than asserting general equivalence. Conditional maps
+still discard their ray, so authoritative selected/summed transport, rotation
+and completed-point adoption budgets remain required. Hosted joint binding,
+exact GL638 external-frame specialization and CT center/alpha handoff stay open.
+
+The existing timing counters now accumulate source/map/partition work and
+failed native attempts, norm/debug remaps and one inclusive canonical policy
+pass. Actual target bodies are timed separately across all lanes and rotations;
+evaluator/event fields are subsets, not extra physical costs. Final snapshots
+retain all accumulated time. Focused timing tests pass; exhausted error
+returns still emit no timing metadata. The optimized matched GL638 10% budget
+remains unmeasured, with shared preparation attribution still to be established
+after host adoption. Unclassified work and first native binding costs must be
+reported separately from the warmed comparison.
+
+The combined shorter run passes 174 core tests in 124.853 s and three API tests
+in 103.571 s. Combined checking passes in 48.73 s; clippy passes in 58.10 s with
+68 existing warnings, none on changed lines. The complete kite rerun passes in
+1550.337 s, completing 175 selected core tests. Its 8192 draws satisfy the fixed
+6% normalization and 8% moment bounds, with repeated physical, body-retry and
+timing checks passing. This is an unoptimized complete-fixture duration, not
+production map cost; the separate optimized 10% runtime gate remains unmeasured.
+
+The [GL638 LU-ray physical replay](GL638_LU_RAY_REPLAY.md) additionally passes
+three native calls: hard `hz_03` in the ordinary stack and forced Arb, and
+double-soft `soft22` in forced Arb. All 936 orientations, six event identities
+and weights, and the original subtraction/UV settings are retained; all 35
+saved-state hashes remain unchanged. Relative complex total changes against
+the frozen earlier results are `2.1690e-16`, `1.3995e-294` and `1.3671e-281`,
+respectively. The baseline includes intervening commits, so this is a bounded
+physical regression rather than isolated attribution or an accuracy gain.
+These six simple cuts have no higher raised eta derivatives. Their coverage
+comes from generated raised-cut fixtures; no sampling-budget claim follows
+from this unoptimized raw-momentum replay.
+The linked artifact independently verifies the post-build private tuple type
+alias as a semantics-neutral source change; it introduces no new numerical
+behavior beyond the tested snapshot.

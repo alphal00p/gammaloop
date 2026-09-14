@@ -996,8 +996,13 @@ pub struct LoopMomentaEscalationMetrics {
 #[derive(Clone, Serialize, Debug)]
 pub struct EvaluationMetaData {
     pub total_timing: Duration,
+    /// All actual target calls across native attempts and rotations; includes
+    /// evaluator/event work and excludes separately timed sampling maps.
     pub integrand_evaluation_time: Duration,
+    /// Existing primary-call evaluator subset of integrand_evaluation_time.
     pub evaluator_evaluation_time: Duration,
+    /// Source/map/partition work across all attempts and replays. Canonical
+    /// policy preparation is inclusive and charged once, never again per child.
     pub parameterization_time: Duration,
     pub event_processing_time: Duration,
     pub generated_event_count: usize,
