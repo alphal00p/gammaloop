@@ -75,6 +75,7 @@ The small records included here are:
 | [GL638_X2_DIRECT_H.md](GL638_X2_DIRECT_H.md), [data](GL638_X2_DIRECT_H.json) | Actual selected/full936-catalogue conditional-H reference, native inverse rays and full12D determinant; physical comparisons remain separate |
 | [GL638_X2_PHYSICAL_PILOT.md](GL638_X2_PHYSICAL_PILOT.md), [data](GL638_X2_PHYSICAL_PILOT.json) | All-936-orientation full-UV pilot, native physical rays and 48 exact maximum replays; direct H remains unbounded and global efficiency is inconclusive |
 | [GL638_X4_ALPHA_REPLAY.md](GL638_X4_ALPHA_REPLAY.md), [data](GL638_X4_ALPHA_REPLAY.json) | Three full-orientation native hard/soft replays after the alpha projection change; tested physics agrees, with no precision or variance gain claimed |
+| [GL638_HOSTED_JOINT_GATE.md](GL638_HOSTED_JOINT_GATE.md), [artifacts](gl638_hosted_joint_gate/) | Original hosted H/Z joint maps: 53 native physical checks pass; warmed 20-worker cost exceeds 10%, and one retained source fails Quad/Arb stability; no integration gain claimed |
 
 The frozen inputs and equations preserve the numerical setup without requiring
 the original machine. They are not executable acceptance tests. The original

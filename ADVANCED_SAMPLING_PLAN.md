@@ -1182,8 +1182,13 @@ not conceal an expensive hard-sample path. Report first compilation/warmup and
 training separately from warmed production. Unoptimized amplitude test timings
 cannot establish this GL638 budget. Profile and optimize only when needed to
 meet the 10% bound, preserve all correctness gates, and stop once the bound is
-met; further speed optimization is outside the requirement. This gate remains
-unmeasured until the full physical benchmark is available.
+met; further speed optimization is outside the requirement. The first matched
+[all-orientation hosted-joint benchmark](docs/research/advanced_sampling/GL638_HOSTED_JOINT_GATE.md)
+now measures this gate: optimized LMB passes, while the direct joint candidate
+fails at 47.8% conservative overhead on valid representative calls and 58.5% on
+maximum replays. One retained source also fails physical stability in Quad and
+Arb. Reduce redundant eager derivative work and diagnose that fixed source
+before full GL638 normalization and integration; no gain is established yet.
 For historical scale only, the optimized
 [X2 physical pilot](docs/research/advanced_sampling/GL638_X2_PHYSICAL_PILOT.md#fixed-budget-pilot)
 recorded 72.04–79.47 ms total per all-orientation draw, with 0.151–0.170 ms

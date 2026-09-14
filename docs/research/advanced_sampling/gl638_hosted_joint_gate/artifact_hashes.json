@@ -1,0 +1,77 @@
+{
+  "manifest.json": {
+    "sha256_uncompressed": "6e4f6c576e99f8ab2da392c6fb0eaa62d30ac01dea8e454c72a6ede7085943ca",
+    "bytes_uncompressed": 11636,
+    "stored_path": "manifest.json"
+  },
+  "drivers/gate.rs": {
+    "sha256_uncompressed": "049f60d8d44c5dfde3cf062b69319be6419db73185b80a3a01d57d6590ee2eb5",
+    "bytes_uncompressed": 51480,
+    "stored_path": "drivers/gate.rs"
+  },
+  "drivers/gate.build.json": {
+    "sha256_uncompressed": "c89cba042216b2183007470dfdf1cf5ab4a9869a47878b26e8bee4943fbe7531",
+    "bytes_uncompressed": 41997,
+    "stored_path": "drivers/gate.build.json"
+  },
+  "audit_physical.py": {
+    "sha256_uncompressed": "22b1acf7e4c41cb17e889a8426a093bea2972917cb5061d57307619c1bc1481c",
+    "bytes_uncompressed": 14847,
+    "stored_path": "audit_physical.py"
+  },
+  "cards/optimized_lmb.toml": {
+    "sha256_uncompressed": "05c384bc1ce55ab23891b6e8937d392b2c30be2a2634ff54047f5f1fb5f41d67",
+    "bytes_uncompressed": 1944,
+    "stored_path": "cards/optimized_lmb.toml.gz"
+  },
+  "cards/joint_hz_plus_lmb.toml": {
+    "sha256_uncompressed": "7d4d40c692da56fcf9855bb4bde90dfd2faeab05eb93e188b928aac0753c08f2",
+    "bytes_uncompressed": 2401,
+    "stored_path": "cards/joint_hz_plus_lmb.toml.gz"
+  },
+  "cards/direct_h_p2.toml": {
+    "sha256_uncompressed": "a135fbca4644daf6ebe07d2697add69093ba83b980588dbde0a7b3068486e743",
+    "bytes_uncompressed": 2135,
+    "stored_path": "cards/direct_h_p2.toml.gz"
+  },
+  "failure-worker12-draw12.json": {
+    "sha256_uncompressed": "9353a6ce22055bdf7b870f9a0f9453561be0d1a49618858fe8800e9f66404290",
+    "bytes_uncompressed": 458501,
+    "stored_path": "failure-worker12-draw12.json.gz"
+  },
+  "results-timing1/state_before.json": {
+    "sha256_uncompressed": "eea5232cd0b55f5c3e507b26a4ef9ee00fffcac19532601e34b8a0d6186f5f1f",
+    "bytes_uncompressed": 4106,
+    "stored_path": "results-timing1/state_before.json"
+  },
+  "results-timing1/state_after.json": {
+    "sha256_uncompressed": "eea5232cd0b55f5c3e507b26a4ef9ee00fffcac19532601e34b8a0d6186f5f1f",
+    "bytes_uncompressed": 4106,
+    "stored_path": "results-timing1/state_after.json"
+  },
+  "results-timing1/optimized_lmb.json": {
+    "sha256_uncompressed": "95fa711e5b13a59316e6369779c120f5eb34a0dced007b3b671871dc36633265",
+    "bytes_uncompressed": 5636428,
+    "stored_path": "results-timing1/optimized_lmb.json.gz"
+  },
+  "results-timing1/joint_hz_plus_lmb.json": {
+    "sha256_uncompressed": "96a714fd75ee89f3ab4936910ef72807bbdcadd702c54dddcc05fec2124fe797",
+    "bytes_uncompressed": 5644023,
+    "stored_path": "results-timing1/joint_hz_plus_lmb.json.gz"
+  },
+  "results-smoke1/optimized_lmb.json": {
+    "sha256_uncompressed": "a7bff810b5539797c9367fe0834dea1e3faf94f8aca84e7ca8e30cc204a05796",
+    "bytes_uncompressed": 568094,
+    "stored_path": "results-smoke1/optimized_lmb.json.gz"
+  },
+  "results-smoke1/joint_hz_plus_lmb.json": {
+    "sha256_uncompressed": "dacb644fdc4396eaf5eeca5f97db2be5496f40d7a463f0cea0d8968499e623c7",
+    "bytes_uncompressed": 541508,
+    "stored_path": "results-smoke1/joint_hz_plus_lmb.json.gz"
+  },
+  "results-smoke1/physics_audit.json": {
+    "sha256_uncompressed": "a46d6d1ddf274b3425f0171c09dc11cb56ddf14250d6d91950cc218dd72d8394",
+    "bytes_uncompressed": 775977,
+    "stored_path": "results-smoke1/physics_audit.json.gz"
+  }
+}
