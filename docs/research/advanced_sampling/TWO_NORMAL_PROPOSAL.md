@@ -622,3 +622,16 @@ gates pass in 106.024 s, combined checking in 12.56 s and clippy in 57.76 s
 (68 existing warnings, none on changed lines). Formatting/diff checks pass.
 The optimized GL638 10% budget remains unmeasured; hosted joint binding and
 full host-to-H/Z sensitivity propagation remain open.
+
+### Original hosted-joint binding and completed-point alignment
+
+Explicit original hosted H/Z pairs now use the existing joint, embedding and
+affine owners. Original signed-routing enclosures check canonical/native normal
+displacement and finite host residual on the actual rescaled point, each against
+half the normal-radius accuracy budget. Amplitudes use the same normal check.
+The 8192-point generated hosted Gaussian/moment acceptance passes in 616.215 s;
+all 214 focused core regressions pass. The full all-18-orientation amplitude
+rerun passes in 954.918 s, bringing the milestone to 216 unique core tests.
+See the [implementation and limits](HOSTED_JOINT_NORMAL_ALIGNMENT.md).
+This enables direct targets; it does not establish CT-star alignment, a GL638
+variance gain, bounded global weights or the optimized 10% runtime budget.

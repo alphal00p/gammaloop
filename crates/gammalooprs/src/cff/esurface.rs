@@ -8,6 +8,7 @@ use linnet::half_edge::HedgeGraph;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Flow, HedgePair};
 use linnet::half_edge::subgraph::OrientedCut;
 use ref_ops::RefNeg;
+use rug::{Float, float::Round};
 use serde::{Deserialize, Serialize};
 
 use symbolica::atom::{Atom, AtomCore};
@@ -27,6 +28,7 @@ pub use crate::cff::surface::EsurfaceID;
 use crate::graph::{Graph, GraphGroupPosition, LmbIndex, LoopMomentumBasis};
 use crate::{GammaLoopContext, define_index};
 
+use crate::integrands::process::sampling_maps::SamplingEvaluationError;
 use crate::integrands::process::{GenericEvaluator, ImplicitSurfaceRadialMap};
 use crate::momentum::sample::{
     ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopIndex, LoopMomenta, SubspaceData,
@@ -60,6 +62,8 @@ pub struct Esurface {
 
 // Edge identity, radial velocity, constant spatial offset, and mass.
 type EsurfaceRayEnergy<T> = (EdgeIndex, ThreeMomentum<F<T>>, ThreeMomentum<F<T>>, F<T>);
+// Ephemeral endpoint tuples for the same affine energy fold, with no stored ray.
+type EnclosedRayEnergy = ([[Float; 2]; 3], [[Float; 2]; 3], [Float; 2]);
 
 /// One represented affine energy equation, retaining its ordered edge occurrences.
 /// This is native geometry, not a cross-precision or selected-host transport record.
@@ -101,6 +105,223 @@ impl EsurfaceRay<ArbPrec> {
 }
 
 impl<T: FloatLike> EsurfaceRay<T> {
+    const ENCLOSURE_PRECISION: u32 = 2048;
+
+    // These directed operations serve the represented and original-routed
+    // affine-energy checks; they do not introduce a second certificate engine.
+    fn enclosed_add(a: &[Float; 2], b: &[Float; 2]) -> [Float; 2] {
+        [
+            Float::with_val_round(Self::ENCLOSURE_PRECISION, &a[0] + &b[0], Round::Down).0,
+            Float::with_val_round(Self::ENCLOSURE_PRECISION, &a[1] + &b[1], Round::Up).0,
+        ]
+    }
+    fn enclosed_mul(a: &[Float; 2], b: &[Float; 2]) -> [Float; 2] {
+        let lower = a
+            .iter()
+            .flat_map(|x| {
+                b.iter().map(move |y| {
+                    Float::with_val_round(Self::ENCLOSURE_PRECISION, x * y, Round::Down).0
+                })
+            })
+            .reduce(|a, b| a.min(&b))
+            .unwrap();
+        let upper = a
+            .iter()
+            .flat_map(|x| {
+                b.iter().map(move |y| {
+                    Float::with_val_round(Self::ENCLOSURE_PRECISION, x * y, Round::Up).0
+                })
+            })
+            .reduce(|a, b| a.max(&b))
+            .unwrap();
+        [lower, upper]
+    }
+    fn enclosed_square(a: &[Float; 2]) -> [Float; 2] {
+        let upper = a[0].clone().abs().max(&a[1].clone().abs());
+        let lower = if a[0] <= 0 && a[1] >= 0 {
+            Float::with_val(Self::ENCLOSURE_PRECISION, 0)
+        } else {
+            a[0].clone().abs().min(&a[1].clone().abs())
+        };
+        [
+            Float::with_val_round(Self::ENCLOSURE_PRECISION, &lower * &lower, Round::Down).0,
+            Float::with_val_round(Self::ENCLOSURE_PRECISION, &upper * &upper, Round::Up).0,
+        ]
+    }
+    fn enclosed_divide(a: &[Float; 2], b: &[Float; 2]) -> [Float; 2] {
+        debug_assert!(b[0] > 0);
+        let reciprocal = [
+            Float::with_val_round(Self::ENCLOSURE_PRECISION, b[1].recip_ref(), Round::Down).0,
+            Float::with_val_round(Self::ENCLOSURE_PRECISION, b[0].recip_ref(), Round::Up).0,
+        ];
+        Self::enclosed_mul(a, &reciprocal)
+    }
+
+    fn enclosed_native(value: &F<T>) -> [Float; 2] {
+        let (lo, hi) = value.0.mpfr_enclosure(Self::ENCLOSURE_PRECISION);
+        [lo, hi]
+    }
+
+    fn enclosed_sum(terms: impl Iterator<Item = (i64, [Float; 2])>) -> [Float; 2] {
+        let zero = Float::with_val(Self::ENCLOSURE_PRECISION, 0);
+        terms.fold([zero.clone(), zero], |sum, (coefficient, value)| {
+            let coefficient = Float::with_val(Self::ENCLOSURE_PRECISION, coefficient);
+            Self::enclosed_add(
+                &sum,
+                &Self::enclosed_mul(&[coefficient.clone(), coefficient], &value),
+            )
+        })
+    }
+
+    fn evaluate_enclosed(
+        energies: impl Iterator<Item = EnclosedRayEnergy>,
+        shift: [Float; 2],
+        radius: &[Float; 2],
+        with_derivative: bool,
+    ) -> Result<([Float; 2], [Float; 2])> {
+        let zero = Float::with_val(Self::ENCLOSURE_PRECISION, 0);
+        let point = |x: &Float| [x.clone(), x.clone()];
+        let uncertain = |detail: &str| SamplingEvaluationError::UncertainGeometry {
+            detail: format!("LU host adoption: {detail}"),
+        };
+        let mut value = shift;
+        let mut slope = point(&zero);
+        for (velocity, offset, mass) in energies {
+            let mut norm = Self::enclosed_square(&mass);
+            let mut dot = point(&zero);
+            for (v, b) in velocity.into_iter().zip(offset) {
+                let q = Self::enclosed_add(&Self::enclosed_mul(&v, radius), &b);
+                norm = Self::enclosed_add(&norm, &Self::enclosed_square(&q));
+                dot = Self::enclosed_add(&dot, &Self::enclosed_mul(&v, &q));
+            }
+            if norm.iter().chain(&dot).any(|x| !x.is_finite()) {
+                return Err(SamplingEvaluationError::Unrepresentable {
+                    operation: "LU host certificate",
+                    detail: "nonfinite directed energy or numerator".into(),
+                }
+                .into());
+            }
+            let energy = [
+                Float::with_val_round(Self::ENCLOSURE_PRECISION, norm[0].sqrt_ref(), Round::Down).0,
+                Float::with_val_round(Self::ENCLOSURE_PRECISION, norm[1].sqrt_ref(), Round::Up).0,
+            ];
+            value = Self::enclosed_add(&value, &energy);
+            if with_derivative {
+                if energy[0] <= 0 {
+                    return Err(uncertain(
+                        "energy lower bound touches zero on the fixed candidate interval",
+                    )
+                    .into());
+                }
+                slope = Self::enclosed_add(&slope, &Self::enclosed_divide(&dot, &energy));
+            }
+        }
+        if value.iter().chain(&slope).any(|x| !x.is_finite()) {
+            return Err(SamplingEvaluationError::Unrepresentable {
+                operation: "LU host certificate",
+                detail: "nonfinite directed residual or derivative".into(),
+            }
+            .into());
+        }
+        Ok((value, slope))
+    }
+
+    /// Compare original isotropic normal equations on the actual completed
+    /// canonical/native LU points. Half the relative budget controls their
+    /// displacement; half controls the native point's host constraint defect.
+    /// This does not certify arbitrary multiplier functions or raised jets.
+    pub(crate) fn verify_normal_alignment(
+        canonical_normals: [[Float; 2]; 2],
+        native_normals: [[Float; 2]; 2],
+        native_host_residual: [Float; 2],
+        tolerance: f64,
+    ) -> Result<()> {
+        if !tolerance.is_finite() || tolerance <= 0.0 {
+            return Err(eyre!(
+                "hosted normal alignment requires a finite positive budget"
+            ));
+        }
+        let bounds = canonical_normals
+            .iter()
+            .chain(&native_normals)
+            .chain(std::iter::once(&native_host_residual));
+        for bound in bounds {
+            if bound.iter().any(|x| !x.is_finite()) {
+                return Err(SamplingEvaluationError::Unrepresentable {
+                    operation: "hosted normal alignment",
+                    detail: "nonfinite directed normal or host residual".into(),
+                }
+                .into());
+            }
+            if bound[0] > bound[1] {
+                return Err(eyre!("hosted normal alignment requires ordered bounds"));
+            }
+        }
+        let radius_squared = Self::enclosed_add(
+            &Self::enclosed_square(&canonical_normals[0]),
+            &Self::enclosed_square(&canonical_normals[1]),
+        );
+        let radius_lower = Float::with_val_round(
+            Self::ENCLOSURE_PRECISION,
+            radius_squared[0].sqrt_ref(),
+            Round::Down,
+        )
+        .0;
+        if radius_lower <= 0 {
+            return Err(SamplingEvaluationError::UncertainGeometry {
+                detail: "hosted normal alignment has no strictly positive canonical radius bound"
+                    .into(),
+            }
+            .into());
+        }
+        let difference: [_; 2] = std::array::from_fn(|axis| {
+            let canonical = &canonical_normals[axis];
+            Self::enclosed_add(
+                &native_normals[axis],
+                &[-canonical[1].clone(), -canonical[0].clone()],
+            )
+        });
+        let error_squared = Self::enclosed_add(
+            &Self::enclosed_square(&difference[0]),
+            &Self::enclosed_square(&difference[1]),
+        );
+        let error_upper = Float::with_val_round(
+            Self::ENCLOSURE_PRECISION,
+            error_squared[1].sqrt_ref(),
+            Round::Up,
+        )
+        .0;
+        let budget = Float::with_val(Self::ENCLOSURE_PRECISION, tolerance);
+        let half_budget =
+            Float::with_val_round(Self::ENCLOSURE_PRECISION, &budget / 2, Round::Down).0;
+        let allowed = Float::with_val_round(
+            Self::ENCLOSURE_PRECISION,
+            &half_budget * &radius_lower,
+            Round::Down,
+        )
+        .0;
+        let host_upper = native_host_residual[0]
+            .clone()
+            .abs()
+            .max(&native_host_residual[1].clone().abs());
+        if [&radius_lower, &error_upper, &host_upper, &allowed]
+            .iter()
+            .any(|x| !x.is_finite())
+        {
+            return Err(SamplingEvaluationError::Unrepresentable {
+                operation: "hosted normal alignment",
+                detail: "nonfinite directed comparison".into(),
+            }
+            .into());
+        }
+        if error_upper > allowed || host_upper > allowed {
+            return Err(SamplingEvaluationError::UncertainGeometry {
+                detail: "original normal displacement or completed host defect exceeds its half sampling budget".into(),
+            }.into());
+        }
+        Ok(())
+    }
+
     #[inline]
     pub(crate) fn evaluate(&self, radius: &F<T>) -> (F<T>, F<T>) {
         let zero = radius.zero();
@@ -175,9 +396,7 @@ impl<T: FloatLike> EsurfaceRay<T> {
         dimension_bound: usize,
         tolerance: &F<T>,
     ) -> Result<()> {
-        use crate::integrands::process::sampling_maps::SamplingEvaluationError;
-        use rug::{Float, float::Round};
-        const PRECISION: u32 = 2048;
+        let precision = Self::ENCLOSURE_PRECISION;
         let uncertain = |detail: &str| SamplingEvaluationError::UncertainGeometry {
             detail: format!("LU host adoption: {detail}"),
         };
@@ -218,120 +437,35 @@ impl<T: FloatLike> EsurfaceRay<T> {
         if t <= &t.zero() || derivative <= &t.zero() || tolerance <= &t.zero() {
             return Err(uncertain("candidate, derivative and budget must be positive").into());
         }
-        // These local directed operations serve only this affine-ray check;
-        // they do not introduce a second interval/certificate engine.
-        let native = |x: &F<T>| {
-            let (lo, hi) = x.0.mpfr_enclosure(PRECISION);
-            [lo, hi]
-        };
+        let native = Self::enclosed_native;
         let point = |x: &Float| [x.clone(), x.clone()];
-        let add = |a: &[Float; 2], b: &[Float; 2]| {
-            [
-                Float::with_val_round(PRECISION, &a[0] + &b[0], Round::Down).0,
-                Float::with_val_round(PRECISION, &a[1] + &b[1], Round::Up).0,
-            ]
-        };
-        let mul = |a: &[Float; 2], b: &[Float; 2]| {
-            let lower = a
-                .iter()
-                .flat_map(|x| {
-                    b.iter()
-                        .map(move |y| Float::with_val_round(PRECISION, x * y, Round::Down).0)
-                })
-                .reduce(|a, b| a.min(&b))
-                .unwrap();
-            let upper = a
-                .iter()
-                .flat_map(|x| {
-                    b.iter()
-                        .map(move |y| Float::with_val_round(PRECISION, x * y, Round::Up).0)
-                })
-                .reduce(|a, b| a.max(&b))
-                .unwrap();
-            [lower, upper]
-        };
-        let square = |a: &[Float; 2]| {
-            let upper = a[0].clone().abs().max(&a[1].clone().abs());
-            let lower = if a[0] <= 0 && a[1] >= 0 {
-                Float::with_val(PRECISION, 0)
-            } else {
-                a[0].clone().abs().min(&a[1].clone().abs())
-            };
-            [
-                Float::with_val_round(PRECISION, &lower * &lower, Round::Down).0,
-                Float::with_val_round(PRECISION, &upper * &upper, Round::Up).0,
-            ]
-        };
-        let divide = |a: &[Float; 2], b: &[Float; 2]| {
-            debug_assert!(b[0] > 0);
-            let reciprocal = [
-                Float::with_val_round(PRECISION, b[1].recip_ref(), Round::Down).0,
-                Float::with_val_round(PRECISION, b[0].recip_ref(), Round::Up).0,
-            ];
-            mul(a, &reciprocal)
-        };
-        let zero = Float::with_val(PRECISION, 0);
-        let one = Float::with_val(PRECISION, 1);
-        let evaluate = |ray: &Self,
-                        radius: &[Float; 2],
-                        with_derivative: bool|
-         -> Result<([Float; 2], [Float; 2])> {
-            let mut value = native(&ray.shift);
-            let mut slope = point(&zero);
-            for (_, velocity, offset, mass) in &ray.energies {
-                let mut norm = square(&native(mass));
-                let mut dot = point(&zero);
-                for (v, b) in [&velocity.px, &velocity.py, &velocity.pz]
-                    .into_iter()
-                    .zip([&offset.px, &offset.py, &offset.pz])
-                {
-                    let v = native(v);
-                    let q = add(&mul(&v, radius), &native(b));
-                    norm = add(&norm, &square(&q));
-                    dot = add(&dot, &mul(&v, &q));
-                }
-                if norm.iter().chain(&dot).any(|x| !x.is_finite()) {
-                    return Err(SamplingEvaluationError::Unrepresentable {
-                        operation: "LU host certificate",
-                        detail: "nonfinite directed energy or numerator".into(),
-                    }
-                    .into());
-                }
-                let energy = [
-                    Float::with_val_round(PRECISION, norm[0].sqrt_ref(), Round::Down).0,
-                    Float::with_val_round(PRECISION, norm[1].sqrt_ref(), Round::Up).0,
-                ];
-                value = add(&value, &energy);
-                if with_derivative {
-                    if energy[0] <= 0 {
-                        return Err(uncertain(
-                            "energy lower bound touches zero on the fixed candidate interval",
-                        )
-                        .into());
-                    }
-                    slope = add(&slope, &divide(&dot, &energy));
-                }
-            }
-            if value.iter().chain(&slope).any(|x| !x.is_finite()) {
-                return Err(SamplingEvaluationError::Unrepresentable {
-                    operation: "LU host certificate",
-                    detail: "nonfinite directed residual or derivative".into(),
-                }
-                .into());
-            }
-            Ok((value, slope))
+        let zero = Float::with_val(precision, 0);
+        let one = Float::with_val(precision, 1);
+        let evaluate = |ray: &Self, radius: &[Float; 2], with_derivative: bool| {
+            Self::evaluate_enclosed(
+                ray.energies.iter().map(|(_, velocity, offset, mass)| {
+                    (
+                        [&velocity.px, &velocity.py, &velocity.pz].map(native),
+                        [&offset.px, &offset.py, &offset.pz].map(native),
+                        native(mass),
+                    )
+                }),
+                native(&ray.shift),
+                radius,
+                with_derivative,
+            )
         };
         let delta = native(tolerance)[0]
             .clone()
-            .min(&(Float::with_val(PRECISION, 1) >> 2));
-        let divisor = Float::with_val(PRECISION, 4 * (dimension_bound + 1));
-        let r = Float::with_val_round(PRECISION, &delta / &divisor, Round::Down).0;
+            .min(&(Float::with_val(precision, 1) >> 2));
+        let divisor = Float::with_val(precision, 4 * (dimension_bound + 1));
+        let r = Float::with_val_round(precision, &delta / &divisor, Round::Down).0;
         let t0 = native(t);
-        let lo_factor = Float::with_val_round(PRECISION, &one - &r, Round::Down).0;
-        let hi_factor = Float::with_val_round(PRECISION, &one + &r, Round::Up).0;
+        let lo_factor = Float::with_val_round(precision, &one - &r, Round::Down).0;
+        let hi_factor = Float::with_val_round(precision, &one + &r, Round::Up).0;
         let interval = [
-            Float::with_val_round(PRECISION, &t0[0] * &lo_factor, Round::Down).0,
-            Float::with_val_round(PRECISION, &t0[1] * &hi_factor, Round::Up).0,
+            Float::with_val_round(precision, &t0[0] * &lo_factor, Round::Down).0,
+            Float::with_val_round(precision, &t0[1] * &hi_factor, Round::Up).0,
         ];
         if interval
             .iter()
@@ -349,10 +483,10 @@ impl<T: FloatLike> EsurfaceRay<T> {
             return Err(uncertain("fixed candidate interval is not positive and distinct").into());
         }
         let allowed = [
-            Float::with_val_round(PRECISION, &one - &delta, Round::Up).0,
-            Float::with_val_round(PRECISION, &one + &delta, Round::Down).0,
+            Float::with_val_round(precision, &one - &delta, Round::Up).0,
+            Float::with_val_round(precision, &one + &delta, Round::Down).0,
         ];
-        let residual_budget = Float::with_val_round(PRECISION, &t0[0] * &r, Round::Down).0;
+        let residual_budget = Float::with_val_round(precision, &t0[0] * &r, Round::Down).0;
         for ray in [self, completed] {
             if evaluate(ray, &point(&zero), false)?.0[1] >= 0
                 || evaluate(ray, &point(&interval[0]), false)?.0[1] >= 0
@@ -369,7 +503,7 @@ impl<T: FloatLike> EsurfaceRay<T> {
             }
             let residual = evaluate(ray, &t0, false)?.0;
             let residual = residual[0].clone().abs().max(&residual[1].clone().abs());
-            if Float::with_val_round(PRECISION, &residual / &slope[0], Round::Up).0
+            if Float::with_val_round(precision, &residual / &slope[0], Round::Up).0
                 > residual_budget
             {
                 return Err(uncertain(
@@ -377,7 +511,7 @@ impl<T: FloatLike> EsurfaceRay<T> {
                 )
                 .into());
             }
-            let ratio = divide(&slope, &native(derivative));
+            let ratio = Self::enclosed_divide(&slope, &native(derivative));
             if ratio.iter().any(|x| !x.is_finite())
                 || ratio[0] < allowed[0]
                 || ratio[1] > allowed[1]
@@ -389,10 +523,13 @@ impl<T: FloatLike> EsurfaceRay<T> {
         }
         // Bound implemented/exact and its reciprocal explicitly, so the
         // statement does not depend on the chosen relative-error denominator.
-        for ratio in [divide(&interval, &t0), divide(&t0, &interval)] {
+        for ratio in [
+            Self::enclosed_divide(&interval, &t0),
+            Self::enclosed_divide(&t0, &interval),
+        ] {
             let mut determinant_ratio = point(&one);
             for _ in 0..dimension_bound {
-                determinant_ratio = mul(&determinant_ratio, &ratio);
+                determinant_ratio = Self::enclosed_mul(&determinant_ratio, &ratio);
             }
             if determinant_ratio.iter().any(|x| !x.is_finite())
                 || determinant_ratio[0] < allowed[0]
@@ -1876,6 +2013,131 @@ impl Esurface {
         (energy_sum + shift, derivative)
     }
 
+    /// Enclose the original graph equation at `radius * loop_momenta`.
+    /// Route integer coefficients before rounding energy sums; importing an
+    /// already represented `routed_ray` would omit this routing error. True
+    /// external shifts and every repeated energy occurrence remain unchanged.
+    pub(crate) fn evaluate_routed_enclosed<T: FloatLike>(
+        &self,
+        radius: &F<T>,
+        loop_momenta: &LoopMomenta<F<T>>,
+        external_momenta: &ExternalFourMomenta<F<T>>,
+        masses: &EdgeVec<F<T>>,
+        lmb: &LoopMomentumBasis,
+    ) -> Result<[Float; 2]> {
+        use linnet::num_traits::SignOrZero;
+        if loop_momenta.len() != lmb.loop_edges.len()
+            || external_momenta.len() != lmb.ext_edges.len()
+        {
+            return Err(eyre!(
+                "routed E-surface enclosure requires the complete parent and external frame"
+            ));
+        }
+        if !radius.0.is_finite()
+            || loop_momenta
+                .iter()
+                .flat_map(|p| [&p.px, &p.py, &p.pz])
+                .chain(external_momenta.iter().flat_map(|p| {
+                    [
+                        &p.temporal.value,
+                        &p.spatial.px,
+                        &p.spatial.py,
+                        &p.spatial.pz,
+                    ]
+                }))
+                .any(|x| !x.0.is_finite())
+        {
+            return Err(SamplingEvaluationError::Unrepresentable {
+                operation: "routed E-surface enclosure",
+                detail: "nonfinite original radius or momentum component".into(),
+            }
+            .into());
+        }
+        for edge in self
+            .energies
+            .iter()
+            .chain(self.external_shift.iter().map(|(edge, _)| edge))
+        {
+            let signature = lmb.edge_signatures.get(*edge).ok_or_else(|| {
+                eyre!("routed E-surface enclosure has no signature for edge {edge}")
+            })?;
+            // Empty signatures are exact zero routes; nonempty signatures must
+            // describe the full frame, never a silently truncated prefix.
+            if (!signature.internal.is_empty() && signature.internal.len() != loop_momenta.len())
+                || (!signature.external.is_empty()
+                    && signature.external.len() != external_momenta.len())
+            {
+                return Err(eyre!(
+                    "routed E-surface enclosure has an incomplete signature for edge {edge}"
+                ));
+            }
+        }
+        let coefficient = |sign: &SignOrZero| match sign {
+            SignOrZero::Plus => 1,
+            SignOrZero::Minus => -1,
+            SignOrZero::Zero => 0,
+        };
+        let spatial = |p: &ThreeMomentum<F<T>>, axis| {
+            EsurfaceRay::<T>::enclosed_native([&p.px, &p.py, &p.pz][axis])
+        };
+        let mut energies = Vec::with_capacity(self.energies.len());
+        for &edge in &self.energies {
+            let mass = masses
+                .get(edge)
+                .ok_or_else(|| eyre!("routed E-surface enclosure has no mass for edge {edge}"))?;
+            if !mass.0.is_finite() {
+                return Err(SamplingEvaluationError::Unrepresentable {
+                    operation: "routed E-surface enclosure",
+                    detail: format!("nonfinite original mass on edge {edge}"),
+                }
+                .into());
+            }
+            let signature = &lmb.edge_signatures[edge];
+            let velocity = std::array::from_fn(|axis| {
+                EsurfaceRay::<T>::enclosed_sum(
+                    signature
+                        .internal
+                        .iter()
+                        .zip(loop_momenta.iter())
+                        .map(|(sign, p)| (coefficient(sign), spatial(p, axis))),
+                )
+            });
+            let offset = std::array::from_fn(|axis| {
+                EsurfaceRay::<T>::enclosed_sum(
+                    signature
+                        .external
+                        .iter()
+                        .zip(external_momenta.iter())
+                        .map(|(sign, p)| (coefficient(sign), spatial(&p.spatial, axis))),
+                )
+            });
+            energies.push((velocity, offset, EsurfaceRay::<T>::enclosed_native(mass)));
+        }
+        let shift =
+            EsurfaceRay::<T>::enclosed_sum(self.external_shift.iter().map(|(edge, scale)| {
+                let temporal = EsurfaceRay::<T>::enclosed_sum(
+                    lmb.edge_signatures[*edge]
+                        .external
+                        .iter()
+                        .zip(external_momenta.iter())
+                        .map(|(sign, p)| {
+                            (
+                                coefficient(sign),
+                                EsurfaceRay::<T>::enclosed_native(&p.temporal.value),
+                            )
+                        }),
+                );
+                (*scale, temporal)
+            }));
+        Ok(EsurfaceRay::<T>::evaluate_enclosed(
+            energies.into_iter(),
+            shift,
+            &EsurfaceRay::<T>::enclosed_native(radius),
+            false,
+        )?
+        .0)
+    }
+
     /// Explicit prepared-ray boundary for LU root and jet evaluation. Routing
     /// before radial scaling changes finite-precision association. Existing
     /// amplitude/static/fiber evaluation keeps scale-then-route semantics.
@@ -2728,6 +2990,206 @@ mod tests {
         check::<f64>(&graph);
         check::<QuadFloat>(&graph);
         check::<ArbPrec>(&graph);
+    }
+
+    #[test]
+    fn routed_enclosure_preserves_original_terms_and_native_rescale() {
+        use super::{EsurfaceRay, SamplingEvaluationError};
+        use crate::momentum::sample::LoopIndex;
+        use rug::Float;
+
+        fn check<T: FloatLike>() {
+            let one = F::<T>::default().one();
+            let zero = one.zero();
+            let graph = dummy_hedge_graph(11);
+            let mut routes = (0..5)
+                .map(|i| {
+                    let mut internal = vec![0; 5];
+                    internal[i] = 1;
+                    LoopExtSignature::from((internal, vec![0; 2]))
+                })
+                .collect::<Vec<_>>();
+            routes.extend([
+                LoopExtSignature::from((vec![1, 1, 1, -1, -1], vec![1, 0])),
+                LoopExtSignature::from((vec![0; 5], vec![0, 1])),
+                LoopExtSignature::from((vec![0; 5], vec![0, 0])),
+                LoopExtSignature::from((vec![0; 5], vec![1, -1])),
+                LoopExtSignature::from((vec![0; 5], vec![1, 0])),
+                LoopExtSignature::from((vec![0; 5], vec![0, 1])),
+            ]);
+            let lmb = LoopMomentumBasis {
+                tree: SuBitGraph::empty(0),
+                loop_edges: (0..5).map(EdgeIndex).collect(),
+                ext_edges: vec![EdgeIndex(9), EdgeIndex(10)].into(),
+                edge_signatures: graph.new_edgevec_from_iter(routes).unwrap(),
+            };
+            let big = one.clone() / one.epsilon().square();
+            let middle = big.sqrt();
+            let vector = |x| ThreeMomentum::new(x, zero.clone(), zero.clone());
+            // The complete signed route is exactly one. Three separated
+            // scales also expose cancellation in a two-limb Quad sum.
+            let loops = LoopMomenta::from_iter(
+                [big.clone(), middle.clone(), one.clone(), middle, big].map(&vector),
+            );
+            let externals = ExternalFourMomenta::from_iter([
+                FourMomentum::from_args(
+                    one.from_i64(7),
+                    one.from_i64(3),
+                    zero.clone(),
+                    zero.clone(),
+                ),
+                FourMomentum::from_args(
+                    one.from_i64(11),
+                    one.from_i64(4),
+                    zero.clone(),
+                    zero.clone(),
+                ),
+            ]);
+            let mut masses = graph
+                .new_edgevec_from_iter(vec![one.from_i64(3); 11])
+                .unwrap();
+            masses[EdgeIndex(7)] = zero.clone();
+            let surface = Esurface {
+                energies: vec![EdgeIndex(5), EdgeIndex(5), EdgeIndex(6), EdgeIndex(7)],
+                external_shift: vec![(EdgeIndex(8), 3), (EdgeIndex(6), -1)],
+                vertex_set: VertexSet::dummy(),
+            };
+            // Two sqrt(4^2+3^2), one fixed sqrt(4^2+3^2), one exact
+            // massless zero, and shift 3*(7-11)-11 give exactly -8.
+            let bounds = surface
+                .evaluate_routed_enclosed(&one, &loops, &externals, &masses, &lmb)
+                .unwrap();
+            assert_eq!(
+                bounds,
+                [Float::with_val(2048, -8), Float::with_val(2048, -8)]
+            );
+            let center = LoopMomenta::from_iter((0..5).map(|_| vector(zero.clone())));
+            let represented = surface.routed_ray(&loops, &center, &externals, &masses, &lmb);
+            assert_eq!(represented.energies[0].1.px, zero);
+            let old_value = represented.evaluate(&one).0;
+            assert!(
+                old_value < one.from_i64(-9),
+                "rounded routing must fail the exact -8 oracle"
+            );
+
+            // Include the physical scalar multiplication itself: evaluating
+            // exact tau*K is different from evaluating the rounded rescale.
+            let tau = &one + one.epsilon();
+            let mut loops = center;
+            loops[LoopIndex(0)] = vector(tau.clone());
+            let scalar = Esurface {
+                energies: vec![EdgeIndex(0)],
+                external_shift: vec![],
+                vertex_set: VertexSet::dummy(),
+            };
+            masses[EdgeIndex(0)] = zero.clone();
+            let mathematical = scalar
+                .evaluate_routed_enclosed(&tau, &loops, &externals, &masses, &lmb)
+                .unwrap();
+            let completed = loops.rescale(&tau, None);
+            let actual = scalar
+                .evaluate_routed_enclosed(&one, &completed, &externals, &masses, &lmb)
+                .unwrap();
+            assert!(
+                mathematical[0] > actual[1],
+                "the omitted epsilon^2 term must be resolved"
+            );
+            let actual_native = EsurfaceRay::<T>::enclosed_native(&completed[LoopIndex(0)].px);
+            assert!(actual[0] <= actual_native[0] && actual[1] >= actual_native[1]);
+
+            let missing = LoopMomenta::from_iter(loops.iter().take(4).cloned());
+            assert!(
+                scalar
+                    .evaluate_routed_enclosed(&one, &missing, &externals, &masses, &lmb)
+                    .is_err()
+            );
+            loops[LoopIndex(0)].px = zero.clone() / zero.clone();
+            assert!(matches!(
+                scalar
+                    .evaluate_routed_enclosed(&one, &loops, &externals, &masses, &lmb)
+                    .unwrap_err()
+                    .downcast_ref::<SamplingEvaluationError>(),
+                Some(SamplingEvaluationError::Unrepresentable { .. })
+            ));
+        }
+        check::<f64>();
+        check::<QuadFloat>();
+        check::<ArbPrec>();
+    }
+
+    #[test]
+    fn hosted_normal_alignment_enforces_directed_half_budgets() {
+        use super::{EsurfaceRay, SamplingEvaluationError};
+        use rug::Float;
+        let point = |value: i32| {
+            let x = Float::with_val(2048, value);
+            [x.clone(), x]
+        };
+        let canonical = [point(3), point(4)];
+        let half_budget: Float = Float::with_val(2048, 5) / 16;
+        let shifted: Float = Float::with_val(2048, 3) + &half_budget;
+        let native = [[shifted.clone(), shifted], point(4)];
+        let host = [-half_budget.clone(), -half_budget.clone()];
+        // R=5 and epsilon=1/8 allocate exactly 5/16 to each check.
+        EsurfaceRay::<f64>::verify_normal_alignment(
+            canonical.clone(),
+            native.clone(),
+            host.clone(),
+            0.125,
+        )
+        .unwrap();
+        let beyond: Float = Float::with_val(2048, 1) >> 1000;
+        let mut bad_normal = native;
+        bad_normal[0][1] += &beyond;
+        let mut bad_host = host;
+        bad_host[0] -= beyond;
+        for (native, host) in [(bad_normal, point(0)), (canonical.clone(), bad_host)] {
+            assert!(matches!(
+                EsurfaceRay::<f64>::verify_normal_alignment(canonical.clone(), native, host, 0.125)
+                    .unwrap_err()
+                    .downcast_ref::<SamplingEvaluationError>(),
+                Some(SamplingEvaluationError::UncertainGeometry { .. })
+            ));
+        }
+        for canonical in [
+            [point(0), point(0)],
+            [
+                [Float::with_val(2048, -1), Float::with_val(2048, 1)],
+                point(0),
+            ],
+        ] {
+            assert!(matches!(
+                EsurfaceRay::<f64>::verify_normal_alignment(
+                    canonical.clone(),
+                    canonical,
+                    point(0),
+                    0.125
+                )
+                .unwrap_err()
+                .downcast_ref::<SamplingEvaluationError>(),
+                Some(SamplingEvaluationError::UncertainGeometry { .. })
+            ));
+        }
+        assert!(
+            EsurfaceRay::<f64>::verify_normal_alignment(
+                canonical.clone(),
+                canonical.clone(),
+                point(0),
+                0.0
+            )
+            .is_err()
+        );
+        assert!(matches!(
+            EsurfaceRay::<f64>::verify_normal_alignment(
+                canonical.clone(),
+                canonical,
+                std::array::from_fn(|_| Float::with_val(2048, rug::float::Special::Infinity)),
+                0.125
+            )
+            .unwrap_err()
+            .downcast_ref::<SamplingEvaluationError>(),
+            Some(SamplingEvaluationError::Unrepresentable { .. })
+        ));
     }
 
     #[test]
