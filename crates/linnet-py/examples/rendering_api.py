@@ -39,6 +39,9 @@ def _():
         slot: str
         runtime_context: object
 
+    mo.md(
+        "Node data: `TaskRecord` · edge data: `ChannelRecord` · endpoint data: `EndpointRecord`."
+    )
     return ChannelRecord, EndpointRecord, TaskRecord, lp, mo
 
 
@@ -102,6 +105,7 @@ def _(
     custom_theme,
     layout_algorithm,
     lp,
+    mo,
     node_store,
     show_half_edge_ids,
 ):
@@ -269,6 +273,7 @@ def _(
             source=_direction_drawing,
             sink=_direction_drawing,
         )
+    mo.md(f"Constructed **{graph.n_nodes} nodes and {graph.n_edges} edges**.")
     return graph, receive_data, request_channel, request_port, runtime_context
 
 
@@ -354,11 +359,6 @@ def _(
     - shared runtime object remains aliased: **{_shared_alias}**
     - SVG starts with: `{svg[:40]!r}`
     """)
-    return
-
-
-@app.cell
-def _():
     return
 
 

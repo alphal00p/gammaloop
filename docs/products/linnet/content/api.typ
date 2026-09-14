@@ -58,6 +58,9 @@ its required feature and your `Cargo.toml` before using it.
   diagnosing compatibility between Rust and Python code.
 ])
 
+Try the #link("playground/")[live Python playground] for editable DOT and a browser notebook,
+or start with the runnable graph example in the #link("quickstart/python/")[Python quickstart].
+
 The Python binding separates arbitrary application data from drawing data. `Node.data`,
 `Edge.data`, and `HalfEdge.data` may contain any Python object. Linnet retains those objects by
 reference: it does not copy, compare, hash, pickle, stringify, or send them to Typst. The matching

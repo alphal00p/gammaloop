@@ -287,11 +287,104 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "Reusable Cargo producer: $cargo_producer; five-site build: ${build_seconds}s"
 
+      - id: notebook_source
+        name: Select browser notebook support at the documented revision
+        run: |
+          set -euo pipefail
+          if [ -f docs/products/linnet/content/playground.typ ] \
+            && [ -f crates/linnet-py/examples/export_wasm.py ] \
+            && grep -Fq -- '"--docs"' crates/linnet-py/examples/export_wasm.py; then
+            {
+              echo "enabled=true"
+              echo "revision=$(git rev-parse HEAD)"
+              echo "epoch=$(git log -1 --format=%ct)"
+            } >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - id: notebook_wheel
+        name: Restore this revision's browser wheel
+        if: steps.notebook_source.outputs.enabled == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/linnet-docs-wheel
+          key: linnet-docs-wheel-v1-${{ runner.os }}-cibuildwheel-4.2.0-${{ steps.notebook_source.outputs.revision }}
+
+      - name: Install the WebAssembly Rust target
+        if: steps.notebook_source.outputs.enabled == 'true' && steps.notebook_wheel.outputs.cache-hit != 'true'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-emscripten
+
+      - name: Build and test the documented revision's browser wheel
+        if: steps.notebook_source.outputs.enabled == 'true' && steps.notebook_wheel.outputs.cache-hit != 'true'
+        uses: pypa/cibuildwheel@v4.2.0
+        with:
+          package-dir: crates/linnet-py
+          output-dir: ${{ runner.temp }}/linnet-docs-wheel
+        env:
+          CIBW_BUILD: cp314-pyodide_wasm32
+          CIBW_ENVIRONMENT_PYODIDE: CARGO_PROFILE_RELEASE_LTO=thin CARGO_BUILD_JOBS=2 SOURCE_DATE_EPOCH=${{ steps.notebook_source.outputs.epoch }}
+          CIBW_PLATFORM: pyodide
+          SOURCE_DATE_EPOCH: ${{ steps.notebook_source.outputs.epoch }}
+
+      - id: publication_bundle
+        name: Bundle live notebooks with the documentation
+        env:
+          NOTEBOOKS_ENABLED: ${{ steps.notebook_source.outputs.enabled }}
+          DOCS_PATH: ${{ steps.docs.outputs.path }}
+          CHANNEL: ${{ steps.release.outputs.channel }}
+          SNAPSHOT_TAG: ${{ steps.release.outputs.snapshot_tag }}
+          SOURCE_DATE_EPOCH: ${{ steps.notebook_source.outputs.epoch }}
+        run: |
+          set -euo pipefail
+          if [ "$NOTEBOOKS_ENABLED" != true ]; then
+            echo "path=$DOCS_PATH" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          shopt -s nullglob
+          wheels=("$RUNNER_TEMP/linnet-docs-wheel/"*.whl)
+          if [ "${#wheels[@]}" -ne 1 ]; then
+            echo "Expected exactly one browser wheel for the documented revision" >&2
+            exit 2
+          fi
+          staged_docs="$RUNNER_TEMP/documentation-with-notebooks"
+          cp -a "$DOCS_PATH" "$staged_docs"
+          chmod -R u+w "$staged_docs"
+          channel_path=latest
+          if [ "$CHANNEL" = snapshot ]; then
+            channel_path="snapshots/$SNAPSHOT_TAG"
+          fi
+          exporter_help=$(python3 crates/linnet-py/examples/export_wasm.py --help)
+          products=(linnet)
+          product_selection=false
+          if [[ "$exporter_help" == *"--docs {"* ]]; then
+            products+=(gammaloop)
+            product_selection=true
+          fi
+          for product in "${products[@]}"; do
+            # Manual snapshots use the exporter from the selected historical
+            # revision, including its original Linnet-only boolean --docs flag.
+            docs_args=(--docs)
+            if [ "$product_selection" = true ]; then
+              docs_args+=("$product")
+            fi
+            nix develop --command \
+              uv run --no-project --with marimo==0.24.0 python \
+              crates/linnet-py/examples/export_wasm.py \
+              "${docs_args[@]}" \
+              --wheel "${wheels[0]}" \
+              --output "$staged_docs/products/$product/$channel_path/assets/notebooks"
+          done
+          echo "path=$staged_docs" >> "$GITHUB_OUTPUT"
+
       - name: Summarize documentation quality
         env:
           CARGO_PRODUCER: ${{ steps.docs.outputs.cargo_producer }}
           CHANNEL: ${{ steps.release.outputs.channel }}
-          DOCS_PATH: ${{ steps.docs.outputs.path }}
+          DOCS_PATH: ${{ steps.publication_bundle.outputs.path }}
           PUBLISH: ${{ steps.release.outputs.publish }}
           SECONDS_ELAPSED: ${{ steps.docs.outputs.seconds }}
         run: |
@@ -376,7 +469,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: documentation-publication-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ steps.docs.outputs.path }}
+          path: ${{ steps.publication_bundle.outputs.path }}
           include-hidden-files: true
           retention-days: 1
 
@@ -385,7 +478,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: documentation-preview-${{ github.sha }}
-          path: ${{ steps.docs.outputs.path }}
+          path: ${{ steps.publication_bundle.outputs.path }}
           include-hidden-files: true
           retention-days: 14
 
