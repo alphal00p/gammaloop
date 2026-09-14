@@ -5,6 +5,14 @@ design and current implementation status. It is the implementation authority
 and applies to arbitrary loop order and topology, to amplitudes and
 cross sections, and to both ordinary and threshold-adapted sampling.
 
+Current execution goal: establish the physics on all-orientation GL638 through
+H/Z-corner weight scaling, matched-count signed and absolute-integral errors
+for ordinary, simpler advanced and joint channel combinations, remaining
+maximum-weight origins, and the best supported cross-section estimate with
+uncertainty. The final joint-certificate optimization is complete and runtime
+tuning has stopped. Correctness repairs remain required. The comparison and
+resource limits below supersede the earlier 10% optimization stopping rule.
+
 Current implementation status: there is one `SamplingChannelCatalogue` and one
 `SamplingChannelId` domain. The Symbolica selection parser, explicit parent-LMB
 validation, active `subspace_lmb` metadata, exact affine LMB routing, graph/default
@@ -1162,7 +1170,7 @@ not establish it. Warm every required native binding per worker separately,
 report remaining `Other` work, and do not use the benchmark's residual
 "Integrand" row alone as the full physical denominator.
 
-The runtime budget is `T_sampling / T_physical <= 0.10`, measured conservatively
+The original runtime target is `T_sampling / T_physical <= 0.10`, measured conservatively
 in a warmed optimized build at matched actual GL638 samples and physical
 settings. `T_sampling` includes the fixed-Arb forward maps and Jacobians,
 foreign inverses, proxies/partition, support and root certificates, plus direct
@@ -1180,22 +1188,41 @@ timing uncertainty. Report aggregate costs and ratios separately for these sets,
 plus per-draw distributions, high quantiles and extrema; a cheap average must
 not conceal an expensive hard-sample path. Report first compilation/warmup and
 training separately from warmed production. Unoptimized amplitude test timings
-cannot establish this GL638 budget. Profile and optimize only when needed to
-meet the 10% bound, preserve all correctness gates, and stop once the bound is
-met; further speed optimization is outside the requirement. The first matched
+cannot establish this GL638 budget. The
 [all-orientation hosted-joint benchmark](docs/research/advanced_sampling/GL638_HOSTED_JOINT_GATE.md)
-now measures this gate: optimized LMB passes, while the direct joint candidate
-fails at 47.8% conservative overhead on valid representative calls and 58.5% on
-maximum replays. One retained source also fails physical stability in Quad and
-Arb. Reduce redundant eager derivative work and diagnose that fixed source
-before full GL638 normalization and integration; no gain is established yet.
+now measures this cost. Scalar/active-column eager specialization and independent
+worker buffers are validated at source `1f83233dd` (137 relevant core checks),
+but that matched 20-worker candidate cost 46.27% conservative overhead
+on valid representative calls and 47.82% on representative-maximum replays.
+Optimized LMB aggregate costs remain below 10%. The same retained source fails
+CT-on Euler stability in Quad and Arb; actual CT-off is stable. Detailed traces
+retain identical complete membership while the independently solved SOCP
+center norms differ by `1.216e−7 GeV`. The final certificate round now reuses
+radius-independent directed data within
+one preparation. Eight focused tests pass, and the matched all-orientation
+replay preserves every represented sample and physical result. Sampling time
+falls by 15.25% in this batch; valid-call conservative overhead is 41.79% and
+maximum-replay overhead is 48.10%. Runtime tuning stops here as requested.
+The separate repair retaining canonical physical centers across rotations and
+rescue is in validation. No new GL638 normalization or integration gain follows
+from these changes.
+Continue reporting sampling cost honestly; exceeding 10% no longer blocks
+physics studies. Prioritize actual-state Gaussian correctness and the
+fixed-source center repair, then compare at equal sample counts (a) ordinary
+sampling, (b) simpler nonjoint advanced channels, and (c) the best configuration
+including the joint channel. Report signed and absolute integrals with Monte
+Carlo errors, maximum weights and their origin, H/Z-corner boundedness/scaling
+tests, and the best defensible GL638 central value and uncertainty. Compare
+configuration (c)'s maxima against both (a) and (b). Up to 30 cores and 300 GB
+may be used when scaling is useful. These physics results remain pending.
+
 For historical scale only, the optimized
 [X2 physical pilot](docs/research/advanced_sampling/GL638_X2_PHYSICAL_PILOT.md#fixed-budget-pilot)
 recorded 72.04–79.47 ms total per all-orientation draw, with 0.151–0.170 ms
 recorded map time for direct-H selections and 0.075 ms for six optimized LMBs.
 Those earlier timings exclude the new joint/fixed-Arb policy phase and do not
 certify its budget. Neither they nor the current unoptimized amplitude test
-rate establish success or failure of the new matched optimized requirement.
+rate establish the current runtime or physics claims.
 
 ### Estimator and adaptive grids
 

@@ -1,0 +1,55 @@
+{
+  "calculation_commit": "1f83233dd79b5c7b8b09aef38ad5acdd5fde932c",
+  "argv": [
+    "/tmp/gl638-hosted-joint-gate/drivers/gate-performance",
+    "/tmp/gl638-hosted-joint-gate/manifest-performance-timing.json",
+    "/tmp/gl638-hosted-joint-gate/results-ct-trace1",
+    "joint_hz_plus_lmb",
+    "failure-diagnostic",
+    "1",
+    "1",
+    "1",
+    "1337"
+  ],
+  "environment": {
+    "GL_DISPLAY_FILTER": "off,gammalooprs::integrands::process=debug,gammalooprs::subtraction::lu_counterterm=debug"
+  },
+  "returncode": 0,
+  "traced": true,
+  "runtime_budget_evidence": false,
+  "summary_without_repeated_reports": {
+    "cold_load_seconds": 44.6538764,
+    "draws_per_worker": 1,
+    "error": null,
+    "mode": [
+      "joint_hz_plus_lmb"
+    ],
+    "preflight_accepted": false,
+    "repetitions": 1,
+    "saved_state_unchanged": true,
+    "scope": {
+      "finite_smoke_is_not_normalization": true,
+      "gain_claim": false,
+      "maps_scope": "completed-point hosted joint; CT-star density cure remains pending",
+      "precision_scope": "fresh first iteration max_eval=0; trained-iteration rescue history not certified",
+      "runtime_cap": "representative, stored hard selected/bare and replayed representative maxima, each reported separately"
+    },
+    "seed": 1337,
+    "stage": "failure-diagnostic",
+    "status": "completed_requested_stages",
+    "workers": 1
+  },
+  "omitted_duplicate_reports": {
+    "joint_hz_plus_lmb.json": {
+      "sha256_uncompressed": "da58aa1cebe9d8581be17608e003fef42b382e2d37022f2f08a8c230b8f6cd62",
+      "bytes_uncompressed": 995470
+    },
+    "summary.json": {
+      "sha256_uncompressed": "788ab6e6a86aece8efa02565243c457a3c5ba371170197464a340adb6ef6c9f9",
+      "bytes_uncompressed": 1026355
+    }
+  },
+  "source_build_proof": "../source-commit-proof.json",
+  "driver_build": "../gate.build.json",
+  "note": "Completion of a diagnostic stage does not establish numerical or performance acceptance; invalid rows remain in the progress JSON."
+}

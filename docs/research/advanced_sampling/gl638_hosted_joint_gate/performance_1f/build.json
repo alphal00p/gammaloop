@@ -1,0 +1,26 @@
+{
+  "head": "c8850207ef74b1425e5e63edcd051128a90edaf6",
+  "started_utc": "2026-09-14T05:38:41.419538+00:00",
+  "profile": "dev-optim",
+  "jobs": 2,
+  "source_patch_sha256": "e3c9262638c0add4f6ef3d01d3f9d438430994c02130bfb2748554639e7a1c3d",
+  "argv": [
+    "cargo",
+    "build",
+    "--profile",
+    "dev-optim",
+    "--locked",
+    "--offline",
+    "-p",
+    "gammaloop-api",
+    "--bin",
+    "gammaloop",
+    "--features",
+    "ufo_support",
+    "--message-format=json"
+  ],
+  "cargo_pid": 979344,
+  "returncode": 0,
+  "elapsed_seconds": 740.9618405010551,
+  "finished_utc": "2026-09-14T05:51:02.396653+00:00"
+}

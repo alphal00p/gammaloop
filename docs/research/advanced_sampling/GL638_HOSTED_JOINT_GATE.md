@@ -199,3 +199,170 @@ RAYON_NUM_THREADS=20 /tmp/gl638-hosted-joint-gate/drivers/gate \
 Use a new output directory for a replay. The ordinary full reference and pilot
 stages remain pending. Further CT-star maps and automatic channel discovery
 remain separate incomplete milestones in `ADVANCED_SAMPLING_PLAN.md`.
+
+## Matched measurements after evaluator specialization
+
+The follow-up uses commit `1f83233dd79b5c7b8b09aef38ad5acdd5fde932c`.
+It includes scalar inverse reconstruction, three active eager Jacobian columns,
+independent nested worker evaluator buffers, and the CT-off representative-cache
+fix. The relevant 137 core checks passed, including the full 18-orientation
+amplitude fixture. Exact active-three/full-seventeen Jacobian comparisons pass;
+separate scalar evaluation agrees within native rounding. No physical accuracy
+budget, canonical precision, certificate or density was relaxed.
+
+The matched untraced 20-worker run uses exactly the previous complete Samples,
+hard raw cases and representative maxima. Native totals, final precisions,
+factors and validity flags match the previous run in both modes. All 936
+orientations and six cuts remain active; the same 35 saved-state hashes are
+unchanged. The measurement scope and W/S/P definitions above remain unchanged.
+
+| Set | Optimized LMB: S/P; bound | Joint + LMB: S/P; bound |
+| --- | ---: | ---: |
+| Representative, all 960 calls | 3.69%; 4.32% | 39.48%; 39.76% |
+| Representative, 957 valid joint calls | — | 45.95%; 46.27% |
+| Selected hard points, combined | 2.32%; 3.89% | 18.08%; 18.33% |
+| Representative-maximum replay | 6.14%; 6.42% | 47.51%; 47.82% |
+
+The valid-only row remains a diagnostic, not acceptance. The same source
+(worker 12/draw 12) is invalid on all three repetitions. Its slow rescues add
+10.42 seconds to P; including them must not conceal the valid-call cost. The
+selected joint bounds are 44.39% at hz00 and 43.33% at hz03; the selected LMB
+sibling at soft22 costs 8.19% and requires Quad physics. The representative
+bound p99/max is 159%/199%; maximum-replay p99/max is 91.3%. No tail is removed.
+
+Total representative S changes only from 27.9771 to 27.8895 seconds (−0.31%).
+This improvement is insufficient. Both timing clients rewarm their worker
+clones, so the clone-ownership fix cannot explain this comparison. Baseline
+aggregate costs remain below 10%; no baseline optimization is needed. The
+next bounded optimization reuses radius-independent directed certificate
+ranges within one preparation. It must preserve every radius trial, predicate,
+error guard and proposal decision. No new performance result for that change
+is included here.
+
+## Physical discrepancy localized to the center choice
+
+The new CT-off code now runs successfully on actual GL638. Separate traced
+diagnostics retain the same failed Sample and verify identical canonical raw
+point, J and every partition weight across settings and before/after calls.
+These diagnostics are not runtime-budget measurements.
+
+| Target and probe | Ordinary configured stack | Forced Arb |
+| --- | --- | --- |
+| CT on, Euler `(0.1,0.2,0.3)` | Invalid; Quad/Arb discrepancy `2.168501393203e-10` | Invalid; `2.1685013932032444e-10` |
+| CT on, Pi/2 about z | Valid Quad; `5.329944811107988e-14` | Valid; `5.329945071257791e-14` |
+| CT off, Euler | Valid Quad; `8.814134297321171e-23` | Valid; `1.6901990237284813e-301` |
+
+The more detailed CT trace identifies a first internal difference in physical
+cut 3 (cut group 0), on its left side. Identity and Euler have the same complete
+membership `[0,1]`, parent `LmbIndex(64)` and active index 2. Their independently
+solved binary64 SOCP centers have norms differing by approximately
+`−1.21607e−7 GeV` (`−3.40155e−10` relative). The subsequent native alpha solves
+are accurate for these different rays: their residuals are of order `1e−299`.
+
+| Quantity in the first Arb pair | Euler minus identity, GeV |
+| --- | ---: |
+| Left center norm | `−1.216073698e−7` |
+| Left radius, both thresholds | `−3.109727606e−8` |
+| Left threshold 0, r-star | `+7.176130159e−8` |
+| Left threshold 1, r-star | `+4.065094032e−8` |
+| Right radius and both r-star values | Exactly equal in retained native output |
+
+The right center is zero. The extraction interprets printed center coordinates
+as round-trippable binary64 values and r/r-star as native Arb decimals. Treating
+the center printouts as exact decimal values instead changes the norm difference
+by only about `7e−15 GeV`; this is immaterial to the finding. The raw trace,
+line-numbered extraction and script are retained.
+
+The center repair is being implemented separately: choose complete physical
+overlaps once from each canonical point, independently of the sampling channel,
+then promote the stored center bits exactly and rotate in native precision.
+Native cuts retain their own complements, LU/alpha solves and raised packets.
+Raw unselected, ordinary, summed and nonmaster graph rows require the same
+physical convention for the same accepted cut set. Explicit channel-ID selectors
+retain the real source annotation and may intentionally change that set; their
+semantics must not be replaced by a fictitious channel or a numerical retry.
+Unexplained native membership disagreement must fail without selecting a
+replacement center. This is pending implementation validation; it is not an
+A-star map, a demonstrated cure, or an amplitude covariance claim.
+
+## Follow-up archive and replay
+
+The new files are in `gl638_hosted_joint_gate/performance_1f/`. The `timing/`
+directory is untraced 20-worker cost evidence. `diagnostic/` and `ct_trace/`
+contain separate traced one-worker runs; their timings are not additive
+component costs or evidence for the 10% gate. In particular, detached hosted
+component calls that reject a missing runtime row remain recorded as errors.
+
+The archive retains exact raw compressed reports/logs, failure rows, settings,
+state hashes, driver source/build record, compiler invocations and the source
+patch proof tying optimized build 2 to commit `1f83233dd`. Large duplicate
+summary reports are represented by their uncompressed hashes; no binary or
+saved physics state is copied. `artifact_hashes.additions.json` follows the
+existing archive's uncompressed-hash convention.
+
+```sh
+GL_DISPLAY_FILTER=off \
+  /tmp/gl638-hosted-joint-gate/drivers/gate-performance \
+  /tmp/gl638-hosted-joint-gate/manifest-performance-timing.json \
+  /tmp/gl638-hosted-joint-gate/results-performance-timing1 \
+  optimized_lmb,joint_hz_plus_lmb timing 20 16 3 1337
+
+GL_DISPLAY_FILTER=off,gammalooprs::integrands::process=debug \
+  /tmp/gl638-hosted-joint-gate/drivers/gate-performance \
+  /tmp/gl638-hosted-joint-gate/manifest-performance.json \
+  /tmp/gl638-hosted-joint-gate/results-performance-diagnostic1 \
+  joint_hz_plus_lmb failure-diagnostic 1 1 3 1337
+
+GL_DISPLAY_FILTER=off,gammalooprs::integrands::process=debug,gammalooprs::subtraction::lu_counterterm=debug \
+  /tmp/gl638-hosted-joint-gate/drivers/gate-performance \
+  /tmp/gl638-hosted-joint-gate/manifest-performance-timing.json \
+  /tmp/gl638-hosted-joint-gate/results-ct-trace1 \
+  joint_hz_plus_lmb failure-diagnostic 1 1 1 1337
+```
+
+The latest user direction is to complete the current certificate optimization
+and then stop performance tuning even if its cost exceeds 10%. Retain honest
+cost reporting, but prioritize the center repair, actual-state Gaussian
+correctness, and matched physics comparisons: ordinary sampling, simpler
+nonjoint advanced channels, and the best configuration including the joint
+channel. Compare equal sample counts, signed and absolute integrals with Monte
+Carlo errors, maximum weights and their origin, and H/Z-corner scaling. The
+remaining target is the best defensible GL638 central value and uncertainty;
+up to 30 cores and 300 GB are authorized when scaling is useful. No such new
+physics comparison is claimed by this archive.
+
+These reproduce the historical invocations; use fresh output directories for a
+new run. The diagnostic stage returning successfully means its requested
+matrix was retained, not that every physical row passed. Full GL638
+normalization, integration gain and bounded weights remain unestablished.
+
+## Final certificate round: performance work stopped
+
+The [matched comparison](gl638_hosted_joint_gate/certificate_round/comparison_1f_certificate.md)
+records optimized build 3: base `1f83233dd`, with the archived source patch
+`61e9a9b07a858f152537dbc98d2778cbb05071558fdb8276b967d7427af4f06d`.
+Radius-independent directed ranges are reused within one preparation. Radius
+trials, predicate ordering, lower-bound arithmetic and underflow guards remain
+unchanged. All eight focused tests, all-target checks and changed-line Clippy
+checks pass. The newly added reuse fixture was corrected to include its known
+admitted radius; no existing physical tolerance changed.
+
+| Joint set | Previous conservative overhead | Final conservative overhead |
+| --- | ---: | ---: |
+| All 960 representative calls, including 3 invalid | 39.76% | 35.67% |
+| 957 valid representative calls, diagnostic subset | 46.27% | 41.79% |
+| Selected hard points, combined | 18.33% | 17.05% |
+| Representative maxima | 47.82% | 48.10% |
+
+Aggregate representative sampling time falls by 15.25% in this batch. The
+unchanged baseline timing also varies; this is not a universal speed claim.
+Every original Sample, hard case, retained maximum, native total, precision,
+factor and stability outcome matches exactly. The same three physical failures
+remain, and all 35 state hashes are unchanged. The archive retains individual
+hard-point ratios, tails and the complete failed rows.
+
+The user has explicitly accepted present performance. Further runtime tuning
+stops despite exceeding the former 10% target. Work now proceeds to canonical
+physical-center validation and the requested matched physics comparisons.
+Neither bounded weights nor a variance improvement is established by this
+performance experiment.
