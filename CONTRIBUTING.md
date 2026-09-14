@@ -208,6 +208,9 @@ commands from the repository as before. Use `just --list` to see them.
 
 ## NixCI Cache
 
+See [CI maintenance and measurements](docs/ci.md) for the build design, measured
+results, branch migration and `just ci-report` usage.
+
 Before pushing, contributors and agents should run the selected CI checks
 locally and upload successful results when cache credentials are available.
 Work from the repository root; enter `nix develop` if you need the pinned Just

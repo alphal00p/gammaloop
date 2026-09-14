@@ -1,8 +1,8 @@
 # Nix/Crane Cargo artifact reuse
 
 This note records the cache-reuse audit for the NixCI Rust build graph.
-It includes earlier experiments; [the 10 September results](../ci-cargo-parity.md)
-record the current implementation, rejected storage modes and remaining acceptance gaps.
+This is a historical audit. See [CI maintenance and measurements](../ci.md) for
+the current implementation, retained results and reporting workflow.
 
 ## Sources checked
 
