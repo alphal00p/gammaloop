@@ -98,7 +98,7 @@ changelog = "crates/spenso/CHANGELOG.typ"
 related = ["linnet", "idenso", "gammaloop"]
 rust_components = [
   { id = "spenso", package = "spenso", kind = "library", version_source = "crates/spenso/Cargo.toml", features = ["shadowing"] },
-  { id = "spenso-macros", package = "spenso-macros", kind = "proc-macro-library", version_source = "crates/spenso-macros/Cargo.toml", features = ["shadowing"] },
+  { id = "spenso-macros", package = "spenso-macros", kind = "proc-macro-library", version_source = "crates/spenso-macros/Cargo.toml" },
   { id = "spenso-hep-lib", package = "spenso-hep-lib", kind = "domain-library", version_source = "crates/spenso-hep-lib/Cargo.toml" },
 ]
 python_components = [
