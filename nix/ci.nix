@@ -1,5 +1,6 @@
 {
   workspaceGraph,
+  workspacePackages ? workspaceGraph.packages,
   system ? "x86_64-linux",
 }: let
   # Compile the integration crate once; groups select disjoint test binaries.
@@ -61,7 +62,6 @@
         value = true;
       })
       values));
-  workspacePackages = workspaceGraph.packages;
   cratePackageDepsAttr = package: "packages.${system}.crate-deps-${package}";
   cratePackageAttr = package: "packages.${system}.crate-${package}";
   crateTestDependencyAttr = representative: "packages.${system}.crate-test-dependencies-${representative}";
@@ -370,7 +370,15 @@
   == []
   || builtins.throw "projected NixCI dependency graph contains cycles through: ${builtins.concatStringsSep ", " projectedDependencyCycles}"; projectedDependencies;
 in {
-  inherit groups testFeatures;
+  inherit
+    groups
+    testFeatures
+    workspaceDependencyClosureFor
+    workspaceTestComponentRepresentativeFor
+    workspaceTestComponentMembers
+    workspaceTestComponentDependencyRepresentativesFor
+    workspaceTestDependencyComponentRepresentatives
+    ;
   configuration = {
     systems = [system];
     inherit onlyBuild;
