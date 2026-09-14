@@ -64,11 +64,16 @@ accuracy audit passes 551 checks, and an independent artifact audit passes 415;
 the largest ordinary/Arb relative complex error is 1.17633 × 10⁻¹² for totals and
 1.17645 × 10⁻¹² for cuts. Six near-zero component-relative diagnostics remain
 visible under the original norm acceptance criteria. This proves numerical
-reproduction for the retained controls, not a global weight bound. In particular,
-the primary method's actual |Im| maximum at seed 20011 is outside its top two
-complex norms, so its current replay is Double-only; no Arb control or star
-attribution is inferred for that point. New-point physical attribution is separate
-from the earlier [screen maximum traces](GL638_MAXIMUM_PHYSICS_ATTRIBUTION.md).
+reproduction for the retained controls, not a global weight bound. The primary
+method's actual |Im| maximum at seed 20011 lies outside its top two complex norms.
+The subsequent [maximum study](GL638_CONFIRMATION_MAXIMUM_PHYSICS.md) therefore
+extends the retained controls to four per method, with 605 accuracy checks and
+78 checks preserving the original results. It supplies that missing Arb control
+and traces the three distinct maximum configurations. These include a shared
+b/c real maximum whose weight increases by exactly 7/6 when the inactive joint
+channel is added, and imaginary maxima enhanced at projected counterterm points.
+This attribution is separate from the earlier
+[screen maximum traces](GL638_MAXIMUM_PHYSICS_ATTRIBUTION.md).
 
 The [protocol archive](gl638_hosted_joint_gate/mc_confirmation/protocol_build7/provenance.json)
 retains the final manifest, frozen selection, 57 validator artifact tests, original
