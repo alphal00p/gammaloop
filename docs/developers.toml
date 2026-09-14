@@ -877,7 +877,9 @@ end_anchor = "\nin\n{\n  inherit"
 # Reviewed 2026-09-14: the terminal Python closure supplies pinned Typst;
 # Cargo builds its wheel offline and uv installs it without resolving the
 # inherited Nix packages. The reusable Cargo producer boundary is unchanged.
-digest = "81b92fb935c6ac86f29956cf77b5042e166db144"
+# Reviewed 2026-09-14: terminal renders receive runtime Symbolica licensing;
+# the reusable Cargo producer inputs remain unchanged.
+digest = "edc84e51b071ce06d7290de8a316ffba11cae9a4"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"
