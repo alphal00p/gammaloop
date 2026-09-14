@@ -1,0 +1,553 @@
+{
+  "calculation_commit": "072c9999ee928e8e9979f92bd5fb16d4f17ca15f",
+  "diagnostic_driver_source_sha256": "7b5e474ea21b0dd20fa12181cd8b8dc635c7d5db0d17d6400d1e1c47b406123e",
+  "diagnostic_binary_sha256": "c614bacf36943082551157121293cb14caf8884a38af9807f1e7439842e3fb89",
+  "argv": [
+    "/tmp/gl638-hosted-joint-gate/drivers/gate-diagnostic-z-072",
+    "/tmp/gl638-hosted-joint-gate/manifest.json",
+    "/tmp/gl638-hosted-joint-gate/results-failure-diagnostic2",
+    "joint_hz_plus_lmb",
+    "failure-diagnostic",
+    "1",
+    "1",
+    "3",
+    "1337"
+  ],
+  "summary_without_repeated_reports": {
+    "cold_load_seconds": 45.785151872,
+    "draws_per_worker": 1,
+    "error": "failure diagnostic worker panicked",
+    "mode": [
+      "joint_hz_plus_lmb"
+    ],
+    "repetitions": 3,
+    "saved_state_unchanged": true,
+    "scope": {
+      "finite_smoke_is_not_normalization": true,
+      "gain_claim": false,
+      "maps_scope": "completed-point hosted joint; CT-star density cure remains pending",
+      "precision_scope": "fresh first iteration max_eval=0; trained-iteration rescue history not certified",
+      "runtime_cap": "representative, stored hard selected/bare and replayed representative maxima, each reported separately"
+    },
+    "seed": 1337,
+    "stage": "failure-diagnostic",
+    "status": "failed",
+    "workers": 1
+  },
+  "mode_summary_without_repeated_inventory": {
+    "error": "failure diagnostic worker panicked",
+    "mode": "joint_hz_plus_lmb",
+    "preflight_accepted": false,
+    "warmup_seconds": 0.044670387
+  },
+  "omitted_duplicate_reports": {
+    "summary.json": {
+      "sha256_uncompressed": "5d82ac08ad34a26e418fd2f4a83deb7f097a83a60f1fab9967a26aacd7e213cc",
+      "bytes_uncompressed": 456664
+    },
+    "joint_hz_plus_lmb.json": {
+      "sha256_uncompressed": "5eaa8591267cba6f7bcc96bb6c31161b9cd257be819834bd29f23d010e1a633e",
+      "bytes_uncompressed": 445148
+    }
+  },
+  "reproduction_inputs": {
+    "manifest": "../manifest.json",
+    "failed_sample": "../failure-worker12-draw12.json.gz",
+    "valid_control_and_original_timing": "../results-timing1/joint_hz_plus_lmb.json.gz",
+    "source": "gate.rs.gz",
+    "build_and_exact_library_hashes": "gate.build.json",
+    "complete_partial_output": "failure-diagnostic-progress.json.gz",
+    "settings": "joint_hz_plus_lmb.settings.toml",
+    "read_only_state_file_hashes": "state_before.json and state_after.json"
+  },
+  "observations": {
+    "physical_matrix": [
+      {
+        "name": "ct_on_euler",
+        "same_native_baseline_anchor": {
+          "jacobian": true,
+          "partition_weights": true,
+          "raw_point": true
+        },
+        "same_native_anchor_after_evaluations": {
+          "jacobian": true,
+          "partition_weights": true,
+          "raw_point": true
+        },
+        "rows": [
+          {
+            "forced_arb": false,
+            "repetition": 0,
+            "final_precision": "Arb",
+            "valid": false,
+            "stability_levels": [
+              {
+                "estimated_relative_accuracy": null,
+                "precision": "Double",
+                "status": {
+                  "Unstable": 0
+                },
+                "total_time": {
+                  "nanos": 991413,
+                  "secs": 0
+                }
+              },
+              {
+                "estimated_relative_accuracy": 2.1685013932030374e-10,
+                "precision": "Quad",
+                "status": {
+                  "Unstable": 2
+                },
+                "total_time": {
+                  "nanos": 195084884,
+                  "secs": 0
+                }
+              },
+              {
+                "estimated_relative_accuracy": 2.1685013932032444e-10,
+                "precision": "Arb",
+                "status": {
+                  "Unstable": 2
+                },
+                "total_time": {
+                  "nanos": 473324621,
+                  "secs": 2
+                }
+              }
+            ]
+          },
+          {
+            "forced_arb": false,
+            "repetition": 1,
+            "final_precision": "Arb",
+            "valid": false,
+            "stability_levels": [
+              {
+                "estimated_relative_accuracy": null,
+                "precision": "Double",
+                "status": {
+                  "Unstable": 0
+                },
+                "total_time": {
+                  "nanos": 1070442,
+                  "secs": 0
+                }
+              },
+              {
+                "estimated_relative_accuracy": 2.1685013932030374e-10,
+                "precision": "Quad",
+                "status": {
+                  "Unstable": 2
+                },
+                "total_time": {
+                  "nanos": 195077075,
+                  "secs": 0
+                }
+              },
+              {
+                "estimated_relative_accuracy": 2.1685013932032444e-10,
+                "precision": "Arb",
+                "status": {
+                  "Unstable": 2
+                },
+                "total_time": {
+                  "nanos": 494608792,
+                  "secs": 2
+                }
+              }
+            ]
+          },
+          {
+            "forced_arb": false,
+            "repetition": 2,
+            "final_precision": "Arb",
+            "valid": false,
+            "stability_levels": [
+              {
+                "estimated_relative_accuracy": null,
+                "precision": "Double",
+                "status": {
+                  "Unstable": 0
+                },
+                "total_time": {
+                  "nanos": 1227272,
+                  "secs": 0
+                }
+              },
+              {
+                "estimated_relative_accuracy": 2.1685013932030374e-10,
+                "precision": "Quad",
+                "status": {
+                  "Unstable": 2
+                },
+                "total_time": {
+                  "nanos": 215242303,
+                  "secs": 0
+                }
+              },
+              {
+                "estimated_relative_accuracy": 2.1685013932032444e-10,
+                "precision": "Arb",
+                "status": {
+                  "Unstable": 2
+                },
+                "total_time": {
+                  "nanos": 543967480,
+                  "secs": 2
+                }
+              }
+            ]
+          },
+          {
+            "forced_arb": true,
+            "repetition": 0,
+            "final_precision": "Arb",
+            "valid": false,
+            "stability_levels": [
+              {
+                "estimated_relative_accuracy": 2.1685013932032444e-10,
+                "precision": "Arb",
+                "status": {
+                  "Unstable": 2
+                },
+                "total_time": {
+                  "nanos": 618635147,
+                  "secs": 2
+                }
+              }
+            ]
+          }
+        ],
+        "reference": {
+          "valid": true,
+          "reporting_precision": "f64 after native reference stability and checked narrowing",
+          "stability_levels": [
+            {
+              "estimated_relative_accuracy": 5.001898468563083e-16,
+              "precision": "Double",
+              "status": {
+                "Stable": 2
+              },
+              "total_time": {
+                "nanos": 134310,
+                "secs": 0
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "ct_on_exact_z",
+        "same_native_baseline_anchor": {
+          "jacobian": true,
+          "partition_weights": true,
+          "raw_point": true
+        },
+        "same_native_anchor_after_evaluations": {
+          "jacobian": true,
+          "partition_weights": true,
+          "raw_point": true
+        },
+        "rows": [
+          {
+            "forced_arb": false,
+            "repetition": 0,
+            "final_precision": "Quad",
+            "valid": true,
+            "stability_levels": [
+              {
+                "estimated_relative_accuracy": null,
+                "precision": "Double",
+                "status": {
+                  "Unstable": 0
+                },
+                "total_time": {
+                  "nanos": 997832,
+                  "secs": 0
+                }
+              },
+              {
+                "estimated_relative_accuracy": 5.329944811107988e-14,
+                "precision": "Quad",
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "nanos": 253349404,
+                  "secs": 0
+                }
+              }
+            ]
+          },
+          {
+            "forced_arb": false,
+            "repetition": 1,
+            "final_precision": "Quad",
+            "valid": true,
+            "stability_levels": [
+              {
+                "estimated_relative_accuracy": null,
+                "precision": "Double",
+                "status": {
+                  "Unstable": 0
+                },
+                "total_time": {
+                  "nanos": 1025432,
+                  "secs": 0
+                }
+              },
+              {
+                "estimated_relative_accuracy": 5.329944811107988e-14,
+                "precision": "Quad",
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "nanos": 196386458,
+                  "secs": 0
+                }
+              }
+            ]
+          },
+          {
+            "forced_arb": false,
+            "repetition": 2,
+            "final_precision": "Quad",
+            "valid": true,
+            "stability_levels": [
+              {
+                "estimated_relative_accuracy": null,
+                "precision": "Double",
+                "status": {
+                  "Unstable": 0
+                },
+                "total_time": {
+                  "nanos": 1063232,
+                  "secs": 0
+                }
+              },
+              {
+                "estimated_relative_accuracy": 5.329944811107988e-14,
+                "precision": "Quad",
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "nanos": 196244287,
+                  "secs": 0
+                }
+              }
+            ]
+          },
+          {
+            "forced_arb": true,
+            "repetition": 0,
+            "final_precision": "Arb",
+            "valid": true,
+            "stability_levels": [
+              {
+                "estimated_relative_accuracy": 5.329945071257791e-14,
+                "precision": "Arb",
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "nanos": 125954863,
+                  "secs": 2
+                }
+              }
+            ]
+          }
+        ],
+        "reference": {
+          "valid": true,
+          "reporting_precision": "f64 after native reference stability and checked narrowing",
+          "stability_levels": [
+            {
+              "estimated_relative_accuracy": 0.0,
+              "precision": "Double",
+              "status": {
+                "Stable": 2
+              },
+              "total_time": {
+                "nanos": 40650,
+                "secs": 0
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "component_timings": [
+      {
+        "worker_setup": "warmed_clone_only",
+        "source": "failed",
+        "same_native_baseline_anchor": {
+          "jacobian": true,
+          "partition_weights": true,
+          "raw_point": true
+        },
+        "operations": [
+          {
+            "operation": "selected_channel_forward",
+            "status": "rejected",
+            "calls": 3,
+            "mean_wall_seconds": 0.0002507873333333333
+          },
+          {
+            "operation": "bridge_forward_with_partition",
+            "status": "completed",
+            "calls": 3,
+            "mean_wall_seconds": 0.06439364333333333
+          },
+          {
+            "operation": "channel_inverse_at_anchor",
+            "status": "rejected",
+            "calls": 3,
+            "mean_wall_seconds": 0.000271154
+          },
+          {
+            "operation": "channel_inverse_at_anchor",
+            "status": "completed",
+            "calls": 18,
+            "mean_wall_seconds": 0.0002920413888888889
+          },
+          {
+            "operation": "bridge_partition_at_anchor",
+            "status": "completed",
+            "calls": 3,
+            "mean_wall_seconds": 0.033185036
+          }
+        ]
+      },
+      {
+        "worker_setup": "warmed_clone_only",
+        "source": "valid_joint_control",
+        "same_native_baseline_anchor": {
+          "jacobian": true,
+          "partition_weights": true,
+          "raw_point": true
+        },
+        "operations": [
+          {
+            "operation": "selected_channel_forward",
+            "status": "rejected",
+            "calls": 3,
+            "mean_wall_seconds": 0.00021157066666666668
+          },
+          {
+            "operation": "bridge_forward_with_partition",
+            "status": "completed",
+            "calls": 3,
+            "mean_wall_seconds": 0.033194205666666664
+          },
+          {
+            "operation": "channel_inverse_at_anchor",
+            "status": "rejected",
+            "calls": 3,
+            "mean_wall_seconds": 0.00025335733333333333
+          },
+          {
+            "operation": "channel_inverse_at_anchor",
+            "status": "completed",
+            "calls": 18,
+            "mean_wall_seconds": 0.00029637177777777776
+          },
+          {
+            "operation": "bridge_partition_at_anchor",
+            "status": "completed",
+            "calls": 3,
+            "mean_wall_seconds": 0.017689092333333333
+          }
+        ]
+      },
+      {
+        "worker_setup": "clone_then_explicit_rewarm",
+        "source": "failed",
+        "same_native_baseline_anchor": {
+          "jacobian": true,
+          "partition_weights": true,
+          "raw_point": true
+        },
+        "operations": [
+          {
+            "operation": "selected_channel_forward",
+            "status": "rejected",
+            "calls": 3,
+            "mean_wall_seconds": 0.00022782366666666666
+          },
+          {
+            "operation": "bridge_forward_with_partition",
+            "status": "completed",
+            "calls": 3,
+            "mean_wall_seconds": 0.06416752266666667
+          },
+          {
+            "operation": "channel_inverse_at_anchor",
+            "status": "rejected",
+            "calls": 3,
+            "mean_wall_seconds": 0.00027093066666666665
+          },
+          {
+            "operation": "channel_inverse_at_anchor",
+            "status": "completed",
+            "calls": 18,
+            "mean_wall_seconds": 0.00028923066666666666
+          },
+          {
+            "operation": "bridge_partition_at_anchor",
+            "status": "completed",
+            "calls": 3,
+            "mean_wall_seconds": 0.03310043866666667
+          }
+        ]
+      },
+      {
+        "worker_setup": "clone_then_explicit_rewarm",
+        "source": "valid_joint_control",
+        "same_native_baseline_anchor": {
+          "jacobian": true,
+          "partition_weights": true,
+          "raw_point": true
+        },
+        "operations": [
+          {
+            "operation": "selected_channel_forward",
+            "status": "rejected",
+            "calls": 3,
+            "mean_wall_seconds": 0.00021229733333333334
+          },
+          {
+            "operation": "bridge_forward_with_partition",
+            "status": "completed",
+            "calls": 3,
+            "mean_wall_seconds": 0.03295940533333334
+          },
+          {
+            "operation": "channel_inverse_at_anchor",
+            "status": "rejected",
+            "calls": 3,
+            "mean_wall_seconds": 0.000251734
+          },
+          {
+            "operation": "channel_inverse_at_anchor",
+            "status": "completed",
+            "calls": 18,
+            "mean_wall_seconds": 0.00029618577777777775
+          },
+          {
+            "operation": "bridge_partition_at_anchor",
+            "status": "completed",
+            "calls": 3,
+            "mean_wall_seconds": 0.017640155333333334
+          }
+        ]
+      }
+    ],
+    "forced_arb_identity_total_full_decimal_equal": true,
+    "forced_arb_six_identity_cut_weights_full_decimal_equal": true,
+    "first_differing_boundary": "second physical stability probe, after the same canonical source and the same identity physical result",
+    "ct_off_status": "frozen072 panics before any completed CT-off physical result; no CT-off numerical conclusion",
+    "timing_scope": "one worker, sequential detached calls; completed operations overlap and are nonadditive. Rejected hosted selected-forward and hosted joint-inverse calls lack a runtime row context and are unusable as successful component timings. No 10-percent budget claim."
+  }
+}

@@ -30,6 +30,7 @@ delegate = "0.12.0"
 derive_more = "0.99.20"
 dirs = { workspace = true }
 dot-parser = { workspace = true }
+dyn-clone = "1.0.17"
 enum_dispatch = "*"
 eyre = { workspace = true }
 gammaloop-tracing-filter = { workspace = true, features = ["symbolica"] }

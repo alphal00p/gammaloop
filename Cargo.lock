@@ -1744,6 +1744,7 @@ dependencies = [
  "derive_more 0.99.20",
  "dirs",
  "dot-parser",
+ "dyn-clone",
  "enum_dispatch",
  "eyre",
  "gammaloop-tracing-filter",

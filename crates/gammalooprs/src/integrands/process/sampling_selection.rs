@@ -3545,7 +3545,7 @@ mod tests {
 
         // Isolate a faulty inverse determinant from coordinate round trips:
         // the underlying affine map remains exactly invertible with zero residual.
-        #[derive(Debug)]
+        #[derive(Clone, Debug)]
         struct InverseDensityProbe<T: FloatLike> {
             map: SamplingMapAffine<T>,
             multiplier: T,
@@ -4315,7 +4315,7 @@ mod tests {
                 let program = SamplingExpressionEvaluator::new(
                     ["0", "1/10^400", "0", "0", "0"].map(|x| try_parse!(x).unwrap()),
                     parameters,
-                    true,
+                    &[0, 1, 2, 3, 4],
                 )
                 .unwrap();
                 let mut selection = SamplingChannelSelection {

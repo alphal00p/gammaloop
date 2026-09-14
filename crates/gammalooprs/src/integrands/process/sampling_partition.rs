@@ -580,7 +580,7 @@ mod tests {
         let evaluator = SamplingExpressionEvaluator::new(
             [parameter.clone(), parameter.clone()],
             [parameter],
-            false,
+            &[],
         )
         .unwrap();
         let error =

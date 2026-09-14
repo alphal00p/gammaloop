@@ -452,7 +452,9 @@ impl<T: FloatLike> SamplingMapEvaluation<T> {
 /// ordered conditional composition. The borrowed context carries previously
 /// produced raw coordinates for `then` maps (empty for independent products)
 /// together with the original-draw proposal access and stable compiled path.
-pub trait SamplingMapComponent<T: FloatLike = f64>: std::fmt::Debug + Send + Sync {
+pub trait SamplingMapComponent<T: FloatLike = f64>:
+    std::fmt::Debug + Send + Sync + dyn_clone::DynClone
+{
     fn dimensions(&self) -> usize;
     fn output_dimensions(&self) -> usize;
     fn contract(&self) -> SamplingMapContract;
@@ -473,6 +475,8 @@ pub trait SamplingMapComponent<T: FloatLike = f64>: std::fmt::Debug + Send + Syn
         context: &mut SamplingMapContext<'_, T>,
     ) -> Result<Option<SamplingMapEvaluation<T>>>;
 }
+
+dyn_clone::clone_trait_object!(<T> SamplingMapComponent<T> where T: FloatLike);
 
 /// An exact affine change of coordinates between two equal-dimensional frames.
 ///
@@ -857,6 +861,9 @@ fn halton(mut index: usize, base: u64) -> f64 {
 /// determinants.  Ordered compositions pass all previous output blocks as
 /// context to each child; their derivative is block triangular, so the exact
 /// determinant is still the product of the diagonal child determinants.
+/// Cloning recurses into each child's warmed evaluator buffers; immutable
+/// geometry callbacks retain their existing shared ownership.
+#[derive(Clone)]
 pub struct SamplingMapComposition<T: FloatLike = f64> {
     kind: SamplingCompositionKind,
     children: Vec<Box<dyn SamplingMapComponent<T>>>,
@@ -881,7 +888,7 @@ pub type SamplingMapContextTransform<T> = Arc<
 
 #[derive(Clone)]
 pub struct SamplingMapEmbedding<T: FloatLike = f64> {
-    map: Arc<SamplingMapComposition<T>>,
+    map: Box<SamplingMapComposition<T>>,
     /// Product-output index -> master-frame output index.
     output_indices: Vec<usize>,
     context_transform: Option<SamplingMapContextTransform<T>>,
@@ -930,7 +937,7 @@ impl<T: FloatLike> SamplingMapEmbedding<T> {
             *slot = true;
         }
         Ok(Self {
-            map: Arc::new(map),
+            map: Box::new(map),
             output_indices,
             context_transform: None,
         })
@@ -1581,9 +1588,14 @@ impl<T: FloatLike> ImplicitSurfaceRadialMap<T> {
         }
         if program.parameter_count() != 5
             || program.output_count() != 5
-            || !program.has_derivatives()
+            || program.derivative_parameters() != [0, 1, 2, 3, 4]
         {
-            return Err(eyre!("invalid compiled LU-h profile program"));
+            return Err(eyre!(
+                "invalid compiled LU-h profile program: expected five inputs/outputs and ordered derivative columns [0, 1, 2, 3, 4], got {} inputs, {} outputs and {:?}",
+                program.parameter_count(),
+                program.output_count(),
+                program.derivative_parameters(),
+            ));
         }
         let zero = self.center[0].zero();
         let fit = program.evaluate(&vec![zero; 5])?;
@@ -3195,6 +3207,40 @@ mod tests {
     }
 
     #[test]
+    fn lu_h_radial_profile_rejects_incompatible_derivative_columns() -> Result<()> {
+        crate::initialisation::test_initialise()?;
+        let parameters = ["y", "r", "b", "f", "s"]
+            .map(|name| Atom::var(symbol!(&format!("lu_column_contract::{name}"))));
+        for columns in [&[][..], &[1], &[1, 0, 2, 3, 4]] {
+            // The fit itself is finite with positive shape. Reject missing or
+            // reordered derivatives before derivative[0] can mean another input.
+            let program = SamplingExpressionEvaluator::new(
+                [
+                    "0",
+                    "1",
+                    "lu_column_contract::y",
+                    "1-lu_column_contract::y",
+                    "-lu_column_contract::y",
+                ]
+                .map(|expression| try_parse!(expression).unwrap()),
+                parameters.clone(),
+                columns,
+            )?;
+            let error = ImplicitSurfaceRadialMap::new(
+                3,
+                vec![0.0; 3],
+                1.0,
+                1.0,
+                Arc::new(|_, radius| Ok((radius - 1.0, 1.0))),
+            )?
+            .with_lu_h_profile(program, &SamplingRadialProfile::default(), 1)
+            .unwrap_err();
+            assert!(error.to_string().contains("ordered derivative columns"));
+        }
+        Ok(())
+    }
+
+    #[test]
     fn lu_h_radial_profile_uses_root_independent_broad_and_absent_laws() {
         // Eager/dual compilation needs a larger development-build stack, as
         // in the generated graph fixtures; this leaves all numeric checks intact.
@@ -3440,7 +3486,7 @@ mod tests {
             let mut evaluator = SamplingExpressionEvaluator::new(
                 [try_parse!(expression).unwrap()],
                 [coordinate.clone(), power.clone()],
-                true,
+                &[0, 1],
             )
             .unwrap();
             for power in [1.0, 1.5, 2.0, 3.0] {
@@ -4792,7 +4838,111 @@ mod tests {
         );
     }
 
-    #[derive(Debug)]
+    #[test]
+    fn embedded_worker_clone_owns_nested_eager_buffers() -> Result<()> {
+        use std::{sync::mpsc, time::Duration};
+
+        crate::initialisation::test_initialise()?;
+        // Retain the parent's buffer handle to test ownership through two
+        // embedded compositions. Leaf maps already clone their eager buffers;
+        // a shared outer composition must not prevent that clone from running.
+        struct EagerProbe(Arc<Mutex<SamplingExpressionEvaluator>>);
+
+        impl std::fmt::Debug for EagerProbe {
+            fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("EagerProbe")
+            }
+        }
+
+        impl Clone for EagerProbe {
+            fn clone(&self) -> Self {
+                Self(Arc::new(Mutex::new(self.0.lock().unwrap().clone())))
+            }
+        }
+
+        impl SamplingMapComponent for EagerProbe {
+            fn dimensions(&self) -> usize {
+                1
+            }
+            fn output_dimensions(&self) -> usize {
+                1
+            }
+            fn contract(&self) -> SamplingMapContract {
+                SamplingMapContract {
+                    support: SamplingSupport::Full,
+                    requires_context: false,
+                    requires_proposal_policy: false,
+                    jacobian: SamplingJacobian::ExactForward,
+                }
+            }
+            fn name(&self) -> &'static str {
+                "eager_clone_probe"
+            }
+            fn forward(
+                &self,
+                coordinates: &[f64],
+                _context: &mut SamplingMapContext<'_, f64>,
+            ) -> Result<SamplingMapEvaluation> {
+                let evaluated = self
+                    .0
+                    .lock()
+                    .unwrap()
+                    .evaluate_with_real_jacobian(coordinates, None)?;
+                Ok(SamplingMapEvaluation {
+                    coordinates: coordinates.to_vec(),
+                    point: evaluated.values,
+                    jacobian: evaluated.determinant,
+                    inverse_jacobian: evaluated.determinant.recip(),
+                    residual: 0.0,
+                    support: SamplingSupport::Full,
+                    diagnostics: Vec::new(),
+                })
+            }
+            fn inverse(
+                &self,
+                point: &[f64],
+                context: &mut SamplingMapContext<'_, f64>,
+            ) -> Result<Option<SamplingMapEvaluation>> {
+                self.forward(&[(point[0] - 1.0) / 3.0], context).map(Some)
+            }
+        }
+
+        let program = Arc::new(Mutex::new(SamplingExpressionEvaluator::new(
+            [try_parse!("3*embedded_clone::x+1").map_err(|error| eyre!(error))?],
+            [try_parse!("embedded_clone::x").map_err(|error| eyre!(error))?],
+            &[0],
+        )?));
+        let inner =
+            SamplingMapEmbedding::product(vec![Box::new(EagerProbe(program.clone()))], vec![0])?;
+        let parent = SamplingMapEmbedding::from_composition(
+            SamplingMapComposition::then(vec![Box::new(inner)])?,
+            vec![0],
+        )?;
+        let worker = parent.clone();
+        let parent_lock = program.lock().unwrap();
+        let (sender, receiver) = mpsc::channel();
+        let handle = std::thread::spawn(move || -> Result<()> {
+            let mapped = worker.forward(&[0.25], &mut SamplingMapContext::detached(&[]))?;
+            let inverse = worker
+                .inverse(&mapped.point, &mut SamplingMapContext::detached(&[]))?
+                .unwrap();
+            sender.send((mapped, inverse))?;
+            Ok(())
+        });
+        let result = receiver.recv_timeout(Duration::from_secs(5));
+        // Always release the parent before joining, including a regression
+        // timeout, so a shared mutex produces a bounded failure rather than a hang.
+        drop(parent_lock);
+        handle.join().unwrap()?;
+        let (mapped, inverse) = result.expect("worker used its parent's eager buffer");
+        assert_eq!(mapped.point, [1.75]);
+        assert_eq!(mapped.jacobian, 3.0);
+        assert_eq!(inverse.coordinates, [0.25]);
+        assert_eq!(mapped.jacobian * inverse.inverse_jacobian, 1.0);
+        Ok(())
+    }
+
+    #[derive(Clone, Debug)]
     struct ContextShiftMap;
 
     impl SamplingMapComponent for ContextShiftMap {
