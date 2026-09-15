@@ -318,7 +318,7 @@
   };
   deploy = {
     ci-passed = {
-      branches = "all";
+      branches = ":any";
       package = "packages.x86_64-linux.nix-ci-passed";
       system = "x86_64-linux";
     };
