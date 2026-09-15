@@ -56,7 +56,7 @@ rand = "0.9.4"
 ratatui = "0.30.0"
 rayon = "1.5"
 regex = "1.12.3"
-rustred = { path = "../../crates/rustred-core" }
+rustred = { git = "https://github.com/alphal00p/rustred.git", rev = "ce92d3a73212170ba65bbb651e9001def2246063" }
 schemars = "1.2.1"
 serde = "1.0.228"
 self_cell = "1.2.2"

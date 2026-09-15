@@ -1,7 +1,8 @@
 # RustRed acceptance coverage through three loops
 
-This is a source-level inventory and corrected frozen-process passing-test
-report. It covers every
+This is a source-level inventory and audited frozen-process test report.
+The legacy input inventory has passing native peers; two supplemental
+all-class tensor/scalar comparisons still fail. It covers every
 existing end-to-end scalar comparison/reference input with one common mass and
 at most three loops. Tensor-bearing native peers use the existing FeynKit
 prepass, followed by RustRed scalar reduction and master substitution. The
@@ -20,15 +21,41 @@ Before K6 activation, 25 legacy entries / 31 executions mapped to enabled peers
 and 15 entries / 15 executions mapped to pending K6 peers. Genuine K6 bytes are
 now shipped and the existing loader/routing adapter and all peer entrypoints
 are enabled. All 40 entries / 46 executions have active native mappings.
-Enabled means configured to run. After correcting the three native-pattern
-conditions and the contracted-class fixtures without changing numerical
-assertions, the fresh frozen matrix completed **76 selected invocations: 76
-passed, 0 failed, 0 ignored**: 15 catalog/default, 17 three-loop peers, 43
-legacy-complement, and one offline 38-terminal MATAD oracle. The offline test
-uses FORM only to validate the terminal catalog; all scalar RustRed peers use
-an invalid FORM path. Evidence is in
-`target/vakint-short-pattern.OAgEGT/`; the invocation count complements,
-rather than replaces, the 40-entry / 46-input inventory below.
+Enabled means configured to run. The original report at revision `98550cc0`
+counted **76 PASS records**, but its three-loop selection manifest contained
+24 tests and its result table stopped after 17. The next test had a failing
+stdout/stderr log without a corresponding result row. Those 76 records were
+therefore not evidence that the complete selected matrix passed.
+
+An independent rerun of the seven missing result entries used the same frozen
+executables and FORM oracle, unchanged assertions, one CPU and one thread per
+compute pool. Five passed and two failed. Joining those results with the
+original completed rows gives **83 distinct selected tests: 81 passed,
+2 failed, 0 ignored**:
+
+| Group | Passed | Failed |
+| --- | ---: | ---: |
+| Native catalog/default | 15 | 0 |
+| Three-loop peers and supplemental class checks | 22 | 2 |
+| Legacy-complement checks | 43 | 0 |
+| Offline 38-terminal MATAD catalog oracle | 1 | 0 |
+
+The three previously unrecorded legacy-setting variants and both basketball
+finite-part companions now have fresh passing evidence. The two failures are
+`feynkit_three_loop_class_scalar_oracles_agree` and
+`feynkit_rustred_three_loop_class_numerical_peers`. Both stop at
+`I3L_pinch_1_6` on an AlphaLoop-versus-MATAD difference, before the harness
+compares the RustRed numerical result or reaches the fifth class. No claim of
+complete supplemental all-class tensor/scalar parity is justified yet.
+
+The original evidence is in `target/vakint-short-pattern.OAgEGT/`; the seven
+independent reruns and their exact runner are in
+`target/vakint-three-loop-audit.JA4fsa/`. Frozen executable and FORM hashes
+match. The original source-input hash check differs only at the currently
+edited workspace `Cargo.toml`; no binary was rebuilt. Native FeynKit and
+RustRed lanes retain their invalid FORM paths. FORM remains available only
+to separate comparison-oracle lanes and the offline catalog oracle. These
+counts complement, rather than replace, the 40-entry / 46-input inventory.
 
 ## Complete mapping
 
@@ -117,12 +144,22 @@ loops: they stop at epsilon^-1. They are preserved verbatim. Separate
 RV companions `rustred_basketball_a_finite_part` and
 `rustred_basketball_b_finite_part` request four terms, including epsilon^0.
 These two added executions are not included in the 40-entry legacy census.
-They are enabled and pass in the corrected frozen matrix.
+They pass in the independent seven-test frozen-binary rerun recorded above.
 
 The five scalar matcher-class fixtures in RS and the five tensor-bearing
 class inputs in `rustred_k6_pipeline_tests.rs` supplement this matrix; they do
 not replace the original eleven three-loop acceptance bodies. A numerical-only
 K6 terminal basis is permitted, but invalid-FORM-path checks remain mandatory.
+The scalar matcher-class peers pass. The tensor prepasses also match FORM
+for all five classes, but the two subsequent all-class scalar comparisons
+fail at the fourth class and do not reach the fifth. At that fourth class,
+the epsilon^-3 real coefficient is approximately `0.30116343610153126`
+for AlphaLoop and `0.30102068072626876` for MATAD, a relative difference
+of about `4.741e-4` against the unchanged `1e-25` tolerance. All lanes are
+evaluated before comparisons, but the assertion stops before displaying or
+comparing RustRed's value; the current logs do not identify which reducer is
+responsible. Pairwise diagnostic comparisons are needed without weakening
+the original assertions.
 The old explicit unsupported-K6 inventory assertion now requires a successful
 nonzero parent reduction, and its existing numerical peer inventory is live.
 Before acceptance, execute every peer: merely removing ignore attributes or
@@ -216,7 +253,7 @@ recursive applier or graph match is introduced.
 Exact offline MATAD-basis terminal projections are preferred over unnecessary
 20,000-digit literal tables.
 
-### Genuine K6 asset and exact terminal manifest, runtime gate passed
+### Genuine K6 asset and exact terminal manifest, catalog runtime gate passed
 
 The canonical RustRed producer generated byte-identical one/six-worker artifacts:
 8,911,462 bytes, 623 rules, 5,639 cells, 38 typed corner terminals and 26 zero
@@ -226,7 +263,8 @@ join and disjoint 64-mask partition passed independent audit. The shipped SHA256
 is `53bb589f98beaa735332cffbd080b174cfff5fc7a664e3499d5f667ad8fb8434`;
 the actual algorithm ID is `rustred.source-port-original-domain.v1`. Evidence:
 RustRed `target/spired-k6-producer.007TpB/RESULTS.md`. These are artifact/CLI
-gates joined by the complete Vakint three-loop scalar parity matrix below.
+gates joined by the passing legacy-input native peers and the two failing
+supplemental class comparisons documented above.
 
 `src/rustred_evaluation/terminal/k6.rs` now records the actual 38 canonical
 corner keys checked by RustRed's 623-rule unit-mass program. Six authenticated
@@ -252,9 +290,11 @@ GammaLoop libtest binaries. No fake `ClosedArtifact` or alternate loader is adde
 `TerminalCatalog::compile` authenticates the shipped artifact and requires exact
 equality with its complete typed terminal set before use. The current 15-test
 native catalog/default gate passes, including master finalization and the
-existing artifact contract checks. The 17 three-loop peer tests and 43
-legacy-complement tests also pass from fresh frozen processes with invalid FORM
-paths for RustRed scalar evaluation.
+existing artifact contract checks. The audited union also contains 22 passing
+three-loop selections and 43 passing legacy-complement checks, with invalid
+FORM paths for RustRed scalar evaluation. Two supplemental all-class
+tensor/scalar selections fail as described above; they must not be hidden by
+counting only existing PASS rows.
 
 Two additional checks are prepared. The enabled native-only test now passes: it
 materializes the five different terminal expressions through the finite
