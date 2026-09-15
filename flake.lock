@@ -3,17 +3,17 @@
     "ci-cache-base": {
       "flake": false,
       "locked": {
-        "lastModified": 1789467490,
-        "narHash": "sha256-YPHpkZfWcJAmoXNr9v4Ov7iWNEKEKti0nutFlgTGSBY=",
+        "lastModified": 1789486227,
+        "narHash": "sha256-cWleUrCGGmboOPaL4vxbG7E7P8frOaMto3hhed4EP5U=",
         "owner": "alphal00p",
         "repo": "gammaloop",
-        "rev": "fa1565a780b6b1f391be137b1e5a120762e9df9f",
+        "rev": "9935a2b52d047daf5bbe6616c798fa07e364da6a",
         "type": "github"
       },
       "original": {
         "owner": "alphal00p",
         "repo": "gammaloop",
-        "rev": "fa1565a780b6b1f391be137b1e5a120762e9df9f",
+        "rev": "9935a2b52d047daf5bbe6616c798fa07e364da6a",
         "type": "github"
       }
     },
