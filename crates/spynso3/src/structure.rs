@@ -41,7 +41,7 @@ use symbolica::api::python::{ConvertibleToExpression, PythonExpression};
 
 use idenso::{color::CS, dirac::AGS, representations::Bispinor};
 
-use super::expression::TensorExpression;
+use super::{ModuleInit, expression::TensorExpression};
 
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::{PyStubType, derive::*, impl_stub_type};

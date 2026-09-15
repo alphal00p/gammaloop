@@ -45,6 +45,7 @@
       "packages.x86_64-linux.crate-test-binaries-spenso"
       "packages.x86_64-linux.crate-test-binaries-spenso-hep-lib"
       "packages.x86_64-linux.crate-test-binaries-spenso-macros"
+      "packages.x86_64-linux.crate-test-binaries-spynso3"
       "packages.x86_64-linux.crate-test-binaries-symbolica-utils"
     ];
     "checks.x86_64-linux.gammaloop-nextest-binaries-vakint" = [
@@ -117,6 +118,9 @@
     "packages.x86_64-linux.crate-test-binaries-spenso-macros" = [
       "packages.x86_64-linux.crate-test-dependencies-spenso-macros"
     ];
+    "packages.x86_64-linux.crate-test-binaries-spynso3" = [
+      "packages.x86_64-linux.crate-test-dependencies-spynso3"
+    ];
     "packages.x86_64-linux.crate-test-binaries-symbolica-utils" = [
       "packages.x86_64-linux.crate-test-dependencies-symbolica-utils"
     ];
@@ -162,9 +166,7 @@
       "packages.x86_64-linux.crate-test-dependencies-gammaloop-api"
       "packages.x86_64-linux.crate-test-dependencies-idenso"
       "packages.x86_64-linux.crate-test-dependencies-linnet-py"
-      "packages.x86_64-linux.crate-test-dependencies-spenso"
-      "packages.x86_64-linux.crate-test-dependencies-spenso-hep-lib"
-      "packages.x86_64-linux.crate-test-dependencies-spenso-macros"
+      "packages.x86_64-linux.crate-test-dependencies-spynso3"
       "packages.x86_64-linux.crate-test-dependencies-vakint"
     ];
     "packages.x86_64-linux.crate-test-dependencies-alphal00p-docs-schema" = [
@@ -262,6 +264,14 @@
       "packages.x86_64-linux.cargoArtifacts"
       "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
     ];
+    "packages.x86_64-linux.crate-test-dependencies-spynso3" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-idenso"
+      "packages.x86_64-linux.crate-test-dependencies-spenso"
+      "packages.x86_64-linux.crate-test-dependencies-spenso-hep-lib"
+      "packages.x86_64-linux.crate-test-dependencies-spenso-macros"
+    ];
     "packages.x86_64-linux.crate-test-dependencies-symbolica-utils" = [
       "packages.x86_64-linux.cargoArtifacts"
       "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
@@ -350,6 +360,7 @@
     "packages.x86_64-linux.crate-test-binaries-spenso"
     "packages.x86_64-linux.crate-test-binaries-spenso-hep-lib"
     "packages.x86_64-linux.crate-test-binaries-spenso-macros"
+    "packages.x86_64-linux.crate-test-binaries-spynso3"
     "packages.x86_64-linux.crate-test-binaries-symbolica-utils"
     "packages.x86_64-linux.crate-test-binaries-vakint"
     "packages.x86_64-linux.crate-test-dependencies-alphal00p-docs-builder"
@@ -372,6 +383,7 @@
     "packages.x86_64-linux.crate-test-dependencies-spenso"
     "packages.x86_64-linux.crate-test-dependencies-spenso-hep-lib"
     "packages.x86_64-linux.crate-test-dependencies-spenso-macros"
+    "packages.x86_64-linux.crate-test-dependencies-spynso3"
     "packages.x86_64-linux.crate-test-dependencies-symbolica-utils"
     "packages.x86_64-linux.crate-test-dependencies-vakint"
     "packages.x86_64-linux.gammaloop-python-module"
@@ -394,7 +406,7 @@
       in-repo = true;
       package = "packages.x86_64-linux.nix-ci-check-gammaloop-doctest";
       secrets = [
-        "SYMBOLICA_LICENSE"
+        "SYMBOLICA_LICENSE_SIGNED"
       ];
       system = "x86_64-linux";
     };
@@ -402,7 +414,7 @@
       in-repo = true;
       package = "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-clinnet";
       secrets = [
-        "SYMBOLICA_LICENSE"
+        "SYMBOLICA_LICENSE_SIGNED"
       ];
       system = "x86_64-linux";
     };
@@ -410,7 +422,7 @@
       in-repo = true;
       package = "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-core";
       secrets = [
-        "SYMBOLICA_LICENSE"
+        "SYMBOLICA_LICENSE_SIGNED"
       ];
       system = "x86_64-linux";
     };
@@ -418,7 +430,7 @@
       in-repo = true;
       package = "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-docs";
       secrets = [
-        "SYMBOLICA_LICENSE"
+        "SYMBOLICA_LICENSE_SIGNED"
       ];
       system = "x86_64-linux";
     };
@@ -426,7 +438,7 @@
       in-repo = true;
       package = "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-integration";
       secrets = [
-        "SYMBOLICA_LICENSE"
+        "SYMBOLICA_LICENSE_SIGNED"
       ];
       system = "x86_64-linux";
     };
@@ -434,7 +446,7 @@
       in-repo = true;
       package = "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-linnet";
       secrets = [
-        "SYMBOLICA_LICENSE"
+        "SYMBOLICA_LICENSE_SIGNED"
       ];
       system = "x86_64-linux";
     };
@@ -442,7 +454,7 @@
       in-repo = true;
       package = "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-python-api";
       secrets = [
-        "SYMBOLICA_LICENSE"
+        "SYMBOLICA_LICENSE_SIGNED"
       ];
       system = "x86_64-linux";
     };
@@ -450,7 +462,7 @@
       in-repo = true;
       package = "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-spenso";
       secrets = [
-        "SYMBOLICA_LICENSE"
+        "SYMBOLICA_LICENSE_SIGNED"
       ];
       system = "x86_64-linux";
     };
@@ -458,7 +470,7 @@
       in-repo = true;
       package = "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-vakint";
       secrets = [
-        "SYMBOLICA_LICENSE"
+        "SYMBOLICA_LICENSE_SIGNED"
       ];
       system = "x86_64-linux";
     };

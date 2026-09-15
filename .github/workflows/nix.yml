@@ -116,7 +116,7 @@ jobs:
       - id: filter-matrix
         name: Filter unavailable licensed tests
         env:
-          LICENSE: ${{ secrets.SYMBOLICA_LICENSE }}
+          LICENSE: ${{ secrets.SYMBOLICA_LICENSE_SIGNED }}
           MATRIX: ${{ steps.matrix.outputs.matrix }}
         run: |
           set -euo pipefail
@@ -162,7 +162,7 @@ jobs:
       - name: Build checks
         env:
           CHECK_ATTR: ${{ matrix.attr }}
-          SYMBOLICA_LICENSE: ${{ secrets.SYMBOLICA_LICENSE || 'GAMMALOOP_USER' }}
+          SYMBOLICA_LICENSE: ${{ secrets.SYMBOLICA_LICENSE_SIGNED || 'GAMMALOOP_USER' }}
         run: |
           set -euo pipefail
           nix_options=()

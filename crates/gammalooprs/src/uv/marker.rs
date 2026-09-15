@@ -60,7 +60,7 @@ impl UvMarker {
 
     fn normalize(atom: &Atom) -> Atom {
         atom.replace(function!(GS.ct_marker, W_.a_).pow(Atom::var(W_.b_)))
-            .when(W_.b_.filter(|exponent| exponent.is_integer()))
+            .when(W_.b_.filter(|exponent| exponent.is_integer().is_true()))
             .with(function!(
                 GS.ct_marker,
                 Atom::var(W_.a_).pow(Atom::var(W_.b_))

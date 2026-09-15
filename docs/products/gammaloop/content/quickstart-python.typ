@@ -19,8 +19,7 @@ python -m pip install --upgrade pip
 python -m pip install "gammaloop>=0.3.4"
 ```
 
-Until that release is visible on PyPI, build the current package from a source checkout instead.
-The public build selector is not a private license key:
+Until that release is visible on PyPI, build the current package from a source checkout instead:
 
 // docs-example: syntax
 ```sh
@@ -28,9 +27,11 @@ git clone https://github.com/alphal00p/gammaloop.git
 cd gammaloop
 python3.11 -m venv .venv
 . .venv/bin/activate
-SYMBOLICA_OEM_LICENSE=SYMBOLICA_OEM_GAMMALOOP \
-  python -m pip install .
+python -m pip install .
 ```
+
+The Python library does not activate the CLI's OEM license. Set `SYMBOLICA_LICENSE`
+to your user license when running Python; no OEM selector is needed to build the library.
 
 == Generate and evaluate
 

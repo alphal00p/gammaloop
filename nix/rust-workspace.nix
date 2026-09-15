@@ -37,22 +37,6 @@
 
   cargoVendorDir = craneLib.vendorCargoDeps {
     cargoLock = (workspaceRoot + "/Cargo.lock");
-    overrideVendorGitCheckout = packages: drv:
-      if lib.any (package: package.name == "symbolica") packages
-      then
-        drv.overrideAttrs (old: {
-          postInstall =
-            (old.postInstall or "")
-            + ''
-              for crate in ${lib.concatMapStringsSep " " (package: lib.escapeShellArg "${package.name}-${package.version}") packages}; do
-                if [ -d "$out/$crate" ]; then
-                  mkdir -p "$out/$crate/.git"
-                  printf 'ref: refs/heads/nix-vendor\n' > "$out/$crate/.git/HEAD"
-                fi
-              done
-            '';
-        })
-      else drv;
   };
 
   nonCargoBuildSources = lib.fileset.unions [
@@ -67,6 +51,8 @@
     (workspaceRoot + "/crates/linnest/typst/typst.toml")
     (workspaceRoot + "/crates/linnet-py/README.md")
     (workspaceRoot + "/crates/linnet-py/vendor")
+    # Reviewed 2026-09-14: Spynso's embedded Typst renderer is also a build input;
+    # adding its source directory does not change the documentation cache boundaries.
     (workspaceRoot + "/crates/spynso3/typst")
     (workspaceRoot + "/crates/vakint/form_src")
     (workspaceRoot + "/crates/vakint/templates")
@@ -405,6 +391,7 @@
       "crates/linnest/typst/typst.toml"
       "crates/linnet-py/vendor"
     ];
+    spynso3 = ["crates/spynso3/typst"];
     vakint = [
       "crates/vakint/form_src"
       "crates/vakint/templates"
@@ -1194,8 +1181,8 @@
       # The workspace sets default-members to gammaloop-api, so CI checks must
       # opt into the full workspace explicitly.
       cargoExtraArgs = "--locked --workspace ${craneWorkspacePrebuildFeatureArgs}";
-      # NixCI provides the runtime Symbolica license, not the compile-time
-      # OEM key consumed by gammalooprs' activate_oem_license! path.
+      # NixCI exercises the runtime Symbolica license, including for the CLI,
+      # rather than the OEM activation in the gammaloop binary entry point.
       NO_SYMBOLICA_OEM_LICENSE = "1";
 
       PYO3_PYTHON = "${pkgs.python313}/bin/python3";
@@ -2363,10 +2350,7 @@
 
   nextestSplitPackages = sortedUnique (lib.concatMap (target: target.packages) nextestPackageGroups);
   workspacePackages = sortedUnique workspaceMemberPackages;
-  nextestCoverageIgnoredPackages = [
-    "gammaloop-workspace-hack"
-    "spynso3"
-  ];
+  nextestCoverageIgnoredPackages = ["gammaloop-workspace-hack"];
   nextestCoveredWorkspacePackages = sortedUnique (lib.subtractLists nextestCoverageIgnoredPackages workspaceMemberPackages);
   missingNextestPackages = lib.subtractLists nextestSplitPackages nextestCoveredWorkspacePackages;
   extraNextestPackages = lib.subtractLists nextestCoveredWorkspacePackages nextestSplitPackages;
@@ -2685,6 +2669,9 @@
         runtimeInputs = [pkgs.nix];
         text = ''
           set -euo pipefail
+          if [[ -n "''${SYMBOLICA_LICENSE_SIGNED:-}" ]]; then
+            export SYMBOLICA_LICENSE="$SYMBOLICA_LICENSE_SIGNED"
+          fi
           exec nix \
             --extra-experimental-features nix-command \
             --extra-experimental-features flakes \

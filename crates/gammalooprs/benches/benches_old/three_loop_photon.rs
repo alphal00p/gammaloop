@@ -67,7 +67,7 @@ fn load_helper(path: &str) -> Graph {
 }
 
 fn criterion_benchmark(c: &mut Criterion) {
-    let _ = symbolica::LicenseManager::set_license_key("GAMMALOOP_USER");
+    let _ = symbolica::license::LicenseManager::set_license_key("GAMMALOOP_USER");
     env_logger::init();
 
     let mut group = c.benchmark_group("3L physical benchmarks");

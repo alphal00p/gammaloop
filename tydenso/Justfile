@@ -66,7 +66,7 @@ check: build check-wasm-features
     set -euo pipefail
     cd "{{ justfile_directory() }}/tydenso"
     tymbolica_checkout="${TYMBOLICA_CHECKOUT:-../../tymbolica}"
-    tymbolica_revision="e85233dd3d99e5fb458913d0d49f99d83466025b"
+    tymbolica_revision="4aab37aa6a5250ac692b425bc95592a408c98cc1"
     if [ ! -f "$tymbolica_checkout/typst.toml" ]; then
       echo "set TYMBOLICA_CHECKOUT to the pinned lcnbr/tymbolica checkout" >&2
       exit 1
@@ -76,13 +76,28 @@ check: build check-wasm-features
       echo "TYMBOLICA_CHECKOUT must be at $tymbolica_revision; found ${checkout_revision:-no Git HEAD}" >&2
       exit 1
     fi
-    symbolica_revision="ec19eeb211685aa216dbd28a4df547cd4c6baca1"
-    expected_source="source = \"git+https://github.com/symbolica-dev/symbolica?rev=$symbolica_revision#$symbolica_revision\""
+    symbolica_version="3.0.0"
+    check_dir="$(mktemp -d)"
+    trap 'rm -rf "$check_dir"' EXIT
+    mkdir -p "$check_dir/tymbolica" ../target/tymbolica
+    git -C "$tymbolica_checkout" archive "$tymbolica_revision" | tar -x -C "$check_dir/tymbolica"
+    tymbolica_checkout="$check_dir/tymbolica"
+    # Rebuild both pinned engines without changing the checkout.
+    # Their build script reads only Cargo's target and feature settings;
+    # its file watch excludes regenerated plugin assets from invalidating the core build.
+    # Keep compilation reusable outside Swatinem's workspace-target cleanup.
+    ln -s "$PWD/../target/tymbolica" "$tymbolica_checkout/target"
+    (
+      cd "$tymbolica_checkout"
+      unset CARGO_TARGET_DIR
+      nix run --no-write-lock-file "path:$PWD#build"
+    )
+    expected="$(printf 'version = "%s"\nsource = "registry+https://github.com/rust-lang/crates.io-index"\n' "$symbolica_version")"
     for lock in ../Cargo.lock Cargo.lock "$tymbolica_checkout/Cargo.lock"; do
       for package in symbolica numerica graphica; do
-        resolved="$(sed -n "/^name = \"$package\"$/,/^\[\[package\]\]/p" "$lock" | grep '^source = ' | sort -u)"
-        if [ "$resolved" != "$expected_source" ]; then
-          echo "$lock must resolve exactly one $package source at $symbolica_revision; found ${resolved:-none}" >&2
+        resolved="$(sed -n "/^name = \"$package\"$/,/^\[\[package\]\]/p" "$lock" | grep -E '^(version|source) = ')"
+        if [ "$resolved" != "$expected" ]; then
+          echo "$lock must resolve exactly one crates.io $package at $symbolica_version; found ${resolved:-none}" >&2
           exit 1
         fi
       done
@@ -90,8 +105,6 @@ check: build check-wasm-features
     cmp typst/render.typ ../crates/spynso3/typst/render.typ
     cmp typst/notation.typ ../crates/spynso3/typst/notation.typ
 
-    check_dir="$(mktemp -d)"
-    trap 'rm -rf "$check_dir"' EXIT
     package_root="$check_dir/xdg/typst/packages/local"
     mkdir -p \
       "$package_root/tydenso/0.1.0" \

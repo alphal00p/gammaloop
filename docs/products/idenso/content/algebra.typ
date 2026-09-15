@@ -29,13 +29,13 @@ each factor with a distinct header first, while leaving its external indices unt
 ```python
 import symbolica as sp
 from symbolica.community.idenso import list_dangling, wrap_dummies
-from symbolica.community.spenso import Representation, TensorName
+from symbolica.community.spenso import Representation, TensorExpression, TensorName
 
 rep = Representation.euc(3)
 mu = rep("mu")
 nu = rep("nu")
 rho = rep("rho")
-g = TensorName.g()
+g = TensorExpression.g(rep)
 p = TensorName("p")
 q = TensorName("q")
 

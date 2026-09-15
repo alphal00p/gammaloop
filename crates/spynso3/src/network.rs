@@ -1079,7 +1079,8 @@ impl SpensoNet {
                         r
                     }
                     .non_greedy_wildcards(setting_non_greedy_wildcards.clone())
-                    .level_range(setting_level_range)
+                    .min_level(setting_level_range.0)
+                    .max_level(setting_level_range.1)
                     .level_is_tree_depth(setting_level_is_tree_depth)
                     .allow_new_wildcards_on_rhs(setting_allow_new_wildcards_on_rhs)
                     .rhs_cache_size(setting_rhs_cache_size);
@@ -1195,8 +1196,8 @@ impl SpensoNet {
     /// ----------
     /// library : TensorLibrary, optional
     ///     Optional tensor library for resolving tensor operations
-    /// function_library : None, optional
-    ///     Reserved for an internally supplied function library
+    /// function_library : TensorFunctionLibrary or None, optional
+    ///     Tensor function callbacks; None uses the built-in function library
     /// n_steps : int, optional
     ///     Maximum number of execution steps (None for complete execution)
     /// mode : ExecutionMode, optional
@@ -1216,9 +1217,7 @@ impl SpensoNet {
     fn execute(
         &mut self,
         library: Option<&SpensorLibrary>,
-        #[gen_stub(override_type(type_repr = "None"))] function_library: Option<
-            &SpensorFunctionLibrary,
-        >,
+        function_library: Option<&SpensorFunctionLibrary>,
         n_steps: Option<usize>,
         mode: ExecutionMode,
     ) -> PyResult<()> {

@@ -56,7 +56,6 @@ bincode = ["dep:bincode", "dep:bincode-trait-derive"]
 native = [
   "linnet/native",
   "spenso/native",
-  "spenso-macros/native",
   "symbolica/integer-gmp",
   "symbolica/float-mpfr",
   "symbolica-utils/native",
@@ -67,7 +66,6 @@ python_stubgen = ["dep:pyo3-stub-gen", "python", "symbolica/python_stubgen"]
 wasm = [
   "linnet/wasm",
   "spenso/wasm",
-  "spenso-macros/wasm",
   "symbolica/wasm",
   "symbolica-utils/wasm",
 ]

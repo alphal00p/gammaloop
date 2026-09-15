@@ -331,14 +331,14 @@ pub(crate) fn generate_rstar_t_dependence_evaluator(
             let solutions = Atom::solve(std::slice::from_ref(eq))
                 .wrt_with_exponent::<u8, _>(std::slice::from_ref(variable))
                 .unwrap();
-            let [solution] = solutions.as_slice() else {
+            let [solution] = solutions.iter().as_slice() else {
                 panic!(
                     "expected one implicit-function solution, got {} branches",
                     solutions.len()
                 );
             };
             assert!(
-                !solution.is_underdetermined(),
+                solution.free_variables().is_empty(),
                 "implicit-function solution is underdetermined"
             );
             let variable = PolyVariable::try_from(variable.clone()).unwrap();
