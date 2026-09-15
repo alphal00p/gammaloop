@@ -181,7 +181,13 @@ impl<T: FloatLike> GenericEvaluationResult<T> {
                 if reported == 0.0 && value != &value.zero() {
                     let complete = remaining.map(|factor| value * factor);
                     if complete.as_ref().is_none_or(|weighted| {
-                        !weighted.0.is_finite() || weighted.into_f64() != 0.0
+                        // A completed contribution below binary64's normal
+                        // range is an exponentially suppressed tail and may
+                        // be rounded to zero at the reporting boundary.  A
+                        // remaining factor that promotes it into the normal
+                        // range must still be preserved and therefore fails.
+                        !weighted.0.is_finite()
+                            || weighted.abs() >= F::<T>::from_f64(f64::MIN_POSITIVE)
                     }) {
                         return Err(eyre::eyre!(
                             "native value {value} rounds to zero before remaining factor {}; complete contribution {} cannot be preserved at the f64 integration/reporting boundary",
