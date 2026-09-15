@@ -142,10 +142,13 @@ cached checks without compiler artifacts/downloads, a real five-test Clinnet cac
 miss, and a missing-license failure. Consolidation preserved all 63 compared Nix
 output identities and all 11 required local checks; those checks reused results.
 
-Detailed, immutable evidence remains in the pre-cleanup commit:
-#link("https://github.com/alphal00p/gammaloop/blob/0cc8cd2bb42a2e5d1bebe468df347d1d5420d897/docs/ci-final-warm-comparison.json")[final warm data], #link("https://github.com/alphal00p/gammaloop/blob/0cc8cd2bb42a2e5d1bebe468df347d1d5420d897/docs/ci-artifact-preparation-results.json")[local artifact and coverage results],
-#link("https://github.com/alphal00p/gammaloop/blob/0cc8cd2bb42a2e5d1bebe468df347d1d5420d897/docs/ci-cold-cargo-comparison.json")[cold commands and results], and #link("https://github.com/alphal00p/gammaloop/tree/0cc8cd2bb42a2e5d1bebe468df347d1d5420d897/docs")[experiment history]. This
-keeps generated reports and experiment diaries out of the maintained source tree.
+Detailed evidence remains in these file histories, ending at the pre-cleanup
+commit `0cc8cd2`:
+#link("https://github.com/alphal00p/gammaloop/commits/0cc8cd2bb42a2e5d1bebe468df347d1d5420d897/docs/ci-final-warm-comparison.json")[final warm data history],
+#link("https://github.com/alphal00p/gammaloop/commits/0cc8cd2bb42a2e5d1bebe468df347d1d5420d897/docs/ci-artifact-preparation-results.json")[local artifact and coverage history],
+#link("https://github.com/alphal00p/gammaloop/commits/0cc8cd2bb42a2e5d1bebe468df347d1d5420d897/docs/ci-cold-cargo-comparison.json")[cold commands and results history], and
+#link("https://github.com/alphal00p/gammaloop/commits/0cc8cd2bb42a2e5d1bebe468df347d1d5420d897/docs")[experiment history].
+This keeps generated reports and experiment diaries out of the maintained source tree.
 
 == Collecting another comparison
 
