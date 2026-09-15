@@ -60,7 +60,7 @@ use crate::{
     processes::{AmplitudeGraph, GraphGenerationStats, GraphGroupSelectionPlan, GroupDerivedData},
     settings::{
         GlobalSettings, RuntimeSettings,
-        global::{CompilationOptimizationLevel, FrozenCompilationMode},
+        global::{CompilationOptionsSnapshot, FrozenCompilationMode},
         runtime::ParameterizationSettings,
     },
     subtraction::{
@@ -1321,8 +1321,8 @@ impl AmplitudeIntegrand {
         if crate::is_interrupted() {
             return Err(eyre!("Generation interrupted by user"));
         }
-        match self.data.compilation {
-            FrozenCompilationMode::Symjit(optimization_level) => {
+        match &self.data.compilation {
+            FrozenCompilationMode::Symjit(options) => {
                 let mut compile_times = Vec::with_capacity(self.data.graph_terms.len());
                 for graph_term in &mut self.data.graph_terms {
                     if crate::is_interrupted() {
@@ -1330,7 +1330,7 @@ impl AmplitudeIntegrand {
                     }
                     let compile_started = std::time::Instant::now();
                     graph_term.for_each_generic_evaluator_mut(|evaluator| {
-                        evaluator.activate_symjit(optimization_level)
+                        evaluator.activate_symjit(options)
                     })?;
                     if crate::is_interrupted() {
                         return Err(eyre!("Generation interrupted by user"));
@@ -1367,21 +1367,21 @@ impl AmplitudeIntegrand {
                 self.prepare_runtime_backends_after_generation()?;
                 Ok(None)
             }
-            FrozenCompilationMode::Symjit(optimization_level) => {
+            FrozenCompilationMode::Symjit(options) => {
                 self.for_each_generic_evaluator_mut(|evaluator| {
-                    evaluator.activate_symjit(optimization_level)
+                    evaluator.activate_symjit(&options)
                 })?;
                 self.active_f64_backend.set(ActiveF64Backend::Symjit);
                 Ok(None)
             }
             FrozenCompilationMode::Cpp(options) => self.activate_external_after_load(
                 ActiveF64Backend::Cpp,
-                options.optimization_level,
+                &options,
                 allow_symjit_fallback,
             ),
             FrozenCompilationMode::Assembly(options) => self.activate_external_after_load(
                 ActiveF64Backend::Assembly,
-                options.optimization_level,
+                &options,
                 allow_symjit_fallback,
             ),
         }
@@ -1390,7 +1390,7 @@ impl AmplitudeIntegrand {
     fn activate_external_after_load(
         &mut self,
         backend: ActiveF64Backend,
-        optimization_level: CompilationOptimizationLevel,
+        options: &CompilationOptionsSnapshot,
         allow_symjit_fallback: bool,
     ) -> Result<Option<String>> {
         if !self.has_complete_external_artifacts()? {
@@ -1408,7 +1408,7 @@ impl AmplitudeIntegrand {
             Err(err) if allow_symjit_fallback => {
                 let error_message = err.to_string();
                 self.for_each_generic_evaluator_mut(|evaluator| {
-                    evaluator.activate_symjit(optimization_level)
+                    evaluator.activate_symjit(options)
                 })?;
                 self.active_f64_backend.set(ActiveF64Backend::Symjit);
                 Ok(Some(error_message))

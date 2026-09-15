@@ -247,6 +247,10 @@
         "fast_math": {
           "type": "boolean"
         },
+        "jit_direct_translation": {
+          "description": "Translate Symbolica instructions directly to SymJIT IR during JIT compilation.",
+          "type": "boolean"
+        },
         "optimization_level": {
           "$ref": "#/$defs/CompilationOptimizationLevel"
         },
