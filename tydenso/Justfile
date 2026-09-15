@@ -88,6 +88,12 @@ check: build check-wasm-features
         "$tymbolica_checkout/$manifest" > "$tymbolica_checkout/$manifest.tmp"
       mv "$tymbolica_checkout/$manifest.tmp" "$tymbolica_checkout/$manifest"
     done
+    # Its build script reads only Cargo's target and feature settings.
+    # Regenerated plugin assets must not invalidate the core build.
+    awk '{ print; if ($0 == "fn main() {") print "    println!(\"cargo:rerun-if-changed=build.rs\");" }' \
+      "$tymbolica_checkout/build.rs" > "$tymbolica_checkout/build.rs.tmp"
+    touch -r "$tymbolica_checkout/build.rs" "$tymbolica_checkout/build.rs.tmp"
+    mv "$tymbolica_checkout/build.rs.tmp" "$tymbolica_checkout/build.rs"
     # Keep dependency compilation reusable through the existing Tydenso target cache.
     ln -s "$PWD/target/tymbolica" "$tymbolica_checkout/target"
     (
