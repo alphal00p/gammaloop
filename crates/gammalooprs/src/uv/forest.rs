@@ -62,6 +62,21 @@ impl ParametricIntegrands {
         }
     }
 
+    /// Apply a semantic substitution to roots and each retained body once.
+    /// Multiplicative cut prefactors continue to use the root-only `map`.
+    pub(crate) fn map_expressions(
+        self,
+        mut map: impl FnMut(&Atom) -> Result<Atom>,
+    ) -> Result<Self> {
+        Ok(Self {
+            integrands: self
+                .integrands
+                .fallible_map(&mut map)?
+                .map_numerators(map)?,
+            cuts: self.cuts,
+        })
+    }
+
     pub fn zero_like(&self) -> Self {
         Self {
             integrands: self.integrands.zero_like(),
@@ -174,8 +189,10 @@ impl Forest {
             let final_integrand = node
                 .data
                 .final_integrand(graph)?
-                .map(|numerator| post_process(numerator.clone()))
-                .into_integrands();
+                .clone()
+                .into_integrands()
+                .resolved()?
+                .map(|numerator| post_process(numerator.clone()));
             for (term_index, (&residue_index, numerator)) in final_integrand.iter().enumerate() {
                 terms.push(UVForestNodeExpression {
                     forest_index,
@@ -381,7 +398,7 @@ impl Forest {
             let terms = n
                 .data
                 .final_integrand(graph)?
-                .map(|integrand| integrand.clone().collect_color());
+                .map_expressions(|integrand| Ok(integrand.clone().collect_color()))?;
             sum = Some(match sum {
                 Some(sum) => sum.zip_add(terms).wrap_err_with(|| {
                     format!(
@@ -407,13 +424,13 @@ impl Forest {
             })
             .collect::<Vec<_>>();
 
-        Ok(sum.map(|integrand| {
-            integrand
+        sum.map_expressions(|integrand| {
+            Ok(integrand
                 .replace_multiple(&split_momentum_replacements)
                 .replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_))
-                .with(W_.d_)
+                .with(W_.d_))
             // .collect_factors(); Really bad ! Turns
-        }))
+        })
     }
 
     // pub(crate) fn graphs(&self, graph: &Graph) -> String {
@@ -441,9 +458,69 @@ impl Forest {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::ParametricIntegrands;
-    use crate::{cff::CutCFFIndex, graph::cuts::CutSet, uv::Integrands};
-    use symbolica::{atom::Atom, symbol};
+    use crate::{
+        cff::CutCFFIndex, graph::cuts::CutSet, integrands::process::param_builder::FnMapEntry,
+        uv::Integrands,
+    };
+    use symbolica::{
+        atom::{Atom, AtomCore},
+        function, symbol,
+    };
+
+    #[test]
+    fn semantic_maps_substitute_shared_bodies_while_prefactors_multiply_roots()
+    -> color_eyre::Result<()> {
+        crate::initialisation::test_initialise()?;
+        let family = symbol!("gammalooprs::uv::numerator_family");
+        let parameter = symbol!("uv_forest_test::parameter");
+        let scope = Atom::var(symbol!("uv_forest_test::scope"));
+        let coordinate = Atom::var(symbol!("uv_forest_test::coordinate"));
+        let definition = Arc::new(FnMapEntry {
+            lhs: function!(family, &scope, parameter),
+            rhs: Atom::var(parameter) + &coordinate,
+            args: vec![parameter.into()],
+            tags: vec![scope.clone()],
+        });
+        let cut = CutCFFIndex::new_all_none();
+        let original = ParametricIntegrands {
+            integrands: Integrands::from_iter([(cut, &coordinate * function!(family, &scope, 2))])
+                .with_numerators([Arc::clone(&definition)])?,
+            cuts: CutSet::empty(3),
+        };
+        let multiplied = original.clone().map(|atom| Atom::num(3) * atom);
+        assert!(Arc::ptr_eq(
+            &multiplied.integrands.numerators()[0],
+            &definition
+        ));
+        assert_eq!(
+            multiplied.integrands.resolved()?,
+            Integrands::from_iter([(
+                cut,
+                Atom::num(3) * &coordinate * (Atom::num(2) + &coordinate)
+            )])
+        );
+
+        let mut visited = 0;
+        let substituted = original.map_expressions(|atom| {
+            visited += 1;
+            Ok(atom
+                .replace(coordinate.to_pattern())
+                .with(Atom::num(2) * &coordinate))
+        })?;
+        assert_eq!(visited, 2, "visit the root and shared body once each");
+        assert_eq!(substituted.cuts, CutSet::empty(3));
+        assert_eq!(
+            substituted.integrands.resolved()?,
+            Integrands::from_iter([(
+                cut,
+                Atom::num(2) * &coordinate * (Atom::num(2) + Atom::num(2) * &coordinate)
+            )])
+        );
+        Ok(())
+    }
 
     #[test]
     fn zero_like_preserves_shape_and_cuts() {

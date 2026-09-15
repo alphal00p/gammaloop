@@ -7,7 +7,7 @@ use spenso::{
     network::{
         Network,
         library::{
-            TensorLibraryData,
+            LibraryTensor, TensorLibraryData,
             function_lib::{INBUILTS, PanicMissingConcrete, SymbolLib},
             symbolic::{ExplicitKey, TensorLibrary},
         },
@@ -21,7 +21,7 @@ use spenso::{
     tensors::{
         complex::RealOrComplexTensor,
         data::{SetTensorData, SparseTensor, StorageTensor},
-        parametric::{MixedTensor, ParamOrConcrete},
+        parametric::{MixedTensor, ParamTensor},
     },
 };
 use symbolica::{
@@ -692,9 +692,13 @@ pub fn hep_lib_su3<Aind: AbsInd>() -> TensorLibrary<MixedTensor<f64, ExplicitKey
     lib
 }
 
-pub fn hep_lib_atom<Aind: AbsInd, T: TensorLibraryData + Clone + Default>()
--> TensorLibrary<MixedTensor<T, ExplicitKey<Aind>>, Aind>
+pub fn hep_lib_atom<Aind: AbsInd, T>() -> TensorLibrary<T, Aind>
 where
+    T: LibraryTensor<Structure = ExplicitKey<Aind>>
+        + SetTensorData<SetData = <T as LibraryTensor>::Data>
+        + Clone
+        + From<ParamTensor<ExplicitKey<Aind>>>,
+    <T as LibraryTensor>::Data: TensorLibraryData,
 {
     let mut weyl = TensorLibrary::new();
     initialize();
@@ -705,55 +709,55 @@ where
 
     let gamma_key = gamma_data_weyl(AGS.gamma_strct::<Aind>(4), one.clone(), zero.clone())
         .map_canonical(|tensor| {
-            ParamOrConcrete::param(tensor.map_data(|a| a.re + a.im * Atom::i()).into())
+            ParamTensor::param(tensor.map_data(|a| a.re + a.im * Atom::i()).into()).into()
         });
     // println!("layout{:?}", gamma_key.layout());
     weyl.insert_explicit(gamma_key);
     let gamma_conj_key =
         gamma_conj_data_weyl(AGS.gamma_conj_strct::<Aind>(4), one.clone(), zero.clone())
             .map_canonical(|tensor| {
-                ParamOrConcrete::param(tensor.map_data(|a| a.re + a.im * Atom::i()).into())
+                ParamTensor::param(tensor.map_data(|a| a.re + a.im * Atom::i()).into()).into()
             });
     // println!("layout{:?}", gamma_key.layout());
     weyl.insert_explicit(gamma_conj_key);
     let gamma_adj_key =
         gamma_adj_data_weyl(AGS.gamma_adj_strct::<Aind>(4), one.clone(), zero.clone())
             .map_canonical(|tensor| {
-                ParamOrConcrete::param(tensor.map_data(|a| a.re + a.im * Atom::i()).into())
+                ParamTensor::param(tensor.map_data(|a| a.re + a.im * Atom::i()).into()).into()
             });
     // println!("layout{:?}", gamma_key.layout());
     weyl.insert_explicit(gamma_adj_key);
     let gamma0_key = gamma0_weyl(AGS.gamma0_strct::<Aind>(4), one.clone(), zero.clone())
         .map_canonical(|tensor| {
-            ParamOrConcrete::param(tensor.map_data(|a| a.re + a.im * Atom::i()).into())
+            ParamTensor::param(tensor.map_data(|a| a.re + a.im * Atom::i()).into()).into()
         });
     // println!("layout{:?}", gamma_key.layout());
     weyl.insert_explicit(gamma0_key);
 
     let gamma5_key = gamma5_weyl_data(AGS.gamma5_strct::<Aind>(4), one.clone(), zero.clone())
         .map_canonical(|tensor| {
-            ParamOrConcrete::param(tensor.map_data(|a| a.re + a.im * Atom::i()).into())
+            ParamTensor::param(tensor.map_data(|a| a.re + a.im * Atom::i()).into()).into()
         });
     weyl.insert_explicit(gamma5_key);
 
     let projm_key = proj_m_data_weyl(AGS.projm_strct::<Aind>(4), one.clone(), zero.clone())
         .map_canonical(|tensor| {
-            ParamOrConcrete::param(tensor.map_data(|a| a.re + a.im * Atom::i()).into())
+            ParamTensor::param(tensor.map_data(|a| a.re + a.im * Atom::i()).into()).into()
         });
     weyl.insert_explicit(projm_key);
 
     let projp_key = proj_p_data_weyl(AGS.projp_strct::<Aind>(4), one.clone(), zero.clone())
         .map_canonical(|tensor| {
-            ParamOrConcrete::param(tensor.map_data(|a| a.re + a.im * Atom::i()).into())
+            ParamTensor::param(tensor.map_data(|a| a.re + a.im * Atom::i()).into()).into()
         });
     weyl.insert_explicit(projp_key);
 
     let color_t_key = su3_generator_data_atom(CS.t_strct::<Aind>(3, 8))
-        .map_canonical(|tensor| ParamOrConcrete::param(tensor.into()));
+        .map_canonical(|tensor| ParamTensor::param(tensor.into()).into());
     weyl.insert_explicit(color_t_key);
 
     let color_f_key = su3_structure_f_data_atom(CS.f_strct::<Aind>(8))
-        .map_canonical(|tensor| ParamOrConcrete::param(tensor.into()));
+        .map_canonical(|tensor| ParamTensor::param(tensor.into()).into());
     weyl.insert_explicit(color_f_key);
 
     weyl

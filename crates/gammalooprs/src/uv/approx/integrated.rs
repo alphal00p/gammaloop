@@ -44,7 +44,6 @@ use symbolica::{
     id::Replacement,
     parse, parse_lit,
     poly::{PolyVariable, series::Series},
-    solve::SolveError,
     symbol,
 };
 use symbolica_utils::ReplaceBuilderExt;
@@ -523,9 +522,9 @@ impl Integrated<'_> {
         let numerator = simplify(&numerator)?;
         Self::ensure_resolved_lorentz_contractions(&numerator)?;
         let numerator = Self::dimensionally_regularized(&numerator)
-            .undo_schoonschip::<Aind>()
-            .undo_chain::<Aind>()
-            .undo_trace::<Aind>()
+            .undo_schoonschip::<Aind>()?
+            .undo_chain::<Aind>()?
+            .undo_trace::<Aind>()?
             .metric_shorthand_to_dot();
         Ok(Self::to_vakint_numerator(&numerator))
     }
@@ -549,7 +548,7 @@ impl Integrated<'_> {
                 ..Default::default()
             })
             .map_err(|error| eyre!("invalid analytic UV Lorentz tensor notation: {error}"))?
-            .simple_execute::<()>()
+            .simple_execute::<()>()?
             .expand();
         let terms = if let AtomView::Add(sum) = explicit.as_view() {
             sum.iter().collect::<Vec<_>>()

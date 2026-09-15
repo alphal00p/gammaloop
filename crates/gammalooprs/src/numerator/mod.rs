@@ -17,7 +17,6 @@ use symbolica_utils::SerializableSymbol;
 use spenso::tensors::data::DataTensor;
 use spenso::tensors::data::GetTensorData;
 use spenso::tensors::data::StorageTensor;
-use spenso::tensors::parametric::MixedTensor;
 use spenso::tensors::parametric::atomcore::TensorAtomMaps;
 
 use spenso::tensors::parametric::ParamTensor;
@@ -33,10 +32,7 @@ use tracing::{debug, instrument};
 use crate::graph::parse::string_utils::ToOrderedSimple;
 use crate::momentum::{PolDef, PolType};
 use crate::utils::{FUN_LIB, GS, TENSORLIB, W_};
-use crate::{
-    model::Model,
-    utils::{F, serde_utils::IsDefault},
-};
+use crate::{model::Model, utils::serde_utils::IsDefault};
 
 use crate::{GammaLoopContextContainer, disable};
 use ahash::AHashMap;
@@ -1191,8 +1187,8 @@ impl PolyContracted {}
 
 impl GammaSimplified {
     pub(crate) fn parse(self) -> Network {
-        let lib = DummyLibrary::<MixedTensor<F<f64>, ShadowedStructure<Aind>>, _>::new();
-        let net = StandardTensorNet::try_from_view(
+        let lib = DummyLibrary::<ParamTensor<ShadowedStructure<Aind>>, _>::new();
+        let net = ParsingNet::try_from_view(
             self.get_single_atom().unwrap().as_view(),
             &lib,
             &ParseSettings::default(),
@@ -1205,7 +1201,7 @@ impl GammaSimplified {
 
     // pub(crate) fn parse_only_colorless(self) -> Network {
     //     let lib = DummyLibrary::<(), _>::new();
-    //     let net = StandardTensorNet::try_from_view(
+    //     let net = ParsingNet::try_from_view(
     //         self.colorless
     //             .clone()
     //             .scalar()
@@ -1245,21 +1241,7 @@ impl Numerator<GammaSimplified> {
 }
 
 pub type ParsingNet = spenso::network::Network<
-    NetworkStore<MixedTensor<F<f64>, ShadowedStructure<Aind>>, Atom>,
-    ExplicitKey<Aind>,
-    Symbol,
-    Aind,
->;
-
-pub type ParamParsingNet = spenso::network::Network<
     NetworkStore<ParamTensor<ShadowedStructure<Aind>>, Atom>,
-    ExplicitKey<Aind>,
-    Symbol,
-    Aind,
->;
-
-pub type IntParsingNet = spenso::network::Network<
-    NetworkStore<MixedTensor<i64, ShadowedStructure<Aind>>, Atom>,
     ExplicitKey<Aind>,
     Symbol,
     Aind,
@@ -1320,17 +1302,10 @@ pub enum ExecutionMode {
     All,
 }
 
-pub type StandardTensorNet = spenso::network::Network<
-    NetworkStore<MixedTensor<F<f64>, ShadowedStructure<Aind>>, Atom>,
-    ExplicitKey<Aind>,
-    Symbol,
-    Aind,
->;
-
 impl Network {
     pub(crate) fn parse_impl(expr: AtomView) -> Self {
-        let lib = DummyLibrary::<MixedTensor<F<f64>, ShadowedStructure<Aind>>, _>::new();
-        let net = StandardTensorNet::try_from_view(expr, &lib, &ParseSettings::default()).unwrap();
+        let lib = DummyLibrary::<ParamTensor<ShadowedStructure<Aind>>, _>::new();
+        let net = ParsingNet::try_from_view(expr, &lib, &ParseSettings::default()).unwrap();
 
         // println!("net scalar{}", net.scalar.as_ref().unwrap());
         Network { net }

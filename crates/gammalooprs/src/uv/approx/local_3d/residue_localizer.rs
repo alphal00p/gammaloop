@@ -448,10 +448,10 @@ impl<'a> Localizer<'a> {
         self,
         graph: &mut Graph,
         to_contract: &SuBitGraph,
-        numerator: &Atom,
+        numerators: &[Atom],
         active_edges: impl IntoIterator<Item = EdgeIndex>,
         generation_context: CffGenerationContext,
-    ) -> Result<(Atom, OrientationIntegrands)> {
+    ) -> Result<(Vec<Atom>, OrientationIntegrands)> {
         let selection_started = std::time::Instant::now();
         debug_tags!(#generation, #profile, #uv, #summary;
             stage = "outer_cff_routing_start",
@@ -459,7 +459,7 @@ impl<'a> Localizer<'a> {
             "Preparing bounded soft-momentum routing proposals"
         );
         let preparation_started = std::time::Instant::now();
-        let mut proposals = graph.soft_momentum_routing_proposals(numerator, active_edges)?;
+        let mut proposals = graph.soft_momentum_routing_proposals(numerators, active_edges)?;
         let proposal_preparation_time = preparation_started.elapsed();
         let prepared_candidates = proposals.len();
         let setup_started = std::time::Instant::now();
@@ -480,8 +480,14 @@ impl<'a> Localizer<'a> {
                 elapsed_ms = selection_started.elapsed().as_secs_f64() * 1000.0,
                 "Selected the existing root CFF routing without native generation"
             );
-            let projected =
-                self.projected_cff(graph, to_contract, [&numerator], generation_context)?;
+            let projected = self.projected_cff(
+                graph,
+                to_contract,
+                [numerator
+                    .iter()
+                    .fold(Atom::one(), |product, factor| product * factor)],
+                generation_context,
+            )?;
             return Ok((numerator, projected));
         }
         let (contract_subgraph, options) =
@@ -490,13 +496,16 @@ impl<'a> Localizer<'a> {
         contract_edges.sort_unstable();
         contract_edges.dedup();
         let setup_time = setup_started.elapsed();
-        let mut selected: Option<(usize, usize, Atom, GeneratedThreeDExpression)> = None;
+        let mut selected: Option<(usize, usize, Vec<Atom>, GeneratedThreeDExpression)> = None;
         for (proposal, numerator) in proposals.into_iter().enumerate() {
             let started = std::time::Instant::now();
+            let analysis = numerator
+                .iter()
+                .fold(Atom::one(), |product, factor| product * factor);
             let generated = graph.generate_raw_3d_expression_for_integrand(
                 &contract_edges,
                 &options,
-                Some(&numerator),
+                Some(&analysis),
             )?;
             let map_count = generated.expression.orientations.len();
             debug_tags!(#generation, #profile, #uv, #summary;
@@ -691,6 +700,7 @@ impl<'a> Localizer<'a> {
         ))
     }
 
+    #[cfg(test)]
     pub(crate) fn map_numerator(
         self,
         graph: &Graph,

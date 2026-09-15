@@ -293,6 +293,14 @@ impl GammaloopSymbols {
             .with(Symbol::IF.call_args([Atom::var(W_.a_), Atom::one(), Atom::Zero]))
             .replace(Symbol::IF.call_args([Atom::var(W_.a_)]))
             .with(Symbol::IF.call_args([Atom::var(W_.a_), Atom::one(), Atom::Zero]))
+            // Tensor contractions are complete here. Combine scalar contributions
+            // selected by the same key while keeping their complete bodies lazy.
+            .replace(
+                Symbol::IF.call_args([Atom::var(W_.a_), Atom::Zero, Atom::var(W_.b_)])
+                    + Symbol::IF.call_args([Atom::var(W_.a_), Atom::Zero, Atom::var(W_.c_)]),
+            )
+            .repeat()
+            .with(Symbol::IF.call_args([Atom::var(W_.a_), Atom::Zero, Atom::var(W_.b_) + W_.c_]))
     }
 
     pub fn den<'a>(
@@ -1425,6 +1433,39 @@ mod tests {
             / (Atom::var(x) + Atom::one()).pow(2);
         assert_eq!(GS.collect_orientation_if(expression.clone()), expression);
         assert_eq!(GS.collect_orientation_if(expression.as_view()), expression);
+    }
+
+    #[test]
+    fn orientation_collection_merges_same_key_scalar_contributions() {
+        let (key, a, b, c, d, x) = symbol!(
+            "selector_merge_key",
+            "selector_merge_a",
+            "selector_merge_b",
+            "selector_merge_c",
+            "selector_merge_d",
+            "selector_merge_x"
+        );
+        let condition = Atom::var(key) - 4;
+        let bodies = [
+            (Atom::var(a) + b).pow(3) * (Atom::var(c) + d).pow(2),
+            Atom::var(x).pow(-1),
+            Atom::var(c) + 7,
+        ];
+        // Unrelated siblings and other branch forms keep their own conditions.
+        let unrelated = Atom::var(d)
+            + Symbol::IF.call_args([Atom::var(key) - 9, Atom::Zero, Atom::var(x).pow(-2)])
+            + Symbol::IF.call_args([condition.clone(), Atom::var(a), Atom::Zero])
+            + Symbol::IF.call_args([condition.clone(), Atom::var(b), Atom::var(c)]);
+        let expression = Atom::add_many(
+            bodies
+                .iter()
+                .map(|body| Symbol::IF.call_args([condition.clone(), Atom::Zero, body.clone()])),
+        ) + &unrelated;
+        let expected =
+            Symbol::IF.call_args([condition, Atom::Zero, Atom::add_many(bodies)]) + unrelated;
+        let collected = GS.collect_orientation_if(expression);
+        assert_eq!(collected, expected);
+        assert_eq!(GS.collect_orientation_if(collected.clone()), collected);
     }
 
     #[test]

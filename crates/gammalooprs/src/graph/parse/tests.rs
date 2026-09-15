@@ -1232,8 +1232,9 @@ mod failing {
                 .map(|(_, _, vertex)| vertex.get_num())
                 .exactly_one()
                 .unwrap_or_else(|_| panic!("input contains one physical vertex"))
-                .canonize(Aind::Dummy);
-            let expected = expected.canonize(Aind::Dummy);
+                .canonize(Aind::Dummy)
+                .unwrap();
+            let expected = expected.canonize(Aind::Dummy).unwrap();
             assert!(
                 (actual - expected).expand().is_zero(),
                 "vertex rule for {} changed",
@@ -1265,8 +1266,9 @@ mod failing {
             .map(|(_, _, vertex)| vertex.get_num())
             .exactly_one()
             .unwrap_or_else(|_| panic!("input contains one physical vertex"))
-            .canonize(Aind::Dummy);
-        let expected = expected.canonize(Aind::Dummy);
+            .canonize(Aind::Dummy)
+            .unwrap();
+        let expected = expected.canonize(Aind::Dummy).unwrap();
         assert!(
             (actual - expected).expand().is_zero(),
             "scalar-gravity vertex rule changed",

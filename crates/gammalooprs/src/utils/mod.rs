@@ -34,14 +34,13 @@ use spenso::algebra::complex::SymbolicaComplex;
 use spenso::algebra::complex::symbolica_traits::ToFloat;
 use spenso::algebra::upgrading_arithmetic::TrySmallestUpgrade;
 use spenso::network::library::TensorLibraryData;
-use spenso::network::library::function_lib::{INBUILTS, Panic, PanicMissingConcrete, SymbolLib};
+use spenso::network::library::function_lib::{INBUILTS, Panic, SymbolLib, Wrap};
 use spenso::network::library::symbolic::{ExplicitKey, TensorLibrary};
 use spenso::network::parsing::ShadowedStructure;
 use spenso::structure::concrete_index::ExpandedIndex;
-use spenso::tensors::complex::RealOrComplexTensor;
 use spenso::tensors::data::StorageTensor;
+use spenso::tensors::parametric::ParamTensor;
 use spenso::tensors::parametric::to_param::ToAtom;
-use spenso::tensors::parametric::{MixedTensor, ParamTensor};
 use spenso_hep_lib::hep_lib_atom;
 use symbolica::{
     domains::{
@@ -4943,17 +4942,15 @@ mod formatting_tests {
 pub mod symbols;
 pub use symbols::{GS, W_};
 
-type TensorLibStore = RwLock<TensorLibrary<MixedTensor<F<f64>, ExplicitKey<Aind>>, Aind>>;
-type FunLibStore =
-    SymbolLib<RealOrComplexTensor<F<f64>, ShadowedStructure<Aind>>, PanicMissingConcrete>;
+type TensorLibStore = RwLock<TensorLibrary<ParamTensor<ExplicitKey<Aind>>, Aind>>;
+type FunLibStore = SymbolLib<ParamTensor<ShadowedStructure<Aind>>, Wrap>;
 
 pub static TENSORLIB: LazyLock<TensorLibStore> = LazyLock::new(|| RwLock::new(hep_lib_atom()));
 
 pub static FUN_LIB: LazyLock<FunLibStore> = LazyLock::new(|| {
-    let mut lib = PanicMissingConcrete::new_lib();
-    lib.insert(INBUILTS.conj, |a| match a {
-        RealOrComplexTensor::Complex(c) => RealOrComplexTensor::Complex(c.map_data(|x| x.conj())),
-        RealOrComplexTensor::Real(r) => RealOrComplexTensor::Real(r),
+    let mut lib = Wrap::new_lib();
+    lib.insert(INBUILTS.conj, |a: ParamTensor<ShadowedStructure<Aind>>| {
+        a.map_data_self(|x| x.conj())
     });
     lib
 });
@@ -4966,17 +4963,6 @@ pub static PARAM_FUN_LIB: LazyLock<SymbolLib<ParamTensor<ShadowedStructure<Aind>
         });
         lib
     });
-
-pub static INT_FUN_LIB: LazyLock<
-    SymbolLib<RealOrComplexTensor<i64, ShadowedStructure<Aind>>, PanicMissingConcrete>,
-> = LazyLock::new(|| {
-    let mut lib = PanicMissingConcrete::new_lib();
-    lib.insert(INBUILTS.conj, |a| match a {
-        RealOrComplexTensor::Complex(c) => RealOrComplexTensor::Complex(c.map_data(|x| x.conj())),
-        RealOrComplexTensor::Real(r) => RealOrComplexTensor::Real(r),
-    });
-    lib
-});
 
 pub static VAKINT: OnceLock<Result<Vakint>> = OnceLock::new();
 

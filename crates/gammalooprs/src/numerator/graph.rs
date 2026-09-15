@@ -114,7 +114,10 @@ where
             };
 
             let (structure, layout) = pol.into_parts();
-            let concrete: ParamTensor<_> = structure.to_shell().concretize_logical(&layout);
+            let concrete: ParamTensor<_> = structure
+                .to_shell()
+                .concretize_logical(&layout)
+                .expect("polarization parameters require concrete tensor dimensions");
 
             for (_, i) in concrete.iter_flat() {
                 pols.push(i.to_owned());

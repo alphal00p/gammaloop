@@ -92,6 +92,7 @@ impl OrientationIntegrands {
             .map(Self)
     }
 
+    #[cfg(test)]
     pub(crate) fn multiply_mapped(
         &self,
         mut map: impl FnMut(OrientationID, Option<&[LinearEnergyExpr]>) -> Result<Atom>,

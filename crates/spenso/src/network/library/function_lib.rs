@@ -16,7 +16,7 @@ use crate::{
     },
     structure::{HasStructure, TensorStructure},
     tensors::{
-        data::StorageTensor,
+        data::{DataTensor, SparseOrDense, StorageTensor},
         parametric::{ParamOrConcrete, ParamTensor, to_param::ToParam},
     },
 };
@@ -169,10 +169,17 @@ impl<S: TensorStructure + Clone> FunctionLibrary<ParamTensor<S>, Atom>
         key: &Self::Key,
         tensor: ParamTensor<S>,
     ) -> Result<ParamTensor<S>, FunctionLibraryError<Symbol>> {
-        if let Some(func) = self.functions.get(key) {
-            func(tensor)
+        let tensor = if let Some(func) = self.functions.get(key) {
+            func(tensor)?
         } else {
-            Ok(tensor.map_data_self(|a| function!(*key, a)))
+            tensor.map_data_self(|a| function!(*key, a))
+        };
+        // Sparse contractions skip absent entries. A broadcast that changes
+        // their zero value must materialize those components before contraction.
+        if matches!(&tensor.tensor, DataTensor::Sparse(sparse) if !sparse.zero.is_zero()) {
+            Ok(tensor.to_dense())
+        } else {
+            Ok(tensor)
         }
     }
 
@@ -446,5 +453,73 @@ fn fallible_function_adapter_preserves_errors() {
     assert_eq!(
         library.functions[&key](1).unwrap_err().to_string(),
         "callback failed"
+    );
+}
+
+#[test]
+fn parametric_broadcast_preserves_implicit_components_through_contraction() {
+    use crate::{
+        network::{
+            ExecutionResult, Network, SequentialRef, SmallestDegree,
+            library::{DummyKey, DummyLibrary},
+            store::NetworkStore,
+        },
+        structure::{
+            OrderedStructure,
+            representation::{Euclidean, RepName},
+        },
+        tensors::data::{DenseTensor, SparseTensor},
+    };
+
+    type Tensor = ParamTensor<OrderedStructure<Euclidean>>;
+    type Net = Network<NetworkStore<Tensor, Atom>, DummyKey, Symbol>;
+
+    let structure = OrderedStructure::new(vec![
+        Euclidean {}.new_slot(2, 1),
+        Euclidean {}.new_slot(2, 2),
+    ])
+    .into_canonical();
+    let metric = ParamTensor::param(DataTensor::Sparse(SparseTensor {
+        elements: [[0, 0], [1, 1]]
+            .into_iter()
+            .map(|index| (structure.flat_index(index).unwrap(), Atom::num(1)))
+            .collect(),
+        zero: Atom::Zero,
+        structure,
+    }));
+    let h = crate::broadcast_symbol!("spenso::test_sparse_broadcast_h");
+    let mut functions = Wrap::new_lib();
+    functions.insert(INBUILTS.conj, |tensor: Tensor| {
+        tensor.map_data_self(|atom| atom.conj())
+    });
+    let mapped = functions.apply(&h, metric.clone()).unwrap();
+    assert_eq!(mapped.structure(), metric.structure());
+    assert_eq!(mapped.param_type, metric.param_type);
+    let conjugated = functions.apply(&INBUILTS.conj, metric.clone()).unwrap();
+    assert!(matches!(conjugated.tensor, DataTensor::Sparse(_)));
+    assert_eq!(conjugated, metric);
+
+    let ones = |index| {
+        let structure =
+            OrderedStructure::new(vec![Euclidean {}.new_slot(2, index)]).into_canonical();
+        ParamTensor::composite(
+            DenseTensor::from_storage_data(vec![Atom::num(1); 2], structure)
+                .unwrap()
+                .into(),
+        )
+    };
+    let mut net =
+        Net::from_tensor(metric).fun(h) * Net::from_tensor(ones(1)) * Net::from_tensor(ones(2));
+    net.execute::<SequentialRef, SmallestDegree, _, _, _>(
+        &DummyLibrary::<Tensor>::new(),
+        &functions,
+    )
+    .unwrap();
+    let ExecutionResult::Val(actual) = net.result_scalar().unwrap() else {
+        panic!("expected a scalar contraction of the broadcast metric");
+    };
+    assert_eq!(
+        actual.as_ref(),
+        &(Atom::num(2) * (function!(h, 1) + function!(h, 0)))
     );
 }
