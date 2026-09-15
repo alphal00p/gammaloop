@@ -76,7 +76,25 @@ check: build check-wasm-features
       echo "TYMBOLICA_CHECKOUT must be at $tymbolica_revision; found ${checkout_revision:-no Git HEAD}" >&2
       exit 1
     fi
-    symbolica_revision="4f1323185fe5e0c0f8c864ab89edd1905e7adef1"
+    symbolica_revision="1814278ea103258bcdb059276b760f19d25b46e3"
+    check_dir="$(mktemp -d)"
+    trap 'rm -rf "$check_dir"' EXIT
+    mkdir -p "$check_dir/tymbolica" target/tymbolica
+    git -C "$tymbolica_checkout" archive "$tymbolica_revision" | tar -x -C "$check_dir/tymbolica"
+    tymbolica_checkout="$check_dir/tymbolica"
+    # Rebuild both pinned engines with our Symbolica revision without changing the checkout.
+    for manifest in Cargo.toml Cargo.lock; do
+      sed "s/4f1323185fe5e0c0f8c864ab89edd1905e7adef1/$symbolica_revision/g" \
+        "$tymbolica_checkout/$manifest" > "$tymbolica_checkout/$manifest.tmp"
+      mv "$tymbolica_checkout/$manifest.tmp" "$tymbolica_checkout/$manifest"
+    done
+    # Keep dependency compilation reusable through the existing Tydenso target cache.
+    ln -s "$PWD/target/tymbolica" "$tymbolica_checkout/target"
+    (
+      cd "$tymbolica_checkout"
+      unset CARGO_TARGET_DIR
+      nix run --no-write-lock-file "path:$PWD#build"
+    )
     expected_source="source = \"git+https://github.com/symbolica-dev/symbolica?rev=$symbolica_revision#$symbolica_revision\""
     for lock in ../Cargo.lock Cargo.lock "$tymbolica_checkout/Cargo.lock"; do
       for package in symbolica numerica graphica; do
@@ -90,8 +108,6 @@ check: build check-wasm-features
     cmp typst/render.typ ../crates/spynso3/typst/render.typ
     cmp typst/notation.typ ../crates/spynso3/typst/notation.typ
 
-    check_dir="$(mktemp -d)"
-    trap 'rm -rf "$check_dir"' EXIT
     package_root="$check_dir/xdg/typst/packages/local"
     mkdir -p \
       "$package_root/tydenso/0.1.0" \

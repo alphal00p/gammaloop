@@ -16,8 +16,10 @@ just tydenso::manual
 
 The interop tests require `TYMBOLICA_CHECKOUT` to have Git HEAD
 `32ae00483b4845161401afac8be755cc336cb2bb`, the exact Tymbolica revision pinned
-by the nested Rust workspace. The checkout only supplies Tymbolica's Typst
-package files to those tests; the Rust payload dependency itself comes from the
-same pinned Git revision.
+by the nested Rust workspace. The check uses Nix to rebuild Tymbolica and Rubi
+in a temporary copy with the same Symbolica revision as GammaLoop and Tydenso.
+It preserves the checkout and reuses compiled dependencies in
+`tydenso/target/tymbolica`. The Rust payload dependency comes from the same
+pinned Git revision.
 
 Tydenso is licensed under the [MIT license](LICENSE) carried in this directory.

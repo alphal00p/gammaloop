@@ -108,7 +108,7 @@ check-symbolica-feature-isolation:
         exit 1
       fi
     done
-    revision="4f1323185fe5e0c0f8c864ab89edd1905e7adef1"
+    revision="1814278ea103258bcdb059276b760f19d25b46e3"
     expected="source = \"git+https://github.com/symbolica-dev/symbolica?rev=$revision#$revision\""
     for lock in "$root/Cargo.lock" "$root/tydenso/Cargo.lock"; do
       for package in symbolica numerica graphica; do

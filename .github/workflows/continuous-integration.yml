@@ -84,6 +84,8 @@ jobs:
           ref: 32ae00483b4845161401afac8be755cc336cb2bb
           path: tymbolica-pinned
 
+      - uses: NixOS/nix-installer-action@main
+
       - name: Install Binaryen 130
         run: |
           binaryen_dir="$RUNNER_TEMP/binaryen"
