@@ -13,7 +13,7 @@ use spenso::{
         parsing::ParseSettings,
     },
     structure::{TensorStructure, representation::Minkowski, slot::IsAbstractSlot},
-    tensors::parametric::{ParamOrConcrete, ParamTensor},
+    tensors::parametric::ParamTensor,
 };
 use symbolica::{
     atom::{Atom, AtomCore},
@@ -25,7 +25,7 @@ use crate::{
     initialisation::test_initialise,
     model::{Model, UFOSymbol},
     numerator::{ParsingNet, aind::Aind},
-    utils::{F, FUN_LIB, GS, load_generic_model},
+    utils::{FUN_LIB, GS, load_generic_model},
 };
 
 type Matrix = [[Atom; 4]; 4];
@@ -158,14 +158,10 @@ fn vertex_matrix(
 fn tensor_matrix(expression: Atom, vector_component: usize) -> Matrix {
     // Build the generic metric with Atom entries so its spatial signs
     // remain exact alongside the parametric gamma matrices and couplings.
-    let mut library = spenso_hep_lib::hep_lib_atom::<Aind, F<f64>>();
+    let mut library = spenso_hep_lib::hep_lib_atom::<Aind, ParamTensor<ExplicitKey<Aind>>>();
     library.insert_generic(
         TensorLibrary::<ParamTensor<ExplicitKey<Aind>>, Aind>::id(Minkowski {}.into()),
-        |key| {
-            ParamOrConcrete::Param(
-                TensorLibrary::<ParamTensor<ExplicitKey<Aind>>, Aind>::diag_unimodular_metric(key),
-            )
-        },
+        TensorLibrary::<ParamTensor<ExplicitKey<Aind>>, Aind>::diag_unimodular_metric,
     );
     let mut network =
         ParsingNet::try_from_view(expression.as_view(), &library, &ParseSettings::default())
@@ -176,9 +172,7 @@ fn tensor_matrix(expression: Atom, vector_component: usize) -> Matrix {
     let ExecutionResult::Val(tensor) = network.result_tensor(&library).unwrap() else {
         panic!("expected nonzero model vertex");
     };
-    let mut tensor = tensor.into_owned();
-    tensor.to_param();
-    let tensor = tensor.try_into_parametric().unwrap();
+    let tensor = tensor.into_owned();
     let slots = tensor.external_structure();
     let mut result: Matrix = std::array::from_fn(|_| std::array::from_fn(|_| Atom::Zero));
     for (indices, value) in tensor.iter_expanded() {

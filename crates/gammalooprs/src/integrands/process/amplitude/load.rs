@@ -149,16 +149,10 @@ impl<S, A: ImportWithMap> StandaloneEvaluatorArchive<S, A> {
                 .transpose()?;
 
             if let Some(a) = fnmap_integrand {
-                println!("Comparing fnmap summed fn and parametric epression");
-
-                if a != exprs[0] {
-                    println!(
-                        "They are the different:\n {}!",
-                        (&a - &exprs[0]).collect_factors()
-                    );
-                } else {
-                    println!("They are the same!")
-                }
+                println!(
+                    "Stored fnmap and parametric roots match structurally: {} (definitions are not expanded)",
+                    a == exprs[0]
+                );
             }
 
             let original_integrand = LoadedStandaloneEvaluatorStack {

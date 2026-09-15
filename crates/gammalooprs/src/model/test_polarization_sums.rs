@@ -15,9 +15,8 @@ use spenso::{
         representation::{Euclidean, LibraryRep, Minkowski, RepName},
     },
     tensors::{
-        complex::RealOrComplexTensor,
         data::{DataTensor, DenseTensor, SparseOrDense, StorageTensor},
-        parametric::{MixedTensor, ParamOrConcrete, atomcore::TensorAtomMaps},
+        parametric::{ParamTensor, atomcore::TensorAtomMaps},
     },
     vector, vector_symbol,
 };
@@ -42,7 +41,7 @@ use super::{ParameterName, Particle, UFOSymbol};
 type ComplexF64 = Complex<F<f64>>;
 type SymComplexF64 = symbolica::domains::float::Complex<F<f64>>;
 type SymComplexPlainF64 = symbolica::domains::float::Complex<f64>;
-type TestTensorLibrary = TensorLibrary<MixedTensor<F<f64>, ExplicitKey<Aind>>, Aind>;
+type TestTensorLibrary = TensorLibrary<ParamTensor<ExplicitKey<Aind>>, Aind>;
 
 static TEST_INITIALIZED: OnceLock<()> = OnceLock::new();
 
@@ -62,9 +61,10 @@ fn insert_explicit_complex_tensor(
     let storage_data = layout
         .reorder_to_storage(data)
         .expect("test tensor data must match its logical shape");
-    let tensor: Canonicalized<MixedTensor<F<f64>, _>> = key.map_canonical(|structure| {
+    let tensor: Canonicalized<ParamTensor<_>> = key.map_canonical(|structure| {
         DenseTensor::from_storage_data(storage_data, structure)
             .unwrap()
+            .map_data(|c| Atom::num(c.re) + Atom::num(c.im) * Atom::i())
             .into()
     });
     lib.insert_explicit(tensor);
@@ -310,22 +310,11 @@ fn evaluate_tensor_network_with_constants(
             )
         })
         .collect();
-    let result = match result.into_owned() {
-        ParamOrConcrete::Param(tensor) => {
-            let evaluated = tensor
-                .evaluate(&constants_f64)
-                .unwrap()
-                .map_data(|c| Complex::new(F(c.re), F(c.im)));
-            ParamOrConcrete::Concrete(RealOrComplexTensor::Complex(evaluated))
-        }
-        ParamOrConcrete::Concrete(tensor) => ParamOrConcrete::Concrete(tensor),
-    };
-
     let dense = result
-        .try_into_concrete()
+        .into_owned()
+        .evaluate(&constants_f64)
         .unwrap()
-        .try_into_complex()
-        .unwrap()
+        .map_data(|c| Complex::new(F(c.re), F(c.im)))
         .to_dense();
 
     let DataTensor::Dense(dense) = dense else {

@@ -1,9 +1,12 @@
+use std::{collections::BTreeMap, sync::Arc};
+
 #[cfg(test)]
 use crate::cff::CutCFFIndex;
 use crate::{
     cff::expression::OrientationID,
     debug_tags,
     graph::Graph,
+    integrands::process::param_builder::FnMapEntry,
     utils::{GS, W_},
     uv::{
         Integrands, UVgenerationSettings, UltravioletGraph,
@@ -26,7 +29,7 @@ use idenso::{
 use linnet::half_edge::subgraph::{Inclusion, SuBitGraph, SubSetLike, SubSetOps};
 use spenso::network::parsing::{AtomStructureExt, StrictTensorFilter};
 use symbolica::{
-    atom::{Atom, AtomCore, AtomType, AtomView, Symbol},
+    atom::{Atom, AtomCore, AtomType, AtomView, Indeterminate, Symbol},
     function,
     id::Replacement,
     symbol,
@@ -39,11 +42,18 @@ impl FinalIntegrands {
     /// Iterate over finalized semantic expressions for diagnostics.
     #[cfg(test)]
     pub(crate) fn iter(&self) -> impl Iterator<Item = (CutCFFIndex, Atom)> {
-        self.0.iter().map(|(index, atom)| (*index, atom.clone()))
+        self.0
+            .resolved()
+            .expect("finalized diagnostic numerator definitions must resolve")
+            .atoms
+            .into_iter()
     }
 
-    pub(crate) fn map(&self, f: impl FnMut(&Atom) -> Atom) -> Self {
-        Self(self.0.map(f))
+    pub(crate) fn map_expressions(
+        &self,
+        mut map: impl FnMut(&Atom) -> Result<Atom>,
+    ) -> Result<Self> {
+        Ok(Self(self.0.fallible_map(&mut map)?.map_numerators(map)?))
     }
 
     pub(crate) fn zip_add(self, other: Self) -> Result<Self> {
@@ -79,6 +89,7 @@ impl FinalIntegrands {
                                 GS.theta,
                                 GS.orientation_delta,
                                 Symbol::IF,
+                                symbol!("gammalooprs::uv::numerator_family"),
                             ]
                             .contains(&fun.get_symbol()),
                             _ => false,
@@ -189,7 +200,12 @@ impl<'a> FinalIntegrandBuilder<'a> {
             .map(|atom| self.marker.prefix(&full_graph, current.subgraph(), atom));
         let final_branches = localized_integrated
             .zip_add(&localized_local)?
-            .multiply_key_mapped(self.localizer.orientation, graph, &resnum)?;
+            .multiply_key_mapped(
+                self.localizer.orientation,
+                graph,
+                &resnum,
+                DirectResidueBranches::numerator_scope(),
+            )?;
 
         // `DirectResidueBranches` is the sparse, factorization-preserving
         // representation of sum_k sigma(k) I_k while the Taylor forest is
@@ -282,7 +298,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
             .collect::<Vec<_>>();
         let mut selector_free: Option<Vec<Integrands>> = None;
         for sector in active_sectors {
-            if sector.coefficient.is_zero() {
+            if sector.coefficient.iter().all(|(_, atom)| atom.is_zero()) {
                 // A disabled integrated prefix can deliberately retain a
                 // typed zero sector for later forest replay. Preserve all
                 // allowed cut orders without asking the outer CFF to resolve
@@ -290,43 +306,162 @@ impl<'a> FinalIntegrandBuilder<'a> {
                 selector_free.get_or_insert_with(Vec::new);
                 continue;
             }
-            // Choose the soft Taylor routing once with the untouched cograph
-            // numerator present. The child remains factorized, and both the
-            // capacity oracle and every outer map consume this same expression.
-            // Independent sectors are never summed before deriving their ranks.
-            let (numerator, localized) = localizer.projected_cff_from_soft_momentum_proposals(
-                graph,
-                current.subgraph(),
-                &(&sector.coefficient * &resnum),
-                active_edges.iter().copied(),
-                CffGenerationContext::EmbeddedCffFactor,
-            )?;
-            let localized = localized
-                .map(|atom| atom * &fourddenoms)
-                .multiply_mapped(|orientation_id, source_edge_energy_map| {
-                    localizer.map_numerator(
+            // Keep each ordinary coefficient family visible to both physical
+            // rank analysis and soft routing. Distinct scalar weights prevent
+            // different residue samples from cancelling in this capacity
+            // oracle; they never stand in for hidden energy dependence.
+            let family = symbol!("gammalooprs::uv::numerator_family");
+            let coefficient = symbol!("gammalooprs::uv::numerator_coefficient"; Scalar);
+            if sector.coefficient.numerators().is_empty() {
+                return Err(eyre::eyre!(
+                    "nonzero projected coefficient has no shared numerator family"
+                ));
+            }
+            for entry in sector.coefficient.numerators() {
+                let weight_scope = DirectResidueBranches::numerator_scope().1;
+                let mut weights = BTreeMap::<Atom, Atom>::new();
+                let carrier =
+                    sector
+                        .coefficient
+                        .iter()
+                        .try_fold(Atom::Zero, |sum, (index, root)| {
+                            if *index != crate::cff::CutCFFIndex::new_all_none() {
+                                return Err(eyre::eyre!(
+                                    "projected child coefficient has a production cut key"
+                                ));
+                            }
+                            let carrier = root.replace_map(|view, _, output| {
+                                if let AtomView::Fun(call) = view
+                                    && call.get_symbol() == family
+                                {
+                                    if call.get_nargs() > 0
+                                        && call.get(0) == entry.tags[0].as_view()
+                                    {
+                                        let next = weights.len();
+                                        **output = weights
+                                            .entry(view.to_owned())
+                                            .or_insert_with(|| {
+                                                coefficient.call_args([
+                                                    weight_scope.clone(),
+                                                    Atom::num(next),
+                                                ])
+                                            })
+                                            .clone();
+                                    } else {
+                                        **output = Atom::Zero;
+                                    }
+                                }
+                            });
+                            Ok(sum + carrier)
+                        })?;
+                if carrier.is_zero() {
+                    continue;
+                }
+                // Plan one product while retaining its two ordinary factors.
+                // The chosen occurrence-local route is replayed separately on
+                // the body and the small scalar carrier, never on expanded rows.
+                let (mut factors, localized) = localizer
+                    .projected_cff_from_soft_momentum_proposals(
                         graph,
-                        orientation_id,
-                        source_edge_energy_map,
-                        &numerator,
-                    )
-                })?
-                .map(|atom| {
-                    self.marker.prefix(
-                        &full_graph,
                         current.subgraph(),
-                        &(atom * &sector.frozen_factor),
-                    )
+                        &[&entry.rhs * &resnum, carrier],
+                        active_edges.iter().copied(),
+                        CffGenerationContext::EmbeddedCffFactor,
+                    )?;
+                let carrier = factors.pop().expect("routing retains the scalar carrier");
+                let numerator = factors
+                    .pop()
+                    .expect("routing retains the ordinary numerator");
+                // A selected cut can exclude every outer source row even
+                // when the child coefficient is nonzero. Its contribution
+                // keeps the allowed cut zeros without inventing a residue map.
+                if localized.iter_orientations().next().is_none() {
+                    selector_free.get_or_insert_with(Vec::new);
+                    continue;
+                }
+                let localized = DirectResidueBranches::from_transient(
+                    &localized.map(|atom| atom * &fourddenoms),
+                )?;
+                let scope = DirectResidueBranches::numerator_scope();
+                let (rhs, outer_parameters, rows) = localized.prepare_numerator(
+                    localizer.orientation,
+                    graph,
+                    &numerator,
+                    scope.0,
+                )?;
+                let child_parameters = entry
+                    .args
+                    .iter()
+                    .cloned()
+                    .map(Atom::from)
+                    .collect::<Vec<_>>();
+                let parameters = child_parameters
+                    .iter()
+                    .cloned()
+                    .chain(outer_parameters.iter().cloned())
+                    .collect::<Vec<_>>();
+                let prepared = Arc::new(FnMapEntry {
+                    lhs: family.call_args(
+                        std::iter::once(scope.1.clone()).chain(parameters.iter().cloned()),
+                    ),
+                    rhs,
+                    args: parameters
+                        .iter()
+                        .cloned()
+                        .map(Indeterminate::try_from)
+                        .collect::<std::result::Result<Vec<_>, _>>()
+                        .map_err(|error| eyre::eyre!(error))?,
+                    tags: vec![scope.1],
                 });
-            // Child contours have already been summed. Only actual outer
-            // branches carry maps and cut orders; consume each map once before
-            // adding its value, checking the complete allowed cut-key shape.
-            for (_, _, integrands) in localized.iter_orientations() {
-                selector_free
-                    .get_or_insert_with(Vec::new)
-                    .push(integrands.clone());
+                // A child's arguments can depend on the entire graph. Bind the
+                // cograph body, child body and carrier with this same outer key
+                // before summing anything; no selector is materialized here.
+                for ((key, integrands), (row_key, outer_arguments)) in
+                    localized.iter_keys().zip(rows)
+                {
+                    eyre::ensure!(*key == row_key, "prepared outer residue order changed");
+                    let replacements = weights
+                        .iter()
+                        .map(|(call, weight)| {
+                            let AtomView::Fun(call) = call.as_view() else {
+                                unreachable!()
+                            };
+                            let arguments = call
+                                .iter()
+                                .skip(entry.tags.len())
+                                .map(|argument| argument.to_owned())
+                                .chain(outer_arguments.iter().cloned());
+                            let call = prepared.lhs.replace_multiple(
+                                parameters.iter().zip(arguments).map(|(parameter, value)| {
+                                    Replacement::new(parameter.to_pattern(), value)
+                                }),
+                            );
+                            Replacement::new(weight.to_pattern(), call)
+                        })
+                        .collect::<Vec<_>>();
+                    let mapped_carrier = key
+                        .map_numerator(localizer.orientation, graph, &carrier)?
+                        .replace_multiple(replacements);
+                    let mapped = integrands
+                        .map(|atom| {
+                            self.marker.prefix(
+                                &full_graph,
+                                current.subgraph(),
+                                &(atom * &mapped_carrier * &sector.frozen_factor),
+                            )
+                        })
+                        .with_numerators(
+                            integrands
+                                .numerators()
+                                .iter()
+                                .cloned()
+                                .chain([Arc::clone(&prepared)]),
+                        )?;
+                    selector_free.get_or_insert_with(Vec::new).push(mapped);
+                }
             }
         }
+
         // The integrated addback is shared with the direct route. Its localizer
         // hosts the independent cograph sum in both routes, retaining every
         // source map even when no compatible physical-prefix host survives.
@@ -337,20 +472,29 @@ impl<'a> FinalIntegrandBuilder<'a> {
                 graph,
                 current,
             )?
-            .combine()?
-            .multiply_mapped(|orientation_id, source_edge_energy_map| {
-                self.localizer
-                    .map_numerator(graph, orientation_id, source_edge_energy_map, &resnum)
-            })?
-            .map(|atom| self.marker.prefix(&full_graph, current.subgraph(), atom));
-        // Both legitimate projected maps have now consumed every still-unmapped
-        // numerator factor. Production hosts are mapping metadata only in this
-        // lane: sum them explicitly without ever materializing a selector or
-        // traversing another numerator map.
-        for (_, _, integrands) in localized_integrated.iter_orientations() {
-            selector_free
-                .get_or_insert_with(Vec::new)
-                .push(integrands.clone());
+            .combine()?;
+        // An empty integrated zero contributes no source map. The typed local
+        // zero above already retains the allowed cut shape; do not invent an
+        // energy map merely to pass it through the nonempty branch owner.
+        if localized_integrated.iter_orientations().next().is_some() {
+            let localized_integrated =
+                DirectResidueBranches::from_transient(&localized_integrated)?
+                    .multiply_key_mapped(
+                        self.localizer.orientation,
+                        graph,
+                        &resnum,
+                        DirectResidueBranches::numerator_scope(),
+                    )?
+                    .map(|atom| self.marker.prefix(&full_graph, current.subgraph(), atom));
+            // Both legitimate projected maps have now consumed every still-unmapped
+            // numerator factor. Production hosts are mapping metadata only in this
+            // lane: sum them explicitly without ever materializing a selector or
+            // traversing another numerator map.
+            for (_, integrands) in localized_integrated.iter_keys() {
+                selector_free
+                    .get_or_insert_with(Vec::new)
+                    .push(integrands.clone());
+            }
         }
         let selector_free = selector_free.ok_or_else(|| {
             eyre::eyre!("final 3D UV integrand contains no production energy maps")
@@ -374,7 +518,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
                 Replacement::new(function!(GS.energy, edge_id), function!(GS.ose, edge_id))
             })
             .collect::<Vec<_>>();
-        let simplified = integrands.fallible_map(|atom| {
+        let mut simplify = |atom: &Atom| {
             let mut atom = atom
                 .replace_multiple(&energy_replacements)
                 .replace(function!(GS.ose, W_.mass_, W_.prop_))
@@ -391,7 +535,11 @@ impl<'a> FinalIntegrandBuilder<'a> {
             );
             atom = atom
                 .simplify_color_with(
-                    ColorSimplifySettings::default().with_cof_dimension_invariants(),
+                    ColorSimplifySettings {
+                        simplify_non_color: false,
+                        ..Default::default()
+                    }
+                    .with_cof_dimension_invariants(),
                 )
                 .expand_dots()?;
 
@@ -403,7 +551,10 @@ impl<'a> FinalIntegrandBuilder<'a> {
                 .with(GS.m_uv_vacuum)
                 .replace(GS.dim_epsilon)
                 .with(0))
-        })?;
+        };
+        let simplified = integrands
+            .fallible_map(&mut simplify)?
+            .map_numerators(simplify)?;
         Ok(FinalIntegrands(simplified))
     }
 }
@@ -567,6 +718,7 @@ mod tests {
                 let (mut stack, _) = EvaluatorStack::new_with_timings(
                     std::slice::from_ref(atom),
                     &builder,
+                    &[],
                     &orientations,
                     &production_ids,
                     None,
@@ -659,6 +811,7 @@ mod tests {
             let (mut stack, _) = EvaluatorStack::new_with_timings(
                 std::slice::from_ref(atom),
                 &builder,
+                &[],
                 &orientations,
                 &production_ids,
                 None,
@@ -738,7 +891,7 @@ mod tests {
         };
         let builder = FinalIntegrandBuilder::new(localizer, &settings);
         let local = Projected4dCts::new(vec![Projected4dSector {
-            coefficient: Atom::Zero,
+            coefficient: Integrands::from_iter([(CutCFFIndex::new_all_none(), Atom::Zero)]),
             frozen_factor: Atom::var(GS.numerator_sampling_scale),
         }]);
         let finalized =

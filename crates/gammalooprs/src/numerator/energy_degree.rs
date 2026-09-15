@@ -1770,7 +1770,8 @@ impl Graph {
         active_edges: impl IntoIterator<Item = EdgeIndex>,
     ) -> color_eyre::Result<Atom> {
         Ok(self
-            .soft_momentum_routing_proposals(numerator, active_edges)?
+            .soft_momentum_routing_proposals(std::slice::from_ref(numerator), active_edges)?
+            .remove(0)
             .remove(0))
     }
 
@@ -1780,26 +1781,31 @@ impl Graph {
     /// LMB, including the fixed external shift; on-shell energies play no role.
     pub(crate) fn soft_momentum_routing_proposals(
         &self,
-        numerator: &Atom,
+        numerators: &[Atom],
         active_edges: impl IntoIterator<Item = EdgeIndex>,
-    ) -> color_eyre::Result<Vec<Atom>> {
-        if !numerator.contains_symbol(GS.uv_momentum_provenance) {
-            return Ok(vec![numerator.clone()]);
+    ) -> color_eyre::Result<Vec<Vec<Atom>>> {
+        if !numerators
+            .iter()
+            .any(|numerator| numerator.contains_symbol(GS.uv_momentum_provenance))
+        {
+            return Ok(vec![numerators.to_vec()]);
         }
         let mut soft_components = BTreeSet::new();
-        let _ = numerator.replace_map(|view, _, output| {
-            if let AtomView::Fun(momentum) = view
-                && momentum.get_symbol() == GS.emr_mom
-                && momentum.get_nargs() == 2
-                && let Some((_, UvMomentumProvenanceRole::DenominatorDerivedSoft, _)) =
-                    GS.uv_momentum_provenance_data(momentum.get(0))
-            {
-                soft_components.insert(view.to_owned());
-                **output = view.to_owned();
-            }
-        });
+        for numerator in numerators {
+            let _ = numerator.replace_map(|view, _, output| {
+                if let AtomView::Fun(momentum) = view
+                    && momentum.get_symbol() == GS.emr_mom
+                    && momentum.get_nargs() == 2
+                    && let Some((_, UvMomentumProvenanceRole::DenominatorDerivedSoft, _)) =
+                        GS.uv_momentum_provenance_data(momentum.get(0))
+                {
+                    soft_components.insert(view.to_owned());
+                    **output = view.to_owned();
+                }
+            });
+        }
         if soft_components.is_empty() {
-            return Ok(vec![numerator.clone()]);
+            return Ok(vec![numerators.to_vec()]);
         }
 
         let active_edges = active_edges.into_iter().collect::<BTreeSet<_>>();
@@ -1929,12 +1935,24 @@ impl Graph {
         // of the active edges onto which its energy has to be routed. Fixed
         // loads on these extra axes are identical in every assignment and do
         // not enter the final active-edge objective.
-        let planned = EnergyPowerAnalyzer::for_physical_emr_edges(planning_edges).plan_view(
-            numerator.as_view(),
-            &mut 0,
-            false,
-            &BTreeSet::new(),
-        )?;
+        let analyzer = EnergyPowerAnalyzer::for_physical_emr_edges(planning_edges);
+        let mut next_factor = 0;
+        // Keep the caller's ordinary bodies and scalar carriers separately, but
+        // assign occurrence IDs and rank their product in one existing plan.
+        // Replaying the winning plan never requires resolving residue samples.
+        let planned = PlannedEnergyExpression::Mul(
+            numerators
+                .iter()
+                .map(|numerator| {
+                    analyzer.plan_view(
+                        numerator.as_view(),
+                        &mut next_factor,
+                        false,
+                        &BTreeSet::new(),
+                    )
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+        );
         let mut proposals = planned.soft_momentum_assignments(&alternatives)?;
         proposals.sort_by_cached_key(|(degrees, assignments)| {
             let mut envelope = active_edges
@@ -1969,24 +1987,35 @@ impl Graph {
             })
             .take(ENERGY_ASSIGNMENT_PROPOSAL_BUDGET)
             .map(|(_, assignments)| {
-                let optimized = planned.map(&mut |id, factor, _| {
-                    Ok::<_, EnergyPowerAnalysisError>(assignments.get(&id).map_or_else(
-                        || factor.clone(),
-                        |choice| alternatives[factor][*choice].0.clone(),
-                    ))
-                })?;
-                // Energy-independent powers/functions need no assignment traversal.
-                // Erase their remaining soft metadata without changing their routing.
-                Ok(optimized.replace_map(|view, _, output| {
-                    if let AtomView::Fun(momentum) = view
-                        && momentum.get_symbol() == GS.emr_mom
-                        && momentum.get_nargs() == 2
-                        && let Some((_, UvMomentumProvenanceRole::DenominatorDerivedSoft, _)) =
-                            GS.uv_momentum_provenance_data(momentum.get(0))
-                    {
-                        **output = GS.erase_uv_momentum_provenance(&view.to_owned());
-                    }
-                }))
+                let PlannedEnergyExpression::Mul(factors) = &planned else {
+                    unreachable!()
+                };
+                factors
+                    .iter()
+                    .map(|factor_plan| {
+                        let optimized = factor_plan.map(&mut |id, factor, _| {
+                            Ok::<_, EnergyPowerAnalysisError>(assignments.get(&id).map_or_else(
+                                || factor.clone(),
+                                |choice| alternatives[factor][*choice].0.clone(),
+                            ))
+                        })?;
+                        // Energy-independent powers/functions need no assignment traversal.
+                        // Erase their remaining soft metadata without changing their routing.
+                        Ok(optimized.replace_map(|view, _, output| {
+                            if let AtomView::Fun(momentum) = view
+                                && momentum.get_symbol() == GS.emr_mom
+                                && momentum.get_nargs() == 2
+                                && let Some((
+                                    _,
+                                    UvMomentumProvenanceRole::DenominatorDerivedSoft,
+                                    _,
+                                )) = GS.uv_momentum_provenance_data(momentum.get(0))
+                            {
+                                **output = GS.erase_uv_momentum_provenance(&view.to_owned());
+                            }
+                        }))
+                    })
+                    .collect()
             })
             .collect()
     }
@@ -2575,7 +2604,11 @@ mod tests {
             "the fixture must expose duplicate capacity through different atoms"
         );
         for source in [external_soft.clone(), (external_soft + Atom::one()).pow(8)] {
-            let proposals = graph.soft_momentum_routing_proposals(&source, active)?;
+            let proposals = graph
+                .soft_momentum_routing_proposals(std::slice::from_ref(&source), active)?
+                .into_iter()
+                .map(|mut factors| factors.remove(0))
+                .collect::<Vec<_>>();
             assert!(!proposals.is_empty());
             for proposal in proposals {
                 assert!(
@@ -3213,7 +3246,7 @@ mod tests {
             4
         );
         let mut expressions = vec![
-            idenso::gamma!(&vector, &start, &end) * (&energy + Atom::one()).pow(4),
+            spenso::chain!(&start, &end, idenso::gamma!(&vector)) * (&energy + Atom::one()).pow(4),
             spenso::chain!(
                 &start,
                 &end,

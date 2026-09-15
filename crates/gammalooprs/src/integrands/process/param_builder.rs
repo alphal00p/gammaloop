@@ -19,7 +19,6 @@ use spenso::{
     iterators::IteratableTensor,
     network::{ExecutionResult, parsing::ParseSettings},
     structure::concrete_index::ExpandedIndex,
-    tensors::parametric::AtomViewOrConcrete,
 };
 use symbolica::prelude::{
     Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, FunctionMap, Indeterminate, Rational,
@@ -322,12 +321,8 @@ impl GammaLoopPairs {
                 ExecutionResult::One => {}
                 ExecutionResult::Zero => {}
                 ExecutionResult::Val(a) => {
-                    for (_, val) in a.iter_flat() {
-                        let AtomViewOrConcrete::Atom(a) = val else {
-                            panic!("SHOULD BE ATOMVIEW")
-                        };
-
-                        params.push(a.to_owned());
+                    for (_, value) in a.iter_flat() {
+                        params.push(value.to_owned());
                     }
                 }
             }
@@ -660,7 +655,9 @@ pub struct ParamBuilder<T: FloatLike = f64> {
     pub fn_map: FunctionMap,
 }
 
-#[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode, Debug)]
+#[derive(
+    Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode, Debug, PartialEq, Eq, Hash,
+)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct FnMapEntry {
     pub lhs: Atom,

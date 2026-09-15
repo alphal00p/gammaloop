@@ -1351,7 +1351,7 @@ impl Forests {
                     .require(operation)?
                     .cut(operation, cutset)?
                     .final_integrands
-                    .map(|integrand| integrand.clone().collect_color());
+                    .map_expressions(|integrand| Ok(integrand.clone().collect_color()))?;
                 sum = Some(match sum {
                     Some(sum) => sum.zip_add(terms).wrap_err_with(|| {
                         format!("while aggregating hedge-poset term {operation} for cut {cutset:?}")
@@ -1362,12 +1362,12 @@ impl Forests {
 
             let integrands = sum
                 .ok_or_else(|| eyre!("No terms in hedge-poset forest for cut {cutset:?}"))?
-                .map(|integrand| {
-                    integrand
+                .map_expressions(|integrand| {
+                    Ok(integrand
                         .replace_multiple(&split_momentum_replacements)
                         .replace(function!(GS.den, W_.a_, W_.b_, W_.c_, W_.d_))
-                        .with(W_.d_)
-                });
+                        .with(W_.d_))
+                })?;
             expressions.push(ParametricIntegrands::from_final(integrands, cutset.clone()));
         }
 
@@ -1394,8 +1394,10 @@ impl Forests {
             let final_integrands = computed
                 .cut(operation, cutset)?
                 .final_integrands
-                .map(|numerator| post_process(numerator.clone()))
-                .into_integrands();
+                .clone()
+                .into_integrands()
+                .resolved()?
+                .map(|numerator| post_process(numerator.clone()));
             let node_key = operation.to_string();
             for (term_index, (&residue_index, numerator)) in final_integrands.iter().enumerate() {
                 terms.push(UVForestNodeExpression {
@@ -2592,6 +2594,7 @@ mod tests {
         let expected = union_local
             .branches()?
             .materialize(false)?
+            .resolved()?
             .map(|atom| -(atom * &numerator));
         let child_local = Direct3dApproximation::new(localizer, &mut spectacles, &settings).run(
             &union_local,
@@ -2601,7 +2604,7 @@ mod tests {
             &current,
             &given,
         )?;
-        let actual = child_local.branches()?.materialize(false)?;
+        let actual = child_local.branches()?.materialize(false)?.resolved()?;
         assert_eq!(
             actual.map(|atom| atom.collect_factors()),
             expected.map(|atom| atom.collect_factors()),

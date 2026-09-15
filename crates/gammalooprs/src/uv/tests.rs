@@ -116,6 +116,198 @@ fn integrands_bulk_add_checks_every_complete_cut_shape() -> Result<(), eyre::Rep
     Ok(())
 }
 
+#[test]
+fn integrands_retain_flat_numerator_definitions_through_arithmetic_and_persistence()
+-> Result<(), eyre::Report> {
+    use std::{io::Cursor, sync::Arc};
+    use symbolica::state::State;
+
+    use crate::{
+        GammaLoopContextContainer, cff::CutCFFIndex,
+        integrands::process::param_builder::FnMapEntry, uv::Integrands,
+    };
+
+    test_initialise()?;
+    let family = symbol!("gammalooprs::uv::numerator_family");
+    let parameter = symbol!("uv_definition_test::parameter");
+    let x = Atom::var(parameter);
+    let y = Atom::var(symbol!("uv_definition_test::y"));
+    let scope = Atom::var(symbol!("uv_definition_test::scope"));
+    let body = (&x + &y).pow(3) * (&x + Atom::num(1));
+    let entry = Arc::new(FnMapEntry {
+        lhs: function!(family, &scope, &x),
+        rhs: body.clone(),
+        args: vec![parameter.into()],
+        tags: vec![scope.clone()],
+    });
+    let cut = CutCFFIndex::new_all_none();
+    let call = function!(family, &scope, 2);
+    let roots = Integrands::from_iter([(cut, call.clone())])
+        .with_numerators([Arc::clone(&entry), Arc::clone(&entry)])?;
+    assert_eq!(roots.numerators().len(), 1);
+    let explicit = body.replace(x.to_pattern()).with(Atom::num(2));
+    assert_eq!(
+        roots.resolved()?,
+        Integrands::from_iter([(cut, explicit.clone())])
+    );
+
+    let multiplier = &y + Atom::one();
+    let products = [
+        (
+            roots.map(|atom| atom * &multiplier),
+            &explicit * &multiplier,
+        ),
+        (
+            roots.fallible_map(|atom| Ok(atom * &multiplier))?,
+            &explicit * &multiplier,
+        ),
+        (roots.clone() * multiplier.clone(), &explicit * &multiplier),
+        (roots.clone() * &multiplier, &explicit * &multiplier),
+        (-roots.clone(), -&explicit),
+        (roots.zero_like(), Atom::Zero),
+        (roots.zip_mul(&roots)?, &explicit * &explicit),
+        (
+            roots.clone().zip_add([roots.clone()])?,
+            Atom::num(2) * &explicit,
+        ),
+    ];
+    for (actual, expected) in products {
+        assert_eq!(actual.numerators().len(), 1);
+        assert!(Arc::ptr_eq(&actual.numerators()[0], &entry));
+        assert_eq!(actual.numerators()[0].rhs, body);
+        let resolved = actual.resolved()?;
+        assert!(resolved.numerators().is_empty());
+        assert_eq!(resolved, Integrands::from_iter([(cut, expected)]));
+    }
+    let changed = roots.map_numerators(|rhs| Ok(rhs.replace(y.to_pattern()).with(Atom::num(3))))?;
+    assert_eq!(changed.iter().next().unwrap().1, &call);
+    assert_eq!(
+        changed.resolved()?,
+        Integrands::from_iter([(cut, explicit.replace(y.to_pattern()).with(Atom::num(3)))])
+    );
+    let cleared = roots.clone().with_numerators([])?;
+    assert!(cleared.numerators().is_empty());
+    assert!(cleared.resolved().is_err());
+
+    let encoded = bincode::encode_to_vec(&roots, bincode::config::standard())?;
+    let mut state = Vec::new();
+    State::export(&mut state)?;
+    let state_map = State::import(&mut Cursor::new(state), None)?;
+    let model = Model::default();
+    let (decoded, consumed): (Integrands, _) = bincode::decode_from_slice_with_context(
+        &encoded,
+        bincode::config::standard(),
+        GammaLoopContextContainer {
+            state_map: &state_map,
+            model: &model,
+        },
+    )?;
+    assert_eq!(consumed, encoded.len());
+    assert_eq!(decoded, roots);
+    assert_eq!(decoded.resolved()?, roots.resolved()?);
+    Ok(())
+}
+
+#[test]
+fn integrands_reject_conflicting_dependent_and_unregistered_numerator_families()
+-> Result<(), eyre::Report> {
+    use std::sync::Arc;
+
+    use crate::{cff::CutCFFIndex, integrands::process::param_builder::FnMapEntry, uv::Integrands};
+
+    test_initialise()?;
+    let family = symbol!("gammalooprs::uv::numerator_family");
+    let scope = Atom::var(symbol!("uv_definition_test::conflict_scope"));
+    let call = function!(family, &scope);
+    let entry = Arc::new(FnMapEntry {
+        lhs: call.clone(),
+        rhs: Atom::num(2),
+        args: Vec::new(),
+        tags: vec![scope],
+    });
+    let cut = CutCFFIndex::new_all_none();
+    let roots = Integrands::from_iter([(cut, call.clone())]);
+    let first = roots.clone().with_numerators([Arc::clone(&entry)])?;
+    let conflicting = Arc::new(FnMapEntry {
+        rhs: Atom::num(3),
+        ..entry.as_ref().clone()
+    });
+    let second = roots.clone().with_numerators([Arc::clone(&conflicting)])?;
+    assert!(
+        roots
+            .clone()
+            .with_numerators([Arc::clone(&entry), conflicting])
+            .is_err()
+    );
+    assert!(first.zip_mul(&second).is_err());
+    assert!(first.clone().zip_add([second]).is_err());
+    assert!(
+        roots
+            .clone()
+            .with_numerators([Arc::new(FnMapEntry {
+                rhs: call.clone(),
+                ..entry.as_ref().clone()
+            })])
+            .is_err()
+    );
+
+    let unknown_call = function!(family, symbol!("uv_definition_test::unknown_scope"));
+    assert!(roots.resolved().is_err());
+    assert!(first.map(|atom| atom + &unknown_call).resolved().is_err());
+    assert!(first.map_numerators(|_| Ok(unknown_call.clone())).is_err());
+    Ok(())
+}
+
+#[test]
+fn integrands_reject_formal_bindings_that_capture_tags_or_each_other() -> Result<(), eyre::Report> {
+    use std::sync::Arc;
+    use symbolica::atom::Indeterminate;
+
+    use crate::{cff::CutCFFIndex, integrands::process::param_builder::FnMapEntry, uv::Integrands};
+
+    test_initialise()?;
+    let family = symbol!("gammalooprs::uv::numerator_family");
+    let head = symbol!("uv_definition_test::formal");
+    let z = Atom::var(symbol!("uv_definition_test::z"));
+    let scope = Atom::var(symbol!("uv_definition_test::binding_scope"));
+    let nested = function!(head, &z);
+    for (tag, parameters) in [
+        (z.clone(), vec![z.clone()]),
+        (nested.clone(), vec![z.clone()]),
+        (scope.clone(), vec![z.clone(), nested.clone()]),
+        (scope.clone(), vec![nested, z.clone()]),
+        (scope.clone(), vec![z.clone(), z]),
+    ] {
+        let entry = Arc::new(FnMapEntry {
+            lhs: family.call_args(std::iter::once(tag.clone()).chain(parameters.iter().cloned())),
+            rhs: parameters[0].clone(),
+            args: parameters
+                .into_iter()
+                .map(|p| Indeterminate::try_from(p).unwrap())
+                .collect(),
+            tags: vec![tag],
+        });
+        assert!(Integrands::from_iter([]).with_numerators([entry]).is_err());
+    }
+    // Generated formals may contain their scope tag; substituting the complete
+    // formal key leaves that fixed tag intact.
+    let parameter = function!(head, &scope, 0);
+    let entry = Arc::new(FnMapEntry {
+        lhs: function!(family, &scope, &parameter),
+        rhs: parameter.clone(),
+        args: vec![Indeterminate::try_from(parameter).unwrap()],
+        tags: vec![scope.clone()],
+    });
+    let cut = CutCFFIndex::new_all_none();
+    let roots =
+        Integrands::from_iter([(cut, function!(family, &scope, 2))]).with_numerators([entry])?;
+    assert_eq!(
+        roots.resolved()?,
+        Integrands::from_iter([(cut, Atom::num(2))])
+    );
+    Ok(())
+}
+
 fn logspace(start: f64, stop: f64, num: usize, base: f64) -> Vec<f64> {
     let log_start = start;
     let log_stop = stop;
@@ -2210,14 +2402,17 @@ mod failing {
         )
         .unwrap();
 
-        println!("{}", amp.graphs[0].derived_data.all_mighty_integrand);
+        println!(
+            "{}",
+            amp.graphs[0].derived_data.resolved_integrand().unwrap()
+        );
 
         for g in amp.graphs {
             // let all = g.graph.all_cycle_unions(&g.graph.full_filter());
 
             g.graph.all_limits(
                 &g.graph.full_filter(),
-                &g.derived_data.all_mighty_integrand,
+                &g.derived_data.resolved_integrand().unwrap(),
                 symbol!("lambd"),
                 &g.graph.loop_momentum_basis,
             );

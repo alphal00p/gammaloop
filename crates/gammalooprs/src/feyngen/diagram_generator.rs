@@ -65,7 +65,7 @@ use crate::model::VertexRule;
 use crate::model::{ArcParticle, ColorStructure, Particle};
 use crate::momentum::sample::LoopIndex;
 use crate::momentum::{Pow, Sign, SignOrZero};
-use crate::numerator::ParamParsingNet;
+use crate::numerator::ParsingNet;
 use crate::numerator::aind::Aind;
 use crate::numerator::graph::ReversibleEdge;
 use crate::numerator::symbolica_ext::NumeratorAtomExt;
@@ -5081,7 +5081,7 @@ impl ProcessedNumeratorForComparison {
                                     )
                                 };
                                 debug!("Sample evaluation inputs c:{c},l:{l}");
-                                let mut net = ParamParsingNet::try_from_view(
+                                let mut net = ParsingNet::try_from_view(
                                     l.as_view(),
                                     lib,
                                     &sample_parse_settings,

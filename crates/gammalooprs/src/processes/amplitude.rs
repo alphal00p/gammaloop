@@ -5,6 +5,7 @@ use std::{
     io::Write,
     iter,
     path::Path,
+    sync::Arc,
 };
 
 use ahash::AHashSet;
@@ -37,6 +38,7 @@ use crate::{
         GenericEvaluator, LmbMultiChannelingSetup,
         amplitude::{AmplitudeGraphTerm, AmplitudeIntegrand, AmplitudeIntegrandData},
         graph_to_group_id_for_group_structure,
+        param_builder::FnMapEntry,
     },
     model::ArcParticle,
     momentum::{sample::ExternalIndex, signature::SignatureLike},
@@ -51,7 +53,7 @@ use crate::{
     subtraction::amplitude_counterterm::AmplitudeCountertermAtom,
     utils::{F, GS, Length, W_},
     uv::{
-        RenormalizationPart, UVgenerationSettings, UltravioletGraph,
+        Integrands, RenormalizationPart, UVgenerationSettings, UltravioletGraph,
         approx::{CutStructure, OrientationProjection, integrated::to_vakint_integrand},
         settings::VakintSettings,
     },
@@ -763,6 +765,7 @@ impl AmplitudeGraph {
             graph,
             derived_data: AmplitudeDerivedData {
                 all_mighty_integrand: Atom::Zero,
+                all_mighty_numerators: Vec::new(),
                 cff_expression: None,
 
                 lmbs: None,
@@ -1274,6 +1277,7 @@ impl AmplitudeGraph {
             ));
         }
         self.derived_data.all_mighty_integrand = integrand.clone();
+        self.derived_data.all_mighty_numerators = expr.integrands.numerators().to_vec();
         crate::debug_tags!(#generation, #profile, #graph, #summary;
             stage = "amplitude_graph_build_integrands_done",
             graph = %self.graph.name,
@@ -1443,8 +1447,10 @@ impl AmplitudeGraph {
             let raised_esurface_id = raised_esurface_ids[raised_group.esurface_ids[0]];
             debug!("raised_esurface_id: {}", raised_esurface_id.0);
 
-            for (_, integrand) in counterterm_atom.parametric.iter() {
-                debug!("counterterm integrand: {}", integrand.log_print(Some(100)));
+            if tracing::enabled!(tracing::Level::DEBUG) {
+                for (_, integrand) in counterterm_atom.parametric.resolved()?.iter() {
+                    debug!("counterterm integrand: {}", integrand.log_print(Some(100)));
+                }
             }
 
             counterterms[raised_esurface_id] = counterterm_atom;
@@ -1605,6 +1611,7 @@ impl AmplitudeGraph {
 #[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeDerivedData {
     pub all_mighty_integrand: Atom,
+    pub all_mighty_numerators: Vec<Arc<FnMapEntry>>,
     pub threshold_counterterms: TiVec<RaisedEsurfaceId, AmplitudeCountertermAtom>,
     pub raised_data: RaisedEsurfaceData,
     pub raised_esurface_ids: TiVec<EsurfaceID, RaisedEsurfaceId>,
@@ -1614,6 +1621,23 @@ pub struct AmplitudeDerivedData {
     pub cff_expression: Option<
         GeneratedThreeDExpression<crate::cff::esurface::Esurface, crate::cff::hsurface::Hsurface>,
     >,
+}
+
+impl AmplitudeDerivedData {
+    pub(crate) fn resolved_integrand(&self) -> Result<Atom> {
+        let integrands = Integrands::from_iter([(
+            CutCFFIndex::new_all_none(),
+            self.all_mighty_integrand.clone(),
+        )])
+        .with_numerators(self.all_mighty_numerators.iter().cloned())?
+        .resolved()?;
+        Ok(integrands
+            .iter()
+            .next()
+            .expect("the amplitude semantic view retains its root residue")
+            .1
+            .clone())
+    }
 }
 
 pub trait AmplitudeState:

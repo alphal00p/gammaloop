@@ -220,7 +220,7 @@ impl AmplitudeGraphTerm {
         );
 
         crate::debug_tags!(#generation, #graph, #orientation, #compile, #dump;
-            orientation_parametric_integrand = %graph.derived_data.all_mighty_integrand.printer(LOGPRINTOPTS.clone()),
+            orientation_parametric_integrand = %graph.derived_data.resolved_integrand()?.printer(LOGPRINTOPTS.clone()),
             "Building evaluator for all orientations \n{}",
             graph.graph.param_builder.table()
         );
@@ -238,6 +238,7 @@ impl AmplitudeGraphTerm {
         let (original_integrand, evaluator_timings) = EvaluatorStack::from_integrand_with_timings(
             &graph.derived_data.all_mighty_integrand,
             &graph.graph.param_builder,
+            &graph.derived_data.all_mighty_numerators,
             (!settings.generation.explicit_orientation_sum_only).then_some((
                 orientations.as_slice().as_ref(),
                 &production_orientation_ids,

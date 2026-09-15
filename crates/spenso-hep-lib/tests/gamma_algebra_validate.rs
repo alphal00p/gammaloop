@@ -37,7 +37,8 @@ fn validate() {
     )
     .into_canonical()
     .to_shell()
-    .concretize();
+    .concretize()
+    .unwrap();
 
     for (i, a) in pt.iter_flat() {
         const_map.insert(
@@ -53,7 +54,8 @@ fn validate() {
     )
     .into_canonical()
     .to_shell()
-    .concretize();
+    .concretize()
+    .unwrap();
 
     for (i, a) in qt.iter_flat() {
         const_map.insert(
@@ -225,7 +227,8 @@ mod failing {
         )
         .into_canonical()
         .to_shell()
-        .concretize();
+        .concretize()
+        .unwrap();
 
         for (i, a) in pt.iter_flat() {
             const_map.insert(
@@ -241,7 +244,8 @@ mod failing {
         )
         .into_canonical()
         .to_shell()
-        .concretize();
+        .concretize()
+        .unwrap();
 
         for (i, a) in pt.iter_flat() {
             const_map.insert(
@@ -257,7 +261,8 @@ mod failing {
         )
         .into_canonical()
         .to_shell()
-        .concretize();
+        .concretize()
+        .unwrap();
 
         for (i, a) in pt.iter_flat() {
             const_map.insert(

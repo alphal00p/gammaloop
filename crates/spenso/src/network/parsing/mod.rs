@@ -808,9 +808,12 @@ where
                 Ok(Self::from_scalar(value.as_view().try_into()?))
             }
             Err(_) => {
+                // Tensor dimensions may remain symbolic during analytic normalization;
+                // opaque scalars and library tensors need no eager shadow here.
+                // The target decides whether missing leaves need finite components.
                 let (canonical, layout) = structure.into_parts();
                 Ok(Self::from_tensor(
-                    canonical.to_shell().concretize_logical(&layout),
+                    canonical.to_shell().concretize_logical(&layout)?,
                 ))
             }
         }

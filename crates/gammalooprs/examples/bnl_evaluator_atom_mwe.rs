@@ -30,7 +30,7 @@ use spenso::network::{
     store::NetworkStore,
 };
 use spenso::shadowing::{TensorCollectExt, symbolica_utils::LogPrint};
-use spenso::tensors::{data::HasTensorData, parametric::ParamOrConcrete};
+use spenso::tensors::data::HasTensorData;
 use symbolica::{
     atom::{Atom, AtomCore, AtomView},
     id::AliasedAtom,
@@ -1950,10 +1950,6 @@ fn print_tensor_entry_scalar_stats(stage: &str, net: &ParsingNet) -> TensorEntry
     let mut top_tensors = Vec::new();
 
     for (tensor_index, tensor) in net.store.tensors.iter().enumerate() {
-        let ParamOrConcrete::Param(tensor) = tensor else {
-            stats.concrete_tensor_count += 1;
-            continue;
-        };
         stats.param_tensor_count += 1;
 
         let entries = tensor.data();

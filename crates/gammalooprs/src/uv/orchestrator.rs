@@ -53,10 +53,10 @@ impl UVOrchestrator {
             }
         }?;
         let marker = UvMarker::new(settings);
-        Ok(result
+        result
             .into_iter()
-            .map(|integrands| integrands.map(|atom| marker.finish(&atom)))
-            .collect())
+            .map(|integrands| integrands.map_expressions(|atom| Ok(marker.finish(atom))))
+            .collect()
     }
 
     pub(crate) fn renormalization_part(
@@ -228,8 +228,10 @@ struct IntegrandMapComparison<'a> {
 
 impl IntegrandMapComparison<'_> {
     fn compare(&self) -> Result<()> {
-        self.legacy
-            .checked_zip(self.hedge, |key, legacy_expr, hedge_expr| {
+        let legacy = self.legacy.resolved()?;
+        let hedge = self.hedge.resolved()?;
+        legacy
+            .checked_zip(&hedge, |key, legacy_expr, hedge_expr| {
                 if !ComparableExpr::new(legacy_expr)
                     .equivalent_to(&ComparableExpr::new(hedge_expr))?
                 {

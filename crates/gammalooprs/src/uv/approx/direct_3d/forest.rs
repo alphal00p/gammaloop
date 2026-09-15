@@ -63,10 +63,11 @@ impl DirectSector {
     pub(crate) fn combine(&self) -> Result<DirectResidueBranches> {
         // Scope is needed by later forest operations only. Materialize the physical
         // vacuum mass on this output copy while retaining owners in the stored sector.
-        let physical = self.active.map(|atom| {
-            atom.replace(function!(GS.m_uv_vacuum, W_.x_))
-                .with(GS.m_uv_vacuum)
-        });
+        let physical = self.active.map_expressions(|atom| {
+            Ok(atom
+                .replace(function!(GS.m_uv_vacuum, W_.x_))
+                .with(GS.m_uv_vacuum))
+        })?;
         physical.zip_mul_unmapped(&self.frozen_integrands)
     }
 }
@@ -367,18 +368,15 @@ impl<'a> Direct3dApproximation<'a> {
                     Ok(DirectSector {
                         active_subgraph,
                         coordinate_frames,
-                        active: -active.fallible_map(|key, atom| {
-                            apply_taylor(
-                                &ctx,
-                                self.localizer.orientation,
-                                current,
-                                given,
-                                Some(rescaled_subgraph.clone()),
-                                &coordinate_lmb,
-                                key,
-                                atom,
-                            )
-                        })?,
+                        active: -apply_taylor(
+                            &ctx,
+                            self.localizer.orientation,
+                            current,
+                            given,
+                            Some(rescaled_subgraph.clone()),
+                            &coordinate_lmb,
+                            active,
+                        )?,
                         frozen_integrands,
                     })
                 },
@@ -421,18 +419,15 @@ impl<'a> Direct3dApproximation<'a> {
         let ctx = UVCtx::new(self.graph, self.settings);
         let active_subgraph = current.reduced_subgraph(given);
         let coordinate_lmb = coordinate_lmb(&ctx, current, given, None, &[], &active_subgraph)?;
-        let active = -active.fallible_map(|key, atom| {
-            apply_taylor(
-                &ctx,
-                self.localizer.orientation,
-                current,
-                given,
-                Some(active_subgraph.clone()),
-                &coordinate_lmb,
-                key,
-                atom,
-            )
-        })?;
+        let active = -apply_taylor(
+            &ctx,
+            self.localizer.orientation,
+            current,
+            given,
+            Some(active_subgraph.clone()),
+            &coordinate_lmb,
+            &active,
+        )?;
         let sector = DirectSector {
             active_subgraph: active_subgraph.clone(),
             coordinate_frames: vec![DirectCoordinateFrame {
