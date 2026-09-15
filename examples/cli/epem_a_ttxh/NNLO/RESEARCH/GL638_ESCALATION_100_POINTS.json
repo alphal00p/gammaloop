@@ -99,7 +99,7 @@
         "signed_scale_4e-5_max_rescue_correction": "2.16375651050390801397440732E-15"
       }
     ],
-    "note": "This capture predates the current floor semantics: it used the signed active-phase integral with <=1% relative error. Current production code uses the absolute real-component integral with <=10% relative error. Replay uses unit outer weight and captured Havana weight is reapplied offline; replay dynamic large-weight/floor decisions do not reproduce the integrator context.",
+    "note": "This capture predates the current floor semantics: it used the signed active-phase integral with <=1% relative error. Current production code uses the absolute real-component integral with <=10% relative error, and requires point-level rotation discrepancy >=1e-2 for the waiver. Replay uses unit outer weight and captured Havana weight is reapplied offline; replay dynamic large-weight/floor decisions do not reproduce the integrator context.",
     "probe_max_summary": {
       "min": "6.153280068859717E-273",
       "median": "3.7298343777868006E-41",

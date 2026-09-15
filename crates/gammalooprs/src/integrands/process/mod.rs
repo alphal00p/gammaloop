@@ -1921,30 +1921,37 @@ fn stability_check_components_with_estimate<T: FloatLike>(
         && weighted_absolute_average.im.0.is_finite()
         && weighted_absolute_average.im < minimum_normal;
 
-    let errors = results.iter().map(|res| {
-        let error_re = if !check_real {
-            F::<T>::from_f64(0.0)
-        } else if IsZero::is_zero(&res.re) && IsZero::is_zero(&average.re) {
-            F::<T>::from_f64(0.0)
-        } else {
-            ((&res.re - &average.re) / &average.re).abs()
-        };
-        let error_im = if !check_imag {
-            F::<T>::from_f64(0.0)
-        } else if IsZero::is_zero(&res.im) && IsZero::is_zero(&average.im) {
-            F::<T>::from_f64(0.0)
-        } else {
-            ((&res.im - &average.im) / &average.im).abs()
-        };
-        Complex::new(error_re, error_im)
+    let errors = results
+        .iter()
+        .map(|res| {
+            let error_re = if !check_real {
+                F::<T>::from_f64(0.0)
+            } else if IsZero::is_zero(&res.re) && IsZero::is_zero(&average.re) {
+                F::<T>::from_f64(0.0)
+            } else {
+                ((&res.re - &average.re) / &average.re).abs()
+            };
+            let error_im = if !check_imag {
+                F::<T>::from_f64(0.0)
+            } else if IsZero::is_zero(&res.im) && IsZero::is_zero(&average.im) {
+                F::<T>::from_f64(0.0)
+            } else {
+                ((&res.im - &average.im) / &average.im).abs()
+            };
+            Complex::new(error_re, error_im)
+        })
+        .collect::<Vec<_>>();
+    let estimated_relative_accuracy = errors.iter().fold(average.re.zero(), |max, error| {
+        max.max(error.re.clone().max(error.im.clone()))
     });
-    let mut estimated_relative_accuracy = average.re.zero();
 
     // Do not spend higher precision on a point whose complete weighted probe
     // contribution is negligible compared with a well-resolved integral. The
     // estimate is supplied by the previous integration iteration and is
     // accepted only when its standard error is at most ten percent. The
     // integrator supplies the corresponding absolute-component estimate.
+    // A discrepancy below 1e-2 is treated as insufficient evidence that the
+    // order of magnitude is reliable, so it must not permit this waiver.
     let small_weight_waiver = |max_weight: F<T>| {
         min_abs_wgt_for_escalation > 0.0
             && !is_final_level
@@ -1954,6 +1961,7 @@ fn stability_check_components_with_estimate<T: FloatLike>(
                     && error >= 0.0
                     && estimate != 0.0
                     && error <= 0.10 * estimate.abs()
+                    && estimated_relative_accuracy >= F::<T>::from_f64(1.0e-2)
                     && max_weight.0.is_finite()
                     && max_weight < F::<T>::from_f64(min_abs_wgt_for_escalation * estimate.abs())
             })
@@ -1976,9 +1984,7 @@ fn stability_check_components_with_estimate<T: FloatLike>(
 
     let mut unstable_reason = None;
     let mut unstable_sample = None;
-    for (index, error) in errors.enumerate() {
-        estimated_relative_accuracy =
-            estimated_relative_accuracy.max(error.re.clone().max(error.im.clone()));
+    for (index, error) in errors.into_iter().enumerate() {
         if !is_final_level
             && escalate_if_exact_zero
             && !small_weight_waiver
@@ -2189,16 +2195,22 @@ fn stability_check_on_norm_components_with_estimate<T: FloatLike>(
                             <= F::<T>::from_f64(stability_settings.ecm_relative_tolerance_for_im)))
         });
 
-    let errors = results.iter().map(|res| {
-        let res = component_magnitude(res);
-        if IsZero::is_zero(&res) && IsZero::is_zero(&average) {
-            (F::<T>::from_f64(0.0), true) // true zero is fishy -> upgrade to next precision
-        } else {
-            (((res - average.clone()) / average.clone()).abs(), false)
-        }
-    });
-    let mut estimated_relative_accuracy = average.zero();
+    let errors = results
+        .iter()
+        .map(|res| {
+            let res = component_magnitude(res);
+            if IsZero::is_zero(&res) && IsZero::is_zero(&average) {
+                (F::<T>::from_f64(0.0), true) // true zero is fishy -> upgrade to next precision
+            } else {
+                (((res - average.clone()) / average.clone()).abs(), false)
+            }
+        })
+        .collect::<Vec<_>>();
+    let estimated_relative_accuracy = errors
+        .iter()
+        .fold(average.zero(), |max, (error, _)| max.max(error.clone()));
 
+    // Low probe discrepancy cannot establish the order of magnitude.
     let small_weight_waiver = |max_weight: F<T>| {
         min_abs_wgt_for_escalation > 0.0
             && !is_final_level
@@ -2208,6 +2220,7 @@ fn stability_check_on_norm_components_with_estimate<T: FloatLike>(
                     && error >= 0.0
                     && estimate != 0.0
                     && error <= 0.10 * estimate.abs()
+                    && estimated_relative_accuracy >= F::<T>::from_f64(1.0e-2)
                     && max_weight.0.is_finite()
                     && max_weight < F::<T>::from_f64(min_abs_wgt_for_escalation * estimate.abs())
             })
@@ -2219,8 +2232,7 @@ fn stability_check_on_norm_components_with_estimate<T: FloatLike>(
 
     let mut unstable_reason = None;
     let mut unstable_sample = None;
-    for (index, (error, result_is_exact_zero)) in errors.enumerate() {
-        estimated_relative_accuracy = estimated_relative_accuracy.max(error.clone());
+    for (index, (error, result_is_exact_zero)) in errors.into_iter().enumerate() {
         if !is_final_level
             && error == F::<T>::from_f64(0.0)
             && result_is_exact_zero
@@ -7039,6 +7051,22 @@ pub(crate) mod tests {
             true,
             false,
             Some((10.0, 1.1)),
+            0.2,
+        );
+        assert!(!unstable);
+        assert_eq!(reason, Some(StabilityFailureReason::ErrorThreshold));
+
+        let (_, _, unstable, reason) = super::stability_check_components_with_estimate(
+            None,
+            &[Complex::new_re(F(1.0)), Complex::new_re(F(1.001))],
+            &level,
+            Complex::new_zero(),
+            F(1.0),
+            false,
+            false,
+            true,
+            false,
+            Some((10.0, 0.5)),
             0.2,
         );
         assert!(!unstable);
