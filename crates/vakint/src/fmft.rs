@@ -1,5 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 
+mod finalize;
+
 use crate::fmft_numerics::{MASTERS_EXPANSION, MASTERS_NUMERIC_SUBSTITUTIONS};
 use crate::utils::vakint_macros::{vk_parse, vk_symbol};
 use crate::utils::{self, set_precision_in_polynomial_atom, undress_vakint_symbols};
@@ -12,11 +14,10 @@ use colored::Colorize;
 use log::debug;
 use regex::Regex;
 use string_template_plus::{Render, RenderOptions, Template};
-use symbolica::atom::Symbol;
 use symbolica::printer::{AtomPrinter, PrintOptions};
 use symbolica::{
     atom::{Atom, AtomCore, AtomView},
-    domains::{integer::Integer, rational::Rational},
+    domains::integer::Integer,
     function,
     id::Condition,
 };
@@ -482,129 +483,12 @@ impl Vakint {
         )
         .unwrap();
 
-        let fmft_normalization_correction = vk_parse!(
-            format!(
-                "(
-                (𝑖*(𝜋^((4-2*{eps})/2)))\
-              * (exp(-EulerGamma))^({eps})\
-              * (exp(-logmUVmu-log_mu_sq))^({eps})\
-             )^{n_loops}",
-                eps = settings.epsilon_symbol,
-                n_loops = integral.n_loops
-            )
-            .as_str()
+        fmft.finalize_master_expression(
+            evaluated_integral,
+            integral.n_loops as i64,
+            &muv_sq_atom,
+            options,
+            false,
         )
-        .unwrap();
-
-        // Adjust normalization factor
-        let mut complete_normalization = fmft_normalization_correction
-            * settings
-                .get_integral_normalization_factor_atom()?
-                .replace(S.n_loops.to_pattern())
-                .with(Atom::num(integral.n_loops as i64).to_pattern());
-        complete_normalization = complete_normalization
-            .replace(Atom::var(vk_symbol!(settings.epsilon_symbol.as_str())).to_pattern())
-            .with(vk_parse!("ep").unwrap().to_pattern());
-
-        evaluated_integral *= complete_normalization;
-
-        if options.expand_masters {
-            let expansion_depth =
-                settings.number_of_terms_in_epsilon_expansion - (integral.n_loops as i64) - 1;
-            debug!(
-                "{}: Expanding master integrals with terms up to and including {}^{} ...",
-                "FMFT".green(),
-                settings.epsilon_symbol,
-                expansion_depth
-            );
-            evaluated_integral = fmft.expand_masters(evaluated_integral.as_view())?;
-
-            debug!(
-                "{}: Series expansion of the result up to and including terms of order {}^{} ...",
-                "FMFT".green(),
-                settings.epsilon_symbol,
-                expansion_depth
-            );
-            evaluated_integral = match evaluated_integral.series(
-                vk_symbol!("ep"),
-                Atom::Zero.as_view(),
-                Rational::from(expansion_depth),
-            ) {
-                Ok(a) => a,
-                Err(e) => return Err(VakintError::SymbolicaError(e.to_string())),
-            }
-            .to_atom();
-
-            // Sanity check
-            if let Some(m) = evaluated_integral
-                .pattern_match(&vk_parse!("Oep(x_,y_)").unwrap().to_pattern(), None, None)
-                .next()
-            {
-                return Err(VakintError::FMFTError(format!(
-                    "FMFT expansion yielded terms beyond expansion depth supported: Oep({},{})",
-                    m.get(&S.x_).unwrap(),
-                    m.get(&S.y_).unwrap(),
-                )));
-            }
-
-            if options.susbstitute_masters {
-                debug!(
-                    "{}: Substituting master integrals coefficient with their numerical evaluations...",
-                    "FMFT".green()
-                );
-                evaluated_integral = fmft.substitute_masters(evaluated_integral.as_view())?;
-                debug!(
-                    "{}: Substituting PolyGamma and period constants...",
-                    "FMFT".green()
-                );
-                evaluated_integral = evaluated_integral.expand();
-                evaluated_integral = fmft.substitute_poly_gamma(evaluated_integral.as_view())?;
-                evaluated_integral =
-                    fmft.substitute_additional_constants(evaluated_integral.as_view())?;
-                // Sanity check
-                if let Some(m) = evaluated_integral
-                    .pattern_match(&vk_parse!("Oep(x_,y_)").unwrap().to_pattern(), None, None)
-                    .next()
-                {
-                    return Err(VakintError::FMFTError(format!(
-                        "FMFT expansion yielded terms beyond expansion depth supported: Oep({},{})",
-                        m.get(&S.x_).unwrap(),
-                        m.get(&S.y_).unwrap(),
-                    )));
-                }
-            }
-        }
-
-        evaluated_integral = evaluated_integral
-            .replace(vk_parse!("ep").unwrap().to_pattern())
-            .with(Atom::var(vk_symbol!(settings.epsilon_symbol.as_str())).to_pattern());
-
-        if !settings.use_dot_product_notation {
-            evaluated_integral = Vakint::convert_from_dot_notation(evaluated_integral.as_view());
-        }
-
-        let log_muv_mu_sq = function!(
-            Symbol::LOG,
-            muv_sq_atom / Atom::var(vk_symbol!(settings.mu_r_sq_symbol.as_str()))
-        );
-
-        let log_mu_sq = function!(
-            Symbol::LOG,
-            Atom::var(vk_symbol!(settings.mu_r_sq_symbol.as_str()))
-        );
-
-        evaluated_integral = evaluated_integral
-            .replace(vk_parse!("logmUVmu").unwrap().to_pattern())
-            .with((log_muv_mu_sq).to_pattern());
-        evaluated_integral = evaluated_integral
-            .replace(vk_parse!("log_mu_sq").unwrap().to_pattern())
-            .with((log_mu_sq).to_pattern());
-
-        // println!(
-        //     "evaluated_integral: {}",
-        //     evaluated_integral.to_canonical_string()
-        // );
-
-        Ok(evaluated_integral)
     }
 }
