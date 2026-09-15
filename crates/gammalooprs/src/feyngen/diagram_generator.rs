@@ -32,7 +32,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use symbolica::atom::AtomView;
 use symbolica::coefficient::Coefficient;
-use symbolica::domains::algebraic_number::AlgebraicExtension;
+use symbolica::domains::algebraic::AlgebraicExtension;
 use symbolica::domains::finite_field::PrimeIteratorU64;
 use symbolica::domains::float::Complex as SymbolicaComplex;
 use symbolica::function;
@@ -169,7 +169,7 @@ fn polyrat_to_atom(
 ) -> Atom {
     let polyrat_numerator = polyrat.numerator();
     let num = polyrat_numerator.to_expression_with_coeff_map(|_x, a, b| {
-        let a_poly = a.clone().into_poly();
+        let a_poly = a.clone().into_polynomial();
         *b = Atom::num(match a_poly.coefficients.len() {
             0 => Coefficient::Complex(SymbolicaComplex::new(0.into(), 0.into())),
             1 => {
@@ -194,7 +194,7 @@ fn polyrat_to_atom(
     });
     let polyrat_denominator = polyrat.denominator();
     let den = polyrat_denominator.to_expression_with_coeff_map(|_x, a, b| {
-        let a_poly = a.clone().into_poly();
+        let a_poly = a.clone().into_polynomial();
 
         *b = Atom::num(match a_poly.coefficients.len() {
             0 => Coefficient::Complex(SymbolicaComplex::new(0.into(), 0.into())),

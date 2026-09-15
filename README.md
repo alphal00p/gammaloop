@@ -47,6 +47,11 @@ replay, and the cost of the maintained scientific examples.
 - [Spenso](https://alphal00p.github.io/gammaloop/products/spenso/latest/): typed tensors and executable tensor networks
 - [Idenso](https://alphal00p.github.io/gammaloop/products/idenso/latest/): symbolic tensor identities and rewrites
 - [Vakint](https://alphal00p.github.io/gammaloop/products/vakint/latest/): vacuum-integral matching and evaluation
+- [Tydenso](tydenso/README.md): the Typst interface to Spenso and Idenso, with an independent Wasm workspace under `tydenso/`
+
+Spenso's matching Typst, HTML, SVG, and notebook display API is documented in the
+[Python guide](https://alphal00p.github.io/gammaloop/products/spenso/latest/guides/python/),
+including the optional `gammaloop[typst-display]` renderer.
 
 See [www.alphaloop.ch](https://www.alphaloop.ch) for the broader project and literature.
 

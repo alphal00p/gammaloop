@@ -410,16 +410,16 @@ impl<const N: u32> From<&Rational> for VarFloat<N> {
         let n = x.numerator();
 
         let n = match n {
-            Integer::Double(f) => Float::with_val(N, f),
-            Integer::Large(f) => Float::with_val(N, f),
+            Integer::Double(f) => Float::with_val(N, f.get()),
+            Integer::Large(f) => Float::with_val(N, f.as_raw()),
             Integer::Single(f) => Float::with_val(N, f),
         };
 
         let d = x.denominator();
 
         let d = match d {
-            Integer::Double(f) => Float::with_val(N, f),
-            Integer::Large(f) => Float::with_val(N, f),
+            Integer::Double(f) => Float::with_val(N, f.get()),
+            Integer::Large(f) => Float::with_val(N, f.as_raw()),
             Integer::Single(f) => Float::with_val(N, f),
         };
 
@@ -840,7 +840,10 @@ impl<const N: u32> RealLike for VarFloat<N> {
     }
 
     fn round_to_nearest_integer(&self) -> Integer {
-        self.float.clone().round().to_integer().unwrap().into()
+        symbolica::domains::integer::MultiPrecisionInteger::from_raw(
+            self.float.clone().round().to_integer().unwrap(),
+        )
+        .into()
     }
 
     fn to_usize_clamped(&self) -> usize {
@@ -930,7 +933,7 @@ impl<const N: u32> From<&VarFloat<N>> for SymbolicaFloat {
 impl<const N: u32> From<SymbolicaFloat> for VarFloat<N> {
     fn from(value: SymbolicaFloat) -> Self {
         Self {
-            float: value.into_inner(),
+            float: value.into_raw(),
         }
     }
 }
@@ -1492,7 +1495,7 @@ impl QuadFloat {
     }
 
     fn floor_via_symbolica(&self) -> Self {
-        SymbolicaFloat::from(self).into_inner().floor().into()
+        SymbolicaFloat::from(self).into_raw().floor().into()
     }
 
     fn trunc_toward_zero(&self) -> Self {

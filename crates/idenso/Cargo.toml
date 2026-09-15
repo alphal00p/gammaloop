@@ -9,11 +9,11 @@ bincode = { workspace = true, optional = true }
 bincode-trait-derive = { workspace = true, optional = true }
 eyre = { workspace = true }
 itertools = { workspace = true }
-linnet = { workspace = true }
-spenso = { workspace = true, features = ["shadowing"] }
-spenso-macros = { workspace = true }
+linnet = { workspace = true, default-features = false, features = ["nodestore-vec", "serde"] }
+spenso = { workspace = true, default-features = false, features = ["shadowing"] }
+spenso-macros = { workspace = true, default-features = false }
 symbolica = { workspace = true }
-symbolica-utils = { workspace = true }
+symbolica-utils = { workspace = true, default-features = false }
 
 nu-ansi-term = { workspace = true }
 pyo3 = { workspace = true, optional = true }
@@ -51,8 +51,23 @@ name = "vertex_algebra_once"
 harness = false
 
 [features]
-default = []
+default = ["native"]
 bincode = ["dep:bincode", "dep:bincode-trait-derive"]
+native = [
+  "linnet/native",
+  "spenso/native",
+  "spenso-macros/native",
+  "symbolica/integer-gmp",
+  "symbolica/float-mpfr",
+  "symbolica-utils/native",
+]
 reference-cases = []
 python = ["dep:pyo3", "symbolica/python_export"]
 python_stubgen = ["dep:pyo3-stub-gen", "python", "symbolica/python_stubgen"]
+wasm = [
+  "linnet/wasm",
+  "spenso/wasm",
+  "spenso-macros/wasm",
+  "symbolica/wasm",
+  "symbolica-utils/wasm",
+]

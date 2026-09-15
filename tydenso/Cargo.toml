@@ -1,0 +1,27 @@
+[workspace]
+members = ["inflate", "plugin"]
+resolver = "3"
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+version = "0.1.0"
+
+[workspace.dependencies]
+idenso = { path = "../crates/idenso", default-features = false, features = ["wasm"] }
+spenso = { path = "../crates/spenso", default-features = false, features = ["portable-payload", "shadowing", "wasm"] }
+symbolica = { version = "2.2.0", default-features = false, features = ["wasm"] }
+symbolica-utils = { path = "../crates/symbolica-utils", default-features = false, features = ["wasm"] }
+tymbolica-atom-payload = { git = "https://github.com/lcnbr/tymbolica", rev = "e85233dd3d99e5fb458913d0d49f99d83466025b", default-features = false, features = ["wasm"] }
+
+[patch.crates-io]
+graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "ec19eeb211685aa216dbd28a4df547cd4c6baca1" }
+numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "ec19eeb211685aa216dbd28a4df547cd4c6baca1" }
+symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "ec19eeb211685aa216dbd28a4df547cd4c6baca1" }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "z"
+panic = "abort"
+strip = true

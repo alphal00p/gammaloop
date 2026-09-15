@@ -6,8 +6,8 @@ module assembly, not a standalone `spenso` Python distribution.
 
 The canonical user guide is the rendered
 [Spenso Python workflow](https://alphal00p.github.io/gammaloop/products/spenso/latest/guides/python/).
-It covers tensor construction, reusable libraries, network execution, symbolic
-evaluation, parallelism, failure boundaries, and links to the generated API.
+It covers tensor construction, reusable libraries, network execution, rich
+display, symbolic evaluation, parallelism, failure boundaries, and links to the generated API.
 Exact signatures and defaults are in the
 [generated Python reference](https://alphal00p.github.io/gammaloop/products/spenso/latest/reference/python/spynso3/);
 the checked [`spynso3.pyi`](../../docs/api/python/spynso3.pyi) remains a tooling artifact.
