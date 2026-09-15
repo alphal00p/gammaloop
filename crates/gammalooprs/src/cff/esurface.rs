@@ -397,15 +397,21 @@ impl<T: FloatLike> EsurfaceRay<T> {
         crate::debug_tags!(#integration, #cut, #solver;
             radial_root = %identity,
             initial_guess = %guess,
-            residual_tolerance = %(e_cm * guess.epsilon()),
+            residual_tolerance = %(e_cm * guess.epsilon() * guess.from_i64((4 * self.energies.len() + 1) as i64)),
             "LU radial root setup"
         );
+        // The energy equation is a sum of on-shell square roots.  Include a
+        // small forward-error budget for the momentum norm, square root, and
+        // accumulation of each edge instead of treating the whole sum as one
+        // elementary operation.  This remains a caller-specific tolerance;
+        // generic safeguarded-Newton users retain their original tolerance.
+        let residual_tolerance = guess.from_i64((4 * self.energies.len() + 1) as i64);
         diagnostics.solve(
             identity,
             &guess.zero(),
             &guess,
             |t| self.evaluate(t),
-            &guess.one(),
+            &residual_tolerance,
             2000,
             64,
             e_cm,
