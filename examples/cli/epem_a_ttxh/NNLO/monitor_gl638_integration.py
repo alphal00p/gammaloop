@@ -17,10 +17,10 @@ DEFAULT_ADVANCED = HERE / "workspaces" / "GL638_advanced_sampling_workspace"
 DEFAULT_OPTIMIZED = HERE / "workspaces" / "GL638_optimized_lmbs_workspace"
 
 
-def latest_snapshot(workspace: Path) -> tuple[int, dict[str, Any]]:
+def latest_snapshot(workspace: Path) -> tuple[int, dict[str, Any]] | None:
     files = sorted((workspace / "results").glob("integration_result_iter_*.json"))
     if not files:
-        raise FileNotFoundError(f"no iteration snapshots found in {workspace / 'results'}")
+        return None
     path = files[-1]
     with path.open(encoding="utf-8") as stream:
         document = json.load(stream)
@@ -78,10 +78,12 @@ def main() -> None:
     args = parser.parse_args()
     init(autoreset=True)
 
-    advanced_iter, advanced_slot = latest_snapshot(args.advanced_workspace)
-    optimized_iter, optimized_slot = latest_snapshot(args.optimized_workspace)
-    advanced = metrics(advanced_slot)
-    optimized = metrics(optimized_slot)
+    advanced_snapshot = latest_snapshot(args.advanced_workspace)
+    optimized_snapshot = latest_snapshot(args.optimized_workspace)
+    advanced_iter = advanced_snapshot[0] if advanced_snapshot else None
+    optimized_iter = optimized_snapshot[0] if optimized_snapshot else None
+    advanced = metrics(advanced_snapshot[1]) if advanced_snapshot else None
+    optimized = metrics(optimized_snapshot[1]) if optimized_snapshot else None
 
     table = PrettyTable()
     table.set_style(TableStyle.SINGLE_BORDER)
@@ -94,8 +96,8 @@ def main() -> None:
     table.align["Advanced sampling"] = "r"
     table.align["Optimized-LMB only"] = "r"
     table.title = (
-        f"GL638 latest iteration  {Fore.CYAN}advanced #{advanced_iter}{Style.RESET_ALL}  |  "
-        f"{Fore.YELLOW}optimized #{optimized_iter}{Style.RESET_ALL}"
+        f"GL638 latest iteration  {Fore.CYAN}advanced #{advanced_iter or 'pending'}{Style.RESET_ALL}  |  "
+        f"{Fore.YELLOW}optimized #{optimized_iter or 'pending'}{Style.RESET_ALL}"
     )
     rows = [
         ("Samples", "samples"),
@@ -121,7 +123,8 @@ def main() -> None:
         ("  Evaluators", "evaluator time"),
     ]
     for label, key in rows:
-        left, right = advanced[key], optimized[key]
+        left = advanced[key] if advanced else "pending (no completed iteration)"
+        right = optimized[key] if optimized else "pending (no completed iteration)"
         if key == "unstable":
             left = (Fore.GREEN if left.startswith("0.000") else Fore.RED) + left + Style.RESET_ALL
             right = (Fore.GREEN if right.startswith("0.000") else Fore.RED) + right + Style.RESET_ALL
