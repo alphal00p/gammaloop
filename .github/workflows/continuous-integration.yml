@@ -12,7 +12,7 @@ on:
   merge_group:
 env:
   CARGO_TERM_COLOR: always
-  SYMBOLICA_LICENSE: ${{ secrets.SYMBOLICA_LICENSE }}
+  SYMBOLICA_LICENSE: ${{ secrets.SYMBOLICA_LICENSE_SIGNED }}
 
 permissions:
   contents: read
@@ -81,13 +81,25 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: lcnbr/tymbolica
-          ref: e85233dd3d99e5fb458913d0d49f99d83466025b
+          ref: 4aab37aa6a5250ac692b425bc95592a408c98cc1
           path: tymbolica-pinned
 
-      - name: Install Wasm build tools
+      - uses: NixOS/nix-installer-action@main
+
+      - name: Install Binaryen 130
         run: |
-          sudo apt-get update
-          sudo apt-get install -y binaryen just
+          binaryen_dir="$RUNNER_TEMP/binaryen"
+          mkdir -p "$binaryen_dir"
+          curl --fail --location --retry 3 \
+            https://github.com/WebAssembly/binaryen/releases/download/version_130/binaryen-version_130-x86_64-linux.tar.gz \
+            --output "$binaryen_dir/archive.tar.gz"
+          echo "0a18362361ad05465118cd8eeb72edaeec89de6894bc283576ef4e07aa3babcc  $binaryen_dir/archive.tar.gz" | sha256sum --check
+          tar -xzf "$binaryen_dir/archive.tar.gz" -C "$binaryen_dir" --strip-components=1
+          echo "$binaryen_dir/bin" >> "$GITHUB_PATH"
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -101,14 +113,16 @@ jobs:
         with:
           workspaces: |
             tydenso -> target
+          cache-directories: ${{ github.workspace }}/target/tymbolica
           key: tydenso-wasm
 
       - name: Build and validate Tydenso
         env:
           TYMBOLICA_CHECKOUT: ${{ github.workspace }}/tymbolica-pinned
+          TYPST_IGNORE_SYSTEM_FONTS: 'true'
         run: |
-          just check-symbolica-feature-isolation
-          just tydenso::check
+          just --unstable check-symbolica-feature-isolation
+          just --unstable tydenso::check
 
       - name: Run Tydenso payload-boundary tests
         run: |
@@ -150,7 +164,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
     env:
-      SYMBOLICA_LICENSE: ${{ secrets.SYMBOLICA_LICENSE }}
+      SYMBOLICA_LICENSE: ${{ secrets.SYMBOLICA_LICENSE_SIGNED }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -206,7 +220,7 @@ jobs:
 
       - name: Run tests
         if: startsWith(matrix.os, 'macos-')
-        run: just test-ci-mac
+        run: just --unstable test-ci-mac
 
       - name: Upload nextest JUnit
         if: always()

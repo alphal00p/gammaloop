@@ -1673,7 +1673,7 @@ Examples
 #[cfg(feature = "python_stubgen")]
 pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
     pyo3_stub_gen::StubInfo::from_project_root(
-        "symbolica.community.spenso".to_owned(),
+        "symbolica".to_owned(),
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")),
     )
 }

@@ -151,11 +151,8 @@ let
     CARGO_TARGET_DIR = alphal00pDocsCargoTarget;
     PYO3_PYTHON = "${pkgs.python313}/bin/python3";
     PYTHONPATH = "${pkgs.python313}/lib/python3.13/site-packages";
-    # Keep the compile-time Symbolica setting explicit and identical in
-    # both the reusable producer and the documentation consumer.
-    SYMBOLICA_OEM_LICENSE =
-      (builtins.fromTOML (builtins.readFile (workspaceRoot + "/.cargo/config.toml")))
-      .env.SYMBOLICA_OEM_LICENSE.value;
+    # Symbolica 3 needs no compile-time key in either the reusable producer or
+    # the documentation consumer; the build below supplies its runtime license.
   };
   alphal00pDocsRealCargoArgs = alphal00pDocsCargoArgs // {
     postPatch = normalizeWorkspaceHackBuildScriptTimestampScript;

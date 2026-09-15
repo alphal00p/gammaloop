@@ -32,6 +32,11 @@ Python builds share dependencies, while Python retains its required ABI, interpr
 and features. Clippy and doctests share check dependencies but retain workspace-wide
 source inputs, so their rebuild isolation differs from package test artifacts.
 
+The Spenso group also runs `spynso3` unit and integration tests for typed tensor
+APIs and shared Symbolica expressions. Spynso's embedded `typst/*.typ` files are
+production inputs to its package and dependent builds. Its display integration
+test mocks Typst and checks the missing-optional-renderer behavior.
+
 Merged artifacts are self-contained compressed archives. Recursive inheritance,
 writable extraction, Cargo fingerprints and epoch-1 timestamps must survive
 changes to archive handling. Stable publication outputs depend on the artifacts,

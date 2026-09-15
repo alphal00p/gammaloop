@@ -424,6 +424,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "460fbee9c2c2f33933d720630a6a0bac33ba7053db5344fac858d4b8952d77d5"
 
 [[package]]
+name = "data-encoding"
+version = "2.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4583a4551df46e2792f82ceeac45e850d2e2d5debba0b91f102385cda5b11f06"
+
+[[package]]
 name = "defmt"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -490,6 +496,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "directories"
+version = "6.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "16f5094c54661b38d03bd7e50df373292118db60b585c08a411c6d840017fe7d"
+dependencies = [
+ "dirs-sys",
+]
+
+[[package]]
+name = "dirs-sys"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e01a3366d27ee9890022452ee61b2b63a67e6f13f58900b651ff5665f0bb1fab"
+dependencies = [
+ "libc",
+ "option-ext",
+ "redox_users",
+ "windows-sys",
+]
+
+[[package]]
 name = "dot-parser"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -526,6 +553,12 @@ name = "dyn-clone"
 version = "1.0.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0881ea181b1df73ff77ffaaf9c7544ecc11e82fba9b5f27b262a3c73a332555"
+
+[[package]]
+name = "ed25519-compact"
+version = "2.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f05391a505666bdf2b5d2626f41b7f0f49052b1e33cceac960eaa818008141da"
 
 [[package]]
 name = "either"
@@ -671,13 +704,13 @@ dependencies = [
 
 [[package]]
 name = "graphica"
-version = "2.1.0"
-source = "git+https://github.com/symbolica-dev/symbolica?rev=ec19eeb211685aa216dbd28a4df547cd4c6baca1#ec19eeb211685aa216dbd28a4df547cd4c6baca1"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "afa7211a7cfdba21893f634868e19459e5d1882e5957f98d7c084875a6e70ab6"
 dependencies = [
  "ahash",
  "dyn-clone",
  "numerica",
- "rand 0.9.5",
 ]
 
 [[package]]
@@ -847,6 +880,15 @@ name = "libm"
 version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
+
+[[package]]
+name = "libredox"
+version = "0.1.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8d8f1ea3f21fd3405dcaf6c9b5c1630af9afc422d9073ea39c5f6d6c772e08ed"
+dependencies = [
+ "libc",
+]
 
 [[package]]
 name = "linnet"
@@ -1025,8 +1067,9 @@ dependencies = [
 
 [[package]]
 name = "numerica"
-version = "2.2.0"
-source = "git+https://github.com/symbolica-dev/symbolica?rev=ec19eeb211685aa216dbd28a4df547cd4c6baca1#ec19eeb211685aa216dbd28a4df547cd4c6baca1"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dd28aae6e022a7b5846a8ae40b2d41104f8d8cba38adbb02c0f7933f3ed7bb02"
 dependencies = [
  "ahash",
  "astro-float",
@@ -1040,6 +1083,7 @@ dependencies = [
  "malachite-q",
  "num-traits",
  "rand 0.9.5",
+ "rand_core 0.9.5",
  "rayon",
  "rug",
  "serde",
@@ -1062,10 +1106,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
-name = "papergrid"
-version = "0.17.0"
+name = "option-ext"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6978128c8b51d8f4080631ceb2302ab51e32cc6e8615f735ee2f83fd269ae3f1"
+checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
+
+[[package]]
+name = "papergrid"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d0984e668274d34691bc2b262ef0d115de5fa9973bcdee7ae32213f93099153e"
 dependencies = [
  "bytecount",
  "fnv",
@@ -1172,28 +1222,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "version_check",
-]
-
-[[package]]
-name = "proc-macro-error-attr2"
-version = "2.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96de42df36bb9bba5542fe9f1a054b8cc87e172759a1868aa05c1f3acc89dfc5"
-dependencies = [
- "proc-macro2",
- "quote",
-]
-
-[[package]]
-name = "proc-macro-error2"
-version = "2.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11ec05c52be0a07b08061f7dd003e7d7092e0472bc731b4af7bb1ef876109802"
-dependencies = [
- "proc-macro-error-attr2",
- "proc-macro2",
- "quote",
- "syn 2.0.119",
 ]
 
 [[package]]
@@ -1324,6 +1352,17 @@ checksum = "22e18b0f0062d30d4230b2e85ff77fdfe4326feb054b9783a3460d8435c8ab91"
 dependencies = [
  "crossbeam-deque",
  "crossbeam-utils",
+]
+
+[[package]]
+name = "redox_users"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a4e608c6638b9c18977b00b475ac1f28d14e84b27d8d42f70e0bf1e3dec127ac"
+dependencies = [
+ "getrandom 0.2.17",
+ "libredox",
+ "thiserror",
 ]
 
 [[package]]
@@ -1583,8 +1622,6 @@ version = "0.3.2"
 dependencies = [
  "proc-macro2",
  "quote",
- "serde",
- "symbolica",
  "syn 2.0.119",
 ]
 
@@ -1596,8 +1633,9 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "symbolica"
-version = "2.2.0"
-source = "git+https://github.com/symbolica-dev/symbolica?rev=ec19eeb211685aa216dbd28a4df547cd4c6baca1#ec19eeb211685aa216dbd28a4df547cd4c6baca1"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c060dc0a9613c88aadee7095109bf350e549067c9ecf7ea217064cdf3d439721"
 dependencies = [
  "ahash",
  "append-only-vec",
@@ -1606,7 +1644,10 @@ dependencies = [
  "brotli",
  "byteorder",
  "bytes",
+ "data-encoding",
+ "directories",
  "dyn-clone",
+ "ed25519-compact",
  "getrandom 0.3.4",
  "graphica",
  "inventory",
@@ -1671,9 +1712,9 @@ dependencies = [
 
 [[package]]
 name = "tabled"
-version = "0.20.0"
+version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e39a2ee1fbcd360805a771e1b300f78cc88fec7b8d3e2f71cd37bbf23e725c7d"
+checksum = "2d2596a104db1900b943f97d793a6c99addca918c4525c999f751a0f17d472eb"
 dependencies = [
  "papergrid",
  "tabled_derive",
@@ -1682,12 +1723,11 @@ dependencies = [
 
 [[package]]
 name = "tabled_derive"
-version = "0.11.0"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ea5d1b13ca6cff1f9231ffd62f15eefd72543dab5e468735f1a456728a02846"
+checksum = "7dca1937322a1e892b1a65f6a6736183bb0a29d3b4234d1d53bc436dff9beb76"
 dependencies = [
  "heck 0.5.0",
- "proc-macro-error2",
  "proc-macro2",
  "quote",
  "syn 2.0.119",
@@ -1839,7 +1879,7 @@ dependencies = [
 [[package]]
 name = "tymbolica-atom-payload"
 version = "0.1.0"
-source = "git+https://github.com/lcnbr/tymbolica?rev=e85233dd3d99e5fb458913d0d49f99d83466025b#e85233dd3d99e5fb458913d0d49f99d83466025b"
+source = "git+https://github.com/lcnbr/tymbolica?rev=4aab37aa6a5250ac692b425bc95592a408c98cc1#4aab37aa6a5250ac692b425bc95592a408c98cc1"
 dependencies = [
  "ciborium",
  "symbolica",

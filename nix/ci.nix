@@ -59,6 +59,7 @@
         "spenso"
         "spenso-hep-lib"
         "spenso-macros"
+        "spynso3"
         "symbolica-utils"
       ];
     }
@@ -313,9 +314,7 @@
     ]
     ++ map (group: "checks.${system}.gammaloop-nextest-${group.name}") groups
     ++ [
-      (crateTestDependencyAttr "spynso3")
       (crateTestBinaryAttr workspaceHackPackage)
-      (crateTestBinaryAttr "spynso3")
       (workspacePackageGraphAttr workspaceHackPackage)
     ]
     # A cached Python module needs no production Cargo artifacts. Its worker
@@ -429,7 +428,8 @@ in {
         package = "packages.${system}.nix-ci-check-${name}";
         inherit system;
         in-repo = true;
-        secrets = ["SYMBOLICA_LICENSE"];
+        # Keep the legacy repository key available to branches on older Symbolica.
+        secrets = ["SYMBOLICA_LICENSE_SIGNED"];
       };
     }) (["gammaloop-doctest"] ++ map (group: "gammaloop-nextest-${group.name}") groups));
     deploy = {

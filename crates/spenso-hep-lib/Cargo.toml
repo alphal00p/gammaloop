@@ -7,7 +7,7 @@ description = "A spenso tensor library for high energy physics"
 [dependencies]
 idenso = { workspace = true, features = ["native", "reference-cases"] }
 spenso = { workspace = true, features = ["native", "shadowing"] }
-spenso-macros = { workspace = true, features = ["native"] }
+spenso-macros = { workspace = true }
 symbolica = { workspace = true }
 
 ahash = { workspace = true, features = ["serde"] }

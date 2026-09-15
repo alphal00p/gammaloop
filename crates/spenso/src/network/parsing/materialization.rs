@@ -422,7 +422,7 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
 
     /// Match one argument against the symbolic representation wildcard.
     ///
-    /// Matching is restricted to the argument itself (`level_range = 0`) so a
+    /// Matching is restricted to the argument itself (`max_level = 0`) so a
     /// nested representation inside metadata does not accidentally become the
     /// tensor's compact slot.
     fn compact_rep_pattern_match(arg: AtomView<'_>) -> Option<Representation<LibraryRep>> {
@@ -431,9 +431,7 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
         }
 
         let rep_pattern = Atom::var(SPENSO_TAG.rep_).to_pattern();
-        let settings = MatchSettings::new()
-            .level_range((0, Some(0)))
-            .partial(false);
+        let settings = MatchSettings::new().max_level(0).partial(false);
         let mut matches = arg.pattern_match(&rep_pattern, None, Some(&settings));
         let matched = matches.next_detailed()?;
         let rep = rep_pattern.replace_wildcards_with_matches(matched.match_stack);

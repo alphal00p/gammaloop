@@ -367,7 +367,7 @@ impl Integrated<'_> {
         // apply metric
         res = res
             .replace(vakint::symbols::S.p.call_args([W_.i_, W_.j_]))
-            .when(W_.j_.filter(|r| r.is_integer()))
+            .when(W_.j_.filter(|r| r.is_integer().is_true()))
             .with(
                 vakint::symbols::S.p.call_args([
                     Atom::var(W_.i_),
@@ -381,7 +381,7 @@ impl Integrated<'_> {
                     .p
                     .call_args([Atom::var(W_.i_), vakint::symbols::S.dot_dummy_ind(W_.j_)]),
             )
-            .when(W_.j_.filter(|r| r.is_integer()))
+            .when(W_.j_.filter(|r| r.is_integer().is_true()))
             .with(
                 vakint::symbols::S.p.call_args([
                     Atom::var(W_.i_),
@@ -400,7 +400,7 @@ impl Integrated<'_> {
                 vakint::symbols::S.dot_dummy_ind(W_.x_),
                 W_.y_
             ))
-            .when(W_.x_.filter(|r| r.is_integer()))
+            .when(W_.x_.filter(|r| r.is_integer().is_true()))
             .with(function!(
                 vk_metric,
                 mink.to_symbolic([GS
@@ -413,7 +413,7 @@ impl Integrated<'_> {
                 W_.x_,
                 vakint::symbols::S.dot_dummy_ind(W_.y_)
             ))
-            .when(W_.y_.filter(|r| r.is_integer()))
+            .when(W_.y_.filter(|r| r.is_integer().is_true()))
             .with(function!(
                 vk_metric,
                 mink.to_symbolic([GS
@@ -1048,7 +1048,7 @@ impl VakintMomentumSolution {
         let solutions = Atom::solve(system)
             .wrt_with_exponent::<u8, _>(variables)
             .map_err(|source| eyre!("{source}"))?;
-        let [solution] = solutions.as_slice() else {
+        let [solution] = solutions.iter().as_slice() else {
             return Err(eyre!(
                 "expected one Vakint momentum solution, got {} branches",
                 solutions.len()
@@ -1059,9 +1059,13 @@ impl VakintMomentumSolution {
             .map(|variable| {
                 let polynomial_variable =
                     PolyVariable::try_from(variable.clone()).map_err(|source| eyre!("{source}"))?;
-                solution.get(&polynomial_variable).cloned().ok_or_else(|| {
-                    eyre!("Vakint momentum solution has no value for {polynomial_variable}")
-                })
+                if solution.free_variables().contains(&polynomial_variable) {
+                    Ok(variable.clone())
+                } else {
+                    solution.get(&polynomial_variable).cloned().ok_or_else(|| {
+                        eyre!("Vakint momentum solution has no value for {polynomial_variable}")
+                    })
+                }
             })
             .collect::<Result<Vec<_>>>()?;
         Ok(Self::from_solution(

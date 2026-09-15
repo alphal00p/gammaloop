@@ -140,7 +140,6 @@ program so its dependency revision is recorded with the example:
 
 // docs-example: syntax
 ```sh
-NO_SYMBOLICA_OEM_LICENSE=1 \
 EXTRA_MACOS_LIBS_FOR_GNU_GCC=T \
 SYMBOLICA_LICENSE="$SYMBOLICA_LICENSE" \
 rust-script --debug examples/api/rust/epem_a_ddxg_xs_LO/inspect_events.rs
