@@ -21,6 +21,9 @@ conditional replay result, not a measured production suppression rate.
 The diagnostic therefore records the old behavior and its counterfactual
 counts. The current waiver uses the absolute real-component accumulator,
 `integral |Re|`, and accepts it once its relative error is at most 10%.
+It additionally refuses the waiver when the point's own maximum rotation
+discrepancy is below `1e-2`, because that does not establish a reliable order
+of magnitude for the point.
 
 | Archived optimized-LMB checkpoint | Value |
 | --- | ---: |
