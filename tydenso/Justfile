@@ -79,7 +79,7 @@ check: build check-wasm-features
     symbolica_revision="1814278ea103258bcdb059276b760f19d25b46e3"
     check_dir="$(mktemp -d)"
     trap 'rm -rf "$check_dir"' EXIT
-    mkdir -p "$check_dir/tymbolica" target/tymbolica
+    mkdir -p "$check_dir/tymbolica" ../target/tymbolica
     git -C "$tymbolica_checkout" archive "$tymbolica_revision" | tar -x -C "$check_dir/tymbolica"
     tymbolica_checkout="$check_dir/tymbolica"
     # Rebuild both pinned engines with our Symbolica revision without changing the checkout.
@@ -94,8 +94,8 @@ check: build check-wasm-features
       "$tymbolica_checkout/build.rs" > "$tymbolica_checkout/build.rs.tmp"
     touch -r "$tymbolica_checkout/build.rs" "$tymbolica_checkout/build.rs.tmp"
     mv "$tymbolica_checkout/build.rs.tmp" "$tymbolica_checkout/build.rs"
-    # Keep dependency compilation reusable through the existing Tydenso target cache.
-    ln -s "$PWD/target/tymbolica" "$tymbolica_checkout/target"
+    # Keep compilation reusable outside Swatinem's workspace-target cleanup.
+    ln -s "$PWD/../target/tymbolica" "$tymbolica_checkout/target"
     (
       cd "$tymbolica_checkout"
       unset CARGO_TARGET_DIR

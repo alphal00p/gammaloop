@@ -113,6 +113,7 @@ jobs:
         with:
           workspaces: |
             tydenso -> target
+          cache-directories: ${{ github.workspace }}/target/tymbolica
           key: tydenso-wasm
 
       - name: Build and validate Tydenso
