@@ -220,3 +220,26 @@ confirmation therefore uses eight adaptive iterations, 4,194,304 MC or
 criteria. K9 confirmation remains a separate requirement. The protocol and
 independent calculation are `GAUSSIAN_CONFIRMATION_PROTOCOL.md` and
 `OFFLINE_GAUSSIAN_VARIANCE.md` in the build14 scratch directory.
+
+## Completed K6 native confirmation
+
+The predeclared larger confirmation now passes all four arms and both unit
+targets, retaining the original 3% SEM, 6% distance and five-SEM criteria. There
+are no unstable/NaN samples and the saved state and inputs remain unchanged.
+The Gaussian width is 114 GeV, with the original shifted center; each arm uses
+eight adaptive iterations on twelve workers. MC has 4,194,304 total draws,
+SUM has 2,097,152. These are reference observables, not physical cross sections.
+
+| Score / mode | Normalization | Normalized second moment | Native wall [s] |
+|---|---:|---:|---:|
+| Inverse density / MC | 1.012154 +/- .007749 | 1.015646 +/- .008100 | 402.2 |
+| Inverse density / SUM | 1.001629 +/- .005612 | 1.000732 +/- .005792 | 712.5 |
+| OSE / MC | 1.024783 +/- .010876 | 1.027223 +/- .010954 | 242.1 |
+| OSE / SUM | 1.000907 +/- .006119 | .998156 +/- .006135 | 376.2 |
+
+The complete sequence took 1,822.6 seconds and retained all 32 completed
+iteration checkpoints. Evidence is in `results-gaussian-k6-confirm-build14/summary.json`
+and `audit-gaussian-k6-confirm-build14.json` in the build14 scratch directory.
+The ordinary-LMB confirmation resolves that catalogue's initial statistical
+shortfall. It does not by itself resolve the mixed K9 discrepancy or establish
+physical variance improvement.
