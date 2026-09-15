@@ -892,7 +892,7 @@ fn explicit_parent_validation_excludes_initial_state_cycles() {
     test_initialise().unwrap();
     let model = load_generic_model("sm");
     let graph: Graph =
-        include_str!("../../../../../examples/cli/epem_a_ttxh/NNLO/graphs/GL297.dot")
+        include_str!("../../../../../tests/resources/graphs/GL297.dot")
             .into_graph(&model)
             .unwrap();
     assert_eq!(graph.loop_momentum_basis.loop_edges.len(), 4);
