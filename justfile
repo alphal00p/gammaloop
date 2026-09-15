@@ -519,7 +519,10 @@ coverage-nix:
     nix build .#packages.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-llvm-coverage
 
 # Run all CI checks locally (same as CI)
-ci-checks: clippy-nix fmt-check-nix audit-nix deny-nix doc-nix doctest-nix test-nix
+# Keep this list aligned with the checks exported by the current flake.  The
+# historical audit/deny recipes are retained above for local callers, but those
+# attributes are not exported by this branch's flake.
+ci-checks: clippy-nix fmt-check-nix doc-nix doctest-nix test-nix
 
 # Run the checks and publish their outputs to the NixCI cache.
 # This branch predates the generated CI configuration used by newer branches,
