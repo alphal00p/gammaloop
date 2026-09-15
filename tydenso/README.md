@@ -10,11 +10,12 @@ it from the repository root with:
 
 ```sh
 just tydenso::build
-TYMBOLICA_CHECKOUT=/path/to/tymbolica just tydenso::check
+TYMBOLICA_CHECKOUT=/path/to/symbolica-typst-plugin just tydenso::check
 just tydenso::manual
 ```
 
-The interop tests require `TYMBOLICA_CHECKOUT` to have Git HEAD
+The interop tests require `TYMBOLICA_CHECKOUT` to point to
+[`symbolica-dev/symbolica-typst-plugin`](https://github.com/symbolica-dev/symbolica-typst-plugin) at Git HEAD
 `4aab37aa6a5250ac692b425bc95592a408c98cc1`, the exact Tymbolica revision pinned
 by the nested Rust workspace. The check uses Nix to rebuild Tymbolica and Rubi
 in a temporary copy. GammaLoop, Tydenso and Tymbolica must all resolve
