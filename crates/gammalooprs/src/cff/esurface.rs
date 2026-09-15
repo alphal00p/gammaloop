@@ -4278,9 +4278,8 @@ mod tests {
                 minus[axis] -= step;
                 let plus = map.forward(&plus).unwrap();
                 let minus = map.forward(&minus).unwrap();
-                for component in 0..6 {
-                    derivative_matrix[component][axis] =
-                        (plus.point[component] - minus.point[component]) / (2.0 * step);
+                for (component, row) in derivative_matrix.iter_mut().enumerate().take(6) {
+                    row[axis] = (plus.point[component] - minus.point[component]) / (2.0 * step);
                 }
             }
             let numerical_jacobian = SamplingMapAffine::new(derivative_matrix, vec![0.0; 6])

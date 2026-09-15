@@ -521,6 +521,54 @@ coverage-nix:
 # Run all CI checks locally (same as CI)
 ci-checks: clippy-nix fmt-check-nix audit-nix deny-nix doc-nix doctest-nix test-nix
 
+# Run the checks and publish their outputs to the NixCI cache.
+# This branch predates the generated CI configuration used by newer branches,
+# so enumerate its stable check and producer attributes directly.
+ci-checks-and-upload:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    netrc="${NIXCI_NETRC:-$HOME/.netrc}"
+    test -r "$netrc" || { echo 'Set up ~/.netrc or NIXCI_NETRC before uploading.' >&2; exit 1; }
+
+    just ci-checks
+
+    system=$(nix eval --impure --raw --expr 'builtins.currentSystem')
+    selection=$(nix eval --impure --raw --expr '
+      let
+        system = builtins.currentSystem;
+        flake = builtins.getFlake (toString ./.) ;
+        checks = builtins.attrNames flake.checks.${system};
+        packageNames = [
+          "cargoArtifacts"
+          "workspaceBuildArtifacts"
+          "gammaloop-python-module"
+          "nix-ci-check-gammaloop-doctest"
+          "nix-ci-check-gammaloop-nextest"
+          "nix-ci-check-gammaloop-nextest-core"
+          "nix-ci-check-gammaloop-nextest-clinnet"
+          "nix-ci-check-gammaloop-nextest-integration"
+          "nix-ci-check-gammaloop-nextest-python-api"
+          "nix-ci-check-gammaloop-nextest-linnet"
+          "nix-ci-check-gammaloop-nextest-spenso"
+          "nix-ci-check-gammaloop-nextest-vakint"
+        ];
+        packages = builtins.filter (name: builtins.hasAttr name flake.packages.${system}) packageNames;
+      in builtins.concatStringsSep "\\n"
+        ((map (name: "checks.${system}.${name}") checks)
+          ++ (map (name: "packages.${system}.${name}") packages))
+    ')
+    targets=()
+    while IFS= read -r target; do
+        [ -n "$target" ] && targets+=(".#$target")
+    done <<< "$selection"
+
+    tmp=$(mktemp -d)
+    trap 'rm -rf "$tmp"' EXIT
+    nix build --impure --no-link --print-out-paths "${targets[@]}" > "$tmp/outputs"
+    nix copy --netrc-file "$netrc" \
+        --to 'https://cache.nix-ci.com?compression=xz&parallel-compression=true' \
+        --stdin < "$tmp/outputs"
+
 # Run tests in release mode (faster execution)
 test-release TEST_NAME="":
     #!/usr/bin/env bash

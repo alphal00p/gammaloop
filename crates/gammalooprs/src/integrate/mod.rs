@@ -3434,6 +3434,7 @@ fn numerical_stability_output_path(
     ))
 }
 
+#[allow(clippy::infallible_destructuring_match)]
 fn user_facing_observables_output_formats(integrand: &Integrand) -> Vec<ObservableFileFormat> {
     let process_integrand = match integrand {
         Integrand::ProcessIntegrand(process_integrand) => process_integrand,
@@ -3451,6 +3452,7 @@ fn user_facing_observables_output_formats(integrand: &Integrand) -> Vec<Observab
         .resolved_formats()
 }
 
+#[allow(clippy::infallible_destructuring_match)]
 fn user_facing_observables_output_enabled(integrand: &Integrand) -> bool {
     let process_integrand = match integrand {
         Integrand::ProcessIntegrand(process_integrand) => process_integrand,

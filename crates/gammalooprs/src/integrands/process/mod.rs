@@ -1073,6 +1073,7 @@ impl ProcessIntegrand {
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn evaluate_samples_raw_with_estimate(
         &mut self,
         target: EvaluationTarget<'_>,
@@ -1790,6 +1791,7 @@ type StabilityCheckResult<T> = (
 );
 
 #[inline]
+#[cfg(test)]
 fn stability_check<T: FloatLike>(
     ecm_scale: Option<&F<T>>,
     results: &[Complex<F<T>>],
@@ -1813,6 +1815,7 @@ fn stability_check<T: FloatLike>(
 }
 
 #[inline]
+#[allow(clippy::too_many_arguments)]
 fn stability_check_with_estimate<T: FloatLike>(
     ecm_scale: Option<&F<T>>,
     results: &[Complex<F<T>>],
@@ -1840,6 +1843,8 @@ fn stability_check_with_estimate<T: FloatLike>(
 }
 
 #[inline]
+#[cfg(test)]
+#[allow(clippy::too_many_arguments)]
 fn stability_check_components<T: FloatLike>(
     ecm_scale: Option<&F<T>>,
     results: &[Complex<F<T>>],
@@ -1867,6 +1872,7 @@ fn stability_check_components<T: FloatLike>(
 }
 
 #[inline]
+#[allow(clippy::too_many_arguments)]
 fn stability_check_components_with_estimate<T: FloatLike>(
     ecm_scale: Option<&F<T>>,
     results: &[Complex<F<T>>],
@@ -1924,20 +1930,18 @@ fn stability_check_components_with_estimate<T: FloatLike>(
     let errors = results
         .iter()
         .map(|res| {
-            let error_re = if !check_real {
-                F::<T>::from_f64(0.0)
-            } else if IsZero::is_zero(&res.re) && IsZero::is_zero(&average.re) {
-                F::<T>::from_f64(0.0)
-            } else {
-                ((&res.re - &average.re) / &average.re).abs()
-            };
-            let error_im = if !check_imag {
-                F::<T>::from_f64(0.0)
-            } else if IsZero::is_zero(&res.im) && IsZero::is_zero(&average.im) {
-                F::<T>::from_f64(0.0)
-            } else {
-                ((&res.im - &average.im) / &average.im).abs()
-            };
+            let error_re =
+                if !check_real || (IsZero::is_zero(&res.re) && IsZero::is_zero(&average.re)) {
+                    F::<T>::from_f64(0.0)
+                } else {
+                    ((&res.re - &average.re) / &average.re).abs()
+                };
+            let error_im =
+                if !check_imag || (IsZero::is_zero(&res.im) && IsZero::is_zero(&average.im)) {
+                    F::<T>::from_f64(0.0)
+                } else {
+                    ((&res.im - &average.im) / &average.im).abs()
+                };
             Complex::new(error_re, error_im)
         })
         .collect::<Vec<_>>();
@@ -2121,6 +2125,7 @@ fn stability_check_on_norm<T: FloatLike>(
 }
 
 #[inline]
+#[allow(clippy::too_many_arguments)]
 fn stability_check_on_norm_components_with_estimate<T: FloatLike>(
     ecm_scale: Option<&F<T>>,
     results: &[Complex<F<T>>],
@@ -8354,14 +8359,14 @@ pub(crate) mod tests {
             })
             .collect::<Vec<_>>();
         let total = scores.iter().sum::<f64>();
-        for channel_id in 0..bridge.channels().len() {
+        for (channel_id, score) in scores.iter().enumerate().take(bridge.channels().len()) {
             let evaluation = bridge
                 .inverse(SamplingChannelId::from(channel_id), &raw)
                 .unwrap()
                 .expect("full-support channel inverse");
             assert!((evaluation.partition.weights.iter().sum::<f64>() - 1.0).abs() < 1.0e-14);
             let actual = evaluation.partition.weight(channel_id).unwrap();
-            let expected = scores[channel_id] / total;
+            let expected = score / total;
             assert!(
                 (actual - expected).abs() < 1.0e-14,
                 "channel {channel_id}: {actual} != {expected}"
@@ -8467,8 +8472,10 @@ pub(crate) mod tests {
 
         let selection = SamplingChannelSelection::default();
         let resolved = resolve_sampling_channel_selection(&graph.name, &selection).unwrap();
-        let mut parameterization_settings = ParameterizationSettings::default();
-        parameterization_settings.sampling_channels = selection;
+        let parameterization_settings = ParameterizationSettings {
+            sampling_channels: selection,
+            ..Default::default()
+        };
         let context = SamplingChannelCompileContext::new(
             graph.name.clone(),
             parent_lmb,
