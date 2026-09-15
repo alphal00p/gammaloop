@@ -357,8 +357,8 @@ fn check_backend<T: FloatLike>(
     ));
     let expected_backend = match &mode {
         FrozenCompilationMode::Eager => ActiveF64Backend::Eager,
-        FrozenCompilationMode::Symjit(level) => {
-            evaluator.activate_symjit(*level).unwrap();
+        FrozenCompilationMode::Symjit(options) => {
+            evaluator.activate_symjit(options).unwrap();
             ActiveF64Backend::Symjit
         }
         FrozenCompilationMode::Cpp(_) => {
@@ -574,7 +574,7 @@ fn hyperbolic_cpp_strict() {
         ..Default::default()
     };
     check_backend(
-        FrozenCompilationMode::Cpp(options.external_options_snapshot()),
+        FrozenCompilationMode::Cpp(options.options_snapshot()),
         53,
         |x| F(x.to_f64()),
     );
@@ -584,7 +584,7 @@ fn hyperbolic_cpp_strict() {
 fn hyperbolic_cpp_production() {
     let options = GammaloopCompileOptions::default();
     check_backend(
-        FrozenCompilationMode::Cpp(options.external_options_snapshot()),
+        FrozenCompilationMode::Cpp(options.options_snapshot()),
         53,
         |x| F(x.to_f64()),
     );
@@ -592,8 +592,13 @@ fn hyperbolic_cpp_production() {
 
 #[test]
 fn hyperbolic_symjit_o0() {
+    let options = GammaloopCompileOptions {
+        optimization_level: CompilationOptimizationLevel::O0,
+        jit_direct_translation: true,
+        ..Default::default()
+    };
     check_backend(
-        FrozenCompilationMode::Symjit(CompilationOptimizationLevel::O0),
+        FrozenCompilationMode::Symjit(options.options_snapshot()),
         53,
         |x| F(x.to_f64()),
     );
@@ -601,8 +606,13 @@ fn hyperbolic_symjit_o0() {
 
 #[test]
 fn hyperbolic_symjit_o2() {
+    let options = GammaloopCompileOptions {
+        optimization_level: CompilationOptimizationLevel::O2,
+        jit_direct_translation: true,
+        ..Default::default()
+    };
     check_backend(
-        FrozenCompilationMode::Symjit(CompilationOptimizationLevel::O2),
+        FrozenCompilationMode::Symjit(options.options_snapshot()),
         53,
         |x| F(x.to_f64()),
     );

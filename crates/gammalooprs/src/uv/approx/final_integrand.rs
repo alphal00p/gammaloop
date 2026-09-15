@@ -675,7 +675,7 @@ mod tests {
                 param_builder::{ParamBuilder, ParamValuePairs},
             },
             processes::EvaluatorSettings,
-            settings::global::CompilationOptimizationLevel,
+            settings::global::{CompilationOptimizationLevel, CompilationOptionsSnapshot},
             utils::F,
         };
         use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
@@ -728,7 +728,10 @@ mod tests {
                     if compiled {
                         stack
                             .single_parametric
-                            .activate_symjit(CompilationOptimizationLevel::O0)?;
+                            .activate_symjit(&CompilationOptionsSnapshot {
+                                optimization_level: CompilationOptimizationLevel::O0,
+                                ..Default::default()
+                            })?;
                     }
                     for (map_id, input_x, expected) in [
                         (4, 2.0, 54.0 * factor_at_two),
@@ -763,7 +766,7 @@ mod tests {
                 param_builder::{ParamBuilder, ParamValuePairs},
             },
             processes::EvaluatorSettings,
-            settings::global::CompilationOptimizationLevel,
+            settings::global::{CompilationOptimizationLevel, CompilationOptionsSnapshot},
             utils::F,
         };
         use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
@@ -821,7 +824,10 @@ mod tests {
                 if compiled {
                     stack
                         .single_parametric
-                        .activate_symjit(CompilationOptimizationLevel::O0)?;
+                        .activate_symjit(&CompilationOptionsSnapshot {
+                            optimization_level: CompilationOptimizationLevel::O0,
+                            ..Default::default()
+                        })?;
                 }
                 // For q1=(3,4,0), q2=(-3,-4,0), E1=5, the contractions
                 // are 25-5*E2 and 25+5*E2. The scalar numerator at D=2 is 27.

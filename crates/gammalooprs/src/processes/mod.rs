@@ -935,6 +935,7 @@ mod tests {
                     &GenerationSettings {
                         compile: GammaloopCompileOptions {
                             compilation_mode: CompilationMode::Cpp,
+                            jit_direct_translation: true,
                             fast_math: false,
                             optimization_level: CompilationOptimizationLevel::O0,
                             unsafe_math: false,
