@@ -2,7 +2,7 @@
 
 #quote(block: true)[
 #strong[Status:] Current implementation architecture, audited against the Idenso source on
-2026-08-18.
+2026-09-14.
 
 This note covers the `idenso` Rust crate: representation-aware Symbolica transformations built
 on Spenso's tensor syntax and network parser. It does not describe concrete tensor-component
@@ -152,10 +152,11 @@ The shared concrete syntax and which crate owns each rewrite are specified in th
 
 == Features and serialization
 
-Idenso has no default Cargo features. The core Rust rewrite layer still always includes
-Symbolica and Spenso's `shadowing` support. `python` enables the community-module functions and
-representation initializer; `python_stubgen` adds stub metadata and enables Symbolica's stub
-surface. `reference-cases` exposes the otherwise test-only curated identity cases.
+Idenso defaults to `native`, forwarding GMP/MPFR support; `wasm` selects the Wasm backend with
+default features disabled. The core Rust rewrite layer always includes Symbolica and Spenso's
+`shadowing` support. `python` enables community-module functions and automatic representation
+initialization; `python_stubgen` adds stub metadata and enables Symbolica's stub surface.
+`reference-cases` exposes the otherwise test-only curated identity cases.
 
 The optional `bincode` feature derives binary encoding only for Idenso's zero-sized
 representation marker types. `SymbolicTensor`, rewrite settings, symbol registries, networks,
@@ -171,13 +172,13 @@ Symbolica owns internal expression memory and symbol metadata. Settings are borr
 transformation. Parsed `SymbolicNet` values, dummy libraries, and contraction plans are local to
 the call and are discarded after atom extraction.
 
-Fallible structural entry points remain visible: `SymbolicNetParse` returns
-`TensorNetworkError`, structure inference returns `StructureError`, `dirac_adjoint` returns an
-`eyre::Result`, and `CookSettings::try_cook`/`try_cook_indices` report `CookingError`. By
-contrast, convenience APIs such as `schoonschip`, shorthand expansion, dangling-index queries,
-and `simple_execute` unwrap parsing or network-execution errors internally. They assume an
-initialized, Spenso-compatible expression and may panic on malformed or inconsistent tensor
-syntax; use the fallible parsing boundary first when inputs are not trusted.
+Fallible structural entry points use typed errors: `SymbolicNetParse` returns
+`TensorNetworkError`, structure inference returns `StructureError`, `dirac_adjoint` reports
+`AdjointError`, and `CookSettings::try_cook`/`try_cook_indices` report `CookingError`.
+Canonicalization returns `CanonicalizationError`; dangling-index queries and dummy wrapping
+return `IndexToolingError`. Shorthand expansion, network Schoonschip passes, and
+`simple_execute` return `Result<Atom, NetworkToolingError>` rather than unwrapping parser or
+execution failures. The direct pattern-based `schoonschip` path still returns an `Atom`.
 
 Domain simplifiers usually leave unmatched syntax unchanged rather than diagnosing it as an
 error. A successful return therefore means the configured rewrite reached its fixed point, not

@@ -20,7 +20,7 @@ required-features = ["python_stubgen"]
 [dependencies]
 ciborium = "0.2.2"
 dot-parser = { workspace = true }
-linnet = { workspace = true }
+linnet = { workspace = true, features = ["nodestore-vec", "serde"] }
 linnest = { workspace = true }
 # Maturin follows path dependencies into sdists; render.rs embeds Kurvst's Typst assets.
 kurvst = { path = "../kurvst" }

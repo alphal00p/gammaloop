@@ -1026,7 +1026,7 @@ impl PolySplit {
 
         for (i, monomial) in poly.into_iter().enumerate() {
             mul_h = Atom::num(1);
-            for (var_id, &pow) in poly.variables.iter().zip(monomial.exponents) {
+            for (var_id, &pow) in poly.variables().iter().zip(monomial.exponents) {
                 if pow > 0 {
                     match var_id {
                         PolyVariable::Symbol(v) => {

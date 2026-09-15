@@ -2,7 +2,7 @@
 
 #quote(block: true)[
 #strong[Status:] Current implementation architecture, audited against the Spenso source on
-2026-08-18.
+2026-09-14.
 
 This note covers the `spenso` Rust crate. `spenso-macros`, `spenso-hep-lib`, and `spynso3` are
 separate packages: they provide derives, concrete physics tensors, and a Python adapter rather
@@ -40,9 +40,11 @@ indices are equal after dualization.
 `TensorStructure` exposes an ordered external slot sequence and the conversions derived from it:
 shape, size, flat and expanded indices, duality, permutations, and repeated-index traces.
 Concrete implementations choose different ownership policies: `OrderedStructure` owns an
-ordered slot vector, `NamedStructure` adds a global name and arguments, `PermutedStructure`
-records representation and index permutations, and `SmartShadowStructure` couples symbolic and
-ordered views. `HasStructure` keeps this metadata separate from a tensor's payload.
+ordered slot vector, `NamedStructure` adds a global name and arguments, and
+`SmartShadowStructure` couples symbolic and ordered views. `Canonicalized` keeps a value in
+canonical order alongside its immutable `CanonicalLayout`; `reindex_storage` instead returns
+`Reindexed`, with a checked pending index permutation to apply to the payload. `HasStructure`
+keeps metadata separate from that payload.
 
 The principal materialized payloads are:
 
@@ -95,9 +97,10 @@ path.
   self-dual tensor so network algebra can maintain compatibility.
 
 A leaf refers to a local store position, a lazy tensor sum or scaled tensor, a scalar position,
-or a caller-owned library key with its current indices. The graph never embeds the external
-library value. Materialization occurs through the supplied `Library`, while opaque function
-nodes delegate to the supplied `FunctionLibrary`.
+or a caller-owned library key with its canonical layout. Live indices belong to graph edges,
+not a duplicate leaf cache. The graph never embeds the external library value. Materialization
+occurs through the supplied `Library`, while opaque function nodes delegate to the supplied
+`FunctionLibrary`.
 
 Execution follows one semantic path with interchangeable policies:
 
@@ -158,7 +161,9 @@ Spenso and Idenso are recorded in the
 
 == Features and serialization
 
-The core crate has no default feature declaration. `shadowing` enables Symbolica atoms,
+The default `native` feature forwards GMP/MPFR support; `wasm` selects Symbolica's Wasm backend
+with default features disabled. Native code generation is a separate `native-code-generation`
+feature. `shadowing` enables Symbolica atoms,
 parametric tensors, parsing, state-aware decoding, and Linnet's Symbolica adapter. `python`
 only adds PyO3 extraction for Spenso's complex scalar type; the full Python tensor surface lives
 in `spynso3`. `python_stubgen` adds stub metadata and implies `python`.
@@ -167,8 +172,11 @@ Structures, dense and sparse tensors, `DataTensor`, `NetworkGraph`, `NetworkStor
 `Network` derive Serde and bincode representations when their generic fields support them.
 Under `shadowing`, selected types also decode through Symbolica's state map. These are type-level
 encodings, not a versioned checkpoint protocol: Spenso provides no state directory, database,
-schema migration, or cross-version compatibility promise. The caller owns byte storage, format
-versioning, Symbolica-state availability, and library-key reconstruction.
+schema migration, or cross-version compatibility promise. The optional `portable-payload`
+module carries representation and math-display declarations beside native Atom bytes through
+`tymbolica-atom-payload`; Spenso-aware consumers validate and register these before Atom import.
+The caller still owns byte storage, format versioning, Symbolica-state availability, and
+library-key reconstruction.
 
 == Ownership and error boundaries
 
@@ -199,8 +207,8 @@ for untrusted or dynamically inferred inputs.
   contraction topology; the two edge roles are not interchangeable.
 - Local leaf indexes refer to the associated store. Joining stores or committing parallel
   overlays must rebase every affected tensor and scalar reference.
-- A library leaf owns a key and requested index order, not the library tensor. Permutations are
-  applied when the value crosses the library boundary.
+- A library leaf owns a key and canonical layout, not the library tensor. Materialization reads
+  live indices from graph edges and applies the pending storage permutation at the library boundary.
 - Ready-operation replacement preserves the boundary slot edges of the collapsed subgraph and
   finishes Linnet's deferred node identifications before later scheduling.
 - Parse depth and shorthand settings can change graph granularity without changing the external

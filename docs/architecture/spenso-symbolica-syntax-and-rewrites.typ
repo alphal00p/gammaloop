@@ -1,7 +1,7 @@
 = Spenso Symbolica Syntax And Rewrite Idioms
 
 #quote(block: true)[
-#strong[Status:] Implemented reference; audited against Spenso and Idenso on 2026-08-18
+#strong[Status:] Implemented reference; audited against Spenso and Idenso on 2026-09-14
 
 The surface forms are owned by
 #link("../../crates/spenso/src/network/parsing/mod.rs")[Spenso parsing and materialization], while the
@@ -231,6 +231,10 @@ In expanded parsing, chain materialization replaces `in` and `out` with actual
 slots and creates intermediate dummy slots between adjacent factors. In opaque
 parsing, the chain or trace remains a leaf and its exposed structure is inferred
 from the endpoints and visible external slots.
+
+Chains and traces cannot be nested inside another chain or trace: they share
+one global `in`/`out` placeholder scope, so parsing rejects such nesting before
+either expanded or opaque inference.
 
 The trace macro does the cyclic wrapping automatically:
 
