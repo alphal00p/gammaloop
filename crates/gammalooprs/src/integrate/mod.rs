@@ -2081,6 +2081,7 @@ impl CoreIterationState {
         slot_targets: &[EvaluationTarget<'_>],
         iter: usize,
         current_max_evals: &[Complex<F<f64>>],
+        current_integral_estimates: &[Option<(f64, f64)>],
         chunk_size: usize,
     ) -> Result<usize> {
         let n_points = chunk_size.min(self.remaining_points);
@@ -2120,13 +2121,14 @@ impl CoreIterationState {
 
                 for (slot_index, integrand) in self.slot_integrands.iter_mut().enumerate() {
                     let evaluation_start = Instant::now();
-                    let raw_batch = integrand.evaluate_samples_raw(
+                    let raw_batch = integrand.evaluate_samples_raw_with_estimate(
                         &samples,
                         slot_targets[slot_index],
                         iter,
                         false,
                         true,
                         current_max_evals[slot_index],
+                        current_integral_estimates[slot_index],
                     )?;
                     if raw_batch.samples.len() < samples.len() {
                         return Ok(0);
@@ -2239,14 +2241,16 @@ impl CoreIterationState {
                     }
 
                     let evaluation_start = Instant::now();
-                    let raw_batch = self.slot_integrands[slot_index].evaluate_samples_raw(
-                        &samples,
-                        slot_targets[slot_index],
-                        iter,
-                        false,
-                        true,
-                        current_max_evals[slot_index],
-                    )?;
+                    let raw_batch = self.slot_integrands[slot_index]
+                        .evaluate_samples_raw_with_estimate(
+                            &samples,
+                            slot_targets[slot_index],
+                            iter,
+                            false,
+                            true,
+                            current_max_evals[slot_index],
+                            current_integral_estimates[slot_index],
+                        )?;
                     if raw_batch.samples.len() < samples.len() {
                         return Ok(0);
                     }
@@ -2863,6 +2867,20 @@ where
             .iter()
             .map(ComplexAccumulator::get_worst_case)
             .collect_vec();
+        let current_integral_estimates = integration_state
+            .all_integrals
+            .iter()
+            .zip(&slots)
+            .map(|(integral, slot)| {
+                let accumulator = match slot.settings.integrator.integrated_phase {
+                    IntegratedPhase::Real => &integral.re,
+                    IntegratedPhase::Imag => &integral.im,
+                    IntegratedPhase::Both => return None,
+                };
+                (accumulator.processed_samples > 0)
+                    .then_some((accumulator.avg.0, accumulator.err.0))
+            })
+            .collect_vec();
 
         let mut worker_states = n_points_per_core
             .iter()
@@ -2905,6 +2923,7 @@ where
                                 &slot_targets,
                                 integration_state.iter,
                                 &current_max_evals,
+                                &current_integral_estimates,
                                 current_batch_size,
                             )
                         })
@@ -4988,7 +5007,14 @@ mod tests {
         let current_max_evals = [Complex::new(F(0.0), F(0.0)), Complex::new(F(0.0), F(0.0))];
 
         let processed = core_state
-            .evaluate_chunk(&slot_settings, &slot_targets, 0, &current_max_evals, 8)
+            .evaluate_chunk(
+                &slot_settings,
+                &slot_targets,
+                0,
+                &current_max_evals,
+                &[None, None],
+                8,
+            )
             .expect("correlated chunk evaluation should succeed");
 
         assert_eq!(processed, 8);
