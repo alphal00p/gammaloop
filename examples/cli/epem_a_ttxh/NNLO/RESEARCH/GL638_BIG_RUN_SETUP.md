@@ -32,3 +32,24 @@ underflow below binary64's normal range; the code now rounds such suppressed
 completed contributions to zero while still rejecting a factor that promotes one
 into the normal range. Its focused regression passes. Rebuild and rerun the
 pilot before interpreting physical central values.
+
+## 100-worker validation run
+
+The card was run unchanged at 600 GeV with 100 workers on 2026-09-15. The
+first attempt reached a collapsed 1000-bit LU bracket whose residual exceeded
+the one-operation certification floor. The production LU solver now uses a
+caller-specific `(4*N+1)` forward-error budget for the sum of `N` on-shell
+energies; the generic safeguarded Newton checks and discontinuity rejection are
+unchanged. Commit `1ae7ef75b` contains that fix.
+
+The retry completed all 81,920 samples in 45m12s. The signed real result was
+`-2.9794115967696752e-5 +/- 1.6612389994353444e-5`, while the absolute-real
+result was `2.727319398236424e-4 +/- 1.658539310989596e-5`. The maximum real
+sample was `+0.6424127592` (negative extreme `-0.3566370699`), with final
+maximum-weight impact `0.2632`. No NaN or unstable points occurred. The final
+precision fractions were f64 `99.6411%`, f128 `0.3223%`, and ArbPrec
+`0.0366%`.
+
+Final per-sample timings were `83.8 ms` parameterization, `1.030 s` integrand
+work, and `958 ms` evaluators (total `1.116 s`); these are the global averages
+reported by `integration_result.json`.
