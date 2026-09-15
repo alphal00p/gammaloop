@@ -357,4 +357,25 @@ mod tests {
             ));
         }
     }
+
+    #[test]
+    fn four_loop_matching_reports_unshipped_artifact_without_name_dispatch() {
+        let vakint = Vakint::new().unwrap();
+        let mut matched = vakint
+            .topologies
+            .match_topologies_to_user_input(
+                vk_parse!("topo(I4L_H(13/10,1,1,1,1,1,1,1,1,1))")
+                    .unwrap()
+                    .as_view(),
+                false,
+            )
+            .unwrap()
+            .unwrap();
+        matched.apply_replacement_rules().unwrap();
+        matched.canonical_topology.get_integral_mut().name = "arbitrary_name".into();
+        assert!(matches!(
+            ArtifactFamily::from_topology(&matched.canonical_topology),
+            Err(RustRedEvaluationError::FourLoopArtifactUnavailable { loop_count: 4, .. })
+        ));
+    }
 }
