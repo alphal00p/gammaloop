@@ -12,8 +12,8 @@ use crate::{
     },
     shadowing::Concretize,
     structure::{
-        HasStructure, PermutedStructure, ScalarStructure, ScalarTensor, TensorShell,
-        TensorStructure, permuted::PermuteTensor, slot::IsAbstractSlot,
+        Canonicalized, HasStructure, ScalarStructure, ScalarTensor, TensorShell, TensorStructure,
+        permuted::ApplyPendingIndexPermutation, slot::IsAbstractSlot,
     },
     tensors::{
         complex::RealOrComplexTensor,
@@ -39,7 +39,7 @@ where
     #[allow(clippy::result_large_err)]
     fn tensor_from_expression(
         expression: AtomView<'_>,
-        structure: PermutedStructure<S>,
+        structure: Canonicalized<S>,
         tensor_library: &Lib,
         function_library: &FunLib,
         settings: &ParseSettings,
@@ -51,7 +51,7 @@ where
 
 /// A tensor library whose stored tensor can be indexed into `T`.
 pub trait TensorLibraryFor<S, T>:
-    Library<S, Value = PermutedStructure<<Self as TensorLibraryFor<S, T>>::LibraryTensor>>
+    Library<S, Value = Canonicalized<<Self as TensorLibraryFor<S, T>>::LibraryTensor>>
 where
     S: TensorStructure,
     T: HasStructure,
@@ -63,7 +63,7 @@ impl<S, T, L, LT> TensorLibraryFor<S, T> for L
 where
     S: TensorStructure,
     T: HasStructure,
-    L: Library<S, Value = PermutedStructure<LT>>,
+    L: Library<S, Value = Canonicalized<LT>>,
     LT: LibraryTensor<WithIndices = T> + Clone,
 {
     type LibraryTensor = LT;
@@ -93,7 +93,7 @@ where
         + TensorStructure
         + Clone
         + ScalarTensor
-        + PermuteTensor<Permuted = T>,
+        + ApplyPendingIndexPermutation<Output = T>,
     Sc: for<'r> TryFrom<AtomView<'r>> + Clone + Into<T::Scalar>,
     for<'r> TensorNetworkError<K, symbolica::atom::Symbol>:
         From<<Sc as TryFrom<AtomView<'r>>>::Error>,
@@ -108,7 +108,7 @@ where
 {
     fn tensor_from_expression(
         expression: AtomView<'_>,
-        _structure: PermutedStructure<S>,
+        _structure: Canonicalized<S>,
         tensor_library: &Lib,
         function_library: &FunLib,
         settings: &ParseSettings,
@@ -184,7 +184,7 @@ mod tests {
 
         let rep = Minkowski {}.new_rep(4);
         let slot = rep.slot(AbstractIndex::from(1));
-        let structure: PermutedStructure<Structure> =
+        let structure: Canonicalized<Structure> =
             NamedStructure::from_iter([slot], symbol!("f"), None::<Vec<Atom>>);
         let expression = function!(tensor_symbol!(opaque), slot.to_atom());
         type TensorLib = DummyLibrary<ParamTensor<Structure>, DummyKey>;

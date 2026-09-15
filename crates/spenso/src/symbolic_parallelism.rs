@@ -3,7 +3,7 @@ use std::sync::{
     atomic::{AtomicU8, Ordering},
 };
 
-use symbolica::LicenseManager;
+use symbolica::license::LicenseManager;
 
 /// Policy used to configure Rayon for operations that manipulate Symbolica atoms.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

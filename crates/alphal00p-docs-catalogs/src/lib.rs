@@ -914,20 +914,32 @@ fn python_required_exports(component: &str) -> Result<&'static [&'static str]> {
             "to_dots",
         ]),
         "spynso3" => Ok(&[
+            "BroadcastFunction",
             "CompiledTensorEvaluator",
-            "LibraryTensor",
+            "DisplaySettings",
+            "PortPattern",
             "Representation",
             "Slot",
             "Tensor",
             "TensorEvaluator",
-            "TensorIndices",
-            "TensorStructure",
-            "TensorNetwork",
+            "TensorExpression",
+            "TensorFunctionLibrary",
             "TensorLibrary",
             "TensorName",
+            "TensorNetwork",
+            "TensorPattern",
             "ExecutionMode",
             "SymbolicParallelism",
+            "as_tensor",
+            "chain",
+            "dot",
+            "format_tensor",
+            "formatted",
             "set_symbolica_rayon_enabled",
+            "to_html",
+            "to_svg",
+            "to_typst",
+            "trace",
         ]),
         "linnet-py" | "idenso-community" | "vakint-community" => Ok(&[]),
         _ => bail!("unknown Python component {component}"),
@@ -1301,10 +1313,10 @@ mod tests {
     #[test]
     fn spynso_supported_surface_covers_the_documented_workflow_types() {
         let required = python_required_exports("spynso3").unwrap();
-        assert_eq!(required.len(), 14);
+        assert_eq!(required.len(), 26);
         for entry in [
             "CompiledTensorEvaluator",
-            "LibraryTensor",
+            "TensorExpression",
             "TensorEvaluator",
             "TensorName",
             "set_symbolica_rayon_enabled",
@@ -1328,7 +1340,7 @@ mod tests {
                 matches!(
                     declaration.name.as_str(),
                     "CompiledTensorEvaluator"
-                        | "LibraryTensor"
+                        | "TensorExpression"
                         | "TensorEvaluator"
                         | "TensorName"
                         | "set_symbolica_rayon_enabled"
@@ -1345,7 +1357,7 @@ mod tests {
             .iter()
             .flat_map(|declaration| &declaration.members)
             .collect::<Vec<_>>();
-        assert_eq!(members.len(), 31);
+        assert_eq!(members.len(), 111);
         let overload_groups = members
             .iter()
             .filter(|member| {
@@ -1360,7 +1372,7 @@ mod tests {
             .flat_map(|member| &member.members)
             .filter(|member| member.kind == alphal00p_docs_schema::DocMemberKind::Overload)
             .collect::<Vec<_>>();
-        assert_eq!(members.len() - overload_groups + overloads.len(), 35);
+        assert_eq!(members.len() - overload_groups + overloads.len(), 113);
         assert_eq!(
             members
                 .iter()
@@ -1376,7 +1388,7 @@ mod tests {
                     .iter()
                     .filter(|member| member.docs.is_some())
                     .count(),
-            28
+            96
         );
     }
 

@@ -5,8 +5,7 @@ use spenso::network::store::TensorScalarStore;
 use spenso::p;
 use spenso::q;
 use spenso::shadowing::{TensorCollectExt, symbolica_utils::SpensoPrintSettings};
-use spenso::structure::IndexlessNamedStructure;
-use spenso::structure::PermutedStructure;
+use spenso::structure::{Canonicalized, IndexlessNamedStructure, TensorStructure};
 use spenso::{chain, g, s, slot, trace};
 use symbolica_utils::AtomPrintExt;
 
@@ -17,7 +16,7 @@ use crate::shorthands::{
 };
 use crate::{gamma, gamma0, gamma5, u, v};
 
-static GG: LazyLock<PermutedStructure<IndexlessNamedStructure<Symbol, ()>>> = LazyLock::new(|| {
+static GG: LazyLock<Canonicalized<IndexlessNamedStructure<Symbol, ()>>> = LazyLock::new(|| {
     IndexlessNamedStructure::from_iter(
         [
             Bispinor {}.new_rep(4).to_lib(),
@@ -36,7 +35,6 @@ use crate::tensor::SymbolicNetParse;
 use crate::tensor::SymbolicTensor;
 use spenso::structure::{
     abstract_index::AbstractIndex,
-    permuted::Perm,
     representation::{LibraryRep, Minkowski},
 };
 use symbolica::{
@@ -52,26 +50,42 @@ use crate::{CookMode, CookSettings, Cookable};
 fn gamma_construct() {
     test_initialize();
 
-    println!("{}", gamma!(RS.a_, RS.b_, RS.c_));
+    println!("{}", gamma!(RS.b_, RS.c_, RS.a_));
 
-    let f = GG
-        .clone()
-        .reindex([4, 3, 2])
+    let f = GG.clone();
+    let logical_indices: [AbstractIndex; 3] = [4.into(), 3.into(), 2.into()];
+    let storage_indices = f.layout().logical_to_canonical(&logical_indices);
+    let f = f
+        .into_canonical()
+        .reindex_storage(&storage_indices)
         .unwrap()
-        .map_structure(|a| SymbolicTensor::from_named(&a).unwrap());
+        .map_target(|a| SymbolicTensor::from_named(&a).unwrap());
 
-    let f_s = f.structure.structure.clone();
-
-    // f.rep_permutation = f.rep_permutation.inverse();
-
-    let f_p = f.permute_reps_wrapped().permute_inds();
+    let f_p = f.apply();
 
     println!(
-        "Structure:{}\nPermuted:{}\nPermuted Structure{}\nMetric simplified{}",
-        f_s,
+        "Permuted:{}\nPermuted Structure{}\nMetric simplified{}",
         f_p,
         f_p.structure,
         f_p.expression.simplify_metrics()
+    );
+}
+
+#[test]
+fn sigma_structure_preserves_logical_interface() {
+    test_initialize();
+
+    let structure = AGS.sigma_strct::<AbstractIndex>(6);
+    let canonical_reps = structure.canonical().external_reps();
+
+    assert_eq!(
+        structure.layout().canonical_to_logical(&canonical_reps),
+        [
+            LibraryRep::from(Minkowski {}).new_rep(6),
+            LibraryRep::from(Minkowski {}).new_rep(6),
+            Bispinor {}.new_rep(4).cast(),
+            Bispinor {}.new_rep(4).cast(),
+        ]
     );
 }
 
@@ -113,9 +127,24 @@ fn normalise_g() {
 }
 
 #[test]
+fn gamma_macro_uses_storage_order() {
+    test_initialize();
+    let expr = gamma!(a, b, mu);
+
+    assert_snapshot!(expr.to_bare_ordered_string(), @"gamma(bis(4,a),bis(4,b),mink(4,mu))");
+}
+
+#[test]
+#[should_panic(expected = "gamma first argument must be a bispinor slot")]
+fn gamma_macro_rejects_lorentz_first_ports() {
+    let r = test_initialize();
+    let _ = gamma!(slot!(r.mink4, mu), slot!(r.bis4, a), slot!(r.bis4, b));
+}
+
+#[test]
 fn gamma_macro_accepts_integer_indices() {
     test_initialize();
-    let expr = gamma!(1, 2, 3);
+    let expr = gamma!(2, 3, 1);
 
     assert_snapshot!(expr.to_bare_ordered_string(), @"gamma(bis(4,2),bis(4,3),mink(4,1))");
 }
@@ -123,7 +152,7 @@ fn gamma_macro_accepts_integer_indices() {
 #[test]
 fn gamma_macro_accepts_mixed_default_and_explicit_indices() {
     let r = test_initialize();
-    let expr = gamma!(mu, slot!(r.bis_d, a), 1);
+    let expr = gamma!(slot!(r.bis_d, a), 1, mu);
 
     assert_snapshot!(expr.to_bare_ordered_string(), @"gamma(bis(d,a),bis(4,1),mink(4,mu))");
 }
@@ -157,10 +186,10 @@ fn gamma0_macro_builds_chain_factor() {
 fn gamma_macros_accept_pattern_indices() {
     test_initialize();
 
-    let gamma = gamma!(RS.a__, RS.b__, RS.c__);
+    let gamma = gamma!(RS.b__, RS.c__, RS.a__);
     let gamma5 = gamma5!(RS.b__, RS.c__);
     let gamma0 = gamma0!(RS.b__, RS.c__);
-    let dimensioned_gamma = gamma!(RS.a__, [RS.d_, RS.b_], [RS.d_, RS.c_]);
+    let dimensioned_gamma = gamma!([RS.d_, RS.b_], [RS.d_, RS.c_], RS.a__);
     let dimensioned_gamma0 = gamma0!([RS.d_, RS.b_], [RS.d_, RS.c_]);
 
     assert_snapshot!(gamma.to_bare_ordered_string(), @"gamma(bis(b__),bis(c__),mink(a__))");
@@ -297,7 +326,7 @@ fn four_dimensional_chisholm_requires_four_dimensional_interior() {
 #[test]
 fn gamma_trace_evaluation_can_be_disabled() {
     test_initialize();
-    let expr = gamma!(mu, a, b) * gamma!(nu, b, a);
+    let expr = gamma!(a, b, mu) * gamma!(b, a, nu);
 
     assert_snapshot!(expr.simplify_gamma_with(GammaSimplifySettings::repeated_pairs().without_trace_evaluation()).to_bare_ordered_string(), @"trace(bis(4),cyclic(gamma(in,out,mink(4,nu)),gamma(in,out,mink(4,mu))))");
 }
@@ -364,6 +393,7 @@ fn gl23() {
         expr.simplify_metrics()
             .cook_indices()
             .canonize(AbstractIndex::Dummy)
+            .expect("test expression should canonicalize")
     );
 
     println!(
@@ -371,6 +401,7 @@ fn gl23() {
         expr.simplify_metrics()
             .cook_indices()
             .canonize(AbstractIndex::Dummy)
+            .expect("test expression should canonicalize")
             .simplify_color()
     );
 }
@@ -435,6 +466,7 @@ fn gl24() {
         expr.simplify_metrics()
             .cook_indices()
             .canonize(AbstractIndex::Dummy)
+            .expect("test expression should canonicalize")
     );
 
     println!(
@@ -442,6 +474,7 @@ fn gl24() {
         expr.simplify_metrics()
             .cook_indices()
             .canonize(AbstractIndex::Dummy)
+            .expect("test expression should canonicalize")
             .simplify_color()
     );
 }
@@ -546,18 +579,19 @@ fn gamma_alg() {
     let mink_dim = r.mink_d;
     let bis4 = r.bis4;
 
-    let expr = (gamma!(0, 1, 3) * gamma!(0, 3, 2)).simplify_gamma();
+    let expr = (gamma!(1, 3, 0) * gamma!(3, 2, 0)).simplify_gamma();
 
     assert_snapshot!(expr.to_bare_ordered_string(), @"4*g(bis(4,1),bis(4,2))");
 
     let expr = (p!(slot!(mink4, nu1))
         * (p!(slot!(mink4, nu3)) + q!(slot!(mink4, nu3)))
-        * gamma!(nu1, 1, 3)
-        * gamma!(mu, 3, 4)
-        * gamma!(nu3, 4, 5)
-        * gamma!(nu, 5, 1))
+        * gamma!(1, 3, nu1)
+        * gamma!(3, 4, mu)
+        * gamma!(4, 5, nu3)
+        * gamma!(5, 1, nu))
     .simplify_gamma()
-    .schoonschip_with_net_full::<AbstractIndex>();
+    .schoonschip_with_net_full::<AbstractIndex>()
+    .unwrap();
 
     assert_snapshot!(expr.to_bare_ordered_string(), @"-4*g(mink(4,mu),mink(4,nu))*g(p(mink(4)),p(mink(4)))+-4*g(mink(4,mu),mink(4,nu))*g(p(mink(4)),q(mink(4)))+4*p(mink(4,mu))*q(mink(4,nu))+4*p(mink(4,nu))*q(mink(4,mu))+8*p(mink(4,mu))*p(mink(4,nu))");
 
@@ -573,31 +607,32 @@ fn gamma_alg() {
 
     let expr = (p!(slot!(mink4, nu1))
         * (p!(slot!(mink4, nu3)) + q!(slot!(mink4, nu3)))
-        * gamma!(nu1, 1, 3)
-        * gamma!(mu, 3, 4)
-        * gamma!(nu, 4, 5)
-        * gamma!(nu3, 5, 1))
+        * gamma!(1, 3, nu1)
+        * gamma!(3, 4, mu)
+        * gamma!(4, 5, nu)
+        * gamma!(5, 1, nu3))
     .simplify_gamma()
-    .schoonschip_with_net_full::<AbstractIndex>();
+    .schoonschip_with_net_full::<AbstractIndex>()
+    .unwrap();
 
     assert_snapshot!(expr.to_bare_ordered_string(), @"-4*p(mink(4,nu))*q(mink(4,mu))+4*g(mink(4,mu),mink(4,nu))*g(p(mink(4)),p(mink(4)))+4*g(mink(4,mu),mink(4,nu))*g(p(mink(4)),q(mink(4)))+4*p(mink(4,mu))*q(mink(4,nu))");
 
     let expr = (p!(slot!(mink_dim, nu1))
         * (p!(slot!(mink_dim, nu3)) + q!(slot!(mink_dim, nu3)))
-        * gamma!(slot!(mink_dim, nu1), slot!(bis4, 1), slot!(bis4, 3))
-        * gamma!(slot!(mink_dim, nu), slot!(bis4, 3), slot!(bis4, 4))
-        * gamma!(slot!(mink_dim, nu), slot!(bis4, 4), slot!(bis4, 5))
-        * gamma!(slot!(mink_dim, nu3), slot!(bis4, 5), slot!(bis4, 1)))
+        * gamma!(slot!(bis4, 1), slot!(bis4, 3), slot!(mink_dim, nu1))
+        * gamma!(slot!(bis4, 3), slot!(bis4, 4), slot!(mink_dim, nu))
+        * gamma!(slot!(bis4, 4), slot!(bis4, 5), slot!(mink_dim, nu))
+        * gamma!(slot!(bis4, 5), slot!(bis4, 1), slot!(mink_dim, nu3)))
     .simplify_gamma();
 
-    assert_snapshot!(expr.expand().canonize(AbstractIndex::Dummy).to_bare_ordered_string(), @"(p(mink(d,d_0)))^2*4*d+4*d*p(mink(d,d_0))*q(mink(d,d_0))");
+    assert_snapshot!(expr.expand().canonize(AbstractIndex::Dummy).expect("test expression should canonicalize").to_bare_ordered_string(), @"(p(mink(d,d_0)))^2*4*d+4*d*p(mink(d,d_0))*q(mink(d,d_0))");
 
     let expr = (p!(slot!(mink_dim, nu1))
         * (p!(slot!(mink_dim, nu3)) + q!(slot!(mink_dim, nu3)))
-        * gamma!(slot!(mink_dim, nu1), slot!(bis4, 1), slot!(bis4, 3))
-        * gamma!(slot!(mink_dim, nu), slot!(bis4, 3), slot!(bis4, 4))
-        * gamma!(slot!(mink_dim, nu3), slot!(bis4, 4), slot!(bis4, 5))
-        * gamma!(slot!(mink_dim, nu), slot!(bis4, 5), slot!(bis4, 1)))
+        * gamma!(slot!(bis4, 1), slot!(bis4, 3), slot!(mink_dim, nu1))
+        * gamma!(slot!(bis4, 3), slot!(bis4, 4), slot!(mink_dim, nu))
+        * gamma!(slot!(bis4, 4), slot!(bis4, 5), slot!(mink_dim, nu3))
+        * gamma!(slot!(bis4, 5), slot!(bis4, 1), slot!(mink_dim, nu)))
     .collect_reps([
         LibraryRep::from(Minkowski {}),
         LibraryRep::from(Bispinor {}),
@@ -605,26 +640,27 @@ fn gamma_alg() {
     .schoonschip()
     .simplify_gamma();
 
-    assert_snapshot!(expr.expand().canonize(AbstractIndex::Dummy).to_bare_ordered_string(), @"(p(mink(d,d_0)))^2*-4*d+(p(mink(d,d_0)))^2*8+-4*d*p(mink(d,d_0))*q(mink(d,d_0))+8*p(mink(d,d_0))*q(mink(d,d_0))");
+    assert_snapshot!(expr.expand().canonize(AbstractIndex::Dummy).expect("test expression should canonicalize").to_bare_ordered_string(), @"(p(mink(d,d_0)))^2*-4*d+(p(mink(d,d_0)))^2*8+-4*d*p(mink(d,d_0))*q(mink(d,d_0))+8*p(mink(d,d_0))*q(mink(d,d_0))");
 
     let expr = (p!(slot!(mink_dim, nu1))
         * q!(slot!(mink_dim, nu2))
         * (p!(slot!(mink_dim, nu3)) + q!(slot!(mink_dim, nu3)))
         * q!(slot!(mink_dim, nu4))
-        * gamma!(slot!(mink_dim, nu1), slot!(bis4, 1), slot!(bis4, 3))
-        * gamma!(slot!(mink_dim, nu4), slot!(bis4, 3), slot!(bis4, 4))
-        * gamma!(slot!(mink_dim, nu3), slot!(bis4, 4), slot!(bis4, 5))
-        * gamma!(slot!(mink_dim, nu2), slot!(bis4, 5), slot!(bis4, 1)))
+        * gamma!(slot!(bis4, 1), slot!(bis4, 3), slot!(mink_dim, nu1))
+        * gamma!(slot!(bis4, 3), slot!(bis4, 4), slot!(mink_dim, nu4))
+        * gamma!(slot!(bis4, 4), slot!(bis4, 5), slot!(mink_dim, nu3))
+        * gamma!(slot!(bis4, 5), slot!(bis4, 1), slot!(mink_dim, nu2)))
     .simplify_gamma()
     .schoonschip_with_net_full::<AbstractIndex>()
+    .unwrap()
     .metric_shorthand_to_dot();
 
     assert_snapshot!(expr.to_bare_ordered_string(), @"(dot(p(mink(d)),q(mink(d))))^2*8+-4*dot(p(mink(d)),p(mink(d)))*dot(q(mink(d)),q(mink(d)))+4*dot(p(mink(d)),q(mink(d)))*dot(q(mink(d)),q(mink(d)))");
 
-    let expr = (gamma!(slot!(mink_dim, mu), slot!(bis4, 1), slot!(bis4, 3))
-        * gamma!(slot!(mink_dim, nu), slot!(bis4, 3), slot!(bis4, 4))
-        * gamma!(slot!(mink_dim, mu), slot!(bis4, 4), slot!(bis4, 5))
-        * gamma!(slot!(mink_dim, nu), slot!(bis4, 5), slot!(bis4, 2)))
+    let expr = (gamma!(slot!(bis4, 1), slot!(bis4, 3), slot!(mink_dim, mu))
+        * gamma!(slot!(bis4, 3), slot!(bis4, 4), slot!(mink_dim, nu))
+        * gamma!(slot!(bis4, 4), slot!(bis4, 5), slot!(mink_dim, mu))
+        * gamma!(slot!(bis4, 5), slot!(bis4, 2), slot!(mink_dim, nu)))
     .simplify_gamma()
     .collect_metrics()
     .simplify_metrics();
@@ -755,21 +791,21 @@ fn val_test() {
     // );
     //
     let gamma_product = gamma!(
-        parse_lit!(mink(4, dummy(2, 2)), default_namespace = "spenso"),
         parse_lit!(bis(4, l(2)), default_namespace = "spenso"),
-        parse_lit!(bis(4, r(2)), default_namespace = "spenso")
+        parse_lit!(bis(4, r(2)), default_namespace = "spenso"),
+        parse_lit!(mink(4, dummy(2, 2)), default_namespace = "spenso")
     ) * gamma!(
-        parse_lit!(mink(4, l(5)), default_namespace = "spenso"),
         parse_lit!(bis(4, l(6)), default_namespace = "spenso"),
-        parse_lit!(bis(4, l(5)), default_namespace = "spenso")
+        parse_lit!(bis(4, l(5)), default_namespace = "spenso"),
+        parse_lit!(mink(4, l(5)), default_namespace = "spenso")
     ) * gamma!(
-        parse_lit!(mink(4, dummy(3, 3)), default_namespace = "spenso"),
         parse_lit!(bis(4, r(3)), default_namespace = "spenso"),
-        parse_lit!(bis(4, l(3)), default_namespace = "spenso")
+        parse_lit!(bis(4, l(3)), default_namespace = "spenso"),
+        parse_lit!(mink(4, dummy(3, 3)), default_namespace = "spenso")
     ) * gamma!(
-        parse_lit!(mink(4, r(5)), default_namespace = "spenso"),
         parse_lit!(bis(4, r(5)), default_namespace = "spenso"),
-        parse_lit!(bis(4, r(6)), default_namespace = "spenso")
+        parse_lit!(bis(4, r(6)), default_namespace = "spenso"),
+        parse_lit!(mink(4, r(5)), default_namespace = "spenso")
     );
 
     let expr = parse_lit!(

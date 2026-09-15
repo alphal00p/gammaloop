@@ -1026,7 +1026,7 @@ impl PolySplit {
 
         for (i, monomial) in poly.into_iter().enumerate() {
             mul_h = Atom::num(1);
-            for (var_id, &pow) in poly.variables.iter().zip(monomial.exponents) {
+            for (var_id, &pow) in poly.variables().iter().zip(monomial.exponents) {
                 if pow > 0 {
                     match var_id {
                         PolyVariable::Symbol(v) => {
@@ -1486,7 +1486,7 @@ impl Contracted {
         for i in 0..n_edges {
             let named_structure: NamedStructure<String> =
                 NamedStructure::from_iter([Lorentz {}.new_slot(4, i)], "Q".into(), Some(i))
-                    .structure;
+                    .into_canonical();
             params.extend(
                 named_structure
                     .to_shell()

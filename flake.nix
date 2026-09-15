@@ -21,7 +21,7 @@
 
     # Refresh deliberately with `just ci-cache-base REVISION` after a green run.
     ci-cache-base = {
-      url = "github:alphal00p/gammaloop/5181661ec340ebfb181a0045dac79fcec4f35525";
+      url = "github:alphal00p/gammaloop/9935a2b52d047daf5bbe6616c798fa07e364da6a";
       flake = false;
     };
 
@@ -199,33 +199,35 @@
           valgrind
         ];
 
-      mkDevShell = extraPackages:
-        craneLib.devShell {
-          # checks = self.checks.${system};
+      mkDevShell = craneLibForShell: extraPackages: rustFlags:
+        craneLibForShell.devShell ({
+            # checks = self.checks.${system};
 
-          RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
-          GLIBC_TUNABLES = "glibc.rtld.optional_static_tls=10000";
-          TYPST_FONT_PATHS = docsFontPath;
-          # `typst.withPackages` injects this only into its executable wrapper.
-          # The persistent Rust renderer and typst-py need the same package tree directly.
-          TYPST_PACKAGE_CACHE_PATH = "${docsTypst}/lib/typst/packages";
+            RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
+            GLIBC_TUNABLES = "glibc.rtld.optional_static_tls=10000";
+            TYPST_FONT_PATHS = docsFontPath;
+            # `typst.withPackages` injects this only into its executable wrapper.
+            # The persistent Rust renderer and typst-py need the same package tree directly.
+            TYPST_PACKAGE_CACHE_PATH = "${docsTypst}/lib/typst/packages";
 
-          CC = nixCc;
-          CXX = nixCxx;
-          "${cargoLinkerVar}" = nixCc;
-          RUSTFLAGS = "-C linker=${nixCc}";
+            CC = nixCc;
+            CXX = nixCxx;
+            "${cargoLinkerVar}" = nixCc;
 
-          LD_LIBRARY_PATH = runtimeLibPath;
-          DYLD_LIBRARY_PATH = runtimeLibPath;
+            LD_LIBRARY_PATH = runtimeLibPath;
+            DYLD_LIBRARY_PATH = runtimeLibPath;
 
-          # shellHook = ''
-          #   export CC="${nixCc}"
-          #   export CXX="${nixCxx}"
-          #   export ${cargoLinkerVar}="${nixCc}"
-          # '';
+            # shellHook = ''
+            #   export CC="${nixCc}"
+            #   export CXX="${nixCxx}"
+            #   export ${cargoLinkerVar}="${nixCc}"
+            # '';
 
-          packages = devShellPackages ++ extraPackages;
-        };
+            packages = devShellPackages ++ extraPackages;
+          }
+          // lib.optionalAttrs (rustFlags != null) {
+            RUSTFLAGS = rustFlags;
+          });
     in {
       checks = allChecks;
 
@@ -297,9 +299,12 @@
       };
 
       devShells = {
-        default = mkDevShell [clinnet-cli];
-        full = mkDevShell [clinnet-cli rscls];
-        clinnet = mkDevShell [clinnet-cli];
+        default = mkDevShell craneLib [clinnet-cli] "-C linker=${nixCc}";
+        full = mkDevShell craneLib [clinnet-cli rscls] "-C linker=${nixCc}";
+        clinnet = mkDevShell craneLib [clinnet-cli] "-C linker=${nixCc}";
+        # The native development shell deliberately does not pull every target
+        # standard library. Use this shell for Tydenso and other Wasm builds.
+        wasm = mkDevShell wasmCraneLib [clinnet-cli pkgs.binaryen] null;
       };
     });
 }

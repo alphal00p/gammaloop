@@ -37,7 +37,9 @@ digest = "a923d12cfaa66872454cd1be83212eb03faad754"
 path = "crates/gammaloop-api/src/commands/integrate.rs"
 symbol = "gammaloop_api::commands::integrate::Integrate::default_workspace_path"
 anchor = "fn default_workspace_path(&self"
-digest = "8c949ca9510175675eff692c8e93adf87318d65b"
+# Reviewed 2026-09-14: fallible grid constructors changed only test fixtures;
+# integration-workspace and persistence boundaries remain unchanged.
+digest = "80f35d7c0d7d2e120c0570522fbdbe1aac7d7bf4"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/integrands/evaluation.rs"
@@ -52,7 +54,9 @@ anchor = "pub fn warm_up(&mut self, model"
 # No architecture impact: the 2026-08-21 APIDOC-001 review only clarified the
 # momentum-input/precision contract, retained the legacy precision behavior,
 # and added regression coverage.
-digest = "db0d56f036565015124898a73ab46a0ffd5738c2"
+# Reviewed 2026-09-14: canonical tensor layouts and fallible Symbolica APIs
+# preserve the documented warm-up and state-ownership boundaries.
+digest = "cc699bf2b817eb35c9f0dfceaae5b60bf235e76c"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/observables/events.rs"
@@ -87,7 +91,9 @@ digest = "25cda2dff8fd5a5c01f6b00c42311089a120e503"
 path = "crates/gammalooprs/src/feyngen/diagram_generator.rs"
 symbol = "gammalooprs::feyngen::DiagramGenerator::generate"
 anchor = "pub fn generate("
-digest = "427e8b01ddfcf6d71cd2add4e8e16a0f92126caf"
+# Reviewed 2026-09-14: Symbolica's graph/canonicalization API migration
+# preserves generation, filtering, and persistence ownership.
+digest = "e3803537b52aeb4f7bd340a3bc876af6066a03f6"
 
 [[section.note]]
 id = "integration-dashboard"
@@ -108,7 +114,9 @@ review_triggers = ["crates/gammaloop-api/src/commands/integrate.rs", "crates/gam
 path = "crates/gammaloop-api/src/commands/integrate.rs"
 symbol = "gammaloop_api::commands::integrate::dashboard_event_loop"
 anchor = "fn dashboard_event_loop(receiver"
-digest = "8c949ca9510175675eff692c8e93adf87318d65b"
+# Reviewed 2026-09-14: only grid constructors in test fixtures changed;
+# status flow, renderer ownership, and terminal lifecycle are unchanged.
+digest = "80f35d7c0d7d2e120c0570522fbdbe1aac7d7bf4"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/integrate/render_ratatui.rs"
@@ -120,7 +128,9 @@ digest = "71ab92299354e389a83e7ba4f0f81f6ad1bbc41f"
 path = "crates/gammalooprs/src/integrate/mod.rs"
 symbol = "gammalooprs::integrate"
 anchor = "mod render_ratatui;"
-digest = "45627d3318f40e05bc2ef6148c4178f2b7513115"
+# Reviewed 2026-09-14: test fixtures now unwrap fallible grid construction;
+# status flow and test assertions are unchanged.
+digest = "2ee9d70cfe6d099009a82540410911e58f675ce0"
 
 [[section.note]]
 id = "uv-renormalization"
@@ -141,7 +151,9 @@ review_triggers = ["crates/gammalooprs/src/uv/**", "crates/gammalooprs/src/graph
 path = "crates/gammalooprs/src/uv/orchestrator.rs"
 symbol = "gammalooprs::uv::UVOrchestrator"
 anchor = "impl UVOrchestrator {"
-digest = "b57273870e63895f229215175919b8a9e15e1054"
+# Reviewed 2026-09-14: comparison propagates canonicalization errors;
+# backend selection, returned legacy result, and UV invariants are unchanged.
+digest = "2e705f792117bb2c29a843306c975fc149f3cb00"
 
 [[section.note]]
 id = "spenso-parsing-flow"
@@ -152,8 +164,8 @@ kind = "Architecture diagram"
 status = "Implemented"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-08-17"
-review_ref = "c9f4e32acd2c"
+reviewed_at = "2026-09-14"
+review_ref = "ab00e4917295883add11f9855734aaee1d56926f"
 products = ["spenso", "idenso"]
 topics = ["parsing", "tensor-network"]
 review_triggers = ["crates/spenso/src/network/parsing/**", "crates/idenso/src/tensor/mod.rs"]
@@ -162,7 +174,9 @@ review_triggers = ["crates/spenso/src/network/parsing/**", "crates/idenso/src/te
 path = "crates/spenso/src/network/parsing/mod.rs"
 symbol = "spenso::network::parsing::ShorthandParsing"
 anchor = "pub enum ShorthandParsing {"
-digest = "aaa5b8535c3920a7a8831cd785af176b64136b86"
+# Reviewed 2026-09-14: the note now covers broadcast dispatch, nesting checks,
+# canonical structure extraction, and compact-vector materialization.
+digest = "9d626792d5f9fa5ab5840911832326cb8d02e782"
 
 [[section.note]]
 id = "schoonschip-network"
@@ -173,8 +187,8 @@ kind = "Architecture diagram"
 status = "Implemented"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-08-17"
-review_ref = "c9f4e32acd2c"
+reviewed_at = "2026-09-14"
+review_ref = "ab00e4917295883add11f9855734aaee1d56926f"
 products = ["spenso", "idenso"]
 topics = ["parsing", "schoonschip", "rewrites"]
 review_triggers = ["crates/idenso/src/shorthands/schoonschip/**", "crates/spenso/src/network/**"]
@@ -183,7 +197,9 @@ review_triggers = ["crates/idenso/src/shorthands/schoonschip/**", "crates/spenso
 path = "crates/idenso/src/shorthands/schoonschip/api.rs"
 symbol = "idenso::shorthands::schoonschip::Schoonschip"
 anchor = "pub trait Schoonschip {"
-digest = "07aadf239a22ed4bb7b99cdd3ebe843667c27863"
+# Reviewed 2026-09-14: typed network errors are documented; opaque parsing,
+# contraction settings, and fixed-point execution remain unchanged.
+digest = "608eb6fd27a8463bc0bbfa6383c41db3a9e95000"
 
 [[section.note]]
 id = "gammaloop-draw-style-migration"
@@ -243,11 +259,11 @@ title = "Spenso Symbolica Syntax And Rewrite Idioms"
 summary = "Implemented Spenso surface forms, tag-aware builders and patterns, and the Idenso pass boundaries used for static and dynamic algebraic rewrites."
 source = "docs/architecture/spenso-symbolica-syntax-and-rewrites.typ"
 kind = "Symbolic algebra implementation reference"
-status = "Implemented reference · reviewed 2026-08-18"
+status = "Implemented reference · reviewed 2026-09-14"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-08-18"
-review_ref = "6feaba98e48a2cedb4688d3d0cc9a214716a8677"
+reviewed_at = "2026-09-14"
+review_ref = "ab00e4917295883add11f9855734aaee1d56926f"
 products = ["spenso", "idenso"]
 topics = ["symbolica", "tensor syntax", "rewriting"]
 review_triggers = ["crates/spenso/src/network/parsing/**", "crates/spenso/src/shadowing/**", "crates/idenso/src/lib.rs", "crates/idenso/src/epsilon.rs", "crates/idenso/src/shorthands/**", "crates/idenso/src/dirac/**", "crates/idenso/src/color/**"]
@@ -256,7 +272,9 @@ review_triggers = ["crates/spenso/src/network/parsing/**", "crates/spenso/src/sh
 path = "crates/idenso/src/lib.rs"
 symbol = "idenso::IndexTooling"
 anchor = "pub trait IndexTooling {"
-digest = "f57c607c0b36833c9f630aa82082aca34cb52671"
+# Reviewed 2026-09-14: tagged builders and dualizable dot syntax match the note,
+# which now records the shared chain/trace placeholder scope.
+digest = "270e4b9fcf762a8570acc1f2dc318e758a18b1f6"
 
 [[section.note]]
 id = "spenso-architecture"
@@ -264,11 +282,11 @@ title = "Spenso implementation architecture"
 summary = "Tensor structures and payloads, direct contraction, network graph/store execution, Symbolica parsing, serialization and ownership boundaries, invariants, and tests."
 source = "docs/architecture/spenso-architecture.typ"
 kind = "System architecture"
-status = "Implemented · reviewed 2026-08-18"
+status = "Implemented · reviewed 2026-09-14"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-08-18"
-review_ref = "28275fc5d5154faa43a19dba0233bacd0dafbf1f"
+reviewed_at = "2026-09-14"
+review_ref = "ab00e4917295883add11f9855734aaee1d56926f"
 products = ["spenso"]
 topics = ["tensor structure", "contraction", "tensor network", "parallelism", "parsing", "serialization"]
 review_triggers = ["crates/spenso/Cargo.toml", "crates/spenso/src/structure.rs", "crates/spenso/src/structure/**", "crates/spenso/src/tensors/**", "crates/spenso/src/contraction.rs", "crates/spenso/src/contraction/**", "crates/spenso/src/network/**", "crates/spenso/src/shadowing/**", "crates/spenso/src/symbolic_parallelism.rs", "crates/spenso/src/symbolica_init.rs"]
@@ -279,13 +297,17 @@ symbol = "spenso::structure::TensorStructure"
 anchor = "pub trait TensorStructure {"
 # No architecture impact: the 2026-08-21 APIDOC-105 review made the existing
 # slot-order, index-matching, and coordinate contracts explicit in Rustdoc.
-digest = "ab1dc7572762b2c448186744d1d26b973bae6979"
+# Reviewed 2026-09-14: the note distinguishes canonical layouts from pending
+# index permutations and records backend features and portable attachments.
+digest = "a1af2993b3d34be7a209019820060d2215aa7eef"
 
 [[section.note.scope]]
 path = "crates/spenso/src/tensors/data.rs"
 symbol = "spenso::tensors::data::DataTensor"
 anchor = "pub enum DataTensor<T, I = OrderedStructure> {"
-digest = "090c832fa7615c126e7fbc54747b687f75e21dd4"
+# Reviewed 2026-09-14: payload ownership is unchanged; canonical layouts and
+# explicit storage reindexing replace the previous permuted wrapper.
+digest = "f0e8de6af46e1464919245b04739bb6c8fb20eb2"
 
 [[section.note.scope]]
 path = "crates/spenso/src/contraction.rs"
@@ -301,19 +323,24 @@ symbol = "spenso::network::Network"
 anchor = "pub struct Network<S, LibKey, FunKey, Aind = AbstractIndex> {"
 # No architecture impact: the 2026-09-02 Rust 1.98 compatibility fix removes
 # an unused higher-ranked lifetime without changing the trait bound or behavior.
-digest = "06f15fd382091d02052c40532c48d873aafee977"
+# Reviewed 2026-09-14: the note now assigns live indices to graph edges;
+# graph/store separation and network execution ownership remain unchanged.
+digest = "f8d9f3e088578d9a99217ced000bf5120641e2cd"
 
 [[section.note.scope]]
 path = "crates/spenso/src/network/parsing/mod.rs"
 symbol = "spenso::network::parsing::ParseSettings"
 anchor = "pub struct ParseSettings {"
-digest = "aaa5b8535c3920a7a8831cd785af176b64136b86"
+# Reviewed 2026-09-14 alongside parsing-flow: broadcast dispatch, canonical
+# structures, compact vectors, and shared-placeholder nesting checks.
+digest = "9d626792d5f9fa5ab5840911832326cb8d02e782"
 
 [[section.note.scope]]
 path = "crates/spenso/src/symbolic_parallelism.rs"
 symbol = "spenso::symbolic_parallelism::SymbolicParallelism"
 anchor = "pub enum SymbolicParallelism {"
-digest = "addbd2fb76dc603478b106c13f14503f37b81667"
+# No architecture impact 2026-09-14: only the LicenseManager import path changed.
+digest = "f9475edd533e069fc57ea28b6c14208d1c318a2d"
 
 [[section.note]]
 id = "idenso-architecture"
@@ -321,11 +348,11 @@ title = "Idenso implementation architecture"
 summary = "Representation and symbol initialization, symbolic tensor/network boundaries, rewrite families, Schoonschip execution, feature and serialization limits, index ownership, invariants, and tests."
 source = "docs/architecture/idenso-architecture.typ"
 kind = "System architecture"
-status = "Implemented · reviewed 2026-08-18"
+status = "Implemented · reviewed 2026-09-14"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-08-18"
-review_ref = "28275fc5d5154faa43a19dba0233bacd0dafbf1f"
+reviewed_at = "2026-09-14"
+review_ref = "ab00e4917295883add11f9855734aaee1d56926f"
 products = ["idenso"]
 topics = ["symbolica", "tensor identities", "rewriting", "schoonschip", "index ownership"]
 review_triggers = ["crates/idenso/Cargo.toml", "crates/idenso/src/lib.rs", "crates/idenso/src/representations.rs", "crates/idenso/src/rep_symbols.rs", "crates/idenso/src/tensor/**", "crates/idenso/src/shorthands/**", "crates/idenso/src/dirac/**", "crates/idenso/src/color/**", "crates/idenso/src/epsilon.rs", "crates/idenso/src/selective_expand.rs", "crates/idenso/src/cook.rs", "crates/idenso/src/python.rs"]
@@ -334,25 +361,33 @@ review_triggers = ["crates/idenso/Cargo.toml", "crates/idenso/src/lib.rs", "crat
 path = "crates/idenso/src/representations.rs"
 symbol = "idenso::representations::initialize"
 anchor = "pub fn initialize() {"
-digest = "1143c258ff6209248ee14320962629d9109c149e"
+# Reviewed 2026-09-14: removed Python exposure of initialize; community-module
+# initialization still registers the same representations.
+digest = "6401f1b81469292511f6018715a4033b3ff38136"
 
 [[section.note.scope]]
 path = "crates/idenso/src/lib.rs"
 symbol = "idenso::IndexTooling"
 anchor = "pub trait IndexTooling {"
-digest = "f57c607c0b36833c9f630aa82082aca34cb52671"
+# Reviewed 2026-09-14: typed structural errors and native/Wasm features are
+# documented; symbolic tensor and rewrite ownership remain unchanged.
+digest = "270e4b9fcf762a8570acc1f2dc318e758a18b1f6"
 
 [[section.note.scope]]
 path = "crates/idenso/src/cook.rs"
 symbol = "idenso::CookSettings"
 anchor = "pub struct CookSettings {"
-digest = "c6c01c1ca4825ae4d4c79ed645a55faaa2dc5a3c"
+# No cooking-policy impact 2026-09-14: preserves_tags exposes existing settings
+# without changing selected tags or transformation behavior.
+digest = "7b8c40de4ed8d40b295ca43ebfc29710db34a585"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/mod.rs"
 symbol = "idenso::tensor::SymbolicTensor"
 anchor = "pub struct SymbolicTensor<Aind: AbsInd = AbstractIndex> {"
-digest = "07ae06321c939c183891e2f6fdda331987979c73"
+# Reviewed 2026-09-14: documented typed expansion and execution errors;
+# symbolic tensor ownership and rewrite boundaries remain unchanged.
+digest = "8fc9129b46fcbed085b44179b1af80b76a5fb876"
 
 [[section.note.scope]]
 path = "crates/idenso/src/shorthands/schoonschip/settings.rs"
@@ -458,13 +493,20 @@ review_triggers = ["crates/vakint/src/**", "crates/vakint/templates/**", "crates
 path = "crates/vakint/src/lib.rs"
 symbol = "vakint::Vakint"
 anchor = "pub struct Vakint {"
-digest = "754171cea0bd0c11a4bf78fa6e62e96ec4fe2843"
+# Reviewed 2026-09-14: bind matcher conditions only to present wildcards;
+# reuse registered symbols and index atoms across FORM conversions to preserve metadata.
+# Topology ownership and the documented FORM conversion contracts are unchanged.
+# Reviewed 2026-09-14: stub collection keeps upstream numeric types in Symbolica;
+# Vakint's explicitly registered Python surface and evaluation contracts are unchanged.
+digest = "c6d7a421dcb945bcfe506760598e19e03e093a31"
 
 [[section.note.scope]]
 path = "crates/vakint/src/topologies.rs"
 symbol = "vakint::topologies::Topologies::match_topologies_to_user_input"
 anchor = "pub fn match_topologies_to_user_input("
-digest = "7c79eb9d7e43b05b04f258ff40f4b54184017d8e"
+# Reviewed 2026-09-14: the new solution-set API still requires one fully
+# determined loop-basis solution; matching and replacement mappings are unchanged.
+digest = "7a1dcd23ff9116de1ec3e3a4150e81400cdf552f"
 
 [[section.note.scope]]
 path = "crates/vakint/src/graph.rs"
@@ -796,7 +838,10 @@ end_anchor = "# Exercise the embedded Typst watcher"
 # packages fall outside those ranges; broader review triggers remain advisory.
 # Reviewed 2026-09-14 during PR108 rebase: retain documentation source and
 # runtime ownership while moving Rust, documentation and CI composition apart.
-digest = "239abe69409d2371a9c1cf8f5caca761eb59d99e"
+# Reviewed 2026-09-15: remove the obsolete Symbolica compile-time license marker.
+# Terminal renders still receive SYMBOLICA_LICENSE at runtime; producer ownership
+# and cache boundaries are unchanged.
+digest = "6b54956c8f5d60d16d8b72cbf68a7fa6b33aa147"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
@@ -820,9 +865,12 @@ symbol = "workspace package source ownership"
 # Reviewed 2026-09-14: Clinnet include_str fixtures are compile-time inputs
 # shared with aggregate checks and remapped test execution; docs tests carry
 # the notebook sources linked from their generated pages.
+# Reviewed 2026-09-14: Spynso's embedded Typst files now belong to its
+# production sources, including dependent crate builds. The maintained CI
+# guide records this input boundary and the restored binding-test coverage.
 anchor = "documentationCatalogAnnotatedItemSourcePaths ="
 end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
-digest = "3cbc3214ce45d19eb3032bf6f3ff067246c7c90a"
+digest = "9cc9c47f7e6f60a2a4aca498cb922eaef3e7f3b3"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"

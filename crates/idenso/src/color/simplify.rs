@@ -69,7 +69,7 @@ impl ColorAlgebraSimplifier {
                     continue;
                 }
                 let simplified =
-                    restore_explicit_default_generator_chains(canonicalized).simplify_metrics();
+                    restore_explicit_su_n_generator_chains(canonicalized).simplify_metrics();
                 return if self.settings.substitute_cof_dimension_invariants {
                     simplified.to_cof_dimension_invariants()
                 } else {
@@ -667,6 +667,11 @@ impl ColorAlgebraSimplifier {
                 let Some(structure) = &f_factor.structure else {
                     continue;
                 };
+                let Some(structure_dimension) =
+                    color_structure_dimension(&structure.args.map(|arg| arg.to_owned()))
+                else {
+                    continue;
+                };
 
                 for pair_index in 0..trace.factors.len() {
                     let first = trace.factors[pair_index];
@@ -693,10 +698,7 @@ impl ColorAlgebraSimplifier {
                     // f^{abx} Tr(T^a T^b rest) -> i CA/2 Tr(T^x rest).
                     let replacement = structure_prefactor
                         * Atom::i()
-                        * adjoint_casimir_for_dimension(
-                            color_adjoint_dimension(&target)
-                                .unwrap_or_else(default_adjoint_dimension),
-                        )
+                        * adjoint_casimir_for_dimension(structure_dimension.clone())
                         / Atom::num(2)
                         * trace_with_factors(trace.rep.to_owned(), replacement_factors);
                     return Some(product.replacing_pair(trace_index, f_index, replacement));
@@ -729,6 +731,11 @@ impl ColorAlgebraSimplifier {
                     let Some(structure) = &f_factor.structure else {
                         continue;
                     };
+                    let Some(structure_dimension) =
+                        color_structure_dimension(&structure.args.map(|arg| arg.to_owned()))
+                    else {
+                        continue;
+                    };
                     let Some((target, structure_prefactor)) =
                         Self::structure_target_for_generator_pair(&structure.args, &left, &right)
                     else {
@@ -737,10 +744,7 @@ impl ColorAlgebraSimplifier {
 
                     let coefficient = structure_prefactor
                         * Atom::i()
-                        * adjoint_casimir_for_dimension(
-                            color_adjoint_dimension(&target)
-                                .unwrap_or_else(default_adjoint_dimension),
-                        )
+                        * adjoint_casimir_for_dimension(structure_dimension)
                         / Atom::num(2);
                     let chain_factors = chain
                         .factors
@@ -790,6 +794,9 @@ impl ColorAlgebraSimplifier {
                 let Some(structure) = &f_factor.structure else {
                     continue;
                 };
+                if color_structure_dimension(&structure.args.map(|arg| arg.to_owned())).is_none() {
+                    continue;
+                }
                 let common_count = symmetric
                     .args
                     .iter()
@@ -810,6 +817,9 @@ impl ColorAlgebraSimplifier {
                 continue;
             };
             let left = left_structure.args.map(|arg| arg.to_owned());
+            let Some(dimension) = color_structure_dimension(&left) else {
+                continue;
+            };
 
             for (right_index, right_factor) in
                 product.factors.iter().enumerate().skip(left_index + 1)
@@ -818,10 +828,13 @@ impl ColorAlgebraSimplifier {
                     continue;
                 };
                 let right = right_structure.args.map(|arg| arg.to_owned());
+                if color_structure_dimension(&right).as_ref() != Some(&dimension) {
+                    continue;
+                }
                 let Some(replacement) = two_structure_loop_contraction(
                     &left,
                     &right,
-                    adjoint_casimir_for_dimension(color_structure_dimension(&left)?),
+                    adjoint_casimir_for_dimension(dimension.clone()),
                 ) else {
                     continue;
                 };
@@ -846,6 +859,19 @@ impl ColorAlgebraSimplifier {
             else {
                 continue;
             };
+            let Some(dimensions) = f_args
+                .iter()
+                .map(color_structure_dimension)
+                .collect::<Option<Vec<_>>>()
+            else {
+                continue;
+            };
+            if !dimensions
+                .iter()
+                .all(|dimension| dimension == &dimensions[0])
+            {
+                continue;
+            }
 
             let common01 = common_structure_positions(&f_args[0], &f_args[1]);
             let common12 = common_structure_positions(&f_args[1], &f_args[2]);
@@ -909,8 +935,7 @@ impl ColorAlgebraSimplifier {
                 continue;
             }
 
-            let replacement = prefactor
-                * adjoint_casimir_for_dimension(color_structure_dimension(&f_args[0])?)
+            let replacement = prefactor * adjoint_casimir_for_dimension(dimensions[0].clone())
                 / Atom::num(2)
                 * color_f!(
                     externals[0].clone(),
@@ -1364,21 +1389,12 @@ fn color_adjoint_dimension(slot: &Atom) -> Option<Atom> {
     representation_slot(slot.as_view(), CS.adjoint_rep).map(|(dimension, _)| dimension)
 }
 
-fn default_adjoint_dimension() -> Atom {
-    Atom::var(CS.nc).pow(Atom::num(2)) - Atom::num(1)
-}
-
 fn color_structure_dimension(args: &[Atom; 3]) -> Option<Atom> {
-    let dimensions = args
-        .iter()
-        .filter_map(color_adjoint_dimension)
-        .dedup()
-        .collect::<Vec<_>>();
-    match dimensions.as_slice() {
-        [] => Some(default_adjoint_dimension()),
-        [dimension] => Some(dimension.clone()),
-        _ => None,
-    }
+    let mut dimensions = args.iter().map(color_adjoint_dimension);
+    let dimension = dimensions.next()??;
+    dimensions
+        .all(|candidate| candidate.is_some_and(|candidate| candidate == dimension))
+        .then_some(dimension)
 }
 
 fn color_adjoint_dummy_like(slot: &Atom) -> Option<Atom> {
@@ -1491,15 +1507,17 @@ fn fundamental_chain_dimension_view(start: AtomView<'_>, end: AtomView<'_>) -> O
     (start_dimension == end_dimension).then_some(start_dimension)
 }
 
-fn is_default_fundamental_chain(start: &Atom, end: &Atom) -> bool {
+fn is_su_n_fundamental_chain(start: &Atom, end: &Atom) -> bool {
     fundamental_chain_dimension(start, end).is_some_and(|dimension| dimension == Atom::var(CS.nc))
 }
 
-fn is_default_adjoint_slot(slot: &Atom) -> bool {
-    color_adjoint_dimension(slot).is_some_and(|dimension| dimension == default_adjoint_dimension())
+fn is_su_n_adjoint_slot(slot: &Atom) -> bool {
+    let n = Atom::var(CS.nc);
+    let su_n_adjoint_dimension = n.clone().pow(Atom::num(2)) - Atom::num(1);
+    color_adjoint_dimension(slot).is_some_and(|dimension| dimension == su_n_adjoint_dimension)
 }
 
-fn restore_explicit_default_generator_chains(expression: Atom) -> Atom {
+fn restore_explicit_su_n_generator_chains(expression: Atom) -> Atom {
     expression.replace_map(|arg, _context, out| {
         let Some((start, end, factors)) = chain_parts(arg) else {
             return;
@@ -1507,13 +1525,13 @@ fn restore_explicit_default_generator_chains(expression: Atom) -> Atom {
         let [factor] = factors.as_slice() else {
             return;
         };
-        if !is_default_fundamental_chain(&start, &end) {
+        if !is_su_n_fundamental_chain(&start, &end) {
             return;
         }
         let Some(adjoint) = color_generator_adjoint(factor.as_view()) else {
             return;
         };
-        if !is_default_adjoint_slot(&adjoint) {
+        if !is_su_n_adjoint_slot(&adjoint) {
             return;
         }
 

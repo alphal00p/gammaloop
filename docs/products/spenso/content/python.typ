@@ -29,13 +29,25 @@ Source embedders can build a custom
 the Symbolica assembly version with reproducible results; it is a more useful Python
 compatibility fact than the version of an unrelated local Rust checkout.
 
+Spenso, Idenso, and Symbolica core share one native library, one Symbolica kernel, and one
+Python `Expression` type. The community assembly registers `SpensoModule` as
+`symbolica.community.spenso_native`; its public wrapper imports the native exports and calls
+the host-provided `initialize_module`. That initializer must remain in the export list.
+Do not link Spynso into `gammaloop._gammaloop` or distribute it as a second native extension.
+
+GammaLoop owns the Spynso source and bundled Tydenso `render.typ` and `notation.typ` assets;
+Symbolica Community owns the wheel. Their native dependencies must resolve one Symbolica
+source revision. The `gammaloop[typst-display]` extra adds only the optional renderer, not
+another Spynso binary.
+
 == Choose the right object
 
 - `Representation` and `Slot` define dimensions, duality, and abstract indices.
-- `TensorIndices` carries concrete abstract indices; `TensorStructure` describes a reusable
-  shape whose indices can be assigned later.
-- `Tensor` owns ordinary dense or sparse data. `LibraryTensor` is the named form registered in a
-  `TensorLibrary` for reuse by symbolic networks.
+- `TensorExpression` carries a symbolic expression and its ordered tensor interface. A
+  `Slot` supplies an explicit index; a `Representation` leaves a port open for later indexing.
+- `TensorPattern` and `PortPattern` build rewrite patterns without requiring a concrete interface.
+- `Tensor` owns dense or sparse data with a `TensorExpression` as its exact structure.
+  Register a named tensor in a `TensorLibrary` for reuse by symbolic networks.
 - `TensorNetwork` owns an expression graph. `ExecutionMode` selects the rewrite strategy:
   one smallest-degree rewrite per step, scalar work only, or the general smallest-degree strategy.
   Use `n_steps`, not the mode, to bound how many execution steps run.
@@ -56,13 +68,13 @@ native module.
 
 // docs-example: compile
 ```python
-from symbolica.community.spenso import Representation, Tensor, TensorIndices
+from symbolica.community.spenso import Representation, Tensor, TensorName
 
 rep = Representation.euc(2)
 i = rep("i")
 j = rep("j")
-indices = TensorIndices(i, j)
-matrix = Tensor.dense(indices, [1.0, 0.0, 0.0, 1.0])
+structure = TensorName("A")(i, j)
+matrix = Tensor.dense(structure, [1.0, 0.0, 0.0, 1.0])
 
 assert len(matrix) == 4
 assert matrix[0, 0] == 1.0
@@ -83,6 +95,49 @@ mutate the storage representation; they do not change slots or re-index the tens
   structural mismatch.
 ])
 
+== Typed tensor factories and patterns
+
+Calling a user-defined `TensorName` places scalar key arguments before structural ports.
+Predefined tensors instead have typed factories on `TensorExpression`: `g`, `flat`, `gamma`,
+`gamma5`, `projm`, `projp`, `sigma`, `f`, and `t`. Factory dimensions select representations;
+they are not scalar arguments and do not add fields to tensor-library keys.
+
+// docs-example: compile
+```python
+from symbolica.community.spenso import _, TensorExpression
+
+gamma = TensorExpression.gamma(4)
+gamma_ijmu = gamma("i", "j", "mu")
+line = gamma(_, _, "mu") * gamma(_, _, "nu")
+dirac_trace = line.trace()
+
+generator = TensorExpression.t(8, 3)
+T_aij = generator("a", "i", "j")
+```
+
+Gamma's public argument order is its stored interface: bispinor-in, bispinor-out, then
+Minkowski. `_` (also exported as `AUTO`) leaves a local port unresolved; it is not a shared
+Einstein index. Calling a partially indexed expression assigns only its remaining open ports.
+Raw predefined `TensorName` accessors expose heads for inspection and matching, not concrete
+construction.
+
+Patterns retain ordinary Symbolica wildcard behavior, including wildcard dimensions:
+
+// docs-example: compile
+```python
+from symbolica import S
+from symbolica.community.spenso import TensorPattern
+
+D_, i_, j_, mu_ = S("D_", "i_", "j_", "mu_")
+gamma_pattern = TensorPattern.gamma(D_, i_, j_, mu_)
+```
+
+`TensorPattern` shortcuts follow the same index order as concrete factories. General patterns
+place scalar `args` before structural `ports`; `PortPattern.exact`, `.any`, `.self_dual`, and
+`.dualizable` select fixed or constrained representation heads. Wildcard-head names are
+strings ending in one underscore; dimensions, indices, and scalar arguments are numbers or
+Symbolica expressions. Patterns can be passed directly to Symbolica replacement operations.
+
 == Register data and execute a network
 
 A symbolic network resolves named tensors through a library. Register the data first, construct
@@ -92,19 +147,18 @@ the expression with the same name and compatible slots, then execute and request
 ```python
 from symbolica.community.spenso import (
     ExecutionMode,
-    LibraryTensor,
     Representation,
+    Tensor,
     TensorLibrary,
     TensorName,
     TensorNetwork,
-    TensorStructure,
 )
 
 rep = Representation.euc(2)
 A = TensorName("A")
-structure = TensorStructure(rep, rep, name=A)
+structure = A(rep, rep)
 library = TensorLibrary()
-library.register(LibraryTensor.dense(structure, [1.0, 0.0, 0.0, 1.0]))
+library.register(Tensor.dense(structure, [1.0, 0.0, 0.0, 1.0]))
 
 network = TensorNetwork(A(rep("i"), rep("j")), library=library)
 network.execute(library=library, mode=ExecutionMode.All)
@@ -127,6 +181,60 @@ and #link("reference/python/spynso3/ExecutionMode/")[`ExecutionMode`].
   A changed network structure invalidates assumptions about contraction order; replacing only
   values with the same registered structure does not.
 ])
+
+== Mathematical display
+
+`TensorExpression`, `Tensor`, and `TensorNetwork` share semantic display methods.
+`DisplaySettings` controls the ports, Schoonschip, and call layouts, dimensions, parentheses,
+commas, symbol scripts, and index/factor spacing. Positional calls such as `to_typst(True)`
+and `formatted(True)` still request dimensions.
+
+// docs-example: compile
+```python
+from symbolica.community.spenso import DisplaySettings, TensorExpression
+
+trace = TensorExpression.gamma5(4).trace()
+source = trace.to_typst(
+    settings=DisplaySettings(show_dimensions=True, parentheses=False)
+)
+```
+
+`to_typst` and `format_tensor` emit source using the ports layout. Schoonschip, call, and
+custom-spacing settings require Tydenso's Typst notation layer; use HTML, SVG, or notebook
+display for those settings. Source-only methods reject unsupported settings rather than
+silently ignoring them.
+
+Install the optional compiler to render HTML and SVG:
+
+// docs-example: syntax
+```sh
+pip install 'gammaloop[typst-display]'
+```
+
+// docs-example: compile
+```python
+from symbolica.community.spenso import DisplaySettings, TensorExpression
+
+trace = TensorExpression.gamma5(4).trace()
+compact = DisplaySettings.schoonschip()
+html = trace.to_html(settings=compact)
+svg = trace.to_svg(settings=compact)
+rich = trace.formatted(settings=compact)
+```
+
+Python uses the bundled Typst render/notation assets directly, without calling the Tydenso
+Wasm plugin. Explicit `to_html` and `to_svg` calls raise an install-guidance `ImportError`
+when the compiler is absent. Notebook `_repr_html_` and `formatted()` fall back to existing
+LaTeX or text. `TensorNetwork.__str__` remains Graphviz DOT; `to_dot()` makes that intention
+explicit. These display methods do not replace Symbolica's inherited `to_latex` API.
+
+Idenso transformations still return ordinary Symbolica expressions. Module-level
+`spenso.formatted(expression)` or `spenso.as_tensor(expression)` provides tensor-aware display.
+HTML, SVG, and rich-display functions accept `notation_source` as a trusted, complete
+replacement for the bundled `notation.typ`, not a style fragment. Typst executes that source;
+it must implement the expected notation interface and must not come from untrusted input.
+Display customization stays outside Atom payloads; portable representation and math-label
+declarations continue to travel with the expressions.
 
 == Repeated symbolic evaluation
 

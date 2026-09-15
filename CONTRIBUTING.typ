@@ -463,7 +463,9 @@ preferences; they protect behavior that has been easy to regress.
 
 === Environment And Build Quirks
 
-- `NO_SYMBOLICA_OEM_LICENSE` is read via `option_env!` in `gammalooprs`
-  initialization, so it is a compile-time switch, not a pure runtime one. If you
-  need to disable the OEM-license activation path, that variable must be present
-  when building the relevant binary or Python extension.
+- The `gammaloop` CLI activates its crate-bound application (OEM) license with
+  `symbolica::set_application_key!` before calling the reusable API.
+  `NO_SYMBOLICA_OEM_LICENSE` is read there via `option_env!`, so
+  opting out requires setting it when compiling the binary, not at runtime.
+  Rust/Python libraries and their tests do not activate this OEM license; use a
+  user license through `SYMBOLICA_LICENSE` for those entry points.

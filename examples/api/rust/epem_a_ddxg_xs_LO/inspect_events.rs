@@ -6,21 +6,18 @@
 //! gammaloop-api = { path = "../../../../crates/gammaloop-api", default-features = false, features = ["cli"] }
 //! gammalooprs = { path = "../../../../crates/gammalooprs" }
 //!
-//! [patch.crates-io]
+//! # Symbolica, Graphica, and Numerica use their published 3.0 releases.
 //! #graphica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
 //! #numerica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
 //! #symbolica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
-//! graphica = { git = "https://github.com/benruijl/symbolica", rev = "650ba97bf3da7cf2ff5ada92875f92d5f71e7a31" }
-//! numerica = { git = "https://github.com/benruijl/symbolica", rev = "650ba97bf3da7cf2ff5ada92875f92d5f71e7a31" }
-//! symbolica = { git = "https://github.com/benruijl/symbolica", rev = "650ba97bf3da7cf2ff5ada92875f92d5f71e7a31" }
 //!
 //! ```
 //!
 //! Run from the repository root with `rust-script`, for example:
-//! `NO_SYMBOLICA_OEM_LICENSE=1 EXTRA_MACOS_LIBS_FOR_GNU_GCC=T rust-script --debug examples/api/rust/epem_a_ddxg_xs_LO/inspect_events.rs`
+//! `SYMBOLICA_LICENSE=... EXTRA_MACOS_LIBS_FOR_GNU_GCC=T rust-script --debug examples/api/rust/epem_a_ddxg_xs_LO/inspect_events.rs`
 //!
-//! If you change the OEM-license environment at build time, add `--force` so
-//! `rust-script` does not reuse an incompatible cached build.
+//! This library example uses your runtime Symbolica license, not the CLI's OEM
+//! token. Add `--force` after dependency changes to refresh rust-script's cache.
 
 use std::{env, path::PathBuf};
 

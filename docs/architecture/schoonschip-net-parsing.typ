@@ -4,7 +4,7 @@ The network-backed Schoonschip path always parses tensorial shorthand
 expressions as opaque tensor leaves. Parser shorthand expansion is
 deliberately not part of this path.
 
-#strong[Audit status:] reviewed 2026-08-17 against `c9f4e32acd2c`.
+#strong[Audit status:] reviewed 2026-09-14 against `ab00e491`.
 Lifecycle: current implementation architecture.
 
 == Entry Points
@@ -20,8 +20,11 @@ only. `schoonschip_with_net_full` is a separate convenience entry point
 that enables contracted-sum expansion; neither wrapper subsequently
 calls `schoonschip()` on the full result.
 
+Network entry points propagate parsing, execution, and result-extraction
+failures as `NetworkToolingError`; the pattern path still returns an `Atom`.
+
 ```
-fn schoonschip_net<Aind: AbsInd + DummyAind + ParseableAind + 'static>(&self) -> Atom {
+fn schoonschip_net<Aind: AbsInd + DummyAind + ParseableAind + 'static>(&self) -> Result<Atom, NetworkToolingError> {
     self.schoonschip_with_net::<false, Aind>(&SchoonschipSettings::default_network())
 }
 ```

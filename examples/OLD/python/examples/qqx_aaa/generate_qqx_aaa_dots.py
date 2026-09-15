@@ -38,7 +38,7 @@ if SYMBOLICA_COMMUNITY_PATH is not None:
     sys.path.insert(0, SYMBOLICA_COMMUNITY_PATH)
 from symbolica import Expression, S,E, Replacement, PrintMode
 from symbolica.community.spenso import TensorName as \
-    N,LibraryTensor,TensorNetwork,Representation,TensorStructure,TensorIndices,Tensor,Slot,TensorLibrary, ExecutionMode
+    N,TensorNetwork,Representation,Tensor,Slot,TensorLibrary, ExecutionMode
 from symbolica.community.idenso import *
 from symbolica.community.spenso import Tensor
 #from symbolica.community.spenso import initialize as spenso_initialize
@@ -47,7 +47,7 @@ from symbolica.community.spenso import Tensor
 #print(E("spenso::{spenso::upper}::bis(4,x)").to_canonical_string())
 #from symbolica_community import Expression, S,E, Replacement
 #from symbolica_community.tensors import TensorName as \
-#    N,LibraryTensor,TensorNetwork,Representation,TensorStructure,TensorIndices,Tensor,Slot,TensorLibrary, ExecutionMode
+#    N,TensorNetwork,Representation,Tensor,Slot,TensorLibrary, ExecutionMode
 # from symbolica_community.algebraic_simplification import *
 # import symbolica_community.tensors as tensors
 

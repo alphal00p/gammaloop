@@ -66,9 +66,9 @@ fn main() {
     type Net = Network<Store, DummyKey, DummyKey>;
     type LibraryTensor = DummyLibraryTensor<Tensor>;
 
-    let structure = OrderedStructure::new(vec![Euclidean {}.new_slot(2, 1)]).structure;
-    let a = DenseTensor::from_data(vec![1.0, 2.0], structure.clone()).unwrap();
-    let b = DenseTensor::from_data(vec![3.0, 4.0], structure).unwrap();
+    let structure = OrderedStructure::new(vec![Euclidean {}.new_slot(2, 1)]).into_canonical();
+    let a = DenseTensor::from_storage_data(vec![1.0, 2.0], structure.clone()).unwrap();
+    let b = DenseTensor::from_storage_data(vec![3.0, 4.0], structure).unwrap();
     let tensors = DummyLibrary::new();
     let functions = ErroringLibrary::new();
 
@@ -94,7 +94,7 @@ run it to execute the assertion in a provisioned Symbolica environment. See the 
 #link("reference/rust/spenso/contraction/trait.Contract.html")[pairwise contraction] Rustdoc.
 
 #callout("Interpret execution failures by layer", [
-  `from_data` errors are rank/dimension or storage-length mismatches. An unresolved function-key
+  `from_storage_data` errors are rank/dimension or storage-length mismatches. An unresolved function-key
   error means the network contains a symbolic library node despite the concrete-only setup. A
   different value with the same shape points to scalar placement or node arithmetic; a different
   shape points to changed slots or unintended contraction, which requires replanning.

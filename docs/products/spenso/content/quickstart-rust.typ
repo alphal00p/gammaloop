@@ -25,7 +25,7 @@ Replace `src/main.rs` with:
 use spenso::{
     contraction::Contract,
     structure::{
-        OrderedStructure, PermutedStructure,
+        Canonicalized, OrderedStructure,
         representation::{Euclidean, LibraryRep, RepName},
         slot::{DualSlotTo, IsAbstractSlot},
     },
@@ -39,9 +39,9 @@ fn main() {
     let shared = rep.new_slot(2, 10).to_lib();
 
     let left_structure: OrderedStructure<LibraryRep> =
-        PermutedStructure::from_iter([left_free, shared]).structure;
+        Canonicalized::from_iter([left_free, shared]).into_canonical();
     let right_structure: OrderedStructure<LibraryRep> =
-        PermutedStructure::from_iter([right_free, shared.dual()]).structure;
+        Canonicalized::from_iter([right_free, shared.dual()]).into_canonical();
 
     let mut left = DenseTensor::<i32, _>::zero(left_structure);
     let mut right = DenseTensor::<i32, _>::zero(right_structure);

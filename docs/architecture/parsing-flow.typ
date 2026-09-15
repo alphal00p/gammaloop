@@ -5,14 +5,16 @@ networks in `crates/spenso/src/network/parsing`. It focuses on the
 control flow, shorthand expansion, opaque leaves, structure inference,
 and edge cases that affect Schoonschip-style notation.
 
-#strong[Audit status:] reviewed 2026-08-17 against `c9f4e32acd2c`.
+#strong[Audit status:] reviewed 2026-09-14 against `ab00e491`.
 Lifecycle: current implementation architecture.
 
 == Entry Points
 <entry-points>
 Parsing starts from `NetworkParse` methods such as `parse_to_atom_net`.
-The parser creates a fresh `ParseState` and calls `try_from_view_impl`
-on the input `AtomView`.
+The parser first rejects chains or traces nested inside another chain or
+trace, because they share one global `in`/`out` placeholder scope. It then
+creates a fresh `ParseState` and calls `try_from_view_impl` on the input
+`AtomView`.
 
 #table(
     columns: 2,
@@ -54,7 +56,7 @@ on the input `AtomView`.
     instead of immediately storing them as pure scalars.],
     [`strict_tensor_filter`], [`Tagged` (the default) accepts ordinary
     heads tagged as tensors. `TaggedChecked` additionally requires
-    representation syntax, while `ContainsReps` also accepts untagged
+    representation syntax except for a zero-argument tensor head, while `ContainsReps` also accepts untagged
     heads containing representation syntax. Parser-owned shorthand,
     metric, representation, and broadcast syntax keeps its fixed
     meaning.],
@@ -112,8 +114,8 @@ else -> scalar fallback
 ```
 
 Products, sums, and powers may hit the depth leaf boundary before they
-recurse. Function parsing validates dot arity, applies
-`is_tensorial(strict_tensor_filter)`, handles broadcast wrappers, and
+recurse. Function parsing validates dot arity, handles broadcast wrappers,
+applies `is_tensorial(strict_tensor_filter)`, and
 uses the opaque tensor-expression boundary only for recognized shorthand
 roots.
 
@@ -136,6 +138,8 @@ match value {
 === Top Level
 <top-level>
 #strong[Input];`parse_to_*_net(atom, settings)`
+↓
+#strong[Validation];Reject nested chain/trace placeholder consumers.
 ↓
 #strong[State];Create `ParseState` with depth and dummy allocator.
 ↓
@@ -167,8 +171,9 @@ Pow
 Fun
 ==== `AtomView::Fun`
 <atomviewfun>
-+ Run dot-arity and strict tensor-syntax checks.
++ Check dot arity.
 + Handle broadcast wrappers.
++ Apply the strict tensor-syntax filter.
 + Keep recognized shorthand roots opaque when requested.
 + Materialize generic shorthand before leaf parsing.
 
@@ -191,7 +196,20 @@ fallback.
 No
 ==== Continue
 <continue>
-Scalar escape hatches are considered next.
+Broadcast wrappers are considered next.
+
+↓
+#strong[Decision];Is the head tagged as `broadcast`?
+No
+==== Continue
+<continue-1>
+Apply the strict tensor-syntax filter.
+
+Yes
+==== Broadcast wrapper
+<broadcast-wrapper>
+Require one argument, parse it recursively, then apply the broadcast
+head to the result.
 
 ↓
 #strong[Decision];Does `is_tensorial(strict_tensor_filter)` accept the
@@ -199,26 +217,13 @@ root?
 Yes
 ==== Tensor syntax
 <tensor-syntax>
-Continue to broadcast and shorthand dispatch.
+Continue to shorthand dispatch.
 
 No
 ==== Scalar path
 <scalar-path>
 Parse the whole function as a scalar, except that `pure_scalar(x)`
 unwraps its one argument.
-
-↓
-#strong[Decision];Is the head tagged as `broadcast`?
-No
-==== Continue
-<continue-1>
-Consider opaque shorthand handling.
-
-Yes
-==== Broadcast wrapper
-<broadcast-wrapper>
-Require one argument, parse it recursively, then apply the broadcast
-head to the result.
 
 ↓
 #strong[Decision];Is `shorthand_parsing` opaque and is this a recognized
@@ -265,7 +270,7 @@ Fixed point
 + If the Schoonschip atom rewriter makes no change, do not recurse.
 + Run `S::parse` for fast structure inference.
 + Use a library tensor if a key exists.
-+ Otherwise concretize the parsed tensor shell.
++ Otherwise parse a rank-zero result as a scalar, or concretize the parsed tensor shell.
 
 Empty structure
 ==== Scalar fallback
@@ -344,11 +349,11 @@ Function parsing has the most important ordering rules.
 
 + Reject malformed `dot` syntax first. Dot has exactly two arguments in
   parser syntax.
++ If the head has the `broadcast` tag, require one argument, parse that
+  argument recursively, and apply the head to the result.
 + Apply `is_tensorial(settings.strict_tensor_filter)`. If it rejects the
   root, parse it as a scalar; `pure_scalar(x)` is unwrapped in that
   scalar path.
-+ If the head has the `broadcast` tag, require one argument, parse that
-  argument recursively, and apply the head to the result.
 + If `shorthand_parsing` is `Opaque` and the root is recognized
   shorthand (`chain`, `trace`, `dot`, or compact Schoonschip syntax),
   parse the whole function as one inferred tensor leaf. Ordinary tensor
@@ -361,7 +366,7 @@ Function parsing has the most important ordering rules.
   retained as a fast-inferred leaf. An unchanged ordinary head uses
   regular leaf parsing.
 + Try `S::parse`. If it succeeds, use a library tensor when possible,
-  otherwise concretize a tensor shell.
+  otherwise parse a rank-zero result as a scalar or concretize a tensor shell.
 + If structure parsing reports `StructureError::EmptyStructure`, parse
   the function as a scalar expression. Propagate other structure errors.
 
@@ -370,6 +375,10 @@ Function parsing has the most important ordering rules.
 ```
 if symbol == SPENSO_TAG.dot && value.get_nargs() != 2 {
     return Err(TensorNetworkError::InvalidDotFunction(...));
+}
+
+if symbol.has_tag(&SPENSO_TAG.broadcast) {
+    return Self::parse_broadcast_function(...);
 }
 
 if !value.as_view().is_tensorial(settings.strict_tensor_filter) {
@@ -485,7 +494,7 @@ network.execute::<Sequential, SmallestDegree, ...>(...)?;
 #link("../../crates/idenso/src/tensor/mod.rs#L118")[crates/idenso/src/tensor/mod.rs:118]
 
 ```
-let mut tensor = structure.structure;
+let mut tensor = structure.into_canonical();
 ...
 tensor.expression = expression.to_owned();
 Ok(tensor)
@@ -500,7 +509,7 @@ Fast structure inference is syntactic and intentionally non-semantic.
     align: (auto,auto,),
     table.header([*Syntax*], [*Inferred structure*]),
     [Function], [Direct slot arguments expose slots. `aind(...)` bundles
-    are flattened. Other arguments are metadata.],
+    are flattened; malformed bundles return a slot error. Other arguments are metadata.],
     [Product], [Merge the structures of all factors. Scalar factors
     contribute an empty structure.],
     [Sum], [Use the first summand\'s structure. The parser separately
@@ -527,9 +536,9 @@ ordinary function uses regular leaf parsing.
 
 `SchoonschipMaterializer` is the narrower atom rewriter used by that
 network boundary. It stores a `current` atom plus `additional_factors`.
-Additional factors are multiplied beside the current atom and are not
-inspected by the Schoonschip materializer during that same pass; they
-are parsed when the parser recurses on the complete expression.
+Additional factors are multiplied beside the current atom. Compact scalar
+factors inside a compact-vector product wrapper are recursively materialized
+before the complete expression re-enters ordinary parsing.
 
 #link("../../crates/spenso/src/network/parsing/materialization.rs#L457")[crates/spenso/src/network/parsing/materialization.rs:457]
 
@@ -569,12 +578,14 @@ pub(super) fn materialize_shorthand(&self, value: AtomView<'_>) -> Atom {
 #link("../../crates/spenso/src/network/parsing/materialization.rs#L171")[crates/spenso/src/network/parsing/materialization.rs:171]
 
 ```
-let rep = Self::compact_vector_rep(*lhs)?;
-if rep != Self::compact_vector_rep(*rhs)? || !rep.rep.is_self_dual() {
+let lhs_rep = Self::compact_vector_rep(*lhs)?;
+let rhs_rep = Self::compact_vector_rep(*rhs)?;
+if !lhs_rep.matches(&rhs_rep) {
     return None;
 }
 
-let slot = self.state.slot(&rep).to_atom();
+let lhs_slot = self.state.slot(&lhs_rep);
+let rhs_slot = rhs_rep.slot::<Aind, _>(lhs_slot.aind());
 ```
 
 #link("../../crates/spenso/src/network/parsing/materialization.rs#L20")[crates/spenso/src/network/parsing/materialization.rs:20]
@@ -598,12 +609,13 @@ the namespace of the surrounding network parse.
 === Compact Scalar Product
 <compact-scalar-product-1>
 ```
-g(p(rep), q(rep))
--> p(rep(dummy)) * q(rep(dummy))
+g(p(rep), q(rep.dual()))
+-> p(rep(dummy)) * q(rep.dual()(dummy))
 ```
 
-This currently requires both compact vectors to have the same self-dual
-representation. `dot(p(rep), q(rep))` follows the same rule.
+The compact representations must match under duality, including dimension.
+For self-dual representations, `rep.dual()` is `rep`.
+`dot(p(rep), q(rep.dual()))` follows the same rule.
 
 The stripped representation in `p(rep)` means that the vector replaces
 an omitted tensor slot. It is valid only where such a slot exists:
@@ -617,6 +629,7 @@ because the stripped vectors are not replacing slots.
 <compact-vector-detection>
 A compact vector is a function that:
 
+- has a tensor-tagged head;
 - is not `metric` or `dot`;
 - is not itself a representation;
 - has no explicit slot argument;
@@ -624,7 +637,9 @@ A compact vector is a function that:
   convention.
 
 Sums are accepted only when every summand is a compact vector with the
-same representation. Products and powers are not compact vector syntax.
+same representation. Unary broadcasts, projectors, and products preserve
+compact-vector syntax when they contain exactly one compatible vector and
+otherwise scalar factors. Powers are not compact vector syntax.
 
 == Chain Expansion
 <chain-expansion>
@@ -744,18 +759,20 @@ let factor = ChainExpansion::replace_placeholders(factor, &left, &right);
     algebra rewrite.],
     [`g(p(rep), q(rep))`], [For matching self-dual reps, materializes to
     `p(dummy) * q(dummy)`.],
-    [Dualizable compact scalar products], [Current gap: compact
-    scalar-product materialization requires self-duality. Dualizable
-    cases produced by algebraic Schoonschip rules are not handled by
-    this specific materializer rule.],
+    [Dualizable compact scalar products], [Matching dual representations
+    share one fresh abstract index while retaining their respective
+    orientations: `g(p(rep), q(rep.dual()))` becomes
+    `p(rep(dummy)) * q(rep.dual()(dummy))`.],
     [Compact vector endpoints in chains], [When Schoonschip expansion is
     enabled, compact endpoints materialize into fresh slots and
     additional rank-one factors. With that expansion disabled, endpoints
     must be concrete slots.],
-    [Metadata false positives], [The compact-vector convention is
-    syntactic. Any function argument with exactly one direct
-    representation argument and no slots can be treated as a compact
-    vector in expand mode.],
+    [Metadata false positives], [Compact vector heads must be tensor-tagged,
+    with exactly one direct representation argument and no slots.
+    Untagged metadata wrappers do not qualify.],
+    [Nested chains and traces], [Rejected before parsing or structure
+    inference because nested containers would share ambiguous `in`/`out`
+    placeholders.],
     [Opaque fast vs expanded inference], [Fast inference is cheap and
     syntactic. Expanded inference builds an expanded network and reads
     dangling slots, so it is a validation oracle but more expensive.],
@@ -772,17 +789,18 @@ let factor = ChainExpansion::replace_placeholders(factor, &left, &right);
 <short-algorithm>
 ```
 parse(atom):
+  reject nested chain/trace placeholder consumers
   dispatch by atom kind
 
 parse_fun(fun):
   if fun is dot with arg count != 2:
     return InvalidDotFunction
 
+  if fun is a broadcast wrapper:
+    return its parsed single argument with broadcast handling
+
   if !fun.is_tensorial(strict_tensor_filter):
     return scalar(fun)
-
-  if fun is a broadcast wrapper:
-    parse its single argument with broadcast handling
 
   if opaque mode and fun is recognized shorthand:
     infer structure

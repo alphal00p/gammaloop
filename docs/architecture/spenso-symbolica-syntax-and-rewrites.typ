@@ -1,7 +1,7 @@
 = Spenso Symbolica Syntax And Rewrite Idioms
 
 #quote(block: true)[
-#strong[Status:] Implemented reference; audited against Spenso and Idenso on 2026-08-18
+#strong[Status:] Implemented reference; audited against Spenso and Idenso on 2026-09-14
 
 The surface forms are owned by
 #link("../../crates/spenso/src/network/parsing/mod.rs")[Spenso parsing and materialization], while the
@@ -106,7 +106,7 @@ and what to use when matching it in a replacement rule.
   [`function!(T.pure_scalar, W_.x_)`],
   [`rep(dim)`],
   [stripped representation, for compact notation or traces],
-  [`mink!(D)`, `bis!(D)`, `cof!(NC)`, `coad!(NA)`],
+  [`mink!(D)`, `bis!(D)`, `cof!(NC)`, `coad!(dA)`],
   [representation head tagged `representation`],
   [`rep_!(N; W_.d_)`],
   [`rep(dim, i)`],
@@ -139,12 +139,12 @@ and what to use when matching it in a replacement rule.
   [`g!(a, b)` or `metric!(a, b)`],
   [`ETS.metric` symbol],
   [`function!(ETS.metric, a, b)`],
-  [`g(p(rep), q(rep))`],
+  [`g(p(rep), q(rep.dual()))`],
   [compact scalar product shorthand],
   [`g!(p, q)` or `metric!(p, q)`],
   [`ETS.metric` plus rank-one compact arguments],
   [`function!(ETS.metric, rank1_!(0; ...), rank1_!(1; ...))`],
-  [`dot(p(rep), q(rep))`],
+  [`dot(p(rep), q(rep.dual()))`],
   [two-argument compact dot shorthand],
   [`dot!(p, q)`],
   [`SPENSO_TAG.dot` symbol],
@@ -195,12 +195,14 @@ and what to use when matching it in a replacement rule.
 `dot` is a two-argument shorthand. A three-argument spelling such as
 `dot(rep, p, q)` is not parser syntax.
 
-For compact vector arguments, `g(p(rep), q(rep))` and `dot(p(rep), q(rep))`
-materialize to the same expanded tensor product:
+For compact vector arguments, `g(p(rep), q(rep.dual()))` and
+`dot(p(rep), q(rep.dual()))` materialize to the same expanded tensor product:
 
 ```text
-p(rep(d)) * q(rep(d))
+p(rep(d)) * q(rep.dual()(d))
 ```
+
+For a self-dual representation, `rep.dual()` is equal to `rep`.
 
 The difference is the Symbolica head. `g` is the actual metric tensor head
 (`ETS.metric`), so it is also the spelling for explicit slot metrics such as
@@ -229,6 +231,10 @@ In expanded parsing, chain materialization replaces `in` and `out` with actual
 slots and creates intermediate dummy slots between adjacent factors. In opaque
 parsing, the chain or trace remains a leaf and its exposed structure is inferred
 from the endpoints and visible external slots.
+
+Chains and traces cannot be nested inside another chain or trace: they share
+one global `in`/`out` placeholder scope, so parsing rejects such nesting before
+either expanded or opaque inference.
 
 The trace macro does the cyclic wrapping automatically:
 

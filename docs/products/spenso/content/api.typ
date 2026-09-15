@@ -64,12 +64,12 @@ building the Rust crate alone does not inject the module into another Symbolica 
 from symbolica.community.spenso import (
     Representation,
     Tensor,
-    TensorIndices,
+    TensorName,
 )
 
 rep = Representation.euc(2)
-indices = TensorIndices(rep("i"), rep("j"))
-identity = Tensor.dense(indices, [1.0, 0.0, 0.0, 1.0])
+structure = TensorName("I")(rep("i"), rep("j"))
+identity = Tensor.dense(structure, [1.0, 0.0, 0.0, 1.0])
 ```
 
 The #link("guides/python/")[Python tensor-workflow guide] connects construction, libraries,

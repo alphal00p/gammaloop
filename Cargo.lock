@@ -1407,6 +1407,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "data-encoding"
+version = "2.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4583a4551df46e2792f82ceeac45e850d2e2d5debba0b91f102385cda5b11f06"
+
+[[package]]
 name = "data-url"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1538,6 +1544,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "directories"
+version = "6.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "16f5094c54661b38d03bd7e50df373292118db60b585c08a411c6d840017fe7d"
+dependencies = [
+ "dirs-sys",
+]
+
+[[package]]
 name = "dirs"
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1636,6 +1651,12 @@ checksum = "78e4f79b296fbaab6ce2e22d52cb4c7f010fe0ebe7a32e34fa25885fd797bd02"
 dependencies = [
  "serde",
 ]
+
+[[package]]
+name = "ed25519-compact"
+version = "2.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f05391a505666bdf2b5d2626f41b7f0f49052b1e33cceac960eaa818008141da"
 
 [[package]]
 name = "either"
@@ -2144,23 +2165,16 @@ name = "gammaloop-workspace-hack"
 version = "0.1.0"
 dependencies = [
  "ahash 0.8.12",
- "aho-corasick",
- "anstream",
  "arrayvec",
  "bincode 2.0.1",
  "bitflags 2.11.1",
- "bitvec",
  "chrono",
  "clap",
  "clap_builder",
  "console 0.16.3",
  "criterion",
  "crossterm 0.28.1",
- "derive_more 2.1.1",
- "derive_more-impl",
  "either",
- "figment",
- "getrandom 0.2.17",
  "indenter",
  "indexmap",
  "insta",
@@ -2172,10 +2186,9 @@ dependencies = [
  "num-complex",
  "num-integer",
  "num-traits",
- "once_cell",
+ "numerica",
  "papergrid",
- "rand 0.9.4",
- "rand_chacha 0.9.0",
+ "rand 0.8.6",
  "regex",
  "regex-automata",
  "regex-syntax",
@@ -2183,18 +2196,16 @@ dependencies = [
  "rustix 1.1.4",
  "serde",
  "serde_core",
+ "serde_derive",
  "serde_json",
  "serde_spanned 1.1.1",
- "similar",
  "smallvec",
  "smartstring",
  "symbolica",
- "syn 1.0.109",
  "syn 2.0.117",
  "tabled",
  "testing_table",
  "time",
- "tiny-keccak",
  "toml_datetime 1.1.1+spec-1.1.0",
  "toml_parser",
  "toml_writer",
@@ -2402,13 +2413,13 @@ dependencies = [
 
 [[package]]
 name = "graphica"
-version = "2.1.0"
-source = "git+https://github.com/symbolica-dev/symbolica?branch=dev#0441bd7a511209dce2ca99925fe87f8b18e4bf03"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "afa7211a7cfdba21893f634868e19459e5d1882e5957f98d7c084875a6e70ab6"
 dependencies = [
  "ahash 0.8.12",
  "dyn-clone",
  "numerica",
- "rand 0.9.4",
 ]
 
 [[package]]
@@ -4053,8 +4064,9 @@ dependencies = [
 
 [[package]]
 name = "numerica"
-version = "2.2.0"
-source = "git+https://github.com/symbolica-dev/symbolica?branch=dev#0441bd7a511209dce2ca99925fe87f8b18e4bf03"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dd28aae6e022a7b5846a8ae40b2d41104f8d8cba38adbb02c0f7933f3ed7bb02"
 dependencies = [
  "ahash 0.8.12",
  "astro-float",
@@ -4062,7 +4074,9 @@ dependencies = [
  "bincode-trait-derive",
  "colored 3.1.1",
  "dyn-clone",
+ "gmp-mpfr-sys",
  "itertools 0.14.0",
+ "malachite-base",
  "malachite-nz",
  "malachite-q",
  "num-traits",
@@ -4070,12 +4084,13 @@ dependencies = [
  "pyo3",
  "pyo3-stub-gen",
  "rand 0.9.4",
+ "rand_core 0.9.5",
  "rayon",
  "rug",
  "serde",
  "simba 0.9.1",
  "smallvec",
- "wide 1.3.0",
+ "wide 1.7.0",
  "xprec",
 ]
 
@@ -5591,9 +5606,9 @@ dependencies = [
 
 [[package]]
 name = "safe_arch"
-version = "1.0.0"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1f7caad094bd561859bcd467734a720c3c1f5d1f338995351fefe2190c45efed"
+checksum = "42c6efa15875e6ecb39ca61fb0b0c1a40b84fac5a5ffe71eef7d1000c8eb3f5f"
 dependencies = [
  "bytemuck",
 ]
@@ -6046,6 +6061,8 @@ dependencies = [
  "bincode 2.0.1",
  "bincode-trait-derive",
  "bitvec",
+ "blake3",
+ "ciborium",
  "colored 3.1.1",
  "constcat",
  "criterion",
@@ -6082,6 +6099,7 @@ dependencies = [
  "tabled",
  "thiserror 2.0.18",
  "tracing",
+ "tymbolica-atom-payload",
 ]
 
 [[package]]
@@ -6129,7 +6147,9 @@ dependencies = [
  "spenso-hep-lib",
  "spenso-macros",
  "symbolica",
+ "tabled",
  "thiserror 2.0.18",
+ "tymbolica-atom-payload",
  "xpct",
 ]
 
@@ -6291,8 +6311,9 @@ dependencies = [
 
 [[package]]
 name = "symbolica"
-version = "2.2.0"
-source = "git+https://github.com/symbolica-dev/symbolica?branch=dev#0441bd7a511209dce2ca99925fe87f8b18e4bf03"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c060dc0a9613c88aadee7095109bf350e549067c9ecf7ea217064cdf3d439721"
 dependencies = [
  "ahash 0.8.12",
  "append-only-vec",
@@ -6301,7 +6322,11 @@ dependencies = [
  "brotli 8.0.2",
  "byteorder",
  "bytes",
+ "data-encoding",
+ "directories",
  "dyn-clone",
+ "ed25519-compact",
+ "getrandom 0.3.4",
  "graphica",
  "inventory",
  "libloading",
@@ -6322,7 +6347,7 @@ dependencies = [
  "tinyjson",
  "tracing",
  "tracing-subscriber",
- "wide 1.3.0",
+ "wide 1.7.0",
 ]
 
 [[package]]
@@ -6338,9 +6363,9 @@ dependencies = [
 
 [[package]]
 name = "symjit"
-version = "2.21.0"
+version = "2.25.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "41f54d4663441294b2ebee68fd9504c5483d31f99ee2e007f81ac3cbc246c5c1"
+checksum = "97114f6aba423d7a6a1336992ce0e5140e56a5176cce1a72ab252b5560ede2fe"
 dependencies = [
  "ahash 0.8.12",
  "anyhow",
@@ -6349,6 +6374,7 @@ dependencies = [
  "lazy_static",
  "libc",
  "num-complex",
+ "num-rational",
  "num-traits",
  "rand 0.9.4",
  "rayon",
@@ -6358,7 +6384,7 @@ dependencies = [
  "spec_math",
  "toml 1.1.2+spec-1.1.0",
  "wasmtime-jit-icache-coherence",
- "wide 1.3.0",
+ "wide 1.7.0",
  "windows-sys 0.61.2",
 ]
 
@@ -7088,6 +7114,15 @@ dependencies = [
  "serde",
  "serde_derive",
  "syntect",
+]
+
+[[package]]
+name = "tymbolica-atom-payload"
+version = "0.1.0"
+source = "git+https://github.com/symbolica-dev/symbolica-typst-plugin?rev=4aab37aa6a5250ac692b425bc95592a408c98cc1#4aab37aa6a5250ac692b425bc95592a408c98cc1"
+dependencies = [
+ "ciborium",
+ "symbolica",
 ]
 
 [[package]]
@@ -8342,12 +8377,12 @@ dependencies = [
 
 [[package]]
 name = "wide"
-version = "1.3.0"
+version = "1.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9479f84a757f819cfab37295955906479181395de83add28f74975fde083141"
+checksum = "8cf05ca94c9fba0c51316899caa1d1e74a064fc310a5efa7375e614343d415be"
 dependencies = [
  "bytemuck",
- "safe_arch 1.0.0",
+ "safe_arch 1.2.0",
 ]
 
 [[package]]

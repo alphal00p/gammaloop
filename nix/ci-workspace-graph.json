@@ -172,31 +172,40 @@
       ],
       "gammaloop-workspace-hack": [],
       "gammalooprs": [],
-      "idenso": [],
+      "idenso": [
+        "native"
+      ],
       "linnet": [
         "bincode",
         "serde",
         "symbolica"
       ],
       "spenso": [
+        "native",
         "shadowing"
       ],
-      "symbolica-utils": []
+      "symbolica-utils": [
+        "native"
+      ]
     },
     "gammaloop-integration-tests": {
       "gammaloop-api": [],
       "gammaloop-workspace-hack": [],
       "gammalooprs": [],
       "spenso": [
+        "native",
         "shadowing"
       ],
-      "symbolica-utils": [],
+      "symbolica-utils": [
+        "native"
+      ],
       "vakint": []
     },
     "gammaloop-tracing-filter": {
       "gammaloop-tracing-filter-macros": [],
       "gammaloop-workspace-hack": [],
       "spenso": [
+        "native",
         "shadowing"
       ]
     },
@@ -208,7 +217,8 @@
       ],
       "gammaloop-workspace-hack": [],
       "idenso": [
-        "bincode"
+        "bincode",
+        "native"
       ],
       "linnet": [
         "bincode",
@@ -216,14 +226,20 @@
         "symbolica"
       ],
       "spenso": [
+        "native-code-generation",
         "shadowing"
       ],
       "spenso-hep-lib": [],
-      "symbolica-utils": [],
+      "symbolica-utils": [
+        "native"
+      ],
       "vakint": []
     },
     "idenso": {
-      "linnet": [],
+      "linnet": [
+        "nodestore-vec",
+        "serde"
+      ],
       "spenso": [
         "shadowing"
       ],
@@ -234,6 +250,7 @@
     "linnest": {
       "linnet": [
         "drawing",
+        "nodestore-vec",
         "rkyv",
         "serde"
       ]
@@ -245,12 +262,16 @@
     "linnet-py": {
       "kurvst": [],
       "linnest": [],
-      "linnet": []
+      "linnet": [
+        "nodestore-vec",
+        "serde"
+      ]
     },
     "spenso": {
       "gammaloop-workspace-hack": [],
       "linnet": [
         "bincode",
+        "nodestore-vec",
         "serde"
       ],
       "spenso-macros": [],
@@ -259,17 +280,24 @@
     "spenso-hep-lib": {
       "gammaloop-workspace-hack": [],
       "idenso": [
+        "native",
         "reference-cases"
       ],
       "spenso": [
+        "native",
         "shadowing"
       ],
       "spenso-macros": []
     },
     "spenso-macros": {},
     "spynso3": {
-      "idenso": [],
+      "idenso": [
+        "native",
+        "python"
+      ],
       "spenso": [
+        "native-code-generation",
+        "portable-payload",
         "python",
         "shadowing"
       ],
@@ -418,7 +446,6 @@
     ],
     "kurvst": [],
     "linnest": [
-      "gammaloop-workspace-hack",
       "linnet"
     ],
     "linnet": [
@@ -426,7 +453,6 @@
       "symbolica-utils"
     ],
     "linnet-py": [
-      "gammaloop-workspace-hack",
       "kurvst",
       "linnest",
       "linnet"
@@ -547,7 +573,6 @@
     ],
     "kurvst": [],
     "linnest": [
-      "gammaloop-workspace-hack",
       "linnet"
     ],
     "linnet": [
@@ -555,7 +580,6 @@
       "symbolica-utils"
     ],
     "linnet-py": [
-      "gammaloop-workspace-hack",
       "kurvst",
       "linnest",
       "linnet"
@@ -595,9 +619,7 @@
     "gammaloop-workspace-hack",
     "gammalooprs",
     "idenso",
-    "linnest",
     "linnet",
-    "linnet-py",
     "spenso",
     "spenso-hep-lib",
     "spynso3",
@@ -612,9 +634,7 @@
     "gammaloop-workspace-hack",
     "gammalooprs",
     "idenso",
-    "linnest",
     "linnet",
-    "linnet-py",
     "spenso",
     "spenso-hep-lib",
     "spynso3",
@@ -799,31 +819,40 @@
       ],
       "gammaloop-workspace-hack": [],
       "gammalooprs": [],
-      "idenso": [],
+      "idenso": [
+        "native"
+      ],
       "linnet": [
         "bincode",
         "serde",
         "symbolica"
       ],
       "spenso": [
+        "native",
         "shadowing"
       ],
-      "symbolica-utils": []
+      "symbolica-utils": [
+        "native"
+      ]
     },
     "gammaloop-integration-tests": {
       "gammaloop-api": [],
       "gammaloop-workspace-hack": [],
       "gammalooprs": [],
       "spenso": [
+        "native",
         "shadowing"
       ],
-      "symbolica-utils": [],
+      "symbolica-utils": [
+        "native"
+      ],
       "vakint": []
     },
     "gammaloop-tracing-filter": {
       "gammaloop-tracing-filter-macros": [],
       "gammaloop-workspace-hack": [],
       "spenso": [
+        "native",
         "shadowing"
       ]
     },
@@ -835,7 +864,8 @@
       ],
       "gammaloop-workspace-hack": [],
       "idenso": [
-        "bincode"
+        "bincode",
+        "native"
       ],
       "linnet": [
         "bincode",
@@ -843,14 +873,20 @@
         "symbolica"
       ],
       "spenso": [
+        "native-code-generation",
         "shadowing"
       ],
       "spenso-hep-lib": [],
-      "symbolica-utils": [],
+      "symbolica-utils": [
+        "native"
+      ],
       "vakint": []
     },
     "idenso": {
-      "linnet": [],
+      "linnet": [
+        "nodestore-vec",
+        "serde"
+      ],
       "spenso": [
         "shadowing"
       ],
@@ -861,6 +897,7 @@
     "linnest": {
       "linnet": [
         "drawing",
+        "nodestore-vec",
         "rkyv",
         "serde"
       ]
@@ -877,12 +914,16 @@
     "linnet-py": {
       "kurvst": [],
       "linnest": [],
-      "linnet": []
+      "linnet": [
+        "nodestore-vec",
+        "serde"
+      ]
     },
     "spenso": {
       "gammaloop-workspace-hack": [],
       "linnet": [
         "bincode",
+        "nodestore-vec",
         "serde"
       ],
       "spenso-macros": [],
@@ -891,17 +932,24 @@
     "spenso-hep-lib": {
       "gammaloop-workspace-hack": [],
       "idenso": [
+        "native",
         "reference-cases"
       ],
       "spenso": [
+        "native",
         "shadowing"
       ],
       "spenso-macros": []
     },
     "spenso-macros": {},
     "spynso3": {
-      "idenso": [],
+      "idenso": [
+        "native",
+        "python"
+      ],
       "spenso": [
+        "native-code-generation",
+        "portable-payload",
         "python",
         "shadowing"
       ],

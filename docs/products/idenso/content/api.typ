@@ -50,12 +50,12 @@ operations group naturally into four phases:
 
 ```python
 from symbolica.community.idenso import list_dangling, simplify_metrics
-from symbolica.community.spenso import Representation, TensorName
+from symbolica.community.spenso import Representation, TensorExpression, TensorName
 
 minkowski = Representation.mink(4)
 mu = minkowski("mu")
 nu = minkowski("nu")
-metric = TensorName.g()
+metric = TensorExpression.g(minkowski)
 momentum = TensorName("p")
 expression = metric(mu, nu) * momentum(mu)
 

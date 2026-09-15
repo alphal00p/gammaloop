@@ -28,6 +28,9 @@ dependencies = [
   "ufo-model-loader>=0.1.6",
 ]
 
+[project.optional-dependencies]
+typst-display = ["typst>=0.15,<0.16"]
+
 [project.urls]
 homepage = "https://alphaloop.ch"
 repository = "https://github.com/alphal00p/gammaloop"
@@ -37,6 +40,7 @@ dev = [
   "PyYAML>=6.0.1,<7",
   "black>=23.12.1,<24",
   "inline-snapshot>=0.21.2",
+  "marimo>=0.24,<0.25",
   "pytest>=8.3.5,<9",
   "symbolica>=0.16.0",
   "ufo-model-loader>=0.1.6",

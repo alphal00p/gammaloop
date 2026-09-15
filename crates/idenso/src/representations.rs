@@ -10,10 +10,6 @@ use symbolica::atom::Atom;
 
 use super::{color::CS, dirac::AGS, rep_symbols::RS, shorthands::metric::MS};
 
-#[cfg(feature = "python")]
-use pyo3::pyfunction;
-#[cfg(feature = "python_stubgen")]
-use pyo3_stub_gen::derive::gen_stub_pyfunction;
 #[rustfmt::skip]
 #[derive(SimpleRepresentation)]
 #[derive(
@@ -128,11 +124,6 @@ pub struct ColorAdjoint {}
 ///
 /// Symbolica calls this during community-module initialization. Calling it again
 /// is safe and ensures the standard Lorentz, spinor, and color objects exist.
-#[cfg_attr(
-    feature = "python_stubgen",
-    gen_stub_pyfunction(module = "symbolica.community.idenso")
-)]
-#[cfg_attr(feature = "python", pyfunction)]
 pub fn initialize() {
     let _ = AIND_SYMBOLS.dind;
     let _ = Minkowski {}.to_symbolic([Atom::Zero]);

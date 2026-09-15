@@ -1,6 +1,6 @@
 use color_eyre::{Result, config::HookBuilder};
 use spenso::{network::library::symbolic::ETS, symbolica_init::in_symbolica_initializer};
-use symbolica::{activate_oem_license, initialize};
+use symbolica::initialize;
 
 use crate::numerator::ufo::UFO;
 use crate::utils::{GS, init_vakint};
@@ -17,10 +17,6 @@ initialize!(|| {
 
 pub fn initialise() -> Result<()> {
     INITIALISED.call_once(|| {
-        if option_env!("NO_SYMBOLICA_OEM_LICENSE").is_none() {
-            activate_oem_license!("SYMBOLICA_OEM_KEY_ba2512eb");
-        };
-
         let (panic, eyre) = HookBuilder::default()
             .capture_span_trace_by_default(cfg!(debug_assertions))
             .into_hooks();
