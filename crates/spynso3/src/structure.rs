@@ -41,7 +41,7 @@ use symbolica::api::python::{ConvertibleToExpression, PythonExpression};
 
 use idenso::{color::CS, dirac::AGS, representations::Bispinor};
 
-use super::expression::{TensorExpression, validate_color_structure_ports};
+use super::expression::TensorExpression;
 
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::{PyStubType, derive::*, impl_stub_type};
@@ -189,6 +189,12 @@ impl PyStubType for SpensoSlotOrArgOrRep {
 /// and representations to create tensor expressions. Names can have various mathematical properties like symmetry,
 /// antisymmetry, and custom normalization or printing behavior.
 ///
+/// The predefined accessors such as `TensorName.gamma()` and `TensorName.t()`
+/// return raw fixed heads for introspection and pattern construction; those
+/// reserved names cannot be called directly. Use the matching
+/// `TensorExpression` factory for concrete tensors or `TensorPattern` shortcut
+/// for rewrite patterns.
+///
 /// Examples
 /// --------
 /// >>> from symbolica.community.spenso import TensorName, Slot, Representation
@@ -213,6 +219,31 @@ pub struct SpensoName {
 
 impl ModuleInit for SpensoName {}
 
+impl SpensoName {
+    fn builtin_factory(&self) -> Option<&'static str> {
+        if self.name == ETS.metric {
+            Some("g")
+        } else if self.name == ETS.flat {
+            Some("flat")
+        } else if self.name == AGS.gamma {
+            Some("gamma")
+        } else if self.name == AGS.gamma5 {
+            Some("gamma5")
+        } else if self.name == AGS.projm {
+            Some("projm")
+        } else if self.name == AGS.projp {
+            Some("projp")
+        } else if self.name == AGS.sigma {
+            Some("sigma")
+        } else if self.name == CS.f {
+            Some("f")
+        } else if self.name == CS.t {
+            Some("t")
+        } else {
+            None
+        }
+    }
+}
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), remove_gen_stub)]
 #[pymethods]
@@ -420,6 +451,14 @@ impl SpensoName {
         py: Python<'_>,
         args: &Bound<'_, PyTuple>,
     ) -> PyResult<Py<TensorExpression>> {
+        if let Some(factory) = self.builtin_factory() {
+            return Err(PyTypeError::new_err(format!(
+                "predefined tensor `{factory}` has a fixed structure; use \
+                 TensorExpression.{factory}(...) for concrete tensors or \
+                 TensorPattern.{factory}(...) for patterns"
+            )));
+        }
+
         let mut scalar_args = Vec::new();
         let mut ports = Vec::new();
         let mut port_atoms = Vec::new();
@@ -463,12 +502,6 @@ impl SpensoName {
                 ports.len()
             )));
         }
-        validate_color_structure_ports(
-            self.name,
-            args.len(),
-            &ports.iter().map(|port| port.rep()).collect::<Vec<_>>(),
-        )?;
-
         let atom = FunctionBuilder::new(self.name)
             .add_args(&scalar_args)
             .add_args(&port_atoms)
@@ -533,7 +566,10 @@ impl SpensoName {
         SpensoName { name: ETS.flat }
     }
 
-    /// Predefined gamma matrix name.
+    /// Predefined gamma matrix name for introspection and pattern construction.
+    ///
+    /// The matching typed factories use storage order: bispinor-in,
+    /// bispinor-out, then Minkowski.
     #[staticmethod]
     fn gamma() -> SpensoName {
         SpensoName { name: AGS.gamma }
@@ -720,7 +756,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for ConvertibleToAbstractIndex {
 #[cfg(feature = "python_stubgen")]
 impl_stub_type!(ConvertibleToAbstractIndex = isize | Symbol | PyBackedStr);
 
-pub struct ConvertibleToDimension(Dimension);
+pub struct ConvertibleToDimension(pub(crate) Dimension);
 
 impl<'a, 'py> FromPyObject<'a, 'py> for ConvertibleToDimension {
     type Error = PyErr;
@@ -1389,6 +1425,33 @@ mod tests {
                 name: spenso::vector_symbol!("python_vector_name_construction"),
             };
             assert!(vector.__call__(py, &PyTuple::empty(py)).is_err());
+
+            for (name, factory) in [
+                (ETS.metric, "g"),
+                (ETS.flat, "flat"),
+                (AGS.gamma, "gamma"),
+                (AGS.gamma5, "gamma5"),
+                (AGS.projm, "projm"),
+                (AGS.projp, "projp"),
+                (AGS.sigma, "sigma"),
+                (CS.f, "f"),
+                (CS.t, "t"),
+            ] {
+                let error = SpensoName { name }
+                    .__call__(py, &PyTuple::empty(py))
+                    .expect_err("predefined tensors require their typed factory");
+                assert!(error.is_instance_of::<PyTypeError>(py));
+                assert!(
+                    error
+                        .to_string()
+                        .contains(&format!("TensorExpression.{factory}"))
+                );
+                assert!(
+                    error
+                        .to_string()
+                        .contains(&format!("TensorPattern.{factory}"))
+                );
+            }
             Ok(())
         })
         .unwrap();

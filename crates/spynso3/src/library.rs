@@ -1,7 +1,7 @@
 use std::{cell::Cell, collections::HashMap};
 
 use eyre::eyre;
-use idenso::IndexTooling;
+use idenso::{IndexTooling, dirac::AGS};
 use pyo3::{
     FromPyObject, PyErr, exceptions,
     prelude::*,
@@ -25,12 +25,12 @@ use spenso::{
     structure::{
         Canonicalized, HasStructure, TensorStructure,
         abstract_index::AbstractIndex,
-        partial::{PartialStructure, PartialStructureExt},
+        partial::{PartialIndex, PartialStructure, PartialStructureExt},
         slot::IsAbstractSlot,
     },
     tensors::parametric::MixedTensor,
 };
-use symbolica::atom::{Atom, DefaultNamespace, FunctionBuilder, SymbolBuilder};
+use symbolica::atom::{Atom, DefaultNamespace, SymbolBuilder};
 use symbolica::{
     api::python::PythonExpression,
     atom::{AtomView, Symbol},
@@ -38,7 +38,9 @@ use symbolica::{
 };
 
 use crate::{
-    Spensor, broadcast::SpensoBroadcastFunction, expression::TensorExpression,
+    Spensor,
+    broadcast::SpensoBroadcastFunction,
+    expression::{TensorExpression, value_to_structured_atom},
     structure::SpensoName,
 };
 
@@ -65,7 +67,7 @@ use super::ModuleInit;
 #[pyclass(name = "TensorLibrary", module = "symbolica.community.spenso")]
 pub struct SpensorLibrary {
     pub(crate) library: TensorLibrary<MixedTensor<f64, ExplicitKey<AbstractIndex>>, AbstractIndex>,
-    /// Logical interfaces retained for references registered through Python.
+    /// Python-facing interfaces retained for registered and preloaded references.
     references: HashMap<ExplicitKey<AbstractIndex>, PartialStructure>,
 }
 
@@ -358,16 +360,38 @@ fn tensor_reference(
     args: Vec<Atom>,
     interface: PartialStructure,
 ) -> PyResult<Py<TensorExpression>> {
-    let atom = FunctionBuilder::new(name)
-        .add_args(&args)
-        .add_args(
-            interface
-                .logical_slots()
-                .into_iter()
-                .map(|slot| slot.rep().to_symbolic([])),
-        )
-        .finish();
-    TensorExpression::from_atom_interface_descriptor(py, atom, interface, Some(name), args)
+    let structure = ExplicitKey::from_iter(
+        interface.logical_slots().into_iter().map(|slot| slot.rep()),
+        name,
+        (!args.is_empty()).then_some(args.clone()),
+    );
+    let value = value_to_structured_atom(&structure)?;
+    TensorExpression::from_atom_interface_descriptor(py, value.atom, interface, Some(name), args)
+}
+
+/// Make a Python-facing interface directly from a key's canonical storage
+/// order. Symbol-only lookup returns this interface; exact lookup validates
+/// that gamma callers supplied the same order.
+fn storage_interface(key: &ExplicitKey<AbstractIndex>) -> PartialStructure {
+    PartialStructure::from_logical_slots(
+        key.external_reps_iter()
+            .enumerate()
+            .map(|(position, representation)| representation.slot(PartialIndex::open(position))),
+    )
+}
+
+fn storage_hep_references() -> HashMap<ExplicitKey<AbstractIndex>, PartialStructure> {
+    [
+        AGS.gamma_strct(4),
+        AGS.gamma_adj_strct(4),
+        AGS.gamma_conj_strct(4),
+    ]
+    .into_iter()
+    .map(|key| {
+        let interface = storage_interface(key.canonical());
+        (key.into_canonical(), interface)
+    })
+    .collect()
 }
 
 #[allow(clippy::new_without_default)]
@@ -468,7 +492,8 @@ impl SpensorLibrary {
     /// Parameters
     /// ----------
     /// key : TensorExpression, TensorName, Expression, or str
-    ///     An exact unresolved tensor signature, or a symbol-only convenience key
+    ///     An exact unresolved tensor signature in registered storage order, or a
+    ///     symbol-only convenience key
     ///
     /// Returns
     /// -------
@@ -495,7 +520,24 @@ impl SpensorLibrary {
                 self.library
                     .get(reference.key.canonical())
                     .map_err(|error| exceptions::PyKeyError::new_err(error.to_string()))?;
-                tensor_reference(py, reference.name, reference.args, reference.interface)
+                let interface = if [AGS.gamma, AGS.gammaadj, AGS.gammaconj]
+                    .contains(&reference.name)
+                {
+                    if let Some(registered) = self.references.get(reference.key.canonical()) {
+                        if registered.logical_slots() != reference.interface.logical_slots() {
+                            return Err(exceptions::PyKeyError::new_err(format!(
+                                "tensor library signature '{}' does not use the registered storage-order interface",
+                                reference.signature(),
+                            )));
+                        }
+                        registered.clone()
+                    } else {
+                        reference.interface
+                    }
+                } else {
+                    reference.interface
+                };
+                tensor_reference(py, reference.name, reference.args, interface)
             }
             LibraryReference::Symbol(symbol) => {
                 let key = self.library.get_key_from_name(symbol).map_err(|error| {
@@ -562,7 +604,7 @@ impl SpensorLibrary {
     pub fn hep_lib() -> Self {
         Self {
             library: spenso_hep_lib::hep_lib(1., 0.),
-            references: HashMap::new(),
+            references: storage_hep_references(),
         }
     }
 
@@ -587,7 +629,7 @@ impl SpensorLibrary {
     pub fn hep_lib_atom() -> Self {
         Self {
             library: spenso_hep_lib::hep_lib_atom(),
-            references: HashMap::new(),
+            references: storage_hep_references(),
         }
     }
 }
@@ -597,13 +639,18 @@ mod tests {
     use std::ffi::CString;
 
     use super::*;
-    use idenso::representations::initialize;
+    use idenso::{
+        color::CS,
+        representations::{Bispinor, initialize},
+    };
+    use pyo3::types::PyFloat;
     use spenso::network::{ExecutionResult, Sequential, SmallestDegree};
     use spenso::structure::{
         OrderedStructure,
         dimension::Dimension,
         partial::{OpenPortId, PartialIndex},
-        representation::{ExtendibleReps, RepName},
+        representation::{ExtendibleReps, LibraryRep, Minkowski, RepName},
+        slot::Slot,
     };
     use spenso::tensors::data::{DataTensor, DenseTensor, SparseTensor};
     use spenso_hep_lib::HEP_LIB;
@@ -724,6 +771,48 @@ mod tests {
     }
 
     #[test]
+    fn typed_structure_constant_uses_the_existing_library_key() {
+        initialize();
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let factory = py
+                .get_type::<TensorExpression>()
+                .call_method1("f", (8,))?
+                .extract::<Py<TensorExpression>>()?;
+            let reference = ExactLibraryReference::from_expression(&factory.bind(py).borrow())?;
+            assert_eq!(reference.key, CS.f_strct::<AbstractIndex>(8));
+            assert!(reference.args.is_empty());
+
+            let tensor = Py::new(
+                py,
+                Spensor::sparse(
+                    factory.bind(py).as_any().extract()?,
+                    py.get_type::<PyFloat>(),
+                )?,
+            )?;
+            let mut library = SpensorLibrary::new();
+            library.register(tensor.bind(py).borrow())?;
+
+            let stored = library.__getitem__(
+                py,
+                ConvertibleToLibraryReference(LibraryReference::Exact(Box::new(reference))),
+            )?;
+            assert_ne!(stored.bind(py).borrow().as_super().expr, Atom::Zero);
+            let indexed = stored.bind(py).call1(("a", "b", "c"))?;
+            assert_eq!(indexed.getattr("rank")?.extract::<usize>()?, 3);
+            assert_ne!(
+                indexed
+                    .call_method0("to_expression")?
+                    .extract::<PythonExpression>()?
+                    .expr,
+                Atom::Zero
+            );
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
     fn exact_lookup_materializes_data_in_the_requested_logical_order() {
         initialize();
         Python::initialize();
@@ -819,6 +908,80 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn hep_gamma_family_references_require_storage_order() {
+        idenso::representations::initialize();
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let minkowski = LibraryRep::from(Minkowski {}).new_rep(4);
+            let bispinor = Bispinor {}.new_rep(4).cast::<LibraryRep>();
+            let expected_representations = vec![bispinor, bispinor, minkowski];
+            let storage_interface = PartialStructure::from_logical_slots([
+                bispinor.slot(PartialIndex::open(0)),
+                bispinor.slot(PartialIndex::open(1)),
+                minkowski.slot(PartialIndex::open(2)),
+            ]);
+            let lorentz_first_interface = PartialStructure::from_logical_slots([
+                minkowski.slot(PartialIndex::open(0)),
+                bispinor.slot(PartialIndex::open(1)),
+                bispinor.slot(PartialIndex::open(2)),
+            ]);
+
+            for library in [SpensorLibrary::hep_lib(), SpensorLibrary::hep_lib_atom()] {
+                for name in [AGS.gamma, AGS.gammaadj, AGS.gammaconj] {
+                    for key in [
+                        LibraryReference::Symbol(name),
+                        LibraryReference::Exact(Box::new(ExactLibraryReference::new(
+                            storage_interface.clone(),
+                            name,
+                            Vec::new(),
+                        )?)),
+                    ] {
+                        let reference =
+                            library.__getitem__(py, ConvertibleToLibraryReference(key))?;
+                        let reference = reference.bind(py).borrow();
+                        let AtomView::Fun(function) = reference.as_super().expr.as_view() else {
+                            panic!("a gamma library reference must remain an atomic tensor")
+                        };
+                        assert_eq!(function.get_symbol(), name);
+                        assert_eq!(
+                            function
+                                .iter()
+                                .map(|argument| {
+                                    Slot::<LibraryRep, AbstractIndex>::try_from(argument)
+                                        .unwrap()
+                                        .rep()
+                                })
+                                .collect::<Vec<_>>(),
+                            expected_representations
+                        );
+                        assert_eq!(
+                            reference.interface.logical_slots(),
+                            storage_interface.logical_slots()
+                        );
+                    }
+
+                    let lorentz_first = ExactLibraryReference::new(
+                        lorentz_first_interface.clone(),
+                        name,
+                        Vec::new(),
+                    )?;
+                    let error = library
+                        .__getitem__(
+                            py,
+                            ConvertibleToLibraryReference(LibraryReference::Exact(Box::new(
+                                lorentz_first,
+                            ))),
+                        )
+                        .unwrap_err();
+                    assert!(error.to_string().contains("storage-order"));
+                }
+            }
+            Ok(())
+        })
+        .unwrap();
     }
 }
 

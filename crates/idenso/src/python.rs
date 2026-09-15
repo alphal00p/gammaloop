@@ -367,7 +367,7 @@ pub fn cook_indices(
 /// **Function Cooking Transform:**
 /// - Simple function: `f(a, b)` → `f_a_b`
 /// - Nested arguments: `tensor(rep(mu))` → `tensor_rep_mu`
-/// - Multiple arguments: `gamma(mu, alpha, beta)` → `gamma_mu_alpha_beta`
+/// - Multiple arguments: `gamma(alpha, beta, mu)` → `gamma_alpha_beta_mu`
 /// - Complex names: `my_function(x, y)` → `my_function_x_y`
 ///
 ///
@@ -546,6 +546,10 @@ pub fn list_dangling(expression: &PythonExpression) -> PyResult<Vec<PythonExpres
 /// True
 /// ```
 ///
+/// The native gamma argument order is `bis(dim,alpha), bis(dim,beta), mink(dim,mu)`:
+/// `alpha` and `beta` are spinor indices, followed by the Lorentz index `mu`.
+/// These forms can also be constructed through the HEP tensor library.
+///
 /// # Arguments
 /// - `expression`: expression containing gamma matrix products and traces
 ///
@@ -562,7 +566,7 @@ pub fn list_dangling(expression: &PythonExpression) -> PyResult<Vec<PythonExpres
 /// # Access standard tensors like gamma matrices
 /// gamma_structure = hep_lib[S("spenso::gamma")]
 /// print(gamma_structure)
-/// print(simplify_gamma(gamma_structure(7, 3, 4) * gamma_structure(3, 7, 4)))
+/// print(simplify_gamma(gamma_structure(3, 4, 7) * gamma_structure(7, 4, 3)))
 /// ```
 pub fn simplify_gamma(
     expression: &PythonExpression,
@@ -644,14 +648,14 @@ pub fn to_dots(expression: &PythonExpression) -> PythonExpression {
 /// # Examples:
 /// ```python
 /// from symbolica.community.idenso import simplify_metrics, to_dots
-/// from symbolica.community.spenso import Representation, TensorName
+/// from symbolica.community.spenso import Representation, TensorExpression, TensorName
 /// q = TensorName("q")
-/// g = TensorName.g()
 /// rep = Representation.euc(3)
+/// g = TensorExpression.g(rep)
 /// # With slots (creates TensorExpression)
 /// mu = rep("mu")
 /// nu = rep("nu")
-/// print(simplify_metrics(g(mu, nu) * q(mu)))
+/// print(simplify_metrics(g("mu", "nu") * q(mu)))
 /// ```
 pub fn simplify_metrics(expression: &PythonExpression) -> PythonExpression {
     expression.expr.simplify_metrics().into()

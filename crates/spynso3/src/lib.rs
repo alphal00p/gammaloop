@@ -67,6 +67,7 @@ pub mod display;
 pub mod expression;
 pub mod library;
 pub mod network;
+pub mod pattern;
 pub mod structure;
 
 use composition::StructuredAtom;
@@ -217,6 +218,7 @@ define_spenso_python_surface! {
     ],
     registered_modules: [
         display => ["format_tensor", "to_typst", "formatted"],
+        pattern => ["PortPattern", "TensorPattern"],
         expression => [
             "TensorExpression", "_AutoIndex", "AUTO", "_",
             "as_tensor", "dot", "chain", "trace",
