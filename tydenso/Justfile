@@ -59,16 +59,16 @@ check-wasm-features:
 manual: build
     cd "{{ justfile_directory() }}/tydenso" && typst compile --creation-timestamp 0 --root . typst/manual.typ typst/manual.pdf
 
-# Compile the full package surface. Interop checks use a sibling Tymbolica
+# Compile the full package surface. Interop checks use a sibling Symbolica Typst plugin
 # checkout by default; override TYMBOLICA_CHECKOUT for a differently placed tree.
 check: build check-wasm-features
     #!/usr/bin/env bash
     set -euo pipefail
     cd "{{ justfile_directory() }}/tydenso"
-    tymbolica_checkout="${TYMBOLICA_CHECKOUT:-../../tymbolica}"
+    tymbolica_checkout="${TYMBOLICA_CHECKOUT:-../../symbolica-typst-plugin}"
     tymbolica_revision="4aab37aa6a5250ac692b425bc95592a408c98cc1"
     if [ ! -f "$tymbolica_checkout/typst.toml" ]; then
-      echo "set TYMBOLICA_CHECKOUT to the pinned lcnbr/tymbolica checkout" >&2
+      echo "set TYMBOLICA_CHECKOUT to the pinned symbolica-dev/symbolica-typst-plugin checkout" >&2
       exit 1
     fi
     checkout_revision="$(git -C "$tymbolica_checkout" rev-parse HEAD 2>/dev/null || true)"

@@ -1879,7 +1879,7 @@ dependencies = [
 [[package]]
 name = "tymbolica-atom-payload"
 version = "0.1.0"
-source = "git+https://github.com/lcnbr/tymbolica?rev=4aab37aa6a5250ac692b425bc95592a408c98cc1#4aab37aa6a5250ac692b425bc95592a408c98cc1"
+source = "git+https://github.com/symbolica-dev/symbolica-typst-plugin?rev=4aab37aa6a5250ac692b425bc95592a408c98cc1#4aab37aa6a5250ac692b425bc95592a408c98cc1"
 dependencies = [
  "ciborium",
  "symbolica",

@@ -80,7 +80,7 @@ jobs:
       - name: Check out the exact Tymbolica package revision
         uses: actions/checkout@v4
         with:
-          repository: lcnbr/tymbolica
+          repository: symbolica-dev/symbolica-typst-plugin
           ref: 4aab37aa6a5250ac692b425bc95592a408c98cc1
           path: tymbolica-pinned
 
