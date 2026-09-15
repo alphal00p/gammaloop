@@ -105,6 +105,38 @@ impl Integrand {
         }
     }
 
+    pub fn evaluate_samples_raw_with_estimate(
+        &mut self,
+        samples: &[Sample<F<f64>>],
+        target: EvaluationTarget<'_>,
+        iter: usize,
+        use_arb_prec: bool,
+        stop_on_interrupt: bool,
+        max_eval: Complex<F<f64>>,
+        integral_estimate: Option<(f64, f64)>,
+    ) -> Result<RawBatchEvaluationResult> {
+        match self {
+            Integrand::ProcessIntegrand(integrand) => integrand.evaluate_samples_raw_with_estimate(
+                target,
+                samples,
+                iter,
+                use_arb_prec,
+                stop_on_interrupt,
+                max_eval,
+                integral_estimate,
+            ),
+            #[cfg(test)]
+            Integrand::TestProbe(_) => self.evaluate_samples_raw(
+                samples,
+                target,
+                iter,
+                use_arb_prec,
+                stop_on_interrupt,
+                max_eval,
+            ),
+        }
+    }
+
     pub fn process_evaluation_result(&mut self, result: &EvaluationResult) {
         match self {
             Integrand::ProcessIntegrand(integrand) => integrand.process_evaluation_result(result),

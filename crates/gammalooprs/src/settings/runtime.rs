@@ -1068,6 +1068,18 @@ pub struct StabilitySettings {
     pub check_on_norm: bool,
     #[serde(skip_serializing_if = "is_false")]
     pub escalate_if_exact_zero: bool,
+    /// Suppress non-final stability escalation for negligible weighted probes.
+    /// When positive, a probe is allowed to remain at its current precision if
+    /// its largest absolute weighted rotation result is below this fraction of
+    /// a two-digit-stable integral estimate supplied by the integrator. Zero
+    /// disables this waiver.
+    #[serde(
+        default,
+        deserialize_with = "deserialize_nonnegative_finite_f64",
+        skip_serializing_if = "is_float::<0>"
+    )]
+    #[schemars(range(min = 0.0))]
+    pub min_abs_wgt_for_escalation: f64,
     #[serde(skip_serializing_if = "is_float::<-1>")]
     pub loop_momenta_norm_escalation_factor: f64,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
@@ -1082,6 +1094,7 @@ impl Default for StabilitySettings {
             levels: _default_stability_levels(),
             check_on_norm: true,
             escalate_if_exact_zero: false,
+            min_abs_wgt_for_escalation: 0.0,
             loop_momenta_norm_escalation_factor: -1.0,
             recording: None,
         }
