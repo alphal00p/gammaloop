@@ -2094,8 +2094,32 @@
     "kind": "developer archived record heading"
   },
   {
+    "title": "CI maintenance and measurements",
+    "summary": "The maintained local-check/upload workflow, per-crate cache boundaries, validated measurements, branch migration and CI log reporting.",
+    "href": "architecture/ci/",
+    "kind": "developer current guide"
+  },
+  {
+    "title": "Configuration and cache boundaries",
+    "summary": "CI maintenance and measurements",
+    "href": "architecture/ci/#configuration-and-cache-boundaries",
+    "kind": "developer current guide heading"
+  },
+  {
+    "title": "Measured results",
+    "summary": "CI maintenance and measurements",
+    "href": "architecture/ci/#measured-results",
+    "kind": "developer current guide heading"
+  },
+  {
+    "title": "Collecting another comparison",
+    "summary": "CI maintenance and measurements",
+    "href": "architecture/ci/#collecting-another-comparison",
+    "kind": "developer current guide heading"
+  },
+  {
     "title": "Nix and Crane artifact reuse",
-    "summary": "A living cache-architecture contract embedded in a chronological experiment record, with historical sections explicitly separated.",
+    "summary": "Historical Rust CI cache experiments and the maintained documentation producer and live-watcher cache contract; current Rust CI guidance is recorded separately.",
     "href": "architecture/nix-crane-cache-reuse/",
     "kind": "developer current living engineering record"
   },

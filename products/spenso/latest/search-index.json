@@ -625,8 +625,7 @@
     "title": "spenso-macros Rustdoc",
     "summary": "proc-macro-library crate · version 0.3.2",
     "href": "reference/rust/spenso_macros/",
-    "kind": "rust-api",
-    "text": "shadowing"
+    "kind": "rust-api"
   },
   {
     "title": "spenso-macros · SimpleRepresentation derive",

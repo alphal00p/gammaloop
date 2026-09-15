@@ -11253,8 +11253,7 @@
     "title": "spenso-macros Rustdoc",
     "summary": "proc-macro-library crate · version 0.3.2",
     "href": "products/spenso/latest/reference/rust/spenso_macros/",
-    "kind": "Spenso · rust-api",
-    "text": "shadowing"
+    "kind": "Spenso · rust-api"
   },
   {
     "title": "spenso-macros · SimpleRepresentation derive",
@@ -15625,8 +15624,32 @@
     "kind": "Developers · developer archived record heading"
   },
   {
+    "title": "CI maintenance and measurements",
+    "summary": "The maintained local-check/upload workflow, per-crate cache boundaries, validated measurements, branch migration and CI log reporting.",
+    "href": "developers/architecture/ci/",
+    "kind": "Developers · developer current guide"
+  },
+  {
+    "title": "Configuration and cache boundaries",
+    "summary": "CI maintenance and measurements",
+    "href": "developers/architecture/ci/#configuration-and-cache-boundaries",
+    "kind": "Developers · developer current guide heading"
+  },
+  {
+    "title": "Measured results",
+    "summary": "CI maintenance and measurements",
+    "href": "developers/architecture/ci/#measured-results",
+    "kind": "Developers · developer current guide heading"
+  },
+  {
+    "title": "Collecting another comparison",
+    "summary": "CI maintenance and measurements",
+    "href": "developers/architecture/ci/#collecting-another-comparison",
+    "kind": "Developers · developer current guide heading"
+  },
+  {
     "title": "Nix and Crane artifact reuse",
-    "summary": "A living cache-architecture contract embedded in a chronological experiment record, with historical sections explicitly separated.",
+    "summary": "Historical Rust CI cache experiments and the maintained documentation producer and live-watcher cache contract; current Rust CI guidance is recorded separately.",
     "href": "developers/architecture/nix-crane-cache-reuse/",
     "kind": "Developers · developer current living engineering record"
   },

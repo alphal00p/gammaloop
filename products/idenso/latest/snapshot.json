@@ -4,8 +4,8 @@
   "title": "Idenso",
   "channel": "latest",
   "snapshot_tag": null,
-  "git_commit": "7cc6fbdaa2f2fa0d87302d658cc2dae2e2a57134",
-  "git_timestamp": 1789390203,
+  "git_commit": "74ead2748587fdf1adee9fc769b3c5db47af5f68",
+  "git_timestamp": 1789430175,
   "route": "/products/idenso/latest/",
   "components": [
     {
@@ -86,9 +86,7 @@
       "kind": "proc-macro-library",
       "module": null,
       "version": "0.3.2",
-      "features": [
-        "shadowing"
-      ]
+      "features": []
     },
     {
       "product": "spenso",

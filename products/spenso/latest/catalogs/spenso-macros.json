@@ -10,9 +10,7 @@
     "title": "Spenso spenso-macros",
     "version": "0.3.2",
     "language": "rust",
-    "features": [
-      "shadowing"
-    ]
+    "features": []
   },
   "root": {
     "id": "spenso-macros",
