@@ -502,6 +502,7 @@ impl<'a> StandaloneRuntimeEvaluator<'a> {
                     // complex temporary layouts.
                     .jit_compile(
                         JITCompilationSettings::new()
+                            .direct_translation(true)
                             .optimization_level(2)
                             .with_option("compact", "false"),
                     )

@@ -81,7 +81,7 @@ use crate::{
     },
     settings::{
         RuntimeSettings,
-        global::{CompilationOptimizationLevel, FrozenCompilationMode},
+        global::{CompilationOptionsSnapshot, FrozenCompilationMode},
     },
     utils::{
         ArbPrec, F, FUN_LIB, FloatLike, GS, Length, TENSORLIB, W_, f128,
@@ -2635,10 +2635,7 @@ impl GenericEvaluator {
         self.active_f64_backend.set(ActiveF64Backend::Eager);
     }
 
-    pub(crate) fn activate_symjit(
-        &mut self,
-        optimization_level: CompilationOptimizationLevel,
-    ) -> Result<()> {
+    pub(crate) fn activate_symjit(&mut self, options: &CompilationOptionsSnapshot) -> Result<()> {
         if self.is_eager_only() {
             self.activate_eager_only();
             return Ok(());
@@ -2656,7 +2653,8 @@ impl GenericEvaluator {
             .map_coeff(&|c| SymComplex::new(c.re.0, c.im.0))
             .jit_compile(
                 JITCompilationSettings::new()
-                    .optimization_level(usize::from(optimization_level).min(2) as u8)
+                    .direct_translation(options.jit_direct_translation)
+                    .optimization_level(usize::from(options.optimization_level).min(2) as u8)
                     .with_option("compact", "false")
                     .with_option("cse", "false"),
             )
@@ -3347,6 +3345,7 @@ mod tests {
     use crate::{
         GammaLoopContextContainer, initialisation::test_initialise,
         integrands::process::param_builder::ParamValuePairs, model::Model,
+        settings::global::CompilationOptimizationLevel,
     };
 
     use super::*;
@@ -3477,7 +3476,10 @@ mod tests {
         for compile in [false, true] {
             if compile {
                 evaluator
-                    .activate_symjit(CompilationOptimizationLevel::O0)
+                    .activate_symjit(&CompilationOptionsSnapshot {
+                        optimization_level: CompilationOptimizationLevel::O0,
+                        ..Default::default()
+                    })
                     .unwrap();
                 assert_eq!(evaluator.active_f64_backend(), ActiveF64Backend::Symjit);
             }
@@ -3716,7 +3718,10 @@ mod tests {
         for compile in [false, true] {
             if compile {
                 evaluator
-                    .activate_symjit(CompilationOptimizationLevel::O0)
+                    .activate_symjit(&CompilationOptionsSnapshot {
+                        optimization_level: CompilationOptimizationLevel::O0,
+                        ..Default::default()
+                    })
                     .unwrap();
                 assert_eq!(evaluator.active_f64_backend(), ActiveF64Backend::Symjit);
             }
@@ -4518,7 +4523,10 @@ mod tests {
                     let compile_started = std::time::Instant::now();
                     stack
                         .single_parametric
-                        .activate_symjit(CompilationOptimizationLevel::O0)
+                        .activate_symjit(&CompilationOptionsSnapshot {
+                            optimization_level: CompilationOptimizationLevel::O0,
+                            ..Default::default()
+                        })
                         .unwrap();
                     let compile_ms = compile_started.elapsed().as_secs_f64() * 1000.0;
                     assert_eq!(
@@ -5441,7 +5449,10 @@ mod tests {
                     }
                     if !store_atom && !do_fn_map_replacements && dual_shape.is_none() {
                         retained
-                            .activate_symjit(CompilationOptimizationLevel::O0)
+                            .activate_symjit(&CompilationOptionsSnapshot {
+                                optimization_level: CompilationOptimizationLevel::O0,
+                                ..Default::default()
+                            })
                             .unwrap();
                         let actual =
                             <f64 as GenericEvaluatorFloat>::get_evaluator(&mut retained)(&values);
@@ -5488,7 +5499,10 @@ mod tests {
             for compiled in [false, true] {
                 if compiled {
                     evaluator
-                        .activate_symjit(CompilationOptimizationLevel::O0)
+                        .activate_symjit(&CompilationOptionsSnapshot {
+                            optimization_level: CompilationOptimizationLevel::O0,
+                            ..Default::default()
+                        })
                         .unwrap();
                 }
                 for (input, expected) in [(0.0, 7.0), (2.0, 0.5)] {
@@ -6148,7 +6162,10 @@ mod tests {
             for compiled in [false, true] {
                 if compiled {
                     evaluator
-                        .activate_symjit(CompilationOptimizationLevel::O2)
+                        .activate_symjit(&CompilationOptionsSnapshot {
+                            optimization_level: CompilationOptimizationLevel::O2,
+                            ..Default::default()
+                        })
                         .unwrap();
                 } else {
                     evaluator.activate_eager();
@@ -6197,7 +6214,12 @@ mod tests {
             Some(CompilationOptimizationLevel::O2),
         ] {
             if let Some(level) = level {
-                evaluator.activate_symjit(level).unwrap();
+                evaluator
+                    .activate_symjit(&CompilationOptionsSnapshot {
+                        optimization_level: level,
+                        ..Default::default()
+                    })
+                    .unwrap();
             } else {
                 evaluator.activate_eager();
             }
@@ -6239,6 +6261,64 @@ mod tests {
     }
 
     #[test]
+    fn symjit_direct_translation_survives_reload() {
+        use crate::settings::global::GammaloopCompileOptions;
+
+        test_initialise().unwrap();
+        let parameter = Atom::var(symbol!("jit_direct_translation_parameter"));
+        for jit_direct_translation in [true, false] {
+            let settings = EvaluatorSettings {
+                compile: true,
+                ..Default::default()
+            };
+            let compilation = GammaloopCompileOptions {
+                jit_direct_translation,
+                ..Default::default()
+            }
+            .frozen_mode(&settings);
+            let evaluator = GenericEvaluator::new_from_raw_params(
+                [&parameter * &parameter + Atom::num(3)],
+                std::slice::from_ref(&parameter),
+                &FunctionMap::default(),
+                vec![],
+                settings.optimization_settings(),
+                None,
+                &settings,
+            )
+            .unwrap();
+            let encoded =
+                bincode::encode_to_vec((&evaluator, &compilation), bincode::config::standard())
+                    .unwrap();
+            let mut state = Vec::new();
+            State::export(&mut state).unwrap();
+            let state_map = State::import(&mut Cursor::new(state), None).unwrap();
+            let model = Model::default();
+            let ((mut decoded, decoded_compilation), _): (
+                (GenericEvaluator, FrozenCompilationMode),
+                _,
+            ) = bincode::decode_from_slice_with_context(
+                &encoded,
+                bincode::config::standard(),
+                GammaLoopContextContainer {
+                    state_map: &state_map,
+                    model: &model,
+                },
+            )
+            .unwrap();
+            assert_eq!(decoded_compilation, compilation);
+            let FrozenCompilationMode::Symjit(options) = decoded_compilation else {
+                panic!("expected frozen JIT compilation settings");
+            };
+            decoded.activate_symjit(&options).unwrap();
+            assert_eq!(decoded.active_f64_backend(), ActiveF64Backend::Symjit);
+            let actual = <f64 as GenericEvaluatorFloat>::get_evaluator_single(&mut decoded)(&[
+                Complex::new(F(2.0), F(1.0)),
+            ]);
+            assert_eq!(actual, Complex::new(F(6.0), F(4.0)));
+        }
+    }
+
+    #[test]
     fn symjit_resolves_builtin_constant_slots() {
         test_initialise().unwrap();
         let pi = Atom::var(Symbol::PI);
@@ -6261,7 +6341,10 @@ mod tests {
                 &mut evaluator,
             )(&[]));
             evaluator
-                .activate_symjit(CompilationOptimizationLevel::O0)
+                .activate_symjit(&CompilationOptionsSnapshot {
+                    optimization_level: CompilationOptimizationLevel::O0,
+                    ..Default::default()
+                })
                 .unwrap();
             let jit = scalar_value(<f64 as GenericEvaluatorFloat>::get_evaluator(
                 &mut evaluator,
