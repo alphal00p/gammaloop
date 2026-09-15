@@ -3895,7 +3895,7 @@ mod tests {
         let zero = one.zero();
         let model = crate::utils::load_generic_model("sm");
         let graph: Graph =
-            include_str!("../../../../examples/cli/epem_a_ttxh/NNLO/graphs/GL638.dot")
+            include_str!("../../../../tests/resources/graphs/GL638.dot")
                 .into_graph(&model)
                 .unwrap();
         let lmb = &graph.loop_momentum_basis;
@@ -4115,7 +4115,7 @@ mod tests {
         let f = |value| one.from_i64(value);
         let model = crate::utils::load_generic_model("sm");
         let graph: Graph =
-            include_str!("../../../../examples/cli/epem_a_ttxh/NNLO/graphs/GL638.dot")
+            include_str!("../../../../tests/resources/graphs/GL638.dot")
                 .into_graph(&model)
                 .unwrap();
         let lmb = &graph.loop_momentum_basis;
