@@ -60,6 +60,7 @@ pub trait HasIntegrand {
 /// [`ProcessIntegrand`] with a reference overlay, so no standalone unit-volume
 /// or profile integrand is kept as a second owner of parameterization logic.
 #[derive(Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum Integrand {
     /// Generated amplitude or cross-section process integrand.
     ProcessIntegrand(Box<ProcessIntegrand>),
@@ -115,6 +116,8 @@ impl Integrand {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments)]
     pub fn evaluate_samples_raw_with_estimate(
         &mut self,
         samples: &[Sample<F<f64>>],

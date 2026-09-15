@@ -346,6 +346,7 @@ impl EvaluationResult {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn fmt_evaluation_result_output<T: FloatLike>(
     f: &mut std::fmt::Formatter<'_>,
     precision: Option<Precision>,

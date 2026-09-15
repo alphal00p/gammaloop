@@ -512,8 +512,8 @@ dyn_clone::clone_trait_object!(<T> SamplingMapComponent<T> where T: FloatLike);
 ///
 /// The matrix is stored row-major and the map is `point = matrix * coordinates
 /// + translation`.  This is the graph-independent numerical owner for routing
-/// a selected LMB into a parent frame; graph code supplies the matrix and
-/// translation after resolving the relevant edge signatures and external data.
+///   a selected LMB into a parent frame; graph code supplies the matrix and
+///   translation after resolving the relevant edge signatures and external data.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SamplingMapAffine<T: FloatLike = f64> {
     matrix: Vec<T>,
@@ -601,17 +601,20 @@ impl<T: FloatLike> SamplingMapAffine<T> {
             for value in &mut augmented[pivot_column] {
                 *value *= &inverse_pivot;
             }
-            for row in 0..dimension {
+            // Keep a private copy so that the pivot row can be read while
+            // each other row is updated through the mutable matrix.
+            let pivot_values = augmented[pivot_column].clone();
+            for (row, augmented_row) in augmented.iter_mut().enumerate().take(dimension) {
                 if row == pivot_column {
                     continue;
                 }
-                let factor = augmented[row][pivot_column].clone();
+                let factor = augmented_row[pivot_column].clone();
                 if factor == zero {
                     continue;
                 }
-                for column in 0..2 * dimension {
-                    let term = &factor * &augmented[pivot_column][column];
-                    augmented[row][column] -= term;
+                for (column, pivot_value) in pivot_values.iter().enumerate().take(2 * dimension) {
+                    let term = &factor * pivot_value;
+                    augmented_row[column] -= term;
                 }
             }
         }
@@ -2846,14 +2849,14 @@ impl SamplingMapKernel {
                 "ordinary sampling-map kernel requires a non-empty edge definition"
             ));
         }
-        if let SamplingMapDefinition::Lmb(edges) = &definition {
-            if edges.len() != n_loop_momenta {
-                return Err(eyre!(
-                    "lmb definition has {} edges, but the kernel has {} loop coordinates",
-                    edges.len(),
-                    n_loop_momenta
-                ));
-            }
+        if let SamplingMapDefinition::Lmb(edges) = &definition
+            && edges.len() != n_loop_momenta
+        {
+            return Err(eyre!(
+                "lmb definition has {} edges, but the kernel has {} loop coordinates",
+                edges.len(),
+                n_loop_momenta
+            ));
         }
         Ok(Self {
             definition,
@@ -4286,9 +4289,7 @@ mod tests {
             .unwrap();
         assert!(point.jacobian.0.is_finite() && point.jacobian > F(0.0));
         assert!(point.inverse_jacobian.0.is_finite() && point.inverse_jacobian > F(0.0));
-        assert!(
-            (point.jacobian.clone() * point.inverse_jacobian.clone() - F(1.0)).abs() < F(1.0e-12)
-        );
+        assert!((point.jacobian * point.inverse_jacobian - F(1.0)).abs() < F(1.0e-12));
         assert!(point.residual < F(1.0e-12));
         let inverse = kernel.inverse(&point.loop_momenta).unwrap();
         assert!(inverse.residual < F(1.0e-12));
