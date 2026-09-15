@@ -2,8 +2,8 @@ use std::sync::LazyLock;
 
 use rustred::foundry::artifact::{ArtifactPersistenceError, ArtifactSchemaVersion, ClosedArtifact};
 
-use super::RustRedEvaluationError;
 use super::terminal::{TerminalCatalog, TerminalManifest, TerminalSource};
+use super::RustRedEvaluationError;
 
 const K1_BYTES: &[u8] = include_bytes!("../../data/rustred/unit_mass_vacuum_k1.rr");
 const K3_BYTES: &[u8] = include_bytes!("../../data/rustred/unit_mass_vacuum_k3.rr");
@@ -91,6 +91,23 @@ pub(super) enum ArtifactFamily {
     UnitMassVacuumK6,
 }
 
+/// Build-time registry view used by the matcher and future artifact loaders.
+///
+/// The registry deliberately contains only sealed assets.  A four-loop family
+/// must be added here together with its durable bytes, authenticated family
+/// fingerprint, and terminal manifest; there is no placeholder artifact and
+/// no topology-name dispatch.  Keeping this lookup separate from matching
+/// makes that addition an atomic registry change rather than a change to the
+/// scalar reducer.
+pub(super) const fn shipped_family_for_loop_count(loop_count: usize) -> Option<ArtifactFamily> {
+    match loop_count {
+        1 => Some(ArtifactFamily::UnitMassVacuumK1),
+        2 => Some(ArtifactFamily::UnitMassVacuumK3),
+        3 => Some(ArtifactFamily::UnitMassVacuumK6),
+        _ => None,
+    }
+}
+
 impl ArtifactFamily {
     pub(super) const fn name(self) -> &'static str {
         match self {
@@ -165,11 +182,30 @@ impl ArtifactFamily {
 #[cfg(test)]
 mod tests {
     use rustred::foundry::artifact::{
-        ArtifactPersistenceError, derive_one_loop_unit_mass_tadpole,
-        derive_two_loop_unit_mass_sunset,
+        derive_one_loop_unit_mass_tadpole, derive_two_loop_unit_mass_sunset,
+        ArtifactPersistenceError,
     };
 
-    use super::{K1_BYTES, K3_BYTES, decode_current_artifact};
+    use super::{
+        decode_current_artifact, shipped_family_for_loop_count, ArtifactFamily, K1_BYTES, K3_BYTES,
+    };
+
+    #[test]
+    fn registry_exposes_only_sealed_assets_until_four_loop_artifact_exists() {
+        assert_eq!(
+            shipped_family_for_loop_count(1),
+            Some(ArtifactFamily::UnitMassVacuumK1)
+        );
+        assert_eq!(
+            shipped_family_for_loop_count(2),
+            Some(ArtifactFamily::UnitMassVacuumK3)
+        );
+        assert_eq!(
+            shipped_family_for_loop_count(3),
+            Some(ArtifactFamily::UnitMassVacuumK6)
+        );
+        assert_eq!(shipped_family_for_loop_count(4), None);
+    }
 
     #[test]
     fn embedded_artifacts_match_current_rustred_generators() {

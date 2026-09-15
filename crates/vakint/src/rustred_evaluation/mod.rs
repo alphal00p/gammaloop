@@ -49,6 +49,10 @@ pub enum RustRedEvaluationError {
     ReducerUnavailable { loop_count: usize },
     #[error("RustRed has no sealed scalar artifact for this matched family: {detail}")]
     UnsupportedMatchedFamily { detail: String },
+    #[error(
+        "RustRed has no shipped scalar artifact for the {loop_count}-loop family yet: {detail}"
+    )]
+    FourLoopArtifactUnavailable { loop_count: usize, detail: String },
     #[error("RustRed could not read propagator {propagator} power as an integer: {power}")]
     InvalidPower { propagator: usize, power: String },
     #[error("RustRed rejected the matched single-scale vacuum family: {detail}")]

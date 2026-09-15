@@ -6,9 +6,9 @@ use symbolica::id::Replacement;
 
 use crate::symbols::S;
 use crate::utils::vakint_macros::vk_symbol;
-use crate::{ReplacementRules, Topology, VakintSettings, get_integer_from_atom, get_prop_with_id};
+use crate::{get_integer_from_atom, get_prop_with_id, ReplacementRules, Topology, VakintSettings};
 
-use super::artifact::ArtifactFamily;
+use super::artifact::{shipped_family_for_loop_count, ArtifactFamily};
 use super::{RustRedEvaluationError, RustRedEvaluationOptions};
 
 pub(super) struct MatchedScalarFamily {
@@ -98,6 +98,22 @@ impl ArtifactFamily {
                     }
                 }
                 Ok(Self::UnitMassVacuumK6)
+            }
+            // Keep the admission boundary structural: a future four-loop
+            // registry entry will be selected from the authenticated matcher
+            // witness, never from an integral/topology name.  Until a sealed
+            // artifact and terminal manifest are shipped, fail explicitly
+            // instead of treating a four-loop family as a generic mismatch.
+            Topology::FourLoop(_)
+                if integral.n_loops == 4 && shipped_family_for_loop_count(4).is_none() =>
+            {
+                Err(RustRedEvaluationError::FourLoopArtifactUnavailable {
+                    loop_count: integral.n_loops,
+                    detail: format!(
+                        "matched family has {} parent propagators; no authenticated four-loop registry entry is shipped",
+                        integral.n_props
+                    ),
+                })
             }
             _ => Err(RustRedEvaluationError::UnsupportedMatchedFamily {
                 detail: format!(
@@ -221,8 +237,8 @@ fn require_momentum(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Vakint;
     use crate::utils::vakint_macros::vk_parse;
+    use crate::Vakint;
 
     #[test]
     fn k6_matching_preserves_physical_slots_mass_and_retained_routing() {
@@ -308,18 +324,16 @@ mod tests {
             .0;
         // Slot 3 is absent in this contraction, but its defining parent binding
         // is still authenticated; a check of present slots alone would miss it.
-        assert!(
-            get_prop_with_id(
-                original
-                    .get_integral()
-                    .canonical_expression
-                    .as_ref()
-                    .unwrap()
-                    .as_view(),
-                3
-            )
-            .is_none()
-        );
+        assert!(get_prop_with_id(
+            original
+                .get_integral()
+                .canonical_expression
+                .as_ref()
+                .unwrap()
+                .as_view(),
+            3
+        )
+        .is_none());
         *parent = parent
             .replace(vk_parse!("prop(3,edge(left_,right_),q_,mass_,power_)").unwrap())
             .with(vk_parse!("prop(3,edge(left_,right_),2*q_,mass_,power_)").unwrap());
