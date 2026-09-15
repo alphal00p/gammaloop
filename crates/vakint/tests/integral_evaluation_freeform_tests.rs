@@ -29,7 +29,7 @@ fn test_integrate_1l_decorated_indices_alphaloop() {
     compare_vakint_evaluations_vs_reference(
         VakintSettings{number_of_terms_in_epsilon_expansion: 3, integral_normalization_factor: LoopNormalizationFactor::MSbar, mu_r_sq_symbol: "some_space::{positive,scalar}::DDmursq".into(),..VakintSettings::default()},
         &alphaloop_matad_rustred_lanes(RustRedParityPolicy::ExactMatadBasis),
-        TensorPrepass::Form,
+        TensorPrepass::FeynKit,
         try_parse!(
             "( (user_space::DDsigma(user_space::some_args) + user_space::{scalar}::DDsigma2(user_space::some_args) + user_space::{symmetric,real}::DDsigma3(user_space::some_args))*vakint::p(1,user_space::mink4(4,33))*vakint::p(2,user_space::mink4(4,33))*vakint::p(1,user_space::mink4(4,11))*vakint::p(2,user_space::mink4(4,22))+vakint::k(3,user_space::mink4(4,11))*vakint::k(3,user_space::mink4(4,22)) + vakint::k(3,user_space::mink4(4,77))*vakint::p(1,user_space::mink4(4,77)) ) \
              * vakint::topo( vakint::prop(9,vakint::edge(66,66),vakint::k(3),user_space::{real}::DDMUVsq,1 ))\
@@ -67,7 +67,7 @@ fn test_integrate_1l_decorated_indices_matad() {
     compare_vakint_evaluations_vs_reference(
         VakintSettings{number_of_terms_in_epsilon_expansion: 3, integral_normalization_factor: LoopNormalizationFactor::MSbar,..VakintSettings::default()},
         &alphaloop_matad_rustred_lanes(RustRedParityPolicy::ExactMatadBasis),
-        TensorPrepass::Form,
+        TensorPrepass::FeynKit,
         try_parse!(
             "( (user_space::CCsigma(user_space::some_args) + user_space::{scalar}::CCsigma2(user_space::some_args) + user_space::{real,symmetric}::CCsigma3(user_space::some_args))*vakint::p(1,user_space::mink4(4,33))*vakint::p(2,user_space::mink4(4,33))*vakint::p(1,user_space::mink4(4,11))*vakint::p(2,user_space::mink4(4,22))+vakint::k(3,user_space::mink4(4,11))*vakint::k(3,user_space::mink4(4,22)) + vakint::k(3,user_space::mink4(4,77))*vakint::p(1,user_space::mink4(4,77)) ) \
              * vakint::topo( vakint::prop(9,vakint::edge(66,66),vakint::k(3),user_space::MUVsq,1 ))\

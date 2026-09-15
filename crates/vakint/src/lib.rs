@@ -10,15 +10,15 @@ pub mod symbols;
 pub mod topologies;
 pub mod utils;
 
-pub use rustred_evaluation::{RustRedEvaluationError, RustRedEvaluationOptions};
 use crate::utils::set_precision_in_polynomial_atom;
 use ahash::RandomState;
 use colored::Colorize;
 use eyre::Result;
-use feynkit_tensor::TensorReducer;
+use feynkit_tensor::{RepeatedIndexCompatibility, TensorReducer};
 use graph::Graph;
 #[allow(unused)]
 use log::{debug, info, warn};
+pub use rustred_evaluation::{RustRedEvaluationError, RustRedEvaluationOptions};
 
 use regex::Regex;
 use rug::float::Constant;
@@ -670,6 +670,10 @@ pub struct Integral {
     name: String,
     generic_pattern: FullPattern,
     canonical_expression: Option<Atom>,
+    // The uncontracted defining topology and k_new(i) in its loop basis.
+    // Populated from the actual selected LMB during contraction, not inferred
+    // later by rematching graphs or solving another momentum system.
+    parent_routing: Option<(Atom, Arc<[Atom]>)>,
     short_expression: Option<Atom>,
     short_expression_pattern: Option<Pattern>,
     alphaloop_expression: Option<Atom>,
@@ -866,6 +870,7 @@ impl Integral {
                 n_props: 0,
                 generic_pattern: all_accepting_pattern.clone(),
                 canonical_expression: None,
+                parent_routing: None,
                 short_expression,
                 short_expression_pattern,
                 alphaloop_expression: None,
@@ -1139,6 +1144,7 @@ impl Integral {
             n_props: tot_n_props,
             generic_pattern,
             canonical_expression,
+            parent_routing: None,
             short_expression,
             short_expression_pattern: Some(short_expression_pattern.to_pattern()),
             alphaloop_expression: Some(alphaloop_expression),
@@ -1157,17 +1163,23 @@ impl Integral {
             .replace(vk_parse!("topo(integral_)").unwrap().to_pattern())
             .with(vk_parse!("integral_").unwrap().to_pattern());
         if let Some(short_expression_pattern) = self.short_expression_pattern.as_ref() {
+            // Contracted or fixed powers are literals, not bound wildcards.
+            // A condition on an absent wildcard remains inconclusive in the
+            // native matcher and cannot authenticate a complete match.
+            let mut bound_wildcards = HashSet::new();
+            short_expression_pattern.visitor(&mut |pattern| {
+                if let Pattern::Wildcard(symbol, _) = pattern {
+                    bound_wildcards.insert(*symbol);
+                }
+            });
+            let power_conditions = (1..=self.n_props)
+                .map(|i_prop| vk_symbol!(format!("pow{}_", i_prop)))
+                .filter(|symbol| bound_wildcards.contains(symbol))
+                .fold(Condition::True, |conditions, symbol| {
+                    conditions & Condition::from((symbol, symbol_or_number()))
+                });
             if let Some(m1) = unwrapped_input
-                .pattern_match(
-                    short_expression_pattern,
-                    Some(&apply_restriction_to_symbols(
-                        (1..=self.n_props)
-                            .map(|i_prop| vk_symbol!(format!("pow{}_", i_prop)))
-                            .collect(),
-                        &symbol_or_number(),
-                    )),
-                    None,
-                )
+                .pattern_match(short_expression_pattern, Some(&power_conditions), None)
                 .next_detailed()
             {
                 let mut replacement_rules = ReplacementRules::default();
@@ -2680,7 +2692,11 @@ impl VakintTerm {
             }
         });
         let indexed_numerator = Vakint::convert_from_dot_notation(vakint_dots.as_view());
-        let reducer = TensorReducer::new(dimension).with_integrated_head(S.k);
+        let reducer = TensorReducer::new(dimension)
+            .with_integrated_head(S.k)
+            .with_repeated_index_compatibility(
+                RepeatedIndexCompatibility::LegacyIdenticalIntegratedPowers,
+            );
         let terms = reducer.distribute_summands(indexed_numerator.as_view())?;
         let mut next_bridge_dummy = Self::next_dot_dummy_index(indexed_numerator.as_view());
         let mut reduced = Atom::Zero;
@@ -6016,7 +6032,7 @@ Evaluated (n_loops=1, mu_r=1) :
                     );
                 processed = processed
                     .replace(vk_parse!("vec1(vec_,idx_)").unwrap().to_pattern())
-                    .when(Condition::from((vk_symbol!("v1_"), symbol_condition())))
+                    .when(Condition::from((vk_symbol!("vec_"), symbol_condition())))
                     .with(vk_parse!("vec_(idx_)").unwrap().to_pattern());
 
                 // Undo the temporary float marker wrapping the rationalized coefficients and map them back to floats
@@ -6350,6 +6366,74 @@ mod tests {
     }
 
     #[test]
+    fn short_form_conditions_preserve_fixed_slots_and_power_types() {
+        let vakint = Vakint::new().unwrap();
+        let valid = vk_parse!("topo(I3L_pinch_3_6(mass_squared,2,n,0,1,1,0))").unwrap();
+        assert!(
+            vakint
+                .topologies
+                .match_topologies_to_user_input(valid.as_view(), false)
+                .unwrap()
+                .is_some()
+        );
+        for invalid in [
+            "topo(I3L_pinch_3_6(mass_squared,2,n,1,1,1,0))",
+            "topo(I3L_pinch_3_6(mass_squared,2,n,0,1,1,1))",
+            "topo(I3L_pinch_3_6(mass_squared,2,n+1,0,1,1,0))",
+            "topo(I3L_pinch_3_6(mass_squared,2,f(n),0,1,1,0))",
+        ] {
+            assert!(
+                vakint
+                    .topologies
+                    .match_topologies_to_user_input(vk_parse!(invalid).unwrap().as_view(), false)
+                    .unwrap()
+                    .is_none(),
+                "invalid short form was admitted: {invalid}"
+            );
+        }
+    }
+
+    #[test]
+    fn short_form_conditions_accept_all_literal_powers() {
+        Vakint::initialize_vakint_symbols();
+        let integral = Integral::new(
+            1,
+            Some(vk_parse!("topo(prop(1,edge(1,1),k(1),msq(1),pow(1)))").unwrap()),
+            Some(vk_parse!("fixed_one_loop(msq(1),2)").unwrap()),
+            EvaluationOrder::empty(),
+        )
+        .unwrap();
+        for (input, expected) in [
+            ("topo(fixed_one_loop(mass_squared,2))", true),
+            ("topo(fixed_one_loop(mass_squared,3))", false),
+        ] {
+            assert_eq!(
+                integral
+                    .match_integral_to_short_user_input(vk_parse!(input).unwrap().as_view())
+                    .unwrap()
+                    .is_some(),
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn form_output_restores_vector_wrappers_and_decorated_indices() {
+        let vakint = Vakint::new().unwrap();
+        let index = vk_parse!("user_space::mink4(4,11)").unwrap();
+        let expected = function!(S.p, Atom::num(1), &index);
+        let output = vakint
+            .process_form_output(
+                &VakintSettings::default(),
+                format!("vec1(p1,{})", FORM_REPLACEMENT_INDEX_SHIFT + 1),
+                vec![index.clone()],
+                BTreeMap::from([(function!(vk_symbol!("p1"), &index), expected.clone())]),
+            )
+            .unwrap();
+        assert_eq!(output, expected);
+    }
+
+    #[test]
     fn rustred_scalar_dispatch_reduces_a_matched_one_loop_integral() {
         let vakint = Vakint::new().unwrap();
         let settings = VakintSettings::default();
@@ -6400,17 +6484,14 @@ mod tests {
             .unwrap(),
         ];
 
-        for (index, integral) in representative_integrals.into_iter().enumerate() {
+        for integral in representative_integrals {
             let mut integral_specs = vakint
                 .topologies
                 .match_topologies_to_user_input(integral.as_view(), false)
                 .unwrap()
                 .unwrap();
             integral_specs.apply_replacement_rules().unwrap();
-            assert_eq!(
-                rustred.supports(&settings, &integral_specs.canonical_topology),
-                index < 2
-            );
+            assert!(rustred.supports(&settings, &integral_specs.canonical_topology));
             assert!(alphaloop.supports(&settings, &integral_specs.canonical_topology));
         }
     }

@@ -16,8 +16,7 @@ use crate::symbols::S;
 use crate::{
     AlphaLoopOptions, EvaluationMethod, EvaluationOrder, FMFTOptions, LoopNormalizationFactor,
     MATADOptions, NumericalEvaluationResult, PySecDecOptions, RustRedEvaluationOptions,
-    TensorReductionMethod, Vakint,
-    VakintError, VakintExpression, VakintSettings, vakint_symbol,
+    TensorReductionMethod, Vakint, VakintError, VakintExpression, VakintSettings, vakint_symbol,
 };
 
 #[cfg(feature = "python_stubgen")]

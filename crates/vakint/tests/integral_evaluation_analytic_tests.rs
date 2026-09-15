@@ -43,8 +43,8 @@ fn compare_three_loop_reference(
 ) {
     match mode {
         ThreeLoopReferenceMode::Legacy(evaluation_order) => {
-            // Keep the pre-existing acceptance path byte-for-byte equivalent:
-            // one selected backend and Vakint's historical FORM tensor prepass.
+            // Keep the pre-existing single-backend reference path while using
+            // Vakint's explicit native FeynKit tensor prepass.
             compare_vakint_evaluation_vs_reference(
                 settings,
                 evaluation_order,
@@ -240,7 +240,7 @@ fn test_integrate_1l_a_body() {
             ..VakintSettings::default()
         },
         &analytic_matad_rustred_lanes(RustRedParityPolicy::ExactMatadBasis),
-        TensorPrepass::Form,
+        TensorPrepass::FeynKit,
         input.as_view(),
         params,
         HashMap::default(),
@@ -306,7 +306,7 @@ fn test_integrate_1l_cross_product() {
     compare_vakint_evaluations_vs_reference(
         VakintSettings{number_of_terms_in_epsilon_expansion: 5, integral_normalization_factor: LoopNormalizationFactor::MSbar,..VakintSettings::default()},
         &analytic_matad_rustred_lanes(RustRedParityPolicy::ExactMatadBasis),
-        TensorPrepass::Form,
+        TensorPrepass::FeynKit,
         vakint_parse!(
             "(k(1,11)*p(1,11)*k(1,12)*p(1,12))*topo(\
                 prop(1,edge(1,1),k(1),muvsq,2)\
@@ -338,7 +338,7 @@ fn test_integrate_1l_cross_product_with_additional_symbols_numerator() {
     compare_vakint_evaluations_vs_reference(
         VakintSettings{number_of_terms_in_epsilon_expansion: 5, integral_normalization_factor: LoopNormalizationFactor::MSbar,..VakintSettings::default()},
         &analytic_matad_rustred_lanes(RustRedParityPolicy::ExactMatadBasis),
-        TensorPrepass::Form,
+        TensorPrepass::FeynKit,
         vakint_parse!(
             "(user_space::A*k(1,11)*p(1,11)*k(1,12)*p(1,12)+user_space::B)*topo(\
                 prop(1,edge(1,1),k(1),muvsq,2)\
@@ -370,7 +370,7 @@ fn test_integrate_1l_dot_product_external() {
     compare_vakint_evaluations_vs_reference(
         VakintSettings{integral_normalization_factor: LoopNormalizationFactor::MSbar,..VakintSettings::default()},
         &analytic_matad_rustred_lanes(RustRedParityPolicy::ExactMatadBasis),
-        TensorPrepass::Form,
+        TensorPrepass::FeynKit,
         vakint_parse!(
             "(k(1,1)*p(1,1)*k(1,2)*p(2,2))*topo(\
                 prop(1,edge(1,1),k(1),muvsq,1)\
@@ -436,7 +436,6 @@ fn test_integrate_3l() {
 }
 
 #[test]
-#[ignore = "pending certified sector-complete K=6 artifact"]
 fn rustred_numerical_parity_3l() {
     test_integrate_3l_with_mode(ThreeLoopReferenceMode::RustRedNumericalParity);
 }
@@ -482,7 +481,6 @@ fn test_integrate_3l_rank_4() {
 }
 
 #[test]
-#[ignore = "pending certified sector-complete K=6 artifact"]
 fn rustred_numerical_parity_3l_rank_4() {
     test_integrate_3l_rank_4_with_mode(ThreeLoopReferenceMode::RustRedNumericalParity);
 }
@@ -492,7 +490,7 @@ fn test_integrate_3l_rank_4_with_mode(mode: ThreeLoopReferenceMode) {
     compare_three_loop_reference(
         mode,
         VakintSettings{integral_normalization_factor: LoopNormalizationFactor::MSbar,..VakintSettings::default()},
-        TensorPrepass::Form,
+        TensorPrepass::FeynKit,
         vakint_parse!(
             "(
                   k(1,11)*k(2,11)*k(1,22)*k(2,22)
@@ -533,7 +531,6 @@ fn test_integrate_3l_rank_4_additional_symbols_numerator() {
 }
 
 #[test]
-#[ignore = "pending certified sector-complete K=6 artifact"]
 fn rustred_numerical_parity_3l_rank_4_additional_symbols_numerator() {
     test_integrate_3l_rank_4_additional_symbols_numerator_with_mode(
         ThreeLoopReferenceMode::RustRedNumericalParity,
@@ -545,7 +542,7 @@ fn test_integrate_3l_rank_4_additional_symbols_numerator_with_mode(mode: ThreeLo
     compare_three_loop_reference(
         mode,
         VakintSettings{integral_normalization_factor: LoopNormalizationFactor::MSbar,..VakintSettings::default()},
-        TensorPrepass::Form,
+        TensorPrepass::FeynKit,
         vakint_parse!(
             "(
                   user_space::A*k(1,11)*k(2,11)*k(1,22)*k(2,22)
@@ -592,7 +589,6 @@ fn test_integrate_3l_rank_4_matad() {
 }
 
 #[test]
-#[ignore = "pending certified sector-complete K=6 artifact"]
 fn rustred_numerical_parity_3l_rank_4_matad() {
     test_integrate_3l_rank_4_matad_with_mode(ThreeLoopReferenceMode::RustRedNumericalParity);
 }
@@ -602,7 +598,7 @@ fn test_integrate_3l_rank_4_matad_with_mode(mode: ThreeLoopReferenceMode) {
     compare_three_loop_reference(
         mode,
         VakintSettings{integral_normalization_factor: LoopNormalizationFactor::MSbar, number_of_terms_in_epsilon_expansion: 5,..VakintSettings::default()},
-        TensorPrepass::Form,
+        TensorPrepass::FeynKit,
         vakint_parse!(
             "(
                   k(1,11)*k(2,11)*k(1,22)*k(2,22)
@@ -647,7 +643,6 @@ fn test_integrate_3l_rank_4_matad_additional_symbols_numerator() {
 }
 
 #[test]
-#[ignore = "pending certified sector-complete K=6 artifact"]
 fn rustred_numerical_parity_3l_rank_4_matad_additional_symbols_numerator() {
     test_integrate_3l_rank_4_matad_additional_symbols_numerator_with_mode(
         ThreeLoopReferenceMode::RustRedNumericalParity,
@@ -661,7 +656,7 @@ fn test_integrate_3l_rank_4_matad_additional_symbols_numerator_with_mode(
     compare_three_loop_reference(
         mode,
         VakintSettings{integral_normalization_factor: LoopNormalizationFactor::MSbar, number_of_terms_in_epsilon_expansion: 5,..VakintSettings::default()},
-        TensorPrepass::Form,
+        TensorPrepass::FeynKit,
         vakint_parse!(
             "(
                   user_space::A*k(1,11)*k(2,11)*k(1,22)*k(2,22)
@@ -706,7 +701,6 @@ fn test_integrate_3l_matad() {
 }
 
 #[test]
-#[ignore = "pending certified sector-complete K=6 artifact"]
 fn rustred_numerical_parity_3l_matad() {
     test_integrate_3l_matad_with_mode(ThreeLoopReferenceMode::RustRedNumericalParity);
 }

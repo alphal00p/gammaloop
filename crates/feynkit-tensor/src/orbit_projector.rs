@@ -543,7 +543,23 @@ fn solve_transposed(
             )
         })
         .collect::<Vec<_>>();
-    Atom::solve_linear_system::<u16, _, _>(&equations, &variables)
+    // Use the native rational-function field, retaining symbolic dimension
+    // poles; singular and underdetermined systems are errors, not free choices.
+    Atom::system_to_matrix::<u16, _, _>(&equations, &variables)
+        .and_then(|(matrix, rhs)| {
+            matrix
+                .solve(&rhs)
+                .map(|solution| {
+                    solution
+                        .into_vec()
+                        .into_iter()
+                        .map(|coefficient| coefficient.to_expression())
+                        .collect()
+                })
+                .map_err(|error| {
+                    symbolica::solve::SolveError::Other(format!("Could not solve {error:?}"))
+                })
+        })
         .map_err(|source| OrbitProjectorError::Solve { rank, source })
 }
 
@@ -635,6 +651,33 @@ mod tests {
     use super::*;
     use crate::{CosetType, OrthogonalWeingarten};
     use symbolica::parse;
+
+    #[test]
+    fn transposed_solve_preserves_generic_dimension_poles() {
+        let dimension = parse!("d");
+        let result = solve_transposed(
+            &[
+                vec![dimension.clone(), Atom::num(1)],
+                vec![Atom::num(1), dimension],
+            ],
+            &[Atom::num(1), Atom::num(0)],
+            4,
+        )
+        .unwrap();
+        assert!((&result[0] - parse!("d/(d^2-1)")).cancel().is_zero());
+        assert!((&result[1] + parse!("1/(d^2-1)")).cancel().is_zero());
+    }
+
+    #[test]
+    fn transposed_solve_rejects_inconsistent_and_underdetermined_systems() {
+        let singular = vec![vec![Atom::num(1), Atom::num(1)]; 2];
+        for rhs in [[Atom::num(1), Atom::num(1)], [Atom::num(1), Atom::num(2)]] {
+            assert!(matches!(
+                solve_transposed(&singular, &rhs, 4),
+                Err(OrbitProjectorError::Solve { .. })
+            ));
+        }
+    }
 
     #[test]
     fn joint_color_dp_counts_every_labeled_matching_once() {

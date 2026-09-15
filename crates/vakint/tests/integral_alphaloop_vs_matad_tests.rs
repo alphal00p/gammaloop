@@ -157,7 +157,6 @@ fn test_integrate_3l_basketball_a() {
 }
 
 #[test]
-#[ignore = "pending certified sector-complete K=6 artifact"]
 fn rustred_numerical_parity_3l_basketball_a() {
     test_integrate_3l_basketball_a_with_mode(ThreeLoopPeerMode::RustRedNumericalParity);
 }
@@ -167,7 +166,7 @@ fn test_integrate_3l_basketball_a_with_mode(mode: ThreeLoopPeerMode) {
     compare_three_loop_peers(
         mode,
         VakintSettings { run_time_decimal_precision: N_DIGITS_ANLYTICAL_EVALUATION, number_of_terms_in_epsilon_expansion: 3, ..VakintSettings::default()},
-        TensorPrepass::Form,
+        TensorPrepass::FeynKit,
         vakint_parse!(
             "( k(1, 1)^2 )*topo(
                 prop(1, edge(2, 1), k(1), muvsq, 1)*\
@@ -195,7 +194,6 @@ fn test_integrate_3l_basketball_b() {
 }
 
 #[test]
-#[ignore = "pending certified sector-complete K=6 artifact"]
 fn rustred_numerical_parity_3l_basketball_b() {
     test_integrate_3l_basketball_b_with_mode(ThreeLoopPeerMode::RustRedNumericalParity);
 }
@@ -205,7 +203,7 @@ fn test_integrate_3l_basketball_b_with_mode(mode: ThreeLoopPeerMode) {
     compare_three_loop_peers(
         mode,
         VakintSettings { run_time_decimal_precision: N_DIGITS_ANLYTICAL_EVALUATION, number_of_terms_in_epsilon_expansion: 3, ..VakintSettings::default()},
-        TensorPrepass::Form,
+        TensorPrepass::FeynKit,
         vakint_parse!(
             "( k(3, 1)^2 )*topo(
                 prop(1, edge(2, 1), k(1), muvsq, 1)*\
@@ -233,7 +231,6 @@ fn test_integrate_3l_no_numerator() {
 }
 
 #[test]
-#[ignore = "pending certified sector-complete K=6 artifact"]
 fn rustred_numerical_parity_3l_no_numerator() {
     test_integrate_3l_no_numerator_with_mode(ThreeLoopPeerMode::RustRedNumericalParity);
 }
@@ -274,7 +271,6 @@ fn test_integrate_3l_rank_4() {
 }
 
 #[test]
-#[ignore = "pending certified sector-complete K=6 artifact"]
 fn rustred_numerical_parity_3l_rank_4() {
     test_integrate_3l_rank_4_with_mode(ThreeLoopPeerMode::RustRedNumericalParity);
 }
@@ -284,7 +280,7 @@ fn test_integrate_3l_rank_4_with_mode(mode: ThreeLoopPeerMode) {
     compare_three_loop_peers(
         mode,
         VakintSettings { run_time_decimal_precision: N_DIGITS_ANLYTICAL_EVALUATION, number_of_terms_in_epsilon_expansion: 4, ..VakintSettings::default()},
-        TensorPrepass::Form,
+        TensorPrepass::FeynKit,
         vakint_parse!(
             "(
                   k(1,11)*k(2,11)*k(1,22)*k(2,22)
@@ -319,7 +315,6 @@ fn test_integrate_3l_rank_4_different_scales() {
 }
 
 #[test]
-#[ignore = "pending certified sector-complete K=6 artifact"]
 fn rustred_numerical_parity_3l_rank_4_different_scales() {
     test_integrate_3l_rank_4_different_scales_with_mode(ThreeLoopPeerMode::RustRedNumericalParity);
 }
@@ -329,7 +324,7 @@ fn test_integrate_3l_rank_4_different_scales_with_mode(mode: ThreeLoopPeerMode) 
     compare_three_loop_peers(
         mode,
         VakintSettings { run_time_decimal_precision: N_DIGITS_ANLYTICAL_EVALUATION, number_of_terms_in_epsilon_expansion: 4, ..VakintSettings::default()},
-        TensorPrepass::Form,
+        TensorPrepass::FeynKit,
         vakint_parse!(
             "(
                   k(1,11)*k(2,11)*k(1,22)*k(2,22)

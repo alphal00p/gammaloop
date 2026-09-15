@@ -22,6 +22,7 @@ feynkit-tensor = { workspace = true }
 log = "0.4.29"
 regex = "1.12.2"
 rug = "1.28.0"
+rustred.workspace = true
 spenso = { workspace = true }
 string-template-plus = "0.4.3"
 thiserror = { workspace = true }
