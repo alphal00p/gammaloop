@@ -12,6 +12,12 @@ covariance-preserving point. Advanced maps use exact map-density scores; the
 soft full-volume LMB uses OSE with `alpha=3`. Maps use spherical coordinates,
 linear radial mapping, `b=0.3`, and `power=2`.
 
+The graph selection is controlled by the named `graph_sampling_selection`
+placeholder. The production default is the advanced list above; a matched
+optimized-LMB comparison can use
+`-D 'graph_sampling_selection=["auto:optimized_lmb"]'` without changing any
+other card setting or the physical integrand.
+
 The integrator uses five adaptive iterations of 16,384 outer samples (81,920
 total), 16 bins, minimum 64 samples per update, learning rates 0.25, variance
 training, and seed 62001. The run uses 100 workers, SymJIT O3 compression, real
