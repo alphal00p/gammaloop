@@ -1943,7 +1943,8 @@ fn stability_check_components_with_estimate<T: FloatLike>(
     // Do not spend higher precision on a point whose complete weighted probe
     // contribution is negligible compared with a well-resolved integral. The
     // estimate is supplied by the previous integration iteration and is
-    // accepted only when its standard error is at most one percent.
+    // accepted only when its standard error is at most ten percent. The
+    // integrator supplies the corresponding absolute-component estimate.
     let small_weight_waiver = |max_weight: F<T>| {
         min_abs_wgt_for_escalation > 0.0
             && !is_final_level
@@ -1952,7 +1953,7 @@ fn stability_check_components_with_estimate<T: FloatLike>(
                     && error.is_finite()
                     && error >= 0.0
                     && estimate != 0.0
-                    && error <= 0.01 * estimate.abs()
+                    && error <= 0.10 * estimate.abs()
                     && max_weight.0.is_finite()
                     && max_weight < F::<T>::from_f64(min_abs_wgt_for_escalation * estimate.abs())
             })
@@ -2206,7 +2207,7 @@ fn stability_check_on_norm_components_with_estimate<T: FloatLike>(
                     && error.is_finite()
                     && error >= 0.0
                     && estimate != 0.0
-                    && error <= 0.01 * estimate.abs()
+                    && error <= 0.10 * estimate.abs()
                     && max_weight.0.is_finite()
                     && max_weight < F::<T>::from_f64(min_abs_wgt_for_escalation * estimate.abs())
             })
@@ -7004,7 +7005,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn negligible_weight_waiver_requires_two_digit_integral_estimate() {
+    fn negligible_weight_waiver_requires_ten_percent_absolute_estimate() {
         use super::StabilityFailureReason;
         use crate::settings::runtime::StabilityLevelSetting;
         use spenso::algebra::complex::Complex;
@@ -7021,7 +7022,7 @@ pub(crate) mod tests {
             false,
             true,
             false,
-            Some((10.0, 0.05)),
+            Some((10.0, 0.5)),
             0.2,
         );
         assert!(waived);
@@ -7037,7 +7038,7 @@ pub(crate) mod tests {
             false,
             true,
             false,
-            Some((10.0, 0.2)),
+            Some((10.0, 1.1)),
             0.2,
         );
         assert!(!unstable);

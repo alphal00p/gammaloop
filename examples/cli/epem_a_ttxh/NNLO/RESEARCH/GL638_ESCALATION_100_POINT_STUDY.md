@@ -4,10 +4,12 @@ Study date: 2026-09-15. Reference: `7d580bd01` on `advanced_sampling`.
 
 ## Result and production qualification
 
-`min_abs_wgt_for_escalation=1e-12` has **not yet demonstrated a reduction in
-production escalations**. The implementation requires a previous integral
-estimate with at most 1% relative Monte Carlo error. None of the inspected
-production checkpoints meets that requirement.
+`min_abs_wgt_for_escalation=1e-12` had **not yet demonstrated a reduction in
+production escalations** at the time of this diagnostic. The then-current
+implementation required a previous signed integral estimate with at most 1%
+relative Monte Carlo error. None of the inspected production checkpoints met
+that requirement. The implementation has now been changed to use the
+absolute real-component integral estimate and a 10% relative-error gate.
 
 A separate experiment nevertheless provides strong evidence that the floor
 would remove most expensive rescues once its reference becomes available:
@@ -16,12 +18,9 @@ below `1e-12 * 2e-5`. These include all 62 points that reached Arb. Their
 largest real-weight correction after rescue is `1.8501e-18`. This is a
 conditional replay result, not a measured production suppression rate.
 
-The audit also found a reference-selection mismatch. The integrator currently
-supplies the signed active-phase accumulator, so the test uses `|integral Re|`.
-The user's requested `<|I|>` instead calls for the absolute accumulator,
-`integral |Re|`. That accumulator already exists. This study leaves source
-unchanged and records the discrepancy for correction. Changing the reference
-alone would not activate the gate at the currently available checkpoints.
+The diagnostic therefore records the old behavior and its counterfactual
+counts. The current waiver uses the absolute real-component accumulator,
+`integral |Re|`, and accepts it once its relative error is at most 10%.
 
 | Archived optimized-LMB checkpoint | Value |
 | --- | ---: |
@@ -40,14 +39,18 @@ Source anchors at the reference commit:
   `current_integral_estimates`; the active real/imaginary accumulator is chosen
   at line 2876. Absolute accumulators are updated at lines 396–400.
 - `crates/gammalooprs/src/integrands/process/mod.rs:1948`: finite reference,
-  nonzero central value, at most 1% relative error, and small-weight comparison.
-  The norm variant repeats this gate at line 2202.
+  nonzero central value, at most 10% relative error, and small-weight
+  comparison. The norm variant repeats this gate at line 2202.
 
 The archived checkpoint is in
 `../workspaces/GL638_optimized_lmbs_workspace_before_quiet_20260915/results/`.
 At 17:42 UTC the fresh advanced run had completed iteration 1; the fresh
 optimized run had not. Both were live. The archived values above are labelled
 explicitly so they are not confused with new completed iterations.
+With the revised absolute-real, 10% criterion, the archived optimized-LMB
+checkpoint's 8.68% absolute-real error is sufficiently precise to provide a
+waiver reference; the fresh optimized run had not yet produced such a
+checkpoint.
 
 ## Independent experiment
 
@@ -97,9 +100,10 @@ failure originated from sampling reconstruction or a threshold-counterterm
 error. Final precisions were 38 Quad and 62 Arb. `MAX` ranged from
 `6.15e-273` to `7.79e-7`, with median `3.73e-41`.
 
-The following counts assume a reference estimate that passes the 1% gate.
-The alternative absolute reference is shown to distinguish the intended API
-from the current signed-reference implementation.
+The following counts are historical counterfactuals from the old signed,
+1%-gate implementation. The current implementation instead uses the absolute
+real-component estimate with a 10% gate, so these counts should not be read as
+the measured waiver rate after the change.
 
 | Relative floor | Waived / 100 with reference 2e-5 | Waived / 100 with reference 2e-4 |
 | --- | ---: | ---: |
