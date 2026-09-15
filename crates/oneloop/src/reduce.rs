@@ -123,6 +123,20 @@ fn reduce_core(family: &IntegralFamily) -> Reduction {
     let mass = |i: usize| family.propagators[i].mass_sq.clone();
     let exponents = &family.targets[0].propagator_exponents;
 
+    // Every branch below indexes `invariants` by a hard-coded permutation of the C(n,2)
+    // lexicographic pairwise slots, and `inv()` silently returns `Atom::Zero` past the end --
+    // i.e. a short list is read as "these legs are on shell" rather than as an error. This
+    // check used to guard only the N > 4 arm.
+    {
+        let n = family.propagators.len();
+        let expected = n * (n - 1) / 2;
+        assert_eq!(
+            family.kinematics.invariants.len(),
+            expected,
+            "an {n}-point family needs {expected} lexicographic pairwise invariants"
+        );
+    }
+
     let terms = match family.propagators.len() {
         1 => {
             let m_sq = mass(0);
@@ -215,12 +229,6 @@ fn reduce_core(family: &IntegralFamily) -> Reduction {
         }
         n => {
             // N > 4: van Neerven-Vermaseren / FJT-Tarasov reduction to boxes.
-            let expected = n * (n - 1) / 2;
-            assert_eq!(
-                family.kinematics.invariants.len(),
-                expected,
-                "an {n}-point family needs {expected} lexicographic pairwise invariants"
-            );
             let masses: Vec<Atom> = (0..n).map(mass).collect();
             if family.numerator != Atom::num(1) {
                 ngon_numerator(
