@@ -13,8 +13,8 @@ from prettytable import PrettyTable, TableStyle
 
 
 HERE = Path(__file__).resolve().parent
-DEFAULT_ADVANCED = HERE / "gammaloop_state_GL638_advanced_sampling" / "workspaces" / "GL638_advanced_sampling_workspace"
-DEFAULT_OPTIMIZED = HERE / "gammaloop_state_GL638_optimized_lmbs" / "workspaces" / "GL638_optimized_lmbs_workspace"
+DEFAULT_ADVANCED = HERE / "workspaces" / "GL638_advanced_sampling_workspace"
+DEFAULT_OPTIMIZED = HERE / "workspaces" / "GL638_optimized_lmbs_workspace"
 
 
 def latest_snapshot(workspace: Path) -> tuple[int, dict[str, Any]]:
