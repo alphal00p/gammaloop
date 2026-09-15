@@ -417,6 +417,91 @@ fn matad_k6_representative_laurent_records() {
     }
 }
 
+/// Prepare exact values for a proposed finite terminal set before artifact
+/// certification. The explicitly supplied file contains one comma-separated
+/// six-index key per line in Vakint's canonical I3L denominator order; blank
+/// lines and lines beginning with `#` are ignored. It is not a source-port
+/// residual importer: any family/routing conversion belongs before this input.
+///
+/// Run manually with `VAKINT_K6_ORACLE_CANDIDATE_KEYS_PATH` and the existing
+/// offline FORM path setting. The emitted records are candidates only. They
+/// must not be shipped until their keys exactly match a certified artifact.
+#[test]
+#[ignore = "offline oracle: prepares candidate unit-mass terminal values with FORM/MATAD, not a closure test"]
+fn matad_k6_candidate_exact_terminal_catalog_records() {
+    let path = env::var("VAKINT_K6_ORACLE_CANDIDATE_KEYS_PATH")
+        .expect("offline candidate oracle requires VAKINT_K6_ORACLE_CANDIDATE_KEYS_PATH");
+    let input = fs::read_to_string(&path)
+        .unwrap_or_else(|error| panic!("could not read candidate keys {path:?}: {error}"));
+    let mut keys = std::collections::BTreeSet::new();
+    for (line_number, line) in input.lines().enumerate() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let powers = line
+            .split(',')
+            .map(|power| {
+                power.trim().parse::<i64>().unwrap_or_else(|error| {
+                    panic!(
+                        "invalid candidate power on line {}: {error}",
+                        line_number + 1
+                    )
+                })
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            powers.len(),
+            6,
+            "line {} must have six powers",
+            line_number + 1
+        );
+        assert!(
+            keys.insert(powers),
+            "duplicate candidate on line {}",
+            line_number + 1
+        );
+        assert!(
+            keys.len() <= 512,
+            "candidate set exceeds the offline bound of 512 keys"
+        );
+    }
+    assert!(!keys.is_empty(), "candidate terminal set is empty");
+
+    let vakint = Vakint::new().unwrap();
+    let mut settings = matad_settings(false, 80);
+    // Catalog expressions enter MATAD's finalizer before its user-facing
+    // epsilon renaming. Keep its internal epsilon spelling in these records.
+    settings.epsilon_symbol = "ep".into();
+    let mass = vakint_parse!("muvsq").unwrap();
+    let renormalization_scale = vakint_parse!("mursq").unwrap();
+    let one = Atom::num(1);
+    println!("K6_CANDIDATE_EXACT_TERMINALS_BEGIN count={}", keys.len());
+    for powers in keys {
+        let unit_input = k6_input(&powers)
+            .replace(mass.to_pattern())
+            .with(one.to_pattern());
+        let result = vakint
+            .evaluate_integral(&settings, unit_input.as_view())
+            .unwrap_or_else(|error| panic!("MATAD failed for candidate {powers:?}: {error}"))
+            .replace(renormalization_scale.to_pattern())
+            .with(one.to_pattern())
+            .together();
+        let canonical = result.to_canonical_string();
+        assert!(!result.is_zero(), "candidate {powers:?} is actually zero");
+        assert!(
+            !canonical.contains("topo(") && !canonical.contains("I3L("),
+            "candidate {powers:?} retained an unreduced integral: {canonical}"
+        );
+        assert!(
+            !canonical.contains("muvsq") && !canonical.contains("mursq"),
+            "candidate {powers:?} retained a scale: {canonical}"
+        );
+        println!("    TerminalSource::exact_matad_basis(&{powers:?}, {canonical:?}),");
+    }
+    println!("K6_CANDIDATE_EXACT_TERMINALS_END");
+}
+
 /// Offline bridge from a certified RustRed artifact's complete terminal-key
 /// set to Vakint-owned numerical Laurent catalog records.
 ///

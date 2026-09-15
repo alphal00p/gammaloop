@@ -32,7 +32,7 @@ use symbolica::{
         polynomial::MultivariatePolynomial,
         series::{Series, SeriesError},
     },
-    solve::SolveError,
+    solve::{Solution, SolveError},
     state::RecycledAtom,
     tensors::matrix::Matrix,
     utils::{BorrowedOrOwned, Settable},
@@ -1339,6 +1339,18 @@ impl<S: TensorStructure> DenseTensor<Atom, S> {
         <Atom as AtomCore>::nsolve_system::<N, Atom>(&self.data, vars, init, prec, max_iterations)
     }
 
+    /// Solve a system that is linear in `vars`, if possible.
+    /// Each expression in `system` is understood to yield 0.
+    /// Native solution branches retain conditions and free variables.
+    pub fn solve_linear_system<E: PositiveExponent + 'static, T: AtomCore>(
+        &self,
+        vars: &[T],
+    ) -> Result<Vec<Solution>, SolveError> {
+        // The general solver also accepts nonlinear systems; keep this
+        // wrapper's linearity contract through the native matrix boundary.
+        self.system_to_matrix::<E, T>(vars)?;
+        Atom::solve(&self.data).wrt_with_exponent::<E, T>(vars)
+    }
     /// Convert a system of linear equations to a matrix representation, returning the matrix
     /// and the right-hand side.
     #[allow(clippy::type_complexity)]
@@ -1353,6 +1365,66 @@ impl<S: TensorStructure> DenseTensor<Atom, S> {
         SolveError,
     > {
         <Atom as AtomCore>::system_to_matrix::<E, Atom, T>(&self.data, vars)
+    }
+}
+
+#[cfg(test)]
+mod linear_system_tests {
+    use super::*;
+    use crate::structure::{
+        OrderedStructure,
+        representation::{Euclidean, RepName},
+    };
+    use symbolica::{parse, solve::SolutionValue};
+
+    #[test]
+    fn linear_forwarding_preserves_ordered_exact_solutions() {
+        let structure: OrderedStructure<Euclidean> =
+            OrderedStructure::new(vec![Euclidean {}.new_slot(2, 1)]).structure;
+        let tensor =
+            DenseTensor::from_data(vec![parse!("x+y-3"), parse!("x-y-1")], structure).unwrap();
+        let branches = tensor
+            .solve_linear_system::<u8, _>(&[parse!("x"), parse!("y")])
+            .unwrap();
+        let [solution] = branches.as_slice() else {
+            panic!("expected one linear branch");
+        };
+        assert!(!solution.is_conditional() && !solution.is_underdetermined());
+        let values = solution
+            .variable_solutions()
+            .iter()
+            .map(|coordinate| match coordinate.value() {
+                SolutionValue::Root(value) => value.clone(),
+                _ => panic!("expected an exact point solution"),
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(values, vec![Atom::num(2), Atom::num(1)]);
+    }
+
+    #[test]
+    fn linear_forwarding_retains_conditions_and_free_variables() {
+        let structure: OrderedStructure<Euclidean> =
+            OrderedStructure::new(vec![Euclidean {}.new_slot(1, 1)]).structure;
+        let conditional = DenseTensor::from_data(vec![parse!("a*x-1")], structure.clone()).unwrap();
+        let branches = conditional
+            .solve_linear_system::<u8, _>(&[parse!("x")])
+            .unwrap();
+        assert_eq!(branches.len(), 1);
+        assert!(branches[0].is_conditional());
+        let underdetermined = DenseTensor::from_data(vec![parse!("x+y-1")], structure).unwrap();
+        let branches = underdetermined
+            .solve_linear_system::<u8, _>(&[parse!("x"), parse!("y")])
+            .unwrap();
+        assert_eq!(branches.len(), 1);
+        assert!(branches[0].is_underdetermined());
+    }
+
+    #[test]
+    fn linear_forwarding_does_not_silently_accept_nonlinear_equations() {
+        let structure: OrderedStructure<Euclidean> =
+            OrderedStructure::new(vec![Euclidean {}.new_slot(1, 1)]).structure;
+        let tensor = DenseTensor::from_data(vec![parse!("x^2-1")], structure).unwrap();
+        assert!(tensor.solve_linear_system::<u8, _>(&[parse!("x")]).is_err());
     }
 }
 

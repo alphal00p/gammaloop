@@ -294,11 +294,27 @@ impl TensorReduction {
 /// println!("{}", reduced.expression());
 /// # Ok::<(), feynkit_tensor::TensorReductionError>(())
 /// ```
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum RepeatedIndexCompatibility {
+    /// Reject an index occurring more than twice in one monomial.
+    #[default]
+    Strict,
+    /// Interpret `2n` identical integrated-vector occupants of one index as
+    /// `n` already-contracted scalar products.
+    ///
+    /// This is an explicit compatibility mode for legacy front ends whose
+    /// parser represents `(k(mu) k(mu))^n` as `2n` occurrences of the same
+    /// indexed vector. It deliberately does not accept mixed vectors, odd
+    /// multiplicities, external occupants, metrics, or opaque index uses.
+    LegacyIdenticalIntegratedPowers,
+}
+
 #[derive(Clone, Debug)]
 pub struct TensorReducer {
     dimension: Atom,
     integrated_heads: BTreeSet<String>,
     integrated_vectors: BTreeSet<Atom>,
+    repeated_index_compatibility: RepeatedIndexCompatibility,
     pairing_limit: u128,
     pairing_product_limit: u128,
     output_term_limit: usize,
@@ -322,6 +338,7 @@ impl TensorReducer {
             dimension,
             integrated_heads: BTreeSet::new(),
             integrated_vectors: BTreeSet::new(),
+            repeated_index_compatibility: RepeatedIndexCompatibility::Strict,
             pairing_limit: DEFAULT_PAIRING_LIMIT,
             pairing_product_limit: DEFAULT_PAIRING_PRODUCT_LIMIT,
             output_term_limit: DEFAULT_OUTPUT_TERM_LIMIT,
@@ -352,6 +369,19 @@ impl TensorReducer {
     /// Select one exact compact vector, such as `K(1,spenso::mink(D))`.
     pub fn with_integrated_vector(mut self, vector: Atom) -> Self {
         self.integrated_vectors.insert(vector);
+        self
+    }
+
+    /// Select how repeated occurrences of the same explicit index are parsed.
+    ///
+    /// The default is [`RepeatedIndexCompatibility::Strict`]. Front ends that
+    /// must preserve the historical `(k(mu) k(mu))^n` spelling can opt into
+    /// [`RepeatedIndexCompatibility::LegacyIdenticalIntegratedPowers`].
+    pub fn with_repeated_index_compatibility(
+        mut self,
+        compatibility: RepeatedIndexCompatibility,
+    ) -> Self {
+        self.repeated_index_compatibility = compatibility;
         self
     }
 
@@ -447,6 +477,7 @@ impl TensorReducer {
         let distributed = bounded_expand_summands(expression, self.output_term_limit)?;
         let mut summands = Vec::with_capacity(distributed.len());
         for summand in distributed {
+            let summand = self.preprocess_repeated_indices(summand.as_view())?;
             let normalized = summand.simplify_metrics().metric_shorthand_to_dot();
             let normalized = bounded_expand_summands(normalized.as_view(), self.output_term_limit)?;
             let term_count = summands.len().checked_add(normalized.len()).ok_or(
@@ -497,6 +528,111 @@ impl TensorReducer {
             max_rank,
             fully_contracted,
         })
+    }
+
+    /// Apply the opt-in legacy repeated-index convention before Idenso can
+    /// contract the ambiguous spelling and erase how many occupants shared
+    /// the index. Strict mode therefore rejects `k(mu)^4` at the public
+    /// boundary, while the compatibility mode lowers exactly `2n` identical
+    /// integrated occupants to `dot(k,k)^n`.
+    fn preprocess_repeated_indices(
+        &self,
+        term: AtomView<'_>,
+    ) -> Result<Atom, TensorReductionError> {
+        let factors = match term {
+            AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
+            factor => vec![factor],
+        };
+        let mut retained = Vec::new();
+        let mut by_index: BTreeMap<Atom, IndexOccupants> = BTreeMap::new();
+        for factor in factors {
+            let (vector, multiplicity) = if let AtomView::Pow(power) = factor
+                && let Some(vector) = self.indexed_vector(power.get_base())?
+            {
+                let exponent = i64::try_from(power.get_exp()).map_err(|_| {
+                    TensorReductionError::InvalidVectorPower(power.get_exp().to_owned())
+                })?;
+                let exponent = usize::try_from(exponent).map_err(|_| {
+                    TensorReductionError::InvalidVectorPower(power.get_exp().to_owned())
+                })?;
+                if exponent > OrthogonalWeingarten::MAX_RANK {
+                    return Err(TensorReductionError::UnsupportedRank {
+                        rank: exponent,
+                        maximum: OrthogonalWeingarten::MAX_RANK,
+                    });
+                }
+                (Some(vector), exponent)
+            } else {
+                (self.indexed_vector(factor)?, 1)
+            };
+            let Some(vector) = vector else {
+                retained.push(factor.to_owned());
+                continue;
+            };
+            let integrated = self.is_integrated(&vector);
+            let occupants = by_index.entry(vector.index).or_default();
+            let destination = if integrated {
+                &mut occupants.integrated
+            } else {
+                &mut occupants.outside
+            };
+            destination.extend(std::iter::repeat_n(vector.compact, multiplicity));
+        }
+
+        for (index, occupants) in by_index {
+            let opaque_occurrences = retained.iter().try_fold(0_usize, |count, factor| {
+                Ok::<usize, TensorReductionError>(count.saturating_add(count_minkowski_index(
+                    factor.as_view(),
+                    &self.dimension,
+                    &index,
+                    1,
+                )?))
+            })?;
+            let total_occurrences = occupants
+                .integrated
+                .len()
+                .saturating_add(occupants.outside.len())
+                .saturating_add(opaque_occurrences);
+            if total_occurrences > 2 {
+                let compatible = self.repeated_index_compatibility
+                    == RepeatedIndexCompatibility::LegacyIdenticalIntegratedPowers
+                    && opaque_occurrences == 0
+                    && occupants.outside.is_empty()
+                    && occupants.integrated.len() % 2 == 0
+                    && occupants
+                        .integrated
+                        .windows(2)
+                        .all(|pair| pair[0] == pair[1]);
+                if compatible {
+                    let pair_count = i64::try_from(occupants.integrated.len() / 2)
+                        .expect("tensor rank bound fits in i64");
+                    let vector = &occupants.integrated[0];
+                    retained.push(dot(vector, vector).pow(Atom::num(pair_count)));
+                    continue;
+                }
+                if opaque_occurrences > 0 {
+                    return Err(TensorReductionError::AmbiguousMinkowskiIndex {
+                        index,
+                        occurrences: total_occurrences,
+                    });
+                }
+                return Err(TensorReductionError::AmbiguousIndex {
+                    index,
+                    integrated: occupants.integrated.len(),
+                    outside: occupants.outside.len(),
+                });
+            }
+            retained.extend(
+                occupants
+                    .integrated
+                    .iter()
+                    .chain(&occupants.outside)
+                    .map(|vector| indexed_vector(vector, &index)),
+            );
+        }
+        Ok(retained
+            .into_iter()
+            .fold(Atom::one(), |product, factor| product * factor))
     }
 
     fn parse_monomial(&self, term: AtomView<'_>) -> Result<TensorMonomial, TensorReductionError> {
@@ -2288,6 +2424,112 @@ mod tests {
         assert_eq!(
             result.expression(),
             dot(&compact(k, 1, &dimension), &compact(q, 2, &dimension))
+        );
+    }
+
+    #[test]
+    fn strict_repeated_index_policy_rejects_four_identical_occupants() {
+        let (k, _, _, _) = vectors();
+        let dimension = Atom::var(symbol!("feynkit_tensor_test::D_strict_repeated"));
+        let mu = Atom::var(symbol!("feynkit_tensor_test::strict_repeated_mu"));
+        let input = indexed(k, 1, &dimension, &mu).pow(Atom::num(4));
+
+        let error = TensorReducer::new(dimension)
+            .with_integrated_head(k)
+            .reduce(input.as_view())
+            .expect_err("strict parsing must reject four occupants of one index");
+        assert!(
+            matches!(
+                error,
+                TensorReductionError::AmbiguousIndex {
+                    integrated: 4,
+                    outside: 0,
+                    ..
+                }
+            ),
+            "unexpected strict repeated-index error: {error:?}"
+        );
+    }
+
+    #[test]
+    fn opted_in_identical_contracted_integrated_vectors_preserve_legacy_power_semantics() {
+        let (k, _, _, _) = vectors();
+        let dimension = Atom::var(symbol!("feynkit_tensor_test::D_repeated_contraction"));
+        let mu = Atom::var(symbol!("feynkit_tensor_test::repeated_contraction_mu"));
+        let compact_k = compact(k, 1, &dimension);
+
+        for pair_count in 2..=OrthogonalWeingarten::MAX_RANK / 2 {
+            let exponent = i64::try_from(2 * pair_count).unwrap();
+            let input = indexed(k, 1, &dimension, &mu).pow(Atom::num(exponent));
+            let result = TensorReducer::new(dimension.clone())
+                .with_integrated_head(k)
+                .with_repeated_index_compatibility(
+                    RepeatedIndexCompatibility::LegacyIdenticalIntegratedPowers,
+                )
+                .reduce(input.as_view())
+                .unwrap();
+            let expected =
+                dot(&compact_k, &compact_k).pow(Atom::num(i64::try_from(pair_count).unwrap()));
+
+            assert_eq!(result.expression(), expected);
+            assert_eq!(result.max_rank(), 0);
+            assert!(result.is_fully_contracted());
+        }
+    }
+
+    #[test]
+    fn repeated_mixed_integrated_vectors_remain_ambiguous() {
+        let (k, q, _, _) = vectors();
+        let dimension = Atom::var(symbol!("feynkit_tensor_test::D_mixed_contraction"));
+        let mu = Atom::var(symbol!("feynkit_tensor_test::mixed_contraction_mu"));
+        let input = indexed(k, 1, &dimension, &mu).pow(Atom::num(2))
+            * indexed(q, 1, &dimension, &mu).pow(Atom::num(2));
+
+        let error = TensorReducer::new(dimension)
+            .with_integrated_head(k)
+            .with_integrated_head(q)
+            .with_repeated_index_compatibility(
+                RepeatedIndexCompatibility::LegacyIdenticalIntegratedPowers,
+            )
+            .reduce(input.as_view())
+            .expect_err("mixed contraction must be rejected");
+        assert!(
+            matches!(
+                error,
+                TensorReductionError::AmbiguousIndex {
+                    integrated: 4,
+                    outside: 0,
+                    ..
+                }
+            ),
+            "unexpected mixed-contraction error: {error:?}"
+        );
+    }
+
+    #[test]
+    fn opted_in_repeated_index_compatibility_rejects_odd_multiplicity() {
+        let (k, _, _, _) = vectors();
+        let dimension = Atom::var(symbol!("feynkit_tensor_test::D_odd_repeated"));
+        let mu = Atom::var(symbol!("feynkit_tensor_test::odd_repeated_mu"));
+        let input = indexed(k, 1, &dimension, &mu).pow(Atom::num(3));
+
+        let error = TensorReducer::new(dimension)
+            .with_integrated_head(k)
+            .with_repeated_index_compatibility(
+                RepeatedIndexCompatibility::LegacyIdenticalIntegratedPowers,
+            )
+            .reduce(input.as_view())
+            .expect_err("legacy compatibility must not infer odd contractions");
+        assert!(
+            matches!(
+                error,
+                TensorReductionError::AmbiguousIndex {
+                    integrated: 3,
+                    outside: 0,
+                    ..
+                }
+            ),
+            "unexpected odd repeated-index error: {error:?}"
         );
     }
 

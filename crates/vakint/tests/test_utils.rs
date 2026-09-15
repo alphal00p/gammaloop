@@ -13,10 +13,10 @@ use std::collections::HashMap;
 use std::process::{Command, Stdio};
 use std::sync::{Once, OnceLock};
 use vakint::{
-    EvaluationMethod, MATADOptions, NumericalEvaluationResult, RustRedEvaluationOptions, Vakint,
-    VakintError,
+    EvaluationMethod, MATADOptions, NumericalEvaluationResult, RustRedEvaluationOptions,
+    TensorReductionMethod, Vakint, VakintError,
 };
-use vakint::{EvaluationOrder, LoopNormalizationFactor, Momentum, VakintSettings};
+use vakint::{EvaluationOrder, Momentum, VakintSettings};
 
 pub struct TestVakint {
     pub vakint: Vakint,
@@ -264,11 +264,12 @@ pub enum EvaluationTestInput {
     TensorReduced,
 }
 
-/// Whether the comparison prepares one shared tensor-reduced input with FORM.
+/// Whether the comparison prepares one shared tensor-reduced input with the
+/// native, FORM-independent FeynKit projector.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TensorPrepass {
     Skip,
-    Form,
+    FeynKit,
 }
 
 /// Acceptance authority for one strict RustRed scalar lane.
@@ -415,7 +416,16 @@ fn prepare_comparison_inputs(
     let canonical = vakint.to_canonical(integra_view, true).unwrap();
     let tensor_reduced = match tensor_prepass {
         TensorPrepass::Skip => canonical.clone(),
-        TensorPrepass::Form => vakint.tensor_reduce(canonical.as_view()).unwrap(),
+        TensorPrepass::FeynKit => {
+            let original_method = vakint.settings.tensor_reduction_method;
+            let original_form_path = vakint.settings.form_exe_path.clone();
+            vakint.settings.tensor_reduction_method = TensorReductionMethod::FeynKit;
+            vakint.settings.form_exe_path = FORBIDDEN_SCALAR_FORM_PATH.to_owned();
+            let reduced = vakint.tensor_reduce(canonical.as_view()).unwrap();
+            vakint.settings.tensor_reduction_method = original_method;
+            vakint.settings.form_exe_path = original_form_path;
+            reduced
+        }
     };
     (canonical, tensor_reduced)
 }
@@ -530,8 +540,6 @@ fn compare_evaluations_impl(
     let settings = VakintSettings {
         allow_unknown_integrals: false,
         use_dot_product_notation: true,
-        mu_r_sq_symbol: "mursq".into(),
-        integral_normalization_factor: LoopNormalizationFactor::pySecDec,
         evaluation_order: lanes[0].evaluation_order.clone(),
         ..vakint_default_settings
     };
@@ -546,27 +554,6 @@ fn compare_evaluations_impl(
         &tensor_reduced,
         &original_form_path,
     );
-    let mut evaluation_parameters = HashMap::default();
-    let mass_parameter = if numerical_masses.contains_key("user_space::muv") {
-        "user_space::muv"
-    } else {
-        "muvsq"
-    };
-    evaluation_parameters.insert(
-        mass_parameter.to_owned(),
-        numerical_masses
-            .get(mass_parameter)
-            .unwrap_or_else(|| panic!("{mass_parameter} not found in numerical_masses"))
-            .clone(),
-    );
-    evaluation_parameters.insert(
-        "mursq".to_owned(),
-        numerical_masses
-            .get("mursq")
-            .unwrap_or_else(|| panic!("mursq not found in numerical_masses"))
-            .clone(),
-    );
-
     let mut results = Vec::with_capacity(lanes.len());
     for lane in &lanes {
         debug!("Evaluating integral with {}", lane.evaluation_order);
@@ -580,7 +567,7 @@ fn compare_evaluations_impl(
         let numerical = Vakint::full_numerical_evaluation(
             &vakint.settings,
             evaluated.as_view(),
-            &evaluation_parameters,
+            &numerical_masses,
             &HashMap::default(),
             Some(&numerical_external_momenta),
         )
@@ -709,7 +696,7 @@ pub fn compare_two_evaluations(
         ),
     ];
     let tensor_prepass = if evaluation_orders.0.1 || evaluation_orders.1.1 {
-        TensorPrepass::Form
+        TensorPrepass::FeynKit
     } else {
         TensorPrepass::Skip
     };
@@ -886,7 +873,7 @@ pub fn compare_vakint_evaluation_vs_reference(
             evaluation_order,
             EvaluationTestInput::TensorReduced,
         )],
-        TensorPrepass::Form,
+        TensorPrepass::FeynKit,
         integra_view,
         numerical_masses,
         numerical_external_momenta,

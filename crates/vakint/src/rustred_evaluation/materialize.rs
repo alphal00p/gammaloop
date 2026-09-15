@@ -4,6 +4,7 @@ use rustred::reduction::Reducer;
 use rustred::scalar_numerator::{ScalarNumeratorLimits, ScalarNumeratorService};
 use symbolica::atom::{Atom, AtomCore, AtomView};
 use symbolica::function;
+use symbolica::id::Replacement;
 
 use crate::matad::MATAD;
 use crate::symbols::S;
@@ -30,8 +31,41 @@ pub(super) fn evaluate(
     })?;
     let loop_momenta = (1..=matched.loop_count)
         .map(|index| function!(S.k, Atom::num(index as i64)))
-        .collect();
-    let internal_numerator = Vakint::convert_to_dot_notation(numerator)
+        .collect::<Vec<_>>();
+    let routed_numerator = if let Some(coordinates) = &matched.parent_coordinates {
+        // Input-to-canonical routing has already been applied once by
+        // VakintTerm. Compose only the stored canonical-to-parent witness,
+        // simultaneously at component level, so no dot(sum, sum) reaches the
+        // existing scalar lowerer. External and scalar spectators are untouched.
+        let component = Atom::var(vk_symbol!("rustred_parent_component_"));
+        let components = loop_momenta
+            .iter()
+            .enumerate()
+            .map(|(axis, source)| {
+                Replacement::new(
+                    source.to_pattern(),
+                    function!(S.k, Atom::num(axis + 1), &component).to_pattern(),
+                )
+                .allow_new_wildcards_on_rhs(true)
+            })
+            .collect::<Vec<_>>();
+        let routing = coordinates
+            .iter()
+            .enumerate()
+            .map(|(axis, target)| {
+                Replacement::new(
+                    function!(S.k, Atom::num(axis + 1), &component).to_pattern(),
+                    target.replace_multiple(&components).to_pattern(),
+                )
+            })
+            .collect::<Vec<_>>();
+        Vakint::convert_from_dot_notation(numerator)
+            .replace_multiple(&routing)
+            .expand()
+    } else {
+        numerator.to_owned()
+    };
+    let internal_numerator = Vakint::convert_to_dot_notation(routed_numerator.as_view())
         .replace(Atom::var(vk_symbol!(settings.epsilon_symbol.as_str())).to_pattern())
         .with(vk_parse!("ep").unwrap().to_pattern());
     let scalar_service = ScalarNumeratorService::try_new(

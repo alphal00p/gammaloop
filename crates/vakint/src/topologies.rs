@@ -6,7 +6,7 @@ use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionArgument, FunctionBuilder, SliceType},
     function,
     id::{Condition, Match},
-    poly::PolyVariable,
+    solve::SolutionValue,
 };
 
 use crate::{
@@ -338,6 +338,10 @@ impl From<Integral> for Topology {
     }
 }
 
+#[cfg(test)]
+#[path = "topologies/routing_tests.rs"]
+mod routing_tests;
+
 impl Topology {
     pub fn generate_topology_with_contraction(
         n_tot_props: usize,
@@ -417,8 +421,9 @@ impl Topology {
         // )?
         // .into();
         // println!("tt={}", tt);
-        contracted_canonical_expression =
-            Topology::force_an_lmb(contracted_canonical_expression.as_view(), n_tot_props)?;
+        let (rotated_expression, parent_coordinates) =
+            Self::canonicalize_lmb(contracted_canonical_expression.as_view(), n_tot_props)?;
+        contracted_canonical_expression = rotated_expression;
         // if contracted_short_expression.to_canonical_string()
         //     == String::from("I3L(msq(1),0,pow(2),pow(3),pow(4),pow(5),0)")
         // {
@@ -465,19 +470,28 @@ impl Topology {
                     res.finish()
                 });
         }
-        Ok(Integral::new(
+        let mut integral = Integral::new(
             n_tot_props,
             Some(contracted_canonical_expression),
             Some(contracted_short_expression),
             applicable_evaluation_methods,
-        )?
-        .into())
+        )?;
+        integral.parent_routing = Some((canonical_expression.to_owned(), parent_coordinates));
+        Ok(integral.into())
     }
 
     pub fn force_an_lmb(
         input_canonical_expression: AtomView,
         n_props: usize,
     ) -> Result<Atom, VakintError> {
+        Self::canonicalize_lmb(input_canonical_expression, n_props)
+            .map(|(expression, _)| expression)
+    }
+
+    fn canonicalize_lmb(
+        input_canonical_expression: AtomView,
+        n_props: usize,
+    ) -> Result<(Atom, Arc<[Atom]>), VakintError> {
         let mut loop_mom_ids: HashSet<i64> = HashSet::new();
         let mut momenta = vec![];
         let mut prop_ids = vec![];
@@ -510,7 +524,10 @@ impl Topology {
         }
         // if !need_to_force_lmb && False {
         if !need_to_force_lmb {
-            return Ok(input_canonical_expression.to_owned());
+            let coordinates = (1..=n_loops)
+                .map(|index| function!(S.k, Atom::num(index)))
+                .collect::<Vec<_>>();
+            return Ok((input_canonical_expression.to_owned(), coordinates.into()));
         }
 
         let g = Graph::new_from_atom(input_canonical_expression, n_props)?;
@@ -544,9 +561,14 @@ impl Topology {
         );
 
         let mut system = vec![];
+        let mut parent_coordinates = Vec::with_capacity(n_loops);
         for (i_lmb, lmb_edge_id) in lmb.iter().enumerate() {
             if let Some(m) = get_prop_with_id(input_canonical_expression, *lmb_edge_id as usize) {
                 let mut q = m.get(&vk_symbol!("q_")).unwrap().to_owned();
+                // The defining equation is k_new(i)=q_old(LMB edge i).
+                // Retain this direction before the existing solve computes
+                // the opposite direction used to rewrite the propagators.
+                parent_coordinates.push(q.clone());
                 for (src, (trgt, (_trgt_symbol, _trgt_rotated_symbol))) in
                     mom_vecs_to_symbols.iter()
                 {
@@ -568,42 +590,46 @@ impl Topology {
         //     "variables: {:?}",
         //     variables.iter().map(|a| a.to_string()).collect::<Vec<_>>()
         // );
-        let solutions = match Atom::solve(&system).wrt_with_exponent::<u8, _>(variables.as_slice())
+        // The general solve API also accepts nonlinear equations. Retain the
+        // native linearity gate before asking it for a complete routing branch.
+        Atom::system_to_matrix::<u8, _, _>(&system, &variables).map_err(|error| {
+            VakintError::InvalidIntegralFormat(format!(
+                "Could not form the linear system to force the loop momentum basis: {error:?}"
+            ))
+        })?;
+        let solutions = Atom::solve(&system)
+            .wrt_with_exponent::<u8, _>(&variables)
+            .map_err(|error| {
+                VakintError::InvalidIntegralFormat(format!(
+                    "Could not solve the linear system to force the loop momentum basis: {error:?}"
+                ))
+            })?;
+        // A routing witness must be unique and unconditional. Free coordinates
+        // or exceptional parameter conditions cannot be dropped when changing
+        // the numerator and every propagator simultaneously.
+        let [solution] = solutions.as_slice() else {
+            return Err(VakintError::InvalidIntegralFormat(format!(
+                "Expected one loop momentum basis, found {} solution branches",
+                solutions.len()
+            )));
+        };
+        if solution.is_conditional()
+            || solution.is_underdetermined()
+            || solution.variable_solutions().len() != variables.len()
         {
-            Ok(solutions) => solutions,
-            Err(e) => {
-                return Err(VakintError::InvalidIntegralFormat(format!(
-                    "Could not solve the linear system to force the loop momentum basis: {:?}",
-                    e
-                )));
-            }
-        };
-        let solution = match solutions.iter().as_slice() {
-            [solution] if solution.free_variables().is_empty() => solution,
-            _ => {
-                return Err(VakintError::InvalidIntegralFormat(format!(
-                    "Could not solve the linear system to force the loop momentum basis: expected one fully determined solution, got {} branch(es)",
-                    solutions.len()
-                )));
-            }
-        };
+            return Err(VakintError::InvalidIntegralFormat(format!(
+                "Loop momentum basis is not unique and unconditional: {solution:?}"
+            )));
+        }
         let basis_change = Arc::new(
-            variables
+            solution
+                .variable_solutions()
                 .iter()
-                .map(|variable| {
-                    let polynomial_variable: PolyVariable = variable.clone().try_into().map_err(
-                        |e| {
-                            VakintError::InvalidIntegralFormat(format!(
-                                "Could not solve the linear system to force the loop momentum basis: {:?}",
-                                e
-                            ))
-                        },
-                    )?;
-                    solution.get(&polynomial_variable).cloned().ok_or_else(|| {
-                        VakintError::InvalidIntegralFormat(format!(
-                            "Could not solve the linear system to force the loop momentum basis: no value for {polynomial_variable}"
-                        ))
-                    })
+                .map(|coordinate| match coordinate.value() {
+                    SolutionValue::Root(value) => Ok(value.clone()),
+                    SolutionValue::Interval { .. } => Err(VakintError::InvalidIntegralFormat(
+                        "A loop momentum basis requires exact point solutions".into(),
+                    )),
                 })
                 .collect::<Result<Vec<_>, _>>()?,
         );
@@ -656,7 +682,7 @@ impl Topology {
 
         // println!("Rotated topology: {}", rotated_result);
 
-        Ok(rotated_result)
+        Ok((rotated_result, parent_coordinates.into()))
     }
 
     pub fn get_integral(&self) -> &Integral {

@@ -29,6 +29,10 @@ not migrate or decode obsolete RustRed artifact schemas. This is separate from
 Vakint's backward-compatibility contract for its public API, defaults, and
 existing FORM-backed evaluation methods.
 
+The [RustRed acceptance inventory](tests/RUSTRED_ACCEPTANCE.md) maps all existing
+single-common-mass inputs through three loops to enabled or explicitly pending
+native peers. It distinguishes configured coverage from executed passing tests.
+
 ```rust
 use vakint::{EvaluationOrder, Vakint, VakintSettings, vakint_parse};
 
