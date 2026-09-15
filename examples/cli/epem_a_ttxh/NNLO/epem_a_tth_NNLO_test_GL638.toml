@@ -210,6 +210,7 @@ around = "lmb(6,12,13,14)"
   [integrator.observables_output]
   format = ["json"]
   [stability]
+  integrated_energy_dimension = $(integrated_energy_dimension:-2)
   check_on_norm = $(stability_check_on_norm:false)
   rotation_axis = [{ type = "euler_angles", alpha = $(stability_alpha:0.1), beta = $(stability_beta:0.2), gamma = $(stability_gamma:0.3) }]
   levels = [
