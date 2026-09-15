@@ -2873,8 +2873,8 @@ where
             .zip(&slots)
             .map(|(integral, slot)| {
                 let accumulator = match slot.settings.integrator.integrated_phase {
-                    IntegratedPhase::Real => &integral.re,
-                    IntegratedPhase::Imag => &integral.im,
+                    IntegratedPhase::Real => &integral.absolute_re,
+                    IntegratedPhase::Imag => &integral.absolute_im,
                     IntegratedPhase::Both => return None,
                 };
                 (accumulator.processed_samples > 0)

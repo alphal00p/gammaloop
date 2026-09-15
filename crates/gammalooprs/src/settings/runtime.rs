@@ -1111,8 +1111,8 @@ pub struct StabilitySettings {
     /// Suppress non-final stability escalation for negligible weighted probes.
     /// When positive, a probe is allowed to remain at its current precision if
     /// its largest absolute weighted rotation result is below this fraction of
-    /// a two-digit-stable integral estimate supplied by the integrator. Zero
-    /// disables this waiver.
+    /// an absolute-component integral estimate whose relative standard error
+    /// is at most ten percent. Zero disables this waiver.
     #[serde(
         default,
         deserialize_with = "deserialize_nonnegative_finite_f64",
