@@ -436,7 +436,7 @@ in {
       ci-passed = {
         package = "packages.${system}.nix-ci-passed";
         system = system;
-        branches = "all";
+        branches = ":any";
       };
     };
   };
