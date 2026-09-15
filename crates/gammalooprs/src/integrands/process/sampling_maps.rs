@@ -421,6 +421,24 @@ pub struct SamplingMapEvaluation<T: FloatLike = f64> {
 }
 
 impl<T: FloatLike> SamplingMapEvaluation<T> {
+    /// Preserve the composed Jacobian-pair checks when only its inverse density
+    /// is requested. Reciprocal overflow is still a numerical failure.
+    pub(crate) fn validate_inverse_density(density: T) -> Result<T> {
+        let inverse = F(density);
+        let forward = inverse.inv();
+        if [&inverse, &forward]
+            .iter()
+            .any(|value| !value.0.is_finite() || **value <= value.zero())
+        {
+            return Err(SamplingEvaluationError::Unrepresentable {
+                operation: "composed inverse density",
+                detail: "nonfinite or nonpositive Jacobian pair".into(),
+            }
+            .into());
+        }
+        Ok(inverse.0)
+    }
+
     /// Certify the complete numerical result after composition or affine
     /// routing, where individually finite child determinants may overflow.
     pub(crate) fn validate(self, operation: &'static str) -> Result<Self> {
@@ -474,6 +492,18 @@ pub trait SamplingMapComponent<T: FloatLike = f64>:
         point: &[T],
         context: &mut SamplingMapContext<'_, T>,
     ) -> Result<Option<SamplingMapEvaluation<T>>>;
+
+    /// Exact supplied-point density and support, without requiring a diagnostic
+    /// forward reconstruction. Components with cheap inverses reuse them; costly
+    /// radial inverses override this while retaining the same root and density.
+    fn inverse_density(
+        &self,
+        point: &[T],
+        context: &mut SamplingMapContext<'_, T>,
+    ) -> Result<Option<T>> {
+        self.inverse(point, context)
+            .map(|evaluation| evaluation.map(|evaluation| evaluation.inverse_jacobian))
+    }
 }
 
 dyn_clone::clone_trait_object!(<T> SamplingMapComponent<T> where T: FloatLike);
@@ -1109,6 +1139,44 @@ impl<T: FloatLike> SamplingMapComponent<T> for SamplingMapEmbedding<T> {
             .validate("embedded conditional inverse")
             .map(Some)
     }
+
+    fn inverse_density(
+        &self,
+        point: &[T],
+        context: &mut SamplingMapContext<'_, T>,
+    ) -> Result<Option<T>> {
+        if point.len() != self.output_dimensions() {
+            return Err(eyre!(
+                "sampling-map embedding inverse received output dimension {}, expected {}",
+                point.len(),
+                self.output_dimensions()
+            ));
+        }
+        let raw = self.unembed_point(point);
+        let prepared = self.transformed_context(context)?;
+        let transformed = prepared
+            .as_ref()
+            .map(|(_, frame)| frame.inverse(&raw, &[]))
+            .transpose()?;
+        let previous = prepared
+            .as_ref()
+            .map_or(context.previous, |(physical, _)| physical);
+        let Some(density) = self.map.inverse_density(
+            transformed
+                .as_ref()
+                .map_or(raw.as_slice(), |mapped| &mapped.coordinates),
+            &mut context.reborrow(previous, Some(0)),
+        )?
+        else {
+            return Ok(None);
+        };
+        let density = if let Some(frame) = transformed {
+            (F(density) * F(frame.inverse_jacobian)).0
+        } else {
+            density
+        };
+        SamplingMapEvaluation::validate_inverse_density(density).map(Some)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1330,6 +1398,39 @@ impl<T: FloatLike> SamplingMapComponent<T> for SamplingMapComposition<T> {
         context: &mut SamplingMapContext<'_, T>,
     ) -> Result<Option<SamplingMapEvaluation<T>>> {
         self.evaluate_inverse(point, context)
+    }
+
+    fn inverse_density(
+        &self,
+        point: &[T],
+        initial_context: &mut SamplingMapContext<'_, T>,
+    ) -> Result<Option<T>> {
+        self.validate_output(point.len())?;
+        let mut offset = 0;
+        let mut context = if self.is_then() {
+            initial_context.previous.to_vec()
+        } else {
+            Vec::new()
+        };
+        let mut density = F(point[0].one());
+        for (index, child) in self.children.iter().enumerate() {
+            let end = offset + child.output_dimensions();
+            let child_point = &point[offset..end];
+            let Some(child_density) = child.inverse_density(
+                child_point,
+                &mut initial_context
+                    .reborrow(if self.is_then() { &context } else { &[] }, Some(index)),
+            )?
+            else {
+                return Ok(None);
+            };
+            if self.is_then() {
+                context.extend_from_slice(child_point);
+            }
+            density *= F(child_density);
+            offset = end;
+        }
+        SamplingMapEvaluation::validate_inverse_density(density.0).map(Some)
     }
 }
 
@@ -1588,10 +1689,10 @@ impl<T: FloatLike> ImplicitSurfaceRadialMap<T> {
         }
         if program.parameter_count() != 5
             || program.output_count() != 5
-            || program.derivative_parameters() != [0, 1, 2, 3, 4]
+            || program.derivative_parameters() != [0]
         {
             return Err(eyre!(
-                "invalid compiled LU-h profile program: expected five inputs/outputs and ordered derivative columns [0, 1, 2, 3, 4], got {} inputs, {} outputs and {:?}",
+                "invalid compiled LU-h profile program: expected five inputs/outputs and active derivative column [0], got {} inputs, {} outputs and {:?}",
                 program.parameter_count(),
                 program.output_count(),
                 program.derivative_parameters(),
@@ -1829,6 +1930,15 @@ impl<T: FloatLike> ImplicitSurfaceRadialMap<T> {
         point: &[T],
         context: &[T],
     ) -> Result<SamplingMapEvaluation<T>> {
+        self.inverse_evaluation(point, context, true)
+    }
+
+    fn inverse_evaluation(
+        &self,
+        point: &[T],
+        context: &[T],
+        reconstruct: bool,
+    ) -> Result<SamplingMapEvaluation<T>> {
         if point.len() != self.dimension {
             return Err(eyre!(
                 "implicit surface radial-map inverse received dimension {}, expected {}",
@@ -1874,18 +1984,28 @@ impl<T: FloatLike> ImplicitSurfaceRadialMap<T> {
                 detail: error.to_string(),
             }
         })?;
-        // Reuse the prepared fiber and root for the roundtrip diagnostic;
-        // re-entering forward would repeat its complement-only optimization.
+        // The angular factor and supplied-radius derivative define the density.
+        // Foreign partition queries need neither a second inverse-CDF solve
+        // nor its Cartesian roundtrip, which remain available on full inverses.
         let (recovered_direction, angular) = direction_from_coordinates(&coordinates)?;
-        let (recovered_radius, _) = self.radius_from_coordinate(coordinates[0].clone(), root)?;
-        let reconstructed = center
-            .iter()
-            .zip(&recovered_direction)
-            .map(|(center, direction)| {
-                (F(center.clone()) + F(recovered_radius.clone()) * F(direction.clone())).0
-            })
-            .collect::<Vec<_>>();
-        let residual = max_coordinate_residual_scalar(point, &reconstructed);
+        let residual = if reconstruct {
+            // Reuse the prepared fiber and root for the roundtrip diagnostic;
+            // re-entering forward would repeat its complement-only optimization.
+            let (recovered_radius, _) =
+                self.radius_from_coordinate(coordinates[0].clone(), root)?;
+            let reconstructed = center
+                .iter()
+                .zip(&recovered_direction)
+                .map(|(center, direction)| {
+                    (F(center.clone()) + F(recovered_radius.clone()) * F(direction.clone())).0
+                })
+                .collect::<Vec<_>>();
+            max_coordinate_residual_scalar(point, &reconstructed)
+        } else {
+            // Private placeholder, discarded by the scalar density query; full
+            // inverses always calculate the actual reconstruction residual.
+            radius.zero().0
+        };
         if !residual.is_finite() {
             return Err(SamplingEvaluationError::Unrepresentable { operation: "radial map", detail: "implicit surface radial-map inverse residual is not representable at the current precision".to_owned() }.into());
         }
@@ -1975,12 +2095,12 @@ impl<T: FloatLike> ImplicitSurfaceRadialMap<T> {
         let scale = origin_value.abs().max(zero.one());
         let requested_tolerance = F::<T>::from_f64(self.root_tolerance);
         let native_tolerance = zero.epsilon() * zero.from_i64(64);
-        let relative_tolerance = if requested_tolerance < native_tolerance {
-            requested_tolerance
+        let native_relative_tolerance = if requested_tolerance < native_tolerance {
+            requested_tolerance.clone()
         } else {
             native_tolerance
         };
-        let residual_tolerance = &relative_tolerance * &scale;
+        let residual_tolerance = &native_relative_tolerance * &scale;
         if origin_value.abs() <= residual_tolerance {
             return Err(SamplingEvaluationError::UncertainGeometry {
                 detail: format!("center sign is not certified at the current root tolerance: value={origin_value}, tolerance={residual_tolerance}"),
@@ -1995,6 +2115,24 @@ impl<T: FloatLike> ImplicitSurfaceRadialMap<T> {
             }
             return Ok(None);
         }
+        // An LU-h proposal uses R(direction) only as a positive focusing scale:
+        // any deterministic positive approximation defines the same normalized
+        // radial CDF construction. Its angular derivatives do not enter the
+        // spherical determinant. Honor the declared root accuracy for that law,
+        // identically in forward and inverse; physical host roots and singular
+        // threshold-shell roots retain their native-precision requirements.
+        // Keep origin classification above unchanged, and retain a strict
+        // interior bracket even for a cut very close to production threshold.
+        let relative_tolerance = if self.lu_h_profile.is_some() {
+            let interior_tolerance = origin_value.abs() / (&scale * zero.from_i64(64));
+            if requested_tolerance < interior_tolerance {
+                requested_tolerance
+            } else {
+                interior_tolerance
+            }
+        } else {
+            native_relative_tolerance
+        };
         // Reuse the native bracket-preserving solver. Callback failures keep
         // their original structural/numerical classification across its scalar
         // interface; no failed equation evaluation becomes a rootless branch.
@@ -3056,6 +3194,15 @@ impl<T: FloatLike> SamplingMapComponent<T> for ImplicitSurfaceRadialMap<T> {
     ) -> Result<Option<SamplingMapEvaluation<T>>> {
         ImplicitSurfaceRadialMap::inverse_with_context(self, point, context.previous).map(Some)
     }
+
+    fn inverse_density(
+        &self,
+        point: &[T],
+        context: &mut SamplingMapContext<'_, T>,
+    ) -> Result<Option<T>> {
+        self.inverse_evaluation(point, context.previous, false)
+            .map(|evaluation| Some(evaluation.inverse_jacobian))
+    }
 }
 
 fn max_coordinate_residual<T: FloatLike>(a: &[F<T>], b: &[F<T>]) -> F<T> {
@@ -3107,6 +3254,92 @@ mod tests {
     use super::*;
 
     #[test]
+    fn lu_h_proposal_radius_stops_at_declared_accuracy_without_changing_density() {
+        std::thread::Builder::new()
+            .name("lu-h-proposal-root-test".to_owned())
+            .stack_size(64 * 1024 * 1024)
+            .spawn(|| {
+                use crate::settings::runtime::{HFunctionSettings, SamplingRadialProfile};
+                use std::sync::atomic::{AtomicUsize, Ordering};
+
+                crate::initialisation::test_initialise().unwrap();
+                let profile = SamplingRadialProfile {
+                    broad_fraction: 0.0,
+                    ..Default::default()
+                };
+                let program = SamplingExpressionEvaluator::new_lu_h_profile(
+                    &profile,
+                    &HFunctionSettings::default(),
+                )
+                .unwrap();
+                fn check<T: FloatLike>(
+                    program: &SamplingExpressionEvaluator,
+                    profile: &SamplingRadialProfile,
+                ) {
+                    let one = F::<T>::default().one();
+                    let calls = Arc::new(AtomicUsize::new(0));
+                    let count = Arc::clone(&calls);
+                    let shell = ImplicitSurfaceRadialMap::new(
+                        3,
+                        vec![one.zero().0; 3],
+                        1.0,
+                        2.0,
+                        Arc::new(move |_, radius: T| {
+                            count.fetch_add(1, Ordering::Relaxed);
+                            let radius = F(radius);
+                            Ok((
+                                (radius.square() - radius.from_i64(2)).0,
+                                (&radius * radius.from_i64(2)).0,
+                            ))
+                        }),
+                    )
+                    .unwrap()
+                    .with_root_tolerance(1e-9)
+                    .unwrap();
+                    let proposal = shell
+                        .clone()
+                        .with_lu_h_profile(program.clone(), profile, 1)
+                        .unwrap();
+                    let direction = [one.0.clone(), one.zero().0, one.zero().0];
+                    let (root, _) = proposal
+                        .root_for_direction(&direction, proposal.center(), &[], None)
+                        .unwrap()
+                        .unwrap();
+                    let proposal_calls = calls.swap(0, Ordering::Relaxed);
+                    let residual = (F(root).square() - one.from_i64(2)).abs();
+                    // This witness deliberately uses an inexact focusing radius;
+                    // the actual map inverse must still satisfy the strict law.
+                    assert!(residual < F::<T>::from_f64(2e-9));
+                    assert!(residual > one.epsilon() * one.from_i64(1024));
+                    let (strict_root, _) = shell
+                        .root_for_direction(&direction, shell.center(), &[], None)
+                        .unwrap()
+                        .unwrap();
+                    assert!(calls.load(Ordering::Relaxed) > proposal_calls);
+                    assert!(
+                        (F(strict_root).square() - one.from_i64(2)).abs()
+                            <= one.epsilon() * one.from_i64(128)
+                    );
+                    for radial in [0.01, 0.3, 0.9] {
+                        let coordinates =
+                            [radial, 0.31, 0.64].map(|value| F::<T>::from_f64(value).0);
+                        let forward = proposal.forward(&coordinates).unwrap();
+                        let inverse = proposal.inverse(&forward.point).unwrap();
+                        assert!(
+                            (F(forward.jacobian) * F(inverse.inverse_jacobian) - &one).abs()
+                                < F::<T>::from_f64(1e-13)
+                        );
+                    }
+                }
+                check::<crate::utils::SamplingFloat>(&program, &profile);
+                check::<crate::utils::ArbPrec>(&program, &profile);
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    #[test]
     fn lu_h_radial_profile_has_native_exact_density_and_inverse() {
         // Eager/dual compilation needs a larger development-build stack, as
         // in the generated graph fixtures; this leaves all numeric checks intact.
@@ -3143,6 +3376,14 @@ mod tests {
                             [radial, 0.31, 0.64].map(|value| F::<T>::from_f64(value).0);
                         let forward = map.forward(&coordinates).unwrap();
                         let inverse = map.inverse(&forward.point).unwrap();
+                        assert_eq!(
+                            map.inverse_density(
+                                &forward.point,
+                                &mut SamplingMapContext::detached(&[]),
+                            )
+                            .unwrap(),
+                            Some(inverse.inverse_jacobian.clone()),
+                        );
                         let tolerance = F::<T>::from_f64(1e-7);
                         assert!(
                             (F(forward.jacobian.clone()) * F(inverse.inverse_jacobian)
@@ -3212,8 +3453,9 @@ mod tests {
         let parameters = ["y", "r", "b", "f", "s"]
             .map(|name| Atom::var(symbol!(&format!("lu_column_contract::{name}"))));
         for columns in [&[][..], &[1], &[1, 0, 2, 3, 4]] {
-            // The fit itself is finite with positive shape. Reject missing or
-            // reordered derivatives before derivative[0] can mean another input.
+            // The fit itself is finite with positive shape. Reject missing,
+            // reordered or extra derivatives before derivative[0] can mean
+            // another input or carry unused runtime work.
             let program = SamplingExpressionEvaluator::new(
                 [
                     "0",
@@ -3235,7 +3477,7 @@ mod tests {
             )?
             .with_lu_h_profile(program, &SamplingRadialProfile::default(), 1)
             .unwrap_err();
-            assert!(error.to_string().contains("ordered derivative columns"));
+            assert!(error.to_string().contains("active derivative column"));
         }
         Ok(())
     }
@@ -3556,6 +3798,35 @@ mod tests {
             (F(arb.jacobian) * F(arb.inverse_jacobian) - &one).abs()
                 < one.epsilon() * one.from_i64(64)
         );
+    }
+
+    #[test]
+    fn inverse_density_rejects_composed_jacobian_range_failures() {
+        for scale in [1.0e-160, 1.0e160] {
+            let child = SamplingMapAffine::new(vec![vec![scale]], vec![0.0]).unwrap();
+            let map =
+                SamplingMapComposition::product(vec![Box::new(child.clone()), Box::new(child)])
+                    .unwrap();
+            let point = [scale / 4.0; 2];
+            let inverse = map
+                .inverse(&point, &mut SamplingMapContext::detached(&[]))
+                .unwrap_err();
+            let density = map
+                .inverse_density(&point, &mut SamplingMapContext::detached(&[]))
+                .unwrap_err();
+            assert!(inverse.downcast_ref::<SamplingEvaluationError>().is_some());
+            assert!(density.downcast_ref::<SamplingEvaluationError>().is_some());
+            for nonfinite in [f64::NAN, f64::INFINITY] {
+                let point = [nonfinite, scale / 4.0];
+                let inverse = map
+                    .inverse(&point, &mut SamplingMapContext::detached(&[]))
+                    .unwrap_err();
+                let density = map
+                    .inverse_density(&point, &mut SamplingMapContext::detached(&[]))
+                    .unwrap_err();
+                assert_eq!(density.to_string(), inverse.to_string());
+            }
+        }
     }
 
     #[test]
@@ -4413,6 +4684,15 @@ mod tests {
                 .inverse_with_context(&forward.point, &[context])
                 .unwrap();
             assert_eq!(preparations.load(Ordering::Relaxed), count + 2);
+            assert_eq!(
+                map.inverse_density(
+                    &forward.point,
+                    &mut SamplingMapContext::detached(&[context]),
+                )
+                .unwrap(),
+                Some(inverse.inverse_jacobian),
+            );
+            assert_eq!(preparations.load(Ordering::Relaxed), count + 3);
             assert!((forward.jacobian * inverse.inverse_jacobian - 1.0).abs() < 1.0e-12);
             if context < 2.0 {
                 let ordinary = SurfaceRadialMap::new(3, vec![context, 0.0, 0.0], None, 2.0, 1.0)
@@ -4779,6 +5059,12 @@ mod tests {
             .inverse(&mapped.point, &mut SamplingMapContext::detached(&[]))
             .unwrap()
             .expect("full-support inverse");
+        assert_eq!(
+            composition
+                .inverse_density(&mapped.point, &mut SamplingMapContext::detached(&[]))
+                .unwrap(),
+            Some(inverse.inverse_jacobian),
+        );
         assert!(inverse.residual < 1.0e-10);
         assert!(
             inverse
@@ -4828,6 +5114,12 @@ mod tests {
             .inverse(&mapped.point, &mut SamplingMapContext::detached(&[]))
             .unwrap()
             .expect("full-support inverse");
+        assert_eq!(
+            embedding
+                .inverse_density(&mapped.point, &mut SamplingMapContext::detached(&[]))
+                .unwrap(),
+            Some(inverse.inverse_jacobian),
+        );
         assert!(inverse.residual < 1.0e-10);
         assert!(
             inverse

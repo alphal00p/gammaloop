@@ -310,6 +310,90 @@ payload = {
 
 #[test]
 #[serial]
+fn python_settings_expose_ecm_relative_stability_tolerances() -> Result<()> {
+    let payload = run_python_case(
+        "python_api_ecm_relative_stability_tolerances",
+        &[r#"set default-runtime string '
+[stability]
+integrated_energy_dimension = -2
+[[stability.levels]]
+precision = "Arb"
+required_precision_for_re = 1e-12
+required_precision_for_im = 1e-12
+ecm_relative_tolerance_for_re = 1e-100
+escalate_for_large_weight_threshold = -1.0
+'"#
+        .to_string()],
+        r#"
+settings = api.get_default_runtime_settings()
+level = settings.stability.levels[0]
+payload = {
+    "dimension": settings.stability.integrated_energy_dimension,
+    "serialized_dimension": settings.to_dict()["stability"]["integrated_energy_dimension"],
+    "real": level.ecm_relative_tolerance_for_re,
+    "imaginary": level.ecm_relative_tolerance_for_im,
+    "serialized": settings.to_dict()["stability"]["levels"][0],
+}
+"#,
+    )?;
+    assert_eq!(payload["dimension"].as_i64(), Some(-2));
+    assert_eq!(payload["serialized_dimension"], payload["dimension"]);
+    assert_eq!(payload["real"].as_f64(), Some(1e-100));
+    assert_eq!(payload["imaginary"].as_f64(), Some(0.0));
+    assert_eq!(
+        payload["serialized"]["ecm_relative_tolerance_for_re"],
+        payload["real"]
+    );
+    assert_eq!(
+        payload["serialized"]["ecm_relative_tolerance_for_im"],
+        payload["imaginary"]
+    );
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn python_settings_preserve_ose_and_named_channel_weight() -> Result<()> {
+    let payload = run_python_case(
+        "python_api_ose_channel_weights",
+        &[r#"set default-runtime string '
+[sampling]
+sampling_multichanneling = true
+sampling_channel_weight = "ose"
+alpha = 2.5
+default_channel_selection = ["auto:optimized_lmb"]
+'"#
+        .to_string()],
+        r#"
+legacy = api.get_default_runtime_settings().to_dict()["sampling"]
+run_commands(api, ["""set default-runtime string '
+[sampling]
+sampling_multichanneling = true
+sampling_channel_weight = "map_density"
+alpha = 3.0
+default_channel_selection = ["soft"]
+[sampling.channel_definitions.G.soft]
+around = "lmb(1,2)"
+parent_lmb = [1,2]
+channel_weight = "ose"
+'"""])
+mixed = api.get_default_runtime_settings().to_dict()["sampling"]
+payload = {"legacy": legacy, "mixed": mixed}
+"#,
+    )?;
+    assert_eq!(payload["legacy"]["sampling_channel_weight"], "ose");
+    assert_eq!(payload["legacy"]["alpha"], 2.5);
+    assert_eq!(payload["mixed"]["sampling_channel_weight"], "map_density");
+    assert_eq!(payload["mixed"]["alpha"], 3.0);
+    assert_eq!(
+        payload["mixed"]["channel_definitions"]["G"]["soft"]["channel_weight"],
+        "ose"
+    );
+    Ok(())
+}
+
+#[test]
+#[serial]
 fn python_evaluate_sample_preserves_graph_grouping_and_incoming_pdgs() -> Result<()> {
     let mut commands = base_setup_commands();
     commands.push(

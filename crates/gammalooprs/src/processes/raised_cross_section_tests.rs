@@ -743,6 +743,7 @@ fn generalized_raised_cross_section_covers_derivative_components_and_roundtrips(
                         .insert(
                             "raised_cut".to_owned(),
                             SamplingChannelDefinition {
+                                channel_weight: None,
                                 around: format!("phase_space(cut({edges}))"),
                                 parent_lmb: parent_lmb.clone(),
                                 subspace_lmb: parent_lmb.clone(),
@@ -757,7 +758,6 @@ fn generalized_raised_cross_section_covers_derivative_components_and_roundtrips(
                     settings.sampling =
                         SamplingSettings::MultiChanneling(MultiChannelingSettings {
                             parameterization_settings: parameterization,
-                            ..Default::default()
                         });
                     settings.stability.rotation_axis.clear();
                     settings.stability.levels = vec![StabilityLevelSetting::default_double()];
@@ -1006,6 +1006,7 @@ fn standalone_cut_sampling_compiles_from_production_cut_and_mass_data() {
                     .insert(
                         "physical_cut".into(),
                         SamplingChannelDefinition {
+                            channel_weight: None,
                             around: format!("phase_space(cut({cut_edges}))"),
                             subspace_lmb: parent_lmb.clone(),
                             parent_lmb,
@@ -1094,6 +1095,22 @@ fn standalone_cut_sampling_compiles_from_production_cut_and_mass_data() {
                 assert!((report.normalization - 1.0).abs() < 0.02, "{report:?}");
                 assert!(report.round_trip_residual_max < 1.0e-8, "{report:?}");
 
+                // The source-law fixture uses this same generated cut, including
+                // physical settings and native bindings, without rebuilding it.
+                let mut fixed_source = ProcessIntegrand::CrossSection(integrand.clone());
+                fixed_source.get_mut_settings().sampling =
+                    crate::settings::runtime::SamplingSettings::MultiChanneling(
+                        crate::settings::runtime::MultiChannelingSettings {
+                            parameterization_settings: parameterization.clone(),
+                        },
+                    );
+                crate::integrands::process::tests::check_fixed_quad_source_transport(
+                    &mut fixed_source,
+                    &model,
+                    &Sample::Continuous(F(1.0), [0.23, 0.31, 0.47].into_iter().map(F).collect()),
+                )
+                .unwrap();
+
                 // At fixed angular shape, simple-cut LU physics carries h(t),
                 // whereas this proposal carries p(t|R). Their ratio is not
                 // constant; multiplying the complete estimator by p/h must be.
@@ -1150,7 +1167,6 @@ fn standalone_cut_sampling_compiles_from_production_cut_and_mass_data() {
                                 settings.sampling =
                                     SamplingSettings::MultiChanneling(MultiChannelingSettings {
                                         parameterization_settings: parameterization.clone(),
-                                        ..Default::default()
                                     });
                                 settings.stability.rotation_axis.clear();
                                 settings.stability.levels =
@@ -1260,7 +1276,6 @@ fn standalone_cut_sampling_compiles_from_production_cut_and_mass_data() {
                     settings.sampling =
                         SamplingSettings::MultiChanneling(MultiChannelingSettings {
                             parameterization_settings: focused,
-                            ..Default::default()
                         });
                     settings.stability.rotation_axis.clear();
                     settings.stability.levels = vec![
@@ -1638,10 +1653,12 @@ fn conditional_cut_sampling_preserves_both_sides_and_raised_sum() {
                     vec!["left_only".into(), "both".into()];
                 parameterization.sampling_channels.channel_definitions.insert(graph_name.clone(), BTreeMap::from([
                     ("left_only".into(), SamplingChannelDefinition {
+                        channel_weight: None,
                         around: format!("then(block(lmb({}),phase_space(cut({cut_edges}))),block(lmb({}),left(surface({left_edges}))),lmb({}))", parent[1], parent[0], parent[2]),
                         parent_lmb: parent.clone(), on_cut: vec![host_id.0], ..Default::default()
                     }),
                     ("both".into(), SamplingChannelDefinition {
+                        channel_weight: None,
                         around: format!("then(block(lmb({}),phase_space(cut({cut_edges}))),block(lmb({}),left(surface({left_edges}))),block(lmb({}),right(surface({right_edges}))))", parent[1], parent[0], parent[2]),
                         parent_lmb: parent.clone(), on_cut: vec![host_id.0], ..Default::default()
                     }),
@@ -1657,6 +1674,7 @@ fn conditional_cut_sampling_preserves_both_sides_and_raised_sum() {
                 let mut direct_settings = parameterization.clone();
                 direct_settings.sampling_channels.default_channel_selection = vec!["direct".into()];
                 direct_settings.sampling_channels.channel_definitions.get_mut(&graph_name).unwrap().insert("direct".into(), SamplingChannelDefinition {
+                    channel_weight: None,
                     around: format!("then(block(lmb({}),phase_space(cut({cut_edges}))),block(lmb({}),surface({left_edges})),lmb({}))", parent[1], parent[0], parent[2]),
                     parent_lmb: parent.clone(), on_cut: vec![host_id.0], ..Default::default()
                 });
@@ -1730,6 +1748,7 @@ fn conditional_cut_sampling_preserves_both_sides_and_raised_sum() {
                     ordinary_prefix.sampling_channels.default_channel_selection = vec!["ordinary_host".into()];
                     ordinary_prefix.sampling_channels.channel_definitions.get_mut(&graph_name).unwrap().insert(
                         "ordinary_host".into(), SamplingChannelDefinition {
+                            channel_weight: None,
                             around: format!("then(lmb({}),block(lmb({}),at_cut(cut({cut_edges}),left(surface({left_edges})))),lmb({}))",
                                 parent[1], parent[0], parent[2]),
                             parent_lmb: parent.clone(), on_cut: vec![host_id.0], ..Default::default()
@@ -1979,7 +1998,6 @@ fn conditional_cut_sampling_preserves_both_sides_and_raised_sum() {
                 // by summed channels, explicit channel MC, and direct momenta.
                 runtime.sampling = SamplingSettings::MultiChanneling(MultiChannelingSettings {
                     parameterization_settings: parameterization.clone(),
-                    ..Default::default()
                 });
                 runtime.stability.rotation_axis.clear();
                 runtime.stability.levels = vec![StabilityLevelSetting::default_double()];
@@ -2013,6 +2031,7 @@ fn conditional_cut_sampling_preserves_both_sides_and_raised_sum() {
                 assert!(summed.integrand_result.re.0.abs() + summed.integrand_result.im.0.abs() > 0.0);
                 assert!(!summed.event_groups.is_empty());
                 let mut direct_sum = Complex::new(F(0.0), F(0.0));
+                let mut direct_absolute = Complex::new(F(0.0), F(0.0));
                 let mut direct_results = Vec::new();
                 for id in [SamplingChannelId(0), SamplingChannelId(1)] {
                     let point = bridge.forward(id, &coordinates).unwrap();
@@ -2038,6 +2057,7 @@ fn conditional_cut_sampling_preserves_both_sides_and_raised_sum() {
                     assert!(!direct.event_groups.is_empty());
                     let factor = point.selected_factor().unwrap();
                     direct_sum += direct.integrand_result * F(factor);
+                    direct_absolute += Complex::new(direct.integrand_result.re.abs(), direct.integrand_result.im.abs()) * F(factor);
                     direct_results.push((direct, factor));
                 }
                 for (a, b) in [
@@ -2059,7 +2079,12 @@ fn conditional_cut_sampling_preserves_both_sides_and_raised_sum() {
                         ..Default::default()
                     });
                 integrand.warm_up(&model).unwrap();
+                let absolute = summed.absolute_integrand_result.unwrap();
+                for (a, b) in [(absolute.re.0, direct_absolute.re.0), (absolute.im.0, direct_absolute.im.0)] {
+                    assert!((a-b).abs() <= 1.0e-8 * a.abs().max(b.abs()).max(1.0e-25));
+                }
                 let mut explicit_sum = Complex::new(F(0.0), F(0.0));
+                let mut explicit_absolute = Complex::new(F(0.0), F(0.0));
                 let mut reference_sum = 0.0;
                 let mut moment_sum = 0.0;
                 for (id, (direct, factor)) in direct_results.iter().enumerate() {
@@ -2126,11 +2151,15 @@ fn conditional_cut_sampling_preserves_both_sides_and_raised_sum() {
                         }
                     }
                     explicit_sum += selected.integrand_result;
+                    explicit_absolute += selected.absolute_integrand_result.unwrap();
                 }
                 assert!(
                     (reference_sum - summed_reference.evaluation.integrand_result.re.0).abs() < 1.0e-11
                 );
                 assert!((moment_sum - summed_reference.moments.second_moment.0).abs() < 1.0e-10);
+                for (a, b) in [(absolute.re.0, explicit_absolute.re.0), (absolute.im.0, explicit_absolute.im.0)] {
+                    assert!((a-b).abs() <= 1.0e-8 * a.abs().max(b.abs()).max(1.0e-25));
+                }
                 assert!(
                     (explicit_sum.re.0 - summed.integrand_result.re.0).abs()
                         < 1.0e-8 * summed.integrand_result.re.0.abs().max(1.0e-25)
@@ -2239,21 +2268,21 @@ fn hosted_joint_kite_preserves_original_equations_and_physical_sum() {
         .spawn(|| -> eyre::Result<()> {
             use crate::{
                 DependentMomentaConstructor,
-                cff::esurface::Esurface,
+                cff::esurface::{Esurface, EsurfaceRay},
                 graph::LmbIndex,
                 integrands::process::{
-                    GaussianReferenceFunction, GraphTerm, SamplingChannelId, SamplingExpressionEvaluator,
+                    GaussianReferenceFunction, GraphTerm, ProcessIntegrandImpl, SamplingChannelId, SamplingExpressionEvaluator,
                     SamplingMapComponent, SharedEnergyJointMap, sampling_context::SamplingMapContext,
                 },
                 momentum::{
                     ThreeMomentum,
-                    sample::{ExternalThreeMomenta, LoopMomenta, SubspaceData},
+                    sample::{ExternalThreeMomenta, LoopMomenta, Subspace, SubspaceData},
                 },
                 settings::runtime::{
                     SamplingChannelDefinition, SamplingChannelWeight, SamplingSettingsParser,
                 },
                 utils::{
-                    ArbPrec, FloatLike, QuadFloat,
+                    ArbPrec, FloatLike, QuadFloat, SamplingFloat,
                     newton_solver::{RadialRootDiagnostics, RadialRootIdentity},
                 },
             };
@@ -2371,6 +2400,7 @@ fn hosted_joint_kite_preserves_original_equations_and_physical_sum() {
                         (
                             "joint".into(),
                             SamplingChannelDefinition {
+                                channel_weight: None,
                                 around: format!(
                                     "then(complement({e4}),block(lmb({e5}),at_cut(cut({}),intersect(surface({}),surface({})))))",
                                     host_edges.iter().join(","),
@@ -2385,6 +2415,7 @@ fn hosted_joint_kite_preserves_original_equations_and_physical_sum() {
                         (
                             "ordinary".into(),
                             SamplingChannelDefinition {
+                                channel_weight: None,
                                 around: format!("lmb({e4},{e6})"),
                                 parent_lmb: vec![e4, e6],
                                 ..Default::default()
@@ -2648,6 +2679,17 @@ fn hosted_joint_kite_preserves_original_equations_and_physical_sum() {
                 &parameterization,
                 program.clone(),
             )?;
+            check_native::<SamplingFloat>(
+                term,
+                &model,
+                host,
+                targets,
+                &runtime,
+                &parameterization,
+                program.clone(),
+            )?;
+            let original_host = host.clone();
+            let original_targets = targets.map(Clone::clone);
             check_native::<ArbPrec>(
                 term,
                 &model,
@@ -2834,16 +2876,85 @@ fn hosted_joint_kite_preserves_original_equations_and_physical_sum() {
             )?;
             let mut metadata = crate::integrands::evaluation::EvaluationMetaData::new_empty();
             metadata.sampling_proposal_policies.begin_collection();
-            let anchor = crate::integrands::process::gammaloop_sample::parameterize::<ArbPrec, _>(
+            let anchor = crate::integrands::process::gammaloop_sample::parameterize::<SamplingFloat, _>(
                 &selected,
                 inner,
                 &mut metadata,
+            )?.into_canonical(
+                &inner.get_settings().kinematics.externals,
+                DependentMomentaConstructor::CrossSection,
             )?;
             metadata.sampling_proposal_policies.seal();
             let canonical_bridge = inner.data.graph_terms[0]
                 .multi_channeling_setup
                 .sampling_bridge::<ArbPrec>()?
                 .clone();
+            // The joint block is linear in its radial cube coordinate. Its
+            // prefix is one three-dimensional complement, so index 3 controls
+            // R=rho*u; the global parameterization power does not wrap it.
+            for radial_coordinate in [1e-40, 1e-100] {
+                let mut deep_cube = cube.clone();
+                deep_cube[3] = radial_coordinate;
+                let deep_sample = Sample::Discrete(
+                    F(1.0), 0, Some(Box::new(Sample::Discrete(
+                        F(1.0), 0, Some(Box::new(Sample::Continuous(
+                            F(1.0), deep_cube.into_iter().map(F).collect(),
+                        ))),
+                    ))),
+                );
+                let mut deep_metadata = crate::integrands::evaluation::EvaluationMetaData::new_empty();
+                deep_metadata.sampling_proposal_policies.begin_collection();
+                let generated = crate::integrands::process::gammaloop_sample::parameterize::<SamplingFloat, _>(
+                    &deep_sample, inner, &mut deep_metadata,
+                );
+                deep_metadata.sampling_proposal_policies.seal();
+                if radial_coordinate == 1e-100 {
+                    // Below fixed256 coordinate resolution, the density owner
+                    // must reject this original draw, never redraw or return a
+                    // weight for the rounded point under a different radial law.
+                    assert!(generated.is_err(), "unresolved fixed256 joint tail silently accepted");
+                    continue;
+                }
+                let deep = generated?.into_canonical(
+                    &inner.get_settings().kinematics.externals,
+                    DependentMomentaConstructor::CrossSection,
+                )?;
+                let row = &deep.groups[0].1[0];
+                assert_eq!(row.prepared_lu_hosts.len(), 1);
+                let term = &inner.data.graph_terms[0];
+                let point = &row.sample;
+                let masses = term.graph.get_real_mass_vector::<ArbPrec>(&model);
+                let (_, independent_root) = original_host.solve_lu_cut(
+                    point.loop_moms(), point.external_moms(), &masses,
+                    &term.graph.loop_momentum_basis,
+                    &F::<ArbPrec>::from_f64(runtime.kinematics.e_cm),
+                    &mut RadialRootDiagnostics::default(),
+                    &RadialRootIdentity::new("independent deep fixed256 host".into()),
+                ).map_err(|error| eyre::eyre!("{error:?}"))?;
+                let retained_loops = point.loop_moms().rescale(
+                    &row.prepared_lu_hosts[0].solution.solution, Subspace::None,
+                );
+                let independent_loops = point.loop_moms().rescale(
+                    &independent_root.solution, Subspace::None,
+                );
+                let original = |surface: &Esurface, loops: &LoopMomenta<F<ArbPrec>>| {
+                    surface.evaluate_routed_enclosed(
+                        &point.one(), loops, point.external_moms(), &masses,
+                        &term.graph.loop_momentum_basis,
+                    )
+                };
+                // This uses original graph equations at exactly the retained
+                // source point, with a budget relative to the actual H/Z radius
+                // rather than to the hard energy scale or root magnitude.
+                EsurfaceRay::<ArbPrec>::verify_normal_alignment(
+                    [original(&original_targets[0], &independent_loops)?,
+                     original(&original_targets[1], &independent_loops)?],
+                    [original(&original_targets[0], &retained_loops)?,
+                     original(&original_targets[1], &retained_loops)?],
+                    original(&original_host, &retained_loops)?,
+                    1e-13,
+                )?;
+            }
             let native=anchor.materialize::<f64>(crate::integrands::process::gammaloop_sample::GammaLoopSample::<f64>::relative_accuracy_budget(&runtime))?;
             let row = &native.groups[0].1[0];
             let factor = row.sample.jacobian().0;

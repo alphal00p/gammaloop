@@ -23,6 +23,9 @@ use super::SamplingExpressionEvaluator;
 pub enum SamplingPartitionMode {
     /// Use the exact push-forward density of each sampling map.
     MapDensity,
+    /// Product of basis-edge on-shell energies; this is a partition score,
+    /// not a normalized probability density. Requires a complete LMB channel.
+    Ose,
     /// Use an explicitly supplied positive singularity proxy.
     SingularityProxy,
 }
@@ -239,7 +242,7 @@ impl<T: FloatLike> SamplingChannelScore<T> {
     fn score(&self, mode: SamplingPartitionMode, coordinates: &[T]) -> Result<Option<T>> {
         match mode {
             SamplingPartitionMode::MapDensity => self.map_density.evaluate(coordinates),
-            SamplingPartitionMode::SingularityProxy => self
+            SamplingPartitionMode::Ose | SamplingPartitionMode::SingularityProxy => self
                 .singularity_proxy
                 .as_ref()
                 .ok_or_else(|| {

@@ -72,7 +72,7 @@ use crate::{
             extract_t_derivatives, extract_t_derivatives_complex, new_constant,
             shape_from_cut_cff_index, simple_n_deriv_shape, variable_indices_from_cut_cff_index,
         },
-        newton_solver::{NewtonIterationResult, RadialRootDiagnostics, RadialRootIdentity},
+        newton_solver::{NewtonIterationResult, RadialRootIdentity},
     },
     uv::forest::ParametricIntegrands,
 };
@@ -133,7 +133,6 @@ struct ThresholdHelperEvaluationContext<'a, T: FloatLike> {
     threshold_result: &'a ThresholdHelperValue<T>,
     outputs: LUThresholdHelperOutputs,
     evaluation_meta_data: &'a mut EvaluationMetaData,
-    record_primary_timing: bool,
 }
 
 impl<T, P> ThresholdHelperEvaluation<T, P> {
@@ -247,7 +246,6 @@ fn evaluate_single_multiplier_context<T: FloatLike>(
     effective: &MomentumSample<T>,
     star: &MomentumSample<T>,
     evaluation_meta_data: &mut EvaluationMetaData,
-    record_primary_timing: bool,
 ) -> Result<F<T>> {
     let Some(evaluator_id) = collection.evaluator_id_for_variant(variant_id)? else {
         return Ok(effective.sample.one());
@@ -261,11 +259,7 @@ fn evaluate_single_multiplier_context<T: FloatLike>(
         effective,
         star,
     )?;
-    collection.evaluators_mut()[evaluator_id.0].evaluate(
-        values,
-        evaluation_meta_data,
-        record_primary_timing,
-    )
+    collection.evaluators_mut()[evaluator_id.0].evaluate(values, evaluation_meta_data)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -281,7 +275,6 @@ fn evaluate_pair_multiplier_context<T: FloatLike>(
     effective: &MomentumSample<T>,
     star: &MomentumSample<T>,
     evaluation_meta_data: &mut EvaluationMetaData,
-    record_primary_timing: bool,
 ) -> Result<(F<T>, F<T>)> {
     let left_evaluator_id = collection.evaluator_id_for_variant(left_variant_id)?;
     let right_evaluator_id = collection.evaluator_id_for_variant(right_variant_id)?;
@@ -304,30 +297,19 @@ fn evaluate_pair_multiplier_context<T: FloatLike>(
     {
         // Expression interning gives equal functions one evaluator ID. Both sides receive the
         // same bound input slice, so evaluate the shared function once and reuse its value.
-        let value = collection.evaluators_mut()[left_evaluator_id.0].evaluate(
-            values,
-            evaluation_meta_data,
-            record_primary_timing,
-        )?;
+        let value = collection.evaluators_mut()[left_evaluator_id.0]
+            .evaluate(values, evaluation_meta_data)?;
         return Ok((value.clone(), value));
     }
     let left = if let Some(evaluator_id) = left_evaluator_id {
-        collection.evaluators_mut()[evaluator_id.0].evaluate(
-            values,
-            evaluation_meta_data,
-            record_primary_timing,
-        )?
+        collection.evaluators_mut()[evaluator_id.0].evaluate(values, evaluation_meta_data)?
     } else {
         effective.sample.one()
     };
     // Deliberately evaluate the right factor even when the left factor is exactly zero. This
     // keeps finite/real validation symmetric and makes one global context authoritative.
     let right = if let Some(evaluator_id) = right_evaluator_id {
-        collection.evaluators_mut()[evaluator_id.0].evaluate(
-            values,
-            evaluation_meta_data,
-            record_primary_timing,
-        )?
+        collection.evaluators_mut()[evaluator_id.0].evaluate(values, evaluation_meta_data)?
     } else {
         effective.sample.one()
     };
@@ -589,7 +571,6 @@ fn evaluate_threshold_helper_single<
         threshold_result,
         outputs,
         evaluation_meta_data,
-        record_primary_timing,
     } = context;
     let variable_indices = variable_indices_from_cut_cff_index(cut_cff_index);
     let t_variable = variable_indices.lu_cut;
@@ -634,12 +615,7 @@ fn evaluate_threshold_helper_single<
         );
     }
 
-    let mut result = evaluate_evaluator(
-        helper,
-        &helper_params,
-        evaluation_meta_data,
-        record_primary_timing,
-    );
+    let mut result = evaluate_evaluator(helper, &helper_params, evaluation_meta_data);
 
     match outputs {
         LUThresholdHelperOutputs::Legacy => {
@@ -696,7 +672,6 @@ fn evaluate_threshold_helper_iterated<
         threshold_result,
         outputs,
         evaluation_meta_data,
-        record_primary_timing,
     } = context;
     let variable_indices = variable_indices_from_cut_cff_index(cut_cff_index);
     let t_variable = variable_indices.lu_cut;
@@ -780,12 +755,7 @@ fn evaluate_threshold_helper_iterated<
         );
     }
 
-    let mut result = evaluate_evaluator(
-        helper,
-        &helper_params,
-        evaluation_meta_data,
-        record_primary_timing,
-    );
+    let mut result = evaluate_evaluator(helper, &helper_params, evaluation_meta_data);
 
     match outputs {
         LUThresholdHelperOutputs::Legacy => {
@@ -1122,7 +1092,6 @@ impl LUCounterTermEvaluators {
         pass_one_result: DualOrNot<Complex<F<T>>>,
         cut_esurface: &DualOrNot<F<T>>,
         evaluation_meta_data: &mut EvaluationMetaData,
-        record_primary_timing: bool,
     ) -> Complex<F<T>> {
         let mut params_for_pass_two = vec![];
         match pass_one_result {
@@ -1166,7 +1135,6 @@ impl LUCounterTermEvaluators {
             &mut self.residue_from_e_surface_evaluators[order],
             &params_for_pass_two,
             evaluation_meta_data,
-            record_primary_timing,
         )
     }
 
@@ -1993,7 +1961,6 @@ impl LUCounterTerm {
         param_builder: &mut ParamBuilder<f64>,
         orientations: SingleOrAllOrientations<'_, OrientationID>,
         evaluation_meta_data: &mut EvaluationMetaData,
-        record_primary_timing: bool,
         record_components: bool,
         shared_overlaps: Option<&LUSharedOverlaps<T>>,
     ) -> Result<LUCountertermEvaluation<T>> {
@@ -2126,7 +2093,7 @@ impl LUCounterTerm {
                 match builder.new_esurface_builder(id).solve_rstar(
                     &mut self.rstar_dependence_calculator[cut_group_id],
                     &identity,
-                    &mut evaluation_meta_data.radial_root_diagnostics,
+                    evaluation_meta_data,
                 ) {
                     Some(solution) => solutions.push(solution),
                     None => {
@@ -2189,7 +2156,7 @@ impl LUCounterTerm {
                 match builder.new_esurface_builder(id).solve_rstar(
                     &mut self.rstar_dependence_calculator[cut_group_id],
                     &identity,
-                    &mut evaluation_meta_data.radial_root_diagnostics,
+                    evaluation_meta_data,
                 ) {
                     Some(solution) => solutions.push(solution),
                     None => {
@@ -2299,7 +2266,6 @@ impl LUCounterTerm {
                                 effective,
                                 star,
                                 evaluation_meta_data,
-                                record_primary_timing,
                             )
                             .with_context(|| {
                                 format!(
@@ -2323,7 +2289,6 @@ impl LUCounterTerm {
                                 effective,
                                 star,
                                 evaluation_meta_data,
-                                record_primary_timing,
                             )
                             .with_context(|| {
                                 format!(
@@ -2402,13 +2367,7 @@ impl LUCounterTerm {
                             .left_thresholds_evaluator[left_threshold_id]
                             .get_mut(&cut_cff_index)
                             .unwrap()
-                            .evaluate(
-                                params,
-                                orientations,
-                                settings,
-                                evaluation_meta_data,
-                                record_primary_timing,
-                            )
+                            .evaluate(params, orientations, settings, evaluation_meta_data)
                             .unwrap()
                             .pop()
                             .unwrap();
@@ -2437,7 +2396,6 @@ impl LUCounterTerm {
                                 threshold_result: &result_of_this_ct,
                                 outputs: threshold_helper_outputs,
                                 evaluation_meta_data,
-                                record_primary_timing,
                             },
                             &left_threshold_params,
                         );
@@ -2578,7 +2536,6 @@ impl LUCounterTerm {
                                 effective,
                                 star,
                                 evaluation_meta_data,
-                                record_primary_timing,
                             )
                             .with_context(|| {
                                 format!(
@@ -2602,7 +2559,6 @@ impl LUCounterTerm {
                                 effective,
                                 star,
                                 evaluation_meta_data,
-                                record_primary_timing,
                             )
                             .with_context(|| {
                                 format!(
@@ -2681,13 +2637,7 @@ impl LUCounterTerm {
                             .right_thresholds_evaluator[right_threshold_id]
                             .get_mut(&cut_cff_index)
                             .unwrap()
-                            .evaluate(
-                                params,
-                                orientations,
-                                settings,
-                                evaluation_meta_data,
-                                record_primary_timing,
-                            )
+                            .evaluate(params, orientations, settings, evaluation_meta_data)
                             .unwrap()
                             .pop()
                             .unwrap();
@@ -2716,7 +2666,6 @@ impl LUCounterTerm {
                                 threshold_result: &result_of_this_ct,
                                 outputs: threshold_helper_outputs,
                                 evaluation_meta_data,
-                                record_primary_timing,
                             },
                             &right_threshold_params,
                         );
@@ -2896,7 +2845,6 @@ impl LUCounterTerm {
                                         effective,
                                         star,
                                         evaluation_meta_data,
-                                        record_primary_timing,
                                     )
                                     .with_context(|| {
                                         format!(
@@ -2928,7 +2876,6 @@ impl LUCounterTerm {
                                         effective,
                                         star,
                                         evaluation_meta_data,
-                                        record_primary_timing,
                                     )
                                     .with_context(|| {
                                         format!(
@@ -2961,7 +2908,6 @@ impl LUCounterTerm {
                                         effective,
                                         star,
                                         evaluation_meta_data,
-                                        record_primary_timing,
                                     )
                                     .with_context(|| {
                                         format!(
@@ -2994,7 +2940,6 @@ impl LUCounterTerm {
                                         effective,
                                         star,
                                         evaluation_meta_data,
-                                        record_primary_timing,
                                     )
                                     .with_context(|| {
                                         format!(
@@ -3109,13 +3054,7 @@ impl LUCounterTerm {
                                     .iterated_evaluator[iterated_index]
                                     .get_mut(&cut_cff_index)
                                     .unwrap()
-                                    .evaluate(
-                                        params,
-                                        orientations,
-                                        settings,
-                                        evaluation_meta_data,
-                                        record_primary_timing,
-                                    )
+                                    .evaluate(params, orientations, settings, evaluation_meta_data)
                                     .unwrap()
                                     .pop()
                                     .unwrap();
@@ -3135,7 +3074,6 @@ impl LUCounterTerm {
                                         threshold_result: &result_of_this_ct,
                                         outputs: threshold_helper_outputs,
                                         evaluation_meta_data,
-                                        record_primary_timing,
                                     },
                                     &left_threshold_params,
                                     &right_threshold_params,
@@ -3240,7 +3178,6 @@ impl LUCounterTerm {
                             pass_one,
                             cut_esurface,
                             evaluation_meta_data,
-                            record_primary_timing,
                         )
                     });
                     total_result += weighted;
@@ -3257,7 +3194,6 @@ impl LUCounterTerm {
                     pass_one_result,
                     cut_esurface,
                     evaluation_meta_data,
-                    record_primary_timing,
                 );
             }
         }
@@ -3422,7 +3358,7 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
         self,
         rstar_t_dependence_evaluator: &mut RstarTDependenceEvaluator,
         radial_root_identity: &RadialRootIdentity,
-        radial_root_diagnostics: &mut RadialRootDiagnostics,
+        evaluation_metadata: &mut EvaluationMetaData,
     ) -> Option<RstarSolution<'a, T>> {
         let subspace = self.overlap_builder.subspace;
         let graph = self.overlap_builder.counterterm_builder.graph;
@@ -3570,7 +3506,7 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
                 .subtraction
                 .radial_root_residual_tolerance,
         );
-        let mut solution = match radial_root_diagnostics.solve(
+        let mut solution = match evaluation_metadata.radial_root_diagnostics.solve(
             radial_root_identity,
             &zero,
             &alpha_guess,
@@ -3624,25 +3560,28 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
             };
 
             Some(
-                rstar_t_dependence_evaluator.evaluate_alpha(RstarTDependenceInput {
-                    t_star: &t_star,
-                    alpha: &alpha,
-                    overlap_center: &self.overlap_builder.center,
-                    subspace,
-                    unrescaled_momentum_sample: self
-                        .overlap_builder
-                        .transformed_kinematic_point
-                        .unrescaled_sample(),
-                    representative_sample,
-                    masses,
-                    threshold_esurface: self.esurface,
-                    lmb: &self
-                        .overlap_builder
-                        .counterterm_builder
-                        .graph
-                        .loop_momentum_basis,
-                    all_lmbs: lmbs,
-                }),
+                rstar_t_dependence_evaluator.evaluate_alpha(
+                    RstarTDependenceInput {
+                        t_star: &t_star,
+                        alpha: &alpha,
+                        overlap_center: &self.overlap_builder.center,
+                        subspace,
+                        unrescaled_momentum_sample: self
+                            .overlap_builder
+                            .transformed_kinematic_point
+                            .unrescaled_sample(),
+                        representative_sample,
+                        masses,
+                        threshold_esurface: self.esurface,
+                        lmb: &self
+                            .overlap_builder
+                            .counterterm_builder
+                            .graph
+                            .loop_momentum_basis,
+                        all_lmbs: lmbs,
+                    },
+                    evaluation_metadata,
+                ),
             )
         } else {
             None

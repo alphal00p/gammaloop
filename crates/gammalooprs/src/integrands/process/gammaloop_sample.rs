@@ -95,7 +95,7 @@ impl<T: FloatLike> GammaLoopSample<T> {
             .stability
             .levels
             .iter()
-            .filter(|level| level.precision == T::sampling_precision())
+            .filter(|level| T::sampling_precision() == level.precision.into())
             .map(|level| {
                 level
                     .required_precision_for_re
@@ -103,7 +103,50 @@ impl<T: FloatLike> GammaLoopSample<T> {
             })
             .reduce(f64::min)
             .map(|tolerance| 0.1 * tolerance)
-            .unwrap_or_else(|| F::<T>::default().epsilon().sqrt().into_ff64().0)
+            .unwrap_or_else(|| {
+                if T::sampling_precision() == crate::utils::SamplingPrecision::Arb {
+                    // Forced Arb uses the existing default physical requirement
+                    // when no Arb level is configured; source admission reserves it too.
+                    let forced = super::create_stability_iterator(&settings.stability, true);
+                    0.1 * forced[0]
+                        .required_precision_for_re
+                        .min(forced[0].required_precision_for_im)
+                } else {
+                    F::<T>::default().epsilon().sqrt().into_ff64().0
+                }
+            })
+    }
+
+    /// Source accuracy covers every permitted physical lane, including a later
+    /// rescue. Invalid requirements cannot silently disappear in a minimum.
+    pub(crate) fn source_accuracy_budget(
+        settings: &crate::settings::RuntimeSettings,
+    ) -> Result<f64> {
+        if settings.stability.levels.is_empty() {
+            return Err(eyre!(
+                "sampling source requires at least one stability level"
+            ));
+        }
+        // The precise API can force Arb even when no Arb lane is configured;
+        // reserve its existing default requirement as well, before any draw.
+        let forced = super::create_stability_iterator(&settings.stability, true);
+        let mut budget = f64::INFINITY;
+        for level in settings.stability.levels.iter().chain(&forced) {
+            for requirement in [
+                level.required_precision_for_re,
+                level.required_precision_for_im,
+            ] {
+                let allocated = 0.1 * requirement;
+                if !requirement.is_finite() || !allocated.is_finite() || allocated <= 0.0 {
+                    return Err(eyre!(
+                        "sampling source requires positive finite accuracy for every stability component; {} has requirement {requirement}",
+                        level.precision
+                    ));
+                }
+                budget = budget.min(allocated);
+            }
+        }
+        Ok(budget)
     }
 
     pub(crate) fn rotate(
@@ -280,6 +323,44 @@ impl<T: FloatLike> GammaLoopSample<T> {
         }
         Ok(draw)
     }
+
+    /// Freeze the completed numerical proposal once, while rebuilding physical
+    /// external data from its original Arb owner. Retained source hosts are
+    /// embedded exactly; no map, inverse or root is replayed.
+    pub(crate) fn into_canonical(
+        self,
+        externals: &crate::settings::runtime::kinematic::Externals,
+        dependent_momenta_constructor: DependentMomentaConstructor,
+    ) -> Result<GammaLoopSample<ArbPrec>> {
+        let groups = self.groups.into_iter().map(|(group_id, rows)| {
+            let rows = rows.into_iter().map(|row| {
+                let native = row.sample.sample;
+                if native.dual_loop_moms.is_some() || row.physical_overlaps.is_some() {
+                    return Err(eyre!("fixed source supports only scalar rows before physical overlap preparation"));
+                }
+                let momenta = native.loop_moms.iter().map(|momentum| {
+                    Ok(ThreeMomentum::new(momentum.px.to_arb_exact()?, momentum.py.to_arb_exact()?, momentum.pz.to_arb_exact()?))
+                }).collect::<Result<_>>()?;
+                let mut sample = MomentumSample::<ArbPrec>::new(
+                    momenta, native.loop_mom_cache_id,
+                    externals,
+                    native.external_mom_cache_id, native.jacobian.to_arb_exact()?,
+                    dependent_momenta_constructor, native.orientation,
+                )?;
+                sample.sample.loop_mom_base_cache_id = native.loop_mom_base_cache_id;
+                sample.sample.external_mom_base_cache_id = native.external_mom_base_cache_id;
+                sample.sample.parameterization_branch = native.parameterization_branch;
+                Ok(DiscreteGraphSample {
+                    graph_id: row.graph_id, channel_id: row.channel_id, sample,
+                    integrand_prefactor: row.integrand_prefactor.to_arb_exact()?,
+                    physical_overlaps: None,
+                    prepared_lu_hosts: row.prepared_lu_hosts.iter().map(PreparedLUHost::to_arb_exact).collect::<Result<_>>()?,
+                })
+            }).collect::<Result<_>>()?;
+            Ok((group_id, rows))
+        }).collect::<Result<_>>()?;
+        Ok(GammaLoopSample { groups })
+    }
 }
 
 impl GammaLoopSample<ArbPrec> {
@@ -309,7 +390,6 @@ impl GammaLoopSample<ArbPrec> {
                             event_processing_runtime: runtime.as_mut(),
                             rotation: &rotation,
                             evaluation_metadata: metadata,
-                            record_primary_timing: false,
                             // An explicitly channel-dependent selector retains
                             // its user-requested metadata; geometry never uses it.
                             sampling_channel: row.channel_id,
@@ -520,64 +600,52 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
             });
             let mut prepared_groups = Vec::with_capacity(groups.len());
             for group in groups {
-                let graph_ids = if channel_id.is_some() {
-                    vec![integrand.get_group(group).master()]
-                } else {
-                    integrand.get_group(group).into_iter().collect_vec()
-                };
                 let mut rows = Vec::new();
-                for graph_id in graph_ids {
-                    let bridge = integrand
-                        .get_graph(graph_id)
-                        .sampling_setup()
-                        .sampling_bridge::<T>()?;
-                    let channels = channel_id.map(|id| vec![id]).unwrap_or_else(|| {
-                        (0..bridge.channels().len())
-                            .map(SamplingChannelId::from)
-                            .collect()
-                    });
-                    // Explicit sums contribute J_c(x) w_c(T_c(x)) f(T_c(x)).
-                    // Monte Carlo supplies inverse channel probability separately;
-                    // there is no channel-count multiplier on these rows.
-                    for selected in channels {
-                        let mut contexts = SamplingChannelRuntimeContexts::for_draw(
-                            bridge.channels().len(),
-                            graph_id,
-                            selected,
-                            metadata,
-                        );
-                        let mapped = bridge.forward_with_runtime_contexts(
-                            selected,
-                            &coordinates,
-                            &mut contexts,
-                        )?;
-                        let mut sample =
-                            mapped.to_momentum_sample(SamplingMomentumSampleContext {
-                                loop_mom_cache_id,
-                                external_moms: &settings.kinematics.externals,
-                                external_mom_cache_id,
-                                dependent_momenta_constructor,
-                                orientation: orientation_id,
-                            })?;
-                        sample.sample.jacobian = F(mapped.selected_factor()?);
-                        if channel_id.is_some() {
-                            return GammaLoopSample::from_selected(
-                                integrand,
-                                group,
-                                selected,
-                                sample,
-                                mapped.prepared_lu_hosts,
-                            );
-                        }
-                        rows.push(DiscreteGraphSample {
-                            graph_id,
-                            channel_id: Some(selected),
-                            prepared_lu_hosts: mapped.prepared_lu_hosts,
-                            physical_overlaps: None,
-                            integrand_prefactor: sample.one(),
-                            sample,
-                        });
-                    }
+                let graph_id = integrand.get_group(group).master();
+                let bridge = integrand
+                    .get_graph(graph_id)
+                    .sampling_setup()
+                    .sampling_bridge::<T>()?;
+                let channels = channel_id.map(|id| vec![id]).unwrap_or_else(|| {
+                    (0..bridge.channels().len())
+                        .map(SamplingChannelId::from)
+                        .collect()
+                });
+                // Explicit sums contribute J_c(x) w_c(T_c(x)) f(T_c(x)).
+                // Monte Carlo supplies inverse channel probability separately;
+                // there is no channel-count multiplier on these rows.
+                for selected in channels {
+                    let mut contexts = SamplingChannelRuntimeContexts::for_draw(
+                        bridge.channels().len(),
+                        graph_id,
+                        selected,
+                        metadata,
+                    );
+                    let mapped = bridge.forward_with_runtime_contexts(
+                        selected,
+                        &coordinates,
+                        &mut contexts,
+                    )?;
+                    let mut sample = mapped.to_momentum_sample(SamplingMomentumSampleContext {
+                        loop_mom_cache_id,
+                        external_moms: &settings.kinematics.externals,
+                        external_mom_cache_id,
+                        dependent_momenta_constructor,
+                        orientation: orientation_id,
+                    })?;
+                    sample.sample.jacobian = F(mapped.selected_factor()?);
+                    // Both execution modes evaluate a whole graph group at
+                    // the master's one physical point for this channel.
+                    // Graph members must cancel before taking its absolute
+                    // value; a new channel supplies a distinct point.
+                    let mut selected_draw = GammaLoopSample::from_selected(
+                        integrand,
+                        group,
+                        selected,
+                        sample,
+                        mapped.prepared_lu_hosts,
+                    )?;
+                    rows.append(&mut selected_draw.groups[0].1);
                 }
                 prepared_groups.push((Some(group), rows));
             }
@@ -646,6 +714,180 @@ mod tests {
     };
 
     #[test]
+    fn fixed_source_budget_reserves_all_lanes_and_rejects_invalid_requests() {
+        use crate::settings::{RuntimeSettings, runtime::StabilityLevelSetting};
+        let mut settings = RuntimeSettings::default();
+        settings.stability.levels = vec![
+            StabilityLevelSetting::default_double(),
+            StabilityLevelSetting::default_quad(),
+            StabilityLevelSetting::default_arb(),
+        ];
+        settings.stability.levels[0].required_precision_for_im = 1.0e-12;
+        settings.stability.levels[2].required_precision_for_re = 1.0e-20;
+        assert_eq!(
+            GammaLoopSample::<crate::utils::QuadFloat>::source_accuracy_budget(&settings).unwrap(),
+            0.1 * 1.0e-20
+        );
+        assert_eq!(
+            GammaLoopSample::<crate::utils::ArbPrec>::relative_accuracy_budget(&settings),
+            0.1 * 1.0e-20
+        );
+        for invalid in [0.0, -1.0, f64::NAN, f64::INFINITY, f64::from_bits(1)] {
+            settings.stability.levels[0].required_precision_for_im = invalid;
+            assert!(
+                GammaLoopSample::<crate::utils::ArbPrec>::source_accuracy_budget(&settings)
+                    .is_err(),
+                "{invalid}"
+            );
+        }
+        settings.stability.levels = vec![StabilityLevelSetting {
+            required_precision_for_re: 0.1,
+            required_precision_for_im: 0.1,
+            ..StabilityLevelSetting::default_double()
+        }];
+        assert_eq!(
+            GammaLoopSample::<crate::utils::ArbPrec>::source_accuracy_budget(&settings).unwrap(),
+            0.1 * 1.0e-5
+        );
+        assert_eq!(
+            GammaLoopSample::<crate::utils::ArbPrec>::relative_accuracy_budget(&settings),
+            0.1 * 1.0e-5
+        );
+        assert_eq!(
+            GammaLoopSample::<crate::utils::QuadFloat>::relative_accuracy_budget(&settings),
+            F::<crate::utils::QuadFloat>::default()
+                .epsilon()
+                .sqrt()
+                .into_ff64()
+                .0
+        );
+        settings.stability.levels.clear();
+        assert!(
+            GammaLoopSample::<crate::utils::ArbPrec>::source_accuracy_budget(&settings).is_err()
+        );
+    }
+
+    #[test]
+    fn fixed_source_rows_preserve_exact_outputs_and_original_arb_externals() {
+        use crate::{
+            graph::GroupId,
+            momentum::{ExternalMomenta, Rotation, RotationMethod, ThreeMomentum},
+            utils::{ArbPrec, FloatLike, QuadFloat, SamplingFloat},
+        };
+        use symbolica::domains::float::DoubleFloat;
+
+        fn check<T: FloatLike>(low: F<T>) {
+            let mut externals = Externals::default();
+            let Externals::Constant { momenta, .. } = &mut externals;
+            *momenta = [[2.0, 1.0, 0.0, 0.0], [2.0, -1.0, 0.0, 0.0]]
+                .map(|momentum| ExternalMomenta::Independent(momentum.map(F)))
+                .to_vec();
+            let mut original = externals
+                .get_dependent_externals::<ArbPrec>(DependentMomentaConstructor::CrossSection)
+                .unwrap();
+            let one = F::<ArbPrec>::default().one();
+            // These separated terms exceed both Quad limbs and the 256-bit source.
+            let precise = &one + one.from_i64(2).powi(-80) + one.from_i64(2).powi(-320);
+            original[crate::momentum::sample::ExternalIndex(0)]
+                .spatial
+                .px = precise.clone();
+            assert_ne!(
+                F::<T>::from_arb(&precise.0)
+                    .unwrap()
+                    .to_arb_exact()
+                    .unwrap(),
+                precise
+            );
+            let Externals::Constant { arb_cache, .. } = &mut externals;
+            arb_cache.set(original.clone());
+            let mut sample = MomentumSample::new(
+                vec![ThreeMomentum::new(
+                    low.clone(),
+                    F::<T>::default().zero(),
+                    F::<T>::default().one(),
+                )]
+                .into(),
+                17,
+                &externals,
+                23,
+                F::<T>::default().from_usize(3),
+                DependentMomentaConstructor::CrossSection,
+                Some(7),
+            )
+            .unwrap();
+            sample.sample.loop_mom_base_cache_id = 11;
+            sample.sample.external_mom_base_cache_id = 19;
+            sample.sample.parameterization_branch = Some(2);
+            let rows = (0..3)
+                .map(|index| DiscreteGraphSample {
+                    graph_id: index / 2,
+                    channel_id: Some(SamplingChannelId(index % 2)),
+                    sample: sample.clone(),
+                    integrand_prefactor: low.clone(),
+                    prepared_lu_hosts: vec![],
+                    physical_overlaps: None,
+                })
+                .collect();
+            let draw = GammaLoopSample {
+                groups: vec![(Some(GroupId(4)), rows)],
+            };
+            let canonical = draw
+                .clone()
+                .into_canonical(&externals, DependentMomentaConstructor::CrossSection)
+                .unwrap();
+            assert_eq!(canonical.groups[0].0, Some(GroupId(4)));
+            for (native, row) in draw.groups[0].1.iter().zip(&canonical.groups[0].1) {
+                assert_eq!(
+                    (native.graph_id, native.channel_id),
+                    (row.graph_id, row.channel_id)
+                );
+                assert_eq!(row.sample.sample.loop_mom_cache_id, 17);
+                assert_eq!(row.sample.sample.loop_mom_base_cache_id, 11);
+                assert_eq!(row.sample.sample.external_mom_cache_id, 23);
+                assert_eq!(row.sample.sample.external_mom_base_cache_id, 19);
+                assert_eq!(row.sample.sample.orientation, Some(7));
+                assert_eq!(row.sample.sample.parameterization_branch, Some(2));
+                assert_eq!(row.sample.external_moms(), &original);
+                assert_eq!(
+                    row.sample.jacobian(),
+                    native.sample.jacobian().to_arb_exact().unwrap()
+                );
+                assert_eq!(row.sample.loop_moms().0[0].px, low.to_arb_exact().unwrap());
+                assert_eq!(row.integrand_prefactor, low.to_arb_exact().unwrap());
+            }
+            let frozen = format!("{canonical:?}");
+            let native = canonical.materialize::<T>(1.0e-13).unwrap();
+            assert_eq!(native.groups[0].1[0].sample.loop_moms(), sample.loop_moms());
+            let double = canonical.materialize::<f64>(1.0e-6).unwrap();
+            let rotated = double.rotate(&Rotation::new(RotationMethod::Pi2Z), 101, 103);
+            assert_eq!(rotated.groups[0].1[2].sample.sample.loop_mom_cache_id, 103);
+            canonical.materialize::<ArbPrec>(1.0e-13).unwrap();
+            assert_eq!(format!("{canonical:?}"), frozen);
+            let mut invalid = draw.clone();
+            invalid.groups[0].1[0].sample.sample.dual_loop_moms = Some(vec![].into());
+            assert!(
+                invalid
+                    .into_canonical(&externals, DependentMomentaConstructor::CrossSection)
+                    .is_err()
+            );
+            let mut invalid = draw;
+            invalid.groups[0].1[0].physical_overlaps =
+                Some(std::sync::Arc::new(Default::default()));
+            assert!(
+                invalid
+                    .into_canonical(&externals, DependentMomentaConstructor::CrossSection)
+                    .is_err()
+            );
+        }
+        check(F(QuadFloat::from(DoubleFloat::from_compensated_sum(
+            1.0,
+            2.0_f64.powi(-400),
+        ))));
+        let one = F::<SamplingFloat>::default().one();
+        check(&one + one.from_i64(2).powi(-180) + one.from_i64(2).powi(-240));
+    }
+
+    #[test]
     fn sampling_channel_guard_covers_summed_and_monte_carlo_modes() {
         assert!(
             SamplingSettings::MultiChanneling(MultiChannelingSettings::default())
@@ -694,7 +936,7 @@ mod tests {
         use crate::utils::{ArbPrec, FloatLike, QuadFloat};
 
         // Original source tokens retain their exact binary values. Production
-        // maps consume these once at fixed Arb precision before materialization.
+        // maps consume these once at the fixed epoch precision before materialization.
         let coordinates = vec![F(0.1), F(0.625), F(0.875)];
         let source = symbolica::numerical_integration::Sample::Uniform(
             F(1.0),

@@ -2577,9 +2577,12 @@ impl CrossSectionGraph {
             channels.len()
         );
         Ok(LmbMultiChannelingSetup {
+            master_edge_masses: Default::default(),
             sampling_bridge: Default::default(),
             sampling_bridge_quad: Default::default(),
+            sampling_bridge_fixed256: Default::default(),
             sampling_bridge_arb: Default::default(),
+            sampling_source: Default::default(),
             sampling_catalogue: Default::default(),
             sampling_programs: Default::default(),
             lmb_basis_ids: channels,
