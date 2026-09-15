@@ -632,40 +632,45 @@ impl SymbolicNetParse for AtomView<'_> {
 pub mod contract;
 
 impl<Aind: AbsInd + ParseableAind> Concretize<SymbolicTensor<Aind>> for ShadowedStructure<Aind> {
-    fn concretize(self) -> SymbolicTensor<Aind> {
-        let is_metric = self.name().unwrap() == ETS.metric;
-        SymbolicTensor {
-            expression: self.to_symbolic(None).unwrap(),
+    fn concretize(self) -> eyre::Result<SymbolicTensor<Aind>> {
+        let is_metric = self.name() == Some(ETS.metric);
+        Ok(SymbolicTensor {
+            expression: self
+                .to_symbolic(None)
+                .ok_or_else(|| eyre::eyre!("symbolic tensor requires a name"))?,
             is_composite: false,
             is_metric,
             structure: self.structure,
-        }
+        })
     }
 
-    fn concretize_logical(self, layout: &CanonicalLayout) -> SymbolicTensor<Aind> {
-        let is_metric = self.name().unwrap() == ETS.metric;
+    fn concretize_logical(self, layout: &CanonicalLayout) -> eyre::Result<SymbolicTensor<Aind>> {
+        let is_metric = self.name() == Some(ETS.metric);
         let logical_slots = layout.canonical_to_logical(&self.external_structure());
-        let expression = FunctionBuilder::new(self.name().unwrap())
-            .add_args(self.args().unwrap_or_default())
-            .add_args(logical_slots.into_iter().map(|slot| slot.to_atom()))
-            .finish();
-        SymbolicTensor {
+        let expression = FunctionBuilder::new(
+            self.name()
+                .ok_or_else(|| eyre::eyre!("symbolic tensor requires a name"))?,
+        )
+        .add_args(self.args().unwrap_or_default())
+        .add_args(logical_slots.into_iter().map(|slot| slot.to_atom()))
+        .finish();
+        Ok(SymbolicTensor {
             expression,
             is_composite: false,
             is_metric,
             structure: self.structure,
-        }
+        })
     }
 }
 
 impl<Aind: AbsInd + ParseableAind> Concretize<SymbolicTensor<Aind>>
     for TensorShell<ShadowedStructure<Aind>>
 {
-    fn concretize(self) -> SymbolicTensor<Aind> {
+    fn concretize(self) -> eyre::Result<SymbolicTensor<Aind>> {
         self.structure.concretize()
     }
 
-    fn concretize_logical(self, layout: &CanonicalLayout) -> SymbolicTensor<Aind> {
+    fn concretize_logical(self, layout: &CanonicalLayout) -> eyre::Result<SymbolicTensor<Aind>> {
         self.structure.concretize_logical(layout)
     }
 }
@@ -673,16 +678,16 @@ impl<Aind: AbsInd + ParseableAind> Concretize<SymbolicTensor<Aind>>
 impl<Aind: AbsInd + ParseableAind> Concretize<SymbolicTensor<Aind>>
     for TensorShell<SymbolicTensor<Aind>>
 {
-    fn concretize(self) -> SymbolicTensor<Aind> {
-        self.structure
+    fn concretize(self) -> eyre::Result<SymbolicTensor<Aind>> {
+        Ok(self.structure)
     }
 
-    fn concretize_logical(self, layout: &CanonicalLayout) -> SymbolicTensor<Aind> {
+    fn concretize_logical(self, layout: &CanonicalLayout) -> eyre::Result<SymbolicTensor<Aind>> {
         let positions = (0..self.structure.order()).collect::<Vec<_>>();
         if layout.logical_to_canonical(&positions) != positions {
-            panic!("cannot apply a logical layout to an already concrete symbolic tensor")
+            eyre::bail!("cannot apply a logical layout to an already concrete symbolic tensor");
         }
-        self.structure
+        Ok(self.structure)
     }
 }
 

@@ -27,7 +27,7 @@ use crate::utils::symbols::{UvDenominatorClassId, UvMomentumProvenanceRole};
 use crate::{
     debug_tags,
     graph::{FourDDenominator, Graph, LMBext, LoopMomentumBasis},
-    numerator::ufo::UFO,
+    numerator::{symbolica_ext::NumeratorAtomExt, ufo::UFO},
     utils::{GS, W_},
     uv::{
         ApproximationType, UltravioletGraph,
@@ -1655,14 +1655,13 @@ fn t<S: super::ForestNodeLike>(
     debug_tags!(#uv,#integrated,#rescaled;log.res = rescaled, n_loops=%n_loops,"Rescaled expanded");
 
     let series = rescaled
-        .series(GS.rescale, Atom::Zero, 0)
+        .series_preserving_factors(GS.rescale, Atom::Zero.as_view(), 0, &[])
         .map_err(|error| {
             eyre!(
                 "local 4D Taylor expansion failed for {}: {error}",
                 current.subgraph().string_label()
             )
-        })?
-        .to_atom();
+        })?;
     debug_tags!(#uv,#integrated, #series;log.res = series, "Series expanded");
 
     let evalutated = series.replace(GS.rescale).with(Atom::num(1));
@@ -2943,6 +2942,7 @@ mod tests {
             )
             .series(GS.rescale, Atom::Zero, 0)?
             .coefficient(Rational::from(0))
+            .expect("requested coefficient is within series precision")
             .simplify_metrics()
             .to_dots()
             .normalize_dots();
@@ -3162,8 +3162,24 @@ mod tests {
             .simplify_metrics()
             .to_dots()
             .normalize_dots();
-        assert!(
-            (production.collect_factors() - scalar_series_oracle.collect_factors()).is_zero(),
+        // Compare coefficients of the unchanged quartic numerator: production
+        // keeps it outside the Laurent-layer sum, while the scalar oracle
+        // repeats it in each layer. Neither numerator needs to be expanded.
+        let hard_q1 = GS.uv_momentum_provenance_tag(
+            Atom::num(usize::from(owners[0])),
+            UvMomentumProvenanceRole::TaylorFixed,
+            function!(GS.emr_mom, usize::from(owners[0])),
+        );
+        let numerator_keys = [1, 2].map(|index| {
+            function!(
+                GS.emr_mom,
+                &hard_q1,
+                minkowski.to_symbolic([Atom::num(index)])
+            )
+        });
+        assert_eq!(
+            production.coefficient_list::<u32>(&numerator_keys),
+            scalar_series_oracle.coefficient_list::<u32>(&numerator_keys),
             "production T must equal the complete scalar Taylor series, including leading and linear layers",
         );
         let mut production_numerators = BTreeMap::<[usize; 3], Atom>::new();

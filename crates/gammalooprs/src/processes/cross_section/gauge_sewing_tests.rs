@@ -18,7 +18,7 @@ use spenso::{
         parsing::ParseSettings,
     },
     structure::{
-        PermutedStructure,
+        Canonicalized,
         representation::{Minkowski, RepName},
     },
     tensors::parametric::{ParamOrConcrete, ParamTensor},
@@ -162,7 +162,10 @@ fn generated_higgs_covariant_cuts_equal_three_physical_vector_polarizations() ->
             filtered
                 .cross_section_filters
                 .0
-                .push(FeynGenFilter::AnticommutatingLoopCountRange((0, 0)));
+                .push(FeynGenFilter::VertexVeto(vec![
+                    "V_17".into(),
+                    "V_25".into(),
+                ]));
             assert!(filtered.may_filter_covariant_partners(&model));
             let bosonic_graphs = filtered.generate(&model, &settings)?;
             assert_eq!(bosonic_graphs.len(), 4);
@@ -294,12 +297,12 @@ fn generated_higgs_covariant_cuts_equal_three_physical_vector_polarizations() ->
                             Some(vec![Atom::num(eid.0)]),
                         );
                         let tensor = ParamTensor::from_dense(
-                            key.structure,
+                            key.into_canonical(),
                             q[position].iter().map(|p| Atom::num(sign) * p).collect(),
                         )?;
-                        library.insert_explicit(PermutedStructure::identity(
-                            ParamOrConcrete::Param(tensor),
-                        ));
+                        library.insert_explicit(Canonicalized::identity(ParamOrConcrete::Param(
+                            tensor,
+                        )));
                     }
                     for (pair, eid, _) in graph.iter_edges_of(&graph.initial_state_cut) {
                         let source = match pair {
@@ -315,12 +318,12 @@ fn generated_higgs_covariant_cuts_equal_three_physical_vector_polarizations() ->
                             Some(vec![Atom::num(eid.0)]),
                         );
                         let tensor = ParamTensor::from_dense(
-                            key.structure,
+                            key.into_canonical(),
                             total.iter().map(|p| Atom::num(sign) * p).collect(),
                         )?;
-                        library.insert_explicit(PermutedStructure::identity(
-                            ParamOrConcrete::Param(tensor),
-                        ));
+                        library.insert_explicit(Canonicalized::identity(ParamOrConcrete::Param(
+                            tensor,
+                        )));
                     }
                     let mut expression = model.apply_coupling_replacement_rules(
                         &graph.production_numerator_atom_for_full_3d_expression(),

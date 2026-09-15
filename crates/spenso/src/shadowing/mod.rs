@@ -96,8 +96,10 @@ where
 }
 
 pub trait Concretize<T> {
-    fn concretize(self) -> T;
-    fn concretize_logical(self, layout: &CanonicalLayout) -> T;
+    /// Materialize the target representation, returning errors from finite-component
+    /// construction. Symbolic targets may retain symbolic dimensions.
+    fn concretize(self) -> Result<T>;
+    fn concretize_logical(self, layout: &CanonicalLayout) -> Result<T>;
 }
 
 fn sparse_shadow_tensors() -> bool {
@@ -108,14 +110,17 @@ impl<S: Shadowable> Concretize<DenseTensor<Atom, S::Structure>> for S
 where
     <<S::Structure as TensorStructure>::Slot as IsAbstractSlot>::Aind: ParseableAind,
 {
-    fn concretize(self) -> DenseTensor<Atom, S::Structure> {
+    fn concretize(self) -> Result<DenseTensor<Atom, S::Structure>> {
         // self.flat_s
         // todo!()
-        self.expanded_shadow().unwrap()
+        self.expanded_shadow()
     }
 
-    fn concretize_logical(self, layout: &CanonicalLayout) -> DenseTensor<Atom, S::Structure> {
-        self.expanded_shadow_logical(layout).unwrap()
+    fn concretize_logical(
+        self,
+        layout: &CanonicalLayout,
+    ) -> Result<DenseTensor<Atom, S::Structure>> {
+        self.expanded_shadow_logical(layout)
     }
 }
 
@@ -123,25 +128,28 @@ impl<S: Shadowable> Concretize<DataTensor<Atom, S::Structure>> for S
 where
     <<S::Structure as TensorStructure>::Slot as IsAbstractSlot>::Aind: ParseableAind,
 {
-    fn concretize(self) -> DataTensor<Atom, S::Structure> {
+    fn concretize(self) -> Result<DataTensor<Atom, S::Structure>> {
         // self.flat_s
         // todo!()
-        let dense = <S as Concretize<DenseTensor<Atom, S::Structure>>>::concretize(self);
-        if sparse_shadow_tensors() {
+        let dense = <S as Concretize<DenseTensor<Atom, S::Structure>>>::concretize(self)?;
+        Ok(if sparse_shadow_tensors() {
             dense.to_sparse().into()
         } else {
             dense.into()
-        }
+        })
     }
 
-    fn concretize_logical(self, layout: &CanonicalLayout) -> DataTensor<Atom, S::Structure> {
+    fn concretize_logical(
+        self,
+        layout: &CanonicalLayout,
+    ) -> Result<DataTensor<Atom, S::Structure>> {
         let dense =
-            <S as Concretize<DenseTensor<Atom, S::Structure>>>::concretize_logical(self, layout);
-        if sparse_shadow_tensors() {
+            <S as Concretize<DenseTensor<Atom, S::Structure>>>::concretize_logical(self, layout)?;
+        Ok(if sparse_shadow_tensors() {
             dense.to_sparse().into()
         } else {
             dense.into()
-        }
+        })
     }
 }
 
@@ -149,16 +157,15 @@ impl<S: Shadowable> Concretize<ParamTensor<S::Structure>> for S
 where
     <<S::Structure as TensorStructure>::Slot as IsAbstractSlot>::Aind: ParseableAind,
 {
-    fn concretize(self) -> ParamTensor<S::Structure> {
+    fn concretize(self) -> Result<ParamTensor<S::Structure>> {
         // self.flat_s
         // todo!()
-        ParamTensor::param(<S as Concretize<DataTensor<Atom, S::Structure>>>::concretize(self))
+        <S as Concretize<DataTensor<Atom, S::Structure>>>::concretize(self).map(ParamTensor::param)
     }
 
-    fn concretize_logical(self, layout: &CanonicalLayout) -> ParamTensor<S::Structure> {
-        ParamTensor::param(
-            <S as Concretize<DataTensor<Atom, S::Structure>>>::concretize_logical(self, layout),
-        )
+    fn concretize_logical(self, layout: &CanonicalLayout) -> Result<ParamTensor<S::Structure>> {
+        <S as Concretize<DataTensor<Atom, S::Structure>>>::concretize_logical(self, layout)
+            .map(ParamTensor::param)
     }
 }
 
@@ -166,18 +173,15 @@ impl<T: Clone, S: Shadowable> Concretize<MixedTensor<T, S::Structure>> for S
 where
     <<S::Structure as TensorStructure>::Slot as IsAbstractSlot>::Aind: ParseableAind,
 {
-    fn concretize(self) -> MixedTensor<T, S::Structure> {
+    fn concretize(self) -> Result<MixedTensor<T, S::Structure>> {
         // self.flat_s
         // todo!()
-        MixedTensor::<T, S::Structure>::param(
-            <S as Concretize<DataTensor<Atom, S::Structure>>>::concretize(self),
-        )
+        <S as Concretize<DataTensor<Atom, S::Structure>>>::concretize(self).map(MixedTensor::param)
     }
 
-    fn concretize_logical(self, layout: &CanonicalLayout) -> MixedTensor<T, S::Structure> {
-        MixedTensor::<T, S::Structure>::param(
-            <S as Concretize<DataTensor<Atom, S::Structure>>>::concretize_logical(self, layout),
-        )
+    fn concretize_logical(self, layout: &CanonicalLayout) -> Result<MixedTensor<T, S::Structure>> {
+        <S as Concretize<DataTensor<Atom, S::Structure>>>::concretize_logical(self, layout)
+            .map(MixedTensor::param)
     }
 }
 

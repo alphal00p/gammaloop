@@ -12,7 +12,10 @@ use linnet::half_edge::{
     subgraph::{SubGraphLike, SubSetLike, SubSetOps},
 };
 use serde::{Deserialize, Serialize};
-use symbolica::atom::{Atom, AtomCore, FunctionBuilder};
+use symbolica::{
+    atom::{Atom, AtomCore, FunctionBuilder},
+    symbol,
+};
 
 use crate::{
     cff::{
@@ -24,7 +27,7 @@ use crate::{
         },
         generation::{ExactCffPreparationKey, PreparationKey, PreparationValue},
         orientations::GraphOrientation,
-        surface::GammaLoopSurfaceCache,
+        surface::{GammaLoopLinearEnergyExpr, GammaLoopSurfaceCache, LinearEnergyExpr},
     },
     graph::{
         ExactUvSubLmbFrame, FeynmanGraph, FourDDenominator, Graph, GraphThreeDSource,
@@ -137,6 +140,127 @@ pub(crate) struct PlannedExactSourceNumerator {
 }
 
 impl PlannedExactSourceNumerator {
+    /// Keep the certified ordinary numerator once and describe every residue
+    /// through scalar coefficients of its full affine energy maps. In
+    /// particular, sampling nodes multiply M rather than replacing it, and
+    /// repeated denominator occurrences retain independent coefficient slots.
+    fn prepare_parametric(
+        &self,
+        orientations: &[CFFOrientationTerm],
+        scope: &Atom,
+    ) -> Result<(Atom, Vec<Atom>, Vec<Vec<Atom>>)> {
+        let coefficient = symbol!("gammalooprs::uv::numerator_coefficient"; Scalar);
+        let mut captured = false;
+        let _ = self.template.map(&mut |_, factor, _| {
+            let _ = factor.replace_map(|view, _, _| {
+                if let symbolica::atom::AtomView::Fun(function) = view
+                    && function.get_symbol() == coefficient
+                    && function.get_nargs() == 2
+                    && function.get(0) == scope.as_view()
+                {
+                    captured = true;
+                }
+            });
+            Ok::<_, std::convert::Infallible>(Atom::one())
+        });
+        if captured {
+            return Err(eyre::eyre!(
+                "exact numerator coefficient scope {scope} is already in use"
+            ));
+        }
+        let required = &self.dependencies[0];
+        let Some(first) = orientations.first() else {
+            return Err(eyre::eyre!("exact numerator family has no residue rows"));
+        };
+        let loop_count = first.orientation.loop_energy_map.len();
+        let edge_count = first.orientation.edge_energy_map.len();
+        let mut support = BTreeMap::new();
+        for (row, orientation) in orientations.iter().enumerate() {
+            let orientation = &orientation.orientation;
+            if orientation.loop_energy_map.len() != loop_count
+                || orientation.edge_energy_map.len() != edge_count
+            {
+                return Err(eyre::eyre!(
+                    "exact numerator family has inconsistent affine map lengths"
+                ));
+            }
+            // Validate the source's exact coordinate and occurrence bindings
+            // before preparing even an identically zero sample row.
+            self.mapper.sample_energies(
+                &orientation.loop_energy_map,
+                &orientation.edge_energy_map,
+                required,
+            )?;
+            for &slot in required {
+                let energy = if slot < loop_count {
+                    &orientation.loop_energy_map[slot]
+                } else {
+                    &orientation.edge_energy_map[slot - loop_count]
+                }
+                .clone()
+                .canonical();
+                let coefficients = energy
+                    .internal_terms
+                    .iter()
+                    .map(|(edge, value)| (0, usize::from(*edge), value))
+                    .chain(
+                        energy
+                            .external_terms
+                            .iter()
+                            .map(|(edge, value)| (1, usize::from(*edge), value)),
+                    )
+                    .chain([
+                        (2, 0, &energy.uniform_scale_coeff),
+                        (3, 0, &energy.constant),
+                    ]);
+                for (kind, edge, value) in coefficients {
+                    let value = Atom::num(value.clone());
+                    if !value.is_zero() {
+                        support
+                            .entry((slot, kind, edge))
+                            .or_insert_with(|| vec![Atom::Zero; orientations.len()])[row] = value;
+                    }
+                }
+            }
+        }
+        let mut parameters = Vec::with_capacity(support.len());
+        let mut rows = vec![Vec::with_capacity(support.len()); orientations.len()];
+        let mut samples = required
+            .iter()
+            .copied()
+            .map(|slot| (slot, Atom::Zero))
+            .collect::<BTreeMap<_, _>>();
+        for ((slot, kind, edge), values) in support {
+            let mut unit = LinearEnergyExpr::zero();
+            match kind {
+                0 => unit.internal_terms.push((EdgeIndex(edge), 1.into())),
+                1 => unit.external_terms.push((EdgeIndex(edge), 1.into())),
+                2 => unit.uniform_scale_coeff = 1.into(),
+                3 => unit.constant = 1.into(),
+                _ => unreachable!(),
+            }
+            // The existing source mapper remains the only authority for exact
+            // OSE aliases and affine external shifts, including UV class IDs.
+            let basis = unit
+                .to_atom_gs(&[])
+                .replace_multiple(self.mapper.exact_ose_replacements());
+            // The scope is part of the formal itself, so expression-local
+            // persistence retains it even after this family is recomposed.
+            let parameter = coefficient.call_args([scope.clone(), Atom::num(parameters.len())]);
+            *samples.get_mut(&slot).unwrap() += &parameter * basis;
+            parameters.push(parameter);
+            for (arguments, value) in rows.iter_mut().zip(values) {
+                arguments.push(value);
+            }
+        }
+        let mapped = self.map_template(&self.template, &samples, &mut 0, &mut None);
+        Ok((
+            self.mapper.set_inactive_loop_energies_to_zero(mapped),
+            parameters,
+            rows,
+        ))
+    }
+
     /// Return the certified template and its separate build/cache costs so
     /// candidate selection can charge discarded preparation without duplication.
     fn prepare(
@@ -339,6 +463,7 @@ impl PlannedExactSourceNumerator {
                 .sum::<usize>())
     }
 
+    #[cfg(test)]
     fn sample(
         &self,
         orientation: &OrientationExpression,
@@ -462,6 +587,16 @@ impl PlannedExactSourceNumerator {
 }
 
 impl CFFTerm {
+    pub(crate) fn prepare_exact_source_numerator(
+        &self,
+        scope: &Atom,
+    ) -> Result<(Atom, Vec<Atom>, Vec<Vec<Atom>>)> {
+        self.exact_source_numerator
+            .as_ref()
+            .ok_or_else(|| eyre::eyre!("ordinary CFF term has no exact-source numerator plan"))?
+            .prepare_parametric(&self.orientations, scope)
+    }
+
     #[cfg(test)]
     pub(crate) fn map_exact_source_atom(
         &self,
@@ -496,6 +631,7 @@ impl CFFTerm {
         )
     }
 
+    #[cfg(test)]
     pub(crate) fn map_exact_source_numerator(
         &self,
         orientation: &OrientationExpression,
@@ -1548,6 +1684,111 @@ mod tests {
     }
 
     #[test]
+    fn exact_source_parametric_family_retains_affine_sampling_rows() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph exact_parametric_rows {
+            edge [num=1 mass=1]
+            node [num=1]
+            a -> b [id=0 lmb_id=0]
+            a -> b [id=1]
+        })?;
+        let denominators = [EdgeIndex(0), EdgeIndex(1)].map(|source_edge| FourDDenominator {
+            source_edge,
+            momentum: FunctionBuilder::new(GS.emr_mom)
+                .add_arg(usize::from(source_edge))
+                .finish(),
+            mass_squared: Atom::one(),
+            full_expr: Atom::one(),
+        });
+        let numerator = (GS.emr_mom(EdgeIndex(0), GS.cind(0)).pow(2) + Atom::one())
+            * (GS.emr_mom(EdgeIndex(1), GS.cind(0)) + Atom::num(2)).pow(2);
+        let cutset = CutSet::empty(graph.n_hedges());
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let (cff, _) =
+            graph.cff_from_4d_denominators(&denominators, &cutset, &options, &numerator)?;
+        let term = cff.terms.values().next().unwrap();
+        let scope = crate::uv::approx::direct_3d::DirectResidueBranches::numerator_scope().1;
+        let (body, parameters, rows) = term.prepare_exact_source_numerator(&scope)?;
+        assert_eq!(rows.len(), term.orientations.len());
+        assert!(!parameters.is_empty());
+        for (orientation, arguments) in term.orientations.iter().zip(&rows) {
+            assert!(
+                arguments
+                    .iter()
+                    .all(|value| matches!(value.as_view(), symbolica::atom::AtomView::Num(_)))
+            );
+            let bound =
+                body.replace_multiple(parameters.iter().zip(arguments).map(
+                    |(parameter, value)| Replacement::new(parameter.to_pattern(), value.clone()),
+                ));
+            assert_eq!(
+                bound,
+                term.map_exact_source_numerator(&orientation.orientation, None)?
+            );
+        }
+
+        // Mapping itself must retain full affine rows and explicit zeros even
+        // when those algebraic samples are not a physical contour catalogue.
+        // Distinct occurrence slots deliberately receive different integer M
+        // nodes, so one global sampling coefficient cannot pass this check.
+        let mut synthetic = CFFTerm {
+            orientations: Vec::new(),
+            exact_source_numerator: term.exact_source_numerator.clone(),
+        };
+        for row in 0..3 {
+            let mut orientation = term.orientations[0].orientation.clone();
+            for (slot, energy) in orientation
+                .loop_energy_map
+                .iter_mut()
+                .chain(&mut orientation.edge_energy_map)
+                .enumerate()
+            {
+                *energy = if row == 0 {
+                    LinearEnergyExpr::zero()
+                } else {
+                    LinearEnergyExpr {
+                        internal_terms: vec![
+                            (EdgeIndex(0), (row as i64).into()),
+                            (EdgeIndex(1), (-2).into()),
+                        ],
+                        external_terms: vec![(EdgeIndex(17), (3, 2).into())],
+                        uniform_scale_coeff: ((slot + row) as i64).into(),
+                        constant: 7.into(),
+                    }
+                };
+            }
+            synthetic.orientations.push(CFFOrientationTerm {
+                expression: Atom::one(),
+                orientation,
+                production_orientation_id: Some(crate::cff::expression::OrientationID(0)),
+            });
+        }
+        let scope = crate::uv::approx::direct_3d::DirectResidueBranches::numerator_scope().1;
+        let (body, parameters, rows) = synthetic.prepare_exact_source_numerator(&scope)?;
+        assert_eq!(
+            rows.len(),
+            3,
+            "distinct full maps on one host must retain independent rows"
+        );
+        assert!(body.contains_symbol(GS.numerator_sampling_scale));
+        assert!(rows[0].iter().all(Atom::is_zero));
+        assert_ne!(rows[1], rows[2]);
+        for (orientation, arguments) in synthetic.orientations.iter().zip(rows) {
+            let bound = body.replace_multiple(
+                parameters
+                    .iter()
+                    .zip(arguments)
+                    .map(|(parameter, value)| Replacement::new(parameter.to_pattern(), value)),
+            );
+            assert_eq!(
+                bound,
+                synthetic.map_exact_source_numerator(&orientation.orientation, None)?
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
     fn owned_source_preparation_preserves_assignment_and_coefficient() -> Result<()> {
         test_initialise()?;
         let mut graph: Graph = dot!(digraph owned_source_retention {
@@ -2477,6 +2718,7 @@ mod tests {
             let (mut evaluator, _) = EvaluatorStack::new_explicit_sum_with_timings(
                 std::slice::from_ref(expression),
                 &param_builder,
+                &[],
                 None,
                 &EvaluatorSettings::default(),
             )?;
@@ -4999,12 +5241,15 @@ mod tests {
             "the raised-LU spectator oracle must be evaluated at its selected radial root"
         );
         let value_and_t_derivative = |expression: Atom| -> Result<[Atom; 2]> {
-            let series = rescale_expression(expression)
+            let jet = rescale_expression(expression)
                 .series(GS.rescale, rescale_star.clone(), 1)
-                .map_err(|error| eyre::eyre!("failed to build raised-LU t jet: {error}"))?;
+                .map_err(|error| eyre::eyre!("failed to build raised-LU t jet: {error}"))?
+                .to_atom();
             Ok([
-                series.coefficient(Rational::from(0)),
-                series.coefficient(Rational::from(1)),
+                jet.replace(GS.rescale).with(rescale_star.clone()),
+                jet.derivative(GS.rescale)
+                    .replace(GS.rescale)
+                    .with(rescale_star.clone()),
             ])
         };
         let evaluate_arb = |expression: Atom| -> Result<Complex<F<ArbPrec>>> {
@@ -6870,7 +7115,8 @@ mod tests {
             Ok(rescale_expression(expression)
                 .series(GS.rescale, rescale_star.clone(), 0)
                 .map_err(|error| eyre::eyre!("failed to expand selected LU residue: {error}"))?
-                .coefficient(Rational::from(-1)))
+                .coefficient(Rational::from(-1))
+                .expect("requested coefficient is within series precision"))
         };
         let evaluate_arb = |mut expression: Atom| -> Result<Complex<F<ArbPrec>>> {
             for (edge, mass_squared) in graph_mass_squared.iter().enumerate() {

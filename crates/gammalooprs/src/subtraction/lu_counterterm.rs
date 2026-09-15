@@ -683,6 +683,7 @@ impl LUCounterTermEvaluators {
                 let (evaluator, evaluator_timings) = EvaluatorStack::from_integrand_with_timings(
                     atom,
                     param_builder,
+                    parametric_integrands.integrands.numerators(),
                     (!settings.generation.explicit_orientation_sum_only)
                         .then_some((&orientations.raw, production_orientation_ids)),
                     dual_shape,

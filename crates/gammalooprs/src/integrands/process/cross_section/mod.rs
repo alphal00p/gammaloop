@@ -783,6 +783,7 @@ impl CrossSectionGraphTerm {
                     EvaluatorStack::from_integrand_with_timings(
                         integrand_for_subset,
                         &graph.graph.param_builder,
+                        integrand_for_cut_group.integrands.numerators(),
                         (!settings.generation.explicit_orientation_sum_only)
                             .then_some((&orientations.raw, &production_orientation_ids)),
                         dual_shape,

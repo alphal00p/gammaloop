@@ -132,6 +132,7 @@ impl AmplitudeCountertermAtom {
             let (evaluator_stack, evaluator_timings) = EvaluatorStack::from_integrand_with_timings(
                 integrand,
                 param_builder,
+                self.parametric.numerators(),
                 (!global_settings.generation.explicit_orientation_sum_only)
                     .then_some((orientations.as_slice().as_ref(), production_orientation_ids)),
                 dual_shape,

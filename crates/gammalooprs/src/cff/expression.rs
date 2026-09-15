@@ -18,11 +18,7 @@ use symbolica::{
     id::Replacement,
 };
 
-use super::{
-    esurface::Esurface,
-    hsurface::Hsurface,
-    surface::{GammaLoopLinearEnergyExpr, LinearEnergyExpr},
-};
+use super::{esurface::Esurface, hsurface::Hsurface, surface::GammaLoopLinearEnergyExpr};
 use crate::{
     graph::Graph,
     utils::{GS, W_, ose_atom_from_index},
@@ -135,14 +131,20 @@ impl GammaLoopOrientationExpression for OrientationExpression {
     }
 
     fn energy_replacements_gs(&self, graph: &Graph) -> Vec<Replacement> {
-        energy_map_replacements_gs(&self.edge_energy_map, graph)
+        energy_map_replacements_gs(
+            self.edge_energy_map
+                .iter()
+                .map(|energy| energy.to_atom_gs(&[])),
+            graph,
+        )
     }
 }
 
 pub(crate) fn energy_map_replacements_gs(
-    edge_energy_map: &[LinearEnergyExpr],
+    edge_energy_map: impl IntoIterator<Item = Atom>,
     graph: &Graph,
 ) -> Vec<Replacement> {
+    let edge_energy_map = edge_energy_map.into_iter().collect::<Vec<_>>();
     let mut replacements = Vec::new();
     let mink_index = LibraryRep::from(Minkowski {}).to_symbolic([Atom::var(W_.a__)]);
     let external_edges = graph
@@ -151,7 +153,7 @@ pub(crate) fn energy_map_replacements_gs(
         .filter_map(|(pair, edge_id, _)| (!pair.is_paired()).then_some(edge_id))
         .collect::<BTreeSet<_>>();
 
-    for (edge_id, energy_expr) in edge_energy_map.iter().enumerate() {
+    for (edge_id, energy) in edge_energy_map.iter().enumerate() {
         let edge_id = EdgeIndex(edge_id);
         // Remapping a generated internal-edge map into GammaLoop's physical
         // namespace pads unpaired external-edge slots with zero. Those slots
@@ -160,7 +162,6 @@ pub(crate) fn energy_map_replacements_gs(
         if external_edges.contains(&edge_id) {
             continue;
         }
-        let energy = energy_expr.to_atom_gs(&[]);
         replacements.push(Replacement::new(
             GS.emr_mom(edge_id, AIND_SYMBOLS.cind.call(Atom::Zero))
                 .to_pattern(),
@@ -178,7 +179,7 @@ pub(crate) fn energy_map_replacements_gs(
         let loop_id_atom = Atom::num(loop_id as i64);
         let energy = edge_energy_map
             .get(usize::from(*loop_edge_id))
-            .map(|energy_expr| energy_expr.to_atom_gs(&[]))
+            .cloned()
             .unwrap_or_else(Atom::new);
         replacements.push(Replacement::new(
             function!(
@@ -304,8 +305,10 @@ mod tests {
         let spectator = Atom::var(symbolica::symbol!("spectator"));
         let numerator = external_energy.clone() * (internal_energy + spectator.clone());
 
-        let mapped =
-            numerator.replace_multiple(energy_map_replacements_gs(&edge_energy_map, &graph));
+        let mapped = numerator.replace_multiple(energy_map_replacements_gs(
+            edge_energy_map.iter().map(|energy| energy.to_atom_gs(&[])),
+            &graph,
+        ));
         assert_eq!(
             mapped,
             external_energy * (mapped_internal_energy.to_atom_gs(&[]) + spectator)

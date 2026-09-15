@@ -660,7 +660,9 @@ pub struct ParamBuilder<T: FloatLike = f64> {
     pub fn_map: FunctionMap,
 }
 
-#[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode, Debug)]
+#[derive(
+    Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode, Debug, PartialEq, Eq, Hash,
+)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct FnMapEntry {
     pub lhs: Atom,

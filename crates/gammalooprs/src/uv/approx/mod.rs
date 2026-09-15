@@ -7,7 +7,7 @@ use crate::{
             OrientationSelector, energy_map_replacements_gs,
         },
         hsurface::Hsurface,
-        surface::LinearEnergyExpr,
+        surface::{GammaLoopLinearEnergyExpr, LinearEnergyExpr},
     },
     debug_tags,
     graph::{Graph, LoopMomentumBasis, cuts::CutSet},
@@ -388,7 +388,12 @@ impl<'a> OrientationProjection<'a> {
         })?;
         let replacements = source_edge_energy_map.map_or_else(
             || orientation.energy_replacements_gs(graph),
-            |edge_energy_map| energy_map_replacements_gs(edge_energy_map, graph),
+            |edge_energy_map| {
+                energy_map_replacements_gs(
+                    edge_energy_map.iter().map(|energy| energy.to_atom_gs(&[])),
+                    graph,
+                )
+            },
         );
         Ok(numerator.replace_multiple(replacements))
     }
@@ -1086,7 +1091,13 @@ mod tests {
             let mut hosts = sectors
                 .iter()
                 .flat_map(|sector| sector.active.iter_keys())
-                .filter(|(_, integrands)| integrands.iter().any(|(_, atom)| !atom.is_zero()))
+                .filter(|(_, integrands)| {
+                    integrands
+                        .resolved()
+                        .expect("diagnostic branch numerator definitions must resolve")
+                        .iter()
+                        .any(|(_, atom)| !atom.is_zero())
+                })
                 .map(|(key, _)| key.selector_host)
                 .collect::<Vec<_>>();
             hosts.sort_unstable();
@@ -1094,16 +1105,22 @@ mod tests {
             let summarize_direct = |integrands: &DirectResidueBranches| {
                 let mut by_host = BTreeMap::<OrientationID, Atom>::new();
                 for (key, branch) in integrands.iter_keys() {
-                    *by_host.entry(key.selector_host).or_default() +=
-                        branch.iter().fold(Atom::Zero, |sum, (_, atom)| sum + atom);
+                    *by_host.entry(key.selector_host).or_default() += branch
+                        .resolved()
+                        .expect("diagnostic branch numerator definitions must resolve")
+                        .iter()
+                        .fold(Atom::Zero, |sum, (_, atom)| sum + atom);
                 }
                 by_host.into_iter().collect::<Vec<_>>()
             };
             let summarize_projected = |integrands: &local_3d::OrientationIntegrands| {
                 let mut by_host = BTreeMap::<OrientationID, Atom>::new();
                 for (host, _, branch) in integrands.iter_orientations() {
-                    *by_host.entry(host).or_default() +=
-                        branch.iter().fold(Atom::Zero, |sum, (_, atom)| sum + atom);
+                    *by_host.entry(host).or_default() += branch
+                        .resolved()
+                        .expect("diagnostic branch numerator definitions must resolve")
+                        .iter()
+                        .fold(Atom::Zero, |sum, (_, atom)| sum + atom);
                 }
                 by_host.into_iter().collect::<Vec<_>>()
             };
@@ -1123,10 +1140,14 @@ mod tests {
                         .get_single_atom()
                         .expect("the scalar outer numerator is available")
                         * route_graph.global_atom();
-                    let analysis_numerators = sector
+                    let analysis_branches = sector
                         .active
                         .iter_keys()
-                        .flat_map(|(_, integrands)| integrands.iter())
+                        .map(|(_, integrands)| integrands.resolved())
+                        .collect::<Result<Vec<_>>>()?;
+                    let analysis_numerators = analysis_branches
+                        .iter()
+                        .flat_map(|integrands| integrands.iter())
                         .map(|(_, atom)| atom * &resnum);
                     let outer = localizer.projected_cff(
                         &mut route_graph,
@@ -1464,6 +1485,7 @@ mod tests {
         let (mut evaluator, _) = EvaluatorStack::new_explicit_sum_with_timings(
             &expressions,
             &param_builder,
+            &[],
             None,
             &EvaluatorSettings::default(),
         )?;
@@ -1741,6 +1763,7 @@ mod tests {
             let (mut evaluator, _) = EvaluatorStack::new_explicit_sum_with_timings(
                 &expressions,
                 &param_builder,
+                &[],
                 None,
                 &EvaluatorSettings::default(),
             )?;
@@ -2163,8 +2186,12 @@ mod tests {
                     .series(GS.rescale, Atom::one(), 1)
                     .map_err(|error| eyre!("failed to build raised-LU child t jet: {error}"))?;
                 Ok([
-                    series.coefficient(Rational::from(0)),
-                    series.coefficient(Rational::from(1)),
+                    series
+                        .coefficient(Rational::from(0))
+                        .expect("requested coefficient is within series precision"),
+                    series
+                        .coefficient(Rational::from(1))
+                        .expect("requested coefficient is within series precision"),
                 ])
             };
             let evaluate_arb = |expression: Atom| -> Result<Complex<F<ArbPrec>>> {
@@ -2188,9 +2215,17 @@ mod tests {
             let eta_series = eta
                 .series(GS.rescale, Atom::one(), 2)
                 .map_err(|error| eyre!("failed to build raised-LU eta jet: {error}"))?;
-            let eta_prime = evaluate_arb(eta_series.coefficient(Rational::from(1)))?;
-            let eta_second =
-                evaluate_arb(eta_series.coefficient(Rational::from(2)) * Atom::num(2))?;
+            let eta_prime = evaluate_arb(
+                eta_series
+                    .coefficient(Rational::from(1))
+                    .expect("requested coefficient is within series precision"),
+            )?;
+            let eta_second = evaluate_arb(
+                eta_series
+                    .coefficient(Rational::from(2))
+                    .expect("requested coefficient is within series precision")
+                    * Atom::num(2),
+            )?;
             let combined_raised_residue =
                 |route: &BTreeMap<CutCFFIndex, Atom>| -> Result<Complex<F<ArbPrec>>> {
                     let sum_order = |order| {
@@ -2365,8 +2400,16 @@ mod tests {
                         eyre!("failed to build production-boundary Arb jet: {error}")
                     })?;
                 Ok([
-                    evaluate_arb(series.coefficient(Rational::from(0)))?,
-                    evaluate_arb(series.coefficient(Rational::from(1)))?,
+                    evaluate_arb(
+                        series
+                            .coefficient(Rational::from(0))
+                            .expect("requested coefficient is within series precision"),
+                    )?,
+                    evaluate_arb(
+                        series
+                            .coefficient(Rational::from(1))
+                            .expect("requested coefficient is within series precision"),
+                    )?,
                 ])
             };
             let production_expressions = [&direct, &expanded]
@@ -2458,6 +2501,7 @@ mod tests {
                             EvaluatorStack::new_explicit_sum_with_timings(
                                 &production_expressions,
                                 &param_builder,
+                                &[],
                                 Some(simple_n_deriv_shape(1)),
                                 &EvaluatorSettings::default(),
                             )?;
@@ -2521,10 +2565,17 @@ mod tests {
             let consistent_eta_series = consistent_eta
                 .series(GS.rescale, Atom::one(), 2)
                 .map_err(|error| eyre!("failed to build production-boundary eta jet: {error}"))?;
-            let consistent_eta_prime =
-                evaluate_arb(consistent_eta_series.coefficient(Rational::from(1)))?;
-            let consistent_eta_second =
-                evaluate_arb(consistent_eta_series.coefficient(Rational::from(2)) * Atom::num(2))?;
+            let consistent_eta_prime = evaluate_arb(
+                consistent_eta_series
+                    .coefficient(Rational::from(1))
+                    .expect("requested coefficient is within series precision"),
+            )?;
+            let consistent_eta_second = evaluate_arb(
+                consistent_eta_series
+                    .coefficient(Rational::from(2))
+                    .expect("requested coefficient is within series precision")
+                    * Atom::num(2),
+            )?;
             let mut pass_two_evaluator =
                 build_derivative_structure(2, -1, &EvaluatorSettings::default());
             for (route, jet) in ["direct 3D", "projected local 4D"]

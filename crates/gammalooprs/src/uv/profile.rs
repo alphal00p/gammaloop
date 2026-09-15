@@ -2121,6 +2121,7 @@ impl<'a> UVProfileRunner<'a> {
         let analytic_integrands = if !self.profile_settings.analyse_analytically {
             Vec::new()
         } else {
+            let integrand = g.derived_data.resolved_integrand()?;
             g.derived_data
                 .cff_expression
                 .as_ref()
@@ -2132,7 +2133,7 @@ impl<'a> UVProfileRunner<'a> {
                     analytic_integrand_for_orientation(
                         orientation_id,
                         &orientation.data,
-                        &g.derived_data.all_mighty_integrand,
+                        &integrand,
                     )
                 })
                 .collect()

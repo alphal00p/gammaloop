@@ -25,7 +25,7 @@ use crate::{
     },
 };
 
-use super::{branches::DirectResidueKey, forest::Direct3dApproximation};
+use super::{branches::DirectResidueBranches, forest::Direct3dApproximation};
 
 /// One independently framed connected part of a direct forest sector.
 /// Disconnected replay keeps these frames separate until an enclosing Taylor
@@ -232,12 +232,12 @@ pub(super) fn coordinate_lmb<S: ForestNodeLike>(
     Ok(coordinate_lmb)
 }
 
-/// Apply one local-3D Taylor operation to a complete generalized residue-map
-/// branch. The selector remains outside the atom, and every newly attached
-/// factor uses the branch's one authoritative energy substitution.
+/// Apply one local-3D Taylor operation to a complete residue-map family.
+/// Selectors remain outside the atoms. Newly attached factors share one
+/// coefficient-parametric body and retain each complete key's argument row.
 /// This kernel does not add the current operation's subtraction minus;
 /// forest composition supplies it once, retaining signs already in the branch.
-// Keep the forest operation, coordinate frame, and residue branch explicit.
+// Keep the forest operation, coordinate frame, and residue family explicit.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn apply_taylor<S: ForestNodeLike>(
     ctx: &UVCtx<'_>,
@@ -246,26 +246,12 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
     given: &S,
     active_subgraph: Option<SuBitGraph>,
     lmb: &LoopMomentumBasis,
-    key: &DirectResidueKey,
-    integrand: &Atom,
-) -> Result<Atom> {
+    integrands: &DirectResidueBranches,
+) -> Result<DirectResidueBranches> {
     let active_subgraph = active_subgraph
         .as_ref()
         .map(|active| active.intersection(current.subgraph()));
     let reduced = current.reduced_subgraph(given);
-    debug_tags!(#generation, #profile, #uv, #local, #direct, #trace;
-        stage = "direct_3d_taylor_branch",
-        current = %current.log_display(),
-        given = %given.log_display(),
-        reduced = %reduced.string_label(),
-        active_subgraph = ?active_subgraph.as_ref().map(SubSetLike::string_label),
-        residue_map_key = key.selector_host.0,
-        source_edge_energy_map = ?key.source_edge_energy_map(),
-        loop_edges = ?lmb.loop_edges,
-        file.integrand = %integrand,
-        "Direct local-3D branch entering one Taylor kernel"
-    );
-
     let numerator = ctx
         .graph
         .numerator(&reduced, given.subgraph())
@@ -275,39 +261,22 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
             simplify_non_color: false,
             ..Default::default()
         });
-    let mapped_numerator = key.map_numerator(orientation, ctx.graph, &numerator)?;
+    let scope = DirectResidueBranches::numerator_scope();
+    let numerator_tag = scope.1.clone();
+    let integrands = integrands.multiply_key_mapped(orientation, ctx.graph, &numerator, scope)?;
     debug_tags!(#generation, #profile, #uv, #local, #direct, #trace;
-        stage = "direct_3d_taylor_mapped_numerator",
+        stage = "direct_3d_taylor_family",
         current = %current.log_display(),
         given = %given.log_display(),
-        residue_map_key = key.selector_host.0,
-        file.mapped_numerator = %mapped_numerator,
-        "Mapped the direct branch-owned numerator before its Taylor kernel"
+        reduced = %reduced.string_label(),
+        loop_edges = ?lmb.loop_edges,
+        branch_count = integrands.iter_keys().count(),
+        "Prepared a shared numerator before its Taylor kernel"
     );
+    let started = integrands
+        .map_expressions(|atom| start(ctx, current, atom, active_subgraph.as_ref(), lmb))?;
     match current.renormalization_scheme() {
         ApproximationType::MUV | ApproximationType::PolePart => {
-            let started = start(
-                ctx,
-                current,
-                integrand,
-                &mapped_numerator,
-                active_subgraph.as_ref(),
-                lmb,
-            )?;
-            debug_tags!(#generation, #profile, #uv, #local, #direct, #trace;
-                stage = "direct_3d_taylor_started",
-                current = %current.log_display(),
-                given = %given.log_display(),
-                residue_map_key = key.selector_host.0,
-                file.started = %started,
-                "Direct branch after numerator attachment and before rescaling"
-            );
-            debug_tags!(#generation, #profile, #uv, #local, #direct, #summary;
-                stage = "direct_3d_kernel_after_start",
-                input_byte_size = integrand.as_view().get_byte_size(),
-                output_byte_size = started.as_view().get_byte_size(),
-                "Direct local-3D kernel size checkpoint"
-            );
             Direct3dApproximation::t(ctx, current, given, &started, lmb)
         }
         ApproximationType::IR => {
@@ -315,26 +284,16 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
                 ctx,
                 current,
                 given,
-                integrand,
-                &mapped_numerator,
+                &integrands,
+                &numerator_tag,
                 active_subgraph.as_ref(),
                 lmb,
             )?;
-            Ok(Direct3dApproximation::t(
-                ctx,
-                current,
-                given,
-                &start(
-                    ctx,
-                    current,
-                    integrand,
-                    &mapped_numerator,
-                    active_subgraph.as_ref(),
-                    lmb,
-                )?,
-                lmb,
-            )? + &t_tilde
-                - Direct3dApproximation::t(ctx, current, given, &t_tilde, lmb)?)
+            Direct3dApproximation::t(ctx, current, given, &started, lmb)?
+                .zip_add(&t_tilde)?
+                .zip_add(&-Direct3dApproximation::t(
+                    ctx, current, given, &t_tilde, lmb,
+                )?)
         }
         ApproximationType::VaccuumLimit => Err(eyre!("Not yet implemented VaccuumLimit")),
         ApproximationType::OS => Err(eyre!("Not yet implemented OS")),
@@ -351,11 +310,11 @@ fn t_tilde<S: ForestNodeLike>(
     ctx: &UVCtx<'_>,
     current: &S,
     given: &S,
-    cff: &Atom,
-    mapped_numerator: &Atom,
+    cff: &DirectResidueBranches,
+    numerator_tag: &Atom,
     active_subgraph: Option<&SuBitGraph>,
     lmb: &LoopMomentumBasis,
-) -> Result<Atom> {
+) -> Result<DirectResidueBranches> {
     let graph = ctx.graph;
     let settings = ctx.settings;
     let reduced = current.reduced_subgraph(given);
@@ -375,75 +334,86 @@ fn t_tilde<S: ForestNodeLike>(
         }
     }
 
-    let mut numerator = mapped_numerator.replace_multiple(&reps);
-
-    // rescale the external momenta in the added numerator subgraph
-    for e in &lmb.ext_edges {
-        // println!("Rescale {}", e);
-        numerator = numerator
-            .replace(GS.emr_vec_index(*e, W_.x___))
-            .with(GS.emr_vec_index(*e, W_.x___) * GS.rescale)
-            .replace(GS.emr_mom(*e, W_.x___))
-            .with(GS.emr_mom(*e, W_.x___) * GS.rescale);
-    }
-
-    let mut atomarg = cff * numerator;
-
-    // add data for OSE computation and add an explicit sqrt
-    for (p, ei, e) in graph.iter_edges_of(rescaled_subgraph) {
-        let eid = usize::from(ei) as i64;
-        if p.is_paired() {
-            // set energies from inner_t on-shell
-            atomarg = atomarg.replace(function!(GS.energy, eid)).with(GS.ose(ei));
-
-            let e_mass = e.data.mass_atom();
-            atomarg = atomarg.replace(GS.ose(ei)).with(GS.ose_full(
-                ei,
-                lmb_id,
-                e_mass,
-                None,
-                settings.inner_products,
-            ));
+    let numerator_scaled = cff.map_numerators(|entry| {
+        if entry.tags.first() != Some(numerator_tag) {
+            return Ok(entry.rhs.clone());
         }
-    }
+        let mut numerator = entry.rhs.replace_multiple(&reps);
 
-    atomarg = atomarg.replace_multiple(&reps);
+        // rescale the external momenta in the added numerator subgraph
+        for e in &lmb.ext_edges {
+            // println!("Rescale {}", e);
+            numerator = numerator
+                .replace(GS.emr_vec_index(*e, W_.x___))
+                .with(GS.emr_vec_index(*e, W_.x___) * GS.rescale)
+                .replace(GS.emr_mom(*e, W_.x___))
+                .with(GS.emr_mom(*e, W_.x___) * GS.rescale);
+        }
 
-    let mom_reps = graph.replacement_impl(
-        |e, loops, externals| {
-            Replacement::new(
-                GS.emr_vec
-                    .call_args([Atom::num(usize::from(e)), Atom::var(W_.x___)])
-                    .to_pattern(),
-                (loops
-                    .replace(function!(GS.emr_vec, W_.x_))
-                    .allow_new_wildcards_on_rhs(true)
-                    .with(
-                        FunctionBuilder::new(GS.emr_vec)
-                            .add_arg(W_.x_)
-                            .add_args([W_.x___])
-                            .finish(),
-                    )
-                    + externals * GS.rescale)
-                    .to_pattern(),
-            )
-        },
-        &reduced,
-        lmb,
-        GS.emr_vec,
-        GS.emr_vec,
-        &[],
-        &[W_.x___],
-        HedgePair::is_paired,
-        true,
-    );
+        Ok(numerator)
+    })?;
+    let atomarg = numerator_scaled.map_expressions(|atom| {
+        let mut atomarg = atom.clone();
 
-    atomarg = atomarg.replace_multiple(&mom_reps);
-    atomarg = atomarg
-        .replace(function!(GS.ose, W_.a___))
-        .with(function!(*OSE_FOR_LOCAL_3D_SERIES, W_.a___));
+        // add data for OSE computation and add an explicit sqrt
+        for (p, ei, e) in graph.iter_edges_of(rescaled_subgraph) {
+            let eid = usize::from(ei) as i64;
+            if p.is_paired() {
+                // set energies from inner_t on-shell
+                atomarg = atomarg.replace(function!(GS.energy, eid)).with(GS.ose(ei));
 
-    let a = atomarg.series(GS.rescale, Atom::Zero, -1).map_err(|error| {
+                let e_mass = e.data.mass_atom();
+                atomarg = atomarg.replace(GS.ose(ei)).with(GS.ose_full(
+                    ei,
+                    lmb_id,
+                    e_mass,
+                    None,
+                    settings.inner_products,
+                ));
+            }
+        }
+
+        atomarg = atomarg.replace_multiple(&reps);
+
+        let mom_reps = graph.replacement_impl(
+            |e, loops, externals| {
+                Replacement::new(
+                    GS.emr_vec
+                        .call_args([Atom::num(usize::from(e)), Atom::var(W_.x___)])
+                        .to_pattern(),
+                    (loops
+                        .replace(function!(GS.emr_vec, W_.x_))
+                        .allow_new_wildcards_on_rhs(true)
+                        .with(
+                            FunctionBuilder::new(GS.emr_vec)
+                                .add_arg(W_.x_)
+                                .add_args([W_.x___])
+                                .finish(),
+                        )
+                        + externals * GS.rescale)
+                        .to_pattern(),
+                )
+            },
+            &reduced,
+            lmb,
+            GS.emr_vec,
+            GS.emr_vec,
+            &[],
+            &[W_.x___],
+            HedgePair::is_paired,
+            true,
+        );
+
+        atomarg = atomarg.replace_multiple(&mom_reps);
+        atomarg = atomarg
+            .replace(function!(GS.ose, W_.a___))
+            .with(function!(*OSE_FOR_LOCAL_3D_SERIES, W_.a___));
+
+        Ok(atomarg)
+    })?;
+    let a = atomarg.series_preserving_numerators(
+        GS.rescale, Atom::Zero.as_view(), -1, DirectResidueBranches::numerator_scope().1,
+    ).map_err(|error| {
         eyre!(
             "local 3D infrared Taylor series through order minus one failed for graph `{}` at {} given {}, in loop coordinates {:?}: {error}",
             graph.name,
@@ -453,35 +423,35 @@ fn t_tilde<S: ForestNodeLike>(
         )
     })?;
 
-    let mut a = a
-        .to_atom()
-        .replace(function!(
-            Symbol::DERIVATIVE,
-            0,
-            1,
-            *OSE_FOR_LOCAL_3D_SERIES,
-            W_.y___
-        ))
-        .with(Atom::num(1))
-        .replace(function!(
-            Symbol::DERIVATIVE,
-            W_.x___,
-            *OSE_FOR_LOCAL_3D_SERIES,
-            W_.y___
-        ))
-        .with(Atom::num(0));
-    a = a
-        .replace(function!(*OSE_FOR_LOCAL_3D_SERIES, W_.a___))
-        .with(function!(GS.ose, W_.a___));
-    a = a.replace(GS.rescale).with(Atom::num(1));
-    Ok(a)
+    a.map_expressions(|atom| {
+        let mut a = atom
+            .replace(function!(
+                Symbol::DERIVATIVE,
+                0,
+                1,
+                *OSE_FOR_LOCAL_3D_SERIES,
+                W_.y___
+            ))
+            .with(Atom::num(1))
+            .replace(function!(
+                Symbol::DERIVATIVE,
+                W_.x___,
+                *OSE_FOR_LOCAL_3D_SERIES,
+                W_.y___
+            ))
+            .with(Atom::num(0));
+        a = a
+            .replace(function!(*OSE_FOR_LOCAL_3D_SERIES, W_.a___))
+            .with(function!(GS.ose, W_.a___));
+        a = a.replace(GS.rescale).with(Atom::num(1));
+        Ok(a)
+    })
 }
 
 fn start<S: ForestNodeLike>(
     ctx: &UVCtx<'_>,
     current: &S,
     cff: &Atom,
-    mapped_numerator: &Atom,
     active_subgraph: Option<&SuBitGraph>,
     lmb: &LoopMomentumBasis,
 ) -> Result<Atom> {
@@ -493,7 +463,7 @@ fn start<S: ForestNodeLike>(
         .first()
         .copied()
         .unwrap_or_else(|| current.lmb_id());
-    let mut atomarg = cff * mapped_numerator;
+    let mut atomarg = cff.clone();
     debug_tags!(#generation, #profile, #uv, #local, #trace;
         stage = "local_3d_start_initial",
         byte_size = atomarg.as_view().get_byte_size(),
@@ -556,12 +526,13 @@ impl Direct3dApproximation<'_> {
     //     given = %given.log_display(),
     //     reduced,
     // )]
-    fn t<S: ForestNodeLike>(
+    fn t_rescale<S: ForestNodeLike>(
         ctx: &UVCtx<'_>,
         current: &S,
         given: &S,
         integrand: &Atom,
         lmb: &LoopMomentumBasis,
+        include_measure: bool,
     ) -> Result<Atom> {
         let graph = ctx.graph;
         let reduced = current.reduced_subgraph(given);
@@ -677,9 +648,10 @@ impl Direct3dApproximation<'_> {
         // The supplied LMB is the integration-space authority. In particular,
         // a remainder which is a tree in the original incidence can become a
         // loop after its frozen UV prefix is contracted.
-        atomarg = (atomarg * Atom::var(GS.rescale).pow(3 * lmb.loop_edges.len() as i64))
-            .replace(GS.rescale)
-            .with(Atom::num(1) / GS.rescale);
+        if include_measure {
+            atomarg *= Atom::var(GS.rescale).pow(3 * lmb.loop_edges.len() as i64);
+        }
+        atomarg = atomarg.replace(GS.rescale).with(Atom::num(1) / GS.rescale);
         debug_tags!(#generation, #profile, #uv, #local, #summary;
             stage = "local_3d_t_before_series",
             loop_edges = ?lmb.loop_edges,
@@ -689,31 +661,35 @@ impl Direct3dApproximation<'_> {
 
         debug_tags!(#uv, #local, #before_series; log.expr = atomarg, "Before series in t");
 
-        let series = atomarg.series(GS.rescale, Atom::Zero, 0).map_err(|error| {
-            eyre!(
-                "local 3D Taylor series through order zero failed for graph `{}` at {} given {}, in loop coordinates {:?}: {error}",
-                graph.name,
-                current.subgraph().string_label(),
-                given.subgraph().string_label(),
-                lmb.loop_edges,
-            )
-        })?;
-        let series_atom = series.to_atom();
+        Ok(atomarg)
+    }
+
+    fn t<S: ForestNodeLike>(
+        ctx: &UVCtx<'_>,
+        current: &S,
+        given: &S,
+        integrands: &DirectResidueBranches,
+        lmb: &LoopMomentumBasis,
+    ) -> Result<DirectResidueBranches> {
+        let rescaled = integrands
+            .fallible_map(|_, atom| Self::t_rescale(ctx, current, given, atom, lmb, true))?
+            .map_numerators(|entry| Self::t_rescale(ctx, current, given, &entry.rhs, lmb, false))?;
+        let series = rescaled.series_preserving_numerators(
+            GS.rescale, Atom::Zero.as_view(), 0, DirectResidueBranches::numerator_scope().1,
+        ).map_err(|error| eyre!(
+            "local 3D Taylor series through order zero failed for graph `{}` at {} given {}, in loop coordinates {:?}: {error}",
+            ctx.graph.name, current.subgraph().string_label(),
+            given.subgraph().string_label(), lmb.loop_edges,
+        ))?;
         debug_tags!(#generation, #profile, #uv, #local, #summary;
             stage = "local_3d_t_after_series",
-            byte_size = series_atom.as_view().get_byte_size(),
-            "Local 3D T size checkpoint"
+            branch_count = series.iter_keys().count(),
+            "Shared local 3D Taylor coefficients prepared"
         );
-
-        debug_tags!(#uv, #local; expr = %series, "After series in t");
-        let a = series_atom.replace(GS.rescale).with(Atom::num(1));
-
-        debug_tags!(#generation, #profile, #uv, #local, #summary;
-            stage = "local_3d_t_output",
-            byte_size = a.as_view().get_byte_size(),
-            "Local 3D T size checkpoint"
-        );
-        debug_tags!(#uv, #local; log.expr = a, "Local 3D approximation");
-        Ok(a)
+        series.map_expressions(|atom| {
+            let a = atom.replace(GS.rescale).with(Atom::num(1));
+            debug_tags!(#uv, #local; log.expr = a, "Local 3D approximation");
+            Ok(a)
+        })
     }
 }

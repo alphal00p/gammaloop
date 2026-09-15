@@ -113,7 +113,11 @@ fn soft_dispatch_preserves_the_complete_quartic_contour() -> Result<()> {
         .add_arg(GS.cind(0))
         .finish();
     let numerator = &originals * soft;
-    let proposals = graph.soft_momentum_routing_proposals(&numerator, active)?;
+    let proposals = graph
+        .soft_momentum_routing_proposals(std::slice::from_ref(&numerator), active)?
+        .into_iter()
+        .map(|mut factors| factors.pop().unwrap())
+        .collect::<Vec<_>>();
     let contract = graph.get_edge_subgraph(EdgeIndex(3));
     let options = Generate3DExpressionOptions {
         cff_generation_context: CffGenerationContext::EmbeddedCffFactor,
@@ -140,14 +144,14 @@ fn soft_dispatch_preserves_the_complete_quartic_contour() -> Result<()> {
         OrientationProjection::exact_expression(&production, &options, &pattern, true),
     )
     .with_independent_source_sum();
-    let (selected_numerator, selected) = localizer.projected_cff_from_soft_momentum_proposals(
+    let (mut selected_factors, selected) = localizer.projected_cff_from_soft_momentum_proposals(
         &mut graph,
         &contract,
-        &numerator,
+        std::slice::from_ref(&numerator),
         active,
         CffGenerationContext::EmbeddedCffFactor,
     )?;
-    let mut results = vec![(selected_numerator, selected)];
+    let mut results = vec![(selected_factors.pop().unwrap(), selected)];
     for proposal in proposals {
         let projected = localizer.projected_cff(
             &mut graph.clone(),
@@ -401,8 +405,15 @@ fn direct_root_preserves_powered_production_entries() -> Result<()> {
             ),
         );
         let localized = Direct3dCts::root(&graph, localizer)?.branches()?;
-        let completed = localized.multiply_key_mapped(localizer.orientation, &graph, &numerator)?;
-        let actual = completed.materialize(!explicit_orientation_sum_only)?;
+        let completed = localized.multiply_key_mapped(
+            localizer.orientation,
+            &graph,
+            &numerator,
+            DirectResidueBranches::numerator_scope(),
+        )?;
+        let actual = completed
+            .materialize(!explicit_orientation_sum_only)?
+            .resolved()?;
         let expected = raw_root
             .terms
             .iter()

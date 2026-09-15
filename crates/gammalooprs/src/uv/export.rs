@@ -554,7 +554,7 @@ mod tests {
                         (
                             &graph.graph,
                             graph.derived_data.cff_expression.as_ref().unwrap(),
-                            graph.derived_data.all_mighty_integrand.clone(),
+                            graph.derived_data.resolved_integrand()?,
                         )
                     }
                     ProcessCollection::CrossSections(cross_sections) => {
@@ -566,7 +566,10 @@ mod tests {
                                 .derived_data
                                 .cut_paramatric_integrand
                                 .iter()
-                                .flat_map(|integrand| integrand.integrands.iter())
+                                .map(|integrand| integrand.integrands.resolved())
+                                .collect::<color_eyre::Result<Vec<_>>>()?
+                                .iter()
+                                .flat_map(|integrands| integrands.iter())
                                 .map(|(_, atom)| atom.clone())
                                 .sum::<Atom>(),
                         )

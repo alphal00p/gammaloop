@@ -22,7 +22,7 @@ commands = [
     "remove processes",
     """generate amp g g > h h h | g h t t~ QED==3 [{2}]
            --veto-vertex-interactions V_6 V_9 V_36 V_37
-           --number-of-anticommutating-loops 1 1
+           --number-of-fermion-loops 1 1
            --only-diagrams
            --numerator-grouping only_detect_zeroes
            --select-graphs GL303
