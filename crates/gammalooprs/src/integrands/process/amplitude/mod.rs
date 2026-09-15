@@ -613,6 +613,7 @@ impl AmplitudeGraphTerm {
                 tropical_sampler: graph.derived_data.tropical_sampler.clone(),
                 graph: graph.graph.clone(),
                 multi_channeling_setup: LmbMultiChannelingSetup {
+                    master_edge_masses: Default::default(),
                     sampling_bridge: Default::default(),
                     sampling_bridge_quad: Default::default(),
                     sampling_bridge_fixed256: Default::default(),
@@ -1043,6 +1044,7 @@ impl GraphTerm for AmplitudeGraphTerm {
           err
     )]
     fn warm_up(&mut self, settings: &RuntimeSettings, model: &Model) -> Result<()> {
+        self.multi_channeling_setup.master_edge_masses.invalidate();
         self.multi_channeling_setup.invalidate_sampling();
         if self.explicit_orientation_sum_only {
             self.orientation_filter = SubSet::full(self.orientations.len());
@@ -1134,6 +1136,7 @@ impl GraphTerm for AmplitudeGraphTerm {
         self.graph.param_builder.update_model_values(model);
 
         self.param_builder = self.graph.param_builder.clone();
+        self.multi_channeling_setup.warm_up_masses(settings, model);
 
         if matches!(&settings.sampling,
             SamplingSettings::DiscreteGraphs(discrete)

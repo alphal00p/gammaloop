@@ -259,6 +259,7 @@ impl Graph {
         );
 
         LmbMultiChannelingSetup {
+            master_edge_masses: Default::default(),
             sampling_bridge: Default::default(),
             sampling_bridge_quad: Default::default(),
             sampling_bridge_fixed256: Default::default(),

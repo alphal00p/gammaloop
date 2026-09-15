@@ -273,8 +273,10 @@ Compilation, Clippy and twelve focused tests passed, including the existing
 production cut fixture extended to check actual cube/raw source handling,
 reference admission and physical-dimension errors. Energy/unit rescaling,
 outer-weight amplification, returned-value bounds and independent absolute
-payloads are covered. The Python settings test is added but awaits a rebuilt
-extension. The test run is
+payloads are covered. The Python settings test subsequently passed against the
+rebuilt installed extension in the actual nextest subprocess harness, together
+with the OSE settings roundtrip (2/2, `ose-validation-build14/python-tests.log`).
+The initial Rust test run is
 `/tmp/gl638-final-physics-screen/tests-build13-attempt2.log`; earlier compile
 fixture mistakes and a nested serialization-guard deadlock are retained in the
 preceding logs and were corrected without relaxing assertions.

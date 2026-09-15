@@ -2126,6 +2126,8 @@ pub struct LmbMultiChannelingSetup {
     /// Canonical group-master graph used to resolve group-level channel overrides.
     pub graph: Graph,
     pub all_bases: TiVec<LmbIndex, LoopMomentumBasis>,
+    /// Current masses of the master graph; member masses never define its partition.
+    pub(crate) master_edge_masses: RuntimeCache<EdgeVec<Complex<F<f64>>>>,
     pub(crate) sampling_bridge:
         RuntimeCache<Result<SamplingChannelBridge, sampling_maps::SamplingEvaluationError>>,
     pub(crate) sampling_bridge_quad:
@@ -2144,6 +2146,27 @@ pub struct LmbMultiChannelingSetup {
 }
 
 impl LmbMultiChannelingSetup {
+    /// Refresh master-owned mass evaluators independently of member parameter slots.
+    /// Keep complex values until the selected score decides whether it supports them.
+    pub(crate) fn warm_up_masses(&mut self, settings: &RuntimeSettings, model: &Model) {
+        self.master_edge_masses.invalidate();
+        let parameters = &mut self.graph.param_builder;
+        parameters.m_uv_value(Complex::new_re(F(settings.general.m_uv)));
+        parameters.renormalization_localization_scale_value(Complex::new_re(F(settings
+            .general
+            .renormalization_localization_scale)));
+        parameters.mu_r_sq_value(Complex::new_re(F(settings.general.mu_r_sq())));
+        parameters.numerator_sampling_scale_value(Complex::new_re(F(settings
+            .general
+            .numerator_sampling_scale)));
+        parameters.update_model_values(model);
+        self.master_edge_masses
+            .set(self.graph.new_edgevec(|edge, _, _| {
+                edge.mass_value(model, &self.graph.param_builder)
+                    .unwrap_or_else(|| Complex::new_re(F(0.0)))
+            }));
+    }
+
     /// Borrow the bridge compiled in the current successful warmup epoch, or
     /// replay that precision's cached numerical failure into the stability loop.
     /// Explicit constructors remain fresh and never populate this runtime cache.
@@ -2296,7 +2319,14 @@ impl LmbMultiChannelingSetup {
                 self.graph.name
             ));
         }
-        catalogue.compile(context, programs)
+        let mut context = context.clone();
+        if let Some(masses) = self.master_edge_masses.as_ref() {
+            context.edge_masses = masses
+                .iter()
+                .map(|(edge, mass)| (edge.0, mass.map_ref(|value| F::<T>::from_ff64(*value))))
+                .collect();
+        }
+        catalogue.compile(&context, programs)
     }
 
     /// Compile channels after preparing the external data needed by every
@@ -2336,7 +2366,7 @@ impl LmbMultiChannelingSetup {
                 .lmb_frame_maps_by_edges
                 .insert(edges.clone(), self.lmb_frame_map(&basis, external_momenta)?);
         }
-        catalogue.compile(&context, programs)
+        self.compile_sampling_channels(catalogue, programs, &context)
     }
 
     /// Compile the selected channels and bind them to the raw-frame bridge.
@@ -2352,6 +2382,7 @@ impl LmbMultiChannelingSetup {
             SamplingChannelWeight::MapDensity | SamplingChannelWeight::InverseJacobian => {
                 SamplingPartitionMode::MapDensity
             }
+            SamplingChannelWeight::Ose => SamplingPartitionMode::Ose,
             SamplingChannelWeight::SingularityProxy => SamplingPartitionMode::SingularityProxy,
         };
         SamplingChannelBridge::new_with_partition_mode(channels, mode).map_err(Into::into)
@@ -2375,6 +2406,7 @@ impl LmbMultiChannelingSetup {
             SamplingChannelWeight::MapDensity | SamplingChannelWeight::InverseJacobian => {
                 SamplingPartitionMode::MapDensity
             }
+            SamplingChannelWeight::Ose => SamplingPartitionMode::Ose,
             SamplingChannelWeight::SingularityProxy => SamplingPartitionMode::SingularityProxy,
         };
         SamplingChannelBridge::new_with_partition_mode(channels, mode).map_err(Into::into)
@@ -3254,6 +3286,14 @@ pub(crate) fn validate_process_runtime_settings(
     settings: &RuntimeSettings,
     explicit_orientation_sum_only: bool,
 ) -> Result<()> {
+    if let Some(parameterization) = settings.sampling.get_parameterization_settings() {
+        let alpha = parameterization.sampling_channels.alpha;
+        if !alpha.is_finite() || alpha < 0.0 {
+            return Err(eyre!(
+                "sampling.alpha must be finite and nonnegative; got {alpha}"
+            ));
+        }
+    }
     for (index, level) in settings.stability.levels.iter().enumerate() {
         for (component, tolerance) in [
             ("re", level.ecm_relative_tolerance_for_re),
@@ -5524,7 +5564,6 @@ pub(crate) mod tests {
                                     .sampling
                                     .get_parameterization_settings()
                                     .unwrap(),
-                                ..Default::default()
                             },
                         ),
                         ..Default::default()
@@ -7708,6 +7747,7 @@ pub(crate) mod tests {
         };
         let all_bases = vec![lmb(0), lmb(1), lmb(2)].into();
         let setup = LmbMultiChannelingSetup {
+            master_edge_masses: Default::default(),
             sampling_bridge: Default::default(),
             sampling_bridge_quad: Default::default(),
             sampling_bridge_fixed256: Default::default(),
@@ -7818,6 +7858,7 @@ pub(crate) mod tests {
             .insert(
                 "cut".into(),
                 SamplingChannelDefinition {
+                    channel_weight: None,
                     around: "phase_space(cut(0))".into(),
                     subspace_lmb: parent_lmb.clone(),
                     parent_lmb,
@@ -7868,6 +7909,7 @@ pub(crate) mod tests {
             .insert(
                 "named".into(),
                 SamplingChannelDefinition {
+                    channel_weight: None,
                     around: "lmb(0)".into(),
                     subspace_lmb: Vec::new(),
                     parent_lmb: vec![0],
@@ -7926,7 +7968,8 @@ pub(crate) mod tests {
         let all_bases = graph.generate_loop_momentum_bases();
         assert!(all_bases.len() >= 2);
         graph.loop_momentum_basis = all_bases[LmbIndex::from(0)].clone();
-        let setup = LmbMultiChannelingSetup {
+        let mut setup = LmbMultiChannelingSetup {
+            master_edge_masses: Default::default(),
             sampling_bridge: Default::default(),
             sampling_bridge_quad: Default::default(),
             sampling_bridge_fixed256: Default::default(),
@@ -8057,6 +8100,63 @@ pub(crate) mod tests {
                 "channel {channel_id}: {actual} != {expected}"
             );
         }
+        // The master owns OSE masses even if a member/context supplies different ones.
+        // Refresh twice to catch a stale runtime cache after a model/mass change.
+        let model = crate::utils::load_generic_model("sm");
+        let mut context = context;
+        context.parameterization_settings.sampling_channels.weight =
+            crate::settings::runtime::SamplingChannelWeight::Ose;
+        context.edge_masses = graph
+            .new_edgevec(|_, _, _| spenso::algebra::complex::Complex::new_re(F(1000.0)))
+            .iter()
+            .map(|(edge, mass)| (edge.0, *mass))
+            .collect();
+        for mass in [2.0, 5.0] {
+            let edge = *setup.all_bases[LmbIndex::from(0)]
+                .loop_edges
+                .first()
+                .unwrap();
+            setup.graph.underlying[edge].mass = crate::graph::edge::EdgeMass::Value(
+                spenso::algebra::complex::Complex::new_re(F(mass)),
+            );
+            setup.warm_up_masses(&RuntimeSettings::default(), &model);
+            assert_eq!(setup.master_edge_masses.as_ref().unwrap()[edge].re, F(mass));
+            assert_ne!(graph.get_real_mass_vector::<f64>(&model)[edge], F(mass));
+            let catalogue = setup
+                .sampling_channel_catalogue(&resolved, &context.parameterization_settings)
+                .unwrap();
+            let programs = catalogue
+                .compile_programs(3 * context.n_loop_momenta, &HFunctionSettings::default())
+                .unwrap();
+            let bridge = setup
+                .compile_sampling_channel_bridge_with_external(
+                    &catalogue, &programs, &context, &external,
+                )
+                .unwrap();
+            let energies = setup.graph.get_energy_cache(
+                &model,
+                sample.loop_moms(),
+                sample.external_moms(),
+                &setup.graph.loop_momentum_basis,
+            );
+            let scores = setup
+                .all_bases
+                .iter()
+                .map(|basis| {
+                    basis
+                        .loop_edges
+                        .iter()
+                        .map(|edge| energies[*edge].0)
+                        .product::<f64>()
+                        .powf(-3.0)
+                })
+                .collect::<Vec<_>>();
+            let partition = bridge.partition(&raw).unwrap();
+            let total = scores.iter().sum::<f64>();
+            for (actual, score) in partition.weights.iter().zip(scores) {
+                assert!((actual - score / total).abs() < 1e-13);
+            }
+        }
     }
 
     #[test]
@@ -8085,6 +8185,7 @@ pub(crate) mod tests {
             .map(|edge| edge.0)
             .collect::<Vec<_>>();
         let setup = LmbMultiChannelingSetup {
+            master_edge_masses: Default::default(),
             sampling_bridge: Default::default(),
             sampling_bridge_quad: Default::default(),
             sampling_bridge_fixed256: Default::default(),

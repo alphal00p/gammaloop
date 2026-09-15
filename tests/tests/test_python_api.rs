@@ -353,6 +353,47 @@ payload = {
 
 #[test]
 #[serial]
+fn python_settings_preserve_ose_and_named_channel_weight() -> Result<()> {
+    let payload = run_python_case(
+        "python_api_ose_channel_weights",
+        &[r#"set default-runtime string '
+[sampling]
+sampling_multichanneling = true
+sampling_channel_weight = "ose"
+alpha = 2.5
+default_channel_selection = ["auto:optimized_lmb"]
+'"#
+        .to_string()],
+        r#"
+legacy = api.get_default_runtime_settings().to_dict()["sampling"]
+run_commands(api, ["""set default-runtime string '
+[sampling]
+sampling_multichanneling = true
+sampling_channel_weight = "map_density"
+alpha = 3.0
+default_channel_selection = ["soft"]
+[sampling.channel_definitions.G.soft]
+around = "lmb(1,2)"
+parent_lmb = [1,2]
+channel_weight = "ose"
+'"""])
+mixed = api.get_default_runtime_settings().to_dict()["sampling"]
+payload = {"legacy": legacy, "mixed": mixed}
+"#,
+    )?;
+    assert_eq!(payload["legacy"]["sampling_channel_weight"], "ose");
+    assert_eq!(payload["legacy"]["alpha"], 2.5);
+    assert_eq!(payload["mixed"]["sampling_channel_weight"], "map_density");
+    assert_eq!(payload["mixed"]["alpha"], 3.0);
+    assert_eq!(
+        payload["mixed"]["channel_definitions"]["G"]["soft"]["channel_weight"],
+        "ose"
+    );
+    Ok(())
+}
+
+#[test]
+#[serial]
 fn python_evaluate_sample_preserves_graph_grouping_and_incoming_pdgs() -> Result<()> {
     let mut commands = base_setup_commands();
     commands.push(

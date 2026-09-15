@@ -1,0 +1,19 @@
+# Runtime overlay after loading the GL638 C+J+R+S channel definitions.
+# Only the soft LMB channel uses OSE; advanced channels retain exact densities.
+# Compare against the all-density partition by changing the final channel_weight
+# below to "map_density". This changes scores, not the maps or their Jacobians.
+[sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+sampling_multichanneling = true
+sampling_channels = "monte_carlo"
+sampling_channel_weight = "map_density"
+alpha = 3.0
+
+[sampling.channel_selection]
+GL638 = ["lu_cut_0", "lu_cut_1", "lu_cut_2", "lu_cut_3", "lu_cut_4", "lu_cut_5", "cut1_joint_HZ", "cut3_right_5_10", "soft_6_12"]
+
+[sampling.channel_definitions.GL638.soft_6_12]
+around = "lmb(6,12,13,14)"
+parent_lmb = [3,4,7,10]
+channel_weight = "ose"

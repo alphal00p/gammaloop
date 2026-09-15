@@ -739,12 +739,24 @@ threshold distance and density accuracy still needs its stronger certificate.
 Derived-expression mass evaluation, Gaussian-body underflow and final outer-grid
 range handling remain separate precision limits.
 The bridge checks the selected forward determinant against its inverse density
-at the actual mapped point. It reuses the selected exact partition score, or
-evaluates only the selected inverse in proxy mode. Warmup assigns one tenth of
+at the actual mapped point. It reuses a selected score only when that channel
+actually uses its map density; OSE and user-proxy overrides evaluate the
+selected inverse independently. Warmup assigns one tenth of
 the strictest matching stability-level relative tolerance as its density budget;
 standalone constructors use native square-root epsilon. Failure is a typed
 precision-retry condition. This is numerical proposal consistency, not a
 rigorous enclosure of the physical surface or of floating-point errors.
+
+Channel weights are resolved per canonical entry: the global
+`sampling_channel_weight` is overridden by an optional named
+`channel_weight`. Genuine OSE weights are available for complete ordinary LMB
+maps, using raw master-frame edge energies and the dimensionally consistent
+score `E_cm^(-3L) product(E_cm/E_e)^alpha`; surface maps retain their exact
+densities unless an explicit compatible user proxy is selected. The existing
+positive-score evaluator and support-aware partition own all strategies.
+`SamplingChannelSelection` owns `weight` and `alpha` together; no separate
+legacy LMB-weight owner or enumeration is retained. See the
+[OSE settings and acceptance contract](../research/advanced_sampling/OSE_CHANNEL_WEIGHTS.md).
 
 Physical and Gaussian-reference targets share graph traversal, default-LMB
 routing and original-draw native precision retries. Reference values and raw-frame

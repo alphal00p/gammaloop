@@ -743,6 +743,7 @@ fn generalized_raised_cross_section_covers_derivative_components_and_roundtrips(
                         .insert(
                             "raised_cut".to_owned(),
                             SamplingChannelDefinition {
+                                channel_weight: None,
                                 around: format!("phase_space(cut({edges}))"),
                                 parent_lmb: parent_lmb.clone(),
                                 subspace_lmb: parent_lmb.clone(),
@@ -757,7 +758,6 @@ fn generalized_raised_cross_section_covers_derivative_components_and_roundtrips(
                     settings.sampling =
                         SamplingSettings::MultiChanneling(MultiChannelingSettings {
                             parameterization_settings: parameterization,
-                            ..Default::default()
                         });
                     settings.stability.rotation_axis.clear();
                     settings.stability.levels = vec![StabilityLevelSetting::default_double()];
@@ -1006,6 +1006,7 @@ fn standalone_cut_sampling_compiles_from_production_cut_and_mass_data() {
                     .insert(
                         "physical_cut".into(),
                         SamplingChannelDefinition {
+                            channel_weight: None,
                             around: format!("phase_space(cut({cut_edges}))"),
                             subspace_lmb: parent_lmb.clone(),
                             parent_lmb,
@@ -1101,7 +1102,6 @@ fn standalone_cut_sampling_compiles_from_production_cut_and_mass_data() {
                     crate::settings::runtime::SamplingSettings::MultiChanneling(
                         crate::settings::runtime::MultiChannelingSettings {
                             parameterization_settings: parameterization.clone(),
-                            ..Default::default()
                         },
                     );
                 crate::integrands::process::tests::check_fixed_quad_source_transport(
@@ -1167,7 +1167,6 @@ fn standalone_cut_sampling_compiles_from_production_cut_and_mass_data() {
                                 settings.sampling =
                                     SamplingSettings::MultiChanneling(MultiChannelingSettings {
                                         parameterization_settings: parameterization.clone(),
-                                        ..Default::default()
                                     });
                                 settings.stability.rotation_axis.clear();
                                 settings.stability.levels =
@@ -1277,7 +1276,6 @@ fn standalone_cut_sampling_compiles_from_production_cut_and_mass_data() {
                     settings.sampling =
                         SamplingSettings::MultiChanneling(MultiChannelingSettings {
                             parameterization_settings: focused,
-                            ..Default::default()
                         });
                     settings.stability.rotation_axis.clear();
                     settings.stability.levels = vec![
@@ -1655,10 +1653,12 @@ fn conditional_cut_sampling_preserves_both_sides_and_raised_sum() {
                     vec!["left_only".into(), "both".into()];
                 parameterization.sampling_channels.channel_definitions.insert(graph_name.clone(), BTreeMap::from([
                     ("left_only".into(), SamplingChannelDefinition {
+                        channel_weight: None,
                         around: format!("then(block(lmb({}),phase_space(cut({cut_edges}))),block(lmb({}),left(surface({left_edges}))),lmb({}))", parent[1], parent[0], parent[2]),
                         parent_lmb: parent.clone(), on_cut: vec![host_id.0], ..Default::default()
                     }),
                     ("both".into(), SamplingChannelDefinition {
+                        channel_weight: None,
                         around: format!("then(block(lmb({}),phase_space(cut({cut_edges}))),block(lmb({}),left(surface({left_edges}))),block(lmb({}),right(surface({right_edges}))))", parent[1], parent[0], parent[2]),
                         parent_lmb: parent.clone(), on_cut: vec![host_id.0], ..Default::default()
                     }),
@@ -1674,6 +1674,7 @@ fn conditional_cut_sampling_preserves_both_sides_and_raised_sum() {
                 let mut direct_settings = parameterization.clone();
                 direct_settings.sampling_channels.default_channel_selection = vec!["direct".into()];
                 direct_settings.sampling_channels.channel_definitions.get_mut(&graph_name).unwrap().insert("direct".into(), SamplingChannelDefinition {
+                    channel_weight: None,
                     around: format!("then(block(lmb({}),phase_space(cut({cut_edges}))),block(lmb({}),surface({left_edges})),lmb({}))", parent[1], parent[0], parent[2]),
                     parent_lmb: parent.clone(), on_cut: vec![host_id.0], ..Default::default()
                 });
@@ -1747,6 +1748,7 @@ fn conditional_cut_sampling_preserves_both_sides_and_raised_sum() {
                     ordinary_prefix.sampling_channels.default_channel_selection = vec!["ordinary_host".into()];
                     ordinary_prefix.sampling_channels.channel_definitions.get_mut(&graph_name).unwrap().insert(
                         "ordinary_host".into(), SamplingChannelDefinition {
+                            channel_weight: None,
                             around: format!("then(lmb({}),block(lmb({}),at_cut(cut({cut_edges}),left(surface({left_edges})))),lmb({}))",
                                 parent[1], parent[0], parent[2]),
                             parent_lmb: parent.clone(), on_cut: vec![host_id.0], ..Default::default()
@@ -1996,7 +1998,6 @@ fn conditional_cut_sampling_preserves_both_sides_and_raised_sum() {
                 // by summed channels, explicit channel MC, and direct momenta.
                 runtime.sampling = SamplingSettings::MultiChanneling(MultiChannelingSettings {
                     parameterization_settings: parameterization.clone(),
-                    ..Default::default()
                 });
                 runtime.stability.rotation_axis.clear();
                 runtime.stability.levels = vec![StabilityLevelSetting::default_double()];
@@ -2399,6 +2400,7 @@ fn hosted_joint_kite_preserves_original_equations_and_physical_sum() {
                         (
                             "joint".into(),
                             SamplingChannelDefinition {
+                                channel_weight: None,
                                 around: format!(
                                     "then(complement({e4}),block(lmb({e5}),at_cut(cut({}),intersect(surface({}),surface({})))))",
                                     host_edges.iter().join(","),
@@ -2413,6 +2415,7 @@ fn hosted_joint_kite_preserves_original_equations_and_physical_sum() {
                         (
                             "ordinary".into(),
                             SamplingChannelDefinition {
+                                channel_weight: None,
                                 around: format!("lmb({e4},{e6})"),
                                 parent_lmb: vec![e4, e6],
                                 ..Default::default()

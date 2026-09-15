@@ -1561,6 +1561,15 @@ exact densities and support checks. For mixed scores use the common dimension
 master raw frame. Test energy rescaling, partition normalization, soft powers
 and full-process reference integration before physics comparisons.
 
+The [OSE implementation milestone](docs/research/advanced_sampling/OSE_CHANNEL_WEIGHTS.md)
+now passes 97 focused Rust tests, both Python subprocess roundtrips and the
+selected 15-case full-state precision boundary. The LMB-only preset explicitly
+selects `auto:optimized_lmb` while retaining `sampling_multichanneling=true`;
+turning off that flag would also disable the requested LMB multichanneling.
+The initial eight production Gaussian arms do not meet normalization acceptance,
+so larger native confirmation remains required before OSE physical pilots.
+These results are not evidence for improved physical variance.
+
 The matched candidate matrix uses optimized LMB as the baseline. Every advanced
 candidate includes sampling channels for all six physical cuts, with the direct
 H/Z joint channel switched on or off and the explicit soft LMB `[6,12,13,14]`
