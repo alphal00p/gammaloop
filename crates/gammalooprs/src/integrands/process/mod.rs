@@ -64,7 +64,7 @@ use crate::{
     settings::runtime::Precision,
     settings::runtime::StabilityLevelSetting,
     settings::runtime::StabilitySettings,
-    settings::runtime::{SamplingChannelWeight, SamplingSettings},
+    settings::runtime::{IntegratedPhase, SamplingChannelWeight, SamplingSettings},
 };
 use color_eyre::Result;
 use sampling_context::PreparedLUHost;
@@ -1789,12 +1789,35 @@ fn stability_check<T: FloatLike>(
     is_final_level: bool,
     escalate_if_exact_zero: bool,
 ) -> StabilityCheckResult<T> {
+    stability_check_components(
+        ecm_scale,
+        results,
+        stability_settings,
+        max_eval,
+        wgt,
+        is_final_level,
+        escalate_if_exact_zero,
+        true,
+        true,
+    )
+}
+
+#[inline]
+fn stability_check_components<T: FloatLike>(
+    ecm_scale: Option<&F<T>>,
+    results: &[Complex<F<T>>],
+    stability_settings: &StabilityLevelSetting,
+    max_eval: Complex<F<T>>,
+    wgt: F<T>,
+    is_final_level: bool,
+    escalate_if_exact_zero: bool,
+    check_real: bool,
+    check_imag: bool,
+) -> StabilityCheckResult<T> {
     // Nonfinite probes cannot establish stability, even at the final precision.
     if results.iter().any(|result| {
-        result.re.is_nan()
-            || result.re.is_infinite()
-            || result.im.is_nan()
-            || result.im.is_infinite()
+        (check_real && (result.re.is_nan() || result.re.is_infinite()))
+            || (check_imag && (result.im.is_nan() || result.im.is_infinite()))
     }) {
         return (
             results[0].clone(),
@@ -1825,18 +1848,24 @@ fn stability_check<T: FloatLike>(
         })
         / F::<T>::from_f64(results.len() as f64);
     let minimum_normal = F::<T>::from_f64(f64::MIN_POSITIVE);
-    let real_underflow =
-        weighted_absolute_average.re.0.is_finite() && weighted_absolute_average.re < minimum_normal;
-    let imag_underflow =
-        weighted_absolute_average.im.0.is_finite() && weighted_absolute_average.im < minimum_normal;
+    let real_underflow = check_real
+        && weighted_absolute_average.re.0.is_finite()
+        && weighted_absolute_average.re < minimum_normal;
+    let imag_underflow = check_imag
+        && weighted_absolute_average.im.0.is_finite()
+        && weighted_absolute_average.im < minimum_normal;
 
     let errors = results.iter().map(|res| {
-        let error_re = if IsZero::is_zero(&res.re) && IsZero::is_zero(&average.re) {
+        let error_re = if !check_real {
+            F::<T>::from_f64(0.0)
+        } else if IsZero::is_zero(&res.re) && IsZero::is_zero(&average.re) {
             F::<T>::from_f64(0.0)
         } else {
             ((&res.re - &average.re) / &average.re).abs()
         };
-        let error_im = if IsZero::is_zero(&res.im) && IsZero::is_zero(&average.im) {
+        let error_im = if !check_imag {
+            F::<T>::from_f64(0.0)
+        } else if IsZero::is_zero(&res.im) && IsZero::is_zero(&average.im) {
             F::<T>::from_f64(0.0)
         } else {
             ((&res.im - &average.im) / &average.im).abs()
@@ -1852,8 +1881,8 @@ fn stability_check<T: FloatLike>(
             estimated_relative_accuracy.max(error.re.clone().max(error.im.clone()));
         if !is_final_level
             && escalate_if_exact_zero
-            && error.re == F::<T>::from_f64(0.0)
-            && error.im == F::<T>::from_f64(0.0)
+            && (!check_real || error.re == F::<T>::from_f64(0.0))
+            && (!check_imag || error.im == F::<T>::from_f64(0.0))
         {
             unstable_reason = Some(StabilityFailureReason::ZeroError);
             unstable_sample = Some(index);
@@ -1887,10 +1916,12 @@ fn stability_check<T: FloatLike>(
                     && &absolute_error.im / scale
                         <= F::<T>::from_f64(stability_settings.ecm_relative_tolerance_for_im)
             });
-        if (error.re > F::<T>::from_f64(stability_settings.required_precision_for_re)
+        if (check_real
+            && error.re > F::<T>::from_f64(stability_settings.required_precision_for_re)
             && !real_underflow
             && !real_absolute)
-            || (error.im > F::<T>::from_f64(stability_settings.required_precision_for_im)
+            || (check_imag
+                && error.im > F::<T>::from_f64(stability_settings.required_precision_for_im)
                 && !imag_underflow
                 && !imag_absolute)
         {
@@ -1924,17 +1955,21 @@ fn stability_check<T: FloatLike>(
 
     let stable = unstable_sample.is_none();
 
-    let below_wgt_threshold = if stability_settings.escalate_for_large_weight_threshold > 0.
-        && max_eval.is_non_zero()
-    {
-        average.re.abs() * wgt.clone()
-            < F::<T>::from_f64(stability_settings.escalate_for_large_weight_threshold) * max_eval.re
-            || average.im.abs() * wgt
-                < F::<T>::from_f64(stability_settings.escalate_for_large_weight_threshold)
-                    * max_eval.im
-    } else {
-        true
-    };
+    let has_active_max = (check_real && !IsZero::is_zero(&max_eval.re))
+        || (check_imag && !IsZero::is_zero(&max_eval.im));
+    let below_wgt_threshold =
+        if stability_settings.escalate_for_large_weight_threshold > 0. && has_active_max {
+            (check_real
+                && average.re.abs() * wgt.clone()
+                    < F::<T>::from_f64(stability_settings.escalate_for_large_weight_threshold)
+                        * max_eval.re)
+                || (check_imag
+                    && average.im.abs() * wgt
+                        < F::<T>::from_f64(stability_settings.escalate_for_large_weight_threshold)
+                            * max_eval.im)
+        } else {
+            true
+        };
 
     let weight_reason = if stable && !below_wgt_threshold {
         Some(StabilityFailureReason::WeightThreshold)
@@ -1951,6 +1986,7 @@ fn stability_check<T: FloatLike>(
 }
 
 #[inline]
+#[cfg(test)]
 fn stability_check_on_norm<T: FloatLike>(
     ecm_scale: Option<&F<T>>,
     results: &[Complex<F<T>>],
@@ -1960,12 +1996,35 @@ fn stability_check_on_norm<T: FloatLike>(
     is_final_level: bool,
     escalate_if_exact_zero: bool,
 ) -> StabilityCheckResult<T> {
+    stability_check_on_norm_components(
+        ecm_scale,
+        results,
+        stability_settings,
+        max_eval,
+        wgt,
+        is_final_level,
+        escalate_if_exact_zero,
+        true,
+        true,
+    )
+}
+
+#[inline]
+fn stability_check_on_norm_components<T: FloatLike>(
+    ecm_scale: Option<&F<T>>,
+    results: &[Complex<F<T>>],
+    stability_settings: &StabilityLevelSetting,
+    max_eval: Complex<F<T>>,
+    wgt: F<T>,
+    is_final_level: bool,
+    escalate_if_exact_zero: bool,
+    check_real: bool,
+    check_imag: bool,
+) -> StabilityCheckResult<T> {
     // Nonfinite probes cannot establish stability, even at the final precision.
     if results.iter().any(|result| {
-        result.re.is_nan()
-            || result.re.is_infinite()
-            || result.im.is_nan()
-            || result.im.is_infinite()
+        (check_real && (result.re.is_nan() || result.re.is_infinite()))
+            || (check_imag && (result.im.is_nan() || result.im.is_infinite()))
     }) {
         return (
             results[0].clone(),
@@ -1979,14 +2038,20 @@ fn stability_check_on_norm<T: FloatLike>(
         return (results[0].clone(), None, true, None);
     }
 
-    let average = results.iter().fold(F::<T>::from_f64(0.0), |acc, x| {
-        acc + x.norm_squared().sqrt()
-    }) / F::<T>::from_f64(results.len() as f64);
+    let component_magnitude = |x: &Complex<F<T>>| match (check_real, check_imag) {
+        (true, false) => x.re.abs(),
+        (false, true) => x.im.abs(),
+        (true, true) => x.norm_squared().sqrt(),
+        (false, false) => x.re.zero(),
+    };
+    let average = results
+        .iter()
+        .fold(F::<T>::from_f64(0.0), |acc, x| acc + component_magnitude(x))
+        / F::<T>::from_f64(results.len() as f64);
 
     // The norm owner returns the primary probe, so bound it as well as the
     // average. Componentwise L1 magnitudes avoid squaring tiny weighted values.
-    let weighted_magnitude =
-        |result: &Complex<F<T>>| (&result.re * &wgt).abs() + (&result.im * &wgt).abs();
+    let weighted_magnitude = |result: &Complex<F<T>>| &component_magnitude(result) * &wgt;
     let weighted_absolute_average = results.iter().fold(average.zero(), |sum, result| {
         sum + weighted_magnitude(result)
     }) / F::<T>::from_f64(results.len() as f64);
@@ -2007,16 +2072,18 @@ fn stability_check_on_norm<T: FloatLike>(
         && results.iter().all(|result| {
             let error_re = ((&result.re - &results[0].re) * &wgt).abs();
             let error_im = ((&result.im - &results[0].im) * &wgt).abs();
-            error_re.0.is_finite()
-                && error_im.0.is_finite()
-                && error_re / ecm_scale.unwrap()
-                    <= F::<T>::from_f64(stability_settings.ecm_relative_tolerance_for_re)
-                && error_im / ecm_scale.unwrap()
-                    <= F::<T>::from_f64(stability_settings.ecm_relative_tolerance_for_im)
+            (!check_real
+                || (error_re.0.is_finite()
+                    && error_re / ecm_scale.unwrap()
+                        <= F::<T>::from_f64(stability_settings.ecm_relative_tolerance_for_re)))
+                && (!check_imag
+                    || (error_im.0.is_finite()
+                        && error_im / ecm_scale.unwrap()
+                            <= F::<T>::from_f64(stability_settings.ecm_relative_tolerance_for_im)))
         });
 
     let errors = results.iter().map(|res| {
-        let res = res.norm_squared().sqrt();
+        let res = component_magnitude(res);
         if IsZero::is_zero(&res) && IsZero::is_zero(&average) {
             (F::<T>::from_f64(0.0), true) // true zero is fishy -> upgrade to next precision
         } else {
@@ -2064,14 +2131,16 @@ fn stability_check_on_norm<T: FloatLike>(
 
     let stable = unstable_sample.is_none();
 
-    let below_wgt_threshold =
-        if stability_settings.escalate_for_large_weight_threshold > 0. && max_eval.is_non_zero() {
-            average.abs() * wgt
-                < F::<T>::from_f64(stability_settings.escalate_for_large_weight_threshold)
-                    * max_eval.norm_squared().sqrt()
-        } else {
-            true
-        };
+    let max_magnitude = component_magnitude(&max_eval);
+    let below_wgt_threshold = if stability_settings.escalate_for_large_weight_threshold > 0.
+        && max_magnitude != max_magnitude.zero()
+    {
+        average.abs() * wgt
+            < F::<T>::from_f64(stability_settings.escalate_for_large_weight_threshold)
+                * max_magnitude
+    } else {
+        true
+    };
 
     let weight_reason = if stable && !below_wgt_threshold {
         Some(StabilityFailureReason::WeightThreshold)
@@ -3875,6 +3944,8 @@ struct StabilityEvaluationContext<'a, 'm> {
     record_rotated_results: bool,
     precision_label: &'static str,
     escalate_if_exact_zero: bool,
+    check_real: bool,
+    check_imag: bool,
 }
 
 impl StabilityEvaluationContext<'_, '_> {
@@ -3987,7 +4058,7 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
 
     let (average_result, mut estimated_relative_accuracy, mut is_stable, _instability_reason) =
         if context.check_on_norm {
-            stability_check_on_norm(
+            stability_check_on_norm_components(
                 ecm_scale.as_ref(),
                 &results,
                 context.stability_level,
@@ -3995,9 +4066,11 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
                 wgt,
                 context.is_final_level,
                 context.escalate_if_exact_zero,
+                context.check_real,
+                context.check_imag,
             )
         } else {
-            stability_check(
+            stability_check_components(
                 ecm_scale.as_ref(),
                 &results,
                 context.stability_level,
@@ -4005,6 +4078,8 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
                 wgt,
                 context.is_final_level,
                 context.escalate_if_exact_zero,
+                context.check_real,
+                context.check_imag,
             )
         };
 
@@ -4023,10 +4098,11 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
                 })
             })
             .collect::<Result<Vec<_>>>()?;
+        let (absolute_check_real, absolute_check_imag) = (context.check_real, context.check_imag);
         let check = if context.check_on_norm {
-            stability_check_on_norm::<T>
+            stability_check_on_norm_components::<T>
         } else {
-            stability_check::<T>
+            stability_check_components::<T>
         };
         let (absolute, accuracy, stable, _) = check(
             ecm_scale.as_ref(),
@@ -4036,6 +4112,8 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
             F::<T>::from_ff64(context.wgt),
             context.is_final_level,
             context.escalate_if_exact_zero,
+            absolute_check_real,
+            absolute_check_imag,
         );
         graph_result.absolute_integrand_result = Some(absolute);
         estimated_relative_accuracy = estimated_relative_accuracy
@@ -4986,6 +5064,16 @@ fn evaluate_from_source_precise<I: ProcessIntegrandImpl>(
                 Precision::Arb => "ArbPrec",
             },
             escalate_if_exact_zero,
+            check_real: !matches!(target, EvaluationTarget::Physical(_))
+                || !matches!(
+                    integrand.get_settings().integrator.integrated_phase,
+                    IntegratedPhase::Imag
+                ),
+            check_imag: !matches!(target, EvaluationTarget::Physical(_))
+                || !matches!(
+                    integrand.get_settings().integrator.integrated_phase,
+                    IntegratedPhase::Real
+                ),
         };
         let level_start = Instant::now();
         let mut is_stable = false;
@@ -5601,6 +5689,8 @@ pub(crate) mod tests {
                             record_rotated_results: false,
                             precision_label: "ArbPrec",
                             escalate_if_exact_zero: false,
+                            check_real: true,
+                            check_imag: true,
                         };
                         integrand.settings.stability.integrated_energy_dimension = None;
                         assert_eq!(
@@ -6786,6 +6876,55 @@ pub(crate) mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn real_only_stability_ignores_inactive_imaginary_probe() {
+        use super::StabilityFailureReason;
+        use crate::settings::runtime::StabilityLevelSetting;
+        use spenso::algebra::complex::Complex;
+
+        let level = StabilityLevelSetting::default_double();
+        let results = vec![Complex::new(F(2.0), F(1.0)), Complex::new(F(2.0), F(2.0))];
+        let (_, _, real_stable, _) = super::stability_check_components(
+            None,
+            &results,
+            &level,
+            Complex::new(F(10.0), F(10.0)),
+            F(1.0),
+            false,
+            false,
+            true,
+            false,
+        );
+        let (_, _, both_stable, reason) = super::stability_check_components(
+            None,
+            &results,
+            &level,
+            Complex::new(F(10.0), F(10.0)),
+            F(1.0),
+            false,
+            false,
+            true,
+            true,
+        );
+        assert!(real_stable);
+        assert!(!both_stable);
+        assert_eq!(reason, Some(StabilityFailureReason::ErrorThreshold));
+
+        let nonfinite_im = vec![Complex::new(F(2.0), F(f64::NAN))];
+        let (_, _, stable, _) = super::stability_check_components(
+            None,
+            &nonfinite_im,
+            &level,
+            Complex::new(F(10.0), F(10.0)),
+            F(1.0),
+            true,
+            false,
+            true,
+            false,
+        );
+        assert!(stable);
     }
 
     #[test]

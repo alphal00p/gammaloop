@@ -33,6 +33,8 @@
 # the local threshold-CT Gaussian and sliver settings.
 # Use -D stability_check_on_norm=false to check Re and Im separately; norm
 # agreement alone need not resolve a small component beside a much larger one.
+# Physical stability follows training_phase: with real (the production default),
+# only Re and |Re| drive precision rescue; reference observables still check both.
 # Generic Euler probes avoid exact coordinate permutations that can preserve
 # cancellation errors. Steer their angles with stability_alpha/beta/gamma.
 # Existing workspaces resume. Explicit reset: -D restart=--restart.
@@ -135,6 +137,65 @@ commands = ["""set default-runtime string '
   function = "poly_exponential"
   sigma = $(h_sigma:1.0)
   power = $(h_power:3)
+[sampling.channel_definitions.GL638.lu_cut_0]
+around = "phase_space(cut(2,6,12,13))"
+parent_lmb = [3, 4, 7, 10]
+subspace_lmb = [3, 4, 7, 10]
+on_cut = [0]
+radial_profile = { kind = "lu_h", approximation = "log_logistic", broad_fraction = 0.02 }
+
+[sampling.channel_definitions.GL638.lu_cut_1]
+around = "phase_space(cut(2,6,10))"
+parent_lmb = [3, 4, 7, 10]
+subspace_lmb = [3, 4, 7, 10]
+on_cut = [1]
+radial_profile = { kind = "lu_h", approximation = "log_logistic", broad_fraction = 0.02 }
+
+[sampling.channel_definitions.GL638.lu_cut_2]
+around = "phase_space(cut(2,6,7,13,14))"
+parent_lmb = [3, 4, 7, 10]
+subspace_lmb = [3, 4, 7, 10]
+on_cut = [2]
+radial_profile = { kind = "lu_h", approximation = "log_logistic", broad_fraction = 0.02 }
+
+[sampling.channel_definitions.GL638.lu_cut_3]
+around = "phase_space(cut(2,4,12))"
+parent_lmb = [3, 4, 7, 10]
+subspace_lmb = [3, 4, 7, 10]
+on_cut = [3]
+radial_profile = { kind = "lu_h", approximation = "log_logistic", broad_fraction = 0.02 }
+
+[sampling.channel_definitions.GL638.lu_cut_4]
+around = "phase_space(cut(2,4,10,13))"
+parent_lmb = [3, 4, 7, 10]
+subspace_lmb = [3, 4, 7, 10]
+on_cut = [4]
+radial_profile = { kind = "lu_h", approximation = "log_logistic", broad_fraction = 0.02 }
+
+[sampling.channel_definitions.GL638.lu_cut_5]
+around = "phase_space(cut(2,4,7,14))"
+parent_lmb = [3, 4, 7, 10]
+subspace_lmb = [3, 4, 7, 10]
+on_cut = [5]
+radial_profile = { kind = "lu_h", approximation = "log_logistic", broad_fraction = 0.02 }
+
+[sampling.channel_definitions.GL638.cut1_joint_HZ]
+around = "then(block(lmb(6,10),phase_space(cut(2,6,10))),complement(7),block(lmb(3),at_cut(cut(2,6,10),intersect(surface(2,4,12),surface(3,10,13)))))"
+parent_lmb = [3,6,7,10]
+on_cut = [1]
+radial_profile = { kind = "lu_h", approximation = "log_logistic", broad_fraction = 0.02 }
+
+[sampling.channel_definitions.GL638.cut3_right_5_10]
+around = "then(block(lmb(4,12),phase_space(cut(2,4,12))),complement(7),block(lmb(5),at_cut(cut(2,4,12),surface(5,10))))"
+parent_lmb = [4,5,7,12]
+subspace_lmb = []
+on_cut = [3]
+radial_profile = { kind = "lu_h", approximation = "log_logistic", broad_fraction = 0.02 }
+
+[sampling.channel_definitions.GL638.soft_6_12]
+channel_weight = "ose"
+parent_lmb = [3, 4, 7, 10]
+around = "lmb(6,12,13,14)"
   [integrator]
   integrated_phase = "$(training_phase:real)"
   n_start = $(n_start:16384)
@@ -202,7 +263,7 @@ commands = [
   "run set_model_parameters configure_runtime",
   "set process -p epem_a_tth -i NNLO defaults",
   """integrate -p epem_a_tth -i NNLO --n-cores $(integration_cores:100)
-    --workspace-path $(workspace:./GL638_big_run_workspace)
+    --workspace-path $(workspace:./examples/cli/epem_a_ttxh/NNLO/gammaloop_state_GL638/workspaces/GL638_big_run_workspace)
     --renderer $(renderer:ratatui) --show-phase both
     --show-max-weight-info --show-max-weight-info-for-discrete-bins
     --show-top-discrete-grid --show-discrete-contributions-sum
@@ -225,72 +286,3 @@ commands = ["run configure_generation configure_runtime", "display settings glob
 [[command_blocks]]
 name = "all"
 commands = ["run generate integrate"]
-
-
-# Validated GL638 advanced channels and symmetric soft OSE override.
-[sampling.channel_definitions.GL638.lu_cut_0]
-around = "phase_space(cut(2,6,12,13))"
-parent_lmb = [3, 4, 7, 10]
-subspace_lmb = [3, 4, 7, 10]
-on_cut = [0]
-radial_profile = { kind = "lu_h", approximation = "log_logistic", broad_fraction = 0.02 }
-
-[sampling.channel_definitions.GL638.lu_cut_1]
-around = "phase_space(cut(2,6,10))"
-parent_lmb = [3, 4, 7, 10]
-subspace_lmb = [3, 4, 7, 10]
-on_cut = [1]
-radial_profile = { kind = "lu_h", approximation = "log_logistic", broad_fraction = 0.02 }
-
-[sampling.channel_definitions.GL638.lu_cut_2]
-around = "phase_space(cut(2,6,7,13,14))"
-parent_lmb = [3, 4, 7, 10]
-subspace_lmb = [3, 4, 7, 10]
-on_cut = [2]
-radial_profile = { kind = "lu_h", approximation = "log_logistic", broad_fraction = 0.02 }
-
-[sampling.channel_definitions.GL638.lu_cut_3]
-around = "phase_space(cut(2,4,12))"
-parent_lmb = [3, 4, 7, 10]
-subspace_lmb = [3, 4, 7, 10]
-on_cut = [3]
-radial_profile = { kind = "lu_h", approximation = "log_logistic", broad_fraction = 0.02 }
-
-[sampling.channel_definitions.GL638.lu_cut_4]
-around = "phase_space(cut(2,4,10,13))"
-parent_lmb = [3, 4, 7, 10]
-subspace_lmb = [3, 4, 7, 10]
-on_cut = [4]
-radial_profile = { kind = "lu_h", approximation = "log_logistic", broad_fraction = 0.02 }
-
-[sampling.channel_definitions.GL638.lu_cut_5]
-around = "phase_space(cut(2,4,7,14))"
-parent_lmb = [3, 4, 7, 10]
-subspace_lmb = [3, 4, 7, 10]
-on_cut = [5]
-radial_profile = { kind = "lu_h", approximation = "log_logistic", broad_fraction = 0.02 }
-
-# Compose the cut1 LU-h radial proposal with the hosted joint in one channel.
-# The cut depends on parent columns6/10; column7 is drawn next, then active3.
-# Existing native binding must verify that dependency and the prior permutation.
-# The six unchanged full-volume LU-h siblings retain support for compact decline.
-[sampling.channel_definitions.GL638.cut1_joint_HZ]
-around = "then(block(lmb(6,10),phase_space(cut(2,6,10))),complement(7),block(lmb(3),at_cut(cut(2,6,10),intersect(surface(2,4,12),surface(3,10,13)))))"
-parent_lmb = [3,6,7,10]
-on_cut = [1]
-radial_profile = { kind = "lu_h", approximation = "log_logistic", broad_fraction = 0.02 }
-
-# Prospective hosted Cut3 right-threshold channel; actual catalogue gates pending.
-[sampling.channel_definitions.GL638.cut3_right_5_10]
-around = "then(block(lmb(4,12),phase_space(cut(2,4,12))),complement(7),block(lmb(5),at_cut(cut(2,4,12),surface(5,10))))"
-parent_lmb = [4,5,7,12]
-subspace_lmb = []
-on_cut = [3]
-radial_profile = { kind = "lu_h", approximation = "log_logistic", broad_fraction = 0.02 }
-
-# Retain soft coverage to suppress the observed unbounded single-soft real weights.
-# Reuse the recorded soft LMB channel; this adds one full-volume proposal.
-[sampling.channel_definitions.GL638.soft_6_12]
-channel_weight = "ose"
-parent_lmb = [3, 4, 7, 10]
-around = "lmb(6,12,13,14)"

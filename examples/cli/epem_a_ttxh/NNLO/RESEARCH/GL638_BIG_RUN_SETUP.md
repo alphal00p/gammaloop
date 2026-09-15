@@ -15,13 +15,18 @@ linear radial mapping, `b=0.3`, and `power=2`.
 The integrator uses five adaptive iterations of 16,384 outer samples (81,920
 total), 16 bins, minimum 64 samples per update, learning rates 0.25, variance
 training, and seed 62001. The run uses 100 workers, SymJIT O3 compression, real
-phase integration, and per-iteration maximum diagnostics. Stability uses
-separate real/imaginary components and Double/Quad/Arb escalation, with final
-Arb `ecm_relative_tolerance_for_re=1e-100` at integrated dimension `-2`.
+phase integration, and per-iteration maximum diagnostics. For a physical
+real-phase evaluation the stability owner checks only Re (and the separately
+accumulated `|Re|`) against Double/Quad/Arb escalation; inactive Im probes
+cannot force a rescue. Reference acceptance observables retain their
+independent component checks. The final Arb
+`ecm_relative_tolerance_for_re=1e-100` is applied at integrated dimension `-2`.
 This allowance is relative to `E_cm` and does not waive nonfinite or meaningful
 real discrepancies.
 
-The K6 Gaussian acceptance passed for inverse-density and OSE scores in MC and
+The state and integration workspace are rooted under `gammaloop_state_GL638/`,
+so the card's paths are reproducible from the repository root. The K6 Gaussian
+acceptance passed for inverse-density and OSE scores in MC and
 SUM modes. The first physical OSE pilot stopped on a reporting-boundary tail
 underflow below binary64's normal range; the code now rounds such suppressed
 completed contributions to zero while still rejecting a factor that promotes one
