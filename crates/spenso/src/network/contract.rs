@@ -23,8 +23,8 @@ use crate::{
     contraction::Contract,
     network::graph::{NetworkLeaf, NetworkNode, NetworkOp, NetworkOperation, ScaledTensorRef},
     structure::{
-        HasStructure, PermutedStructure, StructureContract, TensorStructure,
-        permuted::PermuteTensor,
+        Canonicalized, HasStructure, StructureContract, TensorStructure,
+        permuted::ApplyPendingIndexPermutation,
         slot::{AbsInd, IsAbstractSlot},
     },
 };
@@ -632,8 +632,8 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         Aind: AbsInd,
         LT: LibraryTensor + Clone,
         T: HasStructure + From<LT::WithIndices>,
-        L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
-        LT::WithIndices: PermuteTensor<Permuted = LT::WithIndices>,
+        L: Library<T::Structure, Key = K, Value = Canonicalized<LT>>,
+        LT::WithIndices: ApplyPendingIndexPermutation<Output = LT::WithIndices>,
         <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
             IsAbstractSlot<Aind = Aind>,
     {
@@ -705,13 +705,14 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         Aind: AbsInd,
         LT: LibraryTensor + Clone,
         T: HasStructure + Clone + ScalarMul<Sc, Output = T>,
-        L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
+        L: Library<T::Structure, Key = K, Value = Canonicalized<LT>>,
         Sc: for<'a> MulAssign<Sc::Ref<'a>>
             + Clone
             + for<'a> MulAssign<T::ScalarRef<'a>>
             + From<T::Scalar>
             + Ref,
-        LT::WithIndices: ScalarMul<Sc, Output = T> + PermuteTensor<Permuted = LT::WithIndices>,
+        LT::WithIndices:
+            ScalarMul<Sc, Output = T> + ApplyPendingIndexPermutation<Output = LT::WithIndices>,
         <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
             IsAbstractSlot<Aind = Aind>,
     {
@@ -846,13 +847,14 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         Aind: AbsInd,
         LT: LibraryTensor + Clone,
         T: HasStructure + Clone + ScalarMul<Sc, Output = T>,
-        L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
+        L: Library<T::Structure, Key = K, Value = Canonicalized<LT>>,
         Sc: for<'a> MulAssign<Sc::Ref<'a>>
             + Clone
             + for<'a> MulAssign<T::ScalarRef<'a>>
             + From<T::Scalar>
             + Ref,
-        LT::WithIndices: ScalarMul<Sc, Output = T> + PermuteTensor<Permuted = LT::WithIndices>,
+        LT::WithIndices:
+            ScalarMul<Sc, Output = T> + ApplyPendingIndexPermutation<Output = LT::WithIndices>,
         <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
             IsAbstractSlot<Aind = Aind>,
     {
@@ -1016,8 +1018,9 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         Aind: AbsInd,
         LT: LibraryTensor + Clone,
         T: HasStructure + ScalarMul<Sc, Output = T>,
-        L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
-        LT::WithIndices: ScalarMul<Sc, Output = T> + PermuteTensor<Permuted = LT::WithIndices>,
+        L: Library<T::Structure, Key = K, Value = Canonicalized<LT>>,
+        LT::WithIndices:
+            ScalarMul<Sc, Output = T> + ApplyPendingIndexPermutation<Output = LT::WithIndices>,
         <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
             IsAbstractSlot<Aind = Aind>,
         Sc: for<'a> MulAssign<Sc::Ref<'a>> + Clone + Ref,
@@ -1350,10 +1353,10 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
             + TensorCommonFactor<Sc>
             + ScalarMul<Sc, Output = T>
             + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
-        L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
+        L: Library<T::Structure, Key = K, Value = Canonicalized<LT>>,
         Sc: for<'a> MulAssign<Sc::Ref<'a>> + Clone + Ref,
         T::Structure: Display,
-        LT::WithIndices: PermuteTensor<Permuted = LT::WithIndices>,
+        LT::WithIndices: ApplyPendingIndexPermutation<Output = LT::WithIndices>,
         <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
             IsAbstractSlot<Aind = Aind>,
     {
@@ -1536,9 +1539,9 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
             + ScalarMul<Sc, Output = T>
             + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
         T::Structure: Display,
-        L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
+        L: Library<T::Structure, Key = K, Value = Canonicalized<LT>>,
         Sc: for<'a> MulAssign<Sc::Ref<'a>> + Clone + Ref,
-        LT::WithIndices: PermuteTensor<Permuted = LT::WithIndices>,
+        LT::WithIndices: ApplyPendingIndexPermutation<Output = LT::WithIndices>,
         <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
             IsAbstractSlot<Aind = Aind>,
     {
@@ -1629,9 +1632,9 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
             + ScalarMul<Sc, Output = T>
             + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
         T::Structure: Display,
-        L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
+        L: Library<T::Structure, Key = K, Value = Canonicalized<LT>>,
         Sc: for<'a> MulAssign<Sc::Ref<'a>> + Clone + Ref,
-        LT::WithIndices: PermuteTensor<Permuted = LT::WithIndices>,
+        LT::WithIndices: ApplyPendingIndexPermutation<Output = LT::WithIndices>,
         <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
             IsAbstractSlot<Aind = Aind>,
     {
@@ -1734,9 +1737,9 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
             + ScalarMul<Sc, Output = T>
             + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
         T::Structure: Display,
-        L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
+        L: Library<T::Structure, Key = K, Value = Canonicalized<LT>>,
         Sc: for<'a> MulAssign<Sc::Ref<'a>> + Clone + Ref,
-        LT::WithIndices: PermuteTensor<Permuted = LT::WithIndices>,
+        LT::WithIndices: ApplyPendingIndexPermutation<Output = LT::WithIndices>,
         <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
             IsAbstractSlot<Aind = Aind>,
     {
@@ -2027,9 +2030,9 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
             + ScalarMul<Sc, Output = T>
             + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
         T::Structure: Display,
-        L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
+        L: Library<T::Structure, Key = K, Value = Canonicalized<LT>>,
         Sc: for<'a> MulAssign<Sc::Ref<'a>> + Clone + Ref,
-        LT::WithIndices: PermuteTensor<Permuted = LT::WithIndices>,
+        LT::WithIndices: ApplyPendingIndexPermutation<Output = LT::WithIndices>,
         <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
             IsAbstractSlot<Aind = Aind>,
     {
@@ -2090,9 +2093,9 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
             + ScalarMul<Sc, Output = T>
             + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
         T::Structure: Display + StructureContract,
-        L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
+        L: Library<T::Structure, Key = K, Value = Canonicalized<LT>>,
         Sc: for<'a> MulAssign<Sc::Ref<'a>> + Clone + Ref,
-        LT::WithIndices: PermuteTensor<Permuted = LT::WithIndices>,
+        LT::WithIndices: ApplyPendingIndexPermutation<Output = LT::WithIndices>,
         <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
             IsAbstractSlot<Aind = Aind>,
     {
@@ -2147,9 +2150,9 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
             + ScalarMul<Sc, Output = T>
             + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
         T::Structure: Display,
-        L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
+        L: Library<T::Structure, Key = K, Value = Canonicalized<LT>>,
         Sc: for<'a> MulAssign<Sc::Ref<'a>> + Clone + Ref,
-        LT::WithIndices: PermuteTensor<Permuted = LT::WithIndices>,
+        LT::WithIndices: ApplyPendingIndexPermutation<Output = LT::WithIndices>,
         <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
             IsAbstractSlot<Aind = Aind>,
     {
@@ -2322,13 +2325,14 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         Aind: AbsInd,
         LT: LibraryTensor + Clone,
         T: HasStructure + Clone + ScalarMul<Sc, Output = T>,
-        L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
+        L: Library<T::Structure, Key = K, Value = Canonicalized<LT>>,
         Sc: for<'a> MulAssign<Sc::Ref<'a>>
             + Clone
             + for<'a> MulAssign<T::ScalarRef<'a>>
             + From<T::Scalar>
             + Ref,
-        LT::WithIndices: ScalarMul<Sc, Output = T> + PermuteTensor<Permuted = LT::WithIndices>,
+        LT::WithIndices:
+            ScalarMul<Sc, Output = T> + ApplyPendingIndexPermutation<Output = LT::WithIndices>,
         <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
             IsAbstractSlot<Aind = Aind>,
     {
@@ -2450,7 +2454,7 @@ impl<
         + FastTensorSumContractible<Sc>
         + TensorCommonFactor<Sc>
         + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
-    L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
+    L: Library<T::Structure, Key = K, Value = Canonicalized<LT>>,
     Sc: for<'a> MulAssign<Sc::Ref<'a>>
         + Clone
         + for<'a> MulAssign<T::ScalarRef<'a>>
@@ -2464,7 +2468,7 @@ impl<
 where
     LT::WithIndices: Contract<LT::WithIndices, LCM = T>
         + ScalarMul<Sc, Output = T>
-        + PermuteTensor<Permuted = LT::WithIndices>,
+        + ApplyPendingIndexPermutation<Output = LT::WithIndices>,
     <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
         IsAbstractSlot<Aind = Aind>,
 {
@@ -2523,7 +2527,7 @@ impl<
         + FastTensorSumContractible<Sc>
         + TensorCommonFactor<Sc>
         + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
-    L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
+    L: Library<T::Structure, Key = K, Value = Canonicalized<LT>>,
     Sc: for<'a> MulAssign<Sc::Ref<'a>>
         + Clone
         + for<'a> MulAssign<T::ScalarRef<'a>>
@@ -2537,7 +2541,7 @@ impl<
 where
     LT::WithIndices: Contract<LT::WithIndices, LCM = T>
         + ScalarMul<Sc, Output = T>
-        + PermuteTensor<Permuted = LT::WithIndices>,
+        + ApplyPendingIndexPermutation<Output = LT::WithIndices>,
     <LT::WithIndices as HasStructure>::Structure: Display,
     T::Structure: Display,
     <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
@@ -2583,7 +2587,7 @@ impl<
         + FastTensorSumContractible<Sc>
         + TensorCommonFactor<Sc>
         + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
-    L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
+    L: Library<T::Structure, Key = K, Value = Canonicalized<LT>>,
     Sc: for<'a> MulAssign<Sc::Ref<'a>>
         + Clone
         + for<'a> MulAssign<T::ScalarRef<'a>>
@@ -2598,7 +2602,7 @@ impl<
 where
     LT::WithIndices: Contract<LT::WithIndices, LCM = T>
         + ScalarMul<Sc, Output = T>
-        + PermuteTensor<Permuted = LT::WithIndices>,
+        + ApplyPendingIndexPermutation<Output = LT::WithIndices>,
     <LT::WithIndices as HasStructure>::Structure: Display,
     T::Structure: Display,
     <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
@@ -2705,7 +2709,7 @@ impl<
         + FastTensorSumContractible<Sc>
         + TensorCommonFactor<Sc>
         + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
-    L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
+    L: Library<T::Structure, Key = K, Value = Canonicalized<LT>>,
     Sc: for<'a> MulAssign<Sc::Ref<'a>>
         + Clone
         + for<'a> MulAssign<T::ScalarRef<'a>>
@@ -2722,7 +2726,7 @@ impl<
 where
     LT::WithIndices: Contract<LT::WithIndices, LCM = T>
         + ScalarMul<Sc, Output = T>
-        + PermuteTensor<Permuted = LT::WithIndices>,
+        + ApplyPendingIndexPermutation<Output = LT::WithIndices>,
     <LT::WithIndices as HasStructure>::Structure: Display,
     T::Structure: Display + StructureContract,
     <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
@@ -2793,7 +2797,7 @@ impl<
         + FastTensorSumContractible<Sc>
         + TensorCommonFactor<Sc>
         + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
-    L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
+    L: Library<T::Structure, Key = K, Value = Canonicalized<LT>>,
     Sc: for<'a> MulAssign<Sc::Ref<'a>>
         + Clone
         + for<'a> MulAssign<T::ScalarRef<'a>>
@@ -2808,7 +2812,7 @@ impl<
 where
     LT::WithIndices: Contract<LT::WithIndices, LCM = T>
         + ScalarMul<Sc, Output = T>
-        + PermuteTensor<Permuted = LT::WithIndices>,
+        + ApplyPendingIndexPermutation<Output = LT::WithIndices>,
     <LT::WithIndices as HasStructure>::Structure: Display,
     T::Structure: Display,
     <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
@@ -2870,7 +2874,7 @@ impl<
         + FastTensorSumContractible<Sc>
         + TensorCommonFactor<Sc>
         + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
-    L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
+    L: Library<T::Structure, Key = K, Value = Canonicalized<LT>>,
     Sc: for<'a> MulAssign<Sc::Ref<'a>>
         + Clone
         + for<'a> MulAssign<T::ScalarRef<'a>>
@@ -2885,7 +2889,7 @@ impl<
 where
     LT::WithIndices: Contract<LT::WithIndices, LCM = T>
         + ScalarMul<Sc, Output = T>
-        + PermuteTensor<Permuted = LT::WithIndices>,
+        + ApplyPendingIndexPermutation<Output = LT::WithIndices>,
     <LT::WithIndices as HasStructure>::Structure: Display,
     T::Structure: Display,
     <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:

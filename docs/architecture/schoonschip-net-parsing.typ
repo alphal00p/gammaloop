@@ -21,7 +21,7 @@ that enables contracted-sum expansion; neither wrapper subsequently
 calls `schoonschip()` on the full result.
 
 ```
-fn schoonschip_net<Aind: AbsInd + DummyAind + ParseableAind + 'static>(&self) -> Atom {
+fn schoonschip_net<Aind: AbsInd + DummyAind + ParseableAind + 'static>(&self) -> Result<Atom, NetworkToolingError> {
     self.schoonschip_with_net::<false, Aind>(&SchoonschipSettings::default_network())
 }
 ```

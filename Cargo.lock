@@ -6129,6 +6129,7 @@ dependencies = [
  "spenso-hep-lib",
  "spenso-macros",
  "symbolica",
+ "tabled",
  "thiserror 2.0.18",
  "xpct",
 ]

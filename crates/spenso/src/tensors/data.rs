@@ -5,10 +5,10 @@ use crate::{
     },
     iterators::{DenseTensorLinearIterator, SparseTensorLinearIterator},
     structure::{
-        CastStructure, HasName, HasStructure, IndexLess, OrderedStructure, PermutedStructure,
-        ScalarStructure, ScalarTensor, SlotIndex, StructureContract, TensorStructure, TracksCount,
+        ApplyPendingIndexPermutation, CastStructure, HasName, HasStructure, IndexLess,
+        OrderedStructure, PendingIndexPermutation, Reindexed, ScalarStructure, ScalarTensor,
+        SlotIndex, StructureContract, TensorIdentity, TensorStructure, TracksCount,
         concrete_index::{ConcreteIndex, ExpandedIndex, FlatIndex},
-        permuted::PermuteTensor,
         representation::RepName,
         slot::{AbsInd, Slot},
     },
@@ -393,30 +393,29 @@ where
     }
 }
 
-impl<T: Clone, Aind: AbsInd, S: Clone + Into<IndexLess<R, Aind>>, R: RepName<Dual = R>>
-    PermuteTensor for DataTensor<T, S>
+impl<T: Clone, Aind: AbsInd, S, R: RepName<Dual = R>> TensorIdentity for DataTensor<T, S>
 where
-    S: TensorStructure<Slot = Slot<R, Aind>> + PermuteTensor<IdSlot = Slot<R, Aind>, Id = S>,
+    S: TensorStructure<Slot = Slot<R, Aind>> + TensorIdentity<IdSlot = Slot<R, Aind>, Id = S>,
 {
     type Id = DataTensor<T, S>;
     type IdSlot = (T, Slot<R, Aind>);
-    type Permuted = DataTensor<T, S>;
 
     fn id(i: Self::IdSlot, j: Self::IdSlot) -> Self::Id {
         DataTensor::Sparse(SparseTensor::id(i, j))
     }
+}
 
-    fn permute_inds(self, permutation: &linnet::permutation::Permutation) -> Self::Permuted {
-        match self {
-            DataTensor::Dense(d) => DataTensor::Dense(d.permute_inds(permutation)),
-            DataTensor::Sparse(s) => DataTensor::Sparse(s.permute_inds(permutation)),
-        }
-    }
+impl<T: Clone, Aind: AbsInd, S: Clone + Into<IndexLess<R, Aind>>, R: RepName<Dual = R>>
+    ApplyPendingIndexPermutation for DataTensor<T, S>
+where
+    S: TensorStructure<Slot = Slot<R, Aind>>,
+{
+    type Output = Self;
 
-    fn permute_reps(self, rep_perm: &linnet::permutation::Permutation) -> Self::Permuted {
+    fn apply_pending_index_permutation(self, pending: &PendingIndexPermutation) -> Self::Output {
         match self {
-            DataTensor::Dense(d) => DataTensor::Dense(d.permute_reps(rep_perm)),
-            DataTensor::Sparse(s) => DataTensor::Sparse(s.permute_reps(rep_perm)),
+            DataTensor::Dense(d) => DataTensor::Dense(d.apply_pending_index_permutation(pending)),
+            DataTensor::Sparse(s) => DataTensor::Sparse(s.apply_pending_index_permutation(pending)),
         }
     }
 }
@@ -429,28 +428,18 @@ where
     type Indexed = DataTensor<T, S::Indexed>;
     type Slot = S::Slot;
 
-    fn reindex(
+    fn reindex_storage(
         self,
         indices: &[<Self::Slot as IsAbstractSlot>::Aind],
-    ) -> Result<PermutedStructure<Self::Indexed>, StructureError> {
-        Ok(match self {
-            DataTensor::Dense(d) => {
-                let res = d.reindex(indices)?;
-                PermutedStructure {
-                    structure: DataTensor::Dense(res.structure),
-                    index_permutation: res.index_permutation,
-                    rep_permutation: res.rep_permutation,
-                }
-            }
-            DataTensor::Sparse(d) => {
-                let res = d.reindex(indices)?;
-                PermutedStructure {
-                    structure: DataTensor::Sparse(res.structure),
-                    index_permutation: res.index_permutation,
-                    rep_permutation: res.rep_permutation,
-                }
-            }
-        })
+    ) -> Result<Reindexed<Self::Indexed>, StructureError> {
+        match self {
+            DataTensor::Dense(d) => d
+                .reindex_storage(indices)
+                .map(|reindexed| reindexed.map_target(DataTensor::Dense)),
+            DataTensor::Sparse(d) => d
+                .reindex_storage(indices)
+                .map(|reindexed| reindexed.map_target(DataTensor::Sparse)),
+        }
     }
 
     fn dual(self) -> Self {

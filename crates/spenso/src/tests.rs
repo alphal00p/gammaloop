@@ -308,7 +308,7 @@ fn trace() {
 fn construct_dense_tensor() {
     let a = test_structure(4, 32);
     let data = vec![1.0; a.size().unwrap()];
-    let tensor = DenseTensor::from_data(data.clone(), a).unwrap();
+    let tensor = DenseTensor::from_storage_data(data.clone(), a).unwrap();
     let num_tensor: NumTensor = tensor.clone().into();
     let data_tensor: DataTensor<f64, _> = tensor.clone().into();
 
@@ -417,13 +417,13 @@ fn dense_dense_single_contract() {
         VecStructure::new(vec![Euclidean {}.slot(4, 1), Euclidean {}.slot(4, 2)]);
     let structurb = VecStructure::new(vec![Euclidean {}.slot(4, 2), Euclidean {}.slot(3, 3)]);
 
-    let a = DenseTensor::from_data(
+    let a = DenseTensor::from_storage_data(
         vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
         structura,
     )
     .unwrap();
 
-    let b = DenseTensor::from_data(
+    let b = DenseTensor::from_storage_data(
         vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
         structurb.clone(),
     )
@@ -441,7 +441,7 @@ fn sparse_diag_dense_contract() {
         VecStructure::new(vec![Euclidean {}.slot(4, 1), Euclidean {}.slot(4, 2)]);
     let structurb = VecStructure::new(vec![Euclidean {}.slot(4, 2), Euclidean {}.slot(3, 3)]);
 
-    let a = SparseTensor::from_data(
+    let a = SparseTensor::from_storage_data(
         [
             (vec![0, 0], 1),
             (vec![1, 1], 2),
@@ -452,7 +452,7 @@ fn sparse_diag_dense_contract() {
     )
     .unwrap();
 
-    let b = DenseTensor::from_data(
+    let b = DenseTensor::from_storage_data(
         vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
         structurb.clone(),
     )
@@ -643,7 +643,7 @@ fn simple_multi_contract() {
         Lorentz {}.dual().slot(4, 3).cast(),
     ]);
 
-    let a = DenseTensor::from_data(
+    let a = DenseTensor::from_storage_data(
         vec![
             1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 11, 12, 13, 14, 15, 16, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 11,
             12, 13, 14, 15, 16, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 11, 12, 13, 14, 15, 16,
@@ -652,7 +652,7 @@ fn simple_multi_contract() {
     )
     .unwrap();
 
-    let b = DenseTensor::from_data(
+    let b = DenseTensor::from_storage_data(
         vec![
             3, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 0, 0, 3, 2, 1, 3, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 0, 0,
             3, 2, 1, 3, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 0, 0, 3, 2, 1,
@@ -912,7 +912,7 @@ fn mixed_tensor_contraction() {
             None,
         ));
 
-    let a = SparseTensor::from_data(data_a.clone(), structur_a.clone()).unwrap();
+    let a = SparseTensor::from_storage_data(data_a.clone(), structur_a.clone()).unwrap();
 
     let structur_b = HistoryStructure::from(NamedStructure::from_iter(
         [
@@ -923,7 +923,7 @@ fn mixed_tensor_contraction() {
         None,
     ));
 
-    let b = DenseTensor::from_data(
+    let b = DenseTensor::from_storage_data(
         vec![
             im.mul_fallible(&1.0).unwrap(),
             2.0.mul_fallible(&im).unwrap(),
@@ -951,9 +951,9 @@ fn mixed_tensor_contraction() {
         (vec![1, 1], 2.0.mul_fallible(&im).unwrap()),
     ];
 
-    let a = SparseTensor::from_data(data_a.clone(), structur_a).unwrap();
+    let a = SparseTensor::from_storage_data(data_a.clone(), structur_a).unwrap();
 
-    let b = DenseTensor::from_data(vec![1.0, 2.0, 3.0, 4.0], structur_b).unwrap();
+    let b = DenseTensor::from_storage_data(vec![1.0, 2.0, 3.0, 4.0], structur_b).unwrap();
 
     let f = a.contract(&b).unwrap();
     assert_eq!(
@@ -1047,7 +1047,7 @@ fn contract_spensor() {
             None,
         ));
 
-    let a = SparseTensor::from_data(data_a.clone(), structur_a).unwrap();
+    let a = SparseTensor::from_storage_data(data_a.clone(), structur_a).unwrap();
 
     let data_b = [(vec![1, 0], 1.0), (vec![0, 1], 2.0)];
     let structur_b = HistoryStructure::from(NamedStructure::from_iter(
@@ -1059,7 +1059,7 @@ fn contract_spensor() {
         None,
     ));
 
-    let b = SparseTensor::from_data(data_b.clone(), structur_b).unwrap();
+    let b = SparseTensor::from_storage_data(data_b.clone(), structur_b).unwrap();
 
     let f = a.contract(&b).unwrap();
 
@@ -1081,7 +1081,7 @@ fn sparse_addition() {
             None,
         ));
 
-    let a = SparseTensor::from_data(data_a.clone(), structur_a).unwrap();
+    let a = SparseTensor::from_storage_data(data_a.clone(), structur_a).unwrap();
 
     let data_b = [(vec![1, 0], 1.0), (vec![0, 1], 2.0)];
     let structur_b = HistoryStructure::from(NamedStructure::from_iter(
@@ -1093,7 +1093,7 @@ fn sparse_addition() {
         None,
     ));
 
-    let b = SparseTensor::from_data(data_b.clone(), structur_b).unwrap();
+    let b = SparseTensor::from_storage_data(data_b.clone(), structur_b).unwrap();
 
     let f = a.add_fallible(&b).unwrap();
 
@@ -1115,7 +1115,7 @@ fn sparse_sub() {
             None,
         ));
 
-    let a = SparseTensor::from_data(data_a.clone(), structur_a).unwrap();
+    let a = SparseTensor::from_storage_data(data_a.clone(), structur_a).unwrap();
 
     let data_b = [(vec![1, 0], 1.0), (vec![0, 1], 3.0)];
 
@@ -1128,7 +1128,7 @@ fn sparse_sub() {
         None,
     ));
 
-    let b = SparseTensor::from_data(data_b.clone(), structur_b).unwrap();
+    let b = SparseTensor::from_storage_data(data_b.clone(), structur_b).unwrap();
 
     let f = a.sub_fallible(&b).unwrap();
 
@@ -1173,7 +1173,7 @@ fn contract_densor_with_spensor() {
             None,
         ));
 
-    let a = SparseTensor::from_data(data_a.clone(), structur_a).unwrap();
+    let a = SparseTensor::from_storage_data(data_a.clone(), structur_a).unwrap();
 
     let data_b = [1.0, 2.0, 3.0, 4.0];
     let structur_b = HistoryStructure::from(NamedStructure::from_iter(
@@ -1185,7 +1185,7 @@ fn contract_densor_with_spensor() {
         None,
     ));
 
-    let b = DenseTensor::from_data(data_b.to_vec(), structur_b).unwrap();
+    let b = DenseTensor::from_storage_data(data_b.to_vec(), structur_b).unwrap();
 
     let f = a.contract(&b).unwrap();
 
@@ -1245,7 +1245,7 @@ fn convert_sym() {
             "b".into(),
             None,
         ));
-    let b = DenseTensor::from_data(data_b.to_vec(), structur_b).unwrap();
+    let b = DenseTensor::from_storage_data(data_b.to_vec(), structur_b).unwrap();
 
     let symb: DenseTensor<Atom, _> = b.try_into_upgrade().unwrap();
 
@@ -1285,7 +1285,7 @@ fn simple_multi_contract_sym() {
     ]);
     // let structb = structb.to_named("b");
 
-    let _a = DenseTensor::from_data(
+    let _a = DenseTensor::from_storage_data(
         vec![
             1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 11, 12, 13, 14, 15, 16, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 11,
             12, 13, 14, 15, 16, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 11, 12, 13, 14, 15, 16,
@@ -1294,7 +1294,7 @@ fn simple_multi_contract_sym() {
     )
     .unwrap();
 
-    let _b = DenseTensor::from_data(
+    let _b = DenseTensor::from_storage_data(
         vec![
             3, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 0, 0, 3, 2, 1, 3, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 0, 0,
             3, 2, 1, 3, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 0, 0, 3, 2, 1,
@@ -1463,18 +1463,18 @@ fn duals() {
 
 #[test]
 fn transpose() {
-    let a = DenseTensor::from_data(
+    let a = DenseTensor::from_storage_data(
         vec![1, 2],
         VecStructure::<Euclidean>::from_iter([Euclidean {}.slot(2, 1)]),
     )
     .unwrap();
 
-    let b = DenseTensor::from_data(
+    let b = DenseTensor::from_storage_data(
         vec![3, 4],
         VecStructure::from_iter([Euclidean {}.slot(2, 2)]),
     )
     .unwrap();
-    // let m = DenseTensor::from_data(
+    // let m = DenseTensor::from_storage_data(
     //     vec![0, 1, 0, 0],
     //     VecStructure::new(vec![
     //         Bispinor::new_slot_selfless(2, 2).into(),
@@ -1483,13 +1483,13 @@ fn transpose() {
     // )
     // .unwrap();
 
-    let mtranspose = DenseTensor::from_data(
+    let mtranspose = DenseTensor::from_storage_data(
         vec![0, 1, 0, 0],
         VecStructure::from_iter([Euclidean {}.slot(2, 1), Euclidean {}.slot(2, 2)]),
     )
     .unwrap();
 
-    let mdatatransposed = DenseTensor::from_data(
+    let mdatatransposed = DenseTensor::from_storage_data(
         vec![0, 0, 1, 0],
         VecStructure::new(vec![Euclidean {}.slot(2, 2), Euclidean {}.slot(2, 1)]),
     )

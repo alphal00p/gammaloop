@@ -190,10 +190,9 @@ fn parse() {
             |_| None,
             |a| {
                 if let Ok(a) = ShadowedStructure::<Aind>::parse(a.expression.as_view()) {
-                    a.structure
-                        .name()
+                    a.name()
                         .map(|s| {
-                            if let Some(a) = a.structure.args() {
+                            if let Some(a) = a.args() {
                                 FunctionBuilder::new(s).add_args(&a).finish().to_string()
                             } else {
                                 s.to_string()
@@ -1506,10 +1505,9 @@ mod failing {
                 |_| None,
                 |a| {
                     if let Ok(a) = ShadowedStructure::<Aind>::parse(a.expression.as_view()) {
-                        a.structure
-                            .name()
+                        a.name()
                             .map(|s| {
-                                if let Some(a) = a.structure.args() {
+                                if let Some(a) = a.args() {
                                     FunctionBuilder::new(s).add_args(&a).finish().to_string()
                                 } else {
                                     s.to_string()
@@ -1627,10 +1625,9 @@ mod failing {
                 |_| None,
                 |a| {
                     if let Ok(a) = ShadowedStructure::<Aind>::parse(a.expression.as_view()) {
-                        a.structure
-                            .name()
+                        a.name()
                             .map(|s| {
-                                if let Some(a) = a.structure.args() {
+                                if let Some(a) = a.args() {
                                     FunctionBuilder::new(s).add_args(&a).finish().to_string()
                                 } else {
                                     s.to_string()

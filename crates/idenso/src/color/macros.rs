@@ -19,10 +19,10 @@
 /// use idenso::color_t;
 /// use spenso::{slot, trace};
 ///
-/// let factor = color_t!(slot!(coad_na, a));
+/// let factor = color_t!(slot!(coad_da, a));
 /// let expr = trace!(&cof_nc, factor);
-/// let factor_from_binding = color_t!(slot!(coad_na, a));
-/// let explicit_tensor = color_t!(slot!(coad_na, a), slot!(cof_nc, i), slot!(cof_nc.dual(), j));
+/// let factor_from_binding = color_t!(slot!(coad_da, a));
+/// let explicit_tensor = color_t!(slot!(coad_da, a), slot!(cof_nc, i), slot!(cof_nc.dual(), j));
 /// let pattern_tensor = color_t!(RS.a__, RS.i__, RS.j__);
 /// let dimensioned_pattern = color_t!([CS.adj_, RS.a_], [CS.nc_, RS.i_], [CS.nc_, RS.j_]);
 /// ```
@@ -110,7 +110,7 @@ macro_rules! color_t {
 /// use idenso::color_f;
 /// use spenso::slot;
 ///
-/// let expr = color_f!(slot!(coad_na, a), slot!(coad_na, b), slot!(coad_na, c));
+/// let expr = color_f!(slot!(coad_da, a), slot!(coad_da, b), slot!(coad_da, c));
 /// let numeric_label_tensor = color_f!(1, 2, 3);
 /// let pattern_tensor = color_f!(RS.a__, RS.b__, RS.c__);
 /// let dimensioned_pattern = color_f!([CS.adj_, RS.a_], [CS.adj_, RS.b_], [CS.adj_, RS.c_]);
