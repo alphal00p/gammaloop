@@ -37,6 +37,18 @@
 
   cargoVendorDir = craneLib.vendorCargoDeps {
     cargoLock = (workspaceRoot + "/Cargo.lock");
+    overrideVendorCargoPackage = package: drv:
+      if package.name == "symbolica" && package.version == "3.0.0"
+      then
+        drv.overrideAttrs (old: {
+          # Symbolica watches .git/HEAD, which its published crate omits. A stable
+          # file prevents Cargo from rebuilding it whenever Nix restores artifacts.
+          postInstall = (old.postInstall or "") + ''
+            mkdir -p "$out/.git"
+            printf 'ref: refs/heads/nix-vendor\n' > "$out/.git/HEAD"
+          '';
+        })
+      else drv;
   };
 
   nonCargoBuildSources = lib.fileset.unions [
@@ -2208,7 +2220,7 @@
       # and need checking metadata as well as compiled doctest dependencies.
       buildPhaseCargoCommand = ''
         cargoWithProfile check ${ciArgs.cargoExtraArgs} --all-targets
-        cargoWithProfile test ${ciArgs.cargoExtraArgs} --no-run
+        cargoWithProfile test ${ciArgs.cargoExtraArgs} --no-run --exclude alphal00p-docs-python-exporter
       '';
       stripWorkspaceArtifacts = true;
       postPatch = workspaceMissingCargoTargetsScript;

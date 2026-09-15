@@ -21,7 +21,7 @@
 
     # Refresh deliberately with `just ci-cache-base REVISION` after a green run.
     ci-cache-base = {
-      url = "github:alphal00p/gammaloop/5181661ec340ebfb181a0045dac79fcec4f35525";
+      url = "github:alphal00p/gammaloop/fa1565a780b6b1f391be137b1e5a120762e9df9f";
       flake = false;
     };
 
