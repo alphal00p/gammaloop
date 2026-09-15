@@ -132,7 +132,7 @@ commands = ["""set default-runtime string '
   b = $(radial_scale:0.3)
   power = $(radial_power:2.0)
   [sampling.channel_selection]
-  GL638 = ["lu_cut_0", "lu_cut_1", "lu_cut_2", "lu_cut_3", "lu_cut_4", "lu_cut_5", "cut1_joint_HZ", "cut3_right_5_10", "soft_6_12"]
+  GL638 = $(graph_sampling_selection:["lu_cut_0", "lu_cut_1", "lu_cut_2", "lu_cut_3", "lu_cut_4", "lu_cut_5", "cut1_joint_HZ", "cut3_right_5_10", "soft_6_12"])
   [h_function]
   function = "poly_exponential"
   sigma = $(h_sigma:1.0)
