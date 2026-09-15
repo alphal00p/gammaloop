@@ -838,7 +838,10 @@ end_anchor = "# Exercise the embedded Typst watcher"
 # packages fall outside those ranges; broader review triggers remain advisory.
 # Reviewed 2026-09-14 during PR108 rebase: retain documentation source and
 # runtime ownership while moving Rust, documentation and CI composition apart.
-digest = "239abe69409d2371a9c1cf8f5caca761eb59d99e"
+# Reviewed 2026-09-15: remove the obsolete Symbolica compile-time license marker.
+# Terminal renders still receive SYMBOLICA_LICENSE at runtime; producer ownership
+# and cache boundaries are unchanged.
+digest = "6b54956c8f5d60d16d8b72cbf68a7fa6b33aa147"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"

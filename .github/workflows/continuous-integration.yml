@@ -81,7 +81,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: lcnbr/tymbolica
-          ref: 32ae00483b4845161401afac8be755cc336cb2bb
+          ref: 4aab37aa6a5250ac692b425bc95592a408c98cc1
           path: tymbolica-pinned
 
       - uses: NixOS/nix-installer-action@main

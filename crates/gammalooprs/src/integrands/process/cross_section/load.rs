@@ -6,11 +6,8 @@
 //! eyre = "0.6"
 //! serde_json = "1"
 //! serde = { version = "1.0", features = ["derive"] }
-//! symbolica = { version = "2.2", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "serde"] }
-//! [patch.crates-io]
-//! graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "1814278ea103258bcdb059276b760f19d25b46e3" }
-//! numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "1814278ea103258bcdb059276b760f19d25b46e3" }
-//! symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "1814278ea103258bcdb059276b760f19d25b46e3" }
+//! symbolica = { version = "3.0", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "serde"] }
+//! # Symbolica, Graphica, and Numerica use their published 3.0 releases.
 //! ```
 
 #![allow(dead_code)]

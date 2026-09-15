@@ -2175,7 +2175,6 @@ dependencies = [
  "criterion",
  "crossterm 0.28.1",
  "either",
- "graphica",
  "indenter",
  "indexmap",
  "insta",
@@ -2415,7 +2414,8 @@ dependencies = [
 [[package]]
 name = "graphica"
 version = "3.0.0"
-source = "git+https://github.com/symbolica-dev/symbolica?rev=1814278ea103258bcdb059276b760f19d25b46e3#1814278ea103258bcdb059276b760f19d25b46e3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "afa7211a7cfdba21893f634868e19459e5d1882e5957f98d7c084875a6e70ab6"
 dependencies = [
  "ahash 0.8.12",
  "dyn-clone",
@@ -4065,7 +4065,8 @@ dependencies = [
 [[package]]
 name = "numerica"
 version = "3.0.0"
-source = "git+https://github.com/symbolica-dev/symbolica?rev=1814278ea103258bcdb059276b760f19d25b46e3#1814278ea103258bcdb059276b760f19d25b46e3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dd28aae6e022a7b5846a8ae40b2d41104f8d8cba38adbb02c0f7933f3ed7bb02"
 dependencies = [
  "ahash 0.8.12",
  "astro-float",
@@ -6310,8 +6311,9 @@ dependencies = [
 
 [[package]]
 name = "symbolica"
-version = "2.2.0"
-source = "git+https://github.com/symbolica-dev/symbolica?rev=1814278ea103258bcdb059276b760f19d25b46e3#1814278ea103258bcdb059276b760f19d25b46e3"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c060dc0a9613c88aadee7095109bf350e549067c9ecf7ea217064cdf3d439721"
 dependencies = [
  "ahash 0.8.12",
  "append-only-vec",
@@ -7117,7 +7119,7 @@ dependencies = [
 [[package]]
 name = "tymbolica-atom-payload"
 version = "0.1.0"
-source = "git+https://github.com/lcnbr/tymbolica?rev=32ae00483b4845161401afac8be755cc336cb2bb#32ae00483b4845161401afac8be755cc336cb2bb"
+source = "git+https://github.com/lcnbr/tymbolica?rev=4aab37aa6a5250ac692b425bc95592a408c98cc1#4aab37aa6a5250ac692b425bc95592a408c98cc1"
 dependencies = [
  "ciborium",
  "symbolica",

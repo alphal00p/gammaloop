@@ -37,22 +37,6 @@
 
   cargoVendorDir = craneLib.vendorCargoDeps {
     cargoLock = (workspaceRoot + "/Cargo.lock");
-    overrideVendorGitCheckout = packages: drv:
-      if lib.any (package: package.name == "symbolica") packages
-      then
-        drv.overrideAttrs (old: {
-          postInstall =
-            (old.postInstall or "")
-            + ''
-              for crate in ${lib.concatMapStringsSep " " (package: lib.escapeShellArg "${package.name}-${package.version}") packages}; do
-                if [ -d "$out/$crate" ]; then
-                  mkdir -p "$out/$crate/.git"
-                  printf 'ref: refs/heads/nix-vendor\n' > "$out/$crate/.git/HEAD"
-                fi
-              done
-            '';
-        })
-      else drv;
   };
 
   nonCargoBuildSources = lib.fileset.unions [

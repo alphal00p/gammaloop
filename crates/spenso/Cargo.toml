@@ -86,7 +86,7 @@ blake3 = { version = "1.8.3", optional = true }
 tymbolica-atom-payload = { workspace = true, optional = true }
 
 [dependencies.symbolica]
-version = "2.2.0"
+version = "3.0.0"
 default-features = false
 features = ["bincode", "serde"]
 optional = true

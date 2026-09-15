@@ -6,13 +6,10 @@
 //! gammaloop-api = { path = "../../../../crates/gammaloop-api", default-features = false, features = ["cli"] }
 //! gammalooprs = { path = "../../../../crates/gammalooprs" }
 //!
-//! [patch.crates-io]
+//! # Symbolica, Graphica, and Numerica use their published 3.0 releases.
 //! #graphica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
 //! #numerica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
 //! #symbolica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
-//! graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "1814278ea103258bcdb059276b760f19d25b46e3" }
-//! numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "1814278ea103258bcdb059276b760f19d25b46e3" }
-//! symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "1814278ea103258bcdb059276b760f19d25b46e3" }
 //!
 //! ```
 //!
