@@ -35,7 +35,22 @@ try:
 except Exception:
     HAVE_FEYNALG = False
 
-ob.set_renormalization_scale(1.0)      # mu^2 = 1, to match the bare scipy F
+try:                                   # 2nd scalar-master engine: alphal00p/oneloopmaster
+    import os as _os                   # Its Symbolica core dumps a licence banner + a burst of
+    _dn = _os.open(_os.devnull, _os.O_WRONLY)      # "Created infinity ..." WARNs at import, and
+    _saved = (_os.dup(1), _os.dup(2))              # measurably on fd 1 -- i.e. straight into
+    _os.dup2(_dn, 1); _os.dup2(_dn, 2)             # this script's OWN table on stdout.  Written
+    try:                                           # from Rust, so redirect_stdout can't see it:
+        import oneloop_native as olm               # mute both fds around the import only.
+    finally:
+        _os.dup2(_saved[0], 1); _os.dup2(_saved[1], 2)
+        _os.close(_saved[0]); _os.close(_saved[1]); _os.close(_dn)
+    HAVE_OLM = True
+except Exception:
+    HAVE_OLM = False
+
+MU_SQ = 1.0                            # mu^2 = 1, to match the bare scipy F
+ob.set_renormalization_scale(MU_SQ ** 0.5)   # NB: avh_olo's olo_scale() takes mu, not mu^2
 np.random.seed(20260718)
 NS = 3_000_000
 d = sp.Symbol("d")
@@ -138,7 +153,50 @@ def olo_master(kind, a):
         r = ob.three_point(*a)
     else:
         r = ob.four_point(*a)
-    return (complex(r.epsilon_minus_2), complex(r.epsilon_minus_1), complex(r.epsilon_0))
+    v = (complex(r.epsilon_minus_2), complex(r.epsilon_minus_1), complex(r.epsilon_0))
+    _olm_check(kind, a, v)             # running 2nd-engine tally; no-op without oneloopmaster
+    return v
+
+
+OLM_TOL = 1e-10                        # two double-precision engines; agreement is at ~1e-16
+_olm = {"ok": 0, "tot": 0, "worst": 0.0, "bad": []}
+
+
+def olm_master(kind, a):
+    """The scalar master from alphal00p/oneloopmaster, in olo_master's convention.
+
+    Two conventions differ from oneloop_bridge and are undone here:
+      * SCALE: oneloop_bridge.set_renormalization_scale() forwards to avh_olo's olo_scale(),
+               which takes mu and stores mu^2.  oneloop_native's mu_squared= takes mu^2
+               itself.  So pass MU_SQ here and sqrt(MU_SQ) there -- squaring it is a silent
+               wrong answer, not an error.
+      * ORDER: oneloop_native returns (finite, 1/eps, 1/eps^2) (COEFFICIENT_ORDER == (0,-1,-2));
+               olo_master returns (1/eps^2, 1/eps, finite).  Exactly reversed -> [::-1].
+
+    Returns None rather than raising, so an unsupported point just costs the second opinion."""
+    if not HAVE_OLM:
+        return None
+    try:
+        f = {"A0": olm.A0, "B0": olm.B0, "C0": olm.C0, "D0": olm.D0}[kind]
+        return tuple(complex(x) for x in f(*a, mu_squared=MU_SQ))[::-1]
+    except Exception:
+        return None
+
+
+def _olm_check(kind, a, v):
+    """Running OneLOop-vs-oneloopmaster tally on the FULL Laurent (both poles + finite) of
+    every master this run touches -- the reduction loop, scalar_laurent, and the tlx d/dm^2
+    finite differences alike.  Diagnostic only: it never affects a family's verdict."""
+    w = olm_master(kind, a)
+    if w is None:
+        return
+    _olm["tot"] += 1
+    rel = sum(abs(w[i] - v[i]) for i in range(3)) / (1 + sum(abs(x) for x in v))
+    _olm["worst"] = max(_olm["worst"], rel)
+    if rel <= OLM_TOL:
+        _olm["ok"] += 1
+    elif len(_olm["bad"]) < 8:
+        _olm["bad"].append((kind, tuple(complex(x) for x in a), rel, v, w))
 
 
 def feynalg_master(kind, a):
@@ -428,7 +486,20 @@ def main():
           f"(poles cancel to <1e-6; reduced finite part within 5σ of scipy MC)")
     if fey_tot:
         print(f"master finite-part agreement OneLOop vs feynalg: {fey_ok}/{fey_tot}")
+    if _olm["tot"]:
+        print(f"master Laurent agreement OneLOop vs oneloopmaster: {_olm['ok']}/{_olm['tot']} "
+              f"(worst relative residual {_olm['worst']:.2e}, tol {OLM_TOL:g})")
+        for kind, a, rel, v, w in _olm["bad"]:
+            print(f"    disagree {kind}{a} rel={rel:.2e}\n"
+                  f"      avh_olo       {v}\n      oneloopmaster {w}")
+    elif not HAVE_OLM:
+        print("oneloopmaster (oneloop_native) not importable - 2nd master engine skipped")
+    else:                              # imported but answered nothing: every call raised, or the
+        n_fail += 1                    # tally was bypassed.  Silence here would look like a pass.
+        print("oneloopmaster imported but answered 0 masters - 2nd master engine BROKEN")
+    n_fail += _olm["tot"] - _olm["ok"]  # a master disagreement is a failure of the run, not a note
+    return 1 if n_fail else 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
