@@ -1,6 +1,7 @@
 # RustRed acceptance coverage through three loops
 
-This is a source-level inventory, **not a passing-test report**. It covers every
+This is a source-level inventory and corrected frozen-process passing-test
+report. It covers every
 existing end-to-end scalar comparison/reference input with one common mass and
 at most three loops. Tensor-bearing native peers use the existing FeynKit
 prepass, followed by RustRed scalar reduction and master substitution. The
@@ -19,14 +20,15 @@ Before K6 activation, 25 legacy entries / 31 executions mapped to enabled peers
 and 15 entries / 15 executions mapped to pending K6 peers. Genuine K6 bytes are
 now shipped and the existing loader/routing adapter and all peer entrypoints
 are enabled. All 40 entries / 46 executions have active native mappings.
-Enabled means configured to run, not passed. The first full frozen activation
-census completed 97 selected invocations: 74 passed and 23 failed, with no
-timeouts or ignored selections. The failures exposed three native-pattern
-condition bugs and one mislabeled five-class fixture; their correction is
-undergoing a separate build and rerun. The decorated one-loop five-term peer
-and uncontracted three-loop numerical peers already passed. Detailed evidence
-is in `target/vakint-k6-activation.lV949C/RESULTS.md`; that invocation count is
-not a substitute for the 40-entry / 46-input obligation below.
+Enabled means configured to run. After correcting the three native-pattern
+conditions and the contracted-class fixtures without changing numerical
+assertions, the fresh frozen matrix completed **76 selected invocations: 76
+passed, 0 failed, 0 ignored**: 15 catalog/default, 17 three-loop peers, 43
+legacy-complement, and one offline 38-terminal MATAD oracle. The offline test
+uses FORM only to validate the terminal catalog; all scalar RustRed peers use
+an invalid FORM path. Evidence is in
+`target/vakint-short-pattern.OAgEGT/`; the invocation count complements,
+rather than replaces, the 40-entry / 46-input inventory below.
 
 ## Complete mapping
 
@@ -51,11 +53,11 @@ attributes are now removed; all numerical comparison bodies remain unchanged.
 | AM::test_integrate_1l_no_numerator | 6 | Same entry; powers 1–6 | Enabled |
 | AM::test_integrate_1l_no_numerator_squared_mass | 2 | Same entry; powers 1–2 | Enabled |
 | AM::test_integrate_2l_no_numerator | 1 | Same entry | Enabled |
-| AM::test_integrate_3l_basketball_a | 1 | AM::rustred_numerical_parity_3l_basketball_a | Enabled; current gate pending |
-| AM::test_integrate_3l_basketball_b | 1 | AM::rustred_numerical_parity_3l_basketball_b | Enabled; current gate pending |
-| AM::test_integrate_3l_no_numerator | 1 | AM::rustred_numerical_parity_3l_no_numerator | Enabled; current gate pending |
-| AM::test_integrate_3l_rank_4 | 1 | AM::rustred_numerical_parity_3l_rank_4 | Enabled; current gate pending |
-| AM::test_integrate_3l_rank_4_different_scales | 1 | AM::rustred_numerical_parity_3l_rank_4_different_scales | Enabled; current gate pending |
+| AM::test_integrate_3l_basketball_a | 1 | AM::rustred_numerical_parity_3l_basketball_a | Passed |
+| AM::test_integrate_3l_basketball_b | 1 | AM::rustred_numerical_parity_3l_basketball_b | Passed |
+| AM::test_integrate_3l_no_numerator | 1 | AM::rustred_numerical_parity_3l_no_numerator | Passed |
+| AM::test_integrate_3l_rank_4 | 1 | AM::rustred_numerical_parity_3l_rank_4 | Passed |
+| AM::test_integrate_3l_rank_4_different_scales | 1 | AM::rustred_numerical_parity_3l_rank_4_different_scales | Passed |
 | AR::test_integrate_1l_a | 1 | Same entry | Enabled |
 | AR::test_integrate_1l_simple | 1 | Same entry | Enabled |
 | AR::test_integrate_1l_simple_squared_mass | 1 | Same entry | Enabled |
@@ -63,15 +65,15 @@ attributes are now removed; all numerical comparison bodies remain unchanged.
 | AR::test_integrate_1l_cross_product_with_additional_symbols_numerator | 1 | Same entry | Enabled |
 | AR::test_integrate_1l_dot_product_external | 1 | Same entry | Enabled |
 | AR::test_integrate_2l | 1 | Same entry | Enabled |
-| AR::test_integrate_3l | 1 | AR::rustred_numerical_parity_3l | Enabled; current gate pending |
-| AR::test_integrate_3l_rank_4 | 1 | AR::rustred_numerical_parity_3l_rank_4 | Enabled; current gate pending |
-| AR::test_integrate_3l_rank_4_additional_symbols_numerator | 1 | AR::rustred_numerical_parity_3l_rank_4_additional_symbols_numerator | Enabled; current gate pending |
-| AR::test_integrate_3l_rank_4_matad | 1 | AR::rustred_numerical_parity_3l_rank_4_matad | Enabled; current gate pending |
-| AR::test_integrate_3l_rank_4_matad_additional_symbols_numerator | 1 | AR::rustred_numerical_parity_3l_rank_4_matad_additional_symbols_numerator | Enabled; current gate pending |
-| AR::test_integrate_3l_matad | 1 | AR::rustred_numerical_parity_3l_matad | Enabled; current gate pending |
+| AR::test_integrate_3l | 1 | AR::rustred_numerical_parity_3l | Passed |
+| AR::test_integrate_3l_rank_4 | 1 | AR::rustred_numerical_parity_3l_rank_4 | Passed |
+| AR::test_integrate_3l_rank_4_additional_symbols_numerator | 1 | AR::rustred_numerical_parity_3l_rank_4_additional_symbols_numerator | Passed |
+| AR::test_integrate_3l_rank_4_matad | 1 | AR::rustred_numerical_parity_3l_rank_4_matad | Passed |
+| AR::test_integrate_3l_rank_4_matad_additional_symbols_numerator | 1 | AR::rustred_numerical_parity_3l_rank_4_matad_additional_symbols_numerator | Passed |
+| AR::test_integrate_3l_matad | 1 | AR::rustred_numerical_parity_3l_matad | Passed |
 | FF::test_integrate_1l_decorated_indices_alphaloop | 1 | Same entry | Enabled |
 | FF::test_integrate_1l_decorated_indices_matad | 1 | Same entry | Enabled |
-| FF::test_integrate_1l_decorated_indices_pysecdec | 1 | RV::rustred_decorated_one_loop_five_terms | Enabled; not run |
+| FF::test_integrate_1l_decorated_indices_pysecdec | 1 | RV::rustred_decorated_one_loop_five_terms | Passed |
 | PC::test_integrate_1l_pysecdec | 1 | RS::pysecdec peers | Enabled |
 | PC::test_integrate_1l_pysecdec_non_unit_mass | 1 | RS::pysecdec peers | Enabled |
 | PC::test_integrate_1l_pysecdec_non_unit_scale | 1 | RS::pysecdec peers | Enabled |
@@ -81,13 +83,13 @@ attributes are now removed; all numerical comparison bodies remain unchanged.
 | PC::test_integrate_2l_pysecdec_pinched | 1 | RS::pysecdec peers | Enabled |
 | PC::test_integrate_2l_pysecdec_pinched_other_lmb | 1 | RS::pysecdec peers | Enabled |
 | PC::test_integrate_2l_pysecdec_rank_four_num | 1 | RS::pysecdec peers | Enabled |
-| PC::test_integrate_3l_pysecdec | 1 | RV::rustred_three_loop_scalar_nonunit_scale | Enabled; current gate pending |
-| PC::test_integrate_3l_rank_4 | 1 | RV::rustred_three_loop_rank_four_large_external_vectors | Enabled; current gate pending |
-| PC::test_integrate_3l_rank_4_matad | 1 | RV::rustred_three_loop_rank_four_five_terms | Enabled; current gate pending |
+| PC::test_integrate_3l_pysecdec | 1 | RV::rustred_three_loop_scalar_nonunit_scale | Passed |
+| PC::test_integrate_3l_rank_4 | 1 | RV::rustred_three_loop_rank_four_large_external_vectors | Passed |
+| PC::test_integrate_3l_rank_4_matad | 1 | RV::rustred_three_loop_rank_four_five_terms | Passed |
 | PR::test_integrate_1l_simple | 1 | Alias of AR::test_integrate_1l_simple | Enabled alias |
 | PR::test_integrate_1l_cross_product | 1 | Alias of AR::test_integrate_1l_cross_product | Enabled alias |
 | PR::test_integrate_1l_cross_product_with_additional_symbols_numerator | 1 | Alias of AR::test_integrate_1l_cross_product_with_additional_symbols_numerator | Enabled alias |
-| PR::test_integrate_3l_o_eps | 1 | Alias of AR::test_integrate_3l_matad and its pending peer | Enabled alias; current gate pending |
+| PR::test_integrate_3l_o_eps | 1 | Alias of AR::test_integrate_3l_matad and its peer | Passed alias |
 
 The aliases preserve the same integral, mass/scale substitutions, external
 vectors, normalization and epsilon depth. Their original optional numerical
@@ -115,7 +117,7 @@ loops: they stop at epsilon^-1. They are preserved verbatim. Separate
 RV companions `rustred_basketball_a_finite_part` and
 `rustred_basketball_b_finite_part` request four terms, including epsilon^0.
 These two added executions are not included in the 40-entry legacy census.
-They are now enabled but have not yet run in the current gate.
+They are enabled and pass in the corrected frozen matrix.
 
 The five scalar matcher-class fixtures in RS and the five tensor-bearing
 class inputs in `rustred_k6_pipeline_tests.rs` supplement this matrix; they do
@@ -202,9 +204,9 @@ component-template wildcard permission; the earlier isolated run also exposed
 missing symbol initialization. Both approved setup fixes preserve the original
 assertions. All six routing tests now pass in separate fresh processes, including
 the all-class component check. Production K6 scalar steering is wired through
-the retained witness; its full numerical acceptance remains pending. Two new
-matching tests currently stop on an unrecognized short-form fixture before
-their adapter assertions; those failures are preserved separately.
+the retained witness; its numerical peers pass in the corrected frozen matrix.
+The short-form matching fixtures now use only actually bound power wildcards,
+and their adapter assertions pass.
 
 The existing generic loader, typed terminal catalog, memoized reducer and
 homogeneity materialization now consume a genuine V5 K6 artifact and its exact
@@ -214,7 +216,7 @@ recursive applier or graph match is introduced.
 Exact offline MATAD-basis terminal projections are preferred over unnecessary
 20,000-digit literal tables.
 
-### Genuine K6 asset and exact terminal manifest, runtime gate pending
+### Genuine K6 asset and exact terminal manifest, runtime gate passed
 
 The canonical RustRed producer generated byte-identical one/six-worker artifacts:
 8,911,462 bytes, 623 rules, 5,639 cells, 38 typed corner terminals and 26 zero
@@ -224,7 +226,7 @@ join and disjoint 64-mask partition passed independent audit. The shipped SHA256
 is `53bb589f98beaa735332cffbd080b174cfff5fc7a664e3499d5f667ad8fb8434`;
 the actual algorithm ID is `rustred.source-port-original-domain.v1`. Evidence:
 RustRed `target/spired-k6-producer.007TpB/RESULTS.md`. These are artifact/CLI
-gates, not yet the full Vakint numerical pipeline.
+gates joined by the complete Vakint three-loop scalar parity matrix below.
 
 `src/rustred_evaluation/terminal/k6.rs` now records the actual 38 canonical
 corner keys checked by RustRed's 623-rule unit-mass program. Six authenticated
@@ -250,8 +252,9 @@ GammaLoop libtest binaries. No fake `ClosedArtifact` or alternate loader is adde
 `TerminalCatalog::compile` authenticates the shipped artifact and requires exact
 equality with its complete typed terminal set before use. The current 15-test
 native catalog/default gate passes, including master finalization and the
-existing artifact contract checks. Full recursive three-loop numerical peers
-are a separate, still-pending gate.
+existing artifact contract checks. The 17 three-loop peer tests and 43
+legacy-complement tests also pass from fresh frozen processes with invalid FORM
+paths for RustRed scalar evaluation.
 
 Two additional checks are prepared. The enabled native-only test now passes: it
 materializes the five different terminal expressions through the finite

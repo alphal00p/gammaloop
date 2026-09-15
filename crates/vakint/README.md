@@ -23,8 +23,11 @@ Vakint's backward-compatibility contract for its public API, defaults, and
 existing FORM-backed evaluation methods.
 
 The [RustRed acceptance inventory](tests/RUSTRED_ACCEPTANCE.md) maps all existing
-single-common-mass inputs through three loops to enabled or explicitly pending
-native peers. It distinguishes configured coverage from executed passing tests.
+single-common-mass inputs through three loops to native peers. The corrected
+fresh-process matrix passes 76 selected checks (15 catalog/default, 17
+three-loop peers, 43 legacy-complement checks, and one offline 38-terminal
+oracle); the inventory distinguishes those executed checks from aliases in the
+40-entry/46-input legacy census.
 
 ```rust
 use vakint::{EvaluationOrder, Vakint, VakintSettings, vakint_parse};
