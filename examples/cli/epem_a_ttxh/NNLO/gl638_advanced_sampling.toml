@@ -268,8 +268,6 @@ commands = [
   """integrate -p epem_a_tth -i NNLO --n-cores $(integration_cores:50)
     --workspace-path $(workspace:./examples/cli/epem_a_ttxh/NNLO/workspaces/GL638_advanced_sampling_workspace)
     --renderer $(renderer:ratatui) --show-phase both
-    --show-max-weight-info --show-max-weight-info-for-discrete-bins
-    --show-top-discrete-grid --show-discrete-contributions-sum
     --write-results-for-each-iteration --batch-timing 2 $(restart:)
   """,
 ]
