@@ -1070,8 +1070,6 @@ power = 2.0
                 sample_orientations: false,
                 sampling_type: DiscreteGraphSamplingType::MultiChanneling(
                     crate::settings::runtime::MultiChannelingSettings {
-                        alpha: 1.5,
-                        channel_weight: crate::settings::runtime::LmbChannelWeight::InverseJacobian,
                         parameterization_settings:
                             crate::settings::runtime::ParameterizationSettings {
                                 mode: crate::settings::runtime::ParameterizationMode::MomentumSpace,
@@ -1081,6 +1079,7 @@ power = 2.0
                                 lmb_basis_ids: Default::default(),
                                 sampling_channels: crate::settings::runtime::SamplingChannelSelection {
                                     weight: crate::settings::runtime::SamplingChannelWeight::InverseJacobian,
+                                    alpha: 1.5,
                                     default_channel_selection: vec!["auto:optimized_lmb".to_owned()],
                                     ..Default::default()
                                 },
@@ -1113,8 +1112,6 @@ power = 4.0
                 sample_orientations: false,
                 sampling_type: DiscreteGraphSamplingType::MultiChanneling(
                     crate::settings::runtime::MultiChannelingSettings {
-                        alpha: 3.0,
-                        channel_weight: crate::settings::runtime::LmbChannelWeight::InverseJacobian,
                         parameterization_settings:
                             crate::settings::runtime::ParameterizationSettings {
                                 mode: crate::settings::runtime::ParameterizationMode::Spherical,
@@ -1171,8 +1168,6 @@ b = 1.0
                 sample_orientations: false,
                 sampling_type: DiscreteGraphSamplingType::MultiChanneling(
                     crate::settings::runtime::MultiChannelingSettings {
-                        alpha: 3.0,
-                        channel_weight: crate::settings::runtime::LmbChannelWeight::InverseJacobian,
                         parameterization_settings:
                             crate::settings::runtime::ParameterizationSettings {
                                 mode: crate::settings::runtime::ParameterizationMode::RelativeSpherical,
@@ -1235,6 +1230,16 @@ b = 1.0
         fn test_stability_settings_serialize_deserialize() {
             use crate::settings::runtime::StabilitySettings;
             generic_test_settings::<StabilitySettings>();
+            let settings = StabilitySettings {
+                escalate_if_exact_zero: true,
+                ..Default::default()
+            };
+            let serialized = toml::to_string(&settings).unwrap();
+            assert!(serialized.contains("escalate_if_exact_zero = true"));
+            assert_eq!(
+                toml::from_str::<StabilitySettings>(&serialized).unwrap(),
+                settings
+            );
         }
 
         #[test]

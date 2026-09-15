@@ -12,7 +12,8 @@ use std::{
 };
 
 use crate::settings::runtime::{
-    HFunctionSettings, SamplingChannelDefinition, SamplingChannelSelection, SamplingRadialProfile,
+    HFunctionSettings, SamplingChannelDefinition, SamplingChannelSelection, SamplingChannelWeight,
+    SamplingRadialProfile,
 };
 use color_eyre::eyre::{Result, WrapErr, eyre};
 use serde::{Deserialize, Serialize};
@@ -710,6 +711,8 @@ pub struct SamplingChannelCompileContext<T: FloatLike = f64> {
     pub parameterization_settings: ParameterizationSettings,
     pub e_cm: f64,
     pub n_loop_momenta: usize,
+    /// Current master-graph masses, indexed by physical edge identity.
+    pub edge_masses: BTreeMap<usize, spenso::algebra::complex::Complex<F<T>>>,
     pub geometry_maps: BTreeMap<SamplingGeometryKey, CompiledSamplingMap<T>>,
     /// Physical cut identities, independently of the sampling catalogue.
     pub physical_cut_ids: BTreeMap<Vec<usize>, Vec<usize>>,
@@ -735,6 +738,7 @@ impl<T: FloatLike> SamplingChannelCompileContext<T> {
             parameterization_settings,
             e_cm,
             n_loop_momenta,
+            edge_masses: BTreeMap::new(),
             geometry_maps: BTreeMap::new(),
             physical_cut_ids: BTreeMap::new(),
             physical_cut_max_occurrences: BTreeMap::new(),
@@ -742,6 +746,82 @@ impl<T: FloatLike> SamplingChannelCompileContext<T> {
             lmb_frame_maps: BTreeMap::new(),
             lmb_frame_maps_by_edges: BTreeMap::new(),
         }
+    }
+
+    fn ose_score(
+        &self,
+        channel: &str,
+        edges: &[usize],
+        map: &CompiledSamplingMap<T>,
+    ) -> Result<SamplingScoreFunction<T>> {
+        let alpha = self.parameterization_settings.sampling_channels.alpha;
+        if !alpha.is_finite() || alpha < 0.0 || !self.e_cm.is_finite() || self.e_cm <= 0.0 {
+            return Err(eyre!(
+                "channel '{channel}': OSE weighting needs finite alpha >= 0 and finite E_cm > 0"
+            ));
+        }
+        let scale = F::<T>::from_f64(self.e_cm);
+        let log_scale = scale.ln();
+        let normalization = -&log_scale * scale.from_usize(3 * self.n_loop_momenta);
+        // Alpha zero is the uniform partition, including at a zero-energy edge.
+        if alpha == 0.0 {
+            return Ok(SamplingScoreFunction::from_log_function(move |_| {
+                Ok(Some(normalization.0.clone()))
+            }));
+        }
+        let masses = edges
+            .iter()
+            .map(|edge| {
+                let mass = self.edge_masses.get(edge).ok_or_else(|| {
+                    eyre!("channel '{channel}': no warmup master mass for OSE edge {edge}")
+                })?;
+                if !mass.re.0.is_finite() || !mass.im.0.is_finite() || mass.im != mass.im.zero() {
+                    return Err(eyre!("channel '{channel}': OSE needs a finite real master mass for edge {edge}, received {mass}"));
+                }
+                Ok(mass.re.clone())
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let frame = match map {
+            CompiledSamplingMap::Lmb(_) => None,
+            CompiledSamplingMap::Affine { frame, .. } => Some(frame.clone()),
+            _ => {
+                return Err(eyre!(
+                    "channel '{channel}': OSE requires a complete LMB map"
+                ));
+            }
+        };
+        let alpha = F::<T>::from_f64(alpha);
+        let channel = channel.to_owned();
+        let edges = edges.to_vec();
+        Ok(SamplingScoreFunction::from_log_function(move |point| {
+            let native = frame
+                .as_ref()
+                .map(|frame| frame.inverse(point, &[]))
+                .transpose()?;
+            let coordinates = native
+                .as_ref()
+                .map_or(point, |value| value.coordinates.as_slice());
+            if coordinates.len() != 3 * masses.len() {
+                return Err(eyre!(
+                    "channel '{channel}': OSE coordinates do not match its basis"
+                ));
+            }
+            let mut score = normalization.clone();
+            for ((momentum, mass), edge) in coordinates.chunks_exact(3).zip(&masses).zip(&edges) {
+                let energy = momentum
+                    .iter()
+                    .fold(mass.square(), |sum, value| sum + F(value.clone()).square())
+                    .sqrt();
+                if !energy.0.is_finite() || energy <= energy.zero() {
+                    return Err(SamplingEvaluationError::Unrepresentable {
+                        operation: "OSE channel score",
+                        detail: format!("channel '{channel}', edge {edge}: on-shell energy {energy} must be finite and positive; a singular score is not absent support"),
+                    }.into());
+                }
+                score += &alpha * (&log_scale - energy.ln());
+            }
+            Ok(Some(score.0))
+        }))
     }
 
     /// Register one native physical block transactionally. Distinct host, parent
@@ -1036,8 +1116,11 @@ pub struct CompiledSamplingChannel<T: FloatLike = f64> {
     /// Ordered master-graph edge ids for this raw coordinate block.
     pub embedded_edges: Vec<usize>,
     pub map: CompiledSamplingMap<T>,
-    /// Optional eager positive score used by the singularity-proxy partition.
-    /// It is compiled once from the channel metadata during warmup.
+    /// Resolved per-channel choice; manually constructed maps may inherit the
+    /// bridge default. This also records whether a score is an actual density.
+    pub partition_mode: Option<SamplingPartitionMode>,
+    /// Positive score compiled from metadata or bound to native OSE routing
+    /// during warmup. Its normalization never replaces the map Jacobian.
     pub singularity_proxy: Option<SamplingScoreFunction<T>>,
 }
 
@@ -1758,7 +1841,7 @@ impl<T: FloatLike> SamplingChannelBridge<T> {
             |index| {
                 let channel = &self.channels[index];
                 let mut context = contexts.for_channel(SamplingChannelId(index))?;
-                match self.partition_mode {
+                match channel.partition_mode.unwrap_or(self.partition_mode) {
                     SamplingPartitionMode::MapDensity => {
                         // Keep the selected independent inverse and its full
                         // diagnostics. Foreign scores need the exact density
@@ -1785,7 +1868,7 @@ impl<T: FloatLike> SamplingChannelBridge<T> {
                         }
                         Ok(Some(density.ln().0))
                     }
-                    SamplingPartitionMode::SingularityProxy => {
+                    SamplingPartitionMode::Ose | SamplingPartitionMode::SingularityProxy => {
                         let proxy = channel.singularity_proxy.as_ref().ok_or_else(|| {
                             eyre!(
                                 "channel '{}' has no singularity_proxy metadata; provide a positive expression for every channel when sampling_channel_weight = 'singularity_proxy'",
@@ -1861,7 +1944,7 @@ impl<T: FloatLike> SamplingChannelBridge<T> {
         // density at the actual generated point, reusing the partition score
         // when it already evaluates that inverse. Proxy partitions additionally
         // invert restricted foreign maps to establish their actual support.
-        let log_density = match self.partition_mode {
+        let log_density = match channel.partition_mode.unwrap_or(self.partition_mode) {
             SamplingPartitionMode::MapDensity => F(partition.log_scores[channel_index]
                 .clone()
                 .ok_or_else(|| SamplingEvaluationError::UncertainGeometry {
@@ -1870,7 +1953,7 @@ impl<T: FloatLike> SamplingChannelBridge<T> {
                         channel.name
                     ),
                 })?),
-            SamplingPartitionMode::SingularityProxy => {
+            SamplingPartitionMode::Ose | SamplingPartitionMode::SingularityProxy => {
                 let inverse = channel
                     .inverse_with_context(&map.point, &mut contexts.for_channel(channel_id)?)?
                     .ok_or_else(|| SamplingEvaluationError::UncertainGeometry {
@@ -2393,6 +2476,12 @@ impl SamplingChannelCatalogue {
                 ),
             }.into());
         }
+        let alpha = context.parameterization_settings.sampling_channels.alpha;
+        if !alpha.is_finite() || alpha < 0.0 {
+            return Err(eyre!(
+                "sampling.alpha must be finite and nonnegative; got {alpha}"
+            ));
+        }
         if context.master_graph.trim().is_empty() {
             return Err(SamplingChannelCompileError::EmptyMasterGraph.into());
         }
@@ -2520,6 +2609,36 @@ impl SamplingChannelCatalogue {
             // Every compiled complete channel now returns the same master frame,
             // including native-parent affine routing and explicit complements.
             let embedded_edges = context.parent_lmb.clone();
+            let override_weight = match entry {
+                SamplingCatalogueEntry::Named(channel) => channel.definition.channel_weight,
+                _ => None,
+            };
+            let weight = override_weight
+                .unwrap_or(context.parameterization_settings.sampling_channels.weight);
+            let partition_mode = match weight {
+                SamplingChannelWeight::MapDensity | SamplingChannelWeight::InverseJacobian => {
+                    SamplingPartitionMode::MapDensity
+                }
+                SamplingChannelWeight::SingularityProxy => SamplingPartitionMode::SingularityProxy,
+                SamplingChannelWeight::Ose
+                    if matches!(definition, SamplingMapDefinition::Lmb(_)) =>
+                {
+                    SamplingPartitionMode::Ose
+                }
+                SamplingChannelWeight::Ose => {
+                    return Err(eyre!(
+                        "channel '{name}': channel_weight='ose' requires around='lmb(...)'; select map_density for surface, cut, and composed maps"
+                    ));
+                }
+            };
+            let singularity_proxy = if partition_mode == SamplingPartitionMode::Ose {
+                let SamplingMapDefinition::Lmb(edges) = &definition else {
+                    unreachable!()
+                };
+                Some(context.ose_score(&name, edges, &map)?)
+            } else {
+                singularity_proxy
+            };
             compiled.push(CompiledSamplingChannel {
                 name,
                 master_graph: context.master_graph.clone(),
@@ -2527,6 +2646,7 @@ impl SamplingChannelCatalogue {
                 definition,
                 embedded_edges,
                 map,
+                partition_mode: Some(partition_mode),
                 singularity_proxy,
             });
         }
@@ -2552,12 +2672,13 @@ impl SamplingChannelCatalogue {
                     format!("{index}: surface edges={edges:?} parent_lmb={parent_lmb:?}")
                 }
                 SamplingCatalogueEntry::Named(channel) => format!(
-                    "{index}: {} around={} subspace_lmb={:?} parent_lmb={:?} on_cut={:?}",
+                    "{index}: {} around={} subspace_lmb={:?} parent_lmb={:?} on_cut={:?} channel_weight={:?}",
                     channel.name,
                     channel.definition.around,
                     channel.definition.subspace_lmb,
                     channel.definition.parent_lmb,
-                    channel.definition.on_cut
+                    channel.definition.on_cut,
+                    channel.definition.channel_weight
                 ),
             })
             .collect()
@@ -3030,6 +3151,186 @@ mod tests {
     use crate::settings::runtime::ParameterizationSettings;
 
     #[test]
+    fn ose_partition_matches_energy_products_with_affine_shifts_and_alpha() -> Result<()> {
+        use spenso::algebra::complex::Complex;
+        test_initialise()?;
+        let mut settings = ParameterizationSettings::default();
+        settings.sampling_channels.weight = SamplingChannelWeight::Ose;
+        settings.sampling_channels.default_channel_selection = vec!["auto:lmb".into()];
+        let resolved = resolve_sampling_channel_selection("G", &settings.sampling_channels)?;
+        let catalogue =
+            build_sampling_channel_catalogue(&resolved, &[(0, vec![1]), (1, vec![2])], &[0, 1]);
+        let programs = catalogue.compile_programs(3, &HFunctionSettings::default())?;
+        let mut context = SamplingChannelCompileContext::new("G", vec![1], settings, 10.0, 1);
+        context.edge_masses =
+            BTreeMap::from([(1, Complex::new_re(F(2.0))), (2, Complex::new_re(F(3.0)))]);
+        // Edge 2 has momentum k + (7,-2,1): this is the inverse of its map to master k.
+        context.lmb_frame_maps.insert(
+            1,
+            SamplingMapAffine::new(
+                vec![
+                    vec![1.0, 0.0, 0.0],
+                    vec![0.0, 1.0, 0.0],
+                    vec![0.0, 0.0, 1.0],
+                ],
+                vec![-7.0, 2.0, -1.0],
+            )?,
+        );
+        for alpha in [0.0, 1.0, 3.0] {
+            context.parameterization_settings.sampling_channels.alpha = alpha;
+            let bridge = SamplingChannelBridge::new(catalogue.compile(&context, &programs)?)?;
+            let partition = bridge.partition(&[3.0, 4.0, 0.0])?;
+            let scores = [29.0_f64.sqrt().powf(-alpha), 114.0_f64.sqrt().powf(-alpha)];
+            for (weight, score) in partition.weights.iter().zip(scores) {
+                assert!((weight - score / scores.iter().sum::<f64>()).abs() < 1e-13);
+            }
+            // This runs the independent actual-J check, which must not use the OSE score.
+            for id in [0, 1] {
+                let forward = bridge.forward(SamplingChannelId(id), &[0.27, 0.39, 0.64])?;
+                let inverse = bridge
+                    .inverse(SamplingChannelId(id), &forward.raw_coordinates)?
+                    .unwrap();
+                assert!((forward.map.jacobian * inverse.map.inverse_jacobian - 1.0).abs() < 1e-11);
+            }
+        }
+        for invalid in [-1.0, f64::NAN, f64::INFINITY] {
+            context.parameterization_settings.sampling_channels.alpha = invalid;
+            assert!(
+                catalogue
+                    .compile(&context, &programs)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("sampling.alpha")
+            );
+        }
+        context.parameterization_settings.sampling_channels.alpha = 0.0;
+        context.edge_masses.insert(1, Complex::new_re(F(0.0)));
+        let bridge = SamplingChannelBridge::new(catalogue.compile(&context, &programs)?)?;
+        assert_eq!(bridge.partition(&[0.0; 3])?.weights, vec![0.5, 0.5]);
+        context.parameterization_settings.sampling_channels.alpha = 3.0;
+        let bridge = SamplingChannelBridge::new(catalogue.compile(&context, &programs)?)?;
+        assert!(
+            bridge
+                .partition(&[0.0; 3])
+                .unwrap_err()
+                .to_string()
+                .contains("a singular score is not absent support")
+        );
+        context.edge_masses.insert(1, Complex::new(F(2.0), F(1.0)));
+        assert!(
+            catalogue
+                .compile(&context, &programs)
+                .unwrap_err()
+                .to_string()
+                .contains("finite real master mass")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn ose_override_mixes_with_surface_density_and_preserves_units_and_normalization() -> Result<()>
+    {
+        use spenso::algebra::complex::Complex;
+        test_initialise()?;
+        let mut settings = ParameterizationSettings::default();
+        settings.sampling_channels.default_channel_selection =
+            vec!["soft".into(), "surface".into()];
+        let mut soft = definition("lmb(1)");
+        soft.parent_lmb = vec![1];
+        soft.subspace_lmb = vec![];
+        soft.channel_weight = Some(SamplingChannelWeight::Ose);
+        let mut surface = definition("surface(7)");
+        surface.parent_lmb = vec![1];
+        surface.subspace_lmb = vec![1];
+        settings.sampling_channels.channel_definitions.insert(
+            "G".into(),
+            BTreeMap::from([("soft".into(), soft), ("surface".into(), surface)]),
+        );
+        let resolved = resolve_sampling_channel_selection("G", &settings.sampling_channels)?;
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let programs = catalogue.compile_programs(3, &HFunctionSettings::default())?;
+        let mut reference_weights: Option<Vec<f64>> = None;
+        let mut reference_logs: Option<Vec<Option<f64>>> = None;
+        for scale in [1.0, 10.0] {
+            let mut context =
+                SamplingChannelCompileContext::new("G", vec![1], settings.clone(), 10.0 * scale, 1);
+            context
+                .edge_masses
+                .insert(1, Complex::new_re(F(2.0 * scale)));
+            context.insert_geometry_map(
+                SamplingMapDefinition::Surface(vec![7]),
+                vec![1],
+                vec![1],
+                vec![],
+                CompiledSamplingMap::Surface(SurfaceRadialMap::absent(
+                    3,
+                    vec![0.0; 3],
+                    2.0 * scale,
+                    1.0,
+                )?),
+            )?;
+            let bridge = SamplingChannelBridge::new(catalogue.compile(&context, &programs)?)?;
+            assert_eq!(
+                bridge.channels()[0].partition_mode,
+                Some(SamplingPartitionMode::Ose)
+            );
+            assert_eq!(
+                bridge.channels()[1].partition_mode,
+                Some(SamplingPartitionMode::MapDensity)
+            );
+            let partition = bridge.partition(&[3.0 * scale, 4.0 * scale, scale])?;
+            if let Some(weights) = &reference_weights {
+                for (actual, expected) in partition.weights.iter().zip(weights) {
+                    assert!((actual - expected).abs() < 1e-13);
+                }
+                for (actual, previous) in partition
+                    .log_scores
+                    .iter()
+                    .zip(reference_logs.as_ref().unwrap())
+                {
+                    assert!((actual.unwrap() - previous.unwrap() + 3.0 * scale.ln()).abs() < 1e-12);
+                }
+            } else {
+                reference_weights = Some(partition.weights.clone());
+                reference_logs = Some(partition.log_scores.clone());
+            }
+            for id in [0, 1] {
+                let point = bridge.forward(SamplingChannelId(id), &[0.31, 0.43, 0.67])?;
+                assert!((point.partition.weight_sum() - 1.0).abs() < 1e-13);
+            }
+            if scale == 1.0 {
+                let report = SamplingChannelBridgeAcceptanceReport::normalized_gaussian(
+                    &bridge, 8192, 3.0, &[0.0; 3],
+                )?;
+                assert_eq!(
+                    report.finite_sample_count,
+                    report.sample_count * report.channel_count
+                );
+                assert!((report.normalization - 1.0).abs() < 0.04, "{report:?}");
+            }
+            // Global OSE cannot silently reinterpret an advanced channel's score.
+            context.parameterization_settings.sampling_channels.weight = SamplingChannelWeight::Ose;
+            assert!(
+                catalogue
+                    .compile(&context, &programs)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("requires around='lmb(...)'")
+            );
+            let mut explicit_density = catalogue.clone();
+            let SamplingCatalogueEntry::Named(channel) = &mut explicit_density.entries[1] else {
+                unreachable!()
+            };
+            channel.definition.channel_weight = Some(SamplingChannelWeight::MapDensity);
+            assert_eq!(
+                explicit_density.compile(&context, &programs)?[1].partition_mode,
+                Some(SamplingPartitionMode::MapDensity)
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
     fn fixed_quad_source_classifies_complete_catalogue_without_names() -> Result<()> {
         use crate::settings::runtime::SamplingRadialProfile;
         let ordinary = SamplingCatalogueEntry::Lmb {
@@ -3280,6 +3581,7 @@ mod tests {
             program,
         )?;
         let channel = |name: &str, map| CompiledSamplingChannel {
+            partition_mode: None,
             name: name.into(),
             master_graph: "shared-energy-pair".into(),
             basis_id: None,
@@ -3407,6 +3709,7 @@ mod tests {
                 program,
             )?;
             let channel = |name: &str, map| CompiledSamplingChannel {
+                partition_mode: None,
                 name: name.into(),
                 master_graph: "shared-energy-pair".into(),
                 basis_id: None,
@@ -3559,6 +3862,7 @@ mod tests {
             Ok(CompiledSamplingMap::Embedded(map))
         };
         let channel = |name: &str, map| CompiledSamplingChannel {
+            partition_mode: None,
             name: name.into(),
             master_graph: "conditional-shared-energy-pair".into(),
             basis_id: None,
@@ -3774,6 +4078,7 @@ mod tests {
                 })])
                 .unwrap();
                 CompiledSamplingChannel {
+                    partition_mode: None,
                     name: name.into(),
                     master_graph: "G".into(),
                     basis_id: None,
@@ -4004,6 +4309,7 @@ mod tests {
             .into_iter()
             .enumerate()
             .map(|(index, map)| CompiledSamplingChannel {
+                partition_mode: None,
                 name: format!("native_{index}"),
                 master_graph: "G".to_owned(),
                 basis_id: None,
@@ -4090,6 +4396,7 @@ mod tests {
 
     fn definition(around: &str) -> SamplingChannelDefinition {
         SamplingChannelDefinition {
+            channel_weight: None,
             radial_profile: None,
             around: around.to_owned(),
             subspace_lmb: vec![1, 2],
@@ -4188,6 +4495,7 @@ mod tests {
                 .insert(
                     "joint".into(),
                     SamplingChannelDefinition {
+                        channel_weight: None,
                         parent_lmb: vec![6, 4],
                         subspace_lmb: vec![6],
                         ..definition(around)
@@ -4248,6 +4556,7 @@ mod tests {
             selection.channel_definitions.get_mut("G").unwrap().insert(
                 "joint".into(),
                 SamplingChannelDefinition {
+                    channel_weight: None,
                     parent_lmb: vec![6, 4],
                     subspace_lmb: active,
                     ..definition(around)
@@ -4270,6 +4579,7 @@ mod tests {
                     (
                         "joint".into(),
                         SamplingChannelDefinition {
+                            channel_weight: None,
                             parent_lmb: vec![4, 6],
                             subspace_lmb: vec![6],
                             ..definition(pair)
@@ -4278,6 +4588,7 @@ mod tests {
                     (
                         "hosted".into(),
                         SamplingChannelDefinition {
+                            channel_weight: None,
                             parent_lmb: vec![4, 6],
                             subspace_lmb: vec![6],
                             ..definition(&format!("at_cut(cut(9),{pair})"))
@@ -4286,6 +4597,7 @@ mod tests {
                     (
                         "ordinary".into(),
                         SamplingChannelDefinition {
+                            channel_weight: None,
                             parent_lmb: vec![4, 6],
                             subspace_lmb: vec![],
                             ..definition("lmb(4,6)")
@@ -4670,6 +4982,7 @@ mod tests {
         let definitions = selection.channel_definitions.entry("G".into()).or_default();
         for (name, proxy) in [("first", first), ("second", second)] {
             let channel = SamplingChannelDefinition {
+                channel_weight: None,
                 radial_profile: None,
                 around: "lmb(1)".into(),
                 subspace_lmb: Vec::new(),
@@ -4689,7 +5002,13 @@ mod tests {
         let context = SamplingChannelCompileContext::<f64>::new(
             "G",
             vec![1],
-            ParameterizationSettings::default(),
+            ParameterizationSettings {
+                sampling_channels: SamplingChannelSelection {
+                    weight: SamplingChannelWeight::SingularityProxy,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
             100.0,
             1,
         );
@@ -4904,6 +5223,7 @@ mod tests {
             .insert(
                 "named".into(),
                 SamplingChannelDefinition {
+                    channel_weight: None,
                     radial_profile: None,
                     around: "lmb(1,2)".into(),
                     subspace_lmb: Vec::new(),
@@ -4929,6 +5249,7 @@ mod tests {
             .insert(
                 "threshold".into(),
                 SamplingChannelDefinition {
+                    channel_weight: None,
                     radial_profile: None,
                     around: "surface(2,4)".into(),
                     subspace_lmb: Vec::new(),
@@ -5715,6 +6036,7 @@ mod tests {
             .insert(
                 "named".into(),
                 SamplingChannelDefinition {
+                    channel_weight: None,
                     radial_profile: None,
                     around: "lmb(2,4)".into(),
                     subspace_lmb: Vec::new(),
@@ -6179,6 +6501,7 @@ mod tests {
                 .unwrap();
         let bridge = SamplingChannelBridge::new(vec![
             CompiledSamplingChannel {
+                partition_mode: None,
                 name: "left".into(),
                 master_graph: "G".into(),
                 basis_id: Some(0),
@@ -6188,6 +6511,7 @@ mod tests {
                 singularity_proxy: None,
             },
             CompiledSamplingChannel {
+                partition_mode: None,
                 name: "right".into(),
                 master_graph: "G".into(),
                 basis_id: Some(1),
@@ -6467,6 +6791,7 @@ mod tests {
         let map = SamplingMapKernel::new(SamplingMapDefinition::Lmb(vec![1]), settings, 100.0, 1)
             .unwrap();
         let channel = CompiledSamplingChannel {
+            partition_mode: None,
             name: "one".into(),
             master_graph: "G".into(),
             basis_id: Some(0),
@@ -6498,6 +6823,7 @@ mod tests {
         ));
 
         let different_frame = CompiledSamplingChannel {
+            partition_mode: None,
             name: "different-frame".into(),
             master_graph: "G".into(),
             basis_id: Some(2),

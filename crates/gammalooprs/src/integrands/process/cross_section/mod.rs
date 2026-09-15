@@ -1427,6 +1427,7 @@ impl CrossSectionGraphTerm {
                     .clone(),
                 cut_threshold_associations: graph.derived_data.cut_threshold_associations.clone(),
                 multi_channeling_setup: LmbMultiChannelingSetup {
+                    master_edge_masses: Default::default(),
                     sampling_bridge: Default::default(),
                     sampling_bridge_quad: Default::default(),
                     sampling_bridge_fixed256: Default::default(),
@@ -2449,6 +2450,7 @@ impl GraphTerm for CrossSectionGraphTerm {
     }
 
     fn warm_up(&mut self, settings: &RuntimeSettings, model: &Model) -> Result<()> {
+        self.multi_channeling_setup.master_edge_masses.invalidate();
         self.multi_channeling_setup.invalidate_sampling();
         self.graph.validate_real_masses(model)?;
         self.estimated_scale = Some(
@@ -2550,6 +2552,7 @@ impl GraphTerm for CrossSectionGraphTerm {
         self.graph.param_builder.update_model_values(model);
 
         self.param_builder = self.graph.param_builder.clone();
+        self.multi_channeling_setup.warm_up_masses(settings, model);
         self.real_mass_vec = Some(self.graph.new_edgevec(|edge, _, _| {
             edge.mass_value(model, &self.param_builder)
                 .map(|mass| mass.re)
