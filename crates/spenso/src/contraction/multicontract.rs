@@ -781,7 +781,7 @@ mod tests {
     use crate::{
         contraction::Contract,
         structure::{
-            OrderedStructure, PermutedStructure, StructureContract,
+            Canonicalized, OrderedStructure, StructureContract,
             representation::{LibraryRep, Lorentz, RepName},
             slot::{DualSlotTo, IsAbstractSlot},
         },
@@ -797,19 +797,16 @@ mod tests {
         let contracted_left = rep.new_slot(2, 10).to_lib();
         let contracted_right = rep.new_slot(2, 12).to_lib();
 
-        let self_structure: OrderedStructure<LibraryRep> = PermutedStructure::from_iter([
+        let self_structure: OrderedStructure<LibraryRep> = Canonicalized::from_iter([
             self_free_left,
             self_free_right,
             contracted_left,
             contracted_right,
         ])
-        .structure;
-        let other_structure: OrderedStructure<LibraryRep> = PermutedStructure::from_iter([
-            other_free,
-            contracted_left.dual(),
-            contracted_right.dual(),
-        ])
-        .structure;
+        .into_canonical();
+        let other_structure: OrderedStructure<LibraryRep> =
+            Canonicalized::from_iter([other_free, contracted_left.dual(), contracted_right.dual()])
+                .into_canonical();
 
         let (resulting_structure, pos_self, pos_other, mergeinfo) =
             self_structure.merge(&other_structure).unwrap();
@@ -842,19 +839,16 @@ mod tests {
         let contracted_base = rep.new_slot(2, 10).to_lib();
         let contracted_other_base = rep.new_slot(2, 12).to_lib();
 
-        let self_structure: OrderedStructure<LibraryRep> = PermutedStructure::from_iter([
+        let self_structure: OrderedStructure<LibraryRep> = Canonicalized::from_iter([
             self_free_left,
             self_free_right,
             contracted_base,
             contracted_other_base.dual(),
         ])
-        .structure;
-        let other_structure: OrderedStructure<LibraryRep> = PermutedStructure::from_iter([
-            other_free,
-            contracted_other_base,
-            contracted_base.dual(),
-        ])
-        .structure;
+        .into_canonical();
+        let other_structure: OrderedStructure<LibraryRep> =
+            Canonicalized::from_iter([other_free, contracted_other_base, contracted_base.dual()])
+                .into_canonical();
 
         let (resulting_structure, pos_self, pos_other, mergeinfo) =
             self_structure.merge(&other_structure).unwrap();
@@ -890,19 +884,16 @@ mod tests {
         let contracted_base = rep.new_slot(2, 10).to_lib();
         let contracted_other_base = rep.new_slot(2, 12).to_lib();
 
-        let self_structure: OrderedStructure<LibraryRep> = PermutedStructure::from_iter([
+        let self_structure: OrderedStructure<LibraryRep> = Canonicalized::from_iter([
             self_free_left,
             self_free_right,
             contracted_base,
             contracted_other_base.dual(),
         ])
-        .structure;
-        let other_structure: OrderedStructure<LibraryRep> = PermutedStructure::from_iter([
-            other_free,
-            contracted_other_base,
-            contracted_base.dual(),
-        ])
-        .structure;
+        .into_canonical();
+        let other_structure: OrderedStructure<LibraryRep> =
+            Canonicalized::from_iter([other_free, contracted_other_base, contracted_base.dual()])
+                .into_canonical();
 
         let (resulting_structure, pos_self, pos_other, mergeinfo) =
             self_structure.merge(&other_structure).unwrap();

@@ -4,45 +4,70 @@ use spenso::{
 };
 use symbolica::atom::{Atom, AtomView};
 
-use crate::tensor::{SymbolicNetExt, SymbolicNetParse};
+use crate::{
+    NetworkToolingError,
+    tensor::{SymbolicNetExt, SymbolicNetParse},
+};
 
 pub mod chain;
 pub mod metric;
 pub mod schoonschip;
 
 pub trait UndoShorthands {
-    fn undo_schoonschip<Aind: AbsInd + DummyAind + ParseableAind>(&self) -> Atom;
+    fn undo_schoonschip<Aind: AbsInd + DummyAind + ParseableAind>(
+        &self,
+    ) -> Result<Atom, NetworkToolingError>;
 
-    fn undo_all<Aind: AbsInd + DummyAind + ParseableAind>(&self) -> Atom;
-    fn undo_dots<Aind: AbsInd + DummyAind + ParseableAind>(&self) -> Atom;
-    fn undo_chain<Aind: AbsInd + DummyAind + ParseableAind>(&self) -> Atom;
-    fn undo_trace<Aind: AbsInd + DummyAind + ParseableAind>(&self) -> Atom;
+    fn undo_all<Aind: AbsInd + DummyAind + ParseableAind>(
+        &self,
+    ) -> Result<Atom, NetworkToolingError>;
+    fn undo_dots<Aind: AbsInd + DummyAind + ParseableAind>(
+        &self,
+    ) -> Result<Atom, NetworkToolingError>;
+    fn undo_chain<Aind: AbsInd + DummyAind + ParseableAind>(
+        &self,
+    ) -> Result<Atom, NetworkToolingError>;
+    fn undo_trace<Aind: AbsInd + DummyAind + ParseableAind>(
+        &self,
+    ) -> Result<Atom, NetworkToolingError>;
 }
 
 impl UndoShorthands for Atom {
-    fn undo_schoonschip<Aind: AbsInd + DummyAind + ParseableAind>(&self) -> Atom {
+    fn undo_schoonschip<Aind: AbsInd + DummyAind + ParseableAind>(
+        &self,
+    ) -> Result<Atom, NetworkToolingError> {
         self.as_view().undo_schoonschip::<Aind>()
     }
 
-    fn undo_all<Aind: AbsInd + DummyAind + ParseableAind>(&self) -> Atom {
+    fn undo_all<Aind: AbsInd + DummyAind + ParseableAind>(
+        &self,
+    ) -> Result<Atom, NetworkToolingError> {
         self.as_view().undo_all::<Aind>()
     }
 
-    fn undo_dots<Aind: AbsInd + DummyAind + ParseableAind>(&self) -> Atom {
+    fn undo_dots<Aind: AbsInd + DummyAind + ParseableAind>(
+        &self,
+    ) -> Result<Atom, NetworkToolingError> {
         self.as_view().undo_dots::<Aind>()
     }
 
-    fn undo_chain<Aind: AbsInd + DummyAind + ParseableAind>(&self) -> Atom {
+    fn undo_chain<Aind: AbsInd + DummyAind + ParseableAind>(
+        &self,
+    ) -> Result<Atom, NetworkToolingError> {
         self.as_view().undo_chain::<Aind>()
     }
 
-    fn undo_trace<Aind: AbsInd + DummyAind + ParseableAind>(&self) -> Atom {
+    fn undo_trace<Aind: AbsInd + DummyAind + ParseableAind>(
+        &self,
+    ) -> Result<Atom, NetworkToolingError> {
         self.as_view().undo_trace::<Aind>()
     }
 }
 
 impl<'a> UndoShorthands for AtomView<'a> {
-    fn undo_all<Aind: AbsInd + DummyAind + ParseableAind>(&self) -> Atom {
+    fn undo_all<Aind: AbsInd + DummyAind + ParseableAind>(
+        &self,
+    ) -> Result<Atom, NetworkToolingError> {
         let net = self
             .parse_to_symbolic_net::<Aind>(&ParseSettings {
                 shorthand_parsing: ShorthandParsing::Expand {
@@ -52,11 +77,15 @@ impl<'a> UndoShorthands for AtomView<'a> {
                 },
                 ..Default::default()
             })
-            .unwrap();
+            .map_err(|error| NetworkToolingError::Parse {
+                reason: error.to_string(),
+            })?;
 
         net.simple_execute::<()>()
     }
-    fn undo_chain<Aind: AbsInd + DummyAind + ParseableAind>(&self) -> Atom {
+    fn undo_chain<Aind: AbsInd + DummyAind + ParseableAind>(
+        &self,
+    ) -> Result<Atom, NetworkToolingError> {
         let net = self
             .parse_to_symbolic_net::<Aind>(&ParseSettings {
                 shorthand_parsing: ShorthandParsing::Expand {
@@ -66,12 +95,16 @@ impl<'a> UndoShorthands for AtomView<'a> {
                 },
                 ..Default::default()
             })
-            .unwrap();
+            .map_err(|error| NetworkToolingError::Parse {
+                reason: error.to_string(),
+            })?;
 
         net.simple_execute::<()>()
     }
 
-    fn undo_dots<Aind: AbsInd + DummyAind + ParseableAind>(&self) -> Atom {
+    fn undo_dots<Aind: AbsInd + DummyAind + ParseableAind>(
+        &self,
+    ) -> Result<Atom, NetworkToolingError> {
         let net = self
             .parse_to_symbolic_net::<Aind>(&ParseSettings {
                 shorthand_parsing: ShorthandParsing::Expand {
@@ -85,12 +118,16 @@ impl<'a> UndoShorthands for AtomView<'a> {
                 },
                 ..Default::default()
             })
-            .unwrap();
+            .map_err(|error| NetworkToolingError::Parse {
+                reason: error.to_string(),
+            })?;
 
         net.simple_execute::<()>()
     }
 
-    fn undo_schoonschip<Aind: AbsInd + DummyAind + ParseableAind>(&self) -> Atom {
+    fn undo_schoonschip<Aind: AbsInd + DummyAind + ParseableAind>(
+        &self,
+    ) -> Result<Atom, NetworkToolingError> {
         let net = self
             .parse_to_symbolic_net::<Aind>(&ParseSettings {
                 shorthand_parsing: ShorthandParsing::Expand {
@@ -104,12 +141,16 @@ impl<'a> UndoShorthands for AtomView<'a> {
                 },
                 ..Default::default()
             })
-            .unwrap();
+            .map_err(|error| NetworkToolingError::Parse {
+                reason: error.to_string(),
+            })?;
 
         net.simple_execute::<()>()
     }
 
-    fn undo_trace<Aind: AbsInd + DummyAind + ParseableAind>(&self) -> Atom {
+    fn undo_trace<Aind: AbsInd + DummyAind + ParseableAind>(
+        &self,
+    ) -> Result<Atom, NetworkToolingError> {
         let net = self
             .parse_to_symbolic_net::<Aind>(&ParseSettings {
                 shorthand_parsing: ShorthandParsing::Expand {
@@ -119,7 +160,9 @@ impl<'a> UndoShorthands for AtomView<'a> {
                 },
                 ..Default::default()
             })
-            .unwrap();
+            .map_err(|error| NetworkToolingError::Parse {
+                reason: error.to_string(),
+            })?;
 
         net.simple_execute::<()>()
     }
@@ -127,7 +170,14 @@ impl<'a> UndoShorthands for AtomView<'a> {
 
 #[cfg(test)]
 mod tests {
-    use spenso::{chain, chain_factor, mink, structure::abstract_index::AbstractIndex, vector};
+    use spenso::{
+        chain, chain_factor, mink, network::tags::SPENSO_TAG,
+        structure::abstract_index::AbstractIndex, vector,
+    };
+    use symbolica::{
+        atom::{Atom, FunctionBuilder},
+        symbol,
+    };
     use symbolica_utils::AtomPrintExt;
 
     use crate::test_support::test_initialize;
@@ -148,6 +198,21 @@ mod tests {
             )
         );
 
-        insta::assert_snapshot!( expr.undo_schoonschip::<AbstractIndex>().to_bare_ordered_string(), @"chain(mink(4,i),mink(4,j),schoonschip_only_factor(in,out,mink(4,d_1000000)))*compact_p(mink(4,d_1000000))");
+        insta::assert_snapshot!( expr.undo_schoonschip::<AbstractIndex>().unwrap().to_bare_ordered_string(), @"chain(mink(4,i),mink(4,j),schoonschip_only_factor(in,out,mink(4,d_1000000)))*compact_p(mink(4,d_1000000))");
+    }
+
+    #[test]
+    fn network_tooling_malformed_shorthand_returns_a_parse_error() {
+        let _ = test_initialize();
+        let expression = FunctionBuilder::new(SPENSO_TAG.dot)
+            .add_arg(Atom::var(symbol!("malformed_dot_operand")))
+            .finish();
+
+        assert!(matches!(
+            expression
+                .undo_dots::<AbstractIndex>()
+                .expect_err("malformed dot notation should return an error"),
+            NetworkToolingError::Parse { reason } if reason.contains("Invalid dot function")
+        ));
     }
 }

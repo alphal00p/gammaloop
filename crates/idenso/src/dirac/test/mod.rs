@@ -5,8 +5,7 @@ use spenso::network::store::TensorScalarStore;
 use spenso::p;
 use spenso::q;
 use spenso::shadowing::{TensorCollectExt, symbolica_utils::SpensoPrintSettings};
-use spenso::structure::IndexlessNamedStructure;
-use spenso::structure::PermutedStructure;
+use spenso::structure::{Canonicalized, IndexlessNamedStructure, TensorStructure};
 use spenso::{chain, g, s, slot, trace};
 use symbolica_utils::AtomPrintExt;
 
@@ -17,7 +16,7 @@ use crate::shorthands::{
 };
 use crate::{gamma, gamma0, gamma5, u, v};
 
-static GG: LazyLock<PermutedStructure<IndexlessNamedStructure<Symbol, ()>>> = LazyLock::new(|| {
+static GG: LazyLock<Canonicalized<IndexlessNamedStructure<Symbol, ()>>> = LazyLock::new(|| {
     IndexlessNamedStructure::from_iter(
         [
             Bispinor {}.new_rep(4).to_lib(),
@@ -36,7 +35,6 @@ use crate::tensor::SymbolicNetParse;
 use crate::tensor::SymbolicTensor;
 use spenso::structure::{
     abstract_index::AbstractIndex,
-    permuted::Perm,
     representation::{LibraryRep, Minkowski},
 };
 use symbolica::{
@@ -54,21 +52,19 @@ fn gamma_construct() {
 
     println!("{}", gamma!(RS.a_, RS.b_, RS.c_));
 
-    let f = GG
-        .clone()
-        .reindex([4, 3, 2])
+    let f = GG.clone();
+    let logical_indices: [AbstractIndex; 3] = [4.into(), 3.into(), 2.into()];
+    let storage_indices = f.layout().logical_to_canonical(&logical_indices);
+    let f = f
+        .into_canonical()
+        .reindex_storage(&storage_indices)
         .unwrap()
-        .map_structure(|a| SymbolicTensor::from_named(&a).unwrap());
+        .map_target(|a| SymbolicTensor::from_named(&a).unwrap());
 
-    let f_s = f.structure.structure.clone();
-
-    // f.rep_permutation = f.rep_permutation.inverse();
-
-    let f_p = f.permute_reps_wrapped().permute_inds();
+    let f_p = f.apply();
 
     println!(
-        "Structure:{}\nPermuted:{}\nPermuted Structure{}\nMetric simplified{}",
-        f_s,
+        "Permuted:{}\nPermuted Structure{}\nMetric simplified{}",
         f_p,
         f_p.structure,
         f_p.expression.simplify_metrics()
@@ -364,6 +360,7 @@ fn gl23() {
         expr.simplify_metrics()
             .cook_indices()
             .canonize(AbstractIndex::Dummy)
+            .expect("test expression should canonicalize")
     );
 
     println!(
@@ -371,6 +368,7 @@ fn gl23() {
         expr.simplify_metrics()
             .cook_indices()
             .canonize(AbstractIndex::Dummy)
+            .expect("test expression should canonicalize")
             .simplify_color()
     );
 }
@@ -435,6 +433,7 @@ fn gl24() {
         expr.simplify_metrics()
             .cook_indices()
             .canonize(AbstractIndex::Dummy)
+            .expect("test expression should canonicalize")
     );
 
     println!(
@@ -442,6 +441,7 @@ fn gl24() {
         expr.simplify_metrics()
             .cook_indices()
             .canonize(AbstractIndex::Dummy)
+            .expect("test expression should canonicalize")
             .simplify_color()
     );
 }
@@ -557,7 +557,8 @@ fn gamma_alg() {
         * gamma!(nu3, 4, 5)
         * gamma!(nu, 5, 1))
     .simplify_gamma()
-    .schoonschip_with_net_full::<AbstractIndex>();
+    .schoonschip_with_net_full::<AbstractIndex>()
+    .unwrap();
 
     assert_snapshot!(expr.to_bare_ordered_string(), @"-4*g(mink(4,mu),mink(4,nu))*g(p(mink(4)),p(mink(4)))+-4*g(mink(4,mu),mink(4,nu))*g(p(mink(4)),q(mink(4)))+4*p(mink(4,mu))*q(mink(4,nu))+4*p(mink(4,nu))*q(mink(4,mu))+8*p(mink(4,mu))*p(mink(4,nu))");
 
@@ -578,7 +579,8 @@ fn gamma_alg() {
         * gamma!(nu, 4, 5)
         * gamma!(nu3, 5, 1))
     .simplify_gamma()
-    .schoonschip_with_net_full::<AbstractIndex>();
+    .schoonschip_with_net_full::<AbstractIndex>()
+    .unwrap();
 
     assert_snapshot!(expr.to_bare_ordered_string(), @"-4*p(mink(4,nu))*q(mink(4,mu))+4*g(mink(4,mu),mink(4,nu))*g(p(mink(4)),p(mink(4)))+4*g(mink(4,mu),mink(4,nu))*g(p(mink(4)),q(mink(4)))+4*p(mink(4,mu))*q(mink(4,nu))");
 
@@ -590,7 +592,7 @@ fn gamma_alg() {
         * gamma!(slot!(mink_dim, nu3), slot!(bis4, 5), slot!(bis4, 1)))
     .simplify_gamma();
 
-    assert_snapshot!(expr.expand().canonize(AbstractIndex::Dummy).to_bare_ordered_string(), @"(p(mink(d,d_0)))^2*4*d+4*d*p(mink(d,d_0))*q(mink(d,d_0))");
+    assert_snapshot!(expr.expand().canonize(AbstractIndex::Dummy).expect("test expression should canonicalize").to_bare_ordered_string(), @"(p(mink(d,d_0)))^2*4*d+4*d*p(mink(d,d_0))*q(mink(d,d_0))");
 
     let expr = (p!(slot!(mink_dim, nu1))
         * (p!(slot!(mink_dim, nu3)) + q!(slot!(mink_dim, nu3)))
@@ -605,7 +607,7 @@ fn gamma_alg() {
     .schoonschip()
     .simplify_gamma();
 
-    assert_snapshot!(expr.expand().canonize(AbstractIndex::Dummy).to_bare_ordered_string(), @"(p(mink(d,d_0)))^2*-4*d+(p(mink(d,d_0)))^2*8+-4*d*p(mink(d,d_0))*q(mink(d,d_0))+8*p(mink(d,d_0))*q(mink(d,d_0))");
+    assert_snapshot!(expr.expand().canonize(AbstractIndex::Dummy).expect("test expression should canonicalize").to_bare_ordered_string(), @"(p(mink(d,d_0)))^2*-4*d+(p(mink(d,d_0)))^2*8+-4*d*p(mink(d,d_0))*q(mink(d,d_0))+8*p(mink(d,d_0))*q(mink(d,d_0))");
 
     let expr = (p!(slot!(mink_dim, nu1))
         * q!(slot!(mink_dim, nu2))
@@ -617,6 +619,7 @@ fn gamma_alg() {
         * gamma!(slot!(mink_dim, nu2), slot!(bis4, 5), slot!(bis4, 1)))
     .simplify_gamma()
     .schoonschip_with_net_full::<AbstractIndex>()
+    .unwrap()
     .metric_shorthand_to_dot();
 
     assert_snapshot!(expr.to_bare_ordered_string(), @"(dot(p(mink(d)),q(mink(d))))^2*8+-4*dot(p(mink(d)),p(mink(d)))*dot(q(mink(d)),q(mink(d)))+4*dot(p(mink(d)),q(mink(d)))*dot(q(mink(d)),q(mink(d)))");

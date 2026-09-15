@@ -176,7 +176,7 @@ fn simplify(integrand: &Atom) -> Result<Atom> {
         log.expr = simplified,
         "After gamma simplification"
     );
-    let schoonschipped = simplified.schoonschip_net::<Aind>();
+    let schoonschipped = simplified.schoonschip_net::<Aind>()?;
     debug_tags!(#uv, #integrated, #vakint, #profile, #trace,#schoonschip, #start;
         log.expr = schoonschipped,
         "After Schoonschip net"
@@ -496,9 +496,9 @@ pub(crate) fn to_vakint_integrand<
     let reduced_label = reduced.string_label();
     let dependent_subgraph_label = dependent_subgraph.string_label();
     let mut integrand_vakint = integrand
-        .undo_schoonschip::<Aind>()
-        .undo_chain::<Aind>()
-        .undo_trace::<Aind>();
+        .undo_schoonschip::<Aind>()?
+        .undo_chain::<Aind>()?
+        .undo_trace::<Aind>()?;
     debug_tags!(#uv, #integrated, #vakint, #trace;
         stage = "to_vakint_integrand_after_undo_shorthands",
         reduced = %reduced_label,

@@ -4,12 +4,12 @@ use linnet::permutation::Permutation;
 use tabled::{builder::Builder, settings::Style};
 
 use super::{
-    HasName, NamedStructure, OrderedStructure, PermutedStructure, ScalarStructure,
-    SmartShadowStructure, StructureError, TensorStructure,
+    CanonicalLayout, Canonicalized, HasName, NamedStructure, OrderedStructure,
+    PendingIndexPermutation, Reindexed, ScalarStructure, SmartShadowStructure, StructureError,
+    TensorIdentity, TensorStructure,
     abstract_index::AbstractIndex,
     dimension::Dimension,
     named::{ArgDisplay, IdentityName},
-    permuted::PermuteTensor,
     representation::{LibraryRep, RepName, Representation},
     slot::{AbsInd, IsAbstractSlot, Slot},
 };
@@ -54,18 +54,9 @@ impl<T: RepName, Aind> StructureLessDisplay for IndexLess<T, Aind> {
     }
 }
 
-impl<R: RepName<Dual = R>, Aind: AbsInd> PermuteTensor for IndexLess<R, Aind> {
+impl<R: RepName<Dual = R>, Aind: AbsInd> TensorIdentity for IndexLess<R, Aind> {
     type Id = Self;
-    type Permuted = (IndexLess<LibraryRep>, Vec<IndexLess<LibraryRep, Aind>>);
     type IdSlot = Slot<R, Aind>;
-
-    fn permute_inds(self, _permutation: &Permutation) -> Self::Permuted {
-        todo!()
-    }
-
-    fn permute_reps(self, _rep_perm: &Permutation) -> Self::Permuted {
-        todo!()
-    }
 
     fn id(i: Slot<R, Aind>, j: Slot<R, Aind>) -> Self::Id {
         if i.dim() == j.dim() {
@@ -106,26 +97,26 @@ impl<R: RepName, Aind> std::fmt::Debug for IndexLess<R, Aind> {
     }
 }
 
-impl<R: RepName, Aind> FromIterator<Representation<R>> for PermutedStructure<IndexLess<R, Aind>> {
+impl<R: RepName, Aind> FromIterator<Representation<R>> for Canonicalized<IndexLess<R, Aind>> {
     fn from_iter<I: IntoIterator<Item = Representation<R>>>(iter: I) -> Self {
         let structure: Vec<_> = iter.into_iter().collect();
         structure.into()
     }
 }
 
-impl<R: RepName, Aind> From<Vec<Representation<R>>> for PermutedStructure<IndexLess<R, Aind>> {
+impl<R: RepName, Aind> From<Vec<Representation<R>>> for Canonicalized<IndexLess<R, Aind>> {
     fn from(mut structure: Vec<Representation<R>>) -> Self {
         let permutation = Permutation::sort(&structure);
         permutation.apply_slice_in_place(&mut structure);
 
-        PermutedStructure {
-            rep_permutation: permutation,
-            index_permutation: Permutation::id(structure.len()),
-            structure: IndexLess {
+        let order = structure.len();
+        Canonicalized::from_parts(
+            IndexLess {
                 structure,
                 ind: PhantomData,
             },
-        }
+            CanonicalLayout::from_permutations(permutation, Permutation::id(order)),
+        )
     }
 }
 
@@ -205,10 +196,10 @@ impl<T: RepName<Dual = T>, Aind: AbsInd> TensorStructure for IndexLess<T, Aind> 
         self.structure.iter().all(|r| r.rep.is_self_dual())
     }
 
-    fn reindex(
+    fn reindex_storage(
         self,
         indices: &[Aind],
-    ) -> Result<PermutedStructure<OrderedStructure<T, Aind>>, StructureError> {
+    ) -> Result<Reindexed<OrderedStructure<T, Aind>>, StructureError> {
         if self.structure.len() != indices.len() {
             return Err(StructureError::WrongNumberOfArguments(
                 indices.len(),
@@ -216,19 +207,33 @@ impl<T: RepName<Dual = T>, Aind: AbsInd> TensorStructure for IndexLess<T, Aind> 
             ));
         }
 
-        Ok(indices
+        let source = indices
             .iter()
             .cloned()
             .zip(self.structure.iter().cloned())
             .map(|(i, r)| Representation::slot(&r, i))
-            .collect())
+            .collect::<Vec<_>>();
+        let canonicalized = source.clone().into_iter().collect::<Canonicalized<_>>();
+        let (target, layout) = canonicalized.into_parts();
+        if !layout.representation_permutation().is_identity() {
+            return Err(StructureError::InvalidIndexPermutation(
+                "reindexing changed representation order".to_string(),
+            ));
+        }
+        let target_slots = target.external_structure();
+        let pending = PendingIndexPermutation::checked(
+            &source,
+            &target_slots,
+            layout.index_permutation().clone(),
+        )?;
+        Ok(Reindexed::from_parts(target, pending))
     }
     fn dual(self) -> Self {
         self.structure
             .into_iter()
             .map(|r| r.dual())
-            .collect::<PermutedStructure<_>>()
-            .structure
+            .collect::<Canonicalized<_>>()
+            .into_canonical()
     }
 
     fn external_reps_iter(
@@ -254,6 +259,16 @@ impl<T: RepName<Dual = T>, Aind: AbsInd> TensorStructure for IndexLess<T, Aind> 
 
     fn external_structure_iter(&self) -> impl Iterator<Item = Self::Slot> {
         [].iter().cloned()
+    }
+
+    #[cfg(feature = "shadowing")]
+    fn symbolic_external_args(&self) -> Vec<Atom>
+    where
+        Aind: super::slot::ParseableAind,
+    {
+        self.external_reps_iter()
+            .map(|representation| representation.to_symbolic([]))
+            .collect()
     }
 
     fn order(&self) -> usize {
@@ -376,7 +391,7 @@ impl<T: RepName<Dual = T>, Aind: AbsInd> ToSymbolic for IndexLess<T, Aind> {
     fn to_symbolic_with(&self, name: Symbol, args: &[Atom], perm: Option<Permutation>) -> Atom {
         let mut slots = self
             .external_reps_iter()
-            .map(|slot| slot.to_symbolic([]))
+            .map(|representation| representation.to_symbolic([]))
             .collect::<Vec<_>>();
         if let Some(p) = perm {
             p.apply_slice_in_place(&mut slots);
@@ -407,15 +422,11 @@ pub struct IndexlessNamedStructure<
     pub additional_args: Option<Args>,
 }
 
-impl<N: IdentityName, A, R: RepName<Dual = R>, Aind: AbsInd> PermuteTensor
+impl<N: IdentityName, A, R: RepName<Dual = R>, Aind: AbsInd> TensorIdentity
     for IndexlessNamedStructure<N, A, R, Aind>
 {
     type Id = Self;
     type IdSlot = Slot<R, Aind>;
-    type Permuted = (
-        IndexlessNamedStructure<N, A, LibraryRep, Aind>,
-        Vec<IndexlessNamedStructure<N, A, LibraryRep, Aind>>,
-    );
 
     fn id(i: Self::IdSlot, j: Self::IdSlot) -> Self::Id {
         Self {
@@ -424,57 +435,11 @@ impl<N: IdentityName, A, R: RepName<Dual = R>, Aind: AbsInd> PermuteTensor
             additional_args: None,
         }
     }
-
-    fn permute_inds(self, _permutation: &Permutation) -> Self::Permuted {
-        todo!()
-    }
-
-    fn permute_reps(self, _rep_perm: &Permutation) -> Self::Permuted {
-        todo!()
-    }
 }
-// impl<N: IdentityName, A, R: RepName<Dual = R>> PermuteTensor for IndexlessNamedStructure<N, A, R> {
-//     type Id = NamedStructure<N, A, R>;
-//     type IdSlot = Slot<R>;
-//     type Permuted = (
-//         NamedStructure<N, A, LibraryRep>,
-//         Vec<NamedStructure<N, A, LibraryRep>>,
-//     );
-
-//     fn id(i: Self::IdSlot, j: Self::IdSlot) -> Self::Id {
-//         NamedStructure {
-//             structure: OrderedStructure::id(i, j),
-//             global_name: Some(N::id()),
-//             additional_args: None,
-//         }
-//     }
-
-//     fn permute(self, permutation: &Permutation) -> Self::Permuted {
-//         let mut dummy_structure = Vec::new();
-//         let mut ids = Vec::new();
-
-//         for s in permutation.iter_slice_inv(&self.structure.structure) {
-//             let dind = AbstractIndex::new_dummy();
-//             let d = s.to_dummy().to_lib().slot(dind);
-//             let ogs = s.to_lib().slot(dind);
-//             dummy_structure.push(d);
-//             ids.push(NamedStructure::id(d, ogs));
-//         }
-//         let strct = OrderedStructure::new(dummy_structure);
-//         if !strct.permutation.is_identity() {
-//             panic!("should be identity")
-//         }
-
-//         (
-//             NamedStructure {
-//                 global_name: self.global_name,
-//                 additional_args: self.additional_args,
-//                 structure: strct.structure,
-//             },
-//             ids,
-//         )
-//     }
-// }
+// The former indexless transition constructed dummy-index identities while it
+// assigned indices. `reindex_storage` now separates that operation: it returns a
+// canonical `NamedStructure` plus a checked `PendingIndexPermutation` in
+// `Reindexed`, and the eventual symbolic payload owns any required identities.
 
 impl<Name, Args, R: RepName<Dual = R>, Aind: AbsInd> TensorStructure
     for IndexlessNamedStructure<Name, Args, R, Aind>
@@ -482,20 +447,16 @@ impl<Name, Args, R: RepName<Dual = R>, Aind: AbsInd> TensorStructure
     type Slot = Slot<R, Aind>;
     type Indexed = NamedStructure<Name, Args, R, Aind>;
 
-    fn reindex(
+    fn reindex_storage(
         self,
         indices: &[Aind],
-    ) -> Result<PermutedStructure<NamedStructure<Name, Args, R, Aind>>, StructureError> {
-        let res = self.structure.reindex(indices)?;
-
-        Ok(PermutedStructure {
-            rep_permutation: Permutation::id(res.structure.order()),
-            structure: NamedStructure {
+    ) -> Result<Reindexed<NamedStructure<Name, Args, R, Aind>>, StructureError> {
+        self.structure.reindex_storage(indices).map(|reindexed| {
+            reindexed.map_target(|structure| NamedStructure {
                 global_name: self.global_name,
                 additional_args: self.additional_args,
-                structure: res.structure,
-            },
-            index_permutation: res.index_permutation,
+                structure,
+            })
         })
     }
 
@@ -505,6 +466,14 @@ impl<Name, Args, R: RepName<Dual = R>, Aind: AbsInd> TensorStructure
             global_name: self.global_name,
             additional_args: self.additional_args,
         }
+    }
+
+    #[cfg(feature = "shadowing")]
+    fn symbolic_external_args(&self) -> Vec<Atom>
+    where
+        Aind: super::slot::ParseableAind,
+    {
+        self.structure.symbolic_external_args()
     }
 
     delegate! {
@@ -537,7 +506,7 @@ impl<N, A, T: RepName<Dual = T>, Aind: AbsInd> ScalarStructure
 
 impl<Name, Args, R: RepName, Aind> IndexlessNamedStructure<Name, Args, R, Aind> {
     #[must_use]
-    pub fn from_iter<I, T>(iter: T, name: Name, args: Option<Args>) -> PermutedStructure<Self>
+    pub fn from_iter<I, T>(iter: T, name: Name, args: Option<Args>) -> Canonicalized<Self>
     where
         I: RepName,
         R: From<I>,
@@ -545,8 +514,8 @@ impl<Name, Args, R: RepName, Aind> IndexlessNamedStructure<Name, Args, R, Aind> 
     {
         iter.into_iter()
             .map(|a| a.cast())
-            .collect::<PermutedStructure<_>>()
-            .map_structure(move |structure| Self {
+            .collect::<Canonicalized<_>>()
+            .map_canonical(move |structure| Self {
                 structure,
                 global_name: Some(name),
                 additional_args: args,

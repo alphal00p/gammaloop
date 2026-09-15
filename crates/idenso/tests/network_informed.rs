@@ -51,7 +51,7 @@ fn run_network_informed() {
             .with(&rhs_subs);
     }
 
-    let _ = r.schoonschip_net::<AbstractIndex>();
+    let _ = r.schoonschip_net::<AbstractIndex>().unwrap();
 }
 
 #[test]
