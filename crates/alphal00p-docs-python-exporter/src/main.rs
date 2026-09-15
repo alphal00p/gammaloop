@@ -574,13 +574,16 @@ def validate(runtime_module, stub_source):
 
         super::validate_spenso_stub_surface(module).expect("matching Spenso Python surface");
         let rendered = module.to_string();
-        assert!(!rendered.contains("TensorFunctionLibrary"));
+        assert!(rendered.contains("class TensorFunctionLibrary:"));
+        assert!(!rendered.contains("LibraryTensor"));
+        assert!(!rendered.contains("TensorIndices"));
+        assert!(!rendered.contains("TensorStructure"));
         assert!(!rendered.contains("TensorNamespace"));
     }
 
     #[cfg(feature = "spenso")]
     #[test]
-    fn spenso_stub_preserves_optional_structure_defaults_and_execution_semantics() {
+    fn spenso_stub_preserves_typed_index_defaults_and_execution_semantics() {
         let (module_name, stub_info) = super::gather("spynso3").expect("Spenso StubInfo");
         let module = stub_info
             .modules
@@ -589,9 +592,11 @@ def validate(runtime_module, stub_source):
         let rendered = module.to_string();
 
         for signature in [
-            "def __call__(self, *args: builtins.int | Expression | str, extra_args: typing.Sequence[Expression | int | str | float | builtins.complex] | None = None)",
-            "def symbolic(self, *args: builtins.int | Expression | str, extra_args: typing.Sequence[Expression | int | str | float | builtins.complex] | None = None)",
-            "def index(self, *args: builtins.int | Expression | str, extra_args: typing.Sequence[Expression] | None = None, cook_indices: builtins.bool = False)",
+            "def __new__(cls, expr: typing.Any, library: typing.Optional[TensorLibrary] = None) -> TensorNetwork:",
+            "def __call__(self, *indices: typing.Any, cook_indices: builtins.bool = False) -> TensorExpression:",
+            "def index(self, *indices: typing.Any, cook_indices: builtins.bool = False) -> TensorExpression:",
+            "def __call__(self, *indices: typing.Any, cook_indices: builtins.bool = False) -> TensorNetwork:",
+            "def index(self, *indices: typing.Any, cook_indices: builtins.bool = False) -> TensorNetwork:",
         ] {
             assert!(rendered.contains(signature), "missing `{signature}`");
         }

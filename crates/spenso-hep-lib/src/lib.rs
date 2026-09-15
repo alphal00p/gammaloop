@@ -82,29 +82,30 @@ where
     let ci = Complex::<T>::new(zero.clone(), one.clone());
     let cni = Complex::<T>::new(zero.clone(), -one.clone());
     sparse_from_logical(structure, z, |gamma| {
-        // ! No check on actual structure, should expext mink,bis,bis
+        // Coordinates follow the public logical order: bispinor row, bispinor
+        // column, Minkowski. The layout maps them into canonical storage.
 
         // dirac gamma matrices
 
         gamma.set(&[0, 0, 0], c1.clone()).unwrap();
-        gamma.set(&[0, 1, 1], c1.clone()).unwrap();
-        gamma.set(&[0, 2, 2], cn1.clone()).unwrap();
-        gamma.set(&[0, 3, 3], cn1.clone()).unwrap();
+        gamma.set(&[1, 1, 0], c1.clone()).unwrap();
+        gamma.set(&[2, 2, 0], cn1.clone()).unwrap();
+        gamma.set(&[3, 3, 0], cn1.clone()).unwrap();
 
-        gamma.set(&[1, 0, 3], c1.clone()).unwrap();
-        gamma.set(&[1, 1, 2], c1.clone()).unwrap();
-        gamma.set(&[1, 2, 1], cn1.clone()).unwrap();
-        gamma.set(&[1, 3, 0], cn1.clone()).unwrap();
+        gamma.set(&[0, 3, 1], c1.clone()).unwrap();
+        gamma.set(&[1, 2, 1], c1.clone()).unwrap();
+        gamma.set(&[2, 1, 1], cn1.clone()).unwrap();
+        gamma.set(&[3, 0, 1], cn1.clone()).unwrap();
 
-        gamma.set(&[2, 0, 3], cni.clone()).unwrap();
+        gamma.set(&[0, 3, 2], cni.clone()).unwrap();
+        gamma.set(&[1, 2, 2], ci.clone()).unwrap();
         gamma.set(&[2, 1, 2], ci.clone()).unwrap();
-        gamma.set(&[2, 2, 1], ci.clone()).unwrap();
-        gamma.set(&[2, 3, 0], cni.clone()).unwrap();
+        gamma.set(&[3, 0, 2], cni.clone()).unwrap();
 
-        gamma.set(&[3, 0, 2], c1.clone()).unwrap();
-        gamma.set(&[3, 1, 3], cn1.clone()).unwrap();
-        gamma.set(&[3, 2, 0], cn1.clone()).unwrap();
-        gamma.set(&[3, 3, 1], c1.clone()).unwrap();
+        gamma.set(&[0, 2, 3], c1.clone()).unwrap();
+        gamma.set(&[1, 3, 3], cn1.clone()).unwrap();
+        gamma.set(&[2, 0, 3], cn1.clone()).unwrap();
+        gamma.set(&[3, 1, 3], c1.clone()).unwrap();
 
         // gamma.to_dense()
     })
@@ -126,29 +127,30 @@ where
     let ci = Complex::<T>::new(zero.clone(), one.clone());
     let cni = Complex::<T>::new(zero.clone(), -one.clone());
     sparse_from_logical(structure, z, |gamma| {
-        // ! No check on actual structure, should expext mink,bis,bis
+        // Coordinates follow the public logical order: bispinor row, bispinor
+        // column, Minkowski. The layout maps them into canonical storage.
 
         // dirac gamma matrices
 
-        gamma.set(&[0, 0, 2], c1.clone()).unwrap();
-        gamma.set(&[0, 1, 3], c1.clone()).unwrap();
         gamma.set(&[0, 2, 0], c1.clone()).unwrap();
+        gamma.set(&[1, 3, 0], c1.clone()).unwrap();
+        gamma.set(&[2, 0, 0], c1.clone()).unwrap();
+        gamma.set(&[3, 1, 0], c1.clone()).unwrap();
+
         gamma.set(&[0, 3, 1], c1.clone()).unwrap();
+        gamma.set(&[1, 2, 1], c1.clone()).unwrap();
+        gamma.set(&[2, 1, 1], cn1.clone()).unwrap();
+        gamma.set(&[3, 0, 1], cn1.clone()).unwrap();
 
-        gamma.set(&[1, 0, 3], c1.clone()).unwrap();
-        gamma.set(&[1, 1, 2], c1.clone()).unwrap();
-        gamma.set(&[1, 2, 1], cn1.clone()).unwrap();
-        gamma.set(&[1, 3, 0], cn1.clone()).unwrap();
-
-        gamma.set(&[2, 0, 3], cni.clone()).unwrap();
+        gamma.set(&[0, 3, 2], cni.clone()).unwrap();
+        gamma.set(&[1, 2, 2], ci.clone()).unwrap();
         gamma.set(&[2, 1, 2], ci.clone()).unwrap();
-        gamma.set(&[2, 2, 1], ci.clone()).unwrap();
-        gamma.set(&[2, 3, 0], cni.clone()).unwrap();
+        gamma.set(&[3, 0, 2], cni.clone()).unwrap();
 
-        gamma.set(&[3, 0, 2], c1.clone()).unwrap();
-        gamma.set(&[3, 1, 3], cn1.clone()).unwrap();
-        gamma.set(&[3, 2, 0], cn1.clone()).unwrap();
-        gamma.set(&[3, 3, 1], c1.clone()).unwrap();
+        gamma.set(&[0, 2, 3], c1.clone()).unwrap();
+        gamma.set(&[1, 3, 3], cn1.clone()).unwrap();
+        gamma.set(&[2, 0, 3], cn1.clone()).unwrap();
+        gamma.set(&[3, 1, 3], c1.clone()).unwrap();
 
         // gamma.to_dense()
     })
@@ -170,29 +172,30 @@ where
     let ci = Complex::<T>::new(zero.clone(), one.clone());
     let cni = Complex::<T>::new(zero.clone(), -one.clone());
     sparse_from_logical(structure, z, |gamma| {
-        // ! No check on actual structure, should expext mink,bis,bis
+        // Coordinates follow the public logical order: bispinor row, bispinor
+        // column, Minkowski. The layout maps them into canonical storage.
 
         // dirac gamma matrices
 
+        gamma.set(&[2, 0, 0], c1.clone()).unwrap();
+        gamma.set(&[3, 1, 0], c1.clone()).unwrap();
         gamma.set(&[0, 2, 0], c1.clone()).unwrap();
-        gamma.set(&[0, 3, 1], c1.clone()).unwrap();
-        gamma.set(&[0, 0, 2], c1.clone()).unwrap();
-        gamma.set(&[0, 1, 3], c1.clone()).unwrap();
-
         gamma.set(&[1, 3, 0], c1.clone()).unwrap();
-        gamma.set(&[1, 2, 1], c1.clone()).unwrap();
-        gamma.set(&[1, 1, 2], cn1.clone()).unwrap();
-        gamma.set(&[1, 0, 3], cn1.clone()).unwrap();
 
-        gamma.set(&[2, 3, 0], cni.clone()).unwrap();
-        gamma.set(&[2, 2, 1], ci.clone()).unwrap();
+        gamma.set(&[3, 0, 1], c1.clone()).unwrap();
+        gamma.set(&[2, 1, 1], c1.clone()).unwrap();
+        gamma.set(&[1, 2, 1], cn1.clone()).unwrap();
+        gamma.set(&[0, 3, 1], cn1.clone()).unwrap();
+
+        gamma.set(&[3, 0, 2], cni.clone()).unwrap();
         gamma.set(&[2, 1, 2], ci.clone()).unwrap();
-        gamma.set(&[2, 0, 3], cni.clone()).unwrap();
+        gamma.set(&[1, 2, 2], ci.clone()).unwrap();
+        gamma.set(&[0, 3, 2], cni.clone()).unwrap();
 
-        gamma.set(&[3, 2, 0], c1.clone()).unwrap();
-        gamma.set(&[3, 3, 1], cn1.clone()).unwrap();
-        gamma.set(&[3, 0, 2], cn1.clone()).unwrap();
-        gamma.set(&[3, 1, 3], c1.clone()).unwrap();
+        gamma.set(&[2, 0, 3], c1.clone()).unwrap();
+        gamma.set(&[3, 1, 3], cn1.clone()).unwrap();
+        gamma.set(&[0, 2, 3], cn1.clone()).unwrap();
+        gamma.set(&[1, 3, 3], c1.clone()).unwrap();
 
         // gamma.to_dense()
     })
@@ -788,6 +791,7 @@ mod tests {
             store::NetworkStore,
         },
         structure::{HasStructure, abstract_index::AbstractIndex},
+        tensors::data::GetTensorData,
     };
     use symbolica::{
         atom::{Atom, Symbol},
@@ -809,6 +813,20 @@ mod tests {
         };
 
         assert_eq!(conjugated.into_owned(), parse!("1/3 - 2i/7"));
+    }
+
+    #[test]
+    fn dirac_gamma_data_uses_storage_order() {
+        initialize();
+        let gamma =
+            gamma_data_dirac(AGS.gamma_strct::<AbstractIndex>(4), 1_i32, 0_i32).into_canonical();
+
+        // The final coordinate is the Minkowski component. These are the
+        // diagonal entries of gamma^0 in the Dirac basis.
+        assert_eq!(*gamma.get_ref([0, 0, 0]).unwrap(), Complex::new(1, 0));
+        assert_eq!(*gamma.get_ref([1, 1, 0]).unwrap(), Complex::new(1, 0));
+        assert_eq!(*gamma.get_ref([2, 2, 0]).unwrap(), Complex::new(-1, 0));
+        assert_eq!(*gamma.get_ref([3, 3, 0]).unwrap(), Complex::new(-1, 0));
     }
 
     #[test]
