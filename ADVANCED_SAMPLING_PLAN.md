@@ -5,24 +5,201 @@ design and current implementation status. It is the implementation authority
 and applies to arbitrary loop order and topology, to amplitudes and
 cross sections, and to both ordinary and threshold-adapted sampling.
 
+Latest execution milestone: after completing the native-source acceptance and
+the compiled-backend checks, screen the GL638 threshold localization settings,
+IR-compatible threshold-metadata weight functions, sampling channel choices,
+Monte Carlo versus explicit channel summation, and UV mass. Keep
+`sqrt(s)=600 GeV`, `mu_r=91.188 GeV`, all orientations, the physical subtraction
+prescription, and explicit soft coverage. Test compressed SymJIT O3 as an
+additional backend candidate. Use matched exploratory budgets to prune the
+matrix, then run several distinct channel/integration configurations for
+approximately **15 minutes each on 50 cores**, within the existing 300 GB memory
+budget. Investigate the largest real and absolute-real weights after every
+pilot, using its actual settings and complete saved Sample. Include the option
+of replacing the standalone Cut-1 channel with the composed joint channel,
+while retaining explicit soft coverage, and compare Monte Carlo channel
+selection with explicit sums at equal physical work.
+
+Launch an hours-long run only after the pilots support a setup likely to reach
+less than 10% relative error on the real integral. Check independent seeds,
+iteration consistency, absolute-integral convergence and the influence of
+new maxima before extrapolating errors as the inverse square root of work.
+If the signed central value is accidentally close to zero, report its absolute
+error and assess convergence of the absolute integral separately; do not claim
+relative convergence or promise a runtime from an unresolved cancellation.
+Calibrate budgets with the production integrator's complete iteration timings,
+including per-iteration worker cloning. This staging supersedes the earlier
+unconditional one-hour run and the previous 30-core limit.
+
+Report both the real integral and the integral of the absolute real integrand,
+with their errors, sample counts, stability outcomes, maximum weights and
+iteration history. In explicit sampling-channel sums, take the absolute value
+after the complete physical cut/CT cancellation at each sampled point and
+before summing different channel points; retain covariance by accumulating one
+combined observation per outer draw. Compare channel modes at both equal draw
+counts and equal physical evaluation work. Separately measure advanced sampling,
+physical integrand overhead and evaluator time in the selected production
+configuration. Preserve failed candidates and distinguish exploratory selection
+from the independent final estimate.
+
 Current execution goal: establish the physics on all-orientation GL638 through
 H/Z-corner weight scaling, matched-count signed and absolute-integral errors
 for ordinary, simpler advanced and joint channel combinations, remaining
 maximum-weight origins, and the best supported cross-section estimate with
-uncertainty. The final joint-certificate optimization is complete and runtime
-tuning has stopped. Correctness repairs remain required. The comparison and
-resource limits below supersede the earlier 10% optimization stopping rule.
+uncertainty. The first joint-certificate optimization and the fresh five-seed
+confirmation are complete. The user's subsequent execution order is:
+
+Future physics comparisons and channel decisions focus on the real graph
+contribution and its absolute value. The imaginary contribution cancels when
+combined with the CP-symmetric forward graph and is not a further optimization
+objective. Preserve the completed complex results and use both components when
+validating evaluator correctness; do not rewrite the earlier frozen selection.
+
+The leading configuration must retain explicit soft-gluon coverage through
+LMB `[6,12,13,14]`. The completed single-soft approaches show unbounded real
+weights without it, despite directional integrability after including the
+three-dimensional measure. The user's priority is to eliminate as many known
+regions with unbounded real weights as possible, ideally all; a smaller pilot
+variance alone cannot justify dropping coverage of a demonstrated divergence.
+Keep no-soft configurations as diagnostic controls. Double-soft real values at
+the arbitrary-precision cancellation floor remain unresolved and cannot support
+a fitted power or a boundedness claim. Validate the combined cut, joint H/Z,
+Cut 3 right-threshold and soft catalogue before new long integrations.
+Keep a positive channel-probability floor during adaptive channel selection:
+retaining a channel by name is insufficient if its sampling probability can
+vanish. For each claimed local cure, record the physical real scaling, the
+complete density and outer channel factor, and the resulting real-weight
+scaling; distinguish a finite integral or variance from bounded weights.
+
+The completed GL638 studies and frozen compiler benchmark use `sqrt(s)=1000 GeV`.
+The next physics setup starts at `600 GeV`, keeping `mu_r=91.188 GeV` and comparing
+`m_uv=50 GeV` against `91.188 GeV`. Rebuild runtime geometry and verify the active
+threshold intersections at the new energy; do not reuse old H/Z rays or centers.
+Use matched sampling settings and budgets for the UV-scale comparison. Central
+values must agree within statistical uncertainty; compare real/absolute-real
+errors, second moments, maxima and stability outcomes before choosing a scale.
+Keep the completed Eager/SymJIT timing deck at its original energy as the controlled
+compiler comparison. Reduced energy is a proposed stability improvement, not an
+established result.
+The [prepared cards and runtime audit](docs/research/advanced_sampling/gl638_hosted_joint_gate/energy600_preparation/STATIC_AUDIT.md)
+confirm dynamic external-energy and UV-mass slots in the retained state. Use
+common Samples for the paired real difference between the two UV scales, with
+its covariance-aware error; UV-scale independence is an integral test, not a
+pointwise identity.
+
+1. Finish the maximum-weight attribution and test single- and double-soft
+   gluon limits without an explicit gluon LMB channel. Include a catalogue that
+   replaces standalone Cut 1 with its composed joint channel, keeping the other
+   five cut channels, to distinguish replacement from adding a seventh channel.
+   For the remaining real maximum, also assess a Cut 3 plus right-threshold
+   `[5,10]` channel with parent `[4,5,7,12]` and active `[5]`. Its current surface
+   profile uses global `sampling.power`, so a power-2 test requires a matching
+   control. Distinguish concentration near that surface from concentration near
+   a counterterm's projected intersection; the latter is not yet a generic map
+   primitive and no mitigation claim precedes the measured density/weight test.
+2. Before further long integrations, research and implement a safe alternative
+   to unconditional Arb1000 proposal construction and 2048-bit support checks.
+   Preserve one immutable complete point/Jacobian/partition across physical
+   rescue, certified support decisions and fallback on numerical uncertainty.
+   Reuse the existing owners and precision regressions; reduced precision must
+   not silently change the proposal or classify uncertain support as absent.
+   Retain the implemented log-logistic approximation to the Cutkosky h density,
+   including its broad mixture and safeguarded inverse-CDF solve. The physical
+   h-function remains unchanged; use the derivative of the actual proposal for
+   its Jacobian. The user explicitly accepts this shape approximation and asks
+   to keep it. See the [implemented CDF](docs/research/advanced_sampling/LU_H_MATCHED_SAMPLING.md#implemented-inverse-cdf-2026-09-14).
+3. Check the latest SymJIT version and benchmark compressed SymJIT O2 against
+   the current eager evaluator at both one and 20 concurrent workers. Preserve
+   the higher-precision rescue evaluators and use identical physical inputs.
+   Pin any dependency update explicitly, validate physics and report separate
+   evaluator, integrand-overhead and sampling times for the best measured setup.
+4. Only after that optimization round, compare explicit sums over channels with
+   importance-sampled channel selection, including both equal-work and
+   equal-sample accounting. Retain the same subtraction prescription and report
+   finite-sample tail effects without assuming either estimator is biased.
+
+Use agents for precision research, evaluator/dependency investigation and
+independent numerical audits. The current limit is 50 cores and 300 GB;
+20 workers was the earlier measured choice, and the requested final run uses
+50 after a fresh scaling check. Correctness repairs remain required.
+This renewed optimization request supersedes the earlier instruction to stop
+runtime tuning; further long runs wait for the measurements above.
 
 The canonical physical-center repair now passes its generated gates and the
 actual retained GL638 failure: CT-on Euler accepts Quad and Arb without changing
 the canonical point/J/partition, and Pi2Z returns identical native totals and
-six cut weights at each precision. The first local H/Z scan is also complete:
-eight saved points on two hard rays, compared through optimized LMB, direct-H
-and joint channels with actual forwarded points and native inverse diagnostics.
-The next local check extends each direction by two decades; full-state reference
-and matched integration evidence remain pending. These are local/fixed-point
-results, not global boundedness or variance claims. See the
-[center audit](docs/research/advanced_sampling/CANONICAL_CT_CENTERS.md).
+six cut weights at each precision. The local H/Z scan and two-decade extension
+are complete: two hard directions over five decades, compared through optimized
+LMB, direct-H and joint channels using actual forwarded points and native inverse
+diagnostics. The [local result](docs/research/advanced_sampling/LOCAL_HZ_BOUNDING.md)
+shows nearly constant joint weights on these directions, without a global bound
+or variance claim. The [seven-candidate local comparison](docs/research/advanced_sampling/LOCAL_CUT_MATCHED_HZ.md)
+now also passes: 84 point rows, 336 native evaluations and 4,952 independent
+checks. Cut-only mixtures retain `1/R` growth; direct joint and genuinely
+composed Cut1 LU-h to H/Z channels plateau, with the composed endpoint norms
+about 7.9 times lower on these two rays. Soft coverage increases these local
+joint weights by approximately `8/7`; the later global screen retains its
+large outliers and does not establish a benefit from adding that soft channel.
+The [seven-candidate full-state preflight](docs/research/advanced_sampling/GL638_HOSTED_JOINT_GATE.md#completed-cut-matched-acceptance)
+now passes: every mode meets the 32,768-point Gaussian criteria and all 221
+physical comparison checks pass, with 35 saved-file hashes unchanged. The
+[predeclared screen](docs/research/advanced_sampling/GL638_MC_SCREEN.md) now
+passes: 21 stable runs and 43,008 draws, with 167 independent audit checks.
+The frozen confirmation compares optimized LMB, six cuts, and six cuts plus
+composed Cut1 LU-h→H/Z at independent seeds and 32,768 samples per run.
+The composed screen score is only 0.03947% below direct joint, so it does not
+establish superiority between them. Soft-channel outliers remain in the report.
+The measured worker rule chose 20; the 30-worker baseline control is retained
+and excluded from the screen. The first confirmation attempt stopped on the
+ordinary baseline at seed 20011: canonical physical cut-group-3 root certification
+failed at Arb1000 before the body. Three earlier runs completed, but no partial
+confirmation is pooled. The [captured source](docs/research/advanced_sampling/GL638_CONFIRMATION_ROOT.md)
+reproduces that exact error. The [endpoint repair](docs/research/advanced_sampling/CANONICAL_LU_ENDPOINT_CERTIFICATION.md)
+now passes 35 broader tests, the final strengthened fixture, build7 and all 25
+checks of the exact-source Double/Arb six-cut replay, without changing its canonical
+point/J/partition or the numerical tolerance. The [fresh complete confirmation](docs/research/advanced_sampling/GL638_MC_CONFIRMATION.md)
+now passes: all 15 runs and 491,520 draws, with 163,840 draws per method and
+135 independent statistical checks. It gives a mixed result: the joint method's
+real variance is 10.8% higher than cuts alone, while its imaginary variance is
+35.1% lower; the corresponding absolute-component variances behave similarly.
+The frozen primary graph estimate is Re `(1.15444 ± 1.07450) × 10^-4 pb` and
+Im `(-0.0135545 ± 0.892727) × 10^-4 pb`, with empirical pooled errors.
+Rare weights dominate those errors, and confidence in convergence remains
+unestablished. The
+[maximum replay and three-point attribution](docs/research/advanced_sampling/GL638_SCREEN_MAXIMUM_REPLAY.md)
+now pass: 84 signed extrema, 59 distinct Samples, 28 Arb controls, and unchanged
+native trace totals/events. Remaining large weights include ordinary projected
+threshold terms and materially moved CT-star normals; the soft-labelled maximum
+is not at a soft-gluon endpoint. These are finite-point observations, not a global
+bound or variance cure. The final confirmation's 60 retained extrema also
+replay exactly, with higher-precision controls and unchanged saved inputs. The
+[new maximum attribution](docs/research/advanced_sampling/GL638_CONFIRMATION_MAXIMUM_PHYSICS.md)
+now covers all three distinct b/c real and imaginary extrema with native traces.
+The shared real point acquires exactly 7/6 more weight when an inactive joint
+channel is added; other maxima probe projected threshold terms with finite gluon
+energies. The [soft-limit, Cut 1 replacement and Cut 3 channel checks](docs/research/advanced_sampling/GL638_SOFT_AND_CUT3_LOCAL_REAL.md)
+are complete: 120 soft rows and 21 Cut 3 rows preserve the actual common points,
+with 15,050 and 2,681 checks passing respectively. Single-soft real weights grow
+without the explicit soft LMB and are suppressed with it. Cut 1 replacement
+worsens these paths. Double-soft real values remain unresolved at the Arb
+cancellation scale. The extra Cut 3 right `[5,10]` channel reduces the recorded
+real maximum locally from 12.219 to 5.782 pb after its extra channel probability
+is included. The combined eight/nine-channel soft/joint/Cut 3 cards are prepared;
+their normalization, joint local checks and statistical comparisons remain
+pending. These observations do not establish a global bound or variance gain.
+The [matched compiler comparison](docs/research/advanced_sampling/GL638_COMPRESSED_SYMJIT_TIMING.md)
+is complete on the frozen Arb1000 source: at 20 workers, mean evaluator times are
+47.96 ms for Eager, 27.59 ms for uncompressed SymJIT O2, and 22.29 ms for compressed
+SymJIT O2. The three-backend audit passes 28,632 checks and 8,704 complete-estimator
+comparisons under the existing complex-norm criterion; twelve repeated near-zero
+real-component disagreements are retained and do not establish real-only accuracy.
+The best measured throughput remains 95.415 samples/s with compressed SymJIT,
+while canonical sampling still takes 38.40 ms per draw. SymJIT 2.25.6 is pinned;
+raising the JIT stack limit removed scalar-fallback warnings but did not improve
+this run. Directed support certification now starts at 128 bits and escalates on
+uncertainty without changing the represented point. Lowering proposal arithmetic
+is a separate, still-unvalidated optimization; no timing gain is attributed to it.
+See also the [center audit](docs/research/advanced_sampling/CANONICAL_CT_CENTERS.md).
 
 Current implementation status: there is one `SamplingChannelCatalogue` and one
 `SamplingChannelId` domain. The Symbolica selection parser, explicit parent-LMB
@@ -414,8 +591,9 @@ whereas the summed mode evaluates all entries of that same catalogue. This
 choice of estimator must never introduce a separate channel index type.
 
 The remaining retirement work is explicit: route default single-basis sampling
-through the same compiled maps, remove its reinterpretation helper, remove
-obsolete OSE/alpha settings and aliases, and replace `LmbMultiChannelingSetup`
+through the same compiled maps, remove its reinterpretation helper, retain
+genuine OSE weighting and `alpha` on the canonical sampling settings while
+removing their duplicate legacy owners and misleading aliases, and replace `LmbMultiChannelingSetup`
 where it still owns generic catalogue behavior. The old LMB partition helpers
 are already removed. The ordinal `SamplingChannelId` remains only as the
 catalogue's stable position, never an independently generated LMB index.
@@ -1226,16 +1404,18 @@ semantics and native raised packets; CT-off/reference skip it. The
 does not establish amplitude covariance, global stability, GL638 normalization
 or integration gain.
 Continue reporting sampling cost honestly; exceeding 10% no longer blocks
-physics studies. The first eight-point, two-direction H/Z scan is complete for
-optimized LMB, direct-H and joint configurations. Extend those directions by two
-decades next, retaining actual forward/inverse normal distances and full physical
-values. Then establish actual-state reference correctness and compare the
-candidate combinations below at equal sample counts. Report signed and absolute
+physics studies. The eight-point H/Z scan and two-decade extension are complete
+for optimized LMB, direct-H and joint configurations. The
+[archived local comparison](docs/research/advanced_sampling/LOCAL_HZ_BOUNDING.md)
+retains actual forward/inverse distances, full sampled weights and its directional
+limitations. Seven-candidate preflight is underway; establish actual-state
+reference correctness before comparing the candidates below at equal sample
+counts. Report signed and absolute
 integrals with Monte Carlo errors, maximum weights and their origin, H/Z-corner
 boundedness/scaling tests, and the best defensible GL638 central value and uncertainty. Compare
 the joint combinations' maxima against both optimized LMB and nonjoint advanced
 sampling. Up to 30 cores and 300 GB may be used when scaling is useful. Full-state
-normalization, the two-decade extension and integration comparisons remain pending.
+normalization and Monte Carlo integration comparisons remain pending.
 
 For historical scale only, the optimized
 [X2 physical pilot](docs/research/advanced_sampling/GL638_X2_PHYSICAL_PILOT.md#fixed-budget-pilot)
@@ -1351,13 +1531,59 @@ amplitude need not benefit from concentrating on a particular threshold.
 
 ## 6. GL638 validation and completion criteria
 
-The latest candidate matrix uses optimized LMB as the baseline. Every advanced
+The current validation campaign uses `E_cm = 600 GeV`, `mu_r = 91.188 GeV`
+and initially `m_uv = 50 GeV`. Before an hours-long production run, compare
+multiple approximately 15-minute runs on 50 workers, inspect every new maximum
+and require credible progress toward a real-part error below 10%. If the signed
+integral is near zero, assess convergence of the independently accumulated
+integral of `abs(Re f)` instead. Keep the final production seed independent of
+the tuning runs and report sampling, evaluator and remaining integrand costs.
+
+All configurable numerical thresholds must be relative to `E_cm`, with the
+appropriate energy power for the tested quantity. An optional near-zero
+stability allowance is dimensionless: compare fully weighted probe disagreement
+against `U * E_cm^d`, where `d` is the explicitly declared integrated energy
+dimension and `U` is the actual output-unit conversion. Direct momentum
+densities account for their missing spatial measure; reference functions use
+their own known dimensions. Keep real, imaginary and absolute-observable checks
+independent. This allowance defaults to zero and never changes the evaluated
+value. The fixed floating-point representability boundary is a separate
+numerical rule, not a configurable dimensional cutoff.
+
+Retain a genuine OSE partition alongside inverse-map-density weighting in the
+single sampling catalogue. With advanced maps disabled,
+`auto:optimized_lmb` and configurable `alpha` must reproduce the historical
+prefactor proportional to the product of LMB on-shell energies raised to
+`-alpha`; `ose` must not silently select inverse densities. Also compare an
+OSE override for the explicit soft LMB while the advanced channels retain their
+exact densities and support checks. For mixed scores use the common dimension
+`E_cm^(-3L) * product((E_cm/E_edge)^alpha)`, with energies evaluated in the
+master raw frame. Test energy rescaling, partition normalization, soft powers
+and full-process reference integration before physics comparisons.
+
+The [OSE implementation milestone](docs/research/advanced_sampling/OSE_CHANNEL_WEIGHTS.md)
+now passes 97 focused Rust tests, both Python subprocess roundtrips and the
+selected 15-case full-state precision boundary. The LMB-only preset explicitly
+selects `auto:optimized_lmb` while retaining `sampling_multichanneling=true`;
+turning off that flag would also disable the requested LMB multichanneling.
+The initial eight production Gaussian arms do not meet normalization acceptance,
+so larger native confirmation remains required before OSE physical pilots.
+These results are not evidence for improved physical variance.
+
+The matched candidate matrix uses optimized LMB as the baseline. Every advanced
 candidate includes sampling channels for all six physical cuts, with the direct
 H/Z joint channel switched on or off and the explicit soft LMB `[6,12,13,14]`
 independently included or omitted. Thus compare cuts, cuts+soft, cuts+joint, and
-cuts+joint+soft against the same baseline. Keep the cut-1 radial channel when
-adding its hosted joint channel; selecting a proposal never restricts the
+cuts+joint+soft against the same baseline. Compare retaining the cut-1 radial
+channel with replacing it by the composed Cut-1 joint channel; selecting a
+proposal never restricts the
 physical six-cut sum. Preserve normalized full-support coverage in each case.
+
+The seven-candidate preflight adds cuts+combined-joint and
+cuts+combined-joint+soft. Their single composed channel first applies Cut1 LU-h
+sampling to `[6,10]`, samples ordinary complement `[7]`, then applies hosted H/Z
+to `[3]`, in parent `[3,6,7,10]`. This combines radial and joint focusing in one
+map; merely including separate Cut1 and H/Z siblings does not do that.
 
 | Physical cut ID | Exact cut edges | Joint target when enabled |
 | --- | --- | --- |
@@ -1392,8 +1618,9 @@ rescue behavior.
 
 Final GL638 acceptance requires the complete six-cut sum, all 936 orientations,
 direct 3D local UV with orientation localization, integrated UV and current
-threshold metadata. Report the warmed sampling cost honestly; the user's latest
-direction accepts present performance and supersedes the former 10% cost gate.
+threshold metadata. Report the warmed sampling cost honestly. The renewed runtime
+investigation at the beginning of this plan supersedes the earlier instruction
+to accept present performance; the former 10% target has not been met.
 A local finite-variance or bounded-leading-weight result
 for one regular H/Z patch is reported as such, not promoted to a global theorem.
 Defaults change only after the full matrix and independent-pilot evidence show

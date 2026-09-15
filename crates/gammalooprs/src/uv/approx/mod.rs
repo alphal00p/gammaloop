@@ -1509,7 +1509,6 @@ mod tests {
                 },
                 &RuntimeSettings::default(),
                 &mut EvaluationMetaData::new_empty(),
-                false,
             )?
             .into_iter()
             .map(|value| value.unwrap_real())
@@ -1787,7 +1786,6 @@ mod tests {
                     },
                     &RuntimeSettings::default(),
                     &mut EvaluationMetaData::new_empty(),
-                    false,
                 )?
                 .into_iter()
                 .map(|value| value.unwrap_real())
@@ -2524,7 +2522,6 @@ mod tests {
                             },
                             &RuntimeSettings::default(),
                             &mut EvaluationMetaData::new_empty(),
-                            false,
                         )
                     })?;
                 worker

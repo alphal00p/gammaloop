@@ -179,7 +179,9 @@ pub struct IntegrationWorkspaceManifest {
 }
 
 impl IntegrationWorkspaceManifest {
-    pub const CURRENT_VERSION: u32 = 2;
+    // Version 3 records physical absolute contributions before distinct
+    // sampling-channel points are summed. Older absolute moments cannot resume.
+    pub const CURRENT_VERSION: u32 = 3;
 
     /// A missing descriptor requests physics. Resume never silently changes that
     /// request into acceptance, and an unknown reporting convention cannot reuse grids.
@@ -380,6 +382,7 @@ impl ComplexAccumulator {
     pub(crate) fn add_sample(
         &mut self,
         result: Complex<F<f64>>,
+        absolute_result: Option<Complex<F<f64>>>,
         sample_weight: F<f64>,
         sample: Option<&Sample<F<f64>>>,
     ) {
@@ -387,8 +390,14 @@ impl ComplexAccumulator {
         let weighted_im = result.im * sample_weight;
         self.re.add_sample(weighted_re, sample);
         self.im.add_sample(weighted_im, sample);
-        self.absolute_re.add_sample(weighted_re.abs(), sample);
-        self.absolute_im.add_sample(weighted_im.abs(), sample);
+        // One outer cube is one statistical sample, including every explicitly
+        // summed channel. Squaring their summed absolute contribution retains
+        // covariance; abs of the signed channel sum would be another integral.
+        let absolute = absolute_result
+            .unwrap_or_else(|| Complex::new(result.re.abs(), result.im.abs()))
+            * sample_weight.abs();
+        self.absolute_re.add_sample(absolute.re, sample);
+        self.absolute_im.add_sample(absolute.im, sample);
     }
 
     pub(crate) fn merge(&mut self, other: &Self) {
@@ -2155,9 +2164,13 @@ impl CoreIterationState {
                         let jacobian = result.parameterization_jacobian.unwrap_or(F(1.0));
                         let effective_integrand_result =
                             result.integrand_result * Complex::new_re(jacobian);
+                        let effective_absolute_result = result
+                            .absolute_integrand_result
+                            .map(|value| value * jacobian.abs());
 
                         core_accumulator.add_sample(
                             effective_integrand_result,
+                            effective_absolute_result,
                             sample.get_weight(),
                             Some(sample),
                         );
@@ -2171,13 +2184,15 @@ impl CoreIterationState {
                             absolute_re_grid.as_mut(),
                             monitored_discrete_path.as_deref(),
                             sample,
-                            effective_integrand_result.re,
+                            effective_absolute_result
+                                .map_or(effective_integrand_result.re.abs(), |value| value.re),
                         )?;
                         add_shallow_monitor_sample(
                             absolute_im_grid.as_mut(),
                             monitored_discrete_path.as_deref(),
                             sample,
-                            effective_integrand_result.im,
+                            effective_absolute_result
+                                .map_or(effective_integrand_result.im.abs(), |value| value.im),
                         )?;
 
                         if slot_index == 0 {
@@ -2245,9 +2260,13 @@ impl CoreIterationState {
                         let jacobian = result.parameterization_jacobian.unwrap_or(F(1.0));
                         let effective_integrand_result =
                             result.integrand_result * Complex::new_re(jacobian);
+                        let effective_absolute_result = result
+                            .absolute_integrand_result
+                            .map(|value| value * jacobian.abs());
 
                         self.integrals[slot_index].add_sample(
                             effective_integrand_result,
+                            effective_absolute_result,
                             sample.get_weight(),
                             Some(sample),
                         );
@@ -2261,13 +2280,15 @@ impl CoreIterationState {
                             self.slot_absolute_re_grids[slot_index].as_mut(),
                             monitored_discrete_path.as_deref(),
                             sample,
-                            effective_integrand_result.re,
+                            effective_absolute_result
+                                .map_or(effective_integrand_result.re.abs(), |value| value.re),
                         )?;
                         add_shallow_monitor_sample(
                             self.slot_absolute_im_grids[slot_index].as_mut(),
                             monitored_discrete_path.as_deref(),
                             sample,
-                            effective_integrand_result.im,
+                            effective_absolute_result
+                                .map_or(effective_integrand_result.im.abs(), |value| value.im),
                         )?;
 
                         let training_eval =
@@ -4356,6 +4377,10 @@ mod tests {
         assert!(unversioned_error.contains("unversioned"));
         assert!(unversioned_error.contains("--restart"));
 
+        let previous = integration_workspace_manifest(Some(2));
+        let previous_error = previous.validate_version().unwrap_err().to_string();
+        assert!(previous_error.contains("--restart"));
+
         let future =
             integration_workspace_manifest(Some(IntegrationWorkspaceManifest::CURRENT_VERSION + 1));
         let future_error = future.validate_version().unwrap_err().to_string();
@@ -4396,14 +4421,48 @@ mod tests {
     }
 
     #[test]
+    fn absolute_channel_sum_retains_outer_cube_covariance() {
+        let mut accumulator = ComplexAccumulator::new();
+        // The two channel points give (+a,-a): signed cancellation is exact,
+        // but the physical absolute observation is 2a. Its variance includes
+        // the perfect cross-channel covariance on each shared outer cube.
+        for a in [1.0, 2.0, 3.0] {
+            accumulator.add_sample(
+                Complex::new_zero(),
+                Some(Complex::new(F(2.0 * a), F(4.0 * a))),
+                F(1.0),
+                None,
+            );
+        }
+        accumulator.update_iter(false);
+        assert_eq!(accumulator.re.avg, F(0.0));
+        assert_eq!(accumulator.im.avg, F(0.0));
+        assert_eq!(accumulator.absolute_re.avg, F(4.0));
+        assert_eq!(accumulator.absolute_im.avg, F(8.0));
+        assert_eq!(accumulator.absolute_re.processed_samples, 3);
+        assert!((accumulator.absolute_re.err - F((4.0_f64 / 3.0).sqrt())).abs() < F(1.0e-12));
+        assert!((accumulator.absolute_im.err - F((16.0_f64 / 3.0).sqrt())).abs() < F(1.0e-12));
+    }
+
+    #[test]
     fn complex_accumulator_tracks_componentwise_absolute_weighted_samples_and_merges() {
         let first_sample = Sample::Continuous(F(1.0), vec![F(0.25)]);
         let second_sample = Sample::Continuous(F(1.0), vec![F(0.75)]);
         let mut accumulator = ComplexAccumulator::new();
         let mut other = ComplexAccumulator::new();
 
-        accumulator.add_sample(Complex::new(F(-2.0), F(3.0)), F(2.0), Some(&first_sample));
-        other.add_sample(Complex::new(F(1.0), F(-4.0)), F(2.0), Some(&second_sample));
+        accumulator.add_sample(
+            Complex::new(F(-2.0), F(3.0)),
+            None,
+            F(2.0),
+            Some(&first_sample),
+        );
+        other.add_sample(
+            Complex::new(F(1.0), F(-4.0)),
+            None,
+            F(2.0),
+            Some(&second_sample),
+        );
         accumulator.merge(&other);
         accumulator.update_iter(false);
 
@@ -6003,8 +6062,8 @@ mod tests {
         state.all_integrals = vec![ComplexAccumulator::new(); state.slot_metas.len()];
         let slots = make_preview_test_slots(&state.slot_metas);
         let mut core_state = make_preview_test_core_state(&state);
-        core_state.integrals[0].add_sample(Complex::new(F(-2.0), F(3.0)), F(2.0), None);
-        core_state.integrals[0].add_sample(Complex::new(F(1.0), F(-4.0)), F(2.0), None);
+        core_state.integrals[0].add_sample(Complex::new(F(-2.0), F(3.0)), None, F(2.0), None);
+        core_state.integrals[0].add_sample(Complex::new(F(1.0), F(-4.0)), None, F(2.0), None);
 
         let preview_state = build_preview_integration_state(
             &state,

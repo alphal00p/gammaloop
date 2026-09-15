@@ -118,11 +118,13 @@ use super::{
 
 pub mod export;
 pub mod load;
+#[cfg(test)]
+mod sampling_state_tests;
 
 #[allow(clippy::excessive_precision)]
 const PICOBARN_CONVERSION: F<f64> = F(3.89379372171859372125651613062e8);
 
-fn barn_conversion_factor<T: FloatLike>(unit: IntegralUnit, one: F<T>) -> F<T> {
+pub(super) fn barn_conversion_factor<T: FloatLike>(unit: IntegralUnit, one: F<T>) -> F<T> {
     let Some(relative_to_picobarn) = unit.relative_to_picobarn_factor(&one) else {
         return one.one();
     };
@@ -1417,9 +1419,12 @@ impl CrossSectionGraphTerm {
                     .clone(),
                 cut_threshold_associations: graph.derived_data.cut_threshold_associations.clone(),
                 multi_channeling_setup: LmbMultiChannelingSetup {
+                    master_edge_masses: Default::default(),
                     sampling_bridge: Default::default(),
                     sampling_bridge_quad: Default::default(),
+                    sampling_bridge_fixed256: Default::default(),
                     sampling_bridge_arb: Default::default(),
+                    sampling_source: Default::default(),
                     sampling_catalogue: Default::default(),
                     sampling_programs: Default::default(),
                     lmb_basis_ids: TiVec::new(),
@@ -1981,6 +1986,9 @@ impl GraphTerm for CrossSectionGraphTerm {
                         certify_independent(host, &outside, "phase-space cut")?;
                         // This ray is centered at the actual LU fixed point, not
                         // a generic SOCP center. Only then does t*=R(direction)/r.
+                        // Use LU's prepared routing before radial scaling: large
+                        // host-null master components must cancel in the fixed
+                        // velocity, rather than in each rounded scaled point.
                         let zero_velocity =
                             LoopMomenta::from_iter((0..parent.len()).map(|_| {
                                 ThreeMomentum::new(zero.clone(), zero.clone(), zero.clone())
@@ -2022,14 +2030,9 @@ impl GraphTerm for CrossSectionGraphTerm {
                                     F(v[2].clone()),
                                 );
                             }
-                            let (value, derivative) = surface.compute_self_and_r_derivative(
-                                &radius,
-                                &velocity,
-                                &origin_loops,
-                                &externals,
-                                &masses,
-                                &lmb,
-                            );
+                            let (value, derivative) = surface
+                                .routed_ray(&velocity, &origin_loops, &externals, &masses, &lmb)
+                                .evaluate(&radius);
                             Ok((value.0, derivative.0))
                         });
                         let map =
@@ -2439,6 +2442,7 @@ impl GraphTerm for CrossSectionGraphTerm {
     }
 
     fn warm_up(&mut self, settings: &RuntimeSettings, model: &Model) -> Result<()> {
+        self.multi_channeling_setup.master_edge_masses.invalidate();
         self.multi_channeling_setup.invalidate_sampling();
         self.graph.validate_real_masses(model)?;
         self.estimated_scale = Some(
@@ -2540,6 +2544,7 @@ impl GraphTerm for CrossSectionGraphTerm {
         self.graph.param_builder.update_model_values(model);
 
         self.param_builder = self.graph.param_builder.clone();
+        self.multi_channeling_setup.warm_up_masses(settings, model);
         self.real_mass_vec = Some(self.graph.new_edgevec(|edge, _, _| {
             edge.mass_value(model, &self.param_builder)
                 .map(|mass| mass.re)
@@ -3158,7 +3163,6 @@ impl GraphTerm for CrossSectionGraphTerm {
                         orientations,
                         context.settings,
                         context.evaluation_metadata,
-                        context.record_primary_timing,
                     )?
                     .pop()
                     .ok_or_else(|| eyre!("Evaluator returned no cut result"))?;
@@ -3196,7 +3200,6 @@ impl GraphTerm for CrossSectionGraphTerm {
                     pass_two_evaluator,
                     &params_for_pass_two,
                     context.evaluation_metadata,
-                    context.record_primary_timing,
                 );
 
                 debug!("pass_two_result: {:+16e}", pass_two_result);
@@ -3267,7 +3270,6 @@ impl GraphTerm for CrossSectionGraphTerm {
                         &mut self.param_builder,
                         orientations,
                         context.evaluation_metadata,
-                        context.record_primary_timing,
                         record_threshold_decomposition,
                         shared_overlaps[cut_group_id].as_ref(),
                     )?

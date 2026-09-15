@@ -488,6 +488,20 @@ evaluation apply `J_c w_c` once per graph result and event at native precision,
 before reporting, and retain a separate grid probability. Stability rotations
 act on the resulting mapped point and external frame together.
 
+Both execution modes prepare each channel on the graph-group master and reuse
+that point for every group member. The absolute monitor first sums all physical
+cuts, counterterms, orientations and group members at that point, then takes
+the componentwise absolute value. Explicitly summed channels add these positive
+contributions before one outer-cube statistics update, retaining channel
+covariance. The signed channel sum is not passed through `abs` afterward.
+Graph groups remain separate integration domains; if orientations themselves
+are sampled, the absolute monitor describes that sampled-orientation domain,
+not the absolute value of an orientation sum. GL638 studies sum orientations.
+Native, precise and Python evaluation outputs expose the separate
+`absolute_integrand_result` payload before the outer grid weight. Integration
+workspace version 3 rejects older checkpoints whose absolute moments used the
+previous convention, requiring a fresh run.
+
 The existing graph sampling setup retains a nonserialized canonical catalogue,
 compiled programs and native Double/Quad/Arb bridges. Process warmup constructs
 the configured precisions transactionally after numeric masses/externals are ready;
@@ -499,6 +513,8 @@ numeric caches before rebuilding from directly edited inputs.
 
 Standalone `phase_space(cut(...))` maps use the real graph's cut equation,
 warmup masses and fixed external data through the shared implicit radial kernel.
+Their fixed directions use the existing LU ray: route signed velocities before
+radial scaling so large host-null master components cancel before multiplication.
 They retain the auxiliary raw radial variable. Conditional cut/left/right maps
 now share the Symbolica-resolved ordered block plan and one geometry registry.
 The registry key includes qualified target, native parent, active edges and
@@ -665,6 +681,17 @@ verification charged to sampling time. Evaluator and event timings
 are subsets removed from the benchmark's residual integrand row. Final metadata
 retains accumulated costs, including replays after its earlier result snapshot.
 These are measurement counters, not evidence that the GL638 10% budget is met.
+The inclusive evaluator timing update counts every physical evaluator wrapper
+call across probes and rescues, including completed calls before a failure and
+the raised-threshold IFT alpha helper. Earlier reports counted only the primary
+rotation at the first precision and cannot supply this new E split. The
+`canonical_sampling_preparation_time` subset uses the same elapsed interval as
+its contribution to S; the existing canonical physical preparation remains a
+subset of P. Bench rows subtract these subsets once and reject inconsistent
+subset durations. These additions are per-evaluation metadata only; the serialized
+`StatisticsCounter` and integration checkpoint layouts are unchanged. Multiworker
+benchmarks must report summed worker costs separately from elapsed wall time.
+
 
 The native host handoff is implemented and its combined gates pass. The existing
 runtime context owns one native record vector; the initial selected forward or
@@ -712,12 +739,24 @@ threshold distance and density accuracy still needs its stronger certificate.
 Derived-expression mass evaluation, Gaussian-body underflow and final outer-grid
 range handling remain separate precision limits.
 The bridge checks the selected forward determinant against its inverse density
-at the actual mapped point. It reuses the selected exact partition score, or
-evaluates only the selected inverse in proxy mode. Warmup assigns one tenth of
+at the actual mapped point. It reuses a selected score only when that channel
+actually uses its map density; OSE and user-proxy overrides evaluate the
+selected inverse independently. Warmup assigns one tenth of
 the strictest matching stability-level relative tolerance as its density budget;
 standalone constructors use native square-root epsilon. Failure is a typed
 precision-retry condition. This is numerical proposal consistency, not a
 rigorous enclosure of the physical surface or of floating-point errors.
+
+Channel weights are resolved per canonical entry: the global
+`sampling_channel_weight` is overridden by an optional named
+`channel_weight`. Genuine OSE weights are available for complete ordinary LMB
+maps, using raw master-frame edge energies and the dimensionally consistent
+score `E_cm^(-3L) product(E_cm/E_e)^alpha`; surface maps retain their exact
+densities unless an explicit compatible user proxy is selected. The existing
+positive-score evaluator and support-aware partition own all strategies.
+`SamplingChannelSelection` owns `weight` and `alpha` together; no separate
+legacy LMB-weight owner or enumeration is retained. See the
+[OSE settings and acceptance contract](../research/advanced_sampling/OSE_CHANNEL_WEIGHTS.md).
 
 Physical and Gaussian-reference targets share graph traversal, default-LMB
 routing and original-draw native precision retries. Reference values and raw-frame

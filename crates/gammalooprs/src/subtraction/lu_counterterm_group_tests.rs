@@ -274,18 +274,21 @@ fn shared_group_weights_preserve_foreign_cut_data_and_radial_derivatives() {
             ((t.clone() * &t) * F(9.0) + new_constant(&t, &F(4.0))).sqrt() * F(4.0 / 3.0) / &t;
         let alpha = generate_rstar_t_dependence_evaluator(3)
             .unwrap()
-            .evaluate_alpha(RstarTDependenceInput {
-                t_star: &F(1.0),
-                alpha: &(F(4.0) / F(3.0)),
-                overlap_center: &center,
-                subspace: &full_subspace,
-                unrescaled_momentum_sample: &source,
-                representative_sample: &source,
-                masses: &masses,
-                threshold_esurface: &thresholds[EsurfaceID(0)],
-                lmb: &graph.loop_momentum_basis,
-                all_lmbs: &lmbs,
-            });
+            .evaluate_alpha(
+                RstarTDependenceInput {
+                    t_star: &F(1.0),
+                    alpha: &(F(4.0) / F(3.0)),
+                    overlap_center: &center,
+                    subspace: &full_subspace,
+                    unrescaled_momentum_sample: &source,
+                    representative_sample: &source,
+                    masses: &masses,
+                    threshold_esurface: &thresholds[EsurfaceID(0)],
+                    lmb: &graph.loop_momentum_basis,
+                    all_lmbs: &lmbs,
+                },
+                &mut EvaluationMetaData::new_empty(),
+            );
         let actual = alpha * ((t.clone() * &t) * F(9.0) + new_constant(&t, &F(4.0))).sqrt();
         for (order, (actual, expected)) in actual.values.iter().zip(&expected.values).enumerate() {
             assert!(
@@ -478,7 +481,7 @@ fn shared_group_weights_preserve_foreign_cut_data_and_radial_derivatives() {
                             .solve_rstar(
                                 &mut evaluator,
                                 &RadialRootIdentity::new("native canonical center rotation".into()),
-                                &mut RadialRootDiagnostics::default(),
+                                &mut EvaluationMetaData::new_empty(),
                             )
                             .expect("the same canonical center remains inside the rotated sphere");
                         let star = root.base_rstar_loop_momenta();
@@ -515,7 +518,7 @@ fn shared_group_weights_preserve_foreign_cut_data_and_radial_derivatives() {
                     .solve_rstar(
                         &mut evaluator,
                         &RadialRootIdentity::new("analytic alpha projection".into()),
-                        &mut RadialRootDiagnostics::default(),
+                        &mut EvaluationMetaData::new_empty(),
                     )
                     .unwrap();
                 let t = HyperDual::new(simple_n_deriv_shape(3)).variable(0, tau.clone());
@@ -829,7 +832,6 @@ fn shared_group_weights_preserve_foreign_cut_data_and_radial_derivatives() {
                     id: OrientationID(0),
                 },
                 &mut EvaluationMetaData::new_empty(),
-                false,
                 record_components,
                 Some(&shared),
             )

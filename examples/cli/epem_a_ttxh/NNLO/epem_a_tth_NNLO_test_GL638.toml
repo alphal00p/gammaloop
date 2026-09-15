@@ -74,8 +74,8 @@ esurface_existence_threshold = 1.0e-14
 skip_thresholds_that_are_cuts = true
 
 [default_runtime_settings.kinematics]
-e_cm = 1000.0
-externals = { type = "constant", data = { momenta = [[500.0, 0.0, 0.0, 500.0], [500.0, 0.0, 0.0, -500.0]], helicities = ["summed_averaged", "summed_averaged"] } }
+e_cm = 600.0
+externals = { type = "constant", data = { momenta = [[300.0, 0.0, 0.0, 300.0], [300.0, 0.0, 0.0, -300.0]], helicities = ["summed_averaged", "summed_averaged"] } }
 
 [default_runtime_settings.general]
 evaluator_method = "SingleParametric"
@@ -83,7 +83,7 @@ integral_unit = "picobarn"
 enable_cache = false
 generate_events = false
 store_additional_weights_in_event = false
-renormalization_localization_scale = 1000.0
+renormalization_localization_scale = 600.0
 
 [[command_blocks]]
 name = "set_model_parameters"
@@ -107,7 +107,7 @@ name = "configure_runtime"
 commands = ["""set default-runtime string '
   [general]
   mu_r = $(mu_r:91.188)
-  m_uv = $(m_uv:91.188)
+  m_uv = $(m_uv:50.0)
   [subtraction]
   disable_threshold_subtraction = $(disable_threshold_subtraction:false)
   esurface_existence_threshold = $(threshold_tolerance:1e-14)
@@ -118,25 +118,29 @@ commands = ["""set default-runtime string '
   dynamic_width = $(ct_dynamic_width:false)
   force_uv_dampers_to_one = false
   [sampling]
+  default_channel_selection = []
   graphs = "monte_carlo"
   orientations = "summed"
-  lmb_multichanneling = true
-  lmb_channels = "$(lmb_channels:monte_carlo)"
-  lmb_channel_weight = "$(lmb_channel_weight:inverse_jacobian)"
+  sampling_multichanneling = true
+  sampling_channels = "$(sampling_channels:summed)"
+  sampling_channel_weight = "$(sampling_channel_weight:map_density)"
+  alpha = $(alpha:3.0)
   coordinate_system = "spherical"
   mapping = "$(mapping:linear)"
-  b = $(radial_scale:1.0)
-  power = $(radial_power:1.0)
+  b = $(radial_scale:0.3)
+  power = $(radial_power:2.0)
+  [sampling.channel_selection]
+  GL638 = ["lu_cut_0", "lu_cut_1", "lu_cut_2", "lu_cut_3", "lu_cut_4", "lu_cut_5", "cut1_joint_HZ", "cut3_right_5_10", "soft_6_12"]
   [h_function]
   function = "poly_exponential"
   sigma = $(h_sigma:1.0)
   power = $(h_power:3)
   [integrator]
   integrated_phase = "$(training_phase:real)"
-  n_start = $(n_start:1000)
+  n_start = $(n_start:16384)
   n_increase = 0
-  n_max = $(n_max:3000)
-  seed = $(seed:1337)
+  n_max = $(n_max:81920)
+  seed = $(seed:62001)
   n_bins = $(n_bins:16)
   min_samples_for_update = $(min_samples_for_update:64)
   continuous_dim_learning_rate = $(continuous_learning_rate:0.25)
@@ -145,12 +149,12 @@ commands = ["""set default-runtime string '
   [integrator.observables_output]
   format = ["json"]
   [stability]
-  check_on_norm = $(stability_check_on_norm:true)
+  check_on_norm = $(stability_check_on_norm:false)
   rotation_axis = [{ type = "euler_angles", alpha = $(stability_alpha:0.1), beta = $(stability_beta:0.2), gamma = $(stability_gamma:0.3) }]
   levels = [
     { precision = "Double", required_precision_for_re = $(double_precision:1e-6), required_precision_for_im = $(double_precision:1e-6), escalate_for_large_weight_threshold = 0.9 },
     { precision = "Quad", required_precision_for_re = $(quad_precision:1e-10), required_precision_for_im = $(quad_precision:1e-10), escalate_for_large_weight_threshold = -1.0 },
-    { precision = "Arb", required_precision_for_re = $(arb_precision:1e-12), required_precision_for_im = $(arb_precision:1e-12), escalate_for_large_weight_threshold = -1.0 },
+    { precision = "Arb", ecm_relative_tolerance_for_re = $(ecm_relative_tolerance_for_re:1e-100), ecm_relative_tolerance_for_im = 0.0, required_precision_for_re = $(arb_precision:1e-12), required_precision_for_im = $(arb_precision:1e-12), escalate_for_large_weight_threshold = -1.0 },
   ]
 '"""]
 
@@ -197,8 +201,8 @@ name = "integrate_common"
 commands = [
   "run set_model_parameters configure_runtime",
   "set process -p epem_a_tth -i NNLO defaults",
-  """integrate -p epem_a_tth -i NNLO --n-cores $(integration_cores:5)
-    --workspace-path $(workspace:./GL638_integration_workspace)
+  """integrate -p epem_a_tth -i NNLO --n-cores $(integration_cores:100)
+    --workspace-path $(workspace:./GL638_big_run_workspace)
     --renderer $(renderer:ratatui) --show-phase both
     --show-max-weight-info --show-max-weight-info-for-discrete-bins
     --show-top-discrete-grid --show-discrete-contributions-sum
@@ -212,7 +216,7 @@ commands = ["run integrate_common -D n_start=$(n_start:1000) -D n_max=$(n_max:30
 
 [[command_blocks]]
 name = "integrate"
-commands = ["run integrate_common -D n_start=$(n_start:7500) -D n_max=$(n_max:75000)"]
+commands = ["run integrate_common -D n_start=$(n_start:16384) -D n_max=$(n_max:81920)"]
 
 [[command_blocks]]
 name = "check_settings"
@@ -220,4 +224,73 @@ commands = ["run configure_generation configure_runtime", "display settings glob
 
 [[command_blocks]]
 name = "all"
-commands = ["run generate pilot"]
+commands = ["run generate integrate"]
+
+
+# Validated GL638 advanced channels and symmetric soft OSE override.
+[sampling.channel_definitions.GL638.lu_cut_0]
+around = "phase_space(cut(2,6,12,13))"
+parent_lmb = [3, 4, 7, 10]
+subspace_lmb = [3, 4, 7, 10]
+on_cut = [0]
+radial_profile = { kind = "lu_h", approximation = "log_logistic", broad_fraction = 0.02 }
+
+[sampling.channel_definitions.GL638.lu_cut_1]
+around = "phase_space(cut(2,6,10))"
+parent_lmb = [3, 4, 7, 10]
+subspace_lmb = [3, 4, 7, 10]
+on_cut = [1]
+radial_profile = { kind = "lu_h", approximation = "log_logistic", broad_fraction = 0.02 }
+
+[sampling.channel_definitions.GL638.lu_cut_2]
+around = "phase_space(cut(2,6,7,13,14))"
+parent_lmb = [3, 4, 7, 10]
+subspace_lmb = [3, 4, 7, 10]
+on_cut = [2]
+radial_profile = { kind = "lu_h", approximation = "log_logistic", broad_fraction = 0.02 }
+
+[sampling.channel_definitions.GL638.lu_cut_3]
+around = "phase_space(cut(2,4,12))"
+parent_lmb = [3, 4, 7, 10]
+subspace_lmb = [3, 4, 7, 10]
+on_cut = [3]
+radial_profile = { kind = "lu_h", approximation = "log_logistic", broad_fraction = 0.02 }
+
+[sampling.channel_definitions.GL638.lu_cut_4]
+around = "phase_space(cut(2,4,10,13))"
+parent_lmb = [3, 4, 7, 10]
+subspace_lmb = [3, 4, 7, 10]
+on_cut = [4]
+radial_profile = { kind = "lu_h", approximation = "log_logistic", broad_fraction = 0.02 }
+
+[sampling.channel_definitions.GL638.lu_cut_5]
+around = "phase_space(cut(2,4,7,14))"
+parent_lmb = [3, 4, 7, 10]
+subspace_lmb = [3, 4, 7, 10]
+on_cut = [5]
+radial_profile = { kind = "lu_h", approximation = "log_logistic", broad_fraction = 0.02 }
+
+# Compose the cut1 LU-h radial proposal with the hosted joint in one channel.
+# The cut depends on parent columns6/10; column7 is drawn next, then active3.
+# Existing native binding must verify that dependency and the prior permutation.
+# The six unchanged full-volume LU-h siblings retain support for compact decline.
+[sampling.channel_definitions.GL638.cut1_joint_HZ]
+around = "then(block(lmb(6,10),phase_space(cut(2,6,10))),complement(7),block(lmb(3),at_cut(cut(2,6,10),intersect(surface(2,4,12),surface(3,10,13)))))"
+parent_lmb = [3,6,7,10]
+on_cut = [1]
+radial_profile = { kind = "lu_h", approximation = "log_logistic", broad_fraction = 0.02 }
+
+# Prospective hosted Cut3 right-threshold channel; actual catalogue gates pending.
+[sampling.channel_definitions.GL638.cut3_right_5_10]
+around = "then(block(lmb(4,12),phase_space(cut(2,4,12))),complement(7),block(lmb(5),at_cut(cut(2,4,12),surface(5,10))))"
+parent_lmb = [4,5,7,12]
+subspace_lmb = []
+on_cut = [3]
+radial_profile = { kind = "lu_h", approximation = "log_logistic", broad_fraction = 0.02 }
+
+# Retain soft coverage to suppress the observed unbounded single-soft real weights.
+# Reuse the recorded soft LMB channel; this adds one full-volume proposal.
+[sampling.channel_definitions.GL638.soft_6_12]
+channel_weight = "ose"
+parent_lmb = [3, 4, 7, 10]
+around = "lmb(6,12,13,14)"
