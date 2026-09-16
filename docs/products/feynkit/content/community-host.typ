@@ -71,6 +71,45 @@ just docs-watch feynkit 8117
 The preview is served at `http://127.0.0.1:8117`. These commands use the registered Rust and
 Python components, manual pages, and example catalog.
 
+== Build the browser showcases
+
+The #link("guides/showcases/")[showcase gallery] runs in Marimo's browser Python runtime.
+The repository's combined host packages Symbolica, FeynKit, Spenso, and Idenso into one
+WebAssembly wheel. Its `wasm` feature selects portable numeric backends; its default
+`native` feature retains the desktop backends. Browser Symbolica runs without a license key.
+
+The wheel command uses the checkout's pinned Emscripten Rust toolchain and provisions the
+matching Pyodide build environment through cibuildwheel. Then export the executable
+cells and start the existing documentation watcher:
+
+// docs-example: syntax
+```sh
+just notebook-wheel
+just notebook-ufo-wheel
+just docs-notebooks /path/to/symbolica-wasm.whl feynkit docs/generated/notebooks target/notebook-ufo-wheel/ufo_model_loader-0.1.8-py3-none-any.whl
+just docs-watch feynkit 8117
+```
+
+Pass the actual Symbolica wheel filename produced by the build. The UFO loader is pinned to
+the upstream Symbolica-3-compatible revision because the published 0.1.7 API predates it. `docs-notebooks` stages generated assets
+under `docs/generated/notebooks`, which `docs-site` and `docs-watch` include automatically.
+Rerun the export after editing a notebook; the watcher reloads the changed assets. The output
+argument can instead point to an already built site. Generated wheels and notebook assets
+remain local build outputs.
+
+For the shared Spenso + Idenso showcase, also supply the matching Linnet browser wheel for
+network figures:
+
+// docs-example: syntax
+```sh
+just docs-notebooks /path/to/symbolica-wasm.whl spenso docs/generated/notebooks /path/to/linnet-wasm.whl
+just docs-notebooks /path/to/symbolica-wasm.whl idenso docs/generated/notebooks /path/to/linnet-wasm.whl
+```
+
+Publication builds both wheels at the documented revision and adds all three products' assets
+to the versioned site. The source notebooks use the checkout's model fixtures; the browser
+export bundles those same inputs so it needs no external model download.
+
 == Verify an installed host
 
 Build and install the host's combined wheel, then run the repository smoke program in that

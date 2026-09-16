@@ -1,3 +1,13 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "symbolica==3.0.0",
+#     "marimo==0.24.0",
+#     "typst==0.15.0",
+#     "linnet-py==0.1.0",
+# ]
+# ///
+
 import marimo
 
 __generated_with = "0.24.0"
@@ -29,7 +39,7 @@ def _(mo):
 
 @app.cell
 def _():
-    import pydot
+    import linnet_py as lp
     import symbolica as sy
     from symbolica.community import idenso, spenso
     from symbolica.community.spenso import (
@@ -54,7 +64,7 @@ def _():
         as_tensor,
         dot,
         idenso,
-        pydot,
+        lp,
         spenso,
         sy,
         trace,
@@ -65,7 +75,7 @@ def _():
 def _(mo):
     mo.callout(
         mo.md(
-            "The native backend and the optional Typst renderer loaded "
+            "The shared Symbolica backend and the Typst renderer loaded "
             "successfully. The controls below affect every mathematical view."
         ),
         kind="success",
@@ -335,7 +345,10 @@ def _(
 ):
     def card(label, expression, settings=display_settings):
         return mo.vstack(
-            [mo.md(f"**{label}**"), mo.Html(spenso.to_html(expression, settings=settings))],
+            [
+                mo.md(f"**{label}**"),
+                mo.Html(spenso.to_html(expression, settings=settings)),
+            ],
             gap=0.5,
         )
 
@@ -362,7 +375,9 @@ def _(
     comparison = mo.hstack(
         [
             card("Ports", atlas_layout_expression, layout_settings("ports")),
-            card("Schoonschip", atlas_layout_expression, layout_settings("schoonschip")),
+            card(
+                "Schoonschip", atlas_layout_expression, layout_settings("schoonschip")
+            ),
             card("Function call", atlas_layout_expression, layout_settings("call")),
         ],
         widths="equal",
@@ -379,10 +394,14 @@ def _(
             mo.ui.tabs(
                 {
                     "Layout comparison": comparison,
-                    "Ports and vectors": gallery(atlas_groups["Ports and compact vectors"]),
+                    "Ports and vectors": gallery(
+                        atlas_groups["Ports and compact vectors"]
+                    ),
                     "Chains and traces": gallery(atlas_groups["Chains and traces"]),
                     "Dirac and colour": gallery(atlas_groups["Dirac and colour heads"]),
-                    "Representations": gallery(atlas_groups["Representations and labels"]),
+                    "Representations": gallery(
+                        atlas_groups["Representations and labels"]
+                    ),
                 }
             ),
             mo.accordion(
@@ -430,12 +449,12 @@ def _(amplitude, display_settings, mo, show_dimensions, source_block):
 
 
 @app.cell
-def _(TensorName, as_tensor, idenso, mu, nu, p):
-    metric = TensorName.g()
+def _(Representation, as_tensor, idenso, mu, p):
+    metric = Representation.mink(4).g("mu", "nu")
 
     # Crossing to ordinary Symbolica explicitly leaves the repeated index visible
     # to Idenso instead of asking Spenso to choose a tensor-aware contraction.
-    metric_product = metric(mu, nu).to_expression() * p(1, mu).to_expression()
+    metric_product = metric.to_expression() * p(1, mu).to_expression()
     simplified_atom = idenso.simplify_metrics(metric_product)
     simplified_tensor = as_tensor(simplified_atom)
     return metric_product, simplified_atom, simplified_tensor
@@ -526,7 +545,7 @@ def _(
 
 
 @app.cell
-def _(Representation, Tensor, TensorName, display_settings, pydot):
+def _(Representation, Tensor, TensorName, display_settings, lp):
     euc = Representation.euc(2)
     u = Tensor.dense(TensorName.vector("u")(euc), [1.0, 2.0])
     v = Tensor.dense(TensorName.vector("v")(euc), [3.0, 4.0])
@@ -534,8 +553,8 @@ def _(Representation, Tensor, TensorName, display_settings, pydot):
     contraction = u * v
     contraction_math = contraction.to_html(settings=display_settings)
     contraction_dot = contraction.to_dot()
-    graph = pydot.graph_from_dot_data(contraction_dot)[0]
-    contraction_graph = graph.create_svg().decode()
+    graph = lp.Graph.from_dot(contraction_dot, lp.DotCodec.topology())
+    contraction_graph = graph.to_svg()
     contraction.execute()
     contraction_result = contraction.result_scalar()
     return (
@@ -582,114 +601,17 @@ def _(
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _(contraction_result, mo):
+    assert contraction_result == 11.0
     mo.md("""
     ---
 
     Edit the constructors, add an Idenso pass, or replace the dense vectors
     above. The display controls remain ordinary `DisplaySettings`, so the same
     code works in scripts and notebooks outside Marimo.
+
+    <p data-notebook-ready="spenso_idenso_display">Contraction checked: 11.</p>
     """)
-    return
-
-
-@app.cell
-def _():
-    return
-
-
-@app.cell
-def _():
-    return
-
-
-@app.cell
-def _():
-    return
-
-
-@app.cell
-def _():
-    return
-
-
-@app.cell
-def _():
-    return
-
-
-@app.cell
-def _():
-    return
-
-
-@app.cell
-def _():
-    return
-
-
-@app.cell
-def _():
-    return
-
-
-@app.cell
-def _():
-    return
-
-
-@app.cell
-def _():
-    return
-
-
-@app.cell
-def _():
-    return
-
-
-@app.cell
-def _():
-    return
-
-
-@app.cell
-def _():
-    return
-
-
-@app.cell
-def _():
-    return
-
-
-@app.cell
-def _():
-    return
-
-
-@app.cell
-def _():
-    return
-
-
-@app.cell
-def _():
-    return
-
-
-@app.cell
-def _():
-    return
-
-
-@app.cell
-def _():
-    return
-
-
-@app.cell
-def _():
     return
 
 

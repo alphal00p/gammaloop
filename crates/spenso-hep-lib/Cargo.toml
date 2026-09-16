@@ -12,11 +12,10 @@ symbolica = { workspace = true }
 
 ahash = { workspace = true, features = ["serde"] }
 xpct = "0.5.1"
-gammaloop-workspace-hack = { version = "0.1", path = "../gammaloop-workspace-hack", optional = true }
 
 [features]
 default = ["native"]
-native = ["idenso/native", "spenso/native", "dep:gammaloop-workspace-hack"]
+native = ["idenso/native", "spenso/native"]
 wasm = ["idenso/wasm", "spenso/wasm"]
 
 [dev-dependencies]

@@ -126,8 +126,8 @@ is disabled or the contraction strategy performs partial graph rewrites.
 === Symbolic parallelism and optimized sums
 
 With `shadowing`, the process-wide `SymbolicParallelism` policy controls Rayon work involving
-Symbolica atoms. `Auto` checks the Symbolica license once and uses a workload heuristic where an
-operation provides one; `Serial` disables Rayon; `Parallel` forces Rayon and bypasses `Auto`'s
+Symbolica atoms. `Auto` keeps WebAssembly kernels serial; on native targets it checks the
+Symbolica license once and uses a workload heuristic where an operation provides one; `Serial` disables Rayon; `Parallel` forces Rayon and bypasses `Auto`'s
 license safety check. Configure the policy before tensor work: changing it concurrently with an
 active operation is unsupported.
 

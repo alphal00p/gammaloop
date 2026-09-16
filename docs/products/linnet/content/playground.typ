@@ -15,7 +15,7 @@ notebook server is needed. An internet connection is needed for the initial down
 #context if target() == "html" {
   html.elem("div", attrs: (
     class: "live-notebook",
-    "data-linnet-notebook": "layout_stream",
+    "data-notebook": "layout_stream",
     "aria-label": "Live DOT layout notebook",
   ))[
     #html.elem("p", attrs: (class: "live-notebook-fallback"))[

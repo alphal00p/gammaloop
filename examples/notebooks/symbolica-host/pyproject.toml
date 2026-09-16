@@ -1,0 +1,20 @@
+[build-system]
+requires = ["maturin>=1.13.2,<2"]
+build-backend = "maturin"
+
+[project]
+name = "symbolica"
+version = "3.0.0"
+requires-python = ">=3.10"
+dependencies = ["typst==0.15.0"]
+
+[tool.maturin]
+module-name = "symbolica.core"
+python-source = "python"
+
+[tool.cibuildwheel]
+build = "cp314-*"
+
+[tool.cibuildwheel.pyodide]
+repair-wheel-command = ""
+environment = { MATURIN_PEP517_ARGS = "--locked --no-default-features --features wasm", RUSTFLAGS = "" }

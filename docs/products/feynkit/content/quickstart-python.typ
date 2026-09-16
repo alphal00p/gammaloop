@@ -50,6 +50,9 @@ from that model can select external states.
   linking a second Symbolica extension breaks that ownership contract.
 ])
 
+Try the #link("guides/showcases/first-diagram/")[interactive first-diagram showcase] or choose
+a component from the #link("guides/showcases/")[notebook gallery].
+
 Continue with #link("tutorial/")[model inspection and generation], the
 #link("guides/tensor-reduction/")[tensor selector example], or
 #link("guides/notebooks/")[notebook rendering]. The complete signature and docstring inventory

@@ -63,7 +63,7 @@ print(graph.to_dot())
 #context if target() == "html" {
   html.elem("div", attrs: (
     class: "live-notebook",
-    "data-linnet-notebook": "python_quickstart",
+    "data-notebook": "python_quickstart",
     "aria-label": "Run the Python quickstart",
   ))[
     #html.elem("p", attrs: (class: "live-notebook-fallback"))[

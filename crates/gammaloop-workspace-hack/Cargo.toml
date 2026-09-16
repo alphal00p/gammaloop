@@ -26,6 +26,7 @@ criterion = { version = "0.5", features = ["html_reports"] }
 crossterm = { version = "0.28", features = ["serde"] }
 either = { version = "1", features = ["use_std"] }
 indexmap = { version = "2", features = ["serde"] }
+libc = { version = "0.2" }
 log = { version = "0.4", default-features = false, features = ["std"] }
 matrixmultiply = { version = "0.3", features = ["cgemm"] }
 memchr = { version = "2" }
@@ -52,7 +53,6 @@ toml_parser = { version = "1" }
 toml_writer = { version = "1" }
 tracing = { version = "0.1", features = ["release_max_level_info"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "time"] }
-typed-index-collections = { version = "3", features = ["bincode", "serde-alloc"] }
 winnow-ca01ad9e24f5d932 = { package = "winnow", version = "0.7" }
 winnow-dff4ba8e3ae991db = { package = "winnow", version = "1" }
 zerocopy = { version = "0.8", default-features = false, features = ["derive", "simd"] }
@@ -69,6 +69,7 @@ criterion = { version = "0.5", features = ["html_reports"] }
 crossterm = { version = "0.28", features = ["serde"] }
 either = { version = "1", features = ["use_std"] }
 indexmap = { version = "2", features = ["serde"] }
+libc = { version = "0.2" }
 log = { version = "0.4", default-features = false, features = ["std"] }
 matrixmultiply = { version = "0.3", features = ["cgemm"] }
 memchr = { version = "2" }
@@ -96,20 +97,19 @@ toml_parser = { version = "1" }
 toml_writer = { version = "1" }
 tracing = { version = "0.1", features = ["release_max_level_info"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "time"] }
-typed-index-collections = { version = "3", features = ["bincode", "serde-alloc"] }
 winnow-ca01ad9e24f5d932 = { package = "winnow", version = "0.7" }
 winnow-dff4ba8e3ae991db = { package = "winnow", version = "1" }
 zerocopy = { version = "0.8", default-features = false, features = ["derive", "simd"] }
 
 [target.x86_64-unknown-linux-gnu.dependencies]
 bitflags = { version = "2", default-features = false, features = ["std"] }
-libc = { version = "0.2", features = ["extra_traits"] }
+libc = { version = "0.2", default-features = false, features = ["extra_traits"] }
 once_cell = { version = "1" }
 rustix = { version = "1", features = ["fs", "stdio", "termios"] }
 
 [target.x86_64-unknown-linux-gnu.build-dependencies]
 bitflags = { version = "2", default-features = false, features = ["std"] }
-libc = { version = "0.2", features = ["extra_traits"] }
+libc = { version = "0.2", default-features = false, features = ["extra_traits"] }
 once_cell = { version = "1" }
 rustix = { version = "1", features = ["fs", "stdio", "termios"] }
 

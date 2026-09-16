@@ -299,3 +299,6 @@ __marimo__/
 
 # The process-budget owner serializes guarded pipelines through this runtime lock.
 /bin/heavy-run.lock
+
+# Versioned browser wheels and generated Marimo islands for local docs previews.
+/docs/generated/notebooks/
