@@ -430,11 +430,9 @@
     },
     "spenso-hep-lib": {
       "idenso": [
-        "native",
         "reference-cases"
       ],
       "spenso": [
-        "native",
         "shadowing"
       ],
       "spenso-macros": []
@@ -442,11 +440,9 @@
     "spenso-macros": {},
     "spynso3": {
       "idenso": [
-        "native",
         "python"
       ],
       "spenso": [
-        "native-code-generation",
         "portable-payload",
         "python",
         "shadowing"
@@ -1500,11 +1496,9 @@
     },
     "spenso-hep-lib": {
       "idenso": [
-        "native",
         "reference-cases"
       ],
       "spenso": [
-        "native",
         "shadowing"
       ],
       "spenso-macros": []
@@ -1512,11 +1506,9 @@
     "spenso-macros": {},
     "spynso3": {
       "idenso": [
-        "native",
         "python"
       ],
       "spenso": [
-        "native-code-generation",
         "portable-payload",
         "python",
         "shadowing"

@@ -5,8 +5,8 @@ edition = "2024"
 description = "A spenso tensor library for high energy physics"
 
 [dependencies]
-idenso = { workspace = true, features = ["native", "reference-cases"] }
-spenso = { workspace = true, features = ["native", "shadowing"] }
+idenso = { workspace = true, features = ["reference-cases"] }
+spenso = { workspace = true, features = ["shadowing"] }
 spenso-macros = { workspace = true }
 symbolica = { workspace = true }
 
@@ -15,3 +15,8 @@ xpct = "0.5.1"
 [dev-dependencies]
 insta = { workspace = true, features = ["json", "ron", "toml", "yaml"] }
 tabled = { workspace = true }
+
+[features]
+default = ["native"]
+native = ["idenso/native", "spenso/native"]
+wasm = ["idenso/wasm", "spenso/wasm", "symbolica/wasm"]

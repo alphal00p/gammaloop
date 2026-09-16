@@ -25,13 +25,17 @@ use pyo3_stub_gen::{
 };
 
 use spenso::{
-    algebra::complex::{Complex, RealOrComplex, symbolica_traits::CompiledComplexEvaluatorSpenso},
+    algebra::complex::{Complex, RealOrComplex},
     tensors::{
         data::{DenseTensor, GetTensorData, SetTensorData, SparseOrDense, SparseTensor},
-        parametric::{
-            ConcreteOrParam, EvalTensor, ParamOrConcrete, ParamTensor, atomcore::TensorAtomOps,
-        },
+        parametric::{ConcreteOrParam, ParamOrConcrete, ParamTensor, atomcore::TensorAtomOps},
     },
+};
+
+#[cfg(feature = "native")]
+use spenso::{
+    algebra::complex::symbolica_traits::CompiledComplexEvaluatorSpenso,
+    tensors::parametric::EvalTensor,
 };
 
 use spenso::{
@@ -99,13 +103,13 @@ pub struct PythonStubSurface {
 
 macro_rules! define_spenso_python_surface {
     (
-        registered_classes: [$($class:ty),+ $(,)?],
+        registered_classes: [$($(#[$class_meta:meta])* $class:ty),+ $(,)?],
         registered_functions: [$($function:ident => $function_name:literal),+ $(,)?],
         registered_modules: [$($module:ident => [$($export:literal),* $(,)?]),* $(,)?],
         returned_opaque_classes: [$($opaque:ty),* $(,)?],
     ) => {
         pub(crate) fn initialize_spenso(m: &Bound<'_, PyModule>) -> PyResult<()> {
-            $(m.add_class::<$class>()?;)+
+            $( $(#[$class_meta])* m.add_class::<$class>()?;)+
             // m.add_function(?)?;
             $(m.add_function(wrap_pyfunction!($function, m)?)?;)+
             $($module::register(m)?;)*
@@ -126,7 +130,7 @@ macro_rules! define_spenso_python_surface {
         #[cfg(feature = "python_stubgen")]
         pub const PYTHON_STUB_SURFACE: PythonStubSurface = PythonStubSurface {
             registered: &[
-                $(<$class as PyClass>::NAME,)+
+                $( $(#[$class_meta])* <$class as PyClass>::NAME,)+
                 $($function_name,)+
                 $($($export,)*)*
             ],
@@ -203,6 +207,7 @@ define_spenso_python_surface! {
         network::ExecutionMode,
         SymbolicParallelism,
         SpensoExpressionEvaluator,
+        #[cfg(feature = "native")]
         SpensoCompiledExpressionEvaluator,
         Spensor,
         structure::SpensoName,
@@ -1289,6 +1294,7 @@ impl SpensoExpressionEvaluator {
     /// ...     optimization_level=3,
     /// ... )
     /// >>> results = compiled.evaluate_complex([[1.0, 2.0], [3.0, 4.0]])
+    #[cfg(feature = "native")]
     #[pyo3(signature =
         (function_name,
         filename,
@@ -1380,6 +1386,7 @@ impl SpensoExpressionEvaluator {
 /// --------
 /// >>> compiled = evaluator.compile("eval_func", "code.cpp", "lib")
 /// >>> results = compiled.evaluate_complex(large_input_batch)
+#[cfg(feature = "native")]
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     from_py_object,
@@ -1394,6 +1401,7 @@ pub struct SpensoCompiledExpressionEvaluator {
     descriptor_args: Vec<Atom>,
 }
 
+#[cfg(feature = "native")]
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl SpensoCompiledExpressionEvaluator {
