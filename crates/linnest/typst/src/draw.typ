@@ -441,7 +441,9 @@
   edge-omega: 1.0,
   /// Optional style key for anchored source/sink routes. Set
   /// `anchor-control-distance` in `source-style` or `sink-style` to override
-  /// the automatic guide distance used by cubic anchored routes.
+  /// that endpoint's automatic guide distance in graph units. Per-edge endpoint
+  /// styles control each end independently; `auto` is resolved independently.
+  /// Set it in `edge-style` to supply a shared distance for both ends.
   /// -> auto | int | float
   /// Arc-length accuracy for trimming edge curves at node outsets. -> float
   edge-trim-accuracy: 0.001,

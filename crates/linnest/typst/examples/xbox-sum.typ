@@ -167,12 +167,7 @@
       g,
       left: cut-side(g, in-x, crossings, source: (<D1>, <D2>), sink: (<D6>,)),
       right: cut-side(g, out-x, crossings, sink: (<D1>, <D2>), source: (<D6>,)),
-      boundary: item => {
-        let b = item.boundary
-        let row = b.data.crossings.at(b.crossing).y
-        let dy = if row in (mid, mid2) { -.7 } else { 0 }
-        boundary-position(item) + (shift: (0, dy))
-      },
+      boundary: boundary-position
     )
     let edges = (
       compact: (spring-length: 4),
@@ -197,12 +192,14 @@
         fermion-arrow-shift: -0.5,
         show-momentum: false,
       ),
-      D4: (spring-length: .4, show-momentum: false),
+      D4: (spring-length: 1.2, show-momentum: false),
       D5: (spring-length: .1),
       "D6.0": (spring-length: 2)+mom(side: "right", label: (shift: 0.2, gap: .15)),
       "D6.1": (
         spring-length: 5,
         edge-style: (source-anchor: "east", sink-anchor: "west"),
+        source-style: (anchor-control-distance: .3),
+        sink-style: (anchor-control-distance: 4.5),
       )
         + mom(side: "left", shift:1,label: (shift: 1, gap: .1)),
       "D6.2": mom(side: "left", label: (gap: .1)),

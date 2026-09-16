@@ -788,11 +788,8 @@
   calc.max(0.45, calc.min(4.0, 0.18 * dx + 0.3 * dy))
 }
 
-#let _anchor-control-distance(source-style, sink-style, start, route, end) = {
-  let value = _style-value(source-style, "anchor-control-distance")
-  if value == auto {
-    value = _style-value(sink-style, "anchor-control-distance")
-  }
+#let _anchor-control-distance(style, start, route, end) = {
+  let value = _style-value(style, "anchor-control-distance")
   if value == auto {
     _auto-anchor-control-distance(start, route, end)
   } else {
@@ -836,22 +833,24 @@
   route,
   sink-anchor,
   end,
-  amount,
+  source-amount,
+  sink-amount,
 ) = {
   let source-guide = _anchor-control-guide(
     source-anchor,
     start,
     _point-lerp(start, route, 1 / 3),
-    amount,
+    source-amount,
   )
   let sink-guide = _anchor-control-guide(
     sink-anchor,
     end,
     _point-lerp(end, route, 1 / 3),
-    amount,
+    sink-amount,
   )
   let route-direction = _point-sub(end, start)
   let route-direction-length = _point-length(route-direction)
+  // Share a middle handle to keep the two halves tangent-continuous.
   let route-handle = if route-direction-length == 0 {
     (0, 0)
   } else {
@@ -860,7 +859,7 @@
     )
     _point-scale(
       route-direction,
-      calc.min(amount, max-handle) / route-direction-length,
+      calc.min(source-amount, sink-amount, max-handle) / route-direction-length,
     )
   }
   let source-route-guide = _point-sub(route, route-handle)
@@ -1001,25 +1000,25 @@
       accuracy,
     )
   }
+  let source-amount = _anchor-control-distance(source-style, start, route, end)
+  let sink-amount = _anchor-control-distance(sink-style, start, route, end)
   if (
     route-mode != "direct"
       and route-points-mode == "through"
       and (source-route.len() > 0 or sink-route.len() > 0)
   ) {
-    let amount = _anchor-control-distance(
-      source-style,
-      sink-style,
-      start,
-      route,
-      end,
-    )
     let source-amount = _route-aware-anchor-amount(
       start,
-      amount,
+      source-amount,
       source-route,
       route,
     )
-    let sink-amount = _route-aware-anchor-amount(end, amount, sink-route, route)
+    let sink-amount = _route-aware-anchor-amount(
+      end,
+      sink-amount,
+      sink-route,
+      route,
+    )
     let source-guide = _anchor-control-guide(
       source-anchor,
       start,
@@ -1055,20 +1054,14 @@
     )
   }
   if route-mode in ("direct", "edge-pos") {
-    let amount = _anchor-control-distance(
-      source-style,
-      sink-style,
-      start,
-      route,
-      end,
-    )
     let split = _anchored-cubic-route-split(
       start,
       source-anchor,
       route,
       sink-anchor,
       end,
-      amount,
+      source-amount,
+      sink-amount,
     )
     return _split-edge-geometry(
       split.source,
@@ -1082,24 +1075,17 @@
       accuracy,
     )
   } else if route-mode == "hobby-through" {
-    let amount = _anchor-control-distance(
-      source-style,
-      sink-style,
-      start,
-      route,
-      end,
-    )
     let source-guide = _anchor-control-guide(
       source-anchor,
       start,
       _point-lerp(start, route, 1 / 3),
-      amount,
+      source-amount,
     )
     let sink-guide = _anchor-control-guide(
       sink-anchor,
       end,
       _point-lerp(end, route, 1 / 3),
-      amount,
+      sink-amount,
     )
     let split = curve-api.split-through(
       (start, source-guide, route, sink-guide, end),
@@ -1120,20 +1106,13 @@
       accuracy,
     )
   }
-  let amount = _anchor-control-distance(
-    source-style,
-    sink-style,
-    start,
-    route,
-    end,
-  )
   let source-path = curve-api.hobby-spline(
-    _anchor-points(start, source-anchor, route, amount),
+    _anchor-points(start, source-anchor, route, source-amount),
     omega: omega,
     accuracy: accuracy,
   )
   let sink-path = curve-api.hobby-spline(
-    _anchor-points(end, sink-anchor, route, amount, reverse: true),
+    _anchor-points(end, sink-anchor, route, sink-amount, reverse: true),
     omega: omega,
     accuracy: accuracy,
   )

@@ -178,6 +178,51 @@ fn public_linnest_layout_and_drawing_behavior_is_observable() {
         return;
     }
 
+    // Local endpoint distances must not leak to the other end or parallel edges.
+    // Auto is 0.18 * 10 = 1.8 here; the shorter endpoint-to-edge.pos span is 5.
+    for (color, source_distance, sink_distance) in [
+        ("#1234a1", 4.0_f64, 1.5_f64), // asymmetric
+        ("#1234a2", 1.5, 4.0),         // reversed asymmetry
+        ("#1234a3", 2.0, 2.0),         // shared edge-style inheritance
+        ("#1234a4", 4.0, 2.0),         // source override, sink still inherits
+        ("#1234a5", 4.0, 1.8),         // source override, sink still auto
+        ("#1234a6", 1.8, 1.5),         // sink override, source still auto
+        ("#1234a7", 2.0, 2.0),         // equal explicit endpoint distances
+        ("#1234a8", 1.8, 1.8),         // both auto
+    ] {
+        let paths = paths_with_attr(&svg, "stroke", color);
+        assert_eq!(paths.len(), 2, "expected two anchored cubics for {color}");
+        let middle_handle = 10.0 * source_distance.min(sink_distance).min(5.0 / 3.0);
+        // Typst 0.15 emits each cubic separately, with relative controls/end.
+        // At 10pt/unit, edge.pos is (40, -30) from the source in SVG coordinates.
+        for ((_, path), expected) in paths.iter().zip([
+            [
+                10.0 * source_distance,
+                0.0,
+                40.0 - middle_handle,
+                -30.0,
+                40.0,
+                -30.0,
+            ],
+            [
+                middle_handle,
+                0.0,
+                60.0 - 10.0 * sink_distance,
+                30.0,
+                60.0,
+                30.0,
+            ],
+        ]) {
+            let data = svg_attr(path, "d").unwrap();
+            let (_, cubic) = data.split_once('c').expect("expected a relative cubic");
+            let controls = svg_numbers(cubic);
+            assert_eq!(controls.len(), 6, "unexpected cubic for {color}: {data}");
+            for (actual, expected) in controls.into_iter().zip(expected) {
+                assert_close(actual, expected, 1e-3);
+            }
+        }
+    }
+
     let shaft = stroke_spans(&svg, "#16a34a");
     let shaft_reference = stroke_spans(&svg, "#0ea5e9");
     let arrow_head = paths_with_attr(&svg, "fill", "#d119e6");

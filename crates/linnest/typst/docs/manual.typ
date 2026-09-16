@@ -803,6 +803,15 @@
   source node, `edge.pos`, and sink node, with `edge-omega` controlling its Hobby
   curve.
 
+  For anchored paired edges, `anchor-control-distance` sets the control-handle
+  distance in graph units, not the endpoint position. Each edge can specify
+  `source-style: (anchor-control-distance: 4)` and
+  `sink-style: (anchor-control-distance: 1.5)` to tune the two ends independently.
+  Set `source-anchor` and `sink-anchor` in its `edge-style` to choose the tangent
+  directions. A shared `edge-style: (anchor-control-distance: 2)` supplies both
+  ends unless an endpoint style overrides it; `auto` is computed independently
+  for each end. An override no longer supplies the opposite endpoint's distance.
+
   ```typ
   #draw(
     g,
