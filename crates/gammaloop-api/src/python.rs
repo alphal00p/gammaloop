@@ -2813,7 +2813,7 @@ fn parse_cff_dot_graph(dot: &str) -> Result<DotGraph, CffDotInputError> {
             message: error.to_string(),
         })?
         .into_iter()
-        .last()
+        .next_back()
         .ok_or(CffDotInputError::EmptyGraph)
 }
 
