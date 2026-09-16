@@ -30,12 +30,13 @@ Vakint's backward-compatibility contract for its public API, defaults, and
 existing FORM-backed evaluation methods.
 
 The [RustRed acceptance inventory](tests/RUSTRED_ACCEPTANCE.md) maps all existing
-single-common-mass inputs through three loops to native peers. A fresh targeted
-rerun passes 34 tests, including both previously failing all-class comparisons,
-after correcting MATAD's signed numerator routing. Native FeynKit/RustRed
-stages use an invalid FORM path. The inventory distinguishes this rerun from
-the historical 83-test matrix and the 40-entry/46-input legacy census; it does
-not claim four-loop RustRed acceptance.
+single-common-mass inputs through three loops to native peers. The complete
+recorded 83-test selection now passes, following a separate 34-test targeted
+gate for MATAD's signed numerator-routing correction. Both previously failing
+all-class comparisons pass. Native FeynKit/RustRed stages use an invalid FORM
+path; separate legacy oracles use FORM. The inventory distinguishes the
+83-test matrix from the 40-entry/46-input legacy census and does not claim
+four-loop RustRed acceptance.
 
 ```rust
 use vakint::{EvaluationOrder, Vakint, VakintSettings, vakint_parse};

@@ -10,7 +10,51 @@ prepass, followed by RustRed scalar reduction and master substitution. The
 shared harness gives both native stages an invalid FORM path; FORM is available
 only to the explicitly separate AlphaLoop/MATAD oracle lanes.
 
-## Latest correction and fresh rerun (2026-09-16)
+## Complete selected-matrix rerun (2026-09-16)
+
+The complete recorded **83-test selection now passes: 83 passed, 0 failed,
+0 ignored** on revision `433e42d3`. This rerun follows the signed MATAD routing
+correction described below. It uses freshly built, hash-frozen binaries and
+the exact union of the earlier native/catalog, three-loop-peer,
+legacy-complement and offline-catalog manifests; no failing entry was dropped.
+
+| Binary | Selected / passed |
+| --- | ---: |
+| Vakint library (native catalog/defaults and offline MATAD catalog) | 16 |
+| Tensor reduction modes | 1 |
+| Freeform evaluations | 2 |
+| RustRed scalar evaluations | 18 |
+| Analytic references | 19 |
+| RustRed acceptance variants | 6 |
+| Input matching | 5 |
+| AlphaLoop/MATAD comparisons | 13 |
+| Supplemental K6 all-class pipelines | 3 |
+| **Total** | **83** |
+
+Each binary is invoked once with all of its exact selected test names,
+`--include-ignored --test-threads=1 --nocapture`; the runner checks the selected
+name count, successful result count and executable hashes. Numerical assertions
+and tolerances are unchanged. Native FeynKit/RustRed settings still contain an
+invalid FORM path; only the explicitly separate oracle evaluations use FORM.
+This includes the offline exact MATAD comparison for all 38 shipped terminals.
+It is a complete rerun of the recorded selection, not a claim that every test
+in every binary belongs to this matrix. The separate 34-test targeted gate
+below includes additional routing diagnostics and overlaps this selection.
+
+Build manifests and hashes are in `/tmp/vakint-orientation-full-gate.Ny652I/`;
+the successful runner, all nine result rows and per-binary logs/timings are in
+`/tmp/vakint-batched-83.baAvzc/`. An earlier one-process-per-test attempt hit
+the Symbolica activation rate limit and was stopped; its partial logs are not
+counted as mathematical failures or as this successful run. Batching after the
+requested cooldown completed without activation errors.
+
+Clippy now also passes with `-D warnings` for the Vakint library,
+`rustred_k6_pipeline_tests` and `integral_alphaloop_vs_matad_tests`, using the
+available Nix Clippy executable. These are correctness gates, not release
+performance measurements. Four-loop RustRed artifacts and four-loop numerical
+acceptance remain unfinished.
+
+## Routing correction and targeted rerun (2026-09-16)
 
 The contracted basketball basis contains reversed parent edges. MATAD's
 defining identities require Vakint parent slots to map as
@@ -46,9 +90,10 @@ stack. Check and build pass. Clippy was attempted but unavailable in this
 development shell. Raw logs, command evidence and binary/input hashes for
 this run are locally in `/tmp/vakint-matad-orientation.yRdp6a/`.
 
-This resolves every previously identified failure in the selection below,
-but is **not a fresh rerun of all 83 historical obligations**. Four-loop
-RustRed artifacts and end-to-end four-loop acceptance remain unfinished.
+That targeted checkpoint resolved every previously identified failure, but did
+not itself rerun all 83 obligations. The subsequent complete selected-matrix
+run above now supplies that missing evidence. Four-loop RustRed artifacts and
+end-to-end four-loop acceptance remain unfinished.
 
 ## Historical inventory and audit
 
