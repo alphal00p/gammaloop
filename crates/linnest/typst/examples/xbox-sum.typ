@@ -80,13 +80,15 @@
     graph.map(g, node: nodes, edge: edges)
   }
 
-  // The RHS keeps the topology but lets its external endpoints relax independently.
-  let xbox-rhs = graph.map(
-    xbox,
-    edge: e => (show-momentum: false) + if e.boundary != none {
-      (pos: pos(x: e.pos.x, y: e.pos.y, mode: "start"))
-    } else { (:) },
-  )
+  // Open the RHS directly from the master; its external endpoints remain unpinned.
+  let xbox-rhs = {
+    let g = graph.build(default-edge-data: edge-data + (show-momentum: false), master)
+    graph.cut(
+      g,
+      left: subgraph.select(g, source: (<D5>, <D6>)),
+      right: subgraph.select(g, sink: (<D5>, <D6>)),
+    )
+  }
 
   // Pull the external rows together without drawing another propagator.
   let g = graph.build(default-edge-data: edge-data, master, compact)

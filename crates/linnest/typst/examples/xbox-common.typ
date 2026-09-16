@@ -99,14 +99,12 @@
       // Group signed external momenta explicitly, including the through-gluon's
       // hidden endpoints. Shading follows the solved positions, not the layout seeds.
       let edges = graph.edges(g)
-      let endpoints = graph
-        .boundaries(g)
-        .map(b => (
-          b
-            + (
-              group: b.data.crossings.at(b.crossing).group,
-            )
+      let endpoints = graph.boundaries(g)
+      if endpoint-fills.len() > 0 {
+        endpoints = endpoints.map(b => b + (
+          group: b.data.crossings.at(b.crossing).group,
         ))
+      }
       // Directly built dangling edges can provide grouping without cut provenance.
       endpoints += edges
         .filter(e => (
