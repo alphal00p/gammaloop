@@ -61,7 +61,7 @@
     "summary": "Add Idenso and apply a representation-aware metric simplification from Rust.",
     "href": "quickstart/rust/",
     "kind": "getting started",
-    "text": "Using Idenso from Rust This route constructs the same indexed metric contraction as the Python example, applies Idenso’s native MetricSimplifier , and checks the exact reduced Symbolica expression. Use the current Git API until the next crate release The published idenso 0.3.0 predates the current module layout and uses an older Symbolica dependency. Mixing its API with the current manual can create incompatible Atom types. The pinned Git dependency below matches this documentation; switch to the next published Idenso version once it carries the same API. Create a Rust project Use Rust 1.85 or newer: Replace src/main.rs with: Run cargo run . Success means the assertion passes and the vector retains index 0 after the metric contracts index 1 . Symbolica’s license terms apply to the native crate as well as the Python module. Continue with the algebra guide before composing multiple identity families or multiplying expressions with independently allocated dummy indices."
+    "text": "Using Idenso from Rust This route constructs the same indexed metric contraction as the Python example, applies Idenso’s native MetricSimplifier , and checks the exact reduced Symbolica expression. Use the current Git API until the next crate release The published idenso 0.3.0 predates the current module layout and uses an older Symbolica dependency. Mixing its API with the current manual can create incompatible Atom types. The pinned Git dependency below matches this documentation; switch to the next published Idenso version once it carries the same API. Create a Rust project Use Rust 1.89 or newer: Replace src/main.rs with: Run cargo run . Success means the assertion passes and the vector retains index 0 after the metric contracts index 1 . Symbolica’s license terms apply to the native crate as well as the Python module. Continue with the algebra guide before composing multiple identity families or multiplying expressions with independently allocated dummy indices."
   },
   {
     "title": "Create a Rust project",
@@ -320,7 +320,7 @@
     "summary": "library crate · version 0.3.0",
     "href": "reference/rust/idenso/",
     "kind": "rust-api",
-    "text": "bincode reference-cases"
+    "text": "native bincode reference-cases"
   },
   {
     "title": "idenso · Index tooling",
@@ -376,7 +376,7 @@
     "summary": "Builds a Dirac gamma chain factor or an explicitly indexed gamma tensor.",
     "href": "reference/rust/idenso/macro.gamma.html",
     "kind": "rust-api",
-    "text": "Builds a Dirac gamma chain factor or an explicitly indexed gamma tensor. Builds a gamma matrix.\n\nWith one argument, this builds a chain factor using the placeholder indices\n`in` and `out`; use this form only as a factor inside `chain!` or `trace!`.\nWith three arguments, this builds the ordinary gamma tensor with explicit\nspinor endpoints and a Lorentz slot.\n\nArguments are converted through `spenso::shadowing::IntoAtom`, so they\ncan be typed slots, atoms, or atom views.\n\n# Examples\n\n```ignore\nuse idenso::gamma;\nuse spenso::{chain, slot};\n\nlet factor = gamma!(slot!(mink4, mu));\nlet chain_expr = chain!(slot!(bis4, a), slot!(bis4, b), factor);\nlet default_tensor = gamma!(mu, a, b);\nlet indexed_tensor = gamma!(1, 2, 3);\nlet pattern_tensor = gamma!(RS.a__, RS.b__, RS.c__);\nlet pattern_tensor_with_slots = gamma!(RS.a__, [RS.d_, RS.i_], [RS.d_, RS.j_]);\nlet mixed_tensor = gamma!(mu, slot!(bis_d, a), 1);\nlet explicit_tensor = gamma!(slot!(mink_d, mu), slot!(bis_d, a), slot!(bis_d, b));\n``` macro_rules! gamma { … }"
+    "text": "Builds a Dirac gamma chain factor or an explicitly indexed gamma tensor. Builds a gamma matrix.\n\nWith one argument, this builds a chain factor using the placeholder indices\n`in` and `out`; use this form only as a factor inside `chain!` or `trace!`.\nWith three arguments, this builds the ordinary gamma tensor with explicit\nspinor endpoints and a Lorentz slot in storage order:\n`(spinor-in, spinor-out, Lorentz)`.\n\nArguments are converted through `spenso::shadowing::IntoAtom`, so they\ncan be typed slots, atoms, or atom views. The explicit form checks their\nrepresentation heads and rejects anything other than this B, B, M order.\n\n# Examples\n\n```ignore\nuse idenso::gamma;\nuse spenso::{chain, slot};\n\nlet factor = gamma!(slot!(mink4, mu));\nlet chain_expr = chain!(slot!(bis4, a), slot!(bis4, b), factor);\nlet default_tensor = gamma!(a, b, mu);\nlet indexed_tensor = gamma!(1, 2, 3);\nlet pattern_tensor = gamma!(RS.b__, RS.c__, RS.a__);\nlet pattern_tensor_with_slots = gamma!([RS.d_, RS.i_], [RS.d_, RS.j_], RS.a__);\nlet mixed_tensor = gamma!(slot!(bis_d, a), 1, mu);\nlet explicit_tensor = gamma!(slot!(bis_d, a), slot!(bis_d, b), slot!(mink_d, mu));\n``` macro_rules! gamma { … }"
   },
   {
     "title": "idenso · Gamma-zero macro",
@@ -404,14 +404,14 @@
     "summary": "Builds a color-generator chain factor or an explicitly indexed generator tensor.",
     "href": "reference/rust/idenso/macro.color_t.html",
     "kind": "rust-api",
-    "text": "Builds a color-generator chain factor or an explicitly indexed generator tensor. Builds a color-generator atom.\n\nWith one argument, this builds a fundamental generator factor for use inside\n`chain!` or `trace!`. The factor uses the chain placeholder indices `in` and\n`out`; the surrounding chain or trace owns the physical endpoints.\n\nWith three arguments, this builds an explicit generator `t(a,i,j)`. The first\nargument is an adjoint color index, the second is a fundamental color index,\nand the third is an anti-fundamental color index.\n\nArguments can be typed slots, atoms, atom views, pattern variables such as\n`RS.a__`, or bracketed representation argument lists such as\n`[CS.adj_, RS.a_]`. Bare Rust identifiers and literals are expressions, so\nlocal slot bindings and numeric labels are used as-is.\n\n# Examples\n\n```ignore\nuse idenso::color_t;\nuse spenso::{slot, trace};\n\nlet factor = color_t!(slot!(coad_na, a));\nlet expr = trace!(&cof_nc, factor);\nlet factor_from_binding = color_t!(slot!(coad_na, a));\nlet explicit_tensor = color_t!(slot!(coad_na, a), slot!(cof_nc, i), slot!(cof_nc.dual(), j));\nlet pattern_tensor = color_t!(RS.a__, RS.i__, RS.j__);\nlet dimensioned_pattern = color_t!([CS.adj_, RS.a_], [CS.nc_, RS.i_], [CS.nc_, RS.j_]);\n``` macro_rules! color_t { … }"
+    "text": "Builds a color-generator chain factor or an explicitly indexed generator tensor. Builds a color-generator atom.\n\nWith one argument, this builds a fundamental generator factor for use inside\n`chain!` or `trace!`. The factor uses the chain placeholder indices `in` and\n`out`; the surrounding chain or trace owns the physical endpoints.\n\nWith three arguments, this builds an explicit generator `t(a,i,j)`. The first\nargument is an adjoint color index, the second is a fundamental color index,\nand the third is an anti-fundamental color index.\n\nArguments can be typed slots, atoms, atom views, pattern variables such as\n`RS.a__`, or bracketed representation argument lists such as\n`[CS.adj_, RS.a_]`. Bare Rust identifiers and literals are expressions, so\nlocal slot bindings and numeric labels are used as-is.\n\n# Examples\n\n```ignore\nuse idenso::color_t;\nuse spenso::{slot, trace};\n\nlet factor = color_t!(slot!(coad_da, a));\nlet expr = trace!(&cof_nc, factor);\nlet factor_from_binding = color_t!(slot!(coad_da, a));\nlet explicit_tensor = color_t!(slot!(coad_da, a), slot!(cof_nc, i), slot!(cof_nc.dual(), j));\nlet pattern_tensor = color_t!(RS.a__, RS.i__, RS.j__);\nlet dimensioned_pattern = color_t!([CS.adj_, RS.a_], [CS.nc_, RS.i_], [CS.nc_, RS.j_]);\n``` macro_rules! color_t { … }"
   },
   {
     "title": "idenso · Color structure-constant macro",
     "summary": "Builds an explicitly indexed adjoint color structure-constant tensor.",
     "href": "reference/rust/idenso/macro.color_f.html",
     "kind": "rust-api",
-    "text": "Builds an explicitly indexed adjoint color structure-constant tensor. Builds an adjoint color structure-constant atom `f(a,b,c)`.\n\nArguments can be typed slots, atoms, atom views, pattern variables such as\n`RS.a__`, or bracketed adjoint representation argument lists such as\n`[CS.adj_, RS.a_]`. Bare Rust identifiers and literals are expressions, so\nlocal slot bindings and numeric labels are used as-is.\n\n# Examples\n\n```ignore\nuse idenso::color_f;\nuse spenso::slot;\n\nlet expr = color_f!(slot!(coad_na, a), slot!(coad_na, b), slot!(coad_na, c));\nlet numeric_label_tensor = color_f!(1, 2, 3);\nlet pattern_tensor = color_f!(RS.a__, RS.b__, RS.c__);\nlet dimensioned_pattern = color_f!([CS.adj_, RS.a_], [CS.adj_, RS.b_], [CS.adj_, RS.c_]);\n``` macro_rules! color_f { … }"
+    "text": "Builds an explicitly indexed adjoint color structure-constant tensor. Builds an adjoint color structure-constant atom `f(a,b,c)`.\n\nArguments can be typed slots, atoms, atom views, pattern variables such as\n`RS.a__`, or bracketed adjoint representation argument lists such as\n`[CS.adj_, RS.a_]`. Bare Rust identifiers and literals are expressions, so\nlocal slot bindings and numeric labels are used as-is.\n\n# Examples\n\n```ignore\nuse idenso::color_f;\nuse spenso::slot;\n\nlet expr = color_f!(slot!(coad_da, a), slot!(coad_da, b), slot!(coad_da, c));\nlet numeric_label_tensor = color_f!(1, 2, 3);\nlet pattern_tensor = color_f!(RS.a__, RS.b__, RS.c__);\nlet dimensioned_pattern = color_f!([CS.adj_, RS.a_], [CS.adj_, RS.b_], [CS.adj_, RS.c_]);\n``` macro_rules! color_f { … }"
   },
   {
     "title": "idenso · Initialize representations",
@@ -427,115 +427,843 @@
     "kind": "python-api"
   },
   {
+    "title": "symbolica.community.idenso.CanonicalizationError",
+    "summary": "Raised when dummy-index canonicalization fails.",
+    "href": "reference/python/idenso-community/CanonicalizationError/",
+    "kind": "python-api",
+    "text": "Raised when dummy-index canonicalization fails. Raised when dummy-index canonicalization fails. class CanonicalizationError(ValueError):"
+  },
+  {
+    "title": "symbolica.community.idenso.ColorCasimirSettings",
+    "summary": "Immutable configuration for rewriting color invariants into a Casimir basis.",
+    "href": "reference/python/idenso-community/ColorCasimirSettings/",
+    "kind": "python-api",
+    "text": "Immutable configuration for rewriting color invariants into a Casimir basis. Immutable configuration for rewriting color invariants into a Casimir basis. class ColorCasimirSettings:"
+  },
+  {
+    "title": "symbolica.community.idenso.ColorCasimirSettings.rewrite_fundamental_dimension",
+    "summary": "Whether the fundamental dimension is rewritten with the SU(N) relation d_F = C_A.",
+    "href": "reference/python/idenso-community/ColorCasimirSettings/#exports-colorcasimirsettings-rewrite-fundamental-dimension-getter",
+    "kind": "python-api",
+    "text": "Whether the fundamental dimension is rewritten with the SU(N) relation `d_F = C_A`. def rewrite_fundamental_dimension(self) -> bool:"
+  },
+  {
+    "title": "symbolica.community.idenso.ColorCasimirSettings.substitute_fundamental_index",
+    "summary": "Whether the fundamental Dynkin index is replaced by T_F = 1/2.",
+    "href": "reference/python/idenso-community/ColorCasimirSettings/#exports-colorcasimirsettings-substitute-fundamental-index-getter",
+    "kind": "python-api",
+    "text": "Whether the fundamental Dynkin index is replaced by `T_F = 1/2`. def substitute_fundamental_index(self) -> bool:"
+  },
+  {
+    "title": "symbolica.community.idenso.ColorCasimirSettings constructor",
+    "summary": "Configure the SU(N) dimension and fundamental-index normalizations used by Casimir rewriting.",
+    "href": "reference/python/idenso-community/ColorCasimirSettings/#exports-colorcasimirsettings-new-associatedfunction",
+    "kind": "python-api",
+    "text": "Configure the SU(N) dimension and fundamental-index normalizations used by Casimir rewriting. def __new__(cls, *, rewrite_fundamental_dimension: bool = True, substitute_fundamental_index: bool = False) -> ColorCasimirSettings:"
+  },
+  {
+    "title": "symbolica.community.idenso.ColorSimplifySettings",
+    "summary": "Immutable configuration for color simplification.",
+    "href": "reference/python/idenso-community/ColorSimplifySettings/",
+    "kind": "python-api",
+    "text": "Immutable configuration for color simplification. Immutable configuration for color simplification. class ColorSimplifySettings:"
+  },
+  {
+    "title": "symbolica.community.idenso.ColorSimplifySettings.evaluate_traces",
+    "summary": "Whether closed color chains are evaluated as traces.",
+    "href": "reference/python/idenso-community/ColorSimplifySettings/#exports-colorsimplifysettings-evaluate-traces-getter",
+    "kind": "python-api",
+    "text": "Whether closed color chains are evaluated as traces. def evaluate_traces(self) -> bool:"
+  },
+  {
+    "title": "symbolica.community.idenso.ColorSimplifySettings.expand_cross_chain_fierz",
+    "summary": "Whether generators on different open chains are expanded with the Fierz identity.",
+    "href": "reference/python/idenso-community/ColorSimplifySettings/#exports-colorsimplifysettings-expand-cross-chain-fierz-getter",
+    "kind": "python-api",
+    "text": "Whether generators on different open chains are expanded with the Fierz identity. def expand_cross_chain_fierz(self) -> bool:"
+  },
+  {
+    "title": "symbolica.community.idenso.ColorSimplifySettings.substitute_cof_dimension_invariants",
+    "summary": "Whether supported cof(N) invariants are replaced by explicit dimension formulas.",
+    "href": "reference/python/idenso-community/ColorSimplifySettings/#exports-colorsimplifysettings-substitute-cof-dimension-invariants-getter",
+    "kind": "python-api",
+    "text": "Whether supported `cof(N)` invariants are replaced by explicit dimension formulas. def substitute_cof_dimension_invariants(self) -> bool:"
+  },
+  {
+    "title": "symbolica.community.idenso.ColorSimplifySettings constructor",
+    "summary": "Configure color-trace evaluation, cross-chain Fierz expansion, and invariant substitution.",
+    "href": "reference/python/idenso-community/ColorSimplifySettings/#exports-colorsimplifysettings-new-associatedfunction",
+    "kind": "python-api",
+    "text": "Configure color-trace evaluation, cross-chain Fierz expansion, and invariant substitution. def __new__(cls, *, evaluate_traces: bool = True, expand_cross_chain_fierz: bool = True, substitute_cof_dimension_invariants: bool = False) -> ColorSimplifySettings:"
+  },
+  {
+    "title": "symbolica.community.idenso.CookSettings",
+    "summary": "Immutable configuration for cooking symbolic functions and index payloads.",
+    "href": "reference/python/idenso-community/CookSettings/",
+    "kind": "python-api",
+    "text": "Immutable configuration for cooking symbolic functions and index payloads. Immutable configuration for cooking symbolic functions and index payloads. class CookSettings:"
+  },
+  {
+    "title": "symbolica.community.idenso.CookSettings.mode",
+    "summary": "Symbol-encoding mode.",
+    "href": "reference/python/idenso-community/CookSettings/#exports-cooksettings-mode-getter",
+    "kind": "python-api",
+    "text": "Symbol-encoding mode. def mode(self) -> CookMode:"
+  },
+  {
+    "title": "symbolica.community.idenso.CookSettings.source_filter",
+    "summary": "Function occurrences selected for cooking.",
+    "href": "reference/python/idenso-community/CookSettings/#exports-cooksettings-source-filter-getter",
+    "kind": "python-api",
+    "text": "Function occurrences selected for cooking. def source_filter(self) -> CookSourceFilter:"
+  },
+  {
+    "title": "symbolica.community.idenso.CookSettings.output_tags",
+    "summary": "Explicit tags attached to newly created cooked symbols.",
+    "href": "reference/python/idenso-community/CookSettings/#exports-cooksettings-output-tags-getter",
+    "kind": "python-api",
+    "text": "Explicit tags attached to newly created cooked symbols. def output_tags(self) -> list[str]:"
+  },
+  {
+    "title": "symbolica.community.idenso.CookSettings.preserve_tags",
+    "summary": "Whether matching input tags are preserved on cooked symbols.",
+    "href": "reference/python/idenso-community/CookSettings/#exports-cooksettings-preserve-tags-getter",
+    "kind": "python-api",
+    "text": "Whether matching input tags are preserved on cooked symbols. def preserve_tags(self) -> bool:"
+  },
+  {
+    "title": "symbolica.community.idenso.CookSettings constructor",
+    "summary": "Configure how functions are selected, encoded, and tagged when cooked.",
+    "href": "reference/python/idenso-community/CookSettings/#exports-cooksettings-new-associatedfunction",
+    "kind": "python-api",
+    "text": "Configure how functions are selected, encoded, and tagged when cooked.\n\nTags must be fully namespaced Symbolica tags, for example `idenso::cooked`.\nSelecting `ReversibleEncoding` changes only the encoding; use `reversible()` to also\nselect the conventional `idenso::cooked` output tag.\n`mode=None` selects `CookMode.FlattenedSymbol`. def __new__(cls, *, mode: Optional[CookMode] = None, source: Optional[CookSourceFilter] = None, output_tags: Optional[Sequence[str]] = None, preserve_tags: bool = False) -> CookSettings:"
+  },
+  {
+    "title": "symbolica.community.idenso.CookSettings.flattened",
+    "summary": "Cook all functions into readable flattened names.",
+    "href": "reference/python/idenso-community/CookSettings/#exports-cooksettings-flattened-associatedfunction",
+    "kind": "python-api",
+    "text": "Cook all functions into readable flattened names. def flattened() -> CookSettings:"
+  },
+  {
+    "title": "symbolica.community.idenso.CookSettings.indices",
+    "summary": "Cook only nested function payloads inside representation indices and preserve tags.",
+    "href": "reference/python/idenso-community/CookSettings/#exports-cooksettings-indices-associatedfunction",
+    "kind": "python-api",
+    "text": "Cook only nested function payloads inside representation indices and preserve tags. def indices() -> CookSettings:"
+  },
+  {
+    "title": "symbolica.community.idenso.CookSettings.reversible",
+    "summary": "Cook all functions into stable symbols that can be restored by uncook.",
+    "href": "reference/python/idenso-community/CookSettings/#exports-cooksettings-reversible-associatedfunction",
+    "kind": "python-api",
+    "text": "Cook all functions into stable symbols that can be restored by `uncook`. def reversible() -> CookSettings:"
+  },
+  {
+    "title": "symbolica.community.idenso.CookSourceFilter",
+    "summary": "Selects the function occurrences or representation-index payloads to cook.",
+    "href": "reference/python/idenso-community/CookSourceFilter/",
+    "kind": "python-api",
+    "text": "Selects the function occurrences or representation-index payloads to cook. Selects the function occurrences or representation-index payloads to cook. class CookSourceFilter:"
+  },
+  {
+    "title": "symbolica.community.idenso.CookSourceFilter.any_function",
+    "summary": "Select every function-like subexpression.",
+    "href": "reference/python/idenso-community/CookSourceFilter/#exports-cooksourcefilter-any-function-associatedfunction",
+    "kind": "python-api",
+    "text": "Select every function-like subexpression. def any_function() -> CookSourceFilter:"
+  },
+  {
+    "title": "symbolica.community.idenso.CookSourceFilter.function_tags",
+    "summary": "Select function heads accepted by filter.",
+    "href": "reference/python/idenso-community/CookSourceFilter/#exports-cooksourcefilter-function-tags-associatedfunction",
+    "kind": "python-api",
+    "text": "Select function heads accepted by `filter`. def function_tags(filter: CookTagFilter) -> CookSourceFilter:"
+  },
+  {
+    "title": "symbolica.community.idenso.CookSourceFilter.representation_index_payload",
+    "summary": "Select only function payloads inside representation indices.",
+    "href": "reference/python/idenso-community/CookSourceFilter/#exports-cooksourcefilter-representation-index-payload-associatedfunction",
+    "kind": "python-api",
+    "text": "Select only function payloads inside representation indices.\n\nWhen `filter` is supplied, the payload's function head must also match it. def representation_index_payload(filter: Optional[CookTagFilter] = None) -> CookSourceFilter:"
+  },
+  {
+    "title": "symbolica.community.idenso.CookTagFilter",
+    "summary": "A tag predicate used to select which function heads are cooked.",
+    "href": "reference/python/idenso-community/CookTagFilter/",
+    "kind": "python-api",
+    "text": "A tag predicate used to select which function heads are cooked. A tag predicate used to select which function heads are cooked. class CookTagFilter:"
+  },
+  {
+    "title": "symbolica.community.idenso.CookTagFilter.any",
+    "summary": "Match a function head when it carries at least one listed tag.",
+    "href": "reference/python/idenso-community/CookTagFilter/#exports-cooktagfilter-any-associatedfunction",
+    "kind": "python-api",
+    "text": "Match a function head when it carries at least one listed tag. def any(tags: Sequence[str]) -> CookTagFilter:"
+  },
+  {
+    "title": "symbolica.community.idenso.CookTagFilter.all",
+    "summary": "Match a function head only when it carries every listed tag.",
+    "href": "reference/python/idenso-community/CookTagFilter/#exports-cooktagfilter-all-associatedfunction",
+    "kind": "python-api",
+    "text": "Match a function head only when it carries every listed tag. def all(tags: Sequence[str]) -> CookTagFilter:"
+  },
+  {
+    "title": "symbolica.community.idenso.CookTagFilter.matched_output_tags",
+    "summary": "Match the explicit output tags configured on the associated CookSettings.",
+    "href": "reference/python/idenso-community/CookTagFilter/#exports-cooktagfilter-matched-output-tags-associatedfunction",
+    "kind": "python-api",
+    "text": "Match the explicit output tags configured on the associated `CookSettings`. def matched_output_tags() -> CookTagFilter:"
+  },
+  {
+    "title": "symbolica.community.idenso.CookingError",
+    "summary": "Raised when a symbolic function or representation index cannot be cooked.",
+    "href": "reference/python/idenso-community/CookingError/",
+    "kind": "python-api",
+    "text": "Raised when a symbolic function or representation index cannot be cooked. Raised when a symbolic function or representation index cannot be cooked. class CookingError(TypeError):"
+  },
+  {
+    "title": "symbolica.community.idenso.DiracAdjointError",
+    "summary": "Raised when a Dirac adjoint cannot be constructed consistently.",
+    "href": "reference/python/idenso-community/DiracAdjointError/",
+    "kind": "python-api",
+    "text": "Raised when a Dirac adjoint cannot be constructed consistently. Raised when a Dirac adjoint cannot be constructed consistently. class DiracAdjointError(ValueError):"
+  },
+  {
+    "title": "symbolica.community.idenso.DotExpansionError",
+    "summary": "Raised when compact dot notation cannot be expanded into a tensor expression.",
+    "href": "reference/python/idenso-community/DotExpansionError/",
+    "kind": "python-api",
+    "text": "Raised when compact dot notation cannot be expanded into a tensor expression. Raised when compact dot notation cannot be expanded into a tensor expression. class DotExpansionError(ValueError):"
+  },
+  {
+    "title": "symbolica.community.idenso.GammaConjugationError",
+    "summary": "Raised when conjugated gamma matrices cannot be rewritten consistently.",
+    "href": "reference/python/idenso-community/GammaConjugationError/",
+    "kind": "python-api",
+    "text": "Raised when conjugated gamma matrices cannot be rewritten consistently. Raised when conjugated gamma matrices cannot be rewritten consistently. class GammaConjugationError(ValueError):"
+  },
+  {
+    "title": "symbolica.community.idenso.GammaSimplifySettings",
+    "summary": "Immutable configuration for gamma-chain simplification.",
+    "href": "reference/python/idenso-community/GammaSimplifySettings/",
+    "kind": "python-api",
+    "text": "Immutable configuration for gamma-chain simplification. Immutable configuration for gamma-chain simplification. class GammaSimplifySettings:"
+  },
+  {
+    "title": "symbolica.community.idenso.GammaSimplifySettings.chain_ordering",
+    "summary": "Ordering strategy used for open gamma chains.",
+    "href": "reference/python/idenso-community/GammaSimplifySettings/#exports-gammasimplifysettings-chain-ordering-getter",
+    "kind": "python-api",
+    "text": "Ordering strategy used for open gamma chains. def chain_ordering(self) -> GammaChainOrdering:"
+  },
+  {
+    "title": "symbolica.community.idenso.GammaSimplifySettings.evaluate_traces",
+    "summary": "Whether closed gamma chains are evaluated as traces.",
+    "href": "reference/python/idenso-community/GammaSimplifySettings/#exports-gammasimplifysettings-evaluate-traces-getter",
+    "kind": "python-api",
+    "text": "Whether closed gamma chains are evaluated as traces. def evaluate_traces(self) -> bool:"
+  },
+  {
+    "title": "symbolica.community.idenso.GammaSimplifySettings.expand_three_gamma_epsilon",
+    "summary": "Whether three four-dimensional gammas expand into a gamma5-epsilon basis.",
+    "href": "reference/python/idenso-community/GammaSimplifySettings/#exports-gammasimplifysettings-expand-three-gamma-epsilon-getter",
+    "kind": "python-api",
+    "text": "Whether three four-dimensional gammas expand into a gamma5-epsilon basis. def expand_three_gamma_epsilon(self) -> bool:"
+  },
+  {
+    "title": "symbolica.community.idenso.GammaSimplifySettings constructor",
+    "summary": "Configure gamma-chain ordering, trace evaluation, and the optional 4D three-gamma identity.",
+    "href": "reference/python/idenso-community/GammaSimplifySettings/#exports-gammasimplifysettings-new-associatedfunction",
+    "kind": "python-api",
+    "text": "Configure gamma-chain ordering, trace evaluation, and the optional 4D three-gamma identity.\n\n`chain_ordering=None` selects `GammaChainOrdering.RepeatedPairs`. def __new__(cls, *, chain_ordering: Optional[GammaChainOrdering] = None, evaluate_traces: bool = True, expand_three_gamma_epsilon: bool = False) -> GammaSimplifySettings:"
+  },
+  {
+    "title": "symbolica.community.idenso.GammaSimplifySettings.repeated_pairs",
+    "summary": "Use FORM-like repeated-pair ordering and evaluate closed traces.",
+    "href": "reference/python/idenso-community/GammaSimplifySettings/#exports-gammasimplifysettings-repeated-pairs-associatedfunction",
+    "kind": "python-api",
+    "text": "Use FORM-like repeated-pair ordering and evaluate closed traces. def repeated_pairs() -> GammaSimplifySettings:"
+  },
+  {
+    "title": "symbolica.community.idenso.GammaSimplifySettings.canonical",
+    "summary": "Canonically order open gamma chains and evaluate closed traces.",
+    "href": "reference/python/idenso-community/GammaSimplifySettings/#exports-gammasimplifysettings-canonical-associatedfunction",
+    "kind": "python-api",
+    "text": "Canonically order open gamma chains and evaluate closed traces. def canonical() -> GammaSimplifySettings:"
+  },
+  {
+    "title": "symbolica.community.idenso.NetworkToolingError",
+    "summary": "Raised when a symbolic tensor network cannot be parsed or evaluated.",
+    "href": "reference/python/idenso-community/NetworkToolingError/",
+    "kind": "python-api",
+    "text": "Raised when a symbolic tensor network cannot be parsed or evaluated. Raised when a symbolic tensor network cannot be parsed or evaluated. class NetworkToolingError(ValueError):"
+  },
+  {
+    "title": "symbolica.community.idenso.SchoonschipSettings",
+    "summary": "Immutable configuration for expression and network Schoonschip passes.",
+    "href": "reference/python/idenso-community/SchoonschipSettings/",
+    "kind": "python-api",
+    "text": "Immutable configuration for expression and network Schoonschip passes. Immutable configuration for expression and network Schoonschip passes. class SchoonschipSettings:"
+  },
+  {
+    "title": "symbolica.community.idenso.SchoonschipSettings.depth_limit",
+    "summary": "Maximum parsing or recursion depth, or None for no limit.",
+    "href": "reference/python/idenso-community/SchoonschipSettings/#exports-schoonschipsettings-depth-limit-getter",
+    "kind": "python-api",
+    "text": "Maximum parsing or recursion depth, or `None` for no limit. def depth_limit(self) -> Optional[int]:"
+  },
+  {
+    "title": "symbolica.community.idenso.SchoonschipSettings.mode",
+    "summary": "Whether the pass is single-pass or recursive.",
+    "href": "reference/python/idenso-community/SchoonschipSettings/#exports-schoonschipsettings-mode-getter",
+    "kind": "python-api",
+    "text": "Whether the pass is single-pass or recursive. def mode(self) -> SchoonschipMode:"
+  },
+  {
+    "title": "symbolica.community.idenso.SchoonschipSettings.traversal",
+    "summary": "Recursive traversal order, or None in single-pass mode.",
+    "href": "reference/python/idenso-community/SchoonschipSettings/#exports-schoonschipsettings-traversal-getter",
+    "kind": "python-api",
+    "text": "Recursive traversal order, or `None` in single-pass mode. def traversal(self) -> Optional[SchoonschipTraversal]:"
+  },
+  {
+    "title": "symbolica.community.idenso.SchoonschipSettings.expand_contracted_sums",
+    "summary": "Whether contracted sums are expanded before network execution.",
+    "href": "reference/python/idenso-community/SchoonschipSettings/#exports-schoonschipsettings-expand-contracted-sums-getter",
+    "kind": "python-api",
+    "text": "Whether contracted sums are expanded before network execution. def expand_contracted_sums(self) -> bool:"
+  },
+  {
+    "title": "symbolica.community.idenso.SchoonschipSettings.simplify_chain_like_functions",
+    "summary": "Whether chain-like function payloads are simplified recursively.",
+    "href": "reference/python/idenso-community/SchoonschipSettings/#exports-schoonschipsettings-simplify-chain-like-functions-getter",
+    "kind": "python-api",
+    "text": "Whether chain-like function payloads are simplified recursively. def simplify_chain_like_functions(self) -> bool:"
+  },
+  {
+    "title": "symbolica.community.idenso.SchoonschipSettings.schoonschip_rank1_tensors",
+    "summary": "Whether rank-one tensors participate in the Schoonschip pass.",
+    "href": "reference/python/idenso-community/SchoonschipSettings/#exports-schoonschipsettings-schoonschip-rank1-tensors-getter",
+    "kind": "python-api",
+    "text": "Whether rank-one tensors participate in the Schoonschip pass. def schoonschip_rank1_tensors(self) -> bool:"
+  },
+  {
+    "title": "symbolica.community.idenso.SchoonschipSettings.contraction_order",
+    "summary": "Heuristic used to choose network contractions.",
+    "href": "reference/python/idenso-community/SchoonschipSettings/#exports-schoonschipsettings-contraction-order-getter",
+    "kind": "python-api",
+    "text": "Heuristic used to choose network contractions. def contraction_order(self) -> SchoonschipContractionOrder:"
+  },
+  {
+    "title": "symbolica.community.idenso.SchoonschipSettings constructor",
+    "summary": "Configure traversal, depth, shorthand expansion, and network-contraction policies.",
+    "href": "reference/python/idenso-community/SchoonschipSettings/#exports-schoonschipsettings-new-associatedfunction",
+    "kind": "python-api",
+    "text": "Configure traversal, depth, shorthand expansion, and network-contraction policies.\n\n`depth_limit=None` removes the recursion-depth limit. `traversal` is ignored in\n`SinglePass` mode.\n`mode=None`, `traversal=None`, and `contraction_order=None` select `Recursive`,\n`BreadthFirst`, and `SmallestDegree`, respectively. def __new__(cls, *, depth_limit: Optional[int] = 1, mode: Optional[SchoonschipMode] = None, traversal: Optional[SchoonschipTraversal] = None, expand_contracted_sums: bool = False, simplify_chain_like_functions: bool = False, schoonschip_rank1_tensors: bool = True, contraction_order: Optional[SchoonschipContractionOrder] = None) -> SchoonschipSettings:"
+  },
+  {
+    "title": "symbolica.community.idenso.SchoonschipSettings.partial",
+    "summary": "Apply the default shallow recursive expression pass without rank-one tensors.",
+    "href": "reference/python/idenso-community/SchoonschipSettings/#exports-schoonschipsettings-partial-associatedfunction",
+    "kind": "python-api",
+    "text": "Apply the default shallow recursive expression pass without rank-one tensors. def partial() -> SchoonschipSettings:"
+  },
+  {
+    "title": "symbolica.community.idenso.SchoonschipSettings.full",
+    "summary": "Apply one unrestricted-depth pass and include rank-one tensors.",
+    "href": "reference/python/idenso-community/SchoonschipSettings/#exports-schoonschipsettings-full-associatedfunction",
+    "kind": "python-api",
+    "text": "Apply one unrestricted-depth pass and include rank-one tensors. def full() -> SchoonschipSettings:"
+  },
+  {
+    "title": "symbolica.community.idenso.SchoonschipSettings.default_network",
+    "summary": "Use the settings applied by schoonschip_net when no settings are supplied.",
+    "href": "reference/python/idenso-community/SchoonschipSettings/#exports-schoonschipsettings-default-network-associatedfunction",
+    "kind": "python-api",
+    "text": "Use the settings applied by `schoonschip_net` when no settings are supplied. def default_network() -> SchoonschipSettings:"
+  },
+  {
+    "title": "symbolica.community.idenso.SchoonschipSettings.depth_first",
+    "summary": "Recursively simplify each branch before visiting its siblings.",
+    "href": "reference/python/idenso-community/SchoonschipSettings/#exports-schoonschipsettings-depth-first-associatedfunction",
+    "kind": "python-api",
+    "text": "Recursively simplify each branch before visiting its siblings. def depth_first(depth_limit: Optional[int] = None) -> SchoonschipSettings:"
+  },
+  {
+    "title": "symbolica.community.idenso.SchoonschipSettings.breadth_first",
+    "summary": "Recursively simplify all branches one level at a time.",
+    "href": "reference/python/idenso-community/SchoonschipSettings/#exports-schoonschipsettings-breadth-first-associatedfunction",
+    "kind": "python-api",
+    "text": "Recursively simplify all branches one level at a time. def breadth_first(depth_limit: Optional[int] = None) -> SchoonschipSettings:"
+  },
+  {
+    "title": "symbolica.community.idenso.SchoonschipSettings.single_pass",
+    "summary": "Visit each eligible expression once, subject to depth_limit.",
+    "href": "reference/python/idenso-community/SchoonschipSettings/#exports-schoonschipsettings-single-pass-associatedfunction",
+    "kind": "python-api",
+    "text": "Visit each eligible expression once, subject to `depth_limit`. def single_pass(depth_limit: Optional[int] = None) -> SchoonschipSettings:"
+  },
+  {
+    "title": "symbolica.community.idenso.CookMode",
+    "summary": "Selects how cooked function payloads are represented as symbols.",
+    "href": "reference/python/idenso-community/CookMode/",
+    "kind": "python-api",
+    "text": "Selects how cooked function payloads are represented as symbols. Selects how cooked function payloads are represented as symbols.\n\nAvailable values are `FlattenedSymbol` for readable names and `ReversibleEncoding` for a\nstable encoding that can later be restored by `uncook`. class CookMode(enum.Enum):"
+  },
+  {
+    "title": "symbolica.community.idenso.CookMode.FlattenedSymbol",
+    "summary": "Build a readable symbol name from the function name and its arguments.",
+    "href": "reference/python/idenso-community/CookMode/#exports-cookmode-flattenedsymbol-variant",
+    "kind": "python-api",
+    "text": "Build a readable symbol name from the function name and its arguments."
+  },
+  {
+    "title": "symbolica.community.idenso.CookMode.ReversibleEncoding",
+    "summary": "Store a stable encoding that can later be restored by uncook with matching settings.",
+    "href": "reference/python/idenso-community/CookMode/#exports-cookmode-reversibleencoding-variant",
+    "kind": "python-api",
+    "text": "Store a stable encoding that can later be restored by `uncook` with matching settings."
+  },
+  {
+    "title": "symbolica.community.idenso.GammaChainOrdering",
+    "summary": "Controls how open gamma chains are reordered during simplification.",
+    "href": "reference/python/idenso-community/GammaChainOrdering/",
+    "kind": "python-api",
+    "text": "Controls how open gamma chains are reordered during simplification. Controls how open gamma chains are reordered during simplification.\n\nAvailable values are `RepeatedPairs`, which only moves matching matrices together, and\n`Canonical`, which canonically orders the complete open chain. class GammaChainOrdering(enum.Enum):"
+  },
+  {
+    "title": "symbolica.community.idenso.GammaChainOrdering.RepeatedPairs",
+    "summary": "Move repeated gamma matrices toward each other without reordering unrelated factors.",
+    "href": "reference/python/idenso-community/GammaChainOrdering/#exports-gammachainordering-repeatedpairs-variant",
+    "kind": "python-api",
+    "text": "Move repeated gamma matrices toward each other without reordering unrelated factors."
+  },
+  {
+    "title": "symbolica.community.idenso.GammaChainOrdering.Canonical",
+    "summary": "Canonically order open chains using adjacent Clifford-algebra swaps.",
+    "href": "reference/python/idenso-community/GammaChainOrdering/#exports-gammachainordering-canonical-variant",
+    "kind": "python-api",
+    "text": "Canonically order open chains using adjacent Clifford-algebra swaps."
+  },
+  {
+    "title": "symbolica.community.idenso.SchoonschipContractionOrder",
+    "summary": "Selects the heuristic used to choose the next tensor-network contraction.",
+    "href": "reference/python/idenso-community/SchoonschipContractionOrder/",
+    "kind": "python-api",
+    "text": "Selects the heuristic used to choose the next tensor-network contraction. Selects the heuristic used to choose the next tensor-network contraction.\n\nAvailable values are `SmallestDegree`, `LargestDegree`, `MinLargestOperandBytes`,\n`MinProductTerms`, `MinProductBytes`, `SmallestDegreeMinLargestOperandBytes`,\n`SmallestDegreeMinProductTerms`, and `SmallestDegreeMinProductBytes`. class SchoonschipContractionOrder(enum.Enum):"
+  },
+  {
+    "title": "symbolica.community.idenso.SchoonschipContractionOrder.SmallestDegree",
+    "summary": "Contract the pair with the fewest paired tensor slots.",
+    "href": "reference/python/idenso-community/SchoonschipContractionOrder/#exports-schoonschipcontractionorder-smallestdegree-variant",
+    "kind": "python-api",
+    "text": "Contract the pair with the fewest paired tensor slots."
+  },
+  {
+    "title": "symbolica.community.idenso.SchoonschipContractionOrder.LargestDegree",
+    "summary": "Contract the pair with the most paired tensor slots.",
+    "href": "reference/python/idenso-community/SchoonschipContractionOrder/#exports-schoonschipcontractionorder-largestdegree-variant",
+    "kind": "python-api",
+    "text": "Contract the pair with the most paired tensor slots."
+  },
+  {
+    "title": "symbolica.community.idenso.SchoonschipContractionOrder.MinLargestOperandBytes",
+    "summary": "Minimize the larger operand's estimated memory footprint.",
+    "href": "reference/python/idenso-community/SchoonschipContractionOrder/#exports-schoonschipcontractionorder-minlargestoperandbytes-variant",
+    "kind": "python-api",
+    "text": "Minimize the larger operand's estimated memory footprint."
+  },
+  {
+    "title": "symbolica.community.idenso.SchoonschipContractionOrder.MinProductTerms",
+    "summary": "Minimize the estimated number of terms in the product.",
+    "href": "reference/python/idenso-community/SchoonschipContractionOrder/#exports-schoonschipcontractionorder-minproductterms-variant",
+    "kind": "python-api",
+    "text": "Minimize the estimated number of terms in the product."
+  },
+  {
+    "title": "symbolica.community.idenso.SchoonschipContractionOrder.MinProductBytes",
+    "summary": "Minimize the product's estimated memory footprint.",
+    "href": "reference/python/idenso-community/SchoonschipContractionOrder/#exports-schoonschipcontractionorder-minproductbytes-variant",
+    "kind": "python-api",
+    "text": "Minimize the product's estimated memory footprint."
+  },
+  {
+    "title": "symbolica.community.idenso.SchoonschipContractionOrder.SmallestDegreeMinLargestOperandBytes",
+    "summary": "Minimize the paired-slot count first, then the larger operand's estimated bytes.",
+    "href": "reference/python/idenso-community/SchoonschipContractionOrder/#exports-schoonschipcontractionorder-smallestdegreeminlargestoperandbytes-variant",
+    "kind": "python-api",
+    "text": "Minimize the paired-slot count first, then the larger operand's estimated bytes."
+  },
+  {
+    "title": "symbolica.community.idenso.SchoonschipContractionOrder.SmallestDegreeMinProductTerms",
+    "summary": "Minimize the paired-slot count first, then the estimated product term count.",
+    "href": "reference/python/idenso-community/SchoonschipContractionOrder/#exports-schoonschipcontractionorder-smallestdegreeminproductterms-variant",
+    "kind": "python-api",
+    "text": "Minimize the paired-slot count first, then the estimated product term count."
+  },
+  {
+    "title": "symbolica.community.idenso.SchoonschipContractionOrder.SmallestDegreeMinProductBytes",
+    "summary": "Minimize the paired-slot count first, then the estimated product bytes.",
+    "href": "reference/python/idenso-community/SchoonschipContractionOrder/#exports-schoonschipcontractionorder-smallestdegreeminproductbytes-variant",
+    "kind": "python-api",
+    "text": "Minimize the paired-slot count first, then the estimated product bytes."
+  },
+  {
+    "title": "symbolica.community.idenso.SchoonschipMode",
+    "summary": "Selects whether a Schoonschip pass runs once or recursively.",
+    "href": "reference/python/idenso-community/SchoonschipMode/",
+    "kind": "python-api",
+    "text": "Selects whether a Schoonschip pass runs once or recursively. Selects whether a Schoonschip pass runs once or recursively.\n\nAvailable values are `SinglePass` and `Recursive`. class SchoonschipMode(enum.Enum):"
+  },
+  {
+    "title": "symbolica.community.idenso.SchoonschipMode.SinglePass",
+    "summary": "Visit each eligible expression at most once.",
+    "href": "reference/python/idenso-community/SchoonschipMode/#exports-schoonschipmode-singlepass-variant",
+    "kind": "python-api",
+    "text": "Visit each eligible expression at most once."
+  },
+  {
+    "title": "symbolica.community.idenso.SchoonschipMode.Recursive",
+    "summary": "Repeat traversal until the configured depth or a fixed point is reached.",
+    "href": "reference/python/idenso-community/SchoonschipMode/#exports-schoonschipmode-recursive-variant",
+    "kind": "python-api",
+    "text": "Repeat traversal until the configured depth or a fixed point is reached."
+  },
+  {
+    "title": "symbolica.community.idenso.SchoonschipTraversal",
+    "summary": "Selects the recursive traversal order for a Schoonschip pass.",
+    "href": "reference/python/idenso-community/SchoonschipTraversal/",
+    "kind": "python-api",
+    "text": "Selects the recursive traversal order for a Schoonschip pass. Selects the recursive traversal order for a Schoonschip pass.\n\nAvailable values are `DepthFirst` and `BreadthFirst`. class SchoonschipTraversal(enum.Enum):"
+  },
+  {
+    "title": "symbolica.community.idenso.SchoonschipTraversal.DepthFirst",
+    "summary": "Fully simplify each branch before advancing to its siblings.",
+    "href": "reference/python/idenso-community/SchoonschipTraversal/#exports-schoonschiptraversal-depthfirst-variant",
+    "kind": "python-api",
+    "text": "Fully simplify each branch before advancing to its siblings."
+  },
+  {
+    "title": "symbolica.community.idenso.SchoonschipTraversal.BreadthFirst",
+    "summary": "Advance all branches one level before descending further.",
+    "href": "reference/python/idenso-community/SchoonschipTraversal/#exports-schoonschiptraversal-breadthfirst-variant",
+    "kind": "python-api",
+    "text": "Advance all branches one level before descending further."
+  },
+  {
+    "title": "symbolica.community.idenso.alias_subtensors",
+    "summary": "Replace nested tensor subexpressions by generated aliases.",
+    "href": "reference/python/idenso-community/alias_subtensors-function/",
+    "kind": "python-api",
+    "text": "Replace nested tensor subexpressions by generated aliases. Replace nested tensor subexpressions by generated aliases.\n\nReturns the rewritten root followed by sorted `(alias, original)` pairs. def alias_subtensors(expression: Expression, tensor_name: str) -> tuple[Expression, list[tuple[Expression, Expression]]]:"
+  },
+  {
+    "title": "symbolica.community.idenso.canonize",
+    "summary": "Canonically order tensor factors and deterministically rename contracted indices.",
+    "href": "reference/python/idenso-community/canonize-function/",
+    "kind": "python-api",
+    "text": "Canonically order tensor factors and deterministically rename contracted indices. Canonically order tensor factors and deterministically rename contracted indices.\n\nRaises `CanonicalizationError` when the expression cannot be parsed or canonicalized. def canonize(expression: Expression) -> Expression:"
+  },
+  {
+    "title": "symbolica.community.idenso.chainify",
+    "summary": "Rewrite tensors with two slots in representation as explicit open-chain factors.",
+    "href": "reference/python/idenso-community/chainify-function/",
+    "kind": "python-api",
+    "text": "Rewrite tensors with two slots in `representation` as explicit open-chain factors. Rewrite tensors with two slots in `representation` as explicit open-chain factors. def chainify(expression: Expression, representation: Representation | Expression) -> Expression:"
+  },
+  {
+    "title": "symbolica.community.idenso.collect_chains",
+    "summary": "Join adjacent open chains for the supplied representation.",
+    "href": "reference/python/idenso-community/collect_chains-function/",
+    "kind": "python-api",
+    "text": "Join adjacent open chains for the supplied representation. Join adjacent open chains for the supplied representation. def collect_chains(expression: Expression, representation: Representation | Expression) -> Expression:"
+  },
+  {
+    "title": "symbolica.community.idenso.collect_color",
+    "summary": "Factor an expression around tensors carrying fundamental, antifundamental, or adjoint color.",
+    "href": "reference/python/idenso-community/collect_color-function/",
+    "kind": "python-api",
+    "text": "Factor an expression around tensors carrying fundamental, antifundamental, or adjoint color. Factor an expression around tensors carrying fundamental, antifundamental, or adjoint color. def collect_color(expression: Expression) -> Expression:"
+  },
+  {
+    "title": "symbolica.community.idenso.collect_color_constants",
+    "summary": "Factor an expression around recognized scalar color invariants such as Casimirs and indices.",
+    "href": "reference/python/idenso-community/collect_color_constants-function/",
+    "kind": "python-api",
+    "text": "Factor an expression around recognized scalar color invariants such as Casimirs and indices. Factor an expression around recognized scalar color invariants such as Casimirs and indices. def collect_color_constants(expression: Expression) -> Expression:"
+  },
+  {
+    "title": "symbolica.community.idenso.collect_gamma_chains",
+    "summary": "Convert bispinor tensors into chain/trace shorthands and join adjacent gamma chains.",
+    "href": "reference/python/idenso-community/collect_gamma_chains-function/",
+    "kind": "python-api",
+    "text": "Convert bispinor tensors into chain/trace shorthands and join adjacent gamma chains. Convert bispinor tensors into chain/trace shorthands and join adjacent gamma chains. def collect_gamma_chains(expression: Expression) -> Expression:"
+  },
+  {
+    "title": "symbolica.community.idenso.conjugate_transpose",
+    "summary": "Complex-conjugate an expression and transpose tensor slots in representation.",
+    "href": "reference/python/idenso-community/conjugate_transpose-function/",
+    "kind": "python-api",
+    "text": "Complex-conjugate an expression and transpose tensor slots in `representation`. Complex-conjugate an expression and transpose tensor slots in `representation`. def conjugate_transpose(expression: Expression, representation: Representation | Expression) -> Expression:"
+  },
+  {
+    "title": "symbolica.community.idenso.cook",
+    "summary": "Encode selected functions as symbols using reversible cooking by default.",
+    "href": "reference/python/idenso-community/cook-function/",
+    "kind": "python-api",
+    "text": "Encode selected functions as symbols using reversible cooking by default. Encode selected functions as symbols using reversible cooking by default.\n\nRaises `CookingError` when a selected function payload cannot be encoded. def cook(expression: Expression, settings: Optional[CookSettings] = None) -> Expression:"
+  },
+  {
     "title": "symbolica.community.idenso.cook_function",
     "summary": "Convert a single function call into a flattened variable symbol.",
     "href": "reference/python/idenso-community/cook_function-function/",
     "kind": "python-api",
-    "text": "Convert a single function call into a flattened variable symbol. Convert a single function call into a flattened variable symbol.\n\nTransforms a function expression with arguments into a single symbolic variable\nwhose name encodes both the function name and its arguments. This is the\natomic version of `cook_indices()`, operating on individual function calls\nrather than complete expressions.\n\n**Function Cooking Transform:**\n- Simple function: `f(a, b)` → `f_a_b`\n- Nested arguments: `tensor(rep(mu))` → `tensor_rep_mu`\n- Multiple arguments: `gamma(mu, alpha, beta)` → `gamma_mu_alpha_beta`\n- Complex names: `my_function(x, y)` → `my_function_x_y`\n\n\n**Constraints:**\n- Input must be a single function call (not sum, product, etc.)\n- Arguments must be cookable (symbols, numbers, simple functions)\n- Cannot cook expressions containing polynomials or complex structures\n\n# Arguments\n- `self_`: expression representing a single function call to cook\n\n# Returns\nExpression containing the flattened variable symbol.\n\n# Raises\n`TypeError` if input is not a cookable function or contains invalid argument types.\n\n# Examples:\n```python\nimport symbolica as sp\nfrom symbolica.community.idenso import cook_function\n\n# Simple function cooking\nf = sp.S('f')\na, b = sp.S('a','b')\n\ncooked = cook_function(f(a, b))\nprint(cooked)  # Outputs: f_a_b\n``` def cook_function(self_: Expression) -> Expression:"
+    "text": "Convert a single function call into a flattened variable symbol. Convert a single function call into a flattened variable symbol.\n\nTransforms a function expression with arguments into a single symbolic variable\nwhose name encodes both the function name and its arguments. This is the\natomic version of `cook_indices()`, operating on individual function calls\nrather than complete expressions.\n\n**Function Cooking Transform:**\n- Simple function: `f(a, b)` → `f_a_b`\n- Nested arguments: `tensor(rep(mu))` → `tensor_rep_mu`\n- Multiple arguments: `gamma(alpha, beta, mu)` → `gamma_alpha_beta_mu`\n- Complex names: `my_function(x, y)` → `my_function_x_y`\n\n\n**Constraints:**\n- Input must be a single function call (not sum, product, etc.)\n- Arguments must be cookable (symbols, numbers, simple functions)\n- Cannot cook expressions containing polynomials or complex structures\n\n# Arguments\n- `expression`: expression representing a single function call to cook\n\n# Returns\nExpression containing the flattened variable symbol.\n\n# Raises\n`TypeError` if input is not a cookable function or contains invalid argument types.\n\n# Examples:\n```python\nimport symbolica as sp\nfrom symbolica.community.idenso import cook_function\n\n# Simple function cooking\nf = sp.S('f')\na, b = sp.S('a','b')\n\ncooked = cook_function(f(a, b))\nprint(cooked)  # Outputs: f_a_b\n``` def cook_function(expression: Expression, settings: Optional[CookSettings] = None) -> Expression:"
   },
   {
     "title": "symbolica.community.idenso.cook_indices",
     "summary": "Convert complex nested index structures into flattened symbolic names.",
     "href": "reference/python/idenso-community/cook_indices-function/",
     "kind": "python-api",
-    "text": "Convert complex nested index structures into flattened symbolic names. Convert complex nested index structures into flattened symbolic names.\n\nTransforms hierarchical index expressions within tensor function arguments\ninto simplified, flat symbolic representations. This \"cooking\" process is\nessential for pattern matching, simplification, and computational efficiency\nwhen dealing with complex tensor expressions.\n\n**Index Cooking Transformation:**\n- Nested structure: `mink(4, f(g(h(μ))))` → `mink(4, f_g_h_mu)`\n- Function chains: `lorentz(up(mu))` → `lorentz(up_mu)`\n- Complex arguments: `tensor(rep(dim,type(idx)))` → `tensor(rep(dim,type_idx))`\n\n**Scope:**\n- Only affects indices appearing as function arguments\n- Preserves top-level function structure\n# Arguments\n- `self_`: expression containing complex nested index structures\n\n# Returns\nExpression with flattened, simplified index names.\n\n# Examples:\n```python\nfrom symbolica.community.spenso import TensorName, Slot, Representation\nimport symbolica as sp\nfrom symbolica.community.idenso import wrap_indices, cook_indices\n\nT = TensorName(\"T\")\nrep = Representation.euc(3)\n# With slots (creates TensorIndices)\nmu = rep(\"mu\")\nnu = rep(\"nu\")\nx = sp.S(\"x\")\ntensor_with_args = T(mu, nu, x)  # T(mu, nu; x)\nprint(tensor_with_args)\nprint(\n    cook_indices(wrap_indices(tensor_with_args.to_expression(), sp.S(\"wrap\")))\n)\n``` def cook_indices(self_: Expression) -> Expression:"
+    "text": "Convert complex nested index structures into flattened symbolic names. Convert complex nested index structures into flattened symbolic names.\n\nTransforms hierarchical index expressions within tensor function arguments\ninto simplified, flat symbolic representations. This \"cooking\" process is\nessential for pattern matching, simplification, and computational efficiency\nwhen dealing with complex tensor expressions.\n\n**Index Cooking Transformation:**\n- Nested structure: `mink(4, f(g(h(μ))))` → `mink(4, f_g_h_mu)`\n- Function chains: `lorentz(up(mu))` → `lorentz(up_mu)`\n- Complex arguments: `tensor(rep(dim,type(idx)))` → `tensor(rep(dim,type_idx))`\n\n**Scope:**\n- Only affects indices appearing as function arguments\n- Preserves top-level function structure\n# Arguments\n- `expression`: expression containing complex nested index structures\n\n# Returns\nExpression with flattened, simplified index names.\n\n# Examples:\n```python\nfrom symbolica.community.spenso import TensorName, Slot, Representation\nimport symbolica as sp\nfrom symbolica.community.idenso import wrap_indices, cook_indices\n\nT = TensorName(\"T\")\nrep = Representation.euc(3)\n# With slots (creates TensorExpression)\nmu = rep(\"mu\")\nnu = rep(\"nu\")\nx = sp.S(\"x\")\ntensor_with_args = T(x, mu, nu)  # T(x; mu, nu)\nprint(tensor_with_args)\nprint(\n    cook_indices(wrap_indices(tensor_with_args.to_expression(), sp.S(\"wrap\")))\n)\n``` def cook_indices(expression: Expression, settings: Optional[CookSettings] = None) -> Expression:"
   },
   {
     "title": "symbolica.community.idenso.dirac_adjoint",
-    "summary": "Return the Dirac adjoint of a Symbolica tensor expression.",
+    "summary": "Construct the physics-aware Dirac adjoint of a tensor expression.",
     "href": "reference/python/idenso-community/dirac_adjoint-function/",
     "kind": "python-api",
-    "text": "Return the Dirac adjoint of a Symbolica tensor expression. Return the Dirac adjoint of a Symbolica tensor expression.\n\nIdenso takes the symbolic complex conjugate, reverses compatible open bispinor chains, and\ninserts the registered `gamma0` factors required at dangling bispinor slots.\nThe input must use the representation-aware Spenso forms registered by `initialize()`.\n\n# Examples\n```python\n>>> from symbolica.community.idenso import dirac_adjoint, initialize, list_dangling\n>>> from symbolica.community.spenso import Representation, TensorName\n>>> initialize()\n>>> initialize() is None  # Registration is idempotent.\nTrue\n>>> bispinor = Representation.bis(4)\n>>> spinor = TensorName(\"u\")(bispinor(\"alpha\")).to_expression()\n>>> adjoint = dirac_adjoint(spinor)\n>>> len(list_dangling(adjoint)) == 1\nTrue\n>>> \"gamma0\" in str(adjoint)\nTrue\n```\n\n# Arguments\n- `self_`: a Spenso-compatible tensor expression.\n\n# Returns\nThe representation-aware Dirac adjoint. def dirac_adjoint(self_: Expression) -> Expression:"
+    "text": "Construct the physics-aware Dirac adjoint of a tensor expression. Construct the physics-aware Dirac adjoint of a tensor expression.\n\nIdenso takes the symbolic complex conjugate, reverses compatible open bispinor chains, and\ninserts the registered `gamma0` factors required at dangling bispinor slots.\nThe input must use the representation-aware Spenso forms registered on import.\nRaises `DiracAdjointError` when the tensor network does not define a consistent adjoint.\n\n# Examples\n```python\n>>> from symbolica.community.idenso import dirac_adjoint, list_dangling\n>>> from symbolica.community.spenso import Representation, TensorName\n>>> # Built-in representations are registered automatically on import.\n>>> # Re-importing the module does not require explicit re-registration.\n>>> bispinor = Representation.bis(4)\n>>> spinor = TensorName(\"u\")(bispinor(\"alpha\")).to_expression()\n>>> adjoint = dirac_adjoint(spinor)\n>>> len(list_dangling(adjoint)) == 1\nTrue\n>>> \"gamma0\" in str(adjoint)\nTrue\n```\n\n# Arguments\n- `expression`: a Spenso-compatible tensor expression.\n\n# Returns\nThe representation-aware Dirac adjoint. def dirac_adjoint(expression: Expression) -> Expression:"
   },
   {
     "title": "symbolica.community.idenso.expand_bis",
     "summary": "Expand products around factors carrying registered bispinor indices.",
     "href": "reference/python/idenso-community/expand_bis-function/",
     "kind": "python-api",
-    "text": "Expand products around factors carrying registered bispinor indices. Expand products around factors carrying registered bispinor indices.\n\n# Arguments\n- `self_`: a factorized Spenso-compatible expression.\n\n# Returns\nThe expression distributed around its bispinor-bearing factors. No explicit spinor\ncomponents are substituted.\n\n# Examples\n```python\n>>> from symbolica.community.idenso import expand_bis, initialize\n>>> from symbolica.community.spenso import Representation, TensorName\n>>> initialize()\n>>> bispinor = Representation.bis(4)\n>>> alpha, beta = bispinor(\"alpha\"), bispinor(\"beta\")\n>>> u, v, w = TensorName(\"u\"), TensorName(\"v\"), TensorName(\"w\")\n>>> u_alpha = u(alpha).to_expression()\n>>> v_beta, w_beta = v(beta).to_expression(), w(beta).to_expression()\n>>> factorized = u_alpha * (v_beta + w_beta)\n>>> expand_bis(factorized) == u_alpha * v_beta + u_alpha * w_beta\nTrue\n``` def expand_bis(self_: Expression) -> Expression:"
+    "text": "Expand products around factors carrying registered bispinor indices. Expand products around factors carrying registered bispinor indices.\n\n# Arguments\n- `expression`: a factorized Spenso-compatible expression.\n\n# Returns\n`(structure, coefficient)` pairs distributed around bispinor-bearing factors. No explicit\nspinor components are substituted.\n\n# Examples\n```python\n>>> from symbolica.community.idenso import expand_bis\n>>> from symbolica.community.spenso import Representation, TensorName\n>>> # Built-in representations are registered automatically on import.\n>>> bispinor = Representation.bis(4)\n>>> alpha, beta = bispinor(\"alpha\"), bispinor(\"beta\")\n>>> u, v, w = TensorName(\"u\"), TensorName(\"v\"), TensorName(\"w\")\n>>> u_alpha = u(alpha).to_expression()\n>>> v_beta, w_beta = v(beta).to_expression(), w(beta).to_expression()\n>>> factorized = u_alpha * (v_beta + w_beta)\n>>> terms = expand_bis(factorized)\n>>> sum(structure * coefficient for structure, coefficient in terms) == u_alpha * v_beta + u_alpha * w_beta\nTrue\n``` def expand_bis(expression: Expression) -> list[tuple[Expression, Expression]]:"
   },
   {
     "title": "symbolica.community.idenso.expand_color",
     "summary": "Expand products around registered color factors.",
     "href": "reference/python/idenso-community/expand_color-function/",
     "kind": "python-api",
-    "text": "Expand products around registered color factors. Expand products around registered color factors.\n\nFundamental, antifundamental, adjoint, color-chain, color-trace, and supported invariant\nfactors form the selected sector. This only distributes the symbolic expression; use\n`simplify_color()` separately to apply SU(N) identities.\n\n# Arguments\n- `self_`: a factorized Spenso-compatible expression.\n\n# Returns\nThe expression distributed around its color-bearing factors.\n\n# Examples\n```python\n>>> from symbolica.community.idenso import expand_color, initialize\n>>> from symbolica.community.spenso import Representation, TensorName\n>>> initialize()\n>>> adjoint, fundamental = Representation.coad(8), Representation.cof(3)\n>>> antifundamental = fundamental.dual()\n>>> generator = TensorName.t()\n>>> t_a = generator(\n...     adjoint(\"a\"), fundamental(\"i\"), antifundamental(\"j\")\n... ).to_expression()\n>>> t_b = generator(\n...     adjoint(\"b\"), fundamental(\"k\"), antifundamental(\"l\")\n... ).to_expression()\n>>> t_c = generator(\n...     adjoint(\"c\"), fundamental(\"m\"), antifundamental(\"n\")\n... ).to_expression()\n>>> factorized = t_a * (t_b + t_c)\n>>> expand_color(factorized) == t_a * t_b + t_a * t_c\nTrue\n``` def expand_color(self_: Expression) -> Expression:"
+    "text": "Expand products around registered color factors. Expand products around registered color factors.\n\nFundamental, antifundamental, adjoint, color-chain, color-trace, and supported invariant\nfactors form the selected sector. This only distributes the symbolic expression; use\n`simplify_color()` separately to apply SU(N) identities.\n\n# Arguments\n- `expression`: a factorized Spenso-compatible expression.\n\n# Returns\n`(structure, coefficient)` pairs distributed around color-bearing factors.\n\n# Examples\n```python\n>>> from symbolica.community.idenso import expand_color\n>>> from symbolica.community.spenso import Representation, TensorExpression\n>>> # Built-in representations are registered automatically on import.\n>>> adjoint, fundamental = Representation.coad(8), Representation.cof(3)\n>>> antifundamental = fundamental.dual()\n>>> generator = TensorExpression.t(8, 3)\n>>> t_a = generator(\n...     adjoint(\"a\"), fundamental(\"i\"), antifundamental(\"j\")\n... ).to_expression()\n>>> t_b = generator(\n...     adjoint(\"b\"), fundamental(\"k\"), antifundamental(\"l\")\n... ).to_expression()\n>>> t_c = generator(\n...     adjoint(\"c\"), fundamental(\"m\"), antifundamental(\"n\")\n... ).to_expression()\n>>> factorized = t_a * (t_b + t_c)\n>>> terms = expand_color(factorized)\n>>> sum(structure * coefficient for structure, coefficient in terms) == t_a * t_b + t_a * t_c\nTrue\n``` def expand_color(expression: Expression) -> list[tuple[Expression, Expression]]:"
+  },
+  {
+    "title": "symbolica.community.idenso.expand_dots",
+    "summary": "Expand compact dot products into explicit metric and indexed-vector contractions.",
+    "href": "reference/python/idenso-community/expand_dots-function/",
+    "kind": "python-api",
+    "text": "Expand compact dot products into explicit metric and indexed-vector contractions. Expand compact dot products into explicit metric and indexed-vector contractions.\n\nRaises `DotExpansionError` when a dot product does not define a valid tensor contraction. def expand_dots(expression: Expression) -> Expression:"
+  },
+  {
+    "title": "symbolica.community.idenso.expand_in_patterns",
+    "summary": "Selectively expand around the supplied expression patterns.",
+    "href": "reference/python/idenso-community/expand_in_patterns-function/",
+    "kind": "python-api",
+    "text": "Selectively expand around the supplied expression patterns. Selectively expand around the supplied expression patterns.\n\nResults retain the Rust API's `(structure, coefficient)` factorization. def expand_in_patterns(expression: Expression, patterns: Sequence[Expression]) -> list[tuple[Expression, Expression]]:"
   },
   {
     "title": "symbolica.community.idenso.expand_metrics",
     "summary": "Expand products around registered metric tensors.",
     "href": "reference/python/idenso-community/expand_metrics-function/",
     "kind": "python-api",
-    "text": "Expand products around registered metric tensors. Expand products around registered metric tensors.\n\nThis is a structural expansion only. It neither contracts the metrics nor substitutes a\ndimension or signature; call `simplify_metrics()` separately for supported contractions.\n\n# Arguments\n- `self_`: a factorized Spenso-compatible expression.\n\n# Returns\nThe expression distributed around its metric factors.\n\n# Examples\n```python\n>>> from symbolica.community.idenso import expand_metrics, initialize\n>>> from symbolica.community.spenso import Representation, TensorName\n>>> initialize()\n>>> minkowski = Representation.mink(4)\n>>> metric = TensorName.g()\n>>> g_mn = metric(minkowski(\"mu\"), minkowski(\"nu\")).to_expression()\n>>> g_rs = metric(minkowski(\"rho\"), minkowski(\"sigma\")).to_expression()\n>>> g_ab = metric(minkowski(\"alpha\"), minkowski(\"beta\")).to_expression()\n>>> factorized = g_mn * (g_rs + g_ab)\n>>> expand_metrics(factorized) == g_mn * g_rs + g_mn * g_ab\nTrue\n``` def expand_metrics(self_: Expression) -> Expression:"
+    "text": "Expand products around registered metric tensors. Expand products around registered metric tensors.\n\nThis is a structural expansion only. It neither contracts the metrics nor substitutes a\ndimension or signature; call `simplify_metrics()` separately for supported contractions.\n\n# Arguments\n- `expression`: a factorized Spenso-compatible expression.\n\n# Returns\n`(structure, coefficient)` pairs distributed around metric factors.\n\n# Examples\n```python\n>>> from symbolica.community.idenso import expand_metrics\n>>> from symbolica.community.spenso import Representation, TensorExpression\n>>> # Built-in representations are registered automatically on import.\n>>> minkowski = Representation.mink(4)\n>>> metric = TensorExpression.g(minkowski)\n>>> g_mn = metric(minkowski(\"mu\"), minkowski(\"nu\")).to_expression()\n>>> g_rs = metric(minkowski(\"rho\"), minkowski(\"sigma\")).to_expression()\n>>> g_ab = metric(minkowski(\"alpha\"), minkowski(\"beta\")).to_expression()\n>>> factorized = g_mn * (g_rs + g_ab)\n>>> terms = expand_metrics(factorized)\n>>> sum(structure * coefficient for structure, coefficient in terms) == g_mn * g_rs + g_mn * g_ab\nTrue\n``` def expand_metrics(expression: Expression) -> list[tuple[Expression, Expression]]:"
   },
   {
     "title": "symbolica.community.idenso.expand_mink",
     "summary": "Expand products around factors carrying registered Minkowski indices.",
     "href": "reference/python/idenso-community/expand_mink-function/",
     "kind": "python-api",
-    "text": "Expand products around factors carrying registered Minkowski indices. Expand products around factors carrying registered Minkowski indices.\n\nThis is a selective symbolic expansion: Minkowski-bearing factors become polynomial\nvariables while unrelated sectors remain coefficients. It does not substitute explicit\nfour-vector components or choose a metric signature.\n\n# Arguments\n- `self_`: a factorized Spenso-compatible expression.\n\n# Returns\nThe expression distributed around its Minkowski-bearing factors.\n\n# Examples\n```python\n>>> from symbolica.community.idenso import expand_mink, initialize\n>>> from symbolica.community.spenso import Representation, TensorName\n>>> initialize()\n>>> minkowski = Representation.mink(4)\n>>> mu, nu = minkowski(\"mu\"), minkowski(\"nu\")\n>>> p, q, r = TensorName(\"p\"), TensorName(\"q\"), TensorName(\"r\")\n>>> p_mu = p(mu).to_expression()\n>>> q_nu, r_nu = q(nu).to_expression(), r(nu).to_expression()\n>>> factorized = p_mu * (q_nu + r_nu)\n>>> expand_mink(factorized) == p_mu * q_nu + p_mu * r_nu\nTrue\n``` def expand_mink(self_: Expression) -> Expression:"
+    "text": "Expand products around factors carrying registered Minkowski indices. Expand products around factors carrying registered Minkowski indices.\n\nThis is a selective symbolic expansion: Minkowski-bearing factors become polynomial\nvariables while unrelated sectors remain coefficients. It does not substitute explicit\nfour-vector components or choose a metric signature.\n\n# Arguments\n- `expression`: a factorized Spenso-compatible expression.\n\n# Returns\n`(structure, coefficient)` pairs distributed around Minkowski-bearing factors.\n\n# Examples\n```python\n>>> from symbolica.community.idenso import expand_mink\n>>> from symbolica.community.spenso import Representation, TensorName\n>>> # Built-in representations are registered automatically on import.\n>>> minkowski = Representation.mink(4)\n>>> mu, nu = minkowski(\"mu\"), minkowski(\"nu\")\n>>> p, q, r = TensorName(\"p\"), TensorName(\"q\"), TensorName(\"r\")\n>>> p_mu = p(mu).to_expression()\n>>> q_nu, r_nu = q(nu).to_expression(), r(nu).to_expression()\n>>> factorized = p_mu * (q_nu + r_nu)\n>>> terms = expand_mink(factorized)\n>>> sum(structure * coefficient for structure, coefficient in terms) == p_mu * q_nu + p_mu * r_nu\nTrue\n``` def expand_mink(expression: Expression) -> list[tuple[Expression, Expression]]:"
   },
   {
     "title": "symbolica.community.idenso.expand_mink_bis",
     "summary": "Expand products around factors carrying Minkowski or bispinor indices.",
     "href": "reference/python/idenso-community/expand_mink_bis-function/",
     "kind": "python-api",
-    "text": "Expand products around factors carrying Minkowski or bispinor indices. Expand products around factors carrying Minkowski or bispinor indices.\n\nThis combines the selection patterns of `expand_mink()` and `expand_bis()` in one\ncoefficient pass. Other representation families remain in the coefficient sector.\n\n# Arguments\n- `self_`: a factorized Spenso-compatible expression.\n\n# Returns\nThe expression distributed around both selected representation families.\n\n# Examples\n```python\n>>> from symbolica.community.idenso import expand_mink_bis, initialize\n>>> from symbolica.community.spenso import Representation, TensorName\n>>> initialize()\n>>> minkowski, bispinor = Representation.mink(4), Representation.bis(4)\n>>> p_mu = TensorName(\"p\")(minkowski(\"mu\")).to_expression()\n>>> q_mu = TensorName(\"q\")(minkowski(\"mu\")).to_expression()\n>>> u_a = TensorName(\"u\")(bispinor(\"a\")).to_expression()\n>>> v_a = TensorName(\"v\")(bispinor(\"a\")).to_expression()\n>>> factorized = (p_mu + q_mu) * (u_a + v_a)\n>>> expected = p_mu * u_a + p_mu * v_a + q_mu * u_a + q_mu * v_a\n>>> expand_mink_bis(factorized) == expected\nTrue\n``` def expand_mink_bis(self_: Expression) -> Expression:"
-  },
-  {
-    "title": "symbolica.community.idenso.initialize",
-    "summary": "Register Idenso's built-in representations and algebra symbols with Symbolica.",
-    "href": "reference/python/idenso-community/initialize-function/",
-    "kind": "python-api",
-    "text": "Register Idenso's built-in representations and algebra symbols with Symbolica. Register Idenso's built-in representations and algebra symbols with Symbolica.\n\nSymbolica calls this during community-module initialization. Calling it again\nis safe and ensures the standard Lorentz, spinor, and color objects exist. def initialize() -> None:"
+    "text": "Expand products around factors carrying Minkowski or bispinor indices. Expand products around factors carrying Minkowski or bispinor indices.\n\nThis combines the selection patterns of `expand_mink()` and `expand_bis()` in one\ncoefficient pass. Other representation families remain in the coefficient sector.\n\n# Arguments\n- `expression`: a factorized Spenso-compatible expression.\n\n# Returns\n`(structure, coefficient)` pairs distributed around both selected representation families.\n\n# Examples\n```python\n>>> from symbolica.community.idenso import expand_mink_bis\n>>> from symbolica.community.spenso import Representation, TensorName\n>>> # Built-in representations are registered automatically on import.\n>>> minkowski, bispinor = Representation.mink(4), Representation.bis(4)\n>>> p_mu = TensorName(\"p\")(minkowski(\"mu\")).to_expression()\n>>> q_mu = TensorName(\"q\")(minkowski(\"mu\")).to_expression()\n>>> u_a = TensorName(\"u\")(bispinor(\"a\")).to_expression()\n>>> v_a = TensorName(\"v\")(bispinor(\"a\")).to_expression()\n>>> factorized = (p_mu + q_mu) * (u_a + v_a)\n>>> expected = p_mu * u_a + p_mu * v_a + q_mu * u_a + q_mu * v_a\n>>> terms = expand_mink_bis(factorized)\n>>> sum(structure * coefficient for structure, coefficient in terms) == expected\nTrue\n``` def expand_mink_bis(expression: Expression) -> list[tuple[Expression, Expression]]:"
   },
   {
     "title": "symbolica.community.idenso.list_dangling",
     "summary": "Lists the dangling (external, uncontracted) indices present in the expression.",
     "href": "reference/python/idenso-community/list_dangling-function/",
     "kind": "python-api",
-    "text": "Lists the dangling (external, uncontracted) indices present in the expression. Lists the dangling (external, uncontracted) indices present in the expression.\n\nIdentifies and returns all indices that are not summed over (i.e., not dummy\nindices). These are the \"free\" indices that appear in the final result and\ndetermine the tensor rank of the expression. For dualizable representations,\ndownstairs indices are represented wrapped in `dind(...)`.\n\nThis is essential for:\n- Verifying index conservation in tensor equations\n- Determining the rank and structure of tensor expressions\n- Debugging index contractions\n\n# Arguments\n- `self_`: tensor expression to analyze\n\n# Returns\nA list of expressions, each representing a free (dangling) index.\n\n# Examples:\n```python\nfrom symbolica.community.spenso import TensorName, Slot, Representation\nimport symbolica as sp\nfrom symbolica.community.idenso import (\n    list_dangling,\n)\n\nT = TensorName(\"T\")\nrep = Representation.euc(3)\n# With slots (creates TensorIndices)\nmu = rep(\"mu\")\nnu = rep(\"nu\")\nx = sp.S(\"x\")\ntensor_with_args = T(mu, nu, nu, x)  # T(mu, nu; x)\n# print(tensor_with_args)\nprint(list_dangling(tensor_with_args.to_expression()))\n``` def list_dangling(self_: Expression) -> list[Expression]:"
+    "text": "Lists the dangling (external, uncontracted) indices present in the expression. Lists the dangling (external, uncontracted) indices present in the expression.\n\nIdentifies and returns all indices that are not summed over (i.e., not dummy\nindices). These are the \"free\" indices that appear in the final result and\ndetermine the tensor rank of the expression. For dualizable representations,\ndownstairs indices are represented wrapped in `dind(...)`.\n\nThis is essential for:\n- Verifying index conservation in tensor equations\n- Determining the rank and structure of tensor expressions\n- Debugging index contractions\n\n# Arguments\n- `expression`: tensor expression to analyze\n\n# Returns\nA list of expressions, each representing a free (dangling) index.\n\n# Raises\n`ValueError` when the expression cannot be parsed as a tensor network.\n\n# Examples:\n```python\nfrom symbolica.community.spenso import TensorName, Slot, Representation\nimport symbolica as sp\nfrom symbolica.community.idenso import (\n    list_dangling,\n)\n\nT = TensorName(\"T\")\nrep = Representation.euc(3)\n# With slots (creates TensorExpression)\nmu = rep(\"mu\")\nnu = rep(\"nu\")\nx = sp.S(\"x\")\ntensor_with_args = T(x, mu, nu, nu)  # T(x; mu, nu, nu)\n# print(tensor_with_args)\nprint(list_dangling(tensor_with_args.to_expression()))\n``` def list_dangling(expression: Expression) -> list[Expression]:"
+  },
+  {
+    "title": "symbolica.community.idenso.metric_shorthand_to_dot",
+    "summary": "Replace metric shorthand such as g(p(rep), q(rep.dual())) by dot(p(rep), q(rep.dual())).",
+    "href": "reference/python/idenso-community/metric_shorthand_to_dot-function/",
+    "kind": "python-api",
+    "text": "Replace metric shorthand such as `g(p(rep), q(rep.dual()))` by `dot(p(rep), q(rep.dual()))`. Replace metric shorthand such as `g(p(rep), q(rep.dual()))` by\n`dot(p(rep), q(rep.dual()))`. def metric_shorthand_to_dot(expression: Expression) -> Expression:"
+  },
+  {
+    "title": "symbolica.community.idenso.normalize_chains",
+    "summary": "Convert chains whose endpoints coincide into trace shorthands.",
+    "href": "reference/python/idenso-community/normalize_chains-function/",
+    "kind": "python-api",
+    "text": "Convert chains whose endpoints coincide into trace shorthands. Convert chains whose endpoints coincide into trace shorthands. def normalize_chains(expression: Expression) -> Expression:"
+  },
+  {
+    "title": "symbolica.community.idenso.normalize_dots",
+    "summary": "Canonicalize compact dot-product shorthands without expanding their tensor structure.",
+    "href": "reference/python/idenso-community/normalize_dots-function/",
+    "kind": "python-api",
+    "text": "Canonicalize compact dot-product shorthands without expanding their tensor structure. Canonicalize compact dot-product shorthands without expanding their tensor structure. def normalize_dots(expression: Expression) -> Expression:"
+  },
+  {
+    "title": "symbolica.community.idenso.schoonschip",
+    "summary": "Simplify tensor shorthands using the configured Schoonschip traversal.",
+    "href": "reference/python/idenso-community/schoonschip-function/",
+    "kind": "python-api",
+    "text": "Simplify tensor shorthands using the configured Schoonschip traversal. Simplify tensor shorthands using the configured Schoonschip traversal. def schoonschip(expression: Expression, settings: Optional[SchoonschipSettings] = None) -> Expression:"
+  },
+  {
+    "title": "symbolica.community.idenso.schoonschip_net",
+    "summary": "Parse and contract a symbolic tensor network using Schoonschip rules.",
+    "href": "reference/python/idenso-community/schoonschip_net-function/",
+    "kind": "python-api",
+    "text": "Parse and contract a symbolic tensor network using Schoonschip rules. Parse and contract a symbolic tensor network using Schoonschip rules.\n\nSet `expand_contracted_sums=True` to distribute sums before contracted products are executed.\n\nRaises `NetworkToolingError` when the expression is not a valid tensor network or contraction\nfails. def schoonschip_net(expression: Expression, settings: Optional[SchoonschipSettings] = None, *, expand_contracted_sums: bool = False) -> Expression:"
   },
   {
     "title": "symbolica.community.idenso.simplify_color",
     "summary": "Simplify registered Spenso color chains, traces, generators, and structure constants.",
     "href": "reference/python/idenso-community/simplify_color-function/",
     "kind": "python-api",
-    "text": "Simplify registered Spenso color chains, traces, generators, and structure constants. Simplify registered Spenso color chains, traces, generators, and structure constants.\n\nWith the default Python settings, the simplifier evaluates supported closed traces and\nexpands contractions between generators on separate fundamental chains. Its normalization\nconventions are\n\n- `Tr(T^a T^b) = TR δ^{ab}`;\n- `Σ_a (T^a)_i^j (T^a)_k^l = TR (δ_i^l δ_k^j - δ_i^j δ_k^l/Nc)`;\n- `Σ_a (T^a)_i^j (T^a)_j^k = CF δ_i^k`;\n- `Σ_{c,d} f^{acd} f^{bcd} = CA δ^{ab}`.\n\n`CA = Nc`, `CF = (Nc² - 1)/(2Nc)`, and `TR = 1/2` are the conventional fundamental\nSU(Nc) specialization, not identities imposed on every input. The default simplifier keeps\nrepresentation invariants symbolic where possible; explicit dimension substitution is a\nseparate Rust setting.\n\n# Examples\n```python\n>>> from symbolica import E\n>>> from symbolica.community.idenso import initialize, simplify_color\n>>> initialize()\n>>> generators = E('''\n...     t(coad(Nc^2-1,a),cof(Nc,i),dind(cof(Nc,j)))\n...     * t(coad(Nc^2-1,a),cof(Nc,k),dind(cof(Nc,l)))\n... ''', default_namespace=\"spenso\")\n>>> simplified = simplify_color(generators)\n>>> \"t(\" not in str(simplified) and \"g(\" in str(simplified)\nTrue\n```\n\n# Arguments\n- `self_`: expression containing SU(N) color structures\n\n# Returns\nThe simplified expression. Unsupported or open indexed structures may remain explicitly in\nthe result; their presence is not an error.\n\n# Notes\nOnly representation-aware Spenso color forms are recognized. Plain Symbolica functions with\nsimilar names are left unchanged. def simplify_color(self_: Expression) -> Expression:"
+    "text": "Simplify registered Spenso color chains, traces, generators, and structure constants. Simplify registered Spenso color chains, traces, generators, and structure constants.\n\nWith the default Python settings, the simplifier evaluates supported closed traces and\nexpands contractions between generators on separate fundamental chains. Its normalization\nconventions are\n\n- `Tr(T^a T^b) = TR δ^{ab}`;\n- `Σ_a (T^a)_i^j (T^a)_k^l = TR (δ_i^l δ_k^j - δ_i^j δ_k^l/Nc)`;\n- `Σ_a (T^a)_i^j (T^a)_j^k = CF δ_i^k`;\n- `Σ_{c,d} f^{acd} f^{bcd} = CA δ^{ab}`.\nAntisymmetry and Jacobi identities apply to the registered structure constants.\n\n`CA = Nc`, `CF = (Nc² - 1)/(2Nc)`, and `TR = 1/2` are the conventional fundamental\nSU(Nc) specialization, not identities imposed on every input. The default simplifier keeps\nrepresentation invariants symbolic where possible; explicit dimension substitution is a\nseparate `ColorSimplifySettings` option.\n\n# Examples\n```python\n>>> from symbolica import E\n>>> from symbolica.community.idenso import simplify_color\n>>> # Built-in representations are registered automatically on import.\n>>> generators = E('''\n...     t(coad(Nc^2-1,a),cof(Nc,i),dind(cof(Nc,j)))\n...     * t(coad(Nc^2-1,a),cof(Nc,k),dind(cof(Nc,l)))\n... ''', default_namespace=\"spenso\")\n>>> simplified = simplify_color(generators)\n>>> \"t(\" not in str(simplified) and \"g(\" in str(simplified)\nTrue\n```\n\n**Representation invariants:**\nUse `Representation.dimension`, `.casimir()`, `.dynkin_index()`, and `.gram(...)`\nto construct the scalar invariants associated with explicitly typed color structures.\n\n# Arguments\n- `expression`: expression containing SU(N) color structures\n\n# Returns\nThe simplified expression, reduced to representation-owned scalar invariants when possible.\nUnsupported or open indexed structures may remain explicitly in the result; their presence\nis not an error.\n\n# Notes\nOnly representation-aware Spenso color forms are recognized. Plain Symbolica functions with\nsimilar names are left unchanged. def simplify_color(expression: Expression, settings: Optional[ColorSimplifySettings] = None) -> Expression:"
+  },
+  {
+    "title": "symbolica.community.idenso.simplify_epsilon",
+    "summary": "Simplify Levi-Civita/metric contractions and pairs of Levi-Civita tensors to a fixed point.",
+    "href": "reference/python/idenso-community/simplify_epsilon-function/",
+    "kind": "python-api",
+    "text": "Simplify Levi-Civita/metric contractions and pairs of Levi-Civita tensors to a fixed point. Simplify Levi-Civita/metric contractions and pairs of Levi-Civita tensors to a fixed point. def simplify_epsilon(expression: Expression) -> Expression:"
   },
   {
     "title": "symbolica.community.idenso.simplify_gamma",
     "summary": "Simplify registered Spenso gamma chains and traces with Idenso's default rules.",
     "href": "reference/python/idenso-community/simplify_gamma-function/",
     "kind": "python-api",
-    "text": "Simplify registered Spenso gamma chains and traces with Idenso's default rules. Simplify registered Spenso gamma chains and traces with Idenso's default rules.\n\nThe dimension-generic part applies compatible Clifford anticommutation, adjacent\ncontractions, and ordinary odd/even trace recursion. Chisholm identities, gamma-five\nanticommutation and traces, gamma-zero conjugation, and chiral-projector rules are applied\nonly when the expression carries explicit four-dimensional Minkowski and bispinor\nrepresentations.\n\nThis function does not select or implement a dimensional-regularization gamma-five scheme.\nIts gamma-five rules are strictly four-dimensional, and the default Python entry point does\nnot enable the optional three-gamma epsilon expansion available through Rust settings.\nGamma factors must use the Spenso representation-aware forms registered by `initialize()`;\nunrecognized plain Symbolica functions are left unchanged.\n\n# Examples\n```python\n>>> from symbolica import E\n>>> from symbolica.community.idenso import initialize, simplify_gamma\n>>> initialize()\n>>> trace = E('''\n...     gamma(bis(4,a),bis(4,b),mink(4,mu))\n...     * gamma(bis(4,b),bis(4,a),mink(4,nu))\n... ''', default_namespace=\"spenso\")\n>>> simplified = simplify_gamma(trace)\n>>> \"gamma(\" not in str(simplified) and \"g(\" in str(simplified)\nTrue\n```\n\n# Arguments\n- `self_`: expression containing gamma matrix products and traces\n\n# Returns\nThe simplified expression with gamma algebra applied. def simplify_gamma(self_: Expression) -> Expression:"
+    "text": "Simplify registered Spenso gamma chains and traces with Idenso's default rules. Simplify registered Spenso gamma chains and traces with Idenso's default rules.\n\nThe dimension-generic part applies compatible Clifford anticommutation, adjacent\ncontractions, and ordinary odd/even trace recursion. Chisholm identities, gamma-five\nanticommutation and traces, gamma-zero conjugation, and chiral-projector rules are applied\nonly when the expression carries explicit four-dimensional Minkowski and bispinor\nrepresentations.\n\nThis function does not select or implement a dimensional-regularization gamma-five scheme.\nIts gamma-five rules are strictly four-dimensional, and the default Python entry point does\nnot enable the optional three-gamma epsilon expansion available through `GammaSimplifySettings`.\nGamma factors must use the Spenso representation-aware forms registered on import;\nunrecognized plain Symbolica functions are left unchanged.\n\n# Examples\n```python\n>>> from symbolica import E\n>>> from symbolica.community.idenso import simplify_gamma\n>>> # Built-in representations are registered automatically on import.\n>>> trace = E('''\n...     gamma(bis(4,a),bis(4,b),mink(4,mu))\n...     * gamma(bis(4,b),bis(4,a),mink(4,nu))\n... ''', default_namespace=\"spenso\")\n>>> simplified = simplify_gamma(trace)\n>>> \"gamma(\" not in str(simplified) and \"g(\" in str(simplified)\nTrue\n```\n\nThe native gamma argument order is `bis(dim,alpha), bis(dim,beta), mink(dim,mu)`:\n`alpha` and `beta` are spinor indices, followed by the Lorentz index `mu`.\nThese forms can also be constructed through the HEP tensor library.\n\n# Arguments\n- `expression`: expression containing gamma matrix products and traces\n\n# Returns\nThe simplified expression with gamma algebra applied.\n\n# Examples:\n```python\nfrom symbolica.community.spenso import TensorLibrary, TensorName\nfrom symbolica.community.idenso import simplify_gamma\nfrom symbolica import S, Expression\n# Get HEP library with standard tensors\nhep_lib = TensorLibrary.hep_lib()\n# Access standard tensors like gamma matrices\ngamma_structure = hep_lib[S(\"spenso::gamma\")]\nprint(gamma_structure)\nprint(simplify_gamma(gamma_structure(3, 4, 7) * gamma_structure(7, 4, 3)))\n``` def simplify_gamma(expression: Expression, settings: Optional[GammaSimplifySettings] = None) -> Expression:"
+  },
+  {
+    "title": "symbolica.community.idenso.simplify_gamma0",
+    "summary": "Simplify products and linear combinations involving the time-like gamma matrix gamma0.",
+    "href": "reference/python/idenso-community/simplify_gamma0-function/",
+    "kind": "python-api",
+    "text": "Simplify products and linear combinations involving the time-like gamma matrix `gamma0`. Simplify products and linear combinations involving the time-like gamma matrix `gamma0`. def simplify_gamma0(expression: Expression) -> Expression:"
+  },
+  {
+    "title": "symbolica.community.idenso.simplify_gamma_conjugate",
+    "summary": "Rewrite conjugated gamma matrices as gamma0-sandwiched matrices with fresh spinor indices.",
+    "href": "reference/python/idenso-community/simplify_gamma_conjugate-function/",
+    "kind": "python-api",
+    "text": "Rewrite conjugated gamma matrices as gamma0-sandwiched matrices with fresh spinor indices. Rewrite conjugated gamma matrices as gamma0-sandwiched matrices with fresh spinor indices.\n\nRaises `GammaConjugationError` when the expression cannot be rewritten consistently. def simplify_gamma_conjugate(expression: Expression) -> Expression:"
   },
   {
     "title": "symbolica.community.idenso.simplify_metrics",
     "summary": "Simplifies contractions involving metric tensors and identity tensors.",
     "href": "reference/python/idenso-community/simplify_metrics-function/",
     "kind": "python-api",
-    "text": "Simplifies contractions involving metric tensors and identity tensors. Simplifies contractions involving metric tensors and identity tensors.\n\nApplies fundamental tensor algebra rules for metric and identity tensors:\n\n**Metric tensor rules:**\n- `gᵘᵛ pᵥ → pᵘ` (index raising/lowering)\n- `gᵘᵛ gᵥρ → gᵘρ` or `δᵘρ` (metric composition)\n- `gᵘᵤ → D` (dimension of spacetime)\n- `ηᵘᵛ pᵥ → pᵘ` (flat metric contractions)\n\n**Identity tensor rules:**\n- `δᵘᵛ pᵥ → pᵘ` (Kronecker delta contraction)\n- `δᵘᵤ → D` (trace of identity)\n\nThe function recognizes metrics as `spenso::g(...)`\n\n# Arguments\n- `self_`: expression containing metric/identity tensor contractions\n\n# Returns\nThe simplified expression with metric rules applied.\n\n# Examples:\n```python\nfrom symbolica.community.idenso import simplify_metrics, to_dots\nfrom symbolica.community.spenso import Representation, TensorName\nq = TensorName(\"q\")\ng = TensorName.g()\nrep = Representation.euc(3)\n# With slots (creates TensorIndices)\nmu = rep(\"mu\")\nnu = rep(\"nu\")\nprint(simplify_metrics(g(mu, nu) * q(mu)))\n``` def simplify_metrics(self_: Expression) -> Expression:"
+    "text": "Simplifies contractions involving metric tensors and identity tensors. Simplifies contractions involving metric tensors and identity tensors.\n\nApplies fundamental tensor algebra rules for metric and identity tensors:\n\n**Metric tensor rules:**\n- `gᵘᵛ pᵥ → pᵘ` (index raising/lowering)\n- `gᵘᵛ gᵥρ → gᵘρ` or `δᵘρ` (metric composition)\n- `gᵘᵤ → D` (dimension of spacetime)\n- `ηᵘᵛ pᵥ → pᵘ` (flat metric contractions)\n\n**Identity tensor rules:**\n- `δᵘᵛ pᵥ → pᵘ` (Kronecker delta contraction)\n- `δᵘᵤ → D` (trace of identity)\n\nThe function recognizes metrics as `spenso::g(...)`\n\n# Arguments\n- `expression`: expression containing metric/identity tensor contractions\n\n# Returns\nThe simplified expression with metric rules applied.\n\n# Examples:\n```python\nfrom symbolica.community.idenso import simplify_metrics, to_dots\nfrom symbolica.community.spenso import Representation, TensorExpression, TensorName\nq = TensorName(\"q\")\nrep = Representation.euc(3)\ng = TensorExpression.g(rep)\n# With slots (creates TensorExpression)\nmu = rep(\"mu\")\nnu = rep(\"nu\")\nprint(simplify_metrics(g(\"mu\", \"nu\") * q(mu)))\n``` def simplify_metrics(expression: Expression) -> Expression:"
+  },
+  {
+    "title": "symbolica.community.idenso.spenso_conjugate",
+    "summary": "Complex-conjugate an expression while keeping unevaluated conjugations explicit.",
+    "href": "reference/python/idenso-community/spenso_conjugate-function/",
+    "kind": "python-api",
+    "text": "Complex-conjugate an expression while keeping unevaluated conjugations explicit. Complex-conjugate an expression while keeping unevaluated conjugations explicit. def spenso_conjugate(expression: Expression) -> Expression:"
+  },
+  {
+    "title": "symbolica.community.idenso.to_cof_dimension_invariants",
+    "summary": "Replace supported cof(N) Casimir, Dynkin-index, and Gram invariants by dimension formulas.",
+    "href": "reference/python/idenso-community/to_cof_dimension_invariants-function/",
+    "kind": "python-api",
+    "text": "Replace supported `cof(N)` Casimir, Dynkin-index, and Gram invariants by dimension formulas. Replace supported `cof(N)` Casimir, Dynkin-index, and Gram invariants by dimension formulas. def to_cof_dimension_invariants(expression: Expression) -> Expression:"
+  },
+  {
+    "title": "symbolica.community.idenso.to_color_casimir",
+    "summary": "Rewrite the supplied color-representation dimensions and invariants into a Casimir basis.",
+    "href": "reference/python/idenso-community/to_color_casimir-function/",
+    "kind": "python-api",
+    "text": "Rewrite the supplied color-representation dimensions and invariants into a Casimir basis. Rewrite the supplied color-representation dimensions and invariants into a Casimir basis.\n\n`fundamental` and `adjoint` accept Spynso `Representation` objects or their symbolic\nexpressions. Only scalar coefficient positions are rewritten. def to_color_casimir(expression: Expression, *, fundamental: Representation | Expression, adjoint: Representation | Expression, settings: Optional[ColorCasimirSettings] = None) -> Expression:"
   },
   {
     "title": "symbolica.community.idenso.to_dots",
     "summary": "Converts contracted Lorentz/Minkowski indices into dot product notation.",
     "href": "reference/python/idenso-community/to_dots-function/",
     "kind": "python-api",
-    "text": "Converts contracted Lorentz/Minkowski indices into dot product notation. Converts contracted Lorentz/Minkowski indices into dot product notation.\n\nAutomatically identifies and converts patterns like `p(mink(D, mu)) * q(mink(D, mu))`\ninto the compact, representation-carrying `dot(p(mink(D)), q(mink(D)))` notation. This\nsimplification is essential for physics calculations involving four-vectors.\n\nThe function recognizes:\n- Contracted vector indices: `pᵘqᵤ → p·q`\n- Multiple contractions: `pᵘqᵤrᵛsᵥ → (p·q)(r·s)`\n- Self-contractions: `pᵘpᵤ → p²`\n\n# Arguments\n- `self_`: expression containing contracted Minkowski vector indices\n\n# Returns\nThe expression with vector contractions converted to dot products.\n\n# Examples:\n```python\nfrom symbolica.community.idenso import to_dots\nfrom symbolica.community.spenso import Representation, TensorName\np = TensorName(\"p\")\nq = TensorName(\"q\")\nrep = Representation.euc(3)\n# With slots (creates TensorIndices)\nmu = rep(\"mu\")\nnu = rep(\"nu\")\n\nprint(to_dots( p(mu)*q(mu)))\n``` def to_dots(self_: Expression) -> Expression:"
+    "text": "Converts contracted Lorentz/Minkowski indices into dot product notation. Converts contracted Lorentz/Minkowski indices into dot product notation.\n\nAutomatically identifies and converts patterns like `p(mink(D, mu)) * q(mink(D, mu))`\ninto the compact, representation-carrying `dot(p(mink(D)), q(mink(D)))` notation. This\nsimplification is essential for physics calculations involving four-vectors.\n\nThe function recognizes:\n- Contracted vector indices: `pᵘqᵤ → p·q`\n- Multiple contractions: `pᵘqᵤrᵛsᵥ → (p·q)(r·s)`\n- Self-contractions: `pᵘpᵤ → p²`\n\n# Arguments\n- `expression`: expression containing contracted Minkowski vector indices\n\n# Returns\nThe expression with vector contractions converted to dot products.\n\n# Examples:\n```python\nfrom symbolica.community.idenso import to_dots\nfrom symbolica.community.spenso import Representation, TensorName\np = TensorName(\"p\")\nq = TensorName(\"q\")\nrep = Representation.euc(3)\n# With slots (creates TensorExpression)\nmu = rep(\"mu\")\nnu = rep(\"nu\")\n\nprint(to_dots( p(mu)*q(mu)))\n``` def to_dots(expression: Expression) -> Expression:"
+  },
+  {
+    "title": "symbolica.community.idenso.uncook",
+    "summary": "Restore symbols produced by matching reversible cooking settings.",
+    "href": "reference/python/idenso-community/uncook-function/",
+    "kind": "python-api",
+    "text": "Restore symbols produced by matching reversible cooking settings. Restore symbols produced by matching reversible cooking settings. def uncook(expression: Expression, settings: Optional[CookSettings] = None) -> Expression:"
+  },
+  {
+    "title": "symbolica.community.idenso.undo_all",
+    "summary": "Expand Schoonschip, dot, chain, and trace shorthands into explicit tensor expressions.",
+    "href": "reference/python/idenso-community/undo_all-function/",
+    "kind": "python-api",
+    "text": "Expand Schoonschip, dot, chain, and trace shorthands into explicit tensor expressions. Expand Schoonschip, dot, chain, and trace shorthands into explicit tensor expressions.\n\n\nRaises `NetworkToolingError` when the expression is not a valid tensor network or evaluation fails. def undo_all(expression: Expression) -> Expression:"
+  },
+  {
+    "title": "symbolica.community.idenso.undo_chain",
+    "summary": "Expand open-chain shorthands while leaving dots, traces, and Schoonschip forms compact.",
+    "href": "reference/python/idenso-community/undo_chain-function/",
+    "kind": "python-api",
+    "text": "Expand open-chain shorthands while leaving dots, traces, and Schoonschip forms compact. Expand open-chain shorthands while leaving dots, traces, and Schoonschip forms compact.\n\n\nRaises `NetworkToolingError` when the expression is not a valid tensor network or evaluation fails. def undo_chain(expression: Expression) -> Expression:"
+  },
+  {
+    "title": "symbolica.community.idenso.undo_dots",
+    "summary": "Expand dot-product shorthands while leaving other tensor shorthands compact.",
+    "href": "reference/python/idenso-community/undo_dots-function/",
+    "kind": "python-api",
+    "text": "Expand dot-product shorthands while leaving other tensor shorthands compact. Expand dot-product shorthands while leaving other tensor shorthands compact.\n\n\nRaises `NetworkToolingError` when the expression is not a valid tensor network or evaluation fails. def undo_dots(expression: Expression) -> Expression:"
+  },
+  {
+    "title": "symbolica.community.idenso.undo_schoonschip",
+    "summary": "Expand Schoonschip tensor shorthands while leaving dots, chains, and traces compact.",
+    "href": "reference/python/idenso-community/undo_schoonschip-function/",
+    "kind": "python-api",
+    "text": "Expand Schoonschip tensor shorthands while leaving dots, chains, and traces compact. Expand Schoonschip tensor shorthands while leaving dots, chains, and traces compact.\n\n\nRaises `NetworkToolingError` when the expression is not a valid tensor network or evaluation fails. def undo_schoonschip(expression: Expression) -> Expression:"
+  },
+  {
+    "title": "symbolica.community.idenso.undo_single_length",
+    "summary": "Replace one-factor chain shorthands by their underlying tensor factor.",
+    "href": "reference/python/idenso-community/undo_single_length-function/",
+    "kind": "python-api",
+    "text": "Replace one-factor chain shorthands by their underlying tensor factor. Replace one-factor chain shorthands by their underlying tensor factor. def undo_single_length(expression: Expression) -> Expression:"
+  },
+  {
+    "title": "symbolica.community.idenso.undo_trace",
+    "summary": "Expand trace shorthands while leaving dots, chains, and Schoonschip forms compact.",
+    "href": "reference/python/idenso-community/undo_trace-function/",
+    "kind": "python-api",
+    "text": "Expand trace shorthands while leaving dots, chains, and Schoonschip forms compact. Expand trace shorthands while leaving dots, chains, and Schoonschip forms compact.\n\n\nRaises `NetworkToolingError` when the expression is not a valid tensor network or evaluation fails. def undo_trace(expression: Expression) -> Expression:"
+  },
+  {
+    "title": "symbolica.community.idenso.wrap_color",
+    "summary": "Expand around color structures and wrap each resulting scalar coefficient with symbol.",
+    "href": "reference/python/idenso-community/wrap_color-function/",
+    "kind": "python-api",
+    "text": "Expand around color structures and wrap each resulting scalar coefficient with `symbol`. Expand around color structures and wrap each resulting scalar coefficient with `symbol`. def wrap_color(expression: Expression, symbol: Expression) -> Expression:"
   },
   {
     "title": "symbolica.community.idenso.wrap_dummies",
     "summary": "Wraps only the dummy (contracted) indices within the expression using a header symbol.",
     "href": "reference/python/idenso-community/wrap_dummies-function/",
     "kind": "python-api",
-    "text": "Wraps only the dummy (contracted) indices within the expression using a header symbol. Wraps only the dummy (contracted) indices within the expression using a header symbol.\n\nSimilar to `wrap_indices`, but selectively identifies and wraps only contracted\nindices (those appearing once upstairs and once downstairs, or twice in a\nself-dual representation), leaving external (dangling) indices untouched.\nThis is crucial for proper index management in tensor calculations.\n\nContracted indices are those that:\n- Appear in both upper and lower positions (for dualizable reps)\n- Appear twice in the same position (for self-dual reps)\n- Are summed over (Einstein summation convention)\n\n# Arguments\n- `self_`: input expression containing both dummy and free indices\n- `header`: symbol to use as wrapper function name for dummy indices only\n\n# Returns\nA new expression with only contracted indices wrapped.\n\n# Examples:\n```python\nfrom symbolica.community.spenso import TensorName, Slot, Representation\nimport symbolica as sp\nfrom symbolica.community.idenso import simplify_metrics, wrap_dummies\n\nT = TensorName(\"T\")\nrep = Representation.euc(3)\n# With slots (creates TensorIndices)\nmu = rep(\"mu\")\nnu = rep(\"nu\")\nx = sp.S(\"x\")\ntensor_with_args = T(mu, nu, nu, x)  # T(mu, nu; x)\n# print(tensor_with_args)\nprint(wrap_dummies(tensor_with_args.to_expression(), sp.S(\"wrap\")))\n\n``` def wrap_dummies(self_: Expression, header: Expression) -> Expression:"
+    "text": "Wraps only the dummy (contracted) indices within the expression using a header symbol. Wraps only the dummy (contracted) indices within the expression using a header symbol.\n\nSimilar to `wrap_indices`, but selectively identifies and wraps only contracted\nindices (those appearing once upstairs and once downstairs, or twice in a\nself-dual representation), leaving external (dangling) indices untouched.\nThis is crucial for proper index management in tensor calculations.\n\nContracted indices are those that:\n- Appear in both upper and lower positions (for dualizable reps)\n- Appear twice in the same position (for self-dual reps)\n- Are summed over (Einstein summation convention)\n\n# Arguments\n- `expression`: input expression containing both dummy and free indices\n- `header`: symbol to use as wrapper function name for dummy indices only\n\n# Returns\nA new expression with only contracted indices wrapped.\n\n# Raises\n`ValueError` when the expression cannot be parsed as a tensor network.\n\n# Examples:\n```python\nfrom symbolica.community.spenso import TensorName, Slot, Representation\nimport symbolica as sp\nfrom symbolica.community.idenso import simplify_metrics, wrap_dummies\n\nT = TensorName(\"T\")\nrep = Representation.euc(3)\n# With slots (creates TensorExpression)\nmu = rep(\"mu\")\nnu = rep(\"nu\")\nx = sp.S(\"x\")\ntensor_with_args = T(x, mu, nu, nu)  # T(x; mu, nu, nu)\n# print(tensor_with_args)\nprint(wrap_dummies(tensor_with_args.to_expression(), sp.S(\"wrap\")))\n\n``` def wrap_dummies(expression: Expression, header: Expression) -> Expression:"
   },
   {
     "title": "symbolica.community.idenso.wrap_indices",
     "summary": "Wrap all abstract indices with a header symbol",
     "href": "reference/python/idenso-community/wrap_indices-function/",
     "kind": "python-api",
-    "text": "Wrap all abstract indices with a header symbol # Arguments - `self_`: input expression containing tensor indices - `header`: symbol to use as the wrapper function for all indices # Returns Expression with all indices wrapped by the header symbol. Wrap all abstract indices with a header symbol\n\n# Arguments\n- `self_`: input expression containing tensor indices\n- `header`: symbol to use as the wrapper function for all indices\n\n# Returns\nExpression with all indices wrapped by the header symbol.\n\n# Examples:\n```python\nfrom symbolica.community.spenso import TensorName, Slot, Representation\nimport symbolica as sp\nfrom symbolica.community.idenso import wrap_indices\n\nT = TensorName(\"T\")\nrep = Representation.euc(3)\n# With slots (creates TensorIndices)\nmu = rep(\"mu\")\nnu = rep(\"nu\")\nx = sp.S(\"x\")\ntensor_with_args = T(mu, nu, x)  # T(mu, nu; x)\nprint(tensor_with_args)\nprint(wrap_indices(tensor_with_args.to_expression(), sp.S(\"wrap\")))\n\n``` def wrap_indices(self_: Expression, header: Expression) -> Expression:"
+    "text": "Wrap all abstract indices with a header symbol # Arguments - `expression`: input expression containing tensor indices - `header`: symbol to use as the wrapper function for all indices # Returns Expression with all indices wrapped by the header symbol. Wrap all abstract indices with a header symbol\n\n# Arguments\n- `expression`: input expression containing tensor indices\n- `header`: symbol to use as the wrapper function for all indices\n\n# Returns\nExpression with all indices wrapped by the header symbol.\n\n# Examples:\n```python\nfrom symbolica.community.spenso import TensorName, Slot, Representation\nimport symbolica as sp\nfrom symbolica.community.idenso import wrap_indices\n\nT = TensorName(\"T\")\nrep = Representation.euc(3)\n# With slots (creates TensorExpression)\nmu = rep(\"mu\")\nnu = rep(\"nu\")\nx = sp.S(\"x\")\ntensor_with_args = T(x, mu, nu)  # T(x; mu, nu)\nprint(tensor_with_args)\nprint(wrap_indices(tensor_with_args.to_expression(), sp.S(\"wrap\")))\n\n``` def wrap_indices(expression: Expression, header: Expression) -> Expression:"
   }
 ]

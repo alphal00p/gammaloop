@@ -12,7 +12,7 @@
 <a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>symbolica::{
 <a href=#12 id=12 data-nosnippet>12</a>    atom::{Atom, AtomCore, AtomView, Symbol},
 <a href=#13 id=13 data-nosnippet>13</a>    domains::{
-<a href=#14 id=14 data-nosnippet>14</a>        algebraic_number::AlgebraicExtension,
+<a href=#14 id=14 data-nosnippet>14</a>        algebraic::AlgebraicExtension,
 <a href=#15 id=15 data-nosnippet>15</a>        integer::IntegerRing,
 <a href=#16 id=16 data-nosnippet>16</a>        rational::{FractionField, Q},
 <a href=#17 id=17 data-nosnippet>17</a>    },
@@ -27,7 +27,7 @@
 <a href=#26 id=26 data-nosnippet>26</a><span class="kw">use super</span>::{GS, W_};
 <a href=#27 id=27 data-nosnippet>27</a>
 <a href=#28 id=28 data-nosnippet>28</a><span class="kw">pub static </span>Q_I: LazyLock&lt;AlgebraicExtension&lt;FractionField&lt;IntegerRing&gt;&gt;&gt; =
-<a href=#29 id=29 data-nosnippet>29</a>    LazyLock::new(|| AlgebraicExtension::new_complex(Q));
+<a href=#29 id=29 data-nosnippet>29</a>    LazyLock::new(|| AlgebraicExtension::complex(Q));
 <a href=#30 id=30 data-nosnippet>30</a><span class="kw">static </span>RAW_UFO_MOMENTUM: LazyLock&lt;Symbol&gt; = LazyLock::new(|| <span class="macro">symbol!</span>(<span class="string">"UFO::P"</span>));
 <a href=#31 id=31 data-nosnippet>31</a><span class="kw">static </span>RAW_UFO_PSLASH: LazyLock&lt;Symbol&gt; = LazyLock::new(|| <span class="macro">symbol!</span>(<span class="string">"UFO::PSlash"</span>));
 <a href=#32 id=32 data-nosnippet>32</a>

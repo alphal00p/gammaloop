@@ -11,6 +11,7 @@
     "version": "0.6.0",
     "language": "rust",
     "features": [
+      "native",
       "shadowing"
     ]
   },
@@ -50,7 +51,7 @@
             "required_features": [],
             "docs": {
               "format": "rust-markdown",
-              "body": "Ordered structural metadata for a tensor's external coordinates.\n\nEach external slot combines a representation, its dimension, and an\nabstract index. Iterator and coordinate arguments use the same slot order.\nThe default flattening is row-major: for shape `[d0, d1, ..., dn]`, the last\ncoordinate varies fastest. Consequently [`Self::flat_index`] and\n[`Self::expanded_index`] are inverse mappings in that order.\n\nContraction is structural rather than positional. A slot in one operand is\nremoved only when the other operand contains the same abstract index in the\ndual representation and with the same dimension. All other slots remain\nfree and form the output structure. Dummy indices obey the same equality\nrule as named indices; a freshly allocated dummy does not match every other\ndummy.\n\nConstructors such as [`OrderedStructure::new`] may canonicalize an unsorted\nslot list and return a [`PermutedStructure`] recording that permutation.\nComponent data must follow the finalized structure order, not the caller's\noriginal slot order."
+              "body": "Ordered structural metadata for a tensor's external coordinates.\n\nEach external slot combines a representation, its dimension, and an\nabstract index. Iterator and coordinate arguments use the same slot order.\nThe default flattening is row-major: for shape `[d0, d1, ..., dn]`, the last\ncoordinate varies fastest. Consequently [`Self::flat_index`] and\n[`Self::expanded_index`] are inverse mappings in that order.\n\nContraction is structural rather than positional. A slot in one operand is\nremoved only when the other operand contains the same abstract index in the\ndual representation and with the same dimension. All other slots remain\nfree and form the output structure. Dummy indices obey the same equality\nrule as named indices; a freshly allocated dummy does not match every other\ndummy.\n\nConstructors such as [`OrderedStructure::new`] may canonicalize an unsorted\nslot list and return a [`Canonicalized`] recording that canonicalization.\nComponent data must follow the finalized structure order, not the caller's\noriginal slot order."
             },
             "summary": "Describes ordered slots, dimensions, representations, and contraction compatibility independently of data.",
             "signature": "pub trait TensorStructure {}",
@@ -89,13 +90,13 @@
                 "members": []
               },
               {
-                "name": "reindex",
+                "name": "reindex_storage",
                 "kind": "method",
                 "docs": {
                   "format": "rust-markdown",
-                  "body": "Replaces the slot indices in order and records any resulting permutations."
+                  "body": "Replaces slot indices in storage order and records the pending index permutation."
                 },
-                "signature": "fn reindex(self, indices : & [< Self :: Slot as IsAbstractSlot > :: Aind],) ->\nResult < PermutedStructure < Self :: Indexed > , StructureError >;",
+                "signature": "fn\nreindex_storage(self, indices : &\n[< Self :: Slot as IsAbstractSlot > :: Aind],) -> Result < Reindexed < Self ::\nIndexed > , StructureError >;",
                 "default": null,
                 "members": []
               },
@@ -162,6 +163,17 @@
                   "body": "Iterates over the abstract indices of external slots in structure order."
                 },
                 "signature": "fn external_indices_iter(& self) -> impl Iterator < Item = < Self :: Slot as\nIsAbstractSlot > :: Aind >;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "symbolic_external_args",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Returns the symbolic arguments for external tensor ports in storage order."
+                },
+                "signature": "fn symbolic_external_args(& self) -> Vec < Atom > where < Self :: Slot as\nIsAbstractSlot > :: Aind : ParseableAind, { … }",
                 "default": null,
                 "members": []
               },
@@ -501,7 +513,7 @@
             "required_features": [],
             "docs": {
               "format": "rust-markdown",
-              "body": "Contiguous tensor components paired with their structural coordinate map.\n\n`data` follows [`TensorStructure::strides`], which is row-major by default:\ncoordinates are given in external-slot order and the last coordinate varies\nfastest. [`Self::from_data`] validates the component count but does not\npermute values if the supplied structure was created from an unsorted slot\nlist."
+              "body": "Contiguous tensor components paired with their structural coordinate map.\n\n`data` follows [`TensorStructure::strides`], which is row-major by default:\ncoordinates are given in external-slot order and the last coordinate varies\nfastest. [`Self::from_storage_data`] validates the component count but does not\npermute values if the supplied structure was created from an unsorted slot\nlist."
             },
             "summary": "Stores every tensor component in structure-defined flat order.",
             "signature": "pub struct DenseTensor < T, S = OrderedStructure > {}",
@@ -609,7 +621,7 @@
             "source": {
               "identifier": "spenso::tensors::data::sparse::SparseTensor",
               "file": "crates/spenso/src/tensors/data/sparse.rs",
-              "line": 51,
+              "line": 53,
               "column": 1
             }
           },
@@ -677,7 +689,7 @@
             "required_features": [],
             "docs": {
               "format": "rust-markdown",
-              "body": "An owned tensor-expression graph together with the values referenced by it.\n\nAlgebraic operators compose networks without evaluating them. Execution is\nin place: [`Self::execute`] merges adjacent operations, traces self-loops,\nasks an [`ExecutionStrategy`] which ready graph operations to run, and asks\na [`ContractionStrategy`] which tensor pair to contract inside each product.\nThese strategy types are zero-sized policies evaluated against the current\ngraph and store. They do not produce or persist a reusable plan.\n\nOn success, the result remains in this network. Use [`Self::result_tensor`]\nfor a tensor-valued calculation or [`Self::result_scalar`] for a scalar.\n[`Self::result`] exposes the lower-level distinction between local values and\nunresolved library keys. A bounded strategy such as [`Steps`] may return\nsuccessfully before the graph has one result node; the result accessors then\nreport the incomplete graph through [`TensorNetworkError`].\n\n# Three-tensor contraction\n\nThis computes `A[i,j] B[j,k] c[k]`. [`MinResultRank`] compares pairs while\nexecuting the product. Here `B c` has one free slot while `A B` has two, so\nthe strategy selects `B c` first. The network stores no plan after making\nthat decision. Component vectors are row-major in each structure's external\nslot order.\n\n```rust\nuse spenso::{\nnetwork::{\nExecutionResult, MinResultRank, Network, Sequential,\nlibrary::{DummyKey, DummyLibrary, DummyLibraryTensor, panicing::ErroringLibrary},\nstore::NetworkStore,\n},\nstructure::{\nOrderedStructure, TensorStructure,\nabstract_index::AbstractIndex,\nrepresentation::{Euclidean, RepName},\n},\ntensors::data::DenseTensor,\n};\n\ntype Structure = OrderedStructure<Euclidean>;\ntype Tensor = DenseTensor<f64, Structure>;\ntype Store = NetworkStore<Tensor, f64>;\ntype Net = Network<Store, DummyKey, DummyKey>;\ntype LibraryTensor = DummyLibraryTensor<Tensor>;\n\nlet rep = Euclidean {};\nlet a_structure = OrderedStructure::new(vec![\nrep.new_slot(2, 0),\nrep.new_slot(2, 1),\n]).structure;\nlet b_structure = OrderedStructure::new(vec![\nrep.new_slot(2, 1),\nrep.new_slot(2, 2),\n]).structure;\nlet c_structure = OrderedStructure::new(vec![rep.new_slot(2, 2)]).structure;\n\nlet a = DenseTensor::from_data(vec![1.0, 2.0, 3.0, 4.0], a_structure).unwrap();\nlet b = DenseTensor::from_data(vec![5.0, 6.0, 7.0, 8.0], b_structure).unwrap();\nlet c = DenseTensor::from_data(vec![2.0, 3.0], c_structure).unwrap();\nlet tensors = DummyLibrary::new();\nlet functions = ErroringLibrary::new();\n\nlet mut network = Net::from_tensor(a) * Net::from_tensor(b) * Net::from_tensor(c);\nnetwork\n.execute::<Sequential, MinResultRank, LibraryTensor, _, _>(&tensors, &functions)\n.unwrap();\n\nlet ExecutionResult::Val(result) =\nnetwork.result_tensor::<LibraryTensor, _>(&tensors).unwrap()\nelse {\npanic!(\"a nonempty product must produce a concrete value\");\n};\nassert_eq!(result.data, vec![104.0, 236.0]);\nassert_eq!(result.structure.order(), 1);\nassert_eq!(\nresult.structure.external_indices(),\nvec![AbstractIndex::Normal(0)],\n);\n```"
+              "body": "An owned tensor-expression graph together with the values referenced by it.\n\nAlgebraic operators compose networks without evaluating them. Execution is\nin place: [`Self::execute`] merges adjacent operations, traces self-loops,\nasks an [`ExecutionStrategy`] which ready graph operations to run, and asks\na [`ContractionStrategy`] which tensor pair to contract inside each product.\nThese strategy types are zero-sized policies evaluated against the current\ngraph and store. They do not produce or persist a reusable plan.\n\nOn success, the result remains in this network. Use [`Self::result_tensor`]\nfor a tensor-valued calculation or [`Self::result_scalar`] for a scalar.\n[`Self::result`] exposes the lower-level distinction between local values and\nunresolved library keys. A bounded strategy such as [`Steps`] may return\nsuccessfully before the graph has one result node; the result accessors then\nreport the incomplete graph through [`TensorNetworkError`].\n\n# Three-tensor contraction\n\nThis computes `A[i,j] B[j,k] c[k]`. [`MinResultRank`] compares pairs while\nexecuting the product. Here `B c` has one free slot while `A B` has two, so\nthe strategy selects `B c` first. The network stores no plan after making\nthat decision. Component vectors are row-major in each structure's external\nslot order.\n\n```rust\nuse spenso::{\nnetwork::{\nExecutionResult, MinResultRank, Network, Sequential,\nlibrary::{DummyKey, DummyLibrary, DummyLibraryTensor, panicing::ErroringLibrary},\nstore::NetworkStore,\n},\nstructure::{\nOrderedStructure, TensorStructure,\nabstract_index::AbstractIndex,\nrepresentation::{Euclidean, RepName},\n},\ntensors::data::DenseTensor,\n};\n\ntype Structure = OrderedStructure<Euclidean>;\ntype Tensor = DenseTensor<f64, Structure>;\ntype Store = NetworkStore<Tensor, f64>;\ntype Net = Network<Store, DummyKey, DummyKey>;\ntype LibraryTensor = DummyLibraryTensor<Tensor>;\n\nlet rep = Euclidean {};\nlet a_structure = OrderedStructure::new(vec![\nrep.new_slot(2, 0),\nrep.new_slot(2, 1),\n]).into_canonical();\nlet b_structure = OrderedStructure::new(vec![\nrep.new_slot(2, 1),\nrep.new_slot(2, 2),\n]).into_canonical();\nlet c_structure = OrderedStructure::new(vec![rep.new_slot(2, 2)]).into_canonical();\n\nlet a = DenseTensor::from_storage_data(vec![1.0, 2.0, 3.0, 4.0], a_structure).unwrap();\nlet b = DenseTensor::from_storage_data(vec![5.0, 6.0, 7.0, 8.0], b_structure).unwrap();\nlet c = DenseTensor::from_storage_data(vec![2.0, 3.0], c_structure).unwrap();\nlet tensors = DummyLibrary::new();\nlet functions = ErroringLibrary::new();\n\nlet mut network = Net::from_tensor(a) * Net::from_tensor(b) * Net::from_tensor(c);\nnetwork\n.execute::<Sequential, MinResultRank, LibraryTensor, _, _>(&tensors, &functions)\n.unwrap();\n\nlet ExecutionResult::Val(result) =\nnetwork.result_tensor::<LibraryTensor, _>(&tensors).unwrap()\nelse {\npanic!(\"a nonempty product must produce a concrete value\");\n};\nassert_eq!(result.data, vec![104.0, 236.0]);\nassert_eq!(result.structure.order(), 1);\nassert_eq!(\nresult.structure.external_indices(),\nvec![AbstractIndex::Normal(0)],\n);\n```"
             },
             "summary": "Binds symbolic tensor expressions to libraries and an executable contraction graph.",
             "signature": "pub struct Network < S, LibKey, FunKey, Aind = AbstractIndex > {}",
@@ -689,7 +701,7 @@
               {
                 "title": "Example 1",
                 "language": "rust",
-                "code": "use spenso::{\nnetwork::{\nExecutionResult, MinResultRank, Network, Sequential,\nlibrary::{DummyKey, DummyLibrary, DummyLibraryTensor, panicing::ErroringLibrary},\nstore::NetworkStore,\n},\nstructure::{\nOrderedStructure, TensorStructure,\nabstract_index::AbstractIndex,\nrepresentation::{Euclidean, RepName},\n},\ntensors::data::DenseTensor,\n};\n\ntype Structure = OrderedStructure<Euclidean>;\ntype Tensor = DenseTensor<f64, Structure>;\ntype Store = NetworkStore<Tensor, f64>;\ntype Net = Network<Store, DummyKey, DummyKey>;\ntype LibraryTensor = DummyLibraryTensor<Tensor>;\n\nlet rep = Euclidean {};\nlet a_structure = OrderedStructure::new(vec![\nrep.new_slot(2, 0),\nrep.new_slot(2, 1),\n]).structure;\nlet b_structure = OrderedStructure::new(vec![\nrep.new_slot(2, 1),\nrep.new_slot(2, 2),\n]).structure;\nlet c_structure = OrderedStructure::new(vec![rep.new_slot(2, 2)]).structure;\n\nlet a = DenseTensor::from_data(vec![1.0, 2.0, 3.0, 4.0], a_structure).unwrap();\nlet b = DenseTensor::from_data(vec![5.0, 6.0, 7.0, 8.0], b_structure).unwrap();\nlet c = DenseTensor::from_data(vec![2.0, 3.0], c_structure).unwrap();\nlet tensors = DummyLibrary::new();\nlet functions = ErroringLibrary::new();\n\nlet mut network = Net::from_tensor(a) * Net::from_tensor(b) * Net::from_tensor(c);\nnetwork\n.execute::<Sequential, MinResultRank, LibraryTensor, _, _>(&tensors, &functions)\n.unwrap();\n\nlet ExecutionResult::Val(result) =\nnetwork.result_tensor::<LibraryTensor, _>(&tensors).unwrap()\nelse {\npanic!(\"a nonempty product must produce a concrete value\");\n};\nassert_eq!(result.data, vec![104.0, 236.0]);\nassert_eq!(result.structure.order(), 1);\nassert_eq!(\nresult.structure.external_indices(),\nvec![AbstractIndex::Normal(0)],\n);"
+                "code": "use spenso::{\nnetwork::{\nExecutionResult, MinResultRank, Network, Sequential,\nlibrary::{DummyKey, DummyLibrary, DummyLibraryTensor, panicing::ErroringLibrary},\nstore::NetworkStore,\n},\nstructure::{\nOrderedStructure, TensorStructure,\nabstract_index::AbstractIndex,\nrepresentation::{Euclidean, RepName},\n},\ntensors::data::DenseTensor,\n};\n\ntype Structure = OrderedStructure<Euclidean>;\ntype Tensor = DenseTensor<f64, Structure>;\ntype Store = NetworkStore<Tensor, f64>;\ntype Net = Network<Store, DummyKey, DummyKey>;\ntype LibraryTensor = DummyLibraryTensor<Tensor>;\n\nlet rep = Euclidean {};\nlet a_structure = OrderedStructure::new(vec![\nrep.new_slot(2, 0),\nrep.new_slot(2, 1),\n]).into_canonical();\nlet b_structure = OrderedStructure::new(vec![\nrep.new_slot(2, 1),\nrep.new_slot(2, 2),\n]).into_canonical();\nlet c_structure = OrderedStructure::new(vec![rep.new_slot(2, 2)]).into_canonical();\n\nlet a = DenseTensor::from_storage_data(vec![1.0, 2.0, 3.0, 4.0], a_structure).unwrap();\nlet b = DenseTensor::from_storage_data(vec![5.0, 6.0, 7.0, 8.0], b_structure).unwrap();\nlet c = DenseTensor::from_storage_data(vec![2.0, 3.0], c_structure).unwrap();\nlet tensors = DummyLibrary::new();\nlet functions = ErroringLibrary::new();\n\nlet mut network = Net::from_tensor(a) * Net::from_tensor(b) * Net::from_tensor(c);\nnetwork\n.execute::<Sequential, MinResultRank, LibraryTensor, _, _>(&tensors, &functions)\n.unwrap();\n\nlet ExecutionResult::Val(result) =\nnetwork.result_tensor::<LibraryTensor, _>(&tensors).unwrap()\nelse {\npanic!(\"a nonempty product must produce a concrete value\");\n};\nassert_eq!(result.data, vec![104.0, 236.0]);\nassert_eq!(result.structure.order(), 1);\nassert_eq!(\nresult.structure.external_indices(),\nvec![AbstractIndex::Normal(0)],\n);"
               },
               {
                 "title": "Supported usage",
@@ -845,7 +857,7 @@
             "source": {
               "identifier": "spenso::network::ExecutionStrategy",
               "file": "crates/spenso/src/network/mod.rs",
-              "line": 3142,
+              "line": 3148,
               "column": 1
             }
           },
@@ -922,7 +934,7 @@
             "source": {
               "identifier": "spenso::network::ExecutionMode",
               "file": "crates/spenso/src/network/mod.rs",
-              "line": 3934,
+              "line": 3982,
               "column": 1
             }
           },
@@ -997,7 +1009,7 @@
             "source": {
               "identifier": "spenso::network::ExecutionResult",
               "file": "crates/spenso/src/network/mod.rs",
-              "line": 2659,
+              "line": 2665,
               "column": 1
             }
           },
@@ -1136,6 +1148,54 @@
                     "kind": "field",
                     "docs": null,
                     "signature": "LibraryError < K >",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "LibraryIndexRankMismatch",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "A library tensor graph did not match the requested number of indices."
+                },
+                "signature": null,
+                "default": null,
+                "members": [
+                  {
+                    "name": "expected",
+                    "kind": "field",
+                    "docs": null,
+                    "signature": "usize",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "actual",
+                    "kind": "field",
+                    "docs": null,
+                    "signature": "usize",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "ChainNesting",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "A chain expression had invalid nesting."
+                },
+                "signature": null,
+                "default": null,
+                "members": [
+                  {
+                    "name": "0",
+                    "kind": "field",
+                    "docs": null,
+                    "signature": "parsing :: ChainNestingError",
                     "default": null,
                     "members": []
                   }
@@ -1574,7 +1634,7 @@
             "source": {
               "identifier": "spenso::network::TensorNetworkError",
               "file": "crates/spenso/src/network/mod.rs",
-              "line": 2519,
+              "line": 2518,
               "column": 1
             }
           },
@@ -1686,7 +1746,7 @@
             "source": {
               "identifier": "spenso::network::parsing::ParseSettings",
               "file": "crates/spenso/src/network/parsing/mod.rs",
-              "line": 191,
+              "line": 193,
               "column": 1
             }
           },
@@ -1732,7 +1792,7 @@
             "source": {
               "identifier": "spenso::network::parsing::NetworkParse",
               "file": "crates/spenso/src/network/parsing/mod.rs",
-              "line": 1007,
+              "line": 1012,
               "column": 1
             }
           },
@@ -1857,7 +1917,7 @@
             "source": {
               "identifier": "spenso::tensors::parametric::ParamTensor",
               "file": "crates/spenso/src/tensors/parametric.rs",
-              "line": 353,
+              "line": 361,
               "column": 1
             }
           }

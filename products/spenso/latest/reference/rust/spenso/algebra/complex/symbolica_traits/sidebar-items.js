@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["CompiledComplexEvaluatorSpenso"],"trait":["ToFloat"]};
+window.SIDEBAR_ITEMS = {"trait":["ToFloat"]};

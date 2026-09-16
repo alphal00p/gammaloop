@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["GammaChainOrdering"],"fn":["id_atom"],"static":["AGS","PS"],"struct":["GammaLibrary","GammaSimplifySettings","PolSymbols"],"trait":["GammaSimplifier"]};
+window.SIDEBAR_ITEMS = {"enum":["GammaChainOrdering"],"fn":["gamma_tensor","id_atom"],"static":["AGS","PS"],"struct":["GammaLibrary","GammaSimplifySettings","PolSymbols"],"trait":["GammaSimplifier"]};

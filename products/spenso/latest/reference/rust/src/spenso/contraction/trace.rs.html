@@ -22,7 +22,7 @@
 <a href=#21 id=21 data-nosnippet>21</a>            <span class="kw">let </span><span class="kw-2">mut </span>new_structure = <span class="self">self</span>.structure.clone();
 <a href=#22 id=22 data-nosnippet>22</a>            new_structure.trace(trace[<span class="number">0</span>], trace[<span class="number">1</span>]);
 <a href=#23 id=23 data-nosnippet>23</a>
-<a href=#24 id=24 data-nosnippet>24</a>            <span class="kw">let </span><span class="kw-2">mut </span>new_result = DenseTensor::from_data_coerced(<span class="kw-2">&amp;</span><span class="self">self</span>.data, new_structure)
+<a href=#24 id=24 data-nosnippet>24</a>            <span class="kw">let </span><span class="kw-2">mut </span>new_result = DenseTensor::from_storage_data_coerced(<span class="kw-2">&amp;</span><span class="self">self</span>.data, new_structure)
 <a href=#25 id=25 data-nosnippet>25</a>                .unwrap_or_else(|<span class="kw">_</span>| <span class="macro">unreachable!</span>());
 <a href=#26 id=26 data-nosnippet>26</a>            <span class="kw">for </span>(idx, t) <span class="kw">in </span>result.iter_trace(trace) {
 <a href=#27 id=27 data-nosnippet>27</a>                new_result.set(<span class="kw-2">&amp;</span>idx, t).unwrap_or_else(|<span class="kw">_</span>| <span class="macro">unreachable!</span>());

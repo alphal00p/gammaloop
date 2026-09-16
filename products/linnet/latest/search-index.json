@@ -1370,7 +1370,7 @@
     "summary": "library crate · version 0.17.0",
     "href": "reference/rust/linnet/",
     "kind": "rust-api",
-    "text": "nodestore-vec serde bincode drawing symbolica"
+    "text": "native nodestore-vec serde bincode drawing symbolica"
   },
   {
     "title": "linnet · Half-edge graph",

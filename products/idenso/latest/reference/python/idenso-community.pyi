@@ -2,9 +2,463 @@
 # ruff: noqa: E501, F401
 
 import builtins
+import enum
+import typing
+from symbolica.community.spenso import Representation
 from symbolica.core import Expression
 
-def cook_function(self_: Expression) -> Expression:
+class CanonicalizationError(builtins.ValueError):
+    r"""
+    Raised when dummy-index canonicalization fails.
+    """
+    ...
+
+@typing.final
+class ColorCasimirSettings:
+    r"""
+    Immutable configuration for rewriting color invariants into a Casimir basis.
+    """
+    @property
+    def rewrite_fundamental_dimension(self) -> builtins.bool:
+        r"""
+        Whether the fundamental dimension is rewritten with the SU(N) relation `d_F = C_A`.
+        """
+    @property
+    def substitute_fundamental_index(self) -> builtins.bool:
+        r"""
+        Whether the fundamental Dynkin index is replaced by `T_F = 1/2`.
+        """
+    def __new__(cls, *, rewrite_fundamental_dimension: builtins.bool = True, substitute_fundamental_index: builtins.bool = False) -> ColorCasimirSettings:
+        r"""
+        Configure the SU(N) dimension and fundamental-index normalizations used by Casimir rewriting.
+        """
+
+@typing.final
+class ColorSimplifySettings:
+    r"""
+    Immutable configuration for color simplification.
+    """
+    @property
+    def evaluate_traces(self) -> builtins.bool:
+        r"""
+        Whether closed color chains are evaluated as traces.
+        """
+    @property
+    def expand_cross_chain_fierz(self) -> builtins.bool:
+        r"""
+        Whether generators on different open chains are expanded with the Fierz identity.
+        """
+    @property
+    def substitute_cof_dimension_invariants(self) -> builtins.bool:
+        r"""
+        Whether supported `cof(N)` invariants are replaced by explicit dimension formulas.
+        """
+    def __new__(cls, *, evaluate_traces: builtins.bool = True, expand_cross_chain_fierz: builtins.bool = True, substitute_cof_dimension_invariants: builtins.bool = False) -> ColorSimplifySettings:
+        r"""
+        Configure color-trace evaluation, cross-chain Fierz expansion, and invariant substitution.
+        """
+
+@typing.final
+class CookSettings:
+    r"""
+    Immutable configuration for cooking symbolic functions and index payloads.
+    """
+    @property
+    def mode(self) -> CookMode:
+        r"""
+        Symbol-encoding mode.
+        """
+    @property
+    def source_filter(self) -> CookSourceFilter:
+        r"""
+        Function occurrences selected for cooking.
+        """
+    @property
+    def output_tags(self) -> builtins.list[builtins.str]:
+        r"""
+        Explicit tags attached to newly created cooked symbols.
+        """
+    @property
+    def preserve_tags(self) -> builtins.bool:
+        r"""
+        Whether matching input tags are preserved on cooked symbols.
+        """
+    def __new__(cls, *, mode: typing.Optional[CookMode] = None, source: typing.Optional[CookSourceFilter] = None, output_tags: typing.Optional[typing.Sequence[builtins.str]] = None, preserve_tags: builtins.bool = False) -> CookSettings:
+        r"""
+        Configure how functions are selected, encoded, and tagged when cooked.
+
+        Tags must be fully namespaced Symbolica tags, for example `idenso::cooked`.
+        Selecting `ReversibleEncoding` changes only the encoding; use `reversible()` to also
+        select the conventional `idenso::cooked` output tag.
+        `mode=None` selects `CookMode.FlattenedSymbol`.
+        """
+    @staticmethod
+    def flattened() -> CookSettings:
+        r"""
+        Cook all functions into readable flattened names.
+        """
+    @staticmethod
+    def indices() -> CookSettings:
+        r"""
+        Cook only nested function payloads inside representation indices and preserve tags.
+        """
+    @staticmethod
+    def reversible() -> CookSettings:
+        r"""
+        Cook all functions into stable symbols that can be restored by `uncook`.
+        """
+
+@typing.final
+class CookSourceFilter:
+    r"""
+    Selects the function occurrences or representation-index payloads to cook.
+    """
+    @staticmethod
+    def any_function() -> CookSourceFilter:
+        r"""
+        Select every function-like subexpression.
+        """
+    @staticmethod
+    def function_tags(filter: CookTagFilter) -> CookSourceFilter:
+        r"""
+        Select function heads accepted by `filter`.
+        """
+    @staticmethod
+    def representation_index_payload(filter: typing.Optional[CookTagFilter] = None) -> CookSourceFilter:
+        r"""
+        Select only function payloads inside representation indices.
+
+        When `filter` is supplied, the payload's function head must also match it.
+        """
+
+@typing.final
+class CookTagFilter:
+    r"""
+    A tag predicate used to select which function heads are cooked.
+    """
+    @staticmethod
+    def any(tags: typing.Sequence[builtins.str]) -> CookTagFilter:
+        r"""
+        Match a function head when it carries at least one listed tag.
+        """
+    @staticmethod
+    def all(tags: typing.Sequence[builtins.str]) -> CookTagFilter:
+        r"""
+        Match a function head only when it carries every listed tag.
+        """
+    @staticmethod
+    def matched_output_tags() -> CookTagFilter:
+        r"""
+        Match the explicit output tags configured on the associated `CookSettings`.
+        """
+
+class CookingError(builtins.TypeError):
+    r"""
+    Raised when a symbolic function or representation index cannot be cooked.
+    """
+    ...
+
+class DiracAdjointError(builtins.ValueError):
+    r"""
+    Raised when a Dirac adjoint cannot be constructed consistently.
+    """
+    ...
+
+class DotExpansionError(builtins.ValueError):
+    r"""
+    Raised when compact dot notation cannot be expanded into a tensor expression.
+    """
+    ...
+
+class GammaConjugationError(builtins.ValueError):
+    r"""
+    Raised when conjugated gamma matrices cannot be rewritten consistently.
+    """
+    ...
+
+@typing.final
+class GammaSimplifySettings:
+    r"""
+    Immutable configuration for gamma-chain simplification.
+    """
+    @property
+    def chain_ordering(self) -> GammaChainOrdering:
+        r"""
+        Ordering strategy used for open gamma chains.
+        """
+    @property
+    def evaluate_traces(self) -> builtins.bool:
+        r"""
+        Whether closed gamma chains are evaluated as traces.
+        """
+    @property
+    def expand_three_gamma_epsilon(self) -> builtins.bool:
+        r"""
+        Whether three four-dimensional gammas expand into a gamma5-epsilon basis.
+        """
+    def __new__(cls, *, chain_ordering: typing.Optional[GammaChainOrdering] = None, evaluate_traces: builtins.bool = True, expand_three_gamma_epsilon: builtins.bool = False) -> GammaSimplifySettings:
+        r"""
+        Configure gamma-chain ordering, trace evaluation, and the optional 4D three-gamma identity.
+
+        `chain_ordering=None` selects `GammaChainOrdering.RepeatedPairs`.
+        """
+    @staticmethod
+    def repeated_pairs() -> GammaSimplifySettings:
+        r"""
+        Use FORM-like repeated-pair ordering and evaluate closed traces.
+        """
+    @staticmethod
+    def canonical() -> GammaSimplifySettings:
+        r"""
+        Canonically order open gamma chains and evaluate closed traces.
+        """
+
+class NetworkToolingError(builtins.ValueError):
+    r"""
+    Raised when a symbolic tensor network cannot be parsed or evaluated.
+    """
+    ...
+
+@typing.final
+class SchoonschipSettings:
+    r"""
+    Immutable configuration for expression and network Schoonschip passes.
+    """
+    @property
+    def depth_limit(self) -> typing.Optional[builtins.int]:
+        r"""
+        Maximum parsing or recursion depth, or `None` for no limit.
+        """
+    @property
+    def mode(self) -> SchoonschipMode:
+        r"""
+        Whether the pass is single-pass or recursive.
+        """
+    @property
+    def traversal(self) -> typing.Optional[SchoonschipTraversal]:
+        r"""
+        Recursive traversal order, or `None` in single-pass mode.
+        """
+    @property
+    def expand_contracted_sums(self) -> builtins.bool:
+        r"""
+        Whether contracted sums are expanded before network execution.
+        """
+    @property
+    def simplify_chain_like_functions(self) -> builtins.bool:
+        r"""
+        Whether chain-like function payloads are simplified recursively.
+        """
+    @property
+    def schoonschip_rank1_tensors(self) -> builtins.bool:
+        r"""
+        Whether rank-one tensors participate in the Schoonschip pass.
+        """
+    @property
+    def contraction_order(self) -> SchoonschipContractionOrder:
+        r"""
+        Heuristic used to choose network contractions.
+        """
+    def __new__(cls, *, depth_limit: typing.Optional[builtins.int] = 1, mode: typing.Optional[SchoonschipMode] = None, traversal: typing.Optional[SchoonschipTraversal] = None, expand_contracted_sums: builtins.bool = False, simplify_chain_like_functions: builtins.bool = False, schoonschip_rank1_tensors: builtins.bool = True, contraction_order: typing.Optional[SchoonschipContractionOrder] = None) -> SchoonschipSettings:
+        r"""
+        Configure traversal, depth, shorthand expansion, and network-contraction policies.
+
+        `depth_limit=None` removes the recursion-depth limit. `traversal` is ignored in
+        `SinglePass` mode.
+        `mode=None`, `traversal=None`, and `contraction_order=None` select `Recursive`,
+        `BreadthFirst`, and `SmallestDegree`, respectively.
+        """
+    @staticmethod
+    def partial() -> SchoonschipSettings:
+        r"""
+        Apply the default shallow recursive expression pass without rank-one tensors.
+        """
+    @staticmethod
+    def full() -> SchoonschipSettings:
+        r"""
+        Apply one unrestricted-depth pass and include rank-one tensors.
+        """
+    @staticmethod
+    def default_network() -> SchoonschipSettings:
+        r"""
+        Use the settings applied by `schoonschip_net` when no settings are supplied.
+        """
+    @staticmethod
+    def depth_first(depth_limit: typing.Optional[builtins.int] = None) -> SchoonschipSettings:
+        r"""
+        Recursively simplify each branch before visiting its siblings.
+        """
+    @staticmethod
+    def breadth_first(depth_limit: typing.Optional[builtins.int] = None) -> SchoonschipSettings:
+        r"""
+        Recursively simplify all branches one level at a time.
+        """
+    @staticmethod
+    def single_pass(depth_limit: typing.Optional[builtins.int] = None) -> SchoonschipSettings:
+        r"""
+        Visit each eligible expression once, subject to `depth_limit`.
+        """
+
+@typing.final
+class CookMode(enum.Enum):
+    r"""
+    Selects how cooked function payloads are represented as symbols.
+
+    Available values are `FlattenedSymbol` for readable names and `ReversibleEncoding` for a
+    stable encoding that can later be restored by `uncook`.
+    """
+    FlattenedSymbol = ...
+    r"""
+    Build a readable symbol name from the function name and its arguments.
+    """
+    ReversibleEncoding = ...
+    r"""
+    Store a stable encoding that can later be restored by `uncook` with matching settings.
+    """
+
+@typing.final
+class GammaChainOrdering(enum.Enum):
+    r"""
+    Controls how open gamma chains are reordered during simplification.
+
+    Available values are `RepeatedPairs`, which only moves matching matrices together, and
+    `Canonical`, which canonically orders the complete open chain.
+    """
+    RepeatedPairs = ...
+    r"""
+    Move repeated gamma matrices toward each other without reordering unrelated factors.
+    """
+    Canonical = ...
+    r"""
+    Canonically order open chains using adjacent Clifford-algebra swaps.
+    """
+
+@typing.final
+class SchoonschipContractionOrder(enum.Enum):
+    r"""
+    Selects the heuristic used to choose the next tensor-network contraction.
+
+    Available values are `SmallestDegree`, `LargestDegree`, `MinLargestOperandBytes`,
+    `MinProductTerms`, `MinProductBytes`, `SmallestDegreeMinLargestOperandBytes`,
+    `SmallestDegreeMinProductTerms`, and `SmallestDegreeMinProductBytes`.
+    """
+    SmallestDegree = ...
+    r"""
+    Contract the pair with the fewest paired tensor slots.
+    """
+    LargestDegree = ...
+    r"""
+    Contract the pair with the most paired tensor slots.
+    """
+    MinLargestOperandBytes = ...
+    r"""
+    Minimize the larger operand's estimated memory footprint.
+    """
+    MinProductTerms = ...
+    r"""
+    Minimize the estimated number of terms in the product.
+    """
+    MinProductBytes = ...
+    r"""
+    Minimize the product's estimated memory footprint.
+    """
+    SmallestDegreeMinLargestOperandBytes = ...
+    r"""
+    Minimize the paired-slot count first, then the larger operand's estimated bytes.
+    """
+    SmallestDegreeMinProductTerms = ...
+    r"""
+    Minimize the paired-slot count first, then the estimated product term count.
+    """
+    SmallestDegreeMinProductBytes = ...
+    r"""
+    Minimize the paired-slot count first, then the estimated product bytes.
+    """
+
+@typing.final
+class SchoonschipMode(enum.Enum):
+    r"""
+    Selects whether a Schoonschip pass runs once or recursively.
+
+    Available values are `SinglePass` and `Recursive`.
+    """
+    SinglePass = ...
+    r"""
+    Visit each eligible expression at most once.
+    """
+    Recursive = ...
+    r"""
+    Repeat traversal until the configured depth or a fixed point is reached.
+    """
+
+@typing.final
+class SchoonschipTraversal(enum.Enum):
+    r"""
+    Selects the recursive traversal order for a Schoonschip pass.
+
+    Available values are `DepthFirst` and `BreadthFirst`.
+    """
+    DepthFirst = ...
+    r"""
+    Fully simplify each branch before advancing to its siblings.
+    """
+    BreadthFirst = ...
+    r"""
+    Advance all branches one level before descending further.
+    """
+
+def alias_subtensors(expression: Expression, tensor_name: builtins.str) -> tuple[Expression, builtins.list[tuple[Expression, Expression]]]:
+    r"""
+    Replace nested tensor subexpressions by generated aliases.
+
+    Returns the rewritten root followed by sorted `(alias, original)` pairs.
+    """
+
+def canonize(expression: Expression) -> Expression:
+    r"""
+    Canonically order tensor factors and deterministically rename contracted indices.
+
+    Raises `CanonicalizationError` when the expression cannot be parsed or canonicalized.
+    """
+
+def chainify(expression: Expression, representation: Representation | Expression) -> Expression:
+    r"""
+    Rewrite tensors with two slots in `representation` as explicit open-chain factors.
+    """
+
+def collect_chains(expression: Expression, representation: Representation | Expression) -> Expression:
+    r"""
+    Join adjacent open chains for the supplied representation.
+    """
+
+def collect_color(expression: Expression) -> Expression:
+    r"""
+    Factor an expression around tensors carrying fundamental, antifundamental, or adjoint color.
+    """
+
+def collect_color_constants(expression: Expression) -> Expression:
+    r"""
+    Factor an expression around recognized scalar color invariants such as Casimirs and indices.
+    """
+
+def collect_gamma_chains(expression: Expression) -> Expression:
+    r"""
+    Convert bispinor tensors into chain/trace shorthands and join adjacent gamma chains.
+    """
+
+def conjugate_transpose(expression: Expression, representation: Representation | Expression) -> Expression:
+    r"""
+    Complex-conjugate an expression and transpose tensor slots in `representation`.
+    """
+
+def cook(expression: Expression, settings: typing.Optional[CookSettings] = None) -> Expression:
+    r"""
+    Encode selected functions as symbols using reversible cooking by default.
+
+    Raises `CookingError` when a selected function payload cannot be encoded.
+    """
+
+def cook_function(expression: Expression, settings: typing.Optional[CookSettings] = None) -> Expression:
     r"""
     Convert a single function call into a flattened variable symbol.
 
@@ -16,7 +470,7 @@ def cook_function(self_: Expression) -> Expression:
     **Function Cooking Transform:**
     - Simple function: `f(a, b)` → `f_a_b`
     - Nested arguments: `tensor(rep(mu))` → `tensor_rep_mu`
-    - Multiple arguments: `gamma(mu, alpha, beta)` → `gamma_mu_alpha_beta`
+    - Multiple arguments: `gamma(alpha, beta, mu)` → `gamma_alpha_beta_mu`
     - Complex names: `my_function(x, y)` → `my_function_x_y`
 
 
@@ -26,7 +480,7 @@ def cook_function(self_: Expression) -> Expression:
     - Cannot cook expressions containing polynomials or complex structures
 
     # Arguments
-    - `self_`: expression representing a single function call to cook
+    - `expression`: expression representing a single function call to cook
 
     # Returns
     Expression containing the flattened variable symbol.
@@ -48,7 +502,7 @@ def cook_function(self_: Expression) -> Expression:
     ```
     """
 
-def cook_indices(self_: Expression) -> Expression:
+def cook_indices(expression: Expression, settings: typing.Optional[CookSettings] = None) -> Expression:
     r"""
     Convert complex nested index structures into flattened symbolic names.
 
@@ -66,7 +520,7 @@ def cook_indices(self_: Expression) -> Expression:
     - Only affects indices appearing as function arguments
     - Preserves top-level function structure
     # Arguments
-    - `self_`: expression containing complex nested index structures
+    - `expression`: expression containing complex nested index structures
 
     # Returns
     Expression with flattened, simplified index names.
@@ -79,11 +533,11 @@ def cook_indices(self_: Expression) -> Expression:
 
     T = TensorName("T")
     rep = Representation.euc(3)
-    # With slots (creates TensorIndices)
+    # With slots (creates TensorExpression)
     mu = rep("mu")
     nu = rep("nu")
     x = sp.S("x")
-    tensor_with_args = T(mu, nu, x)  # T(mu, nu; x)
+    tensor_with_args = T(x, mu, nu)  # T(x; mu, nu)
     print(tensor_with_args)
     print(
         cook_indices(wrap_indices(tensor_with_args.to_expression(), sp.S("wrap")))
@@ -91,21 +545,21 @@ def cook_indices(self_: Expression) -> Expression:
     ```
     """
 
-def dirac_adjoint(self_: Expression) -> Expression:
+def dirac_adjoint(expression: Expression) -> Expression:
     r"""
-    Return the Dirac adjoint of a Symbolica tensor expression.
+    Construct the physics-aware Dirac adjoint of a tensor expression.
 
     Idenso takes the symbolic complex conjugate, reverses compatible open bispinor chains, and
     inserts the registered `gamma0` factors required at dangling bispinor slots.
-    The input must use the representation-aware Spenso forms registered by `initialize()`.
+    The input must use the representation-aware Spenso forms registered on import.
+    Raises `DiracAdjointError` when the tensor network does not define a consistent adjoint.
 
     # Examples
     ```python
-    >>> from symbolica.community.idenso import dirac_adjoint, initialize, list_dangling
+    >>> from symbolica.community.idenso import dirac_adjoint, list_dangling
     >>> from symbolica.community.spenso import Representation, TensorName
-    >>> initialize()
-    >>> initialize() is None  # Registration is idempotent.
-    True
+    >>> # Built-in representations are registered automatically on import.
+    >>> # Re-importing the module does not require explicit re-registration.
     >>> bispinor = Representation.bis(4)
     >>> spinor = TensorName("u")(bispinor("alpha")).to_expression()
     >>> adjoint = dirac_adjoint(spinor)
@@ -116,40 +570,41 @@ def dirac_adjoint(self_: Expression) -> Expression:
     ```
 
     # Arguments
-    - `self_`: a Spenso-compatible tensor expression.
+    - `expression`: a Spenso-compatible tensor expression.
 
     # Returns
     The representation-aware Dirac adjoint.
     """
 
-def expand_bis(self_: Expression) -> Expression:
+def expand_bis(expression: Expression) -> builtins.list[tuple[Expression, Expression]]:
     r"""
     Expand products around factors carrying registered bispinor indices.
 
     # Arguments
-    - `self_`: a factorized Spenso-compatible expression.
+    - `expression`: a factorized Spenso-compatible expression.
 
     # Returns
-    The expression distributed around its bispinor-bearing factors. No explicit spinor
-    components are substituted.
+    `(structure, coefficient)` pairs distributed around bispinor-bearing factors. No explicit
+    spinor components are substituted.
 
     # Examples
     ```python
-    >>> from symbolica.community.idenso import expand_bis, initialize
+    >>> from symbolica.community.idenso import expand_bis
     >>> from symbolica.community.spenso import Representation, TensorName
-    >>> initialize()
+    >>> # Built-in representations are registered automatically on import.
     >>> bispinor = Representation.bis(4)
     >>> alpha, beta = bispinor("alpha"), bispinor("beta")
     >>> u, v, w = TensorName("u"), TensorName("v"), TensorName("w")
     >>> u_alpha = u(alpha).to_expression()
     >>> v_beta, w_beta = v(beta).to_expression(), w(beta).to_expression()
     >>> factorized = u_alpha * (v_beta + w_beta)
-    >>> expand_bis(factorized) == u_alpha * v_beta + u_alpha * w_beta
+    >>> terms = expand_bis(factorized)
+    >>> sum(structure * coefficient for structure, coefficient in terms) == u_alpha * v_beta + u_alpha * w_beta
     True
     ```
     """
 
-def expand_color(self_: Expression) -> Expression:
+def expand_color(expression: Expression) -> builtins.list[tuple[Expression, Expression]]:
     r"""
     Expand products around registered color factors.
 
@@ -158,19 +613,19 @@ def expand_color(self_: Expression) -> Expression:
     `simplify_color()` separately to apply SU(N) identities.
 
     # Arguments
-    - `self_`: a factorized Spenso-compatible expression.
+    - `expression`: a factorized Spenso-compatible expression.
 
     # Returns
-    The expression distributed around its color-bearing factors.
+    `(structure, coefficient)` pairs distributed around color-bearing factors.
 
     # Examples
     ```python
-    >>> from symbolica.community.idenso import expand_color, initialize
-    >>> from symbolica.community.spenso import Representation, TensorName
-    >>> initialize()
+    >>> from symbolica.community.idenso import expand_color
+    >>> from symbolica.community.spenso import Representation, TensorExpression
+    >>> # Built-in representations are registered automatically on import.
     >>> adjoint, fundamental = Representation.coad(8), Representation.cof(3)
     >>> antifundamental = fundamental.dual()
-    >>> generator = TensorName.t()
+    >>> generator = TensorExpression.t(8, 3)
     >>> t_a = generator(
     ...     adjoint("a"), fundamental("i"), antifundamental("j")
     ... ).to_expression()
@@ -181,12 +636,27 @@ def expand_color(self_: Expression) -> Expression:
     ...     adjoint("c"), fundamental("m"), antifundamental("n")
     ... ).to_expression()
     >>> factorized = t_a * (t_b + t_c)
-    >>> expand_color(factorized) == t_a * t_b + t_a * t_c
+    >>> terms = expand_color(factorized)
+    >>> sum(structure * coefficient for structure, coefficient in terms) == t_a * t_b + t_a * t_c
     True
     ```
     """
 
-def expand_metrics(self_: Expression) -> Expression:
+def expand_dots(expression: Expression) -> Expression:
+    r"""
+    Expand compact dot products into explicit metric and indexed-vector contractions.
+
+    Raises `DotExpansionError` when a dot product does not define a valid tensor contraction.
+    """
+
+def expand_in_patterns(expression: Expression, patterns: typing.Sequence[Expression]) -> builtins.list[tuple[Expression, Expression]]:
+    r"""
+    Selectively expand around the supplied expression patterns.
+
+    Results retain the Rust API's `(structure, coefficient)` factorization.
+    """
+
+def expand_metrics(expression: Expression) -> builtins.list[tuple[Expression, Expression]]:
     r"""
     Expand products around registered metric tensors.
 
@@ -194,28 +664,29 @@ def expand_metrics(self_: Expression) -> Expression:
     dimension or signature; call `simplify_metrics()` separately for supported contractions.
 
     # Arguments
-    - `self_`: a factorized Spenso-compatible expression.
+    - `expression`: a factorized Spenso-compatible expression.
 
     # Returns
-    The expression distributed around its metric factors.
+    `(structure, coefficient)` pairs distributed around metric factors.
 
     # Examples
     ```python
-    >>> from symbolica.community.idenso import expand_metrics, initialize
-    >>> from symbolica.community.spenso import Representation, TensorName
-    >>> initialize()
+    >>> from symbolica.community.idenso import expand_metrics
+    >>> from symbolica.community.spenso import Representation, TensorExpression
+    >>> # Built-in representations are registered automatically on import.
     >>> minkowski = Representation.mink(4)
-    >>> metric = TensorName.g()
+    >>> metric = TensorExpression.g(minkowski)
     >>> g_mn = metric(minkowski("mu"), minkowski("nu")).to_expression()
     >>> g_rs = metric(minkowski("rho"), minkowski("sigma")).to_expression()
     >>> g_ab = metric(minkowski("alpha"), minkowski("beta")).to_expression()
     >>> factorized = g_mn * (g_rs + g_ab)
-    >>> expand_metrics(factorized) == g_mn * g_rs + g_mn * g_ab
+    >>> terms = expand_metrics(factorized)
+    >>> sum(structure * coefficient for structure, coefficient in terms) == g_mn * g_rs + g_mn * g_ab
     True
     ```
     """
 
-def expand_mink(self_: Expression) -> Expression:
+def expand_mink(expression: Expression) -> builtins.list[tuple[Expression, Expression]]:
     r"""
     Expand products around factors carrying registered Minkowski indices.
 
@@ -224,28 +695,29 @@ def expand_mink(self_: Expression) -> Expression:
     four-vector components or choose a metric signature.
 
     # Arguments
-    - `self_`: a factorized Spenso-compatible expression.
+    - `expression`: a factorized Spenso-compatible expression.
 
     # Returns
-    The expression distributed around its Minkowski-bearing factors.
+    `(structure, coefficient)` pairs distributed around Minkowski-bearing factors.
 
     # Examples
     ```python
-    >>> from symbolica.community.idenso import expand_mink, initialize
+    >>> from symbolica.community.idenso import expand_mink
     >>> from symbolica.community.spenso import Representation, TensorName
-    >>> initialize()
+    >>> # Built-in representations are registered automatically on import.
     >>> minkowski = Representation.mink(4)
     >>> mu, nu = minkowski("mu"), minkowski("nu")
     >>> p, q, r = TensorName("p"), TensorName("q"), TensorName("r")
     >>> p_mu = p(mu).to_expression()
     >>> q_nu, r_nu = q(nu).to_expression(), r(nu).to_expression()
     >>> factorized = p_mu * (q_nu + r_nu)
-    >>> expand_mink(factorized) == p_mu * q_nu + p_mu * r_nu
+    >>> terms = expand_mink(factorized)
+    >>> sum(structure * coefficient for structure, coefficient in terms) == p_mu * q_nu + p_mu * r_nu
     True
     ```
     """
 
-def expand_mink_bis(self_: Expression) -> Expression:
+def expand_mink_bis(expression: Expression) -> builtins.list[tuple[Expression, Expression]]:
     r"""
     Expand products around factors carrying Minkowski or bispinor indices.
 
@@ -253,16 +725,16 @@ def expand_mink_bis(self_: Expression) -> Expression:
     coefficient pass. Other representation families remain in the coefficient sector.
 
     # Arguments
-    - `self_`: a factorized Spenso-compatible expression.
+    - `expression`: a factorized Spenso-compatible expression.
 
     # Returns
-    The expression distributed around both selected representation families.
+    `(structure, coefficient)` pairs distributed around both selected representation families.
 
     # Examples
     ```python
-    >>> from symbolica.community.idenso import expand_mink_bis, initialize
+    >>> from symbolica.community.idenso import expand_mink_bis
     >>> from symbolica.community.spenso import Representation, TensorName
-    >>> initialize()
+    >>> # Built-in representations are registered automatically on import.
     >>> minkowski, bispinor = Representation.mink(4), Representation.bis(4)
     >>> p_mu = TensorName("p")(minkowski("mu")).to_expression()
     >>> q_mu = TensorName("q")(minkowski("mu")).to_expression()
@@ -270,20 +742,13 @@ def expand_mink_bis(self_: Expression) -> Expression:
     >>> v_a = TensorName("v")(bispinor("a")).to_expression()
     >>> factorized = (p_mu + q_mu) * (u_a + v_a)
     >>> expected = p_mu * u_a + p_mu * v_a + q_mu * u_a + q_mu * v_a
-    >>> expand_mink_bis(factorized) == expected
+    >>> terms = expand_mink_bis(factorized)
+    >>> sum(structure * coefficient for structure, coefficient in terms) == expected
     True
     ```
     """
 
-def initialize() -> None:
-    r"""
-    Register Idenso's built-in representations and algebra symbols with Symbolica.
-
-    Symbolica calls this during community-module initialization. Calling it again
-    is safe and ensures the standard Lorentz, spinor, and color objects exist.
-    """
-
-def list_dangling(self_: Expression) -> builtins.list[Expression]:
+def list_dangling(expression: Expression) -> builtins.list[Expression]:
     r"""
     Lists the dangling (external, uncontracted) indices present in the expression.
 
@@ -298,10 +763,13 @@ def list_dangling(self_: Expression) -> builtins.list[Expression]:
     - Debugging index contractions
 
     # Arguments
-    - `self_`: tensor expression to analyze
+    - `expression`: tensor expression to analyze
 
     # Returns
     A list of expressions, each representing a free (dangling) index.
+
+    # Raises
+    `ValueError` when the expression cannot be parsed as a tensor network.
 
     # Examples:
     ```python
@@ -313,17 +781,48 @@ def list_dangling(self_: Expression) -> builtins.list[Expression]:
 
     T = TensorName("T")
     rep = Representation.euc(3)
-    # With slots (creates TensorIndices)
+    # With slots (creates TensorExpression)
     mu = rep("mu")
     nu = rep("nu")
     x = sp.S("x")
-    tensor_with_args = T(mu, nu, nu, x)  # T(mu, nu; x)
+    tensor_with_args = T(x, mu, nu, nu)  # T(x; mu, nu, nu)
     # print(tensor_with_args)
     print(list_dangling(tensor_with_args.to_expression()))
     ```
     """
 
-def simplify_color(self_: Expression) -> Expression:
+def metric_shorthand_to_dot(expression: Expression) -> Expression:
+    r"""
+    Replace metric shorthand such as `g(p(rep), q(rep.dual()))` by
+    `dot(p(rep), q(rep.dual()))`.
+    """
+
+def normalize_chains(expression: Expression) -> Expression:
+    r"""
+    Convert chains whose endpoints coincide into trace shorthands.
+    """
+
+def normalize_dots(expression: Expression) -> Expression:
+    r"""
+    Canonicalize compact dot-product shorthands without expanding their tensor structure.
+    """
+
+def schoonschip(expression: Expression, settings: typing.Optional[SchoonschipSettings] = None) -> Expression:
+    r"""
+    Simplify tensor shorthands using the configured Schoonschip traversal.
+    """
+
+def schoonschip_net(expression: Expression, settings: typing.Optional[SchoonschipSettings] = None, *, expand_contracted_sums: builtins.bool = False) -> Expression:
+    r"""
+    Parse and contract a symbolic tensor network using Schoonschip rules.
+
+    Set `expand_contracted_sums=True` to distribute sums before contracted products are executed.
+
+    Raises `NetworkToolingError` when the expression is not a valid tensor network or contraction
+    fails.
+    """
+
+def simplify_color(expression: Expression, settings: typing.Optional[ColorSimplifySettings] = None) -> Expression:
     r"""
     Simplify registered Spenso color chains, traces, generators, and structure constants.
 
@@ -335,17 +834,18 @@ def simplify_color(self_: Expression) -> Expression:
     - `Σ_a (T^a)_i^j (T^a)_k^l = TR (δ_i^l δ_k^j - δ_i^j δ_k^l/Nc)`;
     - `Σ_a (T^a)_i^j (T^a)_j^k = CF δ_i^k`;
     - `Σ_{c,d} f^{acd} f^{bcd} = CA δ^{ab}`.
+    Antisymmetry and Jacobi identities apply to the registered structure constants.
 
     `CA = Nc`, `CF = (Nc² - 1)/(2Nc)`, and `TR = 1/2` are the conventional fundamental
     SU(Nc) specialization, not identities imposed on every input. The default simplifier keeps
     representation invariants symbolic where possible; explicit dimension substitution is a
-    separate Rust setting.
+    separate `ColorSimplifySettings` option.
 
     # Examples
     ```python
     >>> from symbolica import E
-    >>> from symbolica.community.idenso import initialize, simplify_color
-    >>> initialize()
+    >>> from symbolica.community.idenso import simplify_color
+    >>> # Built-in representations are registered automatically on import.
     >>> generators = E('''
     ...     t(coad(Nc^2-1,a),cof(Nc,i),dind(cof(Nc,j)))
     ...     * t(coad(Nc^2-1,a),cof(Nc,k),dind(cof(Nc,l)))
@@ -355,19 +855,29 @@ def simplify_color(self_: Expression) -> Expression:
     True
     ```
 
+    **Representation invariants:**
+    Use `Representation.dimension`, `.casimir()`, `.dynkin_index()`, and `.gram(...)`
+    to construct the scalar invariants associated with explicitly typed color structures.
+
     # Arguments
-    - `self_`: expression containing SU(N) color structures
+    - `expression`: expression containing SU(N) color structures
 
     # Returns
-    The simplified expression. Unsupported or open indexed structures may remain explicitly in
-    the result; their presence is not an error.
+    The simplified expression, reduced to representation-owned scalar invariants when possible.
+    Unsupported or open indexed structures may remain explicitly in the result; their presence
+    is not an error.
 
     # Notes
     Only representation-aware Spenso color forms are recognized. Plain Symbolica functions with
     similar names are left unchanged.
     """
 
-def simplify_gamma(self_: Expression) -> Expression:
+def simplify_epsilon(expression: Expression) -> Expression:
+    r"""
+    Simplify Levi-Civita/metric contractions and pairs of Levi-Civita tensors to a fixed point.
+    """
+
+def simplify_gamma(expression: Expression, settings: typing.Optional[GammaSimplifySettings] = None) -> Expression:
     r"""
     Simplify registered Spenso gamma chains and traces with Idenso's default rules.
 
@@ -379,15 +889,15 @@ def simplify_gamma(self_: Expression) -> Expression:
 
     This function does not select or implement a dimensional-regularization gamma-five scheme.
     Its gamma-five rules are strictly four-dimensional, and the default Python entry point does
-    not enable the optional three-gamma epsilon expansion available through Rust settings.
-    Gamma factors must use the Spenso representation-aware forms registered by `initialize()`;
+    not enable the optional three-gamma epsilon expansion available through `GammaSimplifySettings`.
+    Gamma factors must use the Spenso representation-aware forms registered on import;
     unrecognized plain Symbolica functions are left unchanged.
 
     # Examples
     ```python
     >>> from symbolica import E
-    >>> from symbolica.community.idenso import initialize, simplify_gamma
-    >>> initialize()
+    >>> from symbolica.community.idenso import simplify_gamma
+    >>> # Built-in representations are registered automatically on import.
     >>> trace = E('''
     ...     gamma(bis(4,a),bis(4,b),mink(4,mu))
     ...     * gamma(bis(4,b),bis(4,a),mink(4,nu))
@@ -397,14 +907,43 @@ def simplify_gamma(self_: Expression) -> Expression:
     True
     ```
 
+    The native gamma argument order is `bis(dim,alpha), bis(dim,beta), mink(dim,mu)`:
+    `alpha` and `beta` are spinor indices, followed by the Lorentz index `mu`.
+    These forms can also be constructed through the HEP tensor library.
+
     # Arguments
-    - `self_`: expression containing gamma matrix products and traces
+    - `expression`: expression containing gamma matrix products and traces
 
     # Returns
     The simplified expression with gamma algebra applied.
+
+    # Examples:
+    ```python
+    from symbolica.community.spenso import TensorLibrary, TensorName
+    from symbolica.community.idenso import simplify_gamma
+    from symbolica import S, Expression
+    # Get HEP library with standard tensors
+    hep_lib = TensorLibrary.hep_lib()
+    # Access standard tensors like gamma matrices
+    gamma_structure = hep_lib[S("spenso::gamma")]
+    print(gamma_structure)
+    print(simplify_gamma(gamma_structure(3, 4, 7) * gamma_structure(7, 4, 3)))
+    ```
     """
 
-def simplify_metrics(self_: Expression) -> Expression:
+def simplify_gamma0(expression: Expression) -> Expression:
+    r"""
+    Simplify products and linear combinations involving the time-like gamma matrix `gamma0`.
+    """
+
+def simplify_gamma_conjugate(expression: Expression) -> Expression:
+    r"""
+    Rewrite conjugated gamma matrices as gamma0-sandwiched matrices with fresh spinor indices.
+
+    Raises `GammaConjugationError` when the expression cannot be rewritten consistently.
+    """
+
+def simplify_metrics(expression: Expression) -> Expression:
     r"""
     Simplifies contractions involving metric tensors and identity tensors.
 
@@ -423,7 +962,7 @@ def simplify_metrics(self_: Expression) -> Expression:
     The function recognizes metrics as `spenso::g(...)`
 
     # Arguments
-    - `self_`: expression containing metric/identity tensor contractions
+    - `expression`: expression containing metric/identity tensor contractions
 
     # Returns
     The simplified expression with metric rules applied.
@@ -431,18 +970,36 @@ def simplify_metrics(self_: Expression) -> Expression:
     # Examples:
     ```python
     from symbolica.community.idenso import simplify_metrics, to_dots
-    from symbolica.community.spenso import Representation, TensorName
+    from symbolica.community.spenso import Representation, TensorExpression, TensorName
     q = TensorName("q")
-    g = TensorName.g()
     rep = Representation.euc(3)
-    # With slots (creates TensorIndices)
+    g = TensorExpression.g(rep)
+    # With slots (creates TensorExpression)
     mu = rep("mu")
     nu = rep("nu")
-    print(simplify_metrics(g(mu, nu) * q(mu)))
+    print(simplify_metrics(g("mu", "nu") * q(mu)))
     ```
     """
 
-def to_dots(self_: Expression) -> Expression:
+def spenso_conjugate(expression: Expression) -> Expression:
+    r"""
+    Complex-conjugate an expression while keeping unevaluated conjugations explicit.
+    """
+
+def to_cof_dimension_invariants(expression: Expression) -> Expression:
+    r"""
+    Replace supported `cof(N)` Casimir, Dynkin-index, and Gram invariants by dimension formulas.
+    """
+
+def to_color_casimir(expression: Expression, *, fundamental: Representation | Expression, adjoint: Representation | Expression, settings: typing.Optional[ColorCasimirSettings] = None) -> Expression:
+    r"""
+    Rewrite the supplied color-representation dimensions and invariants into a Casimir basis.
+
+    `fundamental` and `adjoint` accept Spynso `Representation` objects or their symbolic
+    expressions. Only scalar coefficient positions are rewritten.
+    """
+
+def to_dots(expression: Expression) -> Expression:
     r"""
     Converts contracted Lorentz/Minkowski indices into dot product notation.
 
@@ -456,7 +1013,7 @@ def to_dots(self_: Expression) -> Expression:
     - Self-contractions: `pᵘpᵤ → p²`
 
     # Arguments
-    - `self_`: expression containing contracted Minkowski vector indices
+    - `expression`: expression containing contracted Minkowski vector indices
 
     # Returns
     The expression with vector contractions converted to dot products.
@@ -468,7 +1025,7 @@ def to_dots(self_: Expression) -> Expression:
     p = TensorName("p")
     q = TensorName("q")
     rep = Representation.euc(3)
-    # With slots (creates TensorIndices)
+    # With slots (creates TensorExpression)
     mu = rep("mu")
     nu = rep("nu")
 
@@ -476,7 +1033,62 @@ def to_dots(self_: Expression) -> Expression:
     ```
     """
 
-def wrap_dummies(self_: Expression, header: Expression) -> Expression:
+def uncook(expression: Expression, settings: typing.Optional[CookSettings] = None) -> Expression:
+    r"""
+    Restore symbols produced by matching reversible cooking settings.
+    """
+
+def undo_all(expression: Expression) -> Expression:
+    r"""
+    Expand Schoonschip, dot, chain, and trace shorthands into explicit tensor expressions.
+
+
+    Raises `NetworkToolingError` when the expression is not a valid tensor network or evaluation fails.
+    """
+
+def undo_chain(expression: Expression) -> Expression:
+    r"""
+    Expand open-chain shorthands while leaving dots, traces, and Schoonschip forms compact.
+
+
+    Raises `NetworkToolingError` when the expression is not a valid tensor network or evaluation fails.
+    """
+
+def undo_dots(expression: Expression) -> Expression:
+    r"""
+    Expand dot-product shorthands while leaving other tensor shorthands compact.
+
+
+    Raises `NetworkToolingError` when the expression is not a valid tensor network or evaluation fails.
+    """
+
+def undo_schoonschip(expression: Expression) -> Expression:
+    r"""
+    Expand Schoonschip tensor shorthands while leaving dots, chains, and traces compact.
+
+
+    Raises `NetworkToolingError` when the expression is not a valid tensor network or evaluation fails.
+    """
+
+def undo_single_length(expression: Expression) -> Expression:
+    r"""
+    Replace one-factor chain shorthands by their underlying tensor factor.
+    """
+
+def undo_trace(expression: Expression) -> Expression:
+    r"""
+    Expand trace shorthands while leaving dots, chains, and Schoonschip forms compact.
+
+
+    Raises `NetworkToolingError` when the expression is not a valid tensor network or evaluation fails.
+    """
+
+def wrap_color(expression: Expression, symbol: Expression) -> Expression:
+    r"""
+    Expand around color structures and wrap each resulting scalar coefficient with `symbol`.
+    """
+
+def wrap_dummies(expression: Expression, header: Expression) -> Expression:
     r"""
     Wraps only the dummy (contracted) indices within the expression using a header symbol.
 
@@ -491,11 +1103,14 @@ def wrap_dummies(self_: Expression, header: Expression) -> Expression:
     - Are summed over (Einstein summation convention)
 
     # Arguments
-    - `self_`: input expression containing both dummy and free indices
+    - `expression`: input expression containing both dummy and free indices
     - `header`: symbol to use as wrapper function name for dummy indices only
 
     # Returns
     A new expression with only contracted indices wrapped.
+
+    # Raises
+    `ValueError` when the expression cannot be parsed as a tensor network.
 
     # Examples:
     ```python
@@ -505,23 +1120,23 @@ def wrap_dummies(self_: Expression, header: Expression) -> Expression:
 
     T = TensorName("T")
     rep = Representation.euc(3)
-    # With slots (creates TensorIndices)
+    # With slots (creates TensorExpression)
     mu = rep("mu")
     nu = rep("nu")
     x = sp.S("x")
-    tensor_with_args = T(mu, nu, nu, x)  # T(mu, nu; x)
+    tensor_with_args = T(x, mu, nu, nu)  # T(x; mu, nu, nu)
     # print(tensor_with_args)
     print(wrap_dummies(tensor_with_args.to_expression(), sp.S("wrap")))
 
     ```
     """
 
-def wrap_indices(self_: Expression, header: Expression) -> Expression:
+def wrap_indices(expression: Expression, header: Expression) -> Expression:
     r"""
     Wrap all abstract indices with a header symbol
 
     # Arguments
-    - `self_`: input expression containing tensor indices
+    - `expression`: input expression containing tensor indices
     - `header`: symbol to use as the wrapper function for all indices
 
     # Returns
@@ -535,11 +1150,11 @@ def wrap_indices(self_: Expression, header: Expression) -> Expression:
 
     T = TensorName("T")
     rep = Representation.euc(3)
-    # With slots (creates TensorIndices)
+    # With slots (creates TensorExpression)
     mu = rep("mu")
     nu = rep("nu")
     x = sp.S("x")
-    tensor_with_args = T(mu, nu, x)  # T(mu, nu; x)
+    tensor_with_args = T(x, mu, nu)  # T(x; mu, nu)
     print(tensor_with_args)
     print(wrap_indices(tensor_with_args.to_expression(), sp.S("wrap")))
 

@@ -1027,7 +1027,7 @@
 <a href=#1026 id=1026 data-nosnippet>1026</a>
 <a href=#1027 id=1027 data-nosnippet>1027</a>        <span class="kw">for </span>(i, monomial) <span class="kw">in </span>poly.into_iter().enumerate() {
 <a href=#1028 id=1028 data-nosnippet>1028</a>            mul_h = Atom::num(<span class="number">1</span>);
-<a href=#1029 id=1029 data-nosnippet>1029</a>            <span class="kw">for </span>(var_id, <span class="kw-2">&amp;</span>pow) <span class="kw">in </span>poly.variables.iter().zip(monomial.exponents) {
+<a href=#1029 id=1029 data-nosnippet>1029</a>            <span class="kw">for </span>(var_id, <span class="kw-2">&amp;</span>pow) <span class="kw">in </span>poly.variables().iter().zip(monomial.exponents) {
 <a href=#1030 id=1030 data-nosnippet>1030</a>                <span class="kw">if </span>pow &gt; <span class="number">0 </span>{
 <a href=#1031 id=1031 data-nosnippet>1031</a>                    <span class="kw">match </span>var_id {
 <a href=#1032 id=1032 data-nosnippet>1032</a>                        PolyVariable::Symbol(v) =&gt; {
@@ -1487,7 +1487,7 @@
 <a href=#1486 id=1486 data-nosnippet>1486</a>        <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..n_edges {
 <a href=#1487 id=1487 data-nosnippet>1487</a>            <span class="kw">let </span>named_structure: NamedStructure&lt;String&gt; =
 <a href=#1488 id=1488 data-nosnippet>1488</a>                NamedStructure::from_iter([Lorentz {}.new_slot(<span class="number">4</span>, i)], <span class="string">"Q"</span>.into(), <span class="prelude-val">Some</span>(i))
-<a href=#1489 id=1489 data-nosnippet>1489</a>                    .structure;
+<a href=#1489 id=1489 data-nosnippet>1489</a>                    .into_canonical();
 <a href=#1490 id=1490 data-nosnippet>1490</a>            params.extend(
 <a href=#1491 id=1491 data-nosnippet>1491</a>                named_structure
 <a href=#1492 id=1492 data-nosnippet>1492</a>                    .to_shell()

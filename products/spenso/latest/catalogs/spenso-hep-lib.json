@@ -85,7 +85,7 @@
             "source": {
               "identifier": "spenso_hep_lib::hep_lib",
               "file": "crates/spenso-hep-lib/src/lib.rs",
-              "line": 542,
+              "line": 633,
               "column": 1
             }
           },
@@ -101,14 +101,14 @@
               "body": "Creates sparse Dirac-basis gamma-matrix data for the supplied tensor structure."
             },
             "summary": "Creates sparse Dirac-basis gamma-matrix data for the supplied tensor structure.",
-            "signature": "fn gamma_data_dirac < T, N > (structure : N, one : T, zero : T) ->\nSparseTensor < Complex < T > , N > where T : Clone + Neg < Output = T > , N :\nTensorStructure,",
+            "signature": "fn gamma_data_dirac < T, N >\n(structure : Canonicalized < N > , one : T, zero : T,) -> Canonicalized <\nSparseTensor < Complex < T > , N > > where T : Clone + Neg < Output = T > , N\n: TensorStructure,",
             "since": null,
             "keywords": [],
             "params": [
               {
                 "name": "structure",
                 "docs": null,
-                "ty": "N",
+                "ty": "Canonicalized < N >",
                 "default": null,
                 "required": true
               },
@@ -129,7 +129,7 @@
             ],
             "returns": {
               "format": "plain-text",
-              "body": "SparseTensor < Complex < T > , N >"
+              "body": "Canonicalized < SparseTensor < Complex < T > , N > >"
             },
             "examples": [
               {
@@ -142,7 +142,7 @@
             "source": {
               "identifier": "spenso_hep_lib::gamma_data_dirac",
               "file": "crates/spenso-hep-lib/src/lib.rs",
-              "line": 30,
+              "line": 70,
               "column": 1
             }
           },
@@ -158,21 +158,21 @@
               "body": "Fundamental SU(3) generators in the normalization `Tr(T^a T^b)=1/2 delta^{ab}`.\n\nThe index order follows `CS.t_strct`: adjoint, fundamental, anti-fundamental."
             },
             "summary": "Creates the standard sparse SU(3) fundamental-generator tensor.",
-            "signature": "fn su3_generator_data < N > (structure : N) -> SparseTensor < Complex < f64 >\n, N > where N : TensorStructure,",
+            "signature": "fn su3_generator_data < N > (structure : Canonicalized < N > ,) ->\nCanonicalized < SparseTensor < Complex < f64 > , N > > where N :\nTensorStructure,",
             "since": null,
             "keywords": [],
             "params": [
               {
                 "name": "structure",
                 "docs": null,
-                "ty": "N",
+                "ty": "Canonicalized < N >",
                 "default": null,
                 "required": true
               }
             ],
             "returns": {
               "format": "plain-text",
-              "body": "SparseTensor < Complex < f64 > , N >"
+              "body": "Canonicalized < SparseTensor < Complex < f64 > , N > >"
             },
             "examples": [
               {
@@ -185,7 +185,7 @@
             "source": {
               "identifier": "spenso_hep_lib::su3_generator_data",
               "file": "crates/spenso-hep-lib/src/lib.rs",
-              "line": 330,
+              "line": 415,
               "column": 1
             }
           }

@@ -6,10 +6,10 @@
 <a href=#5 id=5 data-nosnippet>5</a>    },
 <a href=#6 id=6 data-nosnippet>6</a>    iterators::IteratableTensor,
 <a href=#7 id=7 data-nosnippet>7</a>    structure::{
-<a href=#8 id=8 data-nosnippet>8</a>        CastStructure, HasName, HasStructure, IndexLess, OrderedStructure, PermutedStructure,
-<a href=#9 id=9 data-nosnippet>9</a>        ScalarStructure, ScalarTensor, SlotIndex, TensorStructure, TracksCount,
-<a href=#10 id=10 data-nosnippet>10</a>        concrete_index::{ConcreteIndex, ExpandedIndex, FlatIndex},
-<a href=#11 id=11 data-nosnippet>11</a>        permuted::PermuteTensor,
+<a href=#8 id=8 data-nosnippet>8</a>        ApplyPendingIndexPermutation, CastStructure, HasName, HasStructure, IndexLess,
+<a href=#9 id=9 data-nosnippet>9</a>        OrderedStructure, PendingIndexPermutation, Reindexed, ScalarStructure, ScalarTensor,
+<a href=#10 id=10 data-nosnippet>10</a>        SlotIndex, TensorIdentity, TensorStructure, TracksCount,
+<a href=#11 id=11 data-nosnippet>11</a>        concrete_index::{ConcreteIndex, ExpandedIndex, FlatIndex},
 <a href=#12 id=12 data-nosnippet>12</a>        representation::RepName,
 <a href=#13 id=13 data-nosnippet>13</a>        slot::{AbsInd, Slot},
 <a href=#14 id=14 data-nosnippet>14</a>    },
@@ -51,7 +51,7 @@
 <a href=#50 id=50 data-nosnippet>50</a>///
 <a href=#51 id=51 data-nosnippet>51</a>/// `data` follows [`TensorStructure::strides`], which is row-major by default:
 <a href=#52 id=52 data-nosnippet>52</a>/// coordinates are given in external-slot order and the last coordinate varies
-<a href=#53 id=53 data-nosnippet>53</a>/// fastest. [`Self::from_data`] validates the component count but does not
+<a href=#53 id=53 data-nosnippet>53</a>/// fastest. [`Self::from_storage_data`] validates the component count but does not
 <a href=#54 id=54 data-nosnippet>54</a>/// permute values if the supplied structure was created from an unsorted slot
 <a href=#55 id=55 data-nosnippet>55</a>/// list.
 <a href=#56 id=56 data-nosnippet>56</a></span><span class="attr">#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Hash, Eq, Encode, Decode)]
@@ -79,70 +79,70 @@
 <a href=#78 id=78 data-nosnippet>78</a>    }
 <a href=#79 id=79 data-nosnippet>79</a>}
 <a href=#80 id=80 data-nosnippet>80</a>
-<a href=#81 id=81 data-nosnippet>81</a><span class="kw">impl</span>&lt;Aind: AbsInd, T: Clone, S: Clone + Into&lt;IndexLess&lt;R, Aind&gt;&gt;, R: RepName&lt;Dual = R&gt;&gt;
-<a href=#82 id=82 data-nosnippet>82</a>    PermuteTensor <span class="kw">for </span>DenseTensor&lt;T, S&gt;
-<a href=#83 id=83 data-nosnippet>83</a><span class="kw">where
-<a href=#84 id=84 data-nosnippet>84</a>    </span>S: TensorStructure&lt;Slot = Slot&lt;R, Aind&gt;&gt; + PermuteTensor&lt;IdSlot = Slot&lt;R, Aind&gt;, Id = S&gt;,
-<a href=#85 id=85 data-nosnippet>85</a>{
-<a href=#86 id=86 data-nosnippet>86</a>    <span class="kw">type </span>Id = DenseTensor&lt;T, S&gt;;
-<a href=#87 id=87 data-nosnippet>87</a>    <span class="kw">type </span>IdSlot = (T, Slot&lt;R, Aind&gt;);
-<a href=#88 id=88 data-nosnippet>88</a>    <span class="kw">type </span>Permuted = DenseTensor&lt;T, S&gt;;
-<a href=#89 id=89 data-nosnippet>89</a>
-<a href=#90 id=90 data-nosnippet>90</a>    <span class="kw">fn </span>id(i: <span class="self">Self</span>::IdSlot, j: <span class="self">Self</span>::IdSlot) -&gt; <span class="self">Self</span>::Id {
-<a href=#91 id=91 data-nosnippet>91</a>        <span class="kw">let </span>(zero, i) = i;
-<a href=#92 id=92 data-nosnippet>92</a>        <span class="kw">let </span>(one, j) = j;
-<a href=#93 id=93 data-nosnippet>93</a>        <span class="kw">let </span>s = S::id(i, j);
-<a href=#94 id=94 data-nosnippet>94</a>        <span class="kw">let </span><span class="kw-2">mut </span>data = <span class="macro">vec!</span>[zero; s.size().unwrap()];
-<a href=#95 id=95 data-nosnippet>95</a>        <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..usize::try_from(i.dim()).unwrap() {
-<a href=#96 id=96 data-nosnippet>96</a>            data[usize::from(s.flat_index([i, i]).unwrap())] = one.clone();
-<a href=#97 id=97 data-nosnippet>97</a>        }
-<a href=#98 id=98 data-nosnippet>98</a>        DenseTensor { data, structure: s }
-<a href=#99 id=99 data-nosnippet>99</a>    }
-<a href=#100 id=100 data-nosnippet>100</a>
-<a href=#101 id=101 data-nosnippet>101</a>    <span class="kw">fn </span>permute_inds(<span class="self">self</span>, permutation: <span class="kw-2">&amp;</span>linnet::permutation::Permutation) -&gt; <span class="self">Self</span>::Permuted {
-<a href=#102 id=102 data-nosnippet>102</a>        <span class="kw">let </span><span class="kw-2">mut </span>permuteds: IndexLess&lt;R, Aind&gt; = <span class="self">self</span>.structure.clone().into();
-<a href=#103 id=103 data-nosnippet>103</a>        permutation.apply_slice_in_place(<span class="kw-2">&amp;mut </span>permuteds.structure);
-<a href=#104 id=104 data-nosnippet>104</a>
-<a href=#105 id=105 data-nosnippet>105</a>        <span class="kw">let </span><span class="kw-2">mut </span>permuted = <span class="self">self</span>.clone();
-<a href=#106 id=106 data-nosnippet>106</a>        <span class="kw">for </span>(i, d) <span class="kw">in </span><span class="self">self</span>.iter_expanded() {
-<a href=#107 id=107 data-nosnippet>107</a>            permuted
-<a href=#108 id=108 data-nosnippet>108</a>                .set_flat(
-<a href=#109 id=109 data-nosnippet>109</a>                    permuteds
-<a href=#110 id=110 data-nosnippet>110</a>                        .flat_index(i.apply_permutation(permutation))
-<a href=#111 id=111 data-nosnippet>111</a>                        .unwrap(),
-<a href=#112 id=112 data-nosnippet>112</a>                    d.clone(),
-<a href=#113 id=113 data-nosnippet>113</a>                )
-<a href=#114 id=114 data-nosnippet>114</a>                .unwrap();
-<a href=#115 id=115 data-nosnippet>115</a>        }
-<a href=#116 id=116 data-nosnippet>116</a>        permuted
-<a href=#117 id=117 data-nosnippet>117</a>    }
-<a href=#118 id=118 data-nosnippet>118</a>
-<a href=#119 id=119 data-nosnippet>119</a>    <span class="kw">fn </span>permute_reps(<span class="self">self</span>, _rep_perm: <span class="kw-2">&amp;</span>linnet::permutation::Permutation) -&gt; <span class="self">Self</span>::Permuted {
-<a href=#120 id=120 data-nosnippet>120</a>        <span class="macro">todo!</span>()
-<a href=#121 id=121 data-nosnippet>121</a>    }
-<a href=#122 id=122 data-nosnippet>122</a>}
-<a href=#123 id=123 data-nosnippet>123</a>
-<a href=#124 id=124 data-nosnippet>124</a><span class="kw">impl</span>&lt;T, S&gt; TensorStructure <span class="kw">for </span>DenseTensor&lt;T, S&gt;
-<a href=#125 id=125 data-nosnippet>125</a><span class="kw">where
-<a href=#126 id=126 data-nosnippet>126</a>    </span>S: TensorStructure,
-<a href=#127 id=127 data-nosnippet>127</a>{
-<a href=#128 id=128 data-nosnippet>128</a>    <span class="comment">// type R = &lt;T::Structure as TensorStructure&gt;::R;
-<a href=#129 id=129 data-nosnippet>129</a>    </span><span class="kw">type </span>Indexed = DenseTensor&lt;T, S::Indexed&gt;;
-<a href=#130 id=130 data-nosnippet>130</a>    <span class="kw">type </span>Slot = S::Slot;
-<a href=#131 id=131 data-nosnippet>131</a>
-<a href=#132 id=132 data-nosnippet>132</a>    <span class="kw">fn </span>reindex(
-<a href=#133 id=133 data-nosnippet>133</a>        <span class="self">self</span>,
-<a href=#134 id=134 data-nosnippet>134</a>        indices: <span class="kw-2">&amp;</span>[&lt;<span class="self">Self</span>::Slot <span class="kw">as </span>IsAbstractSlot&gt;::Aind],
-<a href=#135 id=135 data-nosnippet>135</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;PermutedStructure&lt;<span class="self">Self</span>::Indexed&gt;, StructureError&gt; {
-<a href=#136 id=136 data-nosnippet>136</a>        <span class="kw">let </span>res = <span class="self">self</span>.structure.reindex(indices)<span class="question-mark">?</span>;
-<a href=#137 id=137 data-nosnippet>137</a>
-<a href=#138 id=138 data-nosnippet>138</a>        <span class="prelude-val">Ok</span>(PermutedStructure {
-<a href=#139 id=139 data-nosnippet>139</a>            structure: DenseTensor {
-<a href=#140 id=140 data-nosnippet>140</a>                structure: res.structure,
-<a href=#141 id=141 data-nosnippet>141</a>                data: <span class="self">self</span>.data,
-<a href=#142 id=142 data-nosnippet>142</a>            },
-<a href=#143 id=143 data-nosnippet>143</a>            rep_permutation: res.rep_permutation,
-<a href=#144 id=144 data-nosnippet>144</a>            index_permutation: res.index_permutation,
+<a href=#81 id=81 data-nosnippet>81</a><span class="kw">impl</span>&lt;Aind: AbsInd, T: Clone, S, R: RepName&lt;Dual = R&gt;&gt; TensorIdentity <span class="kw">for </span>DenseTensor&lt;T, S&gt;
+<a href=#82 id=82 data-nosnippet>82</a><span class="kw">where
+<a href=#83 id=83 data-nosnippet>83</a>    </span>S: TensorStructure&lt;Slot = Slot&lt;R, Aind&gt;&gt; + TensorIdentity&lt;IdSlot = Slot&lt;R, Aind&gt;, Id = S&gt;,
+<a href=#84 id=84 data-nosnippet>84</a>{
+<a href=#85 id=85 data-nosnippet>85</a>    <span class="kw">type </span>Id = DenseTensor&lt;T, S&gt;;
+<a href=#86 id=86 data-nosnippet>86</a>    <span class="kw">type </span>IdSlot = (T, Slot&lt;R, Aind&gt;);
+<a href=#87 id=87 data-nosnippet>87</a>
+<a href=#88 id=88 data-nosnippet>88</a>    <span class="kw">fn </span>id(i: <span class="self">Self</span>::IdSlot, j: <span class="self">Self</span>::IdSlot) -&gt; <span class="self">Self</span>::Id {
+<a href=#89 id=89 data-nosnippet>89</a>        <span class="kw">let </span>(zero, i) = i;
+<a href=#90 id=90 data-nosnippet>90</a>        <span class="kw">let </span>(one, j) = j;
+<a href=#91 id=91 data-nosnippet>91</a>        <span class="kw">let </span>s = S::id(i, j);
+<a href=#92 id=92 data-nosnippet>92</a>        <span class="kw">let </span><span class="kw-2">mut </span>data = <span class="macro">vec!</span>[zero; s.size().unwrap()];
+<a href=#93 id=93 data-nosnippet>93</a>        <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..usize::try_from(i.dim()).unwrap() {
+<a href=#94 id=94 data-nosnippet>94</a>            data[usize::from(s.flat_index([i, i]).unwrap())] = one.clone();
+<a href=#95 id=95 data-nosnippet>95</a>        }
+<a href=#96 id=96 data-nosnippet>96</a>        DenseTensor { data, structure: s }
+<a href=#97 id=97 data-nosnippet>97</a>    }
+<a href=#98 id=98 data-nosnippet>98</a>}
+<a href=#99 id=99 data-nosnippet>99</a>
+<a href=#100 id=100 data-nosnippet>100</a><span class="kw">impl</span>&lt;Aind: AbsInd, T: Clone, S: Clone + Into&lt;IndexLess&lt;R, Aind&gt;&gt;, R: RepName&lt;Dual = R&gt;&gt;
+<a href=#101 id=101 data-nosnippet>101</a>    ApplyPendingIndexPermutation <span class="kw">for </span>DenseTensor&lt;T, S&gt;
+<a href=#102 id=102 data-nosnippet>102</a><span class="kw">where
+<a href=#103 id=103 data-nosnippet>103</a>    </span>S: TensorStructure&lt;Slot = Slot&lt;R, Aind&gt;&gt;,
+<a href=#104 id=104 data-nosnippet>104</a>{
+<a href=#105 id=105 data-nosnippet>105</a>    <span class="kw">type </span>Output = <span class="self">Self</span>;
+<a href=#106 id=106 data-nosnippet>106</a>
+<a href=#107 id=107 data-nosnippet>107</a>    <span class="kw">fn </span>apply_pending_index_permutation(<span class="self">self</span>, pending: <span class="kw-2">&amp;</span>PendingIndexPermutation) -&gt; <span class="self">Self</span>::Output {
+<a href=#108 id=108 data-nosnippet>108</a>        <span class="kw">let </span>target: IndexLess&lt;R, Aind&gt; = <span class="self">self</span>.structure.clone().into();
+<a href=#109 id=109 data-nosnippet>109</a>        <span class="kw">let </span><span class="kw-2">mut </span>source = target.clone();
+<a href=#110 id=110 data-nosnippet>110</a>        source.structure = pending.apply_slice_inverse(<span class="kw-2">&amp;</span>source.structure);
+<a href=#111 id=111 data-nosnippet>111</a>
+<a href=#112 id=112 data-nosnippet>112</a>        <span class="kw">let </span>source_data = <span class="self">self</span>.data;
+<a href=#113 id=113 data-nosnippet>113</a>        <span class="kw">let </span><span class="kw-2">mut </span>target_data = source_data.clone();
+<a href=#114 id=114 data-nosnippet>114</a>        <span class="kw">for </span>(flat, value) <span class="kw">in </span>source_data.into_iter().enumerate() {
+<a href=#115 id=115 data-nosnippet>115</a>            <span class="kw">let </span>source_index = source.expanded_index(flat.into()).unwrap();
+<a href=#116 id=116 data-nosnippet>116</a>            <span class="kw">let </span>target_index = source_index.apply_permutation(pending.permutation());
+<a href=#117 id=117 data-nosnippet>117</a>            <span class="kw">let </span>target_flat = target.flat_index(target_index).unwrap();
+<a href=#118 id=118 data-nosnippet>118</a>            target_data[usize::from(target_flat)] = value;
+<a href=#119 id=119 data-nosnippet>119</a>        }
+<a href=#120 id=120 data-nosnippet>120</a>
+<a href=#121 id=121 data-nosnippet>121</a>        DenseTensor {
+<a href=#122 id=122 data-nosnippet>122</a>            data: target_data,
+<a href=#123 id=123 data-nosnippet>123</a>            structure: <span class="self">self</span>.structure,
+<a href=#124 id=124 data-nosnippet>124</a>        }
+<a href=#125 id=125 data-nosnippet>125</a>    }
+<a href=#126 id=126 data-nosnippet>126</a>}
+<a href=#127 id=127 data-nosnippet>127</a>
+<a href=#128 id=128 data-nosnippet>128</a><span class="kw">impl</span>&lt;T, S&gt; TensorStructure <span class="kw">for </span>DenseTensor&lt;T, S&gt;
+<a href=#129 id=129 data-nosnippet>129</a><span class="kw">where
+<a href=#130 id=130 data-nosnippet>130</a>    </span>S: TensorStructure,
+<a href=#131 id=131 data-nosnippet>131</a>{
+<a href=#132 id=132 data-nosnippet>132</a>    <span class="comment">// type R = &lt;T::Structure as TensorStructure&gt;::R;
+<a href=#133 id=133 data-nosnippet>133</a>    </span><span class="kw">type </span>Indexed = DenseTensor&lt;T, S::Indexed&gt;;
+<a href=#134 id=134 data-nosnippet>134</a>    <span class="kw">type </span>Slot = S::Slot;
+<a href=#135 id=135 data-nosnippet>135</a>
+<a href=#136 id=136 data-nosnippet>136</a>    <span class="kw">fn </span>reindex_storage(
+<a href=#137 id=137 data-nosnippet>137</a>        <span class="self">self</span>,
+<a href=#138 id=138 data-nosnippet>138</a>        indices: <span class="kw-2">&amp;</span>[&lt;<span class="self">Self</span>::Slot <span class="kw">as </span>IsAbstractSlot&gt;::Aind],
+<a href=#139 id=139 data-nosnippet>139</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Reindexed&lt;<span class="self">Self</span>::Indexed&gt;, StructureError&gt; {
+<a href=#140 id=140 data-nosnippet>140</a>        <span class="self">self</span>.structure.reindex_storage(indices).map(|reindexed| {
+<a href=#141 id=141 data-nosnippet>141</a>            reindexed.map_target(|structure| DenseTensor {
+<a href=#142 id=142 data-nosnippet>142</a>                structure,
+<a href=#143 id=143 data-nosnippet>143</a>                data: <span class="self">self</span>.data,
+<a href=#144 id=144 data-nosnippet>144</a>            })
 <a href=#145 id=145 data-nosnippet>145</a>        })
 <a href=#146 id=146 data-nosnippet>146</a>    }
 <a href=#147 id=147 data-nosnippet>147</a>
@@ -487,7 +487,7 @@
 <a href=#486 id=486 data-nosnippet>486</a>    ///
 <a href=#487 id=487 data-nosnippet>487</a>    /// Returns an error if `data.len()` differs from the structure size. A
 <a href=#488 id=488 data-nosnippet>488</a>    /// scalar structure accepts exactly one component.
-<a href=#489 id=489 data-nosnippet>489</a>    </span><span class="kw">pub fn </span>from_data(data: Vec&lt;T&gt;, structure: I) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>&gt; {
+<a href=#489 id=489 data-nosnippet>489</a>    </span><span class="kw">pub fn </span>from_storage_data(data: Vec&lt;T&gt;, structure: I) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>&gt; {
 <a href=#490 id=490 data-nosnippet>490</a>        <span class="kw">if </span>data.len() != structure.size()<span class="question-mark">? </span>&amp;&amp; !(data.len() == <span class="number">1 </span>&amp;&amp; structure.is_scalar()) {
 <a href=#491 id=491 data-nosnippet>491</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(<span class="string">"Data length does not match shape"</span>));
 <a href=#492 id=492 data-nosnippet>492</a>        }
@@ -506,8 +506,8 @@
 <a href=#505 id=505 data-nosnippet>505</a>        }
 <a href=#506 id=506 data-nosnippet>506</a>    }
 <a href=#507 id=507 data-nosnippet>507</a>
-<a href=#508 id=508 data-nosnippet>508</a>    <span class="doccomment">/// Generates a new dense tensor from the given data and structure, truncating the data if it is too long with respect to the structure
-<a href=#509 id=509 data-nosnippet>509</a>    </span><span class="kw">pub fn </span>from_data_coerced(data: <span class="kw-2">&amp;</span>[T], structure: I) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>&gt; {
+<a href=#508 id=508 data-nosnippet>508</a>    <span class="doccomment">/// Builds a dense tensor from storage-ordered data, truncating excess values.
+<a href=#509 id=509 data-nosnippet>509</a>    </span><span class="kw">pub fn </span>from_storage_data_coerced(data: <span class="kw-2">&amp;</span>[T], structure: I) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>&gt; {
 <a href=#510 id=510 data-nosnippet>510</a>        <span class="kw">if </span>data.len() &lt; structure.size()<span class="question-mark">? </span>{
 <a href=#511 id=511 data-nosnippet>511</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(<span class="string">"Data length is too small"</span>));
 <a href=#512 id=512 data-nosnippet>512</a>        }
@@ -763,4 +763,37 @@
 <a href=#762 id=762 data-nosnippet>762</a>        }
 <a href=#763 id=763 data-nosnippet>763</a>    }
 <a href=#764 id=764 data-nosnippet>764</a>}
+<a href=#765 id=765 data-nosnippet>765</a>
+<a href=#766 id=766 data-nosnippet>766</a><span class="attr">#[cfg(test)]
+<a href=#767 id=767 data-nosnippet>767</a></span><span class="kw">mod </span>pending_index_tests {
+<a href=#768 id=768 data-nosnippet>768</a>    <span class="kw">use </span><span class="kw">super</span>::DenseTensor;
+<a href=#769 id=769 data-nosnippet>769</a>    <span class="kw">use </span><span class="kw">crate</span>::structure::{
+<a href=#770 id=770 data-nosnippet>770</a>        TensorStructure,
+<a href=#771 id=771 data-nosnippet>771</a>        abstract_index::AbstractIndex,
+<a href=#772 id=772 data-nosnippet>772</a>        ordered::OrderedStructure,
+<a href=#773 id=773 data-nosnippet>773</a>        representation::{Euclidean, RepName},
+<a href=#774 id=774 data-nosnippet>774</a>    };
+<a href=#775 id=775 data-nosnippet>775</a>
+<a href=#776 id=776 data-nosnippet>776</a>    <span class="attr">#[test]
+<a href=#777 id=777 data-nosnippet>777</a>    </span><span class="kw">fn </span>rank_three_cycle_moves_source_storage_into_target_order() {
+<a href=#778 id=778 data-nosnippet>778</a>        <span class="kw">let </span>structure = OrderedStructure::new(<span class="macro">vec!</span>[
+<a href=#779 id=779 data-nosnippet>779</a>            Euclidean {}.new_slot(<span class="number">2</span>, AbstractIndex::Normal(<span class="number">0</span>)),
+<a href=#780 id=780 data-nosnippet>780</a>            Euclidean {}.new_slot(<span class="number">2</span>, AbstractIndex::Normal(<span class="number">1</span>)),
+<a href=#781 id=781 data-nosnippet>781</a>            Euclidean {}.new_slot(<span class="number">2</span>, AbstractIndex::Normal(<span class="number">2</span>)),
+<a href=#782 id=782 data-nosnippet>782</a>        ])
+<a href=#783 id=783 data-nosnippet>783</a>        .into_canonical();
+<a href=#784 id=784 data-nosnippet>784</a>        <span class="kw">let </span>tensor = DenseTensor::from_storage_data((<span class="number">0</span>..<span class="number">8</span>).collect(), structure).unwrap();
+<a href=#785 id=785 data-nosnippet>785</a>
+<a href=#786 id=786 data-nosnippet>786</a>        <span class="kw">let </span>reordered = tensor
+<a href=#787 id=787 data-nosnippet>787</a>            .reindex_storage(<span class="kw-2">&amp;</span>[
+<a href=#788 id=788 data-nosnippet>788</a>                AbstractIndex::Normal(<span class="number">2</span>),
+<a href=#789 id=789 data-nosnippet>789</a>                AbstractIndex::Normal(<span class="number">0</span>),
+<a href=#790 id=790 data-nosnippet>790</a>                AbstractIndex::Normal(<span class="number">1</span>),
+<a href=#791 id=791 data-nosnippet>791</a>            ])
+<a href=#792 id=792 data-nosnippet>792</a>            .unwrap()
+<a href=#793 id=793 data-nosnippet>793</a>            .apply();
+<a href=#794 id=794 data-nosnippet>794</a>
+<a href=#795 id=795 data-nosnippet>795</a>        <span class="macro">assert_eq!</span>(reordered.data, <span class="macro">vec!</span>[<span class="number">0</span>, <span class="number">4</span>, <span class="number">1</span>, <span class="number">5</span>, <span class="number">2</span>, <span class="number">6</span>, <span class="number">3</span>, <span class="number">7</span>]);
+<a href=#796 id=796 data-nosnippet>796</a>    }
+<a href=#797 id=797 data-nosnippet>797</a>}
 </code></pre></div></section></main></body></html>

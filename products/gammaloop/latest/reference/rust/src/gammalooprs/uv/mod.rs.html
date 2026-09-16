@@ -32,7 +32,7 @@
 <a href=#31 id=31 data-nosnippet>31</a>    dim: <span class="kw">impl </span>Into&lt;Dimension&gt;,
 <a href=#32 id=32 data-nosnippet>32</a>) -&gt; ShadowedStructure&lt;Aind&gt; {
 <a href=#33 id=33 data-nosnippet>33</a>    <span class="kw">let </span>mink = Minkowski {}.new_slot(dim, ind);
-<a href=#34 id=34 data-nosnippet>34</a>    NamedStructure::from_iter([mink], GS.emr_mom, <span class="prelude-val">Some</span>(<span class="macro">vec!</span>[Atom::num(tag)])).structure
+<a href=#34 id=34 data-nosnippet>34</a>    NamedStructure::from_iter([mink], GS.emr_mom, <span class="prelude-val">Some</span>(<span class="macro">vec!</span>[Atom::num(tag)])).into_canonical()
 <a href=#35 id=35 data-nosnippet>35</a>}
 <a href=#36 id=36 data-nosnippet>36</a>
 <a href=#37 id=37 data-nosnippet>37</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>spenso_lor_atom(tag: i32, ind: <span class="kw">impl </span>Into&lt;Aind&gt;, dim: <span class="kw">impl </span>Into&lt;Dimension&gt;) -&gt; Atom {

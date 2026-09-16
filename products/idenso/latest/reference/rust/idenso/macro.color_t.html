@@ -28,9 +28,9 @@ local slot bindings and numeric labels are used as-is.</p>
 <div class="example-wrap ignore"><a href="#" class="tooltip" title="This example is not tested">ⓘ</a><pre class="rust rust-example-rendered"><code><span class="kw">use </span>idenso::color_t;
 <span class="kw">use </span>spenso::{slot, trace};
 
-<span class="kw">let </span>factor = <span class="macro">color_t!</span>(<span class="macro">slot!</span>(coad_na, a));
+<span class="kw">let </span>factor = <span class="macro">color_t!</span>(<span class="macro">slot!</span>(coad_da, a));
 <span class="kw">let </span>expr = <span class="macro">trace!</span>(<span class="kw-2">&amp;</span>cof_nc, factor);
-<span class="kw">let </span>factor_from_binding = <span class="macro">color_t!</span>(<span class="macro">slot!</span>(coad_na, a));
-<span class="kw">let </span>explicit_tensor = <span class="macro">color_t!</span>(<span class="macro">slot!</span>(coad_na, a), <span class="macro">slot!</span>(cof_nc, i), <span class="macro">slot!</span>(cof_nc.dual(), j));
+<span class="kw">let </span>factor_from_binding = <span class="macro">color_t!</span>(<span class="macro">slot!</span>(coad_da, a));
+<span class="kw">let </span>explicit_tensor = <span class="macro">color_t!</span>(<span class="macro">slot!</span>(coad_da, a), <span class="macro">slot!</span>(cof_nc, i), <span class="macro">slot!</span>(cof_nc.dual(), j));
 <span class="kw">let </span>pattern_tensor = <span class="macro">color_t!</span>(RS.a__, RS.i__, RS.j__);
 <span class="kw">let </span>dimensioned_pattern = <span class="macro">color_t!</span>([CS.adj_, RS.a_], [CS.nc_, RS.i_], [CS.nc_, RS.j_]);</code></pre></div></div></details></section></div></main></body></html>

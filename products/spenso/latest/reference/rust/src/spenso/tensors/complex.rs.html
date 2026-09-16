@@ -4,9 +4,9 @@
 <a href=#3 id=3 data-nosnippet>3</a><span class="kw">use crate</span>::{
 <a href=#4 id=4 data-nosnippet>4</a>    iterators::IteratorEnum,
 <a href=#5 id=5 data-nosnippet>5</a>    structure::{
-<a href=#6 id=6 data-nosnippet>6</a>        IndexLess, PermutedStructure, SlotIndex,
-<a href=#7 id=7 data-nosnippet>7</a>        concrete_index::ConcreteIndex,
-<a href=#8 id=8 data-nosnippet>8</a>        permuted::PermuteTensor,
+<a href=#6 id=6 data-nosnippet>6</a>        ApplyPendingIndexPermutation, IndexLess, PendingIndexPermutation, Reindexed, SlotIndex,
+<a href=#7 id=7 data-nosnippet>7</a>        TensorIdentity,
+<a href=#8 id=8 data-nosnippet>8</a>        concrete_index::ConcreteIndex,
 <a href=#9 id=9 data-nosnippet>9</a>        representation::RepName,
 <a href=#10 id=10 data-nosnippet>10</a>        slot::{AbsInd, Slot},
 <a href=#11 id=11 data-nosnippet>11</a>    },
@@ -391,305 +391,294 @@
 <a href=#390 id=390 data-nosnippet>390</a>    }
 <a href=#391 id=391 data-nosnippet>391</a>}
 <a href=#392 id=392 data-nosnippet>392</a>
-<a href=#393 id=393 data-nosnippet>393</a><span class="kw">impl</span>&lt;T: Clone, Aind: AbsInd, S: Clone + Into&lt;IndexLess&lt;R, Aind&gt;&gt;, R: RepName&lt;Dual = R&gt;&gt;
-<a href=#394 id=394 data-nosnippet>394</a>    PermuteTensor <span class="kw">for </span>RealOrComplexTensor&lt;T, S&gt;
-<a href=#395 id=395 data-nosnippet>395</a><span class="kw">where
-<a href=#396 id=396 data-nosnippet>396</a>    </span>S: TensorStructure&lt;Slot = Slot&lt;R, Aind&gt;&gt; + PermuteTensor&lt;IdSlot = Slot&lt;R, Aind&gt;, Id = S&gt;,
-<a href=#397 id=397 data-nosnippet>397</a>{
-<a href=#398 id=398 data-nosnippet>398</a>    <span class="kw">type </span>Id = RealOrComplexTensor&lt;T, S&gt;;
-<a href=#399 id=399 data-nosnippet>399</a>    <span class="kw">type </span>IdSlot = (T, Slot&lt;R, Aind&gt;);
-<a href=#400 id=400 data-nosnippet>400</a>    <span class="kw">type </span>Permuted = RealOrComplexTensor&lt;T, S&gt;;
-<a href=#401 id=401 data-nosnippet>401</a>
-<a href=#402 id=402 data-nosnippet>402</a>    <span class="kw">fn </span>id(i: <span class="self">Self</span>::IdSlot, j: <span class="self">Self</span>::IdSlot) -&gt; <span class="self">Self</span>::Id {
-<a href=#403 id=403 data-nosnippet>403</a>        RealOrComplexTensor::Real(DataTensor::id(i, j))
-<a href=#404 id=404 data-nosnippet>404</a>    }
-<a href=#405 id=405 data-nosnippet>405</a>
-<a href=#406 id=406 data-nosnippet>406</a>    <span class="kw">fn </span>permute_inds(<span class="self">self</span>, permutation: <span class="kw-2">&amp;</span>linnet::permutation::Permutation) -&gt; <span class="self">Self</span>::Permuted {
-<a href=#407 id=407 data-nosnippet>407</a>        <span class="kw">match </span><span class="self">self </span>{
-<a href=#408 id=408 data-nosnippet>408</a>            RealOrComplexTensor::Real(d) =&gt; RealOrComplexTensor::Real(d.permute_inds(permutation)),
-<a href=#409 id=409 data-nosnippet>409</a>            RealOrComplexTensor::Complex(s) =&gt; {
-<a href=#410 id=410 data-nosnippet>410</a>                RealOrComplexTensor::Complex(s.permute_inds(permutation))
-<a href=#411 id=411 data-nosnippet>411</a>            }
-<a href=#412 id=412 data-nosnippet>412</a>        }
-<a href=#413 id=413 data-nosnippet>413</a>    }
-<a href=#414 id=414 data-nosnippet>414</a>
-<a href=#415 id=415 data-nosnippet>415</a>    <span class="kw">fn </span>permute_reps(<span class="self">self</span>, rep_perm: <span class="kw-2">&amp;</span>linnet::permutation::Permutation) -&gt; <span class="self">Self</span>::Permuted {
-<a href=#416 id=416 data-nosnippet>416</a>        <span class="kw">match </span><span class="self">self </span>{
-<a href=#417 id=417 data-nosnippet>417</a>            RealOrComplexTensor::Real(d) =&gt; RealOrComplexTensor::Real(d.permute_reps(rep_perm)),
-<a href=#418 id=418 data-nosnippet>418</a>            RealOrComplexTensor::Complex(s) =&gt; {
-<a href=#419 id=419 data-nosnippet>419</a>                RealOrComplexTensor::Complex(s.permute_reps(rep_perm))
-<a href=#420 id=420 data-nosnippet>420</a>            }
-<a href=#421 id=421 data-nosnippet>421</a>        }
-<a href=#422 id=422 data-nosnippet>422</a>    }
-<a href=#423 id=423 data-nosnippet>423</a>}
-<a href=#424 id=424 data-nosnippet>424</a>
-<a href=#425 id=425 data-nosnippet>425</a><span class="kw">impl</span>&lt;T: Clone, S&gt; TensorStructure <span class="kw">for </span>RealOrComplexTensor&lt;T, S&gt;
-<a href=#426 id=426 data-nosnippet>426</a><span class="kw">where
-<a href=#427 id=427 data-nosnippet>427</a>    </span>S: TensorStructure,
-<a href=#428 id=428 data-nosnippet>428</a>{
-<a href=#429 id=429 data-nosnippet>429</a>    <span class="comment">// type R = &lt;T::Structure as TensorStructure&gt;::R;
-<a href=#430 id=430 data-nosnippet>430</a>    </span><span class="kw">type </span>Indexed = RealOrComplexTensor&lt;T, S::Indexed&gt;;
-<a href=#431 id=431 data-nosnippet>431</a>    <span class="kw">type </span>Slot = S::Slot;
-<a href=#432 id=432 data-nosnippet>432</a>
-<a href=#433 id=433 data-nosnippet>433</a>    <span class="kw">fn </span>reindex(
-<a href=#434 id=434 data-nosnippet>434</a>        <span class="self">self</span>,
-<a href=#435 id=435 data-nosnippet>435</a>        indices: <span class="kw-2">&amp;</span>[&lt;<span class="self">Self</span>::Slot <span class="kw">as </span>IsAbstractSlot&gt;::Aind],
-<a href=#436 id=436 data-nosnippet>436</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;PermutedStructure&lt;<span class="self">Self</span>::Indexed&gt;, StructureError&gt; {
-<a href=#437 id=437 data-nosnippet>437</a>        <span class="prelude-val">Ok</span>(<span class="kw">match </span><span class="self">self </span>{
-<a href=#438 id=438 data-nosnippet>438</a>            RealOrComplexTensor::Complex(d) =&gt; {
-<a href=#439 id=439 data-nosnippet>439</a>                <span class="kw">let </span>res = d.reindex(indices)<span class="question-mark">?</span>;
-<a href=#440 id=440 data-nosnippet>440</a>                PermutedStructure {
-<a href=#441 id=441 data-nosnippet>441</a>                    structure: RealOrComplexTensor::Complex(res.structure),
-<a href=#442 id=442 data-nosnippet>442</a>                    rep_permutation: res.rep_permutation,
-<a href=#443 id=443 data-nosnippet>443</a>                    index_permutation: res.index_permutation,
-<a href=#444 id=444 data-nosnippet>444</a>                }
-<a href=#445 id=445 data-nosnippet>445</a>            }
-<a href=#446 id=446 data-nosnippet>446</a>            RealOrComplexTensor::Real(d) =&gt; {
-<a href=#447 id=447 data-nosnippet>447</a>                <span class="kw">let </span>res = d.reindex(indices)<span class="question-mark">?</span>;
-<a href=#448 id=448 data-nosnippet>448</a>                PermutedStructure {
-<a href=#449 id=449 data-nosnippet>449</a>                    structure: RealOrComplexTensor::Real(res.structure),
-<a href=#450 id=450 data-nosnippet>450</a>                    rep_permutation: res.rep_permutation,
-<a href=#451 id=451 data-nosnippet>451</a>                    index_permutation: res.index_permutation,
-<a href=#452 id=452 data-nosnippet>452</a>                }
-<a href=#453 id=453 data-nosnippet>453</a>            }
-<a href=#454 id=454 data-nosnippet>454</a>        })
-<a href=#455 id=455 data-nosnippet>455</a>    }
-<a href=#456 id=456 data-nosnippet>456</a>
-<a href=#457 id=457 data-nosnippet>457</a>    <span class="kw">fn </span>dual(<span class="self">self</span>) -&gt; <span class="self">Self </span>{
-<a href=#458 id=458 data-nosnippet>458</a>        <span class="self">self</span>.map_same_structure(|s| s.dual())
-<a href=#459 id=459 data-nosnippet>459</a>    }
-<a href=#460 id=460 data-nosnippet>460</a>
-<a href=#461 id=461 data-nosnippet>461</a>    <span class="macro">delegate!</span> {
-<a href=#462 id=462 data-nosnippet>462</a>        to <span class="self">self</span>.structure() {
-<a href=#463 id=463 data-nosnippet>463</a>            <span class="kw">fn </span>is_fully_self_dual(<span class="kw-2">&amp;</span><span class="self">self</span>)-&gt; bool;
-<a href=#464 id=464 data-nosnippet>464</a>            <span class="kw">fn </span>external_reps_iter(<span class="kw-2">&amp;</span><span class="self">self</span>)-&gt; <span class="kw">impl </span>Iterator&lt;Item = Representation&lt;&lt;<span class="self">Self</span>::Slot <span class="kw">as </span>IsAbstractSlot&gt;::R&gt;&gt;;
-<a href=#465 id=465 data-nosnippet>465</a>            <span class="kw">fn </span>external_indices_iter(<span class="kw-2">&amp;</span><span class="self">self</span>)-&gt; <span class="kw">impl </span>Iterator&lt;Item = &lt;<span class="self">Self</span>::Slot <span class="kw">as </span>IsAbstractSlot&gt;::Aind&gt;;
-<a href=#466 id=466 data-nosnippet>466</a>            <span class="kw">fn </span>external_dims_iter(<span class="kw-2">&amp;</span><span class="self">self</span>)-&gt; <span class="kw">impl </span>Iterator&lt;Item = Dimension&gt;;
-<a href=#467 id=467 data-nosnippet>467</a>            <span class="kw">fn </span>external_structure_iter(<span class="kw-2">&amp;</span><span class="self">self</span>)-&gt; <span class="kw">impl </span>Iterator&lt;Item = <span class="self">Self</span>::Slot&gt;;
-<a href=#468 id=468 data-nosnippet>468</a>            <span class="kw">fn </span>get_slot(<span class="kw-2">&amp;</span><span class="self">self</span>, i: <span class="kw">impl </span>Into&lt;SlotIndex&gt;)-&gt; <span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>::Slot&gt;;
-<a href=#469 id=469 data-nosnippet>469</a>            <span class="kw">fn </span>get_rep(<span class="kw-2">&amp;</span><span class="self">self</span>, i: <span class="kw">impl </span>Into&lt;SlotIndex&gt;)-&gt; <span class="prelude-ty">Option</span>&lt;Representation&lt;&lt;<span class="self">Self</span>::Slot <span class="kw">as </span>IsAbstractSlot&gt;::R&gt;&gt;;
-<a href=#470 id=470 data-nosnippet>470</a>            <span class="kw">fn </span>get_dim(<span class="kw-2">&amp;</span><span class="self">self</span>, i: <span class="kw">impl </span>Into&lt;SlotIndex&gt;)-&gt; <span class="prelude-ty">Option</span>&lt;Dimension&gt;;
-<a href=#471 id=471 data-nosnippet>471</a>            <span class="kw">fn </span>get_aind(<span class="kw-2">&amp;</span><span class="self">self</span>, i: <span class="kw">impl </span>Into&lt;SlotIndex&gt;)-&gt; <span class="prelude-ty">Option</span>&lt;&lt;<span class="self">Self</span>::Slot <span class="kw">as </span>IsAbstractSlot&gt;::Aind&gt;;
-<a href=#472 id=472 data-nosnippet>472</a>            <span class="kw">fn </span>order(<span class="kw-2">&amp;</span><span class="self">self</span>)-&gt; usize;
-<a href=#473 id=473 data-nosnippet>473</a>        }
-<a href=#474 id=474 data-nosnippet>474</a>    }
-<a href=#475 id=475 data-nosnippet>475</a>}
-<a href=#476 id=476 data-nosnippet>476</a>
-<a href=#477 id=477 data-nosnippet>477</a><span class="kw">impl</span>&lt;T: Clone, S: TensorStructure&gt; HasStructure <span class="kw">for </span>RealOrComplexTensor&lt;T, S&gt; {
-<a href=#478 id=478 data-nosnippet>478</a>    <span class="kw">type </span>Scalar = RealOrComplex&lt;T&gt;;
-<a href=#479 id=479 data-nosnippet>479</a>    <span class="kw">type </span>ScalarRef&lt;<span class="lifetime">'a</span>&gt;
-<a href=#480 id=480 data-nosnippet>480</a>        = RealOrComplexRef&lt;<span class="lifetime">'a</span>, T&gt;
-<a href=#481 id=481 data-nosnippet>481</a>    <span class="kw">where
-<a href=#482 id=482 data-nosnippet>482</a>        </span><span class="self">Self</span>: <span class="lifetime">'a</span>;
-<a href=#483 id=483 data-nosnippet>483</a>    <span class="kw">type </span>Structure = S;
-<a href=#484 id=484 data-nosnippet>484</a>    <span class="kw">type </span>Store&lt;U&gt;
-<a href=#485 id=485 data-nosnippet>485</a>        = RealOrComplexTensor&lt;T, U&gt;
-<a href=#486 id=486 data-nosnippet>486</a>    <span class="kw">where
-<a href=#487 id=487 data-nosnippet>487</a>        </span>U: TensorStructure;
-<a href=#488 id=488 data-nosnippet>488</a>
-<a href=#489 id=489 data-nosnippet>489</a>    <span class="kw">fn </span>map_structure&lt;S2: TensorStructure&gt;(<span class="self">self</span>, f: <span class="kw">impl </span>Fn(S) -&gt; S2) -&gt; RealOrComplexTensor&lt;T, S2&gt; {
-<a href=#490 id=490 data-nosnippet>490</a>        <span class="kw">match </span><span class="self">self </span>{
-<a href=#491 id=491 data-nosnippet>491</a>            RealOrComplexTensor::Real(d) =&gt; RealOrComplexTensor::Real(d.map_structure(f)),
-<a href=#492 id=492 data-nosnippet>492</a>            RealOrComplexTensor::Complex(d) =&gt; RealOrComplexTensor::Complex(d.map_structure(f)),
-<a href=#493 id=493 data-nosnippet>493</a>        }
-<a href=#494 id=494 data-nosnippet>494</a>    }
-<a href=#495 id=495 data-nosnippet>495</a>
-<a href=#496 id=496 data-nosnippet>496</a>    <span class="kw">fn </span>map_structure_result&lt;S2: TensorStructure, E&gt;(
-<a href=#497 id=497 data-nosnippet>497</a>        <span class="self">self</span>,
-<a href=#498 id=498 data-nosnippet>498</a>        f: <span class="kw">impl </span>Fn(S) -&gt; <span class="prelude-ty">Result</span>&lt;S2, E&gt;,
-<a href=#499 id=499 data-nosnippet>499</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;RealOrComplexTensor&lt;T, S2&gt;, E&gt; {
-<a href=#500 id=500 data-nosnippet>500</a>        <span class="prelude-val">Ok</span>(<span class="kw">match </span><span class="self">self </span>{
-<a href=#501 id=501 data-nosnippet>501</a>            RealOrComplexTensor::Real(d) =&gt; RealOrComplexTensor::Real(d.map_structure_result(f)<span class="question-mark">?</span>),
-<a href=#502 id=502 data-nosnippet>502</a>            RealOrComplexTensor::Complex(d) =&gt; {
-<a href=#503 id=503 data-nosnippet>503</a>                RealOrComplexTensor::Complex(d.map_structure_result(f)<span class="question-mark">?</span>)
-<a href=#504 id=504 data-nosnippet>504</a>            }
-<a href=#505 id=505 data-nosnippet>505</a>        })
-<a href=#506 id=506 data-nosnippet>506</a>    }
-<a href=#507 id=507 data-nosnippet>507</a>
-<a href=#508 id=508 data-nosnippet>508</a>    <span class="kw">fn </span>structure(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span><span class="self">Self</span>::Structure {
-<a href=#509 id=509 data-nosnippet>509</a>        <span class="kw">match </span><span class="self">self </span>{
-<a href=#510 id=510 data-nosnippet>510</a>            RealOrComplexTensor::Real(r) =&gt; r.structure(),
-<a href=#511 id=511 data-nosnippet>511</a>            RealOrComplexTensor::Complex(r) =&gt; r.structure(),
-<a href=#512 id=512 data-nosnippet>512</a>        }
-<a href=#513 id=513 data-nosnippet>513</a>    }
-<a href=#514 id=514 data-nosnippet>514</a>
-<a href=#515 id=515 data-nosnippet>515</a>    <span class="kw">fn </span>map_same_structure(<span class="self">self</span>, f: <span class="kw">impl </span>FnOnce(<span class="self">Self</span>::Structure) -&gt; <span class="self">Self</span>::Structure) -&gt; <span class="self">Self </span>{
-<a href=#516 id=516 data-nosnippet>516</a>        <span class="kw">match </span><span class="self">self </span>{
-<a href=#517 id=517 data-nosnippet>517</a>            RealOrComplexTensor::Real(d) =&gt; RealOrComplexTensor::Real(d.map_same_structure(f)),
-<a href=#518 id=518 data-nosnippet>518</a>            RealOrComplexTensor::Complex(d) =&gt; {
-<a href=#519 id=519 data-nosnippet>519</a>                RealOrComplexTensor::Complex(d.map_same_structure(f))
-<a href=#520 id=520 data-nosnippet>520</a>            }
-<a href=#521 id=521 data-nosnippet>521</a>        }
-<a href=#522 id=522 data-nosnippet>522</a>    }
-<a href=#523 id=523 data-nosnippet>523</a>
-<a href=#524 id=524 data-nosnippet>524</a>    <span class="kw">fn </span>mut_structure(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self</span>::Structure {
-<a href=#525 id=525 data-nosnippet>525</a>        <span class="kw">match </span><span class="self">self </span>{
-<a href=#526 id=526 data-nosnippet>526</a>            RealOrComplexTensor::Real(r) =&gt; r.mut_structure(),
-<a href=#527 id=527 data-nosnippet>527</a>            RealOrComplexTensor::Complex(r) =&gt; r.mut_structure(),
-<a href=#528 id=528 data-nosnippet>528</a>        }
-<a href=#529 id=529 data-nosnippet>529</a>    }
-<a href=#530 id=530 data-nosnippet>530</a>
-<a href=#531 id=531 data-nosnippet>531</a>    <span class="kw">fn </span>scalar(<span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>::Scalar&gt; {
-<a href=#532 id=532 data-nosnippet>532</a>        <span class="kw">match </span><span class="self">self </span>{
-<a href=#533 id=533 data-nosnippet>533</a>            RealOrComplexTensor::Real(r) =&gt; r.scalar().map(|x| RealOrComplex::Real(x)),
-<a href=#534 id=534 data-nosnippet>534</a>            RealOrComplexTensor::Complex(r) =&gt; r.scalar().map(|x| RealOrComplex::Complex(x)),
-<a href=#535 id=535 data-nosnippet>535</a>        }
-<a href=#536 id=536 data-nosnippet>536</a>    }
-<a href=#537 id=537 data-nosnippet>537</a>
-<a href=#538 id=538 data-nosnippet>538</a>    <span class="kw">fn </span>scalar_ref(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>::ScalarRef&lt;<span class="lifetime">'_</span>&gt;&gt; {
-<a href=#539 id=539 data-nosnippet>539</a>        <span class="kw">match </span><span class="self">self </span>{
-<a href=#540 id=540 data-nosnippet>540</a>            RealOrComplexTensor::Real(r) =&gt; r.scalar_ref().map(|x| RealOrComplexRef::Real(x)),
-<a href=#541 id=541 data-nosnippet>541</a>            RealOrComplexTensor::Complex(r) =&gt; r.scalar_ref().map(|x| RealOrComplexRef::Complex(x)),
-<a href=#542 id=542 data-nosnippet>542</a>        }
-<a href=#543 id=543 data-nosnippet>543</a>    }
-<a href=#544 id=544 data-nosnippet>544</a>}
-<a href=#545 id=545 data-nosnippet>545</a>
-<a href=#546 id=546 data-nosnippet>546</a><span class="kw">impl</span>&lt;T: Clone, S: TensorStructure + ScalarStructure&gt; ScalarTensor <span class="kw">for </span>RealOrComplexTensor&lt;T, S&gt; {
-<a href=#547 id=547 data-nosnippet>547</a>    <span class="kw">fn </span>new_scalar(scalar: <span class="self">Self</span>::Scalar) -&gt; <span class="self">Self </span>{
-<a href=#548 id=548 data-nosnippet>548</a>        <span class="kw">match </span>scalar {
-<a href=#549 id=549 data-nosnippet>549</a>            RealOrComplex::Real(r) =&gt; RealOrComplexTensor::Real(DataTensor::new_scalar(r)),
-<a href=#550 id=550 data-nosnippet>550</a>            RealOrComplex::Complex(r) =&gt; RealOrComplexTensor::Complex(DataTensor::new_scalar(r)),
-<a href=#551 id=551 data-nosnippet>551</a>        }
-<a href=#552 id=552 data-nosnippet>552</a>    }
-<a href=#553 id=553 data-nosnippet>553</a>}
-<a href=#554 id=554 data-nosnippet>554</a>
-<a href=#555 id=555 data-nosnippet>555</a><span class="kw">impl</span>&lt;T, S&gt; TracksCount <span class="kw">for </span>RealOrComplexTensor&lt;T, S&gt;
-<a href=#556 id=556 data-nosnippet>556</a><span class="kw">where
-<a href=#557 id=557 data-nosnippet>557</a>    </span>S: TensorStructure + TracksCount,
-<a href=#558 id=558 data-nosnippet>558</a>    T: Clone,
-<a href=#559 id=559 data-nosnippet>559</a>{
-<a href=#560 id=560 data-nosnippet>560</a>    <span class="kw">fn </span>contractions_num(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
-<a href=#561 id=561 data-nosnippet>561</a>        <span class="kw">match </span><span class="self">self </span>{
-<a href=#562 id=562 data-nosnippet>562</a>            RealOrComplexTensor::Real(r) =&gt; r.contractions_num(),
-<a href=#563 id=563 data-nosnippet>563</a>            RealOrComplexTensor::Complex(r) =&gt; r.contractions_num(),
-<a href=#564 id=564 data-nosnippet>564</a>        }
-<a href=#565 id=565 data-nosnippet>565</a>    }
-<a href=#566 id=566 data-nosnippet>566</a>}
-<a href=#567 id=567 data-nosnippet>567</a>
-<a href=#568 id=568 data-nosnippet>568</a><span class="kw">impl</span>&lt;T, S&gt; HasName <span class="kw">for </span>RealOrComplexTensor&lt;T, S&gt;
-<a href=#569 id=569 data-nosnippet>569</a><span class="kw">where
-<a href=#570 id=570 data-nosnippet>570</a>    </span>S: TensorStructure + HasName,
-<a href=#571 id=571 data-nosnippet>571</a>    T: Clone,
-<a href=#572 id=572 data-nosnippet>572</a>{
-<a href=#573 id=573 data-nosnippet>573</a>    <span class="kw">type </span>Args = S::Args;
-<a href=#574 id=574 data-nosnippet>574</a>    <span class="kw">type </span>Name = S::Name;
-<a href=#575 id=575 data-nosnippet>575</a>
-<a href=#576 id=576 data-nosnippet>576</a>    <span class="kw">fn </span>name(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;S::Name&gt; {
-<a href=#577 id=577 data-nosnippet>577</a>        <span class="kw">match </span><span class="self">self </span>{
-<a href=#578 id=578 data-nosnippet>578</a>            RealOrComplexTensor::Real(r) =&gt; r.name(),
-<a href=#579 id=579 data-nosnippet>579</a>            RealOrComplexTensor::Complex(r) =&gt; r.name(),
-<a href=#580 id=580 data-nosnippet>580</a>        }
-<a href=#581 id=581 data-nosnippet>581</a>    }
-<a href=#582 id=582 data-nosnippet>582</a>
-<a href=#583 id=583 data-nosnippet>583</a>    <span class="kw">fn </span>set_name(<span class="kw-2">&amp;mut </span><span class="self">self</span>, name: <span class="self">Self</span>::Name) {
-<a href=#584 id=584 data-nosnippet>584</a>        <span class="kw">match </span><span class="self">self </span>{
-<a href=#585 id=585 data-nosnippet>585</a>            RealOrComplexTensor::Real(r) =&gt; r.set_name(name),
-<a href=#586 id=586 data-nosnippet>586</a>            RealOrComplexTensor::Complex(r) =&gt; r.set_name(name),
-<a href=#587 id=587 data-nosnippet>587</a>        }
-<a href=#588 id=588 data-nosnippet>588</a>    }
-<a href=#589 id=589 data-nosnippet>589</a>
-<a href=#590 id=590 data-nosnippet>590</a>    <span class="kw">fn </span>args(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;S::Args&gt; {
-<a href=#591 id=591 data-nosnippet>591</a>        <span class="kw">match </span><span class="self">self </span>{
-<a href=#592 id=592 data-nosnippet>592</a>            RealOrComplexTensor::Real(r) =&gt; r.args(),
-<a href=#593 id=593 data-nosnippet>593</a>            RealOrComplexTensor::Complex(r) =&gt; r.args(),
-<a href=#594 id=594 data-nosnippet>594</a>        }
-<a href=#595 id=595 data-nosnippet>595</a>    }
-<a href=#596 id=596 data-nosnippet>596</a>}
-<a href=#597 id=597 data-nosnippet>597</a>
-<a href=#598 id=598 data-nosnippet>598</a><span class="kw">impl</span>&lt;T: Clone, S: TensorStructure&gt; IteratableTensor <span class="kw">for </span>RealOrComplexTensor&lt;T, S&gt; {
-<a href=#599 id=599 data-nosnippet>599</a>    <span class="kw">type </span>Data&lt;<span class="lifetime">'a</span>&gt;
-<a href=#600 id=600 data-nosnippet>600</a>        = RealOrComplexRef&lt;<span class="lifetime">'a</span>, T&gt;
-<a href=#601 id=601 data-nosnippet>601</a>    <span class="kw">where
-<a href=#602 id=602 data-nosnippet>602</a>        </span><span class="self">Self</span>: <span class="lifetime">'a</span>;
-<a href=#603 id=603 data-nosnippet>603</a>
-<a href=#604 id=604 data-nosnippet>604</a>    <span class="kw">fn </span>iter_expanded(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Iterator&lt;Item = (ExpandedIndex, <span class="self">Self</span>::Data&lt;<span class="lifetime">'_</span>&gt;)&gt; {
-<a href=#605 id=605 data-nosnippet>605</a>        <span class="kw">match </span><span class="self">self </span>{
-<a href=#606 id=606 data-nosnippet>606</a>            RealOrComplexTensor::Real(x) =&gt; IteratorEnum::A(
-<a href=#607 id=607 data-nosnippet>607</a>                x.iter_expanded()
-<a href=#608 id=608 data-nosnippet>608</a>                    .map(|(i, x)| (i, RealOrComplexRef::Real(x))),
-<a href=#609 id=609 data-nosnippet>609</a>            ),
-<a href=#610 id=610 data-nosnippet>610</a>            RealOrComplexTensor::Complex(x) =&gt; IteratorEnum::B(
-<a href=#611 id=611 data-nosnippet>611</a>                x.iter_expanded()
-<a href=#612 id=612 data-nosnippet>612</a>                    .map(|(i, x)| (i, RealOrComplexRef::Complex(x))),
-<a href=#613 id=613 data-nosnippet>613</a>            ),
-<a href=#614 id=614 data-nosnippet>614</a>        }
-<a href=#615 id=615 data-nosnippet>615</a>    }
-<a href=#616 id=616 data-nosnippet>616</a>
-<a href=#617 id=617 data-nosnippet>617</a>    <span class="kw">fn </span>iter_flat(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Iterator&lt;Item = (FlatIndex, <span class="self">Self</span>::Data&lt;<span class="lifetime">'_</span>&gt;)&gt; {
-<a href=#618 id=618 data-nosnippet>618</a>        <span class="kw">match </span><span class="self">self </span>{
-<a href=#619 id=619 data-nosnippet>619</a>            RealOrComplexTensor::Real(x) =&gt; {
-<a href=#620 id=620 data-nosnippet>620</a>                IteratorEnum::A(x.iter_flat().map(|(i, x)| (i, RealOrComplexRef::Real(x))))
-<a href=#621 id=621 data-nosnippet>621</a>            }
-<a href=#622 id=622 data-nosnippet>622</a>            RealOrComplexTensor::Complex(x) =&gt; IteratorEnum::B(
-<a href=#623 id=623 data-nosnippet>623</a>                x.iter_flat()
-<a href=#624 id=624 data-nosnippet>624</a>                    .map(|(i, x)| (i, RealOrComplexRef::Complex(x))),
-<a href=#625 id=625 data-nosnippet>625</a>            ),
-<a href=#626 id=626 data-nosnippet>626</a>        }
-<a href=#627 id=627 data-nosnippet>627</a>    }
-<a href=#628 id=628 data-nosnippet>628</a>}
-<a href=#629 id=629 data-nosnippet>629</a>
-<a href=#630 id=630 data-nosnippet>630</a><span class="kw">impl</span>&lt;S, T&gt; Trace <span class="kw">for </span>RealOrComplexTensor&lt;T, S&gt;
-<a href=#631 id=631 data-nosnippet>631</a><span class="kw">where
-<a href=#632 id=632 data-nosnippet>632</a>    </span>S: TensorStructure + Clone + StructureContract,
-<a href=#633 id=633 data-nosnippet>633</a>    T: ContractableWith&lt;T, Out = T&gt;
-<a href=#634 id=634 data-nosnippet>634</a>        + Clone
-<a href=#635 id=635 data-nosnippet>635</a>        + FallibleMul&lt;Output = T&gt;
-<a href=#636 id=636 data-nosnippet>636</a>        + FallibleAddAssign&lt;T&gt;
-<a href=#637 id=637 data-nosnippet>637</a>        + FallibleSubAssign&lt;T&gt;
-<a href=#638 id=638 data-nosnippet>638</a>        + RefZero
-<a href=#639 id=639 data-nosnippet>639</a>        + IsZero,
-<a href=#640 id=640 data-nosnippet>640</a>    Complex&lt;T&gt;: ContractableWith&lt;Complex&lt;T&gt;, Out = Complex&lt;T&gt;&gt;
-<a href=#641 id=641 data-nosnippet>641</a>        + Clone
-<a href=#642 id=642 data-nosnippet>642</a>        + FallibleMul&lt;Output = Complex&lt;T&gt;&gt;
-<a href=#643 id=643 data-nosnippet>643</a>        + FallibleAddAssign&lt;Complex&lt;T&gt;&gt;
-<a href=#644 id=644 data-nosnippet>644</a>        + FallibleSubAssign&lt;Complex&lt;T&gt;&gt;
-<a href=#645 id=645 data-nosnippet>645</a>        + RefZero
-<a href=#646 id=646 data-nosnippet>646</a>        + IsZero,
-<a href=#647 id=647 data-nosnippet>647</a>{
-<a href=#648 id=648 data-nosnippet>648</a>    <span class="kw">fn </span>internal_contract(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="self">Self </span>{
-<a href=#649 id=649 data-nosnippet>649</a>        <span class="kw">match </span><span class="self">self </span>{
-<a href=#650 id=650 data-nosnippet>650</a>            RealOrComplexTensor::Real(x) =&gt; RealOrComplexTensor::Real(x.internal_contract()),
-<a href=#651 id=651 data-nosnippet>651</a>            RealOrComplexTensor::Complex(x) =&gt; RealOrComplexTensor::Complex(x.internal_contract()),
-<a href=#652 id=652 data-nosnippet>652</a>        }
-<a href=#653 id=653 data-nosnippet>653</a>    }
-<a href=#654 id=654 data-nosnippet>654</a>}
-<a href=#655 id=655 data-nosnippet>655</a>
-<a href=#656 id=656 data-nosnippet>656</a><span class="kw">impl</span>&lt;S, T&gt; Contract&lt;RealOrComplexTensor&lt;T, S&gt;&gt; <span class="kw">for </span>RealOrComplexTensor&lt;T, S&gt;
-<a href=#657 id=657 data-nosnippet>657</a><span class="kw">where
-<a href=#658 id=658 data-nosnippet>658</a>    </span>S: TensorStructure + Clone + StructureContract,
-<a href=#659 id=659 data-nosnippet>659</a>    T: ContractableWith&lt;T, Out = T&gt;
-<a href=#660 id=660 data-nosnippet>660</a>        + ContractableWith&lt;Complex&lt;T&gt;, Out = Complex&lt;T&gt;&gt;
-<a href=#661 id=661 data-nosnippet>661</a>        + Clone
-<a href=#662 id=662 data-nosnippet>662</a>        + FallibleMul&lt;Output = T&gt;
-<a href=#663 id=663 data-nosnippet>663</a>        + FallibleAddAssign&lt;T&gt;
-<a href=#664 id=664 data-nosnippet>664</a>        + FallibleSubAssign&lt;T&gt;
-<a href=#665 id=665 data-nosnippet>665</a>        + RefZero
-<a href=#666 id=666 data-nosnippet>666</a>        + IsZero,
-<a href=#667 id=667 data-nosnippet>667</a>    Complex&lt;T&gt;: ContractableWith&lt;T, Out = Complex&lt;T&gt;&gt;
-<a href=#668 id=668 data-nosnippet>668</a>        + ContractableWith&lt;Complex&lt;T&gt;, Out = Complex&lt;T&gt;&gt;
-<a href=#669 id=669 data-nosnippet>669</a>        + Clone
-<a href=#670 id=670 data-nosnippet>670</a>        + FallibleMul&lt;Output = Complex&lt;T&gt;&gt;
-<a href=#671 id=671 data-nosnippet>671</a>        + FallibleAddAssign&lt;Complex&lt;T&gt;&gt;
-<a href=#672 id=672 data-nosnippet>672</a>        + FallibleSubAssign&lt;Complex&lt;T&gt;&gt;
-<a href=#673 id=673 data-nosnippet>673</a>        + RefZero
-<a href=#674 id=674 data-nosnippet>674</a>        + IsZero,
-<a href=#675 id=675 data-nosnippet>675</a>{
-<a href=#676 id=676 data-nosnippet>676</a>    <span class="kw">type </span>LCM = RealOrComplexTensor&lt;T, S&gt;;
-<a href=#677 id=677 data-nosnippet>677</a>    <span class="kw">fn </span>contract(<span class="kw-2">&amp;</span><span class="self">self</span>, other: <span class="kw-2">&amp;</span>RealOrComplexTensor&lt;T, S&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>::LCM, ContractionError&gt; {
-<a href=#678 id=678 data-nosnippet>678</a>        <span class="kw">match </span>(<span class="self">self</span>, other) {
-<a href=#679 id=679 data-nosnippet>679</a>            (RealOrComplexTensor::Real(s), RealOrComplexTensor::Real(o)) =&gt; {
-<a href=#680 id=680 data-nosnippet>680</a>                <span class="prelude-val">Ok</span>(RealOrComplexTensor::Real(s.contract(o)<span class="question-mark">?</span>))
-<a href=#681 id=681 data-nosnippet>681</a>            }
-<a href=#682 id=682 data-nosnippet>682</a>            (RealOrComplexTensor::Real(s), RealOrComplexTensor::Complex(o)) =&gt; {
-<a href=#683 id=683 data-nosnippet>683</a>                <span class="prelude-val">Ok</span>(RealOrComplexTensor::Complex(s.contract(o)<span class="question-mark">?</span>))
-<a href=#684 id=684 data-nosnippet>684</a>            }
-<a href=#685 id=685 data-nosnippet>685</a>            (RealOrComplexTensor::Complex(s), RealOrComplexTensor::Real(o)) =&gt; {
-<a href=#686 id=686 data-nosnippet>686</a>                <span class="prelude-val">Ok</span>(RealOrComplexTensor::Complex(s.contract(o)<span class="question-mark">?</span>))
-<a href=#687 id=687 data-nosnippet>687</a>            }
-<a href=#688 id=688 data-nosnippet>688</a>            (RealOrComplexTensor::Complex(s), RealOrComplexTensor::Complex(o)) =&gt; {
-<a href=#689 id=689 data-nosnippet>689</a>                <span class="prelude-val">Ok</span>(RealOrComplexTensor::Complex(s.contract(o)<span class="question-mark">?</span>))
-<a href=#690 id=690 data-nosnippet>690</a>            }
-<a href=#691 id=691 data-nosnippet>691</a>        }
-<a href=#692 id=692 data-nosnippet>692</a>    }
-<a href=#693 id=693 data-nosnippet>693</a>}
+<a href=#393 id=393 data-nosnippet>393</a><span class="kw">impl</span>&lt;T: Clone, Aind: AbsInd, S, R: RepName&lt;Dual = R&gt;&gt; TensorIdentity <span class="kw">for </span>RealOrComplexTensor&lt;T, S&gt;
+<a href=#394 id=394 data-nosnippet>394</a><span class="kw">where
+<a href=#395 id=395 data-nosnippet>395</a>    </span>S: TensorStructure&lt;Slot = Slot&lt;R, Aind&gt;&gt; + TensorIdentity&lt;IdSlot = Slot&lt;R, Aind&gt;, Id = S&gt;,
+<a href=#396 id=396 data-nosnippet>396</a>{
+<a href=#397 id=397 data-nosnippet>397</a>    <span class="kw">type </span>Id = RealOrComplexTensor&lt;T, S&gt;;
+<a href=#398 id=398 data-nosnippet>398</a>    <span class="kw">type </span>IdSlot = (T, Slot&lt;R, Aind&gt;);
+<a href=#399 id=399 data-nosnippet>399</a>
+<a href=#400 id=400 data-nosnippet>400</a>    <span class="kw">fn </span>id(i: <span class="self">Self</span>::IdSlot, j: <span class="self">Self</span>::IdSlot) -&gt; <span class="self">Self</span>::Id {
+<a href=#401 id=401 data-nosnippet>401</a>        RealOrComplexTensor::Real(DataTensor::id(i, j))
+<a href=#402 id=402 data-nosnippet>402</a>    }
+<a href=#403 id=403 data-nosnippet>403</a>}
+<a href=#404 id=404 data-nosnippet>404</a>
+<a href=#405 id=405 data-nosnippet>405</a><span class="kw">impl</span>&lt;T: Clone, Aind: AbsInd, S: Clone + Into&lt;IndexLess&lt;R, Aind&gt;&gt;, R: RepName&lt;Dual = R&gt;&gt;
+<a href=#406 id=406 data-nosnippet>406</a>    ApplyPendingIndexPermutation <span class="kw">for </span>RealOrComplexTensor&lt;T, S&gt;
+<a href=#407 id=407 data-nosnippet>407</a><span class="kw">where
+<a href=#408 id=408 data-nosnippet>408</a>    </span>S: TensorStructure&lt;Slot = Slot&lt;R, Aind&gt;&gt;,
+<a href=#409 id=409 data-nosnippet>409</a>{
+<a href=#410 id=410 data-nosnippet>410</a>    <span class="kw">type </span>Output = <span class="self">Self</span>;
+<a href=#411 id=411 data-nosnippet>411</a>
+<a href=#412 id=412 data-nosnippet>412</a>    <span class="kw">fn </span>apply_pending_index_permutation(<span class="self">self</span>, pending: <span class="kw-2">&amp;</span>PendingIndexPermutation) -&gt; <span class="self">Self</span>::Output {
+<a href=#413 id=413 data-nosnippet>413</a>        <span class="kw">match </span><span class="self">self </span>{
+<a href=#414 id=414 data-nosnippet>414</a>            RealOrComplexTensor::Real(d) =&gt; {
+<a href=#415 id=415 data-nosnippet>415</a>                RealOrComplexTensor::Real(d.apply_pending_index_permutation(pending))
+<a href=#416 id=416 data-nosnippet>416</a>            }
+<a href=#417 id=417 data-nosnippet>417</a>            RealOrComplexTensor::Complex(s) =&gt; {
+<a href=#418 id=418 data-nosnippet>418</a>                RealOrComplexTensor::Complex(s.apply_pending_index_permutation(pending))
+<a href=#419 id=419 data-nosnippet>419</a>            }
+<a href=#420 id=420 data-nosnippet>420</a>        }
+<a href=#421 id=421 data-nosnippet>421</a>    }
+<a href=#422 id=422 data-nosnippet>422</a>}
+<a href=#423 id=423 data-nosnippet>423</a>
+<a href=#424 id=424 data-nosnippet>424</a><span class="kw">impl</span>&lt;T: Clone, S&gt; TensorStructure <span class="kw">for </span>RealOrComplexTensor&lt;T, S&gt;
+<a href=#425 id=425 data-nosnippet>425</a><span class="kw">where
+<a href=#426 id=426 data-nosnippet>426</a>    </span>S: TensorStructure,
+<a href=#427 id=427 data-nosnippet>427</a>{
+<a href=#428 id=428 data-nosnippet>428</a>    <span class="comment">// type R = &lt;T::Structure as TensorStructure&gt;::R;
+<a href=#429 id=429 data-nosnippet>429</a>    </span><span class="kw">type </span>Indexed = RealOrComplexTensor&lt;T, S::Indexed&gt;;
+<a href=#430 id=430 data-nosnippet>430</a>    <span class="kw">type </span>Slot = S::Slot;
+<a href=#431 id=431 data-nosnippet>431</a>
+<a href=#432 id=432 data-nosnippet>432</a>    <span class="kw">fn </span>reindex_storage(
+<a href=#433 id=433 data-nosnippet>433</a>        <span class="self">self</span>,
+<a href=#434 id=434 data-nosnippet>434</a>        indices: <span class="kw-2">&amp;</span>[&lt;<span class="self">Self</span>::Slot <span class="kw">as </span>IsAbstractSlot&gt;::Aind],
+<a href=#435 id=435 data-nosnippet>435</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Reindexed&lt;<span class="self">Self</span>::Indexed&gt;, StructureError&gt; {
+<a href=#436 id=436 data-nosnippet>436</a>        <span class="kw">match </span><span class="self">self </span>{
+<a href=#437 id=437 data-nosnippet>437</a>            RealOrComplexTensor::Complex(d) =&gt; d
+<a href=#438 id=438 data-nosnippet>438</a>                .reindex_storage(indices)
+<a href=#439 id=439 data-nosnippet>439</a>                .map(|reindexed| reindexed.map_target(RealOrComplexTensor::Complex)),
+<a href=#440 id=440 data-nosnippet>440</a>            RealOrComplexTensor::Real(d) =&gt; d
+<a href=#441 id=441 data-nosnippet>441</a>                .reindex_storage(indices)
+<a href=#442 id=442 data-nosnippet>442</a>                .map(|reindexed| reindexed.map_target(RealOrComplexTensor::Real)),
+<a href=#443 id=443 data-nosnippet>443</a>        }
+<a href=#444 id=444 data-nosnippet>444</a>    }
+<a href=#445 id=445 data-nosnippet>445</a>
+<a href=#446 id=446 data-nosnippet>446</a>    <span class="kw">fn </span>dual(<span class="self">self</span>) -&gt; <span class="self">Self </span>{
+<a href=#447 id=447 data-nosnippet>447</a>        <span class="self">self</span>.map_same_structure(|s| s.dual())
+<a href=#448 id=448 data-nosnippet>448</a>    }
+<a href=#449 id=449 data-nosnippet>449</a>
+<a href=#450 id=450 data-nosnippet>450</a>    <span class="macro">delegate!</span> {
+<a href=#451 id=451 data-nosnippet>451</a>        to <span class="self">self</span>.structure() {
+<a href=#452 id=452 data-nosnippet>452</a>            <span class="kw">fn </span>is_fully_self_dual(<span class="kw-2">&amp;</span><span class="self">self</span>)-&gt; bool;
+<a href=#453 id=453 data-nosnippet>453</a>            <span class="kw">fn </span>external_reps_iter(<span class="kw-2">&amp;</span><span class="self">self</span>)-&gt; <span class="kw">impl </span>Iterator&lt;Item = Representation&lt;&lt;<span class="self">Self</span>::Slot <span class="kw">as </span>IsAbstractSlot&gt;::R&gt;&gt;;
+<a href=#454 id=454 data-nosnippet>454</a>            <span class="kw">fn </span>external_indices_iter(<span class="kw-2">&amp;</span><span class="self">self</span>)-&gt; <span class="kw">impl </span>Iterator&lt;Item = &lt;<span class="self">Self</span>::Slot <span class="kw">as </span>IsAbstractSlot&gt;::Aind&gt;;
+<a href=#455 id=455 data-nosnippet>455</a>            <span class="kw">fn </span>external_dims_iter(<span class="kw-2">&amp;</span><span class="self">self</span>)-&gt; <span class="kw">impl </span>Iterator&lt;Item = Dimension&gt;;
+<a href=#456 id=456 data-nosnippet>456</a>            <span class="kw">fn </span>external_structure_iter(<span class="kw-2">&amp;</span><span class="self">self</span>)-&gt; <span class="kw">impl </span>Iterator&lt;Item = <span class="self">Self</span>::Slot&gt;;
+<a href=#457 id=457 data-nosnippet>457</a>            <span class="kw">fn </span>get_slot(<span class="kw-2">&amp;</span><span class="self">self</span>, i: <span class="kw">impl </span>Into&lt;SlotIndex&gt;)-&gt; <span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>::Slot&gt;;
+<a href=#458 id=458 data-nosnippet>458</a>            <span class="kw">fn </span>get_rep(<span class="kw-2">&amp;</span><span class="self">self</span>, i: <span class="kw">impl </span>Into&lt;SlotIndex&gt;)-&gt; <span class="prelude-ty">Option</span>&lt;Representation&lt;&lt;<span class="self">Self</span>::Slot <span class="kw">as </span>IsAbstractSlot&gt;::R&gt;&gt;;
+<a href=#459 id=459 data-nosnippet>459</a>            <span class="kw">fn </span>get_dim(<span class="kw-2">&amp;</span><span class="self">self</span>, i: <span class="kw">impl </span>Into&lt;SlotIndex&gt;)-&gt; <span class="prelude-ty">Option</span>&lt;Dimension&gt;;
+<a href=#460 id=460 data-nosnippet>460</a>            <span class="kw">fn </span>get_aind(<span class="kw-2">&amp;</span><span class="self">self</span>, i: <span class="kw">impl </span>Into&lt;SlotIndex&gt;)-&gt; <span class="prelude-ty">Option</span>&lt;&lt;<span class="self">Self</span>::Slot <span class="kw">as </span>IsAbstractSlot&gt;::Aind&gt;;
+<a href=#461 id=461 data-nosnippet>461</a>            <span class="kw">fn </span>order(<span class="kw-2">&amp;</span><span class="self">self</span>)-&gt; usize;
+<a href=#462 id=462 data-nosnippet>462</a>        }
+<a href=#463 id=463 data-nosnippet>463</a>    }
+<a href=#464 id=464 data-nosnippet>464</a>}
+<a href=#465 id=465 data-nosnippet>465</a>
+<a href=#466 id=466 data-nosnippet>466</a><span class="kw">impl</span>&lt;T: Clone, S: TensorStructure&gt; HasStructure <span class="kw">for </span>RealOrComplexTensor&lt;T, S&gt; {
+<a href=#467 id=467 data-nosnippet>467</a>    <span class="kw">type </span>Scalar = RealOrComplex&lt;T&gt;;
+<a href=#468 id=468 data-nosnippet>468</a>    <span class="kw">type </span>ScalarRef&lt;<span class="lifetime">'a</span>&gt;
+<a href=#469 id=469 data-nosnippet>469</a>        = RealOrComplexRef&lt;<span class="lifetime">'a</span>, T&gt;
+<a href=#470 id=470 data-nosnippet>470</a>    <span class="kw">where
+<a href=#471 id=471 data-nosnippet>471</a>        </span><span class="self">Self</span>: <span class="lifetime">'a</span>;
+<a href=#472 id=472 data-nosnippet>472</a>    <span class="kw">type </span>Structure = S;
+<a href=#473 id=473 data-nosnippet>473</a>    <span class="kw">type </span>Store&lt;U&gt;
+<a href=#474 id=474 data-nosnippet>474</a>        = RealOrComplexTensor&lt;T, U&gt;
+<a href=#475 id=475 data-nosnippet>475</a>    <span class="kw">where
+<a href=#476 id=476 data-nosnippet>476</a>        </span>U: TensorStructure;
+<a href=#477 id=477 data-nosnippet>477</a>
+<a href=#478 id=478 data-nosnippet>478</a>    <span class="kw">fn </span>map_structure&lt;S2: TensorStructure&gt;(<span class="self">self</span>, f: <span class="kw">impl </span>Fn(S) -&gt; S2) -&gt; RealOrComplexTensor&lt;T, S2&gt; {
+<a href=#479 id=479 data-nosnippet>479</a>        <span class="kw">match </span><span class="self">self </span>{
+<a href=#480 id=480 data-nosnippet>480</a>            RealOrComplexTensor::Real(d) =&gt; RealOrComplexTensor::Real(d.map_structure(f)),
+<a href=#481 id=481 data-nosnippet>481</a>            RealOrComplexTensor::Complex(d) =&gt; RealOrComplexTensor::Complex(d.map_structure(f)),
+<a href=#482 id=482 data-nosnippet>482</a>        }
+<a href=#483 id=483 data-nosnippet>483</a>    }
+<a href=#484 id=484 data-nosnippet>484</a>
+<a href=#485 id=485 data-nosnippet>485</a>    <span class="kw">fn </span>map_structure_result&lt;S2: TensorStructure, E&gt;(
+<a href=#486 id=486 data-nosnippet>486</a>        <span class="self">self</span>,
+<a href=#487 id=487 data-nosnippet>487</a>        f: <span class="kw">impl </span>Fn(S) -&gt; <span class="prelude-ty">Result</span>&lt;S2, E&gt;,
+<a href=#488 id=488 data-nosnippet>488</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;RealOrComplexTensor&lt;T, S2&gt;, E&gt; {
+<a href=#489 id=489 data-nosnippet>489</a>        <span class="prelude-val">Ok</span>(<span class="kw">match </span><span class="self">self </span>{
+<a href=#490 id=490 data-nosnippet>490</a>            RealOrComplexTensor::Real(d) =&gt; RealOrComplexTensor::Real(d.map_structure_result(f)<span class="question-mark">?</span>),
+<a href=#491 id=491 data-nosnippet>491</a>            RealOrComplexTensor::Complex(d) =&gt; {
+<a href=#492 id=492 data-nosnippet>492</a>                RealOrComplexTensor::Complex(d.map_structure_result(f)<span class="question-mark">?</span>)
+<a href=#493 id=493 data-nosnippet>493</a>            }
+<a href=#494 id=494 data-nosnippet>494</a>        })
+<a href=#495 id=495 data-nosnippet>495</a>    }
+<a href=#496 id=496 data-nosnippet>496</a>
+<a href=#497 id=497 data-nosnippet>497</a>    <span class="kw">fn </span>structure(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span><span class="self">Self</span>::Structure {
+<a href=#498 id=498 data-nosnippet>498</a>        <span class="kw">match </span><span class="self">self </span>{
+<a href=#499 id=499 data-nosnippet>499</a>            RealOrComplexTensor::Real(r) =&gt; r.structure(),
+<a href=#500 id=500 data-nosnippet>500</a>            RealOrComplexTensor::Complex(r) =&gt; r.structure(),
+<a href=#501 id=501 data-nosnippet>501</a>        }
+<a href=#502 id=502 data-nosnippet>502</a>    }
+<a href=#503 id=503 data-nosnippet>503</a>
+<a href=#504 id=504 data-nosnippet>504</a>    <span class="kw">fn </span>map_same_structure(<span class="self">self</span>, f: <span class="kw">impl </span>FnOnce(<span class="self">Self</span>::Structure) -&gt; <span class="self">Self</span>::Structure) -&gt; <span class="self">Self </span>{
+<a href=#505 id=505 data-nosnippet>505</a>        <span class="kw">match </span><span class="self">self </span>{
+<a href=#506 id=506 data-nosnippet>506</a>            RealOrComplexTensor::Real(d) =&gt; RealOrComplexTensor::Real(d.map_same_structure(f)),
+<a href=#507 id=507 data-nosnippet>507</a>            RealOrComplexTensor::Complex(d) =&gt; {
+<a href=#508 id=508 data-nosnippet>508</a>                RealOrComplexTensor::Complex(d.map_same_structure(f))
+<a href=#509 id=509 data-nosnippet>509</a>            }
+<a href=#510 id=510 data-nosnippet>510</a>        }
+<a href=#511 id=511 data-nosnippet>511</a>    }
+<a href=#512 id=512 data-nosnippet>512</a>
+<a href=#513 id=513 data-nosnippet>513</a>    <span class="kw">fn </span>mut_structure(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self</span>::Structure {
+<a href=#514 id=514 data-nosnippet>514</a>        <span class="kw">match </span><span class="self">self </span>{
+<a href=#515 id=515 data-nosnippet>515</a>            RealOrComplexTensor::Real(r) =&gt; r.mut_structure(),
+<a href=#516 id=516 data-nosnippet>516</a>            RealOrComplexTensor::Complex(r) =&gt; r.mut_structure(),
+<a href=#517 id=517 data-nosnippet>517</a>        }
+<a href=#518 id=518 data-nosnippet>518</a>    }
+<a href=#519 id=519 data-nosnippet>519</a>
+<a href=#520 id=520 data-nosnippet>520</a>    <span class="kw">fn </span>scalar(<span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>::Scalar&gt; {
+<a href=#521 id=521 data-nosnippet>521</a>        <span class="kw">match </span><span class="self">self </span>{
+<a href=#522 id=522 data-nosnippet>522</a>            RealOrComplexTensor::Real(r) =&gt; r.scalar().map(|x| RealOrComplex::Real(x)),
+<a href=#523 id=523 data-nosnippet>523</a>            RealOrComplexTensor::Complex(r) =&gt; r.scalar().map(|x| RealOrComplex::Complex(x)),
+<a href=#524 id=524 data-nosnippet>524</a>        }
+<a href=#525 id=525 data-nosnippet>525</a>    }
+<a href=#526 id=526 data-nosnippet>526</a>
+<a href=#527 id=527 data-nosnippet>527</a>    <span class="kw">fn </span>scalar_ref(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>::ScalarRef&lt;<span class="lifetime">'_</span>&gt;&gt; {
+<a href=#528 id=528 data-nosnippet>528</a>        <span class="kw">match </span><span class="self">self </span>{
+<a href=#529 id=529 data-nosnippet>529</a>            RealOrComplexTensor::Real(r) =&gt; r.scalar_ref().map(|x| RealOrComplexRef::Real(x)),
+<a href=#530 id=530 data-nosnippet>530</a>            RealOrComplexTensor::Complex(r) =&gt; r.scalar_ref().map(|x| RealOrComplexRef::Complex(x)),
+<a href=#531 id=531 data-nosnippet>531</a>        }
+<a href=#532 id=532 data-nosnippet>532</a>    }
+<a href=#533 id=533 data-nosnippet>533</a>}
+<a href=#534 id=534 data-nosnippet>534</a>
+<a href=#535 id=535 data-nosnippet>535</a><span class="kw">impl</span>&lt;T: Clone, S: TensorStructure + ScalarStructure&gt; ScalarTensor <span class="kw">for </span>RealOrComplexTensor&lt;T, S&gt; {
+<a href=#536 id=536 data-nosnippet>536</a>    <span class="kw">fn </span>new_scalar(scalar: <span class="self">Self</span>::Scalar) -&gt; <span class="self">Self </span>{
+<a href=#537 id=537 data-nosnippet>537</a>        <span class="kw">match </span>scalar {
+<a href=#538 id=538 data-nosnippet>538</a>            RealOrComplex::Real(r) =&gt; RealOrComplexTensor::Real(DataTensor::new_scalar(r)),
+<a href=#539 id=539 data-nosnippet>539</a>            RealOrComplex::Complex(r) =&gt; RealOrComplexTensor::Complex(DataTensor::new_scalar(r)),
+<a href=#540 id=540 data-nosnippet>540</a>        }
+<a href=#541 id=541 data-nosnippet>541</a>    }
+<a href=#542 id=542 data-nosnippet>542</a>}
+<a href=#543 id=543 data-nosnippet>543</a>
+<a href=#544 id=544 data-nosnippet>544</a><span class="kw">impl</span>&lt;T, S&gt; TracksCount <span class="kw">for </span>RealOrComplexTensor&lt;T, S&gt;
+<a href=#545 id=545 data-nosnippet>545</a><span class="kw">where
+<a href=#546 id=546 data-nosnippet>546</a>    </span>S: TensorStructure + TracksCount,
+<a href=#547 id=547 data-nosnippet>547</a>    T: Clone,
+<a href=#548 id=548 data-nosnippet>548</a>{
+<a href=#549 id=549 data-nosnippet>549</a>    <span class="kw">fn </span>contractions_num(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
+<a href=#550 id=550 data-nosnippet>550</a>        <span class="kw">match </span><span class="self">self </span>{
+<a href=#551 id=551 data-nosnippet>551</a>            RealOrComplexTensor::Real(r) =&gt; r.contractions_num(),
+<a href=#552 id=552 data-nosnippet>552</a>            RealOrComplexTensor::Complex(r) =&gt; r.contractions_num(),
+<a href=#553 id=553 data-nosnippet>553</a>        }
+<a href=#554 id=554 data-nosnippet>554</a>    }
+<a href=#555 id=555 data-nosnippet>555</a>}
+<a href=#556 id=556 data-nosnippet>556</a>
+<a href=#557 id=557 data-nosnippet>557</a><span class="kw">impl</span>&lt;T, S&gt; HasName <span class="kw">for </span>RealOrComplexTensor&lt;T, S&gt;
+<a href=#558 id=558 data-nosnippet>558</a><span class="kw">where
+<a href=#559 id=559 data-nosnippet>559</a>    </span>S: TensorStructure + HasName,
+<a href=#560 id=560 data-nosnippet>560</a>    T: Clone,
+<a href=#561 id=561 data-nosnippet>561</a>{
+<a href=#562 id=562 data-nosnippet>562</a>    <span class="kw">type </span>Args = S::Args;
+<a href=#563 id=563 data-nosnippet>563</a>    <span class="kw">type </span>Name = S::Name;
+<a href=#564 id=564 data-nosnippet>564</a>
+<a href=#565 id=565 data-nosnippet>565</a>    <span class="kw">fn </span>name(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;S::Name&gt; {
+<a href=#566 id=566 data-nosnippet>566</a>        <span class="kw">match </span><span class="self">self </span>{
+<a href=#567 id=567 data-nosnippet>567</a>            RealOrComplexTensor::Real(r) =&gt; r.name(),
+<a href=#568 id=568 data-nosnippet>568</a>            RealOrComplexTensor::Complex(r) =&gt; r.name(),
+<a href=#569 id=569 data-nosnippet>569</a>        }
+<a href=#570 id=570 data-nosnippet>570</a>    }
+<a href=#571 id=571 data-nosnippet>571</a>
+<a href=#572 id=572 data-nosnippet>572</a>    <span class="kw">fn </span>set_name(<span class="kw-2">&amp;mut </span><span class="self">self</span>, name: <span class="self">Self</span>::Name) {
+<a href=#573 id=573 data-nosnippet>573</a>        <span class="kw">match </span><span class="self">self </span>{
+<a href=#574 id=574 data-nosnippet>574</a>            RealOrComplexTensor::Real(r) =&gt; r.set_name(name),
+<a href=#575 id=575 data-nosnippet>575</a>            RealOrComplexTensor::Complex(r) =&gt; r.set_name(name),
+<a href=#576 id=576 data-nosnippet>576</a>        }
+<a href=#577 id=577 data-nosnippet>577</a>    }
+<a href=#578 id=578 data-nosnippet>578</a>
+<a href=#579 id=579 data-nosnippet>579</a>    <span class="kw">fn </span>args(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;S::Args&gt; {
+<a href=#580 id=580 data-nosnippet>580</a>        <span class="kw">match </span><span class="self">self </span>{
+<a href=#581 id=581 data-nosnippet>581</a>            RealOrComplexTensor::Real(r) =&gt; r.args(),
+<a href=#582 id=582 data-nosnippet>582</a>            RealOrComplexTensor::Complex(r) =&gt; r.args(),
+<a href=#583 id=583 data-nosnippet>583</a>        }
+<a href=#584 id=584 data-nosnippet>584</a>    }
+<a href=#585 id=585 data-nosnippet>585</a>}
+<a href=#586 id=586 data-nosnippet>586</a>
+<a href=#587 id=587 data-nosnippet>587</a><span class="kw">impl</span>&lt;T: Clone, S: TensorStructure&gt; IteratableTensor <span class="kw">for </span>RealOrComplexTensor&lt;T, S&gt; {
+<a href=#588 id=588 data-nosnippet>588</a>    <span class="kw">type </span>Data&lt;<span class="lifetime">'a</span>&gt;
+<a href=#589 id=589 data-nosnippet>589</a>        = RealOrComplexRef&lt;<span class="lifetime">'a</span>, T&gt;
+<a href=#590 id=590 data-nosnippet>590</a>    <span class="kw">where
+<a href=#591 id=591 data-nosnippet>591</a>        </span><span class="self">Self</span>: <span class="lifetime">'a</span>;
+<a href=#592 id=592 data-nosnippet>592</a>
+<a href=#593 id=593 data-nosnippet>593</a>    <span class="kw">fn </span>iter_expanded(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Iterator&lt;Item = (ExpandedIndex, <span class="self">Self</span>::Data&lt;<span class="lifetime">'_</span>&gt;)&gt; {
+<a href=#594 id=594 data-nosnippet>594</a>        <span class="kw">match </span><span class="self">self </span>{
+<a href=#595 id=595 data-nosnippet>595</a>            RealOrComplexTensor::Real(x) =&gt; IteratorEnum::A(
+<a href=#596 id=596 data-nosnippet>596</a>                x.iter_expanded()
+<a href=#597 id=597 data-nosnippet>597</a>                    .map(|(i, x)| (i, RealOrComplexRef::Real(x))),
+<a href=#598 id=598 data-nosnippet>598</a>            ),
+<a href=#599 id=599 data-nosnippet>599</a>            RealOrComplexTensor::Complex(x) =&gt; IteratorEnum::B(
+<a href=#600 id=600 data-nosnippet>600</a>                x.iter_expanded()
+<a href=#601 id=601 data-nosnippet>601</a>                    .map(|(i, x)| (i, RealOrComplexRef::Complex(x))),
+<a href=#602 id=602 data-nosnippet>602</a>            ),
+<a href=#603 id=603 data-nosnippet>603</a>        }
+<a href=#604 id=604 data-nosnippet>604</a>    }
+<a href=#605 id=605 data-nosnippet>605</a>
+<a href=#606 id=606 data-nosnippet>606</a>    <span class="kw">fn </span>iter_flat(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Iterator&lt;Item = (FlatIndex, <span class="self">Self</span>::Data&lt;<span class="lifetime">'_</span>&gt;)&gt; {
+<a href=#607 id=607 data-nosnippet>607</a>        <span class="kw">match </span><span class="self">self </span>{
+<a href=#608 id=608 data-nosnippet>608</a>            RealOrComplexTensor::Real(x) =&gt; {
+<a href=#609 id=609 data-nosnippet>609</a>                IteratorEnum::A(x.iter_flat().map(|(i, x)| (i, RealOrComplexRef::Real(x))))
+<a href=#610 id=610 data-nosnippet>610</a>            }
+<a href=#611 id=611 data-nosnippet>611</a>            RealOrComplexTensor::Complex(x) =&gt; IteratorEnum::B(
+<a href=#612 id=612 data-nosnippet>612</a>                x.iter_flat()
+<a href=#613 id=613 data-nosnippet>613</a>                    .map(|(i, x)| (i, RealOrComplexRef::Complex(x))),
+<a href=#614 id=614 data-nosnippet>614</a>            ),
+<a href=#615 id=615 data-nosnippet>615</a>        }
+<a href=#616 id=616 data-nosnippet>616</a>    }
+<a href=#617 id=617 data-nosnippet>617</a>}
+<a href=#618 id=618 data-nosnippet>618</a>
+<a href=#619 id=619 data-nosnippet>619</a><span class="kw">impl</span>&lt;S, T&gt; Trace <span class="kw">for </span>RealOrComplexTensor&lt;T, S&gt;
+<a href=#620 id=620 data-nosnippet>620</a><span class="kw">where
+<a href=#621 id=621 data-nosnippet>621</a>    </span>S: TensorStructure + Clone + StructureContract,
+<a href=#622 id=622 data-nosnippet>622</a>    T: ContractableWith&lt;T, Out = T&gt;
+<a href=#623 id=623 data-nosnippet>623</a>        + Clone
+<a href=#624 id=624 data-nosnippet>624</a>        + FallibleMul&lt;Output = T&gt;
+<a href=#625 id=625 data-nosnippet>625</a>        + FallibleAddAssign&lt;T&gt;
+<a href=#626 id=626 data-nosnippet>626</a>        + FallibleSubAssign&lt;T&gt;
+<a href=#627 id=627 data-nosnippet>627</a>        + RefZero
+<a href=#628 id=628 data-nosnippet>628</a>        + IsZero,
+<a href=#629 id=629 data-nosnippet>629</a>    Complex&lt;T&gt;: ContractableWith&lt;Complex&lt;T&gt;, Out = Complex&lt;T&gt;&gt;
+<a href=#630 id=630 data-nosnippet>630</a>        + Clone
+<a href=#631 id=631 data-nosnippet>631</a>        + FallibleMul&lt;Output = Complex&lt;T&gt;&gt;
+<a href=#632 id=632 data-nosnippet>632</a>        + FallibleAddAssign&lt;Complex&lt;T&gt;&gt;
+<a href=#633 id=633 data-nosnippet>633</a>        + FallibleSubAssign&lt;Complex&lt;T&gt;&gt;
+<a href=#634 id=634 data-nosnippet>634</a>        + RefZero
+<a href=#635 id=635 data-nosnippet>635</a>        + IsZero,
+<a href=#636 id=636 data-nosnippet>636</a>{
+<a href=#637 id=637 data-nosnippet>637</a>    <span class="kw">fn </span>internal_contract(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="self">Self </span>{
+<a href=#638 id=638 data-nosnippet>638</a>        <span class="kw">match </span><span class="self">self </span>{
+<a href=#639 id=639 data-nosnippet>639</a>            RealOrComplexTensor::Real(x) =&gt; RealOrComplexTensor::Real(x.internal_contract()),
+<a href=#640 id=640 data-nosnippet>640</a>            RealOrComplexTensor::Complex(x) =&gt; RealOrComplexTensor::Complex(x.internal_contract()),
+<a href=#641 id=641 data-nosnippet>641</a>        }
+<a href=#642 id=642 data-nosnippet>642</a>    }
+<a href=#643 id=643 data-nosnippet>643</a>}
+<a href=#644 id=644 data-nosnippet>644</a>
+<a href=#645 id=645 data-nosnippet>645</a><span class="kw">impl</span>&lt;S, T&gt; Contract&lt;RealOrComplexTensor&lt;T, S&gt;&gt; <span class="kw">for </span>RealOrComplexTensor&lt;T, S&gt;
+<a href=#646 id=646 data-nosnippet>646</a><span class="kw">where
+<a href=#647 id=647 data-nosnippet>647</a>    </span>S: TensorStructure + Clone + StructureContract,
+<a href=#648 id=648 data-nosnippet>648</a>    T: ContractableWith&lt;T, Out = T&gt;
+<a href=#649 id=649 data-nosnippet>649</a>        + ContractableWith&lt;Complex&lt;T&gt;, Out = Complex&lt;T&gt;&gt;
+<a href=#650 id=650 data-nosnippet>650</a>        + Clone
+<a href=#651 id=651 data-nosnippet>651</a>        + FallibleMul&lt;Output = T&gt;
+<a href=#652 id=652 data-nosnippet>652</a>        + FallibleAddAssign&lt;T&gt;
+<a href=#653 id=653 data-nosnippet>653</a>        + FallibleSubAssign&lt;T&gt;
+<a href=#654 id=654 data-nosnippet>654</a>        + RefZero
+<a href=#655 id=655 data-nosnippet>655</a>        + IsZero,
+<a href=#656 id=656 data-nosnippet>656</a>    Complex&lt;T&gt;: ContractableWith&lt;T, Out = Complex&lt;T&gt;&gt;
+<a href=#657 id=657 data-nosnippet>657</a>        + ContractableWith&lt;Complex&lt;T&gt;, Out = Complex&lt;T&gt;&gt;
+<a href=#658 id=658 data-nosnippet>658</a>        + Clone
+<a href=#659 id=659 data-nosnippet>659</a>        + FallibleMul&lt;Output = Complex&lt;T&gt;&gt;
+<a href=#660 id=660 data-nosnippet>660</a>        + FallibleAddAssign&lt;Complex&lt;T&gt;&gt;
+<a href=#661 id=661 data-nosnippet>661</a>        + FallibleSubAssign&lt;Complex&lt;T&gt;&gt;
+<a href=#662 id=662 data-nosnippet>662</a>        + RefZero
+<a href=#663 id=663 data-nosnippet>663</a>        + IsZero,
+<a href=#664 id=664 data-nosnippet>664</a>{
+<a href=#665 id=665 data-nosnippet>665</a>    <span class="kw">type </span>LCM = RealOrComplexTensor&lt;T, S&gt;;
+<a href=#666 id=666 data-nosnippet>666</a>    <span class="kw">fn </span>contract(<span class="kw-2">&amp;</span><span class="self">self</span>, other: <span class="kw-2">&amp;</span>RealOrComplexTensor&lt;T, S&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>::LCM, ContractionError&gt; {
+<a href=#667 id=667 data-nosnippet>667</a>        <span class="kw">match </span>(<span class="self">self</span>, other) {
+<a href=#668 id=668 data-nosnippet>668</a>            (RealOrComplexTensor::Real(s), RealOrComplexTensor::Real(o)) =&gt; {
+<a href=#669 id=669 data-nosnippet>669</a>                <span class="prelude-val">Ok</span>(RealOrComplexTensor::Real(s.contract(o)<span class="question-mark">?</span>))
+<a href=#670 id=670 data-nosnippet>670</a>            }
+<a href=#671 id=671 data-nosnippet>671</a>            (RealOrComplexTensor::Real(s), RealOrComplexTensor::Complex(o)) =&gt; {
+<a href=#672 id=672 data-nosnippet>672</a>                <span class="prelude-val">Ok</span>(RealOrComplexTensor::Complex(s.contract(o)<span class="question-mark">?</span>))
+<a href=#673 id=673 data-nosnippet>673</a>            }
+<a href=#674 id=674 data-nosnippet>674</a>            (RealOrComplexTensor::Complex(s), RealOrComplexTensor::Real(o)) =&gt; {
+<a href=#675 id=675 data-nosnippet>675</a>                <span class="prelude-val">Ok</span>(RealOrComplexTensor::Complex(s.contract(o)<span class="question-mark">?</span>))
+<a href=#676 id=676 data-nosnippet>676</a>            }
+<a href=#677 id=677 data-nosnippet>677</a>            (RealOrComplexTensor::Complex(s), RealOrComplexTensor::Complex(o)) =&gt; {
+<a href=#678 id=678 data-nosnippet>678</a>                <span class="prelude-val">Ok</span>(RealOrComplexTensor::Complex(s.contract(o)<span class="question-mark">?</span>))
+<a href=#679 id=679 data-nosnippet>679</a>            }
+<a href=#680 id=680 data-nosnippet>680</a>        }
+<a href=#681 id=681 data-nosnippet>681</a>    }
+<a href=#682 id=682 data-nosnippet>682</a>}
 </code></pre></div></section></main></body></html>

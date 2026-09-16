@@ -4,8 +4,8 @@
   "title": "Spenso",
   "channel": "latest",
   "snapshot_tag": null,
-  "git_commit": "c826659f3aa8a8c9a0fe2ea175fa0361af3a1543",
-  "git_timestamp": 1789457207,
+  "git_commit": "48697b19e1f312027eff144fc8d87f860dcf5c02",
+  "git_timestamp": 1789542548,
   "route": "/products/spenso/latest/",
   "components": [
     {
@@ -49,6 +49,7 @@
       "module": null,
       "version": "0.17.0",
       "features": [
+        "native",
         "nodestore-vec",
         "serde",
         "bincode",
@@ -76,6 +77,7 @@
       "module": null,
       "version": "0.6.0",
       "features": [
+        "native",
         "shadowing"
       ]
     },
@@ -116,6 +118,7 @@
       "module": null,
       "version": "0.3.0",
       "features": [
+        "native",
         "bincode",
         "reference-cases"
       ]

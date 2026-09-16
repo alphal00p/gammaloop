@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["PermutedStructure"],"trait":["Perm","PermuteTensor"]};
+window.SIDEBAR_ITEMS = {"struct":["CanonicalLayout","Canonicalized","IndexOrder","PendingIndexPermutation","Reindexed","RepresentationOrder"],"trait":["ApplyPendingIndexPermutation","TensorIdentity"]};

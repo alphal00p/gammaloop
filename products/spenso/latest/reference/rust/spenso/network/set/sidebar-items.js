@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["SharedTensorNetworkSet","TensorNetworkSet"],"type":["CompiledTensorNetworkSet","EvalTensorNetworkSet","EvalTreeTensorNetworkSet"]};
+window.SIDEBAR_ITEMS = {"struct":["SharedTensorNetworkSet","TensorNetworkSet"],"type":["EvalTensorNetworkSet","EvalTreeTensorNetworkSet"]};

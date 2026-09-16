@@ -5,7 +5,7 @@
 <a href=#4 id=4 data-nosnippet>4</a>    algebra::complex::{Complex, RealOrComplex},
 <a href=#5 id=5 data-nosnippet>5</a>    network::StructureLessDisplay,
 <a href=#6 id=6 data-nosnippet>6</a>    structure::{
-<a href=#7 id=7 data-nosnippet>7</a>        HasStructure, PermutedStructure, SlotIndex, StructureError, TensorStructure,
+<a href=#7 id=7 data-nosnippet>7</a>        Canonicalized, HasStructure, Reindexed, SlotIndex, StructureError, TensorStructure,
 <a href=#8 id=8 data-nosnippet>8</a>        concrete_index::ConcreteIndex, dimension::Dimension, representation::Representation,
 <a href=#9 id=9 data-nosnippet>9</a>        slot::IsAbstractSlot,
 <a href=#10 id=10 data-nosnippet>10</a>    },
@@ -64,7 +64,7 @@
 <a href=#63 id=63 data-nosnippet>63</a>
 <a href=#64 id=64 data-nosnippet>64</a>    </span><span class="kw">fn </span>key_for_structure(
 <a href=#65 id=65 data-nosnippet>65</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#66 id=66 data-nosnippet>66</a>        structure: <span class="kw-2">&amp;</span>PermutedStructure&lt;S&gt;,
+<a href=#66 id=66 data-nosnippet>66</a>        structure: <span class="kw-2">&amp;</span>Canonicalized&lt;S&gt;,
 <a href=#67 id=67 data-nosnippet>67</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>::Key, LibraryError&lt;<span class="self">Self</span>::Key&gt;&gt;
 <a href=#68 id=68 data-nosnippet>68</a>    <span class="kw">where
 <a href=#69 id=69 data-nosnippet>69</a>        </span>S: TensorStructure;
@@ -120,14 +120,14 @@
 <a href=#119 id=119 data-nosnippet>119</a>
 <a href=#120 id=120 data-nosnippet>120</a><span class="kw">impl</span>&lt;K: Display + Clone, V: Clone, S&gt; Library&lt;S&gt; <span class="kw">for </span>DummyLibrary&lt;V, K&gt; {
 <a href=#121 id=121 data-nosnippet>121</a>    <span class="kw">type </span>Key = K;
-<a href=#122 id=122 data-nosnippet>122</a>    <span class="kw">type </span>Value = PermutedStructure&lt;DummyLibraryTensor&lt;V&gt;&gt;;
+<a href=#122 id=122 data-nosnippet>122</a>    <span class="kw">type </span>Value = Canonicalized&lt;DummyLibraryTensor&lt;V&gt;&gt;;
 <a href=#123 id=123 data-nosnippet>123</a>    <span class="kw">fn </span>get&lt;<span class="lifetime">'a</span>&gt;(<span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="self">self</span>, key: <span class="kw-2">&amp;</span><span class="self">Self</span>::Key) -&gt; <span class="prelude-ty">Result</span>&lt;Cow&lt;<span class="lifetime">'a</span>, <span class="self">Self</span>::Value&gt;, LibraryError&lt;<span class="self">Self</span>::Key&gt;&gt; {
 <a href=#124 id=124 data-nosnippet>124</a>        <span class="prelude-val">Err</span>(LibraryError::NotFound(key.clone()))
 <a href=#125 id=125 data-nosnippet>125</a>    }
 <a href=#126 id=126 data-nosnippet>126</a>
 <a href=#127 id=127 data-nosnippet>127</a>    <span class="kw">fn </span>key_for_structure(
 <a href=#128 id=128 data-nosnippet>128</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#129 id=129 data-nosnippet>129</a>        _structure: <span class="kw-2">&amp;</span>PermutedStructure&lt;S&gt;,
+<a href=#129 id=129 data-nosnippet>129</a>        _structure: <span class="kw-2">&amp;</span>Canonicalized&lt;S&gt;,
 <a href=#130 id=130 data-nosnippet>130</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>::Key, LibraryError&lt;<span class="self">Self</span>::Key&gt;&gt;
 <a href=#131 id=131 data-nosnippet>131</a>    <span class="kw">where
 <a href=#132 id=132 data-nosnippet>132</a>        </span>S: TensorStructure,
@@ -160,10 +160,10 @@
 <a href=#159 id=159 data-nosnippet>159</a>    <span class="kw">fn </span>is_fully_self_dual(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
 <a href=#160 id=160 data-nosnippet>160</a>        <span class="bool-val">false
 <a href=#161 id=161 data-nosnippet>161</a>    </span>}
-<a href=#162 id=162 data-nosnippet>162</a>    <span class="kw">fn </span>reindex(
+<a href=#162 id=162 data-nosnippet>162</a>    <span class="kw">fn </span>reindex_storage(
 <a href=#163 id=163 data-nosnippet>163</a>        <span class="self">self</span>,
 <a href=#164 id=164 data-nosnippet>164</a>        _indices: <span class="kw-2">&amp;</span>[&lt;<span class="self">Self</span>::Slot <span class="kw">as </span>IsAbstractSlot&gt;::Aind],
-<a href=#165 id=165 data-nosnippet>165</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;PermutedStructure&lt;<span class="self">Self</span>::Indexed&gt;, StructureError&gt; {
+<a href=#165 id=165 data-nosnippet>165</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Reindexed&lt;<span class="self">Self</span>::Indexed&gt;, StructureError&gt; {
 <a href=#166 id=166 data-nosnippet>166</a>        <span class="macro">unimplemented!</span>()
 <a href=#167 id=167 data-nosnippet>167</a>    }
 <a href=#168 id=168 data-nosnippet>168</a>    <span class="kw">fn </span>dual(<span class="self">self</span>) -&gt; <span class="self">Self </span>{
@@ -292,7 +292,7 @@
 <a href=#291 id=291 data-nosnippet>291</a>    <span class="kw">fn </span>with_indices(
 <a href=#292 id=292 data-nosnippet>292</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
 <a href=#293 id=293 data-nosnippet>293</a>        _indices: <span class="kw-2">&amp;</span>[&lt;&lt;&lt;<span class="self">Self</span>::WithIndices <span class="kw">as </span>HasStructure&gt;::Structure <span class="kw">as </span>TensorStructure&gt;::Slot <span class="kw">as </span>IsAbstractSlot&gt;::Aind],
-<a href=#294 id=294 data-nosnippet>294</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;PermutedStructure&lt;<span class="self">Self</span>::WithIndices&gt;, StructureError&gt; {
+<a href=#294 id=294 data-nosnippet>294</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Reindexed&lt;<span class="self">Self</span>::WithIndices&gt;, StructureError&gt; {
 <a href=#295 id=295 data-nosnippet>295</a>        <span class="macro">unimplemented!</span>()
 <a href=#296 id=296 data-nosnippet>296</a>    }
 <a href=#297 id=297 data-nosnippet>297</a>}
@@ -313,7 +313,7 @@
 <a href=#312 id=312 data-nosnippet>312</a>    <span class="kw">fn </span>with_indices(
 <a href=#313 id=313 data-nosnippet>313</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
 <a href=#314 id=314 data-nosnippet>314</a>        indices: <span class="kw-2">&amp;</span>[&lt;&lt;&lt;<span class="self">Self</span>::WithIndices <span class="kw">as </span>HasStructure&gt;::Structure <span class="kw">as </span>TensorStructure&gt;::Slot <span class="kw">as </span>IsAbstractSlot&gt;::Aind],
-<a href=#315 id=315 data-nosnippet>315</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;PermutedStructure&lt;<span class="self">Self</span>::WithIndices&gt;, StructureError&gt;;
+<a href=#315 id=315 data-nosnippet>315</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Reindexed&lt;<span class="self">Self</span>::WithIndices&gt;, StructureError&gt;;
 <a href=#316 id=316 data-nosnippet>316</a>}
 <a href=#317 id=317 data-nosnippet>317</a>
 <a href=#318 id=318 data-nosnippet>318</a><span class="kw">impl</span>&lt;D: Clone, S: TensorStructure + Clone&gt; LibraryTensor <span class="kw">for </span>DataTensor&lt;D, S&gt; {
@@ -325,165 +325,159 @@
 <a href=#324 id=324 data-nosnippet>324</a>    }
 <a href=#325 id=325 data-nosnippet>325</a>
 <a href=#326 id=326 data-nosnippet>326</a>    <span class="kw">fn </span>from_dense(key: S, data: Vec&lt;<span class="self">Self</span>::Data&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>&gt; {
-<a href=#327 id=327 data-nosnippet>327</a>        <span class="prelude-val">Ok</span>(DataTensor::Dense(DenseTensor::from_data(data, key)<span class="question-mark">?</span>))
-<a href=#328 id=328 data-nosnippet>328</a>    }
-<a href=#329 id=329 data-nosnippet>329</a>
-<a href=#330 id=330 data-nosnippet>330</a>    <span class="kw">fn </span>from_sparse(
-<a href=#331 id=331 data-nosnippet>331</a>        key: S,
-<a href=#332 id=332 data-nosnippet>332</a>        data: <span class="kw">impl </span>IntoIterator&lt;Item = (Vec&lt;ConcreteIndex&gt;, <span class="self">Self</span>::Data)&gt;,
-<a href=#333 id=333 data-nosnippet>333</a>        zero: <span class="self">Self</span>::Data,
-<a href=#334 id=334 data-nosnippet>334</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>&gt; {
-<a href=#335 id=335 data-nosnippet>335</a>        <span class="prelude-val">Ok</span>(DataTensor::Sparse(SparseTensor::from_data(
-<a href=#336 id=336 data-nosnippet>336</a>            data, key, zero,
-<a href=#337 id=337 data-nosnippet>337</a>        )<span class="question-mark">?</span>))
-<a href=#338 id=338 data-nosnippet>338</a>    }
-<a href=#339 id=339 data-nosnippet>339</a>
-<a href=#340 id=340 data-nosnippet>340</a>    <span class="kw">fn </span>with_indices(
-<a href=#341 id=341 data-nosnippet>341</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#342 id=342 data-nosnippet>342</a>        indices: <span class="kw-2">&amp;</span>[&lt;&lt;&lt;<span class="self">Self</span>::WithIndices <span class="kw">as </span>HasStructure&gt;::Structure <span class="kw">as </span>TensorStructure&gt;::Slot <span class="kw">as </span>IsAbstractSlot&gt;::Aind],
-<a href=#343 id=343 data-nosnippet>343</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;PermutedStructure&lt;<span class="self">Self</span>::WithIndices&gt;, StructureError&gt; {
-<a href=#344 id=344 data-nosnippet>344</a>        <span class="self">self</span>.clone().reindex(indices)
-<a href=#345 id=345 data-nosnippet>345</a>        <span class="comment">// let new_structure = self.structure().clone().reindex(indices)?;
-<a href=#346 id=346 data-nosnippet>346</a>
-<a href=#347 id=347 data-nosnippet>347</a>        // Ok(match self {
-<a href=#348 id=348 data-nosnippet>348</a>        //     DataTensor::Dense(d) =&gt; DataTensor::Dense(DenseTensor {
-<a href=#349 id=349 data-nosnippet>349</a>        //         data: d.data.clone(),
-<a href=#350 id=350 data-nosnippet>350</a>        //         structure: new_structure,
-<a href=#351 id=351 data-nosnippet>351</a>        //     }),
-<a href=#352 id=352 data-nosnippet>352</a>        //     DataTensor::Sparse(s) =&gt; DataTensor::Sparse(SparseTensor {
-<a href=#353 id=353 data-nosnippet>353</a>        //         elements: s.elements.clone(),
-<a href=#354 id=354 data-nosnippet>354</a>        //         structure: new_structure,
-<a href=#355 id=355 data-nosnippet>355</a>        //     }),
-<a href=#356 id=356 data-nosnippet>356</a>        // })
-<a href=#357 id=357 data-nosnippet>357</a>    </span>}
-<a href=#358 id=358 data-nosnippet>358</a>}
-<a href=#359 id=359 data-nosnippet>359</a>
-<a href=#360 id=360 data-nosnippet>360</a><span class="kw">impl</span>&lt;D: Clone + Default, S: TensorStructure + Clone&gt; LibraryTensor <span class="kw">for </span>RealOrComplexTensor&lt;D, S&gt; {
-<a href=#361 id=361 data-nosnippet>361</a>    <span class="kw">type </span>WithIndices = RealOrComplexTensor&lt;D, S::Indexed&gt;;
-<a href=#362 id=362 data-nosnippet>362</a>    <span class="kw">type </span>Data = RealOrComplex&lt;D&gt;;
-<a href=#363 id=363 data-nosnippet>363</a>
-<a href=#364 id=364 data-nosnippet>364</a>    <span class="kw">fn </span>empty(key: S, zero: <span class="self">Self</span>::Data) -&gt; <span class="self">Self </span>{
-<a href=#365 id=365 data-nosnippet>365</a>        RealOrComplexTensor::Real(DataTensor::Sparse(SparseTensor::empty(
-<a href=#366 id=366 data-nosnippet>366</a>            key,
-<a href=#367 id=367 data-nosnippet>367</a>            zero.to_complex().re,
-<a href=#368 id=368 data-nosnippet>368</a>        )))
-<a href=#369 id=369 data-nosnippet>369</a>    }
-<a href=#370 id=370 data-nosnippet>370</a>
-<a href=#371 id=371 data-nosnippet>371</a>    <span class="kw">fn </span>from_dense(key: S, data: Vec&lt;<span class="self">Self</span>::Data&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>&gt; {
-<a href=#372 id=372 data-nosnippet>372</a>        <span class="kw">let </span>complex_data = data.into_iter().map(|a| a.to_complex()).collect();
-<a href=#373 id=373 data-nosnippet>373</a>        <span class="kw">let </span>complex_tensor =
-<a href=#374 id=374 data-nosnippet>374</a>            &lt;DataTensor&lt;Complex&lt;D&gt;, S&gt; <span class="kw">as </span>LibraryTensor&gt;::from_dense(key, complex_data)<span class="question-mark">?</span>;
-<a href=#375 id=375 data-nosnippet>375</a>
-<a href=#376 id=376 data-nosnippet>376</a>        <span class="prelude-val">Ok</span>(RealOrComplexTensor::Complex(complex_tensor))
-<a href=#377 id=377 data-nosnippet>377</a>    }
-<a href=#378 id=378 data-nosnippet>378</a>
-<a href=#379 id=379 data-nosnippet>379</a>    <span class="kw">fn </span>from_sparse(
-<a href=#380 id=380 data-nosnippet>380</a>        key: S,
-<a href=#381 id=381 data-nosnippet>381</a>        data: <span class="kw">impl </span>IntoIterator&lt;Item = (Vec&lt;ConcreteIndex&gt;, <span class="self">Self</span>::Data)&gt;,
-<a href=#382 id=382 data-nosnippet>382</a>        zero: <span class="self">Self</span>::Data,
-<a href=#383 id=383 data-nosnippet>383</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>&gt; {
-<a href=#384 id=384 data-nosnippet>384</a>        <span class="kw">let </span>complex_tensor = &lt;DataTensor&lt;Complex&lt;D&gt;, S&gt; <span class="kw">as </span>LibraryTensor&gt;::from_sparse(
-<a href=#385 id=385 data-nosnippet>385</a>            key,
-<a href=#386 id=386 data-nosnippet>386</a>            data.into_iter()
-<a href=#387 id=387 data-nosnippet>387</a>                .map(|(indices, value)| (indices, value.to_complex())),
-<a href=#388 id=388 data-nosnippet>388</a>            zero.to_complex(),
-<a href=#389 id=389 data-nosnippet>389</a>        )<span class="question-mark">?</span>;
-<a href=#390 id=390 data-nosnippet>390</a>
-<a href=#391 id=391 data-nosnippet>391</a>        <span class="prelude-val">Ok</span>(RealOrComplexTensor::Complex(complex_tensor))
-<a href=#392 id=392 data-nosnippet>392</a>    }
-<a href=#393 id=393 data-nosnippet>393</a>
-<a href=#394 id=394 data-nosnippet>394</a>    <span class="kw">fn </span>with_indices(
-<a href=#395 id=395 data-nosnippet>395</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#396 id=396 data-nosnippet>396</a>        indices: <span class="kw-2">&amp;</span>[&lt;&lt;&lt;<span class="self">Self</span>::WithIndices <span class="kw">as </span>HasStructure&gt;::Structure <span class="kw">as </span>TensorStructure&gt;::Slot <span class="kw">as </span>IsAbstractSlot&gt;::Aind],
-<a href=#397 id=397 data-nosnippet>397</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;PermutedStructure&lt;<span class="self">Self</span>::WithIndices&gt;, StructureError&gt; {
-<a href=#398 id=398 data-nosnippet>398</a>        <span class="kw">match </span><span class="self">self </span>{
-<a href=#399 id=399 data-nosnippet>399</a>            RealOrComplexTensor::Real(real_tensor) =&gt; {
-<a href=#400 id=400 data-nosnippet>400</a>                <span class="kw">let </span>new_real_tensor =
-<a href=#401 id=401 data-nosnippet>401</a>                    &lt;DataTensor&lt;D, S&gt; <span class="kw">as </span>LibraryTensor&gt;::with_indices(real_tensor, indices)<span class="question-mark">?</span>;
-<a href=#402 id=402 data-nosnippet>402</a>                <span class="prelude-val">Ok</span>(PermutedStructure {
-<a href=#403 id=403 data-nosnippet>403</a>                    structure: RealOrComplexTensor::Real(new_real_tensor.structure),
-<a href=#404 id=404 data-nosnippet>404</a>                    rep_permutation: new_real_tensor.rep_permutation,
-<a href=#405 id=405 data-nosnippet>405</a>                    index_permutation: new_real_tensor.index_permutation,
-<a href=#406 id=406 data-nosnippet>406</a>                })
-<a href=#407 id=407 data-nosnippet>407</a>            }
-<a href=#408 id=408 data-nosnippet>408</a>            RealOrComplexTensor::Complex(complex_tensor) =&gt; {
-<a href=#409 id=409 data-nosnippet>409</a>                <span class="kw">let </span>new_complex_tensor =
-<a href=#410 id=410 data-nosnippet>410</a>                    &lt;DataTensor&lt;Complex&lt;D&gt;, S&gt; <span class="kw">as </span>LibraryTensor&gt;::with_indices(
-<a href=#411 id=411 data-nosnippet>411</a>                        complex_tensor,
-<a href=#412 id=412 data-nosnippet>412</a>                        indices,
-<a href=#413 id=413 data-nosnippet>413</a>                    )<span class="question-mark">?</span>;
-<a href=#414 id=414 data-nosnippet>414</a>                <span class="prelude-val">Ok</span>(PermutedStructure {
-<a href=#415 id=415 data-nosnippet>415</a>                    structure: RealOrComplexTensor::Complex(new_complex_tensor.structure),
-<a href=#416 id=416 data-nosnippet>416</a>                    index_permutation: new_complex_tensor.index_permutation,
-<a href=#417 id=417 data-nosnippet>417</a>                    rep_permutation: new_complex_tensor.rep_permutation,
-<a href=#418 id=418 data-nosnippet>418</a>                })
-<a href=#419 id=419 data-nosnippet>419</a>            }
-<a href=#420 id=420 data-nosnippet>420</a>        }
-<a href=#421 id=421 data-nosnippet>421</a>    }
-<a href=#422 id=422 data-nosnippet>422</a>}
-<a href=#423 id=423 data-nosnippet>423</a>
-<a href=#424 id=424 data-nosnippet>424</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
-<a href=#425 id=425 data-nosnippet>425</a></span><span class="kw">pub mod </span>symbolic;
-<a href=#426 id=426 data-nosnippet>426</a>
-<a href=#427 id=427 data-nosnippet>427</a><span class="kw">pub trait </span>TensorLibraryData: Neg&lt;Output = <span class="self">Self</span>&gt; {
-<a href=#428 id=428 data-nosnippet>428</a>    <span class="kw">fn </span>one() -&gt; <span class="self">Self</span>;
-<a href=#429 id=429 data-nosnippet>429</a>    <span class="kw">fn </span>minus_one() -&gt; <span class="self">Self</span>;
-<a href=#430 id=430 data-nosnippet>430</a>    <span class="kw">fn </span>zero() -&gt; <span class="self">Self</span>;
-<a href=#431 id=431 data-nosnippet>431</a>}
-<a href=#432 id=432 data-nosnippet>432</a><span class="macro">macro_rules!</span> impl_tensor_library_data {
-<a href=#433 id=433 data-nosnippet>433</a>    ( <span class="macro-nonterminal">$target_type</span>:ty, <span class="macro-nonterminal">$zero_val</span>:expr, <span class="macro-nonterminal">$one_val</span>:expr ) =&gt; {
-<a href=#434 id=434 data-nosnippet>434</a>        <span class="comment">// Assuming TensorLibraryData is defined in spenso::tensor_library
-<a href=#435 id=435 data-nosnippet>435</a>        // If the macro is defined *inside* tensor_library.rs, `TensorLibraryData` might suffice.
-<a href=#436 id=436 data-nosnippet>436</a>        // Using `$crate::spenso::tensor_library::TensorLibraryData` is more robust
-<a href=#437 id=437 data-nosnippet>437</a>        // if the macro can be called from other modules within the spenso crate.
-<a href=#438 id=438 data-nosnippet>438</a>        // Adjust path as needed based on your crate structure.
-<a href=#439 id=439 data-nosnippet>439</a>        </span><span class="kw">impl </span>TensorLibraryData <span class="kw">for </span><span class="macro-nonterminal">$target_type </span>{
-<a href=#440 id=440 data-nosnippet>440</a>            <span class="doccomment">/// Returns the additive identity element (zero) of this type.
+<a href=#327 id=327 data-nosnippet>327</a>        <span class="prelude-val">Ok</span>(DataTensor::Dense(DenseTensor::from_storage_data(
+<a href=#328 id=328 data-nosnippet>328</a>            data, key,
+<a href=#329 id=329 data-nosnippet>329</a>        )<span class="question-mark">?</span>))
+<a href=#330 id=330 data-nosnippet>330</a>    }
+<a href=#331 id=331 data-nosnippet>331</a>
+<a href=#332 id=332 data-nosnippet>332</a>    <span class="kw">fn </span>from_sparse(
+<a href=#333 id=333 data-nosnippet>333</a>        key: S,
+<a href=#334 id=334 data-nosnippet>334</a>        data: <span class="kw">impl </span>IntoIterator&lt;Item = (Vec&lt;ConcreteIndex&gt;, <span class="self">Self</span>::Data)&gt;,
+<a href=#335 id=335 data-nosnippet>335</a>        zero: <span class="self">Self</span>::Data,
+<a href=#336 id=336 data-nosnippet>336</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>&gt; {
+<a href=#337 id=337 data-nosnippet>337</a>        <span class="prelude-val">Ok</span>(DataTensor::Sparse(SparseTensor::from_storage_data(
+<a href=#338 id=338 data-nosnippet>338</a>            data, key, zero,
+<a href=#339 id=339 data-nosnippet>339</a>        )<span class="question-mark">?</span>))
+<a href=#340 id=340 data-nosnippet>340</a>    }
+<a href=#341 id=341 data-nosnippet>341</a>
+<a href=#342 id=342 data-nosnippet>342</a>    <span class="kw">fn </span>with_indices(
+<a href=#343 id=343 data-nosnippet>343</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#344 id=344 data-nosnippet>344</a>        indices: <span class="kw-2">&amp;</span>[&lt;&lt;&lt;<span class="self">Self</span>::WithIndices <span class="kw">as </span>HasStructure&gt;::Structure <span class="kw">as </span>TensorStructure&gt;::Slot <span class="kw">as </span>IsAbstractSlot&gt;::Aind],
+<a href=#345 id=345 data-nosnippet>345</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Reindexed&lt;<span class="self">Self</span>::WithIndices&gt;, StructureError&gt; {
+<a href=#346 id=346 data-nosnippet>346</a>        <span class="self">self</span>.clone().reindex_storage(indices)
+<a href=#347 id=347 data-nosnippet>347</a>        <span class="comment">// let new_structure = self.structure().clone().reindex_storage(indices)?;
+<a href=#348 id=348 data-nosnippet>348</a>
+<a href=#349 id=349 data-nosnippet>349</a>        // Ok(match self {
+<a href=#350 id=350 data-nosnippet>350</a>        //     DataTensor::Dense(d) =&gt; DataTensor::Dense(DenseTensor {
+<a href=#351 id=351 data-nosnippet>351</a>        //         data: d.data.clone(),
+<a href=#352 id=352 data-nosnippet>352</a>        //         structure: new_structure,
+<a href=#353 id=353 data-nosnippet>353</a>        //     }),
+<a href=#354 id=354 data-nosnippet>354</a>        //     DataTensor::Sparse(s) =&gt; DataTensor::Sparse(SparseTensor {
+<a href=#355 id=355 data-nosnippet>355</a>        //         elements: s.elements.clone(),
+<a href=#356 id=356 data-nosnippet>356</a>        //         structure: new_structure,
+<a href=#357 id=357 data-nosnippet>357</a>        //     }),
+<a href=#358 id=358 data-nosnippet>358</a>        // })
+<a href=#359 id=359 data-nosnippet>359</a>    </span>}
+<a href=#360 id=360 data-nosnippet>360</a>}
+<a href=#361 id=361 data-nosnippet>361</a>
+<a href=#362 id=362 data-nosnippet>362</a><span class="kw">impl</span>&lt;D: Clone + Default, S: TensorStructure + Clone&gt; LibraryTensor <span class="kw">for </span>RealOrComplexTensor&lt;D, S&gt; {
+<a href=#363 id=363 data-nosnippet>363</a>    <span class="kw">type </span>WithIndices = RealOrComplexTensor&lt;D, S::Indexed&gt;;
+<a href=#364 id=364 data-nosnippet>364</a>    <span class="kw">type </span>Data = RealOrComplex&lt;D&gt;;
+<a href=#365 id=365 data-nosnippet>365</a>
+<a href=#366 id=366 data-nosnippet>366</a>    <span class="kw">fn </span>empty(key: S, zero: <span class="self">Self</span>::Data) -&gt; <span class="self">Self </span>{
+<a href=#367 id=367 data-nosnippet>367</a>        RealOrComplexTensor::Real(DataTensor::Sparse(SparseTensor::empty(
+<a href=#368 id=368 data-nosnippet>368</a>            key,
+<a href=#369 id=369 data-nosnippet>369</a>            zero.to_complex().re,
+<a href=#370 id=370 data-nosnippet>370</a>        )))
+<a href=#371 id=371 data-nosnippet>371</a>    }
+<a href=#372 id=372 data-nosnippet>372</a>
+<a href=#373 id=373 data-nosnippet>373</a>    <span class="kw">fn </span>from_dense(key: S, data: Vec&lt;<span class="self">Self</span>::Data&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>&gt; {
+<a href=#374 id=374 data-nosnippet>374</a>        <span class="kw">let </span>complex_data = data.into_iter().map(|a| a.to_complex()).collect();
+<a href=#375 id=375 data-nosnippet>375</a>        <span class="kw">let </span>complex_tensor =
+<a href=#376 id=376 data-nosnippet>376</a>            &lt;DataTensor&lt;Complex&lt;D&gt;, S&gt; <span class="kw">as </span>LibraryTensor&gt;::from_dense(key, complex_data)<span class="question-mark">?</span>;
+<a href=#377 id=377 data-nosnippet>377</a>
+<a href=#378 id=378 data-nosnippet>378</a>        <span class="prelude-val">Ok</span>(RealOrComplexTensor::Complex(complex_tensor))
+<a href=#379 id=379 data-nosnippet>379</a>    }
+<a href=#380 id=380 data-nosnippet>380</a>
+<a href=#381 id=381 data-nosnippet>381</a>    <span class="kw">fn </span>from_sparse(
+<a href=#382 id=382 data-nosnippet>382</a>        key: S,
+<a href=#383 id=383 data-nosnippet>383</a>        data: <span class="kw">impl </span>IntoIterator&lt;Item = (Vec&lt;ConcreteIndex&gt;, <span class="self">Self</span>::Data)&gt;,
+<a href=#384 id=384 data-nosnippet>384</a>        zero: <span class="self">Self</span>::Data,
+<a href=#385 id=385 data-nosnippet>385</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>&gt; {
+<a href=#386 id=386 data-nosnippet>386</a>        <span class="kw">let </span>complex_tensor = &lt;DataTensor&lt;Complex&lt;D&gt;, S&gt; <span class="kw">as </span>LibraryTensor&gt;::from_sparse(
+<a href=#387 id=387 data-nosnippet>387</a>            key,
+<a href=#388 id=388 data-nosnippet>388</a>            data.into_iter()
+<a href=#389 id=389 data-nosnippet>389</a>                .map(|(indices, value)| (indices, value.to_complex())),
+<a href=#390 id=390 data-nosnippet>390</a>            zero.to_complex(),
+<a href=#391 id=391 data-nosnippet>391</a>        )<span class="question-mark">?</span>;
+<a href=#392 id=392 data-nosnippet>392</a>
+<a href=#393 id=393 data-nosnippet>393</a>        <span class="prelude-val">Ok</span>(RealOrComplexTensor::Complex(complex_tensor))
+<a href=#394 id=394 data-nosnippet>394</a>    }
+<a href=#395 id=395 data-nosnippet>395</a>
+<a href=#396 id=396 data-nosnippet>396</a>    <span class="kw">fn </span>with_indices(
+<a href=#397 id=397 data-nosnippet>397</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#398 id=398 data-nosnippet>398</a>        indices: <span class="kw-2">&amp;</span>[&lt;&lt;&lt;<span class="self">Self</span>::WithIndices <span class="kw">as </span>HasStructure&gt;::Structure <span class="kw">as </span>TensorStructure&gt;::Slot <span class="kw">as </span>IsAbstractSlot&gt;::Aind],
+<a href=#399 id=399 data-nosnippet>399</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Reindexed&lt;<span class="self">Self</span>::WithIndices&gt;, StructureError&gt; {
+<a href=#400 id=400 data-nosnippet>400</a>        <span class="kw">match </span><span class="self">self </span>{
+<a href=#401 id=401 data-nosnippet>401</a>            RealOrComplexTensor::Real(real_tensor) =&gt; {
+<a href=#402 id=402 data-nosnippet>402</a>                <span class="kw">let </span>new_real_tensor =
+<a href=#403 id=403 data-nosnippet>403</a>                    &lt;DataTensor&lt;D, S&gt; <span class="kw">as </span>LibraryTensor&gt;::with_indices(real_tensor, indices)<span class="question-mark">?</span>;
+<a href=#404 id=404 data-nosnippet>404</a>                <span class="prelude-val">Ok</span>(new_real_tensor.map_target(RealOrComplexTensor::Real))
+<a href=#405 id=405 data-nosnippet>405</a>            }
+<a href=#406 id=406 data-nosnippet>406</a>            RealOrComplexTensor::Complex(complex_tensor) =&gt; {
+<a href=#407 id=407 data-nosnippet>407</a>                <span class="kw">let </span>new_complex_tensor =
+<a href=#408 id=408 data-nosnippet>408</a>                    &lt;DataTensor&lt;Complex&lt;D&gt;, S&gt; <span class="kw">as </span>LibraryTensor&gt;::with_indices(
+<a href=#409 id=409 data-nosnippet>409</a>                        complex_tensor,
+<a href=#410 id=410 data-nosnippet>410</a>                        indices,
+<a href=#411 id=411 data-nosnippet>411</a>                    )<span class="question-mark">?</span>;
+<a href=#412 id=412 data-nosnippet>412</a>                <span class="prelude-val">Ok</span>(new_complex_tensor.map_target(RealOrComplexTensor::Complex))
+<a href=#413 id=413 data-nosnippet>413</a>            }
+<a href=#414 id=414 data-nosnippet>414</a>        }
+<a href=#415 id=415 data-nosnippet>415</a>    }
+<a href=#416 id=416 data-nosnippet>416</a>}
+<a href=#417 id=417 data-nosnippet>417</a>
+<a href=#418 id=418 data-nosnippet>418</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#419 id=419 data-nosnippet>419</a></span><span class="kw">pub mod </span>symbolic;
+<a href=#420 id=420 data-nosnippet>420</a>
+<a href=#421 id=421 data-nosnippet>421</a><span class="kw">pub trait </span>TensorLibraryData: Neg&lt;Output = <span class="self">Self</span>&gt; {
+<a href=#422 id=422 data-nosnippet>422</a>    <span class="kw">fn </span>one() -&gt; <span class="self">Self</span>;
+<a href=#423 id=423 data-nosnippet>423</a>    <span class="kw">fn </span>minus_one() -&gt; <span class="self">Self</span>;
+<a href=#424 id=424 data-nosnippet>424</a>    <span class="kw">fn </span>zero() -&gt; <span class="self">Self</span>;
+<a href=#425 id=425 data-nosnippet>425</a>}
+<a href=#426 id=426 data-nosnippet>426</a><span class="macro">macro_rules!</span> impl_tensor_library_data {
+<a href=#427 id=427 data-nosnippet>427</a>    ( <span class="macro-nonterminal">$target_type</span>:ty, <span class="macro-nonterminal">$zero_val</span>:expr, <span class="macro-nonterminal">$one_val</span>:expr ) =&gt; {
+<a href=#428 id=428 data-nosnippet>428</a>        <span class="comment">// Assuming TensorLibraryData is defined in spenso::tensor_library
+<a href=#429 id=429 data-nosnippet>429</a>        // If the macro is defined *inside* tensor_library.rs, `TensorLibraryData` might suffice.
+<a href=#430 id=430 data-nosnippet>430</a>        // Using `$crate::spenso::tensor_library::TensorLibraryData` is more robust
+<a href=#431 id=431 data-nosnippet>431</a>        // if the macro can be called from other modules within the spenso crate.
+<a href=#432 id=432 data-nosnippet>432</a>        // Adjust path as needed based on your crate structure.
+<a href=#433 id=433 data-nosnippet>433</a>        </span><span class="kw">impl </span>TensorLibraryData <span class="kw">for </span><span class="macro-nonterminal">$target_type </span>{
+<a href=#434 id=434 data-nosnippet>434</a>            <span class="doccomment">/// Returns the additive identity element (zero) of this type.
+<a href=#435 id=435 data-nosnippet>435</a>            </span><span class="attr">#[inline]
+<a href=#436 id=436 data-nosnippet>436</a>            </span><span class="kw">fn </span>zero() -&gt; <span class="self">Self </span>{
+<a href=#437 id=437 data-nosnippet>437</a>                <span class="macro-nonterminal">$zero_val
+<a href=#438 id=438 data-nosnippet>438</a>            </span>}
+<a href=#439 id=439 data-nosnippet>439</a>
+<a href=#440 id=440 data-nosnippet>440</a>            <span class="doccomment">/// Returns the additive inverse element (minus one) of this type.
 <a href=#441 id=441 data-nosnippet>441</a>            </span><span class="attr">#[inline]
-<a href=#442 id=442 data-nosnippet>442</a>            </span><span class="kw">fn </span>zero() -&gt; <span class="self">Self </span>{
-<a href=#443 id=443 data-nosnippet>443</a>                <span class="macro-nonterminal">$zero_val
-<a href=#444 id=444 data-nosnippet>444</a>            </span>}
+<a href=#442 id=442 data-nosnippet>442</a>            </span><span class="kw">fn </span>minus_one() -&gt; <span class="self">Self </span>{
+<a href=#443 id=443 data-nosnippet>443</a>                -<span class="self">Self</span>::one()
+<a href=#444 id=444 data-nosnippet>444</a>            }
 <a href=#445 id=445 data-nosnippet>445</a>
-<a href=#446 id=446 data-nosnippet>446</a>            <span class="doccomment">/// Returns the additive inverse element (minus one) of this type.
+<a href=#446 id=446 data-nosnippet>446</a>            <span class="doccomment">/// Returns the multiplicative identity element (one) of this type.
 <a href=#447 id=447 data-nosnippet>447</a>            </span><span class="attr">#[inline]
-<a href=#448 id=448 data-nosnippet>448</a>            </span><span class="kw">fn </span>minus_one() -&gt; <span class="self">Self </span>{
-<a href=#449 id=449 data-nosnippet>449</a>                -<span class="self">Self</span>::one()
-<a href=#450 id=450 data-nosnippet>450</a>            }
-<a href=#451 id=451 data-nosnippet>451</a>
-<a href=#452 id=452 data-nosnippet>452</a>            <span class="doccomment">/// Returns the multiplicative identity element (one) of this type.
-<a href=#453 id=453 data-nosnippet>453</a>            </span><span class="attr">#[inline]
-<a href=#454 id=454 data-nosnippet>454</a>            </span><span class="kw">fn </span>one() -&gt; <span class="self">Self </span>{
-<a href=#455 id=455 data-nosnippet>455</a>                <span class="macro-nonterminal">$one_val
-<a href=#456 id=456 data-nosnippet>456</a>            </span>}
-<a href=#457 id=457 data-nosnippet>457</a>        }
-<a href=#458 id=458 data-nosnippet>458</a>    };
-<a href=#459 id=459 data-nosnippet>459</a>}
-<a href=#460 id=460 data-nosnippet>460</a>
-<a href=#461 id=461 data-nosnippet>461</a><span class="macro">impl_tensor_library_data!</span>(f32, <span class="number">0.0</span>, <span class="number">1.0</span>);
-<a href=#462 id=462 data-nosnippet>462</a><span class="macro">impl_tensor_library_data!</span>(f64, <span class="number">0.0</span>, <span class="number">1.0</span>);
-<a href=#463 id=463 data-nosnippet>463</a><span class="macro">impl_tensor_library_data!</span>(i32, <span class="number">0</span>, <span class="number">1</span>);
-<a href=#464 id=464 data-nosnippet>464</a><span class="macro">impl_tensor_library_data!</span>(i64, <span class="number">0</span>, <span class="number">1</span>);
-<a href=#465 id=465 data-nosnippet>465</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
-<a href=#466 id=466 data-nosnippet>466</a></span><span class="macro">impl_tensor_library_data!</span>(
-<a href=#467 id=467 data-nosnippet>467</a>    symbolica::atom::Atom,
-<a href=#468 id=468 data-nosnippet>468</a>    symbolica::atom::Atom::Zero,
-<a href=#469 id=469 data-nosnippet>469</a>    symbolica::atom::Atom::num(<span class="number">1</span>)
-<a href=#470 id=470 data-nosnippet>470</a>);
-<a href=#471 id=471 data-nosnippet>471</a>
-<a href=#472 id=472 data-nosnippet>472</a><span class="kw">impl</span>&lt;T: TensorLibraryData&gt; TensorLibraryData <span class="kw">for </span>RealOrComplex&lt;T&gt; {
-<a href=#473 id=473 data-nosnippet>473</a>    <span class="kw">fn </span>zero() -&gt; <span class="self">Self </span>{
-<a href=#474 id=474 data-nosnippet>474</a>        RealOrComplex::Real(T::zero())
-<a href=#475 id=475 data-nosnippet>475</a>    }
-<a href=#476 id=476 data-nosnippet>476</a>
-<a href=#477 id=477 data-nosnippet>477</a>    <span class="kw">fn </span>minus_one() -&gt; <span class="self">Self </span>{
-<a href=#478 id=478 data-nosnippet>478</a>        RealOrComplex::Real(T::minus_one())
-<a href=#479 id=479 data-nosnippet>479</a>    }
-<a href=#480 id=480 data-nosnippet>480</a>
-<a href=#481 id=481 data-nosnippet>481</a>    <span class="kw">fn </span>one() -&gt; <span class="self">Self </span>{
-<a href=#482 id=482 data-nosnippet>482</a>        RealOrComplex::Real(T::one())
-<a href=#483 id=483 data-nosnippet>483</a>    }
-<a href=#484 id=484 data-nosnippet>484</a>}
-<a href=#485 id=485 data-nosnippet>485</a>
-<a href=#486 id=486 data-nosnippet>486</a><span class="attr">#[cfg(test)]
-<a href=#487 id=487 data-nosnippet>487</a></span><span class="kw">mod </span>test {}
+<a href=#448 id=448 data-nosnippet>448</a>            </span><span class="kw">fn </span>one() -&gt; <span class="self">Self </span>{
+<a href=#449 id=449 data-nosnippet>449</a>                <span class="macro-nonterminal">$one_val
+<a href=#450 id=450 data-nosnippet>450</a>            </span>}
+<a href=#451 id=451 data-nosnippet>451</a>        }
+<a href=#452 id=452 data-nosnippet>452</a>    };
+<a href=#453 id=453 data-nosnippet>453</a>}
+<a href=#454 id=454 data-nosnippet>454</a>
+<a href=#455 id=455 data-nosnippet>455</a><span class="macro">impl_tensor_library_data!</span>(f32, <span class="number">0.0</span>, <span class="number">1.0</span>);
+<a href=#456 id=456 data-nosnippet>456</a><span class="macro">impl_tensor_library_data!</span>(f64, <span class="number">0.0</span>, <span class="number">1.0</span>);
+<a href=#457 id=457 data-nosnippet>457</a><span class="macro">impl_tensor_library_data!</span>(i32, <span class="number">0</span>, <span class="number">1</span>);
+<a href=#458 id=458 data-nosnippet>458</a><span class="macro">impl_tensor_library_data!</span>(i64, <span class="number">0</span>, <span class="number">1</span>);
+<a href=#459 id=459 data-nosnippet>459</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#460 id=460 data-nosnippet>460</a></span><span class="macro">impl_tensor_library_data!</span>(
+<a href=#461 id=461 data-nosnippet>461</a>    symbolica::atom::Atom,
+<a href=#462 id=462 data-nosnippet>462</a>    symbolica::atom::Atom::Zero,
+<a href=#463 id=463 data-nosnippet>463</a>    symbolica::atom::Atom::num(<span class="number">1</span>)
+<a href=#464 id=464 data-nosnippet>464</a>);
+<a href=#465 id=465 data-nosnippet>465</a>
+<a href=#466 id=466 data-nosnippet>466</a><span class="kw">impl</span>&lt;T: TensorLibraryData&gt; TensorLibraryData <span class="kw">for </span>RealOrComplex&lt;T&gt; {
+<a href=#467 id=467 data-nosnippet>467</a>    <span class="kw">fn </span>zero() -&gt; <span class="self">Self </span>{
+<a href=#468 id=468 data-nosnippet>468</a>        RealOrComplex::Real(T::zero())
+<a href=#469 id=469 data-nosnippet>469</a>    }
+<a href=#470 id=470 data-nosnippet>470</a>
+<a href=#471 id=471 data-nosnippet>471</a>    <span class="kw">fn </span>minus_one() -&gt; <span class="self">Self </span>{
+<a href=#472 id=472 data-nosnippet>472</a>        RealOrComplex::Real(T::minus_one())
+<a href=#473 id=473 data-nosnippet>473</a>    }
+<a href=#474 id=474 data-nosnippet>474</a>
+<a href=#475 id=475 data-nosnippet>475</a>    <span class="kw">fn </span>one() -&gt; <span class="self">Self </span>{
+<a href=#476 id=476 data-nosnippet>476</a>        RealOrComplex::Real(T::one())
+<a href=#477 id=477 data-nosnippet>477</a>    }
+<a href=#478 id=478 data-nosnippet>478</a>}
+<a href=#479 id=479 data-nosnippet>479</a>
+<a href=#480 id=480 data-nosnippet>480</a><span class="attr">#[cfg(test)]
+<a href=#481 id=481 data-nosnippet>481</a></span><span class="kw">mod </span>test {}
 </code></pre></div></section></main></body></html>

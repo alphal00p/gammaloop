@@ -389,7 +389,7 @@
 <a href=#388 id=388 data-nosnippet>388</a></span><span class="kw">mod </span>tests {
 <a href=#389 id=389 data-nosnippet>389</a>
 <a href=#390 id=390 data-nosnippet>390</a>    <span class="kw">use </span><span class="kw">crate</span>::structure::{
-<a href=#391 id=391 data-nosnippet>391</a>        OrderedStructure, PermutedStructure,
+<a href=#391 id=391 data-nosnippet>391</a>        Canonicalized, OrderedStructure,
 <a href=#392 id=392 data-nosnippet>392</a>        representation::{Euclidean, RepName},
 <a href=#393 id=393 data-nosnippet>393</a>    };
 <a href=#394 id=394 data-nosnippet>394</a>
@@ -398,13 +398,13 @@
 <a href=#397 id=397 data-nosnippet>397</a>    <span class="attr">#[test]
 <a href=#398 id=398 data-nosnippet>398</a>    </span><span class="kw">fn </span>weaved_iterator() {
 <a href=#399 id=399 data-nosnippet>399</a>        <span class="kw">let </span>strct: DenseTensor&lt;u32, OrderedStructure&lt;Euclidean&gt;&gt; = DenseTensor::zero(
-<a href=#400 id=400 data-nosnippet>400</a>            PermutedStructure::from_iter([
+<a href=#400 id=400 data-nosnippet>400</a>            Canonicalized::from_iter([
 <a href=#401 id=401 data-nosnippet>401</a>                Euclidean {}.new_slot(<span class="number">4</span>, <span class="number">1</span>),
 <a href=#402 id=402 data-nosnippet>402</a>                Euclidean {}.new_slot(<span class="number">4</span>, <span class="number">2</span>),
 <a href=#403 id=403 data-nosnippet>403</a>                Euclidean {}.new_slot(<span class="number">4</span>, <span class="number">3</span>),
 <a href=#404 id=404 data-nosnippet>404</a>                Euclidean {}.new_slot(<span class="number">4</span>, <span class="number">4</span>),
 <a href=#405 id=405 data-nosnippet>405</a>            ])
-<a href=#406 id=406 data-nosnippet>406</a>            .structure,
+<a href=#406 id=406 data-nosnippet>406</a>            .into_canonical(),
 <a href=#407 id=407 data-nosnippet>407</a>        );
 <a href=#408 id=408 data-nosnippet>408</a>
 <a href=#409 id=409 data-nosnippet>409</a>        <span class="kw">let </span>fiber_spec = [<span class="bool-val">true</span>, <span class="bool-val">false</span>, <span class="bool-val">true</span>, <span class="bool-val">false</span>];

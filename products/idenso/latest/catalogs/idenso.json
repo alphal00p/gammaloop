@@ -11,6 +11,7 @@
     "version": "0.3.0",
     "language": "rust",
     "features": [
+      "native",
       "bincode",
       "reference-cases"
     ]
@@ -71,7 +72,7 @@
                 "name": "canonize",
                 "kind": "method",
                 "docs": null,
-                "signature": "fn canonize < Aind : AbsInd + ParseableAind + DummyAind >\n(& self, new_dummy : impl FnMut(usize) -> Aind,) -> Atom;",
+                "signature": "fn canonize < Aind : AbsInd + ParseableAind + DummyAind >\n(& self, new_dummy : impl FnMut(usize) -> Aind,) -> Result < Atom,\nCanonicalizationError >;",
                 "default": null,
                 "members": []
               },
@@ -107,9 +108,9 @@
                 "kind": "method",
                 "docs": {
                   "format": "rust-markdown",
-                  "body": "Wraps only the dummy (contracted) abstract indices within the expression using a header symbol.\n\nIdentifies indices that appear contracted (e.g., one covariant, one contravariant)\nand wraps only those, leaving external indices unchanged. Transforms `idx -> header(idx)`\nfor dummy indices `idx`.\n\n# Arguments\n* `header` - The [`Symbol`] to use as the wrapping function name for dummy indices.\n\n# Returns\nA new [`Atom`] with only dummy indices wrapped."
+                  "body": "Wraps only the dummy (contracted) abstract indices within the expression using a header symbol.\n\nIdentifies indices that appear contracted (e.g., one covariant, one contravariant)\nand wraps only those, leaving external indices unchanged. Transforms `idx -> header(idx)`\nfor dummy indices `idx`.\n\n# Arguments\n* `header` - The [`Symbol`] to use as the wrapping function name for dummy indices.\n\n# Returns\nA new [`Atom`] with only dummy indices wrapped, or an error when the expression cannot be\nparsed as a tensor network."
                 },
-                "signature": "fn wrap_dummies < Aind : AbsInd + DummyAind + ParseableAind >\n(& self, header : Symbol) -> Atom;",
+                "signature": "fn wrap_dummies < Aind : AbsInd + DummyAind + ParseableAind >\n(& self, header : Symbol,) -> Result < Atom, IndexToolingError >;",
                 "default": null,
                 "members": []
               },
@@ -120,7 +121,7 @@
                   "format": "rust-markdown",
                   "body": "Computes the physics-aware conjugate of the expression.\n\nApplies conjugation rules specific to physics objects like spinors, gamma matrices,\ncolor representations, and the imaginary unit `i`. See implementation details for\nspecific rules applied.\n\n# Returns\nA new [`Atom`] representing the conjugated expression."
                 },
-                "signature": "fn dirac_adjoint < Aind : DummyAind + ParseableAind + AbsInd > (& self) ->\neyre :: Result < Atom >;",
+                "signature": "fn dirac_adjoint < Aind : DummyAind + ParseableAind + AbsInd > (& self) ->\nResult < Atom, AdjointError >;",
                 "default": null,
                 "members": []
               },
@@ -137,9 +138,9 @@
                 "kind": "method",
                 "docs": {
                   "format": "rust-markdown",
-                  "body": "Identifies and returns a list of dangling (external, uncontracted) indices.\n\nAnalyzes the expression to find indices that are not summed over. Returns them\nas `Atom`s. Note that dual indices might be represented wrapped in a `dind` function.\n\n# Returns\nA `Vec<Atom>` where each `Atom` represents a dangling index."
+                  "body": "Identifies and returns a list of dangling (external, uncontracted) indices.\n\nAnalyzes the expression to find indices that are not summed over. Returns them\nas `Atom`s. Note that dual indices might be represented wrapped in a `dind` function.\n\n# Returns\nA `Vec<Atom>` where each `Atom` represents a dangling index, or an error when the\nexpression cannot be parsed as a tensor network."
                 },
-                "signature": "fn list_dangling < Aind : AbsInd + DummyAind + ParseableAind > (& self) -> Vec\n< Atom >;",
+                "signature": "fn list_dangling < Aind : AbsInd + DummyAind + ParseableAind > (& self,) ->\nResult < Vec < Atom > , IndexToolingError >;",
                 "default": null,
                 "members": []
               },
@@ -155,7 +156,7 @@
             "source": {
               "identifier": "idenso::IndexTooling",
               "file": "crates/idenso/src/lib.rs",
-              "line": 173,
+              "line": 203,
               "column": 1
             }
           },
@@ -308,7 +309,7 @@
             "source": {
               "identifier": "idenso::cook::Cookable",
               "file": "crates/idenso/src/cook.rs",
-              "line": 564,
+              "line": 572,
               "column": 1
             }
           },
@@ -413,7 +414,7 @@
             "source": {
               "identifier": "idenso::bis",
               "file": "crates/idenso/src/lib.rs",
-              "line": 106,
+              "line": 105,
               "column": 1
             }
           },
@@ -445,7 +446,7 @@
             "source": {
               "identifier": "idenso::cof",
               "file": "crates/idenso/src/lib.rs",
-              "line": 130,
+              "line": 129,
               "column": 1
             }
           },
@@ -477,7 +478,7 @@
             "source": {
               "identifier": "idenso::coad",
               "file": "crates/idenso/src/lib.rs",
-              "line": 162,
+              "line": 161,
               "column": 1
             }
           },
@@ -490,7 +491,7 @@
             "required_features": [],
             "docs": {
               "format": "rust-markdown",
-              "body": "Builds a gamma matrix.\n\nWith one argument, this builds a chain factor using the placeholder indices\n`in` and `out`; use this form only as a factor inside `chain!` or `trace!`.\nWith three arguments, this builds the ordinary gamma tensor with explicit\nspinor endpoints and a Lorentz slot.\n\nArguments are converted through `spenso::shadowing::IntoAtom`, so they\ncan be typed slots, atoms, or atom views.\n\n# Examples\n\n```ignore\nuse idenso::gamma;\nuse spenso::{chain, slot};\n\nlet factor = gamma!(slot!(mink4, mu));\nlet chain_expr = chain!(slot!(bis4, a), slot!(bis4, b), factor);\nlet default_tensor = gamma!(mu, a, b);\nlet indexed_tensor = gamma!(1, 2, 3);\nlet pattern_tensor = gamma!(RS.a__, RS.b__, RS.c__);\nlet pattern_tensor_with_slots = gamma!(RS.a__, [RS.d_, RS.i_], [RS.d_, RS.j_]);\nlet mixed_tensor = gamma!(mu, slot!(bis_d, a), 1);\nlet explicit_tensor = gamma!(slot!(mink_d, mu), slot!(bis_d, a), slot!(bis_d, b));\n```"
+              "body": "Builds a gamma matrix.\n\nWith one argument, this builds a chain factor using the placeholder indices\n`in` and `out`; use this form only as a factor inside `chain!` or `trace!`.\nWith three arguments, this builds the ordinary gamma tensor with explicit\nspinor endpoints and a Lorentz slot in storage order:\n`(spinor-in, spinor-out, Lorentz)`.\n\nArguments are converted through `spenso::shadowing::IntoAtom`, so they\ncan be typed slots, atoms, or atom views. The explicit form checks their\nrepresentation heads and rejects anything other than this B, B, M order.\n\n# Examples\n\n```ignore\nuse idenso::gamma;\nuse spenso::{chain, slot};\n\nlet factor = gamma!(slot!(mink4, mu));\nlet chain_expr = chain!(slot!(bis4, a), slot!(bis4, b), factor);\nlet default_tensor = gamma!(a, b, mu);\nlet indexed_tensor = gamma!(1, 2, 3);\nlet pattern_tensor = gamma!(RS.b__, RS.c__, RS.a__);\nlet pattern_tensor_with_slots = gamma!([RS.d_, RS.i_], [RS.d_, RS.j_], RS.a__);\nlet mixed_tensor = gamma!(slot!(bis_d, a), 1, mu);\nlet explicit_tensor = gamma!(slot!(bis_d, a), slot!(bis_d, b), slot!(mink_d, mu));\n```"
             },
             "summary": "Builds a Dirac gamma chain factor or an explicitly indexed gamma tensor.",
             "signature": "macro_rules! gamma { … }",
@@ -502,7 +503,7 @@
               {
                 "title": "Example 1",
                 "language": "ignore",
-                "code": "use idenso::gamma;\nuse spenso::{chain, slot};\n\nlet factor = gamma!(slot!(mink4, mu));\nlet chain_expr = chain!(slot!(bis4, a), slot!(bis4, b), factor);\nlet default_tensor = gamma!(mu, a, b);\nlet indexed_tensor = gamma!(1, 2, 3);\nlet pattern_tensor = gamma!(RS.a__, RS.b__, RS.c__);\nlet pattern_tensor_with_slots = gamma!(RS.a__, [RS.d_, RS.i_], [RS.d_, RS.j_]);\nlet mixed_tensor = gamma!(mu, slot!(bis_d, a), 1);\nlet explicit_tensor = gamma!(slot!(mink_d, mu), slot!(bis_d, a), slot!(bis_d, b));"
+                "code": "use idenso::gamma;\nuse spenso::{chain, slot};\n\nlet factor = gamma!(slot!(mink4, mu));\nlet chain_expr = chain!(slot!(bis4, a), slot!(bis4, b), factor);\nlet default_tensor = gamma!(a, b, mu);\nlet indexed_tensor = gamma!(1, 2, 3);\nlet pattern_tensor = gamma!(RS.b__, RS.c__, RS.a__);\nlet pattern_tensor_with_slots = gamma!([RS.d_, RS.i_], [RS.d_, RS.j_], RS.a__);\nlet mixed_tensor = gamma!(slot!(bis_d, a), 1, mu);\nlet explicit_tensor = gamma!(slot!(bis_d, a), slot!(bis_d, b), slot!(mink_d, mu));"
               },
               {
                 "title": "Supported usage",
@@ -514,7 +515,7 @@
             "source": {
               "identifier": "idenso::gamma",
               "file": "crates/idenso/src/dirac/macros.rs",
-              "line": 40,
+              "line": 42,
               "column": 1
             }
           },
@@ -551,7 +552,7 @@
             "source": {
               "identifier": "idenso::gamma0",
               "file": "crates/idenso/src/dirac/macros.rs",
-              "line": 260,
+              "line": 268,
               "column": 1
             }
           },
@@ -583,7 +584,7 @@
             "source": {
               "identifier": "idenso::gamma5",
               "file": "crates/idenso/src/dirac/macros.rs",
-              "line": 342,
+              "line": 350,
               "column": 1
             }
           },
@@ -628,7 +629,7 @@
             "required_features": [],
             "docs": {
               "format": "rust-markdown",
-              "body": "Builds a color-generator atom.\n\nWith one argument, this builds a fundamental generator factor for use inside\n`chain!` or `trace!`. The factor uses the chain placeholder indices `in` and\n`out`; the surrounding chain or trace owns the physical endpoints.\n\nWith three arguments, this builds an explicit generator `t(a,i,j)`. The first\nargument is an adjoint color index, the second is a fundamental color index,\nand the third is an anti-fundamental color index.\n\nArguments can be typed slots, atoms, atom views, pattern variables such as\n`RS.a__`, or bracketed representation argument lists such as\n`[CS.adj_, RS.a_]`. Bare Rust identifiers and literals are expressions, so\nlocal slot bindings and numeric labels are used as-is.\n\n# Examples\n\n```ignore\nuse idenso::color_t;\nuse spenso::{slot, trace};\n\nlet factor = color_t!(slot!(coad_na, a));\nlet expr = trace!(&cof_nc, factor);\nlet factor_from_binding = color_t!(slot!(coad_na, a));\nlet explicit_tensor = color_t!(slot!(coad_na, a), slot!(cof_nc, i), slot!(cof_nc.dual(), j));\nlet pattern_tensor = color_t!(RS.a__, RS.i__, RS.j__);\nlet dimensioned_pattern = color_t!([CS.adj_, RS.a_], [CS.nc_, RS.i_], [CS.nc_, RS.j_]);\n```"
+              "body": "Builds a color-generator atom.\n\nWith one argument, this builds a fundamental generator factor for use inside\n`chain!` or `trace!`. The factor uses the chain placeholder indices `in` and\n`out`; the surrounding chain or trace owns the physical endpoints.\n\nWith three arguments, this builds an explicit generator `t(a,i,j)`. The first\nargument is an adjoint color index, the second is a fundamental color index,\nand the third is an anti-fundamental color index.\n\nArguments can be typed slots, atoms, atom views, pattern variables such as\n`RS.a__`, or bracketed representation argument lists such as\n`[CS.adj_, RS.a_]`. Bare Rust identifiers and literals are expressions, so\nlocal slot bindings and numeric labels are used as-is.\n\n# Examples\n\n```ignore\nuse idenso::color_t;\nuse spenso::{slot, trace};\n\nlet factor = color_t!(slot!(coad_da, a));\nlet expr = trace!(&cof_nc, factor);\nlet factor_from_binding = color_t!(slot!(coad_da, a));\nlet explicit_tensor = color_t!(slot!(coad_da, a), slot!(cof_nc, i), slot!(cof_nc.dual(), j));\nlet pattern_tensor = color_t!(RS.a__, RS.i__, RS.j__);\nlet dimensioned_pattern = color_t!([CS.adj_, RS.a_], [CS.nc_, RS.i_], [CS.nc_, RS.j_]);\n```"
             },
             "summary": "Builds a color-generator chain factor or an explicitly indexed generator tensor.",
             "signature": "macro_rules! color_t { … }",
@@ -640,7 +641,7 @@
               {
                 "title": "Example 1",
                 "language": "ignore",
-                "code": "use idenso::color_t;\nuse spenso::{slot, trace};\n\nlet factor = color_t!(slot!(coad_na, a));\nlet expr = trace!(&cof_nc, factor);\nlet factor_from_binding = color_t!(slot!(coad_na, a));\nlet explicit_tensor = color_t!(slot!(coad_na, a), slot!(cof_nc, i), slot!(cof_nc.dual(), j));\nlet pattern_tensor = color_t!(RS.a__, RS.i__, RS.j__);\nlet dimensioned_pattern = color_t!([CS.adj_, RS.a_], [CS.nc_, RS.i_], [CS.nc_, RS.j_]);"
+                "code": "use idenso::color_t;\nuse spenso::{slot, trace};\n\nlet factor = color_t!(slot!(coad_da, a));\nlet expr = trace!(&cof_nc, factor);\nlet factor_from_binding = color_t!(slot!(coad_da, a));\nlet explicit_tensor = color_t!(slot!(coad_da, a), slot!(cof_nc, i), slot!(cof_nc.dual(), j));\nlet pattern_tensor = color_t!(RS.a__, RS.i__, RS.j__);\nlet dimensioned_pattern = color_t!([CS.adj_, RS.a_], [CS.nc_, RS.i_], [CS.nc_, RS.j_]);"
               },
               {
                 "title": "Supported usage",
@@ -665,7 +666,7 @@
             "required_features": [],
             "docs": {
               "format": "rust-markdown",
-              "body": "Builds an adjoint color structure-constant atom `f(a,b,c)`.\n\nArguments can be typed slots, atoms, atom views, pattern variables such as\n`RS.a__`, or bracketed adjoint representation argument lists such as\n`[CS.adj_, RS.a_]`. Bare Rust identifiers and literals are expressions, so\nlocal slot bindings and numeric labels are used as-is.\n\n# Examples\n\n```ignore\nuse idenso::color_f;\nuse spenso::slot;\n\nlet expr = color_f!(slot!(coad_na, a), slot!(coad_na, b), slot!(coad_na, c));\nlet numeric_label_tensor = color_f!(1, 2, 3);\nlet pattern_tensor = color_f!(RS.a__, RS.b__, RS.c__);\nlet dimensioned_pattern = color_f!([CS.adj_, RS.a_], [CS.adj_, RS.b_], [CS.adj_, RS.c_]);\n```"
+              "body": "Builds an adjoint color structure-constant atom `f(a,b,c)`.\n\nArguments can be typed slots, atoms, atom views, pattern variables such as\n`RS.a__`, or bracketed adjoint representation argument lists such as\n`[CS.adj_, RS.a_]`. Bare Rust identifiers and literals are expressions, so\nlocal slot bindings and numeric labels are used as-is.\n\n# Examples\n\n```ignore\nuse idenso::color_f;\nuse spenso::slot;\n\nlet expr = color_f!(slot!(coad_da, a), slot!(coad_da, b), slot!(coad_da, c));\nlet numeric_label_tensor = color_f!(1, 2, 3);\nlet pattern_tensor = color_f!(RS.a__, RS.b__, RS.c__);\nlet dimensioned_pattern = color_f!([CS.adj_, RS.a_], [CS.adj_, RS.b_], [CS.adj_, RS.c_]);\n```"
             },
             "summary": "Builds an explicitly indexed adjoint color structure-constant tensor.",
             "signature": "macro_rules! color_f { … }",
@@ -677,7 +678,7 @@
               {
                 "title": "Example 1",
                 "language": "ignore",
-                "code": "use idenso::color_f;\nuse spenso::slot;\n\nlet expr = color_f!(slot!(coad_na, a), slot!(coad_na, b), slot!(coad_na, c));\nlet numeric_label_tensor = color_f!(1, 2, 3);\nlet pattern_tensor = color_f!(RS.a__, RS.b__, RS.c__);\nlet dimensioned_pattern = color_f!([CS.adj_, RS.a_], [CS.adj_, RS.b_], [CS.adj_, RS.c_]);"
+                "code": "use idenso::color_f;\nuse spenso::slot;\n\nlet expr = color_f!(slot!(coad_da, a), slot!(coad_da, b), slot!(coad_da, c));\nlet numeric_label_tensor = color_f!(1, 2, 3);\nlet pattern_tensor = color_f!(RS.a__, RS.b__, RS.c__);\nlet dimensioned_pattern = color_f!([CS.adj_, RS.a_], [CS.adj_, RS.b_], [CS.adj_, RS.c_]);"
               },
               {
                 "title": "Supported usage",
@@ -721,7 +722,7 @@
             "source": {
               "identifier": "idenso::representations::initialize",
               "file": "crates/idenso/src/representations.rs",
-              "line": 136,
+              "line": 127,
               "column": 1
             }
           }

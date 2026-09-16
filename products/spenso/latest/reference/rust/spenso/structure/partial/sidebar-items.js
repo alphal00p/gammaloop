@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["PartialIndex"],"struct":["OpenPortId"],"trait":["PartialStructureExt"],"type":["PartialSlot","PartialStructure"]};
