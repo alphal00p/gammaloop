@@ -597,7 +597,7 @@ impl OrientationPattern {
                 .with(function!(GS.selected, &self.pat.as_ref()?.0))
                 .replace(function!(GS.orientation_delta, W_.a___))
                 .min_level(0)
-                .max_level(Some(0))
+                .max_level(0)
                 .with(Atom::Zero),
         )
     }

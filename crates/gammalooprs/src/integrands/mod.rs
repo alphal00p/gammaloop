@@ -1,5 +1,6 @@
 pub mod builtin;
 pub mod evaluation;
+mod grid;
 pub mod process;
 
 use crate::integrands::evaluation::{
@@ -25,6 +26,7 @@ use crate::{
     utils,
 };
 
+use self::grid::continuous_grid;
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use enum_dispatch::enum_dispatch;
@@ -33,7 +35,7 @@ use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
 use std::fmt::{Display, Formatter};
 use std::time::Duration;
-use symbolica::numerical_integration::{ContinuousGrid, Grid, Sample};
+use symbolica::numerical_integration::{Grid, Sample};
 #[allow(unused_imports)]
 use tracing::{debug, error, info, instrument, trace, warn};
 
@@ -377,14 +379,14 @@ impl HasIntegrand for UnitSurfaceIntegrand {
 
     fn create_grid(&self) -> Grid<F<f64>> {
         Grid::Continuous(
-            ContinuousGrid::new(
+            continuous_grid(
                 self.n_dim,
                 self.settings.integrator.n_bins,
                 self.settings.integrator.min_samples_for_update,
                 self.settings.integrator.bin_number_evolution.clone(),
                 self.settings.integrator.train_on_avg,
             )
-            .expect("unit-surface integration requires valid continuous-grid settings"),
+            .expect("valid integration grid settings"),
         )
     }
 
@@ -550,14 +552,14 @@ impl HasIntegrand for UnitVolumeIntegrand {
     }
     fn create_grid(&self) -> Grid<F<f64>> {
         Grid::Continuous(
-            ContinuousGrid::new(
+            continuous_grid(
                 self.n_dim,
                 self.settings.integrator.n_bins,
                 self.settings.integrator.min_samples_for_update,
                 self.settings.integrator.bin_number_evolution.clone(),
                 self.settings.integrator.train_on_avg,
             )
-            .expect("unit-volume integration requires valid continuous-grid settings"),
+            .expect("valid integration grid settings"),
         )
     }
 

@@ -866,7 +866,6 @@
           package: builtins.elem "python-api-tests" features.${package}
         ) featurePackages;
         compileEnvironment = {
-          inherit (ciArgs) NO_SYMBOLICA_OEM_LICENSE;
           inherit (commonArgs) CC CXX RUSTFLAGS;
           PYO3_PYTHON =
             if usesPythonModule
@@ -1370,9 +1369,8 @@
           # The workspace sets default-members to gammaloop-api, so CI checks must
           # opt into the full workspace explicitly.
           cargoExtraArgs = "--locked --workspace ${craneWorkspacePrebuildFeatureArgs}";
-          # NixCI provides the runtime Symbolica license, not the compile-time
-          # OEM key consumed by gammalooprs' activate_oem_license! path.
-          NO_SYMBOLICA_OEM_LICENSE = "1";
+          # NixCI provides the runtime signed Symbolica license. Symbolica 3
+          # no longer supports the former compiled legacy OEM activation path.
 
           PYO3_PYTHON = "${pkgs.python313}/bin/python3";
           PYTHONPATH = "${pkgs.python313}/lib/python3.13/site-packages";

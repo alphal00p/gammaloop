@@ -18,7 +18,7 @@ use color_eyre::Result;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
-use symbolica::numerical_integration::{ContinuousGrid, Grid, Sample};
+use symbolica::numerical_integration::{Grid, Sample};
 use tracing::info;
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
@@ -119,14 +119,14 @@ impl HasIntegrand for HFunctionTestIntegrand {
     }
     fn create_grid(&self) -> Grid<F<f64>> {
         Grid::Continuous(
-            ContinuousGrid::new(
+            continuous_grid(
                 self.n_dim,
                 self.settings.integrator.n_bins,
                 self.settings.integrator.min_samples_for_update,
                 self.settings.integrator.bin_number_evolution.clone(),
                 self.settings.integrator.train_on_avg,
             )
-            .expect("H-function integration requires valid continuous-grid settings"),
+            .expect("valid integration grid settings"),
         )
     }
 

@@ -141,17 +141,20 @@ fn all_three_loop_matcher_classes_have_exact_parent_basis_transport() {
             parent_momenta.push(expected);
         }
         let solutions = Atom::solve(&equations).wrt(&current).unwrap();
-        let [solution] = solutions.as_slice() else {
-            panic!("{} has no unique parent routing", integral.name);
-        };
-        assert!(!solution.is_conditional() && !solution.is_underdetermined());
+        assert_eq!(solutions.coverage(), SolveCoverage::Complete);
+        assert!(solutions.coverage_guard().is_empty());
+        assert_eq!(
+            solutions.len(),
+            1,
+            "{} has no unique parent routing",
+            integral.name
+        );
+        let solution = &solutions[0];
+        assert!(solution.is_point());
         let values = solution
-            .variable_solutions()
+            .coordinates()
             .iter()
-            .map(|coordinate| match coordinate.value() {
-                SolutionValue::Root(value) => value.clone(),
-                _ => panic!("a routing coordinate is not a point"),
-            })
+            .map(|(_, value)| value.clone())
             .collect::<Vec<_>>();
         let (matrix, rhs) =
             Atom::system_to_matrix::<u8, _, _>(&values, &parent_coordinates).unwrap();

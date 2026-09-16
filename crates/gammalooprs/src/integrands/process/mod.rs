@@ -9,6 +9,7 @@ use crate::integrands::evaluation::{
     RawPreciseBatchEvaluationResult, RotatedEvaluation, StabilityFailureReason, StabilityResult,
     StabilityStatus, StatisticsCounter,
 };
+use crate::integrands::grid::continuous_grid;
 use crate::model::Model;
 use crate::momentum::sample::{BareMomentumSample, LoopMomenta, MomentumSample};
 use crate::momentum::{Rotation, ThreeMomentum};
@@ -40,7 +41,7 @@ use spenso::algebra::algebraic_traits::IsZero;
 use spenso::algebra::complex::Complex;
 use std::sync::Once;
 use std::time::{Duration, Instant};
-use symbolica::numerical_integration::{ContinuousGrid, DiscreteGrid, Grid, Sample};
+use symbolica::numerical_integration::{DiscreteGrid, Grid, Sample};
 use tracing::{debug, warn};
 use typed_index_collections::TiVec;
 pub mod amplitude;
@@ -3277,7 +3278,7 @@ fn create_grid_for_graph<G: GraphTerm>(
                         F(integrator_settings.max_prob_ratio),
                         integrator_settings.train_on_avg,
                     )
-                    .expect("orientation sampling requires at least one orientation"),
+                    .expect("valid integration grid settings"),
                 )
             } else {
                 continuous_grid
@@ -3294,7 +3295,7 @@ fn create_grid_for_graph<G: GraphTerm>(
                     F(integrator_settings.max_prob_ratio),
                     integrator_settings.train_on_avg,
                 )
-                .expect("discrete multichanneling requires at least one LMB channel"),
+                .expect("valid integration grid settings"),
             );
 
             if settings.sample_orientations {
@@ -3306,7 +3307,7 @@ fn create_grid_for_graph<G: GraphTerm>(
                         F(integrator_settings.max_prob_ratio),
                         integrator_settings.train_on_avg,
                     )
-                    .expect("orientation sampling requires at least one orientation"),
+                    .expect("valid integration grid settings"),
                 )
             } else {
                 lmb_channel_grid
@@ -3321,14 +3322,14 @@ fn create_grid_for_graph<G: GraphTerm>(
             );
 
             let continious_grid = Grid::Continuous(
-                ContinuousGrid::new(
+                continuous_grid(
                     dimension,
                     integrator_settings.n_bins,
                     integrator_settings.min_samples_for_update,
                     integrator_settings.bin_number_evolution.clone(),
                     integrator_settings.train_on_avg,
                 )
-                .expect("tropical sampling requires valid continuous-grid settings"),
+                .expect("valid integration grid settings"),
             );
 
             if settings.sample_orientations {
@@ -3342,7 +3343,7 @@ fn create_grid_for_graph<G: GraphTerm>(
                         F(integrator_settings.max_prob_ratio),
                         integrator_settings.train_on_avg,
                     )
-                    .expect("orientation sampling requires at least one orientation"),
+                    .expect("valid integration grid settings"),
                 )
             } else {
                 continious_grid
@@ -3356,14 +3357,14 @@ fn create_default_continous_grid<G: GraphTerm>(
     integrator_settings: &IntegratorSettings,
 ) -> Grid<F<f64>> {
     Grid::Continuous(
-        ContinuousGrid::new(
+        continuous_grid(
             graph_term.get_graph().get_loop_number() * 3,
             integrator_settings.n_bins,
             integrator_settings.min_samples_for_update,
             integrator_settings.bin_number_evolution.clone(),
             integrator_settings.train_on_avg,
         )
-        .expect("graph integration requires valid continuous-grid settings"),
+        .expect("valid integration grid settings"),
     )
 }
 
@@ -3371,24 +3372,24 @@ fn create_grid<I: ProcessIntegrandImpl>(integrand: &I) -> Grid<F<f64>> {
     let settings = integrand.get_settings();
     match &settings.sampling {
         SamplingSettings::Default(_) => Grid::Continuous(
-            ContinuousGrid::new(
+            continuous_grid(
                 get_global_dimension_if_exists(integrand).unwrap(),
                 settings.integrator.n_bins,
                 settings.integrator.min_samples_for_update,
                 settings.integrator.bin_number_evolution.clone(),
                 settings.integrator.train_on_avg,
             )
-            .expect("process integration requires valid continuous-grid settings"),
+            .expect("valid integration grid settings"),
         ),
         SamplingSettings::MultiChanneling(_) => Grid::Continuous(
-            ContinuousGrid::new(
+            continuous_grid(
                 get_global_dimension_if_exists(integrand).unwrap(),
                 settings.integrator.n_bins,
                 settings.integrator.min_samples_for_update,
                 settings.integrator.bin_number_evolution.clone(),
                 settings.integrator.train_on_avg,
             )
-            .expect("multichannel integration requires valid continuous-grid settings"),
+            .expect("valid integration grid settings"),
         ),
         SamplingSettings::DiscreteGraphs(discrete_graph_sampling_settings) => Grid::Discrete(
             DiscreteGrid::new(
@@ -3405,7 +3406,7 @@ fn create_grid<I: ProcessIntegrandImpl>(integrand: &I) -> Grid<F<f64>> {
                 F(settings.integrator.max_prob_ratio),
                 settings.integrator.train_on_avg,
             )
-            .expect("discrete graph sampling requires at least one graph group"),
+            .expect("valid integration grid settings"),
         ),
     }
 }

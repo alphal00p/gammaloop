@@ -31,8 +31,9 @@ existing FORM-backed evaluation methods.
 
 The [RustRed acceptance inventory](tests/RUSTRED_ACCEPTANCE.md) maps all existing
 single-common-mass inputs through three loops to native peers. The complete
-recorded 83-test selection now passes, following a separate 34-test targeted
-gate for MATAD's signed numerator-routing correction. Both previously failing
+recorded 83-test selection passes on the pinned Symbolica 3 / RustRed
+`09cef8e3` stack with regenerated current-schema K6 bytes, following the earlier
+34-test targeted gate for MATAD's signed numerator-routing correction. Both previously failing
 all-class comparisons pass. Native FeynKit/RustRed stages use an invalid FORM
 path; separate legacy oracles use FORM. The inventory distinguishes the
 83-test matrix from the 40-entry/46-input legacy census and does not claim

@@ -44,7 +44,7 @@ linnest = { path = "crates/linnest/" }
 linnet = { version = "0.17.0", path = "crates/linnet/" }
 momtrop = "0.3.0"
 ndarray = "0.17.2"
-numerica = { version = "2.2.0", default-features = false }
+numerica = { version = "=3.0.0", default-features = false }
 nu-ansi-term = "0.50.3"
 numpy = "0.28"
 pyo3 = "0.28"
@@ -56,7 +56,7 @@ rand = "0.9.4"
 ratatui = "0.30.0"
 rayon = "1.5"
 regex = "1.12.3"
-rustred = { git = "https://github.com/alphal00p/rustred.git", rev = "ce92d3a73212170ba65bbb651e9001def2246063" }
+rustred = { git = "https://github.com/alphal00p/rustred.git", rev = "09cef8e3cf7487dded7803edc26df5d51bb9f500" }
 schemars = "1.2.1"
 serde = "1.0.228"
 self_cell = "1.2.2"
@@ -68,7 +68,7 @@ spenso = { path = "crates/spenso/" }
 spenso-hep-lib = { path = "crates/spenso-hep-lib/" }
 spenso-macros = { path = "crates/spenso-macros/" }
 symbolica-utils = { path = "crates/symbolica-utils/" }
-symbolica = { version = "2.2.0", default-features = false, features = ["integer-gmp", "float-mpfr", "native_code_generation"] }
+symbolica = { version = "=3.0.0", default-features = false, features = ["integer-gmp", "float-mpfr", "native_code_generation"] }
 sysinfo = "0.33.1"
 tabled = "0.22.0"
 thiserror = "2.0"
@@ -88,9 +88,9 @@ which = "8.0.0"
 # graphica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
 # numerica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
 # symbolica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
-graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "3805d02ed6de0ee3fd3011cdf584cc3972aff40e" }
-numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "3805d02ed6de0ee3fd3011cdf584cc3972aff40e" }
-symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "3805d02ed6de0ee3fd3011cdf584cc3972aff40e" }
+graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "953e26e2754e9a4b918404fbdea590725d8e863d" }
+numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "953e26e2754e9a4b918404fbdea590725d8e863d" }
+symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "953e26e2754e9a4b918404fbdea590725d8e863d" }
 # graphica = { git = "https://github.com/benruijl/symbolica", rev = "309a156264f1b535af653803497d91330fc5abfc" }
 # numerica = { git = "https://github.com/benruijl/symbolica", rev = "309a156264f1b535af653803497d91330fc5abfc" }
 # symbolica = { git = "https://github.com/benruijl/symbolica", rev = "309a156264f1b535af653803497d91330fc5abfc" }

@@ -52,16 +52,16 @@ fn bare_symb() {
                 .expand()
                 .replace(parse!("d(muw1_,k1_)*d(muw1_,k2_)"))
                 .min_level(0)
-                .max_level(Some(0))
+                .max_level(0)
                 .repeat()
                 .with(parse!("d(k1_,k2_)"))
                 .replace(parse!("d(muw1_,k1_)^2"))
                 .min_level(0)
-                .max_level(Some(0))
+                .max_level(0)
                 .with(parse!("d(k1_,k1_)"))
                 .replace(parse!("d(muw1_,muw1_)"))
                 .min_level(0)
-                .max_level(Some(0))
+                .max_level(0)
                 .with(4);
             // println!("New:{:>}", new);
             *out = new;
@@ -76,7 +76,7 @@ fn bare_symb() {
                 i + 1
             )))
             .min_level(0)
-            .max_level(Some(0))
+            .max_level(0)
             .rhs_cache_size(1000)
             .with(&rhs_subs);
         let mut init = Instant::now();
@@ -87,7 +87,7 @@ fn bare_symb() {
         r = r
             .replace(parse!("d(muw1_, k1_)*vx_(x___,muw1_,y___)"))
             .min_level(0)
-            .max_level(Some(0))
+            .max_level(0)
             .repeat()
             .with(parse!("vx(x___,k1_,y___)"));
 
@@ -107,8 +107,7 @@ fn bare_symb() {
         // 516ms when momenta symbols and no replace_map
         // r = r
         //     .replace(parse!("d(muw1_, k1_)*x___"))
-        //     .min_level(0)
-        //     .max_level(Some(0))
+        //     .min_level(0).max_level(0)
         //     .repeat()
         //     .with_map(move |m| {
         //         let a1 = m.get(muw1_).unwrap().to_atom();
@@ -116,8 +115,7 @@ fn bare_symb() {
         //         let dest = m.get(x___).unwrap().to_atom(); // PREVENT!
 
         //         dest.replace(a1)
-        //             .min_level(1)
-        //             .max_level(Some(1))
+        //             .min_level(1).max_level(1)
         //             .rhs_cache_size(0)
         //             .with(a2)
 

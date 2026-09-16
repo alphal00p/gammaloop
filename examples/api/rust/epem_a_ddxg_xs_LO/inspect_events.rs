@@ -14,7 +14,7 @@
 //! ```
 //!
 //! Run from the repository root with `rust-script`, for example:
-//! `SYMBOLICA_LICENSE=... EXTRA_MACOS_LIBS_FOR_GNU_GCC=T rust-script --debug examples/api/rust/epem_a_ddxg_xs_LO/inspect_events.rs`
+//! `EXTRA_MACOS_LIBS_FOR_GNU_GCC=T rust-script --debug examples/api/rust/epem_a_ddxg_xs_LO/inspect_events.rs`
 //!
 //! This library example uses your runtime Symbolica license, not the CLI's OEM
 //! token. Add `--force` after dependency changes to refresh rust-script's cache.

@@ -10,7 +10,68 @@ prepass, followed by RustRed scalar reduction and master substitution. The
 shared harness gives both native stages an invalid FORM path; FORM is available
 only to the explicitly separate AlphaLoop/MATAD oracle lanes.
 
-## Complete selected-matrix rerun (2026-09-16)
+## Symbolica 3 / current-artifact migration rerun (2026-09-16)
+
+The same complete **83-test selection passes again: 83 passed, 0 failed,
+0 ignored**, after the atomic dependency/artifact migration:
+
+- RustRed `09cef8e3cf7487dded7803edc26df5d51bb9f500`;
+- Symbolica, Graphica and Numerica
+  `953e26e2754e9a4b918404fbdea590725d8e863d` (version 3.0.0);
+- regenerated K6 bytes with source-port parent-plan tag `0x704`, the unrestricted
+  root domain, and the unchanged set of 38 exact terminal keys.
+
+The current shipped K6 artifact is 8,916,759 bytes, with 623 rules and 5,639
+cells; its SHA256 is
+`bcf45f876695c99516a7cefec2ae3cd3c5886a89d3da156391a6ea75237ff2ff`.
+
+Every dependency is pinned to a published Git revision; no development-only
+local path is required. K1 and K3 were also regenerated with the pinned
+producer's existing CLI presets, cold-inspected and applied to canaries; their
+bytes are identical to the previous shipped copies. K6's metadata label now
+uses underscores, matching the generic RustRed CLI/Python input. Its private
+expected fingerprint and embedded bytes change together; the mathematics and
+terminal catalog do not change, and there is no obsolete-schema reader.
+
+Spenso forwards Symbolica's native `SolutionSet`, including global coverage and
+guards. Vakint accepts a routing witness only after complete, guard-free
+coverage and a unique unconditional point are established. Native matching
+depth setters replace the removed builder API without changing matching bounds.
+Existing numerical assertions, tolerances, defaults and FORM oracle lanes are
+unchanged. Native FeynKit/RustRed stages still use invalid FORM paths.
+
+The table below remains the exact test inventory. New evidence is in
+`/tmp/vakint-symbolica3-main.bMELju/`: published dependency resolution,
+`cargo check --locked -p vakint --no-default-features --lib --tests`, frozen
+binary hashes, the unchanged `selected.tsv`, and `acceptance/results.tsv` with
+all nine passing batches. The debug correctness batches total 146.64 seconds
+on one pinned core; this is **not** a release performance comparison. The
+1m56s check and 6m24s test compilation are excluded from that runtime total.
+
+The full actual workspace passes `cargo check --locked --workspace --lib` and
+`cargo check --locked --workspace --tests --benches`. Wider migration adapters
+use native Symbolica arithmetic/solvers and preserve zero-dimensional
+continuous samples through a narrowly reviewed point-domain adapter. Symbolica
+3 uses runtime signed-license/environment activation; the removed compiled OEM
+scheme is not emulated (see the root contributor guide).
+
+The fresh focused runtime gate also passes: **28 GammaLoop tests**, **4 Spenso
+native-solver forwarding tests**, and **52 FeynKit tensor tests**. FeynKit's
+pre-existing ignored explicit rank-ten, 893,025-pair cross-check remains
+ignored. The GammaLoop selection covers six point-domain tests, runtime-license
+initialization, exact high-precision conversion, complete/free/guarded momentum
+routing (including cancellation of an input denominator), LMB mappings,
+implicit-function derivatives and grid monitoring. All focused processes use
+an invalid FORM path. Logs and frozen executable hashes are in the same
+evidence directory under `focused-*`; the 12m25s compilation is not a runtime
+benchmark. Scoped `cargo clippy --no-deps --locked -p vakint
+--no-default-features --lib --test rustred_k6_pipeline_tests
+--test integral_alphaloop_vs_matad_tests -- -D warnings` also passes; this is
+not a whole-workspace lint claim.
+These selected checks do not certify every GammaLoop runtime workflow, and do
+not provide four-loop RustRed closure.
+
+## Previous complete selected-matrix rerun (2026-09-16)
 
 The complete recorded **83-test selection now passes: 83 passed, 0 failed,
 0 ignored** on revision `433e42d3`. This rerun follows the signed MATAD routing
@@ -85,10 +146,12 @@ Reproduce with `cargo test --locked -p vakint --no-default-features --lib
 matad::routing_tests`, then the complete integration targets
 `rustred_k6_pipeline_tests` and `integral_alphaloop_vs_matad_tests`; configure
 the licensed Symbolica runtime and the existing FORM oracle executable.
-The dependency pin remains the coherent RustRed `ce92d3a7` / Symbolica 2.2
-stack. Check and build pass. Clippy was attempted but unavailable in this
-development shell. Raw logs, command evidence and binary/input hashes for
-this run are locally in `/tmp/vakint-matad-orientation.yRdp6a/`.
+That historical checkpoint used the coherent RustRed `ce92d3a7` / Symbolica
+2.2 stack. Its check and build passed; Clippy was attempted but unavailable in
+that development shell. The current Symbolica 3 pins and passing Clippy gate
+are recorded at the top of this document. Raw logs, command evidence and
+binary/input hashes for the older run are locally in
+`/tmp/vakint-matad-orientation.yRdp6a/`.
 
 That targeted checkpoint resolved every previously identified failure, but did
 not itself rerun all 83 obligations. The subsequent complete selected-matrix
@@ -239,16 +302,16 @@ The five scalar matcher-class fixtures in RS and the five tensor-bearing
 class inputs in `rustred_k6_pipeline_tests.rs` supplement this matrix; they do
 not replace the original eleven three-loop acceptance bodies. A numerical-only
 K6 terminal basis is permitted, but invalid-FORM-path checks remain mandatory.
-The scalar matcher-class peers pass. The tensor prepasses also match FORM
-for all five classes, but the two subsequent all-class scalar comparisons
-fail at the fourth class and do not reach the fifth. At that fourth class,
+In the initial pre-correction audit, the scalar matcher-class peers passed and
+the tensor prepasses matched FORM for all five classes, but the two subsequent
+all-class scalar comparisons failed at the fourth class before reaching the
+fifth. At that fourth class,
 the epsilon^-3 real coefficient is approximately `0.30116343610153126`
 for AlphaLoop and `0.30102068072626876` for MATAD, a relative difference
-of about `4.741e-4` against the unchanged `1e-25` tolerance. All lanes are
-evaluated before comparisons, but the assertion stops before displaying or
-comparing RustRed's value; the current logs do not identify which reducer is
-responsible. Pairwise diagnostic comparisons are needed without weakening
-the original assertions.
+of about `4.741e-4` against the unchanged `1e-25` tolerance. The original logs
+alone did not identify the responsible reducer. Subsequent signed-routing
+diagnostics isolated and corrected the MATAD numerator orientation, and the
+complete 83-test reruns above now pass without weakening these assertions.
 The old explicit unsupported-K6 inventory assertion now requires a successful
 nonzero parent reduction, and its existing numerical peer inventory is live.
 Before acceptance, execute every peer: merely removing ignore attributes or
@@ -262,7 +325,12 @@ three independent symbolic masses; equal numerical substitutions do not turn
 that input into a common-mass family without changing it. Defaults and all
 historical FORM-backed methods remain unchanged.
 
-## Native dependency and K6 routing preparation
+## Historical native dependency and K6 routing preparation
+
+The following preparation checkpoints predate the completed migration and
+acceptance gates at the top of this document. Their recorded intermediate
+failures and older artifact identities are retained as historical evidence,
+not as current build or acceptance status.
 
 The approved pinned-API migration now passes a combined Vakint/Spenso library
 and test-target check. Fresh frozen libtest processes passed three Spenso
@@ -342,18 +410,19 @@ recursive applier or graph match is introduced.
 Exact offline MATAD-basis terminal projections are preferred over unnecessary
 20,000-digit literal tables.
 
-### Genuine K6 asset and exact terminal manifest, catalog runtime gate passed
+### Earlier K6 asset and exact terminal manifest, catalog runtime gate passed
 
-The canonical RustRed producer generated byte-identical one/six-worker artifacts:
+The earlier canonical RustRed producer generated byte-identical one/six-worker artifacts:
 8,911,462 bytes, 623 rules, 5,639 cells, 38 typed corner terminals and 26 zero
 masks. The existing CLI independently cold-loaded both files and reduced five
 targets, including dotted and negative-power inputs. The exact 38-key catalog
-join and disjoint 64-mask partition passed independent audit. The shipped SHA256
-is `53bb589f98beaa735332cffbd080b174cfff5fc7a664e3499d5f667ad8fb8434`;
+join and disjoint 64-mask partition passed independent audit. Its then-shipped SHA256
+was `53bb589f98beaa735332cffbd080b174cfff5fc7a664e3499d5f667ad8fb8434`;
 the actual algorithm ID is `rustred.source-port-original-domain.v1`. Evidence:
 RustRed `target/spired-k6-producer.007TpB/RESULTS.md`. These are artifact/CLI
-gates joined by the passing legacy-input native peers and the two failing
-supplemental class comparisons documented above.
+gates were joined by passing legacy-input native peers and, at that checkpoint,
+two failing supplemental class comparisons. Both failures are now resolved;
+the current regenerated artifact hash and complete passing matrix are above.
 
 `src/rustred_evaluation/terminal/k6.rs` now records the actual 38 canonical
 corner keys checked by RustRed's 623-rule unit-mass program. Six authenticated
@@ -398,20 +467,19 @@ The latter requires `VAKINT_K6_ORACLE_FORM_PATH` or
 proof of artifact closure. Neither test constructs a replacement catalog or
 another master-evaluation implementation.
 
-The approved Spenso forwarding-wrapper migration now uses the pinned native
-solve builder and returns its complete solution branches, retaining conditions
-and free variables. Its existing matrix conversion supplies the linearity
-gate; no local solver is added. Three focused tests cover unique exact values,
-conditional/free branches and nonlinear rejection; all three now pass.
-The existing K1/K3 asset contract now declares schema V5 and explicitly rejects
-V4. Their bytes were regenerated by the current RustRed producers, not patched
-or read through a compatibility shim; the unchanged exact
-producer-versus-embedded-byte test now passes. The current combined library and
-test-target check passes, but this is not a full GammaLoop workspace build.
-A source-text census also found three obsolete calls in
-GammaLoopRS; those are outside this Vakint/FeynKit test dependency slice and
-remain untouched. All of these observations are distinct from successful
-compilation or end-to-end RustRed acceptance.
+At that preparation checkpoint, the Spenso forwarding wrapper used the pinned
+native solve builder and returned complete solution branches, retaining
+conditions and free variables. Its existing matrix conversion supplied the
+linearity gate; no local solver was added. Three focused tests covered unique
+exact values, conditional/free branches and nonlinear rejection. The K1/K3
+asset contract declared schema V5 and rejected V4; their bytes were regenerated,
+not patched or read through a compatibility shim, and the unchanged exact
+producer-versus-embedded-byte test passed. The then-current combined library
+and test-target check was not a full GammaLoop workspace build. A census found
+three obsolete GammaLoopRS calls outside that dependency slice, which were
+left untouched at that time. The current migration adapts those calls, adds
+the cancellation-guard regression, and passes the whole-workspace compilation
+and focused runtime gates recorded above.
 
 Artifact decoding and recursive IBP application remain exclusively in the
 existing RustRed library. Vakint contributes matcher/routing steering and its

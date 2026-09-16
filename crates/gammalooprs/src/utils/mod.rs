@@ -43,6 +43,7 @@ use spenso::tensors::parametric::{MixedTensor, ParamTensor};
 use spenso_hep_lib::hep_lib_atom;
 use symbolica::{
     domains::{
+        backend::{float::RoundingDirection, integer::MultiPrecisionInteger},
         dual::HyperDual,
         float::{FixedPrecision, Float as SymbolicaFloat, FloatLike as SymFloatLike},
     },
@@ -251,6 +252,47 @@ pub mod tracing;
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
+    use super::{Integer, Rational, RealLike, SymbolicaFloat, VarFloat};
+
+    #[test]
+    fn native_rational_conversion_preserves_requested_precision() {
+        for (numerator, denominator) in [
+            ("17", "19"),
+            (
+                "1267650600228229401496703205377",
+                "1267650600228229401496703205381",
+            ),
+            (
+                "1606938044258990275541962092341162602522202993782792835301377",
+                "3",
+            ),
+        ] {
+            let rational = Rational::new(
+                Integer::from_str(numerator).unwrap(),
+                Integer::from_str(denominator).unwrap(),
+            );
+            let value = VarFloat::<256>::from(&rational);
+            let expected = rug::Float::with_val(
+                256,
+                rug::Rational::from_str(&format!("{numerator}/{denominator}")).unwrap(),
+            );
+            assert_eq!(value.float.prec(), 256);
+            assert_eq!(value.float, expected);
+            assert_eq!(VarFloat::<256>::from(SymbolicaFloat::from(&value)), value);
+        }
+    }
+
+    #[test]
+    fn native_integer_conversion_preserves_large_exact_values() {
+        let integer =
+            Integer::from_str("1606938044258990275541962092341162602522202993782792835301377")
+                .unwrap();
+        let value = VarFloat::<256>::from(&Rational::from(integer.clone()));
+        assert_eq!(value.round_to_nearest_integer(), integer);
+    }
+
     #[test]
     fn debug_tags_macro_supports_tags_and_regular_fields() {
         crate::debug_tags!(#integration, #summary;
@@ -405,26 +447,10 @@ impl<const N: u32> From<Float> for VarFloat<N> {
 
 impl<const N: u32> From<&Rational> for VarFloat<N> {
     fn from(x: &Rational) -> Self {
-        let n = x.numerator();
-
-        let n = match n {
-            Integer::Double(f) => Float::with_val(N, f.get()),
-            Integer::Large(f) => Float::with_val(N, f.as_raw()),
-            Integer::Single(f) => Float::with_val(N, f),
-        };
-
-        let d = x.denominator();
-
-        let d = match d {
-            Integer::Double(f) => Float::with_val(N, f.get()),
-            Integer::Large(f) => Float::with_val(N, f.as_raw()),
-            Integer::Single(f) => Float::with_val(N, f),
-        };
-
-        let r = n / d;
-
         VarFloat {
-            float: rug::Float::with_val(N, r),
+            // Convert the exact ratio once, at the requested precision. Native
+            // Symbolica handles every integer backend without an f64 boundary.
+            float: SymbolicaFloat::from_rational_round(x, N, RoundingDirection::Nearest).into_raw(),
         }
     }
 }
@@ -838,10 +864,7 @@ impl<const N: u32> RealLike for VarFloat<N> {
     }
 
     fn round_to_nearest_integer(&self) -> Integer {
-        symbolica::domains::integer::MultiPrecisionInteger::from_raw(
-            self.float.clone().round().to_integer().unwrap(),
-        )
-        .into()
+        MultiPrecisionInteger::from_raw(self.float.clone().round().to_integer().unwrap()).into()
     }
 
     fn to_usize_clamped(&self) -> usize {

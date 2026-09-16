@@ -17,6 +17,10 @@ initialize!(|| {
 
 pub fn initialise() -> Result<()> {
     INITIALISED.call_once(|| {
+        // Symbolica 3 performs its normal signed-license/environment activation.
+        // Its removed legacy OEM macro/key cannot be used here; renewed OEM
+        // distribution support requires a separate upstream integration.
+
         let (panic, eyre) = HookBuilder::default()
             .capture_span_trace_by_default(cfg!(debug_assertions))
             .into_hooks();
@@ -52,4 +56,14 @@ pub fn bench_initialise() -> Result<()> {
     init_vakint()?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn initialisation_is_idempotent_with_native_symbolica() {
+        super::initialise().unwrap();
+        super::initialise().unwrap();
+        assert_eq!(symbolica::parse!("1+2"), symbolica::atom::Atom::num(3));
+    }
 }

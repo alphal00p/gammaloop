@@ -207,7 +207,7 @@ and calls `evaluate_sample(...)` / `evaluate_samples(...)`:
 
 ```bash
 source .venv/bin/activate
-NO_SYMBOLICA_OEM_LICENSE=1 SYMBOLICA_LICENSE=... just build-api
+SYMBOLICA_LICENSE=... just build-api
 cd examples/api/python/epem_a_ddxg_xs_LO
 SYMBOLICA_LICENSE=... python inspect_events.py
 ```
@@ -253,7 +253,7 @@ differential LU state and prints the formatted rich result returned by
 `evaluate_sample(...)` / `evaluate_samples(...)`:
 
 ```bash
-NO_SYMBOLICA_OEM_LICENSE=1 EXTRA_MACOS_LIBS_FOR_GNU_GCC=T SYMBOLICA_LICENSE=... \
+EXTRA_MACOS_LIBS_FOR_GNU_GCC=T SYMBOLICA_LICENSE=... \
 rust-script --debug examples/api/rust/epem_a_ddxg_xs_LO/inspect_events.rs
 ```
 

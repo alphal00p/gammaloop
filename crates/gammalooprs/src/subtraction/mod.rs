@@ -329,21 +329,17 @@ pub(crate) fn generate_rstar_t_dependence_evaluator(
         .iter()
         .zip(&rstar_derivatives)
         .map(|(eq, variable)| {
-            let solutions = Atom::solve(std::slice::from_ref(eq))
-                .wrt_with_exponent::<u8, _>(std::slice::from_ref(variable))
-                .unwrap();
-            let [solution] = solutions.iter().as_slice() else {
-                panic!(
-                    "expected one implicit-function solution, got {} branches",
-                    solutions.len()
-                );
-            };
-            assert!(
-                solution.free_variables().is_empty(),
-                "implicit-function solution is underdetermined"
-            );
-            let variable = PolyVariable::try_from(variable.clone()).unwrap();
-            solution.get(&variable).cloned().unwrap()
+            // The implicit-function derivatives are generic rational expressions
+            // on regular roots, where the radial Jacobian is nonzero. Use the
+            // native linear matrix solver for that same field-valued contract.
+            let (matrix, rhs) = Atom::system_to_matrix::<u8, _, _>(&[eq], &[variable]).unwrap();
+            matrix
+                .solve(&rhs)
+                .unwrap()
+                .into_vec()
+                .pop()
+                .unwrap()
+                .to_expression()
         })
         .collect_vec();
 

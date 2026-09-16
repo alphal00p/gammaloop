@@ -546,9 +546,9 @@ preferences; they protect behavior that has been easy to regress.
 
 === Environment And Build Quirks
 
-- The `gammaloop` CLI activates its crate-bound application (OEM) license with
-  `symbolica::set_application_key!` before calling the reusable API.
-  `NO_SYMBOLICA_OEM_LICENSE` is read there via `option_env!`, so
-  opting out requires setting it when compiling the binary, not at runtime.
-  Rust/Python libraries and their tests do not activate this OEM license; use a
-  user license through `SYMBOLICA_LICENSE` for those entry points.
+- Symbolica 3 uses its native signed-license/environment activation. Supply
+  `SYMBOLICA_LICENSE` at runtime when licensed features are needed; never commit
+  a license value. The previous compiled OEM macro and legacy OEM key are not
+  supported by this upstream revision. `NO_SYMBOLICA_OEM_LICENSE` no longer
+  controls a GammaLoop activation path. Renewed OEM distribution integration is
+  a separate upstream requirement, not a compatibility fallback.

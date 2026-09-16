@@ -30,7 +30,8 @@ use symbolica::{
     function,
     id::Replacement,
     parse, parse_lit,
-    poly::{PolyVariable, series::Series},
+    poly::series::Series,
+    solve::SolveCoverage,
 };
 use symbolica_utils::ReplaceBuilderExt;
 use vakint::{Vakint, VakintExpression, vakint_symbol};
@@ -1045,29 +1046,29 @@ impl VakintMomentumSolution {
             });
         }
 
-        let solutions = Atom::solve(system)
-            .wrt_with_exponent::<u8, _>(variables)
-            .map_err(|source| eyre!("{source}"))?;
-        let [solution] = solutions.iter().as_slice() else {
+        // Momentum routing is linear, but a subgraph can leave coordinates
+        // free. Preserve those explicitly without discarding native guards.
+        Atom::system_to_matrix::<u8, _, _>(system, variables)?;
+        let solutions = Atom::solve(system).wrt_with_exponent::<u8, _>(variables)?;
+        if solutions.coverage() != SolveCoverage::Complete
+            || !solutions.coverage_guard().is_empty()
+            || solutions.len() != 1
+            || solutions[0].is_conditional()
+        {
             return Err(eyre!(
-                "expected one Vakint momentum solution, got {} branches",
-                solutions.len()
+                "momentum routing requires one complete unconditional solution family: {solutions:?}"
             ));
-        };
-        let solution = variables
-            .iter()
+        }
+        let branch = &solutions[0];
+        let solution = branch
+            .coordinate_order()
             .map(|variable| {
-                let polynomial_variable =
-                    PolyVariable::try_from(variable.clone()).map_err(|source| eyre!("{source}"))?;
-                if solution.free_variables().contains(&polynomial_variable) {
-                    Ok(variable.clone())
-                } else {
-                    solution.get(&polynomial_variable).cloned().ok_or_else(|| {
-                        eyre!("Vakint momentum solution has no value for {polynomial_variable}")
-                    })
-                }
+                branch
+                    .get(variable)
+                    .cloned()
+                    .unwrap_or_else(|| variable.to_atom())
             })
-            .collect::<Result<Vec<_>>>()?;
+            .collect::<Vec<_>>();
         Ok(Self::from_solution(
             &solution,
             variables,
@@ -1403,5 +1404,21 @@ mod tests {
 
         assert!(no_variables.free_variables.is_empty());
         assert_eq!(free_variable.free_variables, vec![q0]);
+    }
+
+    #[test]
+    fn vakint_momentum_solve_rejects_conditional_and_nonlinear_routings() {
+        test_initialise().unwrap();
+
+        let q = function!(GS.emr_mom, 0);
+        let k = function!(GS.loop_mom, 0);
+        let parameter = parse!("routing_parameter");
+        // q/parameter = 0 retains an input-domain guard even when its solution
+        // simplifies to q = 0; neither that guard nor a pivot guard may vanish.
+        for equation in [&parameter * &q - &k, &q / &parameter, q.pow(2) - &k] {
+            assert!(
+                VakintMomentumSolution::solve(&[equation], std::slice::from_ref(&q), &[]).is_err()
+            );
+        }
     }
 }

@@ -240,16 +240,16 @@ fn bare_vertex_fixture(vertex_count: usize) -> BareVertexFixture {
                 .expand()
                 .replace(parse!("d(muw1_,k1_)*d(muw1_,k2_)"))
                 .min_level(0)
-                .max_level(Some(0))
+                .max_level(0)
                 .repeat()
                 .with(parse!("d(k1_,k2_)"))
                 .replace(parse!("d(muw1_,k1_)^2"))
                 .min_level(0)
-                .max_level(Some(0))
+                .max_level(0)
                 .with(parse!("d(k1_,k1_)"))
                 .replace(parse!("d(muw1_,muw1_)"))
                 .min_level(0)
-                .max_level(Some(0))
+                .max_level(0)
                 .with(4);
             Ok(())
         }))],
@@ -272,7 +272,7 @@ pub fn network_vertex_substitution(fixture: NetworkVertexFixture) -> Atom {
                 "vx({vertex_id}, k1_, k2_, k3_, mu1_, mu2_, mu3_)"
             )))
             .min_level(0)
-            .max_level(Some(0))
+            .max_level(0)
             .rhs_cache_size(1000)
             .with_map(move |matches| {
                 gluon_rule
@@ -292,7 +292,7 @@ pub fn bare_vertex_substitution(mut fixture: BareVertexFixture) -> Atom {
                 "vx({vertex_id}, k1_, k2_, k3_, mu1_, mu2_, mu3_)"
             )))
             .min_level(0)
-            .max_level(Some(0))
+            .max_level(0)
             .rhs_cache_size(1000)
             .with(&fixture.rhs_subs);
         fixture.input = fixture.input.expand();
@@ -300,7 +300,7 @@ pub fn bare_vertex_substitution(mut fixture: BareVertexFixture) -> Atom {
             .input
             .replace(parse!("d(muw1_, k1_)*vx_(x___,muw1_,y___)"))
             .min_level(0)
-            .max_level(Some(0))
+            .max_level(0)
             .repeat()
             .with(parse!("vx(x___,k1_,y___)"));
     }

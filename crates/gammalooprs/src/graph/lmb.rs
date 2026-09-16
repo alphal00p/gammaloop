@@ -1649,22 +1649,16 @@ impl LoopMomentumBasis {
             vars.push(othermom.call_args([l.0]))
         }
 
-        let solutions = Atom::solve(&sys).wrt_with_exponent::<u8, _>(&vars).unwrap();
-        let [solution] = solutions.iter().as_slice() else {
-            panic!(
-                "expected one loop-momentum basis solution, got {} branches",
-                solutions.len()
-            );
-        };
-        assert!(
-            solution.free_variables().is_empty(),
-            "loop-momentum basis solution is underdetermined"
-        );
-        vars.iter()
-            .map(|variable| {
-                let variable = PolyVariable::try_from(variable.clone()).unwrap();
-                solution.get(&variable).cloned().unwrap()
-            })
+        // Routing coefficients are exact integer graph incidences. The native
+        // matrix solve retains the unique-basis requirement; singular systems
+        // remain errors rather than choosing values for free loop coordinates.
+        let (matrix, rhs) = Atom::system_to_matrix::<u8, _, _>(&sys, &vars).unwrap();
+        matrix
+            .solve(&rhs)
+            .unwrap()
+            .into_vec()
+            .into_iter()
+            .map(|value| value.to_expression())
             .collect()
     }
     // pub(crate) fn spatial_emr<T: FloatLike>(

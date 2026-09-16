@@ -6,7 +6,7 @@ use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionArgument, FunctionBuilder, SliceType},
     function,
     id::{Condition, Match},
-    solve::SolutionValue,
+    solve::SolveCoverage,
 };
 
 use crate::{
@@ -607,31 +607,30 @@ impl Topology {
         // A routing witness must be unique and unconditional. Free coordinates
         // or exceptional parameter conditions cannot be dropped when changing
         // the numerator and every propagator simultaneously.
-        let [solution] = solutions.as_slice() else {
+        if solutions.coverage() != SolveCoverage::Complete || !solutions.coverage_guard().is_empty()
+        {
+            return Err(VakintError::InvalidIntegralFormat(format!(
+                "Loop momentum basis requires complete guard-free coverage: {solutions:?}"
+            )));
+        }
+        if solutions.len() != 1 {
             return Err(VakintError::InvalidIntegralFormat(format!(
                 "Expected one loop momentum basis, found {} solution branches",
                 solutions.len()
             )));
-        };
-        if solution.is_conditional()
-            || solution.is_underdetermined()
-            || solution.variable_solutions().len() != variables.len()
-        {
+        }
+        let solution = &solutions[0];
+        if !solution.is_point() || solution.coordinates().len() != variables.len() {
             return Err(VakintError::InvalidIntegralFormat(format!(
                 "Loop momentum basis is not unique and unconditional: {solution:?}"
             )));
         }
         let basis_change = Arc::new(
             solution
-                .variable_solutions()
+                .coordinates()
                 .iter()
-                .map(|coordinate| match coordinate.value() {
-                    SolutionValue::Root(value) => Ok(value.clone()),
-                    SolutionValue::Interval { .. } => Err(VakintError::InvalidIntegralFormat(
-                        "A loop momentum basis requires exact point solutions".into(),
-                    )),
-                })
-                .collect::<Result<Vec<_>, _>>()?,
+                .map(|(_, value)| value.clone())
+                .collect::<Vec<_>>(),
         );
         // println!(
         //     "basis_change: {:?}",
