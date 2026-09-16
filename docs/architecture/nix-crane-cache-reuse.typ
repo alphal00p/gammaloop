@@ -1754,7 +1754,7 @@ The latest Pages tree and the immutable snapshot fixture are now separate,
 independently cacheable terminal derivations over the same Cargo producer.
 The lightweight full documentation check consumes both completed trees,
 installs them through the Pages history updater, and asserts the latest and
-snapshot routes for all five products together with the portal, developer
+snapshot routes for all six products together with the portal, developer
 pages, and generated API material. The manual NixCI graph orders both render
 jobs after the shared documentation Cargo artifact and orders the merge check
 after both renders, preventing concurrent consumers from rebuilding the same

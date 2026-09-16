@@ -69,8 +69,10 @@ pub fn initialize_feynkit(module: &Bound<'_, PyModule>) -> PyResult<()> {
 /// Gather the FeynKit stub inventory without declaring an independent wheel.
 #[cfg(feature = "python_stubgen")]
 pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
+    // Unqualified dependency classes belong to Symbolica; FeynKit declarations
+    // explicitly name their community module.
     let info = pyo3_stub_gen::StubInfo::from_project_root(
-        "symbolica.community.feynkit".to_owned(),
+        "symbolica".to_owned(),
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("python"),
     )?;
     let module = info

@@ -17,3 +17,6 @@ serde_json = { workspace = true }
 symbolica = { workspace = true, default-features = false, features = ["serde"] }
 thiserror = { workspace = true }
 vectorize = "0.2.0"
+
+[features]
+native = ["symbolica/integer-gmp", "symbolica/float-mpfr"]

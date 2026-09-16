@@ -179,7 +179,7 @@ docs-svg-assets-check:
         cmp "$checked" "$check_root/$checked"
     done
 
-# Build one product documentation site, or all five sites.
+# Build one product documentation site, or all registered sites.
 docs-site PRODUCT="all" CHANNEL="latest" SNAPSHOT_TAG="" OUTPUT="target/alphal00p-docs":
     #!/usr/bin/env bash
     set -euo pipefail
@@ -224,8 +224,9 @@ docs-notebooks WHEEL PRODUCT="linnet" OUTPUT="target/alphal00p-docs":
         --wheel {{ quote(WHEEL) }} \
         --output {{ quote(OUTPUT + "/products/" + PRODUCT + "/latest/assets/notebooks") }}
 
-# Validate the five-product documentation registry and generated inputs.
+# Validate the documentation registry and generated inputs.
 docs-check:
+    cargo run --locked -p alphal00p-docs-python-exporter --features feynkit -- feynkit-community docs/api/python/feynkit-community.pyi --check
     cargo run --locked -p alphal00p-docs-catalogs --features gammaloop-reference --bin alphal00p-docs-gammaloop-reference -- --check
     cargo run --locked -p alphal00p-docs-catalogs --features vakint-reference --bin alphal00p-docs-vakint-reference -- --check
     cargo run --locked -p alphal00p-docs-python-exporter --features gammaloop -- gammaloop-python docs/api/python/gammaloop-python.pyi --check

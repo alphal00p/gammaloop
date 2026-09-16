@@ -1,4 +1,4 @@
-#import "../../shared.typ": callout, boundary, source-link
+#import "../../shared.typ": callout, boundary, source-link, product-link
 
 #let evaluation = [
 = Topology matching, reduction, and evaluation
@@ -34,8 +34,10 @@ expressions rather than input spelling when testing equivalence.
 
 Tensor numerators are reduced to scalar integrals before analytic evaluation where required.
 Reduction depends on the topology, Lorentz rank, dimension convention, and scalar-product
-normalization. Tensor reduction requires FORM. When diagnosing a mismatch, keep the FORM input
-and Vakint temporary directory so that the failing reduction can be inspected.
+normalization. The default #product-link("feynkit", page: "guides/tensor-reduction/", label: "FeynKit projector")
+works without FORM. Select the AlphaLoop tensor backend explicitly to use the legacy FORM
+projector; retaining its input and temporary directory helps diagnose a reduction failure.
+The #link("#tensor-reduction-backends")[backend examples below] show both selectors.
 
 Tensor reduction validates Lorentz index domains before vacuum projection. It passes universal loop-momentum tensor kernels to FORM while retaining graph coefficients as factorized expressions. Analytic integration uses temporary coefficient symbols and restores their values afterward; numerical integration combines the scalar sectors into one estimator. Numerator and loop-normalization poles in epsilon increase the required integral order. Positive epsilon prefactors never reduce the conservative requested depth. Rational dependence and scalar log/exp/sin/cos series are supported; retained Laurent coefficients must be epsilon-independent. Opaque epsilon-dependent functions produce an error.
 
@@ -75,7 +77,8 @@ For reproducible comparisons record:
 
 This program makes normalization, precision, and backend order explicit before reducing a
 rank-two one-loop numerator. It compiles without running external tools in the documentation
-harness; running it requires a supported FORM installation for the AlphaLoop path.
+harness; running its final AlphaLoop integral-evaluation step requires a supported FORM
+installation. The preceding default tensor-reduction step uses native FeynKit.
 
 // docs-example: compile vakint-backend-policy
 ```rust
@@ -196,6 +199,7 @@ does not need FORM for the tensor-reduction step. `"alphaloop"`
 explicitly selects the historical FORM implementation, whose bundled
 projector tables cover ranks through 10:
 
+// docs-example: compile
 ```python
 from symbolica import E
 from symbolica.community.vakint import Vakint
@@ -213,6 +217,7 @@ The Rust API uses the same default through `VakintSettings`. Set
 `TensorReductionMethod::AlphaLoop` explicitly to request the legacy FORM
 projector:
 
+// docs-example: compile
 ```rust
 use vakint::{TensorReductionMethod, VakintSettings};
 

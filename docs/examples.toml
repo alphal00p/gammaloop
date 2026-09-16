@@ -378,3 +378,48 @@ verification = "compile"
 tier = "pull-request"
 owner = "Vakint maintainers"
 test_command = "cargo test --locked -p alphal00p-docs-examples"
+
+[[example]]
+id = "feynkit-rust-quickstart"
+marker = "feynkit-rust-quickstart"
+product = "feynkit"
+task = "Generate and validate standalone scalar diagrams from Rust"
+audience = "beginner"
+source = "docs/products/feynkit/content/quickstart-rust.typ"
+route = "quickstart/rust/"
+prerequisites = ["Repository checkout", "Rust toolchain with compatible Symbolica dependencies"]
+expected = "The scalar fixture produces finalized tree diagrams that validate and export as DOT."
+verification = "compile"
+tier = "pull-request"
+owner = "FeynKit maintainers"
+test_command = "cargo test --locked -p alphal00p-docs-examples"
+
+[[example]]
+id = "feynkit-community-quickstart"
+marker = "feynkit-community-quickstart"
+product = "feynkit"
+task = "Generate diagrams and construct a CFF expression in Python"
+audience = "beginner"
+source = "docs/products/feynkit/content/quickstart-python.typ"
+route = "quickstart/python/"
+prerequisites = ["Repository checkout", "Python with a combined Symbolica host registering FeynKit"]
+expected = "Generated scalar diagrams round-trip through model-aware JSON and expose a CFF expression."
+verification = "compile"
+tier = "pull-request"
+owner = "FeynKit maintainers"
+test_command = "cargo test --locked -p alphal00p-docs-examples"
+
+[[example]]
+id = "feynkit-tensor-selectors"
+marker = "feynkit-tensor-selectors"
+product = "feynkit"
+task = "Reduce a rank-two vacuum numerator while preserving an external momentum"
+audience = "real-value"
+source = "docs/products/feynkit/content/tensor-reduction.typ"
+route = "guides/tensor-reduction/"
+prerequisites = ["Python with a combined Symbolica host registering FeynKit"]
+expected = "Selecting only k gives k squared times p squared divided by the symbolic dimension D."
+verification = "compile"
+tier = "pull-request"
+owner = "FeynKit maintainers"
+test_command = "cargo test --locked -p alphal00p-docs-examples"
