@@ -169,20 +169,24 @@ projection, marker, and backend-boundary invariants are documented in
 <cff-production-and-numerator-energy-ownership>
 GammaLoop owns production graph/source construction, UV orchestration, exact source mapping, and evaluator preparation. The `three-dimensional-reps` crate owns the shared CFF algebra. The `3Drep` command and feature-gated eager evaluator are diagnostic tools, not production contracts: GammaLoop may prepare their inputs, factors, and expressions differently.
 
-Finite-temperature and zero-temperature equilibrium share `MediumMode` and the
-structural CFF recursion in `three-dimensional-reps`. Cyclic orientations,
-thermal contraction numerators, and distribution derivatives are retained in
-`CFFVariant::thermal_weight`, separately from rational coefficients. Distribution
-derivatives are ordinary energy derivatives at fixed temperature, chemical
-potential, and orientation. Reducing an m-edge cyclic chain contributes
+Finite-temperature and zero-temperature equilibrium share `MediumMode`, the
+structural CFF recursion, and bounded polynomial numerator reduction in
+`three-dimensional-reps`. Numerator reduction includes denominator-cancelling
+contact terms; each surviving denominator sector generates its own
+`CFFVariant::thermal_weight`. These weights retain cyclic orientations, thermal
+contraction numerators, and distribution derivatives separately from rational
+coefficients, keeping physical distributions outside Laurent interpolation.
+Distribution derivatives are ordinary energy derivatives at fixed temperature,
+chemical potential, and orientation. Reducing an m-edge cyclic chain contributes
 `(-1)^(m-1)` to the CFF coefficient and a distribution derivative of order `m-1`.
 These weights survive serialization, variant fusion, source-edge remapping, and
 products of disconnected components. Initial-state cuts remain external energy
 aliases and never acquire thermal distribution factors. GammaLoop's graph and
 parameter layer expands the symbolic weights using particle statistics,
 chemical potentials, and inverse temperature; the shared generator does not
-own the physics model. Thermal generation retains on-shell numerator maps and
-rejects uniform numerator sampling scales.
+own the physics model. Thermal terminal sectors retain their full distribution
+weights rather than applying the vacuum contour-closure normalization. Thermal
+generation continues to reject explicit uniform numerator sampling scales.
 
 Medium modes use direct local 3D UV subtraction. Their local UV kernels take the
 vacuum limit while the surrounding observable retains its medium dependence;
