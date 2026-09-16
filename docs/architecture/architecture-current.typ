@@ -281,8 +281,11 @@ projection, marker, and backend-boundary invariants are documented in
   - eager uses the saved eager evaluator directly
   - symjit is rebuilt after generation/load from the saved Symbolica
     evaluator
-  - external compiled backends load their saved shared-library artifacts
-    lazily
+  - complete external compiled artifacts are loaded while the saved
+    state is activated
+  - missing external artifacts leave the frozen backend metadata
+    unchanged but activate the portable eager evaluator for the current
+    session
   - if external loading fails and startup globals explicitly opt into
     symjit, GammaLoop falls back to symjit for that integrand and logs
     it
