@@ -561,7 +561,7 @@ impl VakintWrapper {
     ///
     /// An empty evaluation order is appropriate for matching, canonicalization, and tensor
     /// reduction. Add explicit `VakintEvaluationMethod` entries before evaluating an integral;
-    /// construction validates the executables required by those entries.
+    /// each operation validates the external executables it needs.
     ///
     /// Parameters
     /// ----------
@@ -934,8 +934,9 @@ impl VakintWrapper {
     /// True
     /// ```
     ///
-    /// This complete path performs tensor reduction before integral evaluation and therefore
-    /// has the same FORM requirement as `evaluate_integral` for the AlphaLoop method.
+    /// This path uses the selected tensor backend before integral evaluation. Here the native
+    /// FeynKit backend reduces the numerator; the AlphaLoop integral-evaluation method requires
+    /// FORM, just as it does for `evaluate_integral`.
     ///
     /// Parameters
     /// ----------

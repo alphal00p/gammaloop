@@ -2015,6 +2015,7 @@ pub struct VakintSettings {
     pub clean_tmp_dir: bool,
     /// Ordered analytic and numerical backends considered for each integral.
     pub evaluation_order: EvaluationOrder,
+    /// Numerator tensor reduction: native FeynKit by default, or the FORM-based AlphaLoop projector.
     pub tensor_reduction_method: TensorReductionMethod,
     // This quantity is typically set equal to *one plus the maximum loop count* of the UV regularisation problem considered.
     // For example when considering a 2-loop problem, then:

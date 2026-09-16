@@ -9793,38 +9793,6 @@
           "possible_values": []
         },
         {
-          "id": "max_multiplicity_for_fast_cut_filter",
-          "long": "max-multiplicity-for-fast-cut-filter",
-          "short": "M",
-          "aliases": [],
-          "action": "set",
-          "arity": {
-            "min": 1,
-            "max": 1
-          },
-          "takes_values": true,
-          "value_required": true,
-          "value_names": [
-            "MAX_MULTIPLICITY_FOR_FAST_CUT_FILTER"
-          ],
-          "help": "Fast cut filter switch multiplicity",
-          "required": false,
-          "positional": false,
-          "index": null,
-          "hidden": false,
-          "global": false,
-          "inherited": false,
-          "exclusive": false,
-          "require_equals": false,
-          "value_delimiter": null,
-          "value_terminator": null,
-          "conflicts_with": [],
-          "defaults": [
-            "6"
-          ],
-          "possible_values": []
-        },
-        {
           "id": "filter_self_loop",
           "long": "filter-self-loop",
           "short": null,
@@ -11341,38 +11309,6 @@
           "value_terminator": null,
           "conflicts_with": [],
           "defaults": [],
-          "possible_values": []
-        },
-        {
-          "id": "max_multiplicity_for_fast_cut_filter",
-          "long": "max-multiplicity-for-fast-cut-filter",
-          "short": "M",
-          "aliases": [],
-          "action": "set",
-          "arity": {
-            "min": 1,
-            "max": 1
-          },
-          "takes_values": true,
-          "value_required": true,
-          "value_names": [
-            "MAX_MULTIPLICITY_FOR_FAST_CUT_FILTER"
-          ],
-          "help": "Fast cut filter switch multiplicity",
-          "required": false,
-          "positional": false,
-          "index": null,
-          "hidden": false,
-          "global": false,
-          "inherited": false,
-          "exclusive": false,
-          "require_equals": false,
-          "value_delimiter": null,
-          "value_terminator": null,
-          "conflicts_with": [],
-          "defaults": [
-            "6"
-          ],
           "possible_values": []
         },
         {
@@ -16785,6 +16721,17 @@
       "required": false,
       "default": null,
       "possible_values": []
+    },
+    {
+      "path": "cli.global.generation.uv.vakint.tensor_reduction_method",
+      "value_type": "string",
+      "description": "Numerator tensor reduction: native FeynKit by default, or the FORM-based AlphaLoop projector.",
+      "required": false,
+      "default": "feynkit",
+      "possible_values": [
+        "alphaloop",
+        "feynkit"
+      ]
     },
     {
       "path": "cli.global.generation.vector_polarization_sum_gauge",
