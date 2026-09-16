@@ -162,6 +162,11 @@ pub struct Build {
     #[arg(long, default_value_t = false)]
     pub no_pretty: bool,
 
+    /// Hide the numerator in the CFF structure table.
+    #[serde(default)]
+    #[arg(long)]
+    pub no_numerator: bool,
+
     /// Disable ANSI colors in the formatted output.
     #[arg(long, default_value_t = false)]
     pub no_color: bool,
@@ -410,7 +415,8 @@ impl Build {
         }
 
         if !self.no_pretty || self.show_details_for_orientation.is_some() {
-            let numerator = selected.graph.full_numerator_atom().to_canonical_string();
+            let numerator = (!self.no_numerator)
+                .then(|| selected.graph.full_numerator_atom().to_canonical_string());
             println!(
                 "{}",
                 render_expression_summary(
@@ -418,7 +424,7 @@ impl Build {
                     &output.graph,
                     energy_degree_bounds.as_deref(),
                     NumeratorDisplay {
-                        original: Some(&numerator),
+                        original: numerator.as_deref(),
                         simplified: None,
                     },
                     output.numerator_sampling_scale_mode,
