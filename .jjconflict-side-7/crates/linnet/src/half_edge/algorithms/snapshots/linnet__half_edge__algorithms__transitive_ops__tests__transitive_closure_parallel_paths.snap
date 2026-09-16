@@ -1,0 +1,34 @@
+---
+source: src/half_edge/algorithms/transitive_ops.rs
+expression: closure_graph.debug_dot()
+---
+digraph {
+  end;
+  path1_a;
+  path2_a;
+  path2_b;
+  path3_a;
+  path3_b;
+  path3_c;
+  start;
+
+  path1_a:0	-> end:1	 [id=0 ];
+  path1_a:2	-> path2_b:3	 [id=1 ];
+  path2_a:4	-> path2_b:5	 [id=2 ];
+  path2_a:6	-> path3_c:7	 [id=3 ];
+  path2_b:8	-> end:9	 [id=4 ];
+  path3_a:10	-> path3_b:11	 [id=5 ];
+  path3_b:12	-> path3_c:13	 [id=6 ];
+  path3_c:14	-> end:15	 [id=7 ];
+  start:16	-> path1_a:17	 [id=8 ];
+  start:18	-> path2_a:19	 [id=9 ];
+  start:20	-> path3_a:21	 [id=10 ];
+  start:22	-> path2_b:23	 [id=11 ];
+  start:24	-> path3_b:25	 [id=12 ];
+  start:26	-> path3_c:27	 [id=13 ];
+  start:28	-> end:29	 [id=14 ];
+  path2_a:30	-> end:31	 [id=15 ];
+  path3_a:32	-> path3_c:33	 [id=16 ];
+  path3_a:34	-> end:35	 [id=17 ];
+  path3_b:36	-> end:37	 [id=18 ];
+}

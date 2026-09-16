@@ -2,7 +2,7 @@
 
 #quote(block: true)[
 #strong[Status:] Current implementation architecture, audited against the Vakint source on
-2026-08-18.
+2026-09-16.
 
 This note describes the Rust engine and its optional Symbolica community-module wrapper. Backend
 availability and numerical coverage depend on the selected topology, epsilon depth, and installed
@@ -18,8 +18,8 @@ Rust crate owns five boundaries:
   canonicalization, tensor reduction, parametric evaluation, and numerical evaluation;
 - `VakintExpression` and `VakintTerm`: the structured numerator/topology representation used
   between stages;
-- `VakintSettings`, `EvaluationOrder`, and `EvaluationMethod`: precision, normalization,
-  dependency, and backend-selection policy;
+- `VakintSettings`, `TensorReductionMethod`, `EvaluationOrder`, and `EvaluationMethod`:
+  precision, normalization, dependency, and backend-selection policy;
 - FORM and pySecDec adapters: template rendering, subprocess execution, and result decoding;
 - the optional `symbolica.community.vakint` module: Python classes that own a Rust engine and
   settings while exchanging Symbolica expressions.
@@ -51,9 +51,9 @@ ephemeral transformation plan, not a persisted cache.
 
 `VakintSettings` controls epsilon and scale symbols, executable paths, input rationalization and
 runtime precision, numerator verification, normalization, unknown-integral policy, temporary
-files, epsilon depth, dot-product notation, and `EvaluationOrder`. A `Vakint` engine is reusable;
-settings are passed explicitly to Rust operations. The Python `Vakint` wrapper stores the engine
-and settings together for convenience.
+files, epsilon depth, dot-product notation, `TensorReductionMethod`, and `EvaluationOrder`.
+A `Vakint` engine is reusable; settings are passed explicitly to Rust operations. The Python
+`Vakint` wrapper stores the engine and settings together for convenience.
 
 == Main control flow
 
@@ -64,7 +64,7 @@ AtomView
   -> validate selected settings and external dependencies
   -> split into VakintExpression terms
   -> match and canonicalize topology plus numerator
-  -> tensor-reduce each numerator through FORM
+  -> tensor-reduce each numerator with the selected TensorReductionMethod
   -> choose the first supported EvaluationMethod for each term
   -> run the backend and decode its Symbolica expression
   -> combine the transformed terms into an Atom
@@ -72,9 +72,11 @@ AtomView
 
 `to_canonical`, `tensor_reduce`, and `evaluate_integral` expose narrower stages. Canonicalization
 tries registered topologies in order, derives replacement rules, normalizes momentum routing,
-and can emit the short topology form. Tensor reduction converts compact dot notation if needed,
-maps vectors and indices into FORM syntax, runs the embedded reduction program, and maps the
-result back to Symbolica.
+and can emit the short topology form. Tensor reduction defaults to the native FeynKit projector,
+which converts the numerator to FeynKit tensor syntax and returns a scalar-product expression
+without requiring FORM. Selecting `TensorReductionMethod::AlphaLoop` uses the historical FORM
+projector: it expands compact dot notation, translates vectors and indices, runs the embedded
+reduction program, and maps the result back to Symbolica.
 
 Integral evaluation matches again so that it has the canonical topology and numerator mapping.
 It then walks `settings.evaluation_order` and selects the first method whose topology, loop count,
@@ -94,7 +96,9 @@ Laurent coefficients `(epsilon power, complex value)`.
 AlphaLoop, MATAD, and FMFT invoke FORM. The pySecDec method invokes both FORM and pySecDec through
 the configured Python executable. `validate_settings` checks only dependencies required by the
 selected evaluation order, validates the loop-normalization expression, and enforces FORM >=
-4.2.1 and pySecDec >= 1.6.4 when those tools are selected.
+4.2.1 and pySecDec >= 1.6.4 when those tools are selected. `evaluate` and `evaluate_integral`
+perform this validation; the narrower `tensor_reduce` stage does not validate scalar-evaluation
+dependencies. Native FeynKit tensor reduction can therefore run without those external tools.
 
 FORM programs, headers, and run templates are embedded in the Rust binary with `include_str!`.
 For each run, Vakint renders those resources into a uniquely named temporary directory, launches
@@ -112,7 +116,8 @@ wrapper and registers `Vakint`, `VakintExpression`, `VakintEvaluationMethod`, an
 `VakintNumericalResult` on `symbolica.community.vakint`. `python_stubgen` adds stub metadata and
 also enables Symbolica's Python export. The wrapper delegates transformations to the Rust engine
 and converts `VakintError` into Python `ValueError`; it does not implement a second evaluation
-pipeline.
+pipeline. Construction stores the selected tensor-reduction and evaluation settings without
+checking external executables; the evaluation entry points validate dependencies when needed.
 
 == Persistence and reproducibility
 
@@ -123,9 +128,9 @@ workspaces are implementation artifacts unless cleanup is disabled or a reuse di
 explicitly supplied.
 
 A reproducible result therefore depends on more than the input expression: record the topology
-form, numerator, normalization convention, epsilon depth, decimal precision, backend order and
-options, numerical masses and external momenta, executable versions, and whether a pySecDec
-workspace was reused.
+form, numerator, normalization convention, epsilon depth, decimal precision, tensor-reduction
+method, backend order and options, numerical masses and external momenta, executable versions,
+and whether a pySecDec workspace was reused.
 
 == Maintained invariants
 
