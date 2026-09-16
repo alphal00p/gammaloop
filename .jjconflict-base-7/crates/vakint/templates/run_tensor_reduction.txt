@@ -1,0 +1,28 @@
+#-
+*Off statistics;
+S D, ep;
+Auto V k,p,q;
+Auto S n,x,m,t,cMi,log,z,ALARM;
+{additional_symbols}
+CF rat,map,uvprop,g(s),tmps(s),dot;
+
+Auto I s=4,mu=D;
+CF counter,vec,vec1,gamma,NN;
+CT opengammastring;
+
+Polyratfun rat;
+#include ./tensorreduce.frm
+
+L F = {numerator};
+
+#call TensorReduce()
+
+id q1?.q2? = dot(q1,q2);
+id g(xi?,xj?)*vec1(q1?,xi?)*vec1(q2?,xj?) = dot(q1,q2);
+id vec1(q1?,xi?)*vec1(q2?,xi?) = dot(q1,q2);
+.sort
+
+Print +S;
+#write<out.txt> \"%E\",F
+
+.end

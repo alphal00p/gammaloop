@@ -3,6 +3,8 @@
 #let notebooks = [
 = Notebook figures and symbolic output
 
+For complete executable examples, open the #link("guides/showcases/")[FeynKit showcase gallery].
+
 Use a diagram produced by the #link("quickstart/python/")[Python quickstart]. Its
 `to_linnest()` method returns complete Typst source; it does not compile a figure. `to_svg()`,
 `to_html()`, `_repr_svg_()`, and `_repr_html_()` compile that source with Python's Typst package.

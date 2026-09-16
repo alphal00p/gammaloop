@@ -2068,6 +2068,13 @@ impl SiteBuilder {
         let site = staging.path().join("site");
         fs::create_dir_all(&site)?;
         self.write_site_assets(&site)?;
+        let notebooks = self.root.join(format!(
+            "docs/generated/notebooks/products/{}/latest/assets/notebooks",
+            product.id
+        ));
+        if notebooks.is_dir() {
+            copy_tree(&notebooks, &site.join("assets/notebooks"))?;
+        }
 
         let metadata = self.metadata(product, options.channel, options.tag, &channel_path)?;
         fs::write(

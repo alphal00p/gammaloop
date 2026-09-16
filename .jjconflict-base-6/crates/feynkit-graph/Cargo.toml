@@ -11,8 +11,13 @@ categories = ["science"]
 [dependencies]
 feynkit-kinematics = { version = "0.1.0", path = "../feynkit-kinematics" }
 feynkit-model = { version = "0.1.0", path = "../feynkit-model" }
-linnet = { version = "0.17.0", path = "../linnet", features = ["serde"] }
+linnet = { version = "0.17.0", path = "../linnet", default-features = false, features = ["serde"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 symbolica = { workspace = true, default-features = false }
 thiserror = { workspace = true }
+
+[features]
+default = ["native"]
+native = ["linnet/native", "feynkit-model/native"]
+wasm = ["linnet/wasm", "symbolica/wasm"]

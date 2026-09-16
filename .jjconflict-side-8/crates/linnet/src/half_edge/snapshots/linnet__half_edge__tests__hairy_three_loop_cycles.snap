@@ -1,0 +1,57 @@
+---
+source: src/half_edge/tests.rs
+expression: cycles
+---
+[
+  Cycle(
+    filter: SubSet(
+      set: BitSeq(
+        order: "bitvec::order::Lsb0",
+        head: BitIdx(
+          width: 64,
+          index: 0,
+        ),
+        bits: 15,
+        data: [
+          32259,
+        ],
+      ),
+      id: PhantomData,
+    ),
+    loop_count: Some(1),
+  ),
+  Cycle(
+    filter: SubSet(
+      set: BitSeq(
+        order: "bitvec::order::Lsb0",
+        head: BitIdx(
+          width: 64,
+          index: 0,
+        ),
+        bits: 15,
+        data: [
+          32268,
+        ],
+      ),
+      id: PhantomData,
+    ),
+    loop_count: Some(1),
+  ),
+  Cycle(
+    filter: SubSet(
+      set: BitSeq(
+        order: "bitvec::order::Lsb0",
+        head: BitIdx(
+          width: 64,
+          index: 0,
+        ),
+        bits: 15,
+        data: [
+          32304,
+        ],
+      ),
+      id: PhantomData,
+    ),
+    loop_count: Some(1),
+  ),
+]
