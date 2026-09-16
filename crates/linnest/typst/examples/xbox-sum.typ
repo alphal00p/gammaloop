@@ -177,16 +177,14 @@
         anchor: "east",
       )),
       "D1.1": (spring-length: 1.6)+mom(side: "right", length: 1, shift: -.5, label: (
-        shift: -3.2,
+        shift: .2,
         gap: .01,
-        anchor: "west",
       )),
-      "D2.0": (spring-length: 2.3)+mom(side: "left", shift: .4, label: (
+      "D2.0": (spring-length: 2.3)+mom(side: "left", shift: .8, label: (
         gap: .1,
-        shift: 1.4,
-        anchor: "east",
+        shift: .8,
       )),
-      "D2.1": mom(side: "left", label: (gap: .01, shift: -.8, anchor: "west")),
+      "D2.1": (spring-length: 2)+mom(side: "left", shift: -.3, label: (gap: .01, shift: -.2)),
       D3: (
         spring-length: 1.,
         crossing-under: <D6.1>,
@@ -196,8 +194,11 @@
       ),
       D4: (spring-length: .4, show-momentum: false),
       D5: (spring-length: .1),
-      "D6.0": mom(side: "right", label: (gap: .2,anchor:"west")),
-      "D6.1": (spring-length: 5)
+      "D6.0": (spring-length: 2)+mom(side: "right", label: (shift: 0.2, gap: .15)),
+      "D6.1": (
+        spring-length: 5,
+        edge-style: (source-anchor: "east", sink-anchor: "west"),
+      )
         + mom(side: "left", shift:1,label: (shift: 1, gap: .1)),
       "D6.2": mom(side: "left", label: (gap: .1)),
     )
@@ -213,30 +214,30 @@
 
   $
     #diagram(xbox, cut-x: -1, initial-cut: 0, draw-after: (g, bounds) => {
-      if draw-initials {
-        let nodes = graph.nodes(g)
-        // The two single-replacement cuts cross the other external leg;
-        // the matching pair opens both, with each branch reaching the diagram boundary.
-        for (name, side, style, both) in (
-          (<c>, 1, 1, false),
-          (<b>, -1, 2, false),
-          (<c>, 1, 3, true),
-          (<b>, -1, 3, true),
-        ) {
-          let p = nodes.find(n => n.name == name).pos
-          let (near, far) = if side > 0 { (bounds.top, bounds.bottom) } else { (bounds.bottom, bounds.top) }
-          let outer = if side > 0 { bounds.right } else { bounds.left }
-          // Meet the top/bottom normally; the paired cut also exits the sides horizontally.
-          let points = if both {
-            ((p.x - side * .8, near), (outer, p.y - side * 1.7), (p.x - side * .8, p.y - side * .6), (p.x + side * .1, p.y - side * 1.7))
-          } else {
-            ((p.x - side * 1.25, near), (outer - side, far), (p.x - side * 1.25, p.y - side * 2), (outer - side, p.y - side * .8))
-          }
-          // Both branches cross D6 in the same direction, retaining its middle segment.
-          if side < 0 { points = (points.at(1), points.at(0), points.at(3), points.at(2)) }
-          cetz.draw.bezier(..points, stroke: initial-cut-styles.at(style))
-        }
-      }
+      // if draw-initials {
+      //   let nodes = graph.nodes(g)
+      //   // The two single-replacement cuts cross the other external leg;
+      //   // the matching pair opens both, with each branch reaching the diagram boundary.
+      //   for (name, side, style, both) in (
+      //     (<c>, 1, 1, false),
+      //     (<b>, -1, 2, false),
+      //     (<c>, 1, 3, true),
+      //     (<b>, -1, 3, true),
+      //   ) {
+      //     let p = nodes.find(n => n.name == name).pos
+      //     let (near, far) = if side > 0 { (bounds.top, bounds.bottom) } else { (bounds.bottom, bounds.top) }
+      //     let outer = if side > 0 { bounds.right } else { bounds.left }
+      //     // Meet the top/bottom normally; the paired cut also exits the sides horizontally.
+      //     let points = if both {
+      //       ((p.x - side * .8, near), (outer, p.y - side * 1.7), (p.x - side * .8, p.y - side * .6), (p.x + side * .1, p.y - side * 1.7))
+      //     } else {
+      //       ((p.x - side * 1.25, near), (outer - side, far), (p.x - side * 1.25, p.y - side * 2), (outer - side, p.y - side * .8))
+      //     }
+      //     // Both branches cross D6 in the same direction, retaining its middle segment.
+      //     if side < 0 { points = (points.at(1), points.at(0), points.at(3), points.at(2)) }
+      //     cetz.draw.bezier(..points, stroke: initial-cut-styles.at(style))
+      //   }
+      // }
     })+
     #diagram(xbox-opened, cut-x: -.4, cut-y: 1, initial-cut: 1)+
     #diagram(xbox-opened2, cut-x: -1.5, cut-y: 1, initial-cut: 2)+

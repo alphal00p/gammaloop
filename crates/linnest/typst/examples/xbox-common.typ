@@ -18,15 +18,12 @@
   ),
   padding: 0.3,
 )
-#let draw-initials = false
+#let draw-initials = true
 
 // One stroke per opening: original, p1 replaced, p2 replaced, both replaced.
-#let initial-cut-styles = (
-  (paint: blue.darken(45%), dash: "dotted"),
-  (paint: blue.darken(15%), dash: "dashed"),
-  (paint: blue.lighten(10%), dash: (4pt, 1.5pt, 1pt, 1.5pt)),
-  (paint: blue.lighten(30%), dash: (4pt, 1.5pt, 1pt, 1.5pt, 1pt, 1.5pt)),
-).map(style => (thickness: 1pt) + style)
+#let initial-cut-styles = ((
+  (paint: blue.transparentize(45%)),
+)*4).map(style => (thickness: 0.8pt, cap: "round") + style)
 
 #let base-layout = layouts.options(
   spring: (strength: 28, length: 0.15),
