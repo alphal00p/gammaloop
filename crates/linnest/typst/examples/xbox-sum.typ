@@ -155,13 +155,13 @@
     let g = graph.map(g, edge: flatten-boundary)
     graph.map(g, node: nodes, edge: edges)
   }
-
+let g = graph.build(default-edge-data: edge-data, master)
   let xbox-cut = {
     let crossings = (
-      D1: ((group: "p1", y: mid2),),
+      D1: ((group: "p1", y: top),),
       D2: ((group: "p2", y: bot),),
       // Along b -> c: right p2 stub, left p2 -> right p1 middle, left p1 stub.
-      D6: ((group: "p2", y: mid), (group: "p1", y: top)),
+      D6: ((group: "p2", y: mid), (group: "p1", y: mid2)),
     )
     let g = graph.cut(
       g,
@@ -170,39 +170,31 @@
       boundary: boundary-position
     )
     let edges = (
-      compact: (spring-length: 4),
-      "D1.0": (spring-length: 1.4)+mom(side: "left", length: .8, label: (
-        shift: 1,
-        gap: .01,
-        anchor: "east",
-      )),
-      "D1.1": (spring-length: 1.6)+mom(side: "right", length: 1, shift: -.5, label: (
-        shift: .2,
-        gap: .01,
-      )),
-      "D2.0": (spring-length: 2.3)+mom(side: "left", shift: .8, label: (
+      // compact: (spring-length: 10),
+      "D1.0": (spring-length: 1.4)+mom(side: "right", length: .8, label: (gap: .01)),
+      "D1.1": (spring-length: 1.6)+mom(side: "right", length: 1, shift: -.5, label: (gap: .1)),
+      "D2.0": (spring-length: 2.3,  crossing-under: <D6.1>,
+      crossing-gap: 0.8,)+mom(side: "left", shift: .8, label: (
         gap: .1,
         shift: .8,
       )),
       "D2.1": (spring-length: 2)+mom(side: "left", shift: -.3, label: (gap: .01, shift: -.2)),
       D3: (
         spring-length: 1.,
-        crossing-under: <D6.1>,
-        crossing-gap: 0.8,
-        fermion-arrow-shift: -0.5,
         show-momentum: false,
       ),
-      D4: (spring-length: 1.2, show-momentum: false),
+      D4: (spring-length: 1.2, show-momentum: false,  crossing-under: <D6.1>,
+      crossing-gap: 0.8,  fermion-arrow-shift: 0.3),
       D5: (spring-length: .1),
       "D6.0": (spring-length: 2)+mom(side: "right", label: (shift: 0.2, gap: .15)),
       "D6.1": (
-        spring-length: 5,
+        spring-length: 6,
+        shift: (0, -0.4),
         edge-style: (source-anchor: "east", sink-anchor: "west"),
-        source-style: (anchor-control-distance: .3),
-        sink-style: (anchor-control-distance: 4.5),
+        
       )
-        + mom(side: "left", shift:1,label: (shift: 1, gap: .1)),
-      "D6.2": mom(side: "left", label: (gap: .1)),
+        + mom(side: "right",shift:0.2,label: (gap: .1)),
+      "D6.2": mom(side: "right", label: (shift:1,gap: .1)),
     )
     let nodes = (a: (pos: pos(y: group("h"))), d: (pos: pos(y: group("h"))))
     let g = graph.map(
@@ -215,7 +207,7 @@
   }
 
   $
-    #diagram(xbox, cut-x: -1, initial-cut: 0, draw-after: (g, bounds) => {
+    #diagram(xbox, cut-x: -1,cut-y: -.8, initial-cut: 0, draw-after: (g, bounds) => {
       // if draw-initials {
       //   let nodes = graph.nodes(g)
       //   // The two single-replacement cuts cross the other external leg;
@@ -241,8 +233,8 @@
       //   }
       // }
     })+
-    #diagram(xbox-opened, cut-x: -.4, cut-y: 1, initial-cut: 1)+
-    #diagram(xbox-opened2, cut-x: -1.5, cut-y: 1, initial-cut: 2)+
-    #diagram(xbox-cut, cut-y: 0.5,cut-x:-0.3, initial-cut: 3) = op("disc")_(p_1^2) op("disc")_(p_2^2) integral (dif^d k)/(2 pi)^d (N^(q overline(q))_times.square delta^+_(q^2)(p_(12)-k) delta^+_0(k))/(p_1^2 p_2^2 (k-p_2)^2 (k-p_1)^2)
+    #diagram(xbox-opened, cut-x: -.4, cut-y: -0.8, initial-cut: 1)+
+    #diagram(xbox-opened2, cut-x: -1.5, cut-y: -0.8, initial-cut: 2)+
+    #diagram(xbox-cut, cut-y: -0.8,cut-x:-0.3, initial-cut: 3) = op("disc")_(p_1^2) op("disc")_(p_2^2) integral (dif^d k)/(2 pi)^d (N^(q overline(q))_times.square delta^+_(q^2)(p_(12)-k) delta^+_0(k))/(p_1^2 p_2^2 (k-p_2)^2 (k-p_1)^2)
   $
 }
