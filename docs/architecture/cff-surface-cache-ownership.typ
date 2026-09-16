@@ -1,4 +1,4 @@
-= CFF Surface-Cache Ownership
+= CFF surface-cache ownership
 <cff-surface-cache-ownership-proposal>
 == Status
 <status>
