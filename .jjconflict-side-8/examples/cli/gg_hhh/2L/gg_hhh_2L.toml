@@ -1,0 +1,193 @@
+commands = []
+
+[[command_blocks]]
+name = "default"
+commands = [
+  "run generate",
+  "quit -o"
+]
+
+[cli_settings]
+[cli_settings.state]
+folder = "./examples/cli/gg_hhh/2L/state"
+name = "gg_hhh_2l"
+
+[[command_blocks]]
+name = "generate"
+commands = [
+
+    "import model sm-default.json",
+    "set global kv global.n_cores.feyngen=10",
+
+    "remove processes",
+    """generate amp g g > h h h | g h t t~ QED==3 [{2}]
+           --veto-vertex-interactions V_6 V_9 V_36 V_37
+           --number-of-fermion-loops 1 1
+           --only-diagrams
+           --numerator-grouping only_detect_zeroes
+           --select-graphs GL303
+           --global-prefactor-projector 'gammalooprs::ϵ(0,spenso::mink(4,gammalooprs::hedge(0)))
+                                           * gammalooprs::ϵ(1,spenso::mink(4,gammalooprs::hedge(1)))
+                                           * (1/8)*spenso::g(spenso::coad(8,gammalooprs::hedge(0)),spenso::coad(8,gammalooprs::hedge(1)))'
+           -p gg_hhh
+           -i 2L
+    """,
+    "generate",
+    "save dot",
+    "save state -o",
+
+]
+
+[[command_blocks]]
+name = "setup_euclidean_configuration"
+commands = [
+    "set model MT=1000.0",
+    "set model WT=0.0",
+    "set model ymt=1000.0",
+]
+
+[[command_blocks]]
+name = "setup_physical_configuration"
+commands = [
+    "set model MT=173.0",
+    "set model WT=0.0",
+    "set model ymt=173.0",
+]
+
+[[command_blocks]]
+name = "integrate"
+commands = [
+    "set process -p gg_hhh -i 2L defaults",
+    """set process -p gg_hhh -i 2L string '
+    [sampling]
+    graphs = "monte_carlo"
+    orientations = "monte_carlo"
+    lmb_multichanneling = true
+    lmb_channels = "monte_carlo"
+    coordinate_system = "spherical"
+    mapping = "linear"
+    b = 1.0
+    '""",
+    "display settings process -p gg_hhh -i 2L",
+
+    # Disable stability checks
+    # "set process -p gg_hhh -i 2L stability.rotation_axis []",
+
+    "set process -p gg_hhh -i 2L kv integrator.n_start=100 integrator.n_max=1000000",
+
+    """integrate --process gg_hhh -i 2L --n-cores 10
+        --workspace-path ./GL_OUTPUT/gg_hhh/2L/integration_workspace
+        --restart
+    """,
+
+]
+
+[default_runtime_settings.general]
+enable_cache = true
+debug_cache = false
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [
+   	[500.0, 0.0, 0.0, 500.0],
+   	[500.0, 0.0, 0.0, -500.0],
+    [0.4385555662246945e3, 0.1553322001835378e3, 0.3480160396513587e3, -0.1773773615718412e3],
+    [0.3563696374921922e3, -0.1680238900851100e2, -0.3187291102436005e3, 0.9748719163688098e2],
+    "dependent"
+]
+helicities = [
+    1,
+	1,
+	0,
+	0,
+	0
+]
+
+# Default "naive" parameterization
+# [default_runtime_settings.sampling]
+# graphs = "summed"
+# orientations = "summed"
+# lmb_multichanneling = false
+# lmb_channels = "summed"
+# coordinate_system = "spherical"
+# mapping = "linear"
+# b = 10.0
+
+## a) Tropical sampling run.
+# [default_runtime_settings.sampling]
+# graphs = "monte_carlo"
+# orientations = "summed"
+# lmb_multichanneling = false
+# lmb_channels = "summed"
+# coordinate_system = "tropical"
+
+##b) MC over LMB with explicit sum per sample point.
+#[default_runtime_settings.sampling]
+#graphs = "monte_carlo"
+#orientations = "summed"
+#lmb_multichanneling = true
+#lmb_channels = "summed"
+#coordinate_system = "spherical"
+#mapping = "linear"
+#b = 1.0
+
+##c) MC over LMB with importance sampling of channels
+[default_runtime_settings.sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "monte_carlo"
+coordinate_system = "spherical"
+mapping = "linear"
+b = 1.0
+
+##d) MC over LMB and single orientation per, both importance-sampled
+#[default_runtime_settings.sampling]
+#graphs = "monte_carlo"
+#orientations = "monte_carlo"
+#lmb_multichanneling = true
+#lmb_channels = "monte_carlo"
+#coordinate_system = "spherical"
+#mapping = "linear"
+#b = 1.0
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = false
+
+[cli_settings.global.generation.compile]
+compilation_mode = "assembly"
+optimization_level = "O3"
+fast_math = true
+unsafe_math = true
+custom = []
+
+[cli_settings.global.n_cores]
+feyngen = 10
+generate = 10
+compile = 10
+integrate = 10
+
+[cli_settings.global.generation.tropical_subgraph_table]
+panic_on_fail = true
+disable_tropical_generation = false
+
+[cli_settings.global.generation.evaluator]
+iterative_orientation_optimization = false
+store_atom = false
+compile = true
+summed = false
+summed_function_map = true
+
+# Disable thresholds with
+#[cli_settings.global.generation.threshold_subtraction]
+#enable_thresholds = false
+#[default_runtime_settings.subtraction]
+#disable_threshold_subtraction = true
+
+# Otherwise leave them enabled with
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = true
+# The option below specifies the generation of threshold for the kinematics supplied
+check_esurface_at_generation = true

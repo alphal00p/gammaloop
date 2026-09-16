@@ -1909,6 +1909,7 @@ dependencies = [
  "linnet",
  "serde",
  "serde_json",
+ "spenso",
  "symbolica",
  "thiserror 2.0.18",
 ]
@@ -2353,7 +2354,6 @@ dependencies = [
  "toml_writer",
  "tracing",
  "tracing-subscriber",
- "typed-index-collections",
  "winnow 0.7.15",
  "winnow 1.0.2",
  "zerocopy",

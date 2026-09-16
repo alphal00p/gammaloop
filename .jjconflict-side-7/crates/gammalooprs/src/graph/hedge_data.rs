@@ -161,10 +161,10 @@ impl From<&ParseHedgeData> for DotHedgeData {
             return DotHedgeData::default();
         };
 
-        // Linnet writes a hedge statement verbatim after `source=`/`sink=`. Keep
-        // the compact JSON5 payload inside a quoted DOT value so serialized
-        // finalized artifacts can be parsed again without relying on inference.
-        DotHedgeData::default().with_statement(format!("\"{{ufo_order:{order}}}\""))
+        // Linnet quotes hedge statements when writing `source=`/`sink=`. Keep
+        // the compact JSON5 payload unquoted here so serialized finalized
+        // artifacts can be parsed again without relying on inference.
+        DotHedgeData::default().with_statement(format!("{{ufo_order:{order}}}"))
     }
 }
 
@@ -190,6 +190,6 @@ mod tests {
         let serialized: DotHedgeData = (&parsed).into();
         let statement = serialized.statement.expect("statement should be present");
 
-        assert_eq!(statement, "\"{ufo_order:1}\"");
+        assert_eq!(statement, "{ufo_order:1}");
     }
 }

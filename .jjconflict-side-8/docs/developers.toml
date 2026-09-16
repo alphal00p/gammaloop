@@ -1,0 +1,1119 @@
+schema = 3
+title = "Developer architecture"
+summary = "Implementation notes, design proposals, performance investigations, and build-system records for contributors working on the αLoop codebase."
+
+[[owner]]
+id = "unassigned"
+name = "Ownership decision required"
+contact = "https://github.com/alphal00p/gammaloop/issues"
+
+[[section]]
+id = "implemented"
+title = "Implemented architecture"
+summary = "How the current runtime, physics layers, parsers, and symbolic engines are organized."
+
+[[section.note]]
+id = "gammaloop-architecture"
+title = "GammaLoop architecture"
+summary = "Application shell, domain core, state lifecycle, integration and event pipelines, persistence, concurrency, and tests."
+source = "docs/architecture/architecture-current.typ"
+kind = "System architecture"
+status = "Implemented"
+lifecycle = "current"
+owner = "unassigned"
+reviewed_at = "2026-08-18"
+review_ref = "c9f4e32acd2c"
+products = ["gammaloop", "feynkit"]
+topics = ["state", "python", "generation", "evaluation", "events", "integration", "persistence"]
+review_triggers = ["crates/feynkit*/**", "crates/gammaloop-api/src/**", "crates/gammaloop-api/python/**", "crates/gammalooprs/src/**"]
+
+[[section.note.scope]]
+path = "crates/gammaloop-api/src/state.rs"
+symbol = "gammaloop_api::state::State::load"
+anchor = "load_state_manifest(&save_path)?"
+# Reviewed 2026-09-16: state version 2 persists the canonical FeynKit model;
+# the architecture records the regeneration requirement for version-1 states.
+digest = "e3b78284267abe5437ffa07da95a46b9c26932d8"
+
+[[section.note.scope]]
+path = "crates/gammaloop-api/src/commands/integrate.rs"
+symbol = "gammaloop_api::commands::integrate::Integrate::default_workspace_path"
+anchor = "fn default_workspace_path(&self"
+# Reviewed 2026-09-14: fallible grid constructors changed only test fixtures;
+# integration-workspace and persistence boundaries remain unchanged.
+# No integration/dashboard impact 2026-09-16: graph-group selection now
+# receives the canonical model; persistence and terminal ownership are unchanged.
+digest = "d28eaf0cba490c361af167110d1919428c3f42ba"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/integrands/evaluation.rs"
+symbol = "gammalooprs::integrands::evaluation::EvaluationResult"
+anchor = "pub struct EvaluationResult {"
+digest = "e9dd13bbf6172e526731689a87d74c4d8ab8f356"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/integrands/process/mod.rs"
+symbol = "gammalooprs::integrands::process::ProcessIntegrand::warm_up"
+anchor = "pub fn warm_up(&mut self, model"
+# No architecture impact: the 2026-08-21 APIDOC-001 review only clarified the
+# momentum-input/precision contract, retained the legacy precision behavior,
+# and added regression coverage.
+# Reviewed 2026-09-14: canonical tensor layouts and fallible Symbolica APIs
+# preserve the documented warm-up and state-ownership boundaries.
+# Reviewed 2026-09-16: selection receives the canonical model and CFF IDs
+# come from FeynKit; warm-up and evaluator activation remain downstream.
+digest = "0c48cc1b8bcc09849bb727152e0a81f081e03fbc"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/observables/events.rs"
+symbol = "gammalooprs::observables::events::GenericEvent"
+anchor = "pub struct GenericEvent<T: FloatLike> {"
+digest = "0f9cc30132cbe0106c4354f5afbee4709debf4a8"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/observables/mod.rs"
+symbol = "gammalooprs::observables::EventProcessingRuntime"
+anchor = "pub struct EventProcessingRuntime {"
+# No event-ownership impact 2026-09-16: canonical model access and finite,
+# nonnegative jet-threshold validation preserve grouping and accumulation.
+digest = "6846b42ea24339e88e2cfb5dc51125cc80c657b4"
+
+[[section.note.scope]]
+path = "crates/gammaloop-api/src/python.rs"
+symbol = "gammaloop_api::python::GammaLoopAPI"
+anchor = "struct GammaLoopAPI {"
+# No architecture impact: the 2026-09-02 doctest correction only marks Python
+# examples as Python in rendered/exported documentation; binding behavior is unchanged.
+# Reviewed 2026-09-16: Python CFF uses FeynKit topology directly and runtime
+# graph imports require finalized artifacts, matching the ownership record.
+# No architecture impact 2026-09-16: next_back preserves last-graph
+# selection while avoiding traversal of the entire DOT graph iterator.
+digest = "1123477410465dbbc1a218c3ad612ca1c951f6ad"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/lib.rs"
+symbol = "gammalooprs module topology"
+anchor = "pub mod cff;"
+digest = "25cda2dff8fd5a5c01f6b00c42311089a120e503"
+
+[[section.note.scope]]
+# No-impact attestation 2026-08-28: tadpole-filter validation failures now
+# warn and reject the candidate instead of panicking; generation ownership and
+# the documented filtering pipeline are unchanged.
+path = "crates/feynkit-generator/src/generation.rs"
+symbol = "feynkit_generator::Generator::generate"
+anchor = "pub fn generate("
+# Reviewed 2026-09-14: Symbolica's graph/canonicalization API migration
+# preserves generation, filtering, and persistence ownership.
+# Reviewed 2026-09-16: the complete generation pipeline moved to FeynKit;
+# the architecture and this scope now follow its canonical owner.
+# Reviewed 2026-09-16: browser kernels use the same coloring pipeline serially;
+# native Rayon configuration and generation ownership remain unchanged.
+digest = "e8047e63496513083652d22d5ac1a22b5be1884b"
+
+[[section.note.scope]]
+path = "crates/feynkit-model/src/model.rs"
+symbol = "feynkit_model::Model"
+anchor = "pub struct Model {"
+# Reviewed 2026-09-16: the current architecture documents this standalone
+# FeynKit owner, with GammaLoop application state downstream.
+digest = "f5ee43a07152b48d75714103bfa70ed68be0e407"
+
+[[section.note.scope]]
+path = "crates/feynkit-graph/src/lib.rs"
+symbol = "feynkit_graph::FeynmanDiagram"
+anchor = "pub struct FeynmanDiagram {"
+# Reviewed 2026-09-16: the current architecture documents this standalone
+# FeynKit owner, with GammaLoop application state downstream.
+# Reviewed 2026-09-16: JSON and DOT parsing reuse exact registered symbol
+# declarations to preserve Symbolica 3 user data; graph ownership is unchanged.
+# Reviewed 2026-09-16: cut and threshold metadata decode JSON directly after
+# Linnet has removed DOT quoting; physical metadata ownership is unchanged.
+digest = "a50750961fe116cefbe751a931fa1da80ddc1db8"
+
+[[section.note.scope]]
+path = "crates/feynkit-tensor/src/lib.rs"
+symbol = "feynkit_tensor public reduction API"
+anchor = "mod orbit_projector;"
+# Reviewed 2026-09-16: the current architecture documents this standalone
+# FeynKit owner, with GammaLoop application state downstream.
+digest = "dcecd6de821a1f91a6db92fe1b8dc0f34ebb7fcb"
+
+[[section.note]]
+id = "integration-dashboard"
+title = "Integration dashboard architecture"
+summary = "Renderer-neutral status flow, Ratatui terminal ownership, suspend/shutdown behavior, keyboard controls, and verification boundaries."
+source = "docs/architecture/ratatui-integration-dashboard.typ"
+kind = "Runtime presentation architecture"
+status = "Implemented"
+lifecycle = "current"
+owner = "unassigned"
+reviewed_at = "2026-08-18"
+review_ref = "6feaba98e48a2cedb4688d3d0cc9a214716a8677"
+products = ["gammaloop"]
+topics = ["integration", "terminal", "ratatui", "status"]
+review_triggers = ["crates/gammaloop-api/src/commands/integrate.rs", "crates/gammalooprs/src/integrate/**"]
+
+[[section.note.scope]]
+path = "crates/gammaloop-api/src/commands/integrate.rs"
+symbol = "gammaloop_api::commands::integrate::dashboard_event_loop"
+anchor = "fn dashboard_event_loop(receiver"
+# Reviewed 2026-09-14: only grid constructors in test fixtures changed;
+# status flow, renderer ownership, and terminal lifecycle are unchanged.
+# No integration/dashboard impact 2026-09-16: graph-group selection now
+# receives the canonical model; persistence and terminal ownership are unchanged.
+digest = "d28eaf0cba490c361af167110d1919428c3f42ba"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/integrate/render_ratatui.rs"
+symbol = "gammalooprs::integrate::RatatuiDashboardState"
+anchor = "pub struct RatatuiDashboardState {"
+digest = "71ab92299354e389a83e7ba4f0f81f6ad1bbc41f"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/integrate/mod.rs"
+symbol = "gammalooprs::integrate"
+anchor = "mod render_ratatui;"
+# Reviewed 2026-09-14: test fixtures now unwrap fallible grid construction;
+# status flow and test assertions are unchanged.
+# No dashboard impact 2026-09-16: unit-volume fixtures use named empty
+# FeynKit models; production status flow and terminal ownership are unchanged.
+digest = "a374aa0ad93554f4b4842ab65a3776e0868483cc"
+
+[[section.note]]
+id = "uv-renormalization"
+title = "UV renormalization architecture"
+summary = "Orchestrator ownership, sign conventions, projections, disconnected composition, and current boundaries."
+source = "docs/architecture/uv-renormalization.typ"
+kind = "System architecture"
+status = "Implemented"
+lifecycle = "current"
+owner = "unassigned"
+reviewed_at = "2026-08-17"
+review_ref = "c9f4e32acd2c"
+products = ["gammaloop"]
+topics = ["uv", "renormalization"]
+review_triggers = ["crates/gammalooprs/src/uv/**", "crates/gammalooprs/src/graph/**"]
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/uv/orchestrator.rs"
+symbol = "gammalooprs::uv::UVOrchestrator"
+anchor = "impl UVOrchestrator {"
+# Reviewed 2026-09-14: comparison propagates canonicalization errors;
+# backend selection, returned legacy result, and UV invariants are unchanged.
+# No orchestrator impact 2026-09-16: the canonical model is passed through
+# both UV paths; forest dispatch and comparison semantics are unchanged.
+digest = "286c229322a3f7453c9ce7caefdd7e7438f81c2d"
+
+[[section.note]]
+id = "spenso-parsing-flow"
+title = "Spenso parsing flow"
+summary = "Dispatch, shorthand modes, structure inference, materialization, chain and trace expansion, and parser edge cases."
+source = "docs/architecture/parsing-flow.typ"
+kind = "Architecture diagram"
+status = "Implemented"
+lifecycle = "current"
+owner = "unassigned"
+reviewed_at = "2026-09-14"
+review_ref = "ab00e4917295883add11f9855734aaee1d56926f"
+products = ["spenso", "idenso"]
+topics = ["parsing", "tensor-network"]
+review_triggers = ["crates/spenso/src/network/parsing/**", "crates/idenso/src/tensor/mod.rs"]
+
+[[section.note.scope]]
+path = "crates/spenso/src/network/parsing/mod.rs"
+symbol = "spenso::network::parsing::ShorthandParsing"
+anchor = "pub enum ShorthandParsing {"
+# Reviewed 2026-09-14: the note now covers broadcast dispatch, nesting checks,
+# canonical structure extraction, and compact-vector materialization.
+digest = "9d626792d5f9fa5ab5840911832326cb8d02e782"
+
+[[section.note]]
+id = "schoonschip-network"
+title = "Schoonschip network architecture"
+summary = "Entry points, fixed-point execution, opaque parsing, contraction, settings, and comparison with pattern rewriting."
+source = "docs/architecture/schoonschip-net-parsing.typ"
+kind = "Architecture diagram"
+status = "Implemented"
+lifecycle = "current"
+owner = "unassigned"
+reviewed_at = "2026-09-14"
+review_ref = "ab00e4917295883add11f9855734aaee1d56926f"
+products = ["spenso", "idenso"]
+topics = ["parsing", "schoonschip", "rewrites"]
+review_triggers = ["crates/idenso/src/shorthands/schoonschip/**", "crates/spenso/src/network/**"]
+
+[[section.note.scope]]
+path = "crates/idenso/src/shorthands/schoonschip/api.rs"
+symbol = "idenso::shorthands::schoonschip::Schoonschip"
+anchor = "pub trait Schoonschip {"
+# Reviewed 2026-09-14: typed network errors are documented; opaque parsing,
+# contraction settings, and fixed-point execution remain unchanged.
+digest = "608eb6fd27a8463bc0bbfa6383c41db3a9e95000"
+
+[[section.note]]
+id = "gammaloop-draw-style-migration"
+title = "GammaLoop drawing style migration record"
+summary = "The implemented Typst callback architecture, canonical source locations, and the superseded design sketch that led to it."
+source = "docs/architecture/gammaloop-draw-style-migration-example.typ"
+kind = "Drawing architecture"
+status = "Implemented record"
+lifecycle = "current"
+owner = "unassigned"
+reviewed_at = "2026-08-15"
+review_ref = "395610143576"
+implemented_by = "395610143576"
+products = ["gammaloop", "linnet"]
+topics = ["drawing", "typst"]
+review_triggers = ["crates/gammaloop-api/src/commands/save.rs", "crates/gammaloop-api/src/templates.rs", "crates/gammalooprs/src/graph/parse/from_dot.rs", "crates/gammalooprs/src/model/mod.rs", "crates/linnest/typst/**", "assets/embedded/drawing/**"]
+
+[[section.note.scope]]
+# Reviewed 2026-08-28: GammaLoop now extracts its domain physics module from
+# its own template bundle; the extraction API and destination contract remain
+# unchanged.
+path = "crates/gammaloop-api/src/templates.rs"
+symbol = "gammaloop_api::templates::Assets::extract_templates"
+anchor = "pub fn extract_templates<P: AsRef<Path>>"
+# No-impact attestation 2026-09-11: the entire production source, including
+# extract_templates and its destination contract, is byte-identical to the
+# previous verified scope; only test coverage changed. The migration record's
+# current preface now names the style composer alongside its three adapters.
+# No-impact attestation 2026-09-16: the test module imports ModelGammaLoopExt
+# for the canonical model API; production template extraction is unchanged.
+digest = "140a80d416120a105cb96d30f922401115920170"
+
+[[section.note]]
+id = "gammaloop-drawing-architecture"
+title = "GammaLoop Drawing Architecture"
+summary = "The current GammaLoop/Linnest/Kurvst drawing pipeline, DOT data ownership and style callbacks, with the superseded evaluated-field proposal kept behind an explicit historical boundary."
+source = "docs/architecture/gammaloop-drawing-architecture.typ"
+kind = "Drawing architecture and syntax reference"
+status = "Partially current · reviewed 2026-08-18"
+lifecycle = "current"
+owner = "unassigned"
+reviewed_at = "2026-08-18"
+review_ref = "6feaba98e48a2cedb4688d3d0cc9a214716a8677"
+products = ["gammaloop", "linnet"]
+topics = ["drawing", "dot", "typst"]
+review_triggers = ["crates/gammaloop-api/src/commands/save.rs", "crates/gammaloop-api/src/templates.rs", "crates/gammalooprs/src/graph/parse/from_dot.rs", "crates/gammalooprs/src/model/mod.rs", "crates/linnet/src/**", "crates/linnest/src/**", "crates/linnest/typst/src/**", "crates/kurvst/src/**", "crates/kurvst/typst/src/**", "crates/clinnet/src/**", "assets/embedded/drawing/templates/**"]
+
+[[section.note.scope]]
+# Reviewed 2026-08-28: Linnest no longer re-exports GammaLoop's physics
+# template; the generic layout-sequence API remains unchanged.
+path = "crates/linnest/typst/src/lib.typ"
+symbol = "linnest::typst::layout-sequence"
+anchor = "#let layout-sequence = layouts.sequence"
+digest = "df4d9c7e162b3d67227e4d3fcd660b19a1bca0e0"
+
+[[section.note]]
+id = "spenso-symbolica-syntax-and-rewrites"
+title = "Spenso Symbolica Syntax And Rewrite Idioms"
+summary = "Implemented Spenso surface forms, tag-aware builders and patterns, and the Idenso pass boundaries used for static and dynamic algebraic rewrites."
+source = "docs/architecture/spenso-symbolica-syntax-and-rewrites.typ"
+kind = "Symbolic algebra implementation reference"
+status = "Implemented reference · reviewed 2026-09-14"
+lifecycle = "current"
+owner = "unassigned"
+reviewed_at = "2026-09-14"
+review_ref = "ab00e4917295883add11f9855734aaee1d56926f"
+products = ["spenso", "idenso"]
+topics = ["symbolica", "tensor syntax", "rewriting"]
+review_triggers = ["crates/spenso/src/network/parsing/**", "crates/spenso/src/shadowing/**", "crates/idenso/src/lib.rs", "crates/idenso/src/epsilon.rs", "crates/idenso/src/shorthands/**", "crates/idenso/src/dirac/**", "crates/idenso/src/color/**"]
+
+[[section.note.scope]]
+path = "crates/idenso/src/lib.rs"
+symbol = "idenso::IndexTooling"
+anchor = "pub trait IndexTooling {"
+# Reviewed 2026-09-14: tagged builders and dualizable dot syntax match the note,
+# which now records the shared chain/trace placeholder scope.
+digest = "270e4b9fcf762a8570acc1f2dc318e758a18b1f6"
+
+[[section.note]]
+id = "spenso-architecture"
+title = "Spenso implementation architecture"
+summary = "Tensor structures and payloads, direct contraction, network graph/store execution, Symbolica parsing, serialization and ownership boundaries, invariants, and tests."
+source = "docs/architecture/spenso-architecture.typ"
+kind = "System architecture"
+status = "Implemented · reviewed 2026-09-14"
+lifecycle = "current"
+owner = "unassigned"
+reviewed_at = "2026-09-14"
+review_ref = "ab00e4917295883add11f9855734aaee1d56926f"
+products = ["spenso"]
+topics = ["tensor structure", "contraction", "tensor network", "parallelism", "parsing", "serialization"]
+review_triggers = ["crates/spenso/Cargo.toml", "crates/spenso/src/structure.rs", "crates/spenso/src/structure/**", "crates/spenso/src/tensors/**", "crates/spenso/src/contraction.rs", "crates/spenso/src/contraction/**", "crates/spenso/src/network/**", "crates/spenso/src/shadowing/**", "crates/spenso/src/symbolic_parallelism.rs", "crates/spenso/src/symbolica_init.rs"]
+
+[[section.note.scope]]
+path = "crates/spenso/src/structure.rs"
+symbol = "spenso::structure::TensorStructure"
+anchor = "pub trait TensorStructure {"
+# No architecture impact: the 2026-08-21 APIDOC-105 review made the existing
+# slot-order, index-matching, and coordinate contracts explicit in Rustdoc.
+# Reviewed 2026-09-14: the note distinguishes canonical layouts from pending
+# index permutations and records backend features and portable attachments.
+digest = "a1af2993b3d34be7a209019820060d2215aa7eef"
+
+[[section.note.scope]]
+path = "crates/spenso/src/tensors/data.rs"
+symbol = "spenso::tensors::data::DataTensor"
+anchor = "pub enum DataTensor<T, I = OrderedStructure> {"
+# Reviewed 2026-09-14: payload ownership is unchanged; canonical layouts and
+# explicit storage reindexing replace the previous permuted wrapper.
+digest = "f0e8de6af46e1464919245b04739bb6c8fb20eb2"
+
+[[section.note.scope]]
+path = "crates/spenso/src/contraction.rs"
+symbol = "spenso::contraction::Contract blanket implementation"
+anchor = "impl<T, U, O> Contract<T> for U"
+# No architecture impact: the 2026-08-21 APIDOC-105 review documented the
+# implemented structural matching, result-storage, and error boundaries.
+digest = "1a6c276ef07e2ee5b1270f4b0302ba6540295894"
+
+[[section.note.scope]]
+path = "crates/spenso/src/network/mod.rs"
+symbol = "spenso::network::Network"
+anchor = "pub struct Network<S, LibKey, FunKey, Aind = AbstractIndex> {"
+# No architecture impact: the 2026-09-02 Rust 1.98 compatibility fix removes
+# an unused higher-ranked lifetime without changing the trait bound or behavior.
+# Reviewed 2026-09-14: the note now assigns live indices to graph edges;
+# graph/store separation and network execution ownership remain unchanged.
+digest = "f8d9f3e088578d9a99217ced000bf5120641e2cd"
+
+[[section.note.scope]]
+path = "crates/spenso/src/network/parsing/mod.rs"
+symbol = "spenso::network::parsing::ParseSettings"
+anchor = "pub struct ParseSettings {"
+# Reviewed 2026-09-14 alongside parsing-flow: broadcast dispatch, canonical
+# structures, compact vectors, and shared-placeholder nesting checks.
+digest = "9d626792d5f9fa5ab5840911832326cb8d02e782"
+
+[[section.note.scope]]
+path = "crates/spenso/src/symbolic_parallelism.rs"
+symbol = "spenso::symbolic_parallelism::SymbolicParallelism"
+anchor = "pub enum SymbolicParallelism {"
+# No architecture impact 2026-09-14: only the LicenseManager import path changed.
+# Reviewed 2026-09-16: Auto keeps browser symbolic work serial; native licensing
+# and explicit policy choices retain their documented behavior.
+digest = "f52c9ac14265f983c86c9affc9713970e6b28561"
+
+[[section.note]]
+id = "idenso-architecture"
+title = "Idenso implementation architecture"
+summary = "Representation and symbol initialization, symbolic tensor/network boundaries, rewrite families, Schoonschip execution, feature and serialization limits, index ownership, invariants, and tests."
+source = "docs/architecture/idenso-architecture.typ"
+kind = "System architecture"
+status = "Implemented · reviewed 2026-09-14"
+lifecycle = "current"
+owner = "unassigned"
+reviewed_at = "2026-09-14"
+review_ref = "ab00e4917295883add11f9855734aaee1d56926f"
+products = ["idenso"]
+topics = ["symbolica", "tensor identities", "rewriting", "schoonschip", "index ownership"]
+review_triggers = ["crates/idenso/Cargo.toml", "crates/idenso/src/lib.rs", "crates/idenso/src/representations.rs", "crates/idenso/src/rep_symbols.rs", "crates/idenso/src/tensor/**", "crates/idenso/src/shorthands/**", "crates/idenso/src/dirac/**", "crates/idenso/src/color/**", "crates/idenso/src/epsilon.rs", "crates/idenso/src/selective_expand.rs", "crates/idenso/src/cook.rs", "crates/idenso/src/python.rs"]
+
+[[section.note.scope]]
+path = "crates/idenso/src/representations.rs"
+symbol = "idenso::representations::initialize"
+anchor = "pub fn initialize() {"
+# Reviewed 2026-09-14: removed Python exposure of initialize; community-module
+# initialization still registers the same representations.
+digest = "6401f1b81469292511f6018715a4033b3ff38136"
+
+[[section.note.scope]]
+path = "crates/idenso/src/lib.rs"
+symbol = "idenso::IndexTooling"
+anchor = "pub trait IndexTooling {"
+# Reviewed 2026-09-14: typed structural errors and native/Wasm features are
+# documented; symbolic tensor and rewrite ownership remain unchanged.
+digest = "270e4b9fcf762a8570acc1f2dc318e758a18b1f6"
+
+[[section.note.scope]]
+path = "crates/idenso/src/cook.rs"
+symbol = "idenso::CookSettings"
+anchor = "pub struct CookSettings {"
+# No cooking-policy impact 2026-09-14: preserves_tags exposes existing settings
+# without changing selected tags or transformation behavior.
+digest = "7b8c40de4ed8d40b295ca43ebfc29710db34a585"
+
+[[section.note.scope]]
+path = "crates/idenso/src/tensor/mod.rs"
+symbol = "idenso::tensor::SymbolicTensor"
+anchor = "pub struct SymbolicTensor<Aind: AbsInd = AbstractIndex> {"
+# Reviewed 2026-09-14: documented typed expansion and execution errors;
+# symbolic tensor ownership and rewrite boundaries remain unchanged.
+digest = "8fc9129b46fcbed085b44179b1af80b76a5fb876"
+
+[[section.note.scope]]
+path = "crates/idenso/src/shorthands/schoonschip/settings.rs"
+symbol = "idenso::shorthands::schoonschip::SchoonschipSettings"
+anchor = "pub struct SchoonschipSettings {"
+digest = "6924df328f8de538c789d2b07b312508e7c87534"
+
+[[section.note]]
+id = "idenso-form-color-dirac-source-map"
+title = "Idenso FORM color and Dirac source map"
+summary = "FORM sources, Symbolica and Spenso target patterns, implementation mappings, historical validation commands, and unresolved provenance retained behind the concise public convention contract."
+source = "docs/architecture/idenso-form-color-dirac-source-map.typ"
+kind = "Implementation source map"
+status = "Mixed shipped evidence and target specification · reviewed 2026-08-21"
+lifecycle = "proposal"
+owner = "unassigned"
+reviewed_at = "2026-08-21"
+review_ref = "umvyopkm"
+products = ["idenso"]
+topics = ["FORM", "Dirac algebra", "color algebra", "Symbolica", "Spenso", "provenance"]
+review_triggers = ["crates/idenso/src/dirac/**", "crates/idenso/src/color/**", "docs/products/idenso/content/form-symbolica-color-and-dirac.typ"]
+
+[[section.note]]
+id = "linnet-architecture"
+title = "Linnet implementation architecture"
+summary = "Half-edge storage, subgraph views, mutation and DOT flows, feature and serialization boundaries, invariants, and verification."
+source = "docs/architecture/linnet-architecture.typ"
+kind = "System architecture"
+status = "Implemented · reviewed 2026-08-18"
+lifecycle = "current"
+owner = "unassigned"
+reviewed_at = "2026-08-18"
+review_ref = "28275fc5d5154faa43a19dba0233bacd0dafbf1f"
+products = ["linnet"]
+topics = ["half-edge", "subgraph", "dot", "serialization", "algorithms"]
+review_triggers = ["crates/linnet/src/lib.rs", "crates/linnet/src/half_edge.rs", "crates/linnet/src/half_edge/**", "crates/linnet/src/parser/**", "crates/linnet/src/permutation.rs", "crates/linnet/src/tree/**", "crates/linnet/src/union_find/**", "crates/linnet/src/drawing.rs", "crates/linnet/src/num_traits.rs", "crates/linnet/Cargo.toml"]
+
+[[section.note.scope]]
+# Documentation-impact attestation 2026-08-26: the architecture note now
+# documents exact node-store conversion, retained-history rejection, and
+# explicit empty-crown extraction.
+# Documentation-impact attestation 2026-08-28: the architecture note now
+# documents selectable directedness, history-safe topological traversal, and
+# bounded cycle/tadpole enumeration.
+path = "crates/linnet/src/half_edge.rs"
+symbol = "linnet::half_edge::HedgeGraph"
+anchor = "pub struct HedgeGraph<E, V, H = NoData, S: NodeStorage<NodeData = V> = DefaultNodeStore<V>> {"
+# No architecture impact: the 2026-08-21 APIDOC-002 review corrected the
+# public graph-invariant and DOT parsing documentation without changing behavior.
+digest = "a1c12db2c1f4cdd31650a2232b6b7a5831dfcf18"
+
+[[section.note.scope]]
+path = "crates/linnet/src/half_edge/involution.rs"
+symbol = "linnet::half_edge::involution::Involution"
+anchor = "pub struct Involution<E = EdgeIndex> {"
+# No architecture impact: the 2026-08-21 APIDOC-002 review corrected the
+# public involution invariants and terminology without changing behavior.
+# The 2026-08-27 serializer fix quotes endpoint statements without changing
+# graph invariants.
+digest = "2c3b0f19a5d4a991b493c75e3b0bb3294be302d6"
+
+[[section.note.scope]]
+path = "crates/linnet/src/half_edge/subgraph.rs"
+symbol = "linnet::half_edge::subgraph::SubGraphLike"
+anchor = "pub trait SubGraphLike: SubSetLike<Hedge> + Inclusion<HedgePair> {"
+digest = "05983dad9fdb3db00351c9e536a439ce48efd94b"
+
+[[section.note.scope]]
+# Documentation-impact attestation 2026-08-21: malformed DOT endpoint,
+# direction, and ID failures are now explicit parser errors, as documented by
+# the DOT interchange boundary in the architecture note.
+# Documentation-impact attestation 2026-08-26: the subsequent parser change is
+# a semantics-preserving Clippy rewrite of empty graph-name formatting.
+path = "crates/linnet/src/parser/mod.rs"
+symbol = "linnet::parser::DotGraph"
+anchor = "pub struct DotGraph<N: NodeStorage<NodeData = DotVertexData> = DefaultNodeStore<DotVertexData>> {"
+# No architecture impact: the 2026-08-21 APIDOC-002 review corrected the
+# documented DOT parser path, added a round trip, and qualified its macro link.
+# The 2026-08-26 serializer cleanup only omits empty attribute lists.
+# The 2026-08-27 regression covers canonical endpoint-statement escaping and
+# one-pass decoding of the reserved terminal-backslash transport.
+# No-impact attestation 2026-09-14: fixed-size byte chunks replace the
+# deprecated iterator in label decoding; the even-length guard and parsing
+# behavior are unchanged.
+digest = "ad1cf0bfc2cdffcff10c69ccc87c0495c025eecc"
+
+[[section.note]]
+id = "vakint-architecture"
+title = "Vakint implementation architecture"
+summary = "Topology construction, canonicalization and tensor-reduction flow, backend selection, external-process ownership, persistence boundaries, invariants, and tests."
+source = "docs/architecture/vakint-architecture.typ"
+kind = "System architecture"
+status = "Implemented · reviewed 2026-09-16"
+lifecycle = "current"
+owner = "unassigned"
+reviewed_at = "2026-09-16"
+review_ref = "2a2c9afe7417780d2102aaf5be6fb1860bb43651"
+products = ["vakint"]
+topics = ["topologies", "canonicalization", "tensor reduction", "FORM", "pySecDec"]
+review_triggers = ["crates/vakint/src/**", "crates/vakint/templates/**", "crates/vakint/form_src/**", "crates/vakint/build.rs", "crates/vakint/Cargo.toml"]
+
+[[section.note.scope]]
+path = "crates/vakint/src/lib.rs"
+symbol = "vakint::Vakint"
+anchor = "pub struct Vakint {"
+# Reviewed 2026-09-14: bind matcher conditions only to present wildcards;
+# reuse registered symbols and index atoms across FORM conversions to preserve metadata.
+# Topology ownership and the documented FORM conversion contracts are unchanged.
+# Reviewed 2026-09-14: stub collection keeps upstream numeric types in Symbolica;
+# Vakint's explicitly registered Python surface and evaluation contracts are unchanged.
+# Reviewed 2026-09-16: native FeynKit tensor reduction is now the default;
+# the architecture distinguishes it from the explicit legacy FORM backend.
+# No runtime impact 2026-09-16: generated API prose now distinguishes native
+# tensor reduction from backend evaluation and its deferred tool validation.
+digest = "01ac590244e65201faafacdd0af4004410cf8b49"
+
+[[section.note.scope]]
+path = "crates/vakint/src/topologies.rs"
+symbol = "vakint::topologies::Topologies::match_topologies_to_user_input"
+anchor = "pub fn match_topologies_to_user_input("
+# Reviewed 2026-09-14: the new solution-set API still requires one fully
+# determined loop-basis solution; matching and replacement mappings are unchanged.
+digest = "7a1dcd23ff9116de1ec3e3a4150e81400cdf552f"
+
+[[section.note.scope]]
+path = "crates/vakint/src/graph.rs"
+symbol = "vakint::graph::Graph::new_from_atom"
+anchor = "pub fn new_from_atom("
+digest = "39e48cf8f2a5f368b6eac525e5b2e19ebe41854e"
+
+[[section.note.scope]]
+path = "crates/vakint/src/symbolica_community_module/mod.rs"
+symbol = "vakint::symbolica_community_module::VakintWrapper"
+anchor = "pub struct VakintWrapper {"
+# No architecture impact: the 2026-08-21 APIDOC-005 review made the Python
+# wrapper contracts and required tool boundaries explicit without changing behavior.
+# Reviewed 2026-09-16: Python selects the tensor backend and defers external
+# tool validation until an operation needs it, as recorded in the architecture.
+# No runtime impact 2026-09-16: generated API prose now distinguishes native
+# tensor reduction from backend evaluation and its deferred tool validation.
+digest = "c9dc2fcdb924175ef43304c93ddf2a88543fd412"
+
+[[section.note]]
+id = "cff-surface-cache-ownership"
+title = "CFF surface-cache ownership"
+summary = "Implemented FeynKit CFF ownership, shared surface arenas, and expression-specific surface invariants."
+source = "docs/architecture/cff-surface-cache-ownership.typ"
+kind = "Architecture"
+status = "Implemented"
+lifecycle = "current"
+owner = "unassigned"
+reviewed_at = "2026-09-16"
+review_ref = "2a2c9afe7417780d2102aaf5be6fb1860bb43651"
+products = ["gammaloop", "feynkit"]
+topics = ["cff", "cache", "ownership"]
+review_triggers = ["crates/feynkit-cff/**", "crates/gammalooprs/src/**/cff*", "crates/gammalooprs/src/graph/**"]
+
+[[section.note.scope]]
+path = "crates/feynkit-cff/src/generation.rs"
+symbol = "feynkit_cff::CffGenerator::generate_into"
+anchor = "pub fn generate_into("
+digest = "e87245d72729848f925f6144b6a37aa65ee724f0"
+
+[[section.note.scope]]
+path = "crates/feynkit-cff/src/expression.rs"
+symbol = "feynkit_cff::CffExpression"
+anchor = "pub struct CffExpression {"
+digest = "22fbe168db1fc1e94241cd87507cd182e76f39a4"
+
+[[section.note.scope]]
+path = "crates/feynkit-cff/src/surface.rs"
+symbol = "feynkit_cff::SurfaceCache"
+anchor = "pub struct SurfaceCache {"
+digest = "e35249fe2ae3d1ed12cd9c5059e7a9f42f56eb51"
+
+[[section]]
+id = "proposals"
+title = "Design proposals"
+summary = "Possible changes that are deliberately kept separate from the implemented architecture."
+
+[[section.note]]
+id = "gammaloop-roadmap"
+title = "GammaLoop architecture roadmap"
+summary = "Candidate service boundaries, cache sessions, pipeline unification, error handling, orchestration, and observability improvements."
+source = "docs/architecture/architecture-ideas.typ"
+kind = "Design proposal"
+status = "Proposal"
+lifecycle = "proposal"
+owner = "unassigned"
+reviewed_at = "2026-08-17"
+review_ref = "c9f4e32acd2c"
+products = ["gammaloop"]
+topics = ["architecture", "roadmap"]
+review_triggers = ["crates/gammaloop-api/src/**", "crates/gammalooprs/src/**"]
+
+[[section]]
+id = "investigations"
+title = "Engineering investigations"
+summary = "Dated measurements and diagnostic records. Treat their results as experiment context, not timeless API guarantees."
+
+[[section.note]]
+id = "gammaloop-drawing-evaluated-fields-history"
+title = "GammaLoop Evaluated-Field Proposal"
+summary = "The superseded proposal for executable Typst fields in DOT drawing data, preserved separately from the maintained callback-based drawing architecture."
+source = "docs/architecture/gammaloop-drawing-evaluated-fields-history.typ"
+kind = "Superseded drawing proposal"
+status = "Archived · superseded"
+lifecycle = "archived"
+owner = "unassigned"
+implemented_by = "gammaloop-drawing-architecture"
+superseded_by = "gammaloop-drawing-architecture"
+products = ["gammaloop", "linnet"]
+topics = ["drawing", "dot", "typst", "implementation-history"]
+
+[[section.note]]
+id = "bnl-benchmark-investigation"
+title = "BNL Benchmark Investigation"
+summary = "A 2026-05-25 threshold-subtraction and four-mass integration study whose cards and graph remain, but whose generated states, workspaces, command blocks, and result logs are absent."
+source = "docs/architecture/bnl-benchmark-investigation.typ"
+kind = "Performance investigation · 2026-05-25"
+status = "Archived · non-reproducible"
+lifecycle = "archived"
+owner = "unassigned"
+captured_at = "2026-05-25"
+evidence_revision = "4fdbf430b29edd24b9e1292c07ab24a151427dc7"
+products = ["gammaloop"]
+topics = ["performance", "bnl", "threshold-subtraction", "integration"]
+
+[[section.note]]
+id = "bnl-contraction-order-performance"
+title = "BNL Contraction Order Performance Notes"
+summary = "A 2026-05-27 to 2026-05-28 contraction-order comparison with retained input atoms and example code, but incomplete machine and dependency controls."
+source = "docs/architecture/bnl-contraction-order-performance.typ"
+kind = "Performance investigation · 2026-05-27 to 2026-05-28"
+status = "Archived · partially reproducible"
+lifecycle = "archived"
+owner = "unassigned"
+captured_at = "2026-05-27 to 2026-05-28"
+evidence_revision = "4fdbf430b29edd24b9e1292c07ab24a151427dc7"
+evidence_command = "cargo run -p gammalooprs --example bnl_evaluator_atom_mwe --profile dev-optim -- examples/cli/BNL/profiling/bnl_integrated_evaluator_atom_exact.sym first:1 --alias-scalars 4096 --contraction-order sparse-atom-aware"
+products = ["gammaloop"]
+topics = ["performance", "bnl", "contraction-order", "tensor-network"]
+
+[[section.note]]
+id = "bnl-scalar-alias-capture"
+title = "BNL Scalar Alias Capture"
+summary = "An undated four-alias evaluator rendering preserved as a concise provenance page plus a hashed ANSI data artifact instead of 9,500 lines of authored prose."
+source = "docs/architecture/bnl-scalar-alias-capture.typ"
+kind = "Raw evaluator evidence · undated"
+status = "Archived raw capture"
+lifecycle = "archived"
+owner = "unassigned"
+captured_at = "undated"
+evidence_revision = "4fdbf430b29edd24b9e1292c07ab24a151427dc7"
+products = ["gammaloop"]
+topics = ["bnl", "evaluator", "scalar-aliasing", "raw-output"]
+
+[[section.note]]
+id = "aa-aa-three-loop-performance-smoke"
+title = "Three-Loop aa to aa Performance Smoke"
+summary = "A 2026-06-15 generation and integration smoke record with retained cards, DOTs, scripts, and CSV summaries, explicit missing-state boundaries, and a warning for 400--570 GiB attempts."
+source = "docs/architecture/aa-aa-three-loop-performance-smoke.typ"
+kind = "Performance investigation · 2026-06-15"
+status = "Archived · partially reproducible"
+lifecycle = "archived"
+owner = "unassigned"
+captured_at = "2026-06-15"
+evidence_revision = "4fdbf430b29edd24b9e1292c07ab24a151427dc7"
+products = ["gammaloop"]
+topics = ["performance", "three-loop", "integration", "memory"]
+
+[[section.note]]
+id = "network-simplification"
+title = "Network simplification status"
+summary = "Direct sum contraction behavior, profiling controls, current bottlenecks, reproduction commands, and open experiments."
+source = "docs/architecture/network-simplification-status.typ"
+kind = "Performance investigation"
+status = "Investigation record"
+lifecycle = "investigation"
+owner = "unassigned"
+products = ["spenso", "idenso"]
+topics = ["performance", "network-execution"]
+
+[[section.note]]
+id = "spenso-large-expressions"
+title = "Spenso large-expression pathology record"
+summary = "A superseded large-input investigation whose root fixtures and controls are no longer present; retained as historical evidence."
+source = "docs/architecture/spenso-large-expression-pathology.typ"
+kind = "Performance investigation"
+status = "Superseded investigation"
+lifecycle = "superseded"
+owner = "unassigned"
+superseded_by = "network-simplification"
+products = ["spenso", "idenso"]
+topics = ["performance", "large-expressions"]
+
+[[section.note]]
+id = "spenso-improvement-effects"
+title = "Spenso large-input improvement effects"
+summary = "A historical timing matrix whose branch, fixture, test, and environment controls no longer exist in the current checkout."
+source = "docs/architecture/spenso-large-input-improvement-effects.typ"
+kind = "Performance investigation"
+status = "Historical experiment"
+lifecycle = "archived"
+owner = "unassigned"
+products = ["spenso", "idenso"]
+topics = ["performance", "large-input"]
+
+[[section.note]]
+id = "spenso-test-baseline"
+title = "Spenso network execution test baseline"
+summary = "An archived test/timeout record with unresolved revision and removed tests; preserved as non-reproducible evidence only."
+source = "docs/architecture/spenso-network-execution-test-baseline.typ"
+kind = "Test baseline · 2026-05-05"
+status = "Archived · non-reproducible"
+lifecycle = "archived"
+owner = "unassigned"
+captured_at = "2026-05-05"
+products = ["spenso", "idenso", "gammaloop"]
+topics = ["testing", "network-execution"]
+
+[[section.note]]
+id = "bnl-evaluator-atom-capture"
+title = "BNL evaluator-atom capture"
+summary = "An undated GammaLoop 0.3.3 evaluator-atom output capture retained as non-reproducible BNL performance evidence, with its missing controls made explicit."
+source = "docs/architecture/bnl-evaluator-atom-capture.typ"
+kind = "Performance evidence · undated"
+status = "Archived · non-reproducible"
+lifecycle = "archived"
+owner = "unassigned"
+products = ["gammaloop"]
+topics = ["performance", "bnl", "evaluator"]
+evidence_command = "cargo run -p gammalooprs --example bnl_evaluator_atom_mwe --profile dev-optim -- examples/cli/BNL/profiling/bnl_integrated_evaluator_atom_unfiltered_pre_network.sym --alias-scalars 8"
+
+[[section.note]]
+id = "uv-scalar-profile-benchmark"
+title = "UV scalar profile benchmark notes"
+summary = "A 2026-05-18 dev-optim profiling record for UV scalar tests, preserved with its removed extraction hooks and missing revision controls made explicit."
+source = "docs/architecture/uv-scalar-profile-benchmark.typ"
+kind = "Performance investigation · 2026-05-18"
+status = "Archived · partially reproducible"
+lifecycle = "archived"
+owner = "unassigned"
+captured_at = "2026-05-18"
+products = ["gammaloop"]
+topics = ["performance", "uv"]
+
+[[section.note]]
+id = "ci-test-failure-summary-2026-03-25"
+title = "CI test failure summary"
+summary = "A 2026-03-25 workspace failure inventory retained as historical triage evidence rather than a current CI status page."
+source = "docs/architecture/ci-test-failure-summary-2026-03-25.typ"
+kind = "CI investigation · 2026-03-25"
+status = "Archived investigation"
+lifecycle = "archived"
+owner = "unassigned"
+captured_at = "2026-03-25"
+products = ["gammaloop", "linnet", "spenso", "idenso", "vakint"]
+topics = ["ci", "testing"]
+
+[[section.note]]
+id = "network-execution-rebase-record"
+title = "Network execution rebase record"
+summary = "A trace-label-indexed record of changes preserved during the symbolic-network-simplify-v2 rebase, retained as implementation history rather than current guidance."
+source = "docs/architecture/network-execution-rebase-record.typ"
+kind = "Implementation history"
+status = "Archived record"
+lifecycle = "archived"
+owner = "unassigned"
+products = ["spenso", "idenso"]
+topics = ["network-execution", "implementation-history"]
+
+[[section.note]]
+id = "ratatui-integration-dashboard-history"
+title = "Ratatui integration dashboard implementation history"
+summary = "The design plan and chronological implementation notes that led to the maintained integration dashboard architecture."
+source = "docs/architecture/ratatui-integration-dashboard-history.typ"
+kind = "Implementation history"
+status = "Archived record"
+lifecycle = "archived"
+owner = "unassigned"
+implemented_by = "crates/gammaloop-api/src/commands/integrate.rs"
+products = ["gammaloop"]
+topics = ["integration", "ratatui", "implementation-history"]
+
+[[section]]
+id = "build-system"
+title = "Build system"
+summary = "Contributor-facing architecture for reproducible builds and continuous integration."
+
+[[section.note]]
+id = "ci"
+title = "CI maintenance and measurements"
+summary = "The maintained local-check/upload workflow, per-crate cache boundaries, validated measurements, branch migration and CI log reporting."
+source = "docs/architecture/ci.typ"
+kind = "Build engineering"
+status = "Current guide"
+lifecycle = "current"
+owner = "unassigned"
+reviewed_at = "2026-09-14"
+review_ref = "2a7401d884db70c522fd9504619412f01ebb2314"
+products = ["gammaloop"]
+topics = ["nix", "ci", "cache", "testing"]
+review_triggers = ["flake.nix", "flake.lock", "nix/**", "nix-ci.nix", "just/ci.just", ".github/scripts/ci-report.mjs", "CONTRIBUTING.typ"]
+
+[[section.note.scope]]
+path = "just/ci.just"
+symbol = "CI checks, uploads and reporting commands"
+anchor = "ci-checks-and-upload:"
+digest = "6d071c5b21aa0364e7aa97aecfbdb3ccf1f5bdc1"
+
+[[section.note]]
+id = "nix-crane-cache-reuse"
+title = "Nix and Crane artifact reuse"
+summary = "Historical Rust CI cache experiments and the maintained documentation producer and live-watcher cache contract; current Rust CI guidance is recorded separately."
+source = "docs/architecture/nix-crane-cache-reuse.typ"
+kind = "Build engineering"
+status = "Living engineering record"
+lifecycle = "current"
+owner = "unassigned"
+reviewed_at = "2026-09-14"
+review_ref = "2a7401d884db70c522fd9504619412f01ebb2314"
+products = ["gammaloop"]
+topics = ["nix", "ci", "cache", "documentation"]
+review_triggers = ["flake.nix", "flake.lock", "nix/**", "nix-ci.nix", ".github/workflows/**", "crates/gammaloop-workspace-hack/**", "crates/alphal00p-docs-builder/**", "justfile"]
+
+[[section.note.scope]]
+# Documentation-impact attestation 2026-08-26: the CI repair completes the
+# documented per-package archive/runtime-source boundary by staging the exact
+# documentation sources and tools, restoring vendored Cargo configuration,
+# extracting archives into the reconstructed workspace root, and isolating the
+# Python stub exporter from the feature-unified workspace doctest pass.
+path = "nix/documentation.nix"
+symbol = "documentationRegistry and alphal00pDocsCargoArtifacts"
+anchor = "documentationRegistry = builtins.fromTOML"
+end_anchor = "# Exercise the embedded Typst watcher"
+# Reviewed after terminal archives gained writable artifacts and runtime Cargo
+# gained the same vendored graph as their compile phase. The docs archive now
+# carries its authored runtime inputs and rendering/provenance tools. Latest and
+# snapshot renders remain isolated, cacheable jobs consumed by a merge-only
+# route check whose assertions match full-site relative URLs. The docs test
+# runner supplies deterministic provenance and an isolated temporary root.
+# No cache-architecture impact: deprecated platform aliases now use hostPlatform.
+# No cache-architecture impact: the documentation source filter includes the
+# double-triangle test fixture consumed by the deterministic About-page SVG.
+# The snapshot gate now also verifies stale routes are pruned while published
+# product channels survive; this does not change the documented cache graph.
+# Its Kurvst assertion follows the generated deployment-relative product link.
+# No cache-architecture impact 2026-08-28: the source filters follow the
+# GammaLoop-owned layout and physics templates for split Clinnet tests and
+# stage the linked Python-only custom-theme example for documentation builds;
+# the final docs assertion follows the replacement domain-templates route.
+# Reviewed 2026-08-28: typst-py 0.15 and its preview-package cache extend
+# only the terminal Linnet Python/docs runtime closure, as documented; the
+# reusable Cargo producer boundary is unchanged.
+# Reviewed 2026-08-31: linnet-py's production source closure now includes its
+# embedded Linnest/Kurvst and pinned CeTZ/oxifmt renderer assets. This makes the
+# standalone wheel independent of Clinnet and the external documentation
+# package cache; the assets intentionally key producers that compile linnet-py
+# and remain excluded from unrelated per-crate producer source sets.
+# Reviewed 2026-08-31: the same terminal source closure now carries the MIT
+# notices embedded with linnet-py, Linnest, and Kurvst. This changes packaging
+# inputs but not the producer partition or cache-reuse architecture.
+# No producer-boundary impact 2026-09-11: streaming/WASM examples and tests
+# extend the terminal documentation closure; the separately pinned docs Typst,
+# Roboto package, and renamed Typst-plugin features leave the reusable
+# Cargo producer ownership unchanged. The note separately records the Pages
+# workflow's new notebook export after the static Nix documentation build.
+# No-impact attestation 2026-09-14: the only change since the verified flake
+# adds gitMinimal to the development shell for documentation provenance lookup.
+# Cargo producer inputs, artifact ownership, and cache boundaries are unchanged.
+# Reviewed 2026-09-14: verified ranges now cover the documentation producer,
+# its source ownership and terminal consumers separately. Development-shell
+# packages fall outside those ranges; broader review triggers remain advisory.
+# Reviewed 2026-09-14 during PR108 rebase: retain documentation source and
+# runtime ownership while moving Rust, documentation and CI composition apart.
+# Reviewed 2026-09-15: remove the obsolete Symbolica compile-time license marker.
+# Terminal renders still receive SYMBOLICA_LICENSE at runtime; producer ownership
+# and cache boundaries are unchanged.
+digest = "6b54956c8f5d60d16d8b72cbf68a7fa6b33aa147"
+
+[[section.note.scope]]
+path = "nix/documentation.nix"
+symbol = "documentation source ownership"
+# Reviewed 2026-09-14: linked notebook sources belong to both latest and
+# snapshot renders, whose source-link validation reads the staged repository.
+anchor = "repositoryDocumentationSources ="
+end_anchor = "documentationRegistry = builtins.fromTOML"
+# Reviewed 2026-09-16: FeynKit joins the existing product pipeline, including
+# shared package/docs stub validation and complete latest/snapshot bundles.
+# Reviewed 2026-09-16: stage the Python sources linked from the FeynKit guides.
+# Reviewed 2026-09-16: stage linked community showcase sources with existing documentation inputs.
+digest = "a589702389ce064928e06ea0973cd3cc59e0ea94"
+
+[[section.note.scope]]
+path = "nix/rust-workspace.nix"
+symbol = "workspace manifest inputs; documentation source inputs are scoped separately"
+anchor = "workspaceDependencyManifestFiles ="
+end_anchor = "cargoGraphGenerationSrc ="
+digest = "7afb2c4ba546f25ebacc08818b3692760e1f1e39"
+
+[[section.note.scope]]
+path = "nix/rust-workspace.nix"
+symbol = "workspace package source ownership"
+# Reviewed 2026-09-14: Clinnet include_str fixtures are compile-time inputs
+# shared with aggregate checks and remapped test execution; docs tests carry
+# the notebook sources linked from their generated pages.
+# Reviewed 2026-09-14: Spynso's embedded Typst files now belong to its
+# production sources, including dependent crate builds. The maintained CI
+# guide records this input boundary and the restored binding-test coverage.
+anchor = "documentationCatalogAnnotatedItemSourcePaths ="
+end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
+# No documentation-cache impact 2026-09-16: FeynKit compile-time fixtures
+# and embedded renderer assets follow their package source ownership.
+# Reviewed 2026-09-16: stage the Python sources linked from the FeynKit guides.
+# Reviewed 2026-09-16: stage linked community showcase sources with existing documentation inputs.
+# Reviewed 2026-09-16: embed the pinned Typst packages for offline FeynKit rendering.
+digest = "d393637bcb7762ccd0e30f5ccdb4f9cffd8e6c82"
+
+[[section.note.scope]]
+path = "nix/documentation.nix"
+symbol = "alphal00pDocsDerivationArgs and terminal documentation consumers"
+anchor = "alphal00pDocsDerivationArgs ="
+end_anchor = "\nin\n{\n  inherit"
+# Reviewed 2026-09-14: Git and Jujutsu provide checkout provenance;
+# archive builds retain explicit revision and timestamp inputs.
+# Reviewed 2026-09-14: the terminal Python closure supplies pinned Typst;
+# Cargo builds its wheel offline and uv installs it without resolving the
+# inherited Nix packages. The reusable Cargo producer boundary is unchanged.
+# Reviewed 2026-09-14: terminal renders receive runtime Symbolica licensing;
+# the reusable Cargo producer inputs remain unchanged.
+# Reviewed 2026-09-16: FeynKit joins the existing product pipeline, including
+# shared package/docs stub validation and complete latest/snapshot bundles.
+# Reviewed 2026-09-16: historical redirect assertions apply to the original
+# five products; new FeynKit bundles publish only their canonical routes.
+digest = "ac6786f72c31fb585f2033d0ee0de0edbfcb4975"
+
+[[section.note.scope]]
+path = "nix/rust-workspace.nix"
+symbol = "nextestPackageGroups documentation runtime tools"
+anchor = "nextestPackageGroups ="
+end_anchor = "sortedUnique ="
+# Reviewed 2026-09-14: documentation provenance tests exercise standalone
+# Jujutsu workspaces; the terminal test closure supplies both Git and Jujutsu.
+digest = "66f700580ce13b9eaee90fe0111639e46968c531"
+
+[[section.note.scope]]
+path = "nix/rust-workspace.nix"
+symbol = "nextestRuntimeSrcFor"
+anchor = "nextestRuntimeSrcFor ="
+end_anchor = "nextestFeatureArgsFor ="
+digest = "e70efccc2a78b7ab7b002facfefa375418e590f0"
+
+[[section.note.scope]]
+path = "crates/alphal00p-docs-builder/src/typst_render.rs"
+symbol = "alphal00p_docs_builder::typst_render::PersistentTypstRenderer"
+anchor = "pub(crate) struct PersistentTypstRenderer {"
+end_anchor = "    #[cfg(test)]\n    mod tests {"
+# Reviewed feature-notice deduplication; source diagnostics still emit every time.
+digest = "9e60895405ff95f51fc80b64c90ec08fcb124f72"
+
+[[section.note.scope]]
+path = "crates/alphal00p-docs-builder/src/watch.rs"
+symbol = "alphal00p_docs_builder::SiteBuilder::build_generation"
+anchor = "fn build_generation("
+end_anchor = "fn refresh_initial_api("
+# Reviewed cache-only execution change: Typst edits retain exhaustive
+# validation while reusing atomically published component catalogues.
+# Reviewed 2026-09-14: watch generations now warn on verified-content drift;
+# malformed scopes and ordinary check/build publication remain strict.
+digest = "424eac149bd4dbf3be82b19f746d6f003829cf61"
+
+[[section.note.scope]]
+path = "nix/ci.nix"
+symbol = "documentation test group coverage"
+anchor = 'name = "docs";'
+end_anchor = 'name = "integration";'
+digest = "2084c83a58875b3ae7563ef5e4adb7408fec0ccb"
+
+[[section]]
+id = "documentation"
+title = "Documentation system"
+summary = "Quality reviews and improvement plans for the manuals, developer notes, validation, navigation, and publishing pipeline."
+
+[[section.note]]
+id = "architecture-notes"
+title = "Architecture notes"
+summary = "How contributor architecture records are classified, reviewed, scoped, superseded, and kept separate from supported product interfaces."
+source = "docs/architecture/architecture.typ"
+kind = "Contributor documentation policy"
+status = "Current guide"
+lifecycle = "current"
+owner = "unassigned"
+reviewed_at = "2026-09-10"
+review_ref = "ymkkxtzp"
+products = ["gammaloop", "linnet", "spenso", "idenso", "vakint"]
+topics = ["documentation", "architecture", "governance"]
+review_triggers = ["docs/developers.toml", "crates/alphal00p-docs-builder/src/lib.rs", "CONTRIBUTING.typ"]
+
+[[section.note.scope]]
+path = "crates/alphal00p-docs-builder/src/lib.rs"
+symbol = "alphal00p_docs_builder::SiteBuilder::check_with_catalogs (developer registry validation)"
+anchor = "self.developers.schema == DEVELOPER_SCHEMA_VERSION,"
+end_anchor = "!self.portal.title.trim().is_empty()"
+# Reviewed snapshot-link and Rustdoc-normalization changes: semantic Typst pages
+# remain separate from presentation; Rust resolves channels and validates links.
+# Reviewed citation-page removal: the documented route inventory is updated;
+# registry lifecycle, scope validation, and build ownership are unchanged.
+# Reviewed maintenance advisories: docs-check reports them explicitly; all
+# build paths still enforce registry, scope, catalogue, and link validity.
+# No documentation-system architecture impact: the getting-started guides use the
+# existing registry, Typst renderer, example harness, and generated navigation pipeline.
+# No-impact attestation: collision-safe Python symbol routes change generated
+# API navigation only; architecture-note lifecycle enforcement is unchanged.
+# Snapshot validation checks intentional developer links to the deployed latest
+# tree against the same generated route without changing publication topology.
+# Its validation-state grouping is a Clippy-only refactor with identical behavior.
+# Snapshot candidates are now normalized before immutable comparison, replace
+# stale global output, and retain existing product channels and snapshot tags.
+# No documentation-system architecture impact 2026-08-28: portal dependency
+# validation follows the GammaLoop-owned template path, and generated Linnet
+# navigation describes domain templates instead of the removed physics route.
+# No lifecycle-policy impact 2026-09-11: the source changes update GammaLoop
+# rendering tests and exclude top-level generated dist exports from authored
+# prose discovery. Verified-scope enforcement and developer HTML restrictions
+# remain byte-identical to the previous reviewed implementation.
+# Reviewed 2026-09-14: verified ranges hash exact selected content. Watch
+# generations warn on digest drift while check/build still reject it; malformed
+# scopes, missing symbols, and invalid metadata remain errors in every mode.
+digest = "947d9b81a8cf58b29e83da1ccb75fb015517c0eb"
+
+[[section.note]]
+id = "documentation-improvement-plan"
+title = "Documentation quality review and improvement plan"
+summary = "A critical review and phased plan for truthful Python/CLI reference, deeper manuals/examples, an integrated corpus, verified developer architecture, and measurable quality gates."
+source = "docs/architecture/documentation-improvement-plan.typ"
+kind = "Documentation strategy"
+status = "In progress"
+lifecycle = "proposal"
+owner = "unassigned"
+reviewed_at = "2026-08-19"
+review_ref = "6feaba98e48a2cedb4688d3d0cc9a214716a8677"
+products = ["gammaloop", "linnet", "spenso", "idenso", "vakint"]
+topics = ["documentation", "quality"]
+review_triggers = ["docs/**", "crates/alphal00p-docs-*/**", ".github/workflows/docs-pages.yml", "flake.nix", "justfile"]
+
+[[section.note]]
+id = "manual-content-debt-register"
+title = "Manual content debt register"
+summary = "A maintained inventory of audience, scientific-explanation, workflow, terminology, result-interpretation, and product-handoff gaps in the authored manuals."
+source = "docs/architecture/manual-content-debt-register.typ"
+kind = "Documentation debt register"
+status = "Open · reviewed 2026-08-21"
+lifecycle = "proposal"
+owner = "unassigned"
+reviewed_at = "2026-08-21"
+review_ref = "4e77d8804aa3394992572575dab5d3f9dedf65a9"
+products = ["gammaloop", "linnet", "spenso", "idenso", "vakint"]
+topics = ["documentation", "manuals", "physics", "workflows", "examples"]
+review_triggers = ["docs/products/**", "docs/examples.toml", "docs/products/registry.toml", "docs/data/publications.json", "examples/**", "crates/linnest/typst/docs/**", "crates/kurvst/typst/docs/**", "crates/**/CHANGELOG.typ", "crates/**/README.md"]
+
+[[section.note]]
+id = "api-documentation-debt-register"
+title = "API documentation debt register"
+summary = "A maintained inventory of inaccurate, incomplete, provisional, and example-deficient Rust and Python reference surfaces, with stable IDs and completion conditions."
+source = "docs/architecture/api-documentation-debt-register.typ"
+kind = "Documentation debt register"
+status = "Open · reviewed 2026-08-21"
+lifecycle = "proposal"
+owner = "unassigned"
+reviewed_at = "2026-08-21"
+review_ref = "4e77d8804aa3394992572575dab5d3f9dedf65a9"
+products = ["gammaloop", "linnet", "spenso", "idenso", "vakint"]
+topics = ["documentation", "rustdoc", "python", "api", "examples"]
+review_triggers = ["flake.nix", "crates/gammalooprs/src/**", "crates/gammaloop-api/src/**", "crates/linnet/src/**", "crates/linnet-py/src/**", "crates/linnest/src/**", "crates/spenso/src/**", "crates/spenso-hep-lib/src/**", "crates/spenso-macros/src/**", "crates/spynso3/src/**", "crates/idenso/src/**", "crates/vakint/src/**", "docs/api/python/**", "docs/products/**", "docs/examples.toml", "crates/alphal00p-docs-catalogs/src/**", "crates/alphal00p-docs-examples/**", "crates/alphal00p-docs-python-exporter/src/**"]

@@ -21,7 +21,7 @@ selectors and run the affected cell with its play button.
 #context if target() == "html" {
   html.elem("div", attrs: (
     class: "live-notebook",
-    "data-linnet-notebook": "rendering_api",
+    "data-notebook": "rendering_api",
     "aria-label": "Linnet Python rendering notebook",
   ))[
     #html.elem("p", attrs: (class: "live-notebook-fallback"))[

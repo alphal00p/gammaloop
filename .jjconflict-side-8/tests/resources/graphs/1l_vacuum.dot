@@ -1,0 +1,14 @@
+digraph vacuum_diag {
+
+num="1";
+overall_factor="1";
+
+edge [num="1"];
+node [num="1"];
+
+v0 -> v1 [particle="scalar_1" lmb_id=1, id=0, num="Q(0,spenso::mink(4,11))"];
+v1 -> v2 [particle="scalar_1" id=1, num="Q(1,spenso::mink(4,11))"];
+v2 -> v3 [particle="scalar_1" id=2];
+v3 -> v0 [particle="scalar_1" id=3];
+
+}

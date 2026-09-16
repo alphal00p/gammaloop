@@ -13,6 +13,8 @@ const KURVST_PACKAGE_DIR: &str = "crates/kurvst/typst";
 
 static LINNEST_SOURCE: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../linnest/typst/src");
 static KURVST_SOURCE: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../kurvst/typst/src");
+static TYPST_PACKAGES: Dir<'_> =
+    include_dir!("$CARGO_MANIFEST_DIR/../linnet-py/vendor/typst-packages");
 static LINNEST_WASM: &[u8] = include_bytes!("../../linnest/typst/linnest.wasm");
 static KURVST_WASM: &[u8] = include_bytes!("../../kurvst/typst/kurvst.wasm");
 static TYPST_ASSETS: OnceLock<Result<tempfile::TempDir, String>> = OnceLock::new();
@@ -53,6 +55,12 @@ fn extract_typst_assets() -> Result<tempfile::TempDir, String> {
         .map_err(|error| format!("could not extract Linnest's Wasm module: {error}"))?;
     fs::write(kurvst.join("kurvst.wasm"), KURVST_WASM)
         .map_err(|error| format!("could not extract Kurvst's Wasm module: {error}"))?;
+    let packages = root.path().join("typst-packages");
+    fs::create_dir_all(&packages)
+        .map_err(|error| format!("could not create the Typst package directory: {error}"))?;
+    TYPST_PACKAGES
+        .extract(packages)
+        .map_err(|error| format!("could not extract the embedded Typst packages: {error}"))?;
     Ok(root)
 }
 
@@ -76,7 +84,11 @@ pub(crate) fn render_diagram_svg(py: Python<'_>, diagram: &FeynmanDiagram) -> Py
     })?;
     let source = diagram.to_linnest();
     let kwargs = PyDict::new(py);
-    kwargs.set_item("root", typst_asset_root()?.to_string_lossy().as_ref())?;
+    let root = typst_asset_root()?;
+    let packages = root.join("typst-packages");
+    kwargs.set_item("root", root.to_string_lossy().as_ref())?;
+    kwargs.set_item("package_path", packages.to_string_lossy().as_ref())?;
+    kwargs.set_item("package_cache_path", packages.to_string_lossy().as_ref())?;
     kwargs.set_item("format", "svg")?;
     kwargs.set_item("ignore_system_fonts", true)?;
     kwargs.set_item("pretty", false)?;
@@ -115,6 +127,16 @@ mod tests {
         assert_eq!(
             escape_html("<script data-x='a&b'>\"x\"</script>"),
             "&lt;script data-x=&#39;a&amp;b&#39;&gt;&quot;x&quot;&lt;/script&gt;"
+        );
+    }
+
+    #[test]
+    fn extracts_typst_packages_for_offline_rendering() {
+        let root = super::extract_typst_assets().unwrap();
+        assert!(
+            root.path()
+                .join("typst-packages/preview/cetz/0.5.1/typst.toml")
+                .is_file()
         );
     }
 

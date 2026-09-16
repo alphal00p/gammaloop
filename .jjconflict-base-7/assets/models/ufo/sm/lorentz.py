@@ -1,0 +1,108 @@
+# type: ignore
+# This file was automatically created by FeynRules 1.7.69
+# Mathematica version: 8.0 for Mac OS X x86 (64-bit) (November 6, 2010)
+# Date: Mon 1 Oct 2012 14:58:26
+
+
+from __future__ import absolute_import
+
+from .function_library import acsc, asec, complexconjugate, csc, im, re, sec
+from .object_library import Lorentz, all_lorentz
+
+try:
+    import form_factors as ForFac
+except ImportError:
+    pass
+
+
+UUS1 = Lorentz(name="UUS1", spins=[-1, -1, 1], structure="1")
+
+UUV1 = Lorentz(name="UUV1", spins=[-1, -1, 3], structure="P(3,2)")
+
+SSS1 = Lorentz(name="SSS1", spins=[1, 1, 1], structure="1")
+
+# Scalar/pseudoscalar and vector/axial coefficients stay explicit so that
+# gamma5-free combinations cancel before dimension-dependent Dirac algebra.
+FFS1 = Lorentz(
+    name="FFS1", spins=[2, 2, 1], structure="(Identity(1,2) + Gamma5(1,2))/2"
+)
+
+FFS2 = Lorentz(name="FFS2", spins=[2, 2, 1], structure="Gamma5(1,2)")
+
+FFS3 = Lorentz(
+    name="FFS3", spins=[2, 2, 1], structure="(Identity(1,2) - Gamma5(1,2))/2"
+)
+
+# Keep the CP-even scalar bilinear explicit. Writing this as ProjM + ProjP hides
+# the exact gamma5 cancellation from dimension-dependent Dirac algebra.
+FFS4 = Lorentz(name="FFS4", spins=[2, 2, 1], structure="Identity(1,2)")
+
+FFV1 = Lorentz(name="FFV1", spins=[2, 2, 3], structure="Gamma(3,1,2)")
+
+FFV2 = Lorentz(
+    name="FFV2",
+    spins=[2, 2, 3],
+    structure="(Gamma(3,1,2) - Gamma(3,1,-1)*Gamma5(-1,2))/2",
+)
+
+FFV3 = Lorentz(
+    name="FFV3",
+    spins=[2, 2, 3],
+    structure="(-Gamma(3,1,2) - 3*Gamma(3,1,-1)*Gamma5(-1,2))/2",
+)
+
+FFV4 = Lorentz(
+    name="FFV4",
+    spins=[2, 2, 3],
+    structure="(3*Gamma(3,1,2) + Gamma(3,1,-1)*Gamma5(-1,2))/2",
+)
+
+FFV5 = Lorentz(
+    name="FFV5",
+    spins=[2, 2, 3],
+    structure="(5*Gamma(3,1,2) + 3*Gamma(3,1,-1)*Gamma5(-1,2))/2",
+)
+
+VSS1 = Lorentz(name="VSS1", spins=[3, 1, 1], structure="P(1,2) - P(1,3)")
+
+VVS1 = Lorentz(name="VVS1", spins=[3, 3, 1], structure="Metric(1,2)")
+
+VVV1 = Lorentz(
+    name="VVV1",
+    spins=[3, 3, 3],
+    structure="P(3,1)*Metric(1,2) - P(3,2)*Metric(1,2) - P(2,1)*Metric(1,3) + P(2,3)*Metric(1,3) + P(1,2)*Metric(2,3) - P(1,3)*Metric(2,3)",
+)
+
+SSSS1 = Lorentz(name="SSSS1", spins=[1, 1, 1, 1], structure="1")
+
+VVSS1 = Lorentz(name="VVSS1", spins=[3, 3, 1, 1], structure="Metric(1,2)")
+
+VVVV1 = Lorentz(
+    name="VVVV1",
+    spins=[3, 3, 3, 3],
+    structure="Metric(1,4)*Metric(2,3) - Metric(1,3)*Metric(2,4)",
+)
+
+VVVV2 = Lorentz(
+    name="VVVV2",
+    spins=[3, 3, 3, 3],
+    structure="Metric(1,4)*Metric(2,3) + Metric(1,3)*Metric(2,4) - 2*Metric(1,2)*Metric(3,4)",
+)
+
+VVVV3 = Lorentz(
+    name="VVVV3",
+    spins=[3, 3, 3, 3],
+    structure="Metric(1,4)*Metric(2,3) - Metric(1,2)*Metric(3,4)",
+)
+
+VVVV4 = Lorentz(
+    name="VVVV4",
+    spins=[3, 3, 3, 3],
+    structure="Metric(1,3)*Metric(2,4) - Metric(1,2)*Metric(3,4)",
+)
+
+VVVV5 = Lorentz(
+    name="VVVV5",
+    spins=[3, 3, 3, 3],
+    structure="Metric(1,4)*Metric(2,3) - (Metric(1,3)*Metric(2,4))/2. - (Metric(1,2)*Metric(3,4))/2.",
+)

@@ -16,6 +16,7 @@ clients use `symbolica.community.feynkit` inside a shared Symbolica kernel.
   #link("tutorial/")[model-to-diagram tutorial].
 - Reduce vacuum numerators while keeping external momenta distinct with the
   #link("guides/tensor-reduction/")[tensor-reduction guide].
+- Explore every component in the #link("guides/showcases/")[executable notebook showcases].
 - Render diagrams and inspect CFF results with the #link("guides/notebooks/")[notebook guide].
 - Embed the Python module in a Symbolica distribution using the
   #link("guides/community-host/")[community-host integration guide].
