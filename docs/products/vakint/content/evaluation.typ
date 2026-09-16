@@ -170,4 +170,39 @@ software version and the method actually selected for the reported result:
 Vakint also uses #link("https://symbolica.io/")[Symbolica] for expression manipulation. Record the
 Vakint revision, normalization, epsilon depth, precision, selected backend and dependency
 versions with the result; a generic citation to the package does not encode those choices.
+
+== Tensor-reduction backends
+<tensor-reduction-backends>
+Numerator tensor reduction has two backends. `"feynkit"` is the default:
+it uses the native FeynKit projector, supports ranks through 20, and
+does not need FORM for the tensor-reduction step. `"alphaloop"`
+explicitly selects the historical FORM implementation, whose bundled
+projector tables cover ranks through 10:
+
+```python
+from symbolica import E
+from symbolica.community.vakint import Vakint
+
+vakint = Vakint()
+integral = E(
+    "k(1,mu)*k(1,nu)*p(1,mu)*p(1,nu)"
+    "*topo(prop(1,edge(1,1),k(1),muvsq,1))",
+    default_namespace="vakint",
+)
+reduced = vakint.tensor_reduce(integral)
+```
+
+The Rust API uses the same default through `VakintSettings`. Set
+`TensorReductionMethod::AlphaLoop` explicitly to request the legacy FORM
+projector:
+
+```rust
+use vakint::{TensorReductionMethod, VakintSettings};
+
+let settings = VakintSettings {
+    tensor_reduction_method: TensorReductionMethod::AlphaLoop,
+    ..VakintSettings::default()
+};
+```
+
 ]

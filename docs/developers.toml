@@ -545,17 +545,17 @@ review_triggers = ["crates/gammaloop-api/src/**", "crates/gammalooprs/src/**"]
 [[section.note]]
 id = "cff-surface-cache-ownership"
 title = "CFF surface-cache ownership"
-summary = "A proposal for expression-local surface ownership, its migration path, invariants, and rejected alternatives."
+summary = "Implemented FeynKit CFF ownership, shared surface arenas, and expression-specific surface invariants."
 source = "docs/architecture/cff-surface-cache-ownership.typ"
-kind = "Design proposal"
-status = "Proposal"
-lifecycle = "proposal"
+kind = "Architecture"
+status = "Implemented"
+lifecycle = "current"
 owner = "unassigned"
 reviewed_at = "2026-08-17"
 review_ref = "c9f4e32acd2c"
 products = ["gammaloop"]
 topics = ["cff", "cache", "ownership"]
-review_triggers = ["crates/gammalooprs/src/**/cff*", "crates/gammalooprs/src/graph/**"]
+review_triggers = ["crates/feynkit-cff/**", "crates/gammalooprs/src/**/cff*", "crates/gammalooprs/src/graph/**"]
 
 [[section]]
 id = "investigations"

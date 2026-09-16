@@ -335,14 +335,6 @@ pub struct SpecArgs {
     )]
     pub global_prefactor_num: Option<String>,
 
-    /// Fast cut filter switch multiplicity
-    #[arg(
-        long = "max-multiplicity-for-fast-cut-filter",
-        short = 'M',
-        default_value_t = 6usize
-    )]
-    pub max_multiplicity_for_fast_cut_filter: usize,
-
     /// Filter graph-theoretic self-loops explicitly; omission keeps them.
     #[arg(long = "filter-self-loop")]
     pub filter_self_loop: Option<bool>,

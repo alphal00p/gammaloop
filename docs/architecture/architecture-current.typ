@@ -118,13 +118,94 @@ Infrastructure
 The command model is stateful by design: commands mutate a long-lived
 `State` that can be saved and resumed.
 
+=== Standalone Physics Toolkit (FeynKit)
+<standalone-physics-toolkit-feynkit>
+FeynKit exposes reusable physics operations through focused crates
+rather than through GammaLoop's application state:
+
+#figure(
+  align(center)[#table(
+    columns: (50%, 50%),
+    align: (auto,auto,),
+    table.header([Crate], [Owned boundary],),
+    table.hline(),
+    [`feynkit-model`], [The canonical immutable runtime model, including
+    particles, parameters, interactions, symbolic rule data, parameter
+    cards, JSON I/O, and stable typed IDs],
+    [`feynkit-ufo`], [Attached-interpreter adapter for
+    `ufo_model_loader`; it returns normalized model data and never owns
+    Python process initialization or global stream/logging
+    configuration],
+    [`feynkit-kinematics`], [Generic three-/four-momenta, boosts,
+    rotations, momentum signatures, and generalized-(k\_T) clustering],
+    [`feynkit-graph`], [Linnet-backed finalized diagram IR, external/cut
+    metadata, canonical symbolic numerators and factors, DOT/serde
+    support, and selected loop-momentum routing],
+    [`feynkit-generator`], [The complete deterministic generation
+    pipeline: topology expansion, interaction assignment, filters,
+    canonicalization, fermion flow, numerator/projector construction,
+    routing, zero detection, and tensor-aware grouping],
+    [`feynkit-cff`], [Canonical CFF topology, orientations, surfaces,
+    shared caches, expression forests, residues, raised surfaces, and
+    ordinary/contracted/UV generation],
+    [`feynkit-tensor`], [Spenso-native vacuum tensor reduction,
+    contraction-orbit compression, and exact orthogonal-Weingarten
+    coefficient tables],
+    [`feynkit`], [Feature-gated, zero-logic Rust facade; core generation
+    is enabled by default and raw UFO loading uses the opt-in `ufo`
+    feature],
+    [`feynkit-py`], [Symbolica community binding for
+    `symbolica.community.feynkit`, including generated type stubs and
+    direct Symbolica expression conversion],
+  )]
+  , kind: table
+  )
+
+Within this family, dependencies point from foundations to consumers:
+
+```text
+feynkit-model ------> feynkit-graph, feynkit-generator, feynkit-ufo
+feynkit-kinematics -> feynkit-graph
+feynkit-graph ------> feynkit-generator, feynkit-cff
+feynkit-graph,
+spenso, idenso ------> feynkit-tensor
+
+focused crates -> feynkit / feynkit-py
+```
+
+No FeynKit crate depends on `gammalooprs`, `gammaloop-api`,
+`GlobalSettings`, or GammaLoop `State`. Generation receives explicit
+`GenerationOptions`, and progress/cancellation are callback- and
+token-based. The CI metadata guard also checks this direction
+transitively and rejects source references that bypass a Cargo
+dependency.
+
+Rust clients load the canonical `Model`, construct a generation request,
+and receive finalized `FeynmanDiagram` values. Enabling `feynkit/ufo`
+exposes an attached-interpreter loader that returns the same model type
+directly. Python clients use this ownership flow through
+`symbolica.community.feynkit`; the curated PyO3 API does not expose
+GammaLoop runtime details.
+
+GammaLoop converts each finalized diagram once into its
+evaluator-oriented runtime graph. That conversion translates identifiers
+and builds derived caches; it does not repeat model loading, rule
+lookup, canonicalization, numerator construction, grouping, or momentum
+routing. GammaLoop consumes FeynKit CFF values directly. GammaLoop-only
+numerical behavior is implemented with extension traits on those types
+rather than wrapper IRs. Integrands, compiled evaluators, numerical
+threshold/subtraction machinery, events, observables, and histogramming
+remain downstream.
+
 === 3. Domain Core (gammalooprs)
 <3-domain-core-gammalooprs>
 - Root module wiring: `crates/gammalooprs/src/lib.rs`.
 - Initialization and shared symbol registries:
   `crates/gammalooprs/src/initialisation.rs`.
-- Diagram generation and filtering: `crates/gammalooprs/src/feyngen`.
-- Model and parameters: `crates/gammalooprs/src/model/mod.rs`.
+- Diagram generation and filtering: `crates/feynkit-generator`; GammaLoop
+  integration: `crates/gammalooprs/src/feyngen`.
+- Canonical model and parameters: `crates/feynkit-model`; GammaLoop numerical
+  extension traits: `crates/gammalooprs/src/model/canonical.rs`.
 - Graph domain: `crates/gammalooprs/src/graph/mod.rs` and submodules.
 - Momentum routing and parameterization: `crates/gammalooprs/src/momentum`.
 - CFF construction, numerator processing, and subtraction:
@@ -176,23 +257,21 @@ projection, marker, and backend-boundary invariants are documented in
   filters.
 
 === 2. Process Generation Flow
-<2-process-generation-flow>
-+ `generate` command builds `ProcessDefinition` (from syntax or graph
-  import).
-+ `State::generate_integrand(s)` creates a generation thread pool.
-+ For generated processes, `feyngen::DiagramGenerator` constructs graphs
-  from model vertex rules, filters them, and performs topology- and optional
-  numerator-aware grouping. Graph import supplies that boundary directly.
-+ `ProcessList::preprocess` delegates to the amplitude or cross-section
-  pipeline. Those graph-level stages generate CFF/cut surfaces,
-  loop-momentum bases and parametric integrand data, plus the configured
-  threshold- and UV-subtraction data.
-+ `ProcessList::generate_integrands` packages the resulting graph
-  collections, runtime settings, and evaluators into `ProcessIntegrand`
-  instances.
+<process-generation-flow>
++ `generate` resolves command syntax into a FeynKit `Process` and
+  `GenerationOptions`.
++ FeynKit generates, canonicalizes, routes, constructs numerators,
+  removes zeroes, and groups diagrams before returning
+  `GenerationResult`.
++ Each final diagram is converted once into a GammaLoop runtime graph,
+  which adds only derived evaluator and integration state.
++ `ProcessList::preprocess` delegates to amplitude/cross-section
+  preprocessors.
++ `ProcessList::generate_integrands` builds `ProcessIntegrand` instances
+  from preprocessed graphs.
 + Optional compile/export steps persist compiled evaluator artifacts and
   DOT/standalone outputs.
-+ Each generated integrand now embeds its frozen f64 backend choice in
++ Each generated integrand embeds its frozen f64 backend choice in
   `integrand.bin`:
   - `eager`
   - `symjit`
@@ -202,14 +281,12 @@ projection, marker, and backend-boundary invariants are documented in
   - eager uses the saved eager evaluator directly
   - symjit is rebuilt after generation/load from the saved Symbolica
     evaluator
-  - complete external compiled artifacts are loaded while the saved
-    state is activated
-  - missing external artifacts leave the frozen backend metadata
-    unchanged but activate the portable eager evaluator for the current
-    session
+  - external compiled backends load their saved shared-library artifacts
+    lazily
   - if external loading fails and startup globals explicitly opt into
     symjit, GammaLoop falls back to symjit for that integrand and logs
     it
+
 
 === 3. Evaluation and Integration Flow
 <3-evaluation-and-integration-flow>
@@ -467,16 +544,16 @@ performance-heavy data.
 
 === Persistence Compatibility Contract
 <persistence-compatibility-contract>
-- State format is versioned with `state_manifest.toml` (`version = 1`
+- State format is versioned with `state_manifest.toml` (`version = 2`
   currently).
-- `State::load` validates the manifest version and rejects states from
-  newer binaries.
-- Saved-state detection is manifest-only. A non-empty folder without a
-  manifest is classified as `Unmanifested` and startup treats its
-  contents as blank scratch state; it is not loaded as a legacy state.
-- Process settings history now uses `settings_history.toml`
-  consistently; loader still accepts legacy `settings_history.yaml` for
-  backward compatibility and migration.
+- `State::load` validates the manifest version. Version-1 states predate
+  the unified FeynKit model and graph formats and must be regenerated;
+  states from newer binaries are rejected until GammaLoop is upgraded.
+- A saved state without a manifest is not loadable. Such folders are
+  classified separately so the CLI can explain the problem or
+  deliberately replace them, but no legacy model/graph migration path is
+  retained.
+- Process settings history uses `settings_history.toml`.
 
 === Integration workspaces
 <integration-workspaces>
