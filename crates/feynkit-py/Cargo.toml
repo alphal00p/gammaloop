@@ -15,12 +15,12 @@ path = "src/bin/stubgen.rs"
 required-features = ["python_stubgen"]
 
 [dependencies]
-feynkit-cff = { version = "0.1.0", path = "../feynkit-cff" }
-feynkit-generator = { version = "0.1.0", path = "../feynkit-generator" }
-feynkit-graph = { version = "0.1.0", path = "../feynkit-graph" }
+feynkit-cff = { version = "0.1.0", path = "../feynkit-cff", default-features = false }
+feynkit-generator = { version = "0.1.0", path = "../feynkit-generator", default-features = false }
+feynkit-graph = { version = "0.1.0", path = "../feynkit-graph", default-features = false }
 feynkit-kinematics = { version = "0.1.0", path = "../feynkit-kinematics" }
 feynkit-model = { version = "0.1.0", path = "../feynkit-model" }
-feynkit-tensor = { version = "0.1.0", path = "../feynkit-tensor" }
+feynkit-tensor = { version = "0.1.0", path = "../feynkit-tensor", default-features = false }
 feynkit-ufo = { version = "0.1.0", path = "../feynkit-ufo", optional = true }
 include_dir = { workspace = true }
 pyo3 = { workspace = true }
@@ -37,6 +37,8 @@ default-features = false
 features = ["python_export"]
 
 [features]
-default = ["ufo"]
+default = ["ufo", "native"]
+native = ["feynkit-cff/native", "feynkit-generator/native", "feynkit-graph/native", "feynkit-tensor/native"]
+wasm = ["feynkit-cff/wasm", "feynkit-generator/wasm", "feynkit-graph/wasm", "feynkit-tensor/wasm"]
 python_stubgen = ["dep:pyo3-stub-gen", "symbolica/python_stubgen"]
 ufo = ["dep:feynkit-ufo"]

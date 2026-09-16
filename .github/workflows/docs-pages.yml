@@ -296,6 +296,9 @@ jobs:
             && grep -Fq -- '"--docs"' crates/linnet-py/examples/export_wasm.py; then
             {
               echo "enabled=true"
+              if [ -f examples/notebooks/symbolica-host/pyproject.toml ]; then
+                echo "community=true"
+              fi
               echo "revision=$(git rev-parse HEAD)"
               echo "epoch=$(git log -1 --format=%ct)"
             } >> "$GITHUB_OUTPUT"
@@ -311,8 +314,16 @@ jobs:
           path: ${{ runner.temp }}/linnet-docs-wheel
           key: linnet-docs-wheel-v1-${{ runner.os }}-cibuildwheel-4.2.0-${{ steps.notebook_source.outputs.revision }}
 
+      - id: community_notebook_wheel
+        name: Restore this revision's shared Symbolica browser wheel
+        if: steps.notebook_source.outputs.community == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/symbolica-docs-wheel
+          key: symbolica-docs-wheel-v1-${{ runner.os }}-cibuildwheel-4.2.0-${{ steps.notebook_source.outputs.revision }}
+
       - name: Install the WebAssembly Rust target
-        if: steps.notebook_source.outputs.enabled == 'true' && steps.notebook_wheel.outputs.cache-hit != 'true'
+        if: steps.notebook_source.outputs.enabled == 'true' && (steps.notebook_wheel.outputs.cache-hit != 'true' || (steps.notebook_source.outputs.community == 'true' && steps.community_notebook_wheel.outputs.cache-hit != 'true'))
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-emscripten
@@ -329,10 +340,23 @@ jobs:
           CIBW_PLATFORM: pyodide
           SOURCE_DATE_EPOCH: ${{ steps.notebook_source.outputs.epoch }}
 
+      - name: Build the shared Symbolica browser wheel
+        if: steps.notebook_source.outputs.community == 'true' && steps.community_notebook_wheel.outputs.cache-hit != 'true'
+        uses: pypa/cibuildwheel@v4.2.0
+        with:
+          package-dir: examples/notebooks/symbolica-host
+          output-dir: ${{ runner.temp }}/symbolica-docs-wheel
+        env:
+          CIBW_BUILD: cp314-pyodide_wasm32
+          CIBW_ENVIRONMENT_PYODIDE: MATURIN_PEP517_ARGS='--locked --no-default-features --features wasm' RUSTFLAGS='' CARGO_PROFILE_RELEASE_LTO=thin CARGO_BUILD_JOBS=2 SOURCE_DATE_EPOCH=${{ steps.notebook_source.outputs.epoch }}
+          CIBW_PLATFORM: pyodide
+          SOURCE_DATE_EPOCH: ${{ steps.notebook_source.outputs.epoch }}
+
       - id: publication_bundle
         name: Bundle live notebooks with the documentation
         env:
           NOTEBOOKS_ENABLED: ${{ steps.notebook_source.outputs.enabled }}
+          COMMUNITY_NOTEBOOKS: ${{ steps.notebook_source.outputs.community }}
           DOCS_PATH: ${{ steps.docs.outputs.path }}
           CHANNEL: ${{ steps.release.outputs.channel }}
           SNAPSHOT_TAG: ${{ steps.release.outputs.snapshot_tag }}
@@ -378,6 +402,31 @@ jobs:
               --wheel "${wheels[0]}" \
               --output "$staged_docs/products/$product/$channel_path/assets/notebooks"
           done
+          if [ "$COMMUNITY_NOTEBOOKS" = true ]; then
+            community_wheels=("$RUNNER_TEMP/symbolica-docs-wheel/"*.whl)
+            if [ "${#community_wheels[@]}" -ne 1 ]; then
+              echo "Expected exactly one shared Symbolica browser wheel" >&2
+              exit 2
+            fi
+            nix develop --command just notebook-ufo-wheel "$RUNNER_TEMP/ufo-docs-wheel"
+            ufo_wheels=("$RUNNER_TEMP/ufo-docs-wheel/"*.whl)
+            if [ "${#ufo_wheels[@]}" -ne 1 ]; then
+              echo "Expected exactly one pinned UFO loader wheel" >&2
+              exit 2
+            fi
+            for product in spenso idenso feynkit; do
+              dependency_args=(--dependency-wheel "${ufo_wheels[0]}")
+              if [ "$product" != feynkit ]; then
+                dependency_args=(--dependency-wheel "${wheels[0]}")
+              fi
+              nix develop --command \
+                uv run --no-project --with marimo==0.24.0 python \
+                crates/linnet-py/examples/export_wasm.py \
+                --docs "$product" --wheel "${community_wheels[0]}" \
+                "${dependency_args[@]}" \
+                --output "$staged_docs/products/$product/$channel_path/assets/notebooks"
+            done
+          fi
           echo "path=$staged_docs" >> "$GITHUB_OUTPUT"
 
       - name: Summarize documentation quality

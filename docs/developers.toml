@@ -107,7 +107,9 @@ anchor = "pub fn generate("
 # preserves generation, filtering, and persistence ownership.
 # Reviewed 2026-09-16: the complete generation pipeline moved to FeynKit;
 # the architecture and this scope now follow its canonical owner.
-digest = "7f857013db79da95de3ba8959d18d15d31b97fd5"
+# Reviewed 2026-09-16: browser kernels use the same coloring pipeline serially;
+# native Rayon configuration and generation ownership remain unchanged.
+digest = "e8047e63496513083652d22d5ac1a22b5be1884b"
 
 [[section.note.scope]]
 path = "crates/feynkit-model/src/model.rs"
@@ -390,7 +392,9 @@ path = "crates/spenso/src/symbolic_parallelism.rs"
 symbol = "spenso::symbolic_parallelism::SymbolicParallelism"
 anchor = "pub enum SymbolicParallelism {"
 # No architecture impact 2026-09-14: only the LicenseManager import path changed.
-digest = "f9475edd533e069fc57ea28b6c14208d1c318a2d"
+# Reviewed 2026-09-16: Auto keeps browser symbolic work serial; native licensing
+# and explicit policy choices retain their documented behavior.
+digest = "f52c9ac14265f983c86c9affc9713970e6b28561"
 
 [[section.note]]
 id = "idenso-architecture"
@@ -929,7 +933,8 @@ end_anchor = "documentationRegistry = builtins.fromTOML"
 # Reviewed 2026-09-16: FeynKit joins the existing product pipeline, including
 # shared package/docs stub validation and complete latest/snapshot bundles.
 # Reviewed 2026-09-16: stage the Python sources linked from the FeynKit guides.
-digest = "f4f618546d3d15d3aa7f2289254f787b6a32b7e0"
+# Reviewed 2026-09-16: stage linked community showcase sources with existing documentation inputs.
+digest = "a589702389ce064928e06ea0973cd3cc59e0ea94"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"
@@ -952,7 +957,9 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # No documentation-cache impact 2026-09-16: FeynKit compile-time fixtures
 # and embedded renderer assets follow their package source ownership.
 # Reviewed 2026-09-16: stage the Python sources linked from the FeynKit guides.
-digest = "fc8476277de2a5e790d478c3f70788c353265b61"
+# Reviewed 2026-09-16: stage linked community showcase sources with existing documentation inputs.
+# Reviewed 2026-09-16: embed the pinned Typst packages for offline FeynKit rendering.
+digest = "d393637bcb7762ccd0e30f5ccdb4f9cffd8e6c82"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"

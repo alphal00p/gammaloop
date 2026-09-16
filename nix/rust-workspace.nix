@@ -372,6 +372,7 @@
 
   workspacePackageExtraSourceRoots.production = {
     "feynkit-py" = [
+      "crates/linnet-py/vendor/typst-packages"
       "crates/kurvst/typst/kurvst.wasm"
       "crates/kurvst/typst/src"
       "crates/linnest/typst/linnest.wasm"
@@ -475,6 +476,7 @@
       "docs"
       "examples/cli/aa_aa/2L/graphs"
       "examples/cli/gg_hhh/3L/3L_graph.dot"
+      "examples/notebooks"
       "flake.nix"
       "scripts/render-docs-svg-assets.sh"
       "tests/resources/graphs"

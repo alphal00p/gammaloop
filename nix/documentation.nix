@@ -100,6 +100,7 @@ let
         (workspaceRoot + "/scripts/render-docs-svg-assets.sh")
         (workspaceRoot + "/scripts/update-docs-pages.sh")
         (workspaceRoot + "/examples/api/python")
+        (workspaceRoot + "/examples/notebooks")
         (workspaceRoot + "/examples/cli/aa_aa/2L/graphs/GL00.dot")
         (workspaceRoot + "/examples/cli/aa_aa/2L/graphs/GL08.dot")
         (workspaceRoot + "/examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL000.dot")

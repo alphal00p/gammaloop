@@ -23,7 +23,9 @@ use idenso::{
 use linnet::half_edge::involution::Flow;
 use linnet::half_edge::subgraph::{InternalSubGraph, SuBitGraph, SubSetLike};
 use linnet::half_edge::{HedgeGraph, NodeIndex};
-use rayon::{ThreadPoolBuildError, ThreadPoolBuilder, prelude::*};
+use rayon::ThreadPoolBuildError;
+#[cfg(not(target_arch = "wasm32"))]
+use rayon::{ThreadPoolBuilder, prelude::*};
 use serde::{Deserialize, Serialize};
 use spenso::{
     network::library::symbolic::ETS,
@@ -1302,16 +1304,12 @@ impl Generator {
         let raw_graphs = filtered_graphs;
         let topology_count = raw_graphs.len();
 
-        let mut pool = ThreadPoolBuilder::new();
-        // Respect an explicit thread count; otherwise Rayon uses its default
-        // logical-CPU count.
-        if let Some(threads) = options.threads {
-            pool = pool.num_threads(threads);
-        }
-        let pool = pool.build()?;
-        let colored = pool.install(|| {
-            raw_graphs
-                .par_iter()
+        let color_graphs = || {
+            #[cfg(target_arch = "wasm32")]
+            let graphs = raw_graphs.iter();
+            #[cfg(not(target_arch = "wasm32"))]
+            let graphs = raw_graphs.par_iter();
+            graphs
                 .filter_map(|(graph, symmetry)| {
                     if options.cancellation_requested() {
                         return None;
@@ -1328,7 +1326,19 @@ impl Generator {
                     )
                 })
                 .collect::<Result<Vec<_>, GenerationError>>()
-        })?;
+        };
+        #[cfg(target_arch = "wasm32")]
+        let colored = color_graphs()?;
+        #[cfg(not(target_arch = "wasm32"))]
+        let colored = {
+            let mut pool = ThreadPoolBuilder::new();
+            // Respect an explicit thread count; otherwise Rayon uses its default
+            // logical-CPU count. Browser kernels process the same graphs serially.
+            if let Some(threads) = options.threads {
+                pool = pool.num_threads(threads);
+            }
+            pool.build()?.install(color_graphs)?
+        };
         if options.cancellation_requested() {
             completed = false;
         }

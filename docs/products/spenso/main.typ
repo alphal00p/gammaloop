@@ -6,6 +6,7 @@
 #import "content/tutorial.typ": tutorial
 #import "content/networks.typ": networks
 #import "content/python.typ": python
+#import "content/showcase.typ": showcase
 #import "content/api.typ": api
 #import "content/changelog.typ": changelog
 #import "content/spenso-releases.typ": spenso-releases
@@ -26,6 +27,7 @@
     #tutorial
     #networks
     #python
+    #showcase
     #api
     #changelog
     #spenso-releases

@@ -605,7 +605,8 @@ vocabulary, and sink-routing contract implemented by these settings.
 <concurrency-model>
 Concurrency is explicit and use-case scoped:
 
-- Generation and compile thread pools use configurable thread counts.
+- Native generation and compile thread pools use configurable thread counts. FeynKit browser
+  kernels process graph coloring serially with the same filtering and assignment pipeline.
 - Integrator parallelism is controlled via runtime/global settings.
 - Some loops over processes/integrands remain sequential at
   orchestration level while heavy operations inside are parallelized.

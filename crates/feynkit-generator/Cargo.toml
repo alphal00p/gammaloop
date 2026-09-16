@@ -11,7 +11,7 @@ categories = ["science"]
 [dependencies]
 bincode-trait-derive = { workspace = true }
 bincode = { workspace = true, features = ["serde"] }
-feynkit-graph = { version = "0.1.0", path = "../feynkit-graph" }
+feynkit-graph = { version = "0.1.0", path = "../feynkit-graph", default-features = false }
 feynkit-model = { version = "0.1.0", path = "../feynkit-model" }
 idenso = { workspace = true }
 linnet = { workspace = true, features = ["symbolica"] }
@@ -24,3 +24,8 @@ thiserror = { workspace = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }
+
+[features]
+default = ["native"]
+native = ["feynkit-graph/native", "spenso-hep-lib/native"]
+wasm = ["feynkit-graph/wasm", "spenso-hep-lib/wasm"]

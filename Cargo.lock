@@ -2349,7 +2349,6 @@ dependencies = [
  "toml_writer",
  "tracing",
  "tracing-subscriber",
- "typed-index-collections",
  "winnow 0.7.15",
  "winnow 1.0.2",
  "zerocopy",
