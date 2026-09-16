@@ -86,6 +86,7 @@
   cut-x: auto,
   cut-y: auto,
   initial-cut: none,
+  endpoint-fills: diagram-style.endpoint-box.fills,
   draw-after: none,
 ) = {
   set text(size: diagram-style.font-size)
@@ -117,7 +118,7 @@
         .map(e => (group: e.data.group, side: e.data.side, pos: e.pos))
       let box-style = diagram-style.endpoint-box
       cetz.draw.on-layer(-1, {
-        for (momentum, fill) in box-style.fills {
+        for (momentum, fill) in endpoint-fills {
           for side in ("left", "right") {
             let points = endpoints
               .filter(b => b.side == side and b.group == momentum)

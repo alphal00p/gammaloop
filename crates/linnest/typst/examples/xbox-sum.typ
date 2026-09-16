@@ -80,6 +80,14 @@
     graph.map(g, node: nodes, edge: edges)
   }
 
+  // The RHS keeps the topology but lets its external endpoints relax independently.
+  let xbox-rhs = graph.map(
+    xbox,
+    edge: e => (show-momentum: false) + if e.boundary != none {
+      (pos: pos(x: e.pos.x, y: e.pos.y, mode: "start"))
+    } else { (:) },
+  )
+
   // Pull the external rows together without drawing another propagator.
   let g = graph.build(default-edge-data: edge-data, master, compact)
   let xbox-opened = {
@@ -235,6 +243,7 @@ let g = graph.build(default-edge-data: edge-data, master)
     })+
     #diagram(xbox-opened, cut-x: -.4, cut-y: -0.8, initial-cut: 1)+
     #diagram(xbox-opened2, cut-x: -1.5, cut-y: -0.8, initial-cut: 2)+
-    #diagram(xbox-cut, cut-y: -0.8,cut-x:-0.3, initial-cut: 3) = op("disc")_(p_1^2) op("disc")_(p_2^2) integral (dif^d k)/(2 pi)^d (N^(q overline(q))_times.square delta^+_(q^2)(p_(12)-k) delta^+_0(k))/(p_1^2 p_2^2 (k-p_2)^2 (k-p_1)^2)
+    #diagram(xbox-cut, cut-y: -0.8,cut-x:-0.3, initial-cut: 3) = op("disc")_(p_1^2) op("disc")_(p_2^2)#h(-3mm)
+    #diagram(xbox-rhs, cut-x: -1, cut-y: -0.8, endpoint-fills: (:))
   $
 }
