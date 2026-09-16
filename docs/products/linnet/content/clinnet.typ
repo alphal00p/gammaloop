@@ -18,7 +18,7 @@ current flags rather than relying on an older pre-subcommand invocation:
 // docs-example: syntax clinnet-render-dot
 ```sh
 cargo install clinnet
-cargo install typst-cli --version 0.15.0 --locked
+cargo install typst-cli --version 0.15.1 --locked
 linnet --help
 linnet draw examples
 ```

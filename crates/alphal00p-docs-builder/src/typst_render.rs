@@ -549,7 +549,7 @@ mod persistent {
                 return;
             };
             assert!(version.status.success());
-            assert!(String::from_utf8_lossy(&version.stdout).contains("0.15.0"));
+            assert!(String::from_utf8_lossy(&version.stdout).contains("0.15.1"));
 
             let root = tempfile::tempdir().unwrap();
             let persistent_output = root.path().join("persistent-output");

@@ -17,8 +17,8 @@ let
   docsCargoProfile = "docs";
   documentationRevision = self.dirtyRev or (self.rev or (self.narHash or "local"));
   typst015 =
-    assert lib.assertMsg (docsPkgs.typst.version == "0.15.0")
-      "the documentation build requires Typst 0.15.0, but the documentation package set provides ${docsPkgs.typst.version}";
+    assert lib.assertMsg (docsPkgs.typst.version == "0.15.1")
+      "the documentation build requires Typst 0.15.1, but the documentation package set provides ${docsPkgs.typst.version}";
     docsPkgs.typst;
 
   docsTypst = typst015.withPackages (
@@ -29,13 +29,23 @@ let
     ]
   );
 
-  linnetPython = docsPkgs.python313.withPackages (
-    pythonPackages:
-    assert lib.assertMsg (
-      pythonPackages.typst.version == "0.15.0"
-    ) "the Linnet Python renderer requires typst-py 0.15.0";
-    [ pythonPackages.typst ]
-  );
+  # Keep pip and Nix on the published Python binding until 0.15.1 reaches PyPI.
+  linnetPython = docsPkgs.python313.withPackages (pythonPackages: [
+    (pythonPackages.typst.overridePythonAttrs (old: rec {
+      version = "0.15.0";
+      src = docsPkgs.fetchFromGitHub {
+        owner = "messense";
+        repo = "typst-py";
+        tag = "v${version}";
+        hash = "sha256-9wHUikOf/WULPaGkCOXa0aXcSme+xbweC6IDwaJnwRk=";
+      };
+      cargoDeps = docsPkgs.rustPlatform.fetchCargoVendor {
+        inherit (old) pname;
+        inherit version src;
+        hash = "sha256-TyLKnJUVbodCHQXhpjIr1numNDmeUkvpsKH1o5tWFCM=";
+      };
+    }))
+  ]);
 
   docsFontPath = "${docsPkgs.roboto}/share/fonts/truetype";
 
