@@ -16,7 +16,7 @@ versioned API reference before adapting them. Vakint is exposed to Python throug
 `symbolica.community.vakint` when that community module is included in the installed Symbolica
 assembly, not as an independent Python distribution.
 
-For supported one- and two-loop equal-mass vacuum families, the opt-in
+For supported one-, two- and three-loop equal-mass vacuum families, the opt-in
 `EvaluationOrder::rustred_only()` scalar backend instead applies closing IBP
 artifacts shipped with Vakint and reuses Vakint's pure-Rust master
 substitutions. This scalar tail neither invokes nor falls back to FORM. The
@@ -30,11 +30,12 @@ Vakint's backward-compatibility contract for its public API, defaults, and
 existing FORM-backed evaluation methods.
 
 The [RustRed acceptance inventory](tests/RUSTRED_ACCEPTANCE.md) maps all existing
-single-common-mass inputs through three loops to native peers. The corrected
-fresh-process matrix passes 76 selected checks (15 catalog/default, 17
-three-loop peers, 43 legacy-complement checks, and one offline 38-terminal
-oracle); the inventory distinguishes those executed checks from aliases in the
-40-entry/46-input legacy census.
+single-common-mass inputs through three loops to native peers. A fresh targeted
+rerun passes 34 tests, including both previously failing all-class comparisons,
+after correcting MATAD's signed numerator routing. Native FeynKit/RustRed
+stages use an invalid FORM path. The inventory distinguishes this rerun from
+the historical 83-test matrix and the 40-entry/46-input legacy census; it does
+not claim four-loop RustRed acceptance.
 
 ```rust
 use vakint::{EvaluationOrder, Vakint, VakintSettings, vakint_parse};

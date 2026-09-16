@@ -1,13 +1,56 @@
 # RustRed acceptance coverage through three loops
 
 This is a source-level inventory and audited frozen-process test report.
-The legacy input inventory has passing native peers; two supplemental
-all-class tensor/scalar comparisons still fail. It covers every
+The legacy input inventory has passing native peers; the two supplemental
+all-class failures below are resolved by the signed MATAD routing correction.
+It covers every
 existing end-to-end scalar comparison/reference input with one common mass and
 at most three loops. Tensor-bearing native peers use the existing FeynKit
 prepass, followed by RustRed scalar reduction and master substitution. The
 shared harness gives both native stages an invalid FORM path; FORM is available
 only to the explicitly separate AlphaLoop/MATAD oracle lanes.
+
+## Latest correction and fresh rerun (2026-09-16)
+
+The contracted basketball basis contains reversed parent edges. MATAD's
+defining identities require Vakint parent slots to map as
+`[p4,p5,p6,-p1,p2,-p3]`. The old numerator adapter retained only the unsigned
+permutation. It therefore gave the wrong sign to mixed products involving a
+reversed loop coordinate, while squared momenta and scalar inputs were
+unaffected. Independent scalar probes and two source-level mathematical
+audits established this without treating a majority of reducers as proof.
+
+The correction includes edge orientation in the existing numerator
+Wick-rotation sign. Denominator numbering, one/two-loop maps, defaults, APIs,
+RustRed artifacts, numerical tolerances and existing assertions are unchanged.
+
+| Fresh selection | Passed | Failed | Ignored | Debug process seconds |
+| --- | ---: | ---: | ---: | ---: |
+| New `matad::routing_tests` | 3 | 0 | 0 | 0.49 |
+| Entire `rustred_k6_pipeline_tests` | 16 | 0 | 0 | 56.13 |
+| Entire `integral_alphaloop_vs_matad_tests` | 15 | 0 | 0 | 39.50 |
+
+Both original all-class comparisons now reach all five three-loop classes.
+The pipeline includes unit/nonunit mass, individual mixed scalar products,
+and both terms of the original tensor numerator. The shared harness retains
+an invalid FORM path for FeynKit and RustRed. Legacy oracle lanes alone use
+FORM. An independent auditor reran the routing and full pipeline selections.
+These are correctness timings, not release performance benchmarks.
+
+Reproduce with `cargo test --locked -p vakint --no-default-features --lib
+matad::routing_tests`, then the complete integration targets
+`rustred_k6_pipeline_tests` and `integral_alphaloop_vs_matad_tests`; configure
+the licensed Symbolica runtime and the existing FORM oracle executable.
+The dependency pin remains the coherent RustRed `ce92d3a7` / Symbolica 2.2
+stack. Check and build pass. Clippy was attempted but unavailable in this
+development shell. Raw logs, command evidence and binary/input hashes for
+this run are locally in `/tmp/vakint-matad-orientation.yRdp6a/`.
+
+This resolves every previously identified failure in the selection below,
+but is **not a fresh rerun of all 83 historical obligations**. Four-loop
+RustRed artifacts and end-to-end four-loop acceptance remain unfinished.
+
+## Historical inventory and audit
 
 The five legacy files contain **40 test entries / 46 input executions**. These
 are not 46 distinct integrals: power loops expand two entries, and several
@@ -45,8 +88,9 @@ finite-part companions now have fresh passing evidence. The two failures are
 `feynkit_three_loop_class_scalar_oracles_agree` and
 `feynkit_rustred_three_loop_class_numerical_peers`. Both stop at
 `I3L_pinch_1_6` on an AlphaLoop-versus-MATAD difference, before the harness
-compares the RustRed numerical result or reaches the fifth class. No claim of
-complete supplemental all-class tensor/scalar parity is justified yet.
+compares the RustRed numerical result or reaches the fifth class. At that
+checkpoint, complete supplemental all-class parity was not established; the
+fresh rerun above resolves these failures.
 
 The original evidence is in `target/vakint-short-pattern.OAgEGT/`; the seven
 independent reruns and their exact runner are in

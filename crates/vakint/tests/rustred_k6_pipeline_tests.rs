@@ -8,8 +8,8 @@ mod test_utils;
 
 use symbolica::atom::AtomCore;
 use test_utils::{
-    RustRedParityPolicy, TensorPrepass, alphaloop_matad_lanes, alphaloop_matad_rustred_lanes,
-    compare_evaluations,
+    EvaluationTestLane, RustRedParityPolicy, TensorPrepass, alphaloop_matad_lanes,
+    alphaloop_matad_rustred_lanes, compare_evaluations,
 };
 use vakint::{
     TensorReductionMethod, Vakint, VakintSettings, externals_from_f64, params_from_f64,
@@ -136,3 +136,97 @@ fn feynkit_rustred_three_loop_class_numerical_peers() {
         );
     }
 }
+
+// The full three-peer gate previously stopped at AlphaLoop versus MATAD for
+// the fourth class before comparing RustRed. These independent regression
+// pairs retain the same numerator, parameters, precision and tolerance so an
+// oracle disagreement cannot hide the RustRed result. The unit-mass controls change
+// only muvsq; all four cases still use the native prepass and the shared
+// harness's invalid FORM path for the RustRed scalar tail.
+fn compare_pinch_1_6_pair(lanes: [EvaluationTestLane; 2], mass_squared: f64) {
+    compare_pinch_1_6_numerator(lanes, mass_squared, NUMERATOR);
+}
+
+fn compare_pinch_1_6_numerator(lanes: [EvaluationTestLane; 2], mass_squared: f64, numerator: &str) {
+    let (_, topology) = THREE_LOOP_CLASSES[3];
+    let input = vakint_parse!(&format!("({numerator})*{topology}")).unwrap();
+    compare_evaluations(
+        VakintSettings {
+            number_of_terms_in_epsilon_expansion: 4,
+            run_time_decimal_precision: 32,
+            ..VakintSettings::default()
+        },
+        &lanes,
+        TensorPrepass::FeynKit,
+        input.as_view(),
+        params_from_f64(
+            &[("muvsq".into(), mass_squared), ("mursq".into(), 0.7)]
+                .into_iter()
+                .collect(),
+            32,
+        ),
+        externals_from_f64(
+            &[(1, (0.17, 0.4, 0.3, 0.12)), (2, (0.31, 0.2, 0.7, 0.43))]
+                .into_iter()
+                .collect(),
+            32,
+        ),
+        1.0e-25,
+        0.0,
+        false,
+    );
+}
+
+#[test]
+fn feynkit_pinch_1_6_matad_rustred_nonunit_mass() {
+    let [_, matad, rustred] = alphaloop_matad_rustred_lanes(RustRedParityPolicy::NumericalOnly);
+    compare_pinch_1_6_pair([matad, rustred], 1.3);
+}
+
+#[test]
+fn feynkit_pinch_1_6_alphaloop_rustred_nonunit_mass() {
+    let [alphaloop, _, rustred] = alphaloop_matad_rustred_lanes(RustRedParityPolicy::NumericalOnly);
+    compare_pinch_1_6_pair([alphaloop, rustred], 1.3);
+}
+
+#[test]
+fn feynkit_pinch_1_6_matad_rustred_unit_mass() {
+    let [_, matad, rustred] = alphaloop_matad_rustred_lanes(RustRedParityPolicy::NumericalOnly);
+    compare_pinch_1_6_pair([matad, rustred], 1.0);
+}
+
+#[test]
+fn feynkit_pinch_1_6_alphaloop_rustred_unit_mass() {
+    let [alphaloop, _, rustred] = alphaloop_matad_rustred_lanes(RustRedParityPolicy::NumericalOnly);
+    compare_pinch_1_6_pair([alphaloop, rustred], 1.0);
+}
+
+// Scalar probes isolate the adapter from external tensors and mass transport.
+// Each is a separate test so a failing mixed product does not hide other cases.
+macro_rules! pinch_1_6_scalar_probe {
+    ($name:ident, $numerator:literal) => {
+        #[test]
+        fn $name() {
+            let [_, matad, rustred] =
+                alphaloop_matad_rustred_lanes(RustRedParityPolicy::NumericalOnly);
+            compare_pinch_1_6_numerator([matad, rustred], 1.0, $numerator);
+        }
+    };
+}
+
+pinch_1_6_scalar_probe!(pinch_1_6_scalar_constant, "1");
+pinch_1_6_scalar_probe!(pinch_1_6_scalar_k1_squared, "k(1,1)*k(1,1)");
+pinch_1_6_scalar_probe!(pinch_1_6_scalar_k2_squared, "k(2,1)*k(2,1)");
+pinch_1_6_scalar_probe!(pinch_1_6_scalar_k3_squared, "k(3,1)*k(3,1)");
+pinch_1_6_scalar_probe!(pinch_1_6_scalar_k1_dot_k2, "k(1,1)*k(2,1)");
+pinch_1_6_scalar_probe!(pinch_1_6_scalar_k1_dot_k3, "k(1,1)*k(3,1)");
+pinch_1_6_scalar_probe!(pinch_1_6_scalar_k2_dot_k3, "k(2,1)*k(3,1)");
+
+pinch_1_6_scalar_probe!(
+    pinch_1_6_original_numerator_term_a,
+    "k(1,1)*p(1,1)*k(2,2)*p(2,2)*k(3,3)*p(1,3)*k(1,4)*p(2,4)"
+);
+pinch_1_6_scalar_probe!(
+    pinch_1_6_original_numerator_term_b,
+    "k(1,1)*p(1,1)*k(1,2)*p(1,2)*k(2,3)*p(2,3)*k(2,4)*p(2,4)"
+);

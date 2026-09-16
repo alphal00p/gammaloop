@@ -101,7 +101,28 @@ pub struct MATAD {
     settings: VakintSettings,
 }
 
+#[cfg(test)]
+#[path = "matad/routing_tests.rs"]
+mod routing_tests;
+
 impl MATAD {
+    /// MATAD edge number and momentum orientation for each Vakint parent slot.
+    /// Denominators use only the edge number; numerators also need its sign.
+    fn edge_momenta(integral_name: &str) -> Result<&'static [(usize, i64)], VakintError> {
+        match integral_name.split("_pinch_").next().unwrap() {
+            "I1L" => Ok(&[(1, 1)]),
+            "I2L" => Ok(&[(2, 1), (3, 1), (1, 1)]),
+            // MATAD uses p4=p1+p6 and p5=p6-p3. With parent
+            // k1=p4, k2=p5, k3=p6, Vakint's k3-k1 and k2-k3
+            // are therefore -p1 and -p3, respectively.
+            "I3L" => Ok(&[(4, 1), (5, 1), (6, 1), (1, -1), (2, 1), (3, -1)]),
+            _ => Err(VakintError::InvalidGenericExpression(format!(
+                "Integral {} is not supported by MATAD.",
+                integral_name
+            ))),
+        }
+    }
+
     pub fn with_settings(settings: VakintSettings) -> Self {
         MATAD { settings }
     }
@@ -538,18 +559,7 @@ impl Vakint {
             Vakint::identify_uv_mass_symbols(integral.canonical_expression.as_ref().unwrap())?;
 
         // Here we map the propagators in the correct order for the definition of the topology in MATAD
-        let vakint_to_matad_edge_map = match integral_name.as_str().split("_pinch_").next().unwrap()
-        {
-            "I1L" => vec![1],
-            "I2L" => vec![2, 3, 1],
-            "I3L" => vec![4, 5, 6, 1, 2, 3],
-            _ => {
-                return Err(VakintError::InvalidGenericExpression(format!(
-                    "Integral {} is not supported by MATAD.",
-                    integral_name
-                )));
-            }
-        };
+        let vakint_to_matad_edge_map = MATAD::edge_momenta(&integral_name)?;
 
         let mut numerator = Vakint::convert_to_dot_notation(input_numerator);
 
@@ -598,8 +608,6 @@ impl Vakint {
             }
         }
 
-        let vakint_to_matad_edge_map_copy = vakint_to_matad_edge_map.clone();
-
         numerator = numerator.replace(
                 function!(S.dot, function!(S.k, S.id1_a), function!(S.k, S.id2_a))
             .to_pattern()).when(&(Condition::from((S.id1_, number_condition()))
@@ -619,15 +627,17 @@ impl Vakint {
                             get_integer_from_atom(match_in.get(S.id2_).unwrap().to_atom().as_view()).unwrap()
                         );
                     }
-                    let i_edge1 =
-                        vakint_to_matad_edge_map_copy[(id1 as usize) - 1];
-                    let i_edge2 =
-                        vakint_to_matad_edge_map_copy[(id2 as usize) - 1];
+                    let (i_edge1, orientation1) =
+                        vakint_to_matad_edge_map[(id1 as usize) - 1];
+                    let (i_edge2, orientation2) =
+                        vakint_to_matad_edge_map[(id2 as usize) - 1];
                     // in MATAD, the loop momenta dot products need to be written p<i>.p<i>
                     // The outter dot will be converted to an inner dot in the next step
                     // Also keep in mind that in MATAD propagators are euclidean propagators so
                     // a minus sign is necessary here.
-                    vk_parse!(format!("-dot(p{},p{})", i_edge1, i_edge2).as_str()).unwrap()
+                    // A contracted LMB can select oppositely oriented parent
+                    // edges. Preserve both signs in addition to the Wick sign.
+                    vk_parse!(format!("{}*dot(p{},p{})", -orientation1 * orientation2, i_edge1, i_edge2).as_str()).unwrap()
                 });
 
         // Substitute eps by (4-d)/2
@@ -676,7 +686,7 @@ impl Vakint {
         let integral_string = powers
             .iter()
             .zip(vakint_to_matad_edge_map)
-            .map(|(pwr, matag_edge_index)| format!("s{}m^{}", matag_edge_index, pwr))
+            .map(|(pwr, (matag_edge_index, _))| format!("s{}m^{}", matag_edge_index, pwr))
             .collect::<Vec<_>>()
             .join("*");
 
