@@ -167,7 +167,12 @@
       g,
       left: cut-side(g, in-x, crossings, source: (<D1>, <D2>), sink: (<D6>,)),
       right: cut-side(g, out-x, crossings, sink: (<D1>, <D2>), source: (<D6>,)),
-      boundary: boundary-position,
+      boundary: item => {
+        let b = item.boundary
+        let row = b.data.crossings.at(b.crossing).y
+        let dy = if row in (mid, mid2) { -.7 } else { 0 }
+        boundary-position(item) + (shift: (0, dy))
+      },
     )
     let edges = (
       compact: (spring-length: 4),
