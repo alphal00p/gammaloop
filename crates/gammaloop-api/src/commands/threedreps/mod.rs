@@ -6,8 +6,8 @@ use std::{
 
 use clap::{Args, Subcommand, ValueEnum};
 use color_eyre::{
-    eyre::{eyre, Context},
     Result,
+    eyre::{Context, eyre},
 };
 use gammalooprs::{
     graph::Graph,
@@ -19,16 +19,16 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use symbolica::atom::AtomCore;
 use three_dimensional_reps::{
-    generate_3d_expression, graph_info, render_expression_summary, validate_parsed_graph,
     DisplayOptions, GenerationError, GraphInfo, GraphValidation, NumeratorDisplay,
     NumeratorSamplingScaleMode, OrientationID, RepresentationMode, ThreeDExpression,
-    ThreeDGraphSource,
+    ThreeDGraphSource, generate_3d_expression, graph_info, render_expression_summary,
+    validate_parsed_graph,
 };
 
 use crate::{
+    CLISettings,
     completion::CompletionArgExt,
     state::{ProcessRef, State},
-    CLISettings,
 };
 
 #[derive(Debug, Subcommand, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
@@ -161,6 +161,11 @@ pub struct Build {
     /// Suppress the formatted expression summary unless orientation details are requested.
     #[arg(long, default_value_t = false)]
     pub no_pretty: bool,
+
+    /// Hide the numerator in the CFF structure table.
+    #[serde(default)]
+    #[arg(long)]
+    pub no_numerator: bool,
 
     /// Disable ANSI colors in the formatted output.
     #[arg(long, default_value_t = false)]
@@ -410,7 +415,8 @@ impl Build {
         }
 
         if !self.no_pretty || self.show_details_for_orientation.is_some() {
-            let numerator = selected.graph.full_numerator_atom().to_canonical_string();
+            let numerator = (!self.no_numerator)
+                .then(|| selected.graph.full_numerator_atom().to_canonical_string());
             println!(
                 "{}",
                 render_expression_summary(
@@ -418,7 +424,7 @@ impl Build {
                     &output.graph,
                     energy_degree_bounds.as_deref(),
                     NumeratorDisplay {
-                        original: Some(&numerator),
+                        original: numerator.as_deref(),
                         simplified: None,
                     },
                     output.numerator_sampling_scale_mode,
