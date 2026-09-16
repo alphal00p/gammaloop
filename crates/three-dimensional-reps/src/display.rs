@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, Orientation};
 use nu_ansi_term::{Color, Style as AnsiStyle};
-use symbolica::atom::AtomCore;
+use symbolica::{atom::AtomCore, printer::PrintOptions};
 use tabled::{builder::Builder, settings::Style};
 
 use crate::{
@@ -640,7 +640,14 @@ fn short_origin_label(origin: &str) -> String {
 }
 
 fn coefficient_label(coeff: &symbolica::atom::Atom, use_color: bool) -> String {
-    c(&coeff.to_canonical_string(), Color::Yellow, use_color)
+    let label = coeff
+        .printer(PrintOptions {
+            hide_all_namespaces: true,
+            include_attributes: false,
+            ..PrintOptions::file()
+        })
+        .to_string();
+    c(&label, Color::Yellow, use_color)
 }
 
 fn factor_list(power: usize, half_edges: &[EdgeIndex], use_color: bool) -> String {

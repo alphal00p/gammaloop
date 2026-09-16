@@ -274,6 +274,11 @@
         "no_color": {
           "type": "boolean"
         },
+        "no_numerator": {
+          "description": "Hide the numerator in the CFF structure table.",
+          "type": "boolean",
+          "default": false
+        },
         "no_pretty": {
           "type": "boolean"
         },
