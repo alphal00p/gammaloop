@@ -121,7 +121,11 @@ symbol = "feynkit_graph::FeynmanDiagram"
 anchor = "pub struct FeynmanDiagram {"
 # Reviewed 2026-09-16: the current architecture documents this standalone
 # FeynKit owner, with GammaLoop application state downstream.
-digest = "bc5f1862a4b36e80b3a1853900b3a7516bec19f2"
+# Reviewed 2026-09-16: JSON and DOT parsing reuse exact registered symbol
+# declarations to preserve Symbolica 3 user data; graph ownership is unchanged.
+# Reviewed 2026-09-16: cut and threshold metadata decode JSON directly after
+# Linnet has removed DOT quoting; physical metadata ownership is unchanged.
+digest = "a50750961fe116cefbe751a931fa1da80ddc1db8"
 
 [[section.note.scope]]
 path = "crates/feynkit-tensor/src/lib.rs"
