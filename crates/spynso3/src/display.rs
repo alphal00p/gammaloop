@@ -28,11 +28,11 @@ use symbolica::{
     domains::SelfRing,
     printer::{AnsiHtmlFormatter, PrintOptions, PrintState},
 };
+use symbolica_typst_atom_payload::{AttachmentSet, encode_atom_render_tree};
 use tabled::{
     builder::Builder,
     settings::{Alignment, Style},
 };
-use tymbolica_atom_payload::{AttachmentSet, encode_atom_render_tree};
 
 use crate::{
     Spensor,

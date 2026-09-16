@@ -328,7 +328,7 @@
 }
 
 #let _atom-envelope(atom, semantic) = (
-  protocol: "tymbolica",
+  protocol: "symbolica",
   version: 1,
   kind: "atom",
   atom: atom,

@@ -24,7 +24,7 @@ use symbolica::atom::{
     Atom, AtomCore, AtomView, DefaultNamespace, NamespacedSymbol, Symbol, SymbolAttribute,
     SymbolBuilder,
 };
-use tymbolica_atom_payload::{
+use symbolica_typst_atom_payload::{
     AttachmentSet, ParsedPayload, encode_atom_from_set, encode_atom_render_tree, parse_payload,
 };
 use wasm_minimal_protocol::*;
@@ -36,7 +36,7 @@ use spenso::portable_payload::REPRESENTATION_ATTACHMENT_VERSION;
 #[cfg(test)]
 use spenso::portable_payload::math_display_symbol_name;
 #[cfg(test)]
-use tymbolica_atom_payload::{Attachment, AttachmentKey};
+use symbolica_typst_atom_payload::{Attachment, AttachmentKey};
 
 initiate_protocol!();
 
@@ -640,7 +640,7 @@ fn semantic_atom_payload_bytes(value: &Value) -> Result<Option<&[u8]>, String> {
     let Some(Value::Map(payload)) = map_get(slots, "value") else {
         return Ok(None);
     };
-    if map_get(payload, "protocol") != Some(&Value::Text("tymbolica".to_owned())) {
+    if map_get(payload, "protocol") != Some(&Value::Text("symbolica".to_owned())) {
         return Ok(None);
     }
     if map_text(payload, "kind")? != "atom" {
@@ -648,26 +648,26 @@ fn semantic_atom_payload_bytes(value: &Value) -> Result<Option<&[u8]>, String> {
     }
     let version = value_i64(
         map_get(payload, "version")
-            .ok_or_else(|| "tymbolica index metadata missing version".to_owned())?,
-        "tymbolica index metadata version",
+            .ok_or_else(|| "symbolica index metadata missing version".to_owned())?,
+        "symbolica index metadata version",
     )?;
     if version != 1 {
         return Err(format!(
-            "unsupported tymbolica index metadata version {version}"
+            "unsupported symbolica index metadata version {version}"
         ));
     }
     match map_get(payload, "atom") {
         Some(Value::Bytes(bytes)) => Ok(Some(bytes)),
         Some(other) => Err(format!(
-            "tymbolica index metadata atom must be bytes, got {other:?}"
+            "symbolica index metadata atom must be bytes, got {other:?}"
         )),
-        None => Err("tymbolica index metadata missing atom".to_owned()),
+        None => Err("symbolica index metadata missing atom".to_owned()),
     }
 }
 
 fn exact_atom_from_index_ast(value: &Value) -> Result<Option<Atom>, String> {
     semantic_atom_payload_bytes(value)?
-        .map(|bytes| decode_atom(bytes, "tymbolica index metadata"))
+        .map(|bytes| decode_atom(bytes, "symbolica index metadata"))
         .transpose()
 }
 
@@ -1035,7 +1035,7 @@ fn collect_construct_value(
             "display-index" => {
                 let ast = display_ast_value(map, "display index", DISPLAY_INDEX_VERSION)?;
                 if let Some(bytes) = semantic_atom_payload_bytes(&ast)? {
-                    context.inspect_payload(bytes, "tymbolica index metadata")?;
+                    context.inspect_payload(bytes, "symbolica index metadata")?;
                 } else {
                     let mut nodes = 0;
                     let display = index_display_from_ast(&ast, 0, &mut nodes)?;
@@ -1046,7 +1046,7 @@ fn collect_construct_value(
             "display-math" => {
                 let ast = display_ast_value(map, "display math", DISPLAY_MATH_VERSION)?;
                 if let Some(bytes) = semantic_atom_payload_bytes(&ast)? {
-                    context.inspect_payload(bytes, "tymbolica display metadata")?;
+                    context.inspect_payload(bytes, "symbolica display metadata")?;
                     Ok(())
                 } else {
                     let mut nodes = 0;
@@ -1357,11 +1357,12 @@ pub fn from_ast(ast: &[u8], namespace: &[u8]) -> Result<Vec<u8>, String> {
         other => return Err(format!("namespace must be text, got {other:?}")),
     };
     let mut context = InputContext::default();
-    let preflight = tymbolica_atom_payload::typst_ast::preflight_payloads_from_ast(ast, "ast")?;
+    let preflight =
+        symbolica_typst_atom_payload::typst_ast::preflight_payloads_from_ast(ast, "ast")?;
     context.absorb_attachment_set(&preflight.attachments)?;
     context.register_representations()?;
     let attached =
-        tymbolica_atom_payload::typst_ast::attached_atom_from_ast(ast, &namespace, "ast")?;
+        symbolica_typst_atom_payload::typst_ast::attached_atom_from_ast(ast, &namespace, "ast")?;
     debug_assert_eq!(attached.attachments, preflight.attachments);
     encode_atom_with_context(&attached.atom, &context)
 }
@@ -1768,7 +1769,7 @@ mod tests {
         assert!(Symbol::get_symbol(NamespacedSymbol::parse(&display_name)).is_none());
 
         let atom = Atom::var(parse_symbol("x", namespace, None).unwrap());
-        let payload = tymbolica_atom_payload::encode_atom_with_attachments(
+        let payload = symbolica_typst_atom_payload::encode_atom_with_attachments(
             &atom,
             [
                 representation_attachment(&representation_name, &representation),
@@ -1880,7 +1881,7 @@ mod tests {
             vec![(
                 "value",
                 cbor_map([
-                    ("protocol", Value::Text("tymbolica".to_owned())),
+                    ("protocol", Value::Text("symbolica".to_owned())),
                     ("version", Value::Integer(1.into())),
                     ("kind", Value::Text("atom".to_owned())),
                     ("atom", Value::Bytes(payload)),
@@ -2392,12 +2393,12 @@ mod tests {
         };
         let x = Atom::var(parse_symbol("x", "tydenso_sidecar_raw_conflict_test", None).unwrap());
         let h = Atom::var(parse_symbol("h", "tydenso_sidecar_raw_conflict_test", None).unwrap());
-        let first = tymbolica_atom_payload::encode_atom_with_attachments(
+        let first = symbolica_typst_atom_payload::encode_atom_with_attachments(
             &x,
             [representation_attachment(name, &numeric)],
         )
         .unwrap();
-        let second = tymbolica_atom_payload::encode_atom_with_attachments(
+        let second = symbolica_typst_atom_payload::encode_atom_with_attachments(
             &h,
             [representation_attachment(name, &dual)],
         )
@@ -2434,7 +2435,7 @@ mod tests {
 
         let display = MathDisplayDeclaration::new(expected_display).unwrap();
         let atom = Atom::var(parse_symbol("x", namespace, None).unwrap());
-        let payload = tymbolica_atom_payload::encode_atom_with_attachments(
+        let payload = symbolica_typst_atom_payload::encode_atom_with_attachments(
             &atom,
             [
                 representation_attachment(&representation_name, &representation),
@@ -2498,7 +2499,8 @@ mod tests {
         let atom =
             Atom::var(parse_symbol("x", "tydenso_sidecar_future_version_test", None).unwrap());
         let payload =
-            tymbolica_atom_payload::encode_atom_with_attachments(&atom, [attachment]).unwrap();
+            symbolica_typst_atom_payload::encode_atom_with_attachments(&atom, [attachment])
+                .unwrap();
 
         let error = decode_atom(&payload, "future representation payload").unwrap_err();
         assert!(error.contains(&format!(
@@ -2600,7 +2602,7 @@ mod tests {
             vec![(
                 "value",
                 cbor_map([
-                    ("protocol", Value::Text("tymbolica".to_owned())),
+                    ("protocol", Value::Text("symbolica".to_owned())),
                     ("version", Value::Integer(1.into())),
                     ("kind", Value::Text("atom".to_owned())),
                     ("atom", Value::Bytes(payload)),

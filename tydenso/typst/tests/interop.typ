@@ -1,7 +1,7 @@
 // Cross-plugin payload-contract checks for the cleaned interoperability example.
 #import "../examples/interop.typ" as example
 #import "../lib.typ" as tensors
-#import "@local/tymbolica:0.1.0" as algebra
+#import "@local/symbolica:0.1.0" as algebra
 
 #assert(type(example.expanded) == bytes)
 #assert(type(tensors.inspect(example.expanded)) == dictionary)

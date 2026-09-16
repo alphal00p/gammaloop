@@ -19,7 +19,7 @@ use symbolica::{
     atom::{Atom, FunctionBuilder, NamespacedSymbol, SymbolBuilder},
     parse,
 };
-use tymbolica_atom_payload::{encode_atom_from_set, parse_payload};
+use symbolica_typst_atom_payload::{encode_atom_from_set, parse_payload};
 
 const SPENSO_WRAPPER: &str = r#"
 from ..spenso_native import *

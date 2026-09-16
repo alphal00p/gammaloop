@@ -38,11 +38,11 @@
   cargoVendorDir = craneLib.vendorCargoDeps {
     cargoLock = (workspaceRoot + "/Cargo.lock");
     overrideVendorGitCheckout = packages: drv:
-      if lib.any (package: package.name == "tymbolica-atom-payload") packages
+      if lib.any (package: package.name == "symbolica-typst-atom-payload") packages
       then
         drv.overrideAttrs (_: {
-          # The pinned commit survives on GitHub but is no longer on an upstream
-          # branch. Fetch its archive, preserving the exact Cargo.lock source.
+          # Fetch the exact Cargo.lock revision even if upstream branches move;
+          # the archive has the same contents as the Git checkout.
           src = builtins.fetchTree {
             type = "github";
             owner = "symbolica-dev";

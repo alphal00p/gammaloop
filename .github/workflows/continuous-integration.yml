@@ -77,11 +77,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check out the exact Tymbolica package revision
+      - name: Check out the exact Symbolica Typst plugin revision
         uses: actions/checkout@v4
         with:
           repository: symbolica-dev/symbolica-typst-plugin
-          ref: 4aab37aa6a5250ac692b425bc95592a408c98cc1
+          ref: 18e0491628f9eac5c788659cabfcdb7575f6986d
           path: tymbolica-pinned
 
       - uses: NixOS/nix-installer-action@main
