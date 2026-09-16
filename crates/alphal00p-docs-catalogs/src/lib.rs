@@ -1,4 +1,4 @@
-//! Explicit, ordered supported-API catalogs for the five documentation sites.
+//! Explicit, ordered supported-API catalogs for the documentation sites.
 //!
 //! These adapters intentionally do not use a process-global inventory. Each
 //! component exporter constructs its own scope, which keeps registration
@@ -86,6 +86,74 @@ mod annotated_scopes {
     #[alphal00p_docs::scope(id = "vakint", title = "vakint supported API", format = "typst")]
     mod vakint {}
 
+    /// Loads validated particle content and parameters through the feature-gated FeynKit facade.
+    /// See #link("reference/rust/")[full Rustdoc] for this component.
+    #[alphal00p_docs::scope(id = "feynkit", title = "feynkit supported API", format = "typst")]
+    mod feynkit {}
+
+    /// Owns validated particles, interactions, parameters, and indexed model lookups.
+    /// See #link("reference/rust/")[full Rustdoc] for this component.
+    #[alphal00p_docs::scope(
+        id = "feynkit-model",
+        title = "feynkit-model supported API",
+        format = "typst"
+    )]
+    mod feynkit_model {}
+
+    /// Imports a UFO model through a caller-owned Python interpreter.
+    /// See #link("reference/rust/")[full Rustdoc] for this component.
+    #[alphal00p_docs::scope(
+        id = "feynkit-ufo",
+        title = "feynkit-ufo supported API",
+        format = "typst"
+    )]
+    mod feynkit_ufo {}
+
+    /// Represents contravariant four-momenta with the mostly-minus metric.
+    /// See #link("reference/rust/")[full Rustdoc] for this component.
+    #[alphal00p_docs::scope(
+        id = "feynkit-kinematics",
+        title = "feynkit-kinematics supported API",
+        format = "typst"
+    )]
+    mod feynkit_kinematics {}
+
+    /// Carries model-aware diagrams, momentum routing, and symbolic numerators.
+    /// See #link("reference/rust/")[full Rustdoc] for this component.
+    #[alphal00p_docs::scope(
+        id = "feynkit-graph",
+        title = "feynkit-graph supported API",
+        format = "typst"
+    )]
+    mod feynkit_graph {}
+
+    /// Generates Feynman diagrams from a validated model and process specification.
+    /// See #link("reference/rust/")[full Rustdoc] for this component.
+    #[alphal00p_docs::scope(
+        id = "feynkit-generator",
+        title = "feynkit-generator supported API",
+        format = "typst"
+    )]
+    mod feynkit_generator {}
+
+    /// Builds cross-free families with explicit ownership of the surface cache.
+    /// See #link("reference/rust/")[full Rustdoc] for this component.
+    #[alphal00p_docs::scope(
+        id = "feynkit-cff",
+        title = "feynkit-cff supported API",
+        format = "typst"
+    )]
+    mod feynkit_cff {}
+
+    /// Reduces selected integrated vectors using native Spenso tensor projectors.
+    /// See #link("reference/rust/")[full Rustdoc] for this component.
+    #[alphal00p_docs::scope(
+        id = "feynkit-tensor",
+        title = "feynkit-tensor supported API",
+        format = "typst"
+    )]
+    mod feynkit_tensor {}
+
     pub(super) fn for_component(component: &str) -> Option<alphal00p_docs_schema::DocScope> {
         match component {
             "gammalooprs" => Some(__alphal00p_docs_scope_gammalooprs()),
@@ -96,6 +164,14 @@ mod annotated_scopes {
             "spenso-hep-lib" => Some(__alphal00p_docs_scope_spenso_hep_lib()),
             "idenso" => Some(__alphal00p_docs_scope_idenso()),
             "vakint" => Some(__alphal00p_docs_scope_vakint()),
+            "feynkit" => Some(__alphal00p_docs_scope_feynkit()),
+            "feynkit-model" => Some(__alphal00p_docs_scope_feynkit_model()),
+            "feynkit-ufo" => Some(__alphal00p_docs_scope_feynkit_ufo()),
+            "feynkit-kinematics" => Some(__alphal00p_docs_scope_feynkit_kinematics()),
+            "feynkit-graph" => Some(__alphal00p_docs_scope_feynkit_graph()),
+            "feynkit-generator" => Some(__alphal00p_docs_scope_feynkit_generator()),
+            "feynkit-cff" => Some(__alphal00p_docs_scope_feynkit_cff()),
+            "feynkit-tensor" => Some(__alphal00p_docs_scope_feynkit_tensor()),
             _ => None,
         }
     }
@@ -282,6 +358,7 @@ fn rust_scope(component: &str, workspace_root: &Path) -> Result<DocScope> {
 
 fn rust_item_required_features(component: &str, item: &str) -> &'static [&'static str] {
     match (component, item) {
+        ("feynkit", "Model") => &["model"],
         // The entire parametric module is behind Spenso's Symbolica-backed
         // `shadowing` feature, not merely extra implementations on the type.
         ("spenso", "NetworkParse" | "ParamTensor" | "ParseSettings" | "SymbolicParallelism") => {
@@ -301,9 +378,65 @@ fn rust_examples(component: &str) -> Result<&'static [RustExampleSpec]> {
         "spenso-hep-lib" => Ok(SPENSO_HEP_LIB),
         "idenso" => Ok(IDENSO),
         "vakint" => Ok(VAKINT),
+        "feynkit" => Ok(FEYNKIT),
+        "feynkit-model" => Ok(FEYNKIT_MODEL),
+        "feynkit-ufo" => Ok(FEYNKIT_UFO),
+        "feynkit-kinematics" => Ok(FEYNKIT_KINEMATICS),
+        "feynkit-graph" => Ok(FEYNKIT_GRAPH),
+        "feynkit-generator" => Ok(FEYNKIT_GENERATOR),
+        "feynkit-cff" => Ok(FEYNKIT_CFF),
+        "feynkit-tensor" => Ok(FEYNKIT_TENSOR),
         _ => bail!("unknown Rust component {component}"),
     }
 }
+
+const FEYNKIT: &[RustExampleSpec] = &[example!(
+    "Model",
+    "rust",
+    "let model = feynkit::Model::from_path(\"crates/feynkit-model/tests/fixtures/scalars_2p_3p.json\")?;\nassert!(!model.particles().is_empty());"
+)];
+
+const FEYNKIT_MODEL: &[RustExampleSpec] = &[example!(
+    "Model",
+    "rust",
+    "let model = feynkit_model::Model::from_path(\"crates/feynkit-model/tests/fixtures/scalars_2p_3p.json\")?;\nassert!(!model.particles().is_empty());"
+)];
+
+const FEYNKIT_UFO: &[RustExampleSpec] = &[example!(
+    "UfoLoader",
+    "rust",
+    "let loader = feynkit_ufo::UfoLoader::new().simplify_model(true);\nassert!(loader.options().simplify_model);"
+)];
+
+const FEYNKIT_KINEMATICS: &[RustExampleSpec] = &[example!(
+    "FourMomentum",
+    "rust",
+    "let momentum = feynkit_kinematics::FourMomentum::from_args(5.0_f64, 3.0, 0.0, 4.0);\nassert_eq!(momentum.mass_squared(), 0.0);"
+)];
+
+const FEYNKIT_GRAPH: &[RustExampleSpec] = &[example!(
+    "FeynmanDiagram",
+    "rust",
+    "use feynkit_graph::FeynmanDiagram;\nfn round_trip(diagram: &FeynmanDiagram) -> Result<FeynmanDiagram, feynkit_graph::DiagramError> {\n    FeynmanDiagram::from_json(diagram.model_arc(), &diagram.to_json()?)\n}"
+)];
+
+const FEYNKIT_GENERATOR: &[RustExampleSpec] = &[example!(
+    "Generator",
+    "rust",
+    "use feynkit_generator::{GenerationOptions, Generator, Process};\nlet model = feynkit_model::Model::from_path(\"crates/feynkit-model/tests/fixtures/scalars_2p_3p.json\")?;\nlet generator = Generator::new(model);\nlet process = Process::amplitude([\"scalar_0\"], [\"scalar_0\", \"scalar_0\"]);\nlet result = generator.generate(&process, &GenerationOptions::default().max_vertices(3))?;\nassert!(!result.diagrams.is_empty());"
+)];
+
+const FEYNKIT_CFF: &[RustExampleSpec] = &[example!(
+    "CffGenerator",
+    "rust",
+    "use feynkit_cff::{CffEdge, CffGenerator, CffGraph, EdgeId, VertexId};\nlet graph = CffGraph::new(2, [CffEdge::internal(EdgeId::new(0), VertexId::new(0), VertexId::new(1))])?;\nlet result = CffGenerator::default().generate(&graph)?;\nassert_eq!(result.report.acyclic_orientations, 2);"
+)];
+
+const FEYNKIT_TENSOR: &[RustExampleSpec] = &[example!(
+    "TensorReducer",
+    "rust",
+    "use feynkit_tensor::TensorReducer;\nuse symbolica::{parse, symbol};\nlet reducer = TensorReducer::new(parse!(\"D\")).with_integrated_head(symbol!(\"k\"));\nlet reduced = reducer.reduce(parse!(\"k(spenso::mink(D,mu))*k(spenso::mink(D,nu))\").as_view())?;\nassert_eq!(reduced.terms().len(), 1);"
+)];
 
 const GAMMALOOPRS: &[RustExampleSpec] = &[
     example!(
@@ -941,14 +1074,14 @@ fn python_required_exports(component: &str) -> Result<&'static [&'static str]> {
             "to_typst",
             "trace",
         ]),
-        "linnet-py" | "idenso-community" | "vakint-community" => Ok(&[]),
+        "feynkit-community" | "linnet-py" | "idenso-community" | "vakint-community" => Ok(&[]),
         _ => bail!("unknown Python component {component}"),
     }
 }
 
 fn python_export_is_supported(component: &str, name: &str) -> Result<bool> {
     match component {
-        "linnet-py" | "idenso-community" | "vakint-community" => Ok(true),
+        "feynkit-community" | "linnet-py" | "idenso-community" | "vakint-community" => Ok(true),
         "gammaloop-python" | "spynso3" => Ok(python_required_exports(component)?.contains(&name)),
         _ => bail!("unknown Python component {component}"),
     }
@@ -1002,6 +1135,14 @@ mod tests {
             "spenso-hep-lib",
             "idenso",
             "vakint",
+            "feynkit",
+            "feynkit-model",
+            "feynkit-ufo",
+            "feynkit-kinematics",
+            "feynkit-graph",
+            "feynkit-generator",
+            "feynkit-cff",
+            "feynkit-tensor",
         ] {
             let request = CatalogRequest {
                 product_id: "test".to_owned(),

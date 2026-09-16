@@ -384,9 +384,10 @@ pub struct VakintSettings {
     /// Ordered Vakint evaluation backends tried for each matched vacuum integral.
     #[serde(skip_serializing_if = "is_default_vakint_evaluation_methods")]
     pub evaluation_methods: Vec<String>,
-    /// MATAD-specific master-integral and substitution controls.
+    /// Numerator tensor reduction: native FeynKit by default, or the FORM-based AlphaLoop projector.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub tensor_reduction_method: VakintTensorReductionMethod,
+    /// MATAD-specific master-integral and substitution controls.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub matad: MATADSettings,
     /// AlphaLoop-specific master-integral substitution controls.

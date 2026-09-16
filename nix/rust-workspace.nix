@@ -459,6 +459,8 @@
       "assets/gammalooplogo-dark.svg"
       "assets/gammalooplogo-light.svg"
       "crates/clinnet/CHANGELOG.typ"
+      "crates/feynkit-py/examples/ufo_generation.py"
+      "crates/feynkit-py/python/symbolica/community/feynkit/__init__.py"
       "crates/idenso/CHANGELOG.typ"
       "crates/kurvst/typst/docs"
       "crates/linnest/typst/docs"

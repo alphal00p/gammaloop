@@ -23,7 +23,7 @@ lifecycle = "current"
 owner = "unassigned"
 reviewed_at = "2026-08-18"
 review_ref = "c9f4e32acd2c"
-products = ["gammaloop"]
+products = ["gammaloop", "feynkit"]
 topics = ["state", "python", "generation", "evaluation", "events", "integration", "persistence"]
 review_triggers = ["crates/feynkit*/**", "crates/gammaloop-api/src/**", "crates/gammaloop-api/python/**", "crates/gammalooprs/src/**"]
 
@@ -550,7 +550,9 @@ anchor = "pub struct Vakint {"
 # Vakint's explicitly registered Python surface and evaluation contracts are unchanged.
 # Reviewed 2026-09-16: native FeynKit tensor reduction is now the default;
 # the architecture distinguishes it from the explicit legacy FORM backend.
-digest = "8ad6a5ddaefd03d627f980e8baad73793248d1aa"
+# No runtime impact 2026-09-16: generated API prose now distinguishes native
+# tensor reduction from backend evaluation and its deferred tool validation.
+digest = "01ac590244e65201faafacdd0af4004410cf8b49"
 
 [[section.note.scope]]
 path = "crates/vakint/src/topologies.rs"
@@ -574,7 +576,9 @@ anchor = "pub struct VakintWrapper {"
 # wrapper contracts and required tool boundaries explicit without changing behavior.
 # Reviewed 2026-09-16: Python selects the tensor backend and defers external
 # tool validation until an operation needs it, as recorded in the architecture.
-digest = "f1f9f3fa1052311ad7a86d5632569f1a4f38a934"
+# No runtime impact 2026-09-16: generated API prose now distinguishes native
+# tensor reduction from backend evaluation and its deferred tool validation.
+digest = "c9dc2fcdb924175ef43304c93ddf2a88543fd412"
 
 [[section.note]]
 id = "cff-surface-cache-ownership"
@@ -587,7 +591,7 @@ lifecycle = "current"
 owner = "unassigned"
 reviewed_at = "2026-09-16"
 review_ref = "2a2c9afe7417780d2102aaf5be6fb1860bb43651"
-products = ["gammaloop"]
+products = ["gammaloop", "feynkit"]
 topics = ["cff", "cache", "ownership"]
 review_triggers = ["crates/feynkit-cff/**", "crates/gammalooprs/src/**/cff*", "crates/gammalooprs/src/graph/**"]
 
@@ -922,7 +926,10 @@ symbol = "documentation source ownership"
 # snapshot renders, whose source-link validation reads the staged repository.
 anchor = "repositoryDocumentationSources ="
 end_anchor = "documentationRegistry = builtins.fromTOML"
-digest = "e9896090fd53ab4f5ede95116048e0420b80bb01"
+# Reviewed 2026-09-16: FeynKit joins the existing product pipeline, including
+# shared package/docs stub validation and complete latest/snapshot bundles.
+# Reviewed 2026-09-16: stage the Python sources linked from the FeynKit guides.
+digest = "f4f618546d3d15d3aa7f2289254f787b6a32b7e0"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"
@@ -944,7 +951,8 @@ anchor = "documentationCatalogAnnotatedItemSourcePaths ="
 end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # No documentation-cache impact 2026-09-16: FeynKit compile-time fixtures
 # and embedded renderer assets follow their package source ownership.
-digest = "dd234963ccb0bd8afae7cb0578eccfb758434442"
+# Reviewed 2026-09-16: stage the Python sources linked from the FeynKit guides.
+digest = "fc8476277de2a5e790d478c3f70788c353265b61"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
@@ -958,7 +966,11 @@ end_anchor = "\nin\n{\n  inherit"
 # inherited Nix packages. The reusable Cargo producer boundary is unchanged.
 # Reviewed 2026-09-14: terminal renders receive runtime Symbolica licensing;
 # the reusable Cargo producer inputs remain unchanged.
-digest = "edc84e51b071ce06d7290de8a316ffba11cae9a4"
+# Reviewed 2026-09-16: FeynKit joins the existing product pipeline, including
+# shared package/docs stub validation and complete latest/snapshot bundles.
+# Reviewed 2026-09-16: historical redirect assertions apply to the original
+# five products; new FeynKit bundles publish only their canonical routes.
+digest = "ac6786f72c31fb585f2033d0ee0de0edbfcb4975"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"

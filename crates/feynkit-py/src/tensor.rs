@@ -214,8 +214,21 @@ impl PyTensorReducer {
     /// A rank-two vacuum projection becomes a product of dot products divided
     /// by the dimension:
     ///
-    /// >>> reduced = reducer.reduce(k(mu) * k(nu) * p(mu) * p(nu))
-    /// >>> reduced
+    /// >>> from symbolica import S
+    /// >>> import symbolica.community.feynkit as fk
+    /// >>> D, mu, nu = S("feynkit_docs::D", "feynkit_docs::mu", "feynkit_docs::nu")
+    /// >>> k, p = S("feynkit_docs::k", "feynkit_docs::p")
+    /// >>> mink, dot = S("spenso::mink", "spenso::dot")
+    /// >>> k_compact = k(mink(D))
+    /// >>> p_compact = p(mink(D))
+    /// >>> numerator = (
+    /// ...     k(mink(D, mu)) * k(mink(D, nu))
+    /// ...     * p(mink(D, mu)) * p(mink(D, nu))
+    /// ... )
+    /// >>> reducer = fk.TensorReducer(D).with_integrated_vector(k_compact)
+    /// >>> reduced = reducer.reduce(numerator)
+    /// >>> expected = dot(k_compact, k_compact) * dot(p_compact, p_compact) / D
+    /// >>> assert reduced == expected
     ///
     /// Parameters
     /// ----------

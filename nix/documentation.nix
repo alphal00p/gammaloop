@@ -122,6 +122,9 @@ let
         (workspaceRoot + "/crates/linnet-py/pyproject.toml")
         (workspaceRoot + "/crates/linnet-py/uv.lock")
         (workspaceRoot + "/crates/linnet-py/linnet_py.pyi")
+        (workspaceRoot + "/crates/feynkit-py/python/symbolica/community/feynkit/__init__.pyi")
+        (workspaceRoot + "/crates/feynkit-py/python/symbolica/community/feynkit/__init__.py")
+        (workspaceRoot + "/crates/feynkit-py/examples/ufo_generation.py")
         (workspaceRoot + "/crates/linnet-py/examples/physics_render_settings.py")
         (workspaceRoot + "/crates/linnet-py/examples/layout_stream.py")
         (workspaceRoot + "/crates/linnet-py/examples/rendering_api.py")
@@ -320,6 +323,7 @@ let
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features spenso -- spynso3 docs/api/python/spynso3.pyi --check
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features idenso -- idenso-community docs/api/python/idenso-community.pyi --check
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features vakint -- vakint-community docs/api/python/vakint-community.pyi --check
+    cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features feynkit -- feynkit-community docs/api/python/feynkit-community.pyi --check
     cargo test --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features gammaloop gammaloop_runtime_surface_and_signatures_match_the_docs_stub
     linnet_python="$TMPDIR/alphal00p-docs-linnet-python"
     export UV_CACHE_DIR="$TMPDIR/alphal00p-docs-uv-cache"
@@ -424,7 +428,7 @@ let
           "$out/products/gammaloop/index.html"
         python3 scripts/check-docs-html.py "$out"
 
-        for product in gammaloop linnet spenso idenso vakint; do
+        for product in gammaloop linnet spenso idenso vakint feynkit; do
           test -s "$out/products/$product/snapshots/v0.3.4/.note"
         done
       '';
@@ -485,7 +489,7 @@ let
         cmp "$docs_pages_test/index.html" "$TMPDIR/portal-before-snapshot.html"
         cmp "$docs_pages_test/developers/.note" "$TMPDIR/developers-before-snapshot.note"
         cmp "$docs_pages_test/products/gammaloop/latest/.note" "$TMPDIR/latest-before-snapshot.note"
-        for product in gammaloop linnet spenso idenso vakint; do
+        for product in gammaloop linnet spenso idenso vakint feynkit; do
           test -s "$docs_pages_test/products/$product/snapshots/v0.3.4/.note"
         done
 
@@ -507,7 +511,7 @@ let
         test -s "$out/developers/assets/site.js"
         test -s "$out/developers/architecture/gammaloop-architecture/index.html"
         ${alphal00pDocsDeveloperAssertions "$out"}
-        for product in gammaloop linnet spenso idenso vakint; do
+        for product in gammaloop linnet spenso idenso vakint feynkit; do
           product_root="$out/products/$product"
           test -s "$product_root/index.html"
           test -s "$product_root/latest/index.html"
@@ -518,12 +522,6 @@ let
           test -s "$product_root/latest/tutorial/index.html"
           test -s "$product_root/latest/reference/interfaces/index.html"
           test -s "$product_root/latest/version-history/index.html"
-          test -s "$product_root/latest/manual/interfaces/index.html"
-          test -s "$product_root/latest/manual/releases/index.html"
-          grep -Fq 'url=../../reference/interfaces/' \
-            "$product_root/latest/manual/interfaces/index.html"
-          grep -Fq 'url=../../version-history/' \
-            "$product_root/latest/manual/releases/index.html"
           test -s "$product_root/latest/assets/site.css"
           test -s "$product_root/latest/assets/site.js"
           test -s "$product_root/latest/assets/local-unitarity-light.svg"
@@ -537,6 +535,15 @@ let
           ! grep -q "Rustdoc generation was skipped" \
             "$product_root/latest/reference/rust/index.html"
         done
+        for product in gammaloop linnet spenso idenso vakint; do
+          product_root="$out/products/$product"
+          test -s "$product_root/latest/manual/interfaces/index.html"
+          test -s "$product_root/latest/manual/releases/index.html"
+          grep -Fq 'url=../../reference/interfaces/' \
+            "$product_root/latest/manual/interfaces/index.html"
+          grep -Fq 'url=../../version-history/' \
+            "$product_root/latest/manual/releases/index.html"
+        done
         test -s "$out/products/gammaloop/latest/reference/rust/gammalooprs/index.html"
         test -s "$out/products/gammaloop/latest/reference/rust/gammaloop_api/index.html"
         test -s "$out/products/linnet/latest/reference/rust/linnet/index.html"
@@ -545,6 +552,10 @@ let
         test -s "$out/products/spenso/latest/reference/rust/spenso_hep_lib/index.html"
         test -s "$out/products/idenso/latest/reference/rust/idenso/index.html"
         test -s "$out/products/vakint/latest/reference/rust/vakint/index.html"
+        for component in feynkit feynkit_model feynkit_ufo feynkit_kinematics feynkit_graph feynkit_generator feynkit_cff feynkit_tensor; do
+          test -s "$out/products/feynkit/latest/reference/rust/$component/index.html"
+        done
+        test -s "$out/products/feynkit/latest/reference/python/feynkit-community/index.html"
         test -s "$out/products/gammaloop/latest/reference/rust/theme.css"
         grep -Fq 'href="../theme.css"' \
           "$out/products/gammaloop/latest/reference/rust/gammalooprs/index.html"

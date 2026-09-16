@@ -24,7 +24,7 @@ pages = [
   { id = "kurvst", title = "Kurvst curve and path API", summary = "Bezier and Hobby paths, trimming, patterns, parallel curves, and CeTZ conversion for GammaLoop drawing templates.", source = "docs/products/gammaloop/content/kurvst.typ", symbol = "kurvst", route = "guides/kurvst/", aliases = ["manual/kurvst/"], group = "Companion tools" },
   { id = "releases", title = "Version history", summary = "Release-note coverage, component versions, compatibility risks, and practical upgrade checks.", source = "docs/products/gammaloop/content/changelog.typ", symbol = "changelog", route = "version-history/", aliases = ["manual/releases/"], group = "Version history" },
 ]
-related = ["linnet", "spenso", "idenso", "vakint"]
+related = ["feynkit", "linnet", "spenso", "idenso", "vakint"]
 rust_components = [
   { id = "gammalooprs", package = "gammalooprs", kind = "library", version_source = "crates/gammalooprs/Cargo.toml" },
   { id = "gammaloop-api", package = "gammaloop-api", kind = "library-and-cli", version_source = "crates/gammaloop-api/Cargo.toml", features = ["cli"] },
@@ -64,7 +64,7 @@ pages = [
   { id = "clinnet-releases", title = "Clinnet versions", summary = "Canonical release notes for the independently versioned Clinnet command-line renderer.", source = "docs/products/linnet/content/clinnet-releases.typ", symbol = "clinnet-releases", route = "version-history/clinnet/", aliases = ["manual/clinnet-releases/"], group = "Version history" },
 ]
 changelog = "crates/linnet/CHANGELOG.typ"
-related = ["spenso", "gammaloop"]
+related = ["feynkit", "spenso", "gammaloop"]
 rust_components = [
   { id = "linnet", package = "linnet", kind = "library", version_source = "crates/linnet/Cargo.toml", features = ["native", "nodestore-vec", "serde", "bincode", "drawing", "symbolica"] },
 ]
@@ -95,7 +95,7 @@ pages = [
   { id = "spynso3-releases", title = "Spynso3 versions", summary = "Canonical release notes for the independently versioned Symbolica community Python adapter.", source = "docs/products/spenso/content/spynso3-releases.typ", symbol = "spynso3-releases", route = "version-history/spynso3/", aliases = ["manual/spynso3-releases/"], group = "Version history" },
 ]
 changelog = "crates/spenso/CHANGELOG.typ"
-related = ["linnet", "idenso", "gammaloop"]
+related = ["linnet", "idenso", "feynkit", "gammaloop"]
 rust_components = [
   { id = "spenso", package = "spenso", kind = "library", version_source = "crates/spenso/Cargo.toml", features = ["native", "shadowing"] },
   { id = "spenso-macros", package = "spenso-macros", kind = "proc-macro-library", version_source = "crates/spenso-macros/Cargo.toml" },
@@ -124,7 +124,7 @@ pages = [
   { id = "idenso-releases", title = "Idenso versions", summary = "Canonical release notes for the core Idenso symbolic-identity library.", source = "docs/products/idenso/content/idenso-releases.typ", symbol = "idenso-releases", route = "version-history/idenso/", group = "Version history" },
 ]
 changelog = "crates/idenso/CHANGELOG.typ"
-related = ["spenso", "gammaloop"]
+related = ["feynkit", "spenso", "gammaloop"]
 rust_components = [
   { id = "idenso", package = "idenso", kind = "library", version_source = "crates/idenso/Cargo.toml", features = ["native", "bincode", "reference-cases"] },
 ]
@@ -148,10 +148,43 @@ pages = [
   { id = "interfaces", title = "Rust and Python interfaces", summary = "Engine types, settings, expression formats, and the Symbolica Python module.", source = "docs/products/vakint/content/api.typ", symbol = "api", route = "reference/interfaces/", aliases = ["manual/interfaces/"], group = "Reference" },
   { id = "releases", title = "Version history", summary = "Release-note coverage, component versions, compatibility risks, and practical upgrade checks.", source = "docs/products/vakint/content/changelog.typ", symbol = "changelog", route = "version-history/", aliases = ["manual/releases/"], group = "Version history" },
 ]
-related = ["gammaloop"]
+related = ["feynkit", "gammaloop"]
 rust_components = [
   { id = "vakint", package = "vakint", kind = "library", version_source = "crates/vakint/Cargo.toml" },
 ]
 python_components = [
   { id = "vakint-community", package = "vakint", kind = "symbolica-community-module", version_source = "crates/vakint/Cargo.toml", module = "symbolica.community.vakint", features = ["symbolica_community_module", "python_stubgen"] },
+]
+
+[[product]]
+id = "feynkit"
+title = "FeynKit"
+tagline = "Standalone model, diagram, and symbolic-physics tools"
+source = "docs/products/feynkit/main.typ"
+citation = { title = "FeynKit", creators = ["FeynKit contributors"], year = 2026, repository = "https://github.com/alphal00p/gammaloop" }
+pages = [
+  { id = "overview", title = "Overview", summary = "Standalone models, diagram generation, CFF, kinematics, and vacuum tensor reduction in Rust and Python.", source = "docs/products/feynkit/content/overview.typ", symbol = "overview", route = "", group = "Start here" },
+  { id = "quickstart", title = "Generate your first FeynKit diagram", summary = "Choose Rust or Python to load a small scalar model and generate a finalized tree diagram.", source = "docs/products/feynkit/content/quickstart.typ", symbol = "quickstart", route = "quickstart/", group = "Start here" },
+  { id = "quickstart-rust", title = "Using FeynKit from Rust", summary = "Use the facade crate to load a model, generate a process, validate diagrams, and export DOT.", source = "docs/products/feynkit/content/quickstart-rust.typ", symbol = "quickstart-rust", route = "quickstart/rust/", group = "Getting started" },
+  { id = "quickstart-python", title = "Using FeynKit from Python", summary = "Use a combined Symbolica host to generate diagrams, round-trip JSON, and construct a CFF expression.", source = "docs/products/feynkit/content/quickstart-python.typ", symbol = "quickstart-python", route = "quickstart/python/", group = "Getting started" },
+  { id = "tutorial", title = "From a model to finalized diagrams", summary = "Model and UFO loading, parameter evaluation, process configuration, symbolic numerators, and diagram ownership.", source = "docs/products/feynkit/content/tutorial.typ", symbol = "tutorial", route = "tutorial/", group = "Tutorial" },
+  { id = "tensor-reduction", title = "Vacuum tensor reduction and momentum selectors", summary = "Project integrated momenta while preserving external vectors, dimension conventions, and diagram prefactors.", source = "docs/products/feynkit/content/tensor-reduction.typ", symbol = "tensor-reduction", route = "guides/tensor-reduction/", group = "Guides" },
+  { id = "notebooks", title = "Notebook figures and symbolic output", summary = "Render diagrams as Typst, SVG, HTML, or automatic notebook figures and inspect symbolic expressions separately.", source = "docs/products/feynkit/content/notebooks.typ", symbol = "notebooks", route = "guides/notebooks/", group = "Guides" },
+  { id = "community-host", title = "Integrating the Symbolica community host", summary = "Register the shared native module, package its Python wrapper, export stubs, and verify an installed host.", source = "docs/products/feynkit/content/community-host.typ", symbol = "community-host", route = "guides/community-host/", group = "Advanced" },
+  { id = "interfaces", title = "Rust and Python interfaces", summary = "The eight Rust crates, facade feature gates, Python owners, and their complete API references.", source = "docs/products/feynkit/content/api.typ", symbol = "api", route = "reference/interfaces/", group = "Reference" },
+  { id = "releases", title = "Version history", summary = "Current source-revision coverage, compatibility boundaries, and reproducibility requirements.", source = "docs/products/feynkit/content/changelog.typ", symbol = "changelog", route = "version-history/", group = "Version history" },
+]
+related = ["gammaloop", "linnet", "spenso", "idenso", "vakint"]
+rust_components = [
+  { id = "feynkit", package = "feynkit", kind = "library", version_source = "crates/feynkit/Cargo.toml", features = ["cff", "generator", "graph", "kinematics", "model", "tensor", "ufo"] },
+  { id = "feynkit-model", package = "feynkit-model", kind = "library", version_source = "crates/feynkit-model/Cargo.toml", features = ["native"] },
+  { id = "feynkit-ufo", package = "feynkit-ufo", kind = "library", version_source = "crates/feynkit-ufo/Cargo.toml", features = ["feynkit-model/native"] },
+  { id = "feynkit-kinematics", package = "feynkit-kinematics", kind = "library", version_source = "crates/feynkit-kinematics/Cargo.toml", features = ["numerica/integer-gmp", "numerica/float-mpfr"] },
+  { id = "feynkit-graph", package = "feynkit-graph", kind = "library", version_source = "crates/feynkit-graph/Cargo.toml" },
+  { id = "feynkit-generator", package = "feynkit-generator", kind = "library", version_source = "crates/feynkit-generator/Cargo.toml" },
+  { id = "feynkit-cff", package = "feynkit-cff", kind = "library", version_source = "crates/feynkit-cff/Cargo.toml" },
+  { id = "feynkit-tensor", package = "feynkit-tensor", kind = "library", version_source = "crates/feynkit-tensor/Cargo.toml" },
+]
+python_components = [
+  { id = "feynkit-community", package = "feynkit-py", kind = "symbolica-community-module", version_source = "crates/feynkit-py/Cargo.toml", module = "symbolica.community.feynkit", features = ["ufo", "python_stubgen"] },
 ]
