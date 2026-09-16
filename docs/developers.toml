@@ -274,7 +274,9 @@ anchor = "pub fn extract_templates<P: AsRef<Path>>"
 # extract_templates and its destination contract, is byte-identical to the
 # previous verified scope; only test coverage changed. The migration record's
 # current preface now names the style composer alongside its three adapters.
-digest = "040793fcba3b6f372a03187cfe82cfacc32fa953"
+# No-impact attestation 2026-09-16: the test module imports ModelGammaLoopExt
+# for the canonical model API; production template extraction is unchanged.
+digest = "140a80d416120a105cb96d30f922401115920170"
 
 [[section.note]]
 id = "gammaloop-drawing-architecture"
