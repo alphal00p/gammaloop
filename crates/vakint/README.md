@@ -47,6 +47,18 @@ artifacts and terminal catalogs are shipped. This routing follow-up passes 39
 focused tests, including the existing 16-test K6 pipeline; it is not a fresh
 rerun of the complete 83-test selection or a four-loop numerical-parity claim.
 
+`run_time_decimal_precision` controls arithmetic precision, not the accuracy of
+stored master data. If a required numerical master or period constant carries
+less precision, Vakint emits a `WARNING` through its usual Rust logger and
+continues at the requested working precision. Configure the application's
+logger to display warnings (for example, `RUST_LOG=warn` with an env logger).
+Resizing a stored number does not supply additional accurate digits; in
+particular, requesting 20,000 digits does not establish a 20,000-digit result.
+FMFT checks constants surviving Laurent truncation; direct MATAD/AlphaLoop
+substitution and numerical RustRed catalogs conservatively check each active
+source record before resizing or materialization. Unsupported Laurent orders
+and missing master data remain errors.
+
 ```rust
 use vakint::{EvaluationOrder, Vakint, VakintSettings, vakint_parse};
 

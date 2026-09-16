@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, HashSet};
 use std::{collections::HashMap, sync::LazyLock};
 
+use crate::master_precision::MasterPrecisionWarnings;
 use crate::matad_numerics::DIRECT_SUBSTITUTIONS;
 use crate::utils::vakint_macros::{vk_parse, vk_symbol};
 use crate::utils::{self, set_precision_in_polynomial_atom, undress_vakint_symbols};
@@ -167,6 +168,12 @@ impl MATAD {
     }
 
     pub fn substitute_masters_directly(&self, result: AtomView) -> Result<Atom, VakintError> {
+        MasterPrecisionWarnings::new(&self.settings).check_substitutions(
+            result,
+            DIRECT_SUBSTITUTIONS
+                .iter()
+                .map(|(source, (target, condition))| (source, target, Some(condition))),
+        );
         let processed_constants = DIRECT_SUBSTITUTIONS
             .iter()
             .map(|(src, (trgt, condition))| {
@@ -249,6 +256,12 @@ impl MATAD {
     }
 
     pub fn substitute_poly_gamma(&self, result: AtomView) -> Result<Atom, VakintError> {
+        MasterPrecisionWarnings::new(&self.settings).check_substitutions(
+            result,
+            POLY_GAMMA_SUBSTITUTIONS
+                .iter()
+                .map(|(source, target)| (source, target, None)),
+        );
         let processed_constants = POLY_GAMMA_SUBSTITUTIONS
             .iter()
             .map(|(src, trgt)| {
@@ -294,6 +307,12 @@ impl MATAD {
     }
 
     pub fn substitute_hpls(&self, result: AtomView) -> Result<Atom, VakintError> {
+        MasterPrecisionWarnings::new(&self.settings).check_substitutions(
+            result,
+            HPL_SUBSTITUTIONS
+                .iter()
+                .map(|(source, target)| (source, target, None)),
+        );
         let processed_constants = HPL_SUBSTITUTIONS
             .iter()
             .map(|(src, trgt)| {
@@ -317,6 +336,12 @@ impl MATAD {
     }
 
     pub fn substitute_additional_constants(&self, result: AtomView) -> Result<Atom, VakintError> {
+        MasterPrecisionWarnings::new(&self.settings).check_substitutions(
+            result,
+            ADDITIONAL_CONSTANTS
+                .iter()
+                .map(|(source, target)| (source, target, None)),
+        );
         let processed_constants = ADDITIONAL_CONSTANTS
             .iter()
             .map(|(src, trgt)| {

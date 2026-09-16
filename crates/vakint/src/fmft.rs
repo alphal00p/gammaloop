@@ -488,7 +488,6 @@ impl Vakint {
             integral.n_loops as i64,
             &muv_sq_atom,
             options,
-            false,
         )
     }
 }

@@ -87,6 +87,7 @@ pub(super) fn evaluate(
             detail: error.to_string(),
         })?;
     let mut raw_masters = Atom::Zero;
+    let mut precision_warnings = crate::master_precision::MasterPrecisionWarnings::new(settings);
     for lowered in lowering.terms() {
         let decomposition = reducer
             .reduce_with_common_mass_homogeneity(lowered.integral())
@@ -125,6 +126,12 @@ pub(super) fn evaluate(
                 &matched.mass_squared,
                 options.substitute_masters,
             )?;
+            if options.substitute_masters {
+                matched
+                    .family
+                    .terminals()?
+                    .warn_precision(master, &mut precision_warnings);
+            }
             raw_masters +=
                 exact_coefficient * scale * terminal * lowered.scalar_spectator().clone();
         }

@@ -12,6 +12,7 @@ use rustred::family::IntegralKey;
 use rustred::foundry::artifact::{ArtifactSchemaVersion, ClosedArtifact};
 use symbolica::atom::{Atom, AtomCore};
 
+use crate::master_precision::MasterPrecisionWarnings;
 use crate::utils::vakint_macros::{vk_parse, vk_symbol};
 
 use super::RustRedEvaluationError;
@@ -117,6 +118,21 @@ pub(super) struct TerminalCatalog {
 }
 
 impl TerminalCatalog {
+    /// Numerical records keep their native source precision. Warn once per
+    /// terminal evaluation before mass factors or runtime arithmetic obscure it.
+    pub(super) fn warn_precision(
+        &self,
+        master: &IntegralKey,
+        warnings: &mut MasterPrecisionWarnings<'_>,
+    ) -> bool {
+        if let Some(TerminalValue::NumericalLaurent { symbolic, series }) = self.values.get(master)
+        {
+            warnings.check(symbolic, series)
+        } else {
+            false
+        }
+    }
+
     pub(super) fn compile(
         artifact: &ClosedArtifact,
         manifest: &TerminalManifest<'_>,
@@ -429,5 +445,49 @@ mod tests {
             let error = TerminalCatalog::compile(&artifact, &manifest).unwrap_err();
             assert!(error.contains("must not contain ep or Oep"), "{error}");
         }
+    }
+
+    #[test_log::test]
+    fn numerical_catalog_warns_once_without_changing_materialization() {
+        let artifact = derive_one_loop_unit_mass_tadpole().unwrap();
+        let sources = [TerminalSource::numerical_laurent(
+            &[1],
+            -1,
+            &["1.23456789", "2.34567891"],
+        )];
+        let manifest = TerminalManifest::new(
+            ArtifactSchemaVersion::V5,
+            artifact.algorithm_id(),
+            artifact.family_fingerprint(),
+            &sources,
+        );
+        let catalog = TerminalCatalog::compile(&artifact, &manifest).unwrap();
+        let master = artifact.masters().first().unwrap();
+        let settings = crate::VakintSettings {
+            run_time_decimal_precision: 80,
+            ..Default::default()
+        };
+        let mut warnings = crate::master_precision::MasterPrecisionWarnings::new(&settings);
+        let before = catalog
+            .materialize(
+                super::ArtifactFamily::UnitMassVacuumK1,
+                master,
+                1,
+                &symbolica::atom::Atom::num(1),
+                true,
+            )
+            .unwrap();
+        assert!(catalog.warn_precision(master, &mut warnings));
+        assert!(!catalog.warn_precision(master, &mut warnings));
+        let after = catalog
+            .materialize(
+                super::ArtifactFamily::UnitMassVacuumK1,
+                master,
+                1,
+                &symbolica::atom::Atom::num(1),
+                true,
+            )
+            .unwrap();
+        assert_eq!(before, after);
     }
 }

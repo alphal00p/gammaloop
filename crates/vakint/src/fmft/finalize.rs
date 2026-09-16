@@ -3,18 +3,16 @@
 //! This is not an integral reducer: the caller supplies a reduced expression
 //! with its classical mass dimension restored. No executable is consulted.
 
-use std::collections::HashSet;
-
 use colored::Colorize;
 use log::debug;
-use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
-use symbolica::coefficient::CoefficientView;
+use symbolica::atom::{Atom, AtomCore, Symbol};
 use symbolica::domains::rational::Rational;
 use symbolica::function;
 
 use crate::fmft_numerics::{
     ADDITIONAL_CONSTANTS, MASTERS_NUMERIC_SUBSTITUTIONS, POLY_GAMMA_SUBSTITUTIONS,
 };
+use crate::master_precision::MasterPrecisionWarnings;
 use crate::symbols::S;
 use crate::utils::vakint_macros::{vk_parse, vk_symbol};
 use crate::{FMFTOptions, Vakint, VakintError};
@@ -24,15 +22,10 @@ use super::FMFT;
 impl FMFT {
     /// Finalize native scalar output in the existing Minkowski FMFT PR basis.
     ///
-    /// Native callers cannot silently increase the information content of the
-    /// shipped finite-precision master constants. The historical FORM entry
-    /// retains its existing precision behavior through the shared implementation.
-    /// For this unactivated boundary, runtime working precision is conservatively
-    /// used as the minimum stored-constant precision. Vakint historically makes
-    /// no such accuracy guarantee from that setting: the future four-loop
-    /// adapter must resolve this stricter policy explicitly, rather than lower
-    /// existing numerical tolerances. Passing this check is not an error bound
-    /// on cancellation in the final result.
+    /// Native and historical FORM callers share a warning-only check of finite
+    /// source precision. Requested working precision is preserved, but resizing
+    /// stored constants cannot create additional accurate digits. This check is
+    /// not an error bound on cancellation in the final result.
     /// No four-loop artifact is registered by exposing this internal boundary.
     #[allow(dead_code)] // Activated when genuine four-loop artifacts are shipped.
     pub(crate) fn finalize_native_reduced_masters(
@@ -45,7 +38,7 @@ impl FMFT {
         // epsilon variable. Normalize these before the Laurent expansion so
         // poles such as 1/(d-4) cannot hide required unknown master orders.
         let evaluated_integral = self.process_fmft_form_output(evaluated_integral)?;
-        self.finalize_master_expression(evaluated_integral, 4, muv_sq_atom, options, true)
+        self.finalize_master_expression(evaluated_integral, 4, muv_sq_atom, options)
     }
 
     pub(super) fn finalize_master_expression(
@@ -54,7 +47,6 @@ impl FMFT {
         loop_count: i64,
         muv_sq_atom: &Atom,
         options: &FMFTOptions,
-        require_available_precision: bool,
     ) -> Result<Atom, VakintError> {
         let settings = &self.settings;
         let normalization = vk_parse!(
@@ -100,9 +92,7 @@ impl FMFT {
             // master orders through spurious epsilon poles.
             Self::reject_unknown_orders(&evaluated_integral)?;
             if options.susbstitute_masters {
-                if require_available_precision {
-                    self.check_native_constant_precision(&evaluated_integral)?;
-                }
+                self.warn_constant_precision(&evaluated_integral);
                 debug!(
                     "{}: Substituting master coefficients and period constants...",
                     "FMFT".green()
@@ -161,7 +151,7 @@ impl FMFT {
     /// Check only constants actually needed after exact Laurent truncation,
     /// following the existing substitution tables to a fixed point. Precision
     /// is read from Symbolica's coefficients before any runtime resizing.
-    fn check_native_constant_precision(&self, expression: &Atom) -> Result<(), VakintError> {
+    fn warn_constant_precision(&self, expression: &Atom) {
         let substitutions = MASTERS_NUMERIC_SUBSTITUTIONS
             .iter()
             .map(|(source, (target, condition))| (source, target, Some(condition)))
@@ -174,44 +164,9 @@ impl FMFT {
                 ADDITIONAL_CONSTANTS
                     .iter()
                     .map(|(source, target)| (source, target, None)),
-            )
-            .collect::<Vec<_>>();
-        let mut visited = HashSet::new();
-        let mut pending = vec![("native master expression".to_owned(), expression)];
-        while let Some((source_name, value)) = pending.pop() {
-            let mut available = u32::MAX;
-            value.visitor(&mut |part| {
-                if let AtomView::Num(number) = part
-                    && let CoefficientView::Float(real, imaginary) = number.get_coeff_view()
-                {
-                    for component in [real, imaginary] {
-                        if !component.is_zero() {
-                            available = available.min(component.to_float().prec());
-                        }
-                    }
-                }
-                true
-            });
-            if available < self.settings.get_binary_precision() {
-                return Err(VakintError::FMFTError(format!(
-                    "FMFT numerical constant {source_name} has only {available} bits of stored precision; {} decimal digits ({} bits) were requested",
-                    self.settings.run_time_decimal_precision,
-                    self.settings.get_binary_precision(),
-                )));
-            }
-            for &(source, target, condition) in &substitutions {
-                if !visited.contains(source)
-                    && value
-                        .pattern_match(&source.to_pattern(), condition, None)
-                        .next()
-                        .is_some()
-                {
-                    visited.insert(source.clone());
-                    pending.push((source.to_canonical_string(), target));
-                }
-            }
-        }
-        Ok(())
+            );
+        MasterPrecisionWarnings::new(&self.settings)
+            .check_substitutions(expression.as_view(), substitutions);
     }
 }
 

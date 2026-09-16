@@ -94,28 +94,32 @@ fn native_pr_dimension_and_custom_epsilon_coefficients_match_internal_ep() {
     assert!(!results[0].contains_symbol(vk_symbol!("ep")));
 }
 
-#[test]
-fn native_pr_rejects_unavailable_precision_without_changing_legacy_policy() {
+#[test_log::test]
+fn native_pr_warns_and_preserves_requested_precision_and_legacy_values() {
     let fmft = finalizer(5, 32);
     let value = vk_parse!("PR11d").unwrap();
-    let error = fmft
+    let native = fmft
         .finalize_native_reduced_masters(value.clone(), &Atom::num(1), &FMFTOptions::default())
-        .unwrap_err();
-    assert!(error.to_string().contains("PR11dep0"), "{error}");
-    assert!(error.to_string().contains("stored precision"), "{error}");
-    assert!(
-        fmft.finalize_master_expression(value, 4, &Atom::num(1), &FMFTOptions::default(), false)
-            .is_ok()
-    );
+        .unwrap();
+    let legacy = fmft
+        .finalize_master_expression(value, 4, &Atom::num(1), &FMFTOptions::default())
+        .unwrap();
+    assert_eq!(native, legacy);
+    assert_eq!(fmft.settings.run_time_decimal_precision, 32);
 
-    let error = finalizer(5, 20_000)
+    let high = finalizer(5, 20_000);
+    let native = high
         .finalize_native_reduced_masters(
             vk_parse!("PR12").unwrap(),
             &Atom::num(1),
             &FMFTOptions::default(),
         )
-        .unwrap_err();
-    assert!(error.to_string().contains("stored precision"), "{error}");
+        .unwrap();
+    let expected = high
+        .substitute_masters(vk_parse!("PR12ep0").unwrap().as_view())
+        .unwrap();
+    assert_eq!(native, expected);
+    assert_eq!(high.settings.run_time_decimal_precision, 20_000);
 }
 
 #[test]
@@ -155,7 +159,7 @@ fn native_pr_preserves_mass_and_custom_epsilon_conventions() {
         .finalize_native_reduced_masters(value.clone(), &mass, &FMFTOptions::default())
         .unwrap();
     let legacy = fmft
-        .finalize_master_expression(value, 4, &mass, &FMFTOptions::default(), false)
+        .finalize_master_expression(value, 4, &mass, &FMFTOptions::default())
         .unwrap();
     assert_eq!(native, legacy);
     let expected_finite = fmft

@@ -3,6 +3,7 @@ pub mod alphaloop_numerics;
 pub mod fmft;
 pub mod fmft_numerics;
 pub mod graph;
+mod master_precision;
 pub mod matad;
 pub mod matad_numerics;
 pub mod rustred_evaluation;
@@ -2039,7 +2040,10 @@ pub struct VakintSettings {
     pub verify_numerator_identification: bool,
     /// Per-loop normalization convention applied to evaluated integrals.
     pub integral_normalization_factor: LoopNormalizationFactor,
-    /// Requested decimal precision passed to numerical backends and conversions.
+    /// Requested arithmetic precision, not a guarantee of master-data accuracy.
+    /// Known lower-precision master sources produce a warning; evaluation keeps
+    /// this working precision without gaining additional accurate source digits.
+    /// Missing master data and unsupported Laurent orders remain errors.
     pub run_time_decimal_precision: u32,
     /// Whether inputs may match Vakint's generic unknown-integral topology.
     pub allow_unknown_integrals: bool,
@@ -5358,6 +5362,12 @@ Evaluated (n_loops=1, mu_r=1) :
             Atom::var(vk_symbol!(settings.mu_r_sq_symbol.as_str()))
         );
         if opts.susbstitute_masters {
+            master_precision::MasterPrecisionWarnings::new(settings).check_substitutions(
+                evaluated_integral.as_view(),
+                DIRECT_SUBSTITUTIONS
+                    .iter()
+                    .map(|(source, (target, condition))| (source, target, Some(condition))),
+            );
             let processed_constants = DIRECT_SUBSTITUTIONS
                 .iter()
                 .map(|(src, (trgt, condition))| {
