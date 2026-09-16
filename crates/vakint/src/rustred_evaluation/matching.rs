@@ -6,9 +6,11 @@ use symbolica::id::Replacement;
 
 use crate::symbols::S;
 use crate::utils::vakint_macros::vk_symbol;
-use crate::{get_integer_from_atom, get_prop_with_id, ReplacementRules, Topology, VakintSettings};
+use crate::{
+    Integral, ReplacementRules, Topology, VakintSettings, get_integer_from_atom, get_prop_with_id,
+};
 
-use super::artifact::{shipped_family_for_loop_count, ArtifactFamily};
+use super::artifact::{ArtifactFamily, shipped_family_for_loop_count};
 use super::{RustRedEvaluationError, RustRedEvaluationOptions};
 
 pub(super) struct MatchedScalarFamily {
@@ -45,18 +47,6 @@ impl ArtifactFamily {
                 Ok(Self::UnitMassVacuumK3)
             }
             Topology::ThreeLoop(_) if integral.n_loops == 3 && integral.n_props == 6 => {
-                let (parent, coordinates) = integral.parent_routing.as_ref().ok_or_else(|| {
-                    RustRedEvaluationError::InvalidMatchedFamily {
-                        detail: "the matched three-loop family has no retained parent routing"
-                            .to_owned(),
-                    }
-                })?;
-                if coordinates.len() != 3 {
-                    return Err(RustRedEvaluationError::InvalidMatchedFamily {
-                        detail: "the retained parent routing does not have three coordinates"
-                            .to_owned(),
-                    });
-                }
                 let loops = (1..=3)
                     .map(|axis| function!(S.k, Atom::num(axis)))
                     .collect::<Vec<_>>();
@@ -68,35 +58,7 @@ impl ArtifactFamily {
                     &loops[0] - &loops[1],
                     &loops[1] - &loops[2],
                 ];
-                let routing = loops
-                    .iter()
-                    .zip(coordinates.iter())
-                    .map(|(source, target)| {
-                        Replacement::new(source.to_pattern(), target.to_pattern())
-                    })
-                    .collect::<Vec<_>>();
-                for (axis, momentum) in expected.iter().enumerate() {
-                    // Authenticate the defining parent slots, then the actual
-                    // contracted routing already supplied by the matcher.
-                    // Neither step invokes another graph match or basis solve.
-                    require_momentum(parent, axis + 1, momentum.clone())?;
-                    if let Some(properties) = get_prop_with_id(expression.as_view(), axis + 1) {
-                        let actual = properties
-                            .get(&vk_symbol!("q_"))
-                            .expect("Vakint's canonical propagator matcher captures momentum");
-                        if !(actual.replace_multiple(&routing) - momentum)
-                            .expand()
-                            .is_zero()
-                        {
-                            return Err(RustRedEvaluationError::InvalidMatchedFamily {
-                                detail: format!(
-                                    "canonical propagator {} does not transport to its retained K6 parent slot",
-                                    axis + 1
-                                ),
-                            });
-                        }
-                    }
-                }
+                integral.validate_parent_routing(&expected)?;
                 Ok(Self::UnitMassVacuumK6)
             }
             // Keep the admission boundary structural: a future four-loop
@@ -122,6 +84,78 @@ impl ArtifactFamily {
                 ),
             }),
         }
+    }
+}
+
+impl Integral {
+    /// Bind the retained simultaneous witness to a defining physical-slot order.
+    ///
+    /// This validates routing only, not artifact availability, mass, powers or
+    /// closure. Pinched-out slots still belong to the defining parent and must
+    /// agree with the caller's structural descriptor.
+    pub(crate) fn validate_parent_routing(
+        &self,
+        expected_momenta: &[Atom],
+    ) -> Result<(), RustRedEvaluationError> {
+        if expected_momenta.is_empty() || expected_momenta.len() != self.n_props {
+            return Err(RustRedEvaluationError::InvalidMatchedFamily {
+                detail: format!(
+                    "the parent descriptor has {} momenta for {} physical slots",
+                    expected_momenta.len(),
+                    self.n_props
+                ),
+            });
+        }
+        let expression = self.canonical_expression.as_ref().ok_or_else(|| {
+            RustRedEvaluationError::UnsupportedMatchedFamily {
+                detail: "the matcher did not provide a canonical expression".to_owned(),
+            }
+        })?;
+        let (parent, coordinates) = self.parent_routing.as_ref().ok_or_else(|| {
+            RustRedEvaluationError::InvalidMatchedFamily {
+                detail: "the matched family has no retained parent routing".to_owned(),
+            }
+        })?;
+        if coordinates.len() != self.n_loops {
+            return Err(RustRedEvaluationError::InvalidMatchedFamily {
+                detail: format!(
+                    "the retained parent routing has {} coordinates for {} loops",
+                    coordinates.len(),
+                    self.n_loops
+                ),
+            });
+        }
+        let routing = coordinates
+            .iter()
+            .enumerate()
+            .map(|(axis, target)| {
+                let source = function!(S.k, Atom::num(axis + 1));
+                Replacement::new(source.to_pattern(), target.to_pattern())
+            })
+            .collect::<Vec<_>>();
+        for (axis, momentum) in expected_momenta.iter().enumerate() {
+            // Authenticate the defining parent slots, then the actual
+            // contracted routing already supplied by the matcher.
+            // Neither step invokes another graph match or basis solve.
+            require_momentum(parent, axis + 1, momentum.clone())?;
+            if let Some(properties) = get_prop_with_id(expression.as_view(), axis + 1) {
+                let actual = properties
+                    .get(&vk_symbol!("q_"))
+                    .expect("Vakint's canonical propagator matcher captures momentum");
+                if !(actual.replace_multiple(&routing) - momentum)
+                    .expand()
+                    .is_zero()
+                {
+                    return Err(RustRedEvaluationError::InvalidMatchedFamily {
+                        detail: format!(
+                            "canonical propagator {} does not transport to its retained parent slot",
+                            axis + 1
+                        ),
+                    });
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -237,8 +271,8 @@ fn require_momentum(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::utils::vakint_macros::vk_parse;
     use crate::Vakint;
+    use crate::utils::vakint_macros::vk_parse;
 
     #[test]
     fn k6_matching_preserves_physical_slots_mass_and_retained_routing() {
@@ -324,16 +358,18 @@ mod tests {
             .0;
         // Slot 3 is absent in this contraction, but its defining parent binding
         // is still authenticated; a check of present slots alone would miss it.
-        assert!(get_prop_with_id(
-            original
-                .get_integral()
-                .canonical_expression
-                .as_ref()
-                .unwrap()
-                .as_view(),
-            3
-        )
-        .is_none());
+        assert!(
+            get_prop_with_id(
+                original
+                    .get_integral()
+                    .canonical_expression
+                    .as_ref()
+                    .unwrap()
+                    .as_view(),
+                3
+            )
+            .is_none()
+        );
         *parent = parent
             .replace(vk_parse!("prop(3,edge(left_,right_),q_,mass_,power_)").unwrap())
             .with(vk_parse!("prop(3,edge(left_,right_),2*q_,mass_,power_)").unwrap());

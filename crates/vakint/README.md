@@ -39,6 +39,14 @@ path; separate legacy oracles use FORM. The inventory distinguishes the
 83-test matrix from the 40-entry/46-input legacy census and does not claim
 four-loop RustRed acceptance.
 
+The shared parent-routing validator is also tested against all 19 registered
+four-loop classes and their 123 surviving propagator slots. It reuses the
+matcher's signed simultaneous witness, without graph rematching or topology-name
+dispatch. Four-loop RustRed evaluation remains unavailable until closing
+artifacts and terminal catalogs are shipped. This routing follow-up passes 39
+focused tests, including the existing 16-test K6 pipeline; it is not a fresh
+rerun of the complete 83-test selection or a four-loop numerical-parity claim.
+
 ```rust
 use vakint::{EvaluationOrder, Vakint, VakintSettings, vakint_parse};
 

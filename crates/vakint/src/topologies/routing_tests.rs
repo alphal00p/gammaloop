@@ -2,6 +2,9 @@ use super::*;
 use crate::Vakint;
 use symbolica::id::Replacement;
 
+#[path = "routing_tests/four_loop.rs"]
+mod four_loop;
+
 #[test]
 fn forced_basis_preserves_mass_and_power_under_a_negative_orientation() {
     Vakint::initialize_vakint_symbols();

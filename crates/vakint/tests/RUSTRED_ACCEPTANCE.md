@@ -10,6 +10,31 @@ prepass, followed by RustRed scalar reduction and master substitution. The
 shared harness gives both native stages an invalid FORM path; FORM is available
 only to the explicitly separate AlphaLoop/MATAD oracle lanes.
 
+## Typed four-loop routing preparation (2026-09-16)
+
+The existing K6 signed parent-slot and simultaneous momentum-transport checks
+now live in one crate-private validator reusable by future parent-artifact
+descriptors. K1/K3 behavior, defaults, dependencies and shipped assets are
+unchanged. There is no new graph match, topology-name dispatch or IBP applier.
+
+Native typed tests inspect all 19 registered four-loop classes, 123 surviving
+physical slots and six nonidentity witnesses. They also reject missing/short
+witnesses, altered coordinates, incorrect surviving momentum, changed
+pinched-out parent slots and sign-flipped descriptors. Every four-loop class
+still rejects RustRed admission: routing evidence alone is not a closed artifact.
+
+The fresh scoped gate passes **39 tests**: 23 native library tests, with one
+unchanged offline MATAD-catalog test ignored, plus all 16 K6 pipeline tests.
+The native process and strict native pipeline settings use invalid FORM paths;
+separate oracle lanes use FORM5. Formatting, `cargo check --locked -p vakint
+--lib --tests` and scoped Clippy with `-D warnings` pass. The exact commands,
+frozen hashes and outputs are retained at
+`/tmp/vakint-four-loop-routing.dkHXAz/`.
+
+This is not a rerun of the complete 83-test selection below and does not
+establish four-loop scalar reduction or numerical parity. It replaces the
+earlier diagnostic-only matcher inspection with durable typed regression tests.
+
 ## Symbolica 3 / current-artifact migration rerun (2026-09-16)
 
 The same complete **83-test selection passes again: 83 passed, 0 failed,
