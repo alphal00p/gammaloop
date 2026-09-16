@@ -12,10 +12,11 @@ class Vakint:
 
     Construct one instance and reuse it: initialization processes the complete topology library.
     """
-    def __new__(cls, run_time_decimal_precision: typing.Optional[builtins.int] = None, evaluation_order: typing.Optional[typing.Sequence[VakintEvaluationMethod]] = None, epsilon_symbol: typing.Optional[Expression] = None, mu_r_sq_symbol: typing.Optional[Expression] = None, form_exe_path: typing.Optional[builtins.str] = None, python_exe_path: typing.Optional[builtins.str] = None, verify_numerator_identification: typing.Optional[builtins.bool] = None, integral_normalization_factor: typing.Optional[builtins.str] = None, allow_unknown_integrals: typing.Optional[builtins.bool] = None, clean_tmp_dir: typing.Optional[builtins.bool] = None, number_of_terms_in_epsilon_expansion: typing.Optional[builtins.int] = None, use_dot_product_notation: typing.Optional[builtins.bool] = None, temporary_directory: typing.Optional[builtins.str] = None) -> Vakint:
+    def __new__(cls, run_time_decimal_precision: typing.Optional[builtins.int] = None, evaluation_order: typing.Optional[typing.Sequence[VakintEvaluationMethod]] = None, tensor_reduction_method: typing.Optional[builtins.str] = None, epsilon_symbol: typing.Optional[Expression] = None, mu_r_sq_symbol: typing.Optional[Expression] = None, form_exe_path: typing.Optional[builtins.str] = None, python_exe_path: typing.Optional[builtins.str] = None, verify_numerator_identification: typing.Optional[builtins.bool] = None, integral_normalization_factor: typing.Optional[builtins.str] = None, allow_unknown_integrals: typing.Optional[builtins.bool] = None, clean_tmp_dir: typing.Optional[builtins.bool] = None, number_of_terms_in_epsilon_expansion: typing.Optional[builtins.int] = None, use_dot_product_notation: typing.Optional[builtins.bool] = None, temporary_directory: typing.Optional[builtins.str] = None) -> Vakint:
         r"""
         Create a new Vakint instance, specifying details of the evaluation stack. Note that the same instance can be recycled across multiple evaluations.
         Note that the creation of a Vakint instance involves the processing and creation of the library of all known topologies, which can be time consuming.
+        External executables are validated when an operation needs them, so the FeynKit tensor backend can be used on systems without FORM.
 
         ## Examples
         ```python
@@ -27,7 +28,7 @@ class Vakint:
 
         An empty evaluation order is appropriate for matching, canonicalization, and tensor
         reduction. Add explicit `VakintEvaluationMethod` entries before evaluating an integral;
-        construction validates the executables required by those entries.
+        each operation validates the external executables it needs.
 
         Parameters
         ----------
@@ -36,6 +37,8 @@ class Vakint:
             The decimal precision to be used during the evaluation. Default is 17.
         evaluation_order : Optional[Sequence[VakintEvaluationMethod]]
             A list of `VakintEvaluationMethod` instances specifying the order in which evaluation methods are to be applied. Default is all available methods in a sensible order.
+        tensor_reduction_method : Optional[str]
+            Numerator tensor-reduction backend: "feynkit" is the default, native backend and does not require FORM; "alphaloop" explicitly selects the historical FORM projector.
         epsilon_symbol : Optional[Expression]
             The symbol to be used for the dimensional regularisation parameter epsilon. Default is "ε".
         mu_r_sq_symbol : Optional[Expression]
@@ -231,8 +234,9 @@ class Vakint:
         True
         ```
 
-        This complete path performs tensor reduction before integral evaluation and therefore
-        has the same FORM requirement as `evaluate_integral` for the AlphaLoop method.
+        This path uses the selected tensor backend before integral evaluation. Here the native
+        FeynKit backend reduces the numerator; the AlphaLoop integral-evaluation method requires
+        FORM, just as it does for `evaluate_integral`.
 
         Parameters
         ----------

@@ -10,9 +10,9 @@ a `topo(...)` structure built from propagators.
 
 #callout("Separate matching from evaluation", [
   Canonical topology matching is useful on its own and is much cheaper than a complete
-  evaluation. Tensor reduction and analytic backends invoke FORM; numerical sector decomposition
-  invokes pySecDec and FORM. Choose the narrowest operation and evaluation order needed for the
-  task.
+  evaluation. The default FeynKit tensor reduction works without FORM. Analytic integral
+  evaluation invokes FORM; numerical sector decomposition invokes pySecDec and FORM. Choose
+  the narrowest operation and evaluation order needed for the task.
 ])
 
 == Choose a task
@@ -49,12 +49,12 @@ preserve them, but evaluation still needs a backend that supports the resulting 
 
 == External tools and reproducibility
 
-#boundary("Construction validates the selected backends", [
-  The default evaluation order includes AlphaLoop, MATAD, FMFT, and pySecDec. Settings validation
-  therefore probes FORM and pySecDec even if a later example only canonicalizes an expression.
-  Vakint requires FORM 4.2.1 or newer and pySecDec 1.6.4 or newer. For matching without
-  evaluation, use an empty evaluation order in Rust; in Python, provide an empty
-  `evaluation_order` when constructing `Vakint`.
+#boundary("Integral evaluation validates the selected backends", [
+  Construction and canonicalization defer executable checks. The default native tensor-reduction
+  step also avoids validating scalar-integral backends. Integral evaluation validates its
+  configured order; the default includes AlphaLoop, MATAD, FMFT, and pySecDec. Those backends
+  require FORM 4.2.1 or newer and, for pySecDec, version 1.6.4 or newer. An empty evaluation order
+  makes a matching-only workflow explicit.
 ])
 
 Analytic AlphaLoop, MATAD, and FMFT methods depend on FORM. The pySecDec method depends on both
@@ -76,6 +76,8 @@ VAKINT_NO_CLEAN_TMP_DIR=T RUST_LOG=DEBUG cargo run
 On macOS, if a GNU-compiler link fails with missing `__emul...` symbols, retry the build with
 `EXTRA_MACOS_LIBS_FOR_GNU_GCC=T` set.
 
+The default tensor projector comes from
+#product-link("feynkit", page: "guides/tensor-reduction/", label: "FeynKit").
 Vakint is used by #product-link("gammaloop", label: "GammaLoop") for vacuum-integral work, but it
 owns its topology and evaluation conventions independently. Use this guide and the generated
 API/topology references for the selected version. Contributors can follow topology construction,

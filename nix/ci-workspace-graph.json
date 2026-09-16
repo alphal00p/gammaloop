@@ -13,6 +13,14 @@
     "alphal00p-docs-examples": [
       "alphal00p-docs-catalogs",
       "alphal00p-docs-schema",
+      "feynkit",
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "feynkit-tensor",
+      "feynkit-ufo",
       "gammaloop-api",
       "gammalooprs",
       "idenso",
@@ -24,6 +32,7 @@
     ],
     "alphal00p-docs-macros": [],
     "alphal00p-docs-python-exporter": [
+      "feynkit-py",
       "gammaloop-api",
       "idenso",
       "linnet-py",
@@ -191,6 +200,14 @@
     "alphal00p-docs-examples": {
       "alphal00p-docs-catalogs": [],
       "alphal00p-docs-schema": [],
+      "feynkit": [],
+      "feynkit-cff": [],
+      "feynkit-generator": [],
+      "feynkit-graph": [],
+      "feynkit-kinematics": [],
+      "feynkit-model": [],
+      "feynkit-tensor": [],
+      "feynkit-ufo": [],
       "gammaloop-api": [
         "cli"
       ],
@@ -217,6 +234,9 @@
     },
     "alphal00p-docs-macros": {},
     "alphal00p-docs-python-exporter": {
+      "feynkit-py": [
+        "python_stubgen"
+      ],
       "gammaloop-api": [
         "python_stubgen"
       ],
@@ -546,12 +566,14 @@
       "alphal00p-docs-catalogs",
       "alphal00p-docs-macros",
       "alphal00p-docs-schema",
+      "feynkit",
       "feynkit-cff",
       "feynkit-generator",
       "feynkit-graph",
       "feynkit-kinematics",
       "feynkit-model",
       "feynkit-tensor",
+      "feynkit-ufo",
       "gammaloop-api",
       "gammaloop-tracing-filter",
       "gammaloop-tracing-filter-macros",
@@ -788,12 +810,14 @@
       "alphal00p-docs-catalogs",
       "alphal00p-docs-macros",
       "alphal00p-docs-schema",
+      "feynkit",
       "feynkit-cff",
       "feynkit-generator",
       "feynkit-graph",
       "feynkit-kinematics",
       "feynkit-model",
       "feynkit-tensor",
+      "feynkit-ufo",
       "gammaloop-api",
       "gammaloop-tracing-filter",
       "gammaloop-tracing-filter-macros",
@@ -1085,6 +1109,14 @@
     "alphal00p-docs-examples": [
       "alphal00p-docs-catalogs",
       "alphal00p-docs-schema",
+      "feynkit",
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "feynkit-tensor",
+      "feynkit-ufo",
       "gammaloop-api",
       "gammalooprs",
       "idenso",
@@ -1098,6 +1130,7 @@
       "alphal00p-docs-schema"
     ],
     "alphal00p-docs-python-exporter": [
+      "feynkit-py",
       "gammaloop-api",
       "idenso",
       "linnet-py",
@@ -1269,6 +1302,14 @@
     "alphal00p-docs-examples": {
       "alphal00p-docs-catalogs": [],
       "alphal00p-docs-schema": [],
+      "feynkit": [],
+      "feynkit-cff": [],
+      "feynkit-generator": [],
+      "feynkit-graph": [],
+      "feynkit-kinematics": [],
+      "feynkit-model": [],
+      "feynkit-tensor": [],
+      "feynkit-ufo": [],
       "gammaloop-api": [
         "cli"
       ],
@@ -1297,6 +1338,9 @@
       "alphal00p-docs-schema": []
     },
     "alphal00p-docs-python-exporter": {
+      "feynkit-py": [
+        "python_stubgen"
+      ],
       "gammaloop-api": [
         "python_stubgen"
       ],

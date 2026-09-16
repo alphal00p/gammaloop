@@ -24,6 +24,11 @@ product = "gammaloop"
 role = "Calculation application"
 
 [[task]]
+label = "Diagrams"
+product = "feynkit"
+role = "Particle-physics toolkit"
+
+[[task]]
 label = "Graphs"
 product = "linnet"
 role = "Graph-algorithm library"

@@ -7,6 +7,14 @@ build = "build.rs"
 
 [dependencies]
 eyre.workspace = true
+feynkit = { path = "../feynkit" }
+feynkit-model = { path = "../feynkit-model" }
+feynkit-ufo = { path = "../feynkit-ufo" }
+feynkit-kinematics = { path = "../feynkit-kinematics" }
+feynkit-graph = { path = "../feynkit-graph" }
+feynkit-generator = { path = "../feynkit-generator" }
+feynkit-cff = { path = "../feynkit-cff" }
+feynkit-tensor = { path = "../feynkit-tensor" }
 gammaloop-api = { path = "../gammaloop-api", default-features = false, features = ["cli"] }
 gammalooprs = { path = "../gammalooprs", default-features = false }
 idenso = { workspace = true, features = ["bincode", "reference-cases"] }

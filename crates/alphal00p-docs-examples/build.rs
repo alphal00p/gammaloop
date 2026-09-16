@@ -140,10 +140,21 @@ fn main() -> Result<()> {
                         | RustExampleMode::CompileOnly => {
                             rust_products.insert(product.id.as_str());
                             let function = rust_identifier(&case);
+                            let code = if example.code.lines().any(|line| line.starts_with("# ")) {
+                                let source = example
+                                    .code
+                                    .lines()
+                                    .map(|line| line.strip_prefix("# ").unwrap_or(line))
+                                    .collect::<Vec<_>>()
+                                    .join("\n");
+                                format!("let _ = {{\n{source}\n}};")
+                            } else {
+                                example.code.clone()
+                            };
                             writeln!(
                                 rust_source,
                                 "#[allow(dead_code)]\nfn {function}() -> eyre::Result<()> {{\n{}\n    Ok(())\n}}",
-                                indent(&example.code, 4)
+                                indent(&code, 4)
                             )?;
                             rust_count += 1;
                             match mode {
@@ -578,6 +589,9 @@ fn rust_example_mode(component: &str, item: &str, language: &str) -> Result<Rust
     if language == "ignore" {
         return Ok(RustExampleMode::RustdocIgnored);
     }
+    if language == "no_run" {
+        return Ok(RustExampleMode::CompileOnly);
+    }
     if (component, item, language) == ("gammaloop-api", "gammaloop", "console") {
         return Ok(RustExampleMode::ShellSyntax);
     }
@@ -585,6 +599,9 @@ fn rust_example_mode(component: &str, item: &str, language: &str) -> Result<Rust
         language.split(',').next() == Some("rust"),
         "Rust catalog example {component}::{item} uses unsupported language {language}"
     );
+    if component == "feynkit" || component.starts_with("feynkit-") {
+        return Ok(RustExampleMode::CompileOnly);
+    }
     if (component, item) == ("spenso", "Network") {
         return Ok(RustExampleMode::RunIsolated);
     }

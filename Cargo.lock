@@ -121,6 +121,14 @@ dependencies = [
  "alphal00p-docs-catalogs",
  "alphal00p-docs-schema",
  "eyre",
+ "feynkit",
+ "feynkit-cff",
+ "feynkit-generator",
+ "feynkit-graph",
+ "feynkit-kinematics",
+ "feynkit-model",
+ "feynkit-tensor",
+ "feynkit-ufo",
  "gammaloop-api",
  "gammalooprs",
  "idenso",
@@ -152,6 +160,7 @@ dependencies = [
 name = "alphal00p-docs-python-exporter"
 version = "0.1.0"
 dependencies = [
+ "feynkit-py",
  "gammaloop-api",
  "idenso",
  "linnet-py",
