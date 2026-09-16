@@ -58,7 +58,7 @@ The same native Atom payload can be inspected or transformed by Symbolica:
 #let custom = q(tensors.slot(M, 1))
 #let custom-roundtrip = algebra.expand(custom)
 
-// Rubi accepts the same Atom payload and returns something Tydenso can print.
+// Symbolica's Rubi integration returns the same Atom payload that Tydenso can print.
 #let x = algebra.math($x$)
 #let custom-primitive = calculus.integrate(tensors.atom(custom), x)
 
@@ -71,5 +71,5 @@ The same native Atom payload can be inspected or transformed by Symbolica:
   [spinor after Symbolica], $ #tensors.to-typst(spinor-roundtrip) $,
   [display metadata after Symbolica], $ #tensors.to-typst(routed-roundtrip) $,
   [representation metadata after Symbolica], $ #tensors.to-typst(custom-roundtrip) $,
-  [representation metadata after Rubi], $ #tensors.to-typst(custom-primitive) $,
+  [representation metadata after Symbolica integration], $ #tensors.to-typst(custom-primitive) $,
 )

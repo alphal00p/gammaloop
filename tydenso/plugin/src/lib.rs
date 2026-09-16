@@ -623,7 +623,7 @@ fn index_display_from_bytes(input: &[u8]) -> Result<IndexDisplay, String> {
     index_display_from_ast(&ast, 0, &mut nodes)
 }
 
-/// Recover an exact Atom carried by Tymbolica semantic metadata at the root of
+/// Recover an exact Atom carried by Symbolica semantic metadata at the root of
 /// an index expression. This preserves symbol namespaces and identity without
 /// evaluating any Typst source. Ordinary handwritten math has no such envelope
 /// and continues through the restricted `IndexDisplay` parser.
