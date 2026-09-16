@@ -1,0 +1,113 @@
+# linnet-py
+
+`linnet-py` exposes Linnet's native half-edge graph, node-store variants,
+topology editing, subgraphs, algorithms, arbitrary Python element data, and
+typed drawing configuration as a standalone Python package.
+
+Rendering is in-process through `typst` 0.15.0. The wheel embeds Linnest,
+Kurvst, CeTZ, and oxifmt, while the source distribution carries their build
+inputs. Rendering converts graph topology to a versioned CBOR graph spec and
+never serializes arbitrary Python `.data`. Clinnet and a Typst executable are
+not runtime dependencies.
+
+The linnet-py, Linnest, and Kurvst sources are MIT-licensed under `LICENSE`;
+the distribution also carries the licenses and provenance of its vendored
+Typst packages.
+
+```python
+import linnet_py as lp
+
+left = lp.node("left", data=object(), label="Left")
+right = lp.node("right", data=object(), label="Right")
+graph = lp.build(
+    left,
+    right,
+    lp.edge(lp.source(left), "dependency", lp.sink(right)),
+)
+
+svg = graph.to_svg()
+graph.render("graph.pdf")
+```
+
+Generic rendering labels nodes and edges by their structural IDs ($n_i$, $e_i$,
+...). Set `lp.DrawOptions(show_half_edge_ids=True)` to add optional endpoint
+IDs ($h_i$); explicit drawing labels take precedence.
+
+The package is currently built from the GammaLoop workspace. Its complete API
+and development instructions are maintained in the Linnet documentation there.
+
+## Marimo examples
+
+The generic, physics, and streaming notebooks under `examples/` carry PEP 723
+dependencies for native sandboxing and browser installation. Native editable sessions still
+use the workspace package directly:
+
+```console
+uvx --from marimo==0.24.0 --with-editable crates/linnet-py \
+  marimo edit crates/linnet-py/examples/rendering_api.py
+```
+
+Once an Emscripten wheel is available, export the notebooks as editable static
+WASM pages without changing their checked-in dependency metadata:
+
+```console
+nix develop --command uv run --no-project --with marimo==0.24.0 \
+  python crates/linnet-py/examples/export_wasm.py \
+  --wheel dist/linnet_py-0.1.0-cp310-abi3-pyemscripten_2026_0_wasm32.whl \
+  --output dist/linnet-wasm
+```
+
+The helper stages the local wheel override temporarily, runs Marimo's strict
+`MW` checks, exports in edit mode, and serves the result for an HTTP smoke test.
+Omit `--wheel` after publishing the browser wheel. Pass `--browser-smoke` in an
+environment with Playwright and Chromium to wait for a real SVG render from
+each Pyodide notebook. Use `--notebook layout_stream` to export just the live
+layout demo, and `--browser-executable /path/to/chromium` for a Nix browser.
+
+The physics notebook uses GammaLoop's actual `save dot` drawing bundle, including
+its generated Standard Model particle map and automatic external placement. The
+exporter builds this revision's `.#gammaloop` executable with Nix, or accepts
+`--gammaloop /path/to/gammaloop`, and writes `public/gammaloop-drawing.zip` beside
+the notebooks. Python passes the original DOT and controls to the bundled Typst
+figure template; it does not implement the physics styles or pinning. Layout
+sliders are collapsible, and custom force overrides are optional.
+
+For a native physics-notebook session, point to that exported archive:
+
+```console
+GAMMALOOP_DRAWING_BUNDLE="$PWD/dist/linnet-wasm/public/gammaloop-drawing.zip" \
+  nix develop --command uv run --no-project --with marimo==0.24.0 \
+  --with-editable crates/linnet-py \
+  marimo edit crates/linnet-py/examples/physics_render_settings.py
+```
+
+To add live cells to a built documentation site, run `nix develop --command just
+docs-site linnet`, then `nix develop --command just docs-notebooks /path/to/browser.whl`.
+This exports the rendering guide, DOT playground, and canonical Python quickstart as
+Marimo islands under the Linnet version's `assets/notebooks/` directory. Build the
+GammaLoop docs and pass `gammaloop` after the wheel path to include the physics notebook
+in its DOT input guide. The exporter accepts `--docs linnet` or `--docs gammaloop` for
+the same product selection. The Pages workflow builds one wheel for the documented
+revision and includes both products' notebook assets. Each example loads automatically
+as it approaches the viewport.
+
+The exported pages embed their Python source and open with editable code cells;
+browser edits do not modify the checked-in notebooks. The Linnet wheel is bundled;
+Marimo, Pyodide, and other dependencies load from the network on first use.
+Serve the output directory over HTTP (browsers cannot launch Pyodide from `file://`), for example:
+
+```console
+python -m http.server --directory dist/linnet-wasm
+```
+
+`examples/layout_stream.py` is a force-layout proof of concept with a DOT editor,
+collapsible parameter sliders, pause/resume, and live SVG updates. It consumes
+`LayoutStream.from_dot(...)` lazily; the preview omits Typst label measurement
+and final typography. Its browser export uses the same native solver compiled
+into the local Emscripten wheel.
+
+```console
+nix develop --command uv run --no-project --with marimo==0.24.0 \
+  --with anywidget==0.9.18 --with-editable crates/linnet-py \
+  marimo edit crates/linnet-py/examples/layout_stream.py
+```

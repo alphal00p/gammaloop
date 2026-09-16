@@ -1,0 +1,192 @@
+---
+source: src/half_edge/tests.rs
+expression: graph
+---
+HedgeGraph(
+  hedge_data: HedgeVec([
+    NoData(),
+    NoData(),
+    NoData(),
+    NoData(),
+    NoData(),
+    NoData(),
+    NoData(),
+    NoData(),
+    NoData(),
+    NoData(),
+    NoData(),
+    NoData(),
+  ]),
+  edge_store: SmartEdgeVec(
+    data: EdgeVec([
+      ((), Paired(
+        source: Hedge(0),
+        sink: Hedge(1),
+      )),
+      ((), Paired(
+        source: Hedge(2),
+        sink: Hedge(3),
+      )),
+      ((), Paired(
+        source: Hedge(4),
+        sink: Hedge(5),
+      )),
+      ((), Paired(
+        source: Hedge(6),
+        sink: Hedge(7),
+      )),
+      ((), Paired(
+        source: Hedge(8),
+        sink: Hedge(9),
+      )),
+      ((), Paired(
+        source: Hedge(10),
+        sink: Hedge(11),
+      )),
+    ]),
+    involution: Involution(
+      inv: HedgeVec([
+        Source(
+          data: EdgeData(
+            orientation: Undirected,
+            data: EdgeIndex(0),
+          ),
+          sink_idx: Hedge(1),
+        ),
+        Sink(
+          source_idx: Hedge(0),
+        ),
+        Source(
+          data: EdgeData(
+            orientation: Undirected,
+            data: EdgeIndex(1),
+          ),
+          sink_idx: Hedge(3),
+        ),
+        Sink(
+          source_idx: Hedge(2),
+        ),
+        Source(
+          data: EdgeData(
+            orientation: Undirected,
+            data: EdgeIndex(2),
+          ),
+          sink_idx: Hedge(5),
+        ),
+        Sink(
+          source_idx: Hedge(4),
+        ),
+        Source(
+          data: EdgeData(
+            orientation: Undirected,
+            data: EdgeIndex(3),
+          ),
+          sink_idx: Hedge(7),
+        ),
+        Sink(
+          source_idx: Hedge(6),
+        ),
+        Source(
+          data: EdgeData(
+            orientation: Undirected,
+            data: EdgeIndex(4),
+          ),
+          sink_idx: Hedge(9),
+        ),
+        Sink(
+          source_idx: Hedge(8),
+        ),
+        Source(
+          data: EdgeData(
+            orientation: Undirected,
+            data: EdgeIndex(5),
+          ),
+          sink_idx: Hedge(11),
+        ),
+        Sink(
+          source_idx: Hedge(10),
+        ),
+      ]),
+    ),
+  ),
+  node_store: NodeStorageVec(
+    node_data: NodeVec([
+      (),
+      (),
+      (),
+      (),
+    ]),
+    hedge_data: HedgeVec([
+      NodeIndex(0),
+      NodeIndex(1),
+      NodeIndex(1),
+      NodeIndex(0),
+      NodeIndex(0),
+      NodeIndex(1),
+      NodeIndex(1),
+      NodeIndex(2),
+      NodeIndex(2),
+      NodeIndex(3),
+      NodeIndex(3),
+      NodeIndex(0),
+    ]),
+    nodes: NodeVec([
+      SubSet(
+        set: BitSeq(
+          order: "bitvec::order::Lsb0",
+          head: BitIdx(
+            width: 64,
+            index: 0,
+          ),
+          bits: 12,
+          data: [
+            2073,
+          ],
+        ),
+        id: PhantomData,
+      ),
+      SubSet(
+        set: BitSeq(
+          order: "bitvec::order::Lsb0",
+          head: BitIdx(
+            width: 64,
+            index: 0,
+          ),
+          bits: 12,
+          data: [
+            102,
+          ],
+        ),
+        id: PhantomData,
+      ),
+      SubSet(
+        set: BitSeq(
+          order: "bitvec::order::Lsb0",
+          head: BitIdx(
+            width: 64,
+            index: 0,
+          ),
+          bits: 12,
+          data: [
+            384,
+          ],
+        ),
+        id: PhantomData,
+      ),
+      SubSet(
+        set: BitSeq(
+          order: "bitvec::order::Lsb0",
+          head: BitIdx(
+            width: 64,
+            index: 0,
+          ),
+          bits: 12,
+          data: [
+            1536,
+          ],
+        ),
+        id: PhantomData,
+      ),
+    ]),
+  ),
+)

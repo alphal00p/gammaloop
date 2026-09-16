@@ -27,7 +27,7 @@ use spenso::{
         store::NetworkStore,
     },
     structure::{
-        PermutedStructure,
+        Canonicalized,
         representation::{LibraryRep, Minkowski, RepName},
         slot::{AbsInd, DummyAind, ParseableAind, SlotError},
     },
@@ -394,7 +394,9 @@ pub(crate) fn group_diagrams(
             } else {
                 sample_source.clone()
             };
-            exact_source.canonize(GroupingIndex::Dummy)
+            exact_source
+                .canonize(GroupingIndex::Dummy)
+                .map_err(|error| tensor_evaluation_error(&diagram, 0, error))?
         } else {
             Atom::one()
         };
@@ -980,7 +982,9 @@ fn evaluate_tensor_sample(
                 .result_scalar()
                 .map_err(|error| tensor_evaluation_error(diagram, sample, error))?
                 .into();
-            let color = color.canonize(GroupingIndex::Dummy);
+            let color = color
+                .canonize(GroupingIndex::Dummy)
+                .map_err(|error| tensor_evaluation_error(diagram, sample, error))?;
             Ok(sum + (color * scalar).replace_multiple(&color_replacements))
         })
         .map(|evaluated| evaluated.expand())
@@ -1073,37 +1077,45 @@ fn insert_dirac_tensors(library: &mut GroupingTensorLibrary) {
         Atom::num(1),
         Atom::num(0),
     )
-    .map_data(|value| value.re + Atom::i() * value.im);
-    library.insert_explicit(PermutedStructure::identity(ParamTensor::composite(
-        DataTensor::Sparse(gamma),
-    )));
+    .map_canonical(|tensor| {
+        ParamTensor::composite(DataTensor::Sparse(
+            tensor.map_data(|value| value.re + Atom::i() * value.im),
+        ))
+    });
+    library.insert_explicit(gamma);
     let gamma5 = gamma5_weyl_data(
         AGS.gamma5_strct::<GroupingIndex>(4),
         Atom::num(1),
         Atom::num(0),
     )
-    .map_data(|value| value.re + Atom::i() * value.im);
-    library.insert_explicit(PermutedStructure::identity(ParamTensor::composite(
-        DataTensor::Sparse(gamma5),
-    )));
+    .map_canonical(|tensor| {
+        ParamTensor::composite(DataTensor::Sparse(
+            tensor.map_data(|value| value.re + Atom::i() * value.im),
+        ))
+    });
+    library.insert_explicit(gamma5);
     let projm = proj_m_data_weyl(
         AGS.projm_strct::<GroupingIndex>(4),
         Atom::num(1),
         Atom::num(0),
     )
-    .map_data(|value| value.re + Atom::i() * value.im);
-    library.insert_explicit(PermutedStructure::identity(ParamTensor::composite(
-        DataTensor::Sparse(projm),
-    )));
+    .map_canonical(|tensor| {
+        ParamTensor::composite(DataTensor::Sparse(
+            tensor.map_data(|value| value.re + Atom::i() * value.im),
+        ))
+    });
+    library.insert_explicit(projm);
     let projp = proj_p_data_weyl(
         AGS.projp_strct::<GroupingIndex>(4),
         Atom::num(1),
         Atom::num(0),
     )
-    .map_data(|value| value.re + Atom::i() * value.im);
-    library.insert_explicit(PermutedStructure::identity(ParamTensor::composite(
-        DataTensor::Sparse(projp),
-    )));
+    .map_canonical(|tensor| {
+        ParamTensor::composite(DataTensor::Sparse(
+            tensor.map_data(|value| value.re + Atom::i() * value.im),
+        ))
+    });
+    library.insert_explicit(projp);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1131,14 +1143,14 @@ fn insert_sample_vector(
             }
         })
         .collect();
-    let tensor = ParamTensor::from_dense(key.structure, data).map_err(|error| {
+    let tensor = ParamTensor::from_dense(key.into_canonical(), data).map_err(|error| {
         GroupingError::TensorEvaluation {
             diagram: "sample library".to_owned(),
             sample,
             message: error.to_string(),
         }
     })?;
-    library.insert_explicit(PermutedStructure::identity(tensor));
+    library.insert_explicit(Canonicalized::identity(tensor));
     Ok(())
 }
 
@@ -1167,14 +1179,14 @@ fn insert_sample_wavefunction(
             )
         })
         .collect();
-    let tensor = ParamTensor::from_dense(key.structure, data).map_err(|error| {
+    let tensor = ParamTensor::from_dense(key.into_canonical(), data).map_err(|error| {
         GroupingError::TensorEvaluation {
             diagram: "sample library".to_owned(),
             sample,
             message: error.to_string(),
         }
     })?;
-    library.insert_explicit(PermutedStructure::identity(tensor));
+    library.insert_explicit(Canonicalized::identity(tensor));
     Ok(())
 }
 
@@ -1276,7 +1288,7 @@ fn expressions_equal(left: &Atom, right: &Atom) -> bool {
 }
 
 fn expression_is_scalar(expression: &Atom, scalar_names: &BTreeSet<String>) -> bool {
-    let color_scalars = [CS.na, CS.nc, CS.ca, CS.cf, CS.tr, CS.cas, CS.idx, CS.gram];
+    let color_scalars = [CS.nc, CS.ca, CS.cf, CS.tr, CS.cas, CS.idx, CS.gram];
     expression.get_all_symbols(true).iter().all(|symbol| {
         symbol.is_scalar()
             || color_scalars.contains(symbol)

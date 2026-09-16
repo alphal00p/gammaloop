@@ -543,7 +543,19 @@ fn solve_transposed(
             )
         })
         .collect::<Vec<_>>();
-    Atom::solve_linear_system::<u16, _, _>(&equations, &variables)
+    Atom::system_to_matrix::<u16, _, _>(&equations, &variables)
+        .and_then(|(matrix, rhs)| {
+            matrix
+                .solve(&rhs)
+                .map_err(|error| symbolica::solve::SolveError::Other(error.to_string()))
+        })
+        .map(|solution| {
+            solution
+                .into_vec()
+                .into_iter()
+                .map(|value| value.to_expression())
+                .collect::<Vec<_>>()
+        })
         .map_err(|source| OrbitProjectorError::Solve { rank, source })
 }
 

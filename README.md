@@ -41,6 +41,13 @@ just build-cli
 The tutorial explains non-Nix prerequisites, the repository wrapper, state paths, run-card
 replay, and the cost of the maintained scientific examples.
 
+## Standalone FeynKit toolkit
+
+The `feynkit-*` crates expose reusable model loading, graph generation, CFF,
+kinematics, and tensor reduction through Rust and `symbolica.community.feynkit`.
+See the [ownership and API architecture](docs/architecture/architecture-current.typ)
+and [Python API](crates/feynkit-py/README.md).
+
 ## Related products
 
 - [Linnet](https://alphal00p.github.io/gammaloop/products/linnet/latest/): half-edge graphs, Linnest layout, and Clinnet rendering

@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use spenso::algebra::complex::Complex;
 use spenso::network::library::symbolic::ETS;
 use spenso::structure::{
-    IndexLess, OrderedStructure, PermutedStructure,
+    Canonicalized, IndexLess, OrderedStructure, TensorDataLayout,
     representation::{Euclidean, LibraryRep, Minkowski, RepName},
     slot::{DummyAind, IsAbstractSlot, Slot},
 };
@@ -714,11 +714,11 @@ impl ModelGammaLoopExt for Model {
         }
 
         let mut content = String::from(
-            r#"#import "crates/linnest/typst/src/physics-edge-style.typ": mi, massive, massless, dashed, dotted, stroke-style, source-stroke, sink-stroke, fermion-flow, wave, coil, zigzag, default-edge, style
+            r#"#import "physics-edge-style.typ": mi, palette, massive, massless, dashed, dotted, stroke-style, source-stroke, sink-stroke, fermion-flow, wave, coil, zigzag, default-edge, default-map, style as physics-style
 
 // Auto-generated particle styles from the canonical model. The reusable
 // drawing callbacks live in physics-edge-style.typ.
-#let map = (
+#let generated-map = (
 "#,
         );
         for particle in self.particles() {
@@ -731,18 +731,27 @@ impl ModelGammaLoopExt for Model {
         content.push_str(
             r#")
 
+#let map = generated-map
+
+// Merge model-specific particles with neutral aliases and caller overrides.
+#let style(map: (:), typst-fields: "plain", ..options) = physics-style(
+  map: default-map + generated-map + map,
+  typst-fields: typst-fields,
+  ..options.named(),
+)
+
 #let source-style(edge, typst-fields: "plain", ..options) = {
-  let callbacks = style(map: map, typst-fields: typst-fields, ..options.named())
+  let callbacks = style(typst-fields: typst-fields, ..options.named())
   (callbacks.source-style)(edge)
 }
 
 #let sink-style(edge, typst-fields: "plain", ..options) = {
-  let callbacks = style(map: map, typst-fields: typst-fields, ..options.named())
+  let callbacks = style(typst-fields: typst-fields, ..options.named())
   (callbacks.sink-style)(edge)
 }
 
 #let edge-label(edge, typst-fields: "plain", ..options) = {
-  let callbacks = style(map: map, typst-fields: typst-fields, ..options.named())
+  let callbacks = style(typst-fields: typst-fields, ..options.named())
   (callbacks.edge-label)(edge)
 }
 "#,
@@ -885,7 +894,7 @@ impl ParticleGammaLoopExt for Particle {
     }
 
     fn spin_reps(&self) -> IndexLess<LibraryRep, Aind> {
-        PermutedStructure::<IndexLess<LibraryRep, Aind>>::from_iter(match self.spin {
+        Canonicalized::<IndexLess<LibraryRep, Aind>>::from_iter(match self.spin {
             -1..=1 => vec![],
             spin if spin > 0 && spin % 2 == 0 => {
                 vec![Bispinor {}.new_rep(4).cast(); spin.div_euclid(2) as usize]
@@ -895,7 +904,7 @@ impl ParticleGammaLoopExt for Particle {
             }
             _ => vec![],
         })
-        .structure
+        .into_canonical()
     }
 
     fn color_reps(&self, flow: Flow) -> IndexLess {
@@ -915,7 +924,7 @@ impl ParticleGammaLoopExt for Particle {
             (_, 8) => vec![ColorAdjoint {}.new_rep(8).cast()],
             _ => vec![],
         };
-        PermutedStructure::<IndexLess>::from_iter(reps).structure
+        Canonicalized::<IndexLess>::from_iter(reps).into_canonical()
     }
 
     fn polarization_sum(
@@ -1018,9 +1027,9 @@ impl ParticleGammaLoopExt for Particle {
             "massive"
         };
         let color = if self.charge.abs() > 0.0 {
-            "blue"
+            "palette.accent"
         } else {
-            "black"
+            "palette.ink"
         };
         let source = format!("source-stroke(c: {color}, thickness: {thickness})");
         let sink = format!("sink-stroke(c: {color}, thickness: {thickness})");
@@ -1086,21 +1095,24 @@ impl VertexRuleGammaLoopExt for VertexRule {
         let color_slot = Euclidean {}.new_slot(color_structure.len(), i);
         let spin_slot = Euclidean {}.new_slot(spin_structure.len(), j);
         let color_structure = ParamTensor::composite(DataTensor::Dense(
-            DenseTensor::from_data(
+            DenseTensor::from_storage_data(
                 color_structure,
-                PermutedStructure::from_iter([color_slot]).structure,
+                Canonicalized::from_iter([color_slot]).into_canonical(),
             )
             .unwrap(),
         ));
         let spin_structure = ParamTensor::composite(DataTensor::Dense(
-            DenseTensor::from_data(
+            DenseTensor::from_storage_data(
                 spin_structure,
-                PermutedStructure::from_iter([spin_slot]).structure,
+                Canonicalized::from_iter([spin_slot]).into_canonical(),
             )
             .unwrap(),
         ));
+        let coupling_structure = Canonicalized::from_iter([color_slot, spin_slot]);
+        let coupling_layout = TensorDataLayout::from_canonicalized(&coupling_structure)
+            .expect("vertex coupling dimensions are concrete");
         let mut couplings = ParamTensor::composite(DataTensor::Sparse(SparseTensor::empty(
-            PermutedStructure::from_iter([color_slot, spin_slot]).structure,
+            coupling_structure.into_canonical(),
             Atom::Zero,
         )));
         for (color, row) in self.couplings.iter().enumerate() {
@@ -1108,7 +1120,9 @@ impl VertexRuleGammaLoopExt for VertexRule {
                 if let Some(coupling) = coupling {
                     couplings
                         .set(
-                            &[color, spin],
+                            &coupling_layout
+                                .logical_expanded_to_storage_expanded(&[color, spin])
+                                .expect("vertex coupling coordinates match their dimensions"),
                             Atom::from(UFOSymbol::from(
                                 &model.coupling_by_id(*coupling).unwrap().name,
                             )),
