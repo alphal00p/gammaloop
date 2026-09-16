@@ -45,7 +45,7 @@ linnet = { path = "crates/linnet/", default-features = false }
 momtrop = "0.3.0"
 ndarray = "0.17.2"
 notify = "8.2.0"
-numerica = { version = "2.2.0", default-features = false }
+numerica = { version = "3.0.0", default-features = false }
 nu-ansi-term = "0.50.3"
 numpy = "0.28"
 pyo3 = "0.28"

@@ -1229,6 +1229,8 @@ impl Generator {
         let progress_counter = progress_count.clone();
         let progress_cancellation = cancellation.clone();
         let progress_cancellation_check = options.cancellation_check.clone();
+        // Fast cut filter switch multiplicity is no longer a separate CLI option;
+        // FeynKit owns the physical-cut filtering strategy.
         let mut settings = GenerationSettings::new()
             .max_loops(*process.loop_count().end())
             .allow_self_loops(options.allow_self_loops)
@@ -4376,7 +4378,11 @@ impl ResolvedProcess {
         if externals.is_empty() {
             return true;
         }
-        let connected_components_before = graph.tadpoles(&externals).len() + 1;
+        let connected_components_before = graph
+            .tadpoles(&externals)
+            .expect("external nodes are distinct graph terminals with incident edges")
+            .len()
+            + 1;
         let by_index: BTreeMap<usize, (NodeIndex, ColoredNode)> = external_nodes
             .into_iter()
             .map(|(index, node, color)| (index, (node, color)))

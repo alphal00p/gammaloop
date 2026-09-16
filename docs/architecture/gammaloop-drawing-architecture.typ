@@ -150,9 +150,9 @@ digraph demo {
   edge [particle="a"];
 
   ext0 [style=invis];
-  ext0 -> v0:0 [id=0, is_cut=0];
+  ext0 -> v0:0 [id=0, is_cut=0, initial_state_connection=true];
   v0:1 -> v1:2 [id=1, particle="d", lmb_id=0];
-  v1:3 -> ext1 [id=2, particle="a"];
+  v1:3 -> ext1 [id=2, particle="a", is_cut=0, initial_state_connection=true];
   ext1 [style=invis];
 }
 ```
@@ -241,7 +241,12 @@ GraphViz-only presentation fields such as `label`, `shape`, `style`, `pos`,
 
 / `lmb_id`: Loop-momentum-basis id for a chosen loop edge.
 
-/ `is_cut`: Hedge id used to mark an initial-state cut/external cut.
+/ `is_cut`: Shared sewing key on both dangling halves of a forward-amplitude
+  initial-state connection. Both halves also set `initial_state_connection=true`.
+
+/ `initial_state_connection`: Identifies mechanical forward-amplitude sewing metadata.
+  Canonical cross-section cuts belong to the FeynKit `FeynmanDiagram` artifact
+  and are not inferred from runtime DOT.
 
 / `num`: Explicit edge numerator. The parser localizes `edgeid(...)`, `sourceid(...)`,
   and `sinkid(...)` placeholders to the concrete edge and hedge indices.
