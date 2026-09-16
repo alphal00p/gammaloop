@@ -80,13 +80,20 @@
     graph.map(g, node: nodes, edge: edges)
   }
 
-  // Open the RHS directly from the master; its external endpoints remain unpinned.
+  // Open the RHS directly from the master and align its endpoints in shared rows and columns.
   let xbox-rhs = {
     let g = graph.build(default-edge-data: edge-data + (show-momentum: false), master)
     graph.cut(
       g,
       left: subgraph.select(g, source: (<D5>, <D6>)),
       right: subgraph.select(g, sink: (<D5>, <D6>)),
+      boundary: item => {
+        let b = item.boundary
+        (pos: pos(
+          x: if b.side == "left" { in-x } else { out-x },
+          y: if b.origin.name == <D5> { top } else { bot },
+        ))
+      },
     )
   }
 
