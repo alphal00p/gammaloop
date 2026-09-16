@@ -86,7 +86,9 @@ anchor = "struct GammaLoopAPI {"
 # examples as Python in rendered/exported documentation; binding behavior is unchanged.
 # Reviewed 2026-09-16: Python CFF uses FeynKit topology directly and runtime
 # graph imports require finalized artifacts, matching the ownership record.
-digest = "14f66c1f0b51c43447a2b0d7a16536ffef600864"
+# No architecture impact 2026-09-16: next_back preserves last-graph
+# selection while avoiding traversal of the entire DOT graph iterator.
+digest = "1123477410465dbbc1a218c3ad612ca1c951f6ad"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/lib.rs"
