@@ -3972,8 +3972,7 @@ mod tests {
             .iter()
             .zip(&placeholders)
             .map(|(product, (_, placeholder))| {
-                super::Replacement::new(product.to_pattern(), placeholder.clone())
-                    .level_range((0, Some(0)))
+                super::Replacement::new(product.to_pattern(), placeholder.clone()).max_level(0)
             })
             .collect::<Vec<_>>();
 
