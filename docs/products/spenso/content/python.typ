@@ -40,6 +40,35 @@ Symbolica Community owns the wheel. Their native dependencies must resolve one S
 source revision. The `gammaloop[typst-display]` extra adds only the optional renderer, not
 another Spynso binary.
 
+=== Pyodide builds
+
+The adapter's default `native` feature includes native arithmetic and C++ evaluator
+compilation. For Pyodide, the community assembly must depend on `spynso3` with
+`default-features = false` and forward its `wasm` feature to `spynso3/wasm`.
+Every other Symbolica consumer in that assembly must also disable native defaults
+and select its portable arithmetic features; Cargo combines features across dependencies.
+
+`TensorEvaluator` remains available in this configuration. `TensorEvaluator.compile`
+and `CompiledTensorEvaluator` require the `native` feature and are absent in Pyodide.
+
+With Python 3.14, `pyodide-build==0.39.0`, `maturin==1.15.0`, and the `314.0.7`
+cross-build environment installed, run the following from the community assembly's
+directory. Its manifest must define the `release-small` profile and forward `wasm`
+as described above; the GammaLoop workspace root builds a different Python package.
+
+// docs-example: syntax
+```sh
+export RUSTUP_TOOLCHAIN="$(pyodide config get rust_toolchain)"
+rustup target add --toolchain "$RUSTUP_TOOLCHAIN" wasm32-unknown-emscripten
+pyodide build . --outdir dist --no-isolation \
+  -C maturin.build-args="--locked --profile release-small \
+  --no-default-features --features wasm \
+  -- -C link-arg=-sEXPORTED_FUNCTIONS=_PyInit_core"
+```
+
+In this repository, `just check-spynso-wasm` checks the adapter for Emscripten and
+rejects native arithmetic or workspace-hack dependencies in its portable graph.
+
 == Choose the right object
 
 - `Representation` and `Slot` define dimensions, duality, and abstract indices.

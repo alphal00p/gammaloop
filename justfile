@@ -120,6 +120,20 @@ check-symbolica-feature-isolation:
       done
     done
 
+# Keep Pyodide's portable arithmetic isolated from native code generation and Hakari.
+check-spynso-wasm:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    dependencies=$(cargo tree --locked -p spynso3 --no-default-features --features wasm \
+      --target wasm32-unknown-emscripten -e normal,build --prefix none -f '{p} {f}')
+    if grep -E '^(gammaloop-workspace-hack |symbolica .*\b(integer-gmp|float-mpfr|native_code_generation)\b)' <<< "$dependencies"; then
+      echo "Spynso's Pyodide dependencies enable native-only features" >&2
+      exit 1
+    fi
+    PYO3_CROSS=1 PYO3_CROSS_PYTHON_VERSION=3.14 \
+      cargo check --locked -p spynso3 --no-default-features --features wasm \
+      --target wasm32-unknown-emscripten
+
 # Check code without building
 check: check-symbolica-feature-isolation
     cargo check --workspace --all-targets --locked

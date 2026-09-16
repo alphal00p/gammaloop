@@ -26,7 +26,6 @@ criterion = { version = "0.5", features = ["html_reports"] }
 crossterm = { version = "0.28", features = ["serde"] }
 either = { version = "1", features = ["use_std"] }
 indexmap = { version = "2", features = ["serde"] }
-insta = { version = "1", features = ["json", "ron", "toml", "yaml"] }
 log = { version = "0.4", default-features = false, features = ["std"] }
 matrixmultiply = { version = "0.3", features = ["cgemm"] }
 memchr = { version = "2" }
@@ -35,7 +34,6 @@ num-complex = { version = "0.4" }
 num-integer = { version = "0.1", features = ["i128"] }
 num-traits = { version = "0.2", features = ["i128", "libm"] }
 numerica = { version = "3", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "serde"] }
-papergrid = { version = "0.18", default-features = false, features = ["ansi", "std"] }
 rand = { version = "0.8", features = ["small_rng"] }
 regex = { version = "1" }
 regex-automata = { version = "0.4", default-features = false, features = ["dfa-build", "dfa-onepass", "hybrid", "meta", "nfa", "perf", "std", "unicode"] }
@@ -48,8 +46,6 @@ serde_spanned = { version = "1" }
 smallvec = { version = "1", default-features = false, features = ["const_new", "serde"] }
 smartstring = { version = "1", features = ["serde"] }
 symbolica = { version = "3", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "native_code_generation", "serde"] }
-tabled = { version = "0.22", features = ["ansi"] }
-testing_table = { version = "0.3", default-features = false, features = ["ansi", "std"] }
 time = { version = "0.3", features = ["formatting", "local-offset", "parsing"] }
 toml_datetime = { version = "1", features = ["serde"] }
 toml_parser = { version = "1" }
@@ -72,7 +68,6 @@ criterion = { version = "0.5", features = ["html_reports"] }
 crossterm = { version = "0.28", features = ["serde"] }
 either = { version = "1", features = ["use_std"] }
 indexmap = { version = "2", features = ["serde"] }
-insta = { version = "1", features = ["json", "ron", "toml", "yaml"] }
 log = { version = "0.4", default-features = false, features = ["std"] }
 matrixmultiply = { version = "0.3", features = ["cgemm"] }
 memchr = { version = "2" }
@@ -81,7 +76,6 @@ num-complex = { version = "0.4" }
 num-integer = { version = "0.1", features = ["i128"] }
 num-traits = { version = "0.2", features = ["i128", "libm"] }
 numerica = { version = "3", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "serde"] }
-papergrid = { version = "0.18", default-features = false, features = ["ansi", "std"] }
 rand = { version = "0.8", features = ["small_rng"] }
 regex = { version = "1" }
 regex-automata = { version = "0.4", default-features = false, features = ["dfa-build", "dfa-onepass", "hybrid", "meta", "nfa", "perf", "std", "unicode"] }
@@ -89,15 +83,12 @@ regex-syntax = { version = "0.8" }
 rust-embed-utils = { version = "8", default-features = false, features = ["debug-embed", "include-exclude"] }
 serde = { version = "1", features = ["alloc", "derive"] }
 serde_core = { version = "1", features = ["alloc"] }
-serde_derive = { version = "1" }
 serde_json = { version = "1", features = ["alloc", "float_roundtrip"] }
 serde_spanned = { version = "1" }
 smallvec = { version = "1", default-features = false, features = ["const_new", "serde"] }
 smartstring = { version = "1", features = ["serde"] }
 symbolica = { version = "3", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "native_code_generation", "serde"] }
 syn = { version = "2", features = ["extra-traits", "fold", "full", "visit-mut"] }
-tabled = { version = "0.22", features = ["ansi"] }
-testing_table = { version = "0.3", default-features = false, features = ["ansi", "std"] }
 time = { version = "0.3", features = ["formatting", "local-offset", "parsing"] }
 toml_datetime = { version = "1", features = ["serde"] }
 toml_parser = { version = "1" }

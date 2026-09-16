@@ -42,6 +42,7 @@ workspace-members = [
     "linnest",
     "linnet-py",
     "spenso",
+    "spenso-hep-lib",
     "spenso-macros",
     "spynso3",
     "symbolica-utils",

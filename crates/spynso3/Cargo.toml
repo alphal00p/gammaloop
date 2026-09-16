@@ -8,9 +8,9 @@ repository = "https://github.com/alphal00p/gammaloop"
 
 [dependencies]
 ahash = { workspace = true, features = ["serde"] }
-idenso = { workspace = true, features = ["native", "python"] }
-spenso = { workspace = true, features = ["native-code-generation", "portable-payload", "python", "shadowing"] }
-spenso-hep-lib = { workspace = true }
+idenso = { workspace = true, features = ["python"] }
+spenso = { workspace = true, features = ["portable-payload", "python", "shadowing"] }
+spenso-hep-lib = { workspace = true, default-features = false }
 spenso-macros = { workspace = true }
 xpct = "0.5.1"
 
@@ -22,7 +22,7 @@ pyo3-stub-gen = { workspace = true, default-features = false, features = ["infer
 pyo3-stub-gen-derive = { workspace = true }
 tabled = { workspace = true }
 thiserror = { workspace = true }
-tymbolica-atom-payload = { workspace = true, features = ["native"] }
+tymbolica-atom-payload = { workspace = true }
 
 [dependencies.symbolica]
 workspace = true
@@ -30,6 +30,21 @@ default-features = false
 features = ["bincode", "python_export", "serde"]
 
 [features]
+default = ["native"]
+native = [
+  "idenso/native",
+  "pyo3/multiple-pymethods",
+  "spenso/native-code-generation",
+  "spenso-hep-lib/native",
+  "tymbolica-atom-payload/native",
+]
+wasm = [
+  "idenso/wasm",
+  "spenso/wasm",
+  "spenso-hep-lib/wasm",
+  "symbolica/wasm",
+  "tymbolica-atom-payload/wasm",
+]
 python_stubgen = [
   "dep:pyo3-stub-gen",
   "idenso/python_stubgen",

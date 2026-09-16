@@ -141,7 +141,9 @@
       "spenso": [
         "shadowing"
       ],
-      "spenso-hep-lib": [],
+      "spenso-hep-lib": [
+        "native"
+      ],
       "spenso-macros": [],
       "vakint": []
     },
@@ -229,7 +231,9 @@
         "native-code-generation",
         "shadowing"
       ],
-      "spenso-hep-lib": [],
+      "spenso-hep-lib": [
+        "native"
+      ],
       "symbolica-utils": [
         "native"
       ],
@@ -280,11 +284,9 @@
     "spenso-hep-lib": {
       "gammaloop-workspace-hack": [],
       "idenso": [
-        "native",
         "reference-cases"
       ],
       "spenso": [
-        "native",
         "shadowing"
       ],
       "spenso-macros": []
@@ -292,11 +294,9 @@
     "spenso-macros": {},
     "spynso3": {
       "idenso": [
-        "native",
         "python"
       ],
       "spenso": [
-        "native-code-generation",
         "portable-payload",
         "python",
         "shadowing"
@@ -786,7 +786,9 @@
       "spenso": [
         "shadowing"
       ],
-      "spenso-hep-lib": [],
+      "spenso-hep-lib": [
+        "native"
+      ],
       "spenso-macros": [],
       "vakint": []
     },
@@ -876,7 +878,9 @@
         "native-code-generation",
         "shadowing"
       ],
-      "spenso-hep-lib": [],
+      "spenso-hep-lib": [
+        "native"
+      ],
       "symbolica-utils": [
         "native"
       ],
@@ -932,11 +936,9 @@
     "spenso-hep-lib": {
       "gammaloop-workspace-hack": [],
       "idenso": [
-        "native",
         "reference-cases"
       ],
       "spenso": [
-        "native",
         "shadowing"
       ],
       "spenso-macros": []
@@ -944,11 +946,9 @@
     "spenso-macros": {},
     "spynso3": {
       "idenso": [
-        "native",
         "python"
       ],
       "spenso": [
-        "native-code-generation",
         "portable-payload",
         "python",
         "shadowing"
