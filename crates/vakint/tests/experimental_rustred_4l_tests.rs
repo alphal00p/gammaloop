@@ -26,6 +26,51 @@ use vakint::{
 };
 use vakint::{vakint_parse as vk_parse, vakint_symbol as vk_symbol};
 
+/// The complete four-loop analytic/FMFT acceptance inventory currently used
+/// by Vakint.  This is intentionally kept as an explicit list: a future
+/// sealed four-loop RustRed artifact must exercise every one of these inputs,
+/// not just the finite parent/dotted/pinch probes below.
+const FOUR_LOOP_ANALYTIC_FMFT_CASES: [&str; 14] = [
+    "test_integrate_4l_h",
+    "test_integrate_4l_h_squared_mass",
+    "test_integrate_4l_h_rank_4",
+    "test_integrate_4l_h_rank_4_additional_symbols_numerator",
+    "test_integrate_4l_PR9d_from_H",
+    "test_integrate_4l_PR9d_from_X",
+    "test_integrate_4l_PR9d_from_H_pinch",
+    "test_integrate_4l_PR9d_from_FG",
+    "test_integrate_4l_PR9d_from_FG_pinch",
+    "test_integrate_4l_PR11d",
+    "test_integrate_4l_clover",
+    "test_integrate_4l_clover_with_non_unit_scales",
+    "test_integrate_4l_dotted_clover",
+    "test_integrate_4l_clover_with_numerator",
+];
+
+/// Inventory-only gate for the eventual complete four-loop lane.
+///
+/// This deliberately remains ignored until a sealed four-loop artifact and
+/// terminal catalog are shipped.  It checks that the upstream FMFT cases are
+/// still present and reports the precise production prerequisite instead of
+/// pretending that finite candidate experiments constitute whole-family
+/// acceptance.
+#[test]
+#[ignore = "requires a sealed four-loop RustRed artifact and terminal catalog"]
+fn four_loop_rustred_fmft_inventory_requires_sealed_artifact() {
+    let source = include_str!("integral_evaluation_analytic_tests.rs");
+    for case in FOUR_LOOP_ANALYTIC_FMFT_CASES {
+        assert!(
+            source.contains(&format!("fn {case}()")),
+            "upstream four-loop FMFT case disappeared: {case}"
+        );
+    }
+    panic!(
+        "four-loop RustRed lane is not enabled: {} FMFT cases are inventoried, "
+            "but no authenticated artifact/catalog is registered in Vakint",
+        FOUR_LOOP_ANALYTIC_FMFT_CASES.len()
+    );
+}
+
 /// A negative-boundary stub only; never a numerical reduction oracle.
 #[derive(Debug)]
 struct RejectingReducer {
