@@ -5854,6 +5854,8 @@ parent_lmb = [4,6]
         // Reuse the generated amplitude at fixed raw momenta, so this range
         // regression is independent of a focused map or root certificate.
         // The mass input and its square fit binary64; the full amplitude does not.
+        // Arb retains its nonzero value; complete underflow may round to zero
+        // only at the ordinary reporting boundary.
         {
             use crate::{
                 integrands::evaluation::PreciseEvaluationResult,
@@ -5900,13 +5902,23 @@ parent_lmb = [4,6]
                     .any(|value| value != &value.zero() && value.clone().into_ff64().0 == 0.0)
             );
             assert!(!result.evaluation_metadata.is_nan);
+            let one = result.integrator_weight.one();
+            let remaining = result.parameterization_jacobian.as_ref().unwrap_or(&one)
+                * &result.integrator_weight;
+            assert_eq!(remaining, one);
             assert!(
-                runtime_for_rescue
-                    .evaluate_momentum_configuration(&heavy_model, &input, true)
-                    .unwrap_err()
-                    .to_string()
-                    .contains("f64 integration/reporting boundary")
+                [&result.integrand_result.re, &result.integrand_result.im]
+                    .into_iter()
+                    .all(|value| (value * &remaining).abs() < F::from_f64(f64::MIN_POSITIVE))
             );
+            let reported =
+                runtime_for_rescue.evaluate_momentum_configuration(&heavy_model, &input, true)?;
+            assert_eq!(reported.integrand_result, Complex::new_zero());
+            assert_eq!(
+                reported.absolute_integrand_result,
+                Some(Complex::new_zero())
+            );
+            assert!(!reported.evaluation_metadata.is_nan);
         }
         Ok(())
     }

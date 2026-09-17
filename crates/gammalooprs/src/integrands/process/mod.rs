@@ -6768,7 +6768,7 @@ pub(crate) mod tests {
                 Precision, SamplingChannelWeight, SamplingSettingsParser, StabilityLevelSetting,
                 SumMode,
             },
-            utils::ArbPrec,
+            utils::{ArbPrec, SamplingFloat, SamplingPrecision},
         };
         use spenso::algebra::complex::Complex;
         use std::sync::atomic::{AtomicUsize, Ordering};
@@ -6991,11 +6991,15 @@ pub(crate) mod tests {
         let ProcessIntegrand::Amplitude(amplitude) = &mut runtime else {
             unreachable!()
         };
+        assert_eq!(
+            amplitude.sampling_source_policy()?.0,
+            SamplingPrecision::Fixed256
+        );
         assert!(
             amplitude
                 .get_graph(0)
                 .sampling_setup()
-                .sampling_bridge::<ArbPrec>()
+                .sampling_bridge::<SamplingFloat>()
                 .is_ok()
         );
         probe.retry_lower_half = false;
@@ -7019,7 +7023,7 @@ pub(crate) mod tests {
             amplitude
                 .get_graph(0)
                 .sampling_setup()
-                .sampling_bridge::<ArbPrec>()
+                .sampling_bridge::<SamplingFloat>()
                 .is_ok()
         );
         // A failed fixed proposal cannot choose a native map as a fallback,
