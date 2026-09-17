@@ -1,0 +1,3 @@
+[[command_blocks]]
+name="probe"
+commands=["display integrand -p name:epem_a_tth -i NNLO --category generation", "set process -p name:epem_a_tth -i NNLO file /common/dev/gammaloop_ir_safe_thresholds/target/gl638_spike_candidate_diagnostics/selected15.toml", "inspect -p name:epem_a_tth -i NNLO -d 0 14 -x 0.1251959013471031 0.6720992727031357 0.6683068027704575 0.3428091881658814 0.1868849890763291 0.7452067107805721 0.6413376292351303 0.6899232813031906 0.7296858295826409 0.466699595035992 0.14642355954146338 0.8212867782367871 --json-output /common/dev/gammaloop_ir_safe_thresholds/target/gl638_spike_candidate_diagnostics/selected15_inspect.json"]

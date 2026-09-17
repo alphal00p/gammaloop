@@ -36,7 +36,7 @@ def _defaults(workspace_root: Path | None) -> dict[str, dict[str, Path]]:
             local: dict[str, dict[str, Path]] = {}
             for manifest in sorted(directory.glob("*/manifest.json")):
                 match = re.fullmatch(
-                    r"(GL\d+)_(advanced_sampling(?:_with_optimized_lmbs)?|optimized_lmbs)(?:_workspace)?",
+                    r"(GL\d+)_(advanced_sampling(?:_with_optimized_lmbs|_max_weight)?|optimized_lmbs)(?:_workspace)?",
                     manifest.parent.name,
                     re.IGNORECASE,
                 )
@@ -243,6 +243,11 @@ def main() -> None:
     parser.add_argument("--advanced-workspace", type=Path)
     parser.add_argument("--optimized-workspace", type=Path)
     parser.add_argument(
+        "--max-weight-workspace",
+        type=Path,
+        help="GL638 advanced workspace with the additional outlier-focused channel",
+    )
+    parser.add_argument(
         "--augmented-workspace",
         type=Path,
         help="GL638 advanced workspace with optimized-LMB channels",
@@ -279,6 +284,7 @@ def main() -> None:
         ("advanced_sampling", args.advanced_workspace),
         ("optimized_lmbs", args.optimized_workspace),
         ("advanced_sampling_with_optimized_lmbs", args.augmented_workspace),
+        ("advanced_sampling_max_weight", args.max_weight_workspace),
     ):
         if override is not None:
             paths[strategy] = override.resolve()
@@ -295,9 +301,14 @@ def main() -> None:
             "Advanced + optimized-LMB",
             Fore.MAGENTA,
         ),
+        (
+            "advanced_sampling_max_weight",
+            "Advanced + max-weight channel",
+            Fore.GREEN,
+        ),
     ):
         workspace = paths.get(strategy)
-        if strategy == "advanced_sampling_with_optimized_lmbs" and workspace is None:
+        if workspace is None:
             continue
         result = None
         source = "iteration dump"

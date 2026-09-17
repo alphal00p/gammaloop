@@ -552,8 +552,9 @@ fn scalars_profile_respects_graph_lmb_and_subset_filters() {
     assert!(!analysis.graphs[0].lmbs[0].subsets.is_empty());
     let subset_analysis = &analysis.graphs[0].lmbs[0].subsets[0];
     assert!(!subset_analysis.free.is_empty());
+    assert!(!analysis.allow_vanishing_missing_fits);
     let serialized = serde_json::to_value(&analysis).unwrap();
-    assert_eq!(serialized["allow_vanishing_missing_fits"], false);
+    assert!(serialized.get("allow_vanishing_missing_fits").is_none());
     assert!(serialized["graphs"][0]["lmbs"][0]["subsets"][0]["analysis"].is_object());
     let orientation_entries =
         serialized["graphs"][0]["lmbs"][0]["subsets"][0]["per_orientation_inspect_entries"]

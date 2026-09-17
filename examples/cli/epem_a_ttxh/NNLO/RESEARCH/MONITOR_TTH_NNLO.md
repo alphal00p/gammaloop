@@ -17,13 +17,15 @@ Use `--workspace-root PATH` to search only a chosen common directory.
 
 Default comparisons use manifest-bearing directories named
 `GL<number>_advanced_sampling`, `GL<number>_optimized_lmbs`, and optionally
-`GL<number>_advanced_sampling_with_optimized_lmbs`, with an optional `_workspace`
-suffix. Fixed-grid pilots, timing runs and timestamped backups are excluded.
+`GL<number>_advanced_sampling_with_optimized_lmbs` and
+`GL<number>_advanced_sampling_max_weight`, with an optional `_workspace`
+suffix. The latter adds the fourth GL638 column for the Cut-1 A+Z channel.
+Fixed-grid pilots, timing runs and timestamped backups are excluded.
 Each graph's automatically selected comparison stays in one directory; the
 current directory takes precedence over the script-relative fallbacks.
 The selected paths are printed below the table. Explicit
-`--advanced-workspace`, `--optimized-workspace`, and `--augmented-workspace`
-arguments can select workspaces with other names.
+`--advanced-workspace`, `--optimized-workspace`, `--augmented-workspace`, and
+`--max-weight-workspace` arguments can select workspaces with other names.
 
 The GL134 default reads the two completed adaptive 3-million-point runs in
 `../NNLO_experiment/workspaces/GL134_{advanced_sampling,optimized_lmbs}`.
