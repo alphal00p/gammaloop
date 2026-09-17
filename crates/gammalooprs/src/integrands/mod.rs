@@ -60,6 +60,7 @@ pub trait HasIntegrand {
 /// [`ProcessIntegrand`] with a reference overlay, so no standalone unit-volume
 /// or profile integrand is kept as a second owner of parameterization logic.
 #[derive(Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum Integrand {
     /// Generated amplitude or cross-section process integrand.
     ProcessIntegrand(Box<ProcessIntegrand>),
@@ -112,6 +113,40 @@ impl Integrand {
                     samples: results,
                 })
             }
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments)]
+    pub fn evaluate_samples_raw_with_estimate(
+        &mut self,
+        samples: &[Sample<F<f64>>],
+        target: EvaluationTarget<'_>,
+        iter: usize,
+        use_arb_prec: bool,
+        stop_on_interrupt: bool,
+        max_eval: Complex<F<f64>>,
+        integral_estimate: Option<(f64, f64)>,
+    ) -> Result<RawBatchEvaluationResult> {
+        match self {
+            Integrand::ProcessIntegrand(integrand) => integrand.evaluate_samples_raw_with_estimate(
+                target,
+                samples,
+                iter,
+                use_arb_prec,
+                stop_on_interrupt,
+                max_eval,
+                integral_estimate,
+            ),
+            #[cfg(test)]
+            Integrand::TestProbe(_) => self.evaluate_samples_raw(
+                samples,
+                target,
+                iter,
+                use_arb_prec,
+                stop_on_interrupt,
+                max_eval,
+            ),
         }
     }
 

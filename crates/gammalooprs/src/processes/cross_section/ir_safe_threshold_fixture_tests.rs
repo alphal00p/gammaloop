@@ -706,7 +706,25 @@ fn gl638_correlated_approach_fits(
                             .threshold_counterterms
                             .as_ref()
                             .expect("the cured GL638 profile must record its CT decomposition");
-                        assert_eq!(event.weight, decomposition.total());
+                        // Native aggregation rounds once; its recorded components round
+                        // independently. Check closure at each component's own scale.
+                        let total = decomposition.total();
+                        let scale = decomposition.components.iter().fold(
+                            [decomposition.original.re.0.abs(), decomposition.original.im.0.abs()],
+                            |[re, im], component| [
+                                re + component.weighted.re.0.abs(),
+                                im + component.weighted.im.0.abs(),
+                            ],
+                        );
+                        for (actual, expected, scale) in [
+                            (event.weight.re.0, total.re.0, scale[0]),
+                            (event.weight.im.0, total.im.0, scale[1]),
+                        ] {
+                            assert!(
+                                (actual - expected).abs() / scale.max(f64::MIN_POSITIVE) < 1.0e-12,
+                                "event decomposition does not close: actual={actual}, expected={expected}, scale={scale}"
+                            );
+                        }
                         original += &decomposition.original;
                         event_sum += &event.weight;
                         event_scale += event.weight.norm_squared().sqrt().0;
@@ -891,10 +909,9 @@ fn gl297_selected_orientation_resolves_forced_one_loop_subspaces_with_full_uv() 
 fn explicit_parent_validation_excludes_initial_state_cycles() {
     test_initialise().unwrap();
     let model = load_generic_model("sm");
-    let graph: Graph =
-        include_str!("../../../../../examples/cli/epem_a_ttxh/NNLO/graphs/GL297.dot")
-            .into_graph(&model)
-            .unwrap();
+    let graph: Graph = include_str!("../../../../../tests/resources/graphs/GL297.dot")
+        .into_graph(&model)
+        .unwrap();
     assert_eq!(graph.loop_momentum_basis.loop_edges.len(), 4);
     assert_eq!(graph.external_momentum_edge_order().len(), 2);
     assert_eq!(graph.threshold_counterterms.cuts.len(), 2);
@@ -1357,7 +1374,7 @@ fn gl638_cartesian_structure_and_full_cut_runtime_roundtrip() {
             assert_eq!(group.left.len(), 2);
             assert_eq!(
                 group.right.len(),
-                3,
+                2,
                 "resolved right variants: {:?}",
                 group
                     .right
@@ -1436,7 +1453,6 @@ fn gl638_cartesian_structure_and_full_cut_runtime_roundtrip() {
                     .collect::<BTreeSet<_>>(),
                 BTreeSet::from([
                     vec![5, 10],
-                    vec![4, 5, 6, 12],
                     vec![5, 12, 13],
                 ])
             );
@@ -1444,8 +1460,8 @@ fn gl638_cartesian_structure_and_full_cut_runtime_roundtrip() {
             let generated =
                 &graph.derived_data.threshold_counterterms[crate::processes::CutGroupId::from(0)];
             assert_eq!(generated.left_thresholds.len(), 2);
-            assert_eq!(generated.right_thresholds.len(), 3);
-            assert_eq!(generated.iterated.iter().count(), 6);
+            assert_eq!(generated.right_thresholds.len(), 2);
+            assert_eq!(generated.iterated.iter().count(), 4);
 
             // The original-side identity is a rescaling-map statement, not an extra integrand.
             // There is exactly one O_L*O_R container, four one-sided variant containers, and the
@@ -1453,8 +1469,8 @@ fn gl638_cartesian_structure_and_full_cut_runtime_roundtrip() {
             let original_terms = 1;
             let single_terms = generated.left_thresholds.len() + generated.right_thresholds.len();
             let pair_terms = generated.iterated.iter().count();
-            assert_eq!((original_terms, single_terms, pair_terms), (1, 5, 6));
-            assert_eq!(original_terms + single_terms + pair_terms, 12);
+            assert_eq!((original_terms, single_terms, pair_terms), (1, 4, 4));
+            assert_eq!(original_terms + single_terms + pair_terms, 9);
 
             // Numerical LU evaluation retains all six process-valid cuts. The target-only state
             // above is a structural Cartesian-product test and is not an IR-complete integrand.
@@ -1749,7 +1765,25 @@ fn gl638_cartesian_structure_and_full_cut_runtime_roundtrip() {
                             .threshold_counterterms
                             .as_ref()
                             .expect("explicit threshold variants must record event decomposition");
-                        assert_eq!(event.weight, decomposition.total());
+                        // Native aggregation rounds once; its recorded components round
+                        // independently. Check closure at each component's own scale.
+                        let total = decomposition.total();
+                        let scale = decomposition.components.iter().fold(
+                            [decomposition.original.re.0.abs(), decomposition.original.im.0.abs()],
+                            |[re, im], component| [
+                                re + component.weighted.re.0.abs(),
+                                im + component.weighted.im.0.abs(),
+                            ],
+                        );
+                        for (actual, expected, scale) in [
+                            (event.weight.re.0, total.re.0, scale[0]),
+                            (event.weight.im.0, total.im.0, scale[1]),
+                        ] {
+                            assert!(
+                                (actual - expected).abs() / scale.max(f64::MIN_POSITIVE) < 1.0e-12,
+                                "event decomposition does not close: actual={actual}, expected={expected}, scale={scale}"
+                            );
+                        }
                         for component in &decomposition.components {
                             let metadata = metadata_registry
                                 .components

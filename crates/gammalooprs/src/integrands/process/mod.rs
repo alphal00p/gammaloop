@@ -64,7 +64,7 @@ use crate::{
     settings::runtime::Precision,
     settings::runtime::StabilityLevelSetting,
     settings::runtime::StabilitySettings,
-    settings::runtime::{SamplingChannelWeight, SamplingSettings},
+    settings::runtime::{IntegratedPhase, SamplingChannelWeight, SamplingSettings},
 };
 use color_eyre::Result;
 use sampling_context::PreparedLUHost;
@@ -1074,6 +1074,28 @@ impl ProcessIntegrand {
         stop_on_interrupt: bool,
         max_eval: Complex<F<f64>>,
     ) -> Result<RawBatchEvaluationResult> {
+        self.evaluate_samples_raw_with_estimate(
+            target,
+            samples,
+            _iter,
+            use_arb_prec,
+            stop_on_interrupt,
+            max_eval,
+            None,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn evaluate_samples_raw_with_estimate(
+        &mut self,
+        target: EvaluationTarget<'_>,
+        samples: &[Sample<F<f64>>],
+        _iter: usize,
+        use_arb_prec: bool,
+        stop_on_interrupt: bool,
+        max_eval: Complex<F<f64>>,
+        integral_estimate: Option<(f64, f64)>,
+    ) -> Result<RawBatchEvaluationResult> {
         let mut results = Vec::with_capacity(samples.len());
         for sample in samples {
             if stop_on_interrupt && crate::is_interrupted() {
@@ -1081,13 +1103,14 @@ impl ProcessIntegrand {
             }
             macro_rules! evaluate {
                 ($integrand:expr) => {
-                    evaluate_from_source_precise(
+                    evaluate_from_source_precise_with_estimate(
                         $integrand,
                         target,
                         EvaluationSource::XSpace(sample),
                         sample.get_weight(),
                         use_arb_prec,
                         max_eval,
+                        integral_estimate,
                     )
                 };
             }
@@ -1780,6 +1803,7 @@ type StabilityCheckResult<T> = (
 );
 
 #[inline]
+#[cfg(test)]
 fn stability_check<T: FloatLike>(
     ecm_scale: Option<&F<T>>,
     results: &[Complex<F<T>>],
@@ -1789,12 +1813,95 @@ fn stability_check<T: FloatLike>(
     is_final_level: bool,
     escalate_if_exact_zero: bool,
 ) -> StabilityCheckResult<T> {
+    stability_check_with_estimate(
+        ecm_scale,
+        results,
+        stability_settings,
+        max_eval,
+        wgt,
+        is_final_level,
+        escalate_if_exact_zero,
+        None,
+        0.0,
+    )
+}
+
+#[inline]
+#[allow(clippy::too_many_arguments)]
+fn stability_check_with_estimate<T: FloatLike>(
+    ecm_scale: Option<&F<T>>,
+    results: &[Complex<F<T>>],
+    stability_settings: &StabilityLevelSetting,
+    max_eval: Complex<F<T>>,
+    wgt: F<T>,
+    is_final_level: bool,
+    escalate_if_exact_zero: bool,
+    integral_estimate: Option<(f64, f64)>,
+    min_abs_wgt_for_escalation: f64,
+) -> StabilityCheckResult<T> {
+    stability_check_components_with_estimate(
+        ecm_scale,
+        results,
+        stability_settings,
+        max_eval,
+        wgt,
+        is_final_level,
+        escalate_if_exact_zero,
+        true,
+        true,
+        integral_estimate,
+        min_abs_wgt_for_escalation,
+    )
+}
+
+#[inline]
+#[cfg(test)]
+#[allow(clippy::too_many_arguments)]
+fn stability_check_components<T: FloatLike>(
+    ecm_scale: Option<&F<T>>,
+    results: &[Complex<F<T>>],
+    stability_settings: &StabilityLevelSetting,
+    max_eval: Complex<F<T>>,
+    wgt: F<T>,
+    is_final_level: bool,
+    escalate_if_exact_zero: bool,
+    check_real: bool,
+    check_imag: bool,
+) -> StabilityCheckResult<T> {
+    stability_check_components_with_estimate(
+        ecm_scale,
+        results,
+        stability_settings,
+        max_eval,
+        wgt,
+        is_final_level,
+        escalate_if_exact_zero,
+        check_real,
+        check_imag,
+        None,
+        0.0,
+    )
+}
+
+#[inline]
+#[allow(clippy::too_many_arguments)]
+fn stability_check_components_with_estimate<T: FloatLike>(
+    ecm_scale: Option<&F<T>>,
+    results: &[Complex<F<T>>],
+    stability_settings: &StabilityLevelSetting,
+    max_eval: Complex<F<T>>,
+    wgt: F<T>,
+    is_final_level: bool,
+    escalate_if_exact_zero: bool,
+    check_real: bool,
+    check_imag: bool,
+    integral_estimate: Option<(f64, f64)>,
+    min_abs_wgt_for_escalation: f64,
+) -> StabilityCheckResult<T> {
     // Nonfinite probes cannot establish stability, even at the final precision.
     if results.iter().any(|result| {
-        result.re.is_nan()
-            || result.re.is_infinite()
-            || result.im.is_nan()
-            || result.im.is_infinite()
+        (check_real && (result.re.is_nan() || result.re.is_infinite()))
+            || (check_imag && (result.im.is_nan() || result.im.is_infinite()))
     }) {
         return (
             results[0].clone(),
@@ -1825,35 +1932,80 @@ fn stability_check<T: FloatLike>(
         })
         / F::<T>::from_f64(results.len() as f64);
     let minimum_normal = F::<T>::from_f64(f64::MIN_POSITIVE);
-    let real_underflow =
-        weighted_absolute_average.re.0.is_finite() && weighted_absolute_average.re < minimum_normal;
-    let imag_underflow =
-        weighted_absolute_average.im.0.is_finite() && weighted_absolute_average.im < minimum_normal;
+    let real_underflow = check_real
+        && weighted_absolute_average.re.0.is_finite()
+        && weighted_absolute_average.re < minimum_normal;
+    let imag_underflow = check_imag
+        && weighted_absolute_average.im.0.is_finite()
+        && weighted_absolute_average.im < minimum_normal;
 
-    let errors = results.iter().map(|res| {
-        let error_re = if IsZero::is_zero(&res.re) && IsZero::is_zero(&average.re) {
-            F::<T>::from_f64(0.0)
-        } else {
-            ((&res.re - &average.re) / &average.re).abs()
-        };
-        let error_im = if IsZero::is_zero(&res.im) && IsZero::is_zero(&average.im) {
-            F::<T>::from_f64(0.0)
-        } else {
-            ((&res.im - &average.im) / &average.im).abs()
-        };
-        Complex::new(error_re, error_im)
+    let errors = results
+        .iter()
+        .map(|res| {
+            let error_re =
+                if !check_real || (IsZero::is_zero(&res.re) && IsZero::is_zero(&average.re)) {
+                    F::<T>::from_f64(0.0)
+                } else {
+                    ((&res.re - &average.re) / &average.re).abs()
+                };
+            let error_im =
+                if !check_imag || (IsZero::is_zero(&res.im) && IsZero::is_zero(&average.im)) {
+                    F::<T>::from_f64(0.0)
+                } else {
+                    ((&res.im - &average.im) / &average.im).abs()
+                };
+            Complex::new(error_re, error_im)
+        })
+        .collect::<Vec<_>>();
+    let estimated_relative_accuracy = errors.iter().fold(average.re.zero(), |max, error| {
+        max.max(error.re.clone().max(error.im.clone()))
     });
-    let mut estimated_relative_accuracy = average.re.zero();
+
+    // Do not spend higher precision on a point whose complete weighted probe
+    // contribution is negligible compared with a well-resolved integral. The
+    // estimate is supplied by the previous integration iteration and is
+    // accepted only when its standard error is at most ten percent. The
+    // integrator supplies the corresponding absolute-component estimate.
+    // A discrepancy below 1e-2 is treated as insufficient evidence that the
+    // order of magnitude is reliable, so it must not permit this waiver.
+    let small_weight_waiver = |max_weight: F<T>| {
+        min_abs_wgt_for_escalation > 0.0
+            && !is_final_level
+            && integral_estimate.is_some_and(|(estimate, error)| {
+                estimate.is_finite()
+                    && error.is_finite()
+                    && error >= 0.0
+                    && estimate != 0.0
+                    && error <= 0.10 * estimate.abs()
+                    && estimated_relative_accuracy >= F::<T>::from_f64(1.0e-2)
+                    && max_weight.0.is_finite()
+                    && max_weight < F::<T>::from_f64(min_abs_wgt_for_escalation * estimate.abs())
+            })
+    };
+    let current_max_weight = results
+        .iter()
+        .fold(wgt.abs() * average.re.zero(), |max, result| {
+            let magnitude = if check_real && check_imag {
+                result.re.abs().max(result.im.abs())
+            } else if check_real {
+                result.re.abs()
+            } else if check_imag {
+                result.im.abs()
+            } else {
+                result.re.zero()
+            } * wgt.abs();
+            max.max(magnitude)
+        });
+    let small_weight_waiver = small_weight_waiver(current_max_weight);
 
     let mut unstable_reason = None;
     let mut unstable_sample = None;
-    for (index, error) in errors.enumerate() {
-        estimated_relative_accuracy =
-            estimated_relative_accuracy.max(error.re.clone().max(error.im.clone()));
+    for (index, error) in errors.into_iter().enumerate() {
         if !is_final_level
             && escalate_if_exact_zero
-            && error.re == F::<T>::from_f64(0.0)
-            && error.im == F::<T>::from_f64(0.0)
+            && !small_weight_waiver
+            && (!check_real || error.re == F::<T>::from_f64(0.0))
+            && (!check_imag || error.im == F::<T>::from_f64(0.0))
         {
             unstable_reason = Some(StabilityFailureReason::ZeroError);
             unstable_sample = Some(index);
@@ -1887,12 +2039,16 @@ fn stability_check<T: FloatLike>(
                     && &absolute_error.im / scale
                         <= F::<T>::from_f64(stability_settings.ecm_relative_tolerance_for_im)
             });
-        if (error.re > F::<T>::from_f64(stability_settings.required_precision_for_re)
+        if (check_real
+            && error.re > F::<T>::from_f64(stability_settings.required_precision_for_re)
             && !real_underflow
-            && !real_absolute)
-            || (error.im > F::<T>::from_f64(stability_settings.required_precision_for_im)
+            && !real_absolute
+            && !small_weight_waiver)
+            || (check_imag
+                && error.im > F::<T>::from_f64(stability_settings.required_precision_for_im)
                 && !imag_underflow
-                && !imag_absolute)
+                && !imag_absolute
+                && !small_weight_waiver)
         {
             unstable_reason = Some(StabilityFailureReason::ErrorThreshold);
             unstable_sample = Some(index);
@@ -1924,19 +2080,23 @@ fn stability_check<T: FloatLike>(
 
     let stable = unstable_sample.is_none();
 
-    let below_wgt_threshold = if stability_settings.escalate_for_large_weight_threshold > 0.
-        && max_eval.is_non_zero()
-    {
-        average.re.abs() * wgt.clone()
-            < F::<T>::from_f64(stability_settings.escalate_for_large_weight_threshold) * max_eval.re
-            || average.im.abs() * wgt
-                < F::<T>::from_f64(stability_settings.escalate_for_large_weight_threshold)
-                    * max_eval.im
-    } else {
-        true
-    };
+    let has_active_max = (check_real && !IsZero::is_zero(&max_eval.re))
+        || (check_imag && !IsZero::is_zero(&max_eval.im));
+    let below_wgt_threshold =
+        if stability_settings.escalate_for_large_weight_threshold > 0. && has_active_max {
+            (check_real
+                && average.re.abs() * wgt.clone()
+                    < F::<T>::from_f64(stability_settings.escalate_for_large_weight_threshold)
+                        * max_eval.re)
+                || (check_imag
+                    && average.im.abs() * wgt
+                        < F::<T>::from_f64(stability_settings.escalate_for_large_weight_threshold)
+                            * max_eval.im)
+        } else {
+            true
+        };
 
-    let weight_reason = if stable && !below_wgt_threshold {
+    let weight_reason = if stable && !below_wgt_threshold && !small_weight_waiver {
         Some(StabilityFailureReason::WeightThreshold)
     } else {
         None
@@ -1945,12 +2105,13 @@ fn stability_check<T: FloatLike>(
     (
         average,
         Some(estimated_relative_accuracy),
-        stable && below_wgt_threshold,
+        stable && (below_wgt_threshold || small_weight_waiver),
         unstable_reason.or(weight_reason),
     )
 }
 
 #[inline]
+#[cfg(test)]
 fn stability_check_on_norm<T: FloatLike>(
     ecm_scale: Option<&F<T>>,
     results: &[Complex<F<T>>],
@@ -1960,12 +2121,40 @@ fn stability_check_on_norm<T: FloatLike>(
     is_final_level: bool,
     escalate_if_exact_zero: bool,
 ) -> StabilityCheckResult<T> {
+    stability_check_on_norm_components_with_estimate(
+        ecm_scale,
+        results,
+        stability_settings,
+        max_eval,
+        wgt,
+        is_final_level,
+        escalate_if_exact_zero,
+        true,
+        true,
+        None,
+        0.0,
+    )
+}
+
+#[inline]
+#[allow(clippy::too_many_arguments)]
+fn stability_check_on_norm_components_with_estimate<T: FloatLike>(
+    ecm_scale: Option<&F<T>>,
+    results: &[Complex<F<T>>],
+    stability_settings: &StabilityLevelSetting,
+    max_eval: Complex<F<T>>,
+    wgt: F<T>,
+    is_final_level: bool,
+    escalate_if_exact_zero: bool,
+    check_real: bool,
+    check_imag: bool,
+    integral_estimate: Option<(f64, f64)>,
+    min_abs_wgt_for_escalation: f64,
+) -> StabilityCheckResult<T> {
     // Nonfinite probes cannot establish stability, even at the final precision.
     if results.iter().any(|result| {
-        result.re.is_nan()
-            || result.re.is_infinite()
-            || result.im.is_nan()
-            || result.im.is_infinite()
+        (check_real && (result.re.is_nan() || result.re.is_infinite()))
+            || (check_imag && (result.im.is_nan() || result.im.is_infinite()))
     }) {
         return (
             results[0].clone(),
@@ -1979,14 +2168,20 @@ fn stability_check_on_norm<T: FloatLike>(
         return (results[0].clone(), None, true, None);
     }
 
-    let average = results.iter().fold(F::<T>::from_f64(0.0), |acc, x| {
-        acc + x.norm_squared().sqrt()
-    }) / F::<T>::from_f64(results.len() as f64);
+    let component_magnitude = |x: &Complex<F<T>>| match (check_real, check_imag) {
+        (true, false) => x.re.abs(),
+        (false, true) => x.im.abs(),
+        (true, true) => x.norm_squared().sqrt(),
+        (false, false) => x.re.zero(),
+    };
+    let average = results
+        .iter()
+        .fold(F::<T>::from_f64(0.0), |acc, x| acc + component_magnitude(x))
+        / F::<T>::from_f64(results.len() as f64);
 
     // The norm owner returns the primary probe, so bound it as well as the
     // average. Componentwise L1 magnitudes avoid squaring tiny weighted values.
-    let weighted_magnitude =
-        |result: &Complex<F<T>>| (&result.re * &wgt).abs() + (&result.im * &wgt).abs();
+    let weighted_magnitude = |result: &Complex<F<T>>| &component_magnitude(result) * &wgt;
     let weighted_absolute_average = results.iter().fold(average.zero(), |sum, result| {
         sum + weighted_magnitude(result)
     }) / F::<T>::from_f64(results.len() as f64);
@@ -2007,32 +2202,59 @@ fn stability_check_on_norm<T: FloatLike>(
         && results.iter().all(|result| {
             let error_re = ((&result.re - &results[0].re) * &wgt).abs();
             let error_im = ((&result.im - &results[0].im) * &wgt).abs();
-            error_re.0.is_finite()
-                && error_im.0.is_finite()
-                && error_re / ecm_scale.unwrap()
-                    <= F::<T>::from_f64(stability_settings.ecm_relative_tolerance_for_re)
-                && error_im / ecm_scale.unwrap()
-                    <= F::<T>::from_f64(stability_settings.ecm_relative_tolerance_for_im)
+            (!check_real
+                || (error_re.0.is_finite()
+                    && error_re / ecm_scale.unwrap()
+                        <= F::<T>::from_f64(stability_settings.ecm_relative_tolerance_for_re)))
+                && (!check_imag
+                    || (error_im.0.is_finite()
+                        && error_im / ecm_scale.unwrap()
+                            <= F::<T>::from_f64(stability_settings.ecm_relative_tolerance_for_im)))
         });
 
-    let errors = results.iter().map(|res| {
-        let res = res.norm_squared().sqrt();
-        if IsZero::is_zero(&res) && IsZero::is_zero(&average) {
-            (F::<T>::from_f64(0.0), true) // true zero is fishy -> upgrade to next precision
-        } else {
-            (((res - average.clone()) / average.clone()).abs(), false)
-        }
+    let errors = results
+        .iter()
+        .map(|res| {
+            let res = component_magnitude(res);
+            if IsZero::is_zero(&res) && IsZero::is_zero(&average) {
+                (F::<T>::from_f64(0.0), true) // true zero is fishy -> upgrade to next precision
+            } else {
+                (((res - average.clone()) / average.clone()).abs(), false)
+            }
+        })
+        .collect::<Vec<_>>();
+    let estimated_relative_accuracy = errors
+        .iter()
+        .fold(average.zero(), |max, (error, _)| max.max(error.clone()));
+
+    // Low probe discrepancy cannot establish the order of magnitude.
+    let small_weight_waiver = |max_weight: F<T>| {
+        min_abs_wgt_for_escalation > 0.0
+            && !is_final_level
+            && integral_estimate.is_some_and(|(estimate, error)| {
+                estimate.is_finite()
+                    && error.is_finite()
+                    && error >= 0.0
+                    && estimate != 0.0
+                    && error <= 0.10 * estimate.abs()
+                    && estimated_relative_accuracy >= F::<T>::from_f64(1.0e-2)
+                    && max_weight.0.is_finite()
+                    && max_weight < F::<T>::from_f64(min_abs_wgt_for_escalation * estimate.abs())
+            })
+    };
+    let current_max_weight = results.iter().fold(average.zero(), |max, result| {
+        max.max(weighted_magnitude(result).abs())
     });
-    let mut estimated_relative_accuracy = average.zero();
+    let small_weight_waiver = small_weight_waiver(current_max_weight);
 
     let mut unstable_reason = None;
     let mut unstable_sample = None;
-    for (index, (error, result_is_exact_zero)) in errors.enumerate() {
-        estimated_relative_accuracy = estimated_relative_accuracy.max(error.clone());
+    for (index, (error, result_is_exact_zero)) in errors.into_iter().enumerate() {
         if !is_final_level
             && error == F::<T>::from_f64(0.0)
             && result_is_exact_zero
             && escalate_if_exact_zero
+            && !small_weight_waiver
         {
             unstable_reason = Some(StabilityFailureReason::ZeroError);
             unstable_sample = Some(index);
@@ -2042,6 +2264,7 @@ fn stability_check_on_norm<T: FloatLike>(
         if error > F::<T>::from_f64(stability_settings.required_precision_for_re)
             && !underflow
             && !absolute_agreement
+            && !small_weight_waiver
         {
             unstable_reason = Some(StabilityFailureReason::ErrorThreshold);
             unstable_sample = Some(index);
@@ -2064,16 +2287,18 @@ fn stability_check_on_norm<T: FloatLike>(
 
     let stable = unstable_sample.is_none();
 
-    let below_wgt_threshold =
-        if stability_settings.escalate_for_large_weight_threshold > 0. && max_eval.is_non_zero() {
-            average.abs() * wgt
-                < F::<T>::from_f64(stability_settings.escalate_for_large_weight_threshold)
-                    * max_eval.norm_squared().sqrt()
-        } else {
-            true
-        };
+    let max_magnitude = component_magnitude(&max_eval);
+    let below_wgt_threshold = if stability_settings.escalate_for_large_weight_threshold > 0.
+        && max_magnitude != max_magnitude.zero()
+    {
+        average.abs() * wgt
+            < F::<T>::from_f64(stability_settings.escalate_for_large_weight_threshold)
+                * max_magnitude
+    } else {
+        true
+    };
 
-    let weight_reason = if stable && !below_wgt_threshold {
+    let weight_reason = if stable && !below_wgt_threshold && !small_weight_waiver {
         Some(StabilityFailureReason::WeightThreshold)
     } else {
         None
@@ -2082,7 +2307,7 @@ fn stability_check_on_norm<T: FloatLike>(
     (
         results[0].clone(),
         Some(estimated_relative_accuracy),
-        stable && below_wgt_threshold,
+        stable && (below_wgt_threshold || small_weight_waiver),
         unstable_reason.or(weight_reason),
     )
 }
@@ -2112,7 +2337,11 @@ impl<T: FloatLike> PreciseStabilityLevelResult<T> {
             precision: self.stability_level_used,
             estimated_relative_accuracy: self.estimated_relative_accuracy.as_ref().map(F::into_ff64),
             estimated_decimal_digits,
-            status: StabilityStatus::from_sample_count(self.sample_count, self.is_stable),
+            status: if self.sample_count == 0 {
+                StabilityStatus::Unstable(0)
+            } else {
+                StabilityStatus::from_sample_count(self.sample_count, self.is_stable)
+            },
             total_time: self.total_time,
         }
     }
@@ -2857,7 +3086,7 @@ pub trait ProcessIntegrandImpl {
         for id in 0..self.graph_count() {
             for mass in self
                 .get_graph(id)
-                .get_real_mass_vector()
+                .get_real_mass_vector()?
                 .iter()
                 .filter_map(|(_, mass)| mass.as_ref())
             {
@@ -3466,7 +3695,7 @@ pub trait GraphTerm {
     ) -> Result<LmbIndex>;
     fn get_tropical_sampler(&self) -> &SampleGenerator<3>;
     fn get_mut_param_builder(&mut self) -> &mut ParamBuilder<f64>;
-    fn get_real_mass_vector(&self) -> EdgeVec<Option<F<f64>>>;
+    fn get_real_mass_vector(&self) -> Result<EdgeVec<Option<F<f64>>>>;
 
     /// Compile the canonical full-frame sampling bridge for this graph.
     /// Process implementations own the graph-specific external signature and
@@ -3875,6 +4104,10 @@ struct StabilityEvaluationContext<'a, 'm> {
     record_rotated_results: bool,
     precision_label: &'static str,
     escalate_if_exact_zero: bool,
+    check_real: bool,
+    check_imag: bool,
+    integral_estimate: Option<(f64, f64)>,
+    min_abs_wgt_for_escalation: f64,
 }
 
 impl StabilityEvaluationContext<'_, '_> {
@@ -3941,37 +4174,78 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
     context: &mut StabilityEvaluationContext<'_, '_>,
 ) -> Result<PreciseStabilityLevelResult<T>> {
     let level_start = Instant::now();
-    let gammaloop_sample = context
-        .source
-        .build_gamma_sample::<T, I>(integrand, context.evaluation_metadata)?;
-    let ecm_scale = context.ecm_reference_scale(integrand, &gammaloop_sample)?;
-    debug!("{} parameterization succeeded", context.precision_label);
-    debug!(
-        "jacobian: {:+16e}",
-        gammaloop_sample.get_default_sample().jacobian()
-    );
-
-    let (graph_results, primary_rotation_index, rotated_results) = evaluate_all_rotations(
-        integrand,
-        context.target,
-        &gammaloop_sample,
-        context.evaluation_metadata,
-        context.record_rotated_results,
-        context.source.canonical_sample(),
-    )?;
-    let threshold_counterterm_failed = context
+    let evaluated = if context
         .evaluation_metadata
         .threshold_counterterm_error
-        .is_some();
-    if context.is_final_level
-        && let Some(threshold_error) = &context.evaluation_metadata.threshold_counterterm_error
+        .is_some()
     {
-        return Err(eyre!(
-            "threshold-counterterm evaluation remained invalid after the final {} stability level: {}",
-            context.stability_level.precision,
-            threshold_error,
-        ));
+        None
+    } else {
+        let evaluated = (|| {
+            let sample = context
+                .source
+                .build_gamma_sample::<T, I>(integrand, context.evaluation_metadata)?;
+            let ecm_scale = context.ecm_reference_scale(integrand, &sample)?;
+            debug!("{} parameterization succeeded", context.precision_label);
+            debug!("jacobian: {:+16e}", sample.get_default_sample().jacobian());
+            let rotations = evaluate_all_rotations(
+                integrand,
+                context.target,
+                &sample,
+                context.evaluation_metadata,
+                context.record_rotated_results,
+                context.source.canonical_sample(),
+            )?;
+            Ok::<_, eyre::Report>((sample, ecm_scale, rotations))
+        })();
+        match evaluated {
+            Ok(evaluated) => Some(evaluated),
+            Err(error)
+                if matches!(context.target, EvaluationTarget::Physical(_))
+                    && matches!(
+                        error.downcast_ref::<sampling_maps::SamplingEvaluationError>(),
+                        Some(
+                            sampling_maps::SamplingEvaluationError::UncertifiedOverlap { .. }
+                                | sampling_maps::SamplingEvaluationError::UncertifiedRoot { .. }
+                        )
+                    ) =>
+            {
+                // A failed native pass may have populated only part of its
+                // point caches; use fresh identities for the following lane.
+                integrand.increment_loop_cache_id(integrand.get_rotations().count() + 1);
+                integrand.revert_to_base_external_cache_id();
+                context
+                    .evaluation_metadata
+                    .record_threshold_counterterm_error(format!("{error:#}"));
+                None
+            }
+            Err(error) => return Err(error),
+        }
+    };
+    if context
+        .evaluation_metadata
+        .threshold_counterterm_error
+        .is_some()
+    {
+        // An uncertified cut/overlap invalidates the whole sample, including
+        // partial channels and events. Retry native precision through the same
+        // driver; an exhausted failure remains explicitly marked NaN.
+        let mut graph_result = GraphEvaluationResult::zero(F::<T>::from_f64(0.0));
+        graph_result.integrand_result = Complex::new(F::from_f64(f64::NAN), F::from_f64(f64::NAN));
+        return Ok(PreciseStabilityLevelResult {
+            result: graph_result.integrand_result.clone(),
+            graph_result,
+            stability_level_used: context.stability_level.precision,
+            estimated_relative_accuracy: None,
+            sample_count: 0,
+            total_time: level_start.elapsed(),
+            parameterization_jacobian: context.source.is_x_space().then(|| F::from_f64(1.0)),
+            is_stable: false,
+            rotated_results: Vec::new(),
+        });
     }
+    let (gammaloop_sample, ecm_scale, (graph_results, primary_rotation_index, rotated_results)) =
+        evaluated.expect("a successful level has evaluated rotations");
     let results = graph_results
         .iter()
         .map(|result| result.integrand_result.clone())
@@ -3987,7 +4261,7 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
 
     let (average_result, mut estimated_relative_accuracy, mut is_stable, _instability_reason) =
         if context.check_on_norm {
-            stability_check_on_norm(
+            stability_check_on_norm_components_with_estimate(
                 ecm_scale.as_ref(),
                 &results,
                 context.stability_level,
@@ -3995,9 +4269,13 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
                 wgt,
                 context.is_final_level,
                 context.escalate_if_exact_zero,
+                context.check_real,
+                context.check_imag,
+                context.integral_estimate,
+                context.min_abs_wgt_for_escalation,
             )
         } else {
-            stability_check(
+            stability_check_components_with_estimate(
                 ecm_scale.as_ref(),
                 &results,
                 context.stability_level,
@@ -4005,6 +4283,10 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
                 wgt,
                 context.is_final_level,
                 context.escalate_if_exact_zero,
+                context.check_real,
+                context.check_imag,
+                context.integral_estimate,
+                context.min_abs_wgt_for_escalation,
             )
         };
 
@@ -4023,10 +4305,11 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
                 })
             })
             .collect::<Result<Vec<_>>>()?;
+        let (absolute_check_real, absolute_check_imag) = (context.check_real, context.check_imag);
         let check = if context.check_on_norm {
-            stability_check_on_norm::<T>
+            stability_check_on_norm_components_with_estimate::<T>
         } else {
-            stability_check::<T>
+            stability_check_components_with_estimate::<T>
         };
         let (absolute, accuracy, stable, _) = check(
             ecm_scale.as_ref(),
@@ -4036,6 +4319,10 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
             F::<T>::from_ff64(context.wgt),
             context.is_final_level,
             context.escalate_if_exact_zero,
+            absolute_check_real,
+            absolute_check_imag,
+            context.integral_estimate,
+            context.min_abs_wgt_for_escalation,
         );
         graph_result.absolute_integrand_result = Some(absolute);
         estimated_relative_accuracy = estimated_relative_accuracy
@@ -4082,7 +4369,7 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
                 "E_cm-relative reference-moment scale must be finite and positive"
             ));
         }
-        let (moment, accuracy, stable, _) = stability_check(
+        let (moment, accuracy, stable, _) = stability_check_with_estimate(
             moment_scale.as_ref(),
             &moments,
             &moment_level,
@@ -4090,6 +4377,8 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
             F::<T>::from_ff64(context.wgt),
             context.is_final_level,
             context.escalate_if_exact_zero,
+            context.integral_estimate,
+            context.min_abs_wgt_for_escalation,
         );
         graph_result
             .reference_moments
@@ -4114,7 +4403,7 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
             .source
             .is_x_space()
             .then(|| gammaloop_sample.get_default_sample().one()),
-        is_stable: is_stable && !threshold_counterterm_failed,
+        is_stable,
         rotated_results,
     })
 }
@@ -4909,6 +5198,26 @@ fn evaluate_from_source_precise<I: ProcessIntegrandImpl>(
     use_arb_prec: bool,
     max_eval: Complex<F<f64>>,
 ) -> Result<PreciseEvaluationResult> {
+    evaluate_from_source_precise_with_estimate(
+        integrand,
+        target,
+        source,
+        wgt,
+        use_arb_prec,
+        max_eval,
+        None,
+    )
+}
+
+fn evaluate_from_source_precise_with_estimate<I: ProcessIntegrandImpl>(
+    integrand: &mut I,
+    target: EvaluationTarget<'_>,
+    source: EvaluationSource<'_>,
+    wgt: F<f64>,
+    use_arb_prec: bool,
+    max_eval: Complex<F<f64>>,
+    integral_estimate: Option<(f64, f64)>,
+) -> Result<PreciseEvaluationResult> {
     let stability = &integrand.get_settings().stability;
     if matches!(target, EvaluationTarget::Physical(_))
         && stability.integrated_energy_dimension.is_none()
@@ -4941,10 +5250,32 @@ fn evaluate_from_source_precise<I: ProcessIntegrandImpl>(
             "reference acceptance does not support tropical sampling"
         ));
     }
-    let mut anchor = source.prepare_draw(integrand, &mut evaluation_metadata)?;
-    if let (Some(sample), EvaluationTarget::Physical(model)) = (&mut anchor, target) {
-        sample.prepare_physical_overlaps(integrand, model, &mut evaluation_metadata)?;
-    }
+    let prepared = (|| {
+        let mut anchor = source.prepare_draw(integrand, &mut evaluation_metadata)?;
+        if let (Some(sample), EvaluationTarget::Physical(model)) = (&mut anchor, target) {
+            sample.prepare_physical_overlaps(integrand, model, &mut evaluation_metadata)?;
+        }
+        Ok::<_, eyre::Report>(anchor)
+    })();
+    let (anchor, preparation_error) = match prepared {
+        Ok(anchor) => (anchor, None),
+        Err(error)
+            if matches!(target, EvaluationTarget::Physical(_))
+                && matches!(
+                    error.downcast_ref::<sampling_maps::SamplingEvaluationError>(),
+                    Some(
+                        sampling_maps::SamplingEvaluationError::UncertifiedOverlap { .. }
+                            | sampling_maps::SamplingEvaluationError::UncertifiedRoot { .. }
+                    )
+                ) =>
+        {
+            // The canonical proposal/center authority must not be changed in a
+            // native retry. An unresolved preparation prevents every physical
+            // lane; preserve its diagnostic without evaluating partial bodies.
+            (None, Some(format!("{error:#}")))
+        }
+        Err(error) => return Err(error),
+    };
     let original_source = source;
     let source = match &anchor {
         Some(sample) => EvaluationSource::Prepared {
@@ -4953,8 +5284,14 @@ fn evaluate_from_source_precise<I: ProcessIntegrandImpl>(
         },
         None => original_source,
     };
-    let (stability_iterator, loop_momenta_escalation) =
-        stability_iterator_for_source(integrand, &source, use_arb_prec, &mut evaluation_metadata);
+    let (stability_iterator, loop_momenta_escalation) = if preparation_error.is_some() {
+        (
+            create_stability_iterator(&integrand.get_settings().stability, use_arb_prec),
+            None,
+        )
+    } else {
+        stability_iterator_for_source(integrand, &source, use_arb_prec, &mut evaluation_metadata)
+    };
 
     let mut final_result = None;
 
@@ -4963,6 +5300,9 @@ fn evaluate_from_source_precise<I: ProcessIntegrandImpl>(
     let total_levels = stability_iterator.len();
     for (level_index, stability_level) in stability_iterator.into_iter().enumerate() {
         evaluation_metadata.clear_threshold_counterterm_error();
+        if let Some(error) = &preparation_error {
+            evaluation_metadata.record_threshold_counterterm_error(error.clone());
+        }
         let is_final_level = level_index + 1 == total_levels;
         let record_rotated_results = integrand
             .get_settings()
@@ -4986,6 +5326,23 @@ fn evaluate_from_source_precise<I: ProcessIntegrandImpl>(
                 Precision::Arb => "ArbPrec",
             },
             escalate_if_exact_zero,
+            check_real: !matches!(target, EvaluationTarget::Physical(_))
+                || !matches!(
+                    integrand.get_settings().integrator.integrated_phase,
+                    IntegratedPhase::Imag
+                ),
+            check_imag: !matches!(target, EvaluationTarget::Physical(_))
+                || !matches!(
+                    integrand.get_settings().integrator.integrated_phase,
+                    IntegratedPhase::Real
+                ),
+            integral_estimate: matches!(target, EvaluationTarget::Physical(_))
+                .then_some(integral_estimate)
+                .flatten(),
+            min_abs_wgt_for_escalation: integrand
+                .get_settings()
+                .stability
+                .min_abs_wgt_for_escalation,
         };
         let level_start = Instant::now();
         let mut is_stable = false;
@@ -5068,7 +5425,11 @@ fn evaluate_from_source_precise<I: ProcessIntegrandImpl>(
             break;
         } else {
             debug!("unstable at level: {}", stability_level.precision);
-            if let Ok(gammaloop_sample) = source.debug_sample(integrand, &mut evaluation_metadata) {
+            if evaluation_metadata.threshold_counterterm_error.is_some() {
+                debug!("threshold preparation or evaluation requires precision escalation");
+            } else if let Ok(gammaloop_sample) =
+                source.debug_sample(integrand, &mut evaluation_metadata)
+            {
                 log_rotated_samples(integrand, &gammaloop_sample, &rotated_results);
             } else {
                 debug!("failed to reconstruct sample for instability logging");
@@ -5601,6 +5962,10 @@ pub(crate) mod tests {
                             record_rotated_results: false,
                             precision_label: "ArbPrec",
                             escalate_if_exact_zero: false,
+                            check_real: true,
+                            check_imag: true,
+                            integral_estimate: None,
+                            min_abs_wgt_for_escalation: 0.0,
                         };
                         integrand.settings.stability.integrated_energy_dimension = None;
                         assert_eq!(
@@ -5815,6 +6180,102 @@ pub(crate) mod tests {
                     Some(Complex::new_re(draw.zero()))
                 );
             }
+            // Exercise the pre-stability numerical failure boundary on this
+            // generated physical cut without requiring a platform-dependent
+            // Clarabel termination status. The original proposal stays fixed.
+            let healthy_setup = integrand.get_graph(0).sampling_setup().clone();
+            let overlap_failure = super::sampling_maps::SamplingEvaluationError::UncertifiedOverlap {
+                detail: "Threshold SOCP returned AlmostPrimalInfeasible without a strictly interior center".into(),
+            };
+            let setup = integrand.get_graph_mut(0).sampling_setup_mut();
+            if fixed256 {
+                setup.sampling_bridge_fixed256.set(Err(overlap_failure));
+            } else {
+                setup.sampling_bridge_quad.set(Err(overlap_failure));
+            }
+            let failed = evaluate_from_source_precise(
+                integrand,
+                EvaluationTarget::Physical(model),
+                EvaluationSource::XSpace(source),
+                F(1.0),
+                false,
+                Complex::new_zero(),
+            )?
+            .try_into_f64()?;
+            assert!(failed.evaluation_metadata.is_nan);
+            assert!(failed.event_groups.is_empty());
+            assert_eq!(
+                failed.evaluation_metadata.final_precision(),
+                Some(Precision::Arb)
+            );
+            assert_eq!(
+                failed
+                    .evaluation_metadata
+                    .stability_results
+                    .iter()
+                    .map(|result| (result.precision, result.status.clone()))
+                    .collect::<Vec<_>>(),
+                [Precision::Double, Precision::Quad, Precision::Arb]
+                    .into_iter()
+                    .map(|precision| (
+                        precision,
+                        crate::integrands::evaluation::StabilityStatus::Unstable(0)
+                    ))
+                    .collect::<Vec<_>>()
+            );
+            assert!(
+                failed
+                    .evaluation_metadata
+                    .threshold_counterterm_error
+                    .as_ref()
+                    .unwrap()
+                    .contains("AlmostPrimalInfeasible")
+            );
+            assert!(
+                serde_json::to_string(&failed.evaluation_metadata)?
+                    .contains("AlmostPrimalInfeasible")
+            );
+            assert_eq!(
+                failed.evaluation_metadata.evaluator_evaluation_time,
+                std::time::Duration::ZERO
+            );
+            *integrand.get_graph_mut(0).sampling_setup_mut() = healthy_setup.clone();
+            let following = evaluate_from_source_precise(
+                integrand,
+                EvaluationTarget::Physical(model),
+                EvaluationSource::XSpace(source),
+                F(1.0),
+                false,
+                Complex::new_zero(),
+            )?
+            .try_into_f64()?;
+            assert!(!following.evaluation_metadata.is_nan);
+            assert!(
+                following
+                    .evaluation_metadata
+                    .threshold_counterterm_error
+                    .is_none()
+            );
+            assert!(following.integrand_result.re.0.is_finite());
+            assert!(following.integrand_result.im.0.is_finite());
+            // Missing fixed-source metadata is a programming/configuration
+            // error, not a failed numerical sample to record and skip.
+            integrand
+                .get_graph_mut(0)
+                .sampling_setup_mut()
+                .sampling_source = RuntimeCache::default();
+            let malformed = evaluate_from_source_precise(
+                integrand,
+                EvaluationTarget::Physical(model),
+                EvaluationSource::XSpace(source),
+                F(1.0),
+                false,
+                Complex::new_zero(),
+            )
+            .unwrap_err();
+            assert!(format!("{malformed:#}").contains("fixed sampling source is not initialized"));
+            *integrand.get_graph_mut(0).sampling_setup_mut() = healthy_setup;
+
             let unavailable = super::sampling_maps::SamplingEvaluationError::Unrepresentable {
                 operation: "test-only fixed source poison",
                 detail: "cannot redraw at Arb".into(),
@@ -6356,7 +6817,7 @@ pub(crate) mod tests {
                 Precision, SamplingChannelWeight, SamplingSettingsParser, StabilityLevelSetting,
                 SumMode,
             },
-            utils::ArbPrec,
+            utils::{ArbPrec, SamplingFloat, SamplingPrecision},
         };
         use spenso::algebra::complex::Complex;
         use std::sync::atomic::{AtomicUsize, Ordering};
@@ -6579,11 +7040,15 @@ pub(crate) mod tests {
         let ProcessIntegrand::Amplitude(amplitude) = &mut runtime else {
             unreachable!()
         };
+        assert_eq!(
+            amplitude.sampling_source_policy()?.0,
+            SamplingPrecision::Fixed256
+        );
         assert!(
             amplitude
                 .get_graph(0)
                 .sampling_setup()
-                .sampling_bridge::<ArbPrec>()
+                .sampling_bridge::<SamplingFloat>()
                 .is_ok()
         );
         probe.retry_lower_half = false;
@@ -6607,7 +7072,7 @@ pub(crate) mod tests {
             amplitude
                 .get_graph(0)
                 .sampling_setup()
-                .sampling_bridge::<ArbPrec>()
+                .sampling_bridge::<SamplingFloat>()
                 .is_ok()
         );
         // A failed fixed proposal cannot choose a native map as a fallback,
@@ -6786,6 +7251,112 @@ pub(crate) mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn real_only_stability_ignores_inactive_imaginary_probe() {
+        use super::StabilityFailureReason;
+        use crate::settings::runtime::StabilityLevelSetting;
+        use spenso::algebra::complex::Complex;
+
+        let level = StabilityLevelSetting::default_double();
+        let results = vec![Complex::new(F(2.0), F(1.0)), Complex::new(F(2.0), F(2.0))];
+        let (_, _, real_stable, _) = super::stability_check_components(
+            None,
+            &results,
+            &level,
+            Complex::new(F(10.0), F(10.0)),
+            F(1.0),
+            false,
+            false,
+            true,
+            false,
+        );
+        let (_, _, both_stable, reason) = super::stability_check_components(
+            None,
+            &results,
+            &level,
+            Complex::new(F(10.0), F(10.0)),
+            F(1.0),
+            false,
+            false,
+            true,
+            true,
+        );
+        assert!(real_stable);
+        assert!(!both_stable);
+        assert_eq!(reason, Some(StabilityFailureReason::ErrorThreshold));
+
+        let nonfinite_im = vec![Complex::new(F(2.0), F(f64::NAN))];
+        let (_, _, stable, _) = super::stability_check_components(
+            None,
+            &nonfinite_im,
+            &level,
+            Complex::new(F(10.0), F(10.0)),
+            F(1.0),
+            true,
+            false,
+            true,
+            false,
+        );
+        assert!(stable);
+    }
+
+    #[test]
+    fn negligible_weight_waiver_requires_ten_percent_absolute_estimate() {
+        use super::StabilityFailureReason;
+        use crate::settings::runtime::StabilityLevelSetting;
+        use spenso::algebra::complex::Complex;
+
+        let level = StabilityLevelSetting::default_double();
+        let results = vec![Complex::new_re(F(1.0)), Complex::new_re(F(1.1))];
+        let (_, _, waived, reason) = super::stability_check_components_with_estimate(
+            None,
+            &results,
+            &level,
+            Complex::new_zero(),
+            F(1.0),
+            false,
+            false,
+            true,
+            false,
+            Some((10.0, 0.5)),
+            0.2,
+        );
+        assert!(waived);
+        assert_eq!(reason, None);
+
+        let (_, _, unstable, reason) = super::stability_check_components_with_estimate(
+            None,
+            &results,
+            &level,
+            Complex::new_zero(),
+            F(1.0),
+            false,
+            false,
+            true,
+            false,
+            Some((10.0, 1.1)),
+            0.2,
+        );
+        assert!(!unstable);
+        assert_eq!(reason, Some(StabilityFailureReason::ErrorThreshold));
+
+        let (_, _, unstable, reason) = super::stability_check_components_with_estimate(
+            None,
+            &[Complex::new_re(F(1.0)), Complex::new_re(F(1.001))],
+            &level,
+            Complex::new_zero(),
+            F(1.0),
+            false,
+            false,
+            true,
+            false,
+            Some((10.0, 0.5)),
+            0.2,
+        );
+        assert!(!unstable);
+        assert_eq!(reason, Some(StabilityFailureReason::ErrorThreshold));
     }
 
     #[test]
@@ -7482,6 +8053,44 @@ pub(crate) mod tests {
                 Complex::new_re(small.clone()),
             );
         assert!(
+            format!("{:#}", auxiliary.clone().try_into_f64().unwrap_err())
+                .contains("additional_weights[Original].re")
+        );
+
+        let full_factor_key = crate::observables::AdditionalWeightKey::FullMultiplicativeFactor;
+        auxiliary.event_groups[0][0]
+            .additional_weights
+            .weights
+            .insert(full_factor_key, Complex::new_re(one.clone()));
+        assert_eq!(
+            auxiliary.clone().try_into_f64().unwrap().event_groups[0][0]
+                .additional_weights
+                .weights[&crate::observables::AdditionalWeightKey::Original],
+            Complex::new_zero(),
+        );
+        // An unknown component of a complex multiplier cannot certify a tail,
+        // even when its other component is finite and small.
+        auxiliary.event_groups[0][0]
+            .additional_weights
+            .weights
+            .insert(
+                full_factor_key,
+                Complex::new(F::<ArbPrec>::from_f64(f64::NAN), one.clone()),
+            );
+        assert!(
+            format!("{:#}", auxiliary.clone().try_into_f64().unwrap_err())
+                .contains("additional_weights[Original].re")
+        );
+        // A complex multiplier can promote this tiny real component into a
+        // meaningful imaginary contribution. It must survive before rounding.
+        auxiliary.event_groups[0][0]
+            .additional_weights
+            .weights
+            .insert(
+                full_factor_key,
+                Complex::new_im(one.from_usize(10).powi(100)),
+            );
+        assert!(
             format!("{:#}", auxiliary.try_into_f64().unwrap_err())
                 .contains("additional_weights[Original].re")
         );
@@ -8087,14 +8696,14 @@ pub(crate) mod tests {
             })
             .collect::<Vec<_>>();
         let total = scores.iter().sum::<f64>();
-        for channel_id in 0..bridge.channels().len() {
+        for (channel_id, score) in scores.iter().enumerate().take(bridge.channels().len()) {
             let evaluation = bridge
                 .inverse(SamplingChannelId::from(channel_id), &raw)
                 .unwrap()
                 .expect("full-support channel inverse");
             assert!((evaluation.partition.weights.iter().sum::<f64>() - 1.0).abs() < 1.0e-14);
             let actual = evaluation.partition.weight(channel_id).unwrap();
-            let expected = scores[channel_id] / total;
+            let expected = score / total;
             assert!(
                 (actual - expected).abs() < 1.0e-14,
                 "channel {channel_id}: {actual} != {expected}"
@@ -8200,8 +8809,10 @@ pub(crate) mod tests {
 
         let selection = SamplingChannelSelection::default();
         let resolved = resolve_sampling_channel_selection(&graph.name, &selection).unwrap();
-        let mut parameterization_settings = ParameterizationSettings::default();
-        parameterization_settings.sampling_channels = selection;
+        let parameterization_settings = ParameterizationSettings {
+            sampling_channels: selection,
+            ..Default::default()
+        };
         let context = SamplingChannelCompileContext::new(
             graph.name.clone(),
             parent_lmb,

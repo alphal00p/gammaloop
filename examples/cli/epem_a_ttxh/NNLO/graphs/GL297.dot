@@ -1,51 +1,135 @@
 digraph GL297{
-    num = "1𝑖";
+    num = "1";
     overall_factor = "NumeratorDependentGrouping(297,1,(AutG(1))^(-1)*AntiFermionSpinSumSign(-1)*ExternalFermionOrderingSign(-1)*InternalFermionLoopSign(-1))+NumeratorDependentGrouping(300,1,(AutG(1))^(-1)*AntiFermionSpinSumSign(-1)*ExternalFermionOrderingSign(-1)*InternalFermionLoopSign(-1))";
     overall_factor_evaluated = "-2";
     projector = "u(1,spenso::bis(4,hedge(1)))*ubar(1,spenso::bis(4,hedge(29)))*v(0,spenso::bis(4,hedge(28)))*vbar(0,spenso::bis(4,hedge(0)))";
-    // These forced one-loop subspaces cure the selected-orientation correlated e12 and e13
-    // soft/threshold limits. Only the four genuinely two-loop legacy CTs are overridden;
-    // every other threshold remains an implicit legacy/default association.
-    threshold_counterterms = "
-schema_version = 1
+    // Explicit threshold metadata covers every cut/threshold association used
+    // by the graph. Each counterterm names its one-loop subspace and complete
+    // parent LMB, so grouping and center construction are deterministic.
+    threshold_counterterms = "schema_version = 1
 
 [[cuts]]
-edges = [2, 4, 9]
-
+edges = [2, 11, 14]
   [[cuts.thresholds]]
   edges = [5, 7]
-
     [[cuts.thresholds.counterterms]]
-    name = \"forced_1l\"
+    name = \"gl297_1l\"
     subspace = [5]
-    parent_lmb = [4, 5, 9, 11]
-
+    parent_lmb = [3, 5, 11, 14]
   [[cuts.thresholds]]
   edges = [5, 11, 13]
-
     [[cuts.thresholds.counterterms]]
-    name = \"forced_1l\"
+    name = \"gl297_1l\"
     subspace = [5]
-    parent_lmb = [4, 5, 9, 11]
-
-[[cuts]]
-edges = [2, 6, 7]
-
+    parent_lmb = [3, 5, 11, 14]
   [[cuts.thresholds]]
   edges = [3, 9]
-
     [[cuts.thresholds.counterterms]]
-    name = \"forced_1l\"
+    name = \"gl297_1l\"
     subspace = [3]
-    parent_lmb = [3, 6, 7, 11]
-
+    parent_lmb = [3, 5, 11, 14]
   [[cuts.thresholds]]
   edges = [3, 11, 12]
-
     [[cuts.thresholds.counterterms]]
-    name = \"forced_1l\"
+    name = \"gl297_1l\"
+    subspace = [3]
+    parent_lmb = [3, 5, 11, 14]
+[[cuts]]
+edges = [2, 9, 12, 14]
+  [[cuts.thresholds]]
+  edges = [5, 7]
+    [[cuts.thresholds.counterterms]]
+    name = \"gl297_1l\"
+    subspace = [5]
+    parent_lmb = [5, 9, 12, 14]
+  [[cuts.thresholds]]
+  edges = [5, 9, 12, 13]
+    [[cuts.thresholds.counterterms]]
+    name = \"gl297_1l\"
+    subspace = [5]
+    parent_lmb = [5, 9, 12, 14]
+[[cuts]]
+edges = [2, 7, 13, 14]
+  [[cuts.thresholds]]
+  edges = [3, 9]
+    [[cuts.thresholds.counterterms]]
+    name = \"gl297_1l\"
+    subspace = [3]
+    parent_lmb = [3, 7, 13, 14]
+  [[cuts.thresholds]]
+  edges = [3, 7, 12, 13]
+    [[cuts.thresholds.counterterms]]
+    name = \"gl297_1l\"
+    subspace = [3]
+    parent_lmb = [3, 7, 13, 14]
+[[cuts]]
+edges = [2, 6, 11, 13]
+  [[cuts.thresholds]]
+  edges = [3, 9]
+    [[cuts.thresholds.counterterms]]
+    name = \"gl297_1l\"
+    subspace = [3]
+    parent_lmb = [3, 6, 11, 13]
+  [[cuts.thresholds]]
+  edges = [3, 11, 12]
+    [[cuts.thresholds.counterterms]]
+    name = \"gl297_1l\"
+    subspace = [3]
+    parent_lmb = [3, 6, 11, 13]
+[[cuts]]
+edges = [2, 6, 7]
+  [[cuts.thresholds]]
+  edges = [3, 9]
+    [[cuts.thresholds.counterterms]]
+    name = \"gl297_1l\"
     subspace = [3]
     parent_lmb = [3, 6, 7, 11]
+  [[cuts.thresholds]]
+  edges = [3, 11, 12]
+    [[cuts.thresholds.counterterms]]
+    name = \"gl297_1l\"
+    subspace = [3]
+    parent_lmb = [3, 6, 7, 11]
+  [[cuts.thresholds]]
+  edges = [3, 7, 12, 13]
+    [[cuts.thresholds.counterterms]]
+    name = \"gl297_1l\"
+    subspace = [3]
+    parent_lmb = [3, 6, 7, 11]
+[[cuts]]
+edges = [2, 4, 11, 12]
+  [[cuts.thresholds]]
+  edges = [5, 7]
+    [[cuts.thresholds.counterterms]]
+    name = \"gl297_1l\"
+    subspace = [5]
+    parent_lmb = [4, 5, 11, 12]
+  [[cuts.thresholds]]
+  edges = [5, 11, 13]
+    [[cuts.thresholds.counterterms]]
+    name = \"gl297_1l\"
+    subspace = [5]
+    parent_lmb = [4, 5, 11, 12]
+[[cuts]]
+edges = [2, 4, 9]
+  [[cuts.thresholds]]
+  edges = [5, 7]
+    [[cuts.thresholds.counterterms]]
+    name = \"gl297_1l\"
+    subspace = [5]
+    parent_lmb = [4, 5, 9, 11]
+  [[cuts.thresholds]]
+  edges = [5, 9, 12, 13]
+    [[cuts.thresholds.counterterms]]
+    name = \"gl297_1l\"
+    subspace = [5]
+    parent_lmb = [4, 5, 9, 11]
+  [[cuts.thresholds]]
+  edges = [5, 11, 13]
+    [[cuts.thresholds.counterterms]]
+    name = \"gl297_1l\"
+    subspace = [5]
+    parent_lmb = [4, 5, 9, 11]
 ";
 
 	0 [int_id="V_141"];

@@ -30,8 +30,8 @@ use symbolica::numerical_integration::{
 use crate::Integrand;
 use crate::graph::GroupId;
 use crate::integrands::HasIntegrand;
-use crate::integrands::evaluation::EvaluationResult;
 use crate::integrands::evaluation::StatisticsCounter;
+use crate::integrands::evaluation::{EvaluationMetaData, EvaluationResult};
 use crate::integrands::process::GaussianReferenceFunction;
 use crate::integrands::process::{GraphTerm, ProcessIntegrand};
 use crate::model::{Model, SerializableInputParamCard};
@@ -64,6 +64,7 @@ use status_update::{
     evaluate_target_accuracy,
 };
 use std::fs;
+use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -2002,6 +2003,7 @@ struct CoreIterationState {
     slot_absolute_im_grids: Vec<Option<DiscreteGrid<F<f64>>>>,
     remaining_points: usize,
     completed_points: usize,
+    failed_samples: Vec<(usize, Sample<F<f64>>, EvaluationMetaData)>,
 }
 
 struct CoreSamplingSlotState {
@@ -2072,6 +2074,7 @@ impl CoreIterationState {
             slot_absolute_im_grids: (0..n_slots).map(absolute_monitor_for_slot).collect(),
             remaining_points,
             completed_points: 0,
+            failed_samples: Vec::new(),
         }
     }
 
@@ -2081,6 +2084,7 @@ impl CoreIterationState {
         slot_targets: &[EvaluationTarget<'_>],
         iter: usize,
         current_max_evals: &[Complex<F<f64>>],
+        current_integral_estimates: &[Option<(f64, f64)>],
         chunk_size: usize,
     ) -> Result<usize> {
         let n_points = chunk_size.min(self.remaining_points);
@@ -2120,13 +2124,14 @@ impl CoreIterationState {
 
                 for (slot_index, integrand) in self.slot_integrands.iter_mut().enumerate() {
                     let evaluation_start = Instant::now();
-                    let raw_batch = integrand.evaluate_samples_raw(
+                    let raw_batch = integrand.evaluate_samples_raw_with_estimate(
                         &samples,
                         slot_targets[slot_index],
                         iter,
                         false,
                         true,
                         current_max_evals[slot_index],
+                        current_integral_estimates[slot_index],
                     )?;
                     if raw_batch.samples.len() < samples.len() {
                         return Ok(0);
@@ -2161,6 +2166,13 @@ impl CoreIterationState {
                     .enumerate()
                     {
                         let result = &results[sample_index];
+                        if result.evaluation_metadata.is_nan {
+                            self.failed_samples.push((
+                                slot_index,
+                                sample.clone(),
+                                result.evaluation_metadata.clone(),
+                            ));
+                        }
                         let jacobian = result.parameterization_jacobian.unwrap_or(F(1.0));
                         let effective_integrand_result =
                             result.integrand_result * Complex::new_re(jacobian);
@@ -2239,14 +2251,16 @@ impl CoreIterationState {
                     }
 
                     let evaluation_start = Instant::now();
-                    let raw_batch = self.slot_integrands[slot_index].evaluate_samples_raw(
-                        &samples,
-                        slot_targets[slot_index],
-                        iter,
-                        false,
-                        true,
-                        current_max_evals[slot_index],
-                    )?;
+                    let raw_batch = self.slot_integrands[slot_index]
+                        .evaluate_samples_raw_with_estimate(
+                            &samples,
+                            slot_targets[slot_index],
+                            iter,
+                            false,
+                            true,
+                            current_max_evals[slot_index],
+                            current_integral_estimates[slot_index],
+                        )?;
                     if raw_batch.samples.len() < samples.len() {
                         return Ok(0);
                     }
@@ -2257,6 +2271,13 @@ impl CoreIterationState {
                         self.slot_stats[slot_index].merged(&raw_batch.statistics);
 
                     for (sample, result) in samples.iter().zip(raw_batch.samples.iter()) {
+                        if result.evaluation_metadata.is_nan {
+                            self.failed_samples.push((
+                                slot_index,
+                                sample.clone(),
+                                result.evaluation_metadata.clone(),
+                            ));
+                        }
                         let jacobian = result.parameterization_jacobian.unwrap_or(F(1.0));
                         let effective_integrand_result =
                             result.integrand_result * Complex::new_re(jacobian);
@@ -2319,6 +2340,41 @@ impl CoreIterationState {
         );
 
         Ok(processed_points)
+    }
+
+    fn write_failed_samples(
+        &mut self,
+        workspace: Option<&Path>,
+        slots: &[SlotMeta],
+        iteration: usize,
+    ) -> Result<()> {
+        if self.failed_samples.is_empty() {
+            return Ok(());
+        }
+        if let Some(workspace) = workspace {
+            let directory = workspace.join("numerical_stability");
+            fs::create_dir_all(&directory)?;
+            let mut file = fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(directory.join("failed_samples.jsonl"))?;
+            for (slot_index, sample, metadata) in &self.failed_samples {
+                serde_json::to_writer(
+                    &mut file,
+                    &serde_json::json!({
+                        "schema_version": 1,
+                        "iteration": iteration,
+                        "slot": slots[*slot_index],
+                        "sample": sample,
+                        "evaluation_metadata": metadata,
+                    }),
+                )?;
+                file.write_all(b"\n")?;
+            }
+            file.flush()?;
+        }
+        self.failed_samples.clear();
+        Ok(())
     }
 }
 
@@ -2863,6 +2919,20 @@ where
             .iter()
             .map(ComplexAccumulator::get_worst_case)
             .collect_vec();
+        let current_integral_estimates = integration_state
+            .all_integrals
+            .iter()
+            .zip(&slots)
+            .map(|(integral, slot)| {
+                let accumulator = match slot.settings.integrator.integrated_phase {
+                    IntegratedPhase::Real => &integral.absolute_re,
+                    IntegratedPhase::Imag => &integral.absolute_im,
+                    IntegratedPhase::Both => return None,
+                };
+                (accumulator.processed_samples > 0)
+                    .then_some((accumulator.avg.0, accumulator.err.0))
+            })
+            .collect_vec();
 
         let mut worker_states = n_points_per_core
             .iter()
@@ -2905,12 +2975,23 @@ where
                                 &slot_targets,
                                 integration_state.iter,
                                 &current_max_evals,
+                                &current_integral_estimates,
                                 current_batch_size,
                             )
                         })
                         .collect()
                 })
             };
+            // Keep replayable numerical failures independently of iteration
+            // checkpoints, including rounds interrupted or aborted afterward.
+            // Only this coordinator writes, so worker records cannot interleave.
+            for worker_state in &mut worker_states {
+                worker_state.write_failed_samples(
+                    workspace.as_deref(),
+                    &integration_state.slot_metas,
+                    integration_state.iter + 1,
+                )?;
+            }
             let processed_this_round = processed_per_core
                 .into_iter()
                 .collect::<Result<Vec<_>>>()?
@@ -3415,6 +3496,7 @@ fn numerical_stability_output_path(
     ))
 }
 
+#[allow(clippy::infallible_destructuring_match)]
 fn user_facing_observables_output_formats(integrand: &Integrand) -> Vec<ObservableFileFormat> {
     let process_integrand = match integrand {
         Integrand::ProcessIntegrand(process_integrand) => process_integrand,
@@ -3432,6 +3514,7 @@ fn user_facing_observables_output_formats(integrand: &Integrand) -> Vec<Observab
         .resolved_formats()
 }
 
+#[allow(clippy::infallible_destructuring_match)]
 fn user_facing_observables_output_enabled(integrand: &Integrand) -> bool {
     let process_integrand = match integrand {
         Integrand::ProcessIntegrand(process_integrand) => process_integrand,
@@ -4768,7 +4851,99 @@ mod tests {
             slot_absolute_im_grids: vec![None; state.slot_metas.len()],
             remaining_points: 0,
             completed_points: 12,
+            failed_samples: Vec::new(),
         }
+    }
+
+    #[test]
+    fn failed_sample_records_preserve_replay_and_append_across_iterations() {
+        use crate::integrands::evaluation::{StabilityResult, StabilityStatus};
+        use crate::settings::runtime::Precision;
+
+        let directory = std::env::temp_dir().join(format!(
+            "gammaloop_failed_sample_records_{}",
+            std::process::id()
+        ));
+        if directory.exists() {
+            fs::remove_dir_all(&directory).unwrap();
+        }
+        let state = make_integration_state();
+        let mut worker = make_preview_test_core_state(&state);
+        let sample = Sample::Discrete(
+            F(7.5),
+            0,
+            Some(Box::new(Sample::Discrete(
+                F(2.5),
+                3,
+                Some(Box::new(Sample::Continuous(
+                    F(1.25),
+                    vec![F(0.12345678901234567), F(0.9)],
+                ))),
+            ))),
+        );
+        let mut metadata = EvaluationMetaData::new_empty();
+        metadata.is_nan = true;
+        metadata.record_threshold_counterterm_error("AlmostPrimalInfeasible: no interior center");
+        for precision in [Precision::Double, Precision::Quad, Precision::Arb] {
+            metadata.stability_results.push(StabilityResult {
+                precision,
+                estimated_relative_accuracy: None,
+                status: StabilityStatus::Unstable(1),
+                total_time: Duration::ZERO,
+            });
+        }
+        let path = directory.join("numerical_stability/failed_samples.jsonl");
+        worker
+            .write_failed_samples(Some(&directory), &state.slot_metas, 1)
+            .unwrap();
+        assert!(
+            !path.exists(),
+            "successful batches should not create a failure log"
+        );
+        for iteration in [1, 2] {
+            worker
+                .failed_samples
+                .push((1, sample.clone(), metadata.clone()));
+            worker
+                .write_failed_samples(Some(&directory), &state.slot_metas, iteration)
+                .unwrap();
+            assert!(worker.failed_samples.is_empty());
+            worker
+                .write_failed_samples(Some(&directory), &state.slot_metas, iteration)
+                .unwrap();
+        }
+        let records = fs::read_to_string(path).unwrap();
+        assert_eq!(
+            records.lines().count(),
+            2,
+            "drained records must not be duplicated"
+        );
+        for (index, line) in records.lines().enumerate() {
+            let row: serde_json::Value = serde_json::from_str(line).unwrap();
+            assert_eq!(row["iteration"], index + 1);
+            assert_eq!(row["slot"]["process_name"], "proc_b");
+            assert_eq!(row["evaluation_metadata"]["is_nan"], true);
+            assert_eq!(
+                row["evaluation_metadata"]["stability_results"]
+                    .as_array()
+                    .unwrap()
+                    .len(),
+                3
+            );
+            assert!(
+                row["evaluation_metadata"]["threshold_counterterm_error"]
+                    .as_str()
+                    .unwrap()
+                    .contains("AlmostPrimalInfeasible")
+            );
+            let replay: Sample<F<f64>> = serde_json::from_value(row["sample"].clone()).unwrap();
+            assert_eq!(replay.get_weight(), sample.get_weight());
+            assert_eq!(
+                serde_json::to_value(replay).unwrap(),
+                serde_json::to_value(&sample).unwrap()
+            );
+        }
+        fs::remove_dir_all(directory).unwrap();
     }
 
     fn make_discrete_integration_state() -> IntegrationState {
@@ -4988,7 +5163,14 @@ mod tests {
         let current_max_evals = [Complex::new(F(0.0), F(0.0)), Complex::new(F(0.0), F(0.0))];
 
         let processed = core_state
-            .evaluate_chunk(&slot_settings, &slot_targets, 0, &current_max_evals, 8)
+            .evaluate_chunk(
+                &slot_settings,
+                &slot_targets,
+                0,
+                &current_max_evals,
+                &[None, None],
+                8,
+            )
             .expect("correlated chunk evaluation should succeed");
 
         assert_eq!(processed, 8);

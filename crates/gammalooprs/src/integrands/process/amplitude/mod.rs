@@ -1948,11 +1948,11 @@ impl GraphTerm for AmplitudeGraphTerm {
         &mut self.param_builder
     }
 
-    fn get_real_mass_vector(&self) -> EdgeVec<Option<F<f64>>> {
+    fn get_real_mass_vector(&self) -> Result<EdgeVec<Option<F<f64>>>> {
         self.real_mass_vec
             .as_ref()
-            .expect("real mass vector should be set")
-            .clone()
+            .cloned()
+            .ok_or_else(|| eyre!("real mass vector is not initialized; call warm_up first"))
     }
 }
 
@@ -3560,7 +3560,7 @@ parent_lmb = [4]
                 &externals,
                 &term.graph.loop_momentum_basis,
             );
-            let masses = term.get_real_mass_vector();
+            let masses = term.get_real_mass_vector()?;
             for (_, edge, _) in term.graph.iter_loop_edges() {
                 let momentum = term.graph.loop_momentum_basis.edge_signatures[edge]
                     .compute_four_momentum_from_three(&loops, &externals);
@@ -4088,8 +4088,17 @@ parent_lmb = [4,6]
             assert!(
                 amplitude.data.graph_terms[0]
                     .multi_channeling_setup
-                    .sampling_bridge::<ArbPrec>()
+                    .sampling_bridge::<crate::utils::SamplingFloat>()
                     .is_ok()
+            );
+            assert_eq!(
+                amplitude.data.graph_terms[0]
+                    .multi_channeling_setup
+                    .sampling_source
+                    .as_ref()
+                    .unwrap()
+                    .0,
+                crate::utils::SamplingPrecision::Fixed256
             );
             // A structural bind failure still invalidates all precisions even
             // when the previous epoch contained a usable Quad binding.
@@ -4100,7 +4109,7 @@ parent_lmb = [4,6]
             let error = amplitude.warm_up_sampling().unwrap_err();
             assert!(error.downcast_ref::<SamplingEvaluationError>().is_none());
             assert!(
-                format!("{error:#}").contains("warmup mass data"),
+                format!("{error:#}").contains("real mass vector is not initialized"),
                 "{error:#}"
             );
             assert!(
@@ -5761,7 +5770,6 @@ parent_lmb = [4,6]
                 "Quad-only warmup must not require Double geometry"
             );
             assert!(setup.sampling_bridge::<QuadFloat>().is_ok());
-            assert!(setup.sampling_bridge::<crate::utils::ArbPrec>().is_ok());
             let catalogue = setup.sampling_catalogue.as_ref().unwrap() as *const _ as usize;
             let programs = setup.sampling_programs.as_ref().unwrap() as *const _ as usize;
             runtime.prepare_sampling_precision::<crate::utils::ArbPrec>()?;
@@ -5831,6 +5839,8 @@ parent_lmb = [4,6]
         // Reuse the generated amplitude at fixed raw momenta, so this range
         // regression is independent of a focused map or root certificate.
         // The mass input and its square fit binary64; the full amplitude does not.
+        // Arb retains its nonzero value; complete underflow may round to zero
+        // only at the ordinary reporting boundary.
         {
             use crate::{
                 integrands::evaluation::PreciseEvaluationResult,
@@ -5877,13 +5887,23 @@ parent_lmb = [4,6]
                     .any(|value| value != &value.zero() && value.clone().into_ff64().0 == 0.0)
             );
             assert!(!result.evaluation_metadata.is_nan);
+            let one = result.integrator_weight.one();
+            let remaining = result.parameterization_jacobian.as_ref().unwrap_or(&one)
+                * &result.integrator_weight;
+            assert_eq!(remaining, one);
             assert!(
-                runtime_for_rescue
-                    .evaluate_momentum_configuration(&heavy_model, &input, true)
-                    .unwrap_err()
-                    .to_string()
-                    .contains("f64 integration/reporting boundary")
+                [&result.integrand_result.re, &result.integrand_result.im]
+                    .into_iter()
+                    .all(|value| (value * &remaining).abs() < F::from_f64(f64::MIN_POSITIVE))
             );
+            let reported =
+                runtime_for_rescue.evaluate_momentum_configuration(&heavy_model, &input, true)?;
+            assert_eq!(reported.integrand_result, Complex::new_zero());
+            assert_eq!(
+                reported.absolute_integrand_result,
+                Some(Complex::new_zero())
+            );
+            assert!(!reported.evaluation_metadata.is_nan);
         }
         Ok(())
     }
