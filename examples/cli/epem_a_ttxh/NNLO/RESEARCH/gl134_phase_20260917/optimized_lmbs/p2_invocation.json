@@ -1,0 +1,49 @@
+{
+  "mode": "optimized_lmbs",
+  "argv": [
+    "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/gammaloop",
+    "--no-save-state",
+    "--read-only-state",
+    "--state-folder",
+    "/common/dev/gammaloop_ir_safe_thresholds/examples/cli/epem_a_ttxh/NNLO_experiment/states/GL134_optimized_lmbs",
+    "-L",
+    "off",
+    "-l",
+    "info",
+    "--trace-logs-filename",
+    "/common/dev/gammaloop_ir_safe_thresholds/target/gl134_phase_diagnostics/optimized_lmbs/p2_trace.jsonl",
+    "run",
+    "-c",
+    "inspect -p name:epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec -x 80 -30 45 -120 15 95 41 73 -28 -11 52 39 --json-output /common/dev/gammaloop_ir_safe_thresholds/target/gl134_phase_diagnostics/optimized_lmbs/physical_p2_arb.json"
+  ],
+  "points": [
+    [
+      37,
+      126,
+      -109,
+      -91,
+      64,
+      83,
+      31,
+      -47,
+      59,
+      19,
+      23,
+      -17
+    ],
+    [
+      80,
+      -30,
+      45,
+      -120,
+      15,
+      95,
+      41,
+      73,
+      -28,
+      -11,
+      52,
+      39
+    ]
+  ]
+}

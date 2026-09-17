@@ -1,0 +1,11 @@
+[
+  "target/dev-optim/gammaloop",
+  "-n",
+  "-L",
+  "off",
+  "--state-folder",
+  "/common/dev/gammaloop_ir_safe_thresholds/target/phase_migration_20260917/current_card_state",
+  "target/phase_migration_20260917/current_card.toml",
+  "run",
+  "phase_check"
+]

@@ -104,7 +104,7 @@ run the analysis cards linked above.
 /Users/vjhirsch/Documents/Work/gammaloop_single_parametric_orientation_mc/target/release/gammaloop \
   --clean-state -o -l info -L off -p none \
   -s examples/cli/epem_a_ttxh/NNLO_ir_safe_thresholds/GL638_graph_state \
-  run -c 'import model sm-default.json; set global kv global.n_cores.feyngen=10; remove processes; generate xs e+ e- > t t~ h | e+ e- g t t~ h d d~ ghG ghG~ a QCD^2==4 QED^2==6 [{{4}} QCD=2] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --symmetrize-left-right-states true -p epem_a_tth -i NNLO --global-prefactor-num "1𝑖" --only-diagrams; select -p epem_a_tth -i NNLO --with-only-graph-names GL638 --without-raised-propagator-signatures ANY_RAISING --without-raised-cuts-signatures ANY_RAISING; save dot; quit -n'
+  run -c 'import model sm-default.json; set global kv global.n_cores.feyngen=10; remove processes; generate xs e+ e- > t t~ h | e+ e- g t t~ h d d~ ghG ghG~ a QCD^2==4 QED^2==6 [{{4}} QCD=2] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --symmetrize-left-right-states true -p epem_a_tth -i NNLO --only-diagrams; select -p epem_a_tth -i NNLO --with-only-graph-names GL638 --without-raised-propagator-signatures ANY_RAISING --without-raised-cuts-signatures ANY_RAISING; save dot; quit -n'
 ```
 
 It generated 166 grouped graphs, selected only GL638, and saved the hash above.

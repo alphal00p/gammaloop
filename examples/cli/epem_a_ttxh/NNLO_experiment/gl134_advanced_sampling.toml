@@ -66,8 +66,9 @@ function = "poly_exponential"
 sigma = 1.0
 power = 3
 [integrator]
-# This one-cut graph with num=1i has its nonzero contribution in Im.
-integrated_phase = "imag"
+# The DOT input uses the phase-normalized num=1; regenerate this state after
+# changing the graph input. Train the physical real phase.
+integrated_phase = "real"
 n_start = $(n_start:100000)
 n_increase = 0
 n_max = $(n_max:1000000)

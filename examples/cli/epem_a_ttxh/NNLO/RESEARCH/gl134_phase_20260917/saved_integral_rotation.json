@@ -1,0 +1,45 @@
+{
+  "scope": "algebraic -i rotation of existing estimates, not a new integration",
+  "rows": [
+    {
+      "mode": "advanced_sampling",
+      "samples": 3000000,
+      "stored_result": {
+        "re": -2.8133343915410562e-30,
+        "im": 1.9941979499794005e-09
+      },
+      "stored_error": {
+        "re": 5.190300625391974e-30,
+        "im": 3.228128801291338e-12
+      },
+      "phase_rotated_num1_result": {
+        "re": 1.9941979499794005e-09,
+        "im": 2.8133343915410562e-30
+      },
+      "phase_rotated_error": {
+        "re": 3.228128801291338e-12,
+        "im": 5.190300625391974e-30
+      }
+    },
+    {
+      "mode": "optimized_lmbs",
+      "samples": 3000000,
+      "stored_result": {
+        "re": -4.727469268501623e-30,
+        "im": 1.9991702533895623e-09
+      },
+      "stored_error": {
+        "re": 6.500622564577149e-30,
+        "im": 4.170805163584561e-12
+      },
+      "phase_rotated_num1_result": {
+        "re": 1.9991702533895623e-09,
+        "im": 4.727469268501623e-30
+      },
+      "phase_rotated_error": {
+        "re": 4.170805163584561e-12,
+        "im": 6.500622564577149e-30
+      }
+    }
+  ]
+}

@@ -1,4 +1,5 @@
 [cli_settings]
+# Current cards use the phase-normalized DOT numerator num = "1"; regenerate states after changing this input.
 
 [cli_settings.state]
 folder = "./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL134"

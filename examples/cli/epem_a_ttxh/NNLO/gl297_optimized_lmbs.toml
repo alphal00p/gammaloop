@@ -1,4 +1,5 @@
 # GL297 optimized LMB production card.
+# Phase-normalized DOT inputs use num = "1"; regenerate any pre-existing state after this change.
 #
 # Integration trains the real part while --show-phase both and per-iteration JSON retain real and imaginary observables.
 # The process specification on the graph import selects the tth@NNLO process

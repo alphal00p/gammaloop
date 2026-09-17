@@ -1,0 +1,48 @@
+{
+  "mode": "fresh_1",
+  "argv": [
+    "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/gammaloop",
+    "--no-save-state",
+    "--state-folder",
+    "/common/dev/gammaloop_ir_safe_thresholds/target/gl134_phase_diagnostics/fresh_1/state",
+    "-L",
+    "off",
+    "-l",
+    "info",
+    "--trace-logs-filename",
+    "/common/dev/gammaloop_ir_safe_thresholds/target/gl134_phase_diagnostics/fresh_1/trace.jsonl",
+    "/common/dev/gammaloop_ir_safe_thresholds/target/gl134_phase_diagnostics/fresh_1/card.toml",
+    "run",
+    "probe"
+  ],
+  "points": [
+    [
+      37,
+      126,
+      -109,
+      -91,
+      64,
+      83,
+      31,
+      -47,
+      59,
+      19,
+      23,
+      -17
+    ],
+    [
+      80,
+      -30,
+      45,
+      -120,
+      15,
+      95,
+      41,
+      73,
+      -28,
+      -11,
+      52,
+      39
+    ]
+  ]
+}
