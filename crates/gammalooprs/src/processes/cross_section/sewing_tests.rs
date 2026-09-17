@@ -8,11 +8,10 @@ use linnet::half_edge::involution::HedgePair;
 use spenso::{
     iterators::IteratableTensor,
     network::{
-        ExecutionResult, Sequential, SmallestDegree,
-        library::symbolic::{ExplicitKey, TensorLibrary},
+        ExecutionResult, Sequential, SmallestDegree, library::symbolic::ExplicitKey,
         parsing::ParseSettings,
     },
-    structure::{TensorStructure, representation::Minkowski, slot::IsAbstractSlot},
+    structure::{TensorStructure, slot::IsAbstractSlot},
     tensors::parametric::ParamTensor,
 };
 use symbolica::{
@@ -156,13 +155,9 @@ fn vertex_matrix(
 }
 
 fn tensor_matrix(expression: Atom, vector_component: usize) -> Matrix {
-    // Build the generic metric with Atom entries so its spatial signs
+    // The symbolic library builds generic metrics with Atom entries so their spatial signs
     // remain exact alongside the parametric gamma matrices and couplings.
-    let mut library = spenso_hep_lib::hep_lib_atom::<Aind, ParamTensor<ExplicitKey<Aind>>>();
-    library.insert_generic(
-        TensorLibrary::<ParamTensor<ExplicitKey<Aind>>, Aind>::id(Minkowski {}.into()),
-        TensorLibrary::<ParamTensor<ExplicitKey<Aind>>, Aind>::diag_unimodular_metric,
-    );
+    let library = spenso_hep_lib::hep_lib_atom::<Aind, ParamTensor<ExplicitKey<Aind>>>();
     let mut network =
         ParsingNet::try_from_view(expression.as_view(), &library, &ParseSettings::default())
             .unwrap();

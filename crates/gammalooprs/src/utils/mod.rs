@@ -35,7 +35,7 @@ use spenso::algebra::complex::SymbolicaComplex;
 use spenso::algebra::complex::symbolica_traits::ToFloat;
 use spenso::algebra::upgrading_arithmetic::TrySmallestUpgrade;
 use spenso::network::library::TensorLibraryData;
-use spenso::network::library::function_lib::{INBUILTS, Panic, SymbolLib, Wrap};
+use spenso::network::library::function_lib::{INBUILTS, SymbolLib, Wrap};
 use spenso::network::library::symbolic::{ExplicitKey, TensorLibrary};
 use spenso::network::parsing::ShadowedStructure;
 use spenso::structure::concrete_index::ExpandedIndex;
@@ -4994,6 +4994,8 @@ pub use symbols::{GS, W_};
 type TensorLibStore = RwLock<TensorLibrary<ParamTensor<ExplicitKey<Aind>>, Aind>>;
 type FunLibStore = SymbolLib<ParamTensor<ShadowedStructure<Aind>>, Wrap>;
 
+// Keep metric signs exact: floating symbolic coefficients can round during
+// subsequent rational algebra and spoil UV cancellations at every precision.
 pub static TENSORLIB: LazyLock<TensorLibStore> = LazyLock::new(|| RwLock::new(hep_lib_atom()));
 
 pub static FUN_LIB: LazyLock<FunLibStore> = LazyLock::new(|| {
@@ -5003,15 +5005,6 @@ pub static FUN_LIB: LazyLock<FunLibStore> = LazyLock::new(|| {
     });
     lib
 });
-
-pub static PARAM_FUN_LIB: LazyLock<SymbolLib<ParamTensor<ShadowedStructure<Aind>>, Panic>> =
-    LazyLock::new(|| {
-        let mut lib = Panic::new_lib();
-        lib.insert(INBUILTS.conj, |a: ParamTensor<ShadowedStructure<Aind>>| {
-            a.map_data_self(|x| x.conj())
-        });
-        lib
-    });
 
 pub static VAKINT: OnceLock<Result<Vakint>> = OnceLock::new();
 

@@ -11,10 +11,7 @@ use linnet::half_edge::{
 use spenso::{
     network::{
         ExecutionResult, Sequential, SmallestDegree,
-        library::{
-            LibraryTensor,
-            symbolic::{ExplicitKey, TensorLibrary},
-        },
+        library::{LibraryTensor, symbolic::ExplicitKey},
         parsing::ParseSettings,
     },
     structure::{
@@ -260,16 +257,9 @@ fn generated_higgs_covariant_cuts_equal_three_physical_vector_polarizations() ->
                     let cuts = forward.process_valid_cuts(&model, process, &settings.generation)?;
                     assert_eq!(cuts.len(), 1, "each Higgs Born graph has one cut");
                     let cut = &cuts[super::CutId(0)];
-                    // Build the generic metric with Atom entries so its
-                    // spatial signs remain exact before component contraction.
-                    let mut library =
-                        spenso_hep_lib::hep_lib_atom::<Aind, ParamTensor<ExplicitKey<Aind>>>();
-                    library.insert_generic(
-                        TensorLibrary::<ParamTensor<ExplicitKey<Aind>>, Aind>::id(
-                            Minkowski {}.into(),
-                        ),
-                        TensorLibrary::<ParamTensor<ExplicitKey<Aind>>, Aind>::diag_unimodular_metric,
-                    );
+                    // The symbolic library builds generic metrics with Atom entries so
+                    // their spatial signs remain exact before component contraction.
+                    let mut library = spenso_hep_lib::hep_lib_atom::<Aind, _>();
                     let cut_edges = graph.iter_edges_of(&cut.cut).collect_vec();
                     let mut particles = Vec::new();
                     for (position, (pair, eid, edge)) in cut_edges.iter().enumerate() {
