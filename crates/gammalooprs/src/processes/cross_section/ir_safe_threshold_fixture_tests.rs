@@ -706,7 +706,25 @@ fn gl638_correlated_approach_fits(
                             .threshold_counterterms
                             .as_ref()
                             .expect("the cured GL638 profile must record its CT decomposition");
-                        assert_eq!(event.weight, decomposition.total());
+                        // Native aggregation rounds once; its recorded components round
+                        // independently. Check closure at each component's own scale.
+                        let total = decomposition.total();
+                        let scale = decomposition.components.iter().fold(
+                            [decomposition.original.re.0.abs(), decomposition.original.im.0.abs()],
+                            |[re, im], component| [
+                                re + component.weighted.re.0.abs(),
+                                im + component.weighted.im.0.abs(),
+                            ],
+                        );
+                        for (actual, expected, scale) in [
+                            (event.weight.re.0, total.re.0, scale[0]),
+                            (event.weight.im.0, total.im.0, scale[1]),
+                        ] {
+                            assert!(
+                                (actual - expected).abs() / scale.max(f64::MIN_POSITIVE) < 1.0e-12,
+                                "event decomposition does not close: actual={actual}, expected={expected}, scale={scale}"
+                            );
+                        }
                         original += &decomposition.original;
                         event_sum += &event.weight;
                         event_scale += event.weight.norm_squared().sqrt().0;
@@ -1747,7 +1765,25 @@ fn gl638_cartesian_structure_and_full_cut_runtime_roundtrip() {
                             .threshold_counterterms
                             .as_ref()
                             .expect("explicit threshold variants must record event decomposition");
-                        assert_eq!(event.weight, decomposition.total());
+                        // Native aggregation rounds once; its recorded components round
+                        // independently. Check closure at each component's own scale.
+                        let total = decomposition.total();
+                        let scale = decomposition.components.iter().fold(
+                            [decomposition.original.re.0.abs(), decomposition.original.im.0.abs()],
+                            |[re, im], component| [
+                                re + component.weighted.re.0.abs(),
+                                im + component.weighted.im.0.abs(),
+                            ],
+                        );
+                        for (actual, expected, scale) in [
+                            (event.weight.re.0, total.re.0, scale[0]),
+                            (event.weight.im.0, total.im.0, scale[1]),
+                        ] {
+                            assert!(
+                                (actual - expected).abs() / scale.max(f64::MIN_POSITIVE) < 1.0e-12,
+                                "event decomposition does not close: actual={actual}, expected={expected}, scale={scale}"
+                            );
+                        }
                         for component in &decomposition.components {
                             let metadata = metadata_registry
                                 .components

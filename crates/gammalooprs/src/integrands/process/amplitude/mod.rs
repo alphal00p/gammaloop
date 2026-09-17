@@ -4103,7 +4103,7 @@ parent_lmb = [4,6]
             assert!(
                 amplitude.data.graph_terms[0]
                     .multi_channeling_setup
-                    .sampling_bridge::<QuadFloat>()
+                    .sampling_bridge::<crate::utils::SamplingFloat>()
                     .is_ok()
             );
             assert_eq!(
@@ -4113,7 +4113,7 @@ parent_lmb = [4,6]
                     .as_ref()
                     .unwrap()
                     .0,
-                crate::utils::SamplingPrecision::Quad
+                crate::utils::SamplingPrecision::Fixed256
             );
             // A structural bind failure still invalidates all precisions even
             // when the previous epoch contained a usable Quad binding.
