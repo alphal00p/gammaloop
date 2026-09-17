@@ -264,6 +264,7 @@
       "packages.x86_64-linux.crate-test-dependencies-feynkit-kinematics"
       "packages.x86_64-linux.crate-test-dependencies-feynkit-model"
       "packages.x86_64-linux.crate-test-dependencies-linnet"
+      "packages.x86_64-linux.crate-test-dependencies-spenso"
     ];
     "packages.x86_64-linux.crate-test-dependencies-feynkit-kinematics" = [
       "packages.x86_64-linux.cargoArtifacts"

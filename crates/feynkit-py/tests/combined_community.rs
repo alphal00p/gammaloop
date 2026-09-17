@@ -165,12 +165,20 @@ fn feynkit_and_spenso_share_one_symbolica_kernel_in_both_import_orders() {
             .with_overall_factor(
                 Atom::parse("x + 1", "feynkit_py_test", ParseSettings::default()).unwrap(),
             );
+            let indexed = Atom::parse(
+                "FeynKit::Momentum(1,spenso::mink(4,FeynKit::SourceIndex(7,0)))*FeynKit::Momentum(2,spenso::mink(4,FeynKit::SinkIndex(7,0)))*FeynKit::Momentum(3,spenso::mink(4,FeynKit::EdgeDummy(7,0)))*FeynKit::Momentum(4,spenso::mink(4,FeynKit::VertexDummy(7,0)))",
+                "feynkit_py_test",
+                ParseSettings::default(),
+            ).unwrap();
+            let indexed_diagram = tensor_diagram(&model, "indexed", indexed, Atom::one(), Atom::one());
+            let indexed_diagram = Py::new(py, PyFeynmanDiagram::from(indexed_diagram))?;
             let diagram = Py::new(py, PyFeynmanDiagram::from(diagram))?;
             let free_tensor_diagram = Py::new(py, PyFeynmanDiagram::from(free_tensor_diagram))?;
             let model = Py::new(py, PyModel::from(model))?;
             let locals = PyDict::new(py);
             locals.set_item("core", &core)?;
             locals.set_item("diagram", diagram)?;
+            locals.set_item("indexed_diagram", indexed_diagram)?;
             locals.set_item("free_tensor_diagram", free_tensor_diagram)?;
             locals.set_item("model", model)?;
             locals.set_item("feynkit", feynkit)?;
@@ -231,6 +239,33 @@ assert type(diagram_tensor_reduced) is core.Expression
 assert diagram_tensor_reduced == tensor_expected
 assert len(scalar_graphs) == 1
 assert scalar_graphs[0].numerator_expression() == tensor_expected
+assert isinstance(scalar_graphs[0].numerator_expression(), spenso.TensorExpression)
+assert scalar_graphs[0].numerator_expression().rank == 0
+indexed = indexed_diagram.numerator_expression()
+assert isinstance(indexed, spenso.TensorExpression)
+assert isinstance(indexed, core.Expression)
+assert indexed.rank == 4
+assert indexed.to_expression() == core.Expression.parse(indexed_diagram.numerator)
+for label in ("ˢ⁷.⁰", "ᵗ⁷.⁰", "ᵉ⁷.⁰", "ᵛ⁷.⁰"):
+    assert label in str(indexed), str(indexed)
+for label in ("s", "t", "e", "v"):
+    assert f"{label}^{{7.0}}" in indexed._repr_latex_()
+    assert f"attach({label},t:(7.0))" in indexed.to_typst()
+for vertex in indexed_diagram.vertices:
+    assert isinstance(vertex.numerator_expression(), spenso.TensorExpression)
+for edge in indexed_diagram.edges:
+    assert isinstance(edge.numerator_expression(), spenso.TensorExpression)
+# Rich output must use the portable index hook when the renderer is installed.
+try:
+    import typst
+except ImportError:
+    pass
+else:
+    for output in (indexed.to_html(), indexed.to_svg()):
+        assert "SourceIndex" not in output
+        assert "SinkIndex" not in output
+        assert "EdgeDummy" not in output
+        assert "VertexDummy" not in output
 assert scalar_graphs[0].projector_expression() == 1
 assert scalar_graphs[0].numerator_prefactor_expression() == numerator_prefactor
 assert scalar_graphs[0].overall_factor_expression() == feynkit_expression

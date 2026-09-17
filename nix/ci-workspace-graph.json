@@ -65,7 +65,8 @@
     "feynkit-graph": [
       "feynkit-kinematics",
       "feynkit-model",
-      "linnet"
+      "linnet",
+      "spenso"
     ],
     "feynkit-kinematics": [
       "linnet"
@@ -78,7 +79,8 @@
       "feynkit-kinematics",
       "feynkit-model",
       "feynkit-tensor",
-      "feynkit-ufo"
+      "feynkit-ufo",
+      "spynso3"
     ],
     "feynkit-tensor": [
       "feynkit-graph",
@@ -289,6 +291,9 @@
       "feynkit-model": [],
       "linnet": [
         "serde"
+      ],
+      "spenso": [
+        "shadowing"
       ]
     },
     "feynkit-kinematics": {
@@ -302,7 +307,8 @@
       "feynkit-kinematics": [],
       "feynkit-model": [],
       "feynkit-tensor": [],
-      "feynkit-ufo": []
+      "feynkit-ufo": [],
+      "spynso3": []
     },
     "feynkit-tensor": {
       "feynkit-graph": [],
@@ -612,7 +618,10 @@
       "feynkit-kinematics",
       "feynkit-model",
       "gammaloop-workspace-hack",
-      "linnet"
+      "linnet",
+      "spenso",
+      "spenso-macros",
+      "symbolica-utils"
     ],
     "feynkit-generator": [
       "feynkit-graph",
@@ -630,7 +639,10 @@
       "feynkit-kinematics",
       "feynkit-model",
       "gammaloop-workspace-hack",
-      "linnet"
+      "linnet",
+      "spenso",
+      "spenso-macros",
+      "symbolica-utils"
     ],
     "feynkit-kinematics": [
       "linnet"
@@ -650,6 +662,7 @@
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
+      "spynso3",
       "symbolica-utils"
     ],
     "feynkit-tensor": [
@@ -858,7 +871,10 @@
       "feynkit-kinematics",
       "feynkit-model",
       "gammaloop-workspace-hack",
-      "linnet"
+      "linnet",
+      "spenso",
+      "spenso-macros",
+      "symbolica-utils"
     ],
     "feynkit-generator": [
       "feynkit-graph",
@@ -876,7 +892,10 @@
       "feynkit-kinematics",
       "feynkit-model",
       "gammaloop-workspace-hack",
-      "linnet"
+      "linnet",
+      "spenso",
+      "spenso-macros",
+      "symbolica-utils"
     ],
     "feynkit-kinematics": [
       "linnet"
@@ -1164,7 +1183,8 @@
     "feynkit-graph": [
       "feynkit-kinematics",
       "feynkit-model",
-      "linnet"
+      "linnet",
+      "spenso"
     ],
     "feynkit-kinematics": [
       "linnet"
@@ -1394,6 +1414,9 @@
       "feynkit-model": [],
       "linnet": [
         "serde"
+      ],
+      "spenso": [
+        "shadowing"
       ]
     },
     "feynkit-kinematics": {

@@ -519,25 +519,67 @@ fn qualified_typst_index(
 /// Every script occupies the same horizontal column in the top and bottom
 /// rows. The opposite row receives a hidden copy, following Physica's tensor
 /// layout technique. Each representation owns its preferred row; only the
-/// dual orientation of a dualizable representation flips that row.
+/// dual orientation of a dualizable representation flips that row. Tagged index
+/// calls share this hook for plain, LaTeX, and Typst label rendering.
 pub fn tensor_print(
     atom: AtomView<'_>,
     options: &PrintOptions,
     _state: &PrintState,
 ) -> Option<String> {
-    if !options.mode.is_typst() {
-        return None;
-    }
-
     let resolved = SpensoPrintSettings::resolve(options)?;
-    if !matches!(resolved.backend, SpensoPrintBackend::Typst) {
-        return None;
-    }
     let settings = resolved.presentation;
-
     let AtomView::Fun(function) = atom else {
         return None;
     };
+    // Index labels share the same hook in every consumer. The label tag also
+    // travels with portable render trees, where Typst supplies its own layout.
+    if function.get_symbol().has_tag(&SPENSO_TAG.index) {
+        let symbol = function.get_symbol();
+        let label = symbol
+            .get_tags()
+            .iter()
+            .find_map(|tag| tag.strip_prefix("spenso::index-label:"))?;
+        if !matches!(label, "s" | "t" | "e" | "v" | "d" | "u") {
+            return None;
+        }
+        let arguments = function
+            .iter()
+            .map(isize::try_from)
+            .collect::<Result<Vec<_>, _>>()
+            .ok()?;
+        if arguments.is_empty() {
+            return None;
+        }
+        let body = arguments
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(".");
+        return Some(match resolved.backend {
+            SpensoPrintBackend::Plain => {
+                let prefix = match label {
+                    "s" => "ˢ",
+                    "t" => "ᵗ",
+                    "e" => "ᵉ",
+                    "v" => "ᵛ",
+                    "d" => "ᵈ",
+                    "u" => "ᵘ",
+                    _ => return None,
+                };
+                let body = arguments
+                    .into_iter()
+                    .map(crate::utils::to_superscript)
+                    .collect::<Vec<_>>()
+                    .join(".");
+                format!("{prefix}{body}")
+            }
+            SpensoPrintBackend::Latex => format!("{label}^{{{body}}}"),
+            SpensoPrintBackend::Typst => format!("attach({label},t:({body}))"),
+        });
+    }
+    if !matches!(resolved.backend, SpensoPrintBackend::Typst) {
+        return None;
+    }
     if !function.get_symbol().has_tag(&SPENSO_TAG.tensor) {
         return None;
     }

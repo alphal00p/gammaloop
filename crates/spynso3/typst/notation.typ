@@ -743,6 +743,15 @@
       "spenso::trace": ctx => _render-trace(ctx, settings),
     ),
     tags: (
+      "spenso::index": ctx => {
+        let labels = ctx.tags.filter(tag => tag.starts-with("spenso::index-label:"))
+        if ctx.kind != "function" or labels.len() != 1 {
+          (ctx.default)()
+        } else {
+          let label = labels.first().split(":").last()
+          math.attach(math.italic(label), t: ctx.visual-arguments.join([.]))
+        }
+      },
       tensor: tensor,
       "spenso::tensor": tensor,
     ),

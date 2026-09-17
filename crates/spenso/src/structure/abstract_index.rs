@@ -153,6 +153,33 @@ mod test {
     }
 
     #[test]
+    fn named_indices_preserve_identity_and_reject_malformed_calls() {
+        let source = symbol!("index_test::source", tags = [SPENSO_TAG.index.clone()]);
+        let sink = symbol!("index_test::sink", tags = [SPENSO_TAG.index.clone()]);
+        let indices = [
+            AbstractIndex::Named(source.into(), 7, 0),
+            AbstractIndex::Named(sink.into(), 7, 0),
+            AbstractIndex::Named(source.into(), 7, 1),
+            AbstractIndex::Named(source.into(), usize::MAX, usize::MAX),
+        ];
+        assert_eq!(HashSet::from(indices).len(), indices.len());
+        for index in indices {
+            assert_eq!(
+                AbstractIndex::try_from(index.to_atom().as_view()).unwrap(),
+                index
+            );
+        }
+        for atom in [
+            function!(source, 7),
+            function!(source, 7, -1),
+            function!(source, 7, 0, 1),
+            function!(symbol!("index_test::untagged"), 7, 0),
+        ] {
+            assert!(AbstractIndex::try_from(atom.as_view()).is_err());
+        }
+    }
+
+    #[test]
     fn open_index_atom_round_trips() {
         let index = AbstractIndex::Open { owner: 17, axis: 3 };
         let atom = index.to_atom();
@@ -417,6 +444,9 @@ pub enum AbstractIndex {
         owner: usize,
         axis: usize,
     },
+    /// A tagged index call with an owner and a local index, preserving its head.
+    #[cfg(feature = "shadowing")]
+    Named(SerializableSymbol, usize, usize),
 }
 
 impl AbsInd for AbstractIndex {}
@@ -450,62 +480,18 @@ impl From<Symbol> for AbstractIndex {
 impl std::ops::Add<AbstractIndex> for AbstractIndex {
     type Output = AbstractIndex;
     fn add(self, rhs: AbstractIndex) -> Self::Output {
-        match self {
-            AbstractIndex::Normal(l) => match rhs {
-                AbstractIndex::Normal(r) => AbstractIndex::Added(l + r),
-                AbstractIndex::Dualize(r) => AbstractIndex::Added(l + r),
-                AbstractIndex::Added(r) => AbstractIndex::Added(l + r),
-                AbstractIndex::Dummy(r) => AbstractIndex::Added(l + r),
-                AbstractIndex::Double(_, _) => panic!("cannot add double"),
-                #[cfg(feature = "shadowing")]
-                AbstractIndex::Symbol(r) => AbstractIndex::Added(l + r.get_id() as usize),
-                AbstractIndex::Open { .. } => panic!("cannot add open index"),
-            },
-            AbstractIndex::Dualize(l) => match rhs {
-                AbstractIndex::Normal(r) => AbstractIndex::Added(l + r),
-                AbstractIndex::Dualize(r) => AbstractIndex::Added(l + r),
-                AbstractIndex::Added(r) => AbstractIndex::Added(l + r),
-                AbstractIndex::Dummy(r) => AbstractIndex::Added(l + r),
-                AbstractIndex::Double(_, _) => panic!("cannot add double"),
-                #[cfg(feature = "shadowing")]
-                AbstractIndex::Symbol(r) => AbstractIndex::Added(l + r.get_id() as usize),
-                AbstractIndex::Open { .. } => panic!("cannot add open index"),
-            },
-            AbstractIndex::Added(l) => match rhs {
-                AbstractIndex::Normal(r) => AbstractIndex::Added(l + r),
-                AbstractIndex::Dualize(r) => AbstractIndex::Added(l + r),
-                AbstractIndex::Added(r) => AbstractIndex::Added(l + r),
-                AbstractIndex::Dummy(r) => AbstractIndex::Added(l + r),
-                AbstractIndex::Double(_, _) => panic!("cannot add double"),
-                #[cfg(feature = "shadowing")]
-                AbstractIndex::Symbol(r) => AbstractIndex::Added(l + r.get_id() as usize),
-                AbstractIndex::Open { .. } => panic!("cannot add open index"),
-            },
-            AbstractIndex::Dummy(l) => match rhs {
-                AbstractIndex::Normal(r) => AbstractIndex::Added(l + r),
-                AbstractIndex::Dualize(r) => AbstractIndex::Added(l + r),
-                AbstractIndex::Added(r) => AbstractIndex::Added(l + r),
-                AbstractIndex::Dummy(r) => AbstractIndex::Added(l + r),
-                AbstractIndex::Double(_, _) => panic!("cannot add double"),
-                #[cfg(feature = "shadowing")]
-                AbstractIndex::Symbol(r) => AbstractIndex::Added(l + r.get_id() as usize),
-                AbstractIndex::Open { .. } => panic!("cannot add open index"),
-            },
-            AbstractIndex::Double(_, _) => panic!("cannot add double"),
-
+        match (self, rhs) {
+            (AbstractIndex::Double(..), _) | (_, AbstractIndex::Double(..)) => {
+                panic!("cannot add double")
+            }
+            (AbstractIndex::Open { .. }, _) | (_, AbstractIndex::Open { .. }) => {
+                panic!("cannot add open index")
+            }
             #[cfg(feature = "shadowing")]
-            AbstractIndex::Symbol(l) => match rhs {
-                AbstractIndex::Normal(r) => AbstractIndex::Added(l.get_id() as usize + r),
-                AbstractIndex::Dualize(r) => AbstractIndex::Added(l.get_id() as usize + r),
-                AbstractIndex::Added(r) => AbstractIndex::Added(l.get_id() as usize + r),
-                AbstractIndex::Dummy(r) => AbstractIndex::Added(l.get_id() as usize + r),
-                AbstractIndex::Double(_, _) => panic!("cannot add double"),
-                AbstractIndex::Symbol(r) => {
-                    AbstractIndex::Added(l.get_id() as usize + r.get_id() as usize)
-                }
-                AbstractIndex::Open { .. } => panic!("cannot add open index"),
-            },
-            AbstractIndex::Open { .. } => panic!("cannot add open index"),
+            (AbstractIndex::Named(..), _) | (_, AbstractIndex::Named(..)) => {
+                panic!("cannot add named index")
+            }
+            (left, right) => AbstractIndex::Added(usize::from(left) + usize::from(right)),
         }
     }
 }
@@ -576,6 +562,8 @@ impl std::fmt::Display for AbstractIndex {
                     write!(f, "{}", v)
                 }
             }
+            #[cfg(feature = "shadowing")]
+            AbstractIndex::Named(name, owner, local) => write!(f, "{name}({owner},{local})"),
             AbstractIndex::Open { owner, axis } => write!(f, "open({owner},{axis})"),
         }
     }
@@ -597,6 +585,9 @@ impl From<AbstractIndex> for Atom {
             AbstractIndex::Added(v) => Atom::num(v as i64),
             AbstractIndex::Dummy(v) => Atom::var(symbol!(format!("d_{}", v))),
             AbstractIndex::Symbol(v) => Atom::var(v.into()),
+            AbstractIndex::Named(name, owner, local) => {
+                symbolica::function!(Symbol::from(name), Atom::num(owner), Atom::num(local))
+            }
             AbstractIndex::Open { owner, axis } => {
                 symbolica::function!(AIND_SYMBOLS.openind, Atom::num(owner), Atom::num(axis))
             }
@@ -633,6 +624,8 @@ impl From<AbstractIndex> for usize {
             AbstractIndex::Dummy(v) => v,
             #[cfg(feature = "shadowing")]
             AbstractIndex::Symbol(v) => v.get_id() as usize,
+            #[cfg(feature = "shadowing")]
+            AbstractIndex::Named(..) => panic!("a named index has no numeric identity"),
             AbstractIndex::Open { axis, .. } => axis,
         }
     }
@@ -693,6 +686,19 @@ impl TryFrom<AtomView<'_>> for AbstractIndex {
                     axis: usize::try_from(*axis)
                         .map_err(|_| AbstractIndexError::NotIndex(view.to_string()))?,
                 })
+            }
+            AtomView::Fun(function) if function.get_symbol().has_tag(&SPENSO_TAG.index) => {
+                let args = function.iter().collect::<Vec<_>>();
+                let [owner, local] = args.as_slice() else {
+                    return Err(AbstractIndexError::NotIndex(view.to_string()));
+                };
+                Ok(AbstractIndex::Named(
+                    function.get_symbol().into(),
+                    usize::try_from(*owner)
+                        .map_err(|_| AbstractIndexError::NotIndex(view.to_string()))?,
+                    usize::try_from(*local)
+                        .map_err(|_| AbstractIndexError::NotIndex(view.to_string()))?,
+                ))
             }
             _ => Err(AbstractIndexError::NotIndex(view.to_string())),
         }
