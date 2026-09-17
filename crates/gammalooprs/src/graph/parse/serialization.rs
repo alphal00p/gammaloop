@@ -326,6 +326,7 @@ mod tests {
         let mut graph = triangle();
         let spec = ThresholdCountertermSpec {
             schema_version: THRESHOLD_COUNTERTERM_SCHEMA_VERSION,
+            function_map: [("shifted(x_)".to_string(), "x_ + 1".to_string())].into(),
             cuts: vec![ThresholdCountertermCut {
                 edges: vec![],
                 thresholds: vec![ThresholdCountertermThreshold {
@@ -338,6 +339,8 @@ mod tests {
                         disable: false,
                         multiplier: Some(ThresholdCountertermMultiplier {
                             expression: "custom(\"η\", \\path, tab:\t, line:\n)".to_string(),
+                            function_map: [("shifted(x_)".to_string(), "x_ + 2".to_string())]
+                                .into(),
                             symmetrize: true,
                             opaque_derivatives: true,
                         }),

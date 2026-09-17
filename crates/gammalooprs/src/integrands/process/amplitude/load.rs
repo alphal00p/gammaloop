@@ -38,7 +38,7 @@ use crate::processes::{
     ThresholdCountertermMetadataRegistry, ThresholdCountertermOrigin, ThresholdCountertermSide,
 };
 
-pub const STANDALONE_EVALUATORS_VERSION: u32 = 8;
+pub const STANDALONE_EVALUATORS_VERSION: u32 = 9;
 pub const STANDALONE_MODE_RUST: u8 = 0;
 
 #[derive(
@@ -1920,6 +1920,13 @@ impl LoadedStandaloneEvaluatorStack {
 fn load_bin(path: impl AsRef<Path>) -> Result<LoadedStandaloneEvaluators> {
     let binary =
         fs::read(&path).with_context(|| format!("Cannot read {}", path.as_ref().display()))?;
+    let (version, _): (u32, _) = bincode::decode_from_slice(&binary, bincode::config::standard())?;
+    if version != STANDALONE_EVALUATORS_VERSION {
+        return Err(eyre!(
+            "Unsupported version {version} (expected {}); regenerate the standalone archive",
+            STANDALONE_EVALUATORS_VERSION
+        ));
+    }
     let (archive, _): (StandaloneEvaluatorArchive, _) =
         bincode::decode_from_slice(&binary, bincode::config::standard())?;
 
@@ -2196,6 +2203,7 @@ mod threshold_variant_archive_tests {
         let mut registry = identity_registry();
         registry.variants[0].multiplier = Some(ThresholdCountertermMultiplierMetadata {
             expression: expression.to_string(),
+            function_map: Default::default(),
             symmetrize: false,
             opaque_derivatives: true,
         });
@@ -2537,7 +2545,16 @@ mod threshold_variant_archive_tests {
         )
         .unwrap();
         let expression = layout
-            .parse_expression("2 * archive_weight_b + archive_weight_a")
+            .parse_expression(
+                "scaled(archive_weight_b)",
+                &BTreeMap::from([
+                    (
+                        "scaled(value)".into(),
+                        "double(value)+archive_weight_a".into(),
+                    ),
+                    ("double(value)".into(), "2*value".into()),
+                ]),
+            )
             .unwrap();
         let collection = ThresholdMultiplierEvaluatorCollection::build(
             layout,
