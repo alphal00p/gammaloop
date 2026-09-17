@@ -212,12 +212,14 @@ fn target_directives_from_legacy(cross_section: &CrossSection) -> ThresholdCount
         disable: false,
         multiplier: Some(ThresholdCountertermMultiplier {
             expression: "2".to_string(),
+            function_map: Default::default(),
             symmetrize: false,
             opaque_derivatives: true,
         }),
     };
     ThresholdCountertermSpec {
         schema_version: THRESHOLD_COUNTERTERM_SCHEMA_VERSION,
+        function_map: Default::default(),
         cuts: cuts
             .into_iter()
             .map(|(edges, thresholds)| ThresholdCountertermCut {

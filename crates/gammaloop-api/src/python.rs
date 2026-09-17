@@ -933,6 +933,7 @@ pub struct PyThresholdCountertermAssociationMetadata {
 #[derive(Clone)]
 pub struct PyThresholdCountertermMultiplierMetadata {
     pub expression: String,
+    pub function_map: std::collections::BTreeMap<String, String>,
     pub symmetrize: bool,
     pub opaque_derivatives: bool,
 }
@@ -2834,6 +2835,7 @@ fn py_threshold_counterterm_multiplier_from_metadata(
 ) -> PyThresholdCountertermMultiplierMetadata {
     PyThresholdCountertermMultiplierMetadata {
         expression: multiplier.expression,
+        function_map: multiplier.function_map,
         symmetrize: multiplier.symmetrize,
         opaque_derivatives: multiplier.opaque_derivatives,
     }

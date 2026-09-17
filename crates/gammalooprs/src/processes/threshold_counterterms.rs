@@ -152,6 +152,8 @@ pub struct ThresholdCountertermAssociationMetadata {
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, Serialize, Deserialize, JsonSchema)]
 pub struct ThresholdCountertermMultiplierMetadata {
     pub expression: String,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub function_map: BTreeMap<String, String>,
     pub symmetrize: bool,
     pub opaque_derivatives: bool,
 }
@@ -320,6 +322,7 @@ impl ThresholdCountertermMetadataRegistry {
                     multiplier: variant.multiplier.as_ref().map(|multiplier| {
                         ThresholdCountertermMultiplierMetadata {
                             expression: multiplier.expression.clone(),
+                            function_map: multiplier.function_map.clone(),
                             symmetrize: multiplier.symmetrize,
                             opaque_derivatives: multiplier.opaque_derivatives,
                         }
@@ -1106,6 +1109,7 @@ mod tests {
         };
         let multiplier = |expression: &str| ThresholdCountertermMultiplier {
             expression: expression.to_string(),
+            function_map: Default::default(),
             symmetrize: false,
             opaque_derivatives: true,
         };
