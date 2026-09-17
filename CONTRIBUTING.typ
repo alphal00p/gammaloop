@@ -10,7 +10,9 @@ These rules are intentionally broad and should shape most code changes.
 
 - Prefer one semantic boundary per concept. Before adding a trait, helper, mode,
   or adapter, look for the existing abstraction that already owns the behavior
-  and extend that instead.
+  and extend that instead. Before adding helpers, structs, or methods, search
+  similar use cases; ask maintainers only if ownership or duplication remains
+  unclear after that search.
 - Collapse duplicate abstractions aggressively. If two names describe the same
   responsibility, merge them and update call sites rather than keeping
   compatibility shims.
@@ -22,7 +24,11 @@ These rules are intentionally broad and should shape most code changes.
 - Avoid compatibility fallbacks and "old path plus new path" designs. Pick the
   clearer model and migrate usages.
 - Keep changes minimal but complete: remove obsolete code paths, imports, docs,
-  and call sites in the same change.
+  and call sites in the same change. Preserve useful comments and rationale
+  when moving code; remove demonstrably obsolete comments with the behavior
+  they describe, and ask if their relevance is unclear.
+- Prefer concise, idiomatic code and remove duplication. Review the diff for
+  readability before finishing; line counts are not a quality target.
 - Prefer concrete return types over sentinel-style APIs. Avoid `Option` where
   `None` means "nothing happened" if the caller always needs a usable result.
 - Make transformations explicit and idempotent. If recursive rewriting is
@@ -84,9 +90,10 @@ These rules are intentionally broad and should shape most code changes.
 
 === Rust
 
-- Always format and run `cargo check` before compiling to catch easy errors and
-  keep formatting consistent.
-- Run clippy before finishing a change and address warnings where practical.
+- Format Rust changes and run checks appropriate to the affected code. Use
+  `cargo check` for quick feedback when useful; it is not a prerequisite for
+  every build or test run.
+- Run Clippy for relevant Rust changes and address warnings where practical.
 - Naming: `snake_case` for functions/modules, `CamelCase` for types/traits.
 - Prefer narrow imports and method-call syntax over repeated fully qualified
   paths; retain qualification for disambiguation or macro hygiene.
@@ -116,6 +123,11 @@ These rules are intentionally broad and should shape most code changes.
 
 === Tests
 
+- Never weaken tests merely to make failures disappear. Updating expectations
+  for an explicitly requested behavior change is permitted; otherwise ask
+  before changing what a failing test asserts.
+- During development, run checks relevant to the change. Before final review,
+  run the selected full CI suite as described below.
 - Install `cargo-nextest` 0.9.80 or newer. The repository configuration
   enforces this minimum; update an existing installation with
   `cargo nextest self update`.
@@ -231,14 +243,50 @@ The root `justfile` keeps build and lint commands. Test, NixCI and drawing recip
 are imported from `just/tests.just`, `just/ci.just` and `just/drawing.just`; run all
 commands from the repository as before. Use `just --list` to see them.
 
+== CI Readiness
+<ci-readiness>
+
+The `final-review` label identifies PRs ready for final review. Merging requires
+an open, non-draft PR with this label, explicit top-level `enable = true` in
+`nix-ci.nix`, and successful required CI checks. Draft and unlabeled PRs are
+valid work in progress; their readiness gate intentionally fails to block merging.
+
+During implementation, agents set `enable = false` unless explicitly instructed
+otherwise. Human contributors may enable CI earlier. Read-only investigations
+do not change the toggle. Keep `enable = true` on `main`.
+
+Before requesting final review:
+
++ Set top-level `enable = true` in `nix-ci.nix`.
++ On `itphlies`, reuse/download matching cache outputs through Nix substitution.
+  Run the selected full CI suite against the final code and upload successful
+  results when credentials are available, following the cache workflow below.
++ Push the validated code, mark the PR non-draft, then apply `final-review`.
+
+When returning to development, remove `final-review` and commit
+`enable = false`. Removing the label or returning to draft cancels superseded
+runs of the Nix and Continuous integration Actions workflows. It does not cancel
+already-running NixCI jobs: the committed toggle controls subsequent NixCI work.
+Those two Actions workflows run automatically for non-draft, labeled PRs to
+`main`; main pushes, merge-group runs, and manual dispatch remain available.
+Other workflows retain their own triggers.
+
+Edit only the top-level toggle manually: `just ci-update` preserves it while
+regenerating the scheduling configuration. Missing or nonboolean toggles and
+other generated-content drift fail validation. `dependency-discovery.enable`
+is independent and must not be used to disable CI. Local checks and uploads
+remain available with NixCI disabled.
+
 == NixCI Cache
 <nixci-cache>
 
 See #link("docs/architecture/ci.typ")[CI maintenance and measurements] for the build design, measured
 results, branch migration and `just ci-report` usage.
 
-Before pushing, contributors and agents should run the selected CI checks
+Before final review, contributors and agents must run the selected CI checks
 locally and upload successful results when cache credentials are available.
+Ordinary development pushes require checks relevant to the change, not the full
+suite and upload cycle.
 Work from the repository root; enter `nix develop` if you need the pinned Just
 and build tools. Stage newly added files first so the Git-backed flake sees them.
 
@@ -254,7 +302,17 @@ local environment. An unchanged successful Nix check can be reused without
 executing its tests again. `nix flake check --impure` additionally builds the CLI,
 documentation and WASM checks exported by the flake.
 
-For the normal pre-push workflow:
+On `itphlies`, run the following before pushing CI-enabled work, including
+updates to a PR already in final review. The host's Nix daemon is configured to
+download from the NixCI cache using its signing key and machine credentials.
+Leave substitution enabled: the Nix builds in this command automatically reuse
+local outputs or download matching cached outputs, build/check what is missing,
+then upload the selected successful outputs and producer closures. There is no
+need to download the entire cache or force rebuilds. Completing this locally
+before the push minimizes work left for NixCI.
+
+Use the same command on other hosts for the final-review pre-push workflow when
+cache credentials are available:
 
 ```sh
 just ci-checks-and-upload
@@ -304,6 +362,25 @@ The flake retains NixCI's substituter and signing-key settings for downloads.
 On a shared daemon, an administrator must configure the cache's trust and access
 credentials for substitution; enabling user uploads does not configure downloads.
 
+== CI Completion
+<ci-completion>
+
+Prefer completion notifications over an agent repeatedly polling local checks,
+cache transfers, or remote CI. When the execution environment supports it, run
+long commands with captured logs and an exit-status notification, and resume
+only on completion, failure, or required input. Local checks and uploads must
+still succeed before the dependent push; background execution is not evidence
+of success.
+
+After a push, record the commit and CI run or PR URL, then yield instead of
+actively tracking unchanged status unless explicitly asked to monitor. Use an
+available event-driven completion wake-up to resume the agent. Verify that the
+notification is actually registered; if no such mechanism is available, state
+that limitation in the handoff instead of promising an automatic follow-up.
+A scheduled monitor still polls; do not substitute it for a completion event
+without making that distinction explicit. On resuming, verify that the result
+belongs to the intended commit before reporting success or investigating failure.
+
 == Version Control Workflow
 
 === jj
@@ -321,10 +398,12 @@ credentials for substitution; enabling user uploads does not configure downloads
 
 === Commits And PRs
 
+- Use descriptive branch names without agent prefixes, for example
+  `ci-final-review-readiness`. Only use `codex/` when explicitly requested.
 - Commit messages are short and descriptive, typically lowercase without scopes
   (for example, `remove edge quotes`).
-- If you are recording a user-requested change, include the full user prompt in
-  the commit description.
+- For user-requested changes, describe the requested intent and resulting
+  behavior; do not automatically copy the full user prompt.
 - If there is already a commit, prefer making a new one.
 - PRs should include a clear summary, test command(s) run, and any example
   command card used to validate behavior.

@@ -7,21 +7,21 @@ for this repository.
 If instructions conflict, prefer the more specific local guidance and preserve
 the user's current work unless explicitly asked to change it.
 
-If a test is failing, and you want to change the test itself explicitly ask whether this is intended.
+Use descriptive branch names without an agent prefix, for example
+`ci-final-review-readiness`. Do not add `codex/` unless explicitly requested.
 
+During implementation, set top-level `enable = false` in `nix-ci.nix` unless
+explicitly instructed otherwise. Read-only investigations do not change it.
+Before final review, follow the enable, validate, upload, push, and `final-review`
+label sequence in [CONTRIBUTING.typ](CONTRIBUTING.typ#ci-readiness). On `itphlies`,
+reuse/download matching NixCI cache outputs and finish `just ci-checks-and-upload`
+before pushing CI-enabled work, so NixCI can reuse the results.
 
-Before adding helper functions, structs, or methods, check the codebase for
-similar use cases, and whether the functionality is already provided by the
-existing code or only needs a small adjustment/API change. When adding a new
-helper, confirm with the codebase maintainers that the functionality is not
-already provided by an existing helper.
+Prefer completion notifications over actively polling checks, uploads, or remote
+CI. Preserve the run/commit identity and logs, and resume on completion, failure,
+or required input. Never claim a completion wake-up is configured unless it is;
+see [CONTRIBUTING.typ](CONTRIBUTING.typ#ci-completion).
 
-Be as idiomatic and concise as possible to optimize for readability. Before
-finishing a turn, check this. Anything that can be done more concisely should be
-done so, and we prefer diffs with more deletions than more additions, as long as
-the code is still correct and readable.
-
-Never delete comments outright, even when they are refactored (i.e. move them
-along with the code). Try to keep comments up-to-date with the code, and add new
-comments as needed. Ask for confirmation if you think a comment is no longer
-needed.
+Search existing abstractions before adding helpers. Preserve useful comments
+and test coverage; follow the shared guidance when their intent is unclear.
+Before finishing, review the diff for concise, idiomatic code and duplication.

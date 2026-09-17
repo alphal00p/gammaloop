@@ -1,0 +1,50 @@
+name: NixCI readiness
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft, labeled, unlabeled, edited]
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  merge_group:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nixci-readiness-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  readiness:
+    name: NixCI readiness
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require final review
+        if: github.event_name == 'pull_request'
+        env:
+          READY: ${{ !github.event.pull_request.draft && contains(github.event.pull_request.labels.*.name, 'final-review') }}
+        run: |
+          if [ "$READY" != true ]; then
+            echo '::error::Merging requires a non-draft PR with the final-review label. Work in progress may keep NixCI disabled.'
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - uses: NixOS/nix-installer-action@main
+
+      - name: Require enabled NixCI configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! nix eval --option allow-import-from-derivation false --json --file ./nix-ci.nix | jq -e '.enable == true'; then
+            echo '::error::Set top-level enable = true in nix-ci.nix, validate the final code, and push before requesting final review.'
+            exit 1
+          fi

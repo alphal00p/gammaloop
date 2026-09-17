@@ -2,7 +2,7 @@ name: Nix
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft, labeled, unlabeled, edited]
     branches:
       - main
   push:
@@ -37,7 +37,9 @@ jobs:
   # running in parallel.
   prepare:
     name: Prepare shared artifacts
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    if: >-
+      github.event_name != 'pull_request' ||
+      (!github.event.pull_request.draft && contains(github.event.pull_request.labels.*.name, 'final-review'))
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     outputs:
@@ -182,7 +184,9 @@ jobs:
   flake-checks:
     name: Flake checks
     needs: [prepare, build]
-    if: always() && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
+    if: >-
+      always() && (github.event_name != 'pull_request' ||
+      (!github.event.pull_request.draft && contains(github.event.pull_request.labels.*.name, 'final-review')))
     runs-on: ubuntu-latest
     steps:
       - name: Confirm matrix result
