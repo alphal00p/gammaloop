@@ -1,0 +1,16 @@
+{
+  "evaluation": {
+    "integrand_result": {
+      "re": -1.6283328848214978e-59,
+      "im": 3.299785432016938e-41
+    },
+    "absolute_integrand_result": {
+      "re": 1.8061967595390561e-59,
+      "im": 3.299785432016938e-41
+    },
+    "parameterization_jacobian": null,
+    "integrator_weight": 1.0,
+    "event_groups": [],
+    "evaluation_metadata": null
+  }
+}

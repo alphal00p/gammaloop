@@ -1,0 +1,10 @@
+{
+  "original_path": "/common/dev/gammaloop_ir_safe_thresholds/examples/cli/epem_a_ttxh/NNLO_manual/graphs/GL134.dot",
+  "original_sha256": "3f77305f0e16d8499b2b8539d3db47f4db4a6081c40cfd86c1b35df7c8a5d2c3",
+  "control_path": "/common/dev/gammaloop_ir_safe_thresholds/target/gl134_phase_diagnostics/GL134_num1.dot",
+  "control_sha256": "69892c042e3a981efc951f634c8f3d9d6e3ea2c953a0ad91d76a7d40c6c4e194",
+  "only_text_change": [
+    "num = \"1\ud835\udc56\";",
+    "num = \"1\";"
+  ]
+}

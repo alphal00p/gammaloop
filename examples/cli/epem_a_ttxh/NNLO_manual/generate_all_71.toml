@@ -6,6 +6,7 @@ name = "epem_a_ttxh_NNLO_manual_all_71"
 
 [[command_blocks]]
 name = "generate_diagrams"
+# Current phase-normalized graph inputs use num = "1"; do not restore the historical global i override.
 commands = [
   "import model sm-default.json",
   "set global kv global.n_cores.feyngen=10",
@@ -14,7 +15,6 @@ commands = [
       --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
       --symmetrize-left-right-states true
       -p epem_a_tth -i NNLO
-      --global-prefactor-num "1𝑖"
       --only-diagrams""",
   "select -p epem_a_tth -i NNLO --amplitude-graphs --without-raised-propagator-signatures ANY_RAISING --without-raised-cuts-signatures ANY_RAISING",
   "save dot",

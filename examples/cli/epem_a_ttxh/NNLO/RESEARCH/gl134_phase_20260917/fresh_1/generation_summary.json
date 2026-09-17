@@ -1,0 +1,29 @@
+{
+  "peak_ram_bytes": 449081344,
+  "reports": [
+    {
+      "process_id": 0,
+      "integrand_name": "NNLO",
+      "graph_name": "GL134",
+      "stats": {
+        "evaluator_count": 2,
+        "total_time": {
+          "secs": 33,
+          "nanos": 356266313
+        },
+        "evaluator_spenso_time": {
+          "secs": 4,
+          "nanos": 627850859
+        },
+        "evaluator_symbolica_time": {
+          "secs": 13,
+          "nanos": 55483178
+        },
+        "evaluator_compile_time": {
+          "secs": 0,
+          "nanos": 0
+        }
+      }
+    }
+  ]
+}

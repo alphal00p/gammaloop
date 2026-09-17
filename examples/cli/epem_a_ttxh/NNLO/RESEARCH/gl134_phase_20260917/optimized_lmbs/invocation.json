@@ -1,0 +1,40 @@
+{
+  "mode": "optimized_lmbs",
+  "state": "/common/dev/gammaloop_ir_safe_thresholds/examples/cli/epem_a_ttxh/NNLO_experiment/states/GL134_optimized_lmbs",
+  "argv": [
+    "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/gammaloop",
+    "--read-only-state",
+    "--no-save-state",
+    "--state-folder",
+    "/common/dev/gammaloop_ir_safe_thresholds/examples/cli/epem_a_ttxh/NNLO_experiment/states/GL134_optimized_lmbs",
+    "-L",
+    "off",
+    "-l",
+    "info",
+    "--trace-logs-filename",
+    "/common/dev/gammaloop_ir_safe_thresholds/target/gl134_phase_diagnostics/optimized_lmbs/trace.jsonl",
+    "/common/dev/gammaloop_ir_safe_thresholds/target/gl134_phase_diagnostics/optimized_lmbs/commands.toml",
+    "run",
+    "probe"
+  ],
+  "point": [
+    37,
+    126,
+    -109,
+    -91,
+    64,
+    83,
+    31,
+    -47,
+    59,
+    19,
+    23,
+    -17
+  ],
+  "before_sha256": {
+    "state_manifest.toml": "8e7423074b68d8504aaa62986b8d6499a216f7c144b401fadc5106c2a6faeac8",
+    "processes/cross_sections/epem_a_tth/NNLO/cs.bin": "41d5f26b8d67a25ef2f73938b5567cf96d55b24f762609a6443adcbca58b13bc",
+    "processes/cross_sections/epem_a_tth/NNLO/integrand/integrand.bin": "e7f3a1993251e4e1fa4056b0045a3422de49c67e23fd2dfc7a007c609c543bf3",
+    "processes/cross_sections/epem_a_tth/NNLO/integrand/settings.toml": "527fb3bf34c6745461d00967bedb695dd995c2b35e47e9f6a2512e480a452cd9"
+  }
+}
