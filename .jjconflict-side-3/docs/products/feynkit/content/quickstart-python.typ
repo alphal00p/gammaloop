@@ -45,7 +45,8 @@ options)` when reusing a configured `Process`. Particle names, PDG codes, and pa
 from that model can select external states.
 
 #callout("Keep the same Symbolica kernel", [
-  Numerators and CFF expressions are native Symbolica `Expression` values. The FeynKit module
+  Numerators are Spenso `TensorExpression` values, which extend Symbolica `Expression`; CFF
+  expressions are ordinary `Expression` values. The FeynKit module
   must share `symbolica.core` with Spenso, Idenso, and other community modules; independently
   linking a second Symbolica extension breaks that ownership contract.
 ])

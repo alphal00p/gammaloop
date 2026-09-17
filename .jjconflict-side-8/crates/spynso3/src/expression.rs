@@ -119,12 +119,22 @@ pub struct TensorExpression {
 }
 
 impl TensorExpression {
-    pub(crate) fn from_atom_interface(
+    /// Wrap an atom with its tensor interface, inferring it when omitted.
+    pub fn from_atom_interface(
         py: Python<'_>,
         atom: Atom,
-        interface: PartialStructure,
+        interface: impl Into<Option<PartialStructure>>,
     ) -> PyResult<Py<Self>> {
-        Self::from_atom_interface_named(py, atom, interface, None)
+        if let Some(interface) = interface.into() {
+            return Self::from_atom_interface_named(py, atom, interface, None);
+        }
+        let (name, name_args) = inferred_descriptor(atom.as_view());
+        let value = if has_structured_syntax(atom.as_view()) {
+            reinfer_structured(atom)?
+        } else {
+            StructuredAtom::new(atom, PartialStructure::from_logical_slots([]))
+        };
+        Self::from_atom_interface_descriptor(py, value.atom, value.interface, name, name_args)
     }
 
     pub(crate) fn from_atom_interface_named(
@@ -706,6 +716,7 @@ fn index_value(value: ConvertibleToAbstractIndex, cook: bool) -> PyResult<Abstra
 
 fn has_structured_syntax(value: AtomView<'_>) -> bool {
     value.is_tensorial(StrictTensorFilter::Tagged)
+        || value.is_tensorial(StrictTensorFilter::ContainsReps)
         || is_unmaterialized_tensor_leaf(value)
         || matches!(
             value,
@@ -1310,7 +1321,7 @@ fn infer_validated_interface(atom: &Atom) -> PyResult<PartialStructure> {
         }
     }
 
-    if !atom.is_tensorial(StrictTensorFilter::Tagged) {
+    if !has_structured_syntax(atom.as_view()) {
         return Err(PyValueError::new_err(
             "expression does not contain valid tagged Spenso tensor syntax",
         ));
@@ -1721,10 +1732,7 @@ impl TensorExpression {
 
     /// Re-parse the underlying symbolic expression and rebuild its ordered tensor interface.
     fn reinfer(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let atom = self_.as_super().expr.clone();
-        let (name, name_args) = inferred_descriptor(atom.as_view());
-        let value = reinfer_structured(atom)?;
-        Self::from_atom_interface_descriptor(py, value.atom, value.interface, name, name_args)
+        Self::from_atom_interface(py, self_.as_super().expr.clone(), None)
     }
 
     /// Expand scalar algebra while preserving and validating the tensor interface.
@@ -2699,16 +2707,7 @@ pub fn as_tensor(py: Python<'_>, expression: &Bound<'_, PyAny>) -> PyResult<Py<T
         .map_err(|_| {
             PyTypeError::new_err("as_tensor() expects an Expression or TensorExpression")
         })?;
-    let atom = expression.to_expression().expr;
-    let (name, name_args) = inferred_descriptor(atom.as_view());
-    let value = reinfer_structured(atom)?;
-    TensorExpression::from_atom_interface_descriptor(
-        py,
-        value.atom,
-        value.interface,
-        name,
-        name_args,
-    )
+    TensorExpression::from_atom_interface(py, expression.to_expression().expr, None)
 }
 
 fn structured_operand(value: &Bound<'_, PyAny>, operation: &str) -> PyResult<StructuredAtom> {

@@ -187,6 +187,13 @@ directly. Python clients use this ownership flow through
 `symbolica.community.feynkit`; the curated PyO3 API does not expose
 GammaLoop runtime details.
 
+Python diagram, edge, and vertex numerators use Spenso's `TensorExpression`
+directly, with the existing constructor inferring their tensor interfaces.
+The graph crate registers momentum and index symbols before parsing or
+generation. Index identities retain their source, sink, edge, or vertex head;
+label metadata drives Spenso's shared plain, LaTeX, and Typst printers,
+including portable render trees.
+
 GammaLoop converts each finalized diagram once into its
 evaluator-oriented runtime graph. That conversion translates identifiers
 and builds derived caches; it does not repeat model loading, rule
