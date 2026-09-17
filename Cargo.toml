@@ -56,7 +56,7 @@ rand = "0.9.4"
 ratatui = "0.30.0"
 rayon = "1.5"
 regex = "1.12.3"
-rustred = { git = "https://github.com/alphal00p/rustred.git", rev = "ac7b0473cea12c91c69b905570ec32f88b5e9bf9" }
+rustred = { git = "https://github.com/alphal00p/rustred.git", rev = "fbff9fd45ed4da9e8598fa6c31f35f406e6032d5" }
 schemars = "1.2.1"
 serde = "1.0.228"
 self_cell = "1.2.2"
