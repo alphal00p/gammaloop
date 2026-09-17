@@ -36,7 +36,17 @@ use crate::{
     utils::{F, FUN_LIB, FloatLike, GS, TENSORLIB},
 };
 
-use super::evaluators::{EvaluatorBackendPolicy, GenericEvaluator, evaluate_evaluator_single};
+use super::{
+    evaluators::{EvaluatorBackendPolicy, GenericEvaluator, evaluate_evaluator_single},
+    param_builder::FnMapEntry,
+};
+
+mod function_map;
+use function_map::ThresholdMultiplierFunctions;
+#[cfg(test)]
+mod function_map_tests;
+#[cfg(test)]
+mod gl638_regression_tests;
 
 /// The global kinematic view at which a multiplier input is evaluated.
 ///
@@ -99,6 +109,10 @@ pub enum ThresholdMultiplierInput {
         point: ThresholdMultiplierPoint,
         edge: usize,
         component: usize,
+    },
+    EdgeEnergy {
+        point: ThresholdMultiplierPoint,
+        edge: usize,
     },
     Esurface {
         point: ThresholdMultiplierPoint,
@@ -314,6 +328,12 @@ impl ThresholdMultiplierLayout {
                         AIND_SYMBOLS.cind.call_args([component as i64])
                     ));
                 }
+                self.inputs
+                    .push(ThresholdMultiplierInput::EdgeEnergy { point, edge });
+                self.parameters.push(
+                    private_energy_symbol()
+                        .call_args([point.atom().as_view(), Atom::num(edge as i64).as_view()]),
+                );
             }
         }
 
@@ -365,7 +385,11 @@ impl ThresholdMultiplierLayout {
         self.inputs.is_empty()
     }
 
-    pub fn parse_expression(&self, source: &str) -> Result<ThresholdMultiplierExpression> {
+    pub fn parse_expression(
+        &self,
+        source: &str,
+        definitions: &BTreeMap<String, String>,
+    ) -> Result<ThresholdMultiplierExpression> {
         // The public Q3 symbol has a global normalizer that turns concrete spatial Q3
         // components into Q components. Parse multiplier Q3 calls through a private tensor
         // symbol so that the multiplier ABI can reject genuine Q while preserving Q3 aliases.
@@ -373,16 +397,37 @@ impl ThresholdMultiplierLayout {
         // Register the public grouping head before parsing so Symbolica canonicalizes edge-set
         // arguments independently of their user-provided order.
         let public_eset = public_eset_symbol();
-        let rewritten = rewrite_q3_function_name(source, private_q3.get_name());
-        let parsed = try_parse!(rewritten.as_str()).map_err(|error| {
-            eyre!("failed to parse threshold-multiplier expression `{source}`: {error}")
-        })?;
-        let normalized = self.normalize_before_contraction(&parsed, private_q3, public_eset)?;
-        let scalar = scalarize(normalized.as_view()).with_context(|| {
-            format!("threshold-multiplier expression `{source}` is not a scalar tensor expression")
-        })?;
-        let scalar = self.normalize_after_contraction(&scalar, private_q3)?;
-        Ok(ThresholdMultiplierExpression { scalar })
+        let parse = |text: &str| {
+            let rewritten = rewrite_q3_function_name(text, private_q3.get_name());
+            try_parse!(rewritten.as_str()).map_err(|error| {
+                eyre!("failed to parse threshold-multiplier expression `{text}`: {error}")
+            })
+        };
+        let functions = ThresholdMultiplierFunctions::parse(definitions, parse)?;
+        let (scalar, function_map, function_map_entries) =
+            functions.bind(parse(source)?, |atom| {
+                let normalized =
+                    self.normalize_before_contraction(atom, private_q3, public_eset)?;
+                let scalar = scalarize(normalized.as_view()).with_context(|| {
+                    format!(
+                        "threshold-multiplier expression `{atom}` is not a scalar tensor expression"
+                    )
+                })?;
+                self.normalize_after_contraction(&scalar, private_q3)
+            })?;
+        for entry in &function_map_entries {
+            let name = entry.lhs.as_fun_view().unwrap().get_symbol();
+            if self.parameters.iter().any(|parameter| {
+                matches!(parameter.as_view(), AtomView::Var(variable) if variable.get_symbol() == name)
+            }) {
+                return Err(eyre!("threshold function `{name}` conflicts with multiplier input of the same name"));
+            }
+        }
+        Ok(ThresholdMultiplierExpression {
+            scalar,
+            function_map,
+            function_map_entries,
+        })
     }
 
     fn normalize_before_contraction(
@@ -417,6 +462,32 @@ impl ThresholdMultiplierLayout {
             } else if function_symbol == ascii_eta || function_symbol == GS.eta {
                 match self.normalize_eta_call(function.iter().collect(), public_eset) {
                     Ok(replacement) => **output = replacement,
+                    Err(call_error) => error = Some(call_error),
+                }
+            } else if function_symbol == symbol!("E") {
+                let arguments = function.iter().collect::<Vec<_>>();
+                let (point, edge_atom) = match arguments.as_slice() {
+                    [edge] => (ThresholdMultiplierPoint::Effective, *edge),
+                    [point, edge] => match ThresholdMultiplierPoint::parse(*point) {
+                        Ok(point) => (point, *edge),
+                        Err(call_error) => {
+                            error = Some(call_error);
+                            return;
+                        }
+                    },
+                    _ => {
+                        error = Some(eyre!("E expects `(edge)` or `(effective|star, edge)`, got {} arguments", arguments.len()));
+                        return;
+                    }
+                };
+                match parse_index(edge_atom, "E graph edge") {
+                    Ok(edge) if self.edges.binary_search(&edge).is_ok() => {
+                        **output = private_energy_symbol().call_args([
+                            point.atom().as_view(),
+                            Atom::num(edge as i64).as_view(),
+                        ]);
+                    }
+                    Ok(edge) => error = Some(eyre!("E refers to unknown graph edge {edge}")),
                     Err(call_error) => error = Some(call_error),
                 }
             } else if function_symbol == GS.external_mom {
@@ -643,8 +714,8 @@ impl ThresholdMultiplierLayout {
         let evaluator = GenericEvaluator::new_from_raw_params(
             [expression.scalar.clone()],
             &self.parameters,
-            &FunctionMap::new(),
-            Vec::new(),
+            &expression.function_map,
+            expression.function_map_entries.clone(),
             settings.optimization_settings(),
             None,
             settings,
@@ -662,6 +733,8 @@ impl ThresholdMultiplierLayout {
 #[derive(Clone, Debug)]
 pub struct ThresholdMultiplierExpression {
     scalar: Atom,
+    function_map: FunctionMap,
+    function_map_entries: Vec<FnMapEntry>,
 }
 
 impl ThresholdMultiplierExpression {
@@ -760,21 +833,30 @@ impl ThresholdMultiplierEvaluatorCollection {
         )>,
         settings: &EvaluatorSettings,
     ) -> Result<Option<Self>> {
-        let mut canonical_expressions = Vec::<Atom>::new();
+        let mut canonical_expressions = Vec::new();
         let mut evaluators = Vec::new();
         let mut intern = |expression: Option<ThresholdMultiplierExpression>| -> Result<_> {
             let Some(expression) = expression else {
                 return Ok(None);
             };
+            // Equal outer expressions can reference different local function definitions.
+            let canonical = (
+                expression.scalar.clone(),
+                expression
+                    .function_map_entries
+                    .iter()
+                    .map(|entry| (entry.lhs.clone(), entry.rhs.clone()))
+                    .collect::<Vec<_>>(),
+            );
             let evaluator_id = if let Some(index) = canonical_expressions
                 .iter()
-                .position(|canonical| canonical == expression.scalar())
+                .position(|existing| existing == &canonical)
             {
                 ThresholdMultiplierEvaluatorId(index)
             } else {
                 let evaluator_id = ThresholdMultiplierEvaluatorId(evaluators.len());
                 evaluators.push(layout.build_evaluator(&expression, settings)?);
-                canonical_expressions.push(expression.scalar);
+                canonical_expressions.push(canonical);
                 evaluator_id
             };
             Ok(Some(evaluator_id))
@@ -1006,10 +1088,98 @@ struct ThresholdMultiplierKinematicPoint<T: FloatLike> {
     loop_momenta: LoopMomenta<F<T>>,
     external_momenta: ExternalFourMomenta<F<T>>,
     edge_momenta: Vec<ThreeMomentum<F<T>>>,
+    edge_energies: Vec<F<T>>,
     esurface_values: Vec<F<T>>,
 }
 
 impl<T: FloatLike> ThresholdMultiplierKinematicPoint<T> {
+    fn from_sample(
+        layout: &ThresholdMultiplierLayout,
+        generation_lmb: &LoopMomentumBasis,
+        edge_masses: &EdgeVec<F<T>>,
+        sample: &MomentumSample<T>,
+        external_spatial: &mut ExternalThreeMomenta<F<T>>,
+    ) -> Result<Self> {
+        if sample.loop_moms().0.len() != generation_lmb.loop_edges.len() {
+            return Err(eyre!(
+                "threshold-multiplier sample has {} loop momenta but the generation LMB has {}",
+                sample.loop_moms().0.len(),
+                generation_lmb.loop_edges.len(),
+            ));
+        }
+        if sample.external_moms().len() != layout.external_count {
+            return Err(eyre!(
+                "threshold-multiplier sample has {} external momenta but the layout expects {}",
+                sample.external_moms().len(),
+                layout.external_count,
+            ));
+        }
+
+        external_spatial.clear();
+        external_spatial.extend(
+            sample
+                .external_moms()
+                .iter()
+                .map(|momentum| momentum.spatial.clone()),
+        );
+        let mut edge_momenta = Vec::with_capacity(layout.edges.len());
+        let mut edge_energies = Vec::with_capacity(layout.edges.len());
+        for &edge in &layout.edges {
+            let edge = EdgeIndex(edge);
+            let signature = generation_lmb.edge_signatures.get(edge).ok_or_else(|| {
+                eyre!(
+                    "threshold-multiplier layout graph edge {} is absent from the generation LMB",
+                    edge.0,
+                )
+            })?;
+            let momentum = signature.compute_momentum(sample.loop_moms(), external_spatial);
+            let mass = edge_masses.get(edge).ok_or_else(|| {
+                eyre!(
+                    "threshold-multiplier masses are missing graph edge {}",
+                    edge.0
+                )
+            })?;
+            edge_energies.push((momentum.norm_squared() + mass * mass).sqrt());
+            edge_momenta.push(momentum);
+        }
+
+        let mut esurface_values = Vec::with_capacity(layout.esurfaces.len());
+        for equation in &layout.esurfaces {
+            let mut value = sample.sample.zero();
+            for &edge in &equation.edges {
+                let edge_position = layout.edges.binary_search(&edge).map_err(|_| {
+                    eyre!("threshold-multiplier E-surface refers to missing graph edge {edge}")
+                })?;
+                value += &edge_energies[edge_position];
+            }
+            for &(edge, coefficient) in &equation.external_shift {
+                let signature = generation_lmb
+                    .edge_signatures
+                    .get(EdgeIndex(edge))
+                    .ok_or_else(|| {
+                        eyre!(
+                            "threshold-multiplier E-surface shift refers to graph edge {edge} absent from the generation LMB"
+                        )
+                    })?;
+                let temporal = signature
+                    .external
+                    .try_apply(&sample.external_moms().raw)
+                    .map(|momentum| momentum.temporal.value)
+                    .unwrap_or_else(|| value.zero());
+                let coefficient = value.from_i64(coefficient);
+                value += coefficient * temporal;
+            }
+            esurface_values.push(value);
+        }
+        Ok(Self {
+            loop_momenta: sample.loop_moms().clone(),
+            external_momenta: sample.external_moms().clone(),
+            edge_momenta,
+            edge_energies,
+            esurface_values,
+        })
+    }
+
     fn matches(&self, sample: &MomentumSample<T>) -> bool {
         &self.loop_momenta == sample.loop_moms() && &self.external_momenta == sample.external_moms()
     }
@@ -1072,24 +1242,14 @@ impl<T: FloatLike> ThresholdMultiplierInputWorkspace<T> {
             return Ok(index);
         }
 
-        let mut edge_momenta = Vec::with_capacity(layout.edges.len());
-        let mut esurface_values = Vec::with_capacity(layout.esurfaces.len());
-        fill_kinematic_point(
+        let point = ThresholdMultiplierKinematicPoint::from_sample(
             layout,
             generation_lmb,
             edge_masses,
             sample,
             &mut self.external_spatial_scratch,
-            &mut edge_momenta,
-            &mut esurface_values,
         )?;
-        self.kinematic_points
-            .push(ThresholdMultiplierKinematicPoint {
-                loop_momenta: sample.loop_moms().clone(),
-                external_momenta: sample.external_moms().clone(),
-                edge_momenta,
-                esurface_values,
-            });
+        self.kinematic_points.push(point);
         Ok(self.kinematic_points.len() - 1)
     }
 
@@ -1198,6 +1358,16 @@ impl<T: FloatLike> ThresholdMultiplierInputWorkspace<T> {
                     let momentum = &points[point].edge_momenta[edge_position];
                     Complex::new_re(three_momentum_component(momentum, component)?)
                 }
+                ThresholdMultiplierInput::EdgeEnergy { point, edge } => {
+                    let edge_position = layout.edges.binary_search(&edge).map_err(|_| {
+                        eyre!("threshold-multiplier input refers to missing graph edge {edge}")
+                    })?;
+                    let point = match point {
+                        ThresholdMultiplierPoint::Effective => effective_point,
+                        ThresholdMultiplierPoint::Star => star_point,
+                    };
+                    Complex::new_re(points[point].edge_energies[edge_position].clone())
+                }
                 ThresholdMultiplierInput::Esurface { point, esurface } => {
                     let point = match point {
                         ThresholdMultiplierPoint::Effective => effective_point,
@@ -1214,84 +1384,6 @@ impl<T: FloatLike> ThresholdMultiplierInputWorkspace<T> {
     pub fn values(&self) -> &ThresholdMultiplierInputValues<T> {
         &self.values
     }
-}
-
-fn fill_kinematic_point<T: FloatLike>(
-    layout: &ThresholdMultiplierLayout,
-    generation_lmb: &LoopMomentumBasis,
-    edge_masses: &EdgeVec<F<T>>,
-    sample: &MomentumSample<T>,
-    external_spatial: &mut ExternalThreeMomenta<F<T>>,
-    edge_momenta: &mut Vec<ThreeMomentum<F<T>>>,
-    esurface_values: &mut Vec<F<T>>,
-) -> Result<()> {
-    if sample.loop_moms().0.len() != generation_lmb.loop_edges.len() {
-        return Err(eyre!(
-            "threshold-multiplier sample has {} loop momenta but the generation LMB has {}",
-            sample.loop_moms().0.len(),
-            generation_lmb.loop_edges.len(),
-        ));
-    }
-    if sample.external_moms().len() != layout.external_count {
-        return Err(eyre!(
-            "threshold-multiplier sample has {} external momenta but the layout expects {}",
-            sample.external_moms().len(),
-            layout.external_count,
-        ));
-    }
-
-    external_spatial.clear();
-    external_spatial.extend(
-        sample
-            .external_moms()
-            .iter()
-            .map(|momentum| momentum.spatial.clone()),
-    );
-    edge_momenta.clear();
-    for &edge in &layout.edges {
-        let edge = EdgeIndex(edge);
-        let signature = generation_lmb.edge_signatures.get(edge).ok_or_else(|| {
-            eyre!(
-                "threshold-multiplier layout graph edge {} is absent from the generation LMB",
-                edge.0,
-            )
-        })?;
-        edge_momenta.push(signature.compute_momentum(sample.loop_moms(), external_spatial));
-    }
-
-    esurface_values.clear();
-    for equation in &layout.esurfaces {
-        let mut value = sample.sample.zero();
-        for &edge in &equation.edges {
-            let edge_position = layout.edges.binary_search(&edge).map_err(|_| {
-                eyre!("threshold-multiplier E-surface refers to missing graph edge {edge}")
-            })?;
-            let mass = edge_masses.get(EdgeIndex(edge)).ok_or_else(|| {
-                eyre!("threshold-multiplier masses are missing graph edge {edge}")
-            })?;
-            let momentum = &edge_momenta[edge_position];
-            value += (momentum.norm_squared() + mass * mass).sqrt();
-        }
-        for &(edge, coefficient) in &equation.external_shift {
-            let signature = generation_lmb
-                .edge_signatures
-                .get(EdgeIndex(edge))
-                .ok_or_else(|| {
-                    eyre!(
-                        "threshold-multiplier E-surface shift refers to graph edge {edge} absent from the generation LMB"
-                    )
-                })?;
-            let temporal = signature
-                .external
-                .try_apply(&sample.external_moms().raw)
-                .map(|momentum| momentum.temporal.value)
-                .unwrap_or_else(|| value.zero());
-            let coefficient = value.from_i64(coefficient);
-            value += coefficient * temporal;
-        }
-        esurface_values.push(value);
-    }
-    Ok(())
 }
 
 fn four_momentum_component<T: FloatLike>(
@@ -1327,6 +1419,10 @@ fn eta_parameter_atom(point: ThresholdMultiplierPoint, esurface: usize) -> Atom 
 
 fn private_eta_symbol() -> Symbol {
     symbol!("gammalooprs::threshold_multiplier_eta")
+}
+
+fn private_energy_symbol() -> Symbol {
+    symbol!("gammalooprs::threshold_multiplier_energy")
 }
 
 fn public_eset_symbol() -> Symbol {
@@ -1509,7 +1605,7 @@ mod tests {
                 esurface(vec![1, 2], vec![(0, 3), (3, -1)]),
             ]
         );
-        assert_eq!(layout.len(), 1 + 4 + 2 * 4 * 3 + 2 * 2);
+        assert_eq!(layout.len(), 1 + 4 + 2 * 4 * (3 + 1) + 2 * 2);
 
         let ambiguous_layout = ThresholdMultiplierLayout::new(
             Vec::new(),
@@ -1523,7 +1619,7 @@ mod tests {
         )
         .unwrap();
         let error = ambiguous_layout
-            .parse_expression("eta(eset(0, 1))")
+            .parse_expression("eta(eset(0, 1))", &BTreeMap::new())
             .unwrap_err();
         assert!(error.to_string().contains("ambiguous in this cut"));
     }
@@ -1532,12 +1628,15 @@ mod tests {
     fn q3_alias_preserves_temporal_zero_and_minkowski_sign() {
         let layout = initialized_layout(Vec::new(), 0, vec![0, 1], Vec::new());
         let temporal = layout
-            .parse_expression("Q3(0, cind(0)) + Q3(0, cind(1))")
+            .parse_expression("Q3(0, cind(0)) + Q3(0, cind(1))", &BTreeMap::new())
             .unwrap();
         assert!(!temporal.scalar().to_string().contains("cind(0)"));
 
         let expression = layout
-            .parse_expression("Q3(0, spenso::mink(4, 7)) * Q3(1, spenso::mink(4, 7))")
+            .parse_expression(
+                "Q3(0, spenso::mink(4, 7)) * Q3(1, spenso::mink(4, 7))",
+                &BTreeMap::new(),
+            )
             .unwrap();
         let mut evaluator = layout
             .build_evaluator(&expression, &EvaluatorSettings::default())
@@ -1571,7 +1670,7 @@ mod tests {
             vec![esurface(vec![1, 0], Vec::new())],
         );
         let expression = layout
-            .parse_expression("eta(eset(1, 0)) + eta(star, eset(0, 1))")
+            .parse_expression("eta(eset(1, 0)) + eta(star, eset(0, 1))", &BTreeMap::new())
             .unwrap();
         let mut evaluator = layout
             .build_evaluator(&expression, &EvaluatorSettings::default())
@@ -1604,12 +1703,18 @@ mod tests {
             vec![0, 1],
             vec![esurface(vec![1, 0], Vec::new())],
         );
-        let grouped = layout.parse_expression("eta(eset(1, 0))").unwrap();
-        let permuted = layout.parse_expression("eta(eset(0, 1))").unwrap();
-        let explicit_effective = layout
-            .parse_expression("eta(effective, eset(0, 1))")
+        let grouped = layout
+            .parse_expression("eta(eset(1, 0))", &BTreeMap::new())
             .unwrap();
-        let star = layout.parse_expression("eta(star, eset(1, 0))").unwrap();
+        let permuted = layout
+            .parse_expression("eta(eset(0, 1))", &BTreeMap::new())
+            .unwrap();
+        let explicit_effective = layout
+            .parse_expression("eta(effective, eset(0, 1))", &BTreeMap::new())
+            .unwrap();
+        let star = layout
+            .parse_expression("eta(star, eset(1, 0))", &BTreeMap::new())
+            .unwrap();
         assert_eq!(grouped.scalar(), permuted.scalar());
         assert_eq!(grouped.scalar(), explicit_effective.scalar());
         assert_ne!(grouped.scalar(), star.scalar());
@@ -1679,7 +1784,9 @@ mod tests {
             "eta(star, 0, eset(1))",
             "eta(eset(0), eset(1))",
         ] {
-            let error = layout.parse_expression(expression).unwrap_err();
+            let error = layout
+                .parse_expression(expression, &BTreeMap::new())
+                .unwrap_err();
             assert!(
                 error
                     .to_string()
@@ -1688,35 +1795,47 @@ mod tests {
             );
         }
         for expression in ["eta(0, 1)", "eta(effective, 0, 1)", "eta(star, 0, 1)"] {
-            let error = layout.parse_expression(expression).unwrap_err();
+            let error = layout
+                .parse_expression(expression, &BTreeMap::new())
+                .unwrap_err();
             assert!(
                 error.to_string().contains("must be wrapped in `eset(...)`"),
                 "unexpected error for `{expression}`: {error}"
             );
         }
 
-        let empty = layout.parse_expression("eta(eset())").unwrap_err();
+        let empty = layout
+            .parse_expression("eta(eset())", &BTreeMap::new())
+            .unwrap_err();
         assert!(empty.to_string().contains("at least one graph edge"));
         let nested = layout
-            .parse_expression("eta(eset(0, eset(1)))")
+            .parse_expression("eta(eset(0, eset(1)))", &BTreeMap::new())
             .unwrap_err();
         assert!(nested.to_string().contains("nested `eset(...)`"));
-        let duplicate = layout.parse_expression("eta(eset(1, 0, 1))").unwrap_err();
+        let duplicate = layout
+            .parse_expression("eta(eset(1, 0, 1))", &BTreeMap::new())
+            .unwrap_err();
         assert!(duplicate.to_string().contains("duplicate graph edge"));
-        let non_integer = layout.parse_expression("eta(eset(0, edge))").unwrap_err();
+        let non_integer = layout
+            .parse_expression("eta(eset(0, edge))", &BTreeMap::new())
+            .unwrap_err();
         assert!(
             non_integer
                 .to_string()
                 .contains("expected an integer eta graph edge")
         );
-        let ungrouped = layout.parse_expression("eset(0, 1)").unwrap_err();
+        let ungrouped = layout
+            .parse_expression("eset(0, 1)", &BTreeMap::new())
+            .unwrap_err();
         assert!(ungrouped.to_string().contains("only valid as the sole"));
     }
 
     #[test]
     fn model_parameters_and_external_momenta_are_bound_in_existing_order() {
         let layout = initialized_layout(vec![parse!("UFO::MT")], 1, Vec::new(), Vec::new());
-        let expression = layout.parse_expression("UFO::MT + P(0, cind(0))").unwrap();
+        let expression = layout
+            .parse_expression("UFO::MT + P(0, cind(0))", &BTreeMap::new())
+            .unwrap();
         let mut evaluator = layout
             .build_evaluator(&expression, &EvaluatorSettings::default())
             .unwrap();
@@ -1767,7 +1886,7 @@ mod tests {
         );
 
         let expression = layout
-            .parse_expression("UFO::MT + 2 * alpha + 3 * beta")
+            .parse_expression("UFO::MT + 2 * alpha + 3 * beta", &BTreeMap::new())
             .unwrap();
         let mut evaluator = layout
             .build_evaluator(&expression, &EvaluatorSettings::default())
@@ -1872,24 +1991,32 @@ mod tests {
             layout.additional_parameters(),
             &[parse!("alpha"), parse!("beta")]
         );
-        assert!(layout.parse_expression("alpha + 2 * beta").is_ok());
+        assert!(
+            layout
+                .parse_expression("alpha + 2 * beta", &BTreeMap::new())
+                .is_ok()
+        );
     }
 
     #[test]
     fn forbidden_momenta_and_invalid_frames_are_rejected() {
         let layout = initialized_layout(Vec::new(), 0, vec![0], Vec::new());
         for expression in ["Q(0, cind(1))", "K(0, cind(1))"] {
-            let error = layout.parse_expression(expression).unwrap_err();
+            let error = layout
+                .parse_expression(expression, &BTreeMap::new())
+                .unwrap_err();
             assert!(error.to_string().contains("use `Q3`"));
         }
-        let error = layout.parse_expression("Q3(now, 0, cind(1))").unwrap_err();
+        let error = layout
+            .parse_expression("Q3(now, 0, cind(1))", &BTreeMap::new())
+            .unwrap_err();
         assert!(error.to_string().contains("unknown multiplier frame"));
     }
 
     #[test]
     fn collection_deduplicates_expressions_and_keeps_identity_references() {
         let layout = initialized_layout(Vec::new(), 0, Vec::new(), Vec::new());
-        let expression = layout.parse_expression("7").unwrap();
+        let expression = layout.parse_expression("7", &BTreeMap::new()).unwrap();
         let collection = ThresholdMultiplierEvaluatorCollection::build(
             layout,
             vec![
@@ -1934,7 +2061,7 @@ mod tests {
     #[test]
     fn eager_only_collection_roundtrips_and_evaluates_in_all_precisions() {
         let layout = initialized_layout(Vec::new(), 0, Vec::new(), Vec::new());
-        let expression = layout.parse_expression("7").unwrap();
+        let expression = layout.parse_expression("7", &BTreeMap::new()).unwrap();
         let collection = ThresholdMultiplierEvaluatorCollection::build(
             layout,
             vec![(ThresholdCountertermVariantId(0), Some(expression))],
@@ -2053,7 +2180,7 @@ mod tests {
             .parse_expression(&format!(
                 "UFO::MT + graph_weight + P(0, cind(0)) + Q3({}, cind(1)) + Q3(star, {}, cind(1)) + eta(eset({})) + eta(star, eset({}))",
                 energy_edge.0, energy_edge.0, energy_edge.0, energy_edge.0,
-            ))
+            ), &BTreeMap::new())
             .unwrap();
         let mut evaluator = layout
             .build_evaluator(&expression, &EvaluatorSettings::default())
@@ -2341,6 +2468,7 @@ mod tests {
             .iter()
             .map(|edge| edge.0)
             .collect::<Vec<_>>();
+        let massive_edge = energy_edges[0];
         let layout = ThresholdMultiplierLayout::new(
             Vec::new(),
             Vec::new(),
@@ -2373,7 +2501,9 @@ mod tests {
         let left = make_sample([[11.0, 12.0, 13.0], [4.0, 5.0, 6.0]]);
         let right = make_sample([[1.0, 2.0, 3.0], [24.0, 25.0, 26.0]]);
         let merged = make_sample([[11.0, 12.0, 13.0], [24.0, 25.0, 26.0]]);
-        let masses = (0..graph.n_edges()).map(|_| F(0.0)).collect();
+        let masses = (0..graph.n_edges())
+            .map(|edge| F(if edge == massive_edge { 2.0 } else { 0.0 }))
+            .collect::<EdgeVec<_>>();
         let mut workspace = ThresholdMultiplierInputWorkspace::new(&layout, F(0.0));
         let star_values = |workspace: &mut ThresholdMultiplierInputWorkspace<f64>,
                            star: &MomentumSample<f64>| {
@@ -2422,6 +2552,16 @@ mod tests {
                             .unwrap();
                     assert_eq!(merged_values[input_index].re, expected);
                 }
+                ThresholdMultiplierInput::EdgeEnergy { point, edge } => {
+                    if point == ThresholdMultiplierPoint::Effective {
+                        continue;
+                    }
+                    let edge_position = layout.edges().binary_search(&edge).unwrap();
+                    let expected_momentum = &expected_edges[edge_position];
+                    let mass = if edge == massive_edge { F(2.0) } else { F(0.0) };
+                    let expected = (expected_momentum.norm_squared() + mass * mass).sqrt();
+                    assert_eq!(merged_values[input_index].re, expected);
+                }
                 ThresholdMultiplierInput::Esurface {
                     point: ThresholdMultiplierPoint::Star,
                     esurface: 0,
@@ -2431,7 +2571,8 @@ mod tests {
                         .iter()
                         .map(|edge| {
                             let edge_position = layout.edges().binary_search(edge).unwrap();
-                            expected_edges[edge_position].norm_squared().sqrt()
+                            let mass = masses[EdgeIndex(*edge)];
+                            (expected_edges[edge_position].norm_squared() + mass * mass).sqrt()
                         })
                         .fold(F(0.0), |sum, energy| sum + energy);
                     assert_eq!(merged_values[input_index].re, expected);
@@ -2453,5 +2594,39 @@ mod tests {
         let repeated = star_values(&mut workspace, &merged);
         assert_eq!(workspace.kinematic_points.len(), 4);
         assert_eq!(repeated, merged_values);
+    }
+
+    #[test]
+    fn energy_primitive_accepts_effective_and_star_edges() {
+        test_initialise().unwrap();
+        let layout =
+            ThresholdMultiplierLayout::new(Vec::new(), Vec::new(), 0, vec![0], Vec::new()).unwrap();
+        let expression = layout
+            .parse_expression("E(0) + E(star, 0)", &BTreeMap::new())
+            .unwrap();
+        assert!(
+            expression
+                .scalar()
+                .to_string()
+                .contains("threshold_multiplier_energy")
+        );
+        assert!(layout.inputs().iter().any(|input| {
+            matches!(
+                input,
+                ThresholdMultiplierInput::EdgeEnergy {
+                    point: ThresholdMultiplierPoint::Effective,
+                    edge: 0
+                }
+            )
+        }));
+        assert!(layout.inputs().iter().any(|input| {
+            matches!(
+                input,
+                ThresholdMultiplierInput::EdgeEnergy {
+                    point: ThresholdMultiplierPoint::Star,
+                    edge: 0
+                }
+            )
+        }));
     }
 }

@@ -222,6 +222,12 @@ fn export_threshold_multiplier_input(
             edge,
             component,
         },
+        ThresholdMultiplierInput::EdgeEnergy { point, edge } => {
+            StandaloneThresholdMultiplierInput::EdgeEnergy {
+                point: export_threshold_multiplier_point(point),
+                edge,
+            }
+        }
         ThresholdMultiplierInput::Esurface { point, esurface } => {
             StandaloneThresholdMultiplierInput::Esurface {
                 point: export_threshold_multiplier_point(point),
@@ -275,7 +281,12 @@ pub(crate) fn export_threshold_multiplier_collection<T: ExportAtomTo>(
                 Ok(StandaloneGenericEvaluatorArchive {
                     exprs: vec![T::export_atom_to(evaluator.expression())?],
                     parameter_override: None,
-                    additional_fn_map_entries: Vec::new(),
+                    additional_fn_map_entries: evaluator
+                        .generic_evaluator()
+                        .fn_map_entries
+                        .iter()
+                        .map(|entry| entry.archive())
+                        .collect::<Result<Vec<_>>>()?,
                     dual_shape: None,
                 })
             })

@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
@@ -23,6 +23,9 @@ pub const THRESHOLD_COUNTERTERM_SCHEMA_VERSION: u32 = 1;
 #[serde(deny_unknown_fields)]
 pub struct ThresholdCountertermSpec {
     pub schema_version: u32,
+    /// Definitions shared by all multiplier expressions in this graph.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub function_map: BTreeMap<String, String>,
     #[serde(default)]
     pub cuts: Vec<ThresholdCountertermCut>,
 }
@@ -31,6 +34,7 @@ impl Default for ThresholdCountertermSpec {
     fn default() -> Self {
         Self {
             schema_version: THRESHOLD_COUNTERTERM_SCHEMA_VERSION,
+            function_map: BTreeMap::new(),
             cuts: Vec::new(),
         }
     }
@@ -74,6 +78,9 @@ pub struct ThresholdCountertermVariant {
 #[serde(deny_unknown_fields)]
 pub struct ThresholdCountertermMultiplier {
     pub expression: String,
+    /// Definitions local to this multiplier, overriding shared definitions.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub function_map: BTreeMap<String, String>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub symmetrize: bool,
     #[serde(
@@ -640,6 +647,7 @@ parent_lmb = [1, 2, 0]
     #[test]
     fn recognizes_semantically_legacy_documents() {
         let empty = ThresholdCountertermSpec::parse_toml("schema_version = 1\n").unwrap();
+        assert!(empty.function_map.is_empty());
         assert!(empty.is_legacy_equivalent());
         assert!(empty.to_toml().unwrap().contains("cuts = []"));
 

@@ -27,7 +27,7 @@ use symbolica::{
     domains::rational::Fraction, evaluate::JITCompiledEvaluator, prelude::*, state::StateMap,
 };
 
-const STANDALONE_EVALUATORS_VERSION: u32 = 8;
+const STANDALONE_EVALUATORS_VERSION: u32 = 9;
 const ARB_PRECISION_BITS: u32 = 1000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
@@ -155,6 +155,10 @@ enum StandaloneThresholdMultiplierInput {
         edge: usize,
         component: usize,
     },
+    EdgeEnergy {
+        point: StandaloneThresholdMultiplierPoint,
+        edge: usize,
+    },
     Esurface {
         point: StandaloneThresholdMultiplierPoint,
         esurface: usize,
@@ -220,6 +224,8 @@ struct ThresholdCountertermAssociationMetadata {
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, Serialize, Deserialize)]
 struct ThresholdCountertermMultiplierMetadata {
     expression: String,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    function_map: BTreeMap<String, String>,
     symmetrize: bool,
     opaque_derivatives: bool,
 }
@@ -815,6 +821,7 @@ fn expected_threshold_multiplier_inputs<A>(
                     component,
                 });
             }
+            inputs.push(StandaloneThresholdMultiplierInput::EdgeEnergy { point, edge });
         }
     }
     for point in [
@@ -921,12 +928,9 @@ impl<A: PartialEq> StandaloneThresholdMultiplierCollectionArchive<A> {
             ));
         }
         for (index, evaluator) in self.evaluators.iter().enumerate() {
-            if evaluator.exprs.len() != 1
-                || evaluator.dual_shape.is_some()
-                || !evaluator.additional_fn_map_entries.is_empty()
-            {
+            if evaluator.exprs.len() != 1 || evaluator.dual_shape.is_some() {
                 return Err(eyre!(
-                    "threshold-multiplier evaluator {index} must contain one scalar, non-dual expression without function-map entries"
+                    "threshold-multiplier evaluator {index} must contain one scalar, non-dual expression"
                 ));
             }
         }
@@ -1742,6 +1746,13 @@ fn load_custom_input(path: impl AsRef<Path>) -> Result<Vec<StandaloneComplexInpu
 fn load_bin(path: impl AsRef<Path>) -> Result<StandaloneEvaluatorArchive> {
     let binary =
         fs::read(&path).with_context(|| format!("Cannot read {}", path.as_ref().display()))?;
+    let (version, _): (u32, _) = bincode::decode_from_slice(&binary, bincode::config::standard())?;
+    if version != STANDALONE_EVALUATORS_VERSION {
+        return Err(eyre!(
+            "Unsupported version {version} (expected {}); regenerate the standalone archive",
+            STANDALONE_EVALUATORS_VERSION
+        ));
+    }
     let (archive, _): (StandaloneEvaluatorArchive, _) =
         bincode::decode_from_slice(&binary, bincode::config::standard())?;
     archive.validate()?;
