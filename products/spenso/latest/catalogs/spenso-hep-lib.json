@@ -10,7 +10,9 @@
     "title": "Spenso spenso-hep-lib",
     "version": "0.1.7",
     "language": "rust",
-    "features": []
+    "features": [
+      "native"
+    ]
   },
   "root": {
     "id": "spenso-hep-lib",

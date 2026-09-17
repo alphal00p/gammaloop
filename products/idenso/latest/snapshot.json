@@ -4,8 +4,8 @@
   "title": "Idenso",
   "channel": "latest",
   "snapshot_tag": null,
-  "git_commit": "48697b19e1f312027eff144fc8d87f860dcf5c02",
-  "git_timestamp": 1789542548,
+  "git_commit": "226b7bea45398023f767fb4e53a1b5c6c3a43a2d",
+  "git_timestamp": 1789628328,
   "route": "/products/idenso/latest/",
   "components": [
     {
@@ -97,7 +97,9 @@
       "kind": "domain-library",
       "module": null,
       "version": "0.1.7",
-      "features": []
+      "features": [
+        "native"
+      ]
     },
     {
       "product": "spenso",
