@@ -853,11 +853,17 @@ fn render_threshold_counterterm_directives(
                 .as_ref()
                 .map(|multiplier| {
                     if show_functions {
+                        let definitions = multiplier
+                            .function_map
+                            .iter()
+                            .map(|(name, expression)| format!("\n{name} = {expression}"))
+                            .collect::<String>();
                         format!(
-                            "{} [s={},o={}]",
+                            "{} [s={},o={}]{}",
                             multiplier.expression,
                             u8::from(multiplier.symmetrize),
                             u8::from(multiplier.opaque_derivatives),
+                            definitions,
                         )
                         .magenta()
                         .to_string()
@@ -2091,6 +2097,7 @@ mod test {
                 subspace_loop_count: 1,
                 multiplier: Some(ThresholdCountertermMultiplierMetadata {
                     expression: "eta(effective, eset(3, 4))^2".to_string(),
+                    function_map: Default::default(),
                     symmetrize: false,
                     opaque_derivatives: true,
                 }),
@@ -2147,6 +2154,7 @@ mod test {
                             disabled: false,
                             multiplier: Some(ThresholdCountertermMultiplierMetadata {
                                 expression: "eta(effective, eset(3, 4))^2".to_string(),
+                                function_map: Default::default(),
                                 symmetrize: false,
                                 opaque_derivatives: true,
                             }),

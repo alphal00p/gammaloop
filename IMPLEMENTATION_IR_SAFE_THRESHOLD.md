@@ -151,6 +151,7 @@ V1 exposes one fixed, cut-owned input layout shared by every multiplier under th
 - All active model parameters in existing model order.
 - All external four-momenta `P`.
 - `Q3` for every graph edge in `effective` and `star` views.
+- On-shell energies `E` for every graph edge in the same two views.
 - Every uniquely resolvable E-surface equation `eta` relevant to the owning physical/raised cut group, including resolved threshold associations, in both views.
 
 Accepted syntax is:
@@ -159,6 +160,10 @@ Accepted syntax is:
 Q3(edge, lorentz_index)                  # effective alias
 Q3(effective, edge, lorentz_index)
 Q3(star, edge, lorentz_index)
+
+E(edge)                                # effective alias
+E(effective, edge)
+E(star, edge)
 
 eta(eset(edge_0, edge_1, ...))                 # effective alias
 eta(effective, eset(edge_0, edge_1, ...))
@@ -176,6 +181,68 @@ The `eset` head is mandatory and is registered with Symbolica's symmetric
 attribute before parsing, so callers may write its edge arguments in any
 order. Flat `eta` edge arguments are rejected rather than accepted through a
 backward-compatibility lane.
+
+### Reusable scalar functions
+
+Schema version 1 additionally accepts a default-empty `function_map` both at
+the root of `threshold_counterterms` and inside each
+`cuts.thresholds.counterterms.multiplier` table. Root definitions are shared;
+local definitions override an identical shared key. Different definitions of
+the same function head and arity must use the same formal-argument signature
+to override it, rather than introducing ambiguous competing rules. Existing
+documents without maps keep their meaning.
+
+```toml
+schema_version = 1
+
+[function_map]
+"scale()" = "P(0,cind(0))+P(1,cind(0))"
+"damping(x)" = "1/(1+(x/scale())^2)"
+
+[[cuts]]
+edges = []
+[[cuts.thresholds]]
+edges = [3, 4]
+[[cuts.thresholds.counterterms]]
+parent_lmb = [3]
+[cuts.thresholds.counterterms.multiplier]
+expression = "damping(eta(star,eset(3,4)))"
+[cuts.thresholds.counterterms.multiplier.function_map]
+"scale()" = "UFO::MT"
+```
+
+Function keys and bodies are parsed with Symbolica. Reachable bodies undergo
+scalar and kinematic validation and are retained in the evaluator's function map.
+Bare names and zero-argument functions provide named scalar definitions;
+ordinary scalar arguments are bound hygienically, including nested calls.
+The geometry and mathematical primitive heads cannot be redefined. Reachable recursive
+dependencies and ambiguous definitions are rejected. Function binding does not change evaluation
+frames, opaque-derivative handling, or the existing unsupported status of
+`symmetrize=true`.
+
+The default scalar helper
+`dE(ma,mb,Ea,Eb,ax,ay,az,bx,by,bz)` expands to
+
+```text
+((ma-mb)*(ma+mb)+(ax-bx)*(ax+bx)+(ay-by)*(ay+by)+(az-bz)*(az+bz))/(Ea+Eb)
+```
+
+This rationalized energy difference preserves small differences without
+subtracting two rounded square roots. It is an ordinary overridable function
+definition, with scalar arguments; `E(star,edge)` supplies the graph's on-shell
+energy and `Q3(star,edge,cind(i))` supplies each spatial component. It introduces
+no new sampling, projection, or regulator.
+
+The current GL638 DOT uses shared definitions for `wH`, `g0`, `g4`, `wP`, `wZ`
+and the WH/WF ratios. In its CM frame, `wH`, `g0`, and `g4` are exactly the
+foreign-surface residual minus the host Cut-1 residual. They equal the familiar
+foreign etas only on that host shell; replacing them by those etas off shell
+would change the prescription. `wP=2E3-Q` likewise retains the original CM
+formula. Every variant still evaluates its own star. WH retains complementary
+lazy common-zero values 0 and 1, while the F shared variant retains the literal
+`1-WF()` expression. The original expanded expressions are retained in
+`tests/resources/graphs/ir_safe_thresholds/GL638_legacy_multipliers.toml` for
+numerical regression, rather than as a second production implementation.
 
 Parse expressions during generation, pass tensor expressions through the existing Spenso network/contraction machinery, and require one scalar Symbolica result. Reject free tensor indices, invalid frame names, unknown symbols, invalid edge/external IDs, and non-scalar results with graph/cut/threshold/variant context. At runtime require a finite, real result in the active f64, f128, or arbitrary-precision lane.
 
@@ -226,7 +293,14 @@ Treat multiplier evaluators exactly like existing small helper evaluators:
 - Add them to the existing small-helper evaluator traversal and fast archive/load path, using the same generic-evaluator archive representation rather than `EvaluatorStack`.
 - Preserve eager f64, f128, and arbitrary-precision state in normal integrand saves.
 - Extend cross-section and amplitude standalone archives with multiplier-helper payloads and binding-layout metadata, bump archive versions, and validate dimensions/IDs while loading.
-- Identity multipliers create no evaluator. Deduplicate identical canonical scalar expressions within the same cut layout while retaining distinct variant evaluator references.
+
+- Identity multipliers create no evaluator. Deduplication includes both the canonical scalar expression and its reachable function definitions, while retaining distinct variant evaluator references.
+
+Composable multiplier function maps and positive on-shell energy inputs require
+saved-state manifest version 8, cross-section standalone version 12, and
+amplitude standalone version 9. Older generated states must be regenerated;
+binary standalone loaders reject an old version prefix before decoding the
+changed payload. Existing states and running processes are not rewritten.
 
 Use a reusable cut-local workspace:
 

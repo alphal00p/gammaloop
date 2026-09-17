@@ -32,7 +32,7 @@ type RationalExpressionTree = (
     ExpressionEvaluator<Complex<Fraction<IntegerRing>>>,
 );
 
-pub const STANDALONE_EVALUATORS_VERSION: u32 = 11;
+pub const STANDALONE_EVALUATORS_VERSION: u32 = 12;
 
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode, Serialize, Deserialize,
@@ -90,6 +90,8 @@ pub struct StandaloneThresholdCountertermAssociationMetadata {
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, Serialize, Deserialize)]
 pub struct StandaloneThresholdCountertermMultiplierMetadata {
     pub(crate) expression: String,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) function_map: BTreeMap<String, String>,
     pub(crate) symmetrize: bool,
     pub(crate) opaque_derivatives: bool,
 }
@@ -204,6 +206,10 @@ pub enum StandaloneThresholdMultiplierInput {
         point: StandaloneThresholdMultiplierPoint,
         edge: usize,
         component: usize,
+    },
+    EdgeEnergy {
+        point: StandaloneThresholdMultiplierPoint,
+        edge: usize,
     },
     Esurface {
         point: StandaloneThresholdMultiplierPoint,
@@ -568,6 +574,7 @@ fn expected_threshold_multiplier_inputs<A>(
                     component,
                 });
             }
+            inputs.push(StandaloneThresholdMultiplierInput::EdgeEnergy { point, edge });
         }
     }
     for point in [
@@ -698,12 +705,9 @@ pub(crate) fn validate_threshold_multiplier_archive<A: PartialEq>(
         ));
     }
     for (index, evaluator) in collection.evaluators.iter().enumerate() {
-        if evaluator.exprs.len() != 1
-            || evaluator.dual_shape.is_some()
-            || !evaluator.additional_fn_map_entries.is_empty()
-        {
+        if evaluator.exprs.len() != 1 || evaluator.dual_shape.is_some() {
             return Err(eyre!(
-                "threshold-multiplier evaluator {index} must contain one scalar, non-dual expression without function-map entries"
+                "threshold-multiplier evaluator {index} must contain one scalar, non-dual expression"
             ));
         }
     }
@@ -1472,6 +1476,13 @@ impl<S, A: ImportWithMap + Clone + PartialEq> StandaloneCrossSectionArchive<S, A
 fn load_bin(path: impl AsRef<Path>) -> Result<LoadedStandaloneCrossSection> {
     let binary =
         fs::read(&path).with_context(|| format!("Cannot read {}", path.as_ref().display()))?;
+    let (version, _): (u32, _) = bincode::decode_from_slice(&binary, bincode::config::standard())?;
+    if version != STANDALONE_EVALUATORS_VERSION {
+        return Err(eyre!(
+            "Unsupported version {version} (expected {}); regenerate the standalone archive",
+            STANDALONE_EVALUATORS_VERSION
+        ));
+    }
     let (archive, _): (StandaloneCrossSectionArchive, _) =
         bincode::decode_from_slice(&binary, bincode::config::standard())?;
     archive.load()
@@ -1497,6 +1508,32 @@ fn default_input_path() -> PathBuf {
 #[allow(clippy::items_after_test_module)]
 mod threshold_multiplier_tests {
     use super::*;
+
+    #[test]
+    fn standalone_binary_rejects_old_version_before_decoding_payload() {
+        let path = std::env::temp_dir().join(format!(
+            "gammaloop-cross-section-old-archive-{}.bin",
+            std::process::id()
+        ));
+        // The old prefix is deliberately followed by no payload, so full decoding
+        // would otherwise hide the version error behind an unexpected-end error.
+        fs::write(
+            &path,
+            bincode::encode_to_vec(
+                STANDALONE_EVALUATORS_VERSION - 1,
+                bincode::config::standard(),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let error = load_bin(&path).err().unwrap();
+        fs::remove_file(path).unwrap();
+        assert!(
+            error
+                .to_string()
+                .contains("Unsupported version 11 (expected 12)")
+        );
+    }
 
     fn valid_archive() -> StandaloneThresholdMultiplierCollectionArchive<String> {
         StandaloneThresholdMultiplierCollectionArchive {
@@ -1672,7 +1709,7 @@ mod threshold_multiplier_tests {
 
     #[test]
     fn threshold_counterterm_metadata_archive_validates_ids_and_component_coverage() {
-        assert_eq!(STANDALONE_EVALUATORS_VERSION, 11);
+        assert_eq!(STANDALONE_EVALUATORS_VERSION, 12);
         let counterterms = vec![identity_counterterm()];
         let registry = identity_registry();
         validate_threshold_counterterm_metadata_archive(&registry, "graph", &counterterms).unwrap();
@@ -1690,7 +1727,7 @@ mod threshold_multiplier_tests {
     }
 
     #[test]
-    fn threshold_counterterm_metadata_roundtrips_in_v11_archives() {
+    fn threshold_counterterm_metadata_roundtrips_in_v12_archives() {
         let registry = identity_registry();
         let archive = archive_with_metadata(Some(registry.clone()));
 

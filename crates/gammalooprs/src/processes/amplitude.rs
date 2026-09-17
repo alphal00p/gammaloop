@@ -1494,7 +1494,17 @@ impl AmplitudeGraph {
                 .counterterms
                 .iter()
                 .cloned()
-                .map(|variant| (variant, ThresholdCountertermOrigin::Explicit))
+                .map(|mut variant| {
+                    if let Some(multiplier) = &mut variant.multiplier {
+                        for (name, definition) in &spec.function_map {
+                            multiplier
+                                .function_map
+                                .entry(name.clone())
+                                .or_insert_with(|| definition.clone());
+                        }
+                    }
+                    (variant, ThresholdCountertermOrigin::Explicit)
+                })
                 .collect(),
             None => vec![(
                 ThresholdCountertermVariant {
@@ -2826,6 +2836,7 @@ pub mod test {
                 member.is_group_master = group_id == 0;
                 member.threshold_counterterms = Autogen::explicit(ThresholdCountertermSpec {
                     schema_version: 1,
+                    function_map: Default::default(),
                     cuts: vec![ThresholdCountertermCut {
                         edges: Vec::new(),
                         thresholds: vec![ThresholdCountertermThreshold {
@@ -2859,6 +2870,7 @@ pub mod test {
         let threshold_edges = vec![super::EdgeIndex::from(0), super::EdgeIndex::from(1)];
         let mut spec = ThresholdCountertermSpec {
             schema_version: 1,
+            function_map: Default::default(),
             cuts: vec![ThresholdCountertermCut {
                 edges: Vec::new(),
                 thresholds: vec![ThresholdCountertermThreshold {
@@ -2892,10 +2904,26 @@ pub mod test {
                 multiplier: None,
             },
         ];
+        spec.function_map = [
+            ("shared".to_string(), "7".to_string()),
+            ("scale".to_string(), "2".to_string()),
+        ]
+        .into();
+        spec.cuts[0].thresholds[0].counterterms[1].multiplier =
+            Some(ThresholdCountertermMultiplier {
+                expression: "shared*scale".to_string(),
+                function_map: [("scale".to_string(), "3".to_string())].into(),
+                symmetrize: false,
+                opaque_derivatives: true,
+            });
         let explicit =
             super::AmplitudeGraph::configured_amplitude_threshold_variants(&spec, &threshold_edges);
         assert_eq!(explicit.len(), 2);
         assert!(explicit[0].0.disable);
+        let definitions = &explicit[1].0.multiplier.as_ref().unwrap().function_map;
+        assert_eq!(definitions["shared"], "7");
+        assert_eq!(definitions["scale"], "3");
+        assert_eq!(spec.function_map["scale"], "2");
         assert!(
             explicit
                 .iter()
@@ -3047,6 +3075,7 @@ pub mod test {
         .unwrap();
         graph.graph.threshold_counterterms = Autogen::explicit(ThresholdCountertermSpec {
             schema_version: 1,
+            function_map: Default::default(),
             cuts: vec![ThresholdCountertermCut {
                 edges: Vec::new(),
                 thresholds: vec![ThresholdCountertermThreshold {
@@ -3160,6 +3189,7 @@ pub mod test {
         let mut graph = AmplitudeGraph::new(selected_graph);
         graph.graph.threshold_counterterms = Autogen::explicit(ThresholdCountertermSpec {
             schema_version: 1,
+            function_map: Default::default(),
             cuts: vec![ThresholdCountertermCut {
                 edges: Vec::new(),
                 thresholds: vec![ThresholdCountertermThreshold {
@@ -3330,6 +3360,7 @@ pub mod test {
                     .collect::<Vec<_>>();
                 graph.graph.threshold_counterterms = Autogen::explicit(ThresholdCountertermSpec {
                     schema_version: 1,
+                    function_map: Default::default(),
                     cuts: vec![ThresholdCountertermCut {
                         edges: Vec::new(),
                         thresholds: vec![ThresholdCountertermThreshold {
@@ -3590,6 +3621,7 @@ pub mod test {
                 assert_eq!(parent_edges.len(), 2);
                 graph.threshold_counterterms = Autogen::explicit(ThresholdCountertermSpec {
                     schema_version: 1,
+                    function_map: Default::default(),
                     cuts: vec![ThresholdCountertermCut {
                         edges: Vec::new(),
                         thresholds: vec![ThresholdCountertermThreshold {
@@ -4087,6 +4119,7 @@ pub mod test {
                 ] {
                     graph.threshold_counterterms = Autogen::explicit(ThresholdCountertermSpec {
                         schema_version: 1,
+                        function_map: Default::default(),
                         cuts: vec![ThresholdCountertermCut {
                             edges: Vec::new(),
                             thresholds: vec![ThresholdCountertermThreshold {
@@ -4099,6 +4132,7 @@ pub mod test {
                                     disable: false,
                                     multiplier: Some(ThresholdCountertermMultiplier {
                                         expression: expression.to_string(),
+                                        function_map: Default::default(),
                                         symmetrize: false,
                                         opaque_derivatives: true,
                                     }),
@@ -4437,6 +4471,7 @@ pub mod test {
         // single raised residue two inconsistent prescriptions.
         graph.graph.threshold_counterterms = Autogen::explicit(ThresholdCountertermSpec {
             schema_version: 1,
+            function_map: Default::default(),
             cuts: vec![ThresholdCountertermCut {
                 edges: Vec::new(),
                 thresholds: [1, 2]
@@ -4573,12 +4608,14 @@ pub mod test {
                     disable: false,
                     multiplier: Some(ThresholdCountertermMultiplier {
                         expression: "2".to_string(),
+                        function_map: Default::default(),
                         symmetrize: false,
                         opaque_derivatives: true,
                     }),
                 };
                 graph.threshold_counterterms = Autogen::explicit(ThresholdCountertermSpec {
                     schema_version: 1,
+                    function_map: Default::default(),
                     cuts: vec![ThresholdCountertermCut {
                         edges: Vec::new(),
                         thresholds: expected_thresholds

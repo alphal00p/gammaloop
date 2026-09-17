@@ -3617,10 +3617,13 @@ mod tests {
         )
         .unwrap();
         let expression = layout
-            .parse_expression(&format!(
-                "Q3(effective, {}, cind(1)) + 10 * Q3(star, {}, cind(1))",
-                edge.0, edge.0,
-            ))
+            .parse_expression(
+                &format!(
+                    "Q3(effective, {}, cind(1)) + 10 * Q3(star, {}, cind(1))",
+                    edge.0, edge.0,
+                ),
+                &Default::default(),
+            )
             .unwrap();
         let mut collection = Some(
             ThresholdMultiplierEvaluatorCollection::build(

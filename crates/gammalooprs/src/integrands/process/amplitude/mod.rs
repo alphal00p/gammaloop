@@ -479,7 +479,7 @@ impl AmplitudeGraphTerm {
                                     );
                                 }
                                 layout
-                                    .parse_expression(&multiplier.expression)
+                                    .parse_expression(&multiplier.expression, &multiplier.function_map)
                                     .with_context(|| {
                                         format!(
                                             "Invalid threshold multiplier for amplitude graph '{}' variant '{}' ({})",

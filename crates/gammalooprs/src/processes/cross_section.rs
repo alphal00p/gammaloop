@@ -3079,7 +3079,17 @@ impl CrossSectionGraph {
                 .counterterms
                 .iter()
                 .cloned()
-                .map(|variant| (variant, ThresholdCountertermOrigin::Explicit))
+                .map(|mut variant| {
+                    if let Some(multiplier) = &mut variant.multiplier {
+                        for (name, definition) in &spec.function_map {
+                            multiplier
+                                .function_map
+                                .entry(name.clone())
+                                .or_insert_with(|| definition.clone());
+                        }
+                    }
+                    (variant, ThresholdCountertermOrigin::Explicit)
+                })
                 .collect(),
             None => vec![(
                 ThresholdCountertermVariant {
@@ -5073,6 +5083,7 @@ mod tests {
                 cross_section.graph.threshold_counterterms =
                     Autogen::explicit(ThresholdCountertermSpec {
                         schema_version: 1,
+                        function_map: Default::default(),
                         cuts: vec![ThresholdCountertermCut {
                             edges: target_cut_edges,
                             thresholds: vec![ThresholdCountertermThreshold {
@@ -5090,6 +5101,7 @@ mod tests {
                                     disable: false,
                                     multiplier: Some(ThresholdCountertermMultiplier {
                                         expression: "1".to_string(),
+                                        function_map: Default::default(),
                                         symmetrize: true,
                                         opaque_derivatives: true,
                                     }),
@@ -5293,6 +5305,7 @@ mod tests {
         let threshold_edges = vec![EdgeIndex::from(7), EdgeIndex::from(8)];
         let mut spec = ThresholdCountertermSpec {
             schema_version: 1,
+            function_map: Default::default(),
             cuts: vec![ThresholdCountertermCut {
                 edges: cut_edges.clone(),
                 thresholds: vec![ThresholdCountertermThreshold {
@@ -5394,6 +5407,7 @@ mod tests {
                 assert_eq!(graph.cuts.len(), 2);
                 graph.graph.threshold_counterterms = Autogen::explicit(ThresholdCountertermSpec {
                     schema_version: 1,
+                    function_map: Default::default(),
                     cuts: declarations
                         .into_iter()
                         .map(

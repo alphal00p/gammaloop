@@ -114,6 +114,13 @@ impl IntegrandThresholdCountertermDirectiveInfo {
                             multiplier: variant.multiplier.as_ref().map(|multiplier| {
                                 ThresholdCountertermMultiplierMetadata {
                                     expression: multiplier.expression.clone(),
+                                    function_map: graph
+                                        .threshold_counterterms
+                                        .function_map
+                                        .iter()
+                                        .chain(&multiplier.function_map)
+                                        .map(|(key, value)| (key.clone(), value.clone()))
+                                        .collect(),
                                     symmetrize: multiplier.symmetrize,
                                     opaque_derivatives: multiplier.opaque_derivatives,
                                 }
