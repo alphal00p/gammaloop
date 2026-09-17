@@ -27,9 +27,7 @@ pyo3 = { workspace = true }
 pyo3-stub-gen = { workspace = true, default-features = false, features = ["infer_signature"], optional = true }
 pyo3-stub-gen-derive = { workspace = true }
 tempfile = "3.8"
-
-[dev-dependencies]
-spynso3 = { path = "../spynso3" }
+spynso3 = { path = "../spynso3", default-features = false }
 
 [dependencies.symbolica]
 workspace = true
@@ -38,7 +36,7 @@ features = ["python_export"]
 
 [features]
 default = ["ufo", "native"]
-native = ["feynkit-cff/native", "feynkit-generator/native", "feynkit-graph/native", "feynkit-tensor/native"]
-wasm = ["feynkit-cff/wasm", "feynkit-generator/wasm", "feynkit-graph/wasm", "feynkit-tensor/wasm"]
-python_stubgen = ["dep:pyo3-stub-gen", "symbolica/python_stubgen"]
+native = ["spynso3/native", "feynkit-cff/native", "feynkit-generator/native", "feynkit-graph/native", "feynkit-tensor/native"]
+wasm = ["spynso3/wasm", "feynkit-cff/wasm", "feynkit-generator/wasm", "feynkit-graph/wasm", "feynkit-tensor/wasm"]
+python_stubgen = ["spynso3/python_stubgen", "dep:pyo3-stub-gen", "symbolica/python_stubgen"]
 ufo = ["dep:feynkit-ufo"]

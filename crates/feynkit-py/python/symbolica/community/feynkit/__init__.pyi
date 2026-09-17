@@ -7,6 +7,7 @@ import enum
 import os
 import pathlib
 import typing
+from symbolica.community.spenso import TensorExpression
 from symbolica.core import Expression
 
 @typing.final
@@ -688,9 +689,9 @@ class DiagramEdge:
         Raises :class:`DiagramError` for an incomplete imported diagram that has
         no instantiated propagator numerator.
         """
-    def numerator_expression(self) -> Expression:
+    def numerator_expression(self) -> TensorExpression:
         r"""
-        Parse the numerator annotation as a Symbolica expression.
+        Return the numerator annotation as a Spenso TensorExpression.
 
         Examples
         --------
@@ -844,9 +845,9 @@ class DiagramVertex:
         --------
         >>> external_vertices = [vertex for vertex in diagram.vertices if vertex.is_external]
         """
-    def numerator_expression(self) -> Expression:
+    def numerator_expression(self) -> TensorExpression:
         r"""
-        Parse the numerator annotation as a Symbolica expression.
+        Return the numerator annotation as a Spenso TensorExpression.
 
         Examples
         --------
@@ -1140,9 +1141,9 @@ class FeynmanDiagram:
         dot : str
             DOT text containing the diagram topology and FeynKit annotations.
         """
-    def numerator_expression(self) -> Expression:
+    def numerator_expression(self) -> TensorExpression:
         r"""
-        Parse the diagram numerator as a Symbolica expression.
+        Return the diagram numerator as a Spenso TensorExpression.
 
         Examples
         --------

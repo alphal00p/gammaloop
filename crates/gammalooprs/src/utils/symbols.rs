@@ -534,124 +534,23 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
     localizing_integrand: symbol!("int_loc"),
     uvaind: symbol!(
         "uvind",
-        print = |a, opt, _state| {
-            match opt.custom_print_mode.get("spenso") {
-                Some(PrintUserData::Integer(_i)) => {
-                    let AtomView::Fun(f) = a else {
-                        return None;
-                    };
-
-                    let mut out = "ᵘ".to_string();
-                    let mut first = true;
-                    for arg in f.iter() {
-                        let Ok(i) = isize::try_from(arg) else {
-                            return None;
-                        };
-
-                        if !first {
-                            out.push('.');
-                        } else {
-                            first = false;
-                        }
-                        out.push_str(&to_superscript(i));
-                    }
-                    Some(out)
-                }
-                _ => None,
-            }
-        },
-        tags = [SPENSO_TAG.index.clone()]
+        print = spenso::network::tags::tensor_print,
+        tags = [SPENSO_TAG.index.clone(), "spenso::index-label:u".to_owned()]
     ),
     edgeaind: symbol!(
         "edge",
-        print = |a, opt, _state| {
-            match opt.custom_print_mode.get("spenso") {
-                Some(PrintUserData::Integer(_i)) => {
-                    let AtomView::Fun(f) = a else {
-                        return None;
-                    };
-
-                    let mut out = "ᵉ".to_string();
-                    let mut first = true;
-                    for arg in f.iter() {
-                        let Ok(i) = isize::try_from(arg) else {
-                            return None;
-                        };
-
-                        if !first {
-                            out.push('.');
-                        }
-                        first = false;
-
-                        out.push_str(&to_superscript(i));
-                    }
-                    Some(out)
-                }
-                _ => None,
-            }
-        },
-        tags = [SPENSO_TAG.index.clone()]
+        print = spenso::network::tags::tensor_print,
+        tags = [SPENSO_TAG.index.clone(), "spenso::index-label:e".to_owned()]
     ),
     vertexaind: symbol!(
         "vertex",
-        print = |a, opt, _state| {
-            match opt.custom_print_mode.get("spenso") {
-                Some(PrintUserData::Integer(_i)) => {
-                    let AtomView::Fun(f) = a else {
-                        return None;
-                    };
-
-                    let mut out = "ᵛ".to_string();
-
-                    let mut first = true;
-                    for arg in f.iter() {
-                        let Ok(i) = isize::try_from(arg) else {
-                            return None;
-                        };
-
-                        if !first {
-                            out.push('.');
-                        }
-                        first = false;
-
-                        out.push_str(&to_superscript(i));
-                    }
-                    Some(out)
-                }
-                _ => None,
-            }
-        },
-        tags = [SPENSO_TAG.index.clone()]
+        print = spenso::network::tags::tensor_print,
+        tags = [SPENSO_TAG.index.clone(), "spenso::index-label:v".to_owned()]
     ),
     dummyaind: symbol!(
         "dummy",
-        print = |a, opt, _state| {
-            match opt.custom_print_mode.get("spenso") {
-                Some(PrintUserData::Integer(_i)) => {
-                    let AtomView::Fun(f) = a else {
-                        return None;
-                    };
-
-                    let mut out = "ᵈ".to_string();
-                    let mut first = true;
-                    for arg in f.iter() {
-                        let Ok(i) = isize::try_from(arg) else {
-                            return None;
-                        };
-
-                        if !first {
-                            out.push('.');
-                        }
-                        first = false;
-
-                        out.push_str(&to_superscript(i));
-                    }
-                    Some(out)
-                }
-                _ => None,
-            }
-        },
-        tags = [SPENSO_TAG.index.clone()]
+        print = spenso::network::tags::tensor_print,
+        tags = [SPENSO_TAG.index.clone(), "spenso::index-label:d".to_owned()]
     ),
     hedgeaind: symbol!(
         "hedge",

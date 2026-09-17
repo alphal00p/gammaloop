@@ -10,6 +10,7 @@ use pyo3::{
     prelude::*,
     types::{PyAny, PyModule},
 };
+use spynso3::expression::TensorExpression;
 use symbolica::{api::python::PythonExpression, atom::Atom, parser::ParseSettings, wrap_input};
 
 #[cfg(feature = "python_stubgen")]
@@ -105,7 +106,7 @@ impl PyDiagramVertex {
         Ok(self.inner.numerator.to_plain_string())
     }
 
-    /// Parse the numerator annotation as a Symbolica expression.
+    /// Return the numerator annotation as a Spenso TensorExpression.
     ///
     /// Examples
     /// --------
@@ -113,10 +114,8 @@ impl PyDiagramVertex {
     /// >>> vertex_factor = vertex.numerator_expression()
     /// >>> weighted_vertex_factor = diagram.overall_factor_expression() * vertex_factor
     ///
-    fn numerator_expression(&self) -> PyResult<PythonExpression> {
-        Ok(PythonExpression {
-            expr: self.inner.numerator.clone(),
-        })
+    fn numerator_expression(&self, py: Python<'_>) -> PyResult<Py<TensorExpression>> {
+        TensorExpression::from_atom_interface(py, self.inner.numerator.clone(), None)
     }
 
     /// Return the external-leg index.
@@ -312,7 +311,7 @@ impl PyDiagramEdge {
         Ok(self.inner.numerator.to_plain_string())
     }
 
-    /// Parse the numerator annotation as a Symbolica expression.
+    /// Return the numerator annotation as a Spenso TensorExpression.
     ///
     /// Examples
     /// --------
@@ -320,10 +319,8 @@ impl PyDiagramEdge {
     /// >>> propagator_factor = edge.numerator_expression()
     /// >>> weighted_propagator = diagram.overall_factor_expression() * propagator_factor
     ///
-    fn numerator_expression(&self) -> PyResult<PythonExpression> {
-        Ok(PythonExpression {
-            expr: self.inner.numerator.clone(),
-        })
+    fn numerator_expression(&self, py: Python<'_>) -> PyResult<Py<TensorExpression>> {
+        TensorExpression::from_atom_interface(py, self.inner.numerator.clone(), None)
     }
 
     /// Return a concise description of the edge and its endpoints.
@@ -1012,7 +1009,7 @@ impl PyFeynmanDiagram {
         self.inner.numerator().to_plain_string()
     }
 
-    /// Parse the diagram numerator as a Symbolica expression.
+    /// Return the diagram numerator as a Spenso TensorExpression.
     ///
     /// Examples
     /// --------
@@ -1020,10 +1017,8 @@ impl PyFeynmanDiagram {
     /// >>> integrand_numerator = diagram.overall_factor_expression() * numerator
     /// >>> integrand_numerator  # native Symbolica algebra and rich display
     ///
-    fn numerator_expression(&self) -> PythonExpression {
-        PythonExpression {
-            expr: self.inner.numerator().clone(),
-        }
+    fn numerator_expression(&self, py: Python<'_>) -> PyResult<Py<TensorExpression>> {
+        TensorExpression::from_atom_interface(py, self.inner.numerator().clone(), None)
     }
 
     /// Parse the diagram-wide factor as a Symbolica expression.

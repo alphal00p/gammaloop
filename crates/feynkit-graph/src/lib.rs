@@ -9,6 +9,39 @@
 
 mod display;
 
+// Symbolica does not permit adding tags after a bare symbol with the same name
+// has been registered. Claim momentum and index heads during global state
+// initialization so parsing and generation always agree on their tensor types.
+// Use Spenso's canonical tag names and shared printer so FeynKit interoperates
+// with the Spenso instance embedded by the host.
+symbolica::initialize!(|| {
+    let _ = momentum_symbol();
+    for (name, label) in [
+        ("SourceIndex", "s"),
+        ("SinkIndex", "t"),
+        ("EdgeDummy", "e"),
+        ("VertexDummy", "v"),
+    ] {
+        symbolica::atom::SymbolBuilder::new(symbolica::atom::NamespacedSymbol::parse(&format!(
+            "FeynKit::{name}"
+        )))
+        .with_tags([
+            "spenso::index".to_owned(),
+            format!("spenso::index-label:{label}"),
+        ])
+        .with_print_function(spenso::network::tags::tensor_print)
+        .build()
+        .expect("FeynKit index symbols must be registered before use");
+    }
+});
+
+pub fn momentum_symbol() -> symbolica::atom::Symbol {
+    symbolica::symbol!(
+        "FeynKit::Momentum",
+        tags = ["spenso::tensor", "spenso::rank1"]
+    )
+}
+
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
     fmt::{self, Write},

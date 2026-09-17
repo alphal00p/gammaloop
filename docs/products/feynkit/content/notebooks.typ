@@ -31,8 +31,9 @@ the figure automatically. In another notebook frontend, display `diagram.to_html
 frontend's HTML object when it does not consume the standard rich-display methods. Model,
 generation, and CFF objects also expose compact representations for inspection.
 
-`diagram.numerator_expression()` and `diagram.build_cff().to_expression()` are native Symbolica
-expressions. Displaying those algebraic results is separate from rendering a graph. Use
+`diagram.numerator_expression()` returns Spenso’s `TensorExpression`, retaining the tensor interface
+and index display hooks. `diagram.build_cff().to_expression()` returns a native Symbolica
+expression. Displaying those algebraic results is separate from rendering a graph. Use
 #product-link("spenso", page: "guides/python/", label: "Spenso's display tools") for tensor-aware
 algebra and #product-link("linnet", page: "guides/python-rendering/", label: "Linnet's rendering guide")
 for the underlying graph renderer.

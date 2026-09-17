@@ -1909,6 +1909,7 @@ dependencies = [
  "linnet",
  "serde",
  "serde_json",
+ "spenso",
  "symbolica",
  "thiserror 2.0.18",
 ]

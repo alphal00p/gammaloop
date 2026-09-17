@@ -129,7 +129,9 @@ anchor = "pub struct FeynmanDiagram {"
 # declarations to preserve Symbolica 3 user data; graph ownership is unchanged.
 # Reviewed 2026-09-16: cut and threshold metadata decode JSON directly after
 # Linnet has removed DOT quoting; physical metadata ownership is unchanged.
-digest = "a50750961fe116cefbe751a931fa1da80ddc1db8"
+# Reviewed 2026-09-17: the architecture now records graph-owned symbol
+# registration, shared Spenso index display hooks, and typed Python numerators.
+digest = "80a89f73e15d295ba6450baea9bffbe2292409a1"
 
 [[section.note.scope]]
 path = "crates/feynkit-tensor/src/lib.rs"
