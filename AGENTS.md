@@ -7,6 +7,9 @@ for this repository.
 If instructions conflict, prefer the more specific local guidance and preserve
 the user's current work unless explicitly asked to change it.
 
+Use descriptive branch names without an agent prefix, for example
+`ci-final-review-readiness`. Do not add `codex/` unless explicitly requested.
+
 During implementation, set top-level `enable = false` in `nix-ci.nix` unless
 explicitly instructed otherwise. Read-only investigations do not change it.
 Before final review, follow the enable, validate, upload, push, and `final-review`

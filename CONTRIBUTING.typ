@@ -398,6 +398,8 @@ belongs to the intended commit before reporting success or investigating failure
 
 === Commits And PRs
 
+- Use descriptive branch names without agent prefixes, for example
+  `ci-final-review-readiness`. Only use `codex/` when explicitly requested.
 - Commit messages are short and descriptive, typically lowercase without scopes
   (for example, `remove edge quotes`).
 - For user-requested changes, describe the requested intent and resulting
