@@ -65,8 +65,8 @@ fn four_loop_rustred_fmft_inventory_requires_sealed_artifact() {
         );
     }
     panic!(
-        "four-loop RustRed lane is not enabled: {} FMFT cases are inventoried, "
-            "but no authenticated artifact/catalog is registered in Vakint",
+        "four-loop RustRed lane is not enabled: {} FMFT cases are inventoried, \
+         but no authenticated artifact/catalog is registered in Vakint",
         FOUR_LOOP_ANALYTIC_FMFT_CASES.len()
     );
 }
