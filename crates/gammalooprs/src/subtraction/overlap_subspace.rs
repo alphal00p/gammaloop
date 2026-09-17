@@ -625,7 +625,8 @@ pub(crate) fn check_global_center(
     })
 }
 
-/// Runtime overlap failures are returned so the stability machinery can retry at higher precision.
+/// Runtime overlap failures are returned to the stability machinery. An unresolved
+/// canonical f64 solve stays invalid in every native precision and is recorded as NaN.
 /// Structural generation invariants are still asserted where malformed generated data is unrecoverable.
 /// Solver-derived centers are already found in the current probe frame. `probe_rotation` is
 /// needed only for a configured forced center, whose coordinates are defined in the identity
