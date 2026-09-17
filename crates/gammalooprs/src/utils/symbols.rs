@@ -26,6 +26,44 @@ use symbolica_utils::{PrintSettingsExt, TypstMode};
 
 use crate::{cff::orientations::GraphOrientation, graph::LoopMomentumBasis, numerator::aind::Aind};
 
+/// Persistent ownership carried by an EMR momentum through a local 4D UV
+/// Taylor expansion. Wire value two is deliberately reserved for the
+/// transient denominator marker used while the Taylor operator is acting.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[repr(i64)]
+pub(crate) enum UvMomentumProvenanceRole {
+    /// A pre-existing numerator factor fixed to its original owner during raw
+    /// Taylor recursion. Completed UV projection may certify a denominator
+    /// class and transfer this factor to that class's occurrence pool.
+    TaylorFixed = 0,
+    /// A hard numerator factor created by differentiating a denominator. Raw
+    /// provenance permits copies of the same owner; completed UV projection
+    /// may certify equivalent signed channels before class-wide dispatch.
+    DenominatorDerived = 1,
+    /// A physical source momentum reconstructed from its stored hard lift,
+    /// independently of occurrence-local contact samples.
+    PhysicalSourceFixed = 3,
+    /// A soft momentum created by a denominator Taylor derivative. Its exact
+    /// off-shell routing may be chosen when the outer numerator is complete;
+    /// it is not an occurrence of the differentiated hard denominator.
+    DenominatorDerivedSoft = 4,
+}
+
+/// An algebraic denominator channel in one completed UV projection view.
+/// This namespace is distinct from physical source edges and CFF occurrences.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct UvDenominatorClassId(pub usize);
+
+impl From<bool> for UvMomentumProvenanceRole {
+    fn from(denominator_derived: bool) -> Self {
+        if denominator_derived {
+            Self::DenominatorDerived
+        } else {
+            Self::TaylorFixed
+        }
+    }
+}
+
 pub struct WildCards {
     pub edgeid_: Symbol,
     pub mom_: Symbol,
@@ -113,6 +151,9 @@ pub struct WildCards {
 
 pub struct GammaloopSymbols {
     pub integrand: Symbol,
+    /// Exact generalized-3D-representation residue-map identifier selected by
+    /// the runtime evaluator. This is independent of physical edge signs.
+    pub residue_map_id: Symbol,
     /// wrapper function for the 4d bridge denominators
     pub tree_denom_wrapper: Symbol,
 
@@ -155,7 +196,7 @@ pub struct GammaloopSymbols {
     pub epsilon: Symbol,
     pub epsilonbar: Symbol,
     pub rescale: Symbol,
-    /// Bookkeeping scale for integrated vacuum masses and consumed loop measures.
+    /// Bookkeeping scale that restores consumed loop measures in integrated projections.
     pub integrated_loop_scale: Symbol,
     pub rescale_mass: Symbol,
     pub rescale_star: Symbol,
@@ -175,6 +216,7 @@ pub struct GammaloopSymbols {
     /// UV localization scale factor
     pub renormalization_localization_scale: Symbol,
     pub mu_r_sq: Symbol,
+    pub numerator_sampling_scale: Symbol,
     pub sign: Symbol,
     pub theta: Symbol,
     pub broadcasting_sqrt: Symbol,
@@ -187,6 +229,14 @@ pub struct GammaloopSymbols {
     pub delta_vec: Symbol,
     /// `Q(<edgeid>, index___)`
     pub emr_mom: Symbol,
+    /// UV-local provenance stored in the tag slot of `Q(...)` while applying a
+    /// Taylor operator. Its arguments are the immutable source edge, its
+    /// `UvMomentumProvenanceRole`, and the literal momentum payload. Hard roles
+    /// retain their complete projection in the frozen child LMB; newly derived
+    /// soft factors retain their crown carrier until outer-CFF routing.
+    pub uv_momentum_provenance: Symbol,
+    /// Projection-owned denominator class, never a physical edge identifier.
+    pub uv_class: Symbol,
     pub emr_vec: Symbol,
     pub dot: Symbol,
     pub external_mom: Symbol,
@@ -221,9 +271,19 @@ pub struct GammaloopSymbols {
 
 impl GammaloopSymbols {
     pub fn collect_orientation_if<'a>(&self, arg: impl Into<AtomOrView<'a>>) -> Atom {
-        arg.into()
-            .replace(self.sign_theta(W_.a_))
+        let arg = arg.into();
+        if !arg.as_view().contains_symbol(self.theta) && !arg.as_view().contains_symbol(Symbol::IF)
+        {
+            return arg.into_owned();
+        }
+        arg.replace(self.sign_theta(W_.a_))
             .with(Symbol::IF.call(Atom::var(W_.a_) + 1))
+            // A generalized residue-map delta is represented as
+            // IF(current_id-key, 0, 1). Move the selected branch body inside
+            // that conditional so an inactive key is discarded before any of
+            // its selector-local inverses are evaluated.
+            .replace(Symbol::IF.call_args([Atom::var(W_.a_), Atom::Zero, Atom::one()]) * W_.b___)
+            .with(Symbol::IF.call_args([Atom::var(W_.a_), Atom::Zero, Atom::var(W_.b___)]))
             .replace(Symbol::IF.call(W_.a_) * Symbol::IF.call(W_.b_))
             .repeat()
             .with(Symbol::IF.call(W_.a_ * W_.b_))
@@ -233,6 +293,14 @@ impl GammaloopSymbols {
             .with(Symbol::IF.call_args([Atom::var(W_.a_), Atom::one(), Atom::Zero]))
             .replace(Symbol::IF.call_args([Atom::var(W_.a_)]))
             .with(Symbol::IF.call_args([Atom::var(W_.a_), Atom::one(), Atom::Zero]))
+            // Tensor contractions are complete here. Combine scalar contributions
+            // selected by the same key while keeping their complete bodies lazy.
+            .replace(
+                Symbol::IF.call_args([Atom::var(W_.a_), Atom::Zero, Atom::var(W_.b_)])
+                    + Symbol::IF.call_args([Atom::var(W_.a_), Atom::Zero, Atom::var(W_.c_)]),
+            )
+            .repeat()
+            .with(Symbol::IF.call_args([Atom::var(W_.a_), Atom::Zero, Atom::var(W_.b_) + W_.c_]))
     }
 
     pub fn den<'a>(
@@ -514,6 +582,7 @@ spenso::symbolica_init_lazy_static! {
 pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
     renormalization_localization_scale: symbol!("rls"),
     integrand: symbol!("integrand"),
+    residue_map_id: symbol!("residue_map_id"),
     tree_denom_wrapper: symbol!("tree_denoms"),
     dim_epsilon: symbol!("ε"),
     killing_func: symbol!(
@@ -871,6 +940,7 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
             }
         }
     ),
+    numerator_sampling_scale: symbol!("M"),
     delta_vec: ETS.delta,
     expr: symbol!(
         "expr",
@@ -923,6 +993,8 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
         print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "q") },
         tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
     ),
+    uv_momentum_provenance: symbol!("gammalooprs::uv::momentum_provenance"),
+    uv_class: symbol!("gammalooprs::uv::class"),
     orientation_delta: symbol!("orientation_delta"),
     emr_vec: symbol!(
         "Q3",
@@ -1002,7 +1074,12 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
 }
 
 impl GammaloopSymbols {
-    pub fn integrand<O: GraphOrientation>(&self, i: usize, orientation: &O) -> Atom {
+    pub fn integrand<O: GraphOrientation>(
+        &self,
+        i: usize,
+        residue_map_id: three_dimensional_reps::expression::OrientationID,
+        orientation: &O,
+    ) -> Atom {
         let args = orientation
             .orientation()
             .iter()
@@ -1015,6 +1092,7 @@ impl GammaloopSymbols {
 
         FunctionBuilder::new(self.integrand)
             .add_arg(i)
+            .add_arg(residue_map_id.0)
             .add_args(&args)
             .finish()
     }
@@ -1126,6 +1204,98 @@ impl GammaloopSymbols {
         function!(self.emr_mom, usize::from(e) as i64, a.as_view())
     }
 
+    pub(crate) fn uv_momentum_provenance_tag<'a>(
+        &self,
+        edge: impl Into<AtomOrView<'a>>,
+        role: impl Into<UvMomentumProvenanceRole>,
+        momentum: impl Into<AtomOrView<'a>>,
+    ) -> Atom {
+        let role = role.into();
+        self.uv_momentum_provenance.call_args([
+            edge.into().as_view(),
+            Atom::num(role as i64).as_view(),
+            momentum.into().as_view(),
+        ])
+    }
+
+    pub(crate) fn uv_momentum_provenance_data(
+        &self,
+        argument: AtomView<'_>,
+    ) -> Option<(EdgeIndex, UvMomentumProvenanceRole, Atom)> {
+        let AtomView::Fun(provenance) = argument else {
+            return None;
+        };
+        if provenance.get_symbol() != self.uv_momentum_provenance || provenance.get_nargs() != 3 {
+            return None;
+        }
+        let edge = EdgeIndex(usize::try_from(provenance.get(0)).ok()?);
+        let role = match i64::try_from(provenance.get(1)).ok()? {
+            0 => UvMomentumProvenanceRole::TaylorFixed,
+            1 => UvMomentumProvenanceRole::DenominatorDerived,
+            3 => UvMomentumProvenanceRole::PhysicalSourceFixed,
+            4 => UvMomentumProvenanceRole::DenominatorDerivedSoft,
+            _ => return None,
+        };
+        Some((edge, role, provenance.get(2).to_owned()))
+    }
+
+    pub(crate) fn uv_class_ref(&self, class: UvDenominatorClassId) -> Atom {
+        self.uv_class.call(class.0)
+    }
+
+    pub(crate) fn uv_class_data(&self, argument: AtomView<'_>) -> Option<UvDenominatorClassId> {
+        let AtomView::Fun(class) = argument else {
+            return None;
+        };
+        (class.get_symbol() == self.uv_class && class.get_nargs() == 1)
+            .then(|| usize::try_from(class.get(0)).ok().map(UvDenominatorClassId))
+            .flatten()
+    }
+
+    /// Attach the same component indices to every vector in a linear momentum.
+    pub(crate) fn indexed_momentum(&self, momentum: &Atom, indices: &[Atom]) -> Atom {
+        momentum.replace_map(|view, _, output| {
+            let AtomView::Fun(vector) = view else {
+                return;
+            };
+            if vector.get_symbol() == self.emr_mom && vector.get_nargs() == 1 {
+                let mut component = FunctionBuilder::new(self.emr_mom).add_arg(vector.get(0));
+                for index in indices {
+                    component = component.add_arg(index);
+                }
+                **output = component.finish();
+            }
+        })
+    }
+
+    /// Remove only the UV Taylor provenance from EMR tags. This is used at
+    /// algebraic boundaries such as Vakint and by exact test oracles; the local
+    /// 4D-to-CFF route deliberately retains the tag until energy ownership has
+    /// been planned.
+    pub(crate) fn erase_uv_momentum_provenance(&self, atom: &Atom) -> Atom {
+        atom.replace_map(|view, _, output| {
+            let AtomView::Fun(momentum) = view else {
+                return;
+            };
+            if momentum.get_symbol() != self.emr_mom || momentum.get_nargs() < 1 {
+                return;
+            }
+            let AtomView::Fun(provenance) = momentum.get(0) else {
+                return;
+            };
+            if provenance.get_symbol() != self.uv_momentum_provenance || provenance.get_nargs() != 3
+            {
+                return;
+            }
+            let indices = momentum
+                .iter()
+                .skip(1)
+                .map(|index| index.to_owned())
+                .collect::<Vec<_>>();
+            **output = self.indexed_momentum(&provenance.get(2).to_owned(), &indices);
+        })
+    }
+
     pub(crate) fn localizing_integrand(&self, lmb: &LoopMomentumBasis) -> Atom {
         // Normalize each factor with int d^3k / (|k|^2 + rls^2)^2 = pi^2 / rls,
         // so the localizing integrand itself integrates to one.
@@ -1135,7 +1305,10 @@ impl GammaloopSymbols {
         let mut res = Atom::one();
 
         for l in lmb.loop_edges.iter() {
-            //TODO: Add orientation localisation prefactor (Sum of valid orientation thetas)/(number of valid orientations)
+            // Orientation ownership is applied by `Localizer`: orientation-local 3D uses one
+            // deterministic valid host, while selector-free 3D and local 4D explicitly sum their
+            // source orientations. It is therefore not an extra factor in this normalized radial
+            // kernel.
             res /= normalization_term_integral.as_view();
 
             let spatial_norm_sq = function!(self.emr_mom, l.0, GS.cind(1)).pow(2)
@@ -1215,7 +1388,10 @@ impl GammaloopSymbols {
         )
     }
 
-    /// Add the sign by splitting Q(i,mu)-> Q3(i,mu)+OSE(i)*σ(i)*δ(cind(0),mu)
+    /// Split Q(i,mu) into its spatial part and the already-generated on-shell
+    /// energy, with the production sign attached to the time component. The
+    /// typed 4D CFF source owns mass-dependent on-shell reconstruction before
+    /// this late numerator/export boundary.
     pub fn split_mom_pattern_simple(&self, e: EdgeIndex) -> Replacement {
         let eidc = usize::from(e) as i64;
         let index = Minkowski {}.to_symbolic([W_.a__]);
@@ -1223,14 +1399,6 @@ impl GammaloopSymbols {
             self.emr_mom(e, &index).to_pattern(),
             function!(GS.ose, eidc) * sign_atom(e) * self.energy_delta(&index)
                 + function!(GS.emr_vec, eidc, &index),
-        )
-    }
-
-    pub(crate) fn add_parametric_sign(&self, e: EdgeIndex) -> Replacement {
-        Replacement::new(
-            self.emr_mom(e, AIND_SYMBOLS.cind.call_args([Atom::Zero]))
-                .to_pattern(),
-            sign_atom(e) * self.ose(e),
         )
     }
 
@@ -1251,6 +1419,79 @@ mod tests {
     use spenso::shadowing::symbolica_utils::LogPrint;
 
     use super::*;
+
+    #[test]
+    fn orientation_collection_preserves_selector_free_factorization() {
+        let (a, b, c, d, x) = symbol!(
+            "selector_free_a",
+            "selector_free_b",
+            "selector_free_c",
+            "selector_free_d",
+            "selector_free_x"
+        );
+        let expression = (Atom::var(a) + b).pow(7) * (Atom::var(c) + d).pow(5)
+            / (Atom::var(x) + Atom::one()).pow(2);
+        assert_eq!(GS.collect_orientation_if(expression.clone()), expression);
+        assert_eq!(GS.collect_orientation_if(expression.as_view()), expression);
+    }
+
+    #[test]
+    fn orientation_collection_merges_same_key_scalar_contributions() {
+        let (key, a, b, c, d, x) = symbol!(
+            "selector_merge_key",
+            "selector_merge_a",
+            "selector_merge_b",
+            "selector_merge_c",
+            "selector_merge_d",
+            "selector_merge_x"
+        );
+        let condition = Atom::var(key) - 4;
+        let bodies = [
+            (Atom::var(a) + b).pow(3) * (Atom::var(c) + d).pow(2),
+            Atom::var(x).pow(-1),
+            Atom::var(c) + 7,
+        ];
+        // Unrelated siblings and other branch forms keep their own conditions.
+        let unrelated = Atom::var(d)
+            + Symbol::IF.call_args([Atom::var(key) - 9, Atom::Zero, Atom::var(x).pow(-2)])
+            + Symbol::IF.call_args([condition.clone(), Atom::var(a), Atom::Zero])
+            + Symbol::IF.call_args([condition.clone(), Atom::var(b), Atom::var(c)]);
+        let expression = Atom::add_many(
+            bodies
+                .iter()
+                .map(|body| Symbol::IF.call_args([condition.clone(), Atom::Zero, body.clone()])),
+        ) + &unrelated;
+        let expected =
+            Symbol::IF.call_args([condition, Atom::Zero, Atom::add_many(bodies)]) + unrelated;
+        let collected = GS.collect_orientation_if(expression);
+        assert_eq!(collected, expected);
+        assert_eq!(GS.collect_orientation_if(collected.clone()), collected);
+    }
+
+    #[test]
+    fn canonical_uv_class_references_are_distinct_from_physical_owners() {
+        let class = UvDenominatorClassId(7);
+        assert_eq!(
+            GS.uv_class_data(GS.uv_class_ref(class).as_view()),
+            Some(class)
+        );
+        assert_eq!(GS.uv_class_data(Atom::num(7).as_view()), None);
+        assert_eq!(GS.uv_class_data(GS.uv_class.call(-1).as_view()), None);
+        assert_eq!(
+            GS.uv_class_data(
+                GS.uv_class
+                    .call_args([Atom::num(7), Atom::num(8)])
+                    .as_view()
+            ),
+            None
+        );
+        let provenance = GS.uv_momentum_provenance_tag(
+            7,
+            UvMomentumProvenanceRole::TaylorFixed,
+            GS.emr_mom.call(7),
+        );
+        assert_eq!(GS.uv_class_data(provenance.as_view()), None);
+    }
 
     #[test]
     fn test_print() {

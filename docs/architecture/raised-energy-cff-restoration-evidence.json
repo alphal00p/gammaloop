@@ -1,0 +1,501 @@
+{
+  "measured_revision": "ac2c553c36309e02529574812e70d4bdaa37eba8",
+  "members": [
+    {
+      "path": "comparison.json",
+      "size": 8130,
+      "sha256": "597247273c010f808194913c98c80f65cd9e03e6d7f35af5286c61e451a91569"
+    },
+    {
+      "path": "current-build.json",
+      "size": 648,
+      "sha256": "e1d22dda787e59d1405e4279dfa13455a8b9b3b3bf406f028becd8aef50d571e"
+    },
+    {
+      "path": "inputs/eligible-controls/README.md",
+      "size": 6858,
+      "sha256": "de55b25435a4829c82721acbc1cc84b17d9dd1062880fbe669816dca2ba3f468"
+    },
+    {
+      "path": "inputs/eligible-controls/adaptations/candidate-g_gl1_no_uv.patch",
+      "size": 1987,
+      "sha256": "191ac68cc6eb0af2051cda0db9e5baafa2ad83e597ad1f48163f9acbdfdae567"
+    },
+    {
+      "path": "inputs/eligible-controls/adaptations/main-g_gl1_no_uv.patch",
+      "size": 1445,
+      "sha256": "0fa73c1f33aea232af2dbccdd32e01f6132a281528e98bd6a3c8174afa5b71d2"
+    },
+    {
+      "path": "inputs/eligible-controls/cards-manifest.json",
+      "size": 8343,
+      "sha256": "c88b05c3e60bfd27779ed277a63d3e817f644b9054af38e512d4c2a135964816"
+    },
+    {
+      "path": "inputs/eligible-controls/cards/candidate/aa_aa_GL0_log_only.toml",
+      "size": 2590,
+      "sha256": "5d2bab77500da1f57a19762e8d222634cc4041dd229d3f250b8e69783fb852b2"
+    },
+    {
+      "path": "inputs/eligible-controls/cards/candidate/g_gl1_no_uv.toml",
+      "size": 2299,
+      "sha256": "71d37a8ed78d26c95aa943a532ad2fc80e9d03e0e0f2df1b8c9a23f22358f530"
+    },
+    {
+      "path": "inputs/eligible-controls/cards/fixtures/aa_aa_1L_GL0.dot",
+      "size": 3544,
+      "sha256": "69c74ee75b345661fa823b8c8aa4541cf4e4c9de89de6c02e9939012c5563f18"
+    },
+    {
+      "path": "inputs/eligible-controls/cards/fixtures/models/native-c5-c8/sm/restrict_default.json",
+      "size": 594,
+      "sha256": "9d357d17c254595dbf612b66d6b531c982eefb71432835360bbfd8b21dcf454b"
+    },
+    {
+      "path": "inputs/eligible-controls/cards/fixtures/models/native-c5-c8/sm/sm.json",
+      "size": 88074,
+      "sha256": "e2d605720392666345939f283b54b0527ddf68890898136f73d27dd976900ed1"
+    },
+    {
+      "path": "inputs/eligible-controls/cards/fixtures/models/native-main-c1-c3/sm/restrict_default.json",
+      "size": 594,
+      "sha256": "9d357d17c254595dbf612b66d6b531c982eefb71432835360bbfd8b21dcf454b"
+    },
+    {
+      "path": "inputs/eligible-controls/cards/fixtures/models/native-main-c1-c3/sm/sm.json",
+      "size": 88071,
+      "sha256": "8ba8e7f6f6271e47ee9ba8a41b2a090b6183924af03226a21d96c0846815d3b1"
+    },
+    {
+      "path": "inputs/eligible-controls/cards/fixtures/paper_figure_b1_double_triangle_soft_ir.dot",
+      "size": 857,
+      "sha256": "96da40d49851882676ec59e9fccd26cf3a2fdbb330e893551a16bf8f0a2b1008"
+    },
+    {
+      "path": "inputs/eligible-controls/cards/fixtures/runtime-momentum-points.json",
+      "size": 1924,
+      "sha256": "e411e917b76a9727ac8bfd9f6cd7e979349e724582493cee9afe40b226de1c23"
+    },
+    {
+      "path": "inputs/eligible-controls/cards/main/aa_aa_GL0_log_only.toml",
+      "size": 2469,
+      "sha256": "47e093c255f4f89234137762804b3393ac7157180f19055606b1f8e3584f8c5f"
+    },
+    {
+      "path": "inputs/eligible-controls/cards/main/g_gl1_no_uv.toml",
+      "size": 2178,
+      "sha256": "cc219e7b6c552e2f4746947933e1372cf3e62c99998db2a56e840d355653ddf9"
+    },
+    {
+      "path": "inputs/eligible-controls/command.json",
+      "size": 652,
+      "sha256": "79abd6ad98a260742d877c1a8e92d4b34bb8c3f0f83f3a7b93e87db2a75ddae9"
+    },
+    {
+      "path": "inputs/eligible-controls/log-only-certificate.json",
+      "size": 8853,
+      "sha256": "3afba5eca16dc307b14f34900c9b3513c7e646e92146658d1334df1798cdba97"
+    },
+    {
+      "path": "inputs/eligible-controls/no-uv-certificate.json",
+      "size": 1457,
+      "sha256": "9fe26423254daccc9abf2649b48c4fe31acd8ecd81f93154eb7ddeef9eec7fb2"
+    },
+    {
+      "path": "inputs/eligible-controls/tools/heavy-run.lock",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "inputs/eligible-controls/tools/ram-watchdog.py",
+      "size": 10734,
+      "sha256": "a907b997f17cc6b2d72a0f87d4fcfde35c4c019b12aa3dca252e88d1895a34d8"
+    },
+    {
+      "path": "inputs/eligible-controls/tools/run-card.py",
+      "size": 7493,
+      "sha256": "f8ee7d813c80cdc7d071ecf30666c40d478b498770143895aba5e48653e8c560"
+    },
+    {
+      "path": "inputs/uv-routes/README.md",
+      "size": 7222,
+      "sha256": "ff7f97466e370e6ed2eb466bb2a021780f1c7d348ea02058e9fd881cc4f2360d"
+    },
+    {
+      "path": "inputs/uv-routes/adaptations/g_gl1_local3d_intermediate.toml.patch",
+      "size": 726,
+      "sha256": "422d53617ef7ac1a93f7ae395d1cbfc68994ac10a0163ba90fd592e33df8229d"
+    },
+    {
+      "path": "inputs/uv-routes/adaptations/g_gl1_local4d_intermediate.toml.patch",
+      "size": 742,
+      "sha256": "282bf0af0ebc21dc5b3ab4afb23e931eb27a5472965fd527960b8963a385f5f9"
+    },
+    {
+      "path": "inputs/uv-routes/adaptations/sunrise_integrated_sparse.toml.patch",
+      "size": 545,
+      "sha256": "ea1f4cbc5e40ccfd7a7d9b7596d79261eb560f69df21901c7508ca684136293a"
+    },
+    {
+      "path": "inputs/uv-routes/cards-manifest.json",
+      "size": 15430,
+      "sha256": "d48e4c1c7e188873b1e46cec9683335aa0ae2dcb98e5d18837b344d5d02bff19"
+    },
+    {
+      "path": "inputs/uv-routes/cards/candidate/g_gl1_local3d_intermediate.toml",
+      "size": 1731,
+      "sha256": "64a9f805a099c2a000b2e0b73ebe5bc5005e36834e1d8b44b4e0c9de99c0065c"
+    },
+    {
+      "path": "inputs/uv-routes/cards/candidate/g_gl1_local4d_intermediate.toml",
+      "size": 1850,
+      "sha256": "0b0a5b1494ecb1e4dd89f1d1762134e456146fbfd33602c6cdc1ccf2df0bcca7"
+    },
+    {
+      "path": "inputs/uv-routes/cards/candidate/orientation58_sparse_runtime_compiled.toml",
+      "size": 3348,
+      "sha256": "6cf9b33b017d50be5fe734107ce0e63329383c22141ec161ff7c77a23e04ed07"
+    },
+    {
+      "path": "inputs/uv-routes/cards/candidate/orientation58_sparse_runtime_interpreted.toml",
+      "size": 3349,
+      "sha256": "bd7aa3eb1153ffabc89fe01f3a0148a08ba757fd8dede7468db69e952b7a8f96"
+    },
+    {
+      "path": "inputs/uv-routes/cards/candidate/sunrise_integrated_sparse.toml",
+      "size": 1751,
+      "sha256": "fd8a5a0e8a4fb0764e14eeb3f0d6c59fba6d50ddbb0ae2ec616aa7a5d6dd4fd3"
+    },
+    {
+      "path": "inputs/uv-routes/cards/fixtures/models/native-c5-c8/sm/restrict_default.json",
+      "size": 594,
+      "sha256": "9d357d17c254595dbf612b66d6b531c982eefb71432835360bbfd8b21dcf454b"
+    },
+    {
+      "path": "inputs/uv-routes/cards/fixtures/models/native-c5-c8/sm/sm.json",
+      "size": 88074,
+      "sha256": "e2d605720392666345939f283b54b0527ddf68890898136f73d27dd976900ed1"
+    },
+    {
+      "path": "inputs/uv-routes/cards/fixtures/models/native-main-c1-c3/sm/restrict_default.json",
+      "size": 594,
+      "sha256": "9d357d17c254595dbf612b66d6b531c982eefb71432835360bbfd8b21dcf454b"
+    },
+    {
+      "path": "inputs/uv-routes/cards/fixtures/models/native-main-c1-c3/sm/sm.json",
+      "size": 88071,
+      "sha256": "8ba8e7f6f6271e47ee9ba8a41b2a090b6183924af03226a21d96c0846815d3b1"
+    },
+    {
+      "path": "inputs/uv-routes/cards/fixtures/paper_figure_b1_double_triangle_soft_ir.dot",
+      "size": 857,
+      "sha256": "96da40d49851882676ec59e9fccd26cf3a2fdbb330e893551a16bf8f0a2b1008"
+    },
+    {
+      "path": "inputs/uv-routes/cards/fixtures/runtime-momentum-points.json",
+      "size": 1924,
+      "sha256": "e411e917b76a9727ac8bfd9f6cd7e979349e724582493cee9afe40b226de1c23"
+    },
+    {
+      "path": "inputs/uv-routes/cards/main/g_gl1_local_only.toml",
+      "size": 1676,
+      "sha256": "b549700d1812b80a26d200816e3c3765c526696b02cbd534f7b56a198bf11022"
+    },
+    {
+      "path": "inputs/uv-routes/cards/main/orientation58_sparse_runtime_compiled.toml",
+      "size": 3261,
+      "sha256": "58b17d367c3e0ed43e788063309f9ae8a0058ceb5beba2f1b10d84d3cfe0f02d"
+    },
+    {
+      "path": "inputs/uv-routes/cards/main/orientation58_sparse_runtime_interpreted.toml",
+      "size": 3262,
+      "sha256": "8ce7df11a3f7a169b33e31040d9fa4128c05e2b1cbd3611a9cc21aab3025537b"
+    },
+    {
+      "path": "inputs/uv-routes/cards/main/sunrise_integrated_sparse.toml",
+      "size": 1751,
+      "sha256": "fd8a5a0e8a4fb0764e14eeb3f0d6c59fba6d50ddbb0ae2ec616aa7a5d6dd4fd3"
+    },
+    {
+      "path": "inputs/uv-routes/tools/heavy-run.lock",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "inputs/uv-routes/tools/ram-watchdog.py",
+      "size": 10734,
+      "sha256": "a907b997f17cc6b2d72a0f87d4fcfde35c4c019b12aa3dca252e88d1895a34d8"
+    },
+    {
+      "path": "inputs/uv-routes/tools/run-card.py",
+      "size": 7493,
+      "sha256": "f8ee7d813c80cdc7d071ecf30666c40d478b498770143895aba5e48653e8c560"
+    },
+    {
+      "path": "runs/current-gl1-3d/attempt.json",
+      "size": 4984,
+      "sha256": "6959671a156777d5af54cfd4786a8318ae40eab079023bd57d4c11ddec57879e"
+    },
+    {
+      "path": "runs/current-gl1-3d/generation_summary.json",
+      "size": 573,
+      "sha256": "c0a3588c2dcb9a0cf51e8cd302ca6cef6dc4e01f6ea2966c15ce7477a1912f48"
+    },
+    {
+      "path": "runs/current-gl1-3d/graphs/GL1.dot",
+      "size": 969,
+      "sha256": "4bc9a0cb21e147ef8f4927b6d9276d3f18b7fb8c9cbc380034ac7192dc9994dd"
+    },
+    {
+      "path": "runs/current-gl1-3d/inspect-events.jsonl",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "runs/current-gl1-3d/model_parameters.json",
+      "size": 540,
+      "sha256": "232964f2b9783482f8ccb0e8812eb6e34a0d2dd6d5e8a8905a5b98377ae7fe1d"
+    },
+    {
+      "path": "runs/current-gl1-3d/result.json",
+      "size": 5591,
+      "sha256": "4743e9c095d1efb36f2cff716fb9449bebca2f8bf286d5a9ed941e6d7c605997"
+    },
+    {
+      "path": "runs/current-gl1-3d/run.toml",
+      "size": 1805,
+      "sha256": "2f0942d4828baa946dc12da2174a8dfa6d63bf4950932c3c8cf077d9eac44ee8"
+    },
+    {
+      "path": "runs/current-gl1-3d/settings.toml",
+      "size": 483,
+      "sha256": "4c121f55a6ce84ea43301b118d45563a284fea370d031307fe286c5c7c4ee843"
+    },
+    {
+      "path": "runs/current-gl1-4d/attempt.json",
+      "size": 4984,
+      "sha256": "e293c9888872427f2710bf6d4aee34f1def3e02b6f5b6c7443d7c7fe1456cbfc"
+    },
+    {
+      "path": "runs/current-gl1-4d/generation_summary.json",
+      "size": 570,
+      "sha256": "cbc64f3b52dfbdca78f1d04f52513f7976e7fd36a3c1a9fa2a0c2b2254a1c570"
+    },
+    {
+      "path": "runs/current-gl1-4d/graphs/GL1.dot",
+      "size": 969,
+      "sha256": "4bc9a0cb21e147ef8f4927b6d9276d3f18b7fb8c9cbc380034ac7192dc9994dd"
+    },
+    {
+      "path": "runs/current-gl1-4d/inspect-events.jsonl",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "runs/current-gl1-4d/model_parameters.json",
+      "size": 540,
+      "sha256": "232964f2b9783482f8ccb0e8812eb6e34a0d2dd6d5e8a8905a5b98377ae7fe1d"
+    },
+    {
+      "path": "runs/current-gl1-4d/result.json",
+      "size": 5591,
+      "sha256": "b8c453c9c887a1578fcc58adacad3c9e1d2ff119987d51ba199ffbb39bc28847"
+    },
+    {
+      "path": "runs/current-gl1-4d/run.toml",
+      "size": 1924,
+      "sha256": "1edf5b2becdd70fd9647eb3861bc3453c6634da44988192129c73c721229f03a"
+    },
+    {
+      "path": "runs/current-gl1-4d/settings.toml",
+      "size": 483,
+      "sha256": "4c121f55a6ce84ea43301b118d45563a284fea370d031307fe286c5c7c4ee843"
+    },
+    {
+      "path": "runs/current-log-only/attempt.json",
+      "size": 4427,
+      "sha256": "5918dbc44c747cbde6588e922670ecf91b2eb6a56d5349c0f236756f90291385"
+    },
+    {
+      "path": "runs/current-log-only/generation_summary.json",
+      "size": 568,
+      "sha256": "e4fa5ae5ee16533b39275fcf654bf217768414a31e2a224ef5b32eba833c48ce"
+    },
+    {
+      "path": "runs/current-log-only/graphs/GL0.dot",
+      "size": 3455,
+      "sha256": "6fd04f6b35fe9e62e6f6713c3de10aa931791a13923b4d1c192ff34d6cc67ff0"
+    },
+    {
+      "path": "runs/current-log-only/graphs/GL0.forest.dot",
+      "size": 275,
+      "sha256": "1486bf7c94ec3170a26da5b1877cb663e4c77efc109060af6c31a9dbbc9b2322"
+    },
+    {
+      "path": "runs/current-log-only/inspect-events.jsonl",
+      "size": 876,
+      "sha256": "cd0930232971a7fd5318431ef200dbd20bb6ff06b6a06984a22f5ce39ce816b4"
+    },
+    {
+      "path": "runs/current-log-only/model_parameters.json",
+      "size": 537,
+      "sha256": "1412f6a8f859a21baa24a4a560f918aa32525320aa789ee38c47c629e391518d"
+    },
+    {
+      "path": "runs/current-log-only/result.json",
+      "size": 5033,
+      "sha256": "b327e66662aa18eba7d98bd116a6938d5f10832587ff6a308f8ab209878fd29c"
+    },
+    {
+      "path": "runs/current-log-only/run.toml",
+      "size": 2685,
+      "sha256": "00447e873e72dee26f522a7a3f953c0e3df8f7df119572a8caf8d952a6f15614"
+    },
+    {
+      "path": "runs/current-log-only/settings.toml",
+      "size": 637,
+      "sha256": "4c32ba6699aa16f88143a72bcdc8a907c5af3fa7422288e5512063870a6d2954"
+    },
+    {
+      "path": "runs/current-no-uv/attempt.json",
+      "size": 4411,
+      "sha256": "6359fe04c11cd55d7cb65b04530beaed0cc1f91d9cb533c7f7189931879a7d9a"
+    },
+    {
+      "path": "runs/current-no-uv/generation_summary.json",
+      "size": 564,
+      "sha256": "beb237c0abab8ab4686018ff993cd68812b1aee8d93260cba19b0d6a03ef84e4"
+    },
+    {
+      "path": "runs/current-no-uv/graphs/GL1.dot",
+      "size": 969,
+      "sha256": "4bc9a0cb21e147ef8f4927b6d9276d3f18b7fb8c9cbc380034ac7192dc9994dd"
+    },
+    {
+      "path": "runs/current-no-uv/inspect-events.jsonl",
+      "size": 992,
+      "sha256": "125713f4f044bd8cdf495df2c698655b4f0514881f4b049c8d81bbb9ea2e988f"
+    },
+    {
+      "path": "runs/current-no-uv/model_parameters.json",
+      "size": 540,
+      "sha256": "232964f2b9783482f8ccb0e8812eb6e34a0d2dd6d5e8a8905a5b98377ae7fe1d"
+    },
+    {
+      "path": "runs/current-no-uv/result.json",
+      "size": 5017,
+      "sha256": "975df3abdf3b8752bf16990bfaaac570b70dc84bc1c2257478638d87da4bf976"
+    },
+    {
+      "path": "runs/current-no-uv/run.toml",
+      "size": 2372,
+      "sha256": "0ec598f7f557756a14fb5c3a024f1d03ecfb752bee94caac11315846c5d86775"
+    },
+    {
+      "path": "runs/current-no-uv/settings.toml",
+      "size": 483,
+      "sha256": "4c121f55a6ce84ea43301b118d45563a284fea370d031307fe286c5c7c4ee843"
+    },
+    {
+      "path": "runs/main-log-only/attempt.json",
+      "size": 4731,
+      "sha256": "b2ab7e2870ab836f390db1b256be34c5e2341892f247934e2a9f91cb19351205"
+    },
+    {
+      "path": "runs/main-log-only/generation_summary.json",
+      "size": 567,
+      "sha256": "c9bf5f7566fced052b7004bb78ba2b24458dc6909b661ea7de334630638264f8"
+    },
+    {
+      "path": "runs/main-log-only/graphs/GL0.dot",
+      "size": 3455,
+      "sha256": "6fd04f6b35fe9e62e6f6713c3de10aa931791a13923b4d1c192ff34d6cc67ff0"
+    },
+    {
+      "path": "runs/main-log-only/graphs/GL0.forest.dot",
+      "size": 275,
+      "sha256": "1486bf7c94ec3170a26da5b1877cb663e4c77efc109060af6c31a9dbbc9b2322"
+    },
+    {
+      "path": "runs/main-log-only/inspect-events.jsonl",
+      "size": 876,
+      "sha256": "1f884e4dbdc21c6160f4f8fba70a1edc8298ea768b5fa1d68d2fb8815ad6f561"
+    },
+    {
+      "path": "runs/main-log-only/model_parameters.json",
+      "size": 537,
+      "sha256": "1412f6a8f859a21baa24a4a560f918aa32525320aa789ee38c47c629e391518d"
+    },
+    {
+      "path": "runs/main-log-only/result.json",
+      "size": 5336,
+      "sha256": "1f59949b92c9760ec0e6d2b8dba067d138fc7c7ec342c8301a9fb22a5a5e746c"
+    },
+    {
+      "path": "runs/main-log-only/run.toml",
+      "size": 2561,
+      "sha256": "53a7ea00e11e8236b993b90dfd6d51e696d547ecac7abc4b6600dbf37c575fa6"
+    },
+    {
+      "path": "runs/main-log-only/settings.toml",
+      "size": 603,
+      "sha256": "db0abfd5b3fcce22a1e6c0cf5c24578b84cb891dc1b87289f3a7255c43c8ec8c"
+    },
+    {
+      "path": "runs/main-no-uv/attempt.json",
+      "size": 4715,
+      "sha256": "52f022ab23da496ff7865f1dc9fd2f0eeb0d5126fe47a1f04529bcbf34e3fc76"
+    },
+    {
+      "path": "runs/main-no-uv/generation_summary.json",
+      "size": 566,
+      "sha256": "1cc6a3f0f5c87aa90e614b95bdd5b9e25662894ceb90c5560a27c8b4d521eb33"
+    },
+    {
+      "path": "runs/main-no-uv/graphs/GL1.dot",
+      "size": 969,
+      "sha256": "4bc9a0cb21e147ef8f4927b6d9276d3f18b7fb8c9cbc380034ac7192dc9994dd"
+    },
+    {
+      "path": "runs/main-no-uv/inspect-events.jsonl",
+      "size": 992,
+      "sha256": "f2bf9b2b433850a4e7bc19c652b7670237750b6b824f53faa521356f1c7c91c3"
+    },
+    {
+      "path": "runs/main-no-uv/model_parameters.json",
+      "size": 540,
+      "sha256": "232964f2b9783482f8ccb0e8812eb6e34a0d2dd6d5e8a8905a5b98377ae7fe1d"
+    },
+    {
+      "path": "runs/main-no-uv/result.json",
+      "size": 5321,
+      "sha256": "f0c6656baf40ef56e402f5f3b5b722188eaf50dd7f1cba49c646df316dc06286"
+    },
+    {
+      "path": "runs/main-no-uv/run.toml",
+      "size": 2248,
+      "sha256": "e0670dcfc67875f3133716625ab2d4329108f813dbdab56764946031ae187554"
+    },
+    {
+      "path": "runs/main-no-uv/settings.toml",
+      "size": 449,
+      "sha256": "4b1ad32bdaefc52f7360b9decb5e789c1e4e69d20255741d1b282688e7489648"
+    },
+    {
+      "path": "validation/local-ci-receipt.txt",
+      "size": 99,
+      "sha256": "4765760edda04b54e4f547087c84da384e023886aab26e704f65844158ee7cf7"
+    },
+    {
+      "path": "validation/local-ci.json",
+      "size": 4202,
+      "sha256": "8a34ee4fc116918b8bd0d831670e7fcaef920258fe2eaaa8c184a26004d4cdfe"
+    },
+    {
+      "path": "validation/required-remote-checks.json",
+      "size": 254,
+      "sha256": "0fbc3fb2187f69d7d78e02c890fc82d21fc4938ca36b30f948778df9bc8b5f25"
+    }
+  ],
+  "archive_sha256": "9e291a65ec6fa8843811201d73d04e3154f9dc8edecb6aa7d6d05f2b013064e3"
+}

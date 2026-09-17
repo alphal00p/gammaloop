@@ -1,0 +1,2246 @@
+{
+  "settings": {
+    "horner_iterations": 1,
+    "cpe_iterations": 5,
+    "compile": false,
+    "workers": 1,
+    "threshold_cts": false,
+    "integrated_cts": false,
+    "memory_guard_limit_bytes": 500000000000
+  },
+  "broader_scalar_diagnostic": {
+    "status": "diagnostic test passed; residual performance cost located to a broader boundary",
+    "kind": "Single frozen GL21 base scalar test, excluded from physical performance and dispatch gates",
+    "source_revision": "f938f9c1386eb2670a0a7f603f5eb0878086352a",
+    "test_binary_sha256": "09c20fd57562bec10353c362089d153d89d215045034a1218cd53904e0f054eb",
+    "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl21_inspects_match",
+    "receipt_sha256": "e65f1028daded980c052efffee15a0a1a8c5b66ccd61f2b41d7be68623c3b350",
+    "log_sha256": "1ff59cf26083c1d6b4e3c318de06ffd44c77aec20e377edfdd1b04091d0dc11b",
+    "log_bytes": 12209152,
+    "nextest_test_seconds": 24.56,
+    "child_wall_seconds": 26.011391428066418,
+    "settings": {
+      "horner_iterations": 1,
+      "compile": false,
+      "orchestrator": "hedge_poset",
+      "integrated_uv_cts": true,
+      "threshold_cts": true,
+      "worker_limits": 1,
+      "process_tree_memory_cap_bytes": 30000000000
+    },
+    "route_order_certificate": "The existing test constructs fresh CLI graph states in localized-3D, erased-3D, projected-4D order; each generates no_numerator then numerator. Six cut-discovery starts and six completed graph-build scopes match this sequence. All events share the first CLI logfile because the process logger has one sink.",
+    "scope_notes": [
+      "Three graph states share one test process; this is one diagnostic observation per route, not three cold repetitions.",
+      "The base numerator attaches Q1.Q2 times Q5.Q6 as graph-owned edge factors; it is distinct from the q7_squared probe.",
+      "supergraph_parametric_orchestration includes local and integrated UV construction plus final forest assembly, before numerical tensor/evaluator processing. It is not an isolated hard-projection timer.",
+      "The Boolean compile field in debug events is a semantic tag, not the evaluator compile setting. Existing scalar test settings explicitly disable generated-code compilation.",
+      "Preserved initial CLI states contain no final generated integrand binaries, so no new evaluator operation-count claim is made."
+    ],
+    "groups": [
+      {
+        "route": "3d_local",
+        "integrand": "no_numerator",
+        "parametric_orchestration_ms": 1039.123887,
+        "spenso_original_stacks_ms": 30.50874,
+        "symbolica_original_stacks_ms": 236.454478,
+        "final_graph_term_ms": 271.105568,
+        "original_stack_count": 5,
+        "summed_original_scalar_atom_bytes": 162546,
+        "direct_hard_projection_total_ms": null,
+        "outer_routing_selection_total_ms": null,
+        "taylor_local_construction_ms": 1.8233540000000001,
+        "largest_interevent_gaps": []
+      },
+      {
+        "route": "3d_local",
+        "integrand": "numerator",
+        "parametric_orchestration_ms": 3774.690323,
+        "spenso_original_stacks_ms": 791.697045,
+        "symbolica_original_stacks_ms": 3089.675494,
+        "final_graph_term_ms": 3885.9498820000003,
+        "original_stack_count": 5,
+        "summed_original_scalar_atom_bytes": 4054009,
+        "direct_hard_projection_total_ms": null,
+        "outer_routing_selection_total_ms": null,
+        "taylor_local_construction_ms": 2.645167,
+        "largest_interevent_gaps": [
+          {
+            "seconds": 1.517,
+            "after": "evaluator_expression_preparation_start",
+            "before": "evaluator_expression_preparation_done",
+            "start_utc": "2026-09-13T21:49:44.177Z",
+            "end_utc": "2026-09-13T21:49:45.694Z"
+          },
+          {
+            "seconds": 1.054,
+            "after": "localize_integrated_ct_term",
+            "before": "Computed global numerator",
+            "start_utc": "2026-09-13T21:49:42.125Z",
+            "end_utc": "2026-09-13T21:49:43.179Z"
+          },
+          {
+            "seconds": 0.8,
+            "after": "localize_integrated_ct_term",
+            "before": "direct_3d_kernel_after_start",
+            "start_utc": "2026-09-13T21:49:40.650Z",
+            "end_utc": "2026-09-13T21:49:41.450Z"
+          },
+          {
+            "seconds": 0.508,
+            "after": "evaluator_expression_preparation_start",
+            "before": "evaluator_expression_preparation_done",
+            "start_utc": "2026-09-13T21:49:46.256Z",
+            "end_utc": "2026-09-13T21:49:46.764Z"
+          },
+          {
+            "seconds": 0.395,
+            "after": "localize_integrated_ct_term",
+            "before": "supergraph_parametric_orchestration_done",
+            "start_utc": "2026-09-13T21:49:43.357Z",
+            "end_utc": "2026-09-13T21:49:43.752Z"
+          },
+          {
+            "seconds": 0.285,
+            "after": "evaluator_expression_preparation_start",
+            "before": "evaluator_expression_preparation_done",
+            "start_utc": "2026-09-13T21:49:47.280Z",
+            "end_utc": "2026-09-13T21:49:47.565Z"
+          }
+        ]
+      },
+      {
+        "route": "3d_erased",
+        "integrand": "no_numerator",
+        "parametric_orchestration_ms": 972.363628,
+        "spenso_original_stacks_ms": 21.404248000000003,
+        "symbolica_original_stacks_ms": 12.91925,
+        "final_graph_term_ms": 39.34978,
+        "original_stack_count": 5,
+        "summed_original_scalar_atom_bytes": 104850,
+        "direct_hard_projection_total_ms": null,
+        "outer_routing_selection_total_ms": null,
+        "taylor_local_construction_ms": 1.8432439999999999,
+        "largest_interevent_gaps": []
+      },
+      {
+        "route": "3d_erased",
+        "integrand": "numerator",
+        "parametric_orchestration_ms": 3377.568878,
+        "spenso_original_stacks_ms": 644.301031,
+        "symbolica_original_stacks_ms": 176.26687299999998,
+        "final_graph_term_ms": 835.503338,
+        "original_stack_count": 5,
+        "summed_original_scalar_atom_bytes": 3460024,
+        "direct_hard_projection_total_ms": null,
+        "outer_routing_selection_total_ms": null,
+        "taylor_local_construction_ms": 2.656635,
+        "largest_interevent_gaps": [
+          {
+            "seconds": 0.804,
+            "after": "localize_integrated_ct_term",
+            "before": "direct_3d_kernel_after_start",
+            "start_utc": "2026-09-13T21:49:50.462Z",
+            "end_utc": "2026-09-13T21:49:51.266Z"
+          },
+          {
+            "seconds": 0.699,
+            "after": "localize_integrated_ct_term",
+            "before": "Computed global numerator",
+            "start_utc": "2026-09-13T21:49:51.936Z",
+            "end_utc": "2026-09-13T21:49:52.635Z"
+          },
+          {
+            "seconds": 0.37,
+            "after": "localize_integrated_ct_term",
+            "before": "supergraph_parametric_orchestration_done",
+            "start_utc": "2026-09-13T21:49:52.807Z",
+            "end_utc": "2026-09-13T21:49:53.177Z"
+          },
+          {
+            "seconds": 0.187,
+            "after": "evaluator_stack_parse_atom_terms_start",
+            "before": "evaluator_stack_parse_atom_net_done",
+            "start_utc": "2026-09-13T21:49:53.194Z",
+            "end_utc": "2026-09-13T21:49:53.381Z"
+          },
+          {
+            "seconds": 0.116,
+            "after": "local_4d_construction",
+            "before": "Computed global numerator",
+            "start_utc": "2026-09-13T21:49:49.837Z",
+            "end_utc": "2026-09-13T21:49:49.953Z"
+          },
+          {
+            "seconds": 0.097,
+            "after": "evaluator_stack_parse_atom_parse_elapsed",
+            "before": "evaluator_stack_parse_atom_execute_elapsed",
+            "start_utc": "2026-09-13T21:49:53.406Z",
+            "end_utc": "2026-09-13T21:49:53.503Z"
+          }
+        ]
+      },
+      {
+        "route": "4d_direct",
+        "integrand": "no_numerator",
+        "parametric_orchestration_ms": 405.323716,
+        "spenso_original_stacks_ms": 19.325126,
+        "symbolica_original_stacks_ms": 11.497185000000002,
+        "final_graph_term_ms": 35.648692000000004,
+        "original_stack_count": 5,
+        "summed_original_scalar_atom_bytes": 90165,
+        "direct_hard_projection_total_ms": 12.103307000000003,
+        "outer_routing_selection_total_ms": 19.334833,
+        "taylor_local_construction_ms": 1.845124,
+        "largest_interevent_gaps": []
+      },
+      {
+        "route": "4d_direct",
+        "integrand": "numerator",
+        "parametric_orchestration_ms": 5944.078459,
+        "spenso_original_stacks_ms": 1005.778958,
+        "symbolica_original_stacks_ms": 172.676175,
+        "final_graph_term_ms": 1196.795226,
+        "original_stack_count": 5,
+        "summed_original_scalar_atom_bytes": 3834662,
+        "direct_hard_projection_total_ms": 55.665657,
+        "outer_routing_selection_total_ms": 82.15203,
+        "taylor_local_construction_ms": 2.650117,
+        "largest_interevent_gaps": [
+          {
+            "seconds": 1.921,
+            "after": "localize_integrated_ct_term",
+            "before": "sector_grouping",
+            "start_utc": "2026-09-13T21:49:55.733Z",
+            "end_utc": "2026-09-13T21:49:57.654Z"
+          },
+          {
+            "seconds": 1.849,
+            "after": "localize_integrated_ct_term",
+            "before": "Computed global numerator",
+            "start_utc": "2026-09-13T21:49:58.061Z",
+            "end_utc": "2026-09-13T21:49:59.910Z"
+          },
+          {
+            "seconds": 0.888,
+            "after": "localize_integrated_ct_term",
+            "before": "supergraph_parametric_orchestration_done",
+            "start_utc": "2026-09-13T21:50:00.132Z",
+            "end_utc": "2026-09-13T21:50:01.020Z"
+          },
+          {
+            "seconds": 0.278,
+            "after": "outer_cff_routing_selection",
+            "before": "localize_integrated_ct_forest_overlap",
+            "start_utc": "2026-09-13T21:49:55.374Z",
+            "end_utc": "2026-09-13T21:49:55.652Z"
+          },
+          {
+            "seconds": 0.262,
+            "after": "evaluator_stack_parse_atom_terms_start",
+            "before": "evaluator_stack_parse_atom_net_done",
+            "start_utc": "2026-09-13T21:50:01.039Z",
+            "end_utc": "2026-09-13T21:50:01.301Z"
+          },
+          {
+            "seconds": 0.172,
+            "after": "evaluator_stack_parse_atom_parse_elapsed",
+            "before": "evaluator_stack_parse_atom_execute_elapsed",
+            "start_utc": "2026-09-13T21:50:01.350Z",
+            "end_utc": "2026-09-13T21:50:01.522Z"
+          }
+        ]
+      }
+    ],
+    "three_route_setup_generation_seconds": {
+      "3d_local": 9.704327682,
+      "3d_erased": 6.250474945,
+      "4d_direct": 8.165627544
+    },
+    "interpretation": {
+      "measured": "The no-numerator 4D orchestration is faster, while the graph-owned product numerator increases orchestration and subsequent tensor preprocessing. Numerical Symbolica construction is slightly lower than erased 3D. The hard projection and outer-selection intervals together are only 137.818 ms within the numerator\u2019s 5944.078 ms orchestration.",
+      "inference": "Most residual cost lies after integrated-addback localization in final mapped-integrand assembly/simplification and forest aggregation. The existing FinalIntegrandBuilder tail replaces energies, simplifies metrics/color and expands dot products; HedgePoset aggregation then collects color, adds terms and replaces split momenta. Different factorized inputs reach these shared owners, so their cost can differ.",
+      "limit": "Interevent gaps do not isolate individual functions; this trace does not prove whether a specific replacement, color/metric traversal, dot-product rewrite or combination is the dominant operation. No production changes or new expectations were introduced."
+    }
+  },
+  "created_utc": "2026-09-14T01:07:44.812455+00:00",
+  "status": "pass",
+  "scope": "Six separate cold source911f GL00/GL01 profiles. Profile wall and stage times are excluded from all unprofiled generation/runtime performance gates.",
+  "source_revision": "911f1824f994611d723dff0f50416cb301718617",
+  "binary_sha256": "ef6811aa40114590a0fd72318f99f91850960239ff212abcaf272d7182e48691",
+  "graphs": {
+    "GL00": {
+      "case": "dispatch_GL00_4d_direct_r1",
+      "generation_receipt_sha256": "ce00e8352b935e2ba6ffab5693009cebb49207264dca311af7875278a32e068b",
+      "profile_summary_sha256": "a32cc6315b3520c4d759985136dda96282b72ac02c2a52abf95d774fa395ff1e",
+      "card_sha256": "4b4e4125aa35f5408f5543a617f87ebe1fa370a1c8719ee41ff4a3dd1e82d933",
+      "parser_sha256": "b570d55425ac10b1e383e163b491d0cf33853167f91b92138be8d7a257a6e839",
+      "input_sha256": {
+        "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/final_shared_tensor_power/dispatch_GL00_4d_direct_r1/scratch_state/logs/gammalog-2026-09-14T01-04-06.985Z.jsonl": "9ba1f0710a9f6bcc89d30cde9e6ed110b1e2770f86897381ec45ce4e8814b0ce"
+      },
+      "pid": 3681312,
+      "started_utc": "2026-09-14T01:04:06.944910+00:00",
+      "completed_utc": "2026-09-14T01:04:14.455606+00:00",
+      "diagnostic_process_wall_seconds": 7.5106660389574245,
+      "full_local_uv_dispatch_gate": {
+        "status": "pass",
+        "strict_limit": 0.1,
+        "accounting_complete": true,
+        "accounting_problems": [],
+        "receipt_problems": [],
+        "completed_forest_nodes": 4,
+        "nonroot_nodes": 3,
+        "graph": "GL00",
+        "local_uv_generation_ms": 1646.427867,
+        "forest_elapsed_minus_root_ms": 1646.938807,
+        "measured_child_dispatch_ms": 41.585956,
+        "raw_physical_degree_report_ms": 0.179471,
+        "outer_dispatch_ms": 24.185074999999998,
+        "outer_capacity_analysis_ms": {
+          "standalone_nonroot": 0.0,
+          "included_in_outer_selection": 0.0,
+          "excluded_root_or_outside": 0.0
+        },
+        "outer_winning_native_ms": 5.004211,
+        "outer_losing_raw_requests_ms": 10.087713,
+        "losing_candidate_template_build_ms": 29.474026000000002,
+        "discarded_zero_row_template_build_ms": 0.0,
+        "total_dispatch_ms": 65.950502,
+        "fraction": 0.04005672117307523,
+        "denominator_scope": "Sum of complete nonroot legacy forest nodes: Taylor, child projection and final outer-CT assembly. Root production CFF, final forest summation and tensor/evaluator construction are excluded.",
+        "outer_numerator_policy": "Complete selection minus only the winner's native generation, source reconstruction and postprocessing. Every losing request, proposal construction/certificate, winner degree/capacity preparation and selection/drop cost is charged."
+      },
+      "phase_milliseconds": {
+        "taylor_and_local_construction": 13.517961,
+        "canonical_normalization": 2.165044,
+        "source_reconstruction": 1.49959,
+        "degree_analysis": 0.8322520000000001,
+        "allocation": 1.934407,
+        "candidate_certificate": 0.322481,
+        "selection_residual_including_losing_native": 6.726833,
+        "winning_hard_native_generation": 20.972987000000003,
+        "losing_hard_native_generation": 4.740131,
+        "winning_template_build": 62.042101,
+        "losing_template_build": 29.474026000000002,
+        "row_mapping": 22.53916399999998,
+        "component_composition": 2.6409380000000002,
+        "sector_composition": 0.907883,
+        "projection_total": 192.118862,
+        "preparation_cache_work": 0.581282,
+        "row_cache_work": 1.714675
+      },
+      "count_audit": {
+        "status": "complete_work_counts",
+        "problems": [],
+        "scope": "One cold, completely logged legacy forest uses one projection context. Until the full gate and counter checks pass these are observations, not completed-generation totals. Cumulative counters use the last snapshot, never their sum.",
+        "work_occurrences": {
+          "sector_grouping": {
+            "events": 3,
+            "raw_sectors": {
+              "observations": 3,
+              "sum": 3,
+              "max": 1
+            },
+            "grouped_sectors": {
+              "observations": 3,
+              "sum": 3,
+              "max": 1
+            }
+          },
+          "canonical_normalization": {
+            "events": 3,
+            "buckets": {
+              "observations": 3,
+              "sum": 5,
+              "max": 2
+            },
+            "denominator_classes": {
+              "observations": 3,
+              "sum": 6,
+              "max": 3
+            },
+            "components": {
+              "observations": 3,
+              "sum": 4,
+              "max": 2
+            }
+          },
+          "source_reconstruction": {
+            "events": 8,
+            "denominator_occurrences": {
+              "observations": 8,
+              "sum": 32,
+              "max": 7
+            },
+            "classes": {
+              "observations": 8,
+              "sum": 10,
+              "max": 3
+            },
+            "cache_hit": {
+              "true": 0,
+              "false": 8
+            }
+          },
+          "exact_cff_assignment_selection": {
+            "events": 8,
+            "admitted_candidates": {
+              "observations": 8,
+              "sum": 10,
+              "max": 2
+            },
+            "native_rows": {
+              "observations": 8,
+              "sum": 196,
+              "max": 62
+            },
+            "native_payload_cache_hit": {
+              "true": 3,
+              "false": 5
+            }
+          },
+          "numerator_template": {
+            "events": 10,
+            "template_nodes": {
+              "observations": 10,
+              "sum": 1072,
+              "max": 168
+            },
+            "parameters": {
+              "observations": 10,
+              "sum": 163,
+              "max": 20
+            },
+            "cache_hit": {
+              "true": 0,
+              "false": 10
+            }
+          },
+          "numerator_row_mapping": {
+            "events": 196,
+            "required_energies": {
+              "observations": 196,
+              "sum": 990,
+              "max": 6
+            }
+          }
+        },
+        "cumulative_final_snapshot": {
+          "component_requests": 8,
+          "template_builds": 10,
+          "canonical_preparation_builds": 3,
+          "source_preparation_builds": 8,
+          "preparation_hits": 0,
+          "preparation_misses": 21,
+          "preparation_evictions": 0,
+          "cff_hits": 12,
+          "cff_misses": 6,
+          "cff_evictions": 0,
+          "native_generations": 6,
+          "row_hits": 1652,
+          "row_misses": 602,
+          "row_evictions": 0
+        },
+        "retention_gauges": {
+          "retained_preparation_bytes": {
+            "observations": 3,
+            "last_observed": 1233970,
+            "max_observed": 1233970
+          },
+          "retained_cff_bytes": {
+            "observations": 3,
+            "last_observed": 1122044,
+            "max_observed": 1122044
+          },
+          "retained_row_bytes": {
+            "observations": 3,
+            "last_observed": 0,
+            "max_observed": 0
+          },
+          "retained_subtree_bytes": {
+            "observations": 4,
+            "last_observed": 1817962,
+            "max_observed": 1817962
+          }
+        },
+        "candidate_score_events": 10,
+        "candidate_count_memo": {
+          "hits": 4,
+          "misses": 6,
+          "observations": 10
+        },
+        "actual_hard_native_generation_calls": 6,
+        "unique_native_source_keys": 6,
+        "native_source_identity_certificate": {
+          "observed_distinct_canonical_parsed_sources": 4,
+          "observed_distinct_parsed_source_and_ordered_bounds": 6,
+          "native_generation_calls_upper_bound": 6,
+          "bounds_coincide": true,
+          "proof": "A complete cold context must generate each previously unseen CFF key at least once. Canonical ParsedGraph fields plus ordered bounds are a projection of the complete key (energy-edge maps and other options omitted). Distinct projected keys provide a lower bound; native generation calls provide an upper bound. Equal bounds certify exact full-key uniqueness even if retention is bypassed. Unequal bounds leave uniqueness null. Parsed-source identity retains labels, signatures, masses and boundaries; it is not graph isomorphism or unlabelled physical incidence."
+        },
+        "unique_source_preparation_keys": null,
+        "unique_numerator_template_bindings": null,
+        "unique_full_sample_tuples": null,
+        "retained_cache_entry_counts": null,
+        "uniqueness_limit": "Full structural keys and sample tuples are not logged. The explicit native-key bound certificate can sometimes establish CFF uniqueness; otherwise evictions, oversized bypasses and explicit row-wave clears allow repeated builds/misses. CFF lookup counters include both candidate count and selected payload lookups. Row lookups are per relevant subtree/sample subset, not per complete row. Build and request counts must not be relabeled unique sources or tuples.",
+        "retention_limit": "Evictions count LRU victims only; replacements, oversize bypasses and explicit clears are not evictions. Bytes are accounted retention at recorded endpoints, not RSS or true peak. Live entry counts appear in an existing summary event without #profile and are absent from the minimal filter.",
+        "evaluator_size": "Use the existing count_evaluators executable on the completed saved state for exact program instructions and operation counts. State-file bytes and Atom-stage bytes are separate sizes, not evaluator heap bytes."
+      },
+      "phase_scope": "Individual boundaries can be nested. In particular selection residual already includes losing native time; child dispatch already includes losing template preparation; cumulative cache snapshots are not summed. The full gate applies the nonoverlapping parser accounting."
+    },
+    "GL01": {
+      "case": "dispatch_GL01_4d_direct_r1",
+      "generation_receipt_sha256": "c6d566632da86d44f95af9d014c4434cfd31b34e2402766aeeb76d76dd171abe",
+      "profile_summary_sha256": "4892efd474dfdd6e60d04a86dcc15c4762ccb358974640f06b97bb2d54ce6bee",
+      "card_sha256": "2a6409ffa388ef0228b0ba1a2ae8291430e139cc5a7af58778837e194ed03528",
+      "parser_sha256": "b570d55425ac10b1e383e163b491d0cf33853167f91b92138be8d7a257a6e839",
+      "input_sha256": {
+        "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/final_shared_tensor_power/dispatch_GL01_4d_direct_r1/scratch_state/logs/gammalog-2026-09-14T01-04-43.881Z.jsonl": "ab4a4f7abcefc82ac60c24ee61c00f0568e0c49fb712b586edf5151b48170686"
+      },
+      "pid": 3686235,
+      "started_utc": "2026-09-14T01:04:43.840422+00:00",
+      "completed_utc": "2026-09-14T01:04:51.361325+00:00",
+      "diagnostic_process_wall_seconds": 7.520870857988484,
+      "full_local_uv_dispatch_gate": {
+        "status": "pass",
+        "strict_limit": 0.1,
+        "accounting_complete": true,
+        "accounting_problems": [],
+        "receipt_problems": [],
+        "completed_forest_nodes": 4,
+        "nonroot_nodes": 3,
+        "graph": "GL01",
+        "local_uv_generation_ms": 1650.695776,
+        "forest_elapsed_minus_root_ms": 1651.177948,
+        "measured_child_dispatch_ms": 43.510055,
+        "raw_physical_degree_report_ms": 0.168681,
+        "outer_dispatch_ms": 24.955965,
+        "outer_capacity_analysis_ms": {
+          "standalone_nonroot": 0.0,
+          "included_in_outer_selection": 0.0,
+          "excluded_root_or_outside": 0.0
+        },
+        "outer_winning_native_ms": 5.271891,
+        "outer_losing_raw_requests_ms": 11.047605,
+        "losing_candidate_template_build_ms": 31.486371999999996,
+        "discarded_zero_row_template_build_ms": 0.0,
+        "total_dispatch_ms": 68.634701,
+        "fraction": 0.04157925524369913,
+        "denominator_scope": "Sum of complete nonroot legacy forest nodes: Taylor, child projection and final outer-CT assembly. Root production CFF, final forest summation and tensor/evaluator construction are excluded.",
+        "outer_numerator_policy": "Complete selection minus only the winner's native generation, source reconstruction and postprocessing. Every losing request, proposal construction/certificate, winner degree/capacity preparation and selection/drop cost is charged."
+      },
+      "phase_milliseconds": {
+        "taylor_and_local_construction": 14.100750999999999,
+        "canonical_normalization": 2.1501149999999996,
+        "source_reconstruction": 1.491404,
+        "degree_analysis": 0.831011,
+        "allocation": 1.935905,
+        "candidate_certificate": 0.30569199999999996,
+        "selection_residual_including_losing_native": 6.679492999999999,
+        "winning_hard_native_generation": 21.009327,
+        "losing_hard_native_generation": 4.74291,
+        "winning_template_build": 64.955798,
+        "losing_template_build": 31.486371999999996,
+        "row_mapping": 22.80241000000002,
+        "component_composition": 2.492619,
+        "sector_composition": 1.3202530000000001,
+        "projection_total": 198.299118,
+        "preparation_cache_work": 0.5895889999999999,
+        "row_cache_work": 1.681993
+      },
+      "count_audit": {
+        "status": "complete_work_counts",
+        "problems": [],
+        "scope": "One cold, completely logged legacy forest uses one projection context. Until the full gate and counter checks pass these are observations, not completed-generation totals. Cumulative counters use the last snapshot, never their sum.",
+        "work_occurrences": {
+          "sector_grouping": {
+            "events": 3,
+            "raw_sectors": {
+              "observations": 3,
+              "sum": 3,
+              "max": 1
+            },
+            "grouped_sectors": {
+              "observations": 3,
+              "sum": 3,
+              "max": 1
+            }
+          },
+          "canonical_normalization": {
+            "events": 3,
+            "buckets": {
+              "observations": 3,
+              "sum": 5,
+              "max": 2
+            },
+            "denominator_classes": {
+              "observations": 3,
+              "sum": 6,
+              "max": 3
+            },
+            "components": {
+              "observations": 3,
+              "sum": 4,
+              "max": 2
+            }
+          },
+          "source_reconstruction": {
+            "events": 8,
+            "denominator_occurrences": {
+              "observations": 8,
+              "sum": 32,
+              "max": 7
+            },
+            "classes": {
+              "observations": 8,
+              "sum": 10,
+              "max": 3
+            },
+            "cache_hit": {
+              "true": 0,
+              "false": 8
+            }
+          },
+          "exact_cff_assignment_selection": {
+            "events": 8,
+            "admitted_candidates": {
+              "observations": 8,
+              "sum": 10,
+              "max": 2
+            },
+            "native_rows": {
+              "observations": 8,
+              "sum": 196,
+              "max": 62
+            },
+            "native_payload_cache_hit": {
+              "true": 3,
+              "false": 5
+            }
+          },
+          "numerator_template": {
+            "events": 10,
+            "template_nodes": {
+              "observations": 10,
+              "sum": 1072,
+              "max": 168
+            },
+            "parameters": {
+              "observations": 10,
+              "sum": 163,
+              "max": 20
+            },
+            "cache_hit": {
+              "true": 0,
+              "false": 10
+            }
+          },
+          "numerator_row_mapping": {
+            "events": 196,
+            "required_energies": {
+              "observations": 196,
+              "sum": 990,
+              "max": 6
+            }
+          }
+        },
+        "cumulative_final_snapshot": {
+          "component_requests": 8,
+          "template_builds": 10,
+          "canonical_preparation_builds": 3,
+          "source_preparation_builds": 8,
+          "preparation_hits": 0,
+          "preparation_misses": 21,
+          "preparation_evictions": 0,
+          "cff_hits": 12,
+          "cff_misses": 6,
+          "cff_evictions": 0,
+          "native_generations": 6,
+          "row_hits": 1652,
+          "row_misses": 602,
+          "row_evictions": 0
+        },
+        "retention_gauges": {
+          "retained_preparation_bytes": {
+            "observations": 3,
+            "last_observed": 1233970,
+            "max_observed": 1233970
+          },
+          "retained_cff_bytes": {
+            "observations": 3,
+            "last_observed": 1122044,
+            "max_observed": 1122044
+          },
+          "retained_row_bytes": {
+            "observations": 3,
+            "last_observed": 0,
+            "max_observed": 0
+          },
+          "retained_subtree_bytes": {
+            "observations": 4,
+            "last_observed": 1817962,
+            "max_observed": 1817962
+          }
+        },
+        "candidate_score_events": 10,
+        "candidate_count_memo": {
+          "hits": 4,
+          "misses": 6,
+          "observations": 10
+        },
+        "actual_hard_native_generation_calls": 6,
+        "unique_native_source_keys": 6,
+        "native_source_identity_certificate": {
+          "observed_distinct_canonical_parsed_sources": 4,
+          "observed_distinct_parsed_source_and_ordered_bounds": 6,
+          "native_generation_calls_upper_bound": 6,
+          "bounds_coincide": true,
+          "proof": "A complete cold context must generate each previously unseen CFF key at least once. Canonical ParsedGraph fields plus ordered bounds are a projection of the complete key (energy-edge maps and other options omitted). Distinct projected keys provide a lower bound; native generation calls provide an upper bound. Equal bounds certify exact full-key uniqueness even if retention is bypassed. Unequal bounds leave uniqueness null. Parsed-source identity retains labels, signatures, masses and boundaries; it is not graph isomorphism or unlabelled physical incidence."
+        },
+        "unique_source_preparation_keys": null,
+        "unique_numerator_template_bindings": null,
+        "unique_full_sample_tuples": null,
+        "retained_cache_entry_counts": null,
+        "uniqueness_limit": "Full structural keys and sample tuples are not logged. The explicit native-key bound certificate can sometimes establish CFF uniqueness; otherwise evictions, oversized bypasses and explicit row-wave clears allow repeated builds/misses. CFF lookup counters include both candidate count and selected payload lookups. Row lookups are per relevant subtree/sample subset, not per complete row. Build and request counts must not be relabeled unique sources or tuples.",
+        "retention_limit": "Evictions count LRU victims only; replacements, oversize bypasses and explicit clears are not evictions. Bytes are accounted retention at recorded endpoints, not RSS or true peak. Live entry counts appear in an existing summary event without #profile and are absent from the minimal filter.",
+        "evaluator_size": "Use the existing count_evaluators executable on the completed saved state for exact program instructions and operation counts. State-file bytes and Atom-stage bytes are separate sizes, not evaluator heap bytes."
+      },
+      "phase_scope": "Individual boundaries can be nested. In particular selection residual already includes losing native time; child dispatch already includes losing template preparation; cumulative cache snapshots are not summed. The full gate applies the nonoverlapping parser accounting."
+    }
+  },
+  "all_route_profiles": {
+    "GL00": {
+      "3d_local": {
+        "case": "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/final_shared_tensor_power/dispatch_GL00_3d_local_r1",
+        "card_sha256": "6a5f15b92e8a4e441899a800ede5ccacf227f2850124246f2384ddd385826644",
+        "pid": 3679351,
+        "source_revision": "911f1824f994611d723dff0f50416cb301718617",
+        "binary_sha256": "ef6811aa40114590a0fd72318f99f91850960239ff212abcaf272d7182e48691",
+        "started_utc": "2026-09-14T01:03:40.217165+00:00",
+        "completed_utc": "2026-09-14T01:03:53.631667+00:00",
+        "diagnostic_process_wall_seconds": 13.414355281973258,
+        "guard_observed_peak_rss_bytes": 511275008,
+        "rusage_peak_rss_bytes": 563630080,
+        "guard_observed_peak_vmhwm_bytes": null,
+        "rss_monitor_receipt": {
+          "kind": "Read-only RSS/VmHWM samples observed after structured stage events",
+          "generation_pid": 3679351,
+          "generation_start_ticks": "83504644",
+          "binary_sha256_from_generation_receipt": "ef6811aa40114590a0fd72318f99f91850960239ff212abcaf272d7182e48691",
+          "started_utc": "2026-09-14T01:03:40.378218+00:00",
+          "poll_seconds": 0.05,
+          "periodic_sample_seconds": 1,
+          "samples": 1547,
+          "pre_evaluator_boundary_observed": true,
+          "complete": true,
+          "scope": "Stage samples occur when the log is observed, not exactly when emitted; event lag is recorded. Historical events have no retrospective RSS. This monitor sends no process signals.",
+          "pre_evaluator_boundary": {
+            "observed_utc": "2026-09-14T01:03:45.674549+00:00",
+            "pid": 3679351,
+            "stage": "evaluator_stack_parse_atoms_done",
+            "event_utc": "2026-09-14T01:03:45.635Z",
+            "historical_event": false,
+            "event_lag_seconds": 0.039549,
+            "atom_count": 1,
+            "elapsed_ms": 1919.4125820000002,
+            "rss_bytes": 163430400,
+            "vmhwm_bytes": 186654720
+          },
+          "outcome": "generation process exited",
+          "completed_utc": "2026-09-14T01:03:54.552312+00:00"
+        },
+        "stage_memory_observations": {
+          "forest_compute_done": [
+            {
+              "observed_utc": "2026-09-14T01:03:43.694209+00:00",
+              "pid": 3679351,
+              "stage": "forest_compute_done",
+              "event_utc": "2026-09-14T01:03:43.644Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.050209,
+              "elapsed_ms": 3295.736588,
+              "rss_bytes": 48902144,
+              "vmhwm_bytes": 48902144
+            }
+          ],
+          "evaluator_stack_parse_atoms_start": [
+            {
+              "observed_utc": "2026-09-14T01:03:43.747615+00:00",
+              "pid": 3679351,
+              "stage": "evaluator_stack_parse_atoms_start",
+              "event_utc": "2026-09-14T01:03:43.715Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.032615,
+              "atom_count": 1,
+              "rss_bytes": 47837184,
+              "vmhwm_bytes": 47837184
+            }
+          ],
+          "evaluator_stack_parse_atoms_done": [
+            {
+              "observed_utc": "2026-09-14T01:03:45.674549+00:00",
+              "pid": 3679351,
+              "stage": "evaluator_stack_parse_atoms_done",
+              "event_utc": "2026-09-14T01:03:45.635Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.039549,
+              "atom_count": 1,
+              "elapsed_ms": 1919.4125820000002,
+              "rss_bytes": 163430400,
+              "vmhwm_bytes": 186654720
+            }
+          ],
+          "evaluator_expression_preparation_start": [
+            {
+              "observed_utc": "2026-09-14T01:03:47.388443+00:00",
+              "pid": 3679351,
+              "stage": "evaluator_expression_preparation_start",
+              "event_utc": "2026-09-14T01:03:47.373Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.015443,
+              "rss_bytes": 264241152,
+              "vmhwm_bytes": 405090304
+            },
+            {
+              "observed_utc": "2026-09-14T01:03:49.911293+00:00",
+              "pid": 3679351,
+              "stage": "evaluator_expression_preparation_start",
+              "event_utc": "2026-09-14T01:03:49.877Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.034293,
+              "rss_bytes": 289550336,
+              "vmhwm_bytes": 563630080
+            }
+          ],
+          "evaluator_expression_preparation_done": [
+            {
+              "observed_utc": "2026-09-14T01:03:47.388899+00:00",
+              "pid": 3679351,
+              "stage": "evaluator_expression_preparation_done",
+              "event_utc": "2026-09-14T01:03:47.373Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.015899,
+              "atom_count": 1,
+              "elapsed_ms": 0.19851100000000002,
+              "rss_bytes": 264904704,
+              "vmhwm_bytes": 405090304
+            },
+            {
+              "observed_utc": "2026-09-14T01:03:51.575065+00:00",
+              "pid": 3679351,
+              "stage": "evaluator_expression_preparation_done",
+              "event_utc": "2026-09-14T01:03:51.541Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.034065,
+              "atom_count": 1,
+              "elapsed_ms": 1663.851865,
+              "rss_bytes": 352886784,
+              "vmhwm_bytes": 563630080
+            }
+          ],
+          "evaluator_symbolica_build_start": [
+            {
+              "observed_utc": "2026-09-14T01:03:47.389152+00:00",
+              "pid": 3679351,
+              "stage": "evaluator_symbolica_build_start",
+              "event_utc": "2026-09-14T01:03:47.373Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.016152,
+              "atom_index": 0,
+              "rss_bytes": 265400320,
+              "vmhwm_bytes": 405090304
+            },
+            {
+              "observed_utc": "2026-09-14T01:03:51.575450+00:00",
+              "pid": 3679351,
+              "stage": "evaluator_symbolica_build_start",
+              "event_utc": "2026-09-14T01:03:51.541Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.03445,
+              "atom_index": 0,
+              "rss_bytes": 352886784,
+              "vmhwm_bytes": 563630080
+            }
+          ],
+          "evaluator_symbolica_build_done": [
+            {
+              "observed_utc": "2026-09-14T01:03:49.859491+00:00",
+              "pid": 3679351,
+              "stage": "evaluator_symbolica_build_done",
+              "event_utc": "2026-09-14T01:03:49.856Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.003491,
+              "atom_index": 0,
+              "elapsed_ms": 2482.160435,
+              "rss_bytes": 460484608,
+              "vmhwm_bytes": 563630080
+            },
+            {
+              "observed_utc": "2026-09-14T01:03:52.785306+00:00",
+              "pid": 3679351,
+              "stage": "evaluator_symbolica_build_done",
+              "event_utc": "2026-09-14T01:03:52.778Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.007306,
+              "atom_index": 0,
+              "elapsed_ms": 1236.77054,
+              "rss_bytes": 281591808,
+              "vmhwm_bytes": 563630080
+            }
+          ],
+          "evaluator_numeric_programs_start": [
+            {
+              "observed_utc": "2026-09-14T01:03:49.860004+00:00",
+              "pid": 3679351,
+              "stage": "evaluator_numeric_programs_start",
+              "event_utc": "2026-09-14T01:03:49.856Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.004004,
+              "rss_bytes": 460484608,
+              "vmhwm_bytes": 563630080
+            },
+            {
+              "observed_utc": "2026-09-14T01:03:52.836161+00:00",
+              "pid": 3679351,
+              "stage": "evaluator_numeric_programs_start",
+              "event_utc": "2026-09-14T01:03:52.790Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.046161,
+              "rss_bytes": 257904640,
+              "vmhwm_bytes": 563630080
+            }
+          ],
+          "evaluator_numeric_programs_done": [
+            {
+              "observed_utc": "2026-09-14T01:03:49.910664+00:00",
+              "pid": 3679351,
+              "stage": "evaluator_numeric_programs_done",
+              "event_utc": "2026-09-14T01:03:49.876Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.034664,
+              "elapsed_ms": 20.717117000000002,
+              "rss_bytes": 289550336,
+              "vmhwm_bytes": 563630080
+            },
+            {
+              "observed_utc": "2026-09-14T01:03:52.836544+00:00",
+              "pid": 3679351,
+              "stage": "evaluator_numeric_programs_done",
+              "event_utc": "2026-09-14T01:03:52.802Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.034544,
+              "elapsed_ms": 12.035186999999999,
+              "rss_bytes": 257904640,
+              "vmhwm_bytes": 563630080
+            }
+          ]
+        },
+        "phase_milliseconds": {
+          "preprocessing_ms": 1919.4125820000002,
+          "expression_preparation_ms": 1664.0503760000001,
+          "literal_symbolica_build_ms": 3718.9309749999998,
+          "numeric_program_conversion_ms": 32.752304,
+          "native_symbolica_orchestration_ms": 7167.358602,
+          "native_graph_total_ms": 12484.879671,
+          "graph_total_excluding_literal_build_ms": 8765.948696000001,
+          "graph_total_excluding_native_symbolica_orchestration_ms": 5317.521068999999
+        },
+        "native_generation_summary": {
+          "peak_ram_bytes": 511275008,
+          "reports": [
+            {
+              "process_id": 0,
+              "integrand_name": "2L",
+              "graph_name": "GL00",
+              "stats": {
+                "evaluator_count": 2,
+                "total_time": {
+                  "secs": 12,
+                  "nanos": 484879671
+                },
+                "evaluator_spenso_time": {
+                  "secs": 1,
+                  "nanos": 919412582
+                },
+                "evaluator_symbolica_time": {
+                  "secs": 7,
+                  "nanos": 167358602
+                },
+                "evaluator_compile_time": {
+                  "secs": 0,
+                  "nanos": 0
+                }
+              }
+            }
+          ]
+        },
+        "input_sha256": {
+          "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/final_shared_tensor_power/dispatch_GL00_3d_local_r1/scratch_state/logs/gammalog-2026-09-14T01-03-40.259Z.jsonl": "b2bfafc5f77915bd45a5a7df08e005aefcdc631e186fa23ea880c86cd5717757"
+        },
+        "parser_sha256": "b570d55425ac10b1e383e163b491d0cf33853167f91b92138be8d7a257a6e839",
+        "profile_summary_sha256": "545bbbc2188ddd225188298fef40fc385a958517a35d4c39004f484fc73e650a",
+        "monitor_sha256": "9203059f59d7125cba10560f7899e688fd1001f4b395207740f915c54e691f25",
+        "stage_memory_jsonl_sha256": "91031d2dc1d8e31ae4ffefbfb57a131160f1d14e45d341f980794314c5f1e6a5"
+      },
+      "3d_erased": {
+        "case": "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/final_shared_tensor_power/dispatch_GL00_3d_erased_r1",
+        "card_sha256": "8ba44d0c03631101153f219cc40004a804ee4f3e93234b3e39ceeada83fa2028",
+        "pid": 3679998,
+        "source_revision": "911f1824f994611d723dff0f50416cb301718617",
+        "binary_sha256": "ef6811aa40114590a0fd72318f99f91850960239ff212abcaf272d7182e48691",
+        "started_utc": "2026-09-14T01:03:56.714143+00:00",
+        "completed_utc": "2026-09-14T01:04:03.975863+00:00",
+        "diagnostic_process_wall_seconds": 7.261690572020598,
+        "guard_observed_peak_rss_bytes": 296660992,
+        "rusage_peak_rss_bytes": 350990336,
+        "guard_observed_peak_vmhwm_bytes": null,
+        "rss_monitor_receipt": {
+          "kind": "Read-only RSS/VmHWM samples observed after structured stage events",
+          "generation_pid": 3679998,
+          "generation_start_ticks": "83506294",
+          "binary_sha256_from_generation_receipt": "ef6811aa40114590a0fd72318f99f91850960239ff212abcaf272d7182e48691",
+          "started_utc": "2026-09-14T01:03:56.877214+00:00",
+          "poll_seconds": 0.05,
+          "periodic_sample_seconds": 1,
+          "samples": 1533,
+          "pre_evaluator_boundary_observed": true,
+          "complete": true,
+          "scope": "Stage samples occur when the log is observed, not exactly when emitted; event lag is recorded. Historical events have no retrospective RSS. This monitor sends no process signals.",
+          "pre_evaluator_boundary": {
+            "observed_utc": "2026-09-14T01:04:01.906266+00:00",
+            "pid": 3679998,
+            "stage": "evaluator_stack_parse_atoms_done",
+            "event_utc": "2026-09-14T01:04:01.855Z",
+            "historical_event": false,
+            "event_lag_seconds": 0.051266,
+            "atom_count": 1,
+            "elapsed_ms": 1915.4771560000002,
+            "rss_bytes": 167993344,
+            "vmhwm_bytes": 177393664
+          },
+          "outcome": "generation process exited",
+          "completed_utc": "2026-09-14T01:04:04.027542+00:00"
+        },
+        "stage_memory_observations": {
+          "forest_compute_done": [
+            {
+              "observed_utc": "2026-09-14T01:03:59.875196+00:00",
+              "pid": 3679998,
+              "stage": "forest_compute_done",
+              "event_utc": "2026-09-14T01:03:59.865Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.010196,
+              "elapsed_ms": 3020.37165,
+              "rss_bytes": 49213440,
+              "vmhwm_bytes": 49213440
+            }
+          ],
+          "evaluator_stack_parse_atoms_start": [
+            {
+              "observed_utc": "2026-09-14T01:03:59.979057+00:00",
+              "pid": 3679998,
+              "stage": "evaluator_stack_parse_atoms_start",
+              "event_utc": "2026-09-14T01:03:59.940Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.039057,
+              "atom_count": 1,
+              "rss_bytes": 49635328,
+              "vmhwm_bytes": 49635328
+            }
+          ],
+          "evaluator_stack_parse_atoms_done": [
+            {
+              "observed_utc": "2026-09-14T01:04:01.906266+00:00",
+              "pid": 3679998,
+              "stage": "evaluator_stack_parse_atoms_done",
+              "event_utc": "2026-09-14T01:04:01.855Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.051266,
+              "atom_count": 1,
+              "elapsed_ms": 1915.4771560000002,
+              "rss_bytes": 167993344,
+              "vmhwm_bytes": 177393664
+            }
+          ],
+          "evaluator_expression_preparation_start": [
+            {
+              "observed_utc": "2026-09-14T01:04:01.906676+00:00",
+              "pid": 3679998,
+              "stage": "evaluator_expression_preparation_start",
+              "event_utc": "2026-09-14T01:04:01.855Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.051676,
+              "rss_bytes": 167993344,
+              "vmhwm_bytes": 177393664
+            }
+          ],
+          "evaluator_expression_preparation_done": [
+            {
+              "observed_utc": "2026-09-14T01:04:02.109062+00:00",
+              "pid": 3679998,
+              "stage": "evaluator_expression_preparation_done",
+              "event_utc": "2026-09-14T01:04:02.092Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.017062,
+              "atom_count": 1,
+              "elapsed_ms": 236.0579,
+              "rss_bytes": 167993344,
+              "vmhwm_bytes": 177393664
+            }
+          ],
+          "evaluator_symbolica_build_start": [
+            {
+              "observed_utc": "2026-09-14T01:04:02.109508+00:00",
+              "pid": 3679998,
+              "stage": "evaluator_symbolica_build_start",
+              "event_utc": "2026-09-14T01:04:02.092Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.017508,
+              "atom_index": 0,
+              "rss_bytes": 167993344,
+              "vmhwm_bytes": 177393664
+            }
+          ],
+          "evaluator_symbolica_build_done": [
+            {
+              "observed_utc": "2026-09-14T01:04:03.218435+00:00",
+              "pid": 3679998,
+              "stage": "evaluator_symbolica_build_done",
+              "event_utc": "2026-09-14T01:04:03.204Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.014435,
+              "atom_index": 0,
+              "elapsed_ms": 1112.124544,
+              "rss_bytes": 133230592,
+              "vmhwm_bytes": 350990336
+            }
+          ],
+          "evaluator_numeric_programs_start": [
+            {
+              "observed_utc": "2026-09-14T01:04:03.218891+00:00",
+              "pid": 3679998,
+              "stage": "evaluator_numeric_programs_start",
+              "event_utc": "2026-09-14T01:04:03.207Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.011891,
+              "rss_bytes": 133230592,
+              "vmhwm_bytes": 350990336
+            }
+          ],
+          "evaluator_numeric_programs_done": [
+            {
+              "observed_utc": "2026-09-14T01:04:03.219141+00:00",
+              "pid": 3679998,
+              "stage": "evaluator_numeric_programs_done",
+              "event_utc": "2026-09-14T01:04:03.210Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.009141,
+              "elapsed_ms": 3.537228,
+              "rss_bytes": 133230592,
+              "vmhwm_bytes": 350990336
+            }
+          ]
+        },
+        "phase_milliseconds": {
+          "preprocessing_ms": 1915.4771560000002,
+          "expression_preparation_ms": 236.0579,
+          "literal_symbolica_build_ms": 1112.124544,
+          "numeric_program_conversion_ms": 3.537228,
+          "native_symbolica_orchestration_ms": 1354.999269,
+          "native_graph_total_ms": 6397.9635149999995,
+          "graph_total_excluding_literal_build_ms": 5285.838970999999,
+          "graph_total_excluding_native_symbolica_orchestration_ms": 5042.9642460000005
+        },
+        "native_generation_summary": {
+          "peak_ram_bytes": 308539392,
+          "reports": [
+            {
+              "process_id": 0,
+              "integrand_name": "2L",
+              "graph_name": "GL00",
+              "stats": {
+                "evaluator_count": 1,
+                "total_time": {
+                  "secs": 6,
+                  "nanos": 397963515
+                },
+                "evaluator_spenso_time": {
+                  "secs": 1,
+                  "nanos": 915477156
+                },
+                "evaluator_symbolica_time": {
+                  "secs": 1,
+                  "nanos": 354999269
+                },
+                "evaluator_compile_time": {
+                  "secs": 0,
+                  "nanos": 0
+                }
+              }
+            }
+          ]
+        },
+        "input_sha256": {
+          "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/final_shared_tensor_power/dispatch_GL00_3d_erased_r1/scratch_state/logs/gammalog-2026-09-14T01-03-56.754Z.jsonl": "0db1bb053073292681203a8e0a188d50a4d4f68ed3cdac35228731064d46d6bd"
+        },
+        "parser_sha256": "b570d55425ac10b1e383e163b491d0cf33853167f91b92138be8d7a257a6e839",
+        "profile_summary_sha256": "ff791f371de97a50b509893295af6c1059ac89616474b74966920b3db9efdd40",
+        "monitor_sha256": "9203059f59d7125cba10560f7899e688fd1001f4b395207740f915c54e691f25",
+        "stage_memory_jsonl_sha256": "3d555a2381c9b9f5ca2a0c3b3b99b390d0a61f0d08ab7be13ab744903d962b42"
+      },
+      "4d_direct": {
+        "case": "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/final_shared_tensor_power/dispatch_GL00_4d_direct_r1",
+        "card_sha256": "4b4e4125aa35f5408f5543a617f87ebe1fa370a1c8719ee41ff4a3dd1e82d933",
+        "pid": 3681312,
+        "source_revision": "911f1824f994611d723dff0f50416cb301718617",
+        "binary_sha256": "ef6811aa40114590a0fd72318f99f91850960239ff212abcaf272d7182e48691",
+        "started_utc": "2026-09-14T01:04:06.944910+00:00",
+        "completed_utc": "2026-09-14T01:04:14.455606+00:00",
+        "diagnostic_process_wall_seconds": 7.5106660389574245,
+        "guard_observed_peak_rss_bytes": 307707904,
+        "rusage_peak_rss_bytes": 388419584,
+        "guard_observed_peak_vmhwm_bytes": null,
+        "rss_monitor_receipt": {
+          "kind": "Read-only RSS/VmHWM samples observed after structured stage events",
+          "generation_pid": 3681312,
+          "generation_start_ticks": "83507317",
+          "binary_sha256_from_generation_receipt": "ef6811aa40114590a0fd72318f99f91850960239ff212abcaf272d7182e48691",
+          "started_utc": "2026-09-14T01:04:07.108087+00:00",
+          "poll_seconds": 0.05,
+          "periodic_sample_seconds": 1,
+          "samples": 337,
+          "pre_evaluator_boundary_observed": true,
+          "complete": true,
+          "scope": "Stage samples occur when the log is observed, not exactly when emitted; event lag is recorded. Historical events have no retrospective RSS. This monitor sends no process signals.",
+          "pre_evaluator_boundary": {
+            "observed_utc": "2026-09-14T01:04:12.424485+00:00",
+            "pid": 3681312,
+            "stage": "evaluator_stack_parse_atoms_done",
+            "event_utc": "2026-09-14T01:04:12.387Z",
+            "historical_event": false,
+            "event_lag_seconds": 0.037485,
+            "atom_count": 1,
+            "elapsed_ms": 3382.429737,
+            "rss_bytes": 195776512,
+            "vmhwm_bytes": 247492608
+          },
+          "outcome": "generation process exited",
+          "completed_utc": "2026-09-14T01:04:15.261886+00:00"
+        },
+        "stage_memory_observations": {
+          "forest_compute_done": [
+            {
+              "observed_utc": "2026-09-14T01:04:08.938292+00:00",
+              "pid": 3681312,
+              "stage": "forest_compute_done",
+              "event_utc": "2026-09-14T01:04:08.925Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.013292,
+              "elapsed_ms": 1849.832962,
+              "rss_bytes": 53747712,
+              "vmhwm_bytes": 53747712
+            }
+          ],
+          "evaluator_stack_parse_atoms_start": [
+            {
+              "observed_utc": "2026-09-14T01:04:09.041974+00:00",
+              "pid": 3681312,
+              "stage": "evaluator_stack_parse_atoms_start",
+              "event_utc": "2026-09-14T01:04:09.004Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.037974,
+              "atom_count": 1,
+              "rss_bytes": 51695616,
+              "vmhwm_bytes": 51695616
+            }
+          ],
+          "evaluator_stack_parse_atoms_done": [
+            {
+              "observed_utc": "2026-09-14T01:04:12.424485+00:00",
+              "pid": 3681312,
+              "stage": "evaluator_stack_parse_atoms_done",
+              "event_utc": "2026-09-14T01:04:12.387Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.037485,
+              "atom_count": 1,
+              "elapsed_ms": 3382.429737,
+              "rss_bytes": 195776512,
+              "vmhwm_bytes": 247492608
+            }
+          ],
+          "evaluator_expression_preparation_start": [
+            {
+              "observed_utc": "2026-09-14T01:04:12.424919+00:00",
+              "pid": 3681312,
+              "stage": "evaluator_expression_preparation_start",
+              "event_utc": "2026-09-14T01:04:12.387Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.037919,
+              "rss_bytes": 195776512,
+              "vmhwm_bytes": 247492608
+            }
+          ],
+          "evaluator_expression_preparation_done": [
+            {
+              "observed_utc": "2026-09-14T01:04:12.626735+00:00",
+              "pid": 3681312,
+              "stage": "evaluator_expression_preparation_done",
+              "event_utc": "2026-09-14T01:04:12.618Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.008735,
+              "atom_count": 1,
+              "elapsed_ms": 231.40116999999998,
+              "rss_bytes": 195776512,
+              "vmhwm_bytes": 247492608
+            }
+          ],
+          "evaluator_symbolica_build_start": [
+            {
+              "observed_utc": "2026-09-14T01:04:12.627246+00:00",
+              "pid": 3681312,
+              "stage": "evaluator_symbolica_build_start",
+              "event_utc": "2026-09-14T01:04:12.618Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.009246,
+              "atom_index": 0,
+              "rss_bytes": 195776512,
+              "vmhwm_bytes": 247492608
+            }
+          ],
+          "evaluator_symbolica_build_done": [
+            {
+              "observed_utc": "2026-09-14T01:04:13.484147+00:00",
+              "pid": 3681312,
+              "stage": "evaluator_symbolica_build_done",
+              "event_utc": "2026-09-14T01:04:13.481Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.003147,
+              "atom_index": 0,
+              "elapsed_ms": 862.836959,
+              "rss_bytes": 201035776,
+              "vmhwm_bytes": 388419584
+            }
+          ],
+          "evaluator_numeric_programs_start": [
+            {
+              "observed_utc": "2026-09-14T01:04:13.535019+00:00",
+              "pid": 3681312,
+              "stage": "evaluator_numeric_programs_start",
+              "event_utc": "2026-09-14T01:04:13.484Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.051019,
+              "rss_bytes": 201039872,
+              "vmhwm_bytes": 388419584
+            }
+          ],
+          "evaluator_numeric_programs_done": [
+            {
+              "observed_utc": "2026-09-14T01:04:13.535427+00:00",
+              "pid": 3681312,
+              "stage": "evaluator_numeric_programs_done",
+              "event_utc": "2026-09-14T01:04:13.487Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.048427,
+              "elapsed_ms": 2.847567,
+              "rss_bytes": 201039872,
+              "vmhwm_bytes": 388419584
+            }
+          ]
+        },
+        "phase_milliseconds": {
+          "preprocessing_ms": 3382.429737,
+          "expression_preparation_ms": 231.40116999999998,
+          "literal_symbolica_build_ms": 862.836959,
+          "numeric_program_conversion_ms": 2.847567,
+          "native_symbolica_orchestration_ms": 1100.293282,
+          "native_graph_total_ms": 6442.616939,
+          "graph_total_excluding_literal_build_ms": 5579.779979999999,
+          "graph_total_excluding_native_symbolica_orchestration_ms": 5342.323657
+        },
+        "native_generation_summary": {
+          "peak_ram_bytes": 280006656,
+          "reports": [
+            {
+              "process_id": 0,
+              "integrand_name": "2L",
+              "graph_name": "GL00",
+              "stats": {
+                "evaluator_count": 1,
+                "total_time": {
+                  "secs": 6,
+                  "nanos": 442616939
+                },
+                "evaluator_spenso_time": {
+                  "secs": 3,
+                  "nanos": 382429737
+                },
+                "evaluator_symbolica_time": {
+                  "secs": 1,
+                  "nanos": 100293282
+                },
+                "evaluator_compile_time": {
+                  "secs": 0,
+                  "nanos": 0
+                }
+              }
+            }
+          ]
+        },
+        "input_sha256": {
+          "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/final_shared_tensor_power/dispatch_GL00_4d_direct_r1/scratch_state/logs/gammalog-2026-09-14T01-04-06.985Z.jsonl": "9ba1f0710a9f6bcc89d30cde9e6ed110b1e2770f86897381ec45ce4e8814b0ce"
+        },
+        "parser_sha256": "b570d55425ac10b1e383e163b491d0cf33853167f91b92138be8d7a257a6e839",
+        "profile_summary_sha256": "a32cc6315b3520c4d759985136dda96282b72ac02c2a52abf95d774fa395ff1e",
+        "monitor_sha256": "9203059f59d7125cba10560f7899e688fd1001f4b395207740f915c54e691f25",
+        "stage_memory_jsonl_sha256": "e6d8e724232de451063b505d49f0eef2daaf98fae078c119490b9b49c6fe392a"
+      }
+    },
+    "GL01": {
+      "3d_local": {
+        "case": "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/final_shared_tensor_power/dispatch_GL01_3d_local_r1",
+        "card_sha256": "09c4a686491280a220de1064ae9e01e56d873c93a8d3d5ccc165e7729d6e30fa",
+        "pid": 3682781,
+        "source_revision": "911f1824f994611d723dff0f50416cb301718617",
+        "binary_sha256": "ef6811aa40114590a0fd72318f99f91850960239ff212abcaf272d7182e48691",
+        "started_utc": "2026-09-14T01:04:17.404472+00:00",
+        "completed_utc": "2026-09-14T01:04:30.425737+00:00",
+        "diagnostic_process_wall_seconds": 13.021234186016954,
+        "guard_observed_peak_rss_bytes": 361828352,
+        "rusage_peak_rss_bytes": 526061568,
+        "guard_observed_peak_vmhwm_bytes": null,
+        "rss_monitor_receipt": {
+          "kind": "Read-only RSS/VmHWM samples observed after structured stage events",
+          "generation_pid": 3682781,
+          "generation_start_ticks": "83508363",
+          "binary_sha256_from_generation_receipt": "ef6811aa40114590a0fd72318f99f91850960239ff212abcaf272d7182e48691",
+          "started_utc": "2026-09-14T01:04:17.564839+00:00",
+          "poll_seconds": 0.05,
+          "periodic_sample_seconds": 1,
+          "samples": 1546,
+          "pre_evaluator_boundary_observed": true,
+          "complete": true,
+          "scope": "Stage samples occur when the log is observed, not exactly when emitted; event lag is recorded. Historical events have no retrospective RSS. This monitor sends no process signals.",
+          "pre_evaluator_boundary": {
+            "observed_utc": "2026-09-14T01:04:22.647600+00:00",
+            "pid": 3682781,
+            "stage": "evaluator_stack_parse_atoms_done",
+            "event_utc": "2026-09-14T01:04:22.611Z",
+            "historical_event": false,
+            "event_lag_seconds": 0.0366,
+            "atom_count": 1,
+            "elapsed_ms": 1922.3642750000001,
+            "rss_bytes": 184750080,
+            "vmhwm_bytes": 184750080
+          },
+          "outcome": "generation process exited",
+          "completed_utc": "2026-09-14T01:04:30.769691+00:00"
+        },
+        "stage_memory_observations": {
+          "forest_compute_done": [
+            {
+              "observed_utc": "2026-09-14T01:04:20.667217+00:00",
+              "pid": 3682781,
+              "stage": "forest_compute_done",
+              "event_utc": "2026-09-14T01:04:20.620Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.047217,
+              "elapsed_ms": 3083.1128940000003,
+              "rss_bytes": 47976448,
+              "vmhwm_bytes": 47976448
+            }
+          ],
+          "evaluator_stack_parse_atoms_start": [
+            {
+              "observed_utc": "2026-09-14T01:04:20.720984+00:00",
+              "pid": 3682781,
+              "stage": "evaluator_stack_parse_atoms_start",
+              "event_utc": "2026-09-14T01:04:20.689Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.031984,
+              "atom_count": 1,
+              "rss_bytes": 46800896,
+              "vmhwm_bytes": 46800896
+            }
+          ],
+          "evaluator_stack_parse_atoms_done": [
+            {
+              "observed_utc": "2026-09-14T01:04:22.647600+00:00",
+              "pid": 3682781,
+              "stage": "evaluator_stack_parse_atoms_done",
+              "event_utc": "2026-09-14T01:04:22.611Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.0366,
+              "atom_count": 1,
+              "elapsed_ms": 1922.3642750000001,
+              "rss_bytes": 184750080,
+              "vmhwm_bytes": 184750080
+            }
+          ],
+          "evaluator_expression_preparation_start": [
+            {
+              "observed_utc": "2026-09-14T01:04:24.361727+00:00",
+              "pid": 3682781,
+              "stage": "evaluator_expression_preparation_start",
+              "event_utc": "2026-09-14T01:04:24.347Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.014727,
+              "rss_bytes": 261824512,
+              "vmhwm_bytes": 424108032
+            },
+            {
+              "observed_utc": "2026-09-14T01:04:26.884775+00:00",
+              "pid": 3682781,
+              "stage": "evaluator_expression_preparation_start",
+              "event_utc": "2026-09-14T01:04:26.858Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.026775,
+              "rss_bytes": 265699328,
+              "vmhwm_bytes": 526061568
+            }
+          ],
+          "evaluator_expression_preparation_done": [
+            {
+              "observed_utc": "2026-09-14T01:04:24.362240+00:00",
+              "pid": 3682781,
+              "stage": "evaluator_expression_preparation_done",
+              "event_utc": "2026-09-14T01:04:24.347Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.01524,
+              "atom_count": 1,
+              "elapsed_ms": 0.15894999999999998,
+              "rss_bytes": 262500352,
+              "vmhwm_bytes": 424108032
+            },
+            {
+              "observed_utc": "2026-09-14T01:04:28.497967+00:00",
+              "pid": 3682781,
+              "stage": "evaluator_expression_preparation_done",
+              "event_utc": "2026-09-14T01:04:28.459Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.038967,
+              "atom_count": 1,
+              "elapsed_ms": 1600.8807250000002,
+              "rss_bytes": 297046016,
+              "vmhwm_bytes": 526061568
+            }
+          ],
+          "evaluator_symbolica_build_start": [
+            {
+              "observed_utc": "2026-09-14T01:04:24.362486+00:00",
+              "pid": 3682781,
+              "stage": "evaluator_symbolica_build_start",
+              "event_utc": "2026-09-14T01:04:24.347Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.015486,
+              "atom_index": 0,
+              "rss_bytes": 262967296,
+              "vmhwm_bytes": 424108032
+            },
+            {
+              "observed_utc": "2026-09-14T01:04:28.498398+00:00",
+              "pid": 3682781,
+              "stage": "evaluator_symbolica_build_start",
+              "event_utc": "2026-09-14T01:04:28.460Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.038398,
+              "atom_index": 0,
+              "rss_bytes": 297046016,
+              "vmhwm_bytes": 526061568
+            }
+          ],
+          "evaluator_symbolica_build_done": [
+            {
+              "observed_utc": "2026-09-14T01:04:26.883513+00:00",
+              "pid": 3682781,
+              "stage": "evaluator_symbolica_build_done",
+              "event_utc": "2026-09-14T01:04:26.853Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.030513,
+              "atom_index": 0,
+              "elapsed_ms": 2506.577033,
+              "rss_bytes": 265699328,
+              "vmhwm_bytes": 526061568
+            },
+            {
+              "observed_utc": "2026-09-14T01:04:29.758612+00:00",
+              "pid": 3682781,
+              "stage": "evaluator_symbolica_build_done",
+              "event_utc": "2026-09-14T01:04:29.734Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.024612,
+              "atom_index": 0,
+              "elapsed_ms": 1274.861672,
+              "rss_bytes": 234278912,
+              "vmhwm_bytes": 526061568
+            }
+          ],
+          "evaluator_numeric_programs_start": [
+            {
+              "observed_utc": "2026-09-14T01:04:26.884054+00:00",
+              "pid": 3682781,
+              "stage": "evaluator_numeric_programs_start",
+              "event_utc": "2026-09-14T01:04:26.853Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.031054,
+              "rss_bytes": 265699328,
+              "vmhwm_bytes": 526061568
+            },
+            {
+              "observed_utc": "2026-09-14T01:04:29.759088+00:00",
+              "pid": 3682781,
+              "stage": "evaluator_numeric_programs_start",
+              "event_utc": "2026-09-14T01:04:29.742Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.017088,
+              "rss_bytes": 234278912,
+              "vmhwm_bytes": 526061568
+            }
+          ],
+          "evaluator_numeric_programs_done": [
+            {
+              "observed_utc": "2026-09-14T01:04:26.884312+00:00",
+              "pid": 3682781,
+              "stage": "evaluator_numeric_programs_done",
+              "event_utc": "2026-09-14T01:04:26.858Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.026312,
+              "elapsed_ms": 4.84944,
+              "rss_bytes": 265699328,
+              "vmhwm_bytes": 526061568
+            },
+            {
+              "observed_utc": "2026-09-14T01:04:29.759335+00:00",
+              "pid": 3682781,
+              "stage": "evaluator_numeric_programs_done",
+              "event_utc": "2026-09-14T01:04:29.754Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.005335,
+              "elapsed_ms": 12.562548999999999,
+              "rss_bytes": 234278912,
+              "vmhwm_bytes": 526061568
+            }
+          ]
+        },
+        "phase_milliseconds": {
+          "preprocessing_ms": 1922.3642750000001,
+          "expression_preparation_ms": 1601.0396750000002,
+          "literal_symbolica_build_ms": 3781.438705,
+          "numeric_program_conversion_ms": 17.411989,
+          "native_symbolica_orchestration_ms": 7143.526823,
+          "native_graph_total_ms": 12249.814679,
+          "graph_total_excluding_literal_build_ms": 8468.375973999999,
+          "graph_total_excluding_native_symbolica_orchestration_ms": 5106.287856
+        },
+        "native_generation_summary": {
+          "peak_ram_bytes": 429387776,
+          "reports": [
+            {
+              "process_id": 0,
+              "integrand_name": "2L",
+              "graph_name": "GL01",
+              "stats": {
+                "evaluator_count": 2,
+                "total_time": {
+                  "secs": 12,
+                  "nanos": 249814679
+                },
+                "evaluator_spenso_time": {
+                  "secs": 1,
+                  "nanos": 922364275
+                },
+                "evaluator_symbolica_time": {
+                  "secs": 7,
+                  "nanos": 143526823
+                },
+                "evaluator_compile_time": {
+                  "secs": 0,
+                  "nanos": 0
+                }
+              }
+            }
+          ]
+        },
+        "input_sha256": {
+          "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/final_shared_tensor_power/dispatch_GL01_3d_local_r1/scratch_state/logs/gammalog-2026-09-14T01-04-17.445Z.jsonl": "d4bbbf8e03557468e0ffd27fe14d897cd27b97289a7e357938b8f98b80cab854"
+        },
+        "parser_sha256": "b570d55425ac10b1e383e163b491d0cf33853167f91b92138be8d7a257a6e839",
+        "profile_summary_sha256": "439261a885633ac3c55b26f310610c2127f95b19ca764d77c8230b2aab9fef28",
+        "monitor_sha256": "9203059f59d7125cba10560f7899e688fd1001f4b395207740f915c54e691f25",
+        "stage_memory_jsonl_sha256": "5a8ce8a5a941df68817c12b667387f5fa7e6653ce838ea68d59583186f6a2cfe"
+      },
+      "3d_erased": {
+        "case": "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/final_shared_tensor_power/dispatch_GL01_3d_erased_r1",
+        "card_sha256": "70864afe7f410a7deff59a0a91ed550d353df1b35bda3fb77db63b045f200592",
+        "pid": 3684522,
+        "source_revision": "911f1824f994611d723dff0f50416cb301718617",
+        "binary_sha256": "ef6811aa40114590a0fd72318f99f91850960239ff212abcaf272d7182e48691",
+        "started_utc": "2026-09-14T01:04:33.636599+00:00",
+        "completed_utc": "2026-09-14T01:04:40.901536+00:00",
+        "diagnostic_process_wall_seconds": 7.2647622539661825,
+        "guard_observed_peak_rss_bytes": 316010496,
+        "rusage_peak_rss_bytes": 357019648,
+        "guard_observed_peak_vmhwm_bytes": null,
+        "rss_monitor_receipt": {
+          "kind": "Read-only RSS/VmHWM samples observed after structured stage events",
+          "generation_pid": 3684522,
+          "generation_start_ticks": "83509986",
+          "binary_sha256_from_generation_receipt": "ef6811aa40114590a0fd72318f99f91850960239ff212abcaf272d7182e48691",
+          "started_utc": "2026-09-14T01:04:33.801340+00:00",
+          "poll_seconds": 0.05,
+          "periodic_sample_seconds": 1,
+          "samples": 1533,
+          "pre_evaluator_boundary_observed": true,
+          "complete": true,
+          "scope": "Stage samples occur when the log is observed, not exactly when emitted; event lag is recorded. Historical events have no retrospective RSS. This monitor sends no process signals.",
+          "pre_evaluator_boundary": {
+            "observed_utc": "2026-09-14T01:04:38.878064+00:00",
+            "pid": 3684522,
+            "stage": "evaluator_stack_parse_atoms_done",
+            "event_utc": "2026-09-14T01:04:38.871Z",
+            "historical_event": false,
+            "event_lag_seconds": 0.007064,
+            "atom_count": 1,
+            "elapsed_ms": 1952.911854,
+            "rss_bytes": 166367232,
+            "vmhwm_bytes": 173547520
+          },
+          "outcome": "generation process exited",
+          "completed_utc": "2026-09-14T01:04:40.949311+00:00"
+        },
+        "stage_memory_observations": {
+          "forest_compute_done": [
+            {
+              "observed_utc": "2026-09-14T01:04:36.846889+00:00",
+              "pid": 3684522,
+              "stage": "forest_compute_done",
+              "event_utc": "2026-09-14T01:04:36.843Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.003889,
+              "elapsed_ms": 3072.295557,
+              "rss_bytes": 47579136,
+              "vmhwm_bytes": 47579136
+            }
+          ],
+          "evaluator_stack_parse_atoms_start": [
+            {
+              "observed_utc": "2026-09-14T01:04:36.950997+00:00",
+              "pid": 3684522,
+              "stage": "evaluator_stack_parse_atoms_start",
+              "event_utc": "2026-09-14T01:04:36.918Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.032997,
+              "atom_count": 1,
+              "rss_bytes": 48406528,
+              "vmhwm_bytes": 48406528
+            }
+          ],
+          "evaluator_stack_parse_atoms_done": [
+            {
+              "observed_utc": "2026-09-14T01:04:38.878064+00:00",
+              "pid": 3684522,
+              "stage": "evaluator_stack_parse_atoms_done",
+              "event_utc": "2026-09-14T01:04:38.871Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.007064,
+              "atom_count": 1,
+              "elapsed_ms": 1952.911854,
+              "rss_bytes": 166367232,
+              "vmhwm_bytes": 173547520
+            }
+          ],
+          "evaluator_expression_preparation_start": [
+            {
+              "observed_utc": "2026-09-14T01:04:38.878472+00:00",
+              "pid": 3684522,
+              "stage": "evaluator_expression_preparation_start",
+              "event_utc": "2026-09-14T01:04:38.871Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.007472,
+              "rss_bytes": 166367232,
+              "vmhwm_bytes": 173547520
+            }
+          ],
+          "evaluator_expression_preparation_done": [
+            {
+              "observed_utc": "2026-09-14T01:04:39.131149+00:00",
+              "pid": 3684522,
+              "stage": "evaluator_expression_preparation_done",
+              "event_utc": "2026-09-14T01:04:39.107Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.024149,
+              "atom_count": 1,
+              "elapsed_ms": 235.883592,
+              "rss_bytes": 166367232,
+              "vmhwm_bytes": 173547520
+            }
+          ],
+          "evaluator_symbolica_build_start": [
+            {
+              "observed_utc": "2026-09-14T01:04:39.131593+00:00",
+              "pid": 3684522,
+              "stage": "evaluator_symbolica_build_start",
+              "event_utc": "2026-09-14T01:04:39.107Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.024593,
+              "atom_index": 0,
+              "rss_bytes": 166367232,
+              "vmhwm_bytes": 173547520
+            }
+          ],
+          "evaluator_symbolica_build_done": [
+            {
+              "observed_utc": "2026-09-14T01:04:40.291256+00:00",
+              "pid": 3684522,
+              "stage": "evaluator_symbolica_build_done",
+              "event_utc": "2026-09-14T01:04:40.249Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.042256,
+              "atom_index": 0,
+              "elapsed_ms": 1142.2563969999999,
+              "rss_bytes": 104382464,
+              "vmhwm_bytes": 357019648
+            }
+          ],
+          "evaluator_numeric_programs_start": [
+            {
+              "observed_utc": "2026-09-14T01:04:40.291704+00:00",
+              "pid": 3684522,
+              "stage": "evaluator_numeric_programs_start",
+              "event_utc": "2026-09-14T01:04:40.252Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.039704,
+              "rss_bytes": 104382464,
+              "vmhwm_bytes": 357019648
+            }
+          ],
+          "evaluator_numeric_programs_done": [
+            {
+              "observed_utc": "2026-09-14T01:04:40.291964+00:00",
+              "pid": 3684522,
+              "stage": "evaluator_numeric_programs_done",
+              "event_utc": "2026-09-14T01:04:40.256Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.035964,
+              "elapsed_ms": 3.545079,
+              "rss_bytes": 104382464,
+              "vmhwm_bytes": 357019648
+            }
+          ]
+        },
+        "phase_milliseconds": {
+          "preprocessing_ms": 1952.911854,
+          "expression_preparation_ms": 235.883592,
+          "literal_symbolica_build_ms": 1142.2563969999999,
+          "numeric_program_conversion_ms": 3.545079,
+          "native_symbolica_orchestration_ms": 1385.333776,
+          "native_graph_total_ms": 6517.908849,
+          "graph_total_excluding_literal_build_ms": 5375.652452,
+          "graph_total_excluding_native_symbolica_orchestration_ms": 5132.575073
+        },
+        "native_generation_summary": {
+          "peak_ram_bytes": 257564672,
+          "reports": [
+            {
+              "process_id": 0,
+              "integrand_name": "2L",
+              "graph_name": "GL01",
+              "stats": {
+                "evaluator_count": 1,
+                "total_time": {
+                  "secs": 6,
+                  "nanos": 517908849
+                },
+                "evaluator_spenso_time": {
+                  "secs": 1,
+                  "nanos": 952911854
+                },
+                "evaluator_symbolica_time": {
+                  "secs": 1,
+                  "nanos": 385333776
+                },
+                "evaluator_compile_time": {
+                  "secs": 0,
+                  "nanos": 0
+                }
+              }
+            }
+          ]
+        },
+        "input_sha256": {
+          "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/final_shared_tensor_power/dispatch_GL01_3d_erased_r1/scratch_state/logs/gammalog-2026-09-14T01-04-33.679Z.jsonl": "d441981d8009a77e155c79319e5c364aeadbe633287d3c4ae820fb6a072a2b7f"
+        },
+        "parser_sha256": "b570d55425ac10b1e383e163b491d0cf33853167f91b92138be8d7a257a6e839",
+        "profile_summary_sha256": "27fd98adb67386fa9b91aa6b54c8ef38ef9d65083b1294802307a8b3e4d9cf3a",
+        "monitor_sha256": "9203059f59d7125cba10560f7899e688fd1001f4b395207740f915c54e691f25",
+        "stage_memory_jsonl_sha256": "0c5e4cf0c830bebf385d0191a29a4f8c31f343adcbe70fc196de27fa3e73d47e"
+      },
+      "4d_direct": {
+        "case": "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/final_shared_tensor_power/dispatch_GL01_4d_direct_r1",
+        "card_sha256": "2a6409ffa388ef0228b0ba1a2ae8291430e139cc5a7af58778837e194ed03528",
+        "pid": 3686235,
+        "source_revision": "911f1824f994611d723dff0f50416cb301718617",
+        "binary_sha256": "ef6811aa40114590a0fd72318f99f91850960239ff212abcaf272d7182e48691",
+        "started_utc": "2026-09-14T01:04:43.840422+00:00",
+        "completed_utc": "2026-09-14T01:04:51.361325+00:00",
+        "diagnostic_process_wall_seconds": 7.520870857988484,
+        "guard_observed_peak_rss_bytes": 261644288,
+        "rusage_peak_rss_bytes": 398221312,
+        "guard_observed_peak_vmhwm_bytes": null,
+        "rss_monitor_receipt": {
+          "kind": "Read-only RSS/VmHWM samples observed after structured stage events",
+          "generation_pid": 3686235,
+          "generation_start_ticks": "83511006",
+          "binary_sha256_from_generation_receipt": "ef6811aa40114590a0fd72318f99f91850960239ff212abcaf272d7182e48691",
+          "started_utc": "2026-09-14T01:04:43.998962+00:00",
+          "poll_seconds": 0.05,
+          "periodic_sample_seconds": 1,
+          "samples": 337,
+          "pre_evaluator_boundary_observed": true,
+          "complete": true,
+          "scope": "Stage samples occur when the log is observed, not exactly when emitted; event lag is recorded. Historical events have no retrospective RSS. This monitor sends no process signals.",
+          "pre_evaluator_boundary": {
+            "observed_utc": "2026-09-14T01:04:49.539998+00:00",
+            "pid": 3686235,
+            "stage": "evaluator_stack_parse_atoms_done",
+            "event_utc": "2026-09-14T01:04:49.490Z",
+            "historical_event": false,
+            "event_lag_seconds": 0.049998,
+            "atom_count": 1,
+            "elapsed_ms": 3590.041499,
+            "rss_bytes": 187338752,
+            "vmhwm_bytes": 229552128
+          },
+          "outcome": "generation process exited",
+          "completed_utc": "2026-09-14T01:04:52.165239+00:00"
+        },
+        "stage_memory_observations": {
+          "forest_compute_done": [
+            {
+              "observed_utc": "2026-09-14T01:04:45.833902+00:00",
+              "pid": 3686235,
+              "stage": "forest_compute_done",
+              "event_utc": "2026-09-14T01:04:45.822Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.011902,
+              "elapsed_ms": 1850.725709,
+              "rss_bytes": 57200640,
+              "vmhwm_bytes": 57200640
+            }
+          ],
+          "evaluator_stack_parse_atoms_start": [
+            {
+              "observed_utc": "2026-09-14T01:04:46.105917+00:00",
+              "pid": 3686235,
+              "stage": "evaluator_stack_parse_atoms_start",
+              "event_utc": "2026-09-14T01:04:45.900Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.205917,
+              "atom_count": 1,
+              "rss_bytes": 52023296,
+              "vmhwm_bytes": 52023296
+            }
+          ],
+          "evaluator_stack_parse_atoms_done": [
+            {
+              "observed_utc": "2026-09-14T01:04:49.539998+00:00",
+              "pid": 3686235,
+              "stage": "evaluator_stack_parse_atoms_done",
+              "event_utc": "2026-09-14T01:04:49.490Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.049998,
+              "atom_count": 1,
+              "elapsed_ms": 3590.041499,
+              "rss_bytes": 187338752,
+              "vmhwm_bytes": 229552128
+            }
+          ],
+          "evaluator_expression_preparation_start": [
+            {
+              "observed_utc": "2026-09-14T01:04:49.540402+00:00",
+              "pid": 3686235,
+              "stage": "evaluator_expression_preparation_start",
+              "event_utc": "2026-09-14T01:04:49.491Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.049402,
+              "rss_bytes": 187338752,
+              "vmhwm_bytes": 229552128
+            }
+          ],
+          "evaluator_expression_preparation_done": [
+            {
+              "observed_utc": "2026-09-14T01:04:49.742309+00:00",
+              "pid": 3686235,
+              "stage": "evaluator_expression_preparation_done",
+              "event_utc": "2026-09-14T01:04:49.719Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.023309,
+              "atom_count": 1,
+              "elapsed_ms": 228.824797,
+              "rss_bytes": 187338752,
+              "vmhwm_bytes": 229552128
+            }
+          ],
+          "evaluator_symbolica_build_start": [
+            {
+              "observed_utc": "2026-09-14T01:04:49.742751+00:00",
+              "pid": 3686235,
+              "stage": "evaluator_symbolica_build_start",
+              "event_utc": "2026-09-14T01:04:49.720Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.022751,
+              "atom_index": 0,
+              "rss_bytes": 187338752,
+              "vmhwm_bytes": 229552128
+            }
+          ],
+          "evaluator_symbolica_build_done": [
+            {
+              "observed_utc": "2026-09-14T01:04:50.599933+00:00",
+              "pid": 3686235,
+              "stage": "evaluator_symbolica_build_done",
+              "event_utc": "2026-09-14T01:04:50.595Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.004933,
+              "atom_index": 0,
+              "elapsed_ms": 875.562278,
+              "rss_bytes": 187637760,
+              "vmhwm_bytes": 398221312
+            }
+          ],
+          "evaluator_numeric_programs_start": [
+            {
+              "observed_utc": "2026-09-14T01:04:50.600377+00:00",
+              "pid": 3686235,
+              "stage": "evaluator_numeric_programs_start",
+              "event_utc": "2026-09-14T01:04:50.598Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.002377,
+              "rss_bytes": 187637760,
+              "vmhwm_bytes": 398221312
+            }
+          ],
+          "evaluator_numeric_programs_done": [
+            {
+              "observed_utc": "2026-09-14T01:04:50.651046+00:00",
+              "pid": 3686235,
+              "stage": "evaluator_numeric_programs_done",
+              "event_utc": "2026-09-14T01:04:50.601Z",
+              "historical_event": false,
+              "event_lag_seconds": 0.050046,
+              "elapsed_ms": 2.604626,
+              "rss_bytes": 187662336,
+              "vmhwm_bytes": 398221312
+            }
+          ]
+        },
+        "phase_milliseconds": {
+          "preprocessing_ms": 3590.041499,
+          "expression_preparation_ms": 228.824797,
+          "literal_symbolica_build_ms": 875.562278,
+          "numeric_program_conversion_ms": 2.604626,
+          "native_symbolica_orchestration_ms": 1110.369579,
+          "native_graph_total_ms": 6661.640407,
+          "graph_total_excluding_literal_build_ms": 5786.0781289999995,
+          "graph_total_excluding_native_symbolica_orchestration_ms": 5551.270828
+        },
+        "native_generation_summary": {
+          "peak_ram_bytes": 370429952,
+          "reports": [
+            {
+              "process_id": 0,
+              "integrand_name": "2L",
+              "graph_name": "GL01",
+              "stats": {
+                "evaluator_count": 1,
+                "total_time": {
+                  "secs": 6,
+                  "nanos": 661640407
+                },
+                "evaluator_spenso_time": {
+                  "secs": 3,
+                  "nanos": 590041499
+                },
+                "evaluator_symbolica_time": {
+                  "secs": 1,
+                  "nanos": 110369579
+                },
+                "evaluator_compile_time": {
+                  "secs": 0,
+                  "nanos": 0
+                }
+              }
+            }
+          ]
+        },
+        "input_sha256": {
+          "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/final_shared_tensor_power/dispatch_GL01_4d_direct_r1/scratch_state/logs/gammalog-2026-09-14T01-04-43.881Z.jsonl": "ab4a4f7abcefc82ac60c24ee61c00f0568e0c49fb712b586edf5151b48170686"
+        },
+        "parser_sha256": "b570d55425ac10b1e383e163b491d0cf33853167f91b92138be8d7a257a6e839",
+        "profile_summary_sha256": "4892efd474dfdd6e60d04a86dcc15c4762ccb358974640f06b97bb2d54ce6bee",
+        "monitor_sha256": "9203059f59d7125cba10560f7899e688fd1001f4b395207740f915c54e691f25",
+        "stage_memory_jsonl_sha256": "fb60184b97a56c7e48d3f2975c8a78e009d0f88aee6b6908304ed0de4e4953a7"
+      }
+    }
+  },
+  "memory_boundary_definitions": {
+    "rss_bytes": "Observed process resident set at the stage-event observation, not a synchronous in-process allocation measurement.",
+    "vmhwm_bytes": "Cumulative process resident high-water mark at this observation; not the maximum of this phase alone.",
+    "event_lag_seconds": "Observation timestamp minus structured event timestamp. Every requested event is retained; short stages may share an observed resident-set sample.",
+    "pre_spenso": "evaluator_stack_parse_atoms_start",
+    "post_spenso": "evaluator_stack_parse_atoms_done",
+    "literal_symbolica_build_entry": "Every evaluator_symbolica_build_start, distinct from the earlier evaluator_expression_preparation_start."
+  },
+  "timing_boundary_definitions": {
+    "literal_symbolica_build_ms": "Sum of the nonoverlapping evaluator_symbolica_build_done elapsed_ms intervals across all generated evaluators.",
+    "native_symbolica_orchestration_ms": "evaluator_stack_new_done.symbolica_ms includes expression/function-map preparation, actual builds and numeric program conversion; broader than literal .build.",
+    "phase_medians": "Profiles have one independent fresh process per graph/route; they are phase diagnostics, not repeated performance medians."
+  },
+  "deferred_gl262_memory_evidence": {
+    "audited_utc": "2026-09-13T22:19:51.950584+00:00",
+    "kind": "Read-only memory-boundary audit; no instrumentation, builds or workloads run",
+    "inputs": {
+      "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/monitor_generation_rss.py": {
+        "bytes": 4885,
+        "sha256": "26309f5982fa205db86fb6152dec8cf3122f36f8c82e7f211ee1ca32bc79a410"
+      },
+      "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/benchmark_runtime.py": {
+        "bytes": 17860,
+        "sha256": "c0bbb9b281dfa229467e15c994deae0700805ec14bf0366d1f65987cb6bc62ac"
+      },
+      "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/run_generation_diagnostic.py": {
+        "bytes": 5481,
+        "sha256": "6577e8aeca8f0986e7973516f37dd54d57e4be0f01313199013836b1a9e066b9"
+      },
+      "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/diagnostic_bulk_scalar_tensor_sum/GL262_4d_direct_r1/stage_rss_monitor_receipt.json": {
+        "bytes": 1136,
+        "sha256": "e8c8e8893609d3d037f4eb03722a0425a79ba4c97367b0bf1530b92966706d96"
+      },
+      "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/diagnostic_tensor_store_reclamation/GL262_3d_erased_r1/stage_rss_monitor_receipt.json": {
+        "bytes": 747,
+        "sha256": "ce3d4d26b7d8762289e377515827a163200d471c2354e0f43205ea2df48d0387"
+      }
+    },
+    "physical_final_source": "f938f9c1386eb2670a0a7f603f5eb0878086352a",
+    "GL00_GL01": {
+      "final_generation_receipts_checked": 18,
+      "available_fields": [
+        "observed_peak_rss_bytes",
+        "observed_peak_vmhwm_bytes",
+        "rss_sampling_period_seconds",
+        "memory_guard",
+        "native generation_summary.peak_ram_bytes"
+      ],
+      "boundary_rss_observed": false,
+      "reason": "Final receipts retain only global maxima. Neither completed direct profile has a stage RSS monitor; logged timing milestones contain no RSS/HWM values.",
+      "consequence": "Do not relabel a whole-process peak as pre-evaluator RAM or infer a boundary value from total timing.",
+      "earlier_profiles": [
+        "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/diagnostic_sparse_pair_estimate/dispatch_GL00_4d_direct_r1",
+        "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/diagnostic_sparse_pair_estimate/dispatch_GL01_4d_direct_r1"
+      ]
+    },
+    "existing_monitor_capability": {
+      "owner": "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/monitor_generation_rss.py",
+      "poll_seconds": 0.05,
+      "periodic_seconds": 1,
+      "supported_boundaries": {
+        "forest_compute_done": "Completed UV construction; before later graph assembly and tensor preprocessing.",
+        "evaluator_stack_parse_atoms_start": "Before tensor parsing/contraction of the evaluator inputs.",
+        "evaluator_stack_parse_atoms_done": "After full Spenso preprocessing; before evaluator orchestration, not necessarily immediately before Symbolica .build.",
+        "evaluator_expression_preparation_start/done": "Preparation immediately preceding individual expression evaluator construction.",
+        "evaluator_symbolica_build_start": "Actual per-expression Symbolica .build entry, before the call; observed sample may lag.",
+        "evaluator_numeric_programs_start/done": "Later numeric-program conversion."
+      },
+      "fields": [
+        "rss_bytes",
+        "vmhwm_bytes",
+        "event_utc",
+        "observed_utc",
+        "event_lag_seconds",
+        "historical_event",
+        "atom_index where present",
+        "elapsed_ms where present"
+      ],
+      "limitations": [
+        "Samples are observed after log events; current RSS is not an exact synchronous entry value or phase peak.",
+        "VmHWM remains cumulative for the process; subtracting two HWM values does not measure phase allocation.",
+        "Historical bootstrap events deliberately have no retrospective memory values.",
+        "No core instrumentation change is required; profiles must be monitored while live.",
+        "The two currently prepared direct dispatch profiles alone cannot establish an erased/localized pre-evaluator memory comparison."
+      ]
+    },
+    "native_timer_semantics": "GraphGenerationStats.expression_build_time subtracts both aggregate Spenso and Symbolica-stage timers plus compilation. evaluator_symbolica_time begins immediately after parsed_atoms and also contains later expression preparation and numeric program handling; actual .build has its own start/done stages.",
+    "GL262_preserved_diagnostic": {
+      "scope": "Deferred; failed diagnostic, not paired final acceptance",
+      "direct_cli21": {
+        "source_revision": "a8b4c9d96c3994f77bba80826e16715d53ddbfc9",
+        "samples_path": "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/diagnostic_bulk_scalar_tensor_sum/GL262_4d_direct_r1/stage_rss_samples.jsonl",
+        "boundary_rows": [
+          {
+            "observed_utc": "2026-09-13T14:34:06.607912+00:00",
+            "pid": 2271028,
+            "stage": "evaluator_stack_parse_atoms_start",
+            "event_utc": "2026-09-13T14:34:06.590Z",
+            "historical_event": false,
+            "event_lag_seconds": 0.017912,
+            "atom_count": 1,
+            "rss_bytes": 1487663104,
+            "vmhwm_bytes": 3001602048
+          },
+          {
+            "observed_utc": "2026-09-13T15:12:41.138844+00:00",
+            "pid": 2271028,
+            "stage": "evaluator_stack_parse_atoms_done",
+            "event_utc": "2026-09-13T15:12:41.096Z",
+            "historical_event": false,
+            "event_lag_seconds": 0.042844,
+            "atom_count": 1,
+            "elapsed_ms": 2314506.2551300004,
+            "rss_bytes": 46050947072,
+            "vmhwm_bytes": 68617658368
+          },
+          {
+            "observed_utc": "2026-09-13T15:12:41.139580+00:00",
+            "pid": 2271028,
+            "stage": "evaluator_expression_preparation_start",
+            "event_utc": "2026-09-13T15:12:41.098Z",
+            "historical_event": false,
+            "event_lag_seconds": 0.04158,
+            "rss_bytes": 46050947072,
+            "vmhwm_bytes": 68617658368
+          },
+          {
+            "observed_utc": "2026-09-13T15:15:37.077825+00:00",
+            "pid": 2271028,
+            "stage": "evaluator_expression_preparation_done",
+            "event_utc": "2026-09-13T15:15:37.070Z",
+            "historical_event": false,
+            "event_lag_seconds": 0.007825,
+            "atom_count": 1,
+            "elapsed_ms": 175971.761456,
+            "rss_bytes": 46050967552,
+            "vmhwm_bytes": 68617658368
+          },
+          {
+            "observed_utc": "2026-09-13T15:15:37.078255+00:00",
+            "pid": 2271028,
+            "stage": "evaluator_symbolica_build_start",
+            "event_utc": "2026-09-13T15:15:37.070Z",
+            "historical_event": false,
+            "event_lag_seconds": 0.008255,
+            "atom_index": 0,
+            "rss_bytes": 46050967552,
+            "vmhwm_bytes": 68617658368
+          }
+        ],
+        "eventual_max_sampled_rss_bytes": 120250585088,
+        "eventual_max_observed_vmhwm_bytes": 120480550912
+      },
+      "erased_cli18": {
+        "source_revision": "d6e4c13d9b9b301a9e9201875446cbc199028d56",
+        "receipt": "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/diagnostic_tensor_store_reclamation/GL262_3d_erased_r1/stage_rss_monitor_receipt.json",
+        "pre_evaluator_boundary_observed": false,
+        "reason": "Time cap during tensor preprocessing; no post-Spenso or actual Symbolica builder-entry boundary was reached."
+      }
+    },
+    "next_action_proposed": "Arm the unchanged stage monitor on separate final GL00/GL01 profiling generations. Add matching erased/localized profiles if route-paired boundary RAM is required. Keep all profiling times separate from final acceptance timings; launch awaits root release."
+  }
+}

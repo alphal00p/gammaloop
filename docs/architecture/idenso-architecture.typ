@@ -225,3 +225,10 @@ specification]. Exact public signatures are in the
 and the
 #link("../../../products/idenso/latest/reference/python/idenso-community/")[Python community
 module reference].
+
+== Factorized canonicalization and symbolic targets
+
+Index canonicalization protects independent scalar factors and reserves explicit external indices
+before allocating contraction dummies. Canceled representation groups do not consume canonical dummy
+names. The fallible `Concretize` implementation preserves symbolic dimensions and uses the supplied
+canonical layout to restore logical slot order in the symbolic expression.

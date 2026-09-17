@@ -1,0 +1,2876 @@
+{
+  "status": "pass",
+  "source_revision": "911f1824f994611d723dff0f50416cb301718617",
+  "scope": "183-test final numerical source acceptance; GL262 deferred by user. Scalar setup timings are descriptive single-run complete generation with integrated/threshold CTs, not repeated physical acceptance.",
+  "build_manifest": {
+    "created_at": "2026-09-13T23:52:14.113094+00:00",
+    "source_revision": "911f1824f994611d723dff0f50416cb301718617",
+    "source_patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "cargo_lock_sha256": "5ca128a5828fb99e142beb43afdea60cc7ad2c0fd44f0247251331bfb75b488a",
+    "rustc": "rustc 1.97.0 (2d8144b78 2026-07-07)",
+    "rustflags": "-C linker=/nix/store/vdaz6sk455r8sbpi7wzaf9vlz5i9yyvx-gcc-wrapper-15.2.0/bin/gcc",
+    "cargo_encoded_rustflags": null,
+    "no_symbolica_oem_license": null,
+    "profile": "dev-optim",
+    "debug_assertions": true,
+    "cargo_build_jobs": 8,
+    "profile_assertion_overrides": {
+      "CARGO_PROFILE_DEV_DEBUG_ASSERTIONS": null,
+      "CARGO_PROFILE_DEV_OPTIM_DEBUG_ASSERTIONS": null
+    },
+    "steps": [
+      {
+        "name": "check",
+        "command": [
+          "cargo",
+          "check",
+          "--locked",
+          "--profile",
+          "dev-optim",
+          "-p",
+          "gammaloop-integration-tests",
+          "-p",
+          "gammalooprs",
+          "--test",
+          "test_runs",
+          "--test",
+          "uv",
+          "--test",
+          "test_evaluation_api",
+          "--test",
+          "test_renormalization",
+          "-j8"
+        ],
+        "log": "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/validation_final_shared_tensor_power/integration_check.log",
+        "started_at": "2026-09-13T23:52:14.123717+00:00",
+        "exit_code": 0,
+        "elapsed_seconds": 11.500231903977692
+      },
+      {
+        "name": "build",
+        "command": [
+          "cargo",
+          "nextest",
+          "list",
+          "--locked",
+          "--cargo-profile",
+          "dev-optim",
+          "-p",
+          "gammaloop-integration-tests",
+          "-p",
+          "gammalooprs",
+          "--test",
+          "test_runs",
+          "--test",
+          "uv",
+          "--test",
+          "test_evaluation_api",
+          "--test",
+          "test_renormalization",
+          "--list-type",
+          "binaries-only",
+          "--message-format",
+          "json"
+        ],
+        "log": "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/validation_final_shared_tensor_power/integration_build.log",
+        "started_at": "2026-09-13T23:52:25.624606+00:00",
+        "exit_code": 0,
+        "elapsed_seconds": 63.38657041010447
+      }
+    ],
+    "binaries": [
+      {
+        "binary_id": "gammaloop-integration-tests::test_evaluation_api",
+        "binary": "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/validation_final_shared_tensor_power/immutable_binaries/test_evaluation_api-5717ac7502654375",
+        "sha256": "c1f680ee731bf1309c3b6888639232d990ec8ed7463ac58f956ec88796f374a3",
+        "bytes": 1689605080
+      },
+      {
+        "binary_id": "gammaloop-integration-tests::test_runs",
+        "binary": "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/validation_final_shared_tensor_power/immutable_binaries/test_runs-807e690bdab9becd",
+        "sha256": "afb5390e835f6e95fb8f19e0b6918728b0008e89305d679630f6d78d291dafb7",
+        "bytes": 1744699680
+      },
+      {
+        "binary_id": "gammaloop-integration-tests::uv",
+        "binary": "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/validation_final_shared_tensor_power/immutable_binaries/uv-4b51d4d7bcac7960",
+        "sha256": "4635dc7e8619b4e86f408e769515891200cb9c38ccaf682028d36057f44dd767",
+        "bytes": 1683412320
+      },
+      {
+        "binary_id": "gammalooprs::test_renormalization",
+        "binary": "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/validation_final_shared_tensor_power/immutable_binaries/test_renormalization-69362e6d17bd0f3b",
+        "sha256": "b60aaa930a229b61298422451544fecf3cfd6bfce7e3dd733ea0633ca43c6eea",
+        "bytes": 1330644656
+      }
+    ],
+    "status": "built; correctness execution pending",
+    "check_log": "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/validation_final_shared_tensor_power/integration_check.log",
+    "check_command": "cargo check --locked --profile dev-optim -p gammaloop-integration-tests -p gammalooprs --test test_runs --test uv --test test_evaluation_api --test test_renormalization -j8",
+    "build_log": "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/validation_final_shared_tensor_power/integration_build.log",
+    "build_command": "cargo nextest list --locked --cargo-profile dev-optim -p gammaloop-integration-tests -p gammalooprs --test test_runs --test uv --test test_evaluation_api --test test_renormalization --list-type binaries-only --message-format json",
+    "completed_at": "2026-09-13T23:53:41.542708+00:00"
+  },
+  "receipt_limitations": [
+    "The initial scalar list receipt omits descriptive group/expected_tests metadata; subsequent list receipts inherit those fields from the preceding group. Actual list commands, filters and selected test names identify the correct current group; execution receipts are correctly labeled. Original artifacts are preserved.",
+    "Execution receipt RSS observes the immediate supervisor only. tree_peak_bytes comes from the process-tree watchdog."
+  ],
+  "groups": [
+    {
+      "group": "scalar",
+      "passed": 167,
+      "nextest_seconds": 2732.365,
+      "tree_peak_bytes": 1009836032,
+      "selection": [
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::quadratic_energy_numerators::scalar_3l_cross_section_gl00_quadratic_energy_inspects_match::q7_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::quadratic_energy_numerators::scalar_3l_cross_section_gl16_quadratic_energy_inspects_match::q7_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::quartic_energy_numerators::scalar_3l_cross_section_gl02_quartic_energy_inspects_match::q1_quartic"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl00_first_owned_dot_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl00_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl00_q5_spatial_component_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl00_q5_temporal_component_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl00_q6_spatial_component_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl00_q6_temporal_component_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl00_second_owned_dot_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl00_second_owned_spatial_product_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl00_second_owned_temporal_product_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl02_dod_zero_triangle_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl02_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl04_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl04_left_owned_dot_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl04_left_temporal_product_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl04_q5_spatial_square_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl04_q5_temporal_component_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl04_q5_temporal_square_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl04_q6_temporal_component_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl04_right_owned_dot_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl04_right_temporal_product_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl08_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl09_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl24_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::scalar_3l_gl00_higher_power_cff_is_invariant_under_nonzero_sampling_scale"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl00_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl01_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl01_quadratic_energy_inspects_match::q7_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl02_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl03_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl03_quadratic_energy_inspects_match::q7_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl04_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl04_quadratic_energy_inspects_match::q7_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl05_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl06_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl06_quadratic_energy_inspects_match::q7_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl07_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl07_quadratic_energy_inspects_match::q7_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl08_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl08_quadratic_energy_inspects_match::q7_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl09_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl09_quadratic_energy_inspects_match::q7_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl10_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl10_quadratic_energy_inspects_match::q7_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl11_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl11_quadratic_energy_inspects_match::q7_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl12_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl12_quadratic_energy_inspects_match::q7_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl13_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl13_quadratic_energy_inspects_match::q7_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl14_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl14_quadratic_energy_inspects_match::q7_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl15_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl15_quadratic_energy_inspects_match::q7_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl16_quadratic_energy_inspects_match::q7_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl17_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl17_quadratic_energy_inspects_match::q7_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl18_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl18_quadratic_energy_inspects_match::q7_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl19_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl19_quadratic_energy_inspects_match::q7_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl20_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl20_quadratic_energy_inspects_match::q7_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl21_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl21_quadratic_energy_inspects_match::q7_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl22_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl22_quadratic_energy_inspects_match::q7_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl23_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl23_quadratic_energy_inspects_match::q7_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl24_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl24_quadratic_energy_inspects_match::q7_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl25_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl25_quadratic_energy_inspects_match::q7_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl26_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl26_quadratic_energy_inspects_match::q7_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl27_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl28_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl28_quadratic_energy_inspects_match::q7_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl29_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl30_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl30_quadratic_energy_inspects_match::q7_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl31_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl32_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl32_quadratic_energy_inspects_match::q7_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl33_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl33_quadratic_energy_inspects_match::q7_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl34_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl35_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl36_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl36_quadratic_energy_inspects_match::q7_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl37_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl37_quadratic_energy_inspects_match::q7_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl38_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl38_quadratic_energy_inspects_match::q7_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl39_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl39_quadratic_energy_inspects_match::q7_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl40_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl40_quadratic_energy_inspects_match::q7_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl41_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl41_quadratic_energy_inspects_match::q7_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl42_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl43_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl43_quadratic_energy_inspects_match::q7_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl44_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl44_quadratic_energy_inspects_match::q7_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl45_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl45_quadratic_energy_inspects_match::q7_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl46_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl46_quadratic_energy_inspects_match::q7_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl47_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl47_quadratic_energy_inspects_match::q7_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl48_quadratic_energy_inspects_match::q1_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl48_quadratic_energy_inspects_match::q7_squared"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quartic_energy_numerators::scalar_3l_cross_section_gl00_quartic_energy_inspects_match::q1_quartic"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quartic_energy_numerators::scalar_3l_cross_section_gl06_quartic_energy_inspects_match::q1_quartic"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quartic_energy_numerators::scalar_3l_cross_section_gl10_quartic_energy_inspects_match::q1_quartic"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quartic_energy_numerators::scalar_3l_cross_section_gl16_quartic_energy_inspects_match::q7_quartic"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quartic_energy_numerators::scalar_3l_cross_section_gl20_quartic_energy_inspects_match::q1_quartic"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quartic_energy_numerators::scalar_3l_cross_section_gl24_quartic_energy_inspects_match::q1_quartic"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quartic_energy_numerators::scalar_3l_cross_section_gl30_quartic_energy_inspects_match::q1_quartic"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quartic_energy_numerators::scalar_3l_cross_section_gl41_quartic_energy_inspects_match::q1_quartic"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::quartic_energy_numerators::scalar_3l_cross_section_gl42_quartic_energy_inspects_match::q1_quartic"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl01_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl03_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl05_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl06_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl07_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl10_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl11_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl12_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl13_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl14_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl15_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl16_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl17_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl18_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl19_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl20_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl21_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl22_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl23_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl25_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl26_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl27_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl28_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl29_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl30_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl31_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl32_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl33_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl34_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl35_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl36_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl37_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl38_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl39_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl40_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl41_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl42_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl43_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl44_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl45_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl46_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl47_inspects_match"
+        ],
+        [
+          "test_runs",
+          "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl48_inspects_match"
+        ]
+      ],
+      "execution_receipt": {
+        "kind": "final correctness; serialized per-route setup timings",
+        "binaries_metadata_sha256": "2bb611a5b653202ade4b8ae73decccc98350807c04545fd08801d0cd8ef6f957",
+        "stack_bytes": 67108864,
+        "memory_limit_gb": 30.0,
+        "harness_sha256": "0d10079df2d1b6be3c35c185ee3d18071b5e0573a4e86e04c253c2f2888ce240",
+        "plan_sha256": "ab94d72fcaed95da32b1a148f3a090a1134e8394f51f039c72562bda43e793df",
+        "group": "scalar",
+        "expected_tests": 167,
+        "command": [
+          "timeout",
+          "--signal=TERM",
+          "--kill-after=30s",
+          "6h",
+          "python3",
+          "/common/dev/gammaloop_fix_4d_uv_slowdown/bin/ram_watchdog.py",
+          "--limit-gb",
+          "30.0",
+          "--log",
+          "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/merge_validation_final_shared_tensor_power/scalar/watchdog.jsonl",
+          "--",
+          "/tmp/raised-stack/run",
+          "/nix/store/9pb4ikjdw4gp766ayxl6gg3b7hqm6ds4-rust-stable-with-components-2026-07-09/bin/cargo",
+          "nextest",
+          "run",
+          "--binaries-metadata",
+          "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/validation_final_shared_tensor_power/final_binaries.json",
+          "--profile",
+          "test_gammaloop",
+          "--ignore-default-filter",
+          "-E",
+          "binary(=test_runs) and test(/^scalar_3l_cross_section_inspects::/) and not test(/(^|::)failing::/)",
+          "--color",
+          "never",
+          "--test-threads",
+          "1",
+          "--retries",
+          "0",
+          "--no-fail-fast",
+          "--no-tests",
+          "fail",
+          "--success-output",
+          "immediate",
+          "--failure-output",
+          "immediate",
+          "--status-level",
+          "pass",
+          "--final-status-level",
+          "none",
+          "--no-output-indent"
+        ],
+        "thread_limits": {
+          "RAYON_NUM_THREADS": "1",
+          "OMP_NUM_THREADS": "1",
+          "OPENBLAS_NUM_THREADS": "1",
+          "RUST_MIN_STACK": "67108864"
+        },
+        "measurement_lock": "/tmp/gammaloop-aa-aa-uv-benchmark.lock",
+        "started_utc": "2026-09-14T01:08:38.462821+00:00",
+        "exit_code": 0,
+        "pid": 3704156,
+        "ended_utc": "2026-09-14T01:54:12.081650+00:00",
+        "outer_wall_seconds": 2733.6188385189744,
+        "observed_peak_rss_bytes": 2662400,
+        "observed_peak_vmhwm_bytes": 2662400,
+        "rss_sampling_period_seconds": 1,
+        "succeeded": true
+      },
+      "artifact_sha256": {
+        "nextest.log": "07880968afda4bd3c6c9a164b91b7952729c16dfe18b94eb519bf3c0503b823c",
+        "nextest_receipt.json": "3b0915c8d3da63db6026a546d80cf2fd468014f05845473f864c25402d81cef6",
+        "list_receipt.json": "ac9abe74fa2f02f5defce0bfec7358c535c530b9a677cad78dd0f3b2c6ddc1fc",
+        "selected_tests.json": "d931d344f05903532bed8e7b5d7349f535d30dfb80f8149dd25692433184ccce",
+        "watchdog.jsonl": "106b9a2e9de3d99d5476f652f4d353906278cca7839b179823e418d08972eda0"
+      }
+    },
+    {
+      "group": "physical",
+      "passed": 2,
+      "nextest_seconds": 105.018,
+      "tree_peak_bytes": 572805120,
+      "selection": [
+        [
+          "uv",
+          "slow::aa_aa_2l_gl00_matches_across_local_uv_routes"
+        ],
+        [
+          "uv",
+          "slow::aa_aa_2l_gl01_matches_across_local_uv_routes"
+        ]
+      ],
+      "execution_receipt": {
+        "kind": "final correctness; serialized per-route setup timings",
+        "binaries_metadata_sha256": "2bb611a5b653202ade4b8ae73decccc98350807c04545fd08801d0cd8ef6f957",
+        "stack_bytes": 67108864,
+        "memory_limit_gb": 30.0,
+        "harness_sha256": "0d10079df2d1b6be3c35c185ee3d18071b5e0573a4e86e04c253c2f2888ce240",
+        "plan_sha256": "ab94d72fcaed95da32b1a148f3a090a1134e8394f51f039c72562bda43e793df",
+        "group": "physical",
+        "expected_tests": 2,
+        "command": [
+          "timeout",
+          "--signal=TERM",
+          "--kill-after=30s",
+          "6h",
+          "python3",
+          "/common/dev/gammaloop_fix_4d_uv_slowdown/bin/ram_watchdog.py",
+          "--limit-gb",
+          "30.0",
+          "--log",
+          "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/merge_validation_final_shared_tensor_power/physical/watchdog.jsonl",
+          "--",
+          "/tmp/raised-stack/run",
+          "/nix/store/9pb4ikjdw4gp766ayxl6gg3b7hqm6ds4-rust-stable-with-components-2026-07-09/bin/cargo",
+          "nextest",
+          "run",
+          "--binaries-metadata",
+          "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/validation_final_shared_tensor_power/final_binaries.json",
+          "--profile",
+          "test_gammaloop",
+          "--ignore-default-filter",
+          "-E",
+          "binary(=uv) and (test(=slow::aa_aa_2l_gl00_matches_across_local_uv_routes) or test(=slow::aa_aa_2l_gl01_matches_across_local_uv_routes)) and not test(/(^|::)failing::/)",
+          "--color",
+          "never",
+          "--test-threads",
+          "1",
+          "--retries",
+          "0",
+          "--no-fail-fast",
+          "--no-tests",
+          "fail",
+          "--success-output",
+          "immediate",
+          "--failure-output",
+          "immediate",
+          "--status-level",
+          "pass",
+          "--final-status-level",
+          "none",
+          "--no-output-indent"
+        ],
+        "thread_limits": {
+          "RAYON_NUM_THREADS": "1",
+          "OMP_NUM_THREADS": "1",
+          "OPENBLAS_NUM_THREADS": "1",
+          "RUST_MIN_STACK": "67108864"
+        },
+        "measurement_lock": "/tmp/gammaloop-aa-aa-uv-benchmark.lock",
+        "started_utc": "2026-09-14T01:54:30.569321+00:00",
+        "exit_code": 0,
+        "pid": 3971676,
+        "ended_utc": "2026-09-14T01:56:16.610932+00:00",
+        "outer_wall_seconds": 106.04162311297841,
+        "observed_peak_rss_bytes": 2580480,
+        "observed_peak_vmhwm_bytes": 2580480,
+        "rss_sampling_period_seconds": 1,
+        "succeeded": true
+      },
+      "artifact_sha256": {
+        "nextest.log": "e93e384a630e7f7e40ba61b13219bb48a32473c37e2c53810d709cd612c912e8",
+        "nextest_receipt.json": "8b493b547c6823d2a3e19cab0f9f3cbf758b654f2789b1b144ae2c404f27874e",
+        "list_receipt.json": "a4d30d083158849df2b1423330e0dc31a255ef20396e6355da00bc45939c5d01",
+        "selected_tests.json": "96fe8adb0039f3def684e4be4846935b4385f87ec1a61b3aac052cfa627380c9",
+        "watchdog.jsonl": "9657d445c40996e660e2c3c603a814d6a96521bb464dcefedb8e92160d6923b7"
+      }
+    },
+    {
+      "group": "uv_composition",
+      "passed": 4,
+      "nextest_seconds": 22.294,
+      "tree_peak_bytes": 127717376,
+      "selection": [
+        [
+          "uv",
+          "orientation_local_dod_bubbles_are_uv_finite_per_orientation"
+        ],
+        [
+          "uv",
+          "scalar_amplitudes_match_across_local_uv_routes"
+        ],
+        [
+          "uv",
+          "scalar_spectacles_integrated_matches_across_local_uv_routes"
+        ],
+        [
+          "uv",
+          "scalar_spectacles_integrated_uv_factorizes_over_bridge"
+        ]
+      ],
+      "execution_receipt": {
+        "kind": "final correctness; serialized per-route setup timings",
+        "binaries_metadata_sha256": "2bb611a5b653202ade4b8ae73decccc98350807c04545fd08801d0cd8ef6f957",
+        "stack_bytes": 67108864,
+        "memory_limit_gb": 30.0,
+        "harness_sha256": "0d10079df2d1b6be3c35c185ee3d18071b5e0573a4e86e04c253c2f2888ce240",
+        "plan_sha256": "ab94d72fcaed95da32b1a148f3a090a1134e8394f51f039c72562bda43e793df",
+        "group": "uv_composition",
+        "expected_tests": 4,
+        "command": [
+          "timeout",
+          "--signal=TERM",
+          "--kill-after=30s",
+          "6h",
+          "python3",
+          "/common/dev/gammaloop_fix_4d_uv_slowdown/bin/ram_watchdog.py",
+          "--limit-gb",
+          "30.0",
+          "--log",
+          "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/merge_validation_final_shared_tensor_power/uv_composition/watchdog.jsonl",
+          "--",
+          "/tmp/raised-stack/run",
+          "/nix/store/9pb4ikjdw4gp766ayxl6gg3b7hqm6ds4-rust-stable-with-components-2026-07-09/bin/cargo",
+          "nextest",
+          "run",
+          "--binaries-metadata",
+          "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/validation_final_shared_tensor_power/final_binaries.json",
+          "--profile",
+          "test_gammaloop",
+          "--ignore-default-filter",
+          "-E",
+          "binary(=uv) and (test(=scalar_amplitudes_match_across_local_uv_routes) or test(=scalar_spectacles_integrated_matches_across_local_uv_routes) or test(=scalar_spectacles_integrated_uv_factorizes_over_bridge) or test(=orientation_local_dod_bubbles_are_uv_finite_per_orientation)) and not test(/(^|::)failing::/)",
+          "--color",
+          "never",
+          "--test-threads",
+          "1",
+          "--retries",
+          "0",
+          "--no-fail-fast",
+          "--no-tests",
+          "fail",
+          "--success-output",
+          "immediate",
+          "--failure-output",
+          "immediate",
+          "--status-level",
+          "pass",
+          "--final-status-level",
+          "none",
+          "--no-output-indent"
+        ],
+        "thread_limits": {
+          "RAYON_NUM_THREADS": "1",
+          "OMP_NUM_THREADS": "1",
+          "OPENBLAS_NUM_THREADS": "1",
+          "RUST_MIN_STACK": "67108864"
+        },
+        "measurement_lock": "/tmp/gammaloop-aa-aa-uv-benchmark.lock",
+        "started_utc": "2026-09-14T01:56:33.795667+00:00",
+        "exit_code": 0,
+        "pid": 3982921,
+        "ended_utc": "2026-09-14T01:56:57.805622+00:00",
+        "outer_wall_seconds": 24.00996778300032,
+        "observed_peak_rss_bytes": 2609152,
+        "observed_peak_vmhwm_bytes": 2609152,
+        "rss_sampling_period_seconds": 1,
+        "succeeded": true
+      },
+      "artifact_sha256": {
+        "nextest.log": "1f712acf963c01d27bca2179834fe358b77c02b33e31ab002872c8c29cecd001",
+        "nextest_receipt.json": "6ed1c1863064635d9bec5482afc859b5d8a254f6446893e7740a152a8d8a2207",
+        "list_receipt.json": "f30cc6050d695eedbb93d389cc2c1e16e1330d2b29659f26db58affaaf08bd71",
+        "selected_tests.json": "bab0f51c4e8608c1d07eaeb99f63128caaa6d24ac0f43ba3f5da5558a76eccb5",
+        "watchdog.jsonl": "95b77c31eabd53eee011a349bc6dabc0dd970da90ec4d0a8648b7d4c0813925d"
+      }
+    },
+    {
+      "group": "cut_threshold",
+      "passed": 7,
+      "nextest_seconds": 18.212,
+      "tree_peak_bytes": 107589632,
+      "selection": [
+        [
+          "test_runs",
+          "events::amplitude_events_surface_threshold_counterterms_and_reproduce_weight"
+        ],
+        [
+          "test_runs",
+          "events::amplitude_threshold_counterterms_follow_lmb_channel_normalization"
+        ],
+        [
+          "test_runs",
+          "inspect::raised_cut_numerator_cancels_one_propagator_in_both_orientation_modes"
+        ],
+        [
+          "test_runs",
+          "inspect::raised_scalar_self_energy_uv_matches_across_local_uv_routes"
+        ],
+        [
+          "test_runs",
+          "inspect::test_mass_approach_threshold_subtraction"
+        ],
+        [
+          "test_runs",
+          "inspect::test_mass_approach_threshold_subtraction_dotted"
+        ],
+        [
+          "test_runs",
+          "inspect::test_mass_approach_threshold_subtraction_reversed"
+        ]
+      ],
+      "execution_receipt": {
+        "kind": "final correctness; serialized per-route setup timings",
+        "binaries_metadata_sha256": "2bb611a5b653202ade4b8ae73decccc98350807c04545fd08801d0cd8ef6f957",
+        "stack_bytes": 67108864,
+        "memory_limit_gb": 30.0,
+        "harness_sha256": "0d10079df2d1b6be3c35c185ee3d18071b5e0573a4e86e04c253c2f2888ce240",
+        "plan_sha256": "ab94d72fcaed95da32b1a148f3a090a1134e8394f51f039c72562bda43e793df",
+        "group": "cut_threshold",
+        "expected_tests": 7,
+        "command": [
+          "timeout",
+          "--signal=TERM",
+          "--kill-after=30s",
+          "6h",
+          "python3",
+          "/common/dev/gammaloop_fix_4d_uv_slowdown/bin/ram_watchdog.py",
+          "--limit-gb",
+          "30.0",
+          "--log",
+          "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/merge_validation_final_shared_tensor_power/cut_threshold/watchdog.jsonl",
+          "--",
+          "/tmp/raised-stack/run",
+          "/nix/store/9pb4ikjdw4gp766ayxl6gg3b7hqm6ds4-rust-stable-with-components-2026-07-09/bin/cargo",
+          "nextest",
+          "run",
+          "--binaries-metadata",
+          "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/validation_final_shared_tensor_power/final_binaries.json",
+          "--profile",
+          "test_gammaloop",
+          "--ignore-default-filter",
+          "-E",
+          "binary(=test_runs) and (test(=inspect::raised_cut_numerator_cancels_one_propagator_in_both_orientation_modes) or test(=inspect::raised_scalar_self_energy_uv_matches_across_local_uv_routes) or test(=inspect::test_mass_approach_threshold_subtraction) or test(=inspect::test_mass_approach_threshold_subtraction_reversed) or test(=inspect::test_mass_approach_threshold_subtraction_dotted) or test(=events::amplitude_events_surface_threshold_counterterms_and_reproduce_weight) or test(=events::amplitude_threshold_counterterms_follow_lmb_channel_normalization)) and not test(/(^|::)failing::/)",
+          "--color",
+          "never",
+          "--test-threads",
+          "1",
+          "--retries",
+          "0",
+          "--no-fail-fast",
+          "--no-tests",
+          "fail",
+          "--success-output",
+          "immediate",
+          "--failure-output",
+          "immediate",
+          "--status-level",
+          "pass",
+          "--final-status-level",
+          "none",
+          "--no-output-indent"
+        ],
+        "thread_limits": {
+          "RAYON_NUM_THREADS": "1",
+          "OMP_NUM_THREADS": "1",
+          "OPENBLAS_NUM_THREADS": "1",
+          "RUST_MIN_STACK": "67108864"
+        },
+        "measurement_lock": "/tmp/gammaloop-aa-aa-uv-benchmark.lock",
+        "started_utc": "2026-09-14T01:57:14.514385+00:00",
+        "exit_code": 0,
+        "pid": 3988077,
+        "ended_utc": "2026-09-14T01:57:34.523023+00:00",
+        "outer_wall_seconds": 20.008652172982693,
+        "observed_peak_rss_bytes": 2658304,
+        "observed_peak_vmhwm_bytes": 2658304,
+        "rss_sampling_period_seconds": 1,
+        "succeeded": true
+      },
+      "artifact_sha256": {
+        "nextest.log": "43999eefeb53154ca354006a5b2ed607499584800f07c74c2062e71c7fff00ee",
+        "nextest_receipt.json": "afb4167586bb7f573170af19aea2a8fcaead900c4e083a5c6173f44850880f30",
+        "list_receipt.json": "3daa52c7d2be5fe0f2bca6f61046ee3e0957d74d9c630fcf67e32ab81a959c00",
+        "selected_tests.json": "611da634ff6ba4e8caa98643be2c85b58a5282030890a188f1b6c78bcd2475a2",
+        "watchdog.jsonl": "11d579d5871290eeac5f5dffbbaf7de5043555123f1f2ffeaf611a9e0d40b1b0"
+      }
+    },
+    {
+      "group": "cut_threshold_api",
+      "passed": 2,
+      "nextest_seconds": 3.987,
+      "tree_peak_bytes": 108564480,
+      "selection": [
+        [
+          "test_evaluation_api",
+          "lu_threshold_counterterms_follow_lmb_channel_normalization"
+        ],
+        [
+          "test_evaluation_api",
+          "skip_thresholds_that_are_cuts_excludes_every_physical_cut_association"
+        ]
+      ],
+      "execution_receipt": {
+        "kind": "final correctness; serialized per-route setup timings",
+        "binaries_metadata_sha256": "2bb611a5b653202ade4b8ae73decccc98350807c04545fd08801d0cd8ef6f957",
+        "stack_bytes": 67108864,
+        "memory_limit_gb": 30.0,
+        "harness_sha256": "0d10079df2d1b6be3c35c185ee3d18071b5e0573a4e86e04c253c2f2888ce240",
+        "plan_sha256": "ab94d72fcaed95da32b1a148f3a090a1134e8394f51f039c72562bda43e793df",
+        "group": "cut_threshold_api",
+        "expected_tests": 2,
+        "command": [
+          "timeout",
+          "--signal=TERM",
+          "--kill-after=30s",
+          "6h",
+          "python3",
+          "/common/dev/gammaloop_fix_4d_uv_slowdown/bin/ram_watchdog.py",
+          "--limit-gb",
+          "30.0",
+          "--log",
+          "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/merge_validation_final_shared_tensor_power/cut_threshold_api/watchdog.jsonl",
+          "--",
+          "/tmp/raised-stack/run",
+          "/nix/store/9pb4ikjdw4gp766ayxl6gg3b7hqm6ds4-rust-stable-with-components-2026-07-09/bin/cargo",
+          "nextest",
+          "run",
+          "--binaries-metadata",
+          "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/validation_final_shared_tensor_power/final_binaries.json",
+          "--profile",
+          "test_gammaloop",
+          "--ignore-default-filter",
+          "-E",
+          "binary(=test_evaluation_api) and (test(=skip_thresholds_that_are_cuts_excludes_every_physical_cut_association) or test(=lu_threshold_counterterms_follow_lmb_channel_normalization)) and not test(/(^|::)failing::/)",
+          "--color",
+          "never",
+          "--test-threads",
+          "1",
+          "--retries",
+          "0",
+          "--no-fail-fast",
+          "--no-tests",
+          "fail",
+          "--success-output",
+          "immediate",
+          "--failure-output",
+          "immediate",
+          "--status-level",
+          "pass",
+          "--final-status-level",
+          "none",
+          "--no-output-indent"
+        ],
+        "thread_limits": {
+          "RAYON_NUM_THREADS": "1",
+          "OMP_NUM_THREADS": "1",
+          "OPENBLAS_NUM_THREADS": "1",
+          "RUST_MIN_STACK": "67108864"
+        },
+        "measurement_lock": "/tmp/gammaloop-aa-aa-uv-benchmark.lock",
+        "started_utc": "2026-09-14T01:57:51.543655+00:00",
+        "exit_code": 0,
+        "pid": 3992902,
+        "ended_utc": "2026-09-14T01:57:57.546755+00:00",
+        "outer_wall_seconds": 6.003163937013596,
+        "observed_peak_rss_bytes": 2592768,
+        "observed_peak_vmhwm_bytes": 2592768,
+        "rss_sampling_period_seconds": 1,
+        "succeeded": true
+      },
+      "artifact_sha256": {
+        "nextest.log": "76264c339501a2174a826f86640aadad9bb4504af5acdb9145f7ebd4d273de57",
+        "nextest_receipt.json": "7468903041719e5f354f7edbb5a9f7010d4c155b2c2f3c395810ec6f3f3d0849",
+        "list_receipt.json": "e90c73e8dde262362b4144cac626f89bedee7240550d544b98b035e3cce4587d",
+        "selected_tests.json": "0cc978c92f623d1ecee21b5d2dbf1af6e0186a09ebf519127d00f9f8c8cafa50",
+        "watchdog.jsonl": "d0f2b8cd913c6fe652f132e0bcfa6330734d9a3d13f7fd24b099e421c59cc8f6"
+      }
+    },
+    {
+      "group": "analytic",
+      "passed": 1,
+      "nextest_seconds": 0.378,
+      "tree_peak_bytes": 84471808,
+      "selection": [
+        [
+          "test_renormalization",
+          "finite_part_quark_lo"
+        ]
+      ],
+      "execution_receipt": {
+        "kind": "final correctness; serialized per-route setup timings",
+        "binaries_metadata_sha256": "2bb611a5b653202ade4b8ae73decccc98350807c04545fd08801d0cd8ef6f957",
+        "stack_bytes": 67108864,
+        "memory_limit_gb": 30.0,
+        "harness_sha256": "0d10079df2d1b6be3c35c185ee3d18071b5e0573a4e86e04c253c2f2888ce240",
+        "plan_sha256": "ab94d72fcaed95da32b1a148f3a090a1134e8394f51f039c72562bda43e793df",
+        "group": "analytic",
+        "expected_tests": 1,
+        "command": [
+          "timeout",
+          "--signal=TERM",
+          "--kill-after=30s",
+          "6h",
+          "python3",
+          "/common/dev/gammaloop_fix_4d_uv_slowdown/bin/ram_watchdog.py",
+          "--limit-gb",
+          "30.0",
+          "--log",
+          "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/merge_validation_final_shared_tensor_power/analytic/watchdog.jsonl",
+          "--",
+          "/tmp/raised-stack/run",
+          "/nix/store/9pb4ikjdw4gp766ayxl6gg3b7hqm6ds4-rust-stable-with-components-2026-07-09/bin/cargo",
+          "nextest",
+          "run",
+          "--binaries-metadata",
+          "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/validation_final_shared_tensor_power/final_binaries.json",
+          "--profile",
+          "test_gammaloop",
+          "--ignore-default-filter",
+          "-E",
+          "binary(=test_renormalization) and (test(=finite_part_quark_lo)) and not test(/(^|::)failing::/)",
+          "--color",
+          "never",
+          "--test-threads",
+          "1",
+          "--retries",
+          "0",
+          "--no-fail-fast",
+          "--no-tests",
+          "fail",
+          "--success-output",
+          "immediate",
+          "--failure-output",
+          "immediate",
+          "--status-level",
+          "pass",
+          "--final-status-level",
+          "none",
+          "--no-output-indent"
+        ],
+        "thread_limits": {
+          "RAYON_NUM_THREADS": "1",
+          "OMP_NUM_THREADS": "1",
+          "OPENBLAS_NUM_THREADS": "1",
+          "RUST_MIN_STACK": "67108864"
+        },
+        "measurement_lock": "/tmp/gammaloop-aa-aa-uv-benchmark.lock",
+        "started_utc": "2026-09-14T01:58:14.667822+00:00",
+        "exit_code": 0,
+        "pid": 3995796,
+        "ended_utc": "2026-09-14T01:58:16.669664+00:00",
+        "outer_wall_seconds": 2.0018505110638216,
+        "observed_peak_rss_bytes": 2502656,
+        "observed_peak_vmhwm_bytes": 2502656,
+        "rss_sampling_period_seconds": 1,
+        "succeeded": true
+      },
+      "artifact_sha256": {
+        "nextest.log": "2979fb4b54301db369ada3d701c670df5d125e5235098e08debfaff09fa9a720",
+        "nextest_receipt.json": "6aaa162bf2fa6dbac485d2c07adfd6a8c3b023e5b7b94482d210e32e328cba21",
+        "list_receipt.json": "05a95c06feb7ca11fdd6477a2c39e2340ce8e9d171a98cf549b48d29230fb988",
+        "selected_tests.json": "c0a697fa029be49624f835107ed065a757794154d041474d35ad8bd1e78e3ead",
+        "watchdog.jsonl": "f7ef94ff1e25a6314d41c5399fdcbc69ae49ebdad81e6ab2ffe6cb9a86e65f1e"
+      }
+    }
+  ],
+  "total_passed": 183,
+  "scalar_generation": {
+    "count": 166,
+    "graph_labels": 49,
+    "median_four_d_over_erased_3d": 0.8332482886185391,
+    "below_1": 122,
+    "above_1_15": 12,
+    "observations": [
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::quadratic_energy_numerators::scalar_3l_cross_section_gl00_quadratic_energy_inspects_match::q7_squared",
+        "graph": "GL00",
+        "orientation-local local-3D": 8.799279317,
+        "explicit-sum local-3D": 4.78301766,
+        "projected local-4D": 6.215937876,
+        "four_d_over_erased_3d": 1.29958497288927
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::quadratic_energy_numerators::scalar_3l_cross_section_gl16_quadratic_energy_inspects_match::q7_squared",
+        "graph": "GL16",
+        "orientation-local local-3D": 3.084698179,
+        "explicit-sum local-3D": 1.878928189,
+        "projected local-4D": 1.422006668,
+        "four_d_over_erased_3d": 0.7568179967307948
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::quartic_energy_numerators::scalar_3l_cross_section_gl02_quartic_energy_inspects_match::q1_quartic",
+        "graph": "GL02",
+        "orientation-local local-3D": 1.927066413,
+        "explicit-sum local-3D": 0.888509077,
+        "projected local-4D": 0.884426847,
+        "four_d_over_erased_3d": 0.9954055280855616
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl00_first_owned_dot_inspects_match",
+        "graph": "GL00",
+        "orientation-local local-3D": 1.895939182,
+        "explicit-sum local-3D": 1.55136571,
+        "projected local-4D": 1.357212849,
+        "four_d_over_erased_3d": 0.8748503594294346
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl00_inspects_match",
+        "graph": "GL00",
+        "orientation-local local-3D": 3.861087629,
+        "explicit-sum local-3D": 4.266894984,
+        "projected local-4D": 3.250908228,
+        "four_d_over_erased_3d": 0.7618908457297996
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl00_q5_spatial_component_inspects_match",
+        "graph": "GL00",
+        "orientation-local local-3D": 2.606369478,
+        "explicit-sum local-3D": 1.865634732,
+        "projected local-4D": 1.381035301,
+        "four_d_over_erased_3d": 0.7402495661728493
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl00_q5_temporal_component_inspects_match",
+        "graph": "GL00",
+        "orientation-local local-3D": 1.888464955,
+        "explicit-sum local-3D": 1.872133889,
+        "projected local-4D": 1.380530222,
+        "four_d_over_erased_3d": 0.737409984462922
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl00_q6_spatial_component_inspects_match",
+        "graph": "GL00",
+        "orientation-local local-3D": 1.890249012,
+        "explicit-sum local-3D": 1.388718102,
+        "projected local-4D": 0.889756027,
+        "four_d_over_erased_3d": 0.640703124499201
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl00_q6_temporal_component_inspects_match",
+        "graph": "GL00",
+        "orientation-local local-3D": 1.89293125,
+        "explicit-sum local-3D": 1.375413842,
+        "projected local-4D": 0.893577327,
+        "four_d_over_erased_3d": 0.6496788818852094
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl00_second_owned_dot_inspects_match",
+        "graph": "GL00",
+        "orientation-local local-3D": 3.333390157,
+        "explicit-sum local-3D": 2.347222484,
+        "projected local-4D": 1.369679551,
+        "four_d_over_erased_3d": 0.5835320513230052
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl00_second_owned_spatial_product_inspects_match",
+        "graph": "GL00",
+        "orientation-local local-3D": 2.412608698,
+        "explicit-sum local-3D": 1.865790651,
+        "projected local-4D": 1.383378374,
+        "four_d_over_erased_3d": 0.741443512571229
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl00_second_owned_temporal_product_inspects_match",
+        "graph": "GL00",
+        "orientation-local local-3D": 1.875311954,
+        "explicit-sum local-3D": 1.843728682,
+        "projected local-4D": 1.369269913,
+        "four_d_over_erased_3d": 0.7426634549692381
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl02_dod_zero_triangle_inspects_match",
+        "graph": "GL02",
+        "orientation-local local-3D": 2.383665026,
+        "explicit-sum local-3D": 1.870718207,
+        "projected local-4D": 0.89335002,
+        "four_d_over_erased_3d": 0.477543874142665
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl02_inspects_match",
+        "graph": "GL02",
+        "orientation-local local-3D": 2.381703664,
+        "explicit-sum local-3D": 2.360702839,
+        "projected local-4D": 1.866941664,
+        "four_d_over_erased_3d": 0.7908414532982226
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl04_inspects_match",
+        "graph": "GL04",
+        "orientation-local local-3D": 6.207995128,
+        "explicit-sum local-3D": 5.211854015,
+        "projected local-4D": 5.216952711,
+        "four_d_over_erased_3d": 1.0009782883375715
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl04_left_owned_dot_inspects_match",
+        "graph": "GL04",
+        "orientation-local local-3D": 1.850440521,
+        "explicit-sum local-3D": 1.360278986,
+        "projected local-4D": 1.35751721,
+        "four_d_over_erased_3d": 0.997969698842352
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl04_left_temporal_product_inspects_match",
+        "graph": "GL04",
+        "orientation-local local-3D": 1.390816129,
+        "explicit-sum local-3D": 1.370484351,
+        "projected local-4D": 0.885622039,
+        "four_d_over_erased_3d": 0.6462109825287601
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl04_q5_spatial_square_inspects_match",
+        "graph": "GL04",
+        "orientation-local local-3D": 3.769895941,
+        "explicit-sum local-3D": 2.804202145,
+        "projected local-4D": 2.332493513,
+        "four_d_over_erased_3d": 0.8317850826692097
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl04_q5_temporal_component_inspects_match",
+        "graph": "GL04",
+        "orientation-local local-3D": 1.392731316,
+        "explicit-sum local-3D": 1.373562451,
+        "projected local-4D": 1.360531021,
+        "four_d_over_erased_3d": 0.9905126774610701
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl04_q5_temporal_square_inspects_match",
+        "graph": "GL04",
+        "orientation-local local-3D": 5.261748362,
+        "explicit-sum local-3D": 3.305569335,
+        "projected local-4D": 2.818222556,
+        "four_d_over_erased_3d": 0.8525679755557146
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl04_q6_temporal_component_inspects_match",
+        "graph": "GL04",
+        "orientation-local local-3D": 1.393409161,
+        "explicit-sum local-3D": 1.368711593,
+        "projected local-4D": 1.373845066,
+        "four_d_over_erased_3d": 1.0037505877982287
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl04_right_owned_dot_inspects_match",
+        "graph": "GL04",
+        "orientation-local local-3D": 6.691585383,
+        "explicit-sum local-3D": 3.763106365,
+        "projected local-4D": 4.44508719,
+        "four_d_over_erased_3d": 1.1812281553726425
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl04_right_temporal_product_inspects_match",
+        "graph": "GL04",
+        "orientation-local local-3D": 2.827257936,
+        "explicit-sum local-3D": 2.320273958,
+        "projected local-4D": 2.794030699,
+        "four_d_over_erased_3d": 1.2041813809815642
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl08_inspects_match",
+        "graph": "GL08",
+        "orientation-local local-3D": 2.382519897,
+        "explicit-sum local-3D": 1.87576871,
+        "projected local-4D": 1.382180491,
+        "four_d_over_erased_3d": 0.736860831312193
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl09_inspects_match",
+        "graph": "GL09",
+        "orientation-local local-3D": 1.89663813,
+        "explicit-sum local-3D": 1.853427138,
+        "projected local-4D": 1.38548641,
+        "four_d_over_erased_3d": 0.7475267743705606
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects::scalar_3l_cross_section_gl24_inspects_match",
+        "graph": "GL24",
+        "orientation-local local-3D": 2.378624112,
+        "explicit-sum local-3D": 1.888669165,
+        "projected local-4D": 1.86987546,
+        "four_d_over_erased_3d": 0.9900492339535812
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl00_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL00",
+        "orientation-local local-3D": 2.357437965,
+        "explicit-sum local-3D": 1.853508937,
+        "projected local-4D": 1.369385367,
+        "four_d_over_erased_3d": 0.7388069944871273
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl01_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL01",
+        "orientation-local local-3D": 1.386924628,
+        "explicit-sum local-3D": 0.888582563,
+        "projected local-4D": 0.885619777,
+        "four_d_over_erased_3d": 0.9966657167005426
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl01_quadratic_energy_inspects_match::q7_squared",
+        "graph": "GL01",
+        "orientation-local local-3D": 2.861415596,
+        "explicit-sum local-3D": 1.864945156,
+        "projected local-4D": 1.368517916,
+        "four_d_over_erased_3d": 0.73381134646085
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl02_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL02",
+        "orientation-local local-3D": 1.405625394,
+        "explicit-sum local-3D": 0.8785689099999999,
+        "projected local-4D": 0.888165404,
+        "four_d_over_erased_3d": 1.0109228700114143
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl03_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL03",
+        "orientation-local local-3D": 1.864417506,
+        "explicit-sum local-3D": 1.382306479,
+        "projected local-4D": 1.365342679,
+        "four_d_over_erased_3d": 0.9877279024169285
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl03_quadratic_energy_inspects_match::q7_squared",
+        "graph": "GL03",
+        "orientation-local local-3D": 7.653577988,
+        "explicit-sum local-3D": 4.941954456,
+        "projected local-4D": 4.268230324,
+        "four_d_over_erased_3d": 0.8636725332055548
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl04_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL04",
+        "orientation-local local-3D": 2.826574622,
+        "explicit-sum local-3D": 1.838444308,
+        "projected local-4D": 1.359372329,
+        "four_d_over_erased_3d": 0.7394144729240283
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl04_quadratic_energy_inspects_match::q7_squared",
+        "graph": "GL04",
+        "orientation-local local-3D": 2.335661624,
+        "explicit-sum local-3D": 1.845028845,
+        "projected local-4D": 1.358467047,
+        "four_d_over_erased_3d": 0.7362849912517221
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl05_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL05",
+        "orientation-local local-3D": 1.880557561,
+        "explicit-sum local-3D": 0.878100012,
+        "projected local-4D": 0.871694448,
+        "four_d_over_erased_3d": 0.9927051999630311
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl06_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL06",
+        "orientation-local local-3D": 2.856057237,
+        "explicit-sum local-3D": 1.36766127,
+        "projected local-4D": 1.373666995,
+        "four_d_over_erased_3d": 1.0043912371664951
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl06_quadratic_energy_inspects_match::q7_squared",
+        "graph": "GL06",
+        "orientation-local local-3D": 1.863953843,
+        "explicit-sum local-3D": 1.113719015,
+        "projected local-4D": 1.352065583,
+        "four_d_over_erased_3d": 1.2140096063637738
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl07_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL07",
+        "orientation-local local-3D": 4.262205742,
+        "explicit-sum local-3D": 2.785766363,
+        "projected local-4D": 1.837468422,
+        "four_d_over_erased_3d": 0.6595917182448943
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl07_quadratic_energy_inspects_match::q7_squared",
+        "graph": "GL07",
+        "orientation-local local-3D": 2.353959724,
+        "explicit-sum local-3D": 1.842452995,
+        "projected local-4D": 1.379943411,
+        "four_d_over_erased_3d": 0.7489707551535121
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl08_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL08",
+        "orientation-local local-3D": 1.390515507,
+        "explicit-sum local-3D": 0.88869964,
+        "projected local-4D": 0.886805786,
+        "four_d_over_erased_3d": 0.997868960541044
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl08_quadratic_energy_inspects_match::q7_squared",
+        "graph": "GL08",
+        "orientation-local local-3D": 7.678420991,
+        "explicit-sum local-3D": 4.497888255,
+        "projected local-4D": 3.296204427,
+        "four_d_over_erased_3d": 0.7328337744575648
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl09_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL09",
+        "orientation-local local-3D": 0.915144794,
+        "explicit-sum local-3D": 0.8814200550000001,
+        "projected local-4D": 0.881791065,
+        "four_d_over_erased_3d": 1.0004209230297125
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl09_quadratic_energy_inspects_match::q7_squared",
+        "graph": "GL09",
+        "orientation-local local-3D": 3.232940699,
+        "explicit-sum local-3D": 2.313592024,
+        "projected local-4D": 1.357380201,
+        "four_d_over_erased_3d": 0.5866981675763245
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl10_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL10",
+        "orientation-local local-3D": 1.88427656,
+        "explicit-sum local-3D": 1.359783647,
+        "projected local-4D": 0.885810435,
+        "four_d_over_erased_3d": 0.651434834471134
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl10_quadratic_energy_inspects_match::q7_squared",
+        "graph": "GL10",
+        "orientation-local local-3D": 7.104400738,
+        "explicit-sum local-3D": 4.706304493,
+        "projected local-4D": 3.965583724,
+        "four_d_over_erased_3d": 0.8426109551343898
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl11_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL11",
+        "orientation-local local-3D": 2.340053071,
+        "explicit-sum local-3D": 1.843349565,
+        "projected local-4D": 1.365997384,
+        "four_d_over_erased_3d": 0.7410408801110927
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl11_quadratic_energy_inspects_match::q7_squared",
+        "graph": "GL11",
+        "orientation-local local-3D": 8.546780738,
+        "explicit-sum local-3D": 5.171206783,
+        "projected local-4D": 5.145983964,
+        "four_d_over_erased_3d": 0.9951224501246173
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl12_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL12",
+        "orientation-local local-3D": 1.380939172,
+        "explicit-sum local-3D": 0.881257677,
+        "projected local-4D": 0.877477358,
+        "four_d_over_erased_3d": 0.9957103136816134
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl12_quadratic_energy_inspects_match::q7_squared",
+        "graph": "GL12",
+        "orientation-local local-3D": 3.036673563,
+        "explicit-sum local-3D": 1.836800514,
+        "projected local-4D": 1.342429591,
+        "four_d_over_erased_3d": 0.7308521424989104
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl13_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL13",
+        "orientation-local local-3D": 1.37111338,
+        "explicit-sum local-3D": 0.8720642860000001,
+        "projected local-4D": 0.8752133440000001,
+        "four_d_over_erased_3d": 1.003611038831144
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl13_quadratic_energy_inspects_match::q7_squared",
+        "graph": "GL13",
+        "orientation-local local-3D": 3.233422526,
+        "explicit-sum local-3D": 2.279989085,
+        "projected local-4D": 1.332637159,
+        "four_d_over_erased_3d": 0.5844927801485506
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl14_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL14",
+        "orientation-local local-3D": 1.385520636,
+        "explicit-sum local-3D": 0.881734701,
+        "projected local-4D": 0.886844672,
+        "four_d_over_erased_3d": 1.005795361115089
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl14_quadratic_energy_inspects_match::q7_squared",
+        "graph": "GL14",
+        "orientation-local local-3D": 2.790647288,
+        "explicit-sum local-3D": 1.810528423,
+        "projected local-4D": 1.348012996,
+        "four_d_over_erased_3d": 0.7445411951977956
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl15_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL15",
+        "orientation-local local-3D": 1.373463828,
+        "explicit-sum local-3D": 1.348717298,
+        "projected local-4D": 0.875509826,
+        "four_d_over_erased_3d": 0.6491425796186385
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl15_quadratic_energy_inspects_match::q7_squared",
+        "graph": "GL15",
+        "orientation-local local-3D": 3.47549114,
+        "explicit-sum local-3D": 2.291983027,
+        "projected local-4D": 1.350225643,
+        "four_d_over_erased_3d": 0.5891080462176563
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl16_quadratic_energy_inspects_match::q7_squared",
+        "graph": "GL16",
+        "orientation-local local-3D": 3.282283228,
+        "explicit-sum local-3D": 2.299053205,
+        "projected local-4D": 1.364312877,
+        "four_d_over_erased_3d": 0.5934237946441957
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl17_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL17",
+        "orientation-local local-3D": 2.309692681,
+        "explicit-sum local-3D": 1.340639431,
+        "projected local-4D": 1.349891083,
+        "four_d_over_erased_3d": 1.0069009248766456
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl17_quadratic_energy_inspects_match::q7_squared",
+        "graph": "GL17",
+        "orientation-local local-3D": 8.455432463,
+        "explicit-sum local-3D": 5.120414747,
+        "projected local-4D": 6.251036209,
+        "four_d_over_erased_3d": 1.2208066177964236
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl18_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL18",
+        "orientation-local local-3D": 1.376269368,
+        "explicit-sum local-3D": 1.346719817,
+        "projected local-4D": 0.876632681,
+        "four_d_over_erased_3d": 0.6509391708164045
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl18_quadratic_energy_inspects_match::q7_squared",
+        "graph": "GL18",
+        "orientation-local local-3D": 3.25837763,
+        "explicit-sum local-3D": 2.292832295,
+        "projected local-4D": 1.348188512,
+        "four_d_over_erased_3d": 0.5880013618702103
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl19_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL19",
+        "orientation-local local-3D": 1.367042657,
+        "explicit-sum local-3D": 1.336142243,
+        "projected local-4D": 0.9018444120000001,
+        "four_d_over_erased_3d": 0.6749613798416522
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl19_quadratic_energy_inspects_match::q7_squared",
+        "graph": "GL19",
+        "orientation-local local-3D": 3.245958042,
+        "explicit-sum local-3D": 2.27714184,
+        "projected local-4D": 1.343899122,
+        "four_d_over_erased_3d": 0.5901692632374627
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl20_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL20",
+        "orientation-local local-3D": 1.381265692,
+        "explicit-sum local-3D": 0.86309274,
+        "projected local-4D": 0.883205208,
+        "four_d_over_erased_3d": 1.0233027889911344
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl20_quadratic_energy_inspects_match::q7_squared",
+        "graph": "GL20",
+        "orientation-local local-3D": 3.984927766,
+        "explicit-sum local-3D": 2.319119472,
+        "projected local-4D": 1.345583697,
+        "four_d_over_erased_3d": 0.5802131857569086
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl21_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL21",
+        "orientation-local local-3D": 2.33899403,
+        "explicit-sum local-3D": 2.068918113,
+        "projected local-4D": 1.352290944,
+        "four_d_over_erased_3d": 0.6536222654260265
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl21_quadratic_energy_inspects_match::q7_squared",
+        "graph": "GL21",
+        "orientation-local local-3D": 9.446639983,
+        "explicit-sum local-3D": 5.613084278,
+        "projected local-4D": 7.723626006,
+        "four_d_over_erased_3d": 1.3760039264459447
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl22_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL22",
+        "orientation-local local-3D": 1.852972898,
+        "explicit-sum local-3D": 1.348332846,
+        "projected local-4D": 0.881239876,
+        "four_d_over_erased_3d": 0.6535774001310652
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl22_quadratic_energy_inspects_match::q7_squared",
+        "graph": "GL22",
+        "orientation-local local-3D": 5.595517912,
+        "explicit-sum local-3D": 2.771056552,
+        "projected local-4D": 3.238024214,
+        "four_d_over_erased_3d": 1.1685161068484755
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl23_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL23",
+        "orientation-local local-3D": 1.839014165,
+        "explicit-sum local-3D": 1.347967616,
+        "projected local-4D": 1.348718169,
+        "four_d_over_erased_3d": 1.0005568034358476
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl23_quadratic_energy_inspects_match::q7_squared",
+        "graph": "GL23",
+        "orientation-local local-3D": 7.964820097,
+        "explicit-sum local-3D": 4.801534742,
+        "projected local-4D": 4.156678914,
+        "four_d_over_erased_3d": 0.865697977282281
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl24_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL24",
+        "orientation-local local-3D": 2.786403904,
+        "explicit-sum local-3D": 1.822557358,
+        "projected local-4D": 1.343083387,
+        "four_d_over_erased_3d": 0.736922424473842
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl24_quadratic_energy_inspects_match::q7_squared",
+        "graph": "GL24",
+        "orientation-local local-3D": 2.312836436,
+        "explicit-sum local-3D": 1.812663175,
+        "projected local-4D": 1.354847856,
+        "four_d_over_erased_3d": 0.7474349756126093
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl25_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL25",
+        "orientation-local local-3D": 1.837925116,
+        "explicit-sum local-3D": 0.872246296,
+        "projected local-4D": 0.8683288760000001,
+        "four_d_over_erased_3d": 0.9955088144048708
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl25_quadratic_energy_inspects_match::q7_squared",
+        "graph": "GL25",
+        "orientation-local local-3D": 1.845042904,
+        "explicit-sum local-3D": 0.863962496,
+        "projected local-4D": 0.870820192,
+        "four_d_over_erased_3d": 1.0079374926941274
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl26_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL26",
+        "orientation-local local-3D": 3.930031805,
+        "explicit-sum local-3D": 2.73773587,
+        "projected local-4D": 1.342473496,
+        "four_d_over_erased_3d": 0.4903590264900171
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl26_quadratic_energy_inspects_match::q7_squared",
+        "graph": "GL26",
+        "orientation-local local-3D": 9.404261627,
+        "explicit-sum local-3D": 5.585710219,
+        "projected local-4D": 5.084144555,
+        "four_d_over_erased_3d": 0.9102055702256258
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl27_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL27",
+        "orientation-local local-3D": 2.779722465,
+        "explicit-sum local-3D": 1.344611934,
+        "projected local-4D": 1.352554042,
+        "four_d_over_erased_3d": 1.005906617217336
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl28_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL28",
+        "orientation-local local-3D": 2.321308633,
+        "explicit-sum local-3D": 1.34307502,
+        "projected local-4D": 1.338127999,
+        "four_d_over_erased_3d": 0.9963166458117879
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl28_quadratic_energy_inspects_match::q7_squared",
+        "graph": "GL28",
+        "orientation-local local-3D": 1.85014465,
+        "explicit-sum local-3D": 1.340090043,
+        "projected local-4D": 1.56745089,
+        "four_d_over_erased_3d": 1.1696608733029739
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl29_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL29",
+        "orientation-local local-3D": 2.301221276,
+        "explicit-sum local-3D": 1.331053562,
+        "projected local-4D": 1.335307412,
+        "four_d_over_erased_3d": 1.0031958518585895
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl30_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL30",
+        "orientation-local local-3D": 2.317650645,
+        "explicit-sum local-3D": 1.343604222,
+        "projected local-4D": 1.34630475,
+        "four_d_over_erased_3d": 1.0020099133031752
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl30_quadratic_energy_inspects_match::q7_squared",
+        "graph": "GL30",
+        "orientation-local local-3D": 1.368005312,
+        "explicit-sum local-3D": 0.868896622,
+        "projected local-4D": 0.8644571,
+        "four_d_over_erased_3d": 0.9948906211767964
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl31_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL31",
+        "orientation-local local-3D": 2.778661126,
+        "explicit-sum local-3D": 1.807425889,
+        "projected local-4D": 1.331566354,
+        "four_d_over_erased_3d": 0.7367197527178942
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl32_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL32",
+        "orientation-local local-3D": 1.361821167,
+        "explicit-sum local-3D": 0.866793766,
+        "projected local-4D": 0.867082267,
+        "four_d_over_erased_3d": 1.0003328369576667
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl32_quadratic_energy_inspects_match::q7_squared",
+        "graph": "GL32",
+        "orientation-local local-3D": 1.382534777,
+        "explicit-sum local-3D": 0.867620228,
+        "projected local-4D": 0.862320635,
+        "four_d_over_erased_3d": 0.9938918056207421
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl33_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL33",
+        "orientation-local local-3D": 3.442785337,
+        "explicit-sum local-3D": 2.282023523,
+        "projected local-4D": 1.338754272,
+        "four_d_over_erased_3d": 0.5866522665112774
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl33_quadratic_energy_inspects_match::q7_squared",
+        "graph": "GL33",
+        "orientation-local local-3D": 8.878222822,
+        "explicit-sum local-3D": 5.55334587,
+        "projected local-4D": 4.635441631,
+        "four_d_over_erased_3d": 0.8347114945678684
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl34_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL34",
+        "orientation-local local-3D": 1.809240166,
+        "explicit-sum local-3D": 0.8498833069999999,
+        "projected local-4D": 0.8499059670000001,
+        "four_d_over_erased_3d": 1.0000266624839123
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl35_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL35",
+        "orientation-local local-3D": 2.515272377,
+        "explicit-sum local-3D": 1.359944945,
+        "projected local-4D": 1.343999187,
+        "four_d_over_erased_3d": 0.9882747032821979
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl36_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL36",
+        "orientation-local local-3D": 3.275565649,
+        "explicit-sum local-3D": 2.465994899,
+        "projected local-4D": 1.345939472,
+        "four_d_over_erased_3d": 0.5457997794503954
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl36_quadratic_energy_inspects_match::q7_squared",
+        "graph": "GL36",
+        "orientation-local local-3D": 1.848975863,
+        "explicit-sum local-3D": 1.341747962,
+        "projected local-4D": 1.341562372,
+        "four_d_over_erased_3d": 0.9998616804308589
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl37_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL37",
+        "orientation-local local-3D": 4.231604013,
+        "explicit-sum local-3D": 2.78132628,
+        "projected local-4D": 1.349011519,
+        "four_d_over_erased_3d": 0.4850245469941772
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl37_quadratic_energy_inspects_match::q7_squared",
+        "graph": "GL37",
+        "orientation-local local-3D": 2.330419644,
+        "explicit-sum local-3D": 1.823628143,
+        "projected local-4D": 1.347519887,
+        "four_d_over_erased_3d": 0.7389225112435654
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl38_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL38",
+        "orientation-local local-3D": 2.566741854,
+        "explicit-sum local-3D": 1.359523935,
+        "projected local-4D": 1.358673234,
+        "four_d_over_erased_3d": 0.9993742655218498
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl38_quadratic_energy_inspects_match::q7_squared",
+        "graph": "GL38",
+        "orientation-local local-3D": 8.363825644,
+        "explicit-sum local-3D": 5.570906895,
+        "projected local-4D": 4.142561145,
+        "four_d_over_erased_3d": 0.7436062427677675
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl39_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL39",
+        "orientation-local local-3D": 1.384022276,
+        "explicit-sum local-3D": 0.873465575,
+        "projected local-4D": 0.8786415280000001,
+        "four_d_over_erased_3d": 1.0059257664504981
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl39_quadratic_energy_inspects_match::q7_squared",
+        "graph": "GL39",
+        "orientation-local local-3D": 1.372409638,
+        "explicit-sum local-3D": 0.868177612,
+        "projected local-4D": 0.882377627,
+        "four_d_over_erased_3d": 1.0163561174622873
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl40_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL40",
+        "orientation-local local-3D": 1.838605442,
+        "explicit-sum local-3D": 1.577787983,
+        "projected local-4D": 0.872746063,
+        "four_d_over_erased_3d": 0.5531453353704495
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl40_quadratic_energy_inspects_match::q7_squared",
+        "graph": "GL40",
+        "orientation-local local-3D": 1.837368479,
+        "explicit-sum local-3D": 1.347370208,
+        "projected local-4D": 0.873854927,
+        "four_d_over_erased_3d": 0.6485633434756782
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl41_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL41",
+        "orientation-local local-3D": 3.266956326,
+        "explicit-sum local-3D": 1.821609532,
+        "projected local-4D": 1.352451851,
+        "four_d_over_erased_3d": 0.7424488219026294
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl41_quadratic_energy_inspects_match::q7_squared",
+        "graph": "GL41",
+        "orientation-local local-3D": 1.830350473,
+        "explicit-sum local-3D": 1.328765434,
+        "projected local-4D": 1.334547538,
+        "four_d_over_erased_3d": 1.0043514858620262
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl42_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL42",
+        "orientation-local local-3D": 3.6992093,
+        "explicit-sum local-3D": 1.797921835,
+        "projected local-4D": 1.348242151,
+        "four_d_over_erased_3d": 0.7498891913729943
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl43_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL43",
+        "orientation-local local-3D": 3.257441165,
+        "explicit-sum local-3D": 1.33957581,
+        "projected local-4D": 1.573509425,
+        "four_d_over_erased_3d": 1.1746326062725783
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl43_quadratic_energy_inspects_match::q7_squared",
+        "graph": "GL43",
+        "orientation-local local-3D": 2.319827065,
+        "explicit-sum local-3D": 1.341277844,
+        "projected local-4D": 1.336556554,
+        "four_d_over_erased_3d": 0.9964800059725731
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl44_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL44",
+        "orientation-local local-3D": 4.657905134,
+        "explicit-sum local-3D": 2.757072251,
+        "projected local-4D": 1.822130015,
+        "four_d_over_erased_3d": 0.6608930956884089
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl44_quadratic_energy_inspects_match::q7_squared",
+        "graph": "GL44",
+        "orientation-local local-3D": 11.330346333,
+        "explicit-sum local-3D": 7.198700418,
+        "projected local-4D": 6.516976175,
+        "four_d_over_erased_3d": 0.9052989840644873
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl45_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL45",
+        "orientation-local local-3D": 4.194463531,
+        "explicit-sum local-3D": 2.746444457,
+        "projected local-4D": 1.81093132,
+        "four_d_over_erased_3d": 0.6593729996557509
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl45_quadratic_energy_inspects_match::q7_squared",
+        "graph": "GL45",
+        "orientation-local local-3D": 2.30394439,
+        "explicit-sum local-3D": 1.806390429,
+        "projected local-4D": 1.357486096,
+        "four_d_over_erased_3d": 0.751490970172761
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl46_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL46",
+        "orientation-local local-3D": 3.252253349,
+        "explicit-sum local-3D": 1.81053356,
+        "projected local-4D": 1.339931384,
+        "four_d_over_erased_3d": 0.7400754195354434
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl46_quadratic_energy_inspects_match::q7_squared",
+        "graph": "GL46",
+        "orientation-local local-3D": 11.444569694,
+        "explicit-sum local-3D": 7.447243798,
+        "projected local-4D": 6.017048766,
+        "four_d_over_erased_3d": 0.807956464056664
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl47_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL47",
+        "orientation-local local-3D": 2.79157232,
+        "explicit-sum local-3D": 1.333309179,
+        "projected local-4D": 1.339774485,
+        "four_d_over_erased_3d": 1.0048490673444916
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl47_quadratic_energy_inspects_match::q7_squared",
+        "graph": "GL47",
+        "orientation-local local-3D": 1.841455716,
+        "explicit-sum local-3D": 1.5739421,
+        "projected local-4D": 1.338381152,
+        "four_d_over_erased_3d": 0.8503369672874244
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl48_quadratic_energy_inspects_match::q1_squared",
+        "graph": "GL48",
+        "orientation-local local-3D": 2.797326704,
+        "explicit-sum local-3D": 1.824728026,
+        "projected local-4D": 1.350440141,
+        "four_d_over_erased_3d": 0.7400774919648216
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl48_quadratic_energy_inspects_match::q7_squared",
+        "graph": "GL48",
+        "orientation-local local-3D": 2.315720872,
+        "explicit-sum local-3D": 1.8178716,
+        "projected local-4D": 1.811941496,
+        "four_d_over_erased_3d": 0.9967378862181466
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quartic_energy_numerators::scalar_3l_cross_section_gl00_quartic_energy_inspects_match::q1_quartic",
+        "graph": "GL00",
+        "orientation-local local-3D": 3.739949192,
+        "explicit-sum local-3D": 2.277605651,
+        "projected local-4D": 1.809097689,
+        "four_d_over_erased_3d": 0.7942980332024123
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quartic_energy_numerators::scalar_3l_cross_section_gl06_quartic_energy_inspects_match::q1_quartic",
+        "graph": "GL06",
+        "orientation-local local-3D": 78.452312914,
+        "explicit-sum local-3D": 21.219017903,
+        "projected local-4D": 9.949333255,
+        "four_d_over_erased_3d": 0.46888754703361357
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quartic_energy_numerators::scalar_3l_cross_section_gl10_quartic_energy_inspects_match::q1_quartic",
+        "graph": "GL10",
+        "orientation-local local-3D": 2.797196954,
+        "explicit-sum local-3D": 1.826646037,
+        "projected local-4D": 1.358685845,
+        "four_d_over_erased_3d": 0.7438145198789818
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quartic_energy_numerators::scalar_3l_cross_section_gl16_quartic_energy_inspects_match::q7_quartic",
+        "graph": "GL16",
+        "orientation-local local-3D": 147.12381524,
+        "explicit-sum local-3D": 136.241150698,
+        "projected local-4D": 133.896778265,
+        "four_d_over_erased_3d": 0.9827924792106557
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quartic_energy_numerators::scalar_3l_cross_section_gl20_quartic_energy_inspects_match::q1_quartic",
+        "graph": "GL20",
+        "orientation-local local-3D": 2.327563866,
+        "explicit-sum local-3D": 1.349642012,
+        "projected local-4D": 1.341670883,
+        "four_d_over_erased_3d": 0.9940938938406432
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quartic_energy_numerators::scalar_3l_cross_section_gl24_quartic_energy_inspects_match::q1_quartic",
+        "graph": "GL24",
+        "orientation-local local-3D": 44.225261873,
+        "explicit-sum local-3D": 10.79251668,
+        "projected local-4D": 7.968029531,
+        "four_d_over_erased_3d": 0.7382920747081949
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quartic_energy_numerators::scalar_3l_cross_section_gl30_quartic_energy_inspects_match::q1_quartic",
+        "graph": "GL30",
+        "orientation-local local-3D": 81.020632525,
+        "explicit-sum local-3D": 21.632152145,
+        "projected local-4D": 11.158543526,
+        "four_d_over_erased_3d": 0.5158314092469601
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quartic_energy_numerators::scalar_3l_cross_section_gl41_quartic_energy_inspects_match::q1_quartic",
+        "graph": "GL41",
+        "orientation-local local-3D": 101.505434162,
+        "explicit-sum local-3D": 23.701084241,
+        "projected local-4D": 14.157527647,
+        "four_d_over_erased_3d": 0.5973367084409242
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::quartic_energy_numerators::scalar_3l_cross_section_gl42_quartic_energy_inspects_match::q1_quartic",
+        "graph": "GL42",
+        "orientation-local local-3D": 121.126475828,
+        "explicit-sum local-3D": 29.960836544,
+        "projected local-4D": 17.232824224,
+        "four_d_over_erased_3d": 0.5751783398535002
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl01_inspects_match",
+        "graph": "GL01",
+        "orientation-local local-3D": 9.392721349,
+        "explicit-sum local-3D": 5.118699268,
+        "projected local-4D": 5.780541532,
+        "four_d_over_erased_3d": 1.1292989154759618
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl03_inspects_match",
+        "graph": "GL03",
+        "orientation-local local-3D": 7.809718972,
+        "explicit-sum local-3D": 4.401474643,
+        "projected local-4D": 4.917098565,
+        "four_d_over_erased_3d": 1.1171479933026618
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl05_inspects_match",
+        "graph": "GL05",
+        "orientation-local local-3D": 3.290919208,
+        "explicit-sum local-3D": 3.110682574,
+        "projected local-4D": 1.836974026,
+        "four_d_over_erased_3d": 0.5905372799378404
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl06_inspects_match",
+        "graph": "GL06",
+        "orientation-local local-3D": 3.759545598,
+        "explicit-sum local-3D": 2.311056298,
+        "projected local-4D": 1.840172174,
+        "four_d_over_erased_3d": 0.7962472292832047
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl07_inspects_match",
+        "graph": "GL07",
+        "orientation-local local-3D": 12.745925633,
+        "explicit-sum local-3D": 7.022176862,
+        "projected local-4D": 7.499355304,
+        "four_d_over_erased_3d": 1.067953065178722
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl10_inspects_match",
+        "graph": "GL10",
+        "orientation-local local-3D": 5.696343949,
+        "explicit-sum local-3D": 3.752803035,
+        "projected local-4D": 3.27316882,
+        "four_d_over_erased_3d": 0.872193075275532
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl11_inspects_match",
+        "graph": "GL11",
+        "orientation-local local-3D": 4.946357483,
+        "explicit-sum local-3D": 3.271065296,
+        "projected local-4D": 2.318073108,
+        "four_d_over_erased_3d": 0.7086599924601444
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl12_inspects_match",
+        "graph": "GL12",
+        "orientation-local local-3D": 8.922354979,
+        "explicit-sum local-3D": 5.12265369,
+        "projected local-4D": 4.167359147,
+        "four_d_over_erased_3d": 0.8135156891700793
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl13_inspects_match",
+        "graph": "GL13",
+        "orientation-local local-3D": 2.828235339,
+        "explicit-sum local-3D": 2.332873915,
+        "projected local-4D": 1.84992549,
+        "four_d_over_erased_3d": 0.7929813429286855
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl14_inspects_match",
+        "graph": "GL14",
+        "orientation-local local-3D": 4.207667575,
+        "explicit-sum local-3D": 2.769906629,
+        "projected local-4D": 1.829272301,
+        "four_d_over_erased_3d": 0.6604093733153776
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl15_inspects_match",
+        "graph": "GL15",
+        "orientation-local local-3D": 5.176395222,
+        "explicit-sum local-3D": 3.270032486,
+        "projected local-4D": 2.307855165,
+        "four_d_over_erased_3d": 0.7057590941009385
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl16_inspects_match",
+        "graph": "GL16",
+        "orientation-local local-3D": 2.352610894,
+        "explicit-sum local-3D": 1.851065273,
+        "projected local-4D": 1.373100132,
+        "four_d_over_erased_3d": 0.7417891481344862
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl17_inspects_match",
+        "graph": "GL17",
+        "orientation-local local-3D": 8.426225312,
+        "explicit-sum local-3D": 5.111686689,
+        "projected local-4D": 6.993194767,
+        "four_d_over_erased_3d": 1.3680796951129413
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl18_inspects_match",
+        "graph": "GL18",
+        "orientation-local local-3D": 5.198475879,
+        "explicit-sum local-3D": 3.26259488,
+        "projected local-4D": 2.310745034,
+        "four_d_over_erased_3d": 0.7082537424934597
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl19_inspects_match",
+        "graph": "GL19",
+        "orientation-local local-3D": 5.142560276,
+        "explicit-sum local-3D": 3.23324899,
+        "projected local-4D": 2.285994854,
+        "four_d_over_erased_3d": 0.7070271609363435
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl20_inspects_match",
+        "graph": "GL20",
+        "orientation-local local-3D": 2.340694057,
+        "explicit-sum local-3D": 1.836730062,
+        "projected local-4D": 1.376377241,
+        "four_d_over_erased_3d": 0.7493628320654121
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl21_inspects_match",
+        "graph": "GL21",
+        "orientation-local local-3D": 9.828834083,
+        "explicit-sum local-3D": 5.580275734,
+        "projected local-4D": 7.99017464,
+        "four_d_over_erased_3d": 1.4318601841333314
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl22_inspects_match",
+        "graph": "GL22",
+        "orientation-local local-3D": 2.347964706,
+        "explicit-sum local-3D": 1.364274862,
+        "projected local-4D": 1.365699196,
+        "four_d_over_erased_3d": 1.0010440227549982
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl23_inspects_match",
+        "graph": "GL23",
+        "orientation-local local-3D": 2.512059702,
+        "explicit-sum local-3D": 1.354149348,
+        "projected local-4D": 1.362542177,
+        "four_d_over_erased_3d": 1.0061978606808737
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl25_inspects_match",
+        "graph": "GL25",
+        "orientation-local local-3D": 1.860191329,
+        "explicit-sum local-3D": 1.349451836,
+        "projected local-4D": 1.353556636,
+        "four_d_over_erased_3d": 1.0030418277188515
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl26_inspects_match",
+        "graph": "GL26",
+        "orientation-local local-3D": 10.78207023,
+        "explicit-sum local-3D": 6.988860347,
+        "projected local-4D": 6.516113597,
+        "four_d_over_erased_3d": 0.9323571045166286
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl27_inspects_match",
+        "graph": "GL27",
+        "orientation-local local-3D": 3.261449961,
+        "explicit-sum local-3D": 2.305552215,
+        "projected local-4D": 1.823049721,
+        "four_d_over_erased_3d": 0.7907215066044384
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl28_inspects_match",
+        "graph": "GL28",
+        "orientation-local local-3D": 2.326874187,
+        "explicit-sum local-3D": 1.354231509,
+        "projected local-4D": 1.344220784,
+        "four_d_over_erased_3d": 0.9926078185794154
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl29_inspects_match",
+        "graph": "GL29",
+        "orientation-local local-3D": 4.186941266,
+        "explicit-sum local-3D": 2.756530824,
+        "projected local-4D": 1.825621487,
+        "four_d_over_erased_3d": 0.6622895238845332
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl30_inspects_match",
+        "graph": "GL30",
+        "orientation-local local-3D": 1.84768897,
+        "explicit-sum local-3D": 1.821101476,
+        "projected local-4D": 1.357125526,
+        "four_d_over_erased_3d": 0.7452223524528075
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl31_inspects_match",
+        "graph": "GL31",
+        "orientation-local local-3D": 3.721988626,
+        "explicit-sum local-3D": 2.296569104,
+        "projected local-4D": 1.831733762,
+        "four_d_over_erased_3d": 0.7975957522068973
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl32_inspects_match",
+        "graph": "GL32",
+        "orientation-local local-3D": 1.394010826,
+        "explicit-sum local-3D": 1.371642432,
+        "projected local-4D": 1.359233831,
+        "four_d_over_erased_3d": 0.9909534724863338
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl33_inspects_match",
+        "graph": "GL33",
+        "orientation-local local-3D": 9.356999791,
+        "explicit-sum local-3D": 5.580461644,
+        "projected local-4D": 5.103342112,
+        "four_d_over_erased_3d": 0.9145017809569592
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl34_inspects_match",
+        "graph": "GL34",
+        "orientation-local local-3D": 2.322482928,
+        "explicit-sum local-3D": 1.823749523,
+        "projected local-4D": 1.361224497,
+        "four_d_over_erased_3d": 0.7463878563547677
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl35_inspects_match",
+        "graph": "GL35",
+        "orientation-local local-3D": 5.143171029,
+        "explicit-sum local-3D": 3.240936456,
+        "projected local-4D": 2.769005636,
+        "four_d_over_erased_3d": 0.8543844267213859
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl36_inspects_match",
+        "graph": "GL36",
+        "orientation-local local-3D": 9.42105885,
+        "explicit-sum local-3D": 5.159044668,
+        "projected local-4D": 5.168996292,
+        "four_d_over_erased_3d": 1.0019289664347601
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl37_inspects_match",
+        "graph": "GL37",
+        "orientation-local local-3D": 12.245319053,
+        "explicit-sum local-3D": 6.979809658,
+        "projected local-4D": 6.97648326,
+        "four_d_over_erased_3d": 0.9995234256859444
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl38_inspects_match",
+        "graph": "GL38",
+        "orientation-local local-3D": 4.714182286,
+        "explicit-sum local-3D": 2.788032265,
+        "projected local-4D": 2.328292973,
+        "four_d_over_erased_3d": 0.835102592688252
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl39_inspects_match",
+        "graph": "GL39",
+        "orientation-local local-3D": 1.397270406,
+        "explicit-sum local-3D": 1.365321788,
+        "projected local-4D": 1.351327844,
+        "four_d_over_erased_3d": 0.9897504426260574
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl40_inspects_match",
+        "graph": "GL40",
+        "orientation-local local-3D": 7.961981952,
+        "explicit-sum local-3D": 4.675561644,
+        "projected local-4D": 5.705254131,
+        "four_d_over_erased_3d": 1.22022861966142
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl41_inspects_match",
+        "graph": "GL41",
+        "orientation-local local-3D": 3.366534532,
+        "explicit-sum local-3D": 2.38019099,
+        "projected local-4D": 1.864657105,
+        "four_d_over_erased_3d": 0.7834065051225154
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl42_inspects_match",
+        "graph": "GL42",
+        "orientation-local local-3D": 4.302320474,
+        "explicit-sum local-3D": 2.834118977,
+        "projected local-4D": 1.874710059,
+        "four_d_over_erased_3d": 0.6614789549112143
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl43_inspects_match",
+        "graph": "GL43",
+        "orientation-local local-3D": 2.411966087,
+        "explicit-sum local-3D": 1.394131088,
+        "projected local-4D": 1.395433922,
+        "four_d_over_erased_3d": 1.0009345132686691
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl44_inspects_match",
+        "graph": "GL44",
+        "orientation-local local-3D": 12.076842218,
+        "explicit-sum local-3D": 7.194101612,
+        "projected local-4D": 7.213064588,
+        "four_d_over_erased_3d": 1.0026359060550896
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl45_inspects_match",
+        "graph": "GL45",
+        "orientation-local local-3D": 12.601680109,
+        "explicit-sum local-3D": 7.202408074,
+        "projected local-4D": 7.675835849,
+        "four_d_over_erased_3d": 1.065731873303462
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl46_inspects_match",
+        "graph": "GL46",
+        "orientation-local local-3D": 5.811194473,
+        "explicit-sum local-3D": 3.849887013,
+        "projected local-4D": 2.898465185,
+        "four_d_over_erased_3d": 0.7528701946869317
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl47_inspects_match",
+        "graph": "GL47",
+        "orientation-local local-3D": 2.4084898,
+        "explicit-sum local-3D": 1.401773457,
+        "projected local-4D": 1.402150929,
+        "four_d_over_erased_3d": 1.0002692817431484
+      },
+      {
+        "binary": "gammaloop-integration-tests::test_runs",
+        "test": "scalar_3l_cross_section_inspects::slow::scalar_3l_cross_section_gl48_inspects_match",
+        "graph": "GL48",
+        "orientation-local local-3D": 2.889529503,
+        "explicit-sum local-3D": 2.384917884,
+        "projected local-4D": 2.389912335,
+        "four_d_over_erased_3d": 1.0020941815370277
+      }
+    ]
+  },
+  "physical_correctness_generation": [
+    {
+      "binary": "gammaloop-integration-tests::uv",
+      "test": "slow::aa_aa_2l_gl00_matches_across_local_uv_routes",
+      "graph": "GL00",
+      "localized_3d": 21.31196656,
+      "erased_3d": 15.55165137,
+      "direct_4d": 13.520471953,
+      "four_d_over_erased_3d": 0.869391399750752
+    },
+    {
+      "binary": "gammaloop-integration-tests::uv",
+      "test": "slow::aa_aa_2l_gl01_matches_across_local_uv_routes",
+      "graph": "GL01",
+      "localized_3d": 21.606261601,
+      "erased_3d": 16.153345061,
+      "direct_4d": 14.210764396,
+      "four_d_over_erased_3d": 0.8797412760227545
+    }
+  ],
+  "independent_audit_sha256": "28a49d26d84f1d4e1fa45d79bb6d5f992984205826139299a186cedddcef89e1",
+  "independent_audit_result": "PASS: exact expected/listed/selected/PASS-name equality; all four immutable executables rehashed; all receipts succeed; no failures, retries, guard interventions or overlapping run intervals."
+}

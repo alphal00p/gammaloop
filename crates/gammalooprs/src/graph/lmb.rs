@@ -164,6 +164,25 @@ impl Display for LoopMomentumBasis {
 }
 
 impl LoopMomentumBasis {
+    pub(crate) fn accounted_bytes(&self) -> usize {
+        // Cached LMBs are cloned to their live lengths. Allow a word of slack
+        // for the bitset and charge the owned coordinate vectors explicitly.
+        std::mem::size_of::<Self>()
+            + self.tree.size().div_ceil(8)
+            + 32
+            + (self.loop_edges.capacity() + self.ext_edges.capacity())
+                * std::mem::size_of::<EdgeIndex>()
+            + self.edge_signatures.capacity() * std::mem::size_of::<LoopExtSignature>()
+            + self
+                .edge_signatures
+                .iter()
+                .map(|(_, signature)| {
+                    (signature.internal.len() + signature.external.len())
+                        * std::mem::size_of::<SignOrZero>()
+                })
+                .sum::<usize>()
+    }
+
     pub(crate) fn ext_from(&self, eid: EdgeIndex) -> Option<ExternalIndex> {
         self.ext_edges
             .iter()
@@ -477,12 +496,15 @@ pub trait LMBext {
     fn lmb(&self) -> LoopMomentumBasis;
 
     /// Build the LMB for `outer - shrunken` while each connected component of
-    /// `shrunken` acts as a contracted passage node.
+    /// `shrunken` acts as a contracted passage node. When supplied, the parent
+    /// LMB selects a compatible subset of its loop carriers on the contracted
+    /// topology instead of independently choosing a canonical basis.
     fn shrunken_sub_lmb(
         &self,
         outer: &SuBitGraph,
         shrunken: &InternalSubGraph,
         externals: SuBitGraph,
+        parent_lmb: Option<&LoopMomentumBasis>,
     ) -> LmbResult<LoopMomentumBasis>;
 
     /// Construct the canonical shrunken-subgraph LMB using the full crown of
@@ -578,6 +600,7 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
         outer: &SuBitGraph,
         shrunken: &InternalSubGraph,
         externals: SuBitGraph,
+        parent_lmb: Option<&LoopMomentumBasis>,
     ) -> LmbResult<LoopMomentumBasis> {
         let graph_size = self.n_hedges();
         let outer_dot = || {
@@ -618,12 +641,21 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
             });
         }
 
+        if !outer.union(&self.full_crown(outer)).includes(&externals) {
+            return Err(LmbError::ExternalsOutsideSubgraph {
+                externals_dot: self.dot(&externals),
+                subgraph_dot: outer_dot(),
+            });
+        }
+
         if shrunken.is_empty() {
-            return self.lmb_impl(outer, outer, externals);
+            return match parent_lmb {
+                Some(parent_lmb) => self.try_compatible_sub_lmb(outer, externals, parent_lmb),
+                None => self.lmb_impl(outer, outer, externals),
+            };
         }
 
         let remainder = outer.subtract(&shrunken.filter);
-        let contracted_externals = externals.subtract(&shrunken.filter);
         let mut contracted = self.to_ref();
 
         for component in self.connected_components(shrunken) {
@@ -635,15 +667,31 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                 &component, node_data,
             );
         }
+        contracted.forget_identification_history();
 
-        contracted
-            .lmb_impl(&remainder, &remainder, contracted_externals)
-            .map_err(|source| LmbError::NoShrunkenLmb {
-                outer_dot: outer_dot(),
-                shrunken_dot: shrunken_dot(),
-                remainder_dot: self.dot(&remainder),
-                source: Box::new(source),
-            })
+        // A fully contracted component can have no node in the remainder.
+        // Remove only its retired crown endpoints; the opposite endpoints at
+        // surviving nodes remain external flows. Unrelated invalid externals
+        // have already been rejected against the original outer footprint.
+        let retired_crown = self
+            .full_crown(shrunken)
+            .subtract(&contracted.full_crown(&remainder).union(&remainder));
+        let contracted_externals = externals
+            .subtract(&shrunken.filter)
+            .subtract(&retired_crown);
+
+        match parent_lmb {
+            Some(parent_lmb) => {
+                contracted.try_compatible_sub_lmb(&remainder, contracted_externals, parent_lmb)
+            }
+            None => contracted.lmb_impl(&remainder, &remainder, contracted_externals),
+        }
+        .map_err(|source| LmbError::NoShrunkenLmb {
+            outer_dot: outer_dot(),
+            shrunken_dot: shrunken_dot(),
+            remainder_dot: self.dot(&remainder),
+            source: Box::new(source),
+        })
     }
 
     fn shrunken_lmb_of(
@@ -652,7 +700,7 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
         shrunken: &InternalSubGraph,
     ) -> LoopMomentumBasis {
         let externals = self.full_crown(outer);
-        self.shrunken_sub_lmb(outer, shrunken, externals)
+        self.shrunken_sub_lmb(outer, shrunken, externals, None)
             .unwrap_or_else(|err| {
                 panic!("Failed to build shrunken-subgraph loop momentum basis:\n{err}")
             })
@@ -856,7 +904,9 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                         })?;
 
                 let external_cover = subgraph_tree.covers(&externals);
+                let subgraph_cover = subgraph_tree.covers(subgraph);
 
+                // Select the last half edge in this external cover as the dependent one.
                 root = external_cover.included_iter().next_back().ok_or_else(|| {
                     LmbError::EmptyExternalCover {
                         externals_dot: self.dot(&externals),
@@ -864,15 +914,21 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                     }
                 })?;
                 let root_node = self.node_id(root);
-                let tree =
+                let tree = if subgraph_tree.tree_subgraph.is_empty() {
+                    // A singleton component has an empty spanning forest after external
+                    // hairs are stripped. Retain its root, including for contact graphs
+                    // and tadpoles, so its external flows still conserve momentum.
+                    subgraph_tree
+                } else {
                     SimpleTraversalTree::depth_first_traverse(self, forest_guide, &root_node, None)
                         .map_err(|_| LmbError::ForestGuideMismatch {
                             forest_guide_dot: self.dot(forest_guide),
                             subgraph_dot: self.dot(subgraph),
-                        })?; //select the last half edge in the external cover of this tree as the dependent one
+                        })?
+                };
 
                 debug_assert_eq!(
-                    subgraph_tree.covers(subgraph),
+                    subgraph_cover,
                     tree.covers(subgraph),
                     "Forest guide \n{}\n,does not cover the same nodes as subgraph \n{}\n",
                     self.dot(forest_guide),
@@ -993,21 +1049,34 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                             externals.sub(h);
                         }
                         if !tree.tree_subgraph.includes(&p) {
-                            let cycle = tree.get_cycle(source, self).ok_or_else(|| {
-                                LmbError::MissingCycle {
-                                    hedge: source,
-                                    tree_dot: self.dot(&tree.tree_subgraph),
+                            let signed_cycle = if self.node_id(source) == self.node_id(sink) {
+                                // A contracted UV component can turn a retained edge into
+                                // a tadpole. Its positive generator follows the same source
+                                // half-edge convention as `SignedCycle::from_cycle` below.
+                                let mut filter: SuBitGraph = self.empty_subgraph();
+                                filter.add(source);
+                                SignedCycle {
+                                    filter,
+                                    loop_count: Some(1),
                                 }
-                            })?;
-                            let cycle_is_circuit = cycle.is_circuit(self);
-                            let cycle_dot = self.dot(&cycle.filter);
-                            cycles.push(SignedCycle::from_cycle(cycle, source, self).ok_or_else(
-                                || LmbError::InvalidCycle {
-                                    is_circuit: cycle_is_circuit,
-                                    cycle_dot,
-                                    cover_dot: self.dot(&cover),
-                                },
-                            )?);
+                            } else {
+                                let cycle = tree.get_cycle(source, self).ok_or_else(|| {
+                                    LmbError::MissingCycle {
+                                        hedge: source,
+                                        tree_dot: self.dot(&tree.tree_subgraph),
+                                    }
+                                })?;
+                                let cycle_is_circuit = cycle.is_circuit(self);
+                                let cycle_dot = self.dot(&cycle.filter);
+                                SignedCycle::from_cycle(cycle, source, self).ok_or_else(|| {
+                                    LmbError::InvalidCycle {
+                                        is_circuit: cycle_is_circuit,
+                                        cycle_dot,
+                                        cover_dot: self.dot(&cover),
+                                    }
+                                })?
+                            };
+                            cycles.push(signed_cycle);
                             loop_edges.push(e);
                         }
                     }
@@ -1333,10 +1402,11 @@ impl LMBext for Graph {
         outer: &SuBitGraph,
         shrunken: &InternalSubGraph,
         externals: SuBitGraph,
+        parent_lmb: Option<&LoopMomentumBasis>,
     ) -> LmbResult<LoopMomentumBasis> {
         let mut lmb = self
             .underlying
-            .shrunken_sub_lmb(outer, shrunken, externals)?;
+            .shrunken_sub_lmb(outer, shrunken, externals, parent_lmb)?;
         self.canonicalize_lmb_external_order(&mut lmb);
         Ok(lmb)
     }
@@ -1486,10 +1556,11 @@ impl LMBext for &Graph {
         outer: &SuBitGraph,
         shrunken: &InternalSubGraph,
         externals: SuBitGraph,
+        parent_lmb: Option<&LoopMomentumBasis>,
     ) -> LmbResult<LoopMomentumBasis> {
         let mut lmb = self
             .underlying
-            .shrunken_sub_lmb(outer, shrunken, externals)?;
+            .shrunken_sub_lmb(outer, shrunken, externals, parent_lmb)?;
         self.canonicalize_lmb_external_order(&mut lmb);
         Ok(lmb)
     }
@@ -1780,6 +1851,73 @@ pub mod test {
 
     static SHRUNKEN_LMB_TEST_INIT: std::sync::Once = std::sync::Once::new();
     static SHRUNKEN_LMB_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn generated_singleton_lmbs_conserve_external_momentum() {
+        test_initialise().unwrap();
+        let graphs: Vec<Graph> = dot!(
+            digraph contact {
+                ext [style=invis]
+                node[num=1]
+                ext->v:0[id=0]
+                ext->v:1[id=1]
+                v:2->ext[id=2]
+                v:3->ext[id=3]
+            }
+            digraph tadpole {
+                ext [style=invis]
+                node[num=1]
+                ext->v:0[id=0]
+                ext->v:1[id=1]
+                v:2->ext[id=2]
+                v:3->ext[id=3]
+                v->v[id=4 num=1 mass=1]
+            }
+        )
+        .unwrap();
+
+        for (loops, graph) in graphs.iter().enumerate() {
+            let lmbs = graph.generate_loop_momentum_bases();
+            let lmb = lmbs
+                .first()
+                .expect("a singleton graph has a valid momentum basis");
+            assert_eq!(lmb.loop_edges.len(), loops);
+            // The outgoing dependent leg carries p3 = p0 + p1 - p2.
+            for (edge, expected) in [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [1, 1, -1, 0]]
+                .into_iter()
+                .enumerate()
+            {
+                let signature = &lmb.edge_signatures[EdgeIndex::from(edge)];
+                assert!(
+                    signature
+                        .internal
+                        .iter()
+                        .all(|sign| *sign == SignOrZero::Zero)
+                );
+                assert_eq!(
+                    signature
+                        .external
+                        .iter()
+                        .map(|sign| *sign * 1_i32)
+                        .collect::<Vec<_>>(),
+                    expected
+                );
+            }
+            if loops == 1 {
+                let signature = &lmb.edge_signatures[EdgeIndex::from(4)];
+                assert_eq!(
+                    signature.internal.iter().copied().collect::<Vec<_>>(),
+                    [SignOrZero::Plus]
+                );
+                assert!(
+                    signature
+                        .external
+                        .iter()
+                        .all(|sign| *sign == SignOrZero::Zero)
+                );
+            }
+        }
+    }
 
     #[test]
     fn lmb_for_dummy() {
@@ -2106,7 +2244,38 @@ pub mod test {
                 .iter()
                 .any(|edge| shrunken.filter.includes(&g[edge].1))
         );
-        assert_snapshot!(g.dot_lmb_of(&remainder, &lmb));
+        // Contracting one edge in each triangle preserves two independent loop flows.
+        // On the quotient graph, conservation equates each retained edge pair and
+        // leaves the bridge with zero momentum, for any valid choice of loop basis.
+        let first = &lmb.edge_signatures[EdgeIndex(1)].internal;
+        let second = &lmb.edge_signatures[EdgeIndex(4)].internal;
+        assert_eq!(first, &lmb.edge_signatures[EdgeIndex(2)].internal);
+        assert_eq!(second, &lmb.edge_signatures[EdgeIndex(5)].internal);
+        assert!(
+            lmb.edge_signatures[EdgeIndex(6)]
+                .internal
+                .iter()
+                .all(|sign| *sign == SignOrZero::Zero)
+        );
+        for (_, edge, _) in g.iter_edges_of(&remainder) {
+            assert!(
+                lmb.edge_signatures[edge]
+                    .external
+                    .iter()
+                    .all(|sign| *sign == SignOrZero::Zero)
+            );
+        }
+        let first_norm: i64 = first.iter().map(|sign| (*sign * 1_i64).pow(2)).sum();
+        let second_norm: i64 = second.iter().map(|sign| (*sign * 1_i64).pow(2)).sum();
+        let overlap: i64 = first
+            .iter()
+            .zip(second.iter())
+            .map(|(left, right)| (*left * 1_i64) * (*right * 1_i64))
+            .sum();
+        assert!(
+            first_norm * second_norm > overlap.pow(2),
+            "both surviving cycle flows must be independent"
+        );
     }
 
     #[test]
@@ -2130,8 +2299,130 @@ pub mod test {
             InternalSubGraph::try_new(shrunken_filter, &g.underlying).expect("valid subgraph");
         let outer = g.full_filter().subtract(&shrunken.filter);
 
-        let result = g.shrunken_sub_lmb(&outer, &shrunken, g.full_crown(&outer));
+        let result = g.shrunken_sub_lmb(&outer, &shrunken, g.full_crown(&outer), None);
 
         assert!(matches!(result, Err(LmbError::ShrunkenOutsideOuter { .. })));
+    }
+
+    #[test]
+    fn shrunken_whole_component_retains_only_surviving_external_endpoints() {
+        use linnet::half_edge::subgraph::SubSetLike;
+
+        let _guard = SHRUNKEN_LMB_TEST_LOCK.lock().unwrap();
+        SHRUNKEN_LMB_TEST_INIT.call_once(|| test_initialise().unwrap());
+        let g: Graph = dot!(digraph {
+            edge[num=1 mass=1]
+            node[num=1]
+            b:17 -> a:0 [id=0]
+            a:1 -> e:2 [id=1]
+            a:3 -> f:4 [id=2]
+            b:5 -> c:6 [id=3]
+            b:7 -> d:8 [id=4]
+            c:9 -> d:10 [id=5]
+            c:11 -> f:12 [id=6]
+            d:13 -> e:14 [id=7]
+            e:15 -> f:16 [id=8]
+            x:18 -> y:19 [id=9]
+        })
+        .unwrap();
+        let mut outer: SuBitGraph = g.empty_subgraph();
+        let mut shrunken_filter: SuBitGraph = g.empty_subgraph();
+        for edge in [1, 2, 8].map(EdgeIndex::from) {
+            shrunken_filter.add(g[&edge].1);
+        }
+        outer.union_with(&shrunken_filter);
+        for edge in [3, 4, 5].map(EdgeIndex::from) {
+            outer.add(g[&edge].1);
+        }
+        let shrunken = InternalSubGraph::try_new(shrunken_filter, &g.underlying).unwrap();
+        let remainder = outer.subtract(&shrunken.filter);
+        let externals = g.full_crown(&outer);
+        let parent = g.lmb_impl(&outer, &outer, externals.clone()).unwrap();
+        assert_eq!(parent.loop_edges.len(), 2);
+
+        let mut contracted = g.underlying.to_ref();
+        let root = shrunken.included_iter().next().unwrap();
+        contracted.identify_nodes_of_subgraph_without_self_edges::<_, SuBitGraph>(
+            &shrunken,
+            &g.underlying[g.node_id(root)],
+        );
+        contracted.forget_identification_history();
+        let surviving_crown = contracted.full_crown(&remainder);
+        assert_eq!(
+            surviving_crown.included_iter().collect::<Vec<_>>(),
+            [Hedge(11), Hedge(13), Hedge(17)]
+        );
+        assert!(matches!(
+            contracted.lmb_impl(&remainder, &remainder, externals.clone()),
+            Err(LmbError::ExternalsOutsideSubgraph { .. })
+        ));
+
+        for parent_lmb in [None, Some(&parent)] {
+            let lmb = g
+                .shrunken_sub_lmb(&outer, &shrunken, externals.clone(), parent_lmb)
+                .unwrap();
+            assert_eq!(lmb.loop_edges.len(), 1);
+            assert!(
+                remainder.includes(&g[&lmb.loop_edges[crate::momentum::sample::LoopIndex(0)]].1)
+            );
+            let mut external_edges = lmb.ext_edges.iter().copied().collect::<Vec<_>>();
+            external_edges.sort();
+            assert_eq!(external_edges, [EdgeIndex(0), EdgeIndex(6), EdgeIndex(7)]);
+            // The surviving triangle conserves its loop flow at all three
+            // vertices; each connector retains exactly its physical endpoint.
+            let loop_rows = [3, 4, 5].map(|edge| {
+                *lmb.edge_signatures[EdgeIndex(edge)]
+                    .internal
+                    .iter()
+                    .next()
+                    .unwrap()
+                    * 1_i32
+            });
+            assert_eq!(loop_rows[0] + loop_rows[1], 0);
+            assert_eq!(-loop_rows[0] + loop_rows[2], 0);
+            assert_eq!(-loop_rows[1] - loop_rows[2], 0);
+        }
+
+        // External-flow carriers can also be internal remainder hedges. After
+        // contracting only e1, hedge 3 belongs to the old contracted crown but
+        // remains on e2 at a surviving node, so it must retain its flow slot.
+        let mut partial_filter: SuBitGraph = g.empty_subgraph();
+        partial_filter.add(g[&EdgeIndex(1)].1);
+        let partial = InternalSubGraph::try_new(partial_filter, &g.underlying).unwrap();
+        let mut internal_externals = externals.clone();
+        internal_externals.add(Hedge(3));
+        // Both parent carriers must survive this contraction; the earlier
+        // parent used e1, which is now contracted despite its loop remaining.
+        let mut partial_parent_guide = outer.clone();
+        for edge in [2, 3].map(EdgeIndex::from) {
+            partial_parent_guide.sub(g[&edge].1);
+        }
+        let partial_parent = g
+            .lmb_impl(&outer, &partial_parent_guide, internal_externals.clone())
+            .unwrap();
+        let mut partial_carriers = partial_parent
+            .loop_edges
+            .iter()
+            .copied()
+            .collect::<Vec<_>>();
+        partial_carriers.sort();
+        assert_eq!(partial_carriers, [EdgeIndex(2), EdgeIndex(3)]);
+        for parent_lmb in [None, Some(&partial_parent)] {
+            let lmb = g
+                .shrunken_sub_lmb(&outer, &partial, internal_externals.clone(), parent_lmb)
+                .unwrap();
+            assert_eq!(lmb.loop_edges.len(), 2);
+            assert!(lmb.ext_edges.contains(&EdgeIndex(2)));
+        }
+
+        // A crown intersection must not silently discard an unrelated invalid
+        // external node alongside the legitimately retired component.
+        let mut invalid_externals = externals;
+        invalid_externals.add(Hedge(18));
+        let invalid = g.shrunken_sub_lmb(&outer, &shrunken, invalid_externals, None);
+        assert!(matches!(
+            invalid,
+            Err(LmbError::ExternalsOutsideSubgraph { .. })
+        ));
     }
 }

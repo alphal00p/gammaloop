@@ -13,7 +13,7 @@
 #![allow(dead_code)]
 
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashSet},
     fs,
     io::Cursor,
     path::{Path, PathBuf},
@@ -30,7 +30,7 @@ type RationalExpressionTree = (
     ExpressionEvaluator<Complex<Fraction<IntegerRing>>>,
 );
 
-pub const STANDALONE_EVALUATORS_VERSION: u32 = 8;
+pub const STANDALONE_EVALUATORS_VERSION: u32 = 11;
 
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode, Serialize, Deserialize,
@@ -91,18 +91,23 @@ pub struct StandaloneIndexedGenericEvaluatorArchive<A = Vec<u8>> {
 
 #[derive(Clone, Encode, Decode, Serialize, Deserialize)]
 pub struct StandaloneEvaluatorStackArchive<A = Vec<u8>> {
+    pub(crate) explicit_orientation_sum_only: bool,
+    pub(crate) production_orientation_ids: Vec<usize>,
     pub(crate) single_parametric: StandaloneGenericEvaluatorArchive<A>,
     pub(crate) iterative: Option<StandaloneGenericEvaluatorArchive<A>>,
     pub(crate) summed_function_map: Option<StandaloneGenericEvaluatorArchive<A>>,
     pub(crate) summed: Option<StandaloneGenericEvaluatorArchive<A>>,
     pub(crate) representative_input: Vec<Complex<f64>>,
     pub(crate) start: usize,
+    pub(crate) residue_map_id_start: usize,
     pub(crate) mult_offset: usize,
 }
 
 #[derive(Clone, Encode, Decode, Serialize, Deserialize)]
 pub struct StandaloneGenericEvaluatorArchive<A = Vec<u8>> {
     pub(crate) exprs: Vec<A>,
+    /// Parameters used only by evaluators that are not built from the graph-wide parameter map.
+    pub(crate) parameter_override: Option<Vec<A>>,
     pub(crate) additional_fn_map_entries: Vec<SerializedFnMapEntry<A>>,
     pub(crate) dual_shape: Option<Vec<Vec<usize>>>,
 }
@@ -171,7 +176,13 @@ fn apply_fn_map_entries(
         .add_aliases([(parse_lit!(gammalooprs::x), Atom::Zero)])
         .map_err(|e| eyre!(e))?;
 
-    for (lhs, rhs, tags, args) in parsed_entries {
+    // Graph and evaluator archives can share definitions. Register exact
+    // duplicates once; different bodies still trigger Symbolica's conflict check.
+    let mut seen = HashSet::new();
+    for (lhs, rhs, tags, args) in parsed_entries
+        .into_iter()
+        .filter(|entry| seen.insert(entry.clone()))
+    {
         if let AtomView::Var(_) = lhs.as_view() {
             if let Ok(value) = Complex::<Rational>::try_from(rhs.as_view()) {
                 fn_map
@@ -221,7 +232,7 @@ fn apply_fn_map_entries(
 
 fn build_evaluator<A: ImportWithMap>(
     payload: StandaloneGenericEvaluatorArchive<A>,
-    params: &[Atom],
+    graph_params: &[Atom],
     mut fn_map_entries: Vec<ParsedFnMapEntry>,
     state_map: &StateMap,
     iterate: bool,
@@ -236,6 +247,17 @@ fn build_evaluator<A: ImportWithMap>(
         .iter()
         .map(|expr| expr.import_with_map(state_map))
         .collect::<Result<Vec<_>>>()?;
+    let parameter_override = payload
+        .parameter_override
+        .as_ref()
+        .map(|params| {
+            params
+                .iter()
+                .map(|param| param.import_with_map(state_map))
+                .collect::<Result<Vec<_>>>()
+        })
+        .transpose()?;
+    let params = parameter_override.as_deref().unwrap_or(graph_params);
 
     let additional_reps = parse_fn_map_entries(&payload.additional_fn_map_entries, state_map)?;
     fn_map_entries.extend(additional_reps);
@@ -329,6 +351,12 @@ fn build_stack<A: ImportWithMap>(
     };
 
     Ok(LoadedStandaloneEvaluatorStack {
+        explicit_orientation_sum_only: stack.explicit_orientation_sum_only,
+        production_orientation_ids: stack.production_orientation_ids,
+        representative_input: stack.representative_input,
+        orientation_start: stack.start,
+        residue_map_id_start: stack.residue_map_id_start,
+        mult_offset: stack.mult_offset,
         single_parametric: timed_build(stack.single_parametric, false, "single_parametric")?,
         iterative: stack
             .iterative
@@ -379,6 +407,12 @@ pub struct LoadedStandaloneIteratedCollection<T> {
 }
 
 pub struct LoadedStandaloneEvaluatorStack {
+    pub explicit_orientation_sum_only: bool,
+    pub production_orientation_ids: Vec<usize>,
+    pub representative_input: Vec<Complex<f64>>,
+    pub orientation_start: usize,
+    pub residue_map_id_start: usize,
+    pub mult_offset: usize,
     pub single_parametric: LoadedGenericEvaluator,
     pub iterative: Option<LoadedGenericEvaluator>,
     pub summed_function_map: Option<LoadedGenericEvaluator>,

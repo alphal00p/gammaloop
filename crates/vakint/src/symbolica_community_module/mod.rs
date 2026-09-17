@@ -467,7 +467,7 @@ impl VakintEvaluationMethodWrapper {
         })
     }
 
-    #[pyo3(signature = (quiet = None, relative_precision = None, min_n_evals = None, max_n_evals = None, reuse_existing_output = None, numerical_masses = None, numerical_external_momenta = None))]
+    #[pyo3(signature = (quiet = None, relative_precision = None, min_n_evals = None, max_n_evals = None, reuse_existing_output = None, numerical_parameters = None, numerical_external_momenta = None))]
     #[allow(clippy::too_many_arguments)]
     #[classmethod]
     /// Create a new VakintEvaluationMethod instance representing the numerical pySecDec method.
@@ -481,7 +481,7 @@ impl VakintEvaluationMethodWrapper {
     /// ...     min_n_evals=10_000,
     /// ...     max_n_evals=1_000_000_000_000,
     /// ...     reuse_existing_output=None,
-    /// ...     numerical_masses={"muvsq": 1.0},
+    /// ...     numerical_parameters={"muvsq": (1.0, 0.0), "coupling": (1.0, 2.0)},
     /// ...     numerical_external_momenta={
     /// ...         1: (1.0, 0.0, 0.0, 0.0),
     /// ...         2: (0.0, 1.0, 0.0, 0.0),
@@ -491,7 +491,7 @@ impl VakintEvaluationMethodWrapper {
     /// True
     /// ```
     ///
-    /// pySecDec performs numerical evaluation, so every required mass and external momentum
+    /// pySecDec performs numerical evaluation, so every required mass, numerator parameter and external momentum
     /// must have a numerical value. Constructing this method does not run pySecDec; evaluation
     /// requires a working Python/pySecDec installation.
     ///
@@ -508,8 +508,8 @@ impl VakintEvaluationMethodWrapper {
     ///    The maximum number of evaluations to be performed in the numerical integration. Default is 1,000,000,000,000.
     /// reuse_existing_output : Optional[str]
     ///    Path to existing pySecDec output to reuse. Default is None.
-    /// numerical_masses : Optional[Dict[str, float]]
-    ///    A dictionary mapping mass parameter names to their numerical values. Default is an empty dictionary.
+    /// numerical_parameters : Optional[Dict[str, Tuple[float, float]]]
+    ///    Mass and numerator parameter values as (real, imaginary) pairs. Pole masses must be real. Default is an empty dictionary.
     /// numerical_external_momenta : Optional[Dict[int, Tuple[float, float, float, float]]]
     ///    A dictionary mapping external momentum indices to their numerical 4-vector values. Default is an empty dictionary.
     pub fn new_pysecdec_method(
@@ -519,7 +519,7 @@ impl VakintEvaluationMethodWrapper {
         min_n_evals: Option<u64>,
         max_n_evals: Option<u64>,
         reuse_existing_output: Option<String>,
-        numerical_masses: Option<HashMap<String, f64>>,
+        numerical_parameters: Option<HashMap<String, (f64, f64)>>,
         numerical_external_momenta: Option<HashMap<usize, (f64, f64, f64, f64)>>,
     ) -> PyResult<VakintEvaluationMethodWrapper> {
         let ext_mom = if let Some(em) = numerical_external_momenta {
@@ -534,7 +534,11 @@ impl VakintEvaluationMethodWrapper {
                 relative_precision: relative_precision.unwrap_or(1e-7),
                 min_n_evals: min_n_evals.unwrap_or(10_000),
                 max_n_evals: max_n_evals.unwrap_or(1_000_000_000_000),
-                numerical_masses: numerical_masses.unwrap_or_default(),
+                numerical_parameters: numerical_parameters
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|(name, (re, im))| (name, Complex::new(re, im)))
+                    .collect(),
                 numerical_external_momenta: ext_mom,
             }),
         })

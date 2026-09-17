@@ -1,0 +1,18 @@
+{
+  "archive": "docs/architecture/raised-energy-cff-motivation-evidence.tar.gz",
+  "archive_bytes": 18534727,
+  "archive_sha256": "1e744c2db6755307ef9683943bee2d53791bc7a53adbacdbc1ddcf3afe66fdf3",
+  "files": 7947,
+  "unique_contents": 2539,
+  "source_bytes": 4268141427,
+  "symbolic_atom_outputs": 353,
+  "saved_state_payloads": [
+    "core-perf/GL04-explicit-process-state/processes/cross_sections/core_audit/def.bin",
+    "core-perf/GL04-explicit-process-state/processes/cross_sections/core_audit/numerator/cs.bin",
+    "core-perf/GL04-explicit-process-state/processes/cross_sections/core_audit/numerator/integrand/integrand.bin",
+    "core-perf/GL04-explicit-process-state/symbolica_state.bin"
+  ],
+  "all_indexed_payload_hashes_match": true,
+  "regular_files_and_internal_prior_hard_links_only": true,
+  "no_ELF_payloads_or_license_format_found": true
+}

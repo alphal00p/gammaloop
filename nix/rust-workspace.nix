@@ -439,8 +439,15 @@
       "crates/linnest/typst/examples/map-style.typ"
       "tests/resources/graphs/epemttbar.dot"
     ];
+    # Unit and integration tests embed these graph fixtures and snapshots with include_str!.
+    "gammaloop-api" = ["tests/resources/graphs"];
     gammalooprs = [
-      "tests/resources/graphs/scalar/dod2_bubble.dot"
+      "tests/resources/graphs"
+      "crates/gammalooprs/tests/resources/uv_parametric_numerator"
+    ];
+    "gammaloop-integration-tests" = [
+      "tests/resources/graphs"
+      "tests/tests/snapshots/test_evaluation_api__gl20_multichannel_local_inspect_events.snap"
     ];
   };
 

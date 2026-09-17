@@ -5,6 +5,8 @@
 }: let
   # Compile the integration crate once; groups select disjoint test binaries.
   testFeatures."gammaloop-integration-tests" = ["python-api-tests"];
+  # Isolated CFF tests must retain their numerical evaluation oracles.
+  testFeatures."three-dimensional-reps" = ["eval"];
   groups = [
     {
       name = "core";
@@ -13,6 +15,7 @@
         "gammaloop-tracing-filter"
         "gammaloop-tracing-filter-macros"
         "gammalooprs"
+        "three-dimensional-reps"
       ];
     }
     {

@@ -4,6 +4,8 @@ use std::fs;
 use gammaloop_api::state::SyncSettings;
 use gammalooprs::feyngen::diagram_generator::evaluate_overall_factor;
 use gammalooprs::feyngen::diagram_generator::evaluate_sign_origin;
+use gammalooprs::integrands::process::amplitude::load::StandaloneEvaluatorArchive;
+use gammalooprs::integrands::process::cross_section::load::StandaloneCrossSectionArchive;
 use gammalooprs::processes::{
     CycleSignature, GraphGroupSelectionSpec, GraphSelectionSignatureInventory, ProcessCollection,
     RaisedCutSignatureInventory, RaisedPropagatorScope, RaisedPropagatorSignature,
@@ -15,6 +17,7 @@ use gammaloop_integration_tests::{CLIState, get_test_cli, get_tests_workspace_pa
 use serial_test::serial;
 use symbolica::{
     atom::{Atom, AtomCore},
+    domains::float::Complex,
     printer::CanonicalOrderingSettings,
 };
 use tracing::debug;
@@ -626,6 +629,82 @@ fn feyngen_str(
 
 #[test]
 #[serial]
+fn numerator_grouping_preserves_values_across_worker_counts() -> Result<()> {
+    use gammaloop_api::{commands::inspect::Inspect, state::ProcessRef};
+
+    let test_name = "numerator_grouping_preserves_values_across_worker_counts";
+    let mut cli = get_test_cli(
+        None,
+        get_tests_workspace_path().join(test_name),
+        Some(test_name.to_string()),
+        true,
+    )?;
+    run_commands(
+        &mut cli,
+        &[
+            "import model sm-default.json",
+            "set global kv global.generation.evaluator.iterative_orientation_optimization=false global.generation.evaluator.compile=false global.generation.evaluator.summed=false global.generation.uv.subtract_uv=false global.generation.uv.generate_integrated=false global.generation.threshold_subtraction.enable_thresholds=false",
+            r#"set default-runtime kv kinematics.externals='{"type":"constant","data":{"momenta":[[500.0,0.0,0.0,500.0],[500.0,0.0,0.0,-500.0]],"helicities":["summed_averaged","summed_averaged"]}}'"#,
+            r#"set default-runtime kv general.evaluator_method="SingleParametric" general.enable_cache=false general.generate_events=false subtraction.disable_threshold_subtraction=true sampling.graphs="summed" sampling.orientations="summed" sampling.lmb_multichanneling=false sampling.lmb_channels="summed""#,
+        ],
+    )?;
+    for grouping in [
+        "no_grouping",
+        "group_identical_graphs_up_to_sign",
+        "group_identical_graphs_up_to_scalar_rescaling",
+    ] {
+        let mut baseline: Option<Vec<(f64, f64)>> = None;
+        for cores in [1, 4] {
+            cli.run_command(&format!("set global kv global.n_cores.feyngen={cores}"))?;
+            let _ = generate_graphs_and_count(
+                &mut cli,
+                "xs",
+                &format!(
+                    "e+ e- > d d~ | e- a d g QED^2==4 [{{{{2}}}} QCD] --numerator-grouping {grouping} --symmetrize-left-right-states false -p grouping -i NLO"
+                ),
+                false,
+            )?;
+            cli.run_command("generate existing -p grouping -i NLO")?;
+            // Worker scheduling may change container order and grouping
+            // provenance. Compare the complete graph sum for this strategy;
+            // another grouping strategy may choose a different momentum routing.
+            let mut values = Vec::new();
+            for point in [
+                vec![100.0, -70.0, 90.0, 123.0, 49.0, -73.0],
+                vec![150.0, 40.0, -80.0, -83.0, 160.0, 120.0],
+            ] {
+                let (_, value) = Inspect {
+                    process: Some(ProcessRef::Unqualified("grouping".into())),
+                    integrand_name: Some("NLO".into()),
+                    point,
+                    momentum_space: true,
+                    ..Default::default()
+                }
+                .run(&mut cli.state)?;
+                assert!(value.re.is_finite() && value.im.is_finite());
+                assert!(value.re.abs().max(value.im.abs()) > 0.0);
+                values.push((value.re, value.im));
+            }
+            if let Some(baseline) = &baseline {
+                for (actual, expected) in values.iter().zip(baseline) {
+                    let tolerance = 1.0e-10 * expected.0.abs().max(expected.1.abs());
+                    assert!(
+                        (actual.0 - expected.0).abs() <= tolerance
+                            && (actual.1 - expected.1).abs() <= tolerance,
+                        "{grouping}, {cores} workers: {actual:?}, one-worker reference {expected:?}"
+                    );
+                }
+            } else {
+                baseline = Some(values);
+            }
+        }
+    }
+    gammaloop_integration_tests::clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+#[serial]
 fn scalar_lu_generation_with_e2e_hack_compiles() -> Result<()> {
     let mut cli = get_test_cli(
         Some("scalars_load.toml".into()),
@@ -640,6 +719,65 @@ fn scalar_lu_generation_with_e2e_hack_compiles() -> Result<()> {
         cli.run_command("generate")?;
         Ok(())
     })()
+}
+
+#[test]
+fn amplitude_standalone_export_reloads_and_evaluates() -> Result<()> {
+    let workspace = get_tests_workspace_path().join("amplitude_standalone_export");
+    let output_dir = workspace.join("standalone_export_check");
+    if workspace.exists() {
+        fs::remove_dir_all(&workspace)?;
+    }
+
+    let mut cli = get_test_cli(
+        Some("scalars_load.toml".into()),
+        workspace.clone(),
+        Some("amplitude_standalone_export".to_string()),
+        true,
+    )?;
+    cli.run_command("set global kv global.generation.evaluator.store_atom=true")?;
+    cli.run_command("generate amp scalar_1 > scalar_0 scalar_0 [{1}] --allowed-vertex-interactions V_3_SCALAR_022 V_3_SCALAR_122 -p triangle -i archive_eval")?;
+    cli.run_command("generate")?;
+
+    cli.state.process_list.export_standalone(
+        &output_dir,
+        &StandaloneExportSettings {
+            mode: StandaloneExportMode::Rust,
+            format: StandaloneDataFormat::Json,
+            ..Default::default()
+        },
+    )?;
+
+    let exported_base = output_dir
+        .join("processes")
+        .join("amplitudes")
+        .join("triangle")
+        .join("archive_eval");
+    let archive_path = exported_base.join("standalone_evaluators.json");
+    assert!(archive_path.exists());
+    assert!(exported_base.join("standalone_evaluators_rust.rs").exists());
+
+    let archive: StandaloneEvaluatorArchive<(), String> =
+        serde_json::from_slice(&fs::read(archive_path)?)?;
+    let mut loaded = archive.load()?;
+    let graph_term = loaded
+        .graph_terms
+        .first_mut()
+        .ok_or_else(|| eyre!("standalone amplitude archive has no graph terms"))?;
+    let input = (0..graph_term.param_builder_params.len())
+        .map(|index| Complex::new(0.625 + index as f64 * 0.173, 0.031 + index as f64 * 0.007))
+        .collect::<Vec<_>>();
+    let (_, _, evaluator, result) = &mut graph_term.original_integrand.parametric;
+    evaluator.evaluate(&input, result);
+    assert!(!result.is_empty());
+    assert!(
+        result
+            .iter()
+            .all(|value| value.re.is_finite() && value.im.is_finite())
+    );
+
+    fs::remove_dir_all(workspace)?;
+    Ok(())
 }
 
 #[test]
@@ -660,29 +798,34 @@ fn cross_section_standalone_export_writes_archive_and_loader() -> Result<()> {
     cli.run_command("generate xs z > d d~")?;
     cli.run_command("generate")?;
 
-    cli.state.process_list.export_standalone(
-        &output_dir,
-        &StandaloneExportSettings {
-            mode: StandaloneExportMode::Rust,
-            format: StandaloneDataFormat::Json,
-            ..Default::default()
-        },
-    )?;
+    for format in [StandaloneDataFormat::Json, StandaloneDataFormat::Binary] {
+        cli.state.process_list.export_standalone(
+            &output_dir,
+            &StandaloneExportSettings {
+                mode: StandaloneExportMode::Rust,
+                format,
+                ..Default::default()
+            },
+        )?;
+    }
 
     let exported_base = output_dir
         .join("processes")
         .join("cross_sections")
         .join("z_ddx")
         .join("default");
-    let archive_path = exported_base.join("standalone_cross_section.json");
-    assert!(archive_path.exists());
+    let json_archive_path = exported_base.join("standalone_cross_section.json");
+    let binary_archive_path = exported_base.join("standalone_cross_section.bin");
+    assert!(json_archive_path.exists());
+    assert!(binary_archive_path.exists());
     assert!(
         exported_base
             .join("standalone_cross_section_rust.rs")
             .exists()
     );
 
-    let archive: serde_json::Value = serde_json::from_slice(&fs::read(archive_path)?)?;
+    let json_archive_bytes = fs::read(json_archive_path)?;
+    let archive: serde_json::Value = serde_json::from_slice(&json_archive_bytes)?;
     let graph_term = archive["graph_terms"]
         .as_array()
         .and_then(|graph_terms| graph_terms.first())
@@ -693,6 +836,42 @@ fn cross_section_standalone_export_writes_archive_and_loader() -> Result<()> {
         .ok_or_else(|| eyre!("standalone graph term has no cut-group integrands"))?;
     assert!(!cut_group_integrands.is_empty());
     assert!(graph_term.get("raised_cut_integrands").is_none());
+
+    let json_archive: StandaloneCrossSectionArchive<(), String> =
+        serde_json::from_slice(&json_archive_bytes)?;
+    let binary_archive_bytes = fs::read(binary_archive_path)?;
+    let (binary_archive, consumed): (StandaloneCrossSectionArchive, usize) =
+        bincode::decode_from_slice(&binary_archive_bytes, bincode::config::standard())?;
+    assert_eq!(consumed, binary_archive_bytes.len());
+
+    for (format, mut loaded) in [
+        ("JSON", json_archive.load()?),
+        ("binary", binary_archive.load()?),
+    ] {
+        let graph_term = loaded
+            .graph_terms
+            .first_mut()
+            .ok_or_else(|| eyre!("{format} standalone cross-section archive has no graph terms"))?;
+        let input = (0..graph_term.param_builder_params.len())
+            .map(|index| Complex::new(0.625 + index as f64 * 0.173, 0.031 + index as f64 * 0.007))
+            .collect::<Vec<_>>();
+        let stack = graph_term
+            .cut_group_integrands
+            .first_mut()
+            .and_then(|integrands| integrands.values_mut().next())
+            .ok_or_else(|| {
+                eyre!("{format} standalone graph term has no indexed cut-group evaluator")
+            })?;
+        let (_, _, evaluator, result) = &mut stack.single_parametric;
+        evaluator.evaluate(&input, result);
+        assert!(!result.is_empty(), "{format} evaluator result is empty");
+        assert!(
+            result
+                .iter()
+                .all(|value| value.re.is_finite() && value.im.is_finite()),
+            "{format} evaluator result is not finite",
+        );
+    }
 
     fs::remove_dir_all(workspace)?;
     Ok(())
@@ -1073,33 +1252,131 @@ fn cp_fix_from_symbolica()->Result<()>{
     // Choose the model to consider
     cli.run_command("import model sm-default.json")?;
 
+    // Group IDs here use the explicitly requested CP canonicalization;
+    // default forward-side generation has a different label assignment.
     assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --filter-zero-flow-edges false --fully-numerical-substitution-when-comparing-numerators false --compare-canonized-numerator true",false)?,@"10 | -7+Group(10,-9/2*G^2*Nc^(-1)*ee^(-2)+9/2*G^2*Nc*ee^(-2),-1)+Group(11,1,-1)+Group(12,1,-1)+Group(5,1,-1)+Group(6,1,-1)+Group(7,1,-1)+Group(8,-9/2*G^2*Nc^(-1)*ee^(-2)+9/2*G^2*Nc*ee^(-2),-1)+Group(9,12*G^2*ee^(-2),-1) = -12+-12*G^2*ee^(-2)+-9*G^2*Nc*ee^(-2)+9*G^2*Nc^(-1)*ee^(-2)");//good
     Ok(())
 }
 
 #[test]
-#[rustfmt::skip]
 fn test_generate_sm_full_a_ddx() -> Result<()> {
-    let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
+    let mut cli = get_test_cli(
+        None,
+        get_tests_workspace_path().join("test_generate_sm_full_a_ddx"),
+        Some("feyngen".to_string()),
+        true,
+    )?;
     cli.run_command("import model sm-full.json")?;
 
     // Full particle contents
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{1}}] --symmetrize-left-right-states true --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"1 | -1 = -1");//good
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --numerator-grouping only_detect_zeroes",false)?,@"47 | -47 = -47");//good
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"37 | -35+Group(29,1,-1)+Group(30,1,-1)+Group(31,1,-1)+Group(32,1,-1) = -39");//less 37 vs 45 due to lorentz cancellations
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_sign",true)?,@"36 | -33+Group(29,1,-1)+Group(30,1,-1)+Group(32,1,-1)+Group(33,1,-1)+Group(35,1,-1)+Group(36,1,-1) = -39");//as above
+    assert_eq!(evaluate_overall_factor(generate_graphs_and_count(&mut cli, "xs", "a > d d~ [{{1}}] --symmetrize-left-right-states true --numerator-grouping group_identical_graphs_up_to_sign",false)?.1.as_view()), Atom::num(-1)); //good
+    assert_eq!(
+        evaluate_overall_factor(
+            generate_graphs_and_count(
+                &mut cli,
+                "xs",
+                "a > d d~ [{{2}}] --numerator-grouping only_detect_zeroes",
+                false
+            )?
+            .1
+            .as_view()
+        ),
+        Atom::num(-47)
+    ); //good
+    assert_eq!(
+        evaluate_overall_factor(
+            generate_graphs_and_count(
+                &mut cli,
+                "xs",
+                "a > d d~ [{{2}}] --numerator-grouping group_identical_graphs_up_to_sign",
+                false
+            )?
+            .1
+            .as_view()
+        ),
+        Atom::num(-47)
+    ); //The previous 37 omitted eight mixed W/Goldstone diagrams made spuriously zero by reversed scalar projectors.
+    assert_eq!(evaluate_overall_factor(generate_graphs_and_count(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states false --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_sign",true)?.1.as_view()), Atom::num(-47)); //As above: all eight mass-insertion contributions survive with the corrected scalar projectors.
+    // CP pairs the eight restored mixed W/Goldstone mass-insertion diagrams
+    // into four groups; the signed contribution count remains -47.
+    assert_eq!(evaluate_overall_factor(generate_graphs_and_count(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_sign",true)?.1.as_view()), Atom::num(-47)); //as above
 
     Ok(())
 }
 
 #[test]
-#[rustfmt::skip]
 fn test_vacuum_amplitude_kaapo() -> Result<()> {
-    let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
+    use linnet::half_edge::subgraph::{Inclusion, SuBitGraph};
+    use std::collections::BTreeMap;
+
+    let mut cli = get_test_cli(
+        None,
+        get_tests_workspace_path().join("test_vacuum_amplitude_kaapo"),
+        Some("feyngen".to_string()),
+        true,
+    )?;
     cli.run_command("import model sm-default.json")?;
 
     // 4-loop vaccuum contribution to the neutron start equation of state
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g d d~ ghG ghG~ [{4}] --numerator-grouping only_detect_zeroes --number-of-factorized-loop-subtopologies 1 1000 --number-of-fermion-loops 1 1000 --filter-snails false --filter-selfenergies false --filter-tadpoles false --max-n-bridges 0",false)?,@"52 | -44/3 = -44/3");
+    let _ = generate_graphs_and_count(
+        &mut cli,
+        "amp",
+        "{} > {} | g d d~ ghG ghG~ [{4}] --numerator-grouping only_detect_zeroes --number-of-factorized-loop-subtopologies 1 1000 --filter-snails false --filter-selfenergies false --filter-tadpoles false --max-n-bridges 0",
+        false,
+    )?;
+    let ProcessCollection::Amplitudes(amplitudes) = &cli.state.process_list.processes[0].collection
+    else {
+        panic!("expected a vacuum amplitude inventory");
+    };
+    let mut histogram = BTreeMap::<(usize, usize), (usize, Atom)>::new();
+    let mut graph_count = 0;
+    let mut overall_factor = Atom::Zero;
+    let mut old_count = 0;
+    let mut old_sum = Atom::Zero;
+    for amplitude_graph in &amplitudes.values().next().unwrap().graphs {
+        let graph = &amplitude_graph.graph;
+        let fermions: SuBitGraph = graph
+            .underlying
+            .from_filter(|edge| edge.particle.is_fermion());
+        let ghosts: SuBitGraph = graph
+            .underlying
+            .from_filter(|edge| edge.particle.is_anticommutating() && !edge.particle.is_fermion());
+        // These QCD species form disjoint closed chains, so cycle rank counts loops.
+        for subset in [&fermions, &ghosts] {
+            for (_, neighbors, _) in graph.underlying.iter_nodes_of(subset) {
+                assert_eq!(neighbors.filter(|hedge| subset.includes(hedge)).count(), 2);
+            }
+        }
+        let f = graph.underlying.cyclotomatic_number(&fermions);
+        let g = graph.underlying.cyclotomatic_number(&ghosts);
+        // Preserve this statistics oracle's F + G >= 1 inventory independently
+        // of the public filter, which now counts only fermion loops.
+        if f + g == 0 {
+            continue;
+        }
+        let weight = evaluate_overall_factor(graph.overall_factor.as_view());
+        graph_count += 1;
+        overall_factor += &weight;
+        let bucket = histogram.entry((f, g)).or_insert((0, Atom::Zero));
+        bucket.0 += 1;
+        bucket.1 += &weight;
+        // Undo only the new ghost statistics sign and restore the old F >= 1 filter.
+        // OnlyDetectZeroes does not merge nonzero numerators; UUV1 signs cannot alter zeros.
+        if f > 0 {
+            old_count += 1;
+            old_sum += weight * Atom::num(-1).pow(g as i64);
+        }
+    }
+    for ((f, g), (count, sum)) in histogram {
+        println!("Kaapo F={f}, G={g}: {count} graphs, signed sum {sum}");
+    }
+    println!("Kaapo aggregate: {graph_count} graphs, signed sum {overall_factor}");
+    assert_eq!(old_count, 52);
+    assert_eq!(old_sum, Atom::num((-44, 3)));
+    assert_eq!(
+        evaluate_overall_factor(overall_factor.as_view()),
+        Atom::num((-25, 3))
+    );
 
     Ok(())
 }

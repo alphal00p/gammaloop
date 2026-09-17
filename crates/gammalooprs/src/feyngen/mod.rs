@@ -468,6 +468,7 @@ pub enum FeynGenFilter {
     BlobRange(RangeInclusive<usize>),
     SpectatorRange(RangeInclusive<usize>),
     PerturbativeOrders(HashMap<String, usize>),
+    /// An inclusive range of closed fermion loops, excluding ghost loops.
     FermionLoopCountRange((usize, usize)),
     FactorizedLoopTopologiesCountRange((usize, usize)),
 }

@@ -1,9 +1,11 @@
+use std::collections::BTreeMap;
+
 use color_eyre::Result;
 use eyre::{WrapErr, eyre};
 use gammaloop_tracing_filter::debug_instrument;
 use idenso::{
     color::ColorSimplifier,
-    dirac::{GammaSimplifier, GammaSimplifySettings},
+    dirac::{AGS, GammaSimplifier, GammaSimplifySettings},
     representations::Bispinor,
     shorthands::{
         UndoShorthands,
@@ -11,33 +13,45 @@ use idenso::{
         metric::MetricSimplifier,
         schoonschip::{Schoonschip, SchoonschipSettings},
     },
+    tensor::{SymbolicNetExt, SymbolicNetParse},
 };
 
 use linnet::half_edge::{
     HedgeGraph, NodeIndex,
     builder::HedgeGraphBuilder,
-    involution::HedgePair,
+    involution::{EdgeIndex, HedgePair},
     subgraph::{ModifySubSet, SuBitGraph, SubGraphLike, SubSetLike},
 };
 use spenso::{
-    network::{library::symbolic::ETS, tags::SPENSO_TAG},
+    network::{
+        graph::NetworkEdge,
+        library::symbolic::ETS,
+        parsing::{
+            ParseSettings, SchoonschipExpansionMode, ShorthandParsing, StructureInferenceMode,
+        },
+        tags::SPENSO_TAG,
+    },
     shadowing::TensorCollectExt,
-    structure::representation::{Minkowski, RepName},
+    structure::{
+        representation::{Minkowski, RepName},
+        slot::{DummyAind, IsAbstractSlot, ParseableAind, Slot},
+    },
 };
 use symbolica::{
-    atom::{Atom, AtomCore},
+    atom::{AliasedAtom, Atom, AtomCore, AtomView, FunctionBuilder},
     domains::atom::AtomField,
     function,
     id::Replacement,
     parse, parse_lit,
     poly::{PolyVariable, series::Series},
+    symbol,
 };
 use symbolica_utils::ReplaceBuilderExt;
 use vakint::{Vakint, VakintExpression, vakint_symbol};
 
 use crate::{
     debug_tags,
-    graph::LMBext,
+    graph::{LMBext, LoopMomentumBasis},
     numerator::aind::Aind,
     utils::{GS, W_},
     uv::{
@@ -87,6 +101,10 @@ impl IntegratedCts {
     }
 
     fn projected_atom(&self, finite: bool) -> Atom {
+        // The enclosing forest Taylor operation rescales the vacuum mass in
+        // this coefficient along with its active momenta. The bookkeeping
+        // factor restores only consumed loop measures; physical projections
+        // and the next integration set it to one.
         truncate(&self.expansion, finite)
             * Atom::var(GS.integrated_loop_scale).pow(self.scale_power)
     }
@@ -138,6 +156,70 @@ impl Rooted for IntegratedCts {
 }
 
 fn simplify(integrand: &Atom) -> Result<Atom> {
+    if integrand.contains_symbol(AGS.sigma) {
+        return Err(eyre!(
+            "Sigma tensors are not supported by d-dimensional analytic UV numerator algebra"
+        ));
+    }
+    // Only the analytically integrated UV subgraph reaches this function.
+    // Distribute its spin algebra before closing traces; scalar-only inputs do
+    // not need expansion, and numerically integrated cographs stay factorized.
+    let integrand =
+        if integrand.contains_symbol(AGS.gamma) || integrand.contains_symbol(SPENSO_TAG.trace) {
+            // Scalar products already bind their contracted slots. Materializing
+            // a powered dot before symbolic multiplication reuses its dummy index
+            // and turns (p.k)^2 into p^2 k^2. Protect completed scalar spectators,
+            // while retaining full expansion of spin/vector contractions with
+            // open slots. The symbolic network also checks hidden shorthand
+            // slots without requiring concrete tensor dimensions or execution.
+            let mut used = integrand.get_all_symbols(true);
+            let mut aliases = BTreeMap::<Atom, Atom>::new();
+            let mut serial = 0usize;
+            let protected = integrand.replace_map(|arg, _context, out| {
+                if matches!(arg, AtomView::Fun(fun)
+                    if fun.get_symbol() == SPENSO_TAG.dot || fun.get_symbol() == ETS.metric)
+                    && !arg.contains_symbol(AGS.gamma)
+                    && !arg.contains_symbol(SPENSO_TAG.trace)
+                    && arg
+                        .parse_to_symbolic_net::<Aind>(&ParseSettings {
+                            shorthand_parsing: ShorthandParsing::expand_all(),
+                            ..Default::default()
+                        })
+                        .is_ok_and(|network| network.graph.dangling_indices().is_empty())
+                {
+                    let alias = aliases.entry(arg.to_owned()).or_insert_with(|| {
+                        loop {
+                            let symbol = symbol!(&format!("gammaloop::uv_scalar_product_{serial}"));
+                            serial += 1;
+                            if used.insert(symbol) {
+                                break Atom::var(symbol);
+                            }
+                        }
+                    });
+                    **out = alias.clone();
+                }
+            });
+            let mut protected = AliasedAtom::from(protected);
+            for (original, alias) in aliases {
+                protected.register_alias(alias, original);
+            }
+            let expanded = protected
+                .get_root()
+                .parse_to_symbolic_net::<Aind>(&ParseSettings {
+                    shorthand_parsing: ShorthandParsing::Expand {
+                        schoonschip: SchoonschipExpansionMode::full(),
+                        trace: false,
+                        chain: true,
+                    },
+                    ..Default::default()
+                })
+                .map_err(|error| eyre!("invalid analytic UV spin tensor notation: {error}"))?
+                .simple_execute::<()>()?
+                .expand();
+            protected.map_root(|_| expanded).into_inner()
+        } else {
+            integrand.clone()
+        };
     let collected = integrand
         .collect_rep(Minkowski {}.into())
         .simplify_metrics()
@@ -156,12 +238,14 @@ fn simplify(integrand: &Atom) -> Result<Atom> {
         log.expr = schoonschip,
         "After gamma schoonschip"
     );
+    // Keep each Taylor term's propagator powers. Vakint receives the individual
+    // denominator topologies: collecting factors across the sum clears denominators
+    // and manufactures higher-rank numerator factors before reduction.
     let collected = schoonschip
         .collect_chains_and_traces()
         .simplify_metrics()
         .collect_gamma_chains()
-        .collect_color()
-        .collect_factors();
+        .collect_color();
     debug_tags!(#uv, #integrated, #profile, #trace, #start, #collect;
         log.expr = collected,
         "After gamma collection"
@@ -186,6 +270,30 @@ fn simplify(integrand: &Atom) -> Result<Atom> {
         "After dots"
     );
 
+    if dotted
+        .replace(function!(
+            SPENSO_TAG.trace,
+            Bispinor {}.to_symbolic([W_.d_]),
+            W_.x___
+        ))
+        .matches()
+    {
+        return Err(eyre!(
+            "an unresolved Dirac trace remains after d-dimensional UV numerator algebra"
+        ));
+    }
+    if dotted
+        .replace(function!(
+            SPENSO_TAG.trace,
+            Minkowski {}.to_symbolic([W_.d_]),
+            W_.x___
+        ))
+        .matches()
+    {
+        return Err(eyre!(
+            "an unresolved Lorentz trace remains after d-dimensional UV numerator algebra"
+        ));
+    }
     Ok(dotted)
 }
 
@@ -301,6 +409,7 @@ impl Integrated<'_> {
             graph,
             current.subgraph(),
             given.subgraph(),
+            current.lmb(),
             &settings.vakint,
             true,
         )?;
@@ -338,6 +447,16 @@ impl Integrated<'_> {
                 "Vakint term after tensor reduction"
             );
         }
+        for (term_index, term) in integrand_vakint.0.iter_mut().enumerate() {
+            term.numerator =
+                self.simplify_projected_numerator(&term.numerator, current.topo_order())?;
+            debug_tags!(#uv, #integrated, #vakint, #trace;
+                stage = "projected_numerator_after_d_dimensional_algebra",
+                term_index = %term_index,
+                log.numerator = term.numerator,
+                "Completed projected numerator algebra before Laurent expansion"
+            );
+        }
         integrand_vakint.evaluate_integral(self.vakint, self.vakint_settings)?;
         for (term_index, t) in integrand_vakint.0.iter().enumerate() {
             debug_tags!(#uv,#integrated,#vakint,#trace,#evaluate;
@@ -348,90 +467,16 @@ impl Integrated<'_> {
             );
         }
 
-        let mut res: Atom = integrand_vakint.into();
+        let res: Atom = integrand_vakint.into();
 
         debug_tags!(#uv,#integrated,#vakint,#trace,#raw;
             log.res = res,
             "Raw post vakint "
         );
 
-        res = res
-            .replace(parse_lit!(vakint::cl2))
-            .with(parse_lit!(cl2))
-            .replace(parse_lit!(vakint::sqrt3))
-            .with(parse_lit!(sqrt(3)));
+        let mut res = Self::restore_numerator(res, current.topo_order());
 
-        let vk_metric = vakint_symbol!("g");
-        let mink = Minkowski {}.new_rep(GS.dim);
-
-        // apply metric
-        res = res
-            .replace(vakint::symbols::S.p.call_args([W_.i_, W_.j_]))
-            .when(W_.j_.filter(|r| r.is_integer().is_true()))
-            .with(
-                vakint::symbols::S.p.call_args([
-                    Atom::var(W_.i_),
-                    mink.to_symbolic([GS
-                        .uvaind
-                        .call_args([Atom::num(current.topo_order()), Atom::var(W_.j_)])]),
-                ]),
-            )
-            .replace(
-                vakint::symbols::S
-                    .p
-                    .call_args([Atom::var(W_.i_), vakint::symbols::S.dot_dummy_ind(W_.j_)]),
-            )
-            .when(W_.j_.filter(|r| r.is_integer().is_true()))
-            .with(
-                vakint::symbols::S.p.call_args([
-                    Atom::var(W_.i_),
-                    mink.to_symbolic([GS
-                        .uvaind
-                        .call_args([Atom::num(current.topo_order()), Atom::var(W_.j_)])]),
-                ]),
-            )
-            .replace(vakint::symbols::S.p.call_args([W_.x__]))
-            .with(GS.emr_mom.call_args([W_.x__]));
-        res = res
-            .replace(function!(vk_metric, W_.x_, W_.y_) * function!(GS.emr_mom, W_.x___, W_.x_))
-            .with(function!(GS.emr_mom, W_.x___, W_.y_))
-            .replace(function!(
-                vk_metric,
-                vakint::symbols::S.dot_dummy_ind(W_.x_),
-                W_.y_
-            ))
-            .when(W_.x_.filter(|r| r.is_integer().is_true()))
-            .with(function!(
-                vk_metric,
-                mink.to_symbolic([GS
-                    .uvaind
-                    .call_args([Atom::num(current.topo_order()), Atom::var(W_.x_)])]),
-                W_.y_
-            ))
-            .replace(function!(
-                vk_metric,
-                W_.x_,
-                vakint::symbols::S.dot_dummy_ind(W_.y_)
-            ))
-            .when(W_.y_.filter(|r| r.is_integer().is_true()))
-            .with(function!(
-                vk_metric,
-                mink.to_symbolic([GS
-                    .uvaind
-                    .call_args([Atom::num(current.topo_order()), Atom::var(W_.y_)])]),
-                W_.x_
-            ))
-            .replace(function!(vk_metric, W_.x_, W_.y_))
-            .with(function!(ETS.metric, W_.x_, W_.y_));
-
-        res = res.replace(vakint::symbols::S.cmplx_i).with(Atom::i());
-
-        res = res
-            .simplify_metrics()
-            .metric_shorthand_to_dot()
-            .replace(GS.dim)
-            .max_level(0)
-            .with(Atom::var(GS.dim_epsilon) * (-2) + 4);
+        res = Self::dimensionally_regularized(&res.simplify_metrics().metric_shorthand_to_dot());
 
         debug_tags!(#uv, #integrated, #vakint, #inspect, #trace, #replace;
             log.res = res,
@@ -459,21 +504,297 @@ impl Integrated<'_> {
             "Integrated UV chain cleanup after undo_single_length"
         );
 
-        if res
-            .replace(GS.dim)
-            .max_level(0)
-            .match_iter()
-            .next()
-            .is_some()
-        {
-            panic!(
-                "The t_arg should not contain dim after expansion, found {}",
-                res
-            );
-        }
-
         // println!("\nIntegrated CT:\n{}\n", res);
-        Ok(res)
+        // Normalize the fully integrated UV subgraph before Laurent projection
+        // and reinsertion: identical scalar masters can arrive as 2*(A+B) or
+        // 2*A+2*B. No cograph numerator is present at this analytic boundary.
+        Ok(res.expand())
+    }
+
+    fn simplify_projected_numerator(
+        &self,
+        numerator: &Atom,
+        topology_order: usize,
+    ) -> Result<Atom> {
+        // Tensor projection can identify Lorentz slots belonging to different
+        // gamma matrices. Complete their d-dimensional algebra before Vakint
+        // expands scalar coefficients in epsilon; otherwise an evanescent
+        // contraction can multiply a pole only after its finite term was lost.
+        let numerator = Vakint::convert_to_dot_notation(self.vakint_settings, numerator.as_view())?;
+        let numerator = Self::restore_numerator(numerator, topology_order);
+        let numerator = simplify(&numerator)?;
+        Self::ensure_resolved_lorentz_contractions(&numerator)?;
+        let numerator = Self::dimensionally_regularized(&numerator)
+            .undo_schoonschip::<Aind>()?
+            .undo_chain::<Aind>()?
+            .undo_trace::<Aind>()?
+            .metric_shorthand_to_dot();
+        Ok(Self::to_vakint_numerator(&numerator))
+    }
+
+    fn ensure_resolved_lorentz_contractions(numerator: &Atom) -> Result<()> {
+        let minkowski = Minkowski {}.to_symbolic([GS.dim]).get_symbol().unwrap();
+        if !numerator.contains_symbol(minkowski) {
+            return Ok(());
+        }
+        // Inspect each expanded analytic branch using the tensor parser's
+        // incidence rules. Expose compact inter-chain contractions first;
+        // keeping only non-momentum Lorentz tensors allows scalar products and
+        // slashed external momenta while detecting unresolved tensor operators.
+        let explicit = numerator
+            .parse_to_symbolic_net::<Aind>(&ParseSettings {
+                shorthand_parsing: ShorthandParsing::Expand {
+                    schoonschip: SchoonschipExpansionMode::full(),
+                    trace: false,
+                    chain: true,
+                },
+                ..Default::default()
+            })
+            .map_err(|error| eyre!("invalid analytic UV Lorentz tensor notation: {error}"))?
+            .simple_execute::<()>()?
+            .expand();
+        let terms = if let AtomView::Add(sum) = explicit.as_view() {
+            sum.iter().collect::<Vec<_>>()
+        } else {
+            vec![explicit.as_view()]
+        };
+        let settings = ParseSettings {
+            shorthand_parsing: ShorthandParsing::Opaque {
+                inference: StructureInferenceMode::Fast,
+            },
+            ..Default::default()
+        };
+        for term in terms {
+            let mut unresolved_inner_product = false;
+            let tensors = term.replace_map(|view, _, out| {
+                if !matches!(view, AtomView::Num(_)) && !view.contains_symbol(minkowski) {
+                    // Remove scalar subtrees atomically: replacing the d in
+                    // 1/(d-1) alone would manufacture a singular coefficient.
+                    // Numerical exponents of tensor powers keep their value.
+                    **out = Atom::one();
+                    return;
+                }
+                match view {
+                    AtomView::Fun(f) => {
+                        if [SPENSO_TAG.dot, ETS.metric].contains(&f.get_symbol())
+                            && view.contains_symbol(minkowski)
+                            && !f
+                                .iter()
+                                .all(|arg| Slot::<Minkowski, Aind>::try_from(arg).is_ok())
+                        {
+                            // Full shorthand parsing must expose every compact
+                            // Lorentz contraction before scalar coefficients can
+                            // be discarded by this diagnostic.
+                            unresolved_inner_product = true;
+                        }
+                        let momentum = [
+                            GS.emr_mom,
+                            GS.loop_mom,
+                            vakint::symbols::S.p,
+                            vakint::symbols::S.k,
+                        ]
+                        .contains(&f.get_symbol());
+                        **out = if !momentum
+                            && f.iter()
+                                .any(|arg| Slot::<Minkowski, Aind>::try_from(arg).is_ok())
+                        {
+                            view.to_owned()
+                        } else {
+                            Atom::one()
+                        };
+                    }
+                    AtomView::Var(_) => **out = Atom::one(),
+                    _ => {}
+                }
+            });
+            if unresolved_inner_product {
+                return Err(eyre!(
+                    "an unresolved compact Lorentz inner product remains after d-dimensional UV numerator algebra"
+                ));
+            }
+            let network = tensors
+                .parse_to_symbolic_net::<Aind>(&settings)
+                .map_err(|error| {
+                    eyre!("invalid residual d-dimensional tensor structure: {error}")
+                })?;
+            let external = network.graph.dangling_indices();
+            for (pair, _, edge) in network.graph.graph.iter_edges() {
+                if pair.is_paired()
+                    && let NetworkEdge::Slot(slot) = edge.data
+                    && slot.rep_name().symbol() == minkowski
+                    && !external.contains(slot)
+                {
+                    return Err(eyre!(
+                        "an unresolved internal Lorentz tensor contraction remains after d-dimensional UV numerator algebra; a d-dimensional tensor-operator reduction is required before analytic integration"
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn dimensionally_regularized(numerator: &Atom) -> Atom {
+        let minkowski = Minkowski {}.to_symbolic([GS.dim]).get_symbol().unwrap();
+        let dimension = Atom::var(GS.dim);
+        let regulated = Atom::num(4) - Atom::num(2) * Atom::var(GS.dim_epsilon);
+        numerator.replace_map(|view, _, out| {
+            if view.get_symbol() == Some(minkowski) {
+                // A retained open Lorentz basis keeps its representation. All
+                // scalar occurrences, including inside function coefficients,
+                // must instead participate in the Laurent expansion.
+                **out = view.to_owned();
+            } else if view == dimension.as_view() {
+                **out = regulated.clone();
+            }
+        })
+    }
+
+    fn restore_numerator(mut res: Atom, topology_order: usize) -> Atom {
+        // Projector indices may close two opaque tensor leaves. Restore their
+        // complete Minkowski representation before exposing the tensor bodies.
+        let mink = Minkowski {}.new_rep(GS.dim);
+        let mut projected_indices = std::collections::BTreeMap::new();
+        res = res.replace_map(|view, _, out| {
+            if matches!(view, AtomView::Fun(index) if index.get_symbol() == vakint::symbols::S.tensor_index) {
+                let replacement = projected_indices.entry(view.to_owned()).or_insert_with(|| loop {
+                    let candidate = mink.to_symbolic([Aind::new_dummy().to_atom()]);
+                    if res.pattern_match(&candidate.to_pattern(), None, None).next().is_none() {
+                        break candidate;
+                    }
+                });
+                **out = replacement.clone();
+            }
+        });
+
+        res = res
+            // Opaque tensor slots are needed only while Vakint validates and
+            // projects the Lorentz domain. Restore the caller's tensor leaves.
+            .replace(function!(vakint::symbols::S.tensor, W_.x_, W_.x___))
+            .with(Atom::var(W_.x_))
+            .replace(parse_lit!(vakint::cl2))
+            .with(parse_lit!(cl2))
+            .replace(parse_lit!(vakint::sqrt3))
+            .with(parse_lit!(sqrt(3)));
+
+        let vk_metric = vakint_symbol!("g");
+
+        // apply metric
+        res = res
+            .replace(vakint::symbols::S.p.call_args([W_.i_, W_.j_]))
+            .when(W_.j_.filter(|r| r.is_integer().is_true()))
+            .with(
+                vakint::symbols::S.p.call_args([
+                    Atom::var(W_.i_),
+                    mink.to_symbolic([GS
+                        .uvaind
+                        .call_args([Atom::num(topology_order), Atom::var(W_.j_)])]),
+                ]),
+            )
+            .replace(
+                vakint::symbols::S
+                    .p
+                    .call_args([Atom::var(W_.i_), vakint::symbols::S.dot_dummy_ind(W_.j_)]),
+            )
+            .when(W_.j_.filter(|r| r.is_integer().is_true()))
+            .with(
+                vakint::symbols::S.p.call_args([
+                    Atom::var(W_.i_),
+                    mink.to_symbolic([GS
+                        .uvaind
+                        .call_args([Atom::num(topology_order), Atom::var(W_.j_)])]),
+                ]),
+            )
+            .replace(vakint::symbols::S.p.call_args([W_.x__]))
+            .with(GS.emr_mom.call_args([W_.x__]));
+        res = res
+            .replace(function!(vk_metric, W_.x_, W_.y_) * function!(GS.emr_mom, W_.x___, W_.x_))
+            .with(function!(GS.emr_mom, W_.x___, W_.y_))
+            .replace(function!(
+                vk_metric,
+                vakint::symbols::S.dot_dummy_ind(W_.x_),
+                W_.y_
+            ))
+            .when(W_.x_.filter(|r| r.is_integer().is_true()))
+            .with(function!(
+                vk_metric,
+                mink.to_symbolic([GS
+                    .uvaind
+                    .call_args([Atom::num(topology_order), Atom::var(W_.x_)])]),
+                W_.y_
+            ))
+            .replace(function!(
+                vk_metric,
+                W_.x_,
+                vakint::symbols::S.dot_dummy_ind(W_.y_)
+            ))
+            .when(W_.y_.filter(|r| r.is_integer().is_true()))
+            .with(function!(
+                vk_metric,
+                mink.to_symbolic([GS
+                    .uvaind
+                    .call_args([Atom::num(topology_order), Atom::var(W_.y_)])]),
+                W_.x_
+            ))
+            .replace(function!(vk_metric, W_.x_, W_.y_))
+            .with(function!(ETS.metric, W_.x_, W_.y_));
+
+        res = res.replace(vakint::symbols::S.cmplx_i).with(Atom::i());
+
+        res
+    }
+
+    fn to_vakint_numerator(numerator: &Atom) -> Atom {
+        let numerator = numerator
+            .replace(function!(GS.loop_mom, W_.x___))
+            .with(function!(vakint::symbols::S.k, W_.x___))
+            .replace(function!(GS.emr_mom, W_.x___))
+            .with(function!(vakint::symbols::S.p, W_.x___))
+            .replace(function!(
+                SPENSO_TAG.dot,
+                function!(W_.a_, W_.a___, Minkowski {}.new_rep(GS.dim).to_symbolic([])),
+                function!(W_.b_, W_.b___, Minkowski {}.new_rep(GS.dim).to_symbolic([]))
+            ))
+            .with(vakint::symbols::S.dot(function!(W_.a_, W_.a___), function!(W_.b_, W_.b___)))
+            .replace(function!(
+                ETS.metric,
+                Minkowski {}.to_symbolic([W_.a__]),
+                Minkowski {}.to_symbolic([W_.b__])
+            ))
+            .with(function!(
+                vakint::symbols::S.metric,
+                Minkowski {}.to_symbolic([W_.a__]),
+                Minkowski {}.to_symbolic([W_.b__])
+            ));
+        // Preserve the Lorentz slots of arbitrary spin tensors without
+        // teaching Vakint Spenso's representation syntax or tensor algebra.
+        // Direct slots use the same parser as the tensor network. The original
+        // leaf stays opaque, including its spin and color indices.
+        numerator.replace_map(|view, _, out| {
+            let AtomView::Fun(tensor) = view else { return };
+            if [
+                vakint::symbols::S.k,
+                vakint::symbols::S.p,
+                vakint::symbols::S.g,
+                vakint::symbols::S.dot,
+                vakint::symbols::S.tensor,
+            ]
+            .contains(&tensor.get_symbol())
+            {
+                **out = view.to_owned();
+                return;
+            }
+            let slots = tensor
+                .iter()
+                .filter(|argument| Slot::<Minkowski, Aind>::try_from(*argument).is_ok())
+                .collect::<Vec<_>>();
+            if !slots.is_empty() {
+                let mut wrapped = FunctionBuilder::new(vakint::symbols::S.tensor).add_arg(view);
+                for slot in slots {
+                    wrapped = wrapped.add_arg(slot);
+                }
+                **out = wrapped.finish();
+            }
+        })
     }
 }
 
@@ -489,12 +810,14 @@ pub(crate) fn to_vakint_integrand<
     graph: &HedgeGraph<E, V, H>,
     reduced: &S,
     dependent_subgraph: &SS,
+    source_lmb: &LoopMomentumBasis,
     settings: &VakintSettings,
     substitute_masses_to_m_uv: bool,
 ) -> Result<VakintExpression> {
     let reduced_label = reduced.string_label();
     let dependent_subgraph_label = dependent_subgraph.string_label();
-    let mut integrand_vakint = integrand
+    let mut integrand_vakint = GS
+        .erase_uv_momentum_provenance(integrand)
         .undo_schoonschip::<Aind>()?
         .undo_chain::<Aind>()?
         .undo_trace::<Aind>()?;
@@ -508,23 +831,16 @@ pub(crate) fn to_vakint_integrand<
     );
     //Atom::Zero
 
-    // strip the momentum wrapper from the denominator
-    integrand_vakint = integrand_vakint
-        // .replace(function!(
-        //     GS.den,
-        //     W_.prop_,
-        //     function!(GS.emr_mom, W_.prop_, W_.mom_),
-        //     W_.x__
-        // ))
-        // .with(function!(GS.den, W_.prop_, W_.mom_, W_.x__))
-        .expand();
-    debug_tags!(#uv, #integrated, #vakint, #trace;
-        stage = "to_vakint_integrand_after_den_strip_expand",
-        reduced = %reduced_label,
-        dependent_subgraph = %dependent_subgraph_label,
-        log.integrand = integrand_vakint,
-        "Vakint trace after denominator strip and expand"
-    );
+    // The denominator-to-propagator replacements below strip the momentum
+    // wrapper without distributing the numerator. The former standalone
+    // denominator rewrite was:
+    // .replace(function!(
+    //     GS.den,
+    //     W_.prop_,
+    //     function!(GS.emr_mom, W_.prop_, W_.mom_),
+    //     W_.x__
+    // ))
+    // .with(function!(GS.den, W_.prop_, W_.mom_, W_.x__))
 
     // Nested counterterms can expose a boundary metric next to the propagator
     // metric of the reduced graph. Contract those metric-only structures before
@@ -538,7 +854,22 @@ pub(crate) fn to_vakint_integrand<
         "Vakint trace after metric simplification"
     );
 
+    // Separate denominator monomials before contracting their graph incidence.
+    // In A*B*(c*B+d*B^2), fusing only the outside A*B would leave the
+    // inner B attached to nodes that have already been contracted. Collect
+    // only complete denominator atoms; numerator sums stay factored coefficients.
+    let denominator_pattern = function!(GS.den, W_.x___).to_pattern();
+    let denominators = integrand_vakint
+        .pattern_match(&denominator_pattern, None, None)
+        .map(|matched| denominator_pattern.replace_wildcards(&matched).unwrap())
+        .collect::<std::collections::HashSet<_>>();
+    integrand_vakint = integrand_vakint
+        .coefficient_list::<i32>(&denominators.into_iter().collect::<Vec<_>>())
+        .into_iter()
+        .map(|(denominator, numerator)| denominator * numerator)
+        .sum();
     let mut propagator_id = 1;
+    let mut propagator_replacements = Vec::new();
 
     let vk_prop = vakint::symbols::S.prop;
     let vk_edge = vakint_symbol!("edge");
@@ -567,15 +898,15 @@ pub(crate) fn to_vakint_integrand<
             // } else {
             //     graph.node_id(sink)
             // };
-            integrand_vakint = integrand_vakint
-                .replace(function!(
+            propagator_replacements.push(Replacement::new(
+                function!(
                     GS.den,
                     usize::from(index) as i64,
                     W_.mom_,
                     W_.mass_,
                     W_.x___
-                ))
-                .with(function!(
+                ),
+                function!(
                     vk_prop,
                     propagator_id,
                     function!(
@@ -590,12 +921,17 @@ pub(crate) fn to_vakint_integrand<
                         W_.mass_
                     },
                     1
-                ))
-                .replace(function!(vk_prop, W_.x___, 1).pow(Atom::var(W_.e_)))
-                .with(function!(vk_prop, W_.x___, -Atom::var(W_.e_)));
+                ),
+            ));
             propagator_id += 1;
         }
     }
+    // Edge IDs make these denominator replacements disjoint. Convert all
+    // propagators together, then encode their powers once for the whole atom.
+    integrand_vakint = integrand_vakint
+        .replace_multiple(&propagator_replacements)
+        .replace(function!(vk_prop, W_.x___, 1).pow(Atom::var(W_.e_)))
+        .with(function!(vk_prop, W_.x___, -Atom::var(W_.e_)));
     debug_tags!(#uv, #integrated, #vakint, #trace;
         stage = "to_vakint_integrand_after_den_to_prop",
         reduced = %reduced_label,
@@ -900,6 +1236,15 @@ pub(crate) fn to_vakint_integrand<
                     .mom
                     .pattern_match(&mom_pat, None, None)
                     .for_each(|m| {
+                        // An affine vacuum routing can contain fixed source
+                        // external momenta. Solve only for hard coordinates;
+                        // otherwise H=Q-P can solve for P and leave Q in the
+                        // integrated numerator as a spurious external variable.
+                        if usize::try_from(m[&W_.a_].as_view())
+                            .is_ok_and(|edge| source_lmb.ext_from(EdgeIndex(edge)).is_some())
+                        {
+                            return;
+                        }
                         let var = mom_pat.replace_wildcards(&m).unwrap();
                         if !momentum_variables.iter().any(|existing| existing == &var) {
                             momentum_variables.push(var);
@@ -985,28 +1330,7 @@ pub(crate) fn to_vakint_integrand<
             .with(function!(vakint::symbols::S.k, W_.x___))
             .replace(function!(GS.emr_mom, W_.x___))
             .with(function!(vakint::symbols::S.p, W_.x___));
-        t.numerator = t
-            .numerator
-            .replace(function!(GS.loop_mom, W_.x___))
-            .with(function!(vakint::symbols::S.k, W_.x___))
-            .replace(function!(GS.emr_mom, W_.x___))
-            .with(function!(vakint::symbols::S.p, W_.x___))
-            .replace(function!(
-                SPENSO_TAG.dot,
-                function!(W_.a_, W_.a___, Minkowski {}.new_rep(GS.dim).to_symbolic([])),
-                function!(W_.b_, W_.b___, Minkowski {}.new_rep(GS.dim).to_symbolic([]))
-            ))
-            .with(vakint::symbols::S.dot(function!(W_.a_, W_.a___), function!(W_.b_, W_.b___)))
-            .replace(function!(
-                ETS.metric,
-                Minkowski {}.to_symbolic([W_.a__]),
-                Minkowski {}.to_symbolic([W_.b__])
-            ))
-            .with(function!(
-                vakint::symbols::S.metric,
-                Minkowski {}.to_symbolic([W_.a__]),
-                Minkowski {}.to_symbolic([W_.b__])
-            ));
+        t.numerator = Integrated::to_vakint_numerator(&t.numerator);
         debug_tags!(#uv, #integrated, #vakint, #trace;
             stage = "to_vakint_integrand_term_after_vakint_symbols",
             term_index = %term_index,
@@ -1216,9 +1540,427 @@ impl VakintMomentumSolution {
 
 #[cfg(test)]
 mod tests {
-    use crate::initialisation::test_initialise;
+    use crate::{initialisation::test_initialise, utils::symbolica_ext::Q_I};
 
     use super::*;
+
+    #[test]
+    fn analytic_spin_expansion_preserves_powered_scalar_products() {
+        test_initialise().unwrap();
+        let mink = Minkowski {}.new_rep(GS.dim);
+        let mu = mink.to_symbolic([Aind::new_dummy().to_atom()]);
+        let nu = mink.to_symbolic([Aind::new_dummy().to_atom()]);
+        let bis = Bispinor {}.new_rep(4);
+        let a = bis.to_symbolic([Aind::new_dummy().to_atom()]);
+        let b = bis.to_symbolic([Aind::new_dummy().to_atom()]);
+        let p = function!(GS.loop_mom, 1, mink.to_symbolic([]));
+        let k = function!(GS.loop_mom, 2, mink.to_symbolic([]));
+        let spin = function!(AGS.gamma, &a, &b, &mu) * function!(AGS.gamma, &b, &a, &nu);
+        for product in [spenso::dot!(&p, &k), spenso::g!(&p, &k)] {
+            for power in [2, 3] {
+                // A closed Dirac loop makes the analytic spin-expansion path
+                // active. Its scalar spectator must retain its own contractions.
+                let expected =
+                    Atom::num(4) * spenso::g!(&mu, &nu) * spenso::dot!(&p, &k).pow(power);
+                assert_eq!(
+                    simplify(&(product.pow(power) * &spin))
+                        .unwrap()
+                        .normalize_dots(),
+                    expected
+                );
+                // These compact metrics are tensor contractions, so they must
+                // remain visible even beside the protected scalar spectator.
+                assert_eq!(
+                    simplify(&(product.pow(power) * &spin * spenso::g!(&mu, &p)))
+                        .unwrap()
+                        .normalize_dots(),
+                    Atom::num(4) * function!(GS.loop_mom, 1, &nu) * spenso::dot!(&p, &k).pow(power)
+                );
+                assert_eq!(
+                    simplify(
+                        &(product.pow(power) * &spin * spenso::g!(&mu, &p) * spenso::g!(&nu, &k)),
+                    )
+                    .unwrap()
+                    .normalize_dots(),
+                    Atom::num(4) * spenso::dot!(&p, &k).pow(power + 1)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn projected_dirac_algebra_precedes_single_and_double_pole_expansion() {
+        test_initialise().unwrap();
+        let vakint = Vakint::new().unwrap();
+        let epsilon = Atom::var(GS.dim_epsilon);
+        let radial = vakint::symbols::S.dot(
+            function!(vakint::symbols::S.k, 1),
+            function!(vakint::symbols::S.k, 2),
+        );
+        let mink = Minkowski {}.new_rep(GS.dim);
+        let mu = mink.to_symbolic([Aind::new_dummy().to_atom()]);
+        let nu = mink.to_symbolic([Aind::new_dummy().to_atom()]);
+        let bis = Bispinor {}.new_rep(4);
+        let a = bis.to_symbolic([Aind::new_dummy().to_atom()]);
+        let b = bis.to_symbolic([Aind::new_dummy().to_atom()]);
+        let c = bis.to_symbolic([Aind::new_dummy().to_atom()]);
+
+        for project_onto_tensor_integrals in [true, false] {
+            for use_dot_product_notation in [false, true] {
+                let settings = vakint::VakintSettings {
+                    use_dot_product_notation,
+                    project_onto_tensor_integrals,
+                    ..VakintSettings::default().true_settings()
+                };
+                let integrated = Integrated::new(&vakint, &settings);
+                for closed in [false, true] {
+                    // Distinct loop slashes have no repeated gamma index before
+                    // angular projection. Its projector creates the contraction.
+                    let numerator = function!(GS.loop_mom, 1, &mu)
+                        * function!(GS.loop_mom, 2, &nu)
+                        * function!(AGS.gamma, &a, &b, &mu)
+                        * function!(AGS.gamma, &b, if closed { &a } else { &c }, &nu);
+                    let mut term = vakint::VakintTerm {
+                        integral: vakint::vakint_parse!("topo(I2L(mUVsq,1,1,1))").unwrap(),
+                        numerator: Integrated::to_vakint_numerator(&numerator),
+                        vectors: vec![("k".into(), 1), ("k".into(), 2)],
+                    };
+                    term.tensor_reduce(&vakint, &settings).unwrap();
+                    let spin = if closed {
+                        Atom::num(4)
+                    } else {
+                        function!(ETS.metric, &a, &c)
+                    };
+                    let late_four_dimensional = simplify(
+                        &Integrated::restore_numerator(
+                            Vakint::convert_to_dot_notation(&settings, term.numerator.as_view())
+                                .unwrap(),
+                            0,
+                        )
+                        .replace(GS.dim)
+                        .with(4),
+                    )
+                    .unwrap();
+                    assert!(
+                        !truncate(
+                            &series(
+                                &(late_four_dimensional
+                                    .replace(radial.to_pattern())
+                                    .with(epsilon.pow(-1))
+                                    - &spin * epsilon.pow(-1)),
+                                1,
+                            )
+                            .unwrap(),
+                            true,
+                        )
+                        .is_zero(),
+                        "the old late-4D contraction must miss a nonzero finite term"
+                    );
+                    for evanescent_power in 0..=2 {
+                        let projected = &term.numerator
+                            * (Atom::var(GS.dim) - Atom::num(4)).pow(evanescent_power);
+                        let resolved = integrated
+                            .simplify_projected_numerator(&projected, 0)
+                            .unwrap();
+                        assert!(!resolved.contains_symbol(AGS.gamma));
+                        assert!(!resolved.contains_symbol(SPENSO_TAG.trace));
+                        assert!(!resolved.contains_symbol(GS.dim));
+                        let coefficient = &spin * (Atom::num(-2) * &epsilon).pow(evanescent_power);
+                        for pole in [
+                            epsilon.pow(-1) + Atom::num(5) + Atom::num(7) * &epsilon,
+                            Atom::num(2) * epsilon.pow(-2)
+                                + Atom::num(3) * epsilon.pow(-1)
+                                + Atom::num(5)
+                                + Atom::num(7) * &epsilon,
+                        ] {
+                            // Mock only the scalar master value: the angular
+                            // projection and d-dimensional Dirac algebra above use
+                            // the production pipeline. This isolates the pole ×
+                            // evanescent finite terms from master normalization.
+                            let evaluated = resolved
+                                .replace(radial.to_pattern())
+                                .with(pole.to_pattern());
+                            assert!(
+                                series(&(evaluated - &coefficient * pole), 2)
+                                    .unwrap()
+                                    .to_atom()
+                                    .is_zero(),
+                                "project={project_onto_tensor_integrals}, closed={closed}, dot={use_dot_product_notation}, evanescent power={evanescent_power}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn projected_dirac_numerator_matches_scalar_master_before_backend_truncation() {
+        test_initialise().unwrap();
+        let vakint = Vakint::new().unwrap();
+        let mut results = Vec::new();
+        for project_onto_tensor_integrals in [true, false] {
+            let settings = vakint::VakintSettings {
+                // A two-loop vacuum master is retained only through its finite
+                // term, so omitting the numerator's evanescent factors fails here.
+                number_of_terms_in_epsilon_expansion: 3,
+                project_onto_tensor_integrals,
+                ..VakintSettings::default().true_settings()
+            };
+            let integrated = Integrated::new(&vakint, &settings);
+            let mink = Minkowski {}.new_rep(GS.dim);
+            let mu = mink.to_symbolic([Aind::new_dummy().to_atom()]);
+            let nu = mink.to_symbolic([Aind::new_dummy().to_atom()]);
+            let bis = Bispinor {}.new_rep(4);
+            let a = bis.to_symbolic([Aind::new_dummy().to_atom()]);
+            let b = bis.to_symbolic([Aind::new_dummy().to_atom()]);
+            let numerator = function!(GS.loop_mom, 1, &mu)
+                * function!(GS.loop_mom, 2, &nu)
+                * function!(AGS.gamma, &a, &b, &mu)
+                * function!(AGS.gamma, &b, &a, &nu);
+            let mut projected = vakint::VakintTerm {
+                integral: vakint::vakint_parse!("topo(I2L(mUVsq,1,1,1))").unwrap(),
+                numerator: Integrated::to_vakint_numerator(&numerator),
+                vectors: vec![("k".into(), 1), ("k".into(), 2)],
+            };
+            projected.tensor_reduce(&vakint, &settings).unwrap();
+            let d_minus_four = Atom::var(GS.dim) - Atom::num(4);
+            projected.numerator = integrated
+                .simplify_projected_numerator(
+                    &(&projected.numerator * (&d_minus_four + d_minus_four.pow(2))),
+                    0,
+                )
+                .unwrap();
+            let epsilon = Atom::var(GS.dim_epsilon);
+            let mut scalar = vakint::VakintTerm {
+                numerator: Atom::num(4)
+                    * (Atom::num(-2) * &epsilon + Atom::num(4) * epsilon.pow(2))
+                    * vakint::symbols::S.dot(
+                        function!(vakint::symbols::S.k, 1),
+                        function!(vakint::symbols::S.k, 2),
+                    ),
+                ..projected.clone()
+            };
+            let resolved_input = projected.numerator.clone();
+            // The projector contains 1/(4-2ε) before symbolic-d gamma
+            // contraction. Cancel the analytic oracle's rational denominators
+            // exactly, using the unfactorized polynomial representation.
+            assert!(
+                (&resolved_input - &scalar.numerator)
+                    .try_to_rational_polynomial::<_, _, u32>(&*Q_I, &*Q_I, None)
+                    .expect("the analytic scalar input difference is rational over Q(i)")
+                    .numerator
+                    .is_zero(),
+                "project={project_onto_tensor_integrals}: resolved input {resolved_input} differs from scalar oracle {}",
+                scalar.numerator
+            );
+            projected.evaluate_integral(&vakint, &settings).unwrap();
+            scalar.evaluate_integral(&vakint, &settings).unwrap();
+            assert!(
+                !truncate(&series(&scalar.numerator, 1).unwrap(), true).is_zero(),
+                "the independently integrated evanescent scalar master has a nonzero finite term"
+            );
+            let difference = series(&(&projected.numerator - &scalar.numerator), 1)
+                .unwrap()
+                .to_atom();
+            // These are analytically integrated subgraph coefficients. Expand
+            // their difference to compare exact Laurent coefficients, including
+            // algebraically equal backend output with different factorization.
+            assert!(
+                difference.expand().is_zero(),
+                "project={project_onto_tensor_integrals}: resolved input {resolved_input}; projected result {}; scalar result {}; difference {difference}; expanded difference {}",
+                projected.numerator,
+                scalar.numerator,
+                difference.expand()
+            );
+            results.push(projected.numerator);
+        }
+        assert!(
+            series(&(&results[0] - &results[1]), 1)
+                .unwrap()
+                .to_atom()
+                .expand()
+                .is_zero()
+        );
+    }
+
+    #[test]
+    fn scalar_dimensions_are_substituted_inside_functions_but_not_lorentz_slots() {
+        test_initialise().unwrap();
+        let slot = Minkowski {}
+            .new_rep(GS.dim)
+            .to_symbolic([Aind::new_dummy().to_atom()]);
+        let logarithm = symbolica::symbol!("log");
+        let tensor = symbolica::symbol!("dimension_test_tensor");
+        let input = function!(logarithm, GS.dim) * function!(tensor, &slot);
+        let expected = function!(
+            logarithm,
+            Atom::num(4) - Atom::num(2) * Atom::var(GS.dim_epsilon)
+        ) * function!(tensor, &slot);
+        assert_eq!(Integrated::dimensionally_regularized(&input), expected);
+    }
+
+    #[test]
+    fn analytic_uv_spin_algebra_rejects_unsupported_residual_contractions() {
+        test_initialise().unwrap();
+        let bis = Bispinor {}.new_rep(4);
+        let a = bis.to_symbolic([Aind::new_dummy().to_atom()]);
+        let b = bis.to_symbolic([Aind::new_dummy().to_atom()]);
+        let mu = Minkowski {}
+            .new_rep(GS.dim)
+            .to_symbolic([Aind::new_dummy().to_atom()]);
+        let nu = Minkowski {}
+            .new_rep(GS.dim)
+            .to_symbolic([Aind::new_dummy().to_atom()]);
+        let unknown = function!(
+            symbolica::symbol!("unsupported_dirac_factor"),
+            SPENSO_TAG.chain_in,
+            SPENSO_TAG.chain_out
+        );
+        let gamma = function!(AGS.gamma, SPENSO_TAG.chain_in, SPENSO_TAG.chain_out, &mu);
+        for (input, message) in [
+            (function!(AGS.sigma, &a, &b, &mu, &nu), "Sigma tensors"),
+            (
+                function!(SPENSO_TAG.trace, bis.to_symbolic([]), &unknown),
+                "unresolved Dirac trace",
+            ),
+            (
+                function!(
+                    SPENSO_TAG.trace,
+                    Minkowski {}.new_rep(GS.dim).to_symbolic([]),
+                    &unknown
+                ),
+                "unresolved Lorentz trace",
+            ),
+        ] {
+            assert!(simplify(&input).unwrap_err().to_string().contains(message));
+        }
+        let residual = function!(SPENSO_TAG.chain, &a, &b, &gamma, &unknown, &gamma);
+        assert!(
+            Integrated::ensure_resolved_lorentz_contractions(&simplify(&residual).unwrap())
+                .is_err()
+        );
+        // An open gamma is a valid d-dimensional tensor basis element.
+        let open = simplify(&function!(AGS.gamma, &a, &b, &mu)).unwrap();
+        assert!(Integrated::ensure_resolved_lorentz_contractions(&open).is_ok());
+    }
+
+    #[test]
+    fn residual_tensor_contractions_are_checked_per_analytic_branch() {
+        test_initialise().unwrap();
+        let bis = Bispinor {}.new_rep(4);
+        let [a, b, c, d] =
+            std::array::from_fn::<_, 4, _>(|_| bis.to_symbolic([Aind::new_dummy().to_atom()]));
+        let mink = Minkowski {}.new_rep(GS.dim);
+        let [mu, nu, rho] =
+            std::array::from_fn::<_, 3, _>(|_| mink.to_symbolic([Aind::new_dummy().to_atom()]));
+        let left = function!(AGS.gamma, &a, &b, &mu);
+        let right = function!(AGS.gamma, &c, &d, &mu);
+        assert!(Integrated::ensure_resolved_lorentz_contractions(&(&left * &right)).is_err());
+        let compact = function!(
+            SPENSO_TAG.dot,
+            function!(AGS.gamma, &a, &b, mink.to_symbolic([])),
+            function!(AGS.gamma, &c, &d, mink.to_symbolic([]))
+        );
+        assert!(Integrated::ensure_resolved_lorentz_contractions(&compact).is_err());
+        let same_chain = function!(
+            SPENSO_TAG.dot,
+            function!(AGS.gamma, &a, &b, mink.to_symbolic([])),
+            function!(AGS.gamma, &b, &c, mink.to_symbolic([]))
+        );
+        let same_chain = simplify(&same_chain).unwrap();
+        assert!(
+            (&same_chain - Atom::var(GS.dim) * function!(ETS.metric, &a, &c))
+                .expand()
+                .is_zero(),
+            "a compact contraction within one gamma chain must close to d times its spinor identity: {same_chain}"
+        );
+        assert!(Integrated::ensure_resolved_lorentz_contractions(&same_chain).is_ok());
+        let free =
+            &left * function!(AGS.gamma, &c, &d, &nu) + function!(AGS.gamma, &a, &b, &nu) * &right;
+        assert!(Integrated::ensure_resolved_lorentz_contractions(&free).is_ok());
+        assert!(
+            Integrated::ensure_resolved_lorentz_contractions(&function!(ETS.metric, &mu, &nu))
+                .is_ok()
+        );
+        let ambiguous = function!(
+            SPENSO_TAG.dot,
+            function!(
+                AGS.sigma,
+                &a,
+                &b,
+                mink.to_symbolic([]),
+                mink.to_symbolic([])
+            ),
+            function!(
+                AGS.sigma,
+                &c,
+                &d,
+                mink.to_symbolic([]),
+                mink.to_symbolic([])
+            )
+        );
+        assert!(Integrated::ensure_resolved_lorentz_contractions(&ambiguous).is_err());
+        let slash = function!(
+            AGS.gamma,
+            &a,
+            &b,
+            function!(GS.emr_mom, 0, mink.to_symbolic([]))
+        );
+        assert!(Integrated::ensure_resolved_lorentz_contractions(&slash).is_ok());
+        let slash_product = &slash
+            * function!(
+                AGS.gamma,
+                &c,
+                &d,
+                function!(GS.emr_mom, 1, mink.to_symbolic([]))
+            );
+        assert!(Integrated::ensure_resolved_lorentz_contractions(&slash_product).is_ok());
+        assert!(
+            Integrated::ensure_resolved_lorentz_contractions(
+                &(&left / (Atom::var(GS.dim) - Atom::one()))
+            )
+            .is_ok()
+        );
+
+        // Diagnostic tensor operator, not a physical graph/locality oracle:
+        // crossed spinor closure of two contracted triple-gamma chains gives
+        // 4d(-d²+6d-4). Its evanescent term changes the finite part of a pole.
+        let factors = [&mu, &nu, &rho]
+            .map(|index| function!(AGS.gamma, SPENSO_TAG.chain_in, SPENSO_TAG.chain_out, index));
+        let operator = function!(
+            SPENSO_TAG.chain,
+            &a,
+            &b,
+            &factors[0],
+            &factors[1],
+            &factors[2]
+        ) * function!(
+            SPENSO_TAG.chain,
+            &c,
+            &d,
+            &factors[0],
+            &factors[1],
+            &factors[2]
+        );
+        assert!(Integrated::ensure_resolved_lorentz_contractions(&operator).is_err());
+        let closed = function!(
+            SPENSO_TAG.trace,
+            bis.to_symbolic([]),
+            &factors[0],
+            &factors[1],
+            &factors[2],
+            &factors[0],
+            &factors[1],
+            &factors[2]
+        );
+        let closed = Integrated::dimensionally_regularized(&simplify(&closed).unwrap());
+        let epsilon = Atom::var(GS.dim_epsilon);
+        assert_eq!(
+            truncate(&series(&(closed / epsilon), 0).unwrap(), true),
+            Atom::num(32)
+        );
+    }
 
     #[test]
     fn integrated_counterterm_projects_one_laurent_expansion() {
@@ -1403,5 +2145,172 @@ mod tests {
 
         assert!(no_variables.free_variables.is_empty());
         assert_eq!(free_variable.free_variables, vec![q0]);
+    }
+
+    #[test]
+    fn affine_vakint_routing_keeps_external_momenta_fixed() {
+        use crate::{
+            dot,
+            graph::{Graph, parse::IntoGraph},
+        };
+
+        test_initialise().unwrap();
+        let graph: Graph = dot!(digraph affine_vakint_tadpole {
+            edge [num=1 mass=1]
+            node [num=1]
+            incoming [style=invis]
+            outgoing [style=invis]
+            incoming -> a [id=0]
+            a -> a [id=1 lmb_id=0]
+            a -> outgoing [id=2]
+        })
+        .unwrap();
+        let hard = function!(GS.emr_mom, 1) - function!(GS.emr_mom, 0);
+        let minkowski = Minkowski {}.new_rep(GS.dim).to_symbolic([]);
+        let indexed_hard =
+            function!(GS.emr_mom, 1, &minkowski) - function!(GS.emr_mom, 0, &minkowski);
+        let numerator = function!(
+            SPENSO_TAG.dot,
+            function!(GS.emr_mom, 0, &minkowski),
+            &indexed_hard
+        ) * function!(
+            SPENSO_TAG.dot,
+            function!(GS.emr_mom, 2, &minkowski),
+            &indexed_hard
+        );
+        let settings = VakintSettings {
+            additional_normalization: "1".to_string(),
+            ..Default::default()
+        };
+        for sign in [-1, 1] {
+            let denominator = function!(
+                GS.den,
+                1,
+                Atom::num(sign) * &hard,
+                Atom::var(GS.m_uv_vacuum).pow(2),
+                function!(SPENSO_TAG.dot, &indexed_hard, &indexed_hard)
+                    - Atom::var(GS.m_uv_vacuum).pow(2)
+            );
+            let actual = to_vakint_integrand(
+                &(&numerator / denominator.pow(3)),
+                &graph,
+                &graph.full_filter(),
+                &graph.empty_subgraph::<SuBitGraph>(),
+                &graph.loop_momentum_basis,
+                &settings,
+                true,
+            )
+            .unwrap();
+            // Compare the complete rational integrand through Vakint's public
+            // expression conversion, independent of topology IDs and term layout.
+            let actual = Atom::from(actual)
+                .replace(function!(vakint::symbols::S.topo, W_.x_))
+                .with(W_.x_)
+                .replace(function!(
+                    vakint::symbols::S.prop,
+                    W_.a_,
+                    W_.b_,
+                    W_.c_,
+                    W_.d_,
+                    W_.e_
+                ))
+                .with(
+                    (function!(vakint::symbols::S.dot, W_.c_, W_.c_) - Atom::var(W_.d_))
+                        .pow(-Atom::var(W_.e_)),
+                );
+            let expected_numerator = function!(
+                vakint::symbols::S.dot,
+                function!(vakint::symbols::S.p, 0),
+                function!(vakint::symbols::S.k, 0)
+            ) * function!(
+                vakint::symbols::S.dot,
+                function!(vakint::symbols::S.p, 2),
+                function!(vakint::symbols::S.k, 0)
+            );
+            let radial = function!(
+                vakint::symbols::S.dot,
+                function!(vakint::symbols::S.k, 0),
+                function!(vakint::symbols::S.k, 0)
+            ) - Atom::var(GS.m_uv_vacuum).pow(2);
+            assert!(
+                (actual.collect_factors() - (expected_numerator / radial.pow(3)).collect_factors())
+                    .is_zero(),
+                "the complete integrand must retain the fixed external momenta for either D(H) spelling"
+            );
+        }
+    }
+
+    #[test]
+    fn nested_vacuum_denominators_preserve_incidence_and_factorized_numerators() {
+        use crate::{
+            dot,
+            graph::{Graph, parse::IntoGraph},
+        };
+
+        test_initialise().unwrap();
+        let graph: Graph = dot!(digraph nested_vacuum_bubble {
+            edge [num=1 mass=1]
+            node [num=1]
+            incoming [style=invis]
+            outgoing [style=invis]
+            incoming -> a [id=0]
+            b -> outgoing [id=1]
+            a -> b [id=2 lmb_id=0]
+            a -> b [id=3]
+        })
+        .unwrap();
+        let denominators = [(2, 1), (3, -1)].map(|(edge, sign)| {
+            function!(
+                GS.den,
+                edge,
+                Atom::num(sign) * function!(GS.emr_mom, 2),
+                Atom::var(GS.m_uv_vacuum).pow(2)
+            )
+        });
+        let numerator = parse!("(a+b)*(c+d)");
+        let [first, second] = [parse!("s"), parse!("t")];
+        // Include powers beyond signed eight-bit range, matching the i32
+        // propagator powers used by the incidence conversion below.
+        for base_power in [1, 127] {
+            let input = &numerator / (&denominators[0] * denominators[1].pow(base_power))
+                * (&first / &denominators[1] + &second / denominators[1].pow(2));
+            let actual = to_vakint_integrand(
+                &input,
+                &graph,
+                &graph.full_filter(),
+                &graph.empty_subgraph::<SuBitGraph>(),
+                &graph.loop_momentum_basis,
+                &VakintSettings {
+                    // This conversion oracle uses unit loop normalization in every prefix.
+                    additional_normalization: "1".to_string(),
+                    ..VakintSettings::default()
+                },
+                true,
+            )
+            .unwrap();
+            let actual = Atom::from(actual)
+                .replace(function!(vakint::symbols::S.topo, W_.x_))
+                .with(W_.x_)
+                .replace(function!(
+                    vakint::symbols::S.prop,
+                    W_.a_,
+                    W_.b_,
+                    W_.c_,
+                    W_.d_,
+                    W_.e_
+                ))
+                .with(
+                    (function!(vakint::symbols::S.dot, W_.c_, W_.c_) - Atom::var(W_.d_))
+                        .pow(-Atom::var(W_.e_)),
+                );
+            let radial = function!(
+                vakint::symbols::S.dot,
+                function!(vakint::symbols::S.k, 0),
+                function!(vakint::symbols::S.k, 0)
+            ) - Atom::var(GS.m_uv_vacuum).pow(2);
+            let expected = &numerator
+                * (&first / radial.pow(base_power + 2) + &second / radial.pow(base_power + 3));
+            assert_eq!(actual.collect_factors(), expected.collect_factors());
+        }
     }
 }

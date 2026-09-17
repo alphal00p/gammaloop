@@ -1069,7 +1069,7 @@ mod test {
         {
             // println!("YaY:{a}");
             println!("{tensor}");
-            assert_eq!(tensor, &indexed.to_shell().concretize());
+            assert_eq!(tensor, &indexed.to_shell().concretize().unwrap());
         } else {
             panic!("Not Key")
         }

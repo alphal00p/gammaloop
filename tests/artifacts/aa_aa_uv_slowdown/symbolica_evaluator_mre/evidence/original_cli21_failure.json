@@ -1,0 +1,315 @@
+{
+  "recorded_utc": "2026-09-13T19:32:16.726965+00:00",
+  "scope": "Historical original failure and separate controls. The newly recovered full portable scalar is not yet an independently reproduced failure.",
+  "full_portable_mre_status_at_recording": "input_recovery_in_progress; original failure not yet reproduced by standalone package",
+  "original_failure": {
+    "graph": "GL262, three-loop aa_aa physical amplitude with local UV CTs from 4D",
+    "source_revision": "a8b4c9d96c3994f77bba80826e16715d53ddbfc9",
+    "binary_sha256": "91c9e3389d9b7c3cd614890d24d46422cb45c4339efa3333db8858f958733fe2",
+    "binary_bytes": 1578091368,
+    "build_profile": "dev-optim",
+    "debug_assertions": true,
+    "rustc": "rustc 1.97.0 (2d8144b78 2026-07-07)",
+    "cargo_lock_sha256": "5ca128a5828fb99e142beb43afdea60cc7ad2c0fd44f0247251331bfb75b488a",
+    "packages": [
+      {
+        "name": "bytes",
+        "version": "1.11.1",
+        "source": "registry+https://github.com/rust-lang/crates.io-index"
+      },
+      {
+        "name": "symbolica",
+        "version": "2.2.0",
+        "source": "git+https://github.com/alphal00p/symbolica?rev=4d0a833eb8e059d1f95bdae5abed2559830b235f#4d0a833eb8e059d1f95bdae5abed2559830b235f"
+      }
+    ],
+    "run_card_sha256": "436148c9606ebd212462ef53c224e46f45e5b69dbf3c123f4cad2adf97dae1c0",
+    "effective_evaluator_settings": {
+      "compile": false,
+      "direct_translation": true,
+      "horner_iterations": 1,
+      "cpe_iterations": 5,
+      "n_cores": 1,
+      "iterative_orientation_optimization": false,
+      "summed": false,
+      "summed_function_map": false,
+      "store_atom": false,
+      "do_fn_map_replacements": false,
+      "max_horner_scheme_variables": 500,
+      "max_common_pair_cache_entries": 1000000,
+      "max_common_pair_distance": 1000,
+      "abort_level": 0
+    },
+    "settings_evidence": "compile=false, H1 and CPE5 are explicit in the frozen card. direct_translation=true and evaluator n_cores=1 are defaults in source revision a8b4c9d96c3994f77bba80826e16715d53ddbfc9. Explicit orientation sum forces summed_function_map=false despite card requesting true; logs confirm the effective variants. No function-map replacements were prepared.",
+    "logger_tag_note": "compile=true in JSONL events is the #compile debug tag, not the evaluator compile setting.",
+    "threshold_cts_enabled": false,
+    "integrated_uv_cts_enabled": false,
+    "thread_limits": {
+      "RAYON_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "RUST_MIN_STACK": "67108864"
+    },
+    "started_utc": "2026-09-13T14:18:09.984759+00:00",
+    "completed_utc": "2026-09-13T15:18:08.289353+00:00",
+    "outer_wall_seconds": 3598.3045007369947,
+    "input_atom_bytes": 19982016710,
+    "stage_chronology": [
+      {
+        "atom_index": 0,
+        "stage": "evaluator_stack_parse_atom_terms_start",
+        "term_count": 3050,
+        "timestamp": "2026-09-13T14:34:11.255Z"
+      },
+      {
+        "atom_index": 0,
+        "elapsed_ms": 2314461.627237,
+        "result_bytes": 19982016710,
+        "stage": "evaluator_stack_parse_atom_done",
+        "success": true,
+        "timestamp": "2026-09-13T15:12:41.052Z"
+      },
+      {
+        "atom_count": 1,
+        "elapsed_ms": 2314506.2551300004,
+        "stage": "evaluator_stack_parse_atoms_done",
+        "timestamp": "2026-09-13T15:12:41.096Z"
+      },
+      {
+        "replacement_count": 0,
+        "stage": "evaluator_expression_preparation_start",
+        "timestamp": "2026-09-13T15:12:41.098Z"
+      },
+      {
+        "stage": "evaluator_expression_preparation_done",
+        "event_utc": "2026-09-13T15:15:37.070Z",
+        "atom_count": 1,
+        "elapsed_ms": 175971.761456
+      },
+      {
+        "stage": "evaluator_symbolica_build_start",
+        "event_utc": "2026-09-13T15:15:37.070Z",
+        "atom_index": 0,
+        "atom_bytes": 19982016710
+      }
+    ],
+    "panic_message": "advance out of bounds: the len is 1721315294 but advancing by 10311249876",
+    "panic_source_location": "bytes-1.11.1/src/lib.rs:170",
+    "exit_code": 101,
+    "backtrace_available": false,
+    "panic_excerpt": "original_cli21_panic.txt",
+    "symbolica_build_completed": false,
+    "numeric_programs_started": false,
+    "saved_evaluator_or_state": false,
+    "evaluator_compilation_attempted": false,
+    "pre_evaluator_memory": {
+      "observed_utc": "2026-09-13T15:12:41.138844+00:00",
+      "pid": 2271028,
+      "stage": "evaluator_stack_parse_atoms_done",
+      "event_utc": "2026-09-13T15:12:41.096Z",
+      "historical_event": false,
+      "event_lag_seconds": 0.042844,
+      "atom_count": 1,
+      "elapsed_ms": 2314506.2551300004,
+      "rss_bytes": 46050947072,
+      "vmhwm_bytes": 68617658368
+    },
+    "memory_at_symbolica_build_start": {
+      "observed_utc": "2026-09-13T15:15:37.078255+00:00",
+      "pid": 2271028,
+      "stage": "evaluator_symbolica_build_start",
+      "event_utc": "2026-09-13T15:15:37.070Z",
+      "historical_event": false,
+      "event_lag_seconds": 0.008255,
+      "atom_index": 0,
+      "rss_bytes": 46050967552,
+      "vmhwm_bytes": 68617658368
+    },
+    "full_run_peak_rss_bytes": 120480550912,
+    "full_run_peak_vmhwm_bytes": 120480550912,
+    "memory_guard_bytes": 500000000000,
+    "wall_guard_seconds": 7200.0,
+    "guard_intervened": false,
+    "measurement_limits": "Profiled diagnostic, with earlier concurrent build/check activity. Timings are phase-local observations, not accepted final benchmark ratios. The memory samples follow their events by recorded milliseconds.",
+    "cause_status": "Exact Symbolica call stack and internal root cause remain unconfirmed; the failed call is evaluator .build(). No synthetic or corrupted input was supplied.",
+    "independent_input_tensor_summands": 3050
+  },
+  "separate_controls": [
+    {
+      "name": "control_h1_cpe5_r2",
+      "scope": "Small polynomial control with exact result 36",
+      "source_receipt": "tests/artifacts/aa_aa_uv_slowdown/captured_evaluator_replay_cli18/control_h1_cpe5_r2/receipt.json",
+      "status": "complete",
+      "exit_code": 0,
+      "settings": {
+        "iterative_orientation_optimization": false,
+        "summed": false,
+        "summed_function_map": false,
+        "compile": false,
+        "store_atom": false,
+        "do_fn_map_replacements": false,
+        "direct_translation": true,
+        "horner_iterations": 1,
+        "cpe_iterations": 5,
+        "n_cores": 1
+      },
+      "probe_source_revision": "d6e4c13d9b9b301a9e9201875446cbc199028d56",
+      "probe_binary_sha256": "86c73236788babbfd1185e19450dc20fb6d9ba2ad000fa718f42d12363510b09",
+      "atom_bytes": 32,
+      "build_seconds": 0.0010027630000000176,
+      "outer_wall_seconds": 1.2055143179604784,
+      "peak_observed_rss_bytes": 558964736,
+      "peak_observed_vmhwm_bytes": 558964736,
+      "postprocessing_equal_to_input": true,
+      "native_operations": "OperationCount { additions: 2, multiplications: 2, inversions: 0, function_calls: 0 }",
+      "full_gl262_reproduction": false,
+      "exact_result": 36
+    },
+    {
+      "name": "control_h1_cpe5_tree_r1",
+      "scope": "Small polynomial control with exact result 36",
+      "source_receipt": "tests/artifacts/aa_aa_uv_slowdown/captured_evaluator_replay_cli18/control_h1_cpe5_tree_r1/receipt.json",
+      "status": "complete",
+      "exit_code": 0,
+      "settings": {
+        "iterative_orientation_optimization": false,
+        "summed": false,
+        "summed_function_map": false,
+        "compile": false,
+        "store_atom": false,
+        "do_fn_map_replacements": false,
+        "direct_translation": false,
+        "horner_iterations": 1,
+        "cpe_iterations": 5,
+        "n_cores": 1
+      },
+      "probe_source_revision": "d6e4c13d9b9b301a9e9201875446cbc199028d56",
+      "probe_binary_sha256": "86c73236788babbfd1185e19450dc20fb6d9ba2ad000fa718f42d12363510b09",
+      "atom_bytes": 32,
+      "build_seconds": 0.0004572819999999478,
+      "outer_wall_seconds": 1.007593057001941,
+      "peak_observed_rss_bytes": 538660864,
+      "peak_observed_vmhwm_bytes": 538660864,
+      "postprocessing_equal_to_input": true,
+      "native_operations": "OperationCount { additions: 2, multiplications: 2, inversions: 0, function_calls: 0 }",
+      "full_gl262_reproduction": false,
+      "exact_result": 36
+    },
+    {
+      "name": "largest_h1_cpe5_r1",
+      "scope": "One captured physical scalar component",
+      "source_receipt": "tests/artifacts/aa_aa_uv_slowdown/captured_evaluator_replay_cli18/largest_h1_cpe5_r1/receipt.json",
+      "status": "complete",
+      "exit_code": 0,
+      "settings": {
+        "iterative_orientation_optimization": false,
+        "summed": false,
+        "summed_function_map": false,
+        "compile": false,
+        "store_atom": false,
+        "do_fn_map_replacements": false,
+        "direct_translation": true,
+        "horner_iterations": 1,
+        "cpe_iterations": 5,
+        "n_cores": 1
+      },
+      "probe_source_revision": "d6e4c13d9b9b301a9e9201875446cbc199028d56",
+      "probe_binary_sha256": "86c73236788babbfd1185e19450dc20fb6d9ba2ad000fa718f42d12363510b09",
+      "atom_bytes": 3389407083,
+      "build_seconds": 131.55547303,
+      "outer_wall_seconds": 234.97064208600204,
+      "peak_observed_rss_bytes": 27143188480,
+      "peak_observed_vmhwm_bytes": 27143188480,
+      "postprocessing_equal_to_input": true,
+      "native_operations": "OperationCount { additions: 80026, multiplications: 67213, inversions: 21, function_calls: 11 }",
+      "full_gl262_reproduction": false,
+      "input_dump": {
+        "sha256": "66240aab1ee9115af7d8e0c4e5c5291b2cf74ef74a931efe07ce09db84e7fce0",
+        "bytes": 3389426376,
+        "path": "tests/artifacts/aa_aa_uv_slowdown/captured_tensor_replay_v5_candidate/largest_cli18_export/scalar_4.symbolica"
+      }
+    }
+  ],
+  "interrupted_alternate_physical_control": {
+    "name": "largest_h1_cpe5_tree_r1",
+    "direct_translation": false,
+    "compile": false,
+    "status": "failed",
+    "stop_reason": "supervisor_error",
+    "error": "KeyboardInterrupt()",
+    "source_receipt": "tests/artifacts/aa_aa_uv_slowdown/captured_evaluator_replay_cli18/largest_h1_cpe5_tree_r1/receipt.json",
+    "interpretation": "Interrupted diagnostic; neither success nor reproduction of the original panic."
+  },
+  "source_artifacts": [
+    {
+      "path": "tests/artifacts/aa_aa_uv_slowdown/diagnostic_bulk_scalar_tensor_sum/immutable_binary/manifest.json",
+      "bytes": 22195,
+      "sha256": "16c712fa9be4e213b00e80f1a083fc1788be319b27bebd6b3c240fa00454eb42"
+    },
+    {
+      "path": "tests/artifacts/aa_aa_uv_slowdown/diagnostic_bulk_scalar_tensor_sum/GL262_4d_direct_r1/final_failed_audit.json",
+      "bytes": 6211,
+      "sha256": "8a135696ac3fabfd86993aadf4fa565177530d3fa755a80c9630a0945600e16f"
+    },
+    {
+      "path": "tests/artifacts/aa_aa_uv_slowdown/diagnostic_bulk_scalar_tensor_sum/GL262_4d_direct_r1/diagnostic_receipt.json",
+      "bytes": 1317,
+      "sha256": "7ccb8c8f766f9e0f2b85b1bb097b98fa63e7507ed7255f192cb24d29ca1d2de6"
+    },
+    {
+      "path": "tests/artifacts/aa_aa_uv_slowdown/diagnostic_bulk_scalar_tensor_sum/GL262_4d_direct_r1/run_profile.toml",
+      "bytes": 3117,
+      "sha256": "436148c9606ebd212462ef53c224e46f45e5b69dbf3c123f4cad2adf97dae1c0"
+    },
+    {
+      "path": "tests/artifacts/aa_aa_uv_slowdown/diagnostic_bulk_scalar_tensor_sum/GL262_4d_direct_r1/diagnostic.log",
+      "bytes": 532,
+      "sha256": "03991c4f3fc960b76bbdacd4eaab7f19601543f12941db041f8c0f99497ab895"
+    },
+    {
+      "path": "tests/artifacts/aa_aa_uv_slowdown/diagnostic_bulk_scalar_tensor_sum/GL262_4d_direct_r1/pre_evaluator_boundary.json",
+      "bytes": 4341,
+      "sha256": "4f65bd2cb53e02e9cb3addf0efd7943eeb6e83d3edf38f9f9e6f336f570fcc15"
+    },
+    {
+      "path": "Cargo.lock",
+      "bytes": 151252,
+      "sha256": "5ca128a5828fb99e142beb43afdea60cc7ad2c0fd44f0247251331bfb75b488a"
+    },
+    {
+      "path": "tests/artifacts/aa_aa_uv_slowdown/captured_evaluator_replay_cli18/control_h1_cpe5_r2/receipt.json",
+      "bytes": 49122,
+      "sha256": "884f1de3fe03086817c765ddcc7ae4645f9d7f629783a1021b9f7c2c3f4715ef"
+    },
+    {
+      "path": "tests/artifacts/aa_aa_uv_slowdown/captured_evaluator_replay_cli18/control_h1_cpe5.json",
+      "bytes": 957,
+      "sha256": "6cf62e59764b8a1ae1ecccf347e51c4654fbe0507c7c68b491aa7eb13d092379"
+    },
+    {
+      "path": "tests/artifacts/aa_aa_uv_slowdown/captured_evaluator_replay_cli18/control_h1_cpe5_tree_r1/receipt.json",
+      "bytes": 49168,
+      "sha256": "8b794ca0b610d4beb2d0c69e419ce6e5f3562899ff423649c53370cd1daa97b2"
+    },
+    {
+      "path": "tests/artifacts/aa_aa_uv_slowdown/captured_evaluator_replay_cli18/control_h1_cpe5_tree.json",
+      "bytes": 1076,
+      "sha256": "56566cf30c0711c75213126406586d947810a4c81f3c7a8bc55991cfe55e8ece"
+    },
+    {
+      "path": "tests/artifacts/aa_aa_uv_slowdown/captured_evaluator_replay_cli18/largest_h1_cpe5_r1/receipt.json",
+      "bytes": 49337,
+      "sha256": "a3465ba780d44e3fda793c54c60de78aa94b10806af7f200a259bfa633ae8c47"
+    },
+    {
+      "path": "tests/artifacts/aa_aa_uv_slowdown/captured_evaluator_replay_cli18/largest_h1_cpe5.json",
+      "bytes": 1140,
+      "sha256": "272ad6a46da9be1a786e9efb402d1b37adf152e48747f6b8bec4d30321273a7d"
+    },
+    {
+      "path": "tests/artifacts/aa_aa_uv_slowdown/captured_evaluator_replay_cli18/largest_h1_cpe5_tree_r1/receipt.json",
+      "bytes": 42326,
+      "sha256": "7bb04ec6cf5e4ab3f183b74385b8a2270b0f7d461496d6229ce6877551d5aa1a"
+    }
+  ]
+}

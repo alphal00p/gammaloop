@@ -21,7 +21,7 @@ use idenso::{
 use spenso::{shadowing::symbolica_utils::LogPrint, structure::abstract_index::AbstractIndex};
 use symbolica::{
     atom::{Atom, AtomCore, Symbol},
-    parse, parse_lit,
+    function, parse, parse_lit,
 };
 use symbolica_utils::AtomPrintExt;
 
@@ -68,7 +68,8 @@ pub fn align_to_rqft(atom: &Atom, model: &Model) -> Atom {
         .with(Atom::num((1, 2)))
         .replace(CS.nc)
         .with(CS.ca)
-        // RQFT writes the fundamental Dynkin index as T_F = n_f / 2.
+        // RQFT closed-quark-loop references write the flavor-summed index as
+        // T_F = n_f / 2. External projection traces must first be restored to C_F.
         .replace(color_idx!(2, cof!(3)))
         .with(parse!("nf") / Atom::num(2))
         .replace(parse!("UFO::aS"))
@@ -96,29 +97,62 @@ fn scalar_pole_part() {
     },"scalars")
     .unwrap();
 
-    let mut amp = Amplitude::from_graph_list("bub", sunrise).unwrap();
+    let mut results = Vec::new();
+    for project_integrated_uv_cts_onto_tensor_integrals in [true, false] {
+        let mut amp = Amplitude::from_graph_list("bub", sunrise.clone()).unwrap();
 
-    let model = load_generic_model("scalars");
+        let model = load_generic_model("scalars");
 
-    let a = amp.graphs[0]
-        .renormalization_part(&UVgenerationSettings {
+        // The two forest owners can group identical scalar-master Laurent
+        // series differently. Exercise their unchanged comparison for both
+        // finite counterterms and poles, before comparing the Vakint modes.
+        let settings = UVgenerationSettings {
             softct: false,
+            orchestrator: UVOrchestrator::Compare,
+            project_integrated_uv_cts_onto_tensor_integrals,
             vakint: VakintSettings {
                 normalization: "MSbar".to_string(),
                 additional_normalization: "1".to_string(),
+                // Compare symbolic Laurent coefficients, without rounding
+                // transcendental master constants in either input mode.
+                alphaloop: AlphaLoopSettings {
+                    susbstitute_masters: false,
+                },
                 ..Default::default()
             },
             ..Default::default()
-        })
-        .unwrap();
+        };
+        let a = amp.graphs[0].renormalization_part(&settings).unwrap();
 
-    println!("ren part: {:>}", a);
-    println!(
-        "ren part: {:>}",
-        model.apply_parameter_replacement_rules(
-            &model.apply_coupling_replacement_rules(&a.simplify_color().expand())
-        )
-    );
+        println!("ren part: {:>}", a);
+        println!(
+            "ren part: {:>}",
+            model.apply_parameter_replacement_rules(
+                &model.apply_coupling_replacement_rules(&a.simplify_color().expand())
+            )
+        );
+        assert!(
+            !a.is_zero(),
+            "the massive scalar sunset counterterm must be nonzero"
+        );
+        let mut pole_amp = Amplitude::from_graph_list("bub_poles", sunrise.clone()).unwrap();
+        let poles = pole_amp.graphs[0]
+            .renormalization_part(&UVgenerationSettings {
+                renormalization_prescription: RenormalizationPrescriptionSettings {
+                    log_divergent: ApproximationType::PolePart,
+                    massive_power_divergent: ApproximationType::PolePart,
+                    massless_power_divergent: ApproximationType::PolePart,
+                    ..Default::default()
+                },
+                ..settings
+            })
+            .unwrap();
+        assert!(!poles.is_zero());
+        assert!(poles.contains_symbol(GS.dim_epsilon));
+        results.push((a.expression, poles.expression));
+    }
+    assert!((&results[0].0 - &results[1].0).expand().is_zero());
+    assert!((&results[0].1 - &results[1].1).expand().is_zero());
 }
 #[test]
 fn finite_part_quark_lo() {
@@ -141,23 +175,84 @@ fn finite_part_quark_lo() {
     )
     .unwrap();
 
-    let mut amp = Amplitude::from_graph_list("bub", g).unwrap();
+    let mut results = Vec::new();
+    for project_integrated_uv_cts_onto_tensor_integrals in [true, false] {
+        let mut amp = Amplitude::from_graph_list("bub", g.clone()).unwrap();
 
-    let model = load_generic_model("sm");
+        let model = load_generic_model("sm");
 
-    let a = amp.graphs[0]
-        .renormalization_part(&pole_part_uv_settings())
-        .unwrap();
+        // The external color projector closes this fixed-flavor open quark line:
+        // Tr(T^a T^a)/N_c = (N_c^2-1)*T_F/N_c = C_F. Restore that basis before
+        // the closed-loop RQFT alignment can mistake the projection trace for n_f.
+        let external_index = Atom::num((3, 8)) * function!(CS.cas, 2, cof!(3));
+        assert_eq!(
+            external_index.to_cof_dimension_invariants(),
+            color_idx!(2, cof!(3)).to_cof_dimension_invariants(),
+        );
+        let align_external_quark = |part: &Atom| {
+            align_to_rqft(
+                &part
+                    .replace(color_idx!(2, cof!(3)))
+                    .with(external_index.to_pattern()),
+                &model,
+            )
+        };
 
-    println!("ren part: {:>}", a.log_print(Some(80)));
-    // RQFT quark_lo_0_in.h forest order, H = p1.p1*gs^2*cf (cf = 4/3):
-    // F0 (direct) / H = +ep^-1.
-    // Sum / H = +ep^-1; native GammaLoop / RQFT = +1. The one-loop Vakint sign
-    // and the two quark-gluon vertex phase differences cancel.
-    insta::assert_snapshot!(
-        align_to_rqft(&a,&model)
-        .to_bare_ordered_string(),@"cas(2,cof(3))*dot(P(0,mink(4)),P(0,mink(4)))*gs^2*ε^(-1)"
-    );
+        let a = amp.graphs[0]
+            .renormalization_part(&UVgenerationSettings {
+                project_integrated_uv_cts_onto_tensor_integrals,
+                ..pole_part_uv_settings()
+            })
+            .unwrap();
+
+        println!("ren part: {:>}", a.log_print(Some(80)));
+        // RQFT quark_lo_0_in.h forest order, H = p1.p1*gs^2*cf (cf = 4/3):
+        // F0 (direct) / H = +ep^-1.
+        // Sum / H = +ep^-1; native GammaLoop / RQFT = -1. With the physical
+        // one-loop Vakint measure, the two quark-gluon vertex phase differences remain.
+        let aligned_pole = align_external_quark(&a);
+        let expected = parse!(
+            "-1*spenso::cas(2,spenso::cof(3))
+         *spenso::dot(gammalooprs::P(0,spenso::mink(4)),gammalooprs::P(0,spenso::mink(4)))
+         *gs^2*gammalooprs::ε^(-1)"
+        );
+        assert!((&aligned_pole - expected).expand().is_zero());
+
+        let muv = amp.graphs[0]
+            .renormalization_part(&UVgenerationSettings {
+                softct: false,
+                project_integrated_uv_cts_onto_tensor_integrals,
+                ..Default::default()
+            })
+            .unwrap();
+        let muv = align_external_quark(&muv).replace(GS.dim_epsilon).with(0);
+        assert!(!aligned_pole.is_zero());
+        assert!(!muv.is_zero());
+        results.push((aligned_pole.clone(), muv.clone()));
+        // Extract the physical scale-log coefficient by its derivative. This
+        // also covers equivalent forms such as log(mUV²/μ_R²), without imposing
+        // a particular logarithm spelling or rewriting complex branches.
+        let log_coefficient = Atom::var(GS.mu_r_sq) * muv.derivative(GS.mu_r_sq);
+        let contracted_log_coefficient = log_coefficient
+            .normalize_dots()
+            .metric_shorthand_to_dot()
+            .collect_factors();
+        // Vakint can leave a repeated Lorentz dummy as an indexed momentum squared. After
+        // contracting it and stripping the standard i/(16 pi^2) loop normalization,
+        // the MUV scale logarithm must be minus the already verified pole residue.
+        let normalized_log_coefficient = (contracted_log_coefficient
+            * Atom::num(-16)
+            * Atom::i()
+            * Atom::var(Symbol::PI).pow(2))
+        .collect_factors();
+        let pole_residue = (aligned_pole * Atom::var(GS.dim_epsilon)).collect_factors();
+        assert_eq!(
+            normalized_log_coefficient, -pole_residue,
+            "project={project_integrated_uv_cts_onto_tensor_integrals}: the scale derivative of MUV {muv} must match its signed pole"
+        );
+    }
+    assert!((&results[0].0 - &results[1].0).expand().is_zero());
+    assert!((&results[0].1 - &results[1].1).expand().is_zero());
 }
 
 #[test]
@@ -400,22 +495,11 @@ fn finite_part_ghost_2loop() {
 
     let model = load_generic_model("sm");
 
-    #[derive(Debug)]
-    struct ForestStatsSnapshot {
-        forest_size: usize,
-    }
-
-    impl std::fmt::Display for ForestStatsSnapshot {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "forest_size={}", self.forest_size)
-        }
-    }
-
     fn assert_new_paths_match_legacy(
         amp: &mut AmplitudeGraph,
         a: RenormalizationPart,
         new_settings: &UVgenerationSettings,
-    ) -> ForestStatsSnapshot {
+    ) {
         let normalize = |atom: &Atom| {
             atom.replace(parse_lit!(gammalooprs::dim))
                 .with(parse_lit!(4))
@@ -434,10 +518,6 @@ fn finite_part_ghost_2loop() {
             new_part.log_print(Some(120)),
             a.log_print(Some(120))
         );
-
-        ForestStatsSnapshot {
-            forest_size: new_part.stats.forest_node_count,
-        }
     }
 
     // Each F_i below follows the summand order in the corresponding RQFT
@@ -448,11 +528,16 @@ fn finite_part_ghost_2loop() {
     // F1 (140 -> DM -> 0) / H = -3/16*ep^-2.
     // F2 (140 -> 132 -> 0) / H = -3/16*ep^-2.
     // F3 (not emitted by GammaLoop) / H = 0.
-    // Sum / H = -3/16*ep^-2 + 5/32*ep^-1; native GammaLoop / RQFT = +1.
-    insta::assert_snapshot!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-3𝑖/16+5𝑖/32*ε)*(cas(2,coad(8)))^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)");
-    let stats = assert_new_paths_match_legacy(&mut amp.graphs[0], a, &new_settings);
-    insta::assert_snapshot!(stats.to_string(), @"forest_size=6");
+    // Sum / H = -3/16*ep^-2 + 5/32*ep^-1; native GammaLoop / RQFT = -1.
+    // The corrected ghost-gluon rule reverses all three UUV1 vertices in d1;
+    // each forest term changes sign, while the quoted RQFT coefficients stay fixed.
+    let expected = parse!(
+        "(-5𝑖/32*gammalooprs::ε+3𝑖/16)*(spenso::cas(2,spenso::coad(8)))^2
+         *spenso::dot(gammalooprs::P(0,spenso::mink(4)),gammalooprs::P(0,spenso::mink(4)))
+         *gs^4*gammalooprs::ε^(-2)"
+    );
+    assert!((align_to_rqft(&a, &model) - expected).expand().is_zero());
+    assert_new_paths_match_legacy(&mut amp.graphs[0], a, &new_settings);
 
     let a = amp.graphs[1].renormalization_part(&settings).unwrap();
     // RQFT ghost_nlo_1_in.h, H = p1.p1*i_*gs^4*ca^2:
@@ -461,11 +546,13 @@ fn finite_part_ghost_2loop() {
     // F2 (140 -> 132 -> 0) / H = -1/16*ep^-2.
     // F3 (140 -> GS -> 0, not emitted by GammaLoop) / H = 0.
     // Sum / H = -1/16*ep^-2 + 1/32*ep^-1; native GammaLoop / RQFT = -1.
-    insta::assert_snapshot!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1𝑖/32*ε+1𝑖/16)*(cas(2,coad(8)))^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
+    let expected = parse!(
+        "(-1𝑖/32*gammalooprs::ε+1𝑖/16)*(spenso::cas(2,spenso::coad(8)))^2
+         *spenso::dot(gammalooprs::P(0,spenso::mink(4)),gammalooprs::P(0,spenso::mink(4)))
+         *gs^4*gammalooprs::ε^(-2)"
     );
-    let stats = assert_new_paths_match_legacy(&mut amp.graphs[1], a, &new_settings);
-    insta::assert_snapshot!(stats.to_string(), @"forest_size=6");
+    assert!((align_to_rqft(&a, &model) - expected).expand().is_zero());
+    assert_new_paths_match_legacy(&mut amp.graphs[1], a, &new_settings);
 
     let a = amp.graphs[2].renormalization_part(&settings).unwrap();
     // RQFT ghost_nlo_2_in.h, H = p1.p1*i_*gs^4*ca^2:
@@ -474,11 +561,13 @@ fn finite_part_ghost_2loop() {
     // F2 (140 -> FU -> 0) / H = -1/4*ep^-2 + 1/12*ep^-1.
     // F3 (not emitted by GammaLoop) / H = 0.
     // Sum / H = -1/8*ep^-2 + 1/16*ep^-1; native GammaLoop / RQFT = -1.
-    insta::assert_snapshot!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1𝑖/16*ε+1𝑖/8)*(cas(2,coad(8)))^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
+    let expected = parse!(
+        "(-1𝑖/16*gammalooprs::ε+1𝑖/8)*(spenso::cas(2,spenso::coad(8)))^2
+         *spenso::dot(gammalooprs::P(0,spenso::mink(4)),gammalooprs::P(0,spenso::mink(4)))
+         *gs^4*gammalooprs::ε^(-2)"
     );
-    let stats = assert_new_paths_match_legacy(&mut amp.graphs[2], a, &new_settings);
-    insta::assert_snapshot!(stats.to_string(), @"forest_size=4");
+    assert!((align_to_rqft(&a, &model) - expected).expand().is_zero());
+    assert_new_paths_match_legacy(&mut amp.graphs[2], a, &new_settings);
 
     let a = amp.graphs[3].renormalization_part(&settings).unwrap();
     // RQFT ghost_nlo_3_in.h, H = p1.p1*i_*gs^4*ca*nf:
@@ -486,11 +575,13 @@ fn finite_part_ghost_2loop() {
     // F1 (140 -> zw -> 0) / H = +1/2*ep^-2 + 1/3*ep^-1.
     // Sum / H = +1/4*ep^-2 - 5/24*ep^-1; native GammaLoop / RQFT = -1
     // after preserving the antisymmetric color orientation.
-    insta::assert_snapshot!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1𝑖/4+5𝑖/24*ε)*cas(2,coad(8))*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*nf*ε^(-2)"
+    let expected = parse!(
+        "(-1𝑖/4+5𝑖/24*gammalooprs::ε)*spenso::cas(2,spenso::coad(8))
+         *spenso::dot(gammalooprs::P(0,spenso::mink(4)),gammalooprs::P(0,spenso::mink(4)))
+         *gs^4*nf*gammalooprs::ε^(-2)"
     );
-    let stats = assert_new_paths_match_legacy(&mut amp.graphs[3], a, &new_settings);
-    insta::assert_snapshot!(stats.to_string(), @"forest_size=4");
+    assert!((align_to_rqft(&a, &model) - expected).expand().is_zero());
+    assert_new_paths_match_legacy(&mut amp.graphs[3], a, &new_settings);
 
     let a = amp.graphs[4].renormalization_part(&settings).unwrap();
     // RQFT ghost_nlo_4_in.h, H = p1.p1*i_*gs^4*ca^2:
@@ -500,11 +591,13 @@ fn finite_part_ghost_2loop() {
     // F3 (not emitted by GammaLoop) / H = 0.
     // Sum / H = -5/8*ep^-2 + 35/48*ep^-1; native GammaLoop / RQFT = -1.
     // RQFT already includes the graph's 1/2 symmetry factor.
-    insta::assert_snapshot!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-35𝑖/48*ε+5𝑖/8)*(cas(2,coad(8)))^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
+    let expected = parse!(
+        "(-35𝑖/48*gammalooprs::ε+5𝑖/8)*(spenso::cas(2,spenso::coad(8)))^2
+         *spenso::dot(gammalooprs::P(0,spenso::mink(4)),gammalooprs::P(0,spenso::mink(4)))
+         *gs^4*gammalooprs::ε^(-2)"
     );
-    let stats = assert_new_paths_match_legacy(&mut amp.graphs[4], a, &new_settings);
-    insta::assert_snapshot!(stats.to_string(), @"forest_size=4");
+    assert!((align_to_rqft(&a, &model) - expected).expand().is_zero());
+    assert_new_paths_match_legacy(&mut amp.graphs[4], a, &new_settings);
 
     let a = amp.graphs[5].renormalization_part(&settings).unwrap();
     // RQFT ghost_nlo_5_in.h, H = p1.p1*i_*gs^4*ca^2:
@@ -513,11 +606,13 @@ fn finite_part_ghost_2loop() {
     // F2 (140 -> zw -> 0) / H = -1/6*ep^-1.
     // F3 (not emitted by GammaLoop) / H = 0.
     // Sum / H = +1/24*ep^-1; native GammaLoop / RQFT = -1.
-    insta::assert_snapshot!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(cas(2,coad(8)))^2*-1𝑖/24*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+    let expected = parse!(
+        "(spenso::cas(2,spenso::coad(8)))^2*-1𝑖/24
+         *spenso::dot(gammalooprs::P(0,spenso::mink(4)),gammalooprs::P(0,spenso::mink(4)))
+         *gs^4*gammalooprs::ε^(-1)"
     );
-    let stats = assert_new_paths_match_legacy(&mut amp.graphs[5], a, &new_settings);
-    insta::assert_snapshot!(stats.to_string(), @"forest_size=4");
+    assert!((align_to_rqft(&a, &model) - expected).expand().is_zero());
+    assert_new_paths_match_legacy(&mut amp.graphs[5], a, &new_settings);
 }
 
 #[test]
@@ -552,12 +647,14 @@ fn finit_part_ghlo() {
     println!("ren part: {:>}", a);
     // RQFT ghost_lo_0_in.h forest order, H = p1.p1*gs^2*ca:
     // F0 (direct) / H = +1/2*ep^-1.
-    // Sum / H = +1/2*ep^-1; native GammaLoop / RQFT = -1 after preserving
-    // the antisymmetric color orientation.
-    insta::assert_snapshot!(
-        align_to_rqft(&a,&model)
-        .to_bare_ordered_string(),@"-1/2*cas(2,coad(8))*dot(P(0,mink(4)),P(0,mink(4)))*gs^2*ε^(-1)"
+    // Sum / H = +1/2*ep^-1; native GammaLoop / RQFT = +1 with the physical
+    // one-loop Vakint measure and the preserved antisymmetric color orientation.
+    let expected = parse!(
+        "1/2*spenso::cas(2,spenso::coad(8))
+         *spenso::dot(gammalooprs::P(0,spenso::mink(4)),gammalooprs::P(0,spenso::mink(4)))
+         *gs^2*gammalooprs::ε^(-1)"
     );
+    assert!((align_to_rqft(&a, &model) - expected).expand().is_zero());
 }
 
 mod failing {
@@ -658,7 +755,7 @@ mod failing {
     }
 
     #[test]
-    fn finite_part_ghost_3loop() {
+    fn finite_part_ghost_3loop_developed() {
         test_initialise().unwrap();
 
         let model = load_generic_model("sm");
@@ -744,11 +841,12 @@ mod failing {
         // F1, F3..F5, F7, F9 = 0
         // sum(Fi)/H = rat(9/128*ep^-3 - 39/256*ep^-2 + 9/128*ep^-1);
         // Hedge terminals F0={H2y}, F2={GEe}{H2y}, F6={Fyy}{H2y}, and
-        // F8={Fyy}{GEe}{H2y} match these coefficients before coupling replacement.
-        // Their common i*GC_10^4*GC_12 becomes -gs^6, so native GammaLoop / RQFT
-        // = -1 at the model/RQFT convention boundary, not in the forest recursion.
+        // F8={Fyy}{GEe}{H2y} previously matched them before coupling replacement.
+        // Before correcting UUV1, their common i*GC_10^4*GC_12 became -gs^6.
+        // The three corrected ghost-gluon vertices reverse every forest term,
+        // so native GammaLoop / RQFT = +1 at the model convention boundary.
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-9/128+-9/128*ε^2+39/256*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-39/256*ε+9/128+9/128*ε^2)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
         );
 
         let a = amp.graphs[3].renormalization_part(&settings).unwrap();
@@ -761,11 +859,12 @@ mod failing {
         // F1..F6, F8..F13 = 0
         // sum(Fi)/H = rat(-9/64*ep^-2 + 21/128*ep^-1)
         // RQFT uses the ghost momentum at a ghost-gluon vertex, whereas the SM UFO
-        // uses minus the antighost momentum. This exchanges the mirror pair d4/d5:
+        // now uses the antighost momentum. This still exchanges the mirror pair d4/d5:
         // Hedge terminals {H2y}=F0 and {Fyy}{H2y}=F7, while the others are zero.
-        // Their common i*GC_10^4*GC_12 gives native GammaLoop / RQFT = -1.
+        // Their historical common i*GC_10^4*GC_12 gave a relative -1.
+        // Correcting the three UUV1 vertices gives native GammaLoop / RQFT = +1.
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-21/128*ε+9/64)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-2)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-9/64+21/128*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-2)"
         );
 
         let a = amp.graphs[4].renormalization_part(&settings).unwrap();
@@ -784,9 +883,10 @@ mod failing {
         // F1..F4, F6, F8..F12 = 0
         // sum(Fi)/H = rat(9/128*ep^-3 - 39/256*ep^-2 + 27/128*ep^-1)
         // Hedge terminals {H2y}=F0, {GqO}{H2y}=F5, {Fyy}{H2y}=F7, and
-        // {Fyy}{GqO}{H2y}=F13. By the mirror mapping, native GammaLoop / RQFT = -1.
+        // {Fyy}{GqO}{H2y}=F13. The mirror mapping and three corrected UUV1
+        // vertices give native GammaLoop / RQFT = +1.
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-27/128*ε^2+-9/128+39/256*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-39/256*ε+27/128*ε^2+9/128)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
         );
 
         let a = amp.graphs[5].renormalization_part(&settings).unwrap();
@@ -879,6 +979,31 @@ mod failing {
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"0"
         );
+    }
+
+    // Preserve the unfinished references separately: d11..d78 still contain
+    // historical placeholders and cannot validate the developed phase checks.
+    #[test]
+    fn finite_part_ghost_3loop_unfinished() {
+        test_initialise().unwrap();
+
+        let model = load_generic_model("sm");
+        let g: Vec<Graph> = Graph::from_path(
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../tests/resources/graphs/uv_tests/rqft_ghG_3l.dot"
+            ),
+            &model,
+        )
+        .unwrap();
+
+        let mut amp = Amplitude::from_graph_list("bub", g).unwrap();
+        assert_eq!(amp.graphs.len(), 78);
+        for (index, graph) in amp.graphs.iter().enumerate() {
+            assert_eq!(graph.graph.name, format!("d{}", index + 1));
+        }
+
+        let settings = rqft_3loop_settings();
 
         let a = amp.graphs[10].renormalization_part(&settings).unwrap();
         // d11: RQFT `ghost_nnlo_10`.

@@ -60,6 +60,10 @@ integrate = 10
 
 [[command_blocks]]
 name = "generate_diagrams"
+# A^{mu nu} = -i*(q^2*g^{mu nu}-q^mu*q^nu)*Pi defines these form factors.
+# The transverse projector leaves -i*Pi. The second projector does so at
+# q^2=0 as well: r=q-2*q3 gives r_mu*r_nu*(q^2*g^{mu nu}-q^mu*q^nu)=-4*q0^4.
+# One loop-independent i therefore extracts Pi for either prescription.
 commands = [
   "import model sm-default.json",
   "set global kv global.n_cores.feyngen=10",

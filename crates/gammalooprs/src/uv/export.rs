@@ -1,13 +1,13 @@
 use color_eyre::Result;
 use eyre::{Context, eyre};
-use linnet::half_edge::subgraph::{SubGraphLike, SubSetOps};
+use linnet::half_edge::subgraph::SubSetOps;
 use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
 use symbolica::atom::{Atom, AtomCore};
 
 use crate::{
     cff::CutCFFIndex,
     graph::{
-        FeynmanGraph, Graph,
+        Graph,
         cuts::{CutSet, ResidueSelector},
     },
     integrands::process::ProcessIntegrand,
@@ -62,9 +62,10 @@ pub(crate) struct UVForestNodeExpression {
 }
 
 impl ProcessIntegrand {
-    pub fn export_uv_forest_graph(
+    pub(crate) fn export_uv_forest_graph(
         &self,
         graph_id: usize,
+        orientation: Option<OrientationProjection<'_>>,
         generation_settings: &GenerationSettings,
         export_settings: &UVForestExportSettings,
     ) -> Result<UVForestExport> {
@@ -78,15 +79,13 @@ impl ProcessIntegrand {
                     )
                 })?;
                 let cut_structure = CutStructure::empty(&term.graph);
-                let post_factor = (Atom::var(crate::utils::GS.pi) * Atom::num(2))
-                    .pow(3 * term.graph.get_loop_number() as i64);
                 export_graph(
                     &term.graph,
                     cut_structure,
-                    term.orientations.iter().cloned().collect(),
+                    orientation,
                     generation_settings,
                     export_settings,
-                    |atom| atom / &post_factor,
+                    |_, atom| atom,
                 )
             }
             Self::CrossSection(integrand) => {
@@ -103,7 +102,7 @@ impl ProcessIntegrand {
                     .iter()
                     .map(|cuts| CutSet {
                         residue_selector: ResidueSelector {
-                            lu_cut: Some(cuts.related_esurface_group.clone()),
+                            lu: Some(cuts.lu_cut_selection(&term.graph, &term.cuts)),
                             left_th_cut: None,
                             right_th_cut: None,
                         },
@@ -117,20 +116,22 @@ impl ProcessIntegrand {
                     })
                     .collect();
                 let cut_structure = CutStructure { cuts };
-                let loop_number = term.graph.cyclotomatic_number(&term.graph.full_filter())
-                    - term.graph.initial_state_cut.nedges(&term.graph);
-                let loop_3 = loop_number as i64 * 3;
-                let lu_prefactor = Atom::var(crate::utils::GS.rescale_star).pow(loop_3)
-                    * Atom::var(crate::utils::GS.hfunction_lu_cut)
-                    / (Atom::num(2) * Atom::var(crate::utils::GS.pi)).pow(loop_3 - 1);
+                // Finalized UV nodes already include the CFF spatial measure.
+                // Reuse the physical cut-group conversion, as production does.
+                let lu_prefactors = term
+                    .cut_group_data
+                    .cut_groups
+                    .iter()
+                    .map(|group| group.lu_prefactor(&term.graph, &term.cuts))
+                    .collect::<Result<Vec<_>>>()?;
 
                 export_graph(
                     &term.graph,
                     cut_structure,
-                    term.orientations.iter().cloned().collect(),
+                    orientation,
                     generation_settings,
                     export_settings,
-                    |atom| atom * &lu_prefactor,
+                    |forest_index, atom| atom * &lu_prefactors[forest_index],
                 )
             }
         }
@@ -140,12 +141,10 @@ impl ProcessIntegrand {
 fn export_graph(
     graph: &Graph,
     cut_structure: CutStructure,
-    orientations: Vec<
-        linnet::half_edge::involution::EdgeVec<linnet::half_edge::involution::Orientation>,
-    >,
+    orientation: Option<OrientationProjection<'_>>,
     generation_settings: &GenerationSettings,
     export_settings: &UVForestExportSettings,
-    mut post_process: impl FnMut(Atom) -> Atom,
+    mut post_process: impl FnMut(usize, Atom) -> Atom,
 ) -> Result<UVForestExport> {
     if generation_settings.uv.orchestrator == UVOrchestrator::Compare {
         return Err(eyre!(
@@ -168,10 +167,10 @@ fn export_graph(
                 &forest_name,
                 &mut graph,
                 single_cut,
-                &orientations,
+                orientation,
                 generation_settings,
                 export_settings,
-                &mut post_process,
+                &mut |atom| post_process(forest_index, atom),
                 &mut forest_dot,
                 &mut node_terms,
             )?,
@@ -180,10 +179,10 @@ fn export_graph(
                 &forest_name,
                 &mut graph,
                 single_cut,
-                &orientations,
+                orientation,
                 generation_settings,
                 export_settings,
-                &mut post_process,
+                &mut |atom| post_process(forest_index, atom),
                 &mut forest_dot,
                 &mut node_terms,
             )?,
@@ -204,9 +203,7 @@ fn export_legacy_forest(
     forest_name: &str,
     graph: &mut Graph,
     cut_structure: CutStructure,
-    orientations: &[linnet::half_edge::involution::EdgeVec<
-        linnet::half_edge::involution::Orientation,
-    >],
+    orientation: Option<OrientationProjection<'_>>,
     generation_settings: &GenerationSettings,
     export_settings: &UVForestExportSettings,
     post_process: &mut impl FnMut(Atom) -> Atom,
@@ -225,7 +222,10 @@ fn export_legacy_forest(
         return Ok(());
     }
 
-    compute_legacy_forest(graph, &mut cut_forests, orientations, generation_settings)?;
+    let orientation = orientation.ok_or_else(|| {
+        eyre!("Computed UV forest export requires its stored production CFF expression")
+    })?;
+    compute_legacy_forest(graph, &mut cut_forests, orientation, generation_settings)?;
     let forest = cut_forests
         .forests
         .first()
@@ -243,15 +243,13 @@ fn export_legacy_forest(
 fn compute_legacy_forest(
     graph: &mut Graph,
     cut_forests: &mut CutForests,
-    orientations: &[linnet::half_edge::involution::EdgeVec<
-        linnet::half_edge::involution::Orientation,
-    >],
+    orientation: OrientationProjection<'_>,
     generation_settings: &GenerationSettings,
 ) -> Result<()> {
     cut_forests.compute(
         graph,
         crate::utils::vakint()?,
-        OrientationProjection::new(orientations, &generation_settings.orientation_pattern),
+        orientation,
         &generation_settings.uv,
     )
 }
@@ -262,9 +260,7 @@ fn export_hedge_poset_forest(
     forest_name: &str,
     graph: &mut Graph,
     cut_structure: CutStructure,
-    orientations: &[linnet::half_edge::involution::EdgeVec<
-        linnet::half_edge::involution::Orientation,
-    >],
+    orientation: Option<OrientationProjection<'_>>,
     generation_settings: &GenerationSettings,
     export_settings: &UVForestExportSettings,
     post_process: &mut impl FnMut(Atom) -> Atom,
@@ -283,7 +279,9 @@ fn export_hedge_poset_forest(
     forests.compute(
         graph,
         crate::utils::vakint()?,
-        OrientationProjection::new(orientations, &generation_settings.orientation_pattern),
+        orientation.ok_or_else(|| {
+            eyre!("Computed UV forest export requires its stored production CFF expression")
+        })?,
         &generation_settings.uv,
     )?;
     node_terms.extend(
@@ -403,14 +401,20 @@ mod tests {
     use symbolica::{atom::Atom, function};
 
     use super::{
-        UVForestNodeExpression, UVForestNodeTerm, node_expression_to_dot, sanitize_file_component,
+        UVForestExportSettings, UVForestNodeExpression, UVForestNodeTerm, export_graph,
+        node_expression_to_dot, sanitize_file_component,
     };
     use crate::{
         cff::CutCFFIndex,
         dot,
-        graph::{Graph, parse::IntoGraph},
+        graph::{FeynmanGraph, Graph, parse::IntoGraph},
         initialisation::test_initialise,
+        settings::global::GenerationSettings,
         utils::GS,
+        uv::{
+            UVOrchestrator,
+            approx::{CutStructure, OrientationProjection},
+        },
     };
 
     #[test]
@@ -481,5 +485,275 @@ mod tests {
 
         assert!(exported.dot.contains(r#"full_num = "op(\"Tr\")(1)";"#));
         assert!(!exported.dot.contains("gammalooprs::Truncate"));
+    }
+
+    #[test]
+    fn computed_exports_match_physical_production_normalization() -> color_eyre::Result<()> {
+        use crate::{
+            feyngen::GenerationType,
+            processes::{Process, ProcessCollection, ProcessDefinition},
+            settings::{GlobalSettings, RuntimeSettings},
+            utils::{W_, load_generic_model},
+            uv::marker::UvMarker,
+        };
+        use linnet::half_edge::{involution::EdgeIndex, subgraph::SubSetOps};
+        use symbolica::atom::{AtomCore, AtomView};
+
+        test_initialise()?;
+        let model = load_generic_model("scalars");
+        let pool = rayon::ThreadPoolBuilder::new().num_threads(1).build()?;
+        let runtime = RuntimeSettings::default();
+        for orchestrator in [UVOrchestrator::LegacyDagForest, UVOrchestrator::HedgePoset] {
+            // One amplitude contour and two Born cut multiplicities expose both
+            // a lost cut i and any second insertion of the spatial measure.
+            for multiplicity in [0, 2, 3] {
+                let (kind, source) = if multiplicity == 0 {
+                    (
+                        GenerationType::Amplitude,
+                        include_str!(concat!(
+                            env!("CARGO_MANIFEST_DIR"),
+                            "/../../tests/resources/graphs/scalar_bubble.dot"
+                        ))
+                        .to_string(),
+                    )
+                } else {
+                    let mut source = String::from(
+                        "digraph scalar_born { ext [style=invis]; \
+                         ext -> left [particle=scalar_2,is_cut=0]; \
+                         right -> ext [particle=scalar_2,is_cut=0];",
+                    );
+                    for _ in 0..multiplicity {
+                        source.push_str("left -> right [particle=scalar_0];");
+                    }
+                    source.push('}');
+                    (GenerationType::CrossSection, source)
+                };
+                let graphs = Graph::from_string(&source, &model)?;
+                let definition = ProcessDefinition::from_graph_list(&graphs, kind, &model)?;
+                let mut process = Process::from_graph_list(
+                    "export_phase".into(),
+                    "default".into(),
+                    graphs,
+                    kind,
+                    Some(definition),
+                    None,
+                    &model,
+                )?;
+                let mut settings = GlobalSettings::default();
+                settings.generation.uv.orchestrator = orchestrator;
+                settings.generation.uv.subtract_uv = false;
+                settings.generation.uv.generate_integrated = false;
+                settings.generation.threshold_subtraction.enable_thresholds = false;
+                settings.generation.explicit_orientation_sum_only = true;
+                settings.generation.evaluator.compile = false;
+                process.preprocess(&model, &settings, &(&runtime).into(), &pool)?;
+                process.generate_integrands(&model, &settings, (&runtime).into(), &pool)?;
+                let (graph, production, expected) = match &process.collection {
+                    ProcessCollection::Amplitudes(amplitudes) => {
+                        let graph = &amplitudes["default"].graphs[0];
+                        (
+                            &graph.graph,
+                            graph.derived_data.cff_expression.as_ref().unwrap(),
+                            graph.derived_data.resolved_integrand()?,
+                        )
+                    }
+                    ProcessCollection::CrossSections(cross_sections) => {
+                        let graph = &cross_sections["default"].supergraphs[0];
+                        (
+                            &graph.graph,
+                            graph.derived_data.global_cff_expression.as_ref().unwrap(),
+                            graph
+                                .derived_data
+                                .cut_paramatric_integrand
+                                .iter()
+                                .map(|integrand| integrand.integrands.resolved())
+                                .collect::<color_eyre::Result<Vec<_>>>()?
+                                .iter()
+                                .flat_map(|integrands| integrands.iter())
+                                .map(|(_, atom)| atom.clone())
+                                .sum::<Atom>(),
+                        )
+                    }
+                };
+                let options = graph.production_cff_3d_expression_options(&settings.generation)?;
+                let orientation = OrientationProjection::exact_expression(
+                    production,
+                    &options,
+                    &settings.generation.orientation_pattern,
+                    true,
+                );
+                let exported = process
+                    .get_integrand("default")?
+                    .require_generated()?
+                    .export_uv_forest_graph(
+                        0,
+                        Some(orientation),
+                        &settings.generation,
+                        &UVForestExportSettings { computed: true },
+                    )?;
+                let split = graph
+                    .iter_edges_of(
+                        &graph
+                            .full_filter()
+                            .subtract(&graph.initial_state_cut)
+                            .subtract(&graph.tree_edges),
+                    )
+                    .map(|(_, edge, _)| GS.split_mom_pattern_simple(edge))
+                    .collect::<Vec<_>>();
+                let mut actual = Atom::Zero;
+                for term in &exported.node_terms {
+                    for parsed in Graph::from_string(&term.dot, &model)? {
+                        actual += UvMarker::new(&settings.generation.uv).finish(
+                            &parsed
+                                .global_prefactor
+                                .num
+                                .replace_multiple(&split)
+                                .replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_))
+                                .with(W_.d_),
+                        );
+                    }
+                }
+                // Compare the stored trees first. If their factorizations differ,
+                // evaluate those trees directly at exact nonsingular points.
+                // These signed checks certify the sampled values, not a symbolic
+                // identity; neither numerator is expanded or polynomialized.
+                if actual != expected {
+                    let mut inputs = actual
+                        .get_all_indeterminates(false)
+                        .into_iter()
+                        .chain(expected.get_all_indeterminates(false))
+                        .map(|input| input.to_owned())
+                        .collect::<Vec<_>>();
+                    inputs.sort();
+                    inputs.dedup();
+                    for base in [3, 5, 7] {
+                        let mut actual_value = actual.clone();
+                        let mut expected_value = expected.clone();
+                        for (index, input) in inputs.iter().enumerate() {
+                            let value = Atom::num(base).pow(index as i64 + 1);
+                            actual_value = actual_value.replace(input.clone()).with(value.clone());
+                            expected_value = expected_value.replace(input.clone()).with(value);
+                        }
+                        assert!(matches!(actual_value.as_view(), AtomView::Num(_)));
+                        assert!(matches!(expected_value.as_view(), AtomView::Num(_)));
+                        assert!(!expected_value.is_zero());
+                        assert_eq!(
+                            actual_value, expected_value,
+                            "{kind}/{orchestrator}: computed export differs from production at base {base}"
+                        );
+                    }
+                }
+                if multiplicity != 0 {
+                    let [coupling, expression] = model.get_coupling("SCALAR_COUPLING").rep_rule();
+                    let lambda: Atom = model.get_parameter("lam").name.into();
+                    // The runtime tree-denominator function is the identity;
+                    // these contact Born graphs have an empty product inside it.
+                    let mut physical = actual
+                        .replace(GS.wrap_tree_denoms(Atom::one()))
+                        .with(Atom::one())
+                        .replace(coupling)
+                        .with(expression)
+                        .replace(lambda)
+                        .with(Atom::one())
+                        .replace(GS.rescale_star)
+                        .with(Atom::one())
+                        .replace(GS.hfunction_lu_cut)
+                        .with(Atom::one());
+                    for edge in 0..graph.n_edges() {
+                        physical = physical.replace(GS.ose(EdgeIndex(edge))).with(Atom::one());
+                    }
+                    // With all cut energies set to one, |A|²=1 and no graph
+                    // symmetry factor, dPhi_n has residue coefficient
+                    // 2pi / [(2pi)^(3(n-1)) * 2^n]. The LU derivative is separate.
+                    let two_pi = Atom::num(2) * Atom::var(GS.pi);
+                    let born = &two_pi
+                        / (two_pi.pow(3 * (multiplicity - 1)) * Atom::num(2).pow(multiplicity));
+                    assert_eq!(
+                        physical, born,
+                        "{orchestrator}: scalar Born export has the wrong phase or normalization"
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn computed_export_retains_nonempty_forests_in_all_routes_and_orchestrators()
+    -> color_eyre::Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph computed_direct_forest {
+            edge [num=1 mass=1]
+            node [num=1]
+            a -> b [id=0 lmb_id=0]
+            a -> b [id=1]
+        })?;
+        let mut generation = GenerationSettings::default();
+        assert!(generation.uv.subtract_uv);
+        assert!(generation.uv.generate_integrated);
+        assert_eq!(
+            generation.uv.final_integrand,
+            crate::uv::settings::FinalIntegrandDimension::ThreeD
+        );
+        let options = graph.production_cff_3d_expression_options(&generation)?;
+        let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+        let production = graph.generate_3d_expression_for_integrand(
+            &[],
+            &canonization,
+            &options,
+            Some(&Atom::one()),
+        )?;
+        assert!(!production.expression.orientations.is_empty());
+
+        for orchestrator in [UVOrchestrator::LegacyDagForest, UVOrchestrator::HedgePoset] {
+            generation.uv.orchestrator = orchestrator;
+            for (explicit_sum, projected) in [(false, false), (true, false), (true, true)] {
+                generation.explicit_orientation_sum_only = explicit_sum;
+                generation.uv.local_uv_cts_from_expanded_4d_integrands = projected;
+                let projection = OrientationProjection::exact_expression(
+                    &production,
+                    &options,
+                    &generation.orientation_pattern,
+                    generation.explicit_orientation_sum_only,
+                );
+                let exported = export_graph(
+                    &graph,
+                    CutStructure::empty(&graph),
+                    Some(projection),
+                    &generation,
+                    &UVForestExportSettings { computed: true },
+                    |_, atom| atom,
+                )?;
+                let node_indices = exported
+                    .node_terms
+                    .iter()
+                    .map(|term| term.node_index)
+                    .collect::<std::collections::BTreeSet<_>>();
+                // Require the empty-forest root and at least one actual UV node;
+                // merely exporting the uncomputed forest DOT misses this failure.
+                assert!(
+                    node_indices.len() > 1,
+                    "{} (summed={explicit_sum}, projected={projected}): no nonempty computed forest",
+                    generation.uv.orchestrator
+                );
+                assert!(exported.node_terms.iter().all(|term| {
+                    term.forest_index == 0
+                        && term.residue_index == CutCFFIndex::new_all_none()
+                        && term.dot.contains("forest_residue_index")
+                }));
+
+                let topology = export_graph(
+                    &graph,
+                    CutStructure::empty(&graph),
+                    None,
+                    &generation,
+                    &UVForestExportSettings { computed: false },
+                    |_, atom| atom,
+                )?;
+                assert!(!topology.forest_dot.is_empty());
+                assert!(topology.node_terms.is_empty());
+            }
+        }
+        Ok(())
     }
 }

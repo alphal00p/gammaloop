@@ -1,0 +1,22 @@
+[package]
+name = "symbolica-evaluator-mre"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+symbolica = { git = "https://github.com/alphal00p/symbolica", rev = "4d0a833eb8e059d1f95bdae5abed2559830b235f", default-features = false, features = ["gmp", "native_code_generation"] }
+
+[patch.crates-io]
+numerica = { git = "https://github.com/alphal00p/symbolica", rev = "4d0a833eb8e059d1f95bdae5abed2559830b235f" }
+graphica = { git = "https://github.com/alphal00p/symbolica", rev = "4d0a833eb8e059d1f95bdae5abed2559830b235f" }
+
+[profile.dev-optim]
+inherits = "dev"
+opt-level = 2
+debug-assertions = true
+
+[profile.dev-optim.package."*"]
+opt-level = 3

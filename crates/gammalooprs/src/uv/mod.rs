@@ -2,10 +2,12 @@ use std::{
     collections::BTreeMap,
     hash::Hash,
     ops::{Mul, Neg},
+    sync::Arc,
 };
 
 use crate::{
-    GammaLoopContext, cff::CutCFFIndex, numerator::aind::Aind, utils::GS, uv::approx::Rooted,
+    GammaLoopContext, cff::CutCFFIndex, integrands::process::param_builder::FnMapEntry,
+    numerator::aind::Aind, utils::GS, uv::approx::Rooted,
 };
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
@@ -19,7 +21,10 @@ use spenso::{
         representation::{Minkowski, RepName},
     },
 };
-use symbolica::atom::Atom;
+use symbolica::{
+    atom::{Atom, AtomCore},
+    symbol,
+};
 
 use linnet::half_edge::involution::HedgePair;
 
@@ -38,27 +43,152 @@ pub(crate) fn spenso_lor_atom(tag: i32, ind: impl Into<Aind>, dim: impl Into<Dim
     spenso_lor(tag, ind, dim).to_symbolic(None).unwrap()
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct IntegrandExpr {
-    integrands: BTreeMap<CutCFFIndex, Atom>,
-    // add_arg: Option<Atom>,
-}
-
+/// Cut-indexed factorized integrands. UV markers and final tensor replacements
+/// act on these expressions before evaluator construction. Shared tensor-family
+/// bodies are retained separately; ordinary root maps never multiply or mark them.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
-pub struct Integrands(BTreeMap<CutCFFIndex, Atom>);
+pub struct Integrands {
+    atoms: BTreeMap<CutCFFIndex, Atom>,
+    numerators: Vec<Arc<FnMapEntry>>,
+}
 
 impl Integrands {
     pub fn map<F: FnMut(&Atom) -> Atom>(&self, mut f: F) -> Self {
-        Integrands(self.0.iter().map(|(k, v)| (*k, f(v))).collect())
+        Self {
+            atoms: self.iter().map(|(key, atom)| (*key, f(atom))).collect(),
+            numerators: self.numerators.clone(),
+        }
     }
 
     pub fn fallible_map<F: FnMut(&Atom) -> Result<Atom>>(&self, mut f: F) -> Result<Self> {
-        self.0.iter().map(|(k, v)| Ok((*k, f(v)?))).collect()
+        Ok(Self {
+            atoms: self
+                .iter()
+                .map(|(key, atom)| Ok((*key, f(atom)?)))
+                .collect::<Result<_>>()?,
+            numerators: self.numerators.clone(),
+        })
     }
 
+    /// Iterate over the factorized expressions passed to evaluators.
     pub fn iter(&self) -> impl Iterator<Item = (&CutCFFIndex, &Atom)> {
-        self.0.iter()
+        self.atoms.iter()
+    }
+
+    pub(crate) fn numerators(&self) -> &[Arc<FnMapEntry>] {
+        &self.numerators
+    }
+
+    /// Replace the complete flat definition store. Equal definitions share one
+    /// entry; a reused call with a different body or binding is an error.
+    pub(crate) fn with_numerators(
+        mut self,
+        numerators: impl IntoIterator<Item = Arc<FnMapEntry>>,
+    ) -> Result<Self> {
+        let family = symbol!("gammalooprs::uv::numerator_family");
+        let mut definitions: BTreeMap<Vec<Atom>, Arc<FnMapEntry>> = BTreeMap::new();
+        for numerator in numerators {
+            let parameters = numerator
+                .args
+                .iter()
+                .cloned()
+                .map(Atom::from)
+                .collect::<Vec<_>>();
+            if numerator.tags.is_empty()
+                || numerator.lhs
+                    != family.call_args(
+                        numerator
+                            .tags
+                            .iter()
+                            .cloned()
+                            .chain(parameters.iter().cloned()),
+                    )
+                // Sequential formal substitution must not capture a fixed tag
+                // or alter another formal key before that key is substituted.
+                || parameters.iter().enumerate().any(|(index, parameter)| {
+                    numerator.tags.iter().any(|tag| tag.contains(parameter))
+                        || parameters[..index].iter().any(|other| {
+                            other.contains(parameter) || parameter.contains(other)
+                        })
+                })
+            {
+                return Err(eyre!(
+                    "invalid retained numerator binding {}",
+                    numerator.lhs
+                ));
+            }
+            if let Some(existing) = definitions.get(&numerator.tags) {
+                if existing != &numerator {
+                    return Err(eyre!(
+                        "conflicting retained numerator definition for {}",
+                        numerator.lhs
+                    ));
+                }
+                continue;
+            }
+            if numerator.rhs.contains_symbol(family) {
+                return Err(eyre!(
+                    "retained numerator definitions must be flat: {} contains a family call",
+                    numerator.lhs
+                ));
+            }
+            definitions.insert(numerator.tags.clone(), numerator);
+        }
+        self.numerators = definitions.into_values().collect();
+        Ok(self)
+    }
+
+    /// Transform shared bodies explicitly, preserving their call signatures and
+    /// the cut-indexed roots. Unchanged bodies retain their existing Arc.
+    pub(crate) fn map_numerators(
+        &self,
+        mut map: impl FnMut(&Atom) -> Result<Atom>,
+    ) -> Result<Self> {
+        let numerators = self
+            .numerators
+            .iter()
+            .map(|entry| {
+                let rhs = map(&entry.rhs)?;
+                Ok(if rhs == entry.rhs {
+                    Arc::clone(entry)
+                } else {
+                    Arc::new(FnMapEntry {
+                        rhs,
+                        ..entry.as_ref().clone()
+                    })
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        self.clone().with_numerators(numerators)
+    }
+
+    /// Materialize a semantic view with the existing argument-aware replacement
+    /// rules. A single substitution pass suffices for this flat store; any
+    /// remaining family call is unresolved or cyclic and must not escape.
+    pub(crate) fn resolved(&self) -> Result<Self> {
+        let validated = self
+            .clone()
+            .with_numerators(self.numerators.iter().cloned())?;
+        let replacements = validated
+            .numerators
+            .iter()
+            .map(|entry| entry.replacement())
+            .collect::<Vec<_>>();
+        let mut resolved = validated.map(|atom| atom.replace_multiple(&replacements));
+        let family = symbol!("gammalooprs::uv::numerator_family");
+        if resolved
+            .iter()
+            .any(|(_, atom)| atom.contains_symbol(family))
+        {
+            return Err(eyre!("unresolved or cyclic retained numerator family call"));
+        }
+        resolved.numerators.clear();
+        Ok(resolved)
+    }
+
+    pub(crate) fn zero_like(&self) -> Self {
+        self.map(|_| Atom::Zero)
     }
 
     pub fn checked_zip(
@@ -66,9 +196,9 @@ impl Integrands {
         other: &Integrands,
         mut map: impl FnMut(&CutCFFIndex, &Atom, &Atom) -> Result<Atom>,
     ) -> Result<Integrands> {
-        self.0
+        let atoms = self
             .iter()
-            .merge_join_by(&other.0, |(left_key, _), (right_key, _)| {
+            .merge_join_by(other.iter(), |(left_key, _), (right_key, _)| {
                 left_key.cmp(right_key)
             })
             .map(|pair| match pair {
@@ -80,20 +210,61 @@ impl Integrands {
                     Err(eyre!("left integrands are missing key {key:?}"))
                 }
             })
-            .collect()
+            .collect::<Result<_>>()?;
+        Self {
+            atoms,
+            numerators: Vec::new(),
+        }
+        .with_numerators(self.numerators.iter().chain(&other.numerators).cloned())
     }
 
     pub fn zip_mul(&self, other: &Integrands) -> Result<Integrands> {
         self.checked_zip(other, |_, v1, v2| Ok(v1 * v2))
     }
-    pub fn zip_add(&self, other: &Integrands) -> Result<Integrands> {
-        self.checked_zip(other, |_, v1, v2| Ok(v1 + v2))
+
+    /// Validate every cut-key shape, then merge each symbolic sum once. Pairwise
+    /// accumulation repeatedly copies the already assembled residue numerator.
+    pub fn zip_add(self, others: impl IntoIterator<Item = Self>) -> Result<Self> {
+        let mut numerators = self.numerators;
+        let mut terms = self
+            .atoms
+            .into_iter()
+            .map(|(key, atom)| (key, vec![atom]))
+            .collect::<BTreeMap<_, _>>();
+        for other in others {
+            numerators.extend(other.numerators);
+            for pair in terms
+                .iter_mut()
+                .merge_join_by(other.atoms, |(left, _), (right, _)| (*left).cmp(right))
+            {
+                match pair {
+                    EitherOrBoth::Both((_, terms), (_, atom)) => terms.push(atom),
+                    EitherOrBoth::Left((key, _)) => {
+                        return Err(eyre!("right integrands are missing key {key:?}"));
+                    }
+                    EitherOrBoth::Right((key, _)) => {
+                        return Err(eyre!("left integrands are missing key {key:?}"));
+                    }
+                }
+            }
+        }
+        Self {
+            atoms: terms
+                .into_iter()
+                .map(|(key, terms)| (key, Atom::add_many(terms)))
+                .collect(),
+            numerators: Vec::new(),
+        }
+        .with_numerators(numerators)
     }
 }
 
 impl FromIterator<(CutCFFIndex, Atom)> for Integrands {
     fn from_iter<I: IntoIterator<Item = (CutCFFIndex, Atom)>>(iter: I) -> Self {
-        Integrands(BTreeMap::from_iter(iter))
+        Self {
+            atoms: BTreeMap::from_iter(iter),
+            numerators: Vec::new(),
+        }
     }
 }
 
@@ -123,12 +294,12 @@ impl Mul<&Atom> for Integrands {
 
 impl Rooted for Integrands {
     fn root() -> Self {
-        Integrands(BTreeMap::from([(
-            CutCFFIndex::new_all_none(),
-            Atom::num(1),
-        )]))
+        [(CutCFFIndex::new_all_none(), Atom::num(1))]
+            .into_iter()
+            .collect()
     }
 }
+
 #[allow(dead_code)]
 pub(crate) fn is_not_paired(pair: &HedgePair) -> bool {
     !pair.is_paired()
@@ -157,7 +328,6 @@ pub mod wood;
 pub use wood::Wood;
 
 pub mod approx;
-pub use approx::ApproxOp;
 
 pub mod export;
 

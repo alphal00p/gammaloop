@@ -90,11 +90,11 @@ fn aaa() {
         elapsed
     );
 
-    let expanded_simplified = simplified.expand();
+    let factored_simplified = simplified.collect_factors();
     println!(
         "Gamma simplified: {}, {} terms",
-        expanded_simplified.log_print(Some(120)),
-        expanded_simplified.nterms(),
+        factored_simplified.log_print(Some(120)),
+        factored_simplified.nterms(),
     );
 
     let evaluator_settings = EvaluatorSettings {
@@ -165,7 +165,7 @@ fn aaa() {
     let mut size_table_builder = Builder::new();
     size_table_builder.push_record([
         "expression".to_string(),
-        "size (bytes)".to_string(),
+        "source atoms (bytes)".to_string(),
         "number of multiplications".to_string(),
         "number of additions".to_string(),
         "spenso time".to_string(),
@@ -192,12 +192,14 @@ fn aaa() {
     for (name, expr) in [
         ("Concretized", num),
         ("Simplified", simplified),
-        ("Expanded", expanded_simplified),
+        ("Factored", factored_simplified),
     ] {
         println!("Creating evaluator for {}", name);
         let (mut evaluator, timings) = EvaluatorStack::new_with_timings(
             std::slice::from_ref(&expr),
             &evaluator_param_builder,
+            &[],
+            &[],
             &[],
             None,
             &evaluator_settings,
@@ -228,9 +230,21 @@ fn aaa() {
 
         size_table_builder.push_record([
             name.to_string(),
-            evaluator.single_parametric.exprs.as_ref().unwrap()[0]
-                .as_view()
-                .get_byte_size()
+            evaluator
+                .single_parametric
+                .exprs
+                .as_ref()
+                .unwrap()
+                .iter()
+                .chain(
+                    evaluator
+                        .single_parametric
+                        .fn_map_entries
+                        .iter()
+                        .flat_map(|entry| [&entry.lhs, &entry.rhs]),
+                )
+                .map(|atom| atom.as_view().get_byte_size())
+                .sum::<usize>()
                 .to_string(),
             operation_count.multiplications.to_string(),
             operation_count.additions.to_string(),

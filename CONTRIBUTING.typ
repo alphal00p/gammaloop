@@ -52,6 +52,107 @@ These rules are intentionally broad and should shape most code changes.
   scratch docs, local example edits, profiling outputs, etc.) unless the task
   clearly requires them.
 
+=== Discrepancy Triage
+<discrepancy-triage>
+Before investigating an implementation mismatch at a low level, first
+perform a bird\'s-eye comparison of the two complete pipelines. This
+step is mandatory: it prevents a difference in a shallow representation
+boundary from being debugged as a problem in shared algebra or physics.
+
++ Write down the inputs, requested modes, and ordered processing stages
+  for both routes. Mark every stage as shared or different, and identify
+  the last shared boundary and the first boundary that can produce
+  different state.
++ Record the smallest result matrix that distinguishes the routes.
+  Toggle one independent feature at a time, such as empty versus
+  nonempty UV forest, local versus integrated counterterms, threshold
+  subtraction, cut, residue order, LMB channel, orientation, evaluator
+  mode, and numeric precision.
++ Apply logical exclusions before proposing causes. A mechanism shared
+  by two routes cannot explain a difference between them unless the
+  inputs reaching that mechanism have already diverged. An independently
+  validated downstream engine is not a candidate until its two actual
+  inputs are shown to differ or an identical-input A/B test fails.
++ Inspect the representation at the first differing boundary before
+  tracing deeper code. Prefer durable artifacts such as
+  `save standalone --json`, UV forest exports, generation reports, and
+  structured debug logs. Compare branch counts, keys, maps, selectors,
+  and factorized coefficients before comparing only final floating-point
+  totals.
++ Reduce the mismatch hierarchically: total, graph, forest, cut, residue
+  order, LMB, orientation, then individual term. Stop as soon as the
+  first unequal pair is found and make that pair the reproducer.
++ For selector-local versus explicit-sum representations, compare
+  `sum(selector * body)` with `sum(body)` directly. Evaluate the
+  complete selector truth table and prove that each explicit branch is
+  selected exactly once. Do not investigate contour, residue,
+  reconstruction, or numerator machinery until this shallow
+  partition-of-unity comparison passes.
+
+Diagnostic normalization must preserve the factorization of graph
+numerators, including test-only copies. Denominator-only algebra and
+finite tensor-component contraction are distinct from distributing a
+graph numerator. Each progress report for a discrepancy should state:
+what is shared, what first differs, what has been excluded, the smallest
+current reproducer, and the single next comparison that will reduce it.
+
+==== Projected local-4D UV reconstruction stop rule
+<projected-local-4d-uv-reconstruction-stop-rule>
+For a projected local-4D UV-to-CFF mismatch, reconstruction must be
+certified #emph[before] investigating CFF recursion, contour signs, or
+residue aggregation. This is a mandatory correctness boundary, not an
+optional diagnostic:
+
++ Retain raw post-Taylor sectors in the compatible hard sub-LMB,
+  including original edge owners and provenance roles for subsequent
+  outer Taylor operations. Build canonical algebra only in a separate
+  projection view.
++ Resolve denominator classes by exact signed routing, mass, full
+  polynomial (including its prescription), and component domain. Keep
+  physical source occurrences as a separate incidence witness. Construct
+  the UV skeleton from that witness; derivatives may add serial copies
+  of retained lines. Contract equivalent channels only with a certified
+  serial-path or pure-cycle incidence. Nonadjacent equivalent channels
+  retain their original incidence; do not infer a graph from a signature
+  matrix.
++ Completed hard provenance roles zero and one may transfer to a
+  certified denominator class and use occurrences of that class,
+  including original numerator factors. Preserve the literal
+  odd-momentum sign independently of denominator evenness. A hard
+  carrier without an unambiguous surviving pole class stays a fixed
+  affine carrier; physical-source and soft provenance keep their
+  existing meanings. New soft factors retain explicit provenance until
+  outer-CFF assembly; only those factors may use an exactly certified
+  off-shell routing through active cograph edges, including every fixed
+  external shift.
++ Apply the exact immutable production assignment plan, including the
+  signed hard/raw/parsed conversion `H = h R`, `P = r R`, and
+  `H^0 = h r P^0`.
++ Substitute the source post-Taylor numerator and the reconstructed
+  UV-EMR numerator into one neutral set of formal loop four-momenta (and
+  the same fixed external data) and require their exact symbolic
+  difference to vanish.
++ Independently require equality of denominator momentum, mass,
+  multiplicity, and component domain, using `D(Q) = D(-Q)` only on the
+  denominator side.
+
+Only after both exact certificates pass may a discrepancy be attributed
+to generalized-CFF input normalization, CFF generation, component
+composition, or residue aggregation. The common LMB is only a coordinate
+chart for this proof; it never supplies EMR ownership or CFF rank
+capacity. Correctness of the EMR rewrite precedes dispatch optimization.
+Production compares at most three certified proposals by their actual
+native generated source-map row count, before surface conversion or
+cut/host selection. Rank orders the proposals and breaks count ties; it
+is not a substitute for that count or a proof of global optimality. The
+selected payload and its exact assignment must stay together. Graph
+numerators remain factorized, including diagnostic copies. Establish the
+identity with factor-preserving rewrites and exact cancellation;
+evaluations at explicit coordinates provide additional checks, not a
+general symbolic proof. The worked GL04 `1zs/T2` certificate is
+maintained in
+#link("docs/architecture/exact-powered-denominator-cff-lifting.typ#worked-live-reproducer-gl04-temporal-square-1zst2")[`docs/architecture/exact-powered-denominator-cff-lifting.typ`];.
+
 == Debug Logging Pattern
 
 - Prefer `debug_tags!` plus the log filter environment variables over ad hoc
@@ -128,7 +229,7 @@ These rules are intentionally broad and should shape most code changes.
   before changing what a failing test asserts.
 - During development, run checks relevant to the change. Before final review,
   run the selected full CI suite as described below.
-- Install `cargo-nextest` 0.9.80 or newer. The repository configuration
+- Install `cargo-nextest` 0.9.115 or newer. The repository configuration
   enforces this minimum; update an existing installation with
   `cargo nextest self update`.
 - Rust integration tests live in `tests/` with shared fixtures in
@@ -140,6 +241,9 @@ These rules are intentionally broad and should shape most code changes.
 - Use broader integration tests only for cross-module behavior.
 - Add tests for edge cases that motivated the change, especially when collapsing
   duplicated logic.
+- Numerator oracles must retain physical locality: edge factors depend only on
+  their edge momentum, and vertex factors only on incident momenta. Non-local
+  algebraic diagnostics do not certify UV subtraction or graph reconstruction.
 
 === Docs
 

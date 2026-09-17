@@ -4,6 +4,7 @@ use spenso::{
     chain, dualizable_, dualizable_dual_,
     network::{library::symbolic::ETS, tags::SPENSO_TAG as T},
     self_dual_,
+    shadowing::Collectable,
     structure::representation::{LibraryRep, RepName},
     trace,
 };
@@ -110,6 +111,12 @@ impl Chain for Atom {
 }
 impl<'a> Chain for AtomView<'a> {
     fn collect_chains(&self, representation: LibraryRep) -> Atom {
+        // Every rule below requires a chain. Avoid polynomial collection of
+        // unrelated scalar factors when there is no chain to compose.
+        if !self.contains_symbol(T.chain) {
+            return self.to_owned();
+        }
+
         let in_index = representation.to_symbolic([W_.d_, W_.i_]);
         let dummy_out = representation.dual().to_symbolic([W_.d_, W_.j_]);
         let dummy_in = representation.to_symbolic([W_.d_, W_.j_]);
@@ -141,8 +148,10 @@ impl<'a> Chain for AtomView<'a> {
         );
         // println!("{}", collected);
 
-        self.to_owned()
-            .collect_symbol::<i16>(T.chain)
+        // Use the shared collector's opaque coefficients here as well: chain
+        // composition must not statistically simplify the momentum numerator.
+        self.collect_with_map(|atom| atom.get_symbol() == Some(T.chain))
+            .unwrap_collect()
             .replace(product)
             .repeat()
             .with(collected)
@@ -154,18 +163,27 @@ impl<'a> Chain for AtomView<'a> {
 
         let out_index = representation.dual().to_symbolic([W_.d_, W_.j_]);
 
+        // Existing ports belong to an enclosing chain. A second representation
+        // must retain its explicit slots rather than reuse those untyped ports.
+        let no_ports = |matched: &Match<'_>| {
+            let args = match matched {
+                Match::Multiple(_, args) => args.as_slice(),
+                Match::Single(arg) => std::slice::from_ref(arg),
+                Match::FunctionName(_) => return false,
+            };
+            args.iter()
+                .all(|arg| !arg.contains_symbol(T.chain_in) && !arg.contains_symbol(T.chain_out))
+        };
         self.replace(function!(
             W_.a_, W_.a___, in_index, W_.b___, out_index, W_.c___
         ))
-        .when(W_.a_.filter_match(|a| {
-            if let Match::FunctionName(a) = a
-                && (*a != T.chain && *a != ETS.metric)
-            {
-                true
-            } else {
-                false
-            }
-        }))
+        .when(
+            W_.a_.filter_match(
+                |a| matches!(a, Match::FunctionName(a) if *a != T.chain && *a != ETS.metric),
+            ) & W_.a___.filter_match(no_ports)
+                & W_.b___.filter_match(no_ports)
+                & W_.c___.filter_match(no_ports),
+        )
         .with(function!(
             T.chain,
             in_index,
@@ -193,11 +211,56 @@ mod tests {
     use symbolica::{parse, parse_lit};
     use symbolica_utils::AtomPrintExt;
 
-    use crate::representations::Bispinor;
+    use crate::representations::{Bispinor, ColorFundamental};
     use crate::test_support::{TestReps, test_initialize};
     use crate::{bis, gamma};
 
     use super::*;
+
+    #[test]
+    fn mixed_representation_chains_preserve_slots_and_round_trip() {
+        use crate::tensor::{SymbolicNetExt, SymbolicNetParse};
+        use spenso::{network::parsing::ParseSettings, structure::abstract_index::AbstractIndex};
+
+        test_initialize();
+        let input = parse_lit!(
+            (x + y) ^ 8 * mixed_chain_tensor(bis(4, i), bis(4, j), cof(3, a), dind(cof(3, b))),
+            default_namespace = "spenso"
+        );
+        let settings = ParseSettings::default();
+        let mut expected_slots = input
+            .parse_to_symbolic_net::<AbstractIndex>(&settings)
+            .unwrap()
+            .graph
+            .dangling_indices();
+        expected_slots.sort();
+        assert_eq!(expected_slots.len(), 4);
+        let spin = Bispinor {}.into();
+        let color = ColorFundamental {}.into();
+        for (first, second) in [(spin, color), (color, spin)] {
+            let chained = input.chainify(first).chainify(second);
+            let net = chained
+                .parse_to_symbolic_net::<AbstractIndex>(&settings)
+                .unwrap();
+            let mut slots = net.graph.dangling_indices();
+            slots.sort();
+            assert_eq!(slots, expected_slots);
+            // Parsing restores both tensor interfaces and the untouched scalar
+            // factor, without distributing any numerator products or powers.
+            assert_eq!(net.simple_execute::<()>().unwrap(), input);
+        }
+    }
+
+    #[test]
+    fn collect_chains_preserves_factorized_scalars_without_chains() {
+        test_initialize();
+        let scalar = parse_lit!((a + b) ^ 8 * (c + d) ^ 8 / (1 + a * c + b * d));
+        for representation in [Bispinor {}.into(), ColorFundamental {}.into()] {
+            // Structural equality checks the original factorization, not only
+            // equality after expanding or evaluating the scalar expression.
+            assert_eq!(scalar.collect_chains(representation), scalar);
+        }
+    }
 
     #[test]
     fn collect_gamma_chains_and_close_trace() {
@@ -231,6 +294,37 @@ mod tests {
         let rep = Bispinor {}.into();
 
         assert_snapshot!(chains.collect_chains(rep).to_bare_ordered_string(), @"chain(bis(4,a),bis(4,c),gamma(in,out,mink(4,mu)),gamma(in,out,mink(4,nu)),gamma(in,out,p(1,mink(4))))");
+    }
+
+    #[test]
+    fn collect_chains_preserves_opaque_factorized_spectators() {
+        let r = TestReps::new();
+        let first = chain!(
+            slot!(r.bis4, a),
+            slot!(r.bis4, b),
+            gamma!(slot!(r.mink4, mu)),
+        );
+        let second = chain!(
+            slot!(r.bis4, b),
+            slot!(r.bis4, c),
+            gamma!(slot!(r.mink4, nu)),
+        );
+        let composed = chain!(
+            slot!(r.bis4, a),
+            slot!(r.bis4, c),
+            gamma!(slot!(r.mink4, mu)),
+            gamma!(slot!(r.mink4, nu)),
+        );
+        let spectator = parse_lit!((x + y) ^ 8 * (u + v) ^ n / (1 + x * u + y * v));
+        let input = &spectator * first * second;
+
+        // Exact Atom equality retains the coefficient's sums and powers while
+        // checking the ordered chain payload independently of scalar algebra.
+        assert_eq!(
+            input.collect_chains(Bispinor {}.into()),
+            &spectator * composed
+        );
+        assert_eq!(input.collect_chains(ColorFundamental {}.into()), input);
     }
 
     #[test]

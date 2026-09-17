@@ -231,3 +231,11 @@ For supported workflows, start with the
 for exact public signatures. Python construction and execution are documented in the
 #link("../../../products/spenso/latest/guides/python/")[Spynso3 workflow], whose ownership is
 separate from the core crate described here.
+
+== Factor preservation at materialization
+
+Parsing retains scalar spectators and compatible sum boundaries. Fallible `Concretize` methods
+separate target construction from canonical layout: symbolic tensors may retain symbolic dimensions,
+while finite-component targets report errors. This uses the same `CanonicalLayout` as library leaves.
+Odd tensor powers preserve the remaining base after paired contractions. Completed execution waves
+release unused store payloads while retaining live aliases and tensor handles.

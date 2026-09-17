@@ -13,7 +13,7 @@ use linnet::{
         involution::{EdgeData, EdgeIndex, Hedge, HedgePair},
         subgraph::{
             HedgeNode, Inclusion, ModifySubSet, OrientedCut, SuBitGraph, SubGraphLike, SubSetLike,
-            SubSetOps, subset::SubSet,
+            SubSetOps,
         },
     },
     parser::DotGraph,
@@ -28,7 +28,7 @@ use tracing::warn;
 use typed_index_collections::TiVec;
 
 use crate::{
-    cff::generation::SurfaceCache,
+    cff::surface::SurfaceCache,
     define_index,
     feyngen::diagram_generator::evaluate_overall_factor,
     integrands::process::{ChannelIndex, LmbMultiChannelingSetup, ParamBuilder},
@@ -37,7 +37,7 @@ use crate::{
     processes::DotExportSettings,
     settings::runtime::kinematic::{Externals, improvement::PhaseSpaceImprovementSettings},
     utils::{F, Length, ose_atom_from_index},
-    uv::uv_graph::UVE,
+    uv::{UltravioletGraph, uv_graph::UVE},
 };
 
 pub(crate) mod attribute_warnings;
@@ -144,6 +144,14 @@ impl Graph {
         &self.global_prefactor.num
             * &self.global_prefactor.projector
             * evaluate_overall_factor(self.overall_factor.as_view())
+    }
+
+    pub(crate) fn production_numerator_atom_for_full_3d_expression(&self) -> Atom {
+        let reduced = self.full_filter().subtract(&self.initial_state_cut);
+        self.numerator(&reduced, &self.empty_subgraph())
+            .get_single_atom()
+            .expect("Graph numerator should be available")
+            * self.global_atom()
     }
 
     pub(crate) fn external_momentum_edge_order(&self) -> Vec<EdgeIndex> {
@@ -519,17 +527,11 @@ impl Graph {
         None
     }
 
-    pub(crate) fn get_initial_state_tree(&self) -> (SuBitGraph, Vec<EdgeIndex>) {
-        let mut tree_like_edges = Vec::new();
-        let full_graph = self.underlying.full_filter();
-        let full_is_cut = self
-            .initial_state_cut
-            .left
-            .union(&self.initial_state_cut.right);
-
-        let full_graph_without_initial_state_cut = full_graph.subtract(&full_is_cut);
-
-        let mut result: SubSet<Hedge> = self.underlying.empty_subgraph();
+    pub(crate) fn get_initial_state_tree(&self) -> SuBitGraph {
+        let full_is_cut = self.initial_state_cut.as_subgraph();
+        let full_graph_without_initial_state_cut =
+            self.underlying.full_filter().subtract(&full_is_cut);
+        let mut result: SuBitGraph = self.underlying.empty_subgraph();
 
         for (pair, edge_id, _) in self
             .underlying
@@ -537,28 +539,19 @@ impl Graph {
         {
             if let HedgePair::Paired { source, sink } = pair {
                 let loop_signature = &self.loop_momentum_basis.edge_signatures[edge_id];
-                let is_tree_like = loop_signature.internal.iter().all(|sign| sign.is_zero());
-                if is_tree_like {
-                    tree_like_edges.push(edge_id);
-                    let source_node = self.underlying.node_id(source);
-                    let sink_node = self.underlying.node_id(sink);
-
-                    let source_connects_initial_state =
-                        self.underlying.iter_crown(source_node).any(|hedge| {
-                            let mut single_hedge_subgraph: SubSet<Hedge> =
-                                self.underlying.empty_subgraph();
-
-                            single_hedge_subgraph.add(hedge);
-
-                            single_hedge_subgraph.intersects(&full_is_cut)
+                if loop_signature.internal.iter().all(|sign| sign.is_zero()) {
+                    // A fixed-momentum bridge can also join two internal loop components.
+                    // Amputate only an endpoint attached to the initial-state cut.
+                    let initial_state_node = [source, sink]
+                        .into_iter()
+                        .map(|hedge| self.underlying.node_id(hedge))
+                        .find(|node| {
+                            self.underlying
+                                .iter_crown(*node)
+                                .any(|hedge| full_is_cut.includes(&hedge))
                         });
-
-                    if source_connects_initial_state {
-                        for hedge in self.underlying.iter_crown(source_node) {
-                            result.add(hedge);
-                        }
-                    } else {
-                        for hedge in self.underlying.iter_crown(sink_node) {
+                    if let Some(node) = initial_state_node {
+                        for hedge in self.underlying.iter_crown(node) {
                             result.add(hedge);
                         }
                     }
@@ -566,7 +559,7 @@ impl Graph {
             }
         }
 
-        (result, tree_like_edges)
+        result
     }
 
     pub(crate) fn get_raised_edge_groups(&self) -> Vec<Vec<EdgeIndex>> {
@@ -576,7 +569,7 @@ impl Graph {
             let group_position = result.iter().position(|group| {
                 group.iter().all(|e| {
                     self.loop_momentum_basis.edges_are_raised(*e, edge_index)
-                        && self[edge_index].mass == self[*e].mass
+                        && self[edge_index].particle.mass_atom() == self[*e].particle.mass_atom()
                 })
             });
 
@@ -638,6 +631,8 @@ pub use autogen::Autogen;
 pub use edge::Edge;
 pub mod hedge_data;
 pub use hedge_data::HedgeData;
+pub(crate) mod three_d_source;
+pub(crate) use three_d_source::{ExactUvSubLmbFrame, FourDDenominator, GraphThreeDSource};
 pub mod vertex;
 pub use vertex::Vertex;
 

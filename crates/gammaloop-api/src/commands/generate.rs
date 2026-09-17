@@ -250,7 +250,7 @@ pub struct SpecArgs {
         allow_negative_numbers = true
     )]
     pub number_of_factorized_loop_subtopologies: Option<Vec<i32>>,
-    /// Number of closed fermion loops; negative disables
+    /// Number of closed fermion loops, excluding ghosts; negative disables
     #[arg(
         long = "number-of-fermion-loops",
         short = 'L',
@@ -278,7 +278,7 @@ pub struct SpecArgs {
     /// Identify graphs related by permutations of identical final-state particles.
     #[arg(long = "symmetrize-final-states")]
     pub symmetrize_final_states: Option<bool>,
-    /// Identify cross-section graphs related by exchanging the left and right amplitudes.
+    /// Identify cross-section graphs under CP-based left/right exchange; requires CP symmetry.
     #[arg(long = "symmetrize-left-right-states")]
     pub symmetrize_left_right_states: Option<bool>,
 
@@ -354,6 +354,68 @@ pub struct SpecArgs {
     /// Filter edges that carry zero momentum flow in the selected routing.
     #[arg(long = "filter-zero-flow-edges")]
     pub filter_zero_flow_edges: Option<bool>,
+}
+
+impl SpecArgs {
+    pub(crate) fn from_process_spec_string(spec: impl Into<String>) -> Self {
+        Self {
+            tokens: vec![spec.into()],
+            ..Self::default()
+        }
+    }
+}
+
+impl Default for SpecArgs {
+    fn default() -> Self {
+        Self {
+            tokens: Vec::new(),
+            append: false,
+            clear_existing_processes: false,
+            process_name: None,
+            integrand_name: None,
+            only_diagrams: false,
+            filter_selfenergies: None,
+            filter_snails: None,
+            filter_tadpoles: None,
+            veto_vertex_interactions: None,
+            allowed_vertex_interactions: None,
+            filter_cross_section_tadpoles: None,
+            veto_tadpoles_attached_to_massive_lines: None,
+            veto_tadpoles_attached_to_massless_lines: None,
+            veto_only_scaleless_tadpoles: None,
+            veto_snails_attached_to_massive_lines: None,
+            veto_snails_attached_to_massless_lines: None,
+            veto_only_scaleless_snails: None,
+            veto_self_energy_of_massive_lines: None,
+            veto_self_energy_of_massless_lines: None,
+            veto_only_scaleless_self_energy: None,
+            max_n_bridges: None,
+            number_of_factorized_loop_subtopologies: None,
+            number_of_fermion_loops: None,
+            n_cut_blobs: None,
+            n_cut_spectators: None,
+            allow_symmetrization_of_external_fermions_in_amplitudes: None,
+            symmetrize_initial_states: None,
+            symmetrize_final_states: None,
+            symmetrize_left_right_states: None,
+            numerator_aware_isomorphism_grouping: None,
+            numerical_samples_seed: None,
+            number_of_samples_for_numerator_comparisons: None,
+            consider_internal_masses_only_in_numerator_isomorphisms: None,
+            fully_numerical_substitution_when_comparing_numerators: None,
+            compare_canonized_numerator: None,
+            symmetric_left_right_polarizations: None,
+            loop_momentum_bases: None,
+            select_graphs: None,
+            veto_graphs: None,
+            graph_prefix: None,
+            global_prefactor_projector: None,
+            global_prefactor_num: None,
+            max_multiplicity_for_fast_cut_filter: 6,
+            filter_self_loop: None,
+            filter_zero_flow_edges: None,
+        }
+    }
 }
 
 // =================== Runner ===================
@@ -1349,6 +1411,15 @@ pub fn parse_spec_with_model(
     Ok(spec)
 }
 
+pub(crate) fn parse_process_spec_string(
+    spec: &str,
+    generation_type: GenerationType,
+    model: &Model,
+) -> std::result::Result<ProcessSpec, ParseError> {
+    let args = SpecArgs::from_process_spec_string(spec);
+    parse_spec_with_model(&args, generation_type, model)
+}
+
 // ---- helpers ----
 
 fn split_top_level_arrow(s: &str) -> Option<(&str, &str)> {
@@ -1748,12 +1819,9 @@ fn feyngen_from_spec_args(
     let sym_left_right = a.symmetrize_left_right_states.unwrap_or(false);
     let (sym_init, sym_final) = match generation_type {
         GenerationType::Amplitude => {
-            let s_init = a
-                .symmetrize_initial_states
-                .unwrap_or(sym_left_right /* default equal to LR */);
-            let s_final = a
-                .symmetrize_final_states
-                .unwrap_or(sym_left_right /* default equal to LR */);
+            // LR is the amplitude shorthand; explicit side options take precedence.
+            let s_init = a.symmetrize_initial_states.unwrap_or(sym_left_right);
+            let s_final = a.symmetrize_final_states.unwrap_or(sym_left_right);
             (s_init, s_final)
         }
         GenerationType::CrossSection => {
@@ -2205,6 +2273,7 @@ mod tests {
                     evaluator_spenso_time: Duration::from_secs(1),
                     evaluator_symbolica_time: Duration::from_secs(1),
                     evaluator_compile_time: Duration::from_secs(1),
+                    ..GraphGenerationStats::default()
                 },
             },
             GeneratedGraphReport {
@@ -2217,6 +2286,7 @@ mod tests {
                     evaluator_spenso_time: Duration::from_secs(2),
                     evaluator_symbolica_time: Duration::ZERO,
                     evaluator_compile_time: Duration::from_secs(3),
+                    ..GraphGenerationStats::default()
                 },
             },
         ];
@@ -2312,6 +2382,110 @@ mod tests {
         let model = &load_generic_model("sm");
         let a = base_args(s);
         parse_spec_with_model(&a, GenerationType::CrossSection, model).unwrap()
+    }
+
+    #[test]
+    fn cp_symmetrization_option_defaults_false_and_roundtrips() {
+        let model = load_generic_model("sm");
+        for option in [None, Some(false), Some(true)] {
+            let mut command = vec!["gammaloop", "generate", "xs", "a", ">", "d", "d~"];
+            if let Some(enabled) = option {
+                command.extend([
+                    "--symmetrize-left-right-states",
+                    if enabled { "true" } else { "false" },
+                ]);
+            }
+            let repl = Repl::try_parse_from(command).unwrap();
+            let Commands::Generate(Generate {
+                mode: Some(GenerateCmd::Xs(args)),
+                ..
+            }) = repl.command
+            else {
+                panic!("expected a cross-section generation command");
+            };
+            assert_eq!(args.symmetrize_left_right_states, option);
+            let serialized = serde_json::to_value(&args).unwrap();
+            assert_eq!(
+                serialized["symmetrize_left_right_states"],
+                serde_json::json!(option)
+            );
+            let decoded: SpecArgs = serde_json::from_value(serialized).unwrap();
+            assert_eq!(decoded, args);
+            let spec =
+                parse_spec_with_model(&decoded, GenerationType::CrossSection, &model).unwrap();
+            assert_eq!(
+                spec.process_definition.symmetrize_left_right_states,
+                option.unwrap_or(false)
+            );
+        }
+    }
+
+    #[test]
+    fn amplitude_left_right_shorthand_respects_explicit_side_options() {
+        let model = load_generic_model("sm");
+        let mut args = base_args("e+ e- > d d~");
+        for (left_right, initial, final_state, expected) in [
+            (None, None, None, (false, false)),
+            (Some(true), None, None, (true, true)),
+            (Some(true), Some(false), None, (false, true)),
+            (Some(true), None, Some(false), (true, false)),
+        ] {
+            args.symmetrize_left_right_states = left_right;
+            args.symmetrize_initial_states = initial;
+            args.symmetrize_final_states = final_state;
+            let definition = parse_spec_with_model(&args, GenerationType::Amplitude, &model)
+                .unwrap()
+                .process_definition;
+            assert_eq!(
+                (
+                    definition.symmetrize_initial_states,
+                    definition.symmetrize_final_states
+                ),
+                expected
+            );
+            assert_eq!(
+                definition.symmetrize_left_right_states,
+                left_right.unwrap_or(false)
+            );
+        }
+    }
+
+    #[test]
+    fn fermion_loop_filter_is_added_in_both_generation_modes() {
+        let model = &load_generic_model("sm");
+        let repl = Repl::try_parse_from([
+            "gammaloop",
+            "generate",
+            "amp",
+            "e+",
+            "e-",
+            ">",
+            "d",
+            "d~",
+            "--number-of-fermion-loops",
+            "1",
+            "2",
+        ])
+        .unwrap();
+        let Commands::Generate(Generate {
+            mode: Some(GenerateCmd::Amp(args)),
+            ..
+        }) = repl.command
+        else {
+            panic!("expected an amplitude generation command");
+        };
+        for mode in [GenerationType::Amplitude, GenerationType::CrossSection] {
+            let spec = parse_spec_with_model(&args, mode, model).unwrap();
+            let filters = if mode == GenerationType::Amplitude {
+                &spec.process_definition.amplitude_filters
+            } else {
+                &spec.process_definition.cross_section_filters
+            };
+            assert!(filters
+                .0
+                .iter()
+                .any(|filter| matches!(filter, FeynGenFilter::FermionLoopCountRange((1, 2)))));
+        }
     }
 
     #[test]

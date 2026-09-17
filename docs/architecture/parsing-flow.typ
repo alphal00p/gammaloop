@@ -833,3 +833,11 @@ materialize_shorthand(fun):
     return a regular tensor leaf
   parse the rebuilt expression recursively
 ```
+
+== Factorized scalar and symbolic-dimension boundaries
+
+Scalar factors and compatible sums remain grouped while tensor slots are inferred. A scalar-weighted
+compact vector is accepted only when exactly one factor supplies its compact axis and every other
+factor has scalar structure; unsupported products remain opaque. Library lookup retains the canonical
+layout. Missing tensor leaves use the target's fallible `Concretize::concretize_logical` boundary:
+symbolic targets may keep symbolic dimensions, while component targets report materialization errors.

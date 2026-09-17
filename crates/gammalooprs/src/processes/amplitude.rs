@@ -5,6 +5,7 @@ use std::{
     io::Write,
     iter,
     path::Path,
+    sync::Arc,
 };
 
 use ahash::AHashSet;
@@ -26,8 +27,8 @@ use vakint::{EvaluationMethod, NumericalEvaluationResult, Vakint, vakint_symbol}
 use crate::{
     GammaLoopContext, GammaLoopContextContainer,
     cff::{
+        CutCFFIndex,
         esurface::{GroupEsurfaceId, RaisedEsurfaceData, RaisedEsurfaceId},
-        expression::{CFFExpression, OrientationID},
     },
     graph::{
         GraphGroup, GraphGroupPosition, GroupId, LMBext, LmbIndex, LoopMomentumBasis,
@@ -37,6 +38,7 @@ use crate::{
         GenericEvaluator, LmbMultiChannelingSetup,
         amplitude::{AmplitudeGraphTerm, AmplitudeIntegrand, AmplitudeIntegrandData},
         graph_to_group_id_for_group_structure,
+        param_builder::FnMapEntry,
     },
     model::ArcParticle,
     momentum::{sample::ExternalIndex, signature::SignatureLike},
@@ -51,7 +53,7 @@ use crate::{
     subtraction::amplitude_counterterm::AmplitudeCountertermAtom,
     utils::{F, GS, Length, W_},
     uv::{
-        RenormalizationPart, UVgenerationSettings, UltravioletGraph,
+        Integrands, RenormalizationPart, UVgenerationSettings, UltravioletGraph,
         approx::{CutStructure, OrientationProjection, integrated::to_vakint_integrand},
         settings::VakintSettings,
     },
@@ -67,6 +69,7 @@ use linnet::{
 };
 use spenso::shadowing::symbolica_utils::LogPrint;
 use symbolica::{atom::Var, prelude::*};
+use three_dimensional_reps::GeneratedThreeDExpression;
 use tracing::{debug, info};
 use typed_index_collections::{TiVec, ti_vec};
 
@@ -611,6 +614,9 @@ impl Amplitude {
                     &self.graph_group_structure,
                 ),
                 group_derived_data: self.group_derived_data.clone(),
+                explicit_orientation_sum_only: global_settings
+                    .generation
+                    .explicit_orientation_sum_only,
             },
             event_processing_runtime: Default::default(),
             active_f64_backend: Default::default(),
@@ -703,11 +709,13 @@ impl Amplitude {
 
                     let esurfaces = &amplitude_graph.graph.surface_cache.esurface_cache;
 
+                    // Cached surfaces without a surviving pole are not threshold candidates.
                     for (raised_esurface_id, raised_group) in amplitude_graph
                         .derived_data
                         .raised_data
                         .raised_groups
                         .iter_enumerated()
+                        .filter(|(_, raised_group)| raised_group.max_occurence > 0)
                     {
                         let esurface = &esurfaces[raised_group.esurface_ids[0]];
                         let esurface_atom = esurface.lmb_atom(&amplitude_graph.graph, &lmb_reps);
@@ -757,6 +765,7 @@ impl AmplitudeGraph {
             graph,
             derived_data: AmplitudeDerivedData {
                 all_mighty_integrand: Atom::Zero,
+                all_mighty_numerators: Vec::new(),
                 cff_expression: None,
 
                 lmbs: None,
@@ -779,21 +788,20 @@ impl AmplitudeGraph {
         settings: &UVgenerationSettings,
     ) -> Result<RenormalizationPart> {
         if self.derived_data.cff_expression.is_none() {
-            self.generate_cff(&OrientationPattern::default())?;
+            // Preserve the source-energy gate formerly run by generate_cff,
+            // without requiring energy integration for this 4D-only operation.
+            self.graph.ensure_energy_convergent_cycles(
+                &self
+                    .graph
+                    .no_dummy()
+                    .subtract(&self.graph.initial_state_cut),
+            )?;
         }
-        let valid_orientations: Vec<_> = self
-            .derived_data
-            .cff_expression
-            .as_ref()
-            .expect("cff_expression should have been created")
-            .orientations
-            .iter()
-            .map(|orientation| orientation.data.orientation.clone())
-            .collect();
-
         settings.orchestrator.renormalization_part(
             &mut self.graph,
-            OrientationProjection::new(&valid_orientations, &OrientationPattern::default()),
+            // RenormalizationPart forces a 4D forest: it never builds a CFF
+            // or attaches 3D numerator factors and needs no stored source.
+            OrientationProjection::four_d(&OrientationPattern::default()),
             settings,
         )
     }
@@ -816,7 +824,14 @@ impl AmplitudeGraph {
     }
 
     #[instrument(skip_all, err)]
-    pub(crate) fn generate_cff(&mut self, orientation_pattern: &OrientationPattern) -> Result<()> {
+    pub(crate) fn generate_cff(&mut self, settings: &GenerationSettings) -> Result<()> {
+        settings.validate_explicit_orientation_sum_options()?;
+        self.graph.ensure_energy_convergent_cycles(
+            &self
+                .graph
+                .no_dummy()
+                .subtract(&self.graph.initial_state_cut),
+        )?;
         let _progress_guard = generation_progress::enter_detailed_progress_span("Generating CFF");
         let shift_rewrite = self
             .graph
@@ -834,11 +849,18 @@ impl AmplitudeGraph {
             .map(|x| x.1)
             .collect_vec();
 
-        let cff_expression =
-            self.graph
-                .generate_cff(&contract_edges, &shift_rewrite, orientation_pattern)?;
+        // The options provision maps from the complete factorized numerator.
+        // The numerator itself remains caller-owned and is mapped only when
+        // the corresponding orientation integrand is assembled.
+        let options = self.graph.production_cff_3d_expression_options(settings)?;
+        let generated = self.graph.generate_3d_expression_for_integrand(
+            &contract_edges,
+            &shift_rewrite,
+            &options,
+            None,
+        )?;
 
-        self.derived_data.cff_expression = Some(cff_expression);
+        self.derived_data.cff_expression = Some(generated);
 
         Ok(())
     }
@@ -854,16 +876,18 @@ impl AmplitudeGraph {
         let preprocess_started = std::time::Instant::now();
         let vk = crate::utils::vakint()?;
 
-        self.generate_cff(&settings.orientation_pattern)?;
+        self.generate_cff(settings)?;
 
         // UV orchestration can extend the graph surface cache, while raised IDs
         // belong to the CFF expression generated above.
         let raised_data = settings.threshold_subtraction.enable_thresholds.then(|| {
             self.graph.determine_raised_esurfaces_from_expression(
-                self.derived_data
+                &self
+                    .derived_data
                     .cff_expression
                     .as_ref()
-                    .expect("cff_expression should have been created"),
+                    .expect("cff_expression should have been created")
+                    .expression,
             )
         });
 
@@ -1076,7 +1100,7 @@ impl AmplitudeGraph {
                 &HashMap::default(),
                 &complex_params_vakint,
                 &HashMap::default(),
-            );
+            )?;
         }
 
         let mut num = self
@@ -1143,6 +1167,7 @@ impl AmplitudeGraph {
             &self.graph,
             &self.graph.full_filter(),
             &self.graph.empty_subgraph::<SuBitGraph>(),
+            &component_lmb,
             config.settings,
             false,
         )?;
@@ -1198,19 +1223,17 @@ impl AmplitudeGraph {
             only = %settings.uv.final_integrand,
             "Generation timing milestone"
         );
-        let valid_orientations: Vec<_> = self
+        let cff_options = self.graph.production_cff_3d_expression_options(settings)?;
+        let production_expression = self
             .derived_data
             .cff_expression
             .as_ref()
-            .expect("cff_expression should have been created")
-            .orientations
-            .iter()
-            .map(|orientation| orientation.data.orientation.clone())
-            .collect();
+            .expect("cff_expression should have been created");
+        let production_orientations = &production_expression.expression.orientations;
         crate::debug_tags!(#generation, #profile, #graph, #orientation, #summary;
             stage = "amplitude_graph_valid_orientations_done",
             graph = %self.graph.name,
-            orientation_count = valid_orientations.len(),
+            orientation_count = production_orientations.len(),
             elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
             "Generation timing milestone"
         );
@@ -1220,7 +1243,12 @@ impl AmplitudeGraph {
             &mut self.graph,
             cutstructure,
             vakint,
-            OrientationProjection::new(&valid_orientations, &settings.orientation_pattern),
+            OrientationProjection::exact_expression(
+                production_expression,
+                &cff_options,
+                &settings.orientation_pattern,
+                settings.explicit_orientation_sum_only,
+            ),
             &settings.uv,
         )?;
         crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
@@ -1232,20 +1260,24 @@ impl AmplitudeGraph {
             "Generation timing milestone"
         );
 
-        let normalization_started = std::time::Instant::now();
-        let exprs: Vec<_> = parametric_exprs.into_iter().collect();
-        crate::debug_tags!(#generation, #profile, #graph, #summary;
-            stage = "amplitude_graph_cff_normalization_done",
-            graph = %self.graph.name,
-            expr_count = exprs.len(),
-            elapsed_ms = normalization_started.elapsed().as_secs_f64() * 1000.0,
-            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
-            "Generation timing milestone"
-        );
-
         let assign_started = std::time::Instant::now();
-        let integrands = exprs.into_iter().next().unwrap().integrands;
-        self.derived_data.all_mighty_integrand = integrands.iter().next().unwrap().1.clone(); // should be exactly one expression
+        let [expr] = parametric_exprs.as_slice() else {
+            return Err(eyre!(
+                "amplitude UV construction must produce exactly one cut integrand, got {}",
+                parametric_exprs.len(),
+            ));
+        };
+        let mut roots = expr.integrands.iter();
+        let (index, integrand) = roots
+            .next()
+            .ok_or_else(|| eyre!("amplitude UV integrand has no root residue"))?;
+        if *index != CutCFFIndex::new_all_none() || roots.next().is_some() {
+            return Err(eyre!(
+                "amplitude UV integrand must contain exactly one root residue"
+            ));
+        }
+        self.derived_data.all_mighty_integrand = integrand.clone();
+        self.derived_data.all_mighty_numerators = expr.integrands.numerators().to_vec();
         crate::debug_tags!(#generation, #profile, #graph, #summary;
             stage = "amplitude_graph_build_integrands_done",
             graph = %self.graph.name,
@@ -1270,15 +1302,12 @@ impl AmplitudeGraph {
     )> {
         let _progress_guard =
             generation_progress::enter_detailed_progress_span("Building Threshold Counterterms");
-        let valid_orientations: Vec<_> = self
+        let cff_options = self.graph.production_cff_3d_expression_options(settings)?;
+        let production_expression = self
             .derived_data
             .cff_expression
             .as_ref()
-            .expect("cff_expression should have been created")
-            .orientations
-            .iter()
-            .map(|orientation| orientation.data.orientation.clone())
-            .collect();
+            .expect("cff_expression should have been created");
 
         let global_cff = self
             .derived_data
@@ -1291,7 +1320,7 @@ impl AmplitudeGraph {
             esurface_raising.raised_groups.len()
         ];
         let mut raised_esurface_ids: TiVec<EsurfaceID, Option<RaisedEsurfaceId>> =
-            ti_vec![None; global_cff.surfaces.esurface_cache.len()];
+            ti_vec![None; global_cff.expression.surfaces.esurface_cache.len()];
 
         for (raised_esurface_id, raised_group) in esurface_raising.raised_groups.iter_enumerated() {
             for &esurface_id in &raised_group.esurface_ids {
@@ -1324,9 +1353,14 @@ impl AmplitudeGraph {
             }
         }
 
-        for raised_data in esurface_raising.raised_groups.iter().cloned() {
+        for raised_data in esurface_raising
+            .raised_groups
+            .iter()
+            .filter(|raised_group| raised_group.max_occurence > 0)
+            .cloned()
+        {
             let esurface_id = raised_data.esurface_ids[0];
-            let esurface = &global_cff.surfaces.esurface_cache[esurface_id];
+            let esurface = &global_cff.expression.surfaces.esurface_cache[esurface_id];
 
             if esurface.external_shift.is_empty() {
                 continue;
@@ -1375,7 +1409,7 @@ impl AmplitudeGraph {
 
             let cutset = CutSet {
                 residue_selector: ResidueSelector {
-                    lu_cut: None,
+                    lu: None,
                     left_th_cut: Some(raised_data.clone()),
                     right_th_cut: None,
                 },
@@ -1392,7 +1426,12 @@ impl AmplitudeGraph {
             &mut self.graph,
             cut_structure,
             vakint,
-            OrientationProjection::new(&valid_orientations, &settings.orientation_pattern),
+            OrientationProjection::exact_expression(
+                production_expression,
+                &cff_options,
+                &settings.orientation_pattern,
+                settings.explicit_orientation_sum_only,
+            ),
             &settings.uv,
         )?;
 
@@ -1408,8 +1447,10 @@ impl AmplitudeGraph {
             let raised_esurface_id = raised_esurface_ids[raised_group.esurface_ids[0]];
             debug!("raised_esurface_id: {}", raised_esurface_id.0);
 
-            for (_, integrand) in counterterm_atom.parametric.iter() {
-                debug!("counterterm integrand: {}", integrand.log_print(Some(100)));
+            if tracing::enabled!(tracing::Level::DEBUG) {
+                for (_, integrand) in counterterm_atom.parametric.resolved()?.iter() {
+                    debug!("counterterm integrand: {}", integrand.log_print(Some(100)));
+                }
             }
 
             counterterms[raised_esurface_id] = counterterm_atom;
@@ -1570,13 +1611,33 @@ impl AmplitudeGraph {
 #[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeDerivedData {
     pub all_mighty_integrand: Atom,
+    pub all_mighty_numerators: Vec<Arc<FnMapEntry>>,
     pub threshold_counterterms: TiVec<RaisedEsurfaceId, AmplitudeCountertermAtom>,
     pub raised_data: RaisedEsurfaceData,
     pub raised_esurface_ids: TiVec<EsurfaceID, RaisedEsurfaceId>,
     pub multi_channeling_setup: Option<LmbMultiChannelingSetup>,
     pub lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
     pub tropical_sampler: Option<SampleGenerator<3>>,
-    pub cff_expression: Option<CFFExpression<OrientationID>>,
+    pub cff_expression: Option<
+        GeneratedThreeDExpression<crate::cff::esurface::Esurface, crate::cff::hsurface::Hsurface>,
+    >,
+}
+
+impl AmplitudeDerivedData {
+    pub(crate) fn resolved_integrand(&self) -> Result<Atom> {
+        let integrands = Integrands::from_iter([(
+            CutCFFIndex::new_all_none(),
+            self.all_mighty_integrand.clone(),
+        )])
+        .with_numerators(self.all_mighty_numerators.iter().cloned())?
+        .resolved()?;
+        Ok(integrands
+            .iter()
+            .next()
+            .expect("the amplitude semantic view retains its root residue")
+            .1
+            .clone())
+    }
 }
 
 pub trait AmplitudeState:
@@ -1721,13 +1782,7 @@ pub(crate) fn threshold_counterterm_helper(
     evaluator_settings: &EvaluatorSettings,
 ) -> GenericEvaluator {
     let atom = threshold_counterterm_helper_atom(order, loop_number);
-    let mut fn_map = FunctionMap::default();
-    fn_map
-        .add_aliases([(
-            GS.pi.into(),
-            Atom::num(Rational::try_from(std::f64::consts::PI).unwrap()),
-        )])
-        .unwrap();
+    let fn_map = FunctionMap::default();
 
     let mut params = params_for_derivative_order(order)
         .into_iter()
@@ -1795,7 +1850,7 @@ pub mod test {
 
         let _model = load_generic_model("sm");
 
-        graph.generate_cff(&OrientationPattern::default()).unwrap();
+        graph.generate_cff(&GenerationSettings::default()).unwrap();
         // graph.build_parametric_integrand(&GenerationSettings::default());
 
         let param_builder = &graph.graph.param_builder;
@@ -1848,6 +1903,7 @@ pub mod test {
                 .cff_expression
                 .as_ref()
                 .unwrap()
+                .expression
                 .orientations
                 .len()
                 > 1
@@ -1861,6 +1917,7 @@ pub mod test {
                         .cff_expression
                         .as_ref()
                         .unwrap()
+                        .expression
                         .orientations[OrientationID(0)],
                 ),
                 threshold_subtraction: ThresholdSubtractionSettings {
@@ -1889,6 +1946,7 @@ pub mod test {
                 .cff_expression
                 .as_ref()
                 .unwrap()
+                .expression
                 .orientations[OrientationID(0)]
             .data
             .orientation
