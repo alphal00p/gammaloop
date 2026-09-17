@@ -17405,6 +17405,18 @@
     "kind": "Developers · developer current guide heading"
   },
   {
+    "title": "Final-review readiness",
+    "summary": "CI maintenance and measurements",
+    "href": "developers/architecture/ci/#final-review-readiness",
+    "kind": "Developers · developer current guide heading"
+  },
+  {
+    "title": "Branch maintenance",
+    "summary": "CI maintenance and measurements",
+    "href": "developers/architecture/ci/#branch-maintenance",
+    "kind": "Developers · developer current guide heading"
+  },
+  {
     "title": "Measured results",
     "summary": "CI maintenance and measurements",
     "href": "developers/architecture/ci/#measured-results",
