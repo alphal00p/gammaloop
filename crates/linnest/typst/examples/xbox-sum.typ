@@ -231,8 +231,13 @@ let g = graph.build(default-edge-data: edge-data, master)
     graph.map(g, node: nodes, edge: edges)
   }
 
+  let sum-layouts = (0.21, 0.20, 0.19, 0.15).map(length => layouts.options(
+    base: base-layout,
+    spring: (length: length),
+  ))
+
   $
-    #diagram(xbox, cut-x: -1,cut-y: -.8, initial-cut: 0, draw-after: (g, bounds) => {
+    #diagram(xbox, options: sum-layouts.at(0), cut-x: -1,cut-y: -.8, initial-cut: 0, draw-after: (g, bounds) => {
       // if draw-initials {
       //   let nodes = graph.nodes(g)
       //   // The two single-replacement cuts cross the other external leg;
@@ -258,9 +263,9 @@ let g = graph.build(default-edge-data: edge-data, master)
       //   }
       // }
     })+
-    #diagram(xbox-opened, cut-x: -.4, cut-y: -0.8, initial-cut: 1)+
-    #diagram(xbox-opened2, cut-x: -1.5, cut-y: -0.8, initial-cut: 2)+
-    #diagram(xbox-cut, cut-y: -0.8,cut-x:-0.3, initial-cut: 3) = op("disc")_(p_1^2) op("disc")_(p_2^2)#h(-3mm)
+    #diagram(xbox-opened, options: sum-layouts.at(1), cut-x: -.4, cut-y: -0.8, initial-cut: 1)+
+    #diagram(xbox-opened2, options: sum-layouts.at(2), cut-x: -1.5, cut-y: -0.8, initial-cut: 2)+
+    #diagram(xbox-cut, options: sum-layouts.at(3), cut-y: -0.8,cut-x:-0.3, initial-cut: 3) = op("disc")_(p_1^2) op("disc")_(p_2^2)#h(-3mm)
     #diagram(xbox-rhs, cut-x: none, cut-y: -1, initial-cut: 4, endpoint-fills: (:))
   $
 }
