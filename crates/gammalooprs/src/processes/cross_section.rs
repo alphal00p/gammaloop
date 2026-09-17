@@ -1539,7 +1539,7 @@ impl CrossSectionGraph {
         self.build_parametric_integrand(settings, vk, &cff_energy_degree_bound_reports)?;
         //self.build_parametric_integrand_cut_groups(settings)?;
 
-        let threshold_candidates = self.topological_threshold_candidates()?;
+        let threshold_candidates = self.topological_threshold_candidates(settings)?;
         self.derived_data.threshold_candidate_esurface_ids = threshold_candidates
             .iter()
             .filter_map(|candidate| candidate.selected_orientation_esurface_id)
@@ -2852,15 +2852,24 @@ impl CrossSectionGraph {
         status
     }
 
-    fn topological_threshold_candidates(&mut self) -> Result<Vec<TopologicalThresholdCandidate>> {
+    fn topological_threshold_candidates(
+        &mut self,
+        settings: &GenerationSettings,
+    ) -> Result<Vec<TopologicalThresholdCandidate>> {
         let global_cff = self
             .derived_data
             .global_cff_expression
             .as_ref()
             .expect("global_cff_expression should have been created");
-        let selected_cff_esurface_ids = global_cff
+        // CFF generation retains the full catalogue for 3D UV construction.
+        // Only requested orientations can activate threshold-counterterm instances.
+        let selected_orientations = global_cff
             .expression
             .orientations
+            .iter()
+            .filter(|orientation| settings.orientation_pattern.filter(*orientation))
+            .collect_vec();
+        let selected_cff_esurface_ids = selected_orientations
             .iter()
             .flat_map(|orientation| {
                 orientation
@@ -2894,7 +2903,7 @@ impl CrossSectionGraph {
                     Some(&self.graph.initial_state_cut),
                 );
                 let has_selected_orientation_instance =
-                    global_cff.expression.orientations.iter().any(|orientation| {
+                    selected_orientations.iter().any(|orientation| {
                         let selected_orientation = &orientation.data.orientation;
                         self.graph
                             .iter_edges_of(&cut)
@@ -4976,7 +4985,9 @@ mod tests {
                 cross_section.generate_esurface_cuts();
                 cross_section.generate_cff(&settings).unwrap();
 
-                let topology_candidates = cross_section.topological_threshold_candidates().unwrap();
+                let topology_candidates = cross_section
+                    .topological_threshold_candidates(&settings)
+                    .unwrap();
                 let selected_orientation_energy_sets = topology_candidates
                     .iter()
                     .filter_map(|candidate| {
@@ -5009,7 +5020,7 @@ mod tests {
                 // required by a selected-orientation instance must still exist in the CFF cache.
                 cross_section.graph.surface_cache.esurface_cache.raw.clear();
                 let error = cross_section
-                    .topological_threshold_candidates()
+                    .topological_threshold_candidates(&settings)
                     .err()
                     .expect("a corrupted selected CFF cache must be rejected");
                 assert!(
@@ -5112,7 +5123,9 @@ mod tests {
                 cross_section.generate_cff(&settings).unwrap();
                 cross_section.build_lmbs().unwrap();
                 cross_section.build_subspace_data().unwrap();
-                let topology_candidates = cross_section.topological_threshold_candidates().unwrap();
+                let topology_candidates = cross_section
+                    .topological_threshold_candidates(&settings)
+                    .unwrap();
                 assert!(topology_candidates.iter().any(|candidate| {
                     candidate.threshold_esurface.energies == dormant_threshold_edges
                         && candidate.selected_orientation_esurface_id.is_none()
@@ -5428,7 +5441,7 @@ mod tests {
                 graph.generate_cff(&settings).unwrap();
                 graph.build_lmbs().unwrap();
                 graph.build_subspace_data().unwrap();
-                let topology = graph.topological_threshold_candidates().unwrap();
+                let topology = graph.topological_threshold_candidates(&settings).unwrap();
                 let error = graph
                     .resolve_threshold_counterterm_directives(
                         &model,

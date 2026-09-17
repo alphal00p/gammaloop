@@ -117,8 +117,12 @@ threads-required = 5
 [profile.ci]
 default-filter = "not (binary(/pysecdec/) or test(=test_integrate_1l_decorated_indices_pysecdec))"
 slow-timeout = { period = "120s", terminate-after = 2 }
-# Use all available cores in CI for faster execution
-test-threads = "num-cpus"
+# Keep CI's test scheduler bounded. The host exposes 384 CPUs, while several
+# tests start their own evaluator/integration workers; scheduling one process
+# per host CPU starves those workers and caused otherwise short fixtures to hit
+# the CI timeout. Resource-heavy tests retain their explicit
+# threads-required reservations below.
+test-threads = 16
 # More verbose output for debugging CI failures
 failure-output = "immediate-final"
 success-output = "never"

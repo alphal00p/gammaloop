@@ -304,7 +304,7 @@ impl<T: FloatLike> GammaLoopSample<T> {
     ) -> Result<Self> {
         let graph = integrand.get_master_graph(group_id);
         let master = graph.get_graph();
-        let masses = graph.get_real_mass_vector();
+        let masses = graph.get_real_mass_vector()?;
         let prefactor = master
             .iter_loop_edges()
             .zip(graph.get_tropical_sampler().iter_edge_weights())
@@ -551,7 +551,7 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
                 .kinematics
                 .externals
                 .get_dependent_externals(dependent_momenta_constructor)?;
-            let masses = graph.get_real_mass_vector();
+            let masses = graph.get_real_mass_vector()?;
             let edge_data = graph
                 .get_graph()
                 .iter_loop_edges()

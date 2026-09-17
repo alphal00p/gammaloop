@@ -372,6 +372,9 @@ pub enum SamplingEvaluationError {
     UncertifiedRoot {
         detail: String,
     },
+    UncertifiedOverlap {
+        detail: String,
+    },
     UncertainGeometry {
         detail: String,
     },
@@ -389,6 +392,9 @@ impl std::fmt::Display for SamplingEvaluationError {
                     formatter,
                     "sampling root is not certified at the current precision: {detail}"
                 )
+            }
+            Self::UncertifiedOverlap { detail } => {
+                write!(formatter, "threshold overlap is not certified: {detail}")
             }
             Self::UncertainGeometry { detail } => {
                 write!(

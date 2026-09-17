@@ -18,8 +18,9 @@ use tabled::{
 };
 
 use crate::observables::{
-    EventGroupList, GenericEventGroupList, HistogramAccumulatorState, HistogramMedianPosition,
-    HistogramSnapshot, ObservablePhase, ObservableSnapshotBundle, ObservableValueTransform,
+    AdditionalWeightKey, EventGroupList, GenericEventGroupList, HistogramAccumulatorState,
+    HistogramMedianPosition, HistogramSnapshot, ObservablePhase, ObservableSnapshotBundle,
+    ObservableValueTransform,
     events::{format_complex_generic, format_optional_real_generic, format_real_generic},
 };
 use crate::{
@@ -169,7 +170,7 @@ impl<T: FloatLike> GenericEvaluationResult<T> {
         // Ordinary final rounding may yield zero. A small intermediate must still
         // be retained if any unapplied factor can promote its contribution.
         // None keeps the strict policy for separately stored factors and auxiliary
-        // factorized event entries.
+        // entries whose complete remaining multiplier is unavailable.
         let check = |value: &F<T>, remaining: Option<&F<T>>| -> eyre::Result<()> {
             let reported = value.into_f64();
             if value.0.is_finite() {
@@ -228,9 +229,28 @@ impl<T: FloatLike> GenericEvaluationResult<T> {
                         format!("event_groups[{group_index}][{event_index}].weight.{component}")
                     })?;
                 }
+                // Auxiliary components remain factorized, but their complete
+                // multiplier is known. Bound each component's possible contribution
+                // to BOTH final phases before allowing an underflowed tail to round
+                // to zero; a complex factor may promote real weight into imaginary.
+                let component_factor = event
+                    .additional_weights
+                    .weights
+                    .get(&AdditionalWeightKey::FullMultiplicativeFactor)
+                    .filter(|factor| factor.re.0.is_finite() && factor.im.0.is_finite())
+                    .map(|factor| {
+                        let real = factor.re.abs();
+                        let imag = factor.im.abs();
+                        if real > imag { real } else { imag }
+                    });
                 for (key, weight) in &event.additional_weights.weights {
+                    let remaining = if *key == AdditionalWeightKey::FullMultiplicativeFactor {
+                        None
+                    } else {
+                        component_factor.as_ref()
+                    };
                     for (component, value) in [("re", &weight.re), ("im", &weight.im)] {
-                        check(value, None).wrap_err_with(|| {
+                        check(value, remaining).wrap_err_with(|| {
                             format!("event_groups[{group_index}][{event_index}].additional_weights[{key:?}].{component}")
                         })?;
                     }

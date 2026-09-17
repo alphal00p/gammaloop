@@ -1,0 +1,2217 @@
+{
+  "cases": {
+    "optimized": {
+      "rescued": {
+        "command": [
+          "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/gammaloop",
+          "-n",
+          "-s",
+          "/common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_optimized/state",
+          "-t",
+          "rescued",
+          "-L",
+          "debug",
+          "run",
+          "-c",
+          "set process -p epem_a_tth -i NNLO file /common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_optimized/workspace/integrands/epem_a_tth@NNLO/settings.toml; set process -p epem_a_tth -i NNLO kv general.generate_events=true general.store_additional_weights_in_event=false; inspect -p epem_a_tth -i NNLO -x 0.33168777529733795 0.9182901767427527 0.8871151234013295 0.5237759320929373 0.405645141194353 0.6190324006441688 0.6178135113081745 0.7667261103805785 0.9016624966708675 0.7373798919654603 0.2773975750381326 0.36987952654913625 -d 0 8 --json-output /common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_optimized/rescued_inspect.json; quit"
+        ],
+        "exit_code": 0,
+        "inspection": {
+          "evaluation": {
+            "integrand_result": {
+              "re": 1.055329165715203e-05,
+              "im": 9.755051215472361e-06
+            },
+            "absolute_integrand_result": {
+              "re": 1.055329165715203e-05,
+              "im": 9.755051215472361e-06
+            },
+            "parameterization_jacobian": 1.0,
+            "integrator_weight": 1.0,
+            "event_groups": [
+              [
+                {
+                  "kinematic_configuration": [
+                    [
+                      {
+                        "temporal": {
+                          "value": 300.0
+                        },
+                        "spatial": {
+                          "px": 0.0,
+                          "py": 0.0,
+                          "pz": 300.0
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 300.0
+                        },
+                        "spatial": {
+                          "px": 0.0,
+                          "py": 0.0,
+                          "pz": -300.0
+                        }
+                      }
+                    ],
+                    [
+                      {
+                        "temporal": {
+                          "value": 166.3643167294034
+                        },
+                        "spatial": {
+                          "px": -91.78035322631892,
+                          "py": 59.452193832463124,
+                          "pz": -9.689648652072817
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 233.53760690343674
+                        },
+                        "spatial": {
+                          "px": 50.42073178804129,
+                          "py": -147.84211701969954,
+                          "pz": -14.535201384088774
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 200.09807636715976
+                        },
+                        "spatial": {
+                          "px": 41.359621438277635,
+                          "py": 88.38992318723642,
+                          "pz": 24.22485003616159
+                        }
+                      }
+                    ]
+                  ],
+                  "cut_info": {
+                    "particle_pdgs": [
+                      [
+                        -11,
+                        11
+                      ],
+                      [
+                        25,
+                        6,
+                        -6
+                      ]
+                    ],
+                    "cut_id": 5,
+                    "graph_id": 0,
+                    "graph_group_id": 0,
+                    "orientation_id": null,
+                    "sampling_channel_id": 8,
+                    "sampling_channel_edge_ids": [
+                      4,
+                      9,
+                      12,
+                      13
+                    ]
+                  },
+                  "weight": {
+                    "re": 2.4194353700564838e-05,
+                    "im": -6.108325086607472e-06
+                  },
+                  "additional_weights": {
+                    "weights": {}
+                  }
+                },
+                {
+                  "kinematic_configuration": [
+                    [
+                      {
+                        "temporal": {
+                          "value": 300.0
+                        },
+                        "spatial": {
+                          "px": 0.0,
+                          "py": 0.0,
+                          "pz": 300.0
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 300.0
+                        },
+                        "spatial": {
+                          "px": 0.0,
+                          "py": 0.0,
+                          "pz": -300.0
+                        }
+                      }
+                    ],
+                    [
+                      {
+                        "temporal": {
+                          "value": 203.1516163955444
+                        },
+                        "spatial": {
+                          "px": -133.88282643591475,
+                          "py": 86.72474520204312,
+                          "pz": -14.134588755738779
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 182.243545014203
+                        },
+                        "spatial": {
+                          "px": 31.592109097349798,
+                          "py": -17.812526762233812,
+                          "pz": 44.366228513022
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 214.6048385902525
+                        },
+                        "spatial": {
+                          "px": 102.29071733856497,
+                          "py": -68.91221843980932,
+                          "pz": -30.231639757283222
+                        }
+                      }
+                    ]
+                  ],
+                  "cut_info": {
+                    "particle_pdgs": [
+                      [
+                        -11,
+                        11
+                      ],
+                      [
+                        25,
+                        6,
+                        -6
+                      ]
+                    ],
+                    "cut_id": 7,
+                    "graph_id": 0,
+                    "graph_group_id": 0,
+                    "orientation_id": null,
+                    "sampling_channel_id": 8,
+                    "sampling_channel_edge_ids": [
+                      4,
+                      9,
+                      12,
+                      13
+                    ]
+                  },
+                  "weight": {
+                    "re": 3.039202120687153e-07,
+                    "im": 9.247076411472059e-06
+                  },
+                  "additional_weights": {
+                    "weights": {}
+                  }
+                },
+                {
+                  "kinematic_configuration": [
+                    [
+                      {
+                        "temporal": {
+                          "value": 300.0
+                        },
+                        "spatial": {
+                          "px": 0.0,
+                          "py": 0.0,
+                          "pz": 300.0
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 300.0
+                        },
+                        "spatial": {
+                          "px": 0.0,
+                          "py": 0.0,
+                          "pz": -300.0
+                        }
+                      }
+                    ],
+                    [
+                      {
+                        "temporal": {
+                          "value": 164.688756026163
+                        },
+                        "spatial": {
+                          "px": -89.64337083272812,
+                          "py": 58.06792925933563,
+                          "pz": -9.464038182711247
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 237.93217797454992
+                        },
+                        "spatial": {
+                          "px": 76.29755631339451,
+                          "py": -120.15572576071823,
+                          "pz": 80.14989571566743
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 197.3790659992871
+                        },
+                        "spatial": {
+                          "px": 13.345814519333615,
+                          "py": 62.0877965013826,
+                          "pz": -70.68585753295618
+                        }
+                      }
+                    ]
+                  ],
+                  "cut_info": {
+                    "particle_pdgs": [
+                      [
+                        -11,
+                        11
+                      ],
+                      [
+                        25,
+                        -6,
+                        6
+                      ]
+                    ],
+                    "cut_id": 0,
+                    "graph_id": 0,
+                    "graph_group_id": 0,
+                    "orientation_id": null,
+                    "sampling_channel_id": 8,
+                    "sampling_channel_edge_ids": [
+                      4,
+                      9,
+                      12,
+                      13
+                    ]
+                  },
+                  "weight": {
+                    "re": -1.3944946630947856e-05,
+                    "im": 6.6165119107150986e-06
+                  },
+                  "additional_weights": {
+                    "weights": {}
+                  }
+                },
+                {
+                  "kinematic_configuration": [
+                    [
+                      {
+                        "temporal": {
+                          "value": 300.0
+                        },
+                        "spatial": {
+                          "px": 0.0,
+                          "py": 0.0,
+                          "pz": 300.0
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 300.0
+                        },
+                        "spatial": {
+                          "px": 0.0,
+                          "py": 0.0,
+                          "pz": -300.0
+                        }
+                      }
+                    ],
+                    [
+                      {
+                        "temporal": {
+                          "value": 133.39244867424813
+                        },
+                        "spatial": {
+                          "px": -38.93165549645344,
+                          "py": 25.218603409450616,
+                          "pz": -4.110183170399891
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 185.35709159644313
+                        },
+                        "spatial": {
+                          "px": 21.387611736584635,
+                          "py": -62.712096492855764,
+                          "pz": -6.16558373295349
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 186.98043264329397
+                        },
+                        "spatial": {
+                          "px": 33.13563680193364,
+                          "py": -52.183014513938446,
+                          "pz": 34.808688016669386
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 94.27002708601485
+                        },
+                        "spatial": {
+                          "px": -15.59159304206484,
+                          "py": 89.6765075973436,
+                          "pz": -24.532921113316007
+                        }
+                      }
+                    ]
+                  ],
+                  "cut_info": {
+                    "particle_pdgs": [
+                      [
+                        -11,
+                        11
+                      ],
+                      [
+                        25,
+                        6,
+                        -6,
+                        21
+                      ]
+                    ],
+                    "cut_id": 3,
+                    "graph_id": 0,
+                    "graph_group_id": 0,
+                    "orientation_id": null,
+                    "sampling_channel_id": 8,
+                    "sampling_channel_edge_ids": [
+                      4,
+                      9,
+                      12,
+                      13
+                    ]
+                  },
+                  "weight": {
+                    "re": 1.4744412513126353e-28,
+                    "im": 3.4723366484140854e-18
+                  },
+                  "additional_weights": {
+                    "weights": {}
+                  }
+                },
+                {
+                  "kinematic_configuration": [
+                    [
+                      {
+                        "temporal": {
+                          "value": 300.0
+                        },
+                        "spatial": {
+                          "px": 0.0,
+                          "py": 0.0,
+                          "pz": 300.0
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 300.0
+                        },
+                        "spatial": {
+                          "px": 0.0,
+                          "py": 0.0,
+                          "pz": -300.0
+                        }
+                      }
+                    ],
+                    [
+                      {
+                        "temporal": {
+                          "value": 142.70547188611502
+                        },
+                        "spatial": {
+                          "px": -57.55737686732805,
+                          "py": 37.283712752406906,
+                          "pz": -6.076581093604068
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 174.7452425795209
+                        },
+                        "spatial": {
+                          "px": 13.581719013232014,
+                          "py": -7.657758228640381,
+                          "pz": 19.073422653863133
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 202.30936112414662
+                        },
+                        "spatial": {
+                          "px": 48.988421140260535,
+                          "py": -77.14846425489449,
+                          "pz": 51.46189518232017
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 80.23992441021741
+                        },
+                        "spatial": {
+                          "px": -5.012763286164493,
+                          "py": 47.52250973112797,
+                          "pz": -64.45873674257923
+                        }
+                      }
+                    ]
+                  ],
+                  "cut_info": {
+                    "particle_pdgs": [
+                      [
+                        -11,
+                        11
+                      ],
+                      [
+                        25,
+                        6,
+                        -6,
+                        21
+                      ]
+                    ],
+                    "cut_id": 6,
+                    "graph_id": 0,
+                    "graph_group_id": 0,
+                    "orientation_id": null,
+                    "sampling_channel_id": 8,
+                    "sampling_channel_edge_ids": [
+                      4,
+                      9,
+                      12,
+                      13
+                    ]
+                  },
+                  "weight": {
+                    "re": -3.562453338773671e-11,
+                    "im": -2.1202011120023983e-10
+                  },
+                  "additional_weights": {
+                    "weights": {}
+                  }
+                }
+              ]
+            ],
+            "evaluation_metadata": {
+              "total_timing": {
+                "secs": 0,
+                "nanos": 49182021
+              },
+              "integrand_evaluation_time": {
+                "secs": 0,
+                "nanos": 45233537
+              },
+              "canonical_physical_preparation_time": {
+                "secs": 0,
+                "nanos": 13251499
+              },
+              "evaluator_evaluation_time": {
+                "secs": 0,
+                "nanos": 1035843
+              },
+              "parameterization_time": {
+                "secs": 0,
+                "nanos": 3095321
+              },
+              "canonical_sampling_preparation_time": {
+                "secs": 0,
+                "nanos": 3008061
+              },
+              "event_processing_time": {
+                "secs": 0,
+                "nanos": 536305
+              },
+              "generated_event_count": 5,
+              "accepted_event_count": 5,
+              "relative_instability_error": {
+                "re": 0.0,
+                "im": 0.0
+              },
+              "is_nan": false,
+              "loop_momenta_escalation": null,
+              "stability_results": [
+                {
+                  "precision": "Double",
+                  "estimated_relative_accuracy": 2.648660547578879e-14,
+                  "status": {
+                    "Stable": 2
+                  },
+                  "total_time": {
+                    "secs": 0,
+                    "nanos": 32498070
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "rescued_arb": {
+        "command": [
+          "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/gammaloop",
+          "-n",
+          "-s",
+          "/common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_optimized/state",
+          "-t",
+          "rescued_arb",
+          "-L",
+          "debug",
+          "run",
+          "-c",
+          "set process -p epem_a_tth -i NNLO file /common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_optimized/workspace/integrands/epem_a_tth@NNLO/settings.toml; set process -p epem_a_tth -i NNLO kv general.generate_events=true general.store_additional_weights_in_event=false; inspect -p epem_a_tth -i NNLO -x 0.33168777529733795 0.9182901767427527 0.8871151234013295 0.5237759320929373 0.405645141194353 0.6190324006441688 0.6178135113081745 0.7667261103805785 0.9016624966708675 0.7373798919654603 0.2773975750381326 0.36987952654913625 -d 0 8 -f --json-output /common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_optimized/rescued_arb_inspect.json; quit"
+        ],
+        "exit_code": 0,
+        "inspection": {
+          "evaluation": {
+            "integrand_result": {
+              "re": 1.0553291657152187e-05,
+              "im": 9.755051215472893e-06
+            },
+            "absolute_integrand_result": {
+              "re": 1.0553291657152187e-05,
+              "im": 9.755051215472893e-06
+            },
+            "parameterization_jacobian": 1.0,
+            "integrator_weight": 1.0,
+            "event_groups": [
+              [
+                {
+                  "kinematic_configuration": [
+                    [
+                      {
+                        "temporal": {
+                          "value": 300.0
+                        },
+                        "spatial": {
+                          "px": 0.0,
+                          "py": 0.0,
+                          "pz": 300.0
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 300.0
+                        },
+                        "spatial": {
+                          "px": 0.0,
+                          "py": 0.0,
+                          "pz": -300.0
+                        }
+                      }
+                    ],
+                    [
+                      {
+                        "temporal": {
+                          "value": 166.3643167294034
+                        },
+                        "spatial": {
+                          "px": -91.78035322631895,
+                          "py": 59.45219383246313,
+                          "pz": -9.68964865207282
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 233.53760690343677
+                        },
+                        "spatial": {
+                          "px": 50.4207317880413,
+                          "py": -147.8421170196996,
+                          "pz": -14.535201384088777
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 200.0980763671598
+                        },
+                        "spatial": {
+                          "px": 41.35962143827765,
+                          "py": 88.38992318723646,
+                          "pz": 24.224850036161598
+                        }
+                      }
+                    ]
+                  ],
+                  "cut_info": {
+                    "particle_pdgs": [
+                      [
+                        -11,
+                        11
+                      ],
+                      [
+                        25,
+                        6,
+                        -6
+                      ]
+                    ],
+                    "cut_id": 5,
+                    "graph_id": 0,
+                    "graph_group_id": 0,
+                    "orientation_id": null,
+                    "sampling_channel_id": 8,
+                    "sampling_channel_edge_ids": [
+                      4,
+                      9,
+                      12,
+                      13
+                    ]
+                  },
+                  "weight": {
+                    "re": 2.4194353700564652e-05,
+                    "im": -6.108325086607318e-06
+                  },
+                  "additional_weights": {
+                    "weights": {}
+                  }
+                },
+                {
+                  "kinematic_configuration": [
+                    [
+                      {
+                        "temporal": {
+                          "value": 300.0
+                        },
+                        "spatial": {
+                          "px": 0.0,
+                          "py": 0.0,
+                          "pz": 300.0
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 300.0
+                        },
+                        "spatial": {
+                          "px": 0.0,
+                          "py": 0.0,
+                          "pz": -300.0
+                        }
+                      }
+                    ],
+                    [
+                      {
+                        "temporal": {
+                          "value": 203.15161639554447
+                        },
+                        "spatial": {
+                          "px": -133.8828264359148,
+                          "py": 86.72474520204312,
+                          "pz": -14.134588755738783
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 182.243545014203
+                        },
+                        "spatial": {
+                          "px": 31.592109097349805,
+                          "py": -17.812526762233816,
+                          "pz": 44.366228513022016
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 214.60483859025254
+                        },
+                        "spatial": {
+                          "px": 102.290717338565,
+                          "py": -68.9122184398093,
+                          "pz": -30.231639757283233
+                        }
+                      }
+                    ]
+                  ],
+                  "cut_info": {
+                    "particle_pdgs": [
+                      [
+                        -11,
+                        11
+                      ],
+                      [
+                        25,
+                        6,
+                        -6
+                      ]
+                    ],
+                    "cut_id": 7,
+                    "graph_id": 0,
+                    "graph_group_id": 0,
+                    "orientation_id": null,
+                    "sampling_channel_id": 8,
+                    "sampling_channel_edge_ids": [
+                      4,
+                      9,
+                      12,
+                      13
+                    ]
+                  },
+                  "weight": {
+                    "re": 3.039202120687158e-07,
+                    "im": 9.247076411472522e-06
+                  },
+                  "additional_weights": {
+                    "weights": {}
+                  }
+                },
+                {
+                  "kinematic_configuration": [
+                    [
+                      {
+                        "temporal": {
+                          "value": 300.0
+                        },
+                        "spatial": {
+                          "px": 0.0,
+                          "py": 0.0,
+                          "pz": 300.0
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 300.0
+                        },
+                        "spatial": {
+                          "px": 0.0,
+                          "py": 0.0,
+                          "pz": -300.0
+                        }
+                      }
+                    ],
+                    [
+                      {
+                        "temporal": {
+                          "value": 164.688756026163
+                        },
+                        "spatial": {
+                          "px": -89.64337083272812,
+                          "py": 58.06792925933562,
+                          "pz": -9.46403818271125
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 237.93217797454992
+                        },
+                        "spatial": {
+                          "px": 76.29755631339451,
+                          "py": -120.15572576071824,
+                          "pz": 80.14989571566743
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 197.3790659992871
+                        },
+                        "spatial": {
+                          "px": 13.345814519333604,
+                          "py": 62.08779650138262,
+                          "pz": -70.68585753295618
+                        }
+                      }
+                    ]
+                  ],
+                  "cut_info": {
+                    "particle_pdgs": [
+                      [
+                        -11,
+                        11
+                      ],
+                      [
+                        25,
+                        -6,
+                        6
+                      ]
+                    ],
+                    "cut_id": 0,
+                    "graph_id": 0,
+                    "graph_group_id": 0,
+                    "orientation_id": null,
+                    "sampling_channel_id": 8,
+                    "sampling_channel_edge_ids": [
+                      4,
+                      9,
+                      12,
+                      13
+                    ]
+                  },
+                  "weight": {
+                    "re": -1.3944946630947792e-05,
+                    "im": 6.616511910715416e-06
+                  },
+                  "additional_weights": {
+                    "weights": {}
+                  }
+                },
+                {
+                  "kinematic_configuration": [
+                    [
+                      {
+                        "temporal": {
+                          "value": 300.0
+                        },
+                        "spatial": {
+                          "px": 0.0,
+                          "py": 0.0,
+                          "pz": 300.0
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 300.0
+                        },
+                        "spatial": {
+                          "px": 0.0,
+                          "py": 0.0,
+                          "pz": -300.0
+                        }
+                      }
+                    ],
+                    [
+                      {
+                        "temporal": {
+                          "value": 133.39244867424813
+                        },
+                        "spatial": {
+                          "px": -38.93165549645341,
+                          "py": 25.218603409450594,
+                          "pz": -4.110183170399888
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 185.3570915964431
+                        },
+                        "spatial": {
+                          "px": 21.38761173658462,
+                          "py": -62.71209649285573,
+                          "pz": -6.165583732953486
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 186.98043264329397
+                        },
+                        "spatial": {
+                          "px": 33.13563680193363,
+                          "py": -52.18301451393842,
+                          "pz": 34.808688016669365
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 94.2700270860148
+                        },
+                        "spatial": {
+                          "px": -15.591593042064835,
+                          "py": 89.67650759734354,
+                          "pz": -24.532921113315993
+                        }
+                      }
+                    ]
+                  ],
+                  "cut_info": {
+                    "particle_pdgs": [
+                      [
+                        -11,
+                        11
+                      ],
+                      [
+                        25,
+                        6,
+                        -6,
+                        21
+                      ]
+                    ],
+                    "cut_id": 3,
+                    "graph_id": 0,
+                    "graph_group_id": 0,
+                    "orientation_id": null,
+                    "sampling_channel_id": 8,
+                    "sampling_channel_edge_ids": [
+                      4,
+                      9,
+                      12,
+                      13
+                    ]
+                  },
+                  "weight": {
+                    "re": 1.474441251312522e-28,
+                    "im": 3.472336648413934e-18
+                  },
+                  "additional_weights": {
+                    "weights": {}
+                  }
+                },
+                {
+                  "kinematic_configuration": [
+                    [
+                      {
+                        "temporal": {
+                          "value": 300.0
+                        },
+                        "spatial": {
+                          "px": 0.0,
+                          "py": 0.0,
+                          "pz": 300.0
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 300.0
+                        },
+                        "spatial": {
+                          "px": 0.0,
+                          "py": 0.0,
+                          "pz": -300.0
+                        }
+                      }
+                    ],
+                    [
+                      {
+                        "temporal": {
+                          "value": 142.70547188611502
+                        },
+                        "spatial": {
+                          "px": -57.55737686732807,
+                          "py": 37.283712752406906,
+                          "pz": -6.076581093604068
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 174.7452425795209
+                        },
+                        "spatial": {
+                          "px": 13.581719013232018,
+                          "py": -7.6577582286403825,
+                          "pz": 19.073422653863137
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 202.30936112414665
+                        },
+                        "spatial": {
+                          "px": 48.98842114026055,
+                          "py": -77.14846425489452,
+                          "pz": 51.461895182320184
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 80.23992441021745
+                        },
+                        "spatial": {
+                          "px": -5.012763286164498,
+                          "py": 47.522509731128,
+                          "pz": -64.45873674257926
+                        }
+                      }
+                    ]
+                  ],
+                  "cut_info": {
+                    "particle_pdgs": [
+                      [
+                        -11,
+                        11
+                      ],
+                      [
+                        25,
+                        6,
+                        -6,
+                        21
+                      ]
+                    ],
+                    "cut_id": 6,
+                    "graph_id": 0,
+                    "graph_group_id": 0,
+                    "orientation_id": null,
+                    "sampling_channel_id": 8,
+                    "sampling_channel_edge_ids": [
+                      4,
+                      9,
+                      12,
+                      13
+                    ]
+                  },
+                  "weight": {
+                    "re": -3.562453338773691e-11,
+                    "im": -2.1202011120024138e-10
+                  },
+                  "additional_weights": {
+                    "weights": {}
+                  }
+                }
+              ]
+            ],
+            "evaluation_metadata": {
+              "total_timing": {
+                "secs": 0,
+                "nanos": 305900886
+              },
+              "integrand_evaluation_time": {
+                "secs": 0,
+                "nanos": 302439343
+              },
+              "canonical_physical_preparation_time": {
+                "secs": 0,
+                "nanos": 9162714
+              },
+              "evaluator_evaluation_time": {
+                "secs": 0,
+                "nanos": 167279131
+              },
+              "parameterization_time": {
+                "secs": 0,
+                "nanos": 1108454
+              },
+              "canonical_sampling_preparation_time": {
+                "secs": 0,
+                "nanos": 614332
+              },
+              "event_processing_time": {
+                "secs": 0,
+                "nanos": 1261246
+              },
+              "generated_event_count": 5,
+              "accepted_event_count": 5,
+              "relative_instability_error": {
+                "re": 0.0,
+                "im": 0.0
+              },
+              "is_nan": false,
+              "loop_momenta_escalation": null,
+              "stability_results": [
+                {
+                  "precision": "Arb",
+                  "estimated_relative_accuracy": 4.048160467012685e-301,
+                  "status": {
+                    "Stable": 2
+                  },
+                  "total_time": {
+                    "secs": 0,
+                    "nanos": 295544608
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "advanced": {
+      "rescued": {
+        "command": [
+          "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/gammaloop",
+          "-n",
+          "-s",
+          "/common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_advanced/state",
+          "-t",
+          "rescued",
+          "-L",
+          "debug",
+          "run",
+          "-c",
+          "set process -p epem_a_tth -i NNLO file /common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_advanced/workspace/integrands/epem_a_tth@NNLO/settings.toml; set process -p epem_a_tth -i NNLO kv general.generate_events=true general.store_additional_weights_in_event=false; inspect -p epem_a_tth -i NNLO -x 0.5156951665734136 0.5364636794716388 0.8318524038686087 0.5710377735171434 0.7546447565761167 0.8524813371503793 0.3525930855038039 0.014530525876098557 0.522431365283242 0.6316763485194195 0.5120208610432367 0.5806413236969333 -d 0 3 --json-output /common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_advanced/rescued_inspect.json; quit"
+        ],
+        "exit_code": 0,
+        "inspection": {
+          "evaluation": {
+            "integrand_result": {
+              "re": -0.00012246349837150626,
+              "im": 0.00016310832812435497
+            },
+            "absolute_integrand_result": {
+              "re": 0.00012246349837150626,
+              "im": 0.00016310832812435497
+            },
+            "parameterization_jacobian": 1.0,
+            "integrator_weight": 1.0,
+            "event_groups": [
+              [
+                {
+                  "kinematic_configuration": [
+                    [
+                      {
+                        "temporal": {
+                          "value": 300.0
+                        },
+                        "spatial": {
+                          "px": 0.0,
+                          "py": 0.0,
+                          "pz": 300.0
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 300.0
+                        },
+                        "spatial": {
+                          "px": 0.0,
+                          "py": 0.0,
+                          "pz": -300.0
+                        }
+                      }
+                    ],
+                    [
+                      {
+                        "temporal": {
+                          "value": 172.1626361183409
+                        },
+                        "spatial": {
+                          "px": 84.02043329861453,
+                          "py": -79.79949774858915,
+                          "pz": 24.240054096520538
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 205.7563993442456
+                        },
+                        "spatial": {
+                          "px": -81.13854798829176,
+                          "py": -18.921729637781077,
+                          "pz": 73.92699134264204
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 222.08096453741342
+                        },
+                        "spatial": {
+                          "px": -2.8818853103227684,
+                          "py": 98.72122738637023,
+                          "pz": -98.16704543916258
+                        }
+                      }
+                    ]
+                  ],
+                  "cut_info": {
+                    "particle_pdgs": [
+                      [
+                        -11,
+                        11
+                      ],
+                      [
+                        25,
+                        6,
+                        -6
+                      ]
+                    ],
+                    "cut_id": 5,
+                    "graph_id": 0,
+                    "graph_group_id": 0,
+                    "orientation_id": null,
+                    "sampling_channel_id": 3,
+                    "sampling_channel_edge_ids": [
+                      6,
+                      7,
+                      12,
+                      13
+                    ]
+                  },
+                  "weight": {
+                    "re": -0.00011846172701065239,
+                    "im": 0.00016505227282128944
+                  },
+                  "additional_weights": {
+                    "weights": {}
+                  }
+                },
+                {
+                  "kinematic_configuration": [
+                    [
+                      {
+                        "temporal": {
+                          "value": 300.0
+                        },
+                        "spatial": {
+                          "px": 0.0,
+                          "py": 0.0,
+                          "pz": 300.0
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 300.0
+                        },
+                        "spatial": {
+                          "px": 0.0,
+                          "py": 0.0,
+                          "pz": -300.0
+                        }
+                      }
+                    ],
+                    [
+                      {
+                        "temporal": {
+                          "value": 148.0635062325995
+                        },
+                        "spatial": {
+                          "px": 56.32267550101904,
+                          "py": -53.493192553104805,
+                          "pz": 16.249198527139548
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 231.1028006421663
+                        },
+                        "spatial": {
+                          "px": -134.74437280074108,
+                          "py": -18.16140747391719,
+                          "pz": 70.66556262957303
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 220.83369312523425
+                        },
+                        "spatial": {
+                          "px": 78.42169729972204,
+                          "py": 71.654600027022,
+                          "pz": -86.91476115671259
+                        }
+                      }
+                    ]
+                  ],
+                  "cut_info": {
+                    "particle_pdgs": [
+                      [
+                        -11,
+                        11
+                      ],
+                      [
+                        25,
+                        6,
+                        -6
+                      ]
+                    ],
+                    "cut_id": 7,
+                    "graph_id": 0,
+                    "graph_group_id": 0,
+                    "orientation_id": null,
+                    "sampling_channel_id": 3,
+                    "sampling_channel_edge_ids": [
+                      6,
+                      7,
+                      12,
+                      13
+                    ]
+                  },
+                  "weight": {
+                    "re": -4.097606342158695e-06,
+                    "im": -2.458291947869434e-06
+                  },
+                  "additional_weights": {
+                    "weights": {}
+                  }
+                },
+                {
+                  "kinematic_configuration": [
+                    [
+                      {
+                        "temporal": {
+                          "value": 300.0
+                        },
+                        "spatial": {
+                          "px": 0.0,
+                          "py": 0.0,
+                          "pz": 300.0
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 300.0
+                        },
+                        "spatial": {
+                          "px": 0.0,
+                          "py": 0.0,
+                          "pz": -300.0
+                        }
+                      }
+                    ],
+                    [
+                      {
+                        "temporal": {
+                          "value": 142.24158193301486
+                        },
+                        "spatial": {
+                          "px": 48.1758462338021,
+                          "py": -45.75563564885901,
+                          "pz": 13.898822857799694
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 222.00318782424722
+                        },
+                        "spatial": {
+                          "px": 99.57544839510241,
+                          "py": 64.265266246013,
+                          "pz": -72.87743845231766
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 235.75523024273792
+                        },
+                        "spatial": {
+                          "px": -147.7512946289045,
+                          "py": -18.509630597153986,
+                          "pz": 58.97861559451797
+                        }
+                      }
+                    ]
+                  ],
+                  "cut_info": {
+                    "particle_pdgs": [
+                      [
+                        -11,
+                        11
+                      ],
+                      [
+                        25,
+                        -6,
+                        6
+                      ]
+                    ],
+                    "cut_id": 0,
+                    "graph_id": 0,
+                    "graph_group_id": 0,
+                    "orientation_id": null,
+                    "sampling_channel_id": 3,
+                    "sampling_channel_edge_ids": [
+                      6,
+                      7,
+                      12,
+                      13
+                    ]
+                  },
+                  "weight": {
+                    "re": 1.0348450790596001e-07,
+                    "im": 6.914452680525557e-07
+                  },
+                  "additional_weights": {
+                    "weights": {}
+                  }
+                },
+                {
+                  "kinematic_configuration": [
+                    [
+                      {
+                        "temporal": {
+                          "value": 300.0
+                        },
+                        "spatial": {
+                          "px": 0.0,
+                          "py": 0.0,
+                          "pz": 300.0
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 300.0
+                        },
+                        "spatial": {
+                          "px": 0.0,
+                          "py": 0.0,
+                          "pz": -300.0
+                        }
+                      }
+                    ],
+                    [
+                      {
+                        "temporal": {
+                          "value": 135.7229371232688
+                        },
+                        "spatial": {
+                          "px": 37.52625968398399,
+                          "py": -35.64105251066863,
+                          "pz": 10.826396973542494
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 180.01082044095926
+                        },
+                        "spatial": {
+                          "px": -36.2391159227721,
+                          "py": -8.451060202628323,
+                          "pz": 33.018200048075286
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 204.14103220423203
+                        },
+                        "spatial": {
+                          "px": 77.56364291950818,
+                          "py": 50.05900795399323,
+                          "pz": -56.767403050750666
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 80.12521023153985
+                        },
+                        "spatial": {
+                          "px": -78.85078668072006,
+                          "py": -5.9668952406962745,
+                          "pz": 12.922806029132886
+                        }
+                      }
+                    ]
+                  ],
+                  "cut_info": {
+                    "particle_pdgs": [
+                      [
+                        -11,
+                        11
+                      ],
+                      [
+                        25,
+                        6,
+                        -6,
+                        21
+                      ]
+                    ],
+                    "cut_id": 3,
+                    "graph_id": 0,
+                    "graph_group_id": 0,
+                    "orientation_id": null,
+                    "sampling_channel_id": 3,
+                    "sampling_channel_edge_ids": [
+                      6,
+                      7,
+                      12,
+                      13
+                    ]
+                  },
+                  "weight": {
+                    "re": -1.3007984355876873e-17,
+                    "im": 1.347385416155028e-10
+                  },
+                  "additional_weights": {
+                    "weights": {}
+                  }
+                },
+                {
+                  "kinematic_configuration": [
+                    [
+                      {
+                        "temporal": {
+                          "value": 300.0
+                        },
+                        "spatial": {
+                          "px": 0.0,
+                          "py": 0.0,
+                          "pz": 300.0
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 300.0
+                        },
+                        "spatial": {
+                          "px": 0.0,
+                          "py": 0.0,
+                          "pz": -300.0
+                        }
+                      }
+                    ],
+                    [
+                      {
+                        "temporal": {
+                          "value": 140.30153190465109
+                        },
+                        "spatial": {
+                          "px": 45.21953736655869,
+                          "py": -42.94784290685688,
+                          "pz": 13.045922151928366
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 212.28218810422953
+                        },
+                        "spatial": {
+                          "px": -108.18161862155118,
+                          "py": -14.581168891403923,
+                          "pz": 56.73494771744385
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 216.75491630908925
+                        },
+                        "spatial": {
+                          "px": 93.4650050077347,
+                          "py": 60.32163076659003,
+                          "pz": -68.40531737170433
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 30.661363682030153
+                        },
+                        "spatial": {
+                          "px": -30.502923752742213,
+                          "py": -2.7926189683292364,
+                          "pz": -1.375552497667897
+                        }
+                      }
+                    ]
+                  ],
+                  "cut_info": {
+                    "particle_pdgs": [
+                      [
+                        -11,
+                        11
+                      ],
+                      [
+                        25,
+                        6,
+                        -6,
+                        21
+                      ]
+                    ],
+                    "cut_id": 6,
+                    "graph_id": 0,
+                    "graph_group_id": 0,
+                    "orientation_id": null,
+                    "sampling_channel_id": 3,
+                    "sampling_channel_edge_ids": [
+                      6,
+                      7,
+                      12,
+                      13
+                    ]
+                  },
+                  "weight": {
+                    "re": -7.649526587677724e-09,
+                    "im": -1.7723275565871534e-07
+                  },
+                  "additional_weights": {
+                    "weights": {}
+                  }
+                }
+              ]
+            ],
+            "evaluation_metadata": {
+              "total_timing": {
+                "secs": 0,
+                "nanos": 42011374
+              },
+              "integrand_evaluation_time": {
+                "secs": 0,
+                "nanos": 40607720
+              },
+              "canonical_physical_preparation_time": {
+                "secs": 0,
+                "nanos": 9207183
+              },
+              "evaluator_evaluation_time": {
+                "secs": 0,
+                "nanos": 1155993
+              },
+              "parameterization_time": {
+                "secs": 0,
+                "nanos": 967324
+              },
+              "canonical_sampling_preparation_time": {
+                "secs": 0,
+                "nanos": 956553
+              },
+              "event_processing_time": {
+                "secs": 0,
+                "nanos": 369929
+              },
+              "generated_event_count": 5,
+              "accepted_event_count": 5,
+              "relative_instability_error": {
+                "re": 0.0,
+                "im": 0.0
+              },
+              "is_nan": false,
+              "loop_momenta_escalation": null,
+              "stability_results": [
+                {
+                  "precision": "Double",
+                  "estimated_relative_accuracy": 3.762638904112435e-15,
+                  "status": {
+                    "Stable": 2
+                  },
+                  "total_time": {
+                    "secs": 0,
+                    "nanos": 31585347
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "rescued_arb": {
+        "command": [
+          "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/gammaloop",
+          "-n",
+          "-s",
+          "/common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_advanced/state",
+          "-t",
+          "rescued_arb",
+          "-L",
+          "debug",
+          "run",
+          "-c",
+          "set process -p epem_a_tth -i NNLO file /common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_advanced/workspace/integrands/epem_a_tth@NNLO/settings.toml; set process -p epem_a_tth -i NNLO kv general.generate_events=true general.store_additional_weights_in_event=false; inspect -p epem_a_tth -i NNLO -x 0.5156951665734136 0.5364636794716388 0.8318524038686087 0.5710377735171434 0.7546447565761167 0.8524813371503793 0.3525930855038039 0.014530525876098557 0.522431365283242 0.6316763485194195 0.5120208610432367 0.5806413236969333 -d 0 3 -f --json-output /common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_advanced/rescued_arb_inspect.json; quit"
+        ],
+        "exit_code": 0,
+        "inspection": {
+          "evaluation": {
+            "integrand_result": {
+              "re": -0.00012246349837150643,
+              "im": 0.00016310832812435437
+            },
+            "absolute_integrand_result": {
+              "re": 0.00012246349837150643,
+              "im": 0.00016310832812435437
+            },
+            "parameterization_jacobian": 1.0,
+            "integrator_weight": 1.0,
+            "event_groups": [
+              [
+                {
+                  "kinematic_configuration": [
+                    [
+                      {
+                        "temporal": {
+                          "value": 300.0
+                        },
+                        "spatial": {
+                          "px": 0.0,
+                          "py": 0.0,
+                          "pz": 300.0
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 300.0
+                        },
+                        "spatial": {
+                          "px": 0.0,
+                          "py": 0.0,
+                          "pz": -300.0
+                        }
+                      }
+                    ],
+                    [
+                      {
+                        "temporal": {
+                          "value": 172.1626361183409
+                        },
+                        "spatial": {
+                          "px": 84.02043329861455,
+                          "py": -79.79949774858918,
+                          "pz": 24.240054096520545
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 205.75639934424564
+                        },
+                        "spatial": {
+                          "px": -81.13854798829178,
+                          "py": -18.92172963778108,
+                          "pz": 73.92699134264205
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 222.08096453741345
+                        },
+                        "spatial": {
+                          "px": -2.881885310322769,
+                          "py": 98.72122738637024,
+                          "pz": -98.16704543916259
+                        }
+                      }
+                    ]
+                  ],
+                  "cut_info": {
+                    "particle_pdgs": [
+                      [
+                        -11,
+                        11
+                      ],
+                      [
+                        25,
+                        6,
+                        -6
+                      ]
+                    ],
+                    "cut_id": 5,
+                    "graph_id": 0,
+                    "graph_group_id": 0,
+                    "orientation_id": null,
+                    "sampling_channel_id": 3,
+                    "sampling_channel_edge_ids": [
+                      6,
+                      7,
+                      12,
+                      13
+                    ]
+                  },
+                  "weight": {
+                    "re": -0.00011846172701065302,
+                    "im": 0.00016505227282128832
+                  },
+                  "additional_weights": {
+                    "weights": {}
+                  }
+                },
+                {
+                  "kinematic_configuration": [
+                    [
+                      {
+                        "temporal": {
+                          "value": 300.0
+                        },
+                        "spatial": {
+                          "px": 0.0,
+                          "py": 0.0,
+                          "pz": 300.0
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 300.0
+                        },
+                        "spatial": {
+                          "px": 0.0,
+                          "py": 0.0,
+                          "pz": -300.0
+                        }
+                      }
+                    ],
+                    [
+                      {
+                        "temporal": {
+                          "value": 148.0635062325995
+                        },
+                        "spatial": {
+                          "px": 56.32267550101903,
+                          "py": -53.4931925531048,
+                          "pz": 16.24919852713954
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 231.10280064216627
+                        },
+                        "spatial": {
+                          "px": -134.74437280074108,
+                          "py": -18.161407473917187,
+                          "pz": 70.66556262957303
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 220.83369312523422
+                        },
+                        "spatial": {
+                          "px": 78.42169729972204,
+                          "py": 71.65460002702198,
+                          "pz": -86.91476115671257
+                        }
+                      }
+                    ]
+                  ],
+                  "cut_info": {
+                    "particle_pdgs": [
+                      [
+                        -11,
+                        11
+                      ],
+                      [
+                        25,
+                        6,
+                        -6
+                      ]
+                    ],
+                    "cut_id": 7,
+                    "graph_id": 0,
+                    "graph_group_id": 0,
+                    "orientation_id": null,
+                    "sampling_channel_id": 3,
+                    "sampling_channel_edge_ids": [
+                      6,
+                      7,
+                      12,
+                      13
+                    ]
+                  },
+                  "weight": {
+                    "re": -4.097606342158687e-06,
+                    "im": -2.458291947869402e-06
+                  },
+                  "additional_weights": {
+                    "weights": {}
+                  }
+                },
+                {
+                  "kinematic_configuration": [
+                    [
+                      {
+                        "temporal": {
+                          "value": 300.0
+                        },
+                        "spatial": {
+                          "px": 0.0,
+                          "py": 0.0,
+                          "pz": 300.0
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 300.0
+                        },
+                        "spatial": {
+                          "px": 0.0,
+                          "py": 0.0,
+                          "pz": -300.0
+                        }
+                      }
+                    ],
+                    [
+                      {
+                        "temporal": {
+                          "value": 142.24158193301486
+                        },
+                        "spatial": {
+                          "px": 48.175846233802105,
+                          "py": -45.75563564885901,
+                          "pz": 13.898822857799695
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 222.00318782424722
+                        },
+                        "spatial": {
+                          "px": 99.57544839510243,
+                          "py": 64.265266246013,
+                          "pz": -72.87743845231766
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 235.75523024273792
+                        },
+                        "spatial": {
+                          "px": -147.75129462890453,
+                          "py": -18.509630597153983,
+                          "pz": 58.97861559451797
+                        }
+                      }
+                    ]
+                  ],
+                  "cut_info": {
+                    "particle_pdgs": [
+                      [
+                        -11,
+                        11
+                      ],
+                      [
+                        25,
+                        -6,
+                        6
+                      ]
+                    ],
+                    "cut_id": 0,
+                    "graph_id": 0,
+                    "graph_group_id": 0,
+                    "orientation_id": null,
+                    "sampling_channel_id": 3,
+                    "sampling_channel_edge_ids": [
+                      6,
+                      7,
+                      12,
+                      13
+                    ]
+                  },
+                  "weight": {
+                    "re": 1.0348450790595973e-07,
+                    "im": 6.914452680525501e-07
+                  },
+                  "additional_weights": {
+                    "weights": {}
+                  }
+                },
+                {
+                  "kinematic_configuration": [
+                    [
+                      {
+                        "temporal": {
+                          "value": 300.0
+                        },
+                        "spatial": {
+                          "px": 0.0,
+                          "py": 0.0,
+                          "pz": 300.0
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 300.0
+                        },
+                        "spatial": {
+                          "px": 0.0,
+                          "py": 0.0,
+                          "pz": -300.0
+                        }
+                      }
+                    ],
+                    [
+                      {
+                        "temporal": {
+                          "value": 135.7229371232688
+                        },
+                        "spatial": {
+                          "px": 37.526259683983994,
+                          "py": -35.64105251066864,
+                          "pz": 10.826396973542499
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 180.0108204409593
+                        },
+                        "spatial": {
+                          "px": -36.23911592277211,
+                          "py": -8.451060202628325,
+                          "pz": 33.0182000480753
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 204.14103220423206
+                        },
+                        "spatial": {
+                          "px": 77.56364291950821,
+                          "py": 50.059007953993245,
+                          "pz": -56.76740305075068
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 80.12521023153987
+                        },
+                        "spatial": {
+                          "px": -78.85078668072009,
+                          "py": -5.966895240696276,
+                          "pz": 12.922806029132882
+                        }
+                      }
+                    ]
+                  ],
+                  "cut_info": {
+                    "particle_pdgs": [
+                      [
+                        -11,
+                        11
+                      ],
+                      [
+                        25,
+                        6,
+                        -6,
+                        21
+                      ]
+                    ],
+                    "cut_id": 3,
+                    "graph_id": 0,
+                    "graph_group_id": 0,
+                    "orientation_id": null,
+                    "sampling_channel_id": 3,
+                    "sampling_channel_edge_ids": [
+                      6,
+                      7,
+                      12,
+                      13
+                    ]
+                  },
+                  "weight": {
+                    "re": -1.3007984355783843e-17,
+                    "im": 1.3473854161550442e-10
+                  },
+                  "additional_weights": {
+                    "weights": {}
+                  }
+                },
+                {
+                  "kinematic_configuration": [
+                    [
+                      {
+                        "temporal": {
+                          "value": 300.0
+                        },
+                        "spatial": {
+                          "px": 0.0,
+                          "py": 0.0,
+                          "pz": 300.0
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 300.0
+                        },
+                        "spatial": {
+                          "px": 0.0,
+                          "py": 0.0,
+                          "pz": -300.0
+                        }
+                      }
+                    ],
+                    [
+                      {
+                        "temporal": {
+                          "value": 140.30153190465109
+                        },
+                        "spatial": {
+                          "px": 45.21953736655869,
+                          "py": -42.94784290685687,
+                          "pz": 13.04592215192836
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 212.2821881042295
+                        },
+                        "spatial": {
+                          "px": -108.18161862155118,
+                          "py": -14.581168891403923,
+                          "pz": 56.73494771744386
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 216.75491630908925
+                        },
+                        "spatial": {
+                          "px": 93.46500500773469,
+                          "py": 60.32163076659003,
+                          "pz": -68.40531737170433
+                        }
+                      },
+                      {
+                        "temporal": {
+                          "value": 30.661363682030142
+                        },
+                        "spatial": {
+                          "px": -30.5029237527422,
+                          "py": -2.7926189683292373,
+                          "pz": -1.375552497667894
+                        }
+                      }
+                    ]
+                  ],
+                  "cut_info": {
+                    "particle_pdgs": [
+                      [
+                        -11,
+                        11
+                      ],
+                      [
+                        25,
+                        6,
+                        -6,
+                        21
+                      ]
+                    ],
+                    "cut_id": 6,
+                    "graph_id": 0,
+                    "graph_group_id": 0,
+                    "orientation_id": null,
+                    "sampling_channel_id": 3,
+                    "sampling_channel_edge_ids": [
+                      6,
+                      7,
+                      12,
+                      13
+                    ]
+                  },
+                  "weight": {
+                    "re": -7.649526587678234e-09,
+                    "im": -1.7723275565871446e-07
+                  },
+                  "additional_weights": {
+                    "weights": {}
+                  }
+                }
+              ]
+            ],
+            "evaluation_metadata": {
+              "total_timing": {
+                "secs": 0,
+                "nanos": 320614941
+              },
+              "integrand_evaluation_time": {
+                "secs": 0,
+                "nanos": 317319168
+              },
+              "canonical_physical_preparation_time": {
+                "secs": 0,
+                "nanos": 10894420
+              },
+              "evaluator_evaluation_time": {
+                "secs": 0,
+                "nanos": 164166885
+              },
+              "parameterization_time": {
+                "secs": 0,
+                "nanos": 1631526
+              },
+              "canonical_sampling_preparation_time": {
+                "secs": 0,
+                "nanos": 1598766
+              },
+              "event_processing_time": {
+                "secs": 0,
+                "nanos": 1098034
+              },
+              "generated_event_count": 5,
+              "accepted_event_count": 5,
+              "relative_instability_error": {
+                "re": 0.0,
+                "im": 0.0
+              },
+              "is_nan": false,
+              "loop_momenta_escalation": null,
+              "stability_results": [
+                {
+                  "precision": "Arb",
+                  "estimated_relative_accuracy": 3.7210689902053412e-301,
+                  "status": {
+                    "Stable": 2
+                  },
+                  "total_time": {
+                    "secs": 0,
+                    "nanos": 307433311
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  },
+  "binary_sha256": "a3574203cedcfb536dc5daf0308093e24bb54742782c8e30f36a7187754b3800"
+}

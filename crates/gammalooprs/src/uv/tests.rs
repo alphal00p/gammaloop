@@ -537,7 +537,7 @@ fn scalars_profile_respects_graph_lmb_and_subset_filters() {
     });
 
     let profile_settings = ProfileSettings {
-        n_points: 3,
+        n_points: 5,
         graph_id: Some(1),
         orientation_mode: OrientationProfileMode::PerOrientation,
         ..scalar_uv_profile_settings()
@@ -578,7 +578,7 @@ fn invalid_uv_graph_filter_preserves_the_integrand() {
         ..Default::default()
     });
     let invalid = ProfileSettings {
-        n_points: 3,
+        n_points: 5,
         graph_id: Some(usize::MAX),
         ..scalar_uv_profile_settings()
     };

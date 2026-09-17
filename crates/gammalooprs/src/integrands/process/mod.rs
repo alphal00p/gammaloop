@@ -2337,7 +2337,11 @@ impl<T: FloatLike> PreciseStabilityLevelResult<T> {
             precision: self.stability_level_used,
             estimated_relative_accuracy: self.estimated_relative_accuracy.as_ref().map(F::into_ff64),
             estimated_decimal_digits,
-            status: StabilityStatus::from_sample_count(self.sample_count, self.is_stable),
+            status: if self.sample_count == 0 {
+                StabilityStatus::Unstable(0)
+            } else {
+                StabilityStatus::from_sample_count(self.sample_count, self.is_stable)
+            },
             total_time: self.total_time,
         }
     }
@@ -3082,7 +3086,7 @@ pub trait ProcessIntegrandImpl {
         for id in 0..self.graph_count() {
             for mass in self
                 .get_graph(id)
-                .get_real_mass_vector()
+                .get_real_mass_vector()?
                 .iter()
                 .filter_map(|(_, mass)| mass.as_ref())
             {
@@ -3691,7 +3695,7 @@ pub trait GraphTerm {
     ) -> Result<LmbIndex>;
     fn get_tropical_sampler(&self) -> &SampleGenerator<3>;
     fn get_mut_param_builder(&mut self) -> &mut ParamBuilder<f64>;
-    fn get_real_mass_vector(&self) -> EdgeVec<Option<F<f64>>>;
+    fn get_real_mass_vector(&self) -> Result<EdgeVec<Option<F<f64>>>>;
 
     /// Compile the canonical full-frame sampling bridge for this graph.
     /// Process implementations own the graph-specific external signature and
@@ -4170,37 +4174,78 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
     context: &mut StabilityEvaluationContext<'_, '_>,
 ) -> Result<PreciseStabilityLevelResult<T>> {
     let level_start = Instant::now();
-    let gammaloop_sample = context
-        .source
-        .build_gamma_sample::<T, I>(integrand, context.evaluation_metadata)?;
-    let ecm_scale = context.ecm_reference_scale(integrand, &gammaloop_sample)?;
-    debug!("{} parameterization succeeded", context.precision_label);
-    debug!(
-        "jacobian: {:+16e}",
-        gammaloop_sample.get_default_sample().jacobian()
-    );
-
-    let (graph_results, primary_rotation_index, rotated_results) = evaluate_all_rotations(
-        integrand,
-        context.target,
-        &gammaloop_sample,
-        context.evaluation_metadata,
-        context.record_rotated_results,
-        context.source.canonical_sample(),
-    )?;
-    let threshold_counterterm_failed = context
+    let evaluated = if context
         .evaluation_metadata
         .threshold_counterterm_error
-        .is_some();
-    if context.is_final_level
-        && let Some(threshold_error) = &context.evaluation_metadata.threshold_counterterm_error
+        .is_some()
     {
-        return Err(eyre!(
-            "threshold-counterterm evaluation remained invalid after the final {} stability level: {}",
-            context.stability_level.precision,
-            threshold_error,
-        ));
+        None
+    } else {
+        let evaluated = (|| {
+            let sample = context
+                .source
+                .build_gamma_sample::<T, I>(integrand, context.evaluation_metadata)?;
+            let ecm_scale = context.ecm_reference_scale(integrand, &sample)?;
+            debug!("{} parameterization succeeded", context.precision_label);
+            debug!("jacobian: {:+16e}", sample.get_default_sample().jacobian());
+            let rotations = evaluate_all_rotations(
+                integrand,
+                context.target,
+                &sample,
+                context.evaluation_metadata,
+                context.record_rotated_results,
+                context.source.canonical_sample(),
+            )?;
+            Ok::<_, eyre::Report>((sample, ecm_scale, rotations))
+        })();
+        match evaluated {
+            Ok(evaluated) => Some(evaluated),
+            Err(error)
+                if matches!(context.target, EvaluationTarget::Physical(_))
+                    && matches!(
+                        error.downcast_ref::<sampling_maps::SamplingEvaluationError>(),
+                        Some(
+                            sampling_maps::SamplingEvaluationError::UncertifiedOverlap { .. }
+                                | sampling_maps::SamplingEvaluationError::UncertifiedRoot { .. }
+                        )
+                    ) =>
+            {
+                // A failed native pass may have populated only part of its
+                // point caches; use fresh identities for the following lane.
+                integrand.increment_loop_cache_id(integrand.get_rotations().count() + 1);
+                integrand.revert_to_base_external_cache_id();
+                context
+                    .evaluation_metadata
+                    .record_threshold_counterterm_error(format!("{error:#}"));
+                None
+            }
+            Err(error) => return Err(error),
+        }
+    };
+    if context
+        .evaluation_metadata
+        .threshold_counterterm_error
+        .is_some()
+    {
+        // An uncertified cut/overlap invalidates the whole sample, including
+        // partial channels and events. Retry native precision through the same
+        // driver; an exhausted failure remains explicitly marked NaN.
+        let mut graph_result = GraphEvaluationResult::zero(F::<T>::from_f64(0.0));
+        graph_result.integrand_result = Complex::new(F::from_f64(f64::NAN), F::from_f64(f64::NAN));
+        return Ok(PreciseStabilityLevelResult {
+            result: graph_result.integrand_result.clone(),
+            graph_result,
+            stability_level_used: context.stability_level.precision,
+            estimated_relative_accuracy: None,
+            sample_count: 0,
+            total_time: level_start.elapsed(),
+            parameterization_jacobian: context.source.is_x_space().then(|| F::from_f64(1.0)),
+            is_stable: false,
+            rotated_results: Vec::new(),
+        });
     }
+    let (gammaloop_sample, ecm_scale, (graph_results, primary_rotation_index, rotated_results)) =
+        evaluated.expect("a successful level has evaluated rotations");
     let results = graph_results
         .iter()
         .map(|result| result.integrand_result.clone())
@@ -4358,7 +4403,7 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
             .source
             .is_x_space()
             .then(|| gammaloop_sample.get_default_sample().one()),
-        is_stable: is_stable && !threshold_counterterm_failed,
+        is_stable,
         rotated_results,
     })
 }
@@ -5205,10 +5250,32 @@ fn evaluate_from_source_precise_with_estimate<I: ProcessIntegrandImpl>(
             "reference acceptance does not support tropical sampling"
         ));
     }
-    let mut anchor = source.prepare_draw(integrand, &mut evaluation_metadata)?;
-    if let (Some(sample), EvaluationTarget::Physical(model)) = (&mut anchor, target) {
-        sample.prepare_physical_overlaps(integrand, model, &mut evaluation_metadata)?;
-    }
+    let prepared = (|| {
+        let mut anchor = source.prepare_draw(integrand, &mut evaluation_metadata)?;
+        if let (Some(sample), EvaluationTarget::Physical(model)) = (&mut anchor, target) {
+            sample.prepare_physical_overlaps(integrand, model, &mut evaluation_metadata)?;
+        }
+        Ok::<_, eyre::Report>(anchor)
+    })();
+    let (anchor, preparation_error) = match prepared {
+        Ok(anchor) => (anchor, None),
+        Err(error)
+            if matches!(target, EvaluationTarget::Physical(_))
+                && matches!(
+                    error.downcast_ref::<sampling_maps::SamplingEvaluationError>(),
+                    Some(
+                        sampling_maps::SamplingEvaluationError::UncertifiedOverlap { .. }
+                            | sampling_maps::SamplingEvaluationError::UncertifiedRoot { .. }
+                    )
+                ) =>
+        {
+            // The canonical proposal/center authority must not be changed in a
+            // native retry. An unresolved preparation prevents every physical
+            // lane; preserve its diagnostic without evaluating partial bodies.
+            (None, Some(format!("{error:#}")))
+        }
+        Err(error) => return Err(error),
+    };
     let original_source = source;
     let source = match &anchor {
         Some(sample) => EvaluationSource::Prepared {
@@ -5217,8 +5284,14 @@ fn evaluate_from_source_precise_with_estimate<I: ProcessIntegrandImpl>(
         },
         None => original_source,
     };
-    let (stability_iterator, loop_momenta_escalation) =
-        stability_iterator_for_source(integrand, &source, use_arb_prec, &mut evaluation_metadata);
+    let (stability_iterator, loop_momenta_escalation) = if preparation_error.is_some() {
+        (
+            create_stability_iterator(&integrand.get_settings().stability, use_arb_prec),
+            None,
+        )
+    } else {
+        stability_iterator_for_source(integrand, &source, use_arb_prec, &mut evaluation_metadata)
+    };
 
     let mut final_result = None;
 
@@ -5227,6 +5300,9 @@ fn evaluate_from_source_precise_with_estimate<I: ProcessIntegrandImpl>(
     let total_levels = stability_iterator.len();
     for (level_index, stability_level) in stability_iterator.into_iter().enumerate() {
         evaluation_metadata.clear_threshold_counterterm_error();
+        if let Some(error) = &preparation_error {
+            evaluation_metadata.record_threshold_counterterm_error(error.clone());
+        }
         let is_final_level = level_index + 1 == total_levels;
         let record_rotated_results = integrand
             .get_settings()
@@ -5349,7 +5425,11 @@ fn evaluate_from_source_precise_with_estimate<I: ProcessIntegrandImpl>(
             break;
         } else {
             debug!("unstable at level: {}", stability_level.precision);
-            if let Ok(gammaloop_sample) = source.debug_sample(integrand, &mut evaluation_metadata) {
+            if evaluation_metadata.threshold_counterterm_error.is_some() {
+                debug!("threshold preparation or evaluation requires precision escalation");
+            } else if let Ok(gammaloop_sample) =
+                source.debug_sample(integrand, &mut evaluation_metadata)
+            {
                 log_rotated_samples(integrand, &gammaloop_sample, &rotated_results);
             } else {
                 debug!("failed to reconstruct sample for instability logging");
@@ -6100,6 +6180,102 @@ pub(crate) mod tests {
                     Some(Complex::new_re(draw.zero()))
                 );
             }
+            // Exercise the pre-stability numerical failure boundary on this
+            // generated physical cut without requiring a platform-dependent
+            // Clarabel termination status. The original proposal stays fixed.
+            let healthy_setup = integrand.get_graph(0).sampling_setup().clone();
+            let overlap_failure = super::sampling_maps::SamplingEvaluationError::UncertifiedOverlap {
+                detail: "Threshold SOCP returned AlmostPrimalInfeasible without a strictly interior center".into(),
+            };
+            let setup = integrand.get_graph_mut(0).sampling_setup_mut();
+            if fixed256 {
+                setup.sampling_bridge_fixed256.set(Err(overlap_failure));
+            } else {
+                setup.sampling_bridge_quad.set(Err(overlap_failure));
+            }
+            let failed = evaluate_from_source_precise(
+                integrand,
+                EvaluationTarget::Physical(model),
+                EvaluationSource::XSpace(source),
+                F(1.0),
+                false,
+                Complex::new_zero(),
+            )?
+            .try_into_f64()?;
+            assert!(failed.evaluation_metadata.is_nan);
+            assert!(failed.event_groups.is_empty());
+            assert_eq!(
+                failed.evaluation_metadata.final_precision(),
+                Some(Precision::Arb)
+            );
+            assert_eq!(
+                failed
+                    .evaluation_metadata
+                    .stability_results
+                    .iter()
+                    .map(|result| (result.precision, result.status.clone()))
+                    .collect::<Vec<_>>(),
+                [Precision::Double, Precision::Quad, Precision::Arb]
+                    .into_iter()
+                    .map(|precision| (
+                        precision,
+                        crate::integrands::evaluation::StabilityStatus::Unstable(0)
+                    ))
+                    .collect::<Vec<_>>()
+            );
+            assert!(
+                failed
+                    .evaluation_metadata
+                    .threshold_counterterm_error
+                    .as_ref()
+                    .unwrap()
+                    .contains("AlmostPrimalInfeasible")
+            );
+            assert!(
+                serde_json::to_string(&failed.evaluation_metadata)?
+                    .contains("AlmostPrimalInfeasible")
+            );
+            assert_eq!(
+                failed.evaluation_metadata.evaluator_evaluation_time,
+                std::time::Duration::ZERO
+            );
+            *integrand.get_graph_mut(0).sampling_setup_mut() = healthy_setup.clone();
+            let following = evaluate_from_source_precise(
+                integrand,
+                EvaluationTarget::Physical(model),
+                EvaluationSource::XSpace(source),
+                F(1.0),
+                false,
+                Complex::new_zero(),
+            )?
+            .try_into_f64()?;
+            assert!(!following.evaluation_metadata.is_nan);
+            assert!(
+                following
+                    .evaluation_metadata
+                    .threshold_counterterm_error
+                    .is_none()
+            );
+            assert!(following.integrand_result.re.0.is_finite());
+            assert!(following.integrand_result.im.0.is_finite());
+            // Missing fixed-source metadata is a programming/configuration
+            // error, not a failed numerical sample to record and skip.
+            integrand
+                .get_graph_mut(0)
+                .sampling_setup_mut()
+                .sampling_source = RuntimeCache::default();
+            let malformed = evaluate_from_source_precise(
+                integrand,
+                EvaluationTarget::Physical(model),
+                EvaluationSource::XSpace(source),
+                F(1.0),
+                false,
+                Complex::new_zero(),
+            )
+            .unwrap_err();
+            assert!(format!("{malformed:#}").contains("fixed sampling source is not initialized"));
+            *integrand.get_graph_mut(0).sampling_setup_mut() = healthy_setup;
+
             let unavailable = super::sampling_maps::SamplingEvaluationError::Unrepresentable {
                 operation: "test-only fixed source poison",
                 detail: "cannot redraw at Arb".into(),
@@ -7871,6 +8047,44 @@ pub(crate) mod tests {
             .insert(
                 crate::observables::AdditionalWeightKey::Original,
                 Complex::new_re(small.clone()),
+            );
+        assert!(
+            format!("{:#}", auxiliary.clone().try_into_f64().unwrap_err())
+                .contains("additional_weights[Original].re")
+        );
+
+        let full_factor_key = crate::observables::AdditionalWeightKey::FullMultiplicativeFactor;
+        auxiliary.event_groups[0][0]
+            .additional_weights
+            .weights
+            .insert(full_factor_key, Complex::new_re(one.clone()));
+        assert_eq!(
+            auxiliary.clone().try_into_f64().unwrap().event_groups[0][0]
+                .additional_weights
+                .weights[&crate::observables::AdditionalWeightKey::Original],
+            Complex::new_zero(),
+        );
+        // An unknown component of a complex multiplier cannot certify a tail,
+        // even when its other component is finite and small.
+        auxiliary.event_groups[0][0]
+            .additional_weights
+            .weights
+            .insert(
+                full_factor_key,
+                Complex::new(F::<ArbPrec>::from_f64(f64::NAN), one.clone()),
+            );
+        assert!(
+            format!("{:#}", auxiliary.clone().try_into_f64().unwrap_err())
+                .contains("additional_weights[Original].re")
+        );
+        // A complex multiplier can promote this tiny real component into a
+        // meaningful imaginary contribution. It must survive before rounding.
+        auxiliary.event_groups[0][0]
+            .additional_weights
+            .weights
+            .insert(
+                full_factor_key,
+                Complex::new_im(one.from_usize(10).powi(100)),
             );
         assert!(
             format!("{:#}", auxiliary.try_into_f64().unwrap_err())

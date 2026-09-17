@@ -1,0 +1,77 @@
+{
+  "argv": [
+    "rustc",
+    "--edition=2024",
+    "-C",
+    "opt-level=2",
+    "-C",
+    "debuginfo=1",
+    "-C",
+    "linker=/nix/store/vdaz6sk455r8sbpi7wzaf9vlz5i9yyvx-gcc-wrapper-15.2.0/bin/gcc",
+    "-L",
+    "dependency=/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/deps",
+    "-L",
+    "native=/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/build/gmp-mpfr-sys-2c9c0b34e622e63a/out/lib",
+    "-L",
+    "native=/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/build/blake3-4be88df3d48b740a/out",
+    "-L",
+    "native=/nix/store/jxyrvv4gbpnp3ap5iy7wxwl1sg4x2x88-python3-3.14.6/lib",
+    "--extern",
+    "gammaloop_api=/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/deps/libgammaloop_api.rlib",
+    "--extern",
+    "gammalooprs=/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/deps/libgammalooprs-2a7ce7c0e78bf01f.rlib",
+    "--extern",
+    "symbolica=/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/deps/libsymbolica-8019bfdd5fbaede0.rlib",
+    "--extern",
+    "spenso=/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/deps/libspenso-c4a473cf004cc3b2.rlib",
+    "--extern",
+    "bincode=/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/deps/libbincode-d653225ddcf3d562.rlib",
+    "--extern",
+    "color_eyre=/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/deps/libcolor_eyre-821e98309b993482.rlib",
+    "--extern",
+    "serde_json=/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/deps/libserde_json-8d5a1b6683fc5257.rlib",
+    "target/gl638_spike_inverse_diagnostics/inverse_replay.rs",
+    "-o",
+    "target/gl638_spike_inverse_diagnostics/inverse_replay"
+  ],
+  "artifacts": {
+    "target/gl638_spike_inverse_diagnostics/inverse_replay.rs": {
+      "sha256": "ff5e1dc86abfd094a0ade91f6f69a210d4e229f157be3b4193fc2d36180b2f95",
+      "size": 13480
+    },
+    "target/gl638_spike_inverse_diagnostics/inverse_replay": {
+      "sha256": "7df614d6ca05e8048a5f94ce80779d7cccc46806a9e35447e0bc85f92ec89242",
+      "size": 1691648496
+    },
+    "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/deps/libgammaloop_api.rlib": {
+      "sha256": "dd2263dae3f918625b03e1caccd0229e292f2b5d21e760f844d2334447b27a10",
+      "size": 727680452
+    },
+    "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/deps/libgammalooprs-2a7ce7c0e78bf01f.rlib": {
+      "sha256": "04bad04172683a1181c8d33a96898b42727ed45b692e43737bc758017a894369",
+      "size": 1494195490
+    },
+    "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/deps/libsymbolica-8019bfdd5fbaede0.rlib": {
+      "sha256": "c7d6b590d8e019e5eb1747cc29a20fadfdf0be84fe7521fabd9924349064e977",
+      "size": 662874890
+    },
+    "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/deps/libspenso-c4a473cf004cc3b2.rlib": {
+      "sha256": "236ebe29c743bb2768fdeea6ab991efb03ab5a37d24e41d7f31aa7530aeac585",
+      "size": 53850444
+    },
+    "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/deps/libbincode-d653225ddcf3d562.rlib": {
+      "sha256": "d982bf9b54ddd02d689e2be9398c8fab4906bb0e07e83440aae336f38b5263a2",
+      "size": 2407538
+    },
+    "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/deps/libcolor_eyre-821e98309b993482.rlib": {
+      "sha256": "2024d5c8f376778688e2456059840a42c57fe55d01b7d57ed262d90f89b4d0a1",
+      "size": 3427578
+    },
+    "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/deps/libserde_json-8d5a1b6683fc5257.rlib": {
+      "sha256": "2d7b6881a08e597a14efd9e5511e883b3721e84b092372881614ba57e1863a68",
+      "size": 7187838
+    }
+  },
+  "source_commit": "f4171822f70ef7e33c588b55c0a6bddec99c94cc",
+  "scope": "Standalone diagnostic linked existing dev-optim production libraries. Verified read-only replay using archived learned-grid JSON exports, no binary integration checkpoint needed."
+}
