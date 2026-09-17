@@ -4088,8 +4088,17 @@ parent_lmb = [4,6]
             assert!(
                 amplitude.data.graph_terms[0]
                     .multi_channeling_setup
-                    .sampling_bridge::<ArbPrec>()
+                    .sampling_bridge::<QuadFloat>()
                     .is_ok()
+            );
+            assert_eq!(
+                amplitude.data.graph_terms[0]
+                    .multi_channeling_setup
+                    .sampling_source
+                    .as_ref()
+                    .unwrap()
+                    .0,
+                crate::utils::SamplingPrecision::Quad
             );
             // A structural bind failure still invalidates all precisions even
             // when the previous epoch contained a usable Quad binding.
@@ -4100,7 +4109,7 @@ parent_lmb = [4,6]
             let error = amplitude.warm_up_sampling().unwrap_err();
             assert!(error.downcast_ref::<SamplingEvaluationError>().is_none());
             assert!(
-                format!("{error:#}").contains("warmup mass data"),
+                format!("{error:#}").contains("real mass vector is not initialized"),
                 "{error:#}"
             );
             assert!(
@@ -5761,7 +5770,6 @@ parent_lmb = [4,6]
                 "Quad-only warmup must not require Double geometry"
             );
             assert!(setup.sampling_bridge::<QuadFloat>().is_ok());
-            assert!(setup.sampling_bridge::<crate::utils::ArbPrec>().is_ok());
             let catalogue = setup.sampling_catalogue.as_ref().unwrap() as *const _ as usize;
             let programs = setup.sampling_programs.as_ref().unwrap() as *const _ as usize;
             runtime.prepare_sampling_precision::<crate::utils::ArbPrec>()?;

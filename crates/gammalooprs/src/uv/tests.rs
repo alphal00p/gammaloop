@@ -538,14 +538,15 @@ fn scalars_profile_respects_graph_lmb_and_subset_filters() {
 
     let profile_settings = ProfileSettings {
         n_points: 5,
-        graph_id: Some(1),
+        // The one-loop bubble needs only one representative divergent LMB.
+        graph_id: Some(2),
         orientation_mode: OrientationProfileMode::PerOrientation,
         ..scalar_uv_profile_settings()
     };
     let analysis = amp.profile(&model, &profile_settings).unwrap().analyse();
 
     assert_eq!(analysis.graphs.len(), 1);
-    assert_eq!(analysis.graphs[0].graph_index, 1);
+    assert_eq!(analysis.graphs[0].graph_index, 2);
     assert_eq!(analysis.graphs[0].lmbs.len(), 1);
     assert_eq!(analysis.graphs[0].lmbs[0].lmb_index, 0);
     assert!(!analysis.graphs[0].lmbs[0].subsets.is_empty());
