@@ -8,12 +8,11 @@ use linnet::half_edge::involution::HedgePair;
 use spenso::{
     iterators::IteratableTensor,
     network::{
-        ExecutionResult, Sequential, SmallestDegree,
-        library::symbolic::{ExplicitKey, TensorLibrary},
+        ExecutionResult, Sequential, SmallestDegree, library::symbolic::ExplicitKey,
         parsing::ParseSettings,
     },
-    structure::{TensorStructure, representation::Minkowski, slot::IsAbstractSlot},
-    tensors::parametric::{ParamOrConcrete, ParamTensor},
+    structure::{TensorStructure, slot::IsAbstractSlot},
+    tensors::parametric::ParamTensor,
 };
 use symbolica::{
     atom::{Atom, AtomCore},
@@ -25,7 +24,7 @@ use crate::{
     initialisation::test_initialise,
     model::{Model, UFOSymbol},
     numerator::{ParsingNet, aind::Aind},
-    utils::{F, FUN_LIB, GS, load_generic_model},
+    utils::{FUN_LIB, GS, load_generic_model},
 };
 
 type Matrix = [[Atom; 4]; 4];
@@ -156,17 +155,9 @@ fn vertex_matrix(
 }
 
 fn tensor_matrix(expression: Atom, vector_component: usize) -> Matrix {
-    // Build the generic metric with Atom entries so its spatial signs
+    // The symbolic library builds generic metrics with Atom entries so their spatial signs
     // remain exact alongside the parametric gamma matrices and couplings.
-    let mut library = spenso_hep_lib::hep_lib_atom::<Aind, F<f64>>();
-    library.insert_generic(
-        TensorLibrary::<ParamTensor<ExplicitKey<Aind>>, Aind>::id(Minkowski {}.into()),
-        |key| {
-            ParamOrConcrete::Param(
-                TensorLibrary::<ParamTensor<ExplicitKey<Aind>>, Aind>::diag_unimodular_metric(key),
-            )
-        },
-    );
+    let library = spenso_hep_lib::hep_lib_atom::<Aind, ParamTensor<ExplicitKey<Aind>>>();
     let mut network =
         ParsingNet::try_from_view(expression.as_view(), &library, &ParseSettings::default())
             .unwrap();
@@ -176,9 +167,7 @@ fn tensor_matrix(expression: Atom, vector_component: usize) -> Matrix {
     let ExecutionResult::Val(tensor) = network.result_tensor(&library).unwrap() else {
         panic!("expected nonzero model vertex");
     };
-    let mut tensor = tensor.into_owned();
-    tensor.to_param();
-    let tensor = tensor.try_into_parametric().unwrap();
+    let tensor = tensor.into_owned();
     let slots = tensor.external_structure();
     let mut result: Matrix = std::array::from_fn(|_| std::array::from_fn(|_| Atom::Zero));
     for (indices, value) in tensor.iter_expanded() {

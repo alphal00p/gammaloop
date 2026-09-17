@@ -7,18 +7,21 @@ use spenso::{
     network::{
         Network,
         library::{
-            TensorLibraryData,
+            LibraryTensor, TensorLibraryData,
             function_lib::{INBUILTS, PanicMissingConcrete, SymbolLib},
             symbolic::{ExplicitKey, TensorLibrary},
         },
         parsing::ShadowedStructure,
         store::NetworkStore,
     },
-    structure::{PermutedStructure, TensorStructure, abstract_index::AbstractIndex, slot::AbsInd},
+    structure::{
+        PermutedStructure, TensorStructure, abstract_index::AbstractIndex, permuted::PermuteTensor,
+        slot::AbsInd,
+    },
     tensors::{
         complex::RealOrComplexTensor,
         data::{SetTensorData, SparseTensor, StorageTensor},
-        parametric::{MixedTensor, ParamOrConcrete},
+        parametric::{MixedTensor, ParamTensor},
     },
 };
 use symbolica::{
@@ -606,75 +609,101 @@ pub fn hep_lib_su3<Aind: AbsInd>() -> TensorLibrary<MixedTensor<f64, ExplicitKey
     lib
 }
 
-pub fn hep_lib_atom<Aind: AbsInd, T: TensorLibraryData + Clone + Default>()
--> TensorLibrary<MixedTensor<T, ExplicitKey<Aind>>, Aind>
+pub fn hep_lib_atom<Aind: AbsInd, T>() -> TensorLibrary<T, Aind>
 where
+    T: LibraryTensor<Structure = ExplicitKey<Aind>>
+        + SetTensorData<SetData = <T as LibraryTensor>::Data>
+        + PermuteTensor<Permuted = T>
+        + From<ParamTensor<ExplicitKey<Aind>>>
+        + Clone,
+    T::Data: TensorLibraryData,
 {
-    let mut weyl = TensorLibrary::new();
+    let mut weyl = TensorLibrary::<T, Aind>::new();
     initialize();
     weyl.update_ids();
 
     let one = Atom::one();
     let zero = Atom::Zero;
 
-    let gamma_key = PermutedStructure::identity(ParamOrConcrete::param(
-        gamma_data_weyl(AGS.gamma_strct::<Aind>(4), one.clone(), zero.clone())
-            .map_data(|a| a.re + a.im * Atom::i())
-            .into(),
-    ));
+    let gamma_key = PermutedStructure::identity(
+        ParamTensor::param(
+            gamma_data_weyl(AGS.gamma_strct::<Aind>(4), one.clone(), zero.clone())
+                .map_data(|a| a.re + a.im * Atom::i())
+                .into(),
+        )
+        .into(),
+    );
     // println!("permutation{}", gamma_key.rep_permutation);
     weyl.insert_explicit(gamma_key);
-    let gamma_conj_key = PermutedStructure::identity(ParamOrConcrete::param(
-        gamma_conj_data_weyl(AGS.gamma_conj_strct::<Aind>(4), one.clone(), zero.clone())
-            .map_data(|a| a.re + a.im * Atom::i())
-            .into(),
-    ));
+    let gamma_conj_key = PermutedStructure::identity(
+        ParamTensor::param(
+            gamma_conj_data_weyl(AGS.gamma_conj_strct::<Aind>(4), one.clone(), zero.clone())
+                .map_data(|a| a.re + a.im * Atom::i())
+                .into(),
+        )
+        .into(),
+    );
     // println!("permutation{}", gamma_key.rep_permutation);
     weyl.insert_explicit(gamma_conj_key);
-    let gamma_adj_key = PermutedStructure::identity(ParamOrConcrete::param(
-        gamma_adj_data_weyl(AGS.gamma_adj_strct::<Aind>(4), one.clone(), zero.clone())
-            .map_data(|a| a.re + a.im * Atom::i())
-            .into(),
-    ));
+    let gamma_adj_key = PermutedStructure::identity(
+        ParamTensor::param(
+            gamma_adj_data_weyl(AGS.gamma_adj_strct::<Aind>(4), one.clone(), zero.clone())
+                .map_data(|a| a.re + a.im * Atom::i())
+                .into(),
+        )
+        .into(),
+    );
     // println!("permutation{}", gamma_key.rep_permutation);
     weyl.insert_explicit(gamma_adj_key);
-    let gamma0_key = PermutedStructure::identity(ParamOrConcrete::param(
-        gamma0_weyl(AGS.gamma0_strct::<Aind>(4), one.clone(), zero.clone())
-            .map_data(|a| a.re + a.im * Atom::i())
-            .into(),
-    ));
+    let gamma0_key = PermutedStructure::identity(
+        ParamTensor::param(
+            gamma0_weyl(AGS.gamma0_strct::<Aind>(4), one.clone(), zero.clone())
+                .map_data(|a| a.re + a.im * Atom::i())
+                .into(),
+        )
+        .into(),
+    );
     // println!("permutation{}", gamma_key.rep_permutation);
     weyl.insert_explicit(gamma0_key);
 
-    let gamma5_key = PermutedStructure::identity(ParamOrConcrete::param(
-        gamma5_weyl_data(AGS.gamma5_strct::<Aind>(4), one.clone(), zero.clone())
-            .map_data(|a| a.re + a.im * Atom::i())
-            .into(),
-    ));
+    let gamma5_key = PermutedStructure::identity(
+        ParamTensor::param(
+            gamma5_weyl_data(AGS.gamma5_strct::<Aind>(4), one.clone(), zero.clone())
+                .map_data(|a| a.re + a.im * Atom::i())
+                .into(),
+        )
+        .into(),
+    );
     weyl.insert_explicit(gamma5_key);
 
-    let projm_key = PermutedStructure::identity(ParamOrConcrete::param(
-        proj_m_data_weyl(AGS.projm_strct::<Aind>(4), one.clone(), zero.clone())
-            .map_data(|a| a.re + a.im * Atom::i())
-            .into(),
-    ));
+    let projm_key = PermutedStructure::identity(
+        ParamTensor::param(
+            proj_m_data_weyl(AGS.projm_strct::<Aind>(4), one.clone(), zero.clone())
+                .map_data(|a| a.re + a.im * Atom::i())
+                .into(),
+        )
+        .into(),
+    );
     weyl.insert_explicit(projm_key);
 
-    let projp_key = PermutedStructure::identity(ParamOrConcrete::param(
-        proj_p_data_weyl(AGS.projp_strct::<Aind>(4), one.clone(), zero.clone())
-            .map_data(|a| a.re + a.im * Atom::i())
-            .into(),
-    ));
+    let projp_key = PermutedStructure::identity(
+        ParamTensor::param(
+            proj_p_data_weyl(AGS.projp_strct::<Aind>(4), one.clone(), zero.clone())
+                .map_data(|a| a.re + a.im * Atom::i())
+                .into(),
+        )
+        .into(),
+    );
     weyl.insert_explicit(projp_key);
 
-    let color_t_key = PermutedStructure::identity(ParamOrConcrete::param(
-        su3_generator_data_atom(CS.t_strct::<Aind>(3, 8)).into(),
-    ));
+    let color_t_key = PermutedStructure::identity(
+        ParamTensor::param(su3_generator_data_atom(CS.t_strct::<Aind>(3, 8)).into()).into(),
+    );
     weyl.insert_explicit(color_t_key);
 
-    let color_f_key = PermutedStructure::identity(ParamOrConcrete::param(
-        su3_structure_f_data_atom(CS.f_strct::<Aind>(8)).into(),
-    ));
+    let color_f_key = PermutedStructure::identity(
+        ParamTensor::param(su3_structure_f_data_atom(CS.f_strct::<Aind>(8)).into()).into(),
+    );
     weyl.insert_explicit(color_f_key);
 
     weyl

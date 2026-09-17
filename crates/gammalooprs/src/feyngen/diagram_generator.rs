@@ -65,14 +65,14 @@ use crate::model::VertexRule;
 use crate::model::{ArcParticle, ColorStructure};
 use crate::momentum::sample::LoopIndex;
 use crate::momentum::{Pow, Sign, SignOrZero};
-use crate::numerator::ParamParsingNet;
+use crate::numerator::ParsingNet;
 use crate::numerator::aind::Aind;
 use crate::numerator::graph::ReversibleEdge;
 use crate::numerator::symbolica_ext::NumeratorAtomExt;
 use crate::processes::ProcessDefinition;
 use crate::settings::GlobalSettings;
 use crate::utils::symbolica_ext::{COMPLEXRATPOLYFIELD, LOGPRINTOPTS, Q_I};
-use crate::utils::{self, GS, PARAM_FUN_LIB, W_};
+use crate::utils::{self, FUN_LIB, GS, W_};
 use crate::uv::UltravioletGraph;
 use crate::{INTERRUPTED, is_interrupted, set_interrupted};
 use crate::{
@@ -5055,7 +5055,7 @@ impl ProcessedNumeratorForComparison {
                                     )
                                 };
                                 debug!("Sample evaluation inputs c:{c},l:{l}");
-                                let mut net = ParamParsingNet::try_from_view(
+                                let mut net = ParsingNet::try_from_view(
                                     l.as_view(),
                                     lib,
                                     &sample_parse_settings,
@@ -5071,7 +5071,7 @@ impl ProcessedNumeratorForComparison {
                                 // debug!(net=?net.dot_pretty());
                                 net.execute::<Sequential, MinResultRank, _, _, _>(
                                     lib,
-                                    PARAM_FUN_LIB.deref(),
+                                    FUN_LIB.deref(),
                                 )
                                 .map_err(|source| {
                                     FeynGenError::Eyre(eyre!(source).wrap_err(format!(

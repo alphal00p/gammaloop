@@ -1,7 +1,7 @@
 use gammalooprs::{
     initialisation::test_initialise,
     numerator::{ParsingNet, aind::Aind},
-    utils::{F, FUN_LIB, GS, TENSORLIB},
+    utils::{FUN_LIB, GS, TENSORLIB},
 };
 use spenso::{
     network::{
@@ -9,13 +9,13 @@ use spenso::{
         parsing::{ParseSettings, ShadowedStructure, ShorthandParsing, StructureInferenceMode},
     },
     structure::{HasStructure, TensorStructure},
-    tensors::parametric::MixedTensor,
+    tensors::parametric::ParamTensor,
 };
 use symbolica::{
     atom::Atom, function, parser::ParseSettings as SymbolicaParseSettings, wrap_input,
 };
 
-type ActualTensor = MixedTensor<F<f64>, ShadowedStructure<Aind>>;
+type ActualTensor = ParamTensor<ShadowedStructure<Aind>>;
 
 fn parse_inline_expression(input: &str) -> Atom {
     Atom::parse_with_default_namespace(wrap_input!(input), SymbolicaParseSettings::default())

@@ -20,7 +20,6 @@ use spenso::{
     iterators::IteratableTensor,
     network::{ExecutionResult, parsing::ParseSettings},
     structure::concrete_index::ExpandedIndex,
-    tensors::parametric::AtomViewOrConcrete,
 };
 use symbolica::prelude::{
     Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, FunctionMap, Indeterminate, Rational,
@@ -420,11 +419,7 @@ impl GammaLoopPairs {
                 ExecutionResult::Zero => {}
                 ExecutionResult::Val(a) => {
                     for (_, val) in a.iter_flat() {
-                        let AtomViewOrConcrete::Atom(a) = val else {
-                            panic!("SHOULD BE ATOMVIEW")
-                        };
-
-                        params.push(a.to_owned());
+                        params.push(val.to_owned());
                     }
                 }
             }
