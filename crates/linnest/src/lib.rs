@@ -1295,6 +1295,29 @@ fn default_layout_node_mode() -> LayoutNodeMode {
     LayoutNodeMode::Layout
 }
 
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
+#[archive(check_bytes)]
+#[serde(rename_all = "kebab-case")]
+enum LayoutSubgraphMode {
+    FixedBoundary,
+    Isolated,
+}
+
+fn default_layout_subgraph_mode() -> LayoutSubgraphMode {
+    LayoutSubgraphMode::FixedBoundary
+}
+
 impl LayoutNodeMode {
     fn nodes_are_fixed(self) -> bool {
         matches!(self, LayoutNodeMode::Fixed)
@@ -1505,6 +1528,8 @@ struct LayoutConfig {
     layout_algo: LayoutAlgo,
     #[serde(default = "default_layout_node_mode")]
     layout_nodes: LayoutNodeMode,
+    #[serde(default = "default_layout_subgraph_mode")]
+    subgraph_mode: LayoutSubgraphMode,
     #[serde(default = "default_layout_direction")]
     layout_direction: LayoutDirection,
     #[serde(default = "default_rank_align")]
@@ -1564,6 +1589,7 @@ impl Default for LayoutConfig {
             incremental_energy: default_incremental_energy(),
             layout_algo: default_layout_algo(),
             layout_nodes: default_layout_node_mode(),
+            subgraph_mode: default_layout_subgraph_mode(),
             layout_direction: default_layout_direction(),
             rank_align: default_rank_align(),
             layout_roots: Vec::new(),
@@ -1628,6 +1654,7 @@ impl LayoutConfig {
                 | "step"
                 | "step-shrink"
                 | "steps"
+                | "subgraph-mode"
                 | "temp"
                 | "tree-dx"
                 | "tree-dy"
@@ -2236,10 +2263,30 @@ impl TypstGraph {
 
     pub fn layout_with_subgraph(&mut self, subgraph: Option<&SuBitGraph>) -> Result<(), String> {
         self.validate_layout()?;
-        let spring_params = ParamTuning::from(&self.layout_config.spring);
-        self.clear_hedge_route_points();
+        if subgraph.is_some_and(SubSetLike::is_empty) {
+            return Ok(());
+        }
 
-        let (tree_cfg, energy) = self.tree_init_cfg(&spring_params);
+        let iterative = matches!(
+            self.layout_config.layout_algo,
+            LayoutAlgo::Anneal | LayoutAlgo::Force
+        );
+        let isolated = subgraph.is_some()
+            && iterative
+            && self.layout_config.subgraph_mode == LayoutSubgraphMode::Isolated;
+        if isolated {
+            self.validate_isolated_subgraph_groups(subgraph.unwrap())?;
+        }
+        let selected_items = isolated.then(|| self.selected_layout_items(subgraph.unwrap()));
+        let node_count = selected_items
+            .as_ref()
+            .map_or(self.n_nodes(), |(nodes, _)| {
+                nodes.iter().filter(|(_, selected)| **selected).count()
+            });
+        let spring_params = ParamTuning::from(&self.layout_config.spring);
+        let (tree_cfg, energy) = self.tree_init_cfg(&spring_params, node_count);
+        self.clear_hedge_route_points(isolated.then(|| subgraph.unwrap()));
+
         let fixed_nodes = self.layout_config.layout_nodes.nodes_are_fixed();
         if let Some(subgraph) = subgraph {
             let (mut vertex_points, mut edge_points) = match self.layout_config.layout_algo {
@@ -2264,14 +2311,21 @@ impl TypstGraph {
                 }
             };
             self.apply_layout_constraints(&mut vertex_points, &mut edge_points);
-            self.update_positions(vertex_points, edge_points);
+            self.update_positions(
+                vertex_points,
+                edge_points,
+                selected_items.as_ref().map(|(nodes, edges)| (nodes, edges)),
+            );
             if matches!(
                 self.layout_config.layout_algo,
                 LayoutAlgo::Dot | LayoutAlgo::StableLayered
             ) {
                 self.clear_edge_label_positions();
             } else {
-                self.layout_edge_labels(energy.spring_length);
+                self.layout_edge_labels(
+                    energy.spring_length,
+                    selected_items.as_ref().map(|(nodes, edges)| (nodes, edges)),
+                );
             }
             return Ok(());
         }
@@ -2286,14 +2340,14 @@ impl TypstGraph {
                 self.direct_layout_positions(tree_cfg, self.layout_config.layout_algo)
             };
             self.apply_layout_constraints(&mut vertex_points, &mut edge_points);
-            self.update_positions(vertex_points, edge_points);
+            self.update_positions(vertex_points, edge_points, None);
             if matches!(
                 self.layout_config.layout_algo,
                 LayoutAlgo::Dot | LayoutAlgo::StableLayered
             ) {
                 self.clear_edge_label_positions();
             } else {
-                self.layout_edge_labels(energy.spring_length);
+                self.layout_edge_labels(energy.spring_length, None);
             }
             return Ok(());
         }
@@ -2303,12 +2357,12 @@ impl TypstGraph {
             self.partial_optimized_positions(tree_cfg, &full, &energy)
         } else {
             let (pos_n, pos_e) = self.new_positions(tree_cfg);
-            self.optimized_positions(pos_n, pos_e, &energy, None)
+            self.optimized_positions(pos_n, pos_e, &energy, None, None)
         };
 
         self.apply_layout_constraints(&mut vertex_points, &mut edge_points);
-        self.update_positions(vertex_points, edge_points);
-        self.layout_edge_labels(energy.spring_length);
+        self.update_positions(vertex_points, edge_points, None);
+        self.layout_edge_labels(energy.spring_length, None);
         Ok(())
     }
 
@@ -2359,7 +2413,7 @@ impl TypstGraph {
         SpringChargeEnergy,
     ) {
         let spring_params = ParamTuning::from(&self.layout_config.spring);
-        let (tree_cfg, energy) = self.tree_init_cfg(&spring_params);
+        let (tree_cfg, energy) = self.tree_init_cfg(&spring_params, self.n_nodes());
         let (mut pos_n, mut pos_e) = self.new_positions(tree_cfg);
         self.apply_initial_grouped_constraints(&mut pos_n, &mut pos_e);
         let mut state = self.graph.new_layout_state(
@@ -2381,9 +2435,13 @@ impl TypstGraph {
         (state, energy)
     }
 
-    fn tree_init_cfg(&self, tune: &ParamTuning) -> (TreeInitCfg, SpringChargeEnergy) {
+    fn tree_init_cfg(
+        &self,
+        tune: &ParamTuning,
+        node_count: usize,
+    ) -> (TreeInitCfg, SpringChargeEnergy) {
         let energycfg = SpringChargeEnergy::from_graph(
-            self.n_nodes(),
+            node_count,
             self.layout_config.viewport_w,
             self.layout_config.viewport_h,
             *tune,
@@ -2650,6 +2708,7 @@ impl TypstGraph {
         mut pos_e: EdgeVec<Point2<f64>>,
         energy: &SpringChargeEnergy,
         selection: Option<(&NodeVec<bool>, &EdgeVec<bool>)>,
+        active_subgraph: Option<&SuBitGraph>,
     ) -> (NodeVec<Point2<f64>>, EdgeVec<Point2<f64>>) {
         self.apply_initial_grouped_constraints(&mut pos_n, &mut pos_e);
         let spring_length = energy.spring_length;
@@ -2668,6 +2727,9 @@ impl TypstGraph {
         state.edge_spring_length_scales = self.new_edgevec(|edge, _, _| {
             Self::positive_statement_f64(&edge.statements, "spring-length").unwrap_or(1.0)
         });
+        if let Some(active_subgraph) = active_subgraph {
+            state = state.with_active_subgraph(active_subgraph.clone());
+        }
 
         match self.layout_config.layout_algo {
             LayoutAlgo::Anneal => {
@@ -2748,13 +2810,23 @@ impl TypstGraph {
         }
     }
 
-    pub fn update_positions(&mut self, node: NodeVec<Point2<f64>>, edge: EdgeVec<Point2<f64>>) {
+    pub fn update_positions(
+        &mut self,
+        node: NodeVec<Point2<f64>>,
+        edge: EdgeVec<Point2<f64>>,
+        selection: Option<(&NodeVec<bool>, &EdgeVec<bool>)>,
+    ) {
         node.into_iter().for_each(|(i, p)| {
-            let p = p + self[i].shift.unwrap_or(Vector2::zero());
-            self.graph[i].pos = p;
+            if selection.is_none_or(|(nodes, _)| nodes[i]) {
+                let p = p + self[i].shift.unwrap_or(Vector2::zero());
+                self.graph[i].pos = p;
+            }
         });
 
         edge.into_iter().for_each(|(i, p)| {
+            if selection.is_some_and(|(_, edges)| !edges[i]) {
+                return;
+            }
             let p = p + self[i].shift.unwrap_or(Vector2::zero());
 
             let angle = {
@@ -2779,7 +2851,11 @@ impl TypstGraph {
         });
     }
 
-    fn layout_edge_labels(&mut self, spring_length: f64) {
+    fn layout_edge_labels(
+        &mut self,
+        spring_length: f64,
+        selection: Option<(&NodeVec<bool>, &EdgeVec<bool>)>,
+    ) {
         let cfg = &self.layout_config;
         if cfg.label_steps == 0 {
             return;
@@ -2807,6 +2883,9 @@ impl TypstGraph {
 
             for i in 0..labels.len().0 {
                 let idx = EdgeIndex(i);
+                if selection.is_some_and(|(_, edges)| !edges[idx]) {
+                    continue;
+                }
                 let edge_pos = self.graph[idx].pos;
                 let mut force = match cfg.label_layout {
                     LabelLayout::DanglingTangent | LabelLayout::Normal => {
@@ -2823,6 +2902,9 @@ impl TypstGraph {
                 if label_charge != 0.0 {
                     for n in 0..self.n_nodes() {
                         let ni = NodeIndex(n);
+                        if selection.is_some_and(|(nodes, _)| !nodes[ni]) {
+                            continue;
+                        }
                         let np = self[ni].pos;
                         let d = labels[idx] - np;
                         let dist = d.magnitude();
@@ -2836,7 +2918,7 @@ impl TypstGraph {
 
                     for e in 0..labels.len().0 {
                         let ej = EdgeIndex(e);
-                        if ej == idx {
+                        if ej == idx || selection.is_some_and(|(_, edges)| !edges[ej]) {
                             continue;
                         }
                         let ep = self.graph[ej].pos;
@@ -2850,10 +2932,10 @@ impl TypstGraph {
                     }
 
                     for e in 0..labels.len().0 {
-                        if e == i {
+                        let ej = EdgeIndex(e);
+                        if e == i || selection.is_some_and(|(_, edges)| !edges[ej]) {
                             continue;
                         }
-                        let ej = EdgeIndex(e);
                         let d = labels[idx] - labels[ej];
                         let dist = d.magnitude();
                         if dist > 1e-9 {
@@ -2919,10 +3001,14 @@ impl TypstGraph {
             label_length,
             label_gap,
             spring_length,
+            selection,
         );
 
         for i in 0..labels.len().0 {
             let idx = EdgeIndex(i);
+            if selection.is_some_and(|(_, edges)| !edges[idx]) {
+                continue;
+            }
             self.graph[idx].label_pos = Some(labels[idx]);
             let angle = self.edge_label_angle(idx);
             self.graph[idx].label_angle = Some(angle);
@@ -2935,9 +3021,12 @@ impl TypstGraph {
         }
     }
 
-    fn clear_hedge_route_points(&mut self) {
+    fn clear_hedge_route_points(&mut self, subgraph: Option<&SuBitGraph>) {
         for hedge in 0..self.graph.n_hedges() {
-            self.graph[Hedge(hedge)].route_points.clear();
+            let hedge = Hedge(hedge);
+            if subgraph.is_none_or(|subgraph| subgraph[hedge]) {
+                self.graph[hedge].route_points.clear();
+            }
         }
     }
 
@@ -2976,12 +3065,17 @@ impl TypstGraph {
         label_length: f64,
         label_gap: f64,
         spring_length: f64,
+        selection: Option<(&NodeVec<bool>, &EdgeVec<bool>)>,
     ) {
         let pos_v = self.new_nodevec(|_, _, node| node.pos);
-        let node_boxes = self.layout_node_boxes(&pos_v, label_gap);
+        let node_boxes =
+            self.layout_node_boxes(&pos_v, label_gap, selection.map(|(nodes, _)| nodes));
         let mut ordered_labels = labels
             .iter()
             .filter_map(|(edge, &target)| {
+                if selection.is_some_and(|(_, edges)| !edges[edge]) {
+                    return None;
+                }
                 let (half_width, half_height) = self.edge_label_route_half_extents(edge, label_gap);
                 (half_width > label_gap && half_height > label_gap).then_some((
                     edge,
@@ -3363,6 +3457,7 @@ impl TypstGraph {
             pos_e,
             energy,
             Some((&selected_nodes, &selected_edges)),
+            (self.layout_config.subgraph_mode == LayoutSubgraphMode::Isolated).then_some(subgraph),
         );
         self.restore_layout_constraints(saved_node_constraints, saved_edge_constraints);
         positions
@@ -3375,6 +3470,38 @@ impl TypstGraph {
             edges[self[&pair.any_hedge()]] = true;
         }
         (nodes, edges)
+    }
+
+    fn validate_isolated_subgraph_groups(&self, subgraph: &SuBitGraph) -> Result<(), String> {
+        let (nodes, edges) = self.selected_layout_items(subgraph);
+        let selected = |point| match point {
+            LayoutPointIndex::Node(node) => nodes[node],
+            LayoutPointIndex::Edge(edge) => edges[edge],
+        };
+        let validate = |point, constraints: PointConstraint| {
+            for reference in [constraints.x, constraints.y]
+                .into_iter()
+                .filter_map(|constraint| match constraint {
+                    Constraint::Grouped(reference, _) => Some(reference),
+                    Constraint::Fixed | Constraint::Free => None,
+                })
+            {
+                if selected(point) != selected(reference) {
+                    return Err(
+                        "isolated subgraph layout cannot cross a grouped coordinate boundary"
+                            .to_string(),
+                    );
+                }
+            }
+            Ok(())
+        };
+        for (node, _) in nodes.iter() {
+            validate(LayoutPointIndex::Node(node), self[node].constraints)?;
+        }
+        for (edge, _) in edges.iter() {
+            validate(LayoutPointIndex::Edge(edge), self[edge].constraints)?;
+        }
+        Ok(())
     }
 
     fn grouped_layout_selection(
@@ -4279,7 +4406,7 @@ impl TypstGraph {
         cfg: TreeInitCfg,
     ) {
         let label_gap = (cfg.dx * 0.12).max(0.05);
-        let node_boxes = self.layout_node_boxes(pos_v, label_gap);
+        let node_boxes = self.layout_node_boxes(pos_v, label_gap, None);
         let mut placed_labels = Vec::<LayoutRect>::new();
         let mut ordered_targets = targets
             .iter()
@@ -4345,12 +4472,20 @@ impl TypstGraph {
         }
     }
 
-    fn layout_node_boxes(&self, pos_v: &NodeVec<Point2<f64>>, padding: f64) -> Vec<LayoutRect> {
+    fn layout_node_boxes(
+        &self,
+        pos_v: &NodeVec<Point2<f64>>,
+        padding: f64,
+        selected: Option<&NodeVec<bool>>,
+    ) -> Vec<LayoutRect> {
         let widths = self.node_layout_extents("layout-width");
         let heights = self.node_layout_extents("layout-height");
         widths
             .iter()
             .filter_map(|(node, &width)| {
+                if selected.is_some_and(|selected| !selected[node]) {
+                    return None;
+                }
                 let height = heights[node];
                 (width > 0.0 || height > 0.0).then(|| {
                     LayoutRect::centered(pos_v[node], 0.5 * width + padding, 0.5 * height + padding)

@@ -80,29 +80,62 @@
     graph.map(g, node: nodes, edge: edges)
   }
 
-  // Open the RHS directly from the master and align its endpoints in shared rows and columns.
-  let xbox-rhs = {
+  // Solve the open D1/D2/D5/D6 topology, then close D3/D4 below it.
+  let xbox-rhs = context {
+    set text(size: diagram-style.font-size)
+    show math.equation: set text(size: diagram-style.font-size)
     let g = graph.build(default-edge-data: edge-data + (show-momentum: false), master)
-    let g = graph.cut(
-      g,
-      left: subgraph.select(g, source: (<D5>, <D6>)),
-      right: subgraph.select(g, sink: (<D5>, <D6>)),
-      boundary: item => {
-        let b = item.boundary
-        (pos: pos(
-          x: if b.side == "left" { in-x } else { out-x },
-          y: if b.origin.name == <D5> { top } else { bot },
-        ))
+    let g = graph.map(g,
+      node: (
+        a: (pos: pos( y: group("rhs-ac", start: 4))),
+        b: (pos: pos( y: group("rhs-db", start: -4))),
+        c: (pos:  pos( y: group("rhs-ac", start: 4))),
+        d: (pos:  pos( y: group("rhs-db", start: -4))),
+      ),
+      edge: (
+        D1: (spring-length: 0.4),
+        D2: (spring-length: 0.4),
+        D3: (show-momentum: true)+mom(side: "left", shift: 8.5, label: (gap: 0.1)),
+        D4: (show-momentum: true)+mom(side: "right", shift: 2.5, label: (gap: 0.25)),
+        D5: (crossing-under: <D6>, crossing-gap: 0.7),
+        D6: (show-momentum: true)+mom(side: "left", shift: 1.5, label: (gap: 0.1)),
+      ),
+    )
+    let selected = subgraph.select(g, edges: (<D1>, <D2>, <D5>, <D6>))
+    let rhs-layout = layouts.options(
+      base: base-layout,
+      spring: (length: 0.345),
+      repulsion: (strength: 40, edge-node: .1, edge-edge: 0.05),
+      solver: (subgraph-mode: "isolated"),
+    )
+    let g = layout(graph.style(g, ..graph-style), ..rhs-layout, subgraph: selected)
+    let points = (graph.nodes(g) + graph.edges(g, subgraph: selected)).map(item => item.pos)
+    let bottom = calc.min(..points.map(p => p.y))
+    let center = (calc.min(..points.map(p => p.x)) + calc.max(..points.map(p => p.x))) / 2
+    let g = graph.map(g, edge: (
+      D3: (pos: pos(x: center, y: bottom - 4)),
+      D4: (pos: pos(x: center, y: bottom - 3)),
+    ))
+    // Hidden momentum labels inform layout but should not enlarge the final canvas.
+    let g = graph.style(g, ..(graph-style + (edge-label: none)))
+    draw(g, ..feynman.draw-style, padding: diagram-style.padding, debug: false,
+      draw-after: (g, bounds) => {
+        let x = center
+        let y = bottom -1
+        let radius = 0.25
+        let diagonal = radius / calc.sqrt(2)
+        let stroke = (
+          paint: red.transparentize(50%),
+          thickness: diagram-style.cut-line-width,
+          cap: "round",
+        )
+        cetz.draw.line((x, y + radius), (x, bottom + 3.5), stroke: stroke)
+        let stroke = stroke + (paint: red.lighten(30%))
+        cetz.draw.circle((x, y), radius: radius, fill: none, stroke: stroke)
+        cetz.draw.line((x - diagonal, y - diagonal), (x + diagonal, y + diagonal), stroke: stroke)
+        cetz.draw.line((x - diagonal, y + diagonal), (x + diagonal, y - diagonal), stroke: stroke)
       },
     )
-    graph.map(g, edge: (
-      D3: (
-        crossing-under: <D4>,
-        crossing-gap: 0.8,
-        fermion-arrow-shift: 0.8,
-      ),
-      D4: (fermion-arrow-shift: 0.8),
-    ))
   }
 
   // Pull the external rows together without drawing another propagator.
@@ -216,7 +249,7 @@ let g = graph.build(default-edge-data: edge-data, master)
         spring-length: 6,
         shift: (0, -0.4),
         edge-style: (source-anchor: "east", sink-anchor: "west"),
-        
+
       )
         + mom(side: "right",shift:0.2,label: (gap: .1)),
       "D6.2": mom(side: "right", label: (shift:1,gap: .1)),
@@ -265,7 +298,7 @@ let g = graph.build(default-edge-data: edge-data, master)
     })+
     #diagram(xbox-opened, options: sum-layouts.at(1), cut-x: -.4, cut-y: -0.8, initial-cut: 1)+
     #diagram(xbox-opened2, options: sum-layouts.at(2), cut-x: -1.5, cut-y: -0.8, initial-cut: 2)+
-    #diagram(xbox-cut, options: sum-layouts.at(3), cut-y: -0.8,cut-x:-0.3, initial-cut: 3) = op("disc")_(p_1^2) op("disc")_(p_2^2)#h(-3mm)
-    #diagram(xbox-rhs, cut-x: none, cut-y: -1, initial-cut: 4, endpoint-fills: (:))
+    #diagram(xbox-cut, options: sum-layouts.at(3), cut-y: -0.8,cut-x:-0.3, initial-cut: 3) = op("disc")_(p_1^2) op("disc")_(p_2^2)
+    #xbox-rhs
   $
 }

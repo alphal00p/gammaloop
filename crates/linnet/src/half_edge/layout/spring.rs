@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     half_edge::{
-        involution::{EdgeIndex, EdgeVec, HedgePair},
+        involution::{EdgeIndex, EdgeVec, Flow, Hedge, HedgePair},
         layout::simulatedanneale::{Energy, Neighbor},
         nodestore::NodeStorageOps,
         subgraph::{subset::SubSet, Inclusion, ModifySubSet, SuBitGraph, SubSetLike},
@@ -125,6 +125,7 @@ pub(crate) fn directional_force_shift(
 pub struct LayoutState<'a, E, V, H, N: NodeStorageOps<NodeData = V>> {
     pub graph: &'a HedgeGraph<E, V, H, N>,
     pub ext: SuBitGraph,
+    active_subgraph: Option<SuBitGraph>,
     pub vertex_points: NodeVec<Point2<f64>>,
     pub edge_points: EdgeVec<Point2<f64>>,
     /// Raw auxiliary depths: optional seeds before force layout, final raw values afterwards.
@@ -160,6 +161,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         LayoutState {
             graph: self,
             ext,
+            active_subgraph: None,
             vertex_points,
             edge_points,
             vertex_depths: vec![None; len_v].into(),
@@ -181,6 +183,7 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> Clone for LayoutState<'a, E, 
         LayoutState {
             graph: self.graph,
             ext: self.ext.clone(),
+            active_subgraph: self.active_subgraph.clone(),
             vertex_points: self.vertex_points.clone(),
             edge_points: self.edge_points.clone(),
             vertex_depths: self.vertex_depths.clone(),
@@ -198,6 +201,75 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> Clone for LayoutState<'a, E, 
 }
 
 impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayoutState<'a, E, V, H, N> {
+    pub fn with_active_subgraph(mut self, active_subgraph: SuBitGraph) -> Self {
+        assert_eq!(active_subgraph.size(), self.graph.n_hedges());
+        let mut ext: SuBitGraph = self.graph.empty_subgraph();
+        for (pair, _, _) in self.graph.iter_edges_of(&active_subgraph) {
+            let hedge = match pair {
+                HedgePair::Paired { .. } => None,
+                HedgePair::Split {
+                    source,
+                    sink,
+                    split,
+                } => Some(match split {
+                    Flow::Source => source,
+                    Flow::Sink => sink,
+                }),
+                HedgePair::Unpaired { hedge, .. } => Some(hedge),
+            };
+            if let Some(hedge) = hedge {
+                ext.add(hedge);
+            }
+        }
+        self.ext = ext;
+        self.active_subgraph = Some(active_subgraph);
+        self
+    }
+
+    pub(super) fn has_active_subgraph(&self) -> bool {
+        self.active_subgraph.is_some()
+    }
+
+    pub(super) fn hedge_is_active(&self, hedge: Hedge) -> bool {
+        self.active_subgraph
+            .as_ref()
+            .is_none_or(|active| active.includes(&hedge))
+    }
+
+    pub(super) fn node_is_active(&self, node: NodeIndex) -> bool {
+        self.active_subgraph.as_ref().is_none_or(|active| {
+            self.graph
+                .iter_crown(node)
+                .any(|hedge| active.includes(&hedge))
+        })
+    }
+
+    pub(super) fn edge_is_active(&self, edge: EdgeIndex) -> bool {
+        self.active_subgraph.as_ref().is_none_or(|active| {
+            let (_, pair) = &self.graph[&edge];
+            active.intersects(pair)
+        })
+    }
+
+    fn point_is_active(&self, point: LayoutPointIndex) -> bool {
+        match point {
+            LayoutPointIndex::Node(node) => self.node_is_active(node),
+            LayoutPointIndex::Edge(edge) => self.edge_is_active(edge),
+        }
+    }
+
+    pub(super) fn active_nodes(&self) -> impl Iterator<Item = NodeIndex> + '_ {
+        (0..self.vertex_points.len().0)
+            .map(NodeIndex)
+            .filter(|&node| self.node_is_active(node))
+    }
+
+    pub(super) fn active_edges(&self) -> impl Iterator<Item = EdgeIndex> + '_ {
+        (0..self.edge_points.len().0)
+            .map(EdgeIndex)
+            .filter(|&edge| self.edge_is_active(edge))
+    }
+
     fn mark_node_changed(&mut self, index: NodeIndex) {
         self.changed_nodes.add(index);
     }
@@ -225,23 +297,37 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V> + Clone> Neighbor<LayoutState<
         _temp: f64,
     ) -> LayoutState<'a, E, V, H, N> {
         let mut st = s.clone();
-        let n_v: NodeIndex = st.vertex_points.len();
-        let n_e: EdgeIndex = st.edge_points.len();
+        let active_nodes = st.active_nodes().collect::<Vec<_>>();
+        let active_edges = st.active_edges().collect::<Vec<_>>();
         let step_range: Uniform<f64> = Uniform::from(-step..step);
+        if active_nodes.is_empty() && active_edges.is_empty() {
+            return st;
+        }
 
         let mut didnothing = true;
+        let mut attempts = 0;
         while didnothing {
+            attempts += 1;
+            if st.has_active_subgraph() && attempts > 1024 {
+                return st;
+            }
             match rng.gen_range(0..100) {
                 0..=69 => {
                     // single-DOF
                     if rng.gen_bool(0.6) {
-                        let v = NodeIndex(rng.gen_range(0..n_v.0));
+                        if active_nodes.is_empty() {
+                            continue;
+                        }
+                        let v = active_nodes[rng.gen_range(0..active_nodes.len())];
 
                         let shift = LayoutNeighbor::axis_shift(&step_range, rng);
                         let changed = apply_vertex_shift(&mut st, v, shift);
                         didnothing = !changed;
                     } else {
-                        let e = EdgeIndex(rng.gen_range(0..n_e.0));
+                        if active_edges.is_empty() {
+                            continue;
+                        }
+                        let e = active_edges[rng.gen_range(0..active_edges.len())];
                         let shift = LayoutNeighbor::axis_shift(&step_range, rng);
                         let changed = apply_edge_shift(&mut st, e, shift);
                         didnothing = !changed;
@@ -249,19 +335,25 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V> + Clone> Neighbor<LayoutState<
                 }
                 _ => {
                     // vertex block
-                    let v = NodeIndex(rng.gen_range(0..n_v.0));
+                    if active_nodes.is_empty() {
+                        continue;
+                    }
+                    let v = active_nodes[rng.gen_range(0..active_nodes.len())];
 
                     let shift = LayoutNeighbor::diagonal_shift(&step_range, rng, 0.6);
 
                     // Cache whether a vertex move succeeded so we can mark it.
                     let mut changed_any = apply_vertex_shift(&mut st, v, shift);
-
-                    st.graph.iter_crown(v).for_each(|a| {
-                        let index = st.graph[&a];
-
+                    let incident_edges = st
+                        .graph
+                        .iter_crown(v)
+                        .filter(|&hedge| st.hedge_is_active(hedge))
+                        .map(|hedge| st.graph[&hedge])
+                        .collect::<Vec<_>>();
+                    for index in incident_edges {
                         // Propagate to incident edge control points; any change gets recorded.
                         changed_any |= apply_edge_shift(&mut st, index, shift);
-                    });
+                    }
 
                     didnothing = !changed_any;
                 } // _ => {
@@ -313,12 +405,20 @@ where
     ) -> LayoutState<'a, E, V, H, N> {
         let mut st = s.clone();
         st.synchronize_grouped_coordinates();
-        let n_v: NodeIndex = st.vertex_points.len();
-        let n_e: EdgeIndex = st.edge_points.len();
+        let active_nodes = st.active_nodes().collect::<Vec<_>>();
+        let active_edges = st.active_edges().collect::<Vec<_>>();
         let step_range: Uniform<f64> = Uniform::from(-step..step);
+        if active_nodes.is_empty() && active_edges.is_empty() {
+            return st;
+        }
 
         let mut didnothing = true;
+        let mut attempts = 0;
         while didnothing {
+            attempts += 1;
+            if st.has_active_subgraph() && attempts > 1024 {
+                return st;
+            }
             match rng.gen_range(0..100) {
                 0..=6 => {
                     // swap along pinned axis to allow reordering on fixed lines
@@ -332,7 +432,10 @@ where
                 7..=69 => {
                     // single-DOF
                     if rng.gen_bool(0.6) {
-                        let v = NodeIndex(rng.gen_range(0..n_v.0));
+                        if active_nodes.is_empty() {
+                            continue;
+                        }
+                        let v = active_nodes[rng.gen_range(0..active_nodes.len())];
 
                         let mut shift = LayoutNeighbor::axis_shift(&step_range, rng);
                         let bias = directional_force_shift(
@@ -345,7 +448,10 @@ where
                         let changed = apply_vertex_shift_with_groups(&mut st, v, shift);
                         didnothing = !changed;
                     } else {
-                        let e = EdgeIndex(rng.gen_range(0..n_e.0));
+                        if active_edges.is_empty() {
+                            continue;
+                        }
+                        let e = active_edges[rng.gen_range(0..active_edges.len())];
                         let mut shift = LayoutNeighbor::axis_shift(&step_range, rng);
                         let bias = directional_force_shift(
                             st.graph[e].point_constraint(),
@@ -360,7 +466,10 @@ where
                 }
                 _ => {
                     // vertex block
-                    let v = NodeIndex(rng.gen_range(0..n_v.0));
+                    if active_nodes.is_empty() {
+                        continue;
+                    }
+                    let v = active_nodes[rng.gen_range(0..active_nodes.len())];
 
                     let shift = LayoutNeighbor::diagonal_shift(&step_range, rng, 0.6);
                     let vertex_bias = directional_force_shift(
@@ -374,9 +483,13 @@ where
                     let mut changed_any =
                         apply_vertex_shift_with_groups(&mut st, v, shift + vertex_bias);
 
-                    st.graph.iter_crown(v).for_each(|a| {
-                        let index = st.graph[&a];
-
+                    let incident_edges = st
+                        .graph
+                        .iter_crown(v)
+                        .filter(|&hedge| st.hedge_is_active(hedge))
+                        .map(|hedge| st.graph[&hedge])
+                        .collect::<Vec<_>>();
+                    for index in incident_edges {
                         // Propagate to incident edge control points; any change gets recorded.
                         let edge_bias = directional_force_shift(
                             st.graph[index].point_constraint(),
@@ -386,7 +499,7 @@ where
                         );
                         let edge_shift = shift + edge_bias;
                         changed_any |= apply_edge_shift_with_groups(&mut st, index, edge_shift);
-                    });
+                    }
 
                     didnothing = !changed_any;
                 }
@@ -458,13 +571,17 @@ where
         let mut members = Vec::new();
         for i in 0..self.vertex_points.len().0 {
             let index = NodeIndex(i);
-            if matches_reference(*self.graph[index].point_constraint()) {
+            if self.node_is_active(index)
+                && matches_reference(*self.graph[index].point_constraint())
+            {
                 members.push(LayoutPointIndex::Node(index));
             }
         }
         for i in 0..self.edge_points.len().0 {
             let index = EdgeIndex(i);
-            if matches_reference(*self.graph[index].point_constraint()) {
+            if self.edge_is_active(index)
+                && matches_reference(*self.graph[index].point_constraint())
+            {
                 members.push(LayoutPointIndex::Edge(index));
             }
         }
@@ -524,27 +641,41 @@ where
         for i in 0..self.vertex_points.len().0 {
             let index = NodeIndex(i);
             let point = LayoutPointIndex::Node(index);
+            if !self.point_is_active(point) {
+                continue;
+            }
             let constraints = self.constraints(point);
             if let Constraint::Grouped(reference, _) = constraints.x {
-                let value = self.coordinate(reference, LayoutAxis::X);
-                self.set_coordinate(point, LayoutAxis::X, value);
+                if self.point_is_active(reference) {
+                    let value = self.coordinate(reference, LayoutAxis::X);
+                    self.set_coordinate(point, LayoutAxis::X, value);
+                }
             }
             if let Constraint::Grouped(reference, _) = constraints.y {
-                let value = self.coordinate(reference, LayoutAxis::Y);
-                self.set_coordinate(point, LayoutAxis::Y, value);
+                if self.point_is_active(reference) {
+                    let value = self.coordinate(reference, LayoutAxis::Y);
+                    self.set_coordinate(point, LayoutAxis::Y, value);
+                }
             }
         }
         for i in 0..self.edge_points.len().0 {
             let index = EdgeIndex(i);
             let point = LayoutPointIndex::Edge(index);
+            if !self.point_is_active(point) {
+                continue;
+            }
             let constraints = self.constraints(point);
             if let Constraint::Grouped(reference, _) = constraints.x {
-                let value = self.coordinate(reference, LayoutAxis::X);
-                self.set_coordinate(point, LayoutAxis::X, value);
+                if self.point_is_active(reference) {
+                    let value = self.coordinate(reference, LayoutAxis::X);
+                    self.set_coordinate(point, LayoutAxis::X, value);
+                }
             }
             if let Constraint::Grouped(reference, _) = constraints.y {
-                let value = self.coordinate(reference, LayoutAxis::Y);
-                self.set_coordinate(point, LayoutAxis::Y, value);
+                if self.point_is_active(reference) {
+                    let value = self.coordinate(reference, LayoutAxis::Y);
+                    self.set_coordinate(point, LayoutAxis::Y, value);
+                }
             }
         }
     }
@@ -578,6 +709,9 @@ where
     }
 
     fn shift_constrained(&mut self, index: LayoutPointIndex, shift: Vector2<f64>) -> bool {
+        if !self.point_is_active(index) {
+            return false;
+        }
         let constraints = self.constraints(index);
         let changed_x = self.shift_axis(index, LayoutAxis::X, constraints.x, shift.x);
         let changed_y = self.shift_axis(index, LayoutAxis::Y, constraints.y, shift.y);
@@ -635,6 +769,9 @@ where
     let mut candidates: Vec<NodeIndex> = Vec::new();
     for i in 0..len {
         let idx = NodeIndex(i);
+        if !state.node_is_active(idx) {
+            continue;
+        }
         let constraints = state.graph[idx].point_constraint();
         let free_x_fixed_y = is_free_axis(constraints.x) && is_pinned_axis(constraints.y);
         let fixed_x_free_y = is_pinned_axis(constraints.x) && is_free_axis(constraints.y);
@@ -713,6 +850,9 @@ where
     let mut candidates: Vec<EdgeIndex> = Vec::new();
     for i in 0..len {
         let idx = EdgeIndex(i);
+        if !state.edge_is_active(idx) {
+            continue;
+        }
         let constraints = state.graph[idx].point_constraint();
         let free_x_fixed_y = is_free_axis(constraints.x) && is_pinned_axis(constraints.y);
         let fixed_x_free_y = is_pinned_axis(constraints.x) && is_free_axis(constraints.y);
@@ -1084,17 +1224,15 @@ impl SpringChargeEnergy {
     where
         N: NodeStorageOps<NodeData = V> + Clone,
     {
-        let n = state.vertex_points.len().0;
-        if self.dangling_centroid_charge == 0.0 || n == 0 {
+        let active_nodes = state.active_nodes().collect::<Vec<_>>();
+        if self.dangling_centroid_charge == 0.0 || active_nodes.is_empty() {
             return 0.0;
         }
 
         let centroid = Point2::from_vec(
-            state
-                .vertex_points
-                .iter()
-                .fold(Vector2::zero(), |sum, (_, point)| sum + point.to_vec())
-                / n as f64,
+            active_nodes.iter().fold(Vector2::zero(), |sum, &node| {
+                sum + state.vertex_points[node].to_vec()
+            }) / active_nodes.len() as f64,
         );
         state
             .ext
@@ -1124,9 +1262,13 @@ impl SpringChargeEnergy {
         N: NodeStorageOps<NodeData = V> + Clone,
     {
         let (_, pair) = &s.graph[&edge];
+        let pair = match &s.active_subgraph {
+            Some(active) => pair.with_subgraph(active),
+            None => Some(*pair),
+        };
         let p = s.edge_points[edge];
-        match *pair {
-            HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } => {
+        match pair {
+            Some(HedgePair::Paired { source, sink }) => {
                 let a = s.graph.node_id(source);
                 let b = s.graph.node_id(sink);
                 if a == b {
@@ -1135,10 +1277,23 @@ impl SpringChargeEnergy {
                     vec![(s.vertex_points[a], p, a), (s.vertex_points[b], p, b)]
                 }
             }
-            HedgePair::Unpaired { hedge, .. } => {
-                let a = s.graph.node_id(hedge);
-                vec![(s.vertex_points[a], p, a)]
+            Some(HedgePair::Split {
+                source,
+                sink,
+                split,
+            }) => {
+                let hedge = match split {
+                    Flow::Source => source,
+                    Flow::Sink => sink,
+                };
+                let node = s.graph.node_id(hedge);
+                vec![(s.vertex_points[node], p, node)]
             }
+            Some(HedgePair::Unpaired { hedge, .. }) => {
+                let node = s.graph.node_id(hedge);
+                vec![(s.vertex_points[node], p, node)]
+            }
+            None => Vec::new(),
         }
     }
 
@@ -1152,9 +1307,15 @@ impl SpringChargeEnergy {
     {
         let base = base * s.edge_spring_length_scales[edge];
         let (_, pair) = &s.graph[&edge];
-        match pair {
-            HedgePair::Unpaired { .. } => base * 2.0,
-            _ => base,
+        if let Some(active) = &s.active_subgraph {
+            match pair.with_subgraph(active) {
+                Some(HedgePair::Unpaired { .. } | HedgePair::Split { .. }) => base * 2.0,
+                Some(HedgePair::Paired { .. }) | None => base,
+            }
+        } else if matches!(pair, HedgePair::Unpaired { .. }) {
+            base * 2.0
+        } else {
+            base
         }
     }
 
@@ -1223,9 +1384,15 @@ impl SpringChargeEnergy {
         let vv_start = std::time::Instant::now();
         for i in 0..n {
             let ni = NodeIndex(i);
+            if !s.node_is_active(ni) {
+                continue;
+            }
             let np = s.vertex_points[ni];
             for j in (i + 1)..n {
                 let nj = NodeIndex(j);
+                if !s.node_is_active(nj) {
+                    continue;
+                }
                 let vj = s.vertex_points[nj];
                 energy += self.vv_term(np.distance(vj));
             }
@@ -1237,10 +1404,16 @@ impl SpringChargeEnergy {
         let ev_start = std::time::Instant::now();
         for i in 0..n {
             let ni = NodeIndex(i);
+            if !s.node_is_active(ni) {
+                continue;
+            }
             let np = s.vertex_points[ni];
             if self.c_ev != 0.0 {
                 for e in 0..m {
                     let ei = EdgeIndex(e);
+                    if !s.edge_is_active(ei) {
+                        continue;
+                    }
                     let ep = s.edge_points[ei];
                     energy += self.ev_term(np.distance(ep));
                 }
@@ -1255,13 +1428,24 @@ impl SpringChargeEnergy {
         let ee_local_start = std::time::Instant::now();
         for i in 0..n {
             let ni = NodeIndex(i);
+            if !s.node_is_active(ni) {
+                continue;
+            }
             let np = s.vertex_points[ni];
-            for e in s.graph.iter_crown(ni) {
+            for e in s
+                .graph
+                .iter_crown(ni)
+                .filter(|&hedge| s.hedge_is_active(hedge))
+            {
                 let ei = s.graph[&e];
                 let ep = s.edge_points[ei];
                 let length = Self::edge_spring_length(s, ei, self.spring_length);
                 energy += self.spring_term_with_length(np.distance(ep), length);
-                for e in s.graph.iter_crown(ni) {
+                for e in s
+                    .graph
+                    .iter_crown(ni)
+                    .filter(|&hedge| s.hedge_is_active(hedge))
+                {
                     let ej = s.graph[&e];
                     if ei == ej {
                         continue;
@@ -1281,6 +1465,9 @@ impl SpringChargeEnergy {
         let center_start = std::time::Instant::now();
         for i in 0..n {
             let ni = NodeIndex(i);
+            if !s.node_is_active(ni) {
+                continue;
+            }
             let np = s.vertex_points[ni];
             if self.c_center != 0.0 {
                 energy += self.center_term(np.distance(EuclideanSpace::origin()));
@@ -1313,8 +1500,14 @@ impl SpringChargeEnergy {
             let m = s.edge_points.len().0;
             for i in 0..m {
                 let ei = EdgeIndex(i);
+                if !s.edge_is_active(ei) {
+                    continue;
+                }
                 for j in (i + 1)..m {
                     let ej = EdgeIndex(j);
+                    if !s.edge_is_active(ej) {
+                        continue;
+                    }
                     if Self::edge_crosses(s, ei, ej) {
                         energy += self.crossing_term();
                     }
@@ -1351,11 +1544,17 @@ impl SpringChargeEnergy {
         let vv_start = std::time::Instant::now();
         for i in 0..n {
             let ni = NodeIndex(i);
+            if !next.node_is_active(ni) {
+                continue;
+            }
             let node_changed = node_changes.includes(&ni);
             let prev_np = prev.vertex_points[ni];
             let next_np = next.vertex_points[ni];
             for j in (i + 1)..n {
                 let nj = NodeIndex(j);
+                if !next.node_is_active(nj) {
+                    continue;
+                }
                 if !(node_changed || node_changes.includes(&nj)) {
                     continue;
                 }
@@ -1373,11 +1572,17 @@ impl SpringChargeEnergy {
         if self.c_ev != 0.0 {
             for i in 0..n {
                 let ni = NodeIndex(i);
+                if !next.node_is_active(ni) {
+                    continue;
+                }
                 let node_changed = node_changes.includes(&ni);
                 let prev_np = prev.vertex_points[ni];
                 let next_np = next.vertex_points[ni];
                 for e in 0..m {
                     let ei = EdgeIndex(e);
+                    if !next.edge_is_active(ei) {
+                        continue;
+                    }
                     if !(node_changed || edge_changes.includes(&ei)) {
                         continue;
                     }
@@ -1397,12 +1602,19 @@ impl SpringChargeEnergy {
         let ee_local_start = std::time::Instant::now();
         for i in 0..n {
             let ni = NodeIndex(i);
+            if !next.node_is_active(ni) {
+                continue;
+            }
             let node_changed = node_changes.includes(&ni);
             let prev_np = prev.vertex_points[ni];
             let next_np = next.vertex_points[ni];
 
             let include_node = node_changed;
-            for hedge in next.graph.iter_crown(ni) {
+            for hedge in next
+                .graph
+                .iter_crown(ni)
+                .filter(|&hedge| next.hedge_is_active(hedge))
+            {
                 let ei = next.graph[&hedge];
                 let edge_changed = edge_changes.includes(&ei);
                 if !(include_node || edge_changed) {
@@ -1414,7 +1626,11 @@ impl SpringChargeEnergy {
                 delta += self.spring_term_with_length(next_np.distance(next_ep), length)
                     - self.spring_term_with_length(prev_np.distance(prev_ep), length);
 
-                for other in next.graph.iter_crown(ni) {
+                for other in next
+                    .graph
+                    .iter_crown(ni)
+                    .filter(|&hedge| next.hedge_is_active(hedge))
+                {
                     let ej = next.graph[&other];
                     if ei == ej {
                         continue;
@@ -1441,7 +1657,7 @@ impl SpringChargeEnergy {
         if self.c_center != 0.0 {
             for i in 0..n {
                 let ni = NodeIndex(i);
-                if !node_changes.includes(&ni) {
+                if !next.node_is_active(ni) || !node_changes.includes(&ni) {
                     continue;
                 }
                 let prev_np = prev.vertex_points[ni];
@@ -1478,7 +1694,7 @@ impl SpringChargeEnergy {
             }
         }
         if self.dangling_centroid_charge != 0.0
-            && (!node_changes.is_empty()
+            && (next.active_nodes().any(|node| node_changes.includes(&node))
                 || next
                     .ext
                     .included_iter()
@@ -1495,9 +1711,14 @@ impl SpringChargeEnergy {
             let m = next.edge_points.len().0;
             for i in 0..m {
                 let ei = EdgeIndex(i);
+                if !next.edge_is_active(ei) {
+                    continue;
+                }
                 for j in (i + 1)..m {
                     let ej = EdgeIndex(j);
-                    if !(edge_changes.includes(&ei) || edge_changes.includes(&ej)) {
+                    if !next.edge_is_active(ej)
+                        || !(edge_changes.includes(&ei) || edge_changes.includes(&ej))
+                    {
                         continue;
                     }
                     let prev_cross = Self::edge_crosses(prev, ei, ej);
@@ -1707,6 +1928,87 @@ mod tests {
             cached = incremental;
             assert_eq!(energy.energy(Some((&state, cached)), &state), cached);
         }
+    }
+
+    #[test]
+    fn isolated_energy_ignores_complement_geometry() {
+        let mut builder = HedgeGraphBuilder::<(), ()>::new();
+        let a = builder.add_node(());
+        let b = builder.add_node(());
+        let c = builder.add_node(());
+        builder.add_edge(a, b, (), false);
+        builder.add_edge(b, c, (), false);
+        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let selected_pair = graph.iter_edges().next().unwrap().0;
+        let mut selected = graph.empty_subgraph::<SuBitGraph>();
+        selected.add(selected_pair);
+        let state = graph
+            .new_layout_state(
+                vec![
+                    Point2::new(-1.0, 0.0),
+                    Point2::new(1.0, 0.0),
+                    Point2::new(4.0, 3.0),
+                ]
+                .into(),
+                vec![Point2::origin(), Point2::new(3.0, 2.0)].into(),
+                1.0,
+                0.0,
+                false,
+            )
+            .with_active_subgraph(selected);
+        let energy = SpringChargeEnergy {
+            spring_length: 1.5,
+            k_spring: 2.0,
+            c_vv: 3.0,
+            dangling_charge: 4.0,
+            dangling_centroid_charge: 5.0,
+            c_ev: 6.0,
+            c_ee_local: 7.0,
+            c_center: 8.0,
+            crossing_penalty: 9.0,
+            eps: 1e-4,
+        };
+        let baseline = energy.energy(None, &state);
+        let mut moved = state.clone();
+        moved.vertex_points[NodeIndex(2)] = Point2::new(10_000.0, -20_000.0);
+        moved.edge_points[EdgeIndex(1)] = Point2::new(-30_000.0, 40_000.0);
+        assert_eq!(energy.energy(None, &moved), baseline);
+
+        let mut next = state.clone();
+        apply_vertex_shift(&mut next, NodeIndex(0), Vector2::new(0.25, -0.5));
+        let incremental = energy.energy(Some((&state, baseline)), &next);
+        let exact = energy.total_energy(&next);
+        assert!((incremental - exact).abs() <= 1e-9 * (1.0 + exact.abs()));
+    }
+
+    #[test]
+    fn one_sided_isolated_edge_has_one_dangling_spring() {
+        let mut builder = HedgeGraphBuilder::<(), ()>::new();
+        let a = builder.add_node(());
+        let b = builder.add_node(());
+        builder.add_edge(a, b, (), false);
+        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let HedgePair::Paired { source, .. } = graph.iter_edges().next().unwrap().0 else {
+            panic!("expected paired edge");
+        };
+        let mut selected = graph.empty_subgraph::<SuBitGraph>();
+        selected.add(source);
+        let state = graph
+            .new_layout_state(
+                vec![Point2::origin(), Point2::new(100.0, 0.0)].into(),
+                vec![Point2::new(3.0, 0.0)].into(),
+                1.0,
+                0.0,
+                false,
+            )
+            .with_active_subgraph(selected);
+        let energy = test_energy(0.0);
+
+        assert_eq!(
+            SpringChargeEnergy::edge_spring_length(&state, EdgeIndex(0), 1.0),
+            2.0
+        );
+        assert_eq!(energy.energy(None, &state), 0.5);
     }
 
     #[test]

@@ -924,7 +924,8 @@
   with horizontal spacing $tau_x L$ and vertical spacing $tau_y L$. Here
   $lambda$ is `length-scale`, $W$ is `viewport-w`, $H$ is `viewport-h`, $tau_x$
   is `tree-dx`, and $tau_y$ is `tree-dy`. These fields set the geometry scale for
-  both layout modes.
+  both layout modes. Isolated subgraph layout uses the number of selected incident
+  nodes for $n$; other layouts use the full graph node count.
 
   For deterministic, non-iterative placement, use `layout-algo: "tree"` or
   `layout-algo: "dot"`. `"tree"` places a traversal forest by levels. `"dot"`
@@ -945,9 +946,14 @@
   otherwise.
 
   `layout-algo: "force"` and `layout-algo: "anneal"` also accept `subgraph`.
-  For these iterative modes, nodes and edge control points outside the selected
-  subgraph stay fixed and act as boundary points while the selected subgraph is
-  optimized.
+  The default `solver.subgraph-mode: "fixed-boundary"` keeps nodes and edge
+  control points outside the selection fixed while retaining their spring,
+  repulsion, centroid, and crossing interactions. Set
+  `solver: (subgraph-mode: "isolated")` to omit unselected half edges, nodes,
+  control points, and labels from those interactions. Selected halves of otherwise paired edges become dangling
+  boundaries of the isolated solver domain. Complement coordinates and labels
+  remain unchanged, and an empty selection is a no-op. An isolated selection
+  cannot split a grouped coordinate; expand the selection or remove that group.
 
   Set `layout-nodes: "fixed"` to keep every node at its current `pos` for this
   layout pass and move only edge control points. With `subgraph`, only edges in

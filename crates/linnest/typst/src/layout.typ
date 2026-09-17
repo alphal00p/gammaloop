@@ -57,6 +57,7 @@
     temperature: "number",
     "max-movement": "number",
     "incremental-energy": "boolean",
+    "subgraph-mode": ("fixed-boundary", "isolated"),
     "crossing-penalty": "number",
     "depth-scale": "non-negative-finite",
     "flattening-end": "unit-interval",
@@ -282,17 +283,19 @@
   /// Semantic solver options. Supported fields are `algorithm`, `steps`,
   /// `epochs`, `seed`, `step`, `step-shrink`, `cooling`, `acceptance-floor`,
   /// `tolerance`, `temperature`, `max-movement`, `incremental-energy`,
-  /// `crossing-penalty`, `depth-scale`, and `flattening-end`. These override the
-  /// corresponding flat parameters below.
+  /// `subgraph-mode`, `crossing-penalty`, `depth-scale`, and `flattening-end`.
+  /// These override the corresponding flat parameters below.
   /// -> none | dictionary
   solver: none,
   /// Optional subgraph object to lay out. With `"tree"`, other edges are drawn
   /// from the resulting node positions. With `"dot"` and `"stable-layered"`,
   /// the subgraph determines rank constraints, while all paired edges between
   /// included nodes get dummy routing vertices and edge positions. With
-  /// `"force"` and `"anneal"`, nodes and edges outside the subgraph are fixed
-  /// boundary points during optimization.
-  /// The selection must have compatible topology. -> none | dictionary
+  /// `"force"` and `"anneal"`, `solver.subgraph-mode: "fixed-boundary"` keeps
+  /// outside points fixed but interacting; `"isolated"` excludes them from the
+  /// solver and label-layout interactions. The selection must have compatible
+  /// topology, and isolated selections cannot cross grouped coordinates.
+  /// -> none | dictionary
   subgraph: none,
   /// Width of the layout viewport used to derive the natural spring length.
   /// Applies to both `"force"` and `"anneal"`. -> float
@@ -534,6 +537,7 @@
       "incremental-energy",
       default: incremental-energy,
     ),
+    subgraph-mode: solver.at("subgraph-mode", default: "fixed-boundary"),
     layout-algo: solver.at("algorithm", default: layout-algo),
     layout-nodes: constraints.at("node-movement", default: layout-nodes),
     layout-direction: constraints.at("direction", default: layout-direction),
