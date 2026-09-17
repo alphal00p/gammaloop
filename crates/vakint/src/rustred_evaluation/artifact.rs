@@ -2,8 +2,8 @@ use std::sync::LazyLock;
 
 use rustred::foundry::artifact::{ArtifactPersistenceError, ArtifactSchemaVersion, ClosedArtifact};
 
-use super::terminal::{TerminalCatalog, TerminalManifest, TerminalSource};
 use super::RustRedEvaluationError;
+use super::terminal::{TerminalCatalog, TerminalManifest, TerminalSource};
 
 const K1_BYTES: &[u8] = include_bytes!("../../data/rustred/unit_mass_vacuum_k1.rr");
 const K3_BYTES: &[u8] = include_bytes!("../../data/rustred/unit_mass_vacuum_k3.rr");
@@ -182,12 +182,12 @@ impl ArtifactFamily {
 #[cfg(test)]
 mod tests {
     use rustred::foundry::artifact::{
-        derive_one_loop_unit_mass_tadpole, derive_two_loop_unit_mass_sunset,
-        ArtifactPersistenceError,
+        ArtifactPersistenceError, derive_one_loop_unit_mass_tadpole,
+        derive_two_loop_unit_mass_sunset,
     };
 
     use super::{
-        decode_current_artifact, shipped_family_for_loop_count, ArtifactFamily, K1_BYTES, K3_BYTES,
+        ArtifactFamily, K1_BYTES, K3_BYTES, decode_current_artifact, shipped_family_for_loop_count,
     };
 
     #[test]

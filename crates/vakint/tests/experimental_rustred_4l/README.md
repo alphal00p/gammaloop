@@ -1,0 +1,92 @@
+# Experimental four-loop candidate comparison
+
+This opt-in development lane can compare finite integral targets before the
+candidate rule family has passed RustRed's complete artifact certification.
+It does **not** register a four-loop production artifact, modify Vakint defaults,
+or establish arbitrary-index closure. Production `EvaluationMethod::RustRed`
+continues to require shipped certified artifacts.
+
+The ignored test `candidate_parent_dotted_and_pinch_match_fmft` has three phases:
+
+1. RustRed solves the supplied family and applies candidate rules to a scalar
+   parent, a dotted parent, and a pinch. RustRed owns exact point guards,
+   descent, memoization, and unresolved-target errors. At least one actual rule
+   application is required; a terminal-only comparison is labeled separately.
+2. An explicitly enabled offline FMFT oracle evaluates only the declared fixed
+   residuals actually reached. These values form a frozen terminal catalog.
+   They are not used as IBP rules or as additional master declarations.
+3. The existing comparative harness runs FeynKit, the legacy FMFT peer, and the
+   candidate RustRed scalar peer. The candidate peer has an invalid FORM path
+   and uses Vakint's existing pure-Rust FMFT master finalizer.
+
+The first test is deliberately limited to loop-momentum-free scalar numerators.
+Connecting tensor-bearing cases requires RustRed's family-based scalar-product
+lowering service; this adapter does not reimplement it.
+
+The default CSV under `tests/inputs/experimental_four_loop_h.csv` is test input,
+not an engine dispatch. Its rows define physical graph edges and momentum
+coordinates; the auxiliary slot has edge `(0,0)`. Both the RustRed family and
+oracle input are constructed from the same supplied descriptor. Another input
+may be supplied with `VAKINT_4L_CANDIDATE_PARENT_INPUT`.
+The adjacent FG, BMW and X CSV inputs use the same descriptor schema, so the
+same compiled test binary can study them without recompilation.
+`VAKINT_4L_CANDIDATE_DOT_POWER` changes the dotted target's first physical
+power (an integer at least two; default two). This is target input, not solver
+dispatch. For example, if all three default probes are already declared
+terminals, a larger explicit power can exercise an actual recurrence without
+weakening the mandatory rule-application assertion.
+
+Once the local RustRed candidate bridge is available, run:
+
+```sh
+export VAKINT_4L_CANDIDATE_ORACLE_FORM_PATH=/absolute/path/to/form
+export VAKINT_4L_CANDIDATE_WORKERS=1
+cargo test -p vakint --release --features experimental-rustred \
+  --test experimental_rustred_4l_tests \
+  candidate_parent_dotted_and_pinch_match_fmft \
+  -- --ignored --nocapture --test-threads=1
+```
+
+Supply Symbolica's license through the environment as usual. No license is
+stored in this fixture. The explicit FORM executable is used only by the
+offline preparation and legacy comparison peer, not by candidate application.
+
+The test prints search time, fixed-residual count, per-target rule counts,
+offline terminal expressions, and finite-target parity results. An optional
+`VAKINT_ACCEPTANCE_EXACT_DIAGNOSTICS=1` pass also inspects exact Laurent
+coefficients before numerical master substitution, without changing the
+compared values or tolerances. Catalogs containing floating coefficients are
+rejected before exact PR normalization.
+
+After that unchanged numerical gate succeeds,
+`VAKINT_4L_CANDIDATE_BENCH_REPEATS=3` additionally measures identical scalar-tail
+and full FeynKit-plus-scalar evaluations. One-off candidate search and offline
+terminal preparation are excluded. Native memoization is cleared outside each
+logical-cold interval; immediate warm-cache observations are reported separately
+with their rule counts, not presented as fresh reduction. Lane order alternates
+between repeats, and every timed output is numerically checked outside the
+timer. FORM process startup and temporary I/O remain part of FMFT evaluation.
+Linux CPU deltas include waited-for child processes; RSS fields are explicitly
+parent-process before/after snapshots, not phase peaks or FORM-child memory.
+
+On 2026-09-16 the H parent, dotted parent and pinch passed the unchanged strict
+comparative harness. The invalid-FORM scalar tail performed 26,956 new rule
+applications after its cache was cleared; parent and pinch themselves are
+declared terminals. A separate source/evidence audit confirmed the pass. The
+same binary also passed the three FG targets, with 3,362 new applications.
+The three X targets also passed, with 82,637 new applications.
+These experiments use exact offline projections of only the actually reached
+fixed residuals, not guessed master declarations or oracle-supplied IBP rules.
+
+The existing FMFT finalizer now expands exact Laurent coefficients before
+approximate table substitution. This prevents exact cancelling coefficients
+from becoming tiny floating poles; no zero tolerance, epsilon depth or source
+table is changed. All nine finalizer unit checks pass, including genuine
+missing-order rejection and the new exact-cancellation regression.
+
+This checkpoint is **nine finite-target comparisons**, not all fifteen existing
+four-loop numerical acceptance entrypoints or the nineteen registered graph
+classes. It does not prove arbitrary-index closure, ship a four-loop production
+catalog, or establish twenty-thousand-digit master accuracy. Tensor-bearing
+candidate acceptance and non-unit-mass candidate comparisons remain separate
+gates.

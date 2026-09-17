@@ -92,6 +92,11 @@ impl FMFT {
             // master orders through spurious epsilon poles.
             Self::reject_unknown_orders(&evaluated_integral)?;
             if options.susbstitute_masters {
+                // Distribute exact Laurent coefficients before replacing PR
+                // coefficients by approximate table values. Otherwise an
+                // exact cancellation can become a tiny floating pole. This
+                // is algebraic normalization, not a numerical zero threshold.
+                evaluated_integral = evaluated_integral.expand();
                 self.warn_constant_precision(&evaluated_integral);
                 debug!(
                     "{}: Substituting master coefficients and period constants...",

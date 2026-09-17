@@ -36,6 +36,35 @@ fn native_pr_finite_value_uses_the_existing_table_without_form() {
 }
 
 #[test]
+fn native_pr_exact_cancellation_precedes_approximate_master_tables() {
+    let fmft = finalizer(5, 25);
+    let value = vk_parse!("(PR11d+PR12)/3-PR11d/3-PR12/3").unwrap();
+    assert!(!value.is_zero(), "regression input must remain unexpanded");
+    assert!(value.expand().is_zero(), "input cancels exactly");
+    let pre_table = fmft
+        .expand_masters(value.as_view())
+        .unwrap()
+        .series(vk_symbol!("ep"), Atom::Zero.as_view(), Rational::from(0))
+        .unwrap()
+        .to_atom();
+    assert!(
+        !pre_table.is_zero(),
+        "the series must retain the unexpanded cancellation"
+    );
+    assert!(pre_table.expand().is_zero());
+    // On the pinned native stack, substituting this unexpanded coefficient
+    // first leaves -2.1e-25 at 25 digits. Its exact expansion must precede
+    // approximation; neither a tolerance nor increased precision fixes that.
+    let result = fmft
+        .finalize_native_reduced_masters(value, &Atom::num(1), &FMFTOptions::default())
+        .unwrap();
+    assert!(
+        result.is_zero(),
+        "exact cancellation must not leave a float residual"
+    );
+}
+
+#[test]
 fn native_pr_missing_laurent_order_and_spurious_poles_fail_closed() {
     for (terms, expression) in [(5, "PR9x"), (6, "PR9d"), (5, "PR11d/ep")] {
         let error = finalizer(terms, 25)

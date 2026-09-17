@@ -118,6 +118,35 @@ pub(super) struct TerminalCatalog {
 }
 
 impl TerminalCatalog {
+    /// Compile a terminal manifest for any authenticated complete unit-mass
+    /// vacuum artifact, without requiring the adapter to know its loop count,
+    /// topology name, or algorithm identifier in advance.
+    ///
+    /// RustRed's durable loader remains the trust boundary.  This helper only
+    /// admits the generic source-port capability after that load and then
+    /// applies the same exact terminal-key coverage checks as the registered
+    /// K1/K3/K6 manifests.  A future shipped four-loop artifact therefore
+    /// needs only its embedded bytes and finite terminal sources; no new
+    /// catalog algorithm is needed here.
+    pub(super) fn compile_for_complete_unit_mass_vacuum(
+        artifact: &ClosedArtifact,
+        sources: &[TerminalSource<'_>],
+    ) -> Result<Self, String> {
+        if !artifact.is_complete_unit_mass_vacuum() {
+            return Err(
+                "artifact is not an authenticated complete unit-mass vacuum source-port artifact"
+                    .to_owned(),
+            );
+        }
+        let manifest = TerminalManifest::new(
+            artifact.schema(),
+            artifact.algorithm_id(),
+            artifact.family_fingerprint(),
+            sources,
+        );
+        Self::compile(artifact, &manifest)
+    }
+
     /// Numerical records keep their native source precision. Warn once per
     /// terminal evaluation before mass factors or runtime arithmetic obscure it.
     pub(super) fn warn_precision(
@@ -334,6 +363,24 @@ mod tests {
 
     use super::{TerminalCatalog, TerminalManifest, TerminalSource};
     use crate::utils::vakint_macros::vk_parse;
+
+    #[test]
+    fn generic_complete_vacuum_catalog_admission_is_arity_independent() {
+        let bytes = include_bytes!("../../data/rustred/unit_mass_vacuum_k6.rr");
+        let artifact = rustred::foundry::artifact::ClosedArtifact::decode_durable(bytes).unwrap();
+        let sources = super::k6::SOURCES;
+        let catalog = TerminalCatalog::compile_for_complete_unit_mass_vacuum(&artifact, &sources)
+            .expect("generic source-port catalog admission");
+        assert_eq!(catalog.values.len(), artifact.masters().len());
+
+        // Registered lower-loop artifacts remain valid, but are not source
+        // ports and must not be silently admitted through this generic lane.
+        let lower = derive_one_loop_unit_mass_tadpole().unwrap();
+        let lower_sources = [TerminalSource::exact_matad_basis(&[1], "1")];
+        let error = TerminalCatalog::compile_for_complete_unit_mass_vacuum(&lower, &lower_sources)
+            .unwrap_err();
+        assert!(error.contains("source-port artifact"), "{error}");
+    }
 
     #[test]
     fn catalog_requires_an_exact_cover_of_authenticated_terminals() {

@@ -41,6 +41,8 @@ features = ["integer-gmp", "float-mpfr", "tracing_max_level_info"]
 test-log = "0.2.19"
 
 [features]
+# Development-only candidate-rule comparisons; never a production backend.
+experimental-rustred = []
 python_stubgen = [
   "dep:pyo3-stub-gen",
   "symbolica/python_export",

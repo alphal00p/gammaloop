@@ -3,7 +3,11 @@
 mod artifact;
 mod matching;
 mod materialize;
+mod numerator;
 mod terminal;
+
+#[cfg(feature = "experimental-rustred")]
+pub mod experimental;
 
 use std::fmt;
 

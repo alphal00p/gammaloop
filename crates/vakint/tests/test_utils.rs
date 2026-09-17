@@ -291,6 +291,9 @@ pub struct EvaluationTestLane {
     input: EvaluationTestInput,
     forbid_form_after_prepass: bool,
     rustred_parity: Option<RustRedParityPolicy>,
+    #[cfg(feature = "experimental-rustred")]
+    experimental_rustred:
+        Option<std::sync::Arc<vakint::rustred_evaluation::experimental::ExperimentalRustRed>>,
 }
 
 #[allow(dead_code)]
@@ -301,6 +304,8 @@ impl EvaluationTestLane {
             input,
             forbid_form_after_prepass: false,
             rustred_parity: None,
+            #[cfg(feature = "experimental-rustred")]
+            experimental_rustred: None,
         }
     }
 
@@ -315,6 +320,8 @@ impl EvaluationTestLane {
             input,
             forbid_form_after_prepass: true,
             rustred_parity: Some(parity),
+            #[cfg(feature = "experimental-rustred")]
+            experimental_rustred: None,
         }
     }
 
@@ -324,6 +331,17 @@ impl EvaluationTestLane {
 
     pub fn forbids_form_after_prepass(&self) -> bool {
         self.forbid_form_after_prepass
+    }
+
+    /// Explicit finite-target experiment, never production artifact acceptance.
+    #[cfg(feature = "experimental-rustred")]
+    pub fn experimental_rustred_scalar(
+        input: EvaluationTestInput,
+        evaluator: std::sync::Arc<vakint::rustred_evaluation::experimental::ExperimentalRustRed>,
+    ) -> Self {
+        let mut lane = Self::rustred_scalar(input, RustRedParityPolicy::NumericalOnly);
+        lane.experimental_rustred = Some(evaluator);
+        lane
     }
 }
 
@@ -447,6 +465,13 @@ fn evaluate_lane(
         EvaluationTestInput::Canonical => canonical.as_view(),
         EvaluationTestInput::TensorReduced => tensor_reduced.as_view(),
     };
+    #[cfg(feature = "experimental-rustred")]
+    if let Some(experimental) = &lane.experimental_rustred {
+        return experimental
+            .evaluate_integral(&vakint.vakint, &vakint.settings, input)
+            .unwrap_or_else(|error| panic!("experimental candidate evaluation failed: {error}"))
+            .value;
+    }
     vakint.evaluate_integral(input).unwrap_or_else(|error| {
         panic!(
             "integral evaluation with {} failed: {error}",
@@ -485,6 +510,8 @@ fn assert_exact_raw_rustred_matad_peer(
         input: rustred_input,
         forbid_form_after_prepass: true,
         rustred_parity: Some(RustRedParityPolicy::ExactMatadBasis),
+        #[cfg(feature = "experimental-rustred")]
+        experimental_rustred: None,
     };
     let matad_result = evaluate_lane(
         vakint,
@@ -564,6 +591,14 @@ fn compare_evaluations_impl(
             &tensor_reduced,
             &original_form_path,
         );
+        #[cfg(feature = "experimental-rustred")]
+        if std::env::var_os("VAKINT_ACCEPTANCE_EXACT_DIAGNOSTICS").is_some() {
+            log_laurent_diagnostics(
+                &lane.evaluation_order.to_string(),
+                evaluated.as_view(),
+                &vakint.settings.epsilon_symbol,
+            );
+        }
         let numerical = Vakint::full_numerical_evaluation(
             &vakint.settings,
             evaluated.as_view(),
@@ -614,6 +649,33 @@ fn compare_evaluations_impl(
         assert!(
             matches,
             "{tested_order} does not match benchmark {benchmark_order}: {message}"
+        );
+    }
+}
+
+/// Log only: no replacement of evaluated values or comparison thresholds.
+#[cfg(feature = "experimental-rustred")]
+pub fn log_laurent_diagnostics(label: &str, value: AtomView, epsilon_name: &str) {
+    // Approximate coefficients are not exact zero certificates. Avoid
+    // `together` on floats: this pinned upstream version has a denominator-
+    // exponent bug in that fallback path. Nonconstant monomials in the 4L
+    // finite-part experiment are pole terms; the finite part is not dumped.
+    let epsilon = vakint::vakint_parse!(epsilon_name).unwrap();
+    for (power, coefficient) in value.coefficient_list::<i8>(&[epsilon]) {
+        if power == Atom::num(1) {
+            continue;
+        }
+        let expanded = coefficient.expand();
+        let original = coefficient.to_canonical_string();
+        let expanded_text = expanded.to_canonical_string();
+        eprintln!(
+            "LAURENT_DIAGNOSTIC [{label}] {}: expanded_zero={}; original_chars={}; expanded_chars={}; original={}; expanded={}",
+            power.to_canonical_string(),
+            expanded.is_zero(),
+            original.chars().count(),
+            expanded_text.chars().count(),
+            original.chars().take(8192).collect::<String>(),
+            expanded_text.chars().take(8192).collect::<String>(),
         );
     }
 }
