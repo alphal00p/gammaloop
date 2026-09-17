@@ -1,9 +1,16 @@
 = CI maintenance and measurements
 
 Use `just ci-checks` for the selected local suite and `just ci-checks-and-upload`
-before pushing. The latter checks first, then publishes matching outputs to
+before final review. The latter checks first, then publishes matching outputs to
 NixCI. See #link("../../CONTRIBUTING.typ#nixci-cache")[CONTRIBUTING.typ] for credentials,
 licenses and retries. `just check` runs Cargo checking only.
+
+On `itphlies`, run `just ci-checks-and-upload` before pushing CI-enabled work.
+The configured Nix daemon downloads matching cached outputs as needed; the
+command builds/checks missing outputs and uploads successful results plus their
+producer closures. Finish the upload before pushing so NixCI can reuse that
+work. Keep substitution enabled rather than downloading the whole cache or
+forcing rebuilds.
 
 == Configuration and cache boundaries
 
@@ -47,10 +54,51 @@ does not retain them. Test groups are scheduled and reported independently.
 
 Synchronous dependency discovery incorporates Syd's PR \#104 suggestion while
 retaining the explicit graph. Local uploads adapt \#105 through the Just command;
-entering a shell installs no global upload hook. The existing Actions workflows
-skip draft PRs, react to ready-for-review/manual events and cancel superseded PR
-runs, retaining branch filters and merge-queue coverage. NixCI draft suppression
-remains a separate integration issue.
+entering a shell installs no global upload hook.
+
+== Final-review readiness
+
+`nix-ci.nix` is self-contained. Its top-level `enable` boolean is manually
+controlled; `just ci-update` reads and preserves that value while regenerating
+all other fields. The graph check still compares the complete generated file,
+so either boolean is valid locally but missing/nonboolean values and scheduling
+drift fail. `dependency-discovery.enable` remains independent. Disabling remote
+NixCI does not disable local checks or cache uploads.
+
+The NixCI readiness workflow evaluates the PR head configuration without building
+the flake. Its `NixCI readiness` check requires a non-draft PR with `final-review`
+and top-level `enable = true`. Draft and unlabeled PRs fail this merge gate while
+remaining usable for development and feedback. Main pushes and merge-group
+commits require enabled configuration without a label condition.
+
+The Nix and Continuous integration Actions workflows also wait for non-draft,
+`final-review` PRs to `main`. They react to PR updates, label changes, retargeting,
+and draft/readiness transitions, retaining main pushes, manual dispatch and
+merge-group coverage. PR concurrency cancels superseded Actions runs, including
+when the label is removed or the PR returns to draft. Other workflows retain
+their existing behavior. Labels do not alter committed NixCI configuration or
+cancel already-running NixCI jobs.
+
+Agents disable NixCI during implementation unless instructed otherwise. Before
+final review, enable it, validate/upload the final code, push, and then apply the
+label. Returning to development means removing the label and committing
+`enable = false`. Keep `main` enabled. See
+#link("../../CONTRIBUTING.typ#ci-readiness")[the contributor workflow].
+
+For rollout, create the `final-review` label first. After the readiness workflow
+is merged and its successful check is registered, add `NixCI readiness`, bound
+to GitHub Actions, to the existing `PRs must pass` ruleset. Preserve the required
+`deploy packages.x86_64-linux.nix-ci-passed` status from NixCI and all unrelated
+rules. The readiness check supplements successful tests; it does not replace them.
+
+Prefer an available completion notification over keeping an agent polling CI.
+Retain the commit/run identity and logs, yield after dispatch, and verify the
+result when notified. Local validation and uploads must finish successfully
+before pushing. Notification support depends on the execution environment;
+this repository does not install a CI-to-agent wake-up service. See
+#link("../../CONTRIBUTING.typ#ci-completion")[the completion workflow].
+
+== Branch maintenance
 
 After rebasing an active branch onto the CI changes, preserve its test groups and
 source filters, run `just ci-update`, and commit both generated files. FeynKit
