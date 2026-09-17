@@ -397,15 +397,21 @@ impl<T: FloatLike> EsurfaceRay<T> {
         crate::debug_tags!(#integration, #cut, #solver;
             radial_root = %identity,
             initial_guess = %guess,
-            residual_tolerance = %(e_cm * guess.epsilon()),
+            residual_tolerance = %(e_cm * guess.epsilon() * guess.from_i64((4 * self.energies.len() + 1) as i64)),
             "LU radial root setup"
         );
+        // The energy equation is a sum of on-shell square roots.  Include a
+        // small forward-error budget for the momentum norm, square root, and
+        // accumulation of each edge instead of treating the whole sum as one
+        // elementary operation.  This remains a caller-specific tolerance;
+        // generic safeguarded-Newton users retain their original tolerance.
+        let residual_tolerance = guess.from_i64((4 * self.energies.len() + 1) as i64);
         diagnostics.solve(
             identity,
             &guess.zero(),
             &guess,
             |t| self.evaluate(t),
-            &guess.one(),
+            &residual_tolerance,
             2000,
             64,
             e_cm,
@@ -3888,10 +3894,9 @@ mod tests {
         let one = point[0].one();
         let zero = one.zero();
         let model = crate::utils::load_generic_model("sm");
-        let graph: Graph =
-            include_str!("../../../../examples/cli/epem_a_ttxh/NNLO/graphs/GL638.dot")
-                .into_graph(&model)
-                .unwrap();
+        let graph: Graph = include_str!("../../../../tests/resources/graphs/GL638.dot")
+            .into_graph(&model)
+            .unwrap();
         let lmb = &graph.loop_momentum_basis;
         assert_eq!(
             lmb.loop_edges.raw,
@@ -3949,7 +3954,7 @@ mod tests {
             ),
             "sampling root is not certified at the current precision: canonical physical overlap graph 'GL638' cut group 3: DidNotConverge { result: NewtonIterationResult { solution: F(VarFloat { float: 4.50096019182270793871156294720615053060112718361364618170932397734514711080987392331940322755100771019674059655008057236752740928154857006112161128562114855544422368074316508870600192219593565649427544978773164779121432253631794038806540811255813327701451237828689832176990555566921873234752788019943785e-2 }), derivative_at_solution: F(VarFloat { float: 15947.7515847915197382229906009716238684820639052766863102939247189292647433796806064815357943825914286672680520425869860307247589322869726693916868899181132224865883496823643904736774712938449859097464691001739892743096176224973672876047140085992981227937651521443373989485856759341750304597183394266484 }), error_of_function: F(VarFloat { float: -2.86698583604188839625755508139156634506370492325388705163790645185321035051758274904404068484469074644867580906595607334158997766559958751695315195045047528315210956637693486164171287342869042640210070772612642749923485444545310860535350764889727519890646541984079814999901126931044646673003826046088028e-298 }), num_iterations_used: 10 }, lower_bound: F(VarFloat { float: 4.50096019182270793871156294720615053060112718361364618170932397734514711080987392331940322755100771019674059655008057236752740928154857006112161128562114855544422368074316508870600192219593565649427544978773164779121432253631794038806540811255813327701451237828689832176990555566921873234752788019943785e-2 }), upper_bound: F(VarFloat { float: 4.50096019182270793871156294720615053060112718361364618170932397734514711080987392331940322755100771019674059655008057236752740928154857006112161128562114855544422368074316508870600192219593565649427544978773164779121432253631794038806540811255813327701451237828689832176990555566921873234752788019943844e-2 }) }"
         );
-        let (_, certified) = surface
+        let (_, production) = surface
             .solve_lu_cut(
                 &momentum,
                 &externals,
@@ -3958,6 +3963,26 @@ mod tests {
                 &e_cm,
                 &mut RadialRootDiagnostics::default(),
                 &identity,
+            )
+            .unwrap();
+        // The production LU caller includes the existing energy-sum forward-error
+        // budget. Preserve the retained strict fixture below at its unit budget.
+        let production_budget =
+            one.from_i64((4 * ray.energies.len() + 1) as i64) * one.epsilon() * &e_cm;
+        let (production_value, production_derivative) = ray.evaluate(&production.solution);
+        assert_eq!(production.error_of_function, production_value);
+        assert_eq!(production.derivative_at_solution, production_derivative);
+        assert!(production.error_of_function.abs() <= production_budget);
+        let certified = RadialRootDiagnostics::default()
+            .solve(
+                &identity,
+                &zero,
+                &guess,
+                |r| ray.evaluate(r),
+                &one,
+                2000,
+                64,
+                &e_cm,
             )
             .unwrap();
         let SafeguardedNewtonError::DidNotConverge {
@@ -4108,10 +4133,9 @@ mod tests {
         let zero = one.zero();
         let f = |value| one.from_i64(value);
         let model = crate::utils::load_generic_model("sm");
-        let graph: Graph =
-            include_str!("../../../../examples/cli/epem_a_ttxh/NNLO/graphs/GL638.dot")
-                .into_graph(&model)
-                .unwrap();
+        let graph: Graph = include_str!("../../../../tests/resources/graphs/GL638.dot")
+            .into_graph(&model)
+            .unwrap();
         let lmb = &graph.loop_momentum_basis;
         assert_eq!(
             lmb.loop_edges.raw,
@@ -4272,9 +4296,8 @@ mod tests {
                 minus[axis] -= step;
                 let plus = map.forward(&plus).unwrap();
                 let minus = map.forward(&minus).unwrap();
-                for component in 0..6 {
-                    derivative_matrix[component][axis] =
-                        (plus.point[component] - minus.point[component]) / (2.0 * step);
+                for (component, row) in derivative_matrix.iter_mut().enumerate().take(6) {
+                    row[axis] = (plus.point[component] - minus.point[component]) / (2.0 * step);
                 }
             }
             let numerical_jacobian = SamplingMapAffine::new(derivative_matrix, vec![0.0; 6])

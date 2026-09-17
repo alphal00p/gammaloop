@@ -537,22 +537,24 @@ fn scalars_profile_respects_graph_lmb_and_subset_filters() {
     });
 
     let profile_settings = ProfileSettings {
-        n_points: 3,
-        graph_id: Some(1),
+        n_points: 5,
+        // The one-loop bubble needs only one representative divergent LMB.
+        graph_id: Some(2),
         orientation_mode: OrientationProfileMode::PerOrientation,
         ..scalar_uv_profile_settings()
     };
     let analysis = amp.profile(&model, &profile_settings).unwrap().analyse();
 
     assert_eq!(analysis.graphs.len(), 1);
-    assert_eq!(analysis.graphs[0].graph_index, 1);
+    assert_eq!(analysis.graphs[0].graph_index, 2);
     assert_eq!(analysis.graphs[0].lmbs.len(), 1);
     assert_eq!(analysis.graphs[0].lmbs[0].lmb_index, 0);
     assert!(!analysis.graphs[0].lmbs[0].subsets.is_empty());
     let subset_analysis = &analysis.graphs[0].lmbs[0].subsets[0];
     assert!(!subset_analysis.free.is_empty());
+    assert!(!analysis.allow_vanishing_missing_fits);
     let serialized = serde_json::to_value(&analysis).unwrap();
-    assert_eq!(serialized["allow_vanishing_missing_fits"], false);
+    assert!(serialized.get("allow_vanishing_missing_fits").is_none());
     assert!(serialized["graphs"][0]["lmbs"][0]["subsets"][0]["analysis"].is_object());
     let orientation_entries =
         serialized["graphs"][0]["lmbs"][0]["subsets"][0]["per_orientation_inspect_entries"]
@@ -578,7 +580,7 @@ fn invalid_uv_graph_filter_preserves_the_integrand() {
         ..Default::default()
     });
     let invalid = ProfileSettings {
-        n_points: 3,
+        n_points: 5,
         graph_id: Some(usize::MAX),
         ..scalar_uv_profile_settings()
     };

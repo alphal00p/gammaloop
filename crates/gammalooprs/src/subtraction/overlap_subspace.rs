@@ -8,6 +8,7 @@ use crate::graph::FeynmanGraph;
 use crate::graph::Graph;
 use crate::graph::LmbIndex;
 use crate::graph::LoopMomentumBasis;
+use crate::integrands::process::sampling_maps::SamplingEvaluationError;
 use crate::momentum::sample::ExternalFourMomenta;
 use crate::momentum::sample::LoopIndex;
 use crate::momentum::sample::LoopMomenta;
@@ -164,7 +165,8 @@ fn construct_solver(
     loop_moms: &LoopMomenta<F<f64>>,
     external_momenta: &ExternalFourMomenta<F<f64>>,
     verbose: bool,
-) -> DefaultSolver {
+    variable_scale: f64,
+) -> Option<DefaultSolver> {
     let num_loops = overlap_input.subspace.loopcount();
 
     let num_loop_vars = 3 * num_loops;
@@ -370,6 +372,21 @@ fn construct_solver(
         }
     }
 
+    // Refuse a retry whose change of units rounds subnormal input data.
+    if variable_scale != 1.0
+        && b_vector
+            .iter()
+            .any(|value| (value / variable_scale) * variable_scale != *value)
+    {
+        return None;
+    }
+    // All primal variables and cone slacks have energy units. With P=0,
+    // b -> b/scale and x -> x/scale preserve this homogeneous cone problem.
+    // Restore the physical coordinates before checking any candidate center.
+    for value in &mut b_vector {
+        *value /= variable_scale;
+    }
+
     let a_matrix_sparse = CscMatrix::from(&a_matrix);
 
     let settings = DefaultSettingsBuilder::default()
@@ -379,6 +396,7 @@ fn construct_solver(
 
     crate::debug_tags!(#subtraction, #threshold, #overlap, #socp;
         stage = "threshold_socp_input",
+        variable_scale,
         graph = %overlap_input.graph.name,
         surfaces = ?esurfaces_to_consider,
         file.a = ?a_matrix,
@@ -388,15 +406,17 @@ fn construct_solver(
         "constructed threshold overlap problem"
     );
 
-    DefaultSolver::new(
-        &p_matrix,
-        &q_vector,
-        &a_matrix_sparse,
-        &b_vector,
-        &cones,
-        settings,
+    Some(
+        DefaultSolver::new(
+            &p_matrix,
+            &q_vector,
+            &a_matrix_sparse,
+            &b_vector,
+            &cones,
+            settings,
+        )
+        .unwrap(),
     )
-    .unwrap()
 }
 
 pub(crate) fn find_center(
@@ -407,67 +427,41 @@ pub(crate) fn find_center(
     external_momenta: &ExternalFourMomenta<F<f64>>,
     verbose: bool,
 ) -> Result<Option<LoopMomenta<F<f64>>>> {
-    let mut solver = construct_solver(
-        overlap_input,
-        esurfaces_to_consider,
-        existing_esurfaces,
-        loop_moms,
-        external_momenta,
-        verbose,
-    );
-
-    solver.solve();
-
-    crate::debug_tags!(#subtraction, #threshold, #overlap, #socp;
-        stage = "threshold_socp_result",
-        graph = %overlap_input.graph.name,
-        surfaces = ?esurfaces_to_consider,
-        status = ?solver.solution.status,
-        iterations = solver.solution.iterations,
-        primal_objective = solver.solution.obj_val,
-        dual_objective = solver.solution.obj_val_dual,
-        primal_residual = solver.solution.r_prim,
-        dual_residual = solver.solution.r_dual,
-        file.solution = ?solver.solution,
-        "finished threshold overlap solve"
-    );
-
     let global_loop_number = overlap_input.graph.get_loop_number();
     let esurfaces_to_check = esurfaces_to_consider
         .iter()
         .map(|existing_esurface_id| existing_esurfaces[*existing_esurface_id])
         .collect();
-
-    // Even if optimization did not converge, a physically valid center certifies overlap.
-    // Conversely, a failed solve must not silently remove an overlap from the catalogue.
-    let center = extract_center(
-        global_loop_number,
-        overlap_input.subspace,
-        &solver.solution.x,
-    );
-    if check_global_center(
-        overlap_input,
+    OverlapInput::solve_with_rescaling(
+        &overlap_input.graph.name,
         &esurfaces_to_check,
-        &center,
-        loop_moms,
-        external_momenta,
-    ) {
-        Ok(Some(center))
-    } else if solver.solution.status == SolverStatus::PrimalInfeasible {
-        Ok(None)
-    } else {
-        Err(eyre!(
-            "Threshold SOCP for graph '{}' and E-surfaces {:?} returned {:?} without a strictly interior center: primal objective={}, dual objective={}, primal residual={}, dual residual={}, iterations={}",
-            overlap_input.graph.name,
-            esurfaces_to_check,
-            solver.solution.status,
-            solver.solution.obj_val,
-            solver.solution.obj_val_dual,
-            solver.solution.r_prim,
-            solver.solution.r_dual,
-            solver.solution.iterations,
-        ))
-    }
+        |variable_scale| {
+            construct_solver(
+                overlap_input,
+                esurfaces_to_consider,
+                existing_esurfaces,
+                loop_moms,
+                external_momenta,
+                verbose,
+                variable_scale,
+            )
+        },
+        |coordinates| {
+            let center = extract_center(global_loop_number, overlap_input.subspace, coordinates);
+            check_global_center(
+                overlap_input,
+                &esurfaces_to_check,
+                &center,
+                loop_moms,
+                external_momenta,
+            )
+        },
+    )
+    .map(|coordinates| {
+        coordinates.map(|coordinates| {
+            extract_center(global_loop_number, overlap_input.subspace, &coordinates)
+        })
+    })
 }
 
 pub(crate) struct OverlapInput<'a> {
@@ -486,6 +480,69 @@ pub(crate) struct OverlapInput<'a> {
 }
 
 impl OverlapInput<'_> {
+    fn solve_with_rescaling(
+        graph_name: &str,
+        esurfaces: &ExistingThresholds,
+        mut construct: impl FnMut(f64) -> Option<DefaultSolver>,
+        mut center_is_interior: impl FnMut(&[f64]) -> bool,
+    ) -> Result<Option<Vec<f64>>> {
+        let mut attempts = Vec::with_capacity(2);
+        // Retry only uncertified solves. An exact power-of-two change of energy
+        // units can recover a full infeasibility certificate from Clarabel without
+        // changing the surfaces, their grouping, or the strict physical-center test.
+        for variable_scale in [1.0, 2.0] {
+            let Some(mut solver) = construct(variable_scale) else {
+                attempts.push(format!(
+                    "scale={variable_scale}: change of energy units is not exactly representable"
+                ));
+                continue;
+            };
+            solver.solve();
+            crate::debug_tags!(#subtraction, #threshold, #overlap, #socp;
+                stage = "threshold_socp_result",
+                graph = graph_name,
+                surfaces = ?esurfaces,
+                variable_scale,
+                status = ?solver.solution.status,
+                iterations = solver.solution.iterations,
+                primal_objective = solver.solution.obj_val,
+                dual_objective = solver.solution.obj_val_dual,
+                primal_residual = solver.solution.r_prim,
+                dual_residual = solver.solution.r_dual,
+                file.solution = ?solver.solution,
+                "finished threshold overlap solve"
+            );
+
+            // Even if optimization did not converge, a physically valid center certifies overlap.
+            // Conversely, a failed solve must not silently remove an overlap from the catalogue.
+            for coordinate in &mut solver.solution.x {
+                *coordinate *= variable_scale;
+            }
+            if center_is_interior(&solver.solution.x) {
+                return Ok(Some(solver.solution.x));
+            }
+            if solver.solution.status == SolverStatus::PrimalInfeasible {
+                return Ok(None);
+            }
+            attempts.push(format!(
+                "scale={variable_scale}: {:?} without a strictly interior center: primal objective={}, dual objective={}, primal residual={}, dual residual={}, iterations={}",
+                solver.solution.status,
+                solver.solution.obj_val,
+                solver.solution.obj_val_dual,
+                solver.solution.r_prim,
+                solver.solution.r_dual,
+                solver.solution.iterations,
+            ));
+        }
+        Err(SamplingEvaluationError::UncertifiedOverlap {
+            detail: format!(
+                "Threshold SOCP for graph '{graph_name}' and E-surfaces {esurfaces:?}: {}",
+                attempts.join("; retry "),
+            ),
+        }
+        .into())
+    }
+
     fn threshold_subspace(&self, esurface_id: EsurfaceID) -> &SubspaceData {
         self.threshold_subspaces
             .map_or(self.subspace, |subspaces| &subspaces[esurface_id.0])
@@ -568,7 +625,8 @@ pub(crate) fn check_global_center(
     })
 }
 
-/// Runtime overlap failures are returned so the stability machinery can retry at higher precision.
+/// Runtime overlap failures are returned to the stability machinery. An unresolved
+/// canonical f64 solve stays invalid in every native precision and is recorded as NaN.
 /// Structural generation invariants are still asserted where malformed generated data is unrecoverable.
 /// Solver-derived centers are already found in the current probe frame. `probe_rotation` is
 /// needed only for a configured forced center, whose coordinates are defined in the identity
@@ -1202,6 +1260,89 @@ mod tests {
     use linnet::half_edge::involution::EdgeIndex;
     use linnet::half_edge::subgraph::{SuBitGraph, SubSetOps};
     use typed_index_collections::ti_vec;
+
+    #[test]
+    fn gl297_recorded_uncertified_socp_problems_are_rescued_without_dropping_overlaps() {
+        let fixtures: Vec<serde_json::Value> = serde_json::from_str(include_str!(
+            "../../../../tests/resources/graphs/ir_safe_thresholds/GL297_socp_failures.json"
+        ))
+        .unwrap();
+        for fixture in fixtures {
+            let a: Vec<Vec<f64>> = serde_json::from_value(fixture["a"].clone()).unwrap();
+            let b: Vec<f64> = serde_json::from_value(fixture["b"].clone()).unwrap();
+            let q: Vec<f64> = serde_json::from_value(fixture["q"].clone()).unwrap();
+            let dimensions: Vec<(String, usize)> =
+                serde_json::from_value(fixture["cones"].clone()).unwrap();
+            let cones = dimensions
+                .iter()
+                .map(|(kind, size)| match kind.as_str() {
+                    "NonnegativeConeT" => NonnegativeConeT(*size),
+                    "SecondOrderConeT" => SecondOrderConeT(*size),
+                    _ => panic!("unexpected fixture cone {kind}"),
+                })
+                .collect::<Vec<_>>();
+            let surfaces: ExistingThresholds = (0..dimensions[1].1).map(EsurfaceID).collect();
+            let mut attempts = Vec::new();
+            let result = OverlapInput::solve_with_rescaling(
+                "GL297",
+                &surfaces,
+                |scale| {
+                    attempts.push(scale);
+                    Some(
+                        DefaultSolver::new(
+                            &CscMatrix::spalloc((q.len(), q.len()), 0),
+                            &q,
+                            &CscMatrix::from(&a),
+                            &b.iter().map(|value| value / scale).collect::<Vec<_>>(),
+                            &cones,
+                            DefaultSettingsBuilder::default()
+                                .verbose(false)
+                                .build()
+                                .unwrap(),
+                        )
+                        .unwrap(),
+                    )
+                },
+                |coordinates| {
+                    // Evaluate the physical energy sums in the ORIGINAL units, not
+                    // the auxiliary epigraph energies or the solver's objective.
+                    let active_offset = q.len() - 3;
+                    let mut offset = 1 + surfaces.len();
+                    let energies = dimensions[2..]
+                        .iter()
+                        .map(|(_, size)| {
+                            let energy = (offset + 1..offset + size)
+                                .map(|row| {
+                                    let shift = b[row]
+                                        - (active_offset..q.len())
+                                            .map(|column| a[row][column] * coordinates[column])
+                                            .sum::<f64>();
+                                    shift * shift
+                                })
+                                .sum::<f64>()
+                                .sqrt();
+                            offset += size;
+                            energy
+                        })
+                        .collect::<Vec<_>>();
+                    (1..=surfaces.len()).all(|row| {
+                        energies
+                            .iter()
+                            .enumerate()
+                            .map(|(index, energy)| a[row][index + 1] * energy)
+                            .sum::<f64>()
+                            < b[row]
+                    })
+                },
+            )
+            .unwrap();
+            // The native failure was AlmostPrimalInfeasible. Permit a future solver
+            // to certify the original problem directly, but never accept a failed
+            // solve as an empty overlap or bypass the physical-center predicate.
+            assert!(result.is_none(), "{}", fixture["strategy"]);
+            assert!(attempts == [1.0] || attempts == [1.0, 2.0]);
+        }
+    }
 
     #[test]
     fn maximal_overlap_candidates_include_cliques_whose_pairs_are_already_covered() {

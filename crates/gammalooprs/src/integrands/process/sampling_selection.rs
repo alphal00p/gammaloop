@@ -639,6 +639,7 @@ pub struct ResolvedSamplingChannelSelection {
 /// only supplies generated entries until that runtime migration is complete;
 /// it is not a second production channel universe.
 #[derive(Clone, Debug, PartialEq)]
+#[allow(clippy::large_enum_variant)]
 pub enum SamplingCatalogueEntry {
     Lmb {
         basis_id: usize,
@@ -1565,7 +1566,7 @@ impl<T: FloatLike> SamplingChannelBridgeEvaluation<T> {
                 self.raw_coordinates.len()
             ));
         }
-        if self.raw_coordinates.is_empty() || self.raw_coordinates.len() % 3 != 0 {
+        if self.raw_coordinates.is_empty() || !self.raw_coordinates.len().is_multiple_of(3) {
             return Err(eyre!(
                 "sampling bridge raw frame has {} coordinates; expected a non-empty multiple of 3",
                 self.raw_coordinates.len()
@@ -2743,12 +2744,12 @@ pub fn build_sampling_channel_catalogue_with_surfaces_and_coverage(
     let mut entries = Vec::new();
     for selector in &resolved.selectors {
         let Some(preset) = selector.preset() else {
-            if let SamplingChannelSelector::Named(name) = selector {
-                if let Some(channel) = resolved.named(name) {
-                    let entry = SamplingCatalogueEntry::Named(channel.clone());
-                    if !entries.contains(&entry) {
-                        entries.push(entry);
-                    }
+            if let SamplingChannelSelector::Named(name) = selector
+                && let Some(channel) = resolved.named(name)
+            {
+                let entry = SamplingCatalogueEntry::Named(channel.clone());
+                if !entries.contains(&entry) {
+                    entries.push(entry);
                 }
             }
             continue;
@@ -2768,10 +2769,11 @@ pub fn build_sampling_channel_catalogue_with_surfaces_and_coverage(
             // A surface-aware or optimized preset must retain at least one
             // ordinary full-domain channel when generated LMBs exist.  This
             // is a deterministic fallback, not a hidden second catalogue.
-            if basis_ids.is_empty() && optimized_lmbs.is_empty() {
-                if let Some((basis_id, _)) = all_lmbs.first() {
-                    basis_ids.push(*basis_id);
-                }
+            if basis_ids.is_empty()
+                && optimized_lmbs.is_empty()
+                && let Some((basis_id, _)) = all_lmbs.first()
+            {
+                basis_ids.push(*basis_id);
             }
             // Add the smallest available ordinary channel exposing each
             // elementary massless loop edge omitted by the heuristic.  This
@@ -3142,6 +3144,7 @@ pub fn graph_channel_definitions(
 }
 
 #[cfg(test)]
+#[allow(clippy::field_reassign_with_default)]
 mod tests {
     use std::sync::Arc;
 
@@ -4788,7 +4791,7 @@ mod tests {
                 let program = SamplingExpressionEvaluator::new(
                     ["0", "1/10^400", "0", "0", "0"].map(|x| try_parse!(x).unwrap()),
                     parameters,
-                    &[0, 1, 2, 3, 4],
+                    &[0],
                 )
                 .unwrap();
                 let mut selection = SamplingChannelSelection {

@@ -1,0 +1,118 @@
+# GL134: matched one-cut sampling comparison, all orientations.
+# Run from repository root: target/dev-optim/gammaloop THIS_CARD run all
+# Steer with: run integrate -D seed=13402 -D workspace=NEW_PATH -D n_max=1000000
+# Fixed-grid map-only comparison: -D learning_rate=0 -D n_start=262144 -D n_max=262144
+
+[cli_settings.state]
+folder = "./examples/cli/epem_a_ttxh/NNLO_experiment/states/GL134_advanced_sampling"
+name = "GL134_advanced_sampling"
+
+[cli_settings.global.generation]
+explicit_orientation_sum_only = true
+
+[cli_settings.global.generation.evaluator]
+do_algebra = false
+iterative_orientation_optimization = false
+store_atom = true
+compile = false
+summed = false
+summed_function_map = false
+
+[cli_settings.global.generation.uv]
+subtract_uv = true
+generate_integrated = true
+local_uv_cts_from_expanded_4d_integrands = false
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = true
+skip_thresholds_that_are_cuts = true
+
+[default_runtime_settings.general]
+evaluator_method = "SingleParametric"
+integral_unit = "picobarn"
+mu_r = 91.188
+m_uv = 50.0
+enable_cache = false
+generate_events = false
+
+[default_runtime_settings.kinematics]
+e_cm = 600.0
+externals = { type = "constant", data = { momenta = [[300.0, 0.0, 0.0, 300.0], [300.0, 0.0, 0.0, -300.0]], helicities = ["summed_averaged", "summed_averaged"] } }
+
+[[command_blocks]]
+name = "runtime"
+commands = ["""set default-runtime string '
+[sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+sampling_multichanneling = true
+sampling_channels = "monte_carlo"
+sampling_channel_weight = "map_density"
+coordinate_system = "spherical"
+mapping = "linear"
+b = 0.3
+alpha = 3.0
+default_channel_selection = []
+[sampling.channel_selection]
+GL134 = ["cut_h"]
+[sampling.channel_definitions.GL134.cut_h]
+around = "phase_space(cut(2,3,6,11,14))"
+parent_lmb = [3,6,11,14]
+subspace_lmb = [3,6,11,14]
+on_cut = [0]
+radial_profile = { kind = "lu_h", approximation = "log_logistic", broad_fraction = 0.02 }
+[h_function]
+function = "poly_exponential"
+sigma = 1.0
+power = 3
+[integrator]
+# The DOT input uses the phase-normalized num=1; regenerate this state after
+# changing the graph input. Train the physical real phase.
+integrated_phase = "real"
+n_start = $(n_start:100000)
+n_increase = 0
+n_max = $(n_max:1000000)
+seed = $(seed:13401)
+n_bins = 32
+min_samples_for_update = 64
+continuous_dim_learning_rate = $(learning_rate:0.25)
+discrete_dim_learning_rate = $(learning_rate:0.25)
+train_on_avg = false
+[integrator.observables_output]
+format = ["json"]
+[stability]
+check_on_norm = false
+rotation_axis = [{ type = "euler_angles", alpha = 0.1, beta = 0.2, gamma = 0.3 }]
+levels = [
+ { precision = "Double", required_precision_for_re = 1e-6, required_precision_for_im = 1e-6, escalate_for_large_weight_threshold = -1.0 },
+ { precision = "Quad", required_precision_for_re = 1e-10, required_precision_for_im = 1e-10, escalate_for_large_weight_threshold = -1.0 },
+ { precision = "Arb", required_precision_for_re = 1e-12, required_precision_for_im = 1e-12, escalate_for_large_weight_threshold = -1.0 },
+]
+'"""]
+
+[[command_blocks]]
+name = "generate"
+commands = [
+ "import model sm-default.json",
+ "set model MT=173 MH=125 WT=0 ymt=173 aS=0.118 aEWM1=132.507 Gf=1.166390e-05 MZ=91.188",
+ "run runtime",
+ "import graphs ./examples/cli/epem_a_ttxh/NNLO_manual/graphs/GL134.dot --process-spec 'e+ e- > t t~ h | e+ e- g t t~ h d d~ ghG ghG~ a QCD^2==4 QED^2==6 [{{4}} QCD=2]' -p epem_a_tth -i NNLO -o",
+ "generate existing -p epem_a_tth -i NNLO",
+ "save state -o",
+ "display integrand -p epem_a_tth -i NNLO --show-threshold-functions",
+]
+
+[[command_blocks]]
+name = "integrate"
+commands = [
+ "run runtime",
+ "set process -p epem_a_tth -i NNLO defaults",
+ """integrate -p epem_a_tth -i NNLO --n-cores $(cores:8)
+ --workspace-path $(workspace:./examples/cli/epem_a_ttxh/NNLO_experiment/workspaces/GL134_advanced_sampling)
+ --renderer tabled --show-phase both --show-max-weight-info --show-top-discrete-grid
+ --write-results-for-each-iteration $(restart:--restart)""",
+]
+
+[[command_blocks]]
+name = "all"
+commands = ["run generate integrate"]

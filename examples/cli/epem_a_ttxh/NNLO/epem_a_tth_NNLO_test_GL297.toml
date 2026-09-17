@@ -1,4 +1,5 @@
 # GL297 IR-safe threshold test card.
+# Current cards use the phase-normalized DOT numerator num = "1"; regenerate states after changing this input.
 #
 # The process specification on the graph import selects the tth@NNLO process
 # cuts, while the DOT supplies the explicit threshold-counterterm metadata.

@@ -1,12 +1,16 @@
-# GL638 IR-safe threshold test card.
-# Current cards use the phase-normalized DOT numerator num = "1"; regenerate states after changing this input.
+# GL638 advanced sampling with optimized-LMB fallback production card.
+# Phase-normalized DOT inputs use num = "1"; regenerate any pre-existing state after this change.
 #
+# Integration trains the real part while --show-phase both and per-iteration JSON retain real and imaginary observables.
 # The process specification on the graph import selects the tth@NNLO process
 # cuts, while the DOT supplies the explicit threshold-counterterm metadata.
 # Run the complete workflow with
 # `... card.toml run all`; named generation/integration knobs can be overridden
-# with `-D name=value`, for example `run integrate -D n_start=10000`.
+# with `-D name=value`, for example `run integrate -D n_start=81920`.
 
+# This variant keeps the curated LU/threshold channels and adds the complete
+# optimized-LMB channel selection. It intentionally omits the dedicated
+# soft_6_12 channel used by the original advanced card.
 # Higgs-aware metadata: full-UV generation passes for all 936 orientations.
 # Exact coincident radial roots remain an evaluation limitation. The measured
 # hard H/Z corner also prevents a finite-variance claim for the current sampler;
@@ -19,11 +23,11 @@
 # Use -D explicit_sum=false to retain individual-orientation diagnostics;
 # generate_o0..o3 set this automatically. A custom orientation_pattern needs it too.
 # Keep separate states for all/o0/o1/o2/o3. Compilation or sum changes need regeneration.
-# Integration presets default to 5 cores and <=10 iterations; use
-# -D integration_cores=20 for longer runs and -D training_phase=imag to train Im.
+# Integration presets default to 50 cores with 81920-point iterations; use
+# -D integration_cores=50 for longer runs and -D training_phase=imag to train Im.
 # Try -D radial_scale=0.3: the 300k-sample comparison reduced nominal Re/Im
 # errors by about 30%; this finite-run improvement does not certify variance.
-# If overriding n_start or n_max, keep n_max <= 10*n_start; use the validation
+# If overriding n_start or n_max, keep n_max <= 10B; use the validation
 # runner for enforced caps.
 # Symmetric local-CT localization: -D ct_gaussian_width=0.1 or
 # -D ct_sliver_width=0.1. Widths multiply Q, or r-star with ct_dynamic_width=true.
@@ -43,8 +47,8 @@
 # retains these estimates, precision statistics and replayable maximum points.
 
 [cli_settings.state]
-folder = "./examples/cli/epem_a_ttxh/NNLO/gammaloop_state_GL638"
-name = "epem_a_tth_NNLO_GL638"
+folder = "./examples/cli/epem_a_ttxh/NNLO/gammaloop_state_GL638_advanced_sampling_optimized_lmbs"
+name = "epem_a_tth_NNLO_GL638_advanced_sampling_optimized_lmbs"
 
 [cli_settings.global.generation]
 explicit_orientation_sum_only = true
@@ -125,7 +129,7 @@ commands = ["""set default-runtime string '
   graphs = "monte_carlo"
   orientations = "summed"
   sampling_multichanneling = true
-  sampling_channels = "$(sampling_channels:summed)"
+  sampling_channels = "$(sampling_channels:monte_carlo)"
   sampling_channel_weight = "$(sampling_channel_weight:map_density)"
   alpha = $(alpha:3.0)
   coordinate_system = "spherical"
@@ -133,7 +137,7 @@ commands = ["""set default-runtime string '
   b = $(radial_scale:0.3)
   power = $(radial_power:2.0)
   [sampling.channel_selection]
-  GL638 = $(graph_sampling_selection:["lu_cut_0", "lu_cut_1", "lu_cut_2", "lu_cut_3", "lu_cut_4", "lu_cut_5", "cut1_joint_HZ", "cut3_right_5_10", "soft_6_12"])
+  GL638 = $(graph_sampling_selection:["auto:optimized_lmb", "lu_cut_0", "lu_cut_1", "lu_cut_2", "lu_cut_3", "lu_cut_4", "lu_cut_5", "cut1_joint_HZ", "cut3_right_5_10"])
   [h_function]
   function = "poly_exponential"
   sigma = $(h_sigma:1.0)
@@ -193,15 +197,11 @@ subspace_lmb = []
 on_cut = [3]
 radial_profile = { kind = "lu_h", approximation = "log_logistic", broad_fraction = 0.02 }
 
-[sampling.channel_definitions.GL638.soft_6_12]
-channel_weight = "ose"
-parent_lmb = [3, 4, 7, 10]
-around = "lmb(6,12,13,14)"
   [integrator]
   integrated_phase = "$(training_phase:real)"
-  n_start = $(n_start:16384)
+  n_start = $(n_start:81920)
   n_increase = 0
-  n_max = $(n_max:81920)
+  n_max = $(n_max:10000000000)
   seed = $(seed:62001)
   n_bins = $(n_bins:16)
   min_samples_for_update = $(min_samples_for_update:64)
@@ -211,6 +211,7 @@ around = "lmb(6,12,13,14)"
   [integrator.observables_output]
   format = ["json"]
   [stability]
+  min_abs_wgt_for_escalation = $(min_abs_wgt_for_escalation:1e-12)
   integrated_energy_dimension = $(integrated_energy_dimension:-2)
   check_on_norm = $(stability_check_on_norm:false)
   rotation_axis = [{ type = "euler_angles", alpha = $(stability_alpha:0.1), beta = $(stability_beta:0.2), gamma = $(stability_gamma:0.3) }]
@@ -264,22 +265,20 @@ name = "integrate_common"
 commands = [
   "run set_model_parameters configure_runtime",
   "set process -p epem_a_tth -i NNLO defaults",
-  """integrate -p epem_a_tth -i NNLO --n-cores $(integration_cores:100)
-    --workspace-path $(workspace:./examples/cli/epem_a_ttxh/NNLO/gammaloop_state_GL638/workspaces/GL638_big_run_workspace)
+  """integrate -p epem_a_tth -i NNLO --n-cores $(integration_cores:50)
+    --workspace-path $(workspace:./examples/cli/epem_a_ttxh/NNLO/workspaces/GL638_advanced_sampling_with_optimized_lmbs_workspace)
     --renderer $(renderer:ratatui) --show-phase both
-    --show-max-weight-info --show-max-weight-info-for-discrete-bins
-    --show-top-discrete-grid --show-discrete-contributions-sum
     --write-results-for-each-iteration --batch-timing 2 $(restart:)
   """,
 ]
 
 [[command_blocks]]
 name = "pilot"
-commands = ["run integrate_common -D n_start=$(n_start:1000) -D n_max=$(n_max:3000)"]
+commands = ["run integrate_common -D n_start=$(n_start:81920) -D n_max=$(n_max:81920)"]
 
 [[command_blocks]]
 name = "integrate"
-commands = ["run integrate_common -D n_start=$(n_start:16384) -D n_max=$(n_max:81920)"]
+commands = ["run integrate_common -D n_start=$(n_start:81920) -D n_max=$(n_max:10000000000)"]
 
 [[command_blocks]]
 name = "check_settings"

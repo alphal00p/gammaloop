@@ -2965,8 +2965,8 @@ impl GraphTerm for CrossSectionGraphTerm {
                             "LU radial root requires precision escalation"
                         );
                         // Use the existing residue-failure path so a recoverable numerical
-                        // failure is retried at higher precision and remains fatal at the final
-                        // level, without ever exposing invalid cut kinematics to the evaluator.
+                        // failure is retried at higher precision and remains marked NaN at the
+                        // final level, without exposing invalid cut kinematics to the evaluator.
                         lu_root_errors.push(format!(
                             "Could not solve LU cut group {} of graph '{}', edges {:?}: {:?}",
                             cut_group_id.0,
@@ -3478,11 +3478,11 @@ impl GraphTerm for CrossSectionGraphTerm {
         )
     }
 
-    fn get_real_mass_vector(&self) -> EdgeVec<Option<F<f64>>> {
+    fn get_real_mass_vector(&self) -> Result<EdgeVec<Option<F<f64>>>> {
         self.real_mass_vec
             .as_ref()
-            .expect("real mass vector should be set during warmup")
-            .clone()
+            .cloned()
+            .ok_or_else(|| eyre!("real mass vector is not initialized; call warm_up first"))
     }
 }
 

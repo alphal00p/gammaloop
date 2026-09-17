@@ -1117,6 +1117,13 @@ impl AmplitudeGraph {
             self.derived_data.resolved_threshold_counterterms = Some(build.resolved);
             self.derived_data.raised_esurface_ids = build.raised_esurface_ids;
             self.derived_data.raised_data = raised_data;
+        } else {
+            self.derived_data.resolved_threshold_counterterms = None;
+            self.derived_data.threshold_counterterms.clear();
+            self.derived_data.threshold_counterterm_variants.clear();
+            self.derived_data.raised_esurface_ids.clear();
+            self.derived_data.raised_data.raised_groups.clear();
+            self.derived_data.raised_data.pass_two_evaluator = None;
         }
 
         Ok(GraphGenerationStats {
@@ -1809,10 +1816,13 @@ impl AmplitudeGraph {
             .threshold_subtraction
             .check_esurface_at_generation
             .then(|| self.graph.get_real_mass_vector(model));
+        // The complete CFF is retained for 3D UV construction; threshold activity
+        // follows the requested orientation selection independently.
         let selected_esurface_ids = global_cff
             .expression
             .orientations
             .iter()
+            .filter(|orientation| settings.orientation_pattern.filter(*orientation))
             .flat_map(|orientation| {
                 orientation
                     .iter_denominator_nodes()
@@ -3208,6 +3218,8 @@ pub mod test {
             ..Default::default()
         };
         graph.generate_cff(&settings).unwrap();
+        // CFF generation retains the full catalogue; only the selected subset
+        // contributes evaluators and active threshold-counterterm instances.
         assert_eq!(
             graph
                 .derived_data
@@ -3216,7 +3228,9 @@ pub mod test {
                 .unwrap()
                 .expression
                 .orientations
-                .len(),
+                .iter()
+                .filter(|orientation| settings.orientation_pattern.filter(*orientation))
+                .count(),
             1,
         );
         let raised_data = graph.graph.determine_raised_esurfaces_from_expression(
