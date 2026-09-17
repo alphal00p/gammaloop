@@ -5658,7 +5658,7 @@ dependencies = [
 [[package]]
 name = "rustred"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/rustred.git?rev=d686d0987afd91dee057b6a0c35d89a72840a6c8#d686d0987afd91dee057b6a0c35d89a72840a6c8"
+source = "git+https://github.com/alphal00p/rustred.git?rev=ac7b0473cea12c91c69b905570ec32f88b5e9bf9#ac7b0473cea12c91c69b905570ec32f88b5e9bf9"
 dependencies = [
  "blake3",
  "rand 0.9.4",
