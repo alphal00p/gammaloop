@@ -261,6 +261,6 @@ let g = graph.build(default-edge-data: edge-data, master)
     #diagram(xbox-opened, cut-x: -.4, cut-y: -0.8, initial-cut: 1)+
     #diagram(xbox-opened2, cut-x: -1.5, cut-y: -0.8, initial-cut: 2)+
     #diagram(xbox-cut, cut-y: -0.8,cut-x:-0.3, initial-cut: 3) = op("disc")_(p_1^2) op("disc")_(p_2^2)#h(-3mm)
-    #diagram(xbox-rhs, cut-x: none, endpoint-fills: (:))
+    #diagram(xbox-rhs, cut-x: none, cut-y: -1, initial-cut: 4, endpoint-fills: (:))
   $
 }

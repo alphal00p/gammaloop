@@ -20,10 +20,12 @@
 )
 #let draw-initials = true
 
-// One stroke per opening: original, p1 replaced, p2 replaced, both replaced.
-#let initial-cut-styles = ((
-  (paint: blue.transparentize(45%)),
-)*4).map(style => (thickness: 0.8pt, cap: "round") + style)
+// One stroke per opening: original, p1 replaced, p2 replaced, both replaced,
+// and the RHS opening.
+#let initial-cut-styles = (
+  ((paint: blue.transparentize(45%)),) * 4
+    + ((paint: red.transparentize(50%)),)
+).map(style => (thickness: 0.8pt, cap: "round") + style)
 
 #let base-layout = layouts.options(
   spring: (strength: 28, length: 0.15),
