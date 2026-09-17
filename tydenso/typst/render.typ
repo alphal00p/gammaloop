@@ -1,4 +1,4 @@
-// Generic, document-side rendering for a `tymbolica` Atom render tree.
+// Generic, document-side rendering for a `symbolica` Atom render tree.
 // Rust owns algebra and exact payloads; Typst owns presentation.
 
 #let _empty-notation = (

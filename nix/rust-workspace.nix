@@ -37,6 +37,20 @@
 
   cargoVendorDir = craneLib.vendorCargoDeps {
     cargoLock = (workspaceRoot + "/Cargo.lock");
+    overrideVendorGitCheckout = packages: drv:
+      if lib.any (package: package.name == "symbolica-typst-atom-payload") packages
+      then
+        drv.overrideAttrs (_: {
+          # Fetch the exact Cargo.lock revision even if upstream branches move;
+          # the archive has the same contents as the Git checkout.
+          src = builtins.fetchTree {
+            type = "github";
+            owner = "symbolica-dev";
+            repo = "symbolica-typst-plugin";
+            rev = lib.last (lib.splitString "#" (builtins.head packages).source);
+          };
+        })
+      else drv;
     overrideVendorCargoPackage = package: drv:
       if package.name == "symbolica" && package.version == "3.0.0"
       then
@@ -2660,15 +2674,20 @@
       {
         runnerAttr = "nix-ci-check-gammaloop-doctest";
         checkAttr = "gammaloop-doctest";
+        inputs = [cargoCheckArtifacts];
       }
       {
         runnerAttr = "nix-ci-check-gammaloop-nextest";
         checkAttr = "gammaloop-nextest";
+        inputs = builtins.attrValues nextestBinarySets ++ [gammaloop-python-module];
       }
     ]
     ++ map (target: {
       runnerAttr = "nix-ci-check-gammaloop-nextest-${target.name}";
       checkAttr = "gammaloop-nextest-${target.name}";
+      inputs =
+        [(nextestBinarySetForTarget target)]
+        ++ lib.optional (nextestUsesPythonModule target) gammaloop-python-module;
     })
     checkedNextestPackageGroups;
 
@@ -2678,8 +2697,14 @@
         name = target.runnerAttr;
         # CI publishes the pure test inputs separately, including when this
         # runner is cached. Let the check fetch them only on a result cache miss.
+        # Version the launcher with those inputs: NixCI can start a cached
+        # launcher before its manually ordered producers. Retain only a digest
+        # so a cached test result does not require downloading their closures.
         runtimeInputs = [pkgs.nix];
         text = ''
+          # CI input identity: ${builtins.hashString "sha256" (builtins.unsafeDiscardStringContext (
+            builtins.toJSON (map (input: input.drvPath) target.inputs)
+          ))}
           set -euo pipefail
           if [[ -n "''${SYMBOLICA_LICENSE_SIGNED:-}" ]]; then
             export SYMBOLICA_LICENSE="$SYMBOLICA_LICENSE_SIGNED"

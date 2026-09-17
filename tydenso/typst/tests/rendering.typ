@@ -1,5 +1,5 @@
 #import "../lib.typ": *
-#import "@local/tymbolica:0.1.0" as algebra
+#import "@local/symbolica:0.1.0" as algebra
 
 #set page(width: auto, height: auto, margin: 0pt)
 

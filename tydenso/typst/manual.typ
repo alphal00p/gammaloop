@@ -99,8 +99,8 @@
 
 = Start with a contraction
 
-Tydenso is the tensor-focused companion to Tymbolica. It has its own package,
-manual, notation, and WebAssembly engine. You do not need Tymbolica to construct,
+Tydenso is the tensor-focused companion to Symbolica. It has its own package,
+manual, notation, and WebAssembly engine. You do not need Symbolica to construct,
 simplify, inspect, or display a tensor expression.
 
 The first example contracts a Minkowski metric with a vector. A representation
@@ -328,7 +328,7 @@ that should stay visually rich without becoming part of the tensor algebra.
 
 The first call stores one opaque Symbolica symbol together with a portable,
 structured Typst display tree. The second call stores the actual sum $x + y$,
-so Symbolica may inspect or transform it. Tymbolica and Rubi preserve the
+so Symbolica may inspect or transform it. Symbolica and Rubi preserve the
 display attachment without needing to understand it; Tydenso restores it when
 the payload returns.
 
@@ -593,16 +593,16 @@ arguments, and symmetry flags.
   ],
 )
 
-= Work alongside Tymbolica
+= Work alongside Symbolica
 
-Tydenso and Tymbolica share the same Atom payload. A package can construct and
-simplify tensors with Tydenso, then pass the result to Tymbolica for a general
+Tydenso and Symbolica share the same Atom payload. A package can construct and
+simplify tensors with Tydenso, then pass the result to Symbolica for a general
 algebraic operation. Custom representations keep the information Tydenso needs
 to use them again, including their index palette.
 
 ```typst
 #import "@local/tydenso:0.1.0" as tensors
-#import "@local/tymbolica:0.1.0" as algebra
+#import "@local/symbolica:0.1.0" as algebra
 
 #let V = tensors.representation(
   "M",
@@ -618,7 +618,7 @@ to use them again, including their index palette.
 #tensors.to-typst(expanded)
 ```
 
-Keep package versions aligned. Matrix payloads from Tymbolica are a different
+Keep package versions aligned. Matrix payloads from Symbolica are a different
 format and are not Tydenso inputs.
 
 = API reference

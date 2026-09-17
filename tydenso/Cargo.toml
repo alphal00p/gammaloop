@@ -12,7 +12,7 @@ idenso = { path = "../crates/idenso", default-features = false, features = ["was
 spenso = { path = "../crates/spenso", default-features = false, features = ["portable-payload", "shadowing", "wasm"] }
 symbolica = { version = "3.0.0", default-features = false, features = ["wasm"] }
 symbolica-utils = { path = "../crates/symbolica-utils", default-features = false, features = ["wasm"] }
-tymbolica-atom-payload = { git = "https://github.com/symbolica-dev/symbolica-typst-plugin", rev = "4aab37aa6a5250ac692b425bc95592a408c98cc1", default-features = false, features = ["wasm"] }
+symbolica-typst-atom-payload = { git = "https://github.com/symbolica-dev/symbolica-typst-plugin", rev = "18e0491628f9eac5c788659cabfcdb7575f6986d", default-features = false, features = ["wasm"] }
 
 [profile.release]
 codegen-units = 1

@@ -1609,11 +1609,11 @@ dependencies = [
  "serde_json",
  "spenso-macros",
  "symbolica",
+ "symbolica-typst-atom-payload",
  "symbolica-utils",
  "tabled",
  "thiserror",
  "tracing",
- "tymbolica-atom-payload",
 ]
 
 [[package]]
@@ -1664,6 +1664,15 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "wide 1.7.0",
+]
+
+[[package]]
+name = "symbolica-typst-atom-payload"
+version = "0.1.0"
+source = "git+https://github.com/symbolica-dev/symbolica-typst-plugin?rev=18e0491628f9eac5c788659cabfcdb7575f6986d#18e0491628f9eac5c788659cabfcdb7575f6986d"
+dependencies = [
+ "ciborium",
+ "symbolica",
 ]
 
 [[package]]
@@ -1872,17 +1881,8 @@ dependencies = [
  "idenso",
  "spenso",
  "symbolica",
- "tymbolica-atom-payload",
+ "symbolica-typst-atom-payload",
  "wasm-minimal-protocol",
-]
-
-[[package]]
-name = "tymbolica-atom-payload"
-version = "0.1.0"
-source = "git+https://github.com/symbolica-dev/symbolica-typst-plugin?rev=4aab37aa6a5250ac692b425bc95592a408c98cc1#4aab37aa6a5250ac692b425bc95592a408c98cc1"
-dependencies = [
- "ciborium",
- "symbolica",
 ]
 
 [[package]]

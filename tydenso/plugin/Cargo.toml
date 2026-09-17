@@ -17,5 +17,5 @@ getrandom-02 = { package = "getrandom", version = "0.2", default-features = fals
 idenso.workspace = true
 spenso.workspace = true
 symbolica.workspace = true
-tymbolica-atom-payload.workspace = true
+symbolica-typst-atom-payload.workspace = true
 wasm-minimal-protocol = "0.1"

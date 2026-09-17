@@ -15,7 +15,7 @@
   ),
 ).tree.slots.value
 
-#assert.eq(annotation.protocol, "tymbolica")
+#assert.eq(annotation.protocol, "symbolica")
 #assert.eq(annotation.kind, "atom")
 #assert(type(annotation.atom) == bytes)
 #assert.eq(annotation.semantic.kind, "tensor")

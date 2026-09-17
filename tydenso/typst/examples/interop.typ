@@ -1,6 +1,6 @@
 #import "../lib.typ" as tensors
-#import "@local/tymbolica:0.1.0" as algebra
-#import "@local/tymbolica-rubi:0.1.0" as calculus
+#import "@local/symbolica:0.1.0" as algebra
+#let calculus = algebra
 
 #set page(width: auto, height: auto, margin: 12pt)
 
@@ -14,12 +14,12 @@ Tydenso prints its own tensor notation:
 
 $ #tensors.to-typst(expression) $
 
-The same native Atom payload can be inspected or transformed by Tymbolica:
+The same native Atom payload can be inspected or transformed by Symbolica:
 
 #let expanded = algebra.expand(expression)
 #raw(algebra.canonical(expanded))
 
-// Antisymmetry survives a trip through Tymbolica.
+// Antisymmetry survives a trip through Symbolica.
 #let W = tensors.euc(3)
 #let a = tensors.slot(W, 1)
 #let b = tensors.slot(W, 2)
@@ -58,18 +58,18 @@ The same native Atom payload can be inspected or transformed by Tymbolica:
 #let custom = q(tensors.slot(M, 1))
 #let custom-roundtrip = algebra.expand(custom)
 
-// Rubi accepts the same Atom payload and returns something Tydenso can print.
+// Symbolica's Rubi integration returns the same Atom payload that Tydenso can print.
 #let x = algebra.math($x$)
 #let custom-primitive = calculus.integrate(tensors.atom(custom), x)
 
 #grid(
   columns: 2,
   gutter: 0.8em,
-  [antisymmetry after Tymbolica], $ #tensors.to-typst(cancelled) $,
-  [namespace after Tymbolica], raw(algebra.canonical(roundtrip, namespaces: true)),
+  [antisymmetry after Symbolica], $ #tensors.to-typst(cancelled) $,
+  [namespace after Symbolica], raw(algebra.canonical(roundtrip, namespaces: true)),
   [nested calls after both plugins], raw(algebra.canonical(nested-roundtrip)),
-  [spinor after Tymbolica], $ #tensors.to-typst(spinor-roundtrip) $,
-  [display metadata after Tymbolica], $ #tensors.to-typst(routed-roundtrip) $,
-  [representation metadata after Tymbolica], $ #tensors.to-typst(custom-roundtrip) $,
-  [representation metadata after Rubi], $ #tensors.to-typst(custom-primitive) $,
+  [spinor after Symbolica], $ #tensors.to-typst(spinor-roundtrip) $,
+  [display metadata after Symbolica], $ #tensors.to-typst(routed-roundtrip) $,
+  [representation metadata after Symbolica], $ #tensors.to-typst(custom-roundtrip) $,
+  [representation metadata after Symbolica integration], $ #tensors.to-typst(custom-primitive) $,
 )

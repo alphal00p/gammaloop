@@ -66,7 +66,7 @@ check: build check-wasm-features
     set -euo pipefail
     cd "{{ justfile_directory() }}/tydenso"
     tymbolica_checkout="${TYMBOLICA_CHECKOUT:-../../symbolica-typst-plugin}"
-    tymbolica_revision="4aab37aa6a5250ac692b425bc95592a408c98cc1"
+    tymbolica_revision="18e0491628f9eac5c788659cabfcdb7575f6986d"
     if [ ! -f "$tymbolica_checkout/typst.toml" ]; then
       echo "set TYMBOLICA_CHECKOUT to the pinned symbolica-dev/symbolica-typst-plugin checkout" >&2
       exit 1
@@ -82,9 +82,9 @@ check: build check-wasm-features
     mkdir -p "$check_dir/tymbolica" ../target/tymbolica
     git -C "$tymbolica_checkout" archive "$tymbolica_revision" | tar -x -C "$check_dir/tymbolica"
     tymbolica_checkout="$check_dir/tymbolica"
-    # Rebuild both pinned engines without changing the checkout.
-    # Their build script reads only Cargo's target and feature settings;
-    # its file watch excludes regenerated plugin assets from invalidating the core build.
+    # Rebuild the pinned combined algebra/integration engine without changing the checkout.
+    # Its build script reads Cargo's target and feature settings; generated plugin
+    # assets remain outside the Rust source inputs.
     # Keep compilation reusable outside Swatinem's workspace-target cleanup.
     ln -s "$PWD/../target/tymbolica" "$tymbolica_checkout/target"
     (
@@ -105,26 +105,25 @@ check: build check-wasm-features
     cmp typst/render.typ ../crates/spynso3/typst/render.typ
     cmp typst/notation.typ ../crates/spynso3/typst/notation.typ
 
+    # Nix wrappers may set a read-only package cache; allow both Parsely versions.
     package_root="$check_dir/xdg/typst/packages/local"
     mkdir -p \
       "$package_root/tydenso/0.1.0" \
-      "$package_root/tymbolica/0.1.0" \
-      "$package_root/tymbolica-rubi/0.1.0"
+      "$package_root/symbolica/0.1.0"
     cp -R typst/. "$package_root/tydenso/0.1.0/"
-    cp "$tymbolica_checkout/typst.toml" "$package_root/tymbolica/0.1.0/typst.toml"
-    cp -R "$tymbolica_checkout/typst" "$package_root/tymbolica/0.1.0/typst"
-    cp -R "$tymbolica_checkout/rubi/." "$package_root/tymbolica-rubi/0.1.0/"
+    cp "$tymbolica_checkout/typst.toml" "$package_root/symbolica/0.1.0/typst.toml"
+    cp -R "$tymbolica_checkout/symbolica" "$package_root/symbolica/0.1.0/symbolica"
 
     for source in typst/examples/*.typ typst/tests/*.typ; do
       case "$source" in
         typst/tests/gamma-storage-order-invalid.typ) continue ;;
       esac
       output="$check_dir/$(basename "${source%.typ}").pdf"
-      XDG_DATA_HOME="$check_dir/xdg" typst compile --root . "$source" "$output"
+      XDG_DATA_HOME="$check_dir/xdg" typst compile --package-cache-path "$check_dir/typst-cache" --root . "$source" "$output"
     done
 
     gamma_order_error="$check_dir/gamma-storage-order-invalid.error"
-    if XDG_DATA_HOME="$check_dir/xdg" typst compile --root . \
+    if XDG_DATA_HOME="$check_dir/xdg" typst compile --package-cache-path "$check_dir/typst-cache" --root . \
       typst/tests/gamma-storage-order-invalid.typ \
       "$check_dir/gamma-storage-order-invalid.pdf" >"$gamma_order_error" 2>&1; then
       echo "Lorentz-first explicit gamma ports unexpectedly compiled" >&2
@@ -137,7 +136,7 @@ check: build check-wasm-features
 
     # Keep the target-aware phantom helper exercised: HTML must retain
     # semantic MathML and use mphantom, while SVG remains directly renderable.
-    XDG_DATA_HOME="$check_dir/xdg" typst compile --features html --format html \
+    XDG_DATA_HOME="$check_dir/xdg" typst compile --package-cache-path "$check_dir/typst-cache" --features html --format html \
       --root . typst/examples/basic.typ "$check_dir/basic.html"
     grep -q '<math' "$check_dir/basic.html"
     phantom_count="$(grep -o '<mphantom' "$check_dir/basic.html" | wc -l)"
@@ -145,10 +144,10 @@ check: build check-wasm-features
       echo "expected 7 semantic mphantom alignment nodes, found $phantom_count" >&2
       exit 1
     fi
-    XDG_DATA_HOME="$check_dir/xdg" typst compile --format svg \
+    XDG_DATA_HOME="$check_dir/xdg" typst compile --package-cache-path "$check_dir/typst-cache" --format svg \
       --root . typst/examples/basic.typ "$check_dir/basic.svg"
     test -s "$check_dir/basic.svg"
 
-    XDG_DATA_HOME="$check_dir/xdg" typst compile \
+    XDG_DATA_HOME="$check_dir/xdg" typst compile --package-cache-path "$check_dir/typst-cache" \
       --creation-timestamp 0 --root . typst/manual.typ "$check_dir/manual.pdf"
     cmp typst/manual.pdf "$check_dir/manual.pdf"

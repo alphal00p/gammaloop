@@ -83,7 +83,7 @@ pyo3-stub-gen = { workspace = true, optional = true }
 gammaloop-workspace-hack = { version = "0.1", path = "../gammaloop-workspace-hack", optional = true }
 ciborium = { version = "0.2.2", optional = true }
 blake3 = { version = "1.8.3", optional = true }
-tymbolica-atom-payload = { workspace = true, optional = true }
+symbolica-typst-atom-payload = { workspace = true, optional = true }
 
 [dependencies.symbolica]
 version = "3.0.0"
@@ -103,7 +103,7 @@ native = [
   "symbolica?/integer-gmp",
   "symbolica?/float-mpfr",
   "symbolica-utils/native",
-  "tymbolica-atom-payload?/native",
+  "symbolica-typst-atom-payload?/native",
 ]
 native-code-generation = [
   "native",
@@ -115,7 +115,7 @@ portable-payload = [
   "shadowing",
   "dep:blake3",
   "dep:ciborium",
-  "dep:tymbolica-atom-payload",
+  "dep:symbolica-typst-atom-payload",
 ]
 python = ["dep:pyo3"]
 python_stubgen = ["dep:pyo3-stub-gen", "python"]
@@ -124,5 +124,5 @@ wasm = [
   "linnet/wasm",
   "symbolica?/wasm",
   "symbolica-utils/wasm",
-  "tymbolica-atom-payload?/wasm",
+  "symbolica-typst-atom-payload?/wasm",
 ]

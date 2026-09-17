@@ -13,7 +13,7 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
 
     # Keep generated documentation assets stable across general Nixpkgs updates.
-    nixpkgs-docs.url = "github:NixOS/nixpkgs/716c7a2664ca8325617b8a7fbb609273f2c4cae7";
+    nixpkgs-docs.url = "github:NixOS/nixpkgs/1559d3daa3ecc813a650b79375ea61b6741b8746";
 
     crane = {
       url = "github:ipetkov/crane";

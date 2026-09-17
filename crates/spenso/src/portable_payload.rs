@@ -17,7 +17,7 @@ use spenso::{
     },
 };
 use symbolica::atom::{Atom, AtomView, NamespacedSymbol, Symbol, SymbolBuilder};
-use tymbolica_atom_payload::{Attachment, AttachmentKey, AttachmentSet};
+use symbolica_typst_atom_payload::{Attachment, AttachmentKey, AttachmentSet};
 
 /// Attachment schema used for portable Spenso representation declarations.
 pub const REPRESENTATION_ATTACHMENT_SCHEMA: &str = "spenso.representation";
@@ -65,7 +65,7 @@ pub fn register_math_display_attachments(
 ///
 /// The returned set contains both representation metadata and structured math
 /// displays. It can be merged with application-specific attachments before the
-/// Atom is exported through `tymbolica-atom-payload`.
+/// Atom is exported through `symbolica-typst-atom-payload`.
 pub fn attachments_for_atom(atom: &Atom) -> Result<AttachmentSet> {
     let representations = RepresentationDeclarations::referenced_by_atom(atom)?;
     let math_displays = MathDisplayDeclarations::referenced_by_atom(atom)?;
