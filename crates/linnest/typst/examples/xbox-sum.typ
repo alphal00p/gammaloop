@@ -83,7 +83,7 @@
   // Open the RHS directly from the master and align its endpoints in shared rows and columns.
   let xbox-rhs = {
     let g = graph.build(default-edge-data: edge-data + (show-momentum: false), master)
-    graph.cut(
+    let g = graph.cut(
       g,
       left: subgraph.select(g, source: (<D5>, <D6>)),
       right: subgraph.select(g, sink: (<D5>, <D6>)),
@@ -95,6 +95,14 @@
         ))
       },
     )
+    graph.map(g, edge: (
+      D3: (
+        crossing-under: <D4>,
+        crossing-gap: 0.8,
+        fermion-arrow-shift: 0.8,
+      ),
+      D4: (fermion-arrow-shift: 0.8),
+    ))
   }
 
   // Pull the external rows together without drawing another propagator.
@@ -253,6 +261,6 @@ let g = graph.build(default-edge-data: edge-data, master)
     #diagram(xbox-opened, cut-x: -.4, cut-y: -0.8, initial-cut: 1)+
     #diagram(xbox-opened2, cut-x: -1.5, cut-y: -0.8, initial-cut: 2)+
     #diagram(xbox-cut, cut-y: -0.8,cut-x:-0.3, initial-cut: 3) = op("disc")_(p_1^2) op("disc")_(p_2^2)#h(-3mm)
-    #diagram(xbox-rhs, cut-x: -1, cut-y: -0.8, endpoint-fills: (:))
+    #diagram(xbox-rhs, cut-x: none, endpoint-fills: (:))
   $
 }

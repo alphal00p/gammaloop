@@ -79,7 +79,7 @@
   )
 }
 
-// `cut-x` is in graph units; auto puts the cut just right of center.
+// `cut-x` is in graph units; auto puts the cut just right of center, none hides it.
 #let diagram(
   g,
   options: base-layout,
@@ -164,12 +164,14 @@
         width: bounds.width + 2 * box-style.padding.x,
         height: bounds.height + 2 * y,
       )
-      cetz.draw.line((x, bounds.top), (x, bounds.bottom), stroke: (
-        paint: red.transparentize(50%),
-        thickness: diagram-style.cut-line-width,
-        cap:"round"
-        // dash: "dashed",
-      ))
+      if cut-x != none {
+        cetz.draw.line((x, bounds.top), (x, bounds.bottom), stroke: (
+          paint: red.transparentize(50%),
+          thickness: diagram-style.cut-line-width,
+          cap: "round",
+          // dash: "dashed",
+        ))
+      }
       if initial-cut != none and draw-initials {
         for side in ("left", "right") {
           let side-xs = endpoints.filter(b => b.side == side).map(b => b.pos.x)
