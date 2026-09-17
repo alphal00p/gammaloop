@@ -1,0 +1,27 @@
+{
+  "detailed": [
+    "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/gammaloop",
+    "-n",
+    "-s",
+    "/common/dev/gammaloop_ir_safe_thresholds/examples/cli/epem_a_ttxh/NNLO/workspaces/GL638_max_spike_diagnostic_20260917/state",
+    "-t",
+    "native",
+    "run",
+    "-c",
+    "set process -p epem_a_tth -i NNLO file /common/dev/gammaloop_ir_safe_thresholds/examples/cli/epem_a_ttxh/NNLO/workspaces/GL638_max_spike_diagnostic_20260917/runtime.toml; inspect -p epem_a_tth -i NNLO -x 0.65326967347543075 0.99071624997667884 0.34598647260057075 0.73874307614468926 0.90145414024659398 0.087144592922320935 0.58803498486189254 0.099566804759442573 0.8048060051539222 0.67392249894159018 0.66470428853177543 0.060665899033751615 -d 0 3; inspect -p epem_a_tth -i NNLO -x 0.65326967347543075 0.99071624997667884 0.34598647260057075 0.73874307614468926 0.90145414024659398 0.087144592922320935 0.58803498486189254 0.099566804759442573 0.8048060051539222 0.67392249894159018 0.66470428853177543 0.060665899033751615 -d 0 3 -f; set process -p epem_a_tth -i NNLO kv general.store_additional_weights_in_event=false; inspect -p epem_a_tth -i NNLO -x 0.65326967347543075 0.99071624997667884 0.34598647260057075 0.73874307614468926 0.90145414024659398 0.087144592922320935 0.58803498486189254 0.099566804759442573 0.8048060051539222 0.67392249894159018 0.66470428853177543 0.060665899033751615 -d 0 3 --json-output /common/dev/gammaloop_ir_safe_thresholds/examples/cli/epem_a_ttxh/NNLO/workspaces/GL638_max_spike_diagnostic_20260917/inspect.json; inspect -p epem_a_tth -i NNLO -x 0.65326967347543075 0.99071624997667884 0.34598647260057075 0.73874307614468926 0.90145414024659398 0.087144592922320935 0.58803498486189254 0.099566804759442573 0.8048060051539222 0.67392249894159018 0.66470428853177543 0.060665899033751615 -d 0 3 -f --json-output /common/dev/gammaloop_ir_safe_thresholds/examples/cli/epem_a_ttxh/NNLO/workspaces/GL638_max_spike_diagnostic_20260917/inspect_arb.json; display integrand -p epem_a_tth -i NNLO --category cuts loop_momentum_basis; quit"
+  ],
+  "totals": [
+    "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/gammaloop",
+    "-n",
+    "-s",
+    "/common/dev/gammaloop_ir_safe_thresholds/examples/cli/epem_a_ttxh/NNLO/workspaces/GL638_max_spike_diagnostic_20260917/state",
+    "-t",
+    "totals",
+    "run",
+    "-c",
+    "set process -p epem_a_tth -i NNLO file /common/dev/gammaloop_ir_safe_thresholds/examples/cli/epem_a_ttxh/NNLO/workspaces/GL638_max_spike_diagnostic_20260917/runtime.toml; set process -p epem_a_tth -i NNLO kv general.store_additional_weights_in_event=false; display integrand -p epem_a_tth -i NNLO --category cuts loop_momentum_basis; inspect -p epem_a_tth -i NNLO -x 0.65326967347543075 0.99071624997667884 0.34598647260057075 0.73874307614468926 0.90145414024659398 0.087144592922320935 0.58803498486189254 0.099566804759442573 0.8048060051539222 0.67392249894159018 0.66470428853177543 0.060665899033751615 -d 0 3 --json-output /common/dev/gammaloop_ir_safe_thresholds/examples/cli/epem_a_ttxh/NNLO/workspaces/GL638_max_spike_diagnostic_20260917/inspect.json; inspect -p epem_a_tth -i NNLO -x 0.65326967347543075 0.99071624997667884 0.34598647260057075 0.73874307614468926 0.90145414024659398 0.087144592922320935 0.58803498486189254 0.099566804759442573 0.8048060051539222 0.67392249894159018 0.66470428853177543 0.060665899033751615 -d 0 3 -f --json-output /common/dev/gammaloop_ir_safe_thresholds/examples/cli/epem_a_ttxh/NNLO/workspaces/GL638_max_spike_diagnostic_20260917/inspect_arb.json; quit"
+  ],
+  "note": "Detailed normal call succeeded; following forced-Arb detailed call completed numerical evaluation but failed on underflow of a separately stored factorized Original. Totals calls disable only additional-weight retention, avoiding that reporting error. No production source changes.",
+  "settings_sha256": "ec4f42e46ec86e869deddcf6abd62f494c744be8958dfdbb4b9d72e311f86d3e",
+  "binary_sha256": "cabdbd6bce8fe3ba543f273f65041d9fd56b60e2c016dac3d767e4f57204dd9f"
+}

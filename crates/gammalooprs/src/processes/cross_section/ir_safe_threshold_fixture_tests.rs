@@ -891,10 +891,9 @@ fn gl297_selected_orientation_resolves_forced_one_loop_subspaces_with_full_uv() 
 fn explicit_parent_validation_excludes_initial_state_cycles() {
     test_initialise().unwrap();
     let model = load_generic_model("sm");
-    let graph: Graph =
-        include_str!("../../../../../tests/resources/graphs/GL297.dot")
-            .into_graph(&model)
-            .unwrap();
+    let graph: Graph = include_str!("../../../../../tests/resources/graphs/GL297.dot")
+        .into_graph(&model)
+        .unwrap();
     assert_eq!(graph.loop_momentum_basis.loop_edges.len(), 4);
     assert_eq!(graph.external_momentum_edge_order().len(), 2);
     assert_eq!(graph.threshold_counterterms.cuts.len(), 2);

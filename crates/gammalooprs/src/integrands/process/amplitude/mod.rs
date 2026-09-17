@@ -1963,11 +1963,11 @@ impl GraphTerm for AmplitudeGraphTerm {
         &mut self.param_builder
     }
 
-    fn get_real_mass_vector(&self) -> EdgeVec<Option<F<f64>>> {
+    fn get_real_mass_vector(&self) -> Result<EdgeVec<Option<F<f64>>>> {
         self.real_mass_vec
             .as_ref()
-            .expect("real mass vector should be set")
-            .clone()
+            .cloned()
+            .ok_or_else(|| eyre!("real mass vector is not initialized; call warm_up first"))
     }
 }
 
@@ -3575,7 +3575,7 @@ parent_lmb = [4]
                 &externals,
                 &term.graph.loop_momentum_basis,
             );
-            let masses = term.get_real_mass_vector();
+            let masses = term.get_real_mass_vector()?;
             for (_, edge, _) in term.graph.iter_loop_edges() {
                 let momentum = term.graph.loop_momentum_basis.edge_signatures[edge]
                     .compute_four_momentum_from_three(&loops, &externals);

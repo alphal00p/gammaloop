@@ -556,7 +556,7 @@ ci-checks-and-upload:
           "nix-ci-check-gammaloop-nextest-vakint"
         ];
         packages = builtins.filter (name: builtins.hasAttr name flake.packages.${system}) packageNames;
-      in builtins.concatStringsSep "\\n"
+      in builtins.concatStringsSep "\n"
         ((map (name: "checks.${system}.${name}") checks)
           ++ (map (name: "packages.${system}.${name}") packages))
     ')

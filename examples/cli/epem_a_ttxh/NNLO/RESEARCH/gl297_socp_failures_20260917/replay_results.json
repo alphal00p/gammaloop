@@ -1,0 +1,2399 @@
+{
+  "scope": "Exact next-iteration cloned-checkpoint replay of two GL297 failures, followed by old/patched native inspections and equivalent conic-problem rescaling experiment.",
+  "old_binary_sha256": "cabdbd6bce8fe3ba543f273f65041d9fd56b60e2c016dac3d767e4f57204dd9f",
+  "contained_failure_binary_sha256": "41e36e8adb0b9f98ba1e1794a8cde28312d2cc859645a81c03a0ca0bba265852",
+  "cases": {
+    "optimized": {
+      "failure": {
+        "evaluation_metadata": {
+          "accepted_event_count": 0,
+          "canonical_physical_preparation_time": {
+            "nanos": 4675056,
+            "secs": 0
+          },
+          "canonical_sampling_preparation_time": {
+            "nanos": 381703,
+            "secs": 0
+          },
+          "evaluator_evaluation_time": {
+            "nanos": 0,
+            "secs": 0
+          },
+          "event_processing_time": {
+            "nanos": 0,
+            "secs": 0
+          },
+          "generated_event_count": 0,
+          "integrand_evaluation_time": {
+            "nanos": 4675056,
+            "secs": 0
+          },
+          "is_nan": true,
+          "loop_momenta_escalation": null,
+          "parameterization_time": {
+            "nanos": 381703,
+            "secs": 0
+          },
+          "relative_instability_error": {
+            "im": 0.0,
+            "re": 0.0
+          },
+          "stability_results": [
+            {
+              "estimated_relative_accuracy": null,
+              "precision": "Double",
+              "status": {
+                "Unstable": 0
+              },
+              "total_time": {
+                "nanos": 60,
+                "secs": 0
+              }
+            },
+            {
+              "estimated_relative_accuracy": null,
+              "precision": "Quad",
+              "status": {
+                "Unstable": 0
+              },
+              "total_time": {
+                "nanos": 3980,
+                "secs": 0
+              }
+            },
+            {
+              "estimated_relative_accuracy": null,
+              "precision": "Arb",
+              "status": {
+                "Unstable": 0
+              },
+              "total_time": {
+                "nanos": 3530,
+                "secs": 0
+              }
+            }
+          ],
+          "threshold_counterterm_error": "threshold overlap is not certified: Threshold SOCP for graph 'GL297' and E-surfaces {ExistingEsurfaceId(0): EsurfaceID(1), ExistingEsurfaceId(1): EsurfaceID(3)} returned AlmostPrimalInfeasible without a strictly interior center: primal objective=NaN, dual objective=NaN, primal residual=0.1274421456440971, dual residual=0.00000000000000004016813878407305, iterations=18",
+          "total_timing": {
+            "nanos": 7048748,
+            "secs": 0
+          }
+        },
+        "iteration": 716,
+        "sample": {
+          "Discrete": [
+            0.8140001358462622,
+            0,
+            {
+              "Discrete": [
+                0.8140001358462622,
+                8,
+                {
+                  "Continuous": [
+                    0.15847631364652395,
+                    [
+                      0.33168777529733795,
+                      0.9182901767427527,
+                      0.8871151234013295,
+                      0.5237759320929373,
+                      0.405645141194353,
+                      0.6190324006441688,
+                      0.6178135113081745,
+                      0.7667261103805785,
+                      0.9016624966708675,
+                      0.7373798919654603,
+                      0.2773975750381326,
+                      0.36987952654913625
+                    ]
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "schema_version": 1,
+        "slot": {
+          "integrand_name": "NNLO",
+          "process_name": "epem_a_tth"
+        }
+      },
+      "checkpoint_before_sha256": "8df3e9a266ed2bf92b3ba775b36cb0cf65eece74afd3187cf6753f2ee7865215",
+      "state_copy_hashes": [
+        {
+          "path": "run.toml",
+          "sha256": "24cfab6ec050247029b397f4709780d8cacb6790a1970f0be0ceeb622bf2b744"
+        },
+        {
+          "path": "state_manifest.toml",
+          "sha256": "8e7423074b68d8504aaa62986b8d6499a216f7c144b401fadc5106c2a6faeac8"
+        },
+        {
+          "path": "run.toml.before_long_resume",
+          "sha256": "52bbd2e979d4ab7769dc544b1bf20688fee11e1a3c33540e1cd9e540ed6318fb"
+        },
+        {
+          "path": "justfile",
+          "sha256": "49ce845fc918f10f5e41e7d3e13bf8ac862707fdd7144db1221167375556d65c"
+        },
+        {
+          "path": "model_parameters.json",
+          "sha256": "5cf4b422cfe328559dd3cc9322e5e66c264faba54d5d44b4f5772c3a53a43572"
+        },
+        {
+          "path": "symbolica_state.bin",
+          "sha256": "4ab9d924241925332d6818417d159710747c2590fd56f7cee657a017e4a415fb"
+        },
+        {
+          "path": "global_settings.toml",
+          "sha256": "ea79fe63376018e3b73c0488085790d233178e225de37948ab111ec503196d88"
+        },
+        {
+          "path": "default_runtime_settings.toml",
+          "sha256": "a960bb886ab0a996958a23d208f71fd88ec50be70439f15464acf596914b4be4"
+        },
+        {
+          "path": "model.json",
+          "sha256": "73bd6a7f4ed3c2a6f5ef35520fd39152483e77d947852ca9d02e913c0296395a"
+        },
+        {
+          "path": "drawings/templates/figure.typ",
+          "sha256": "4ab1913e6476ef9f49b4a4bdc07d44589124e5030168fb853963990d7b164672"
+        },
+        {
+          "path": "drawings/templates/edge-style.typ",
+          "sha256": "0e961db4de2d939cc0bee8fc59fe82850e220cb96a1fe4d7e938bbbd7e9e0789"
+        },
+        {
+          "path": "drawings/templates/layout.typ",
+          "sha256": "069a852cd32f4cb519cbd6eebcc94338ca23e561ad59cee454c89a769ea3568e"
+        },
+        {
+          "path": "drawings/templates/grid.typ",
+          "sha256": "a2aea8505809f39564ff2d0ebb1a1c9ac9ee3b46b211d57c72e32c1f1f0ca11d"
+        },
+        {
+          "path": "drawings/templates/crates/kurvst/typst/typst.toml",
+          "sha256": "0d7eec512c399c0beeee8402393b32e489856fbdeb30945feff0ed298dd8bbbd"
+        },
+        {
+          "path": "drawings/templates/crates/kurvst/typst/kurvst.wasm",
+          "sha256": "50619c0dbe6ec78538f9e8a8587b5b8ad33d464672dec974c2c53ab93f7ebd15"
+        },
+        {
+          "path": "drawings/templates/crates/kurvst/typst/src/lib.typ",
+          "sha256": "90fd7952020cb3162f95acb47389e1dafc0516d03d085fa780b084904e9ad636"
+        },
+        {
+          "path": "drawings/templates/crates/kurvst/typst/src/impl.typ",
+          "sha256": "0feab4012862ea5020e4bc833861f333d0f68ea2fc3b5420af5709edeaaf10d8"
+        },
+        {
+          "path": "drawings/templates/crates/linnest/typst/typst.toml",
+          "sha256": "899f5436fa4211c3e98fe022a7968623782a5648980ade9d0c8c0e6cf6ecdfa0"
+        },
+        {
+          "path": "drawings/templates/crates/linnest/typst/linnest.wasm",
+          "sha256": "655d6c2f3dbdac1d6c8ead2113d0cb576a026e3b9e1bc66b7a6c41439e16cd9d"
+        },
+        {
+          "path": "drawings/templates/crates/linnest/typst/src/curve.typ",
+          "sha256": "4350dfbe4a8e825396e4f476731b9862935d87fb6630c24425350f4071b9e590"
+        },
+        {
+          "path": "drawings/templates/crates/linnest/typst/src/subgraph.typ",
+          "sha256": "d318d5e98e902e06f412cd8a1f45ebc6f6c8218a7c4063bf3582333616122c53"
+        },
+        {
+          "path": "drawings/templates/crates/linnest/typst/src/layout.typ",
+          "sha256": "3c06a8413a62fe124c0731fcb6e0ad354051214d055a682520df5c4186d8301c"
+        },
+        {
+          "path": "drawings/templates/crates/linnest/typst/src/graph.typ",
+          "sha256": "3b332b75f3212458ef4815010f5ff645c762d09a1fd9798c9637636590f0f392"
+        },
+        {
+          "path": "drawings/templates/crates/linnest/typst/src/lib.typ",
+          "sha256": "85d9ce54cad4251140acdea0a153a737b465d346b9668665f53c1db2fa6eb200"
+        },
+        {
+          "path": "drawings/templates/crates/linnest/typst/src/draw.typ",
+          "sha256": "7029235345346572dcf7dcd26cf947c9516efdd9828a183d8613b60c6ad8e22f"
+        },
+        {
+          "path": "drawings/templates/crates/linnest/typst/src/physics-edge-style.typ",
+          "sha256": "854530edde9152b8adb01cf8e097c4107f0277ac175f6e47c37df97ada735cd7"
+        },
+        {
+          "path": "drawings/templates/crates/linnest/typst/src/impl/graph.typ",
+          "sha256": "1dc82dd0099c0810036992a378042a33f5c162fd919d08d79cf218b8716c08dd"
+        },
+        {
+          "path": "drawings/templates/crates/linnest/typst/src/impl/physics-edge-style.typ",
+          "sha256": "1e13992babc10e7310fe24bfe0e4f4f67c5ea51afaf08b413418f4d88d269965"
+        },
+        {
+          "path": "drawings/templates/crates/linnest/typst/src/impl/draw.typ",
+          "sha256": "0acb9d50e9f6ac24dbe5b3c9727e3ec4c65843d4dbce57ba5c4f973a0b75f682"
+        },
+        {
+          "path": "processes/cross_sections/epem_a_tth/settings_history.toml",
+          "sha256": "a8bc1b47a36a2703382d26760f9881d20899425d2253f7db6b917c3d5870542b"
+        },
+        {
+          "path": "processes/cross_sections/epem_a_tth/def.bin",
+          "sha256": "afa2ee02a99a35b2dbaa570d9b40fc6bdfbc3b685f0f99be4c9f267b4835e68b"
+        },
+        {
+          "path": "processes/cross_sections/epem_a_tth/NNLO/generation_summary.json",
+          "sha256": "3bd008e015ee5d40732e1ef63c6e7f866de811b572faed929b9b0046a0e35cba"
+        },
+        {
+          "path": "processes/cross_sections/epem_a_tth/NNLO/GL297.dot",
+          "sha256": "f9fdbf60d63abf3e07bcdb294c1bd2b32a846272829fabf7a5b25b99f040f200"
+        },
+        {
+          "path": "processes/cross_sections/epem_a_tth/NNLO/cs.bin",
+          "sha256": "3ecbd476b6fcee3624b496bfb9af9938d80353af2608e2892c5d3787bc0c0eb8"
+        },
+        {
+          "path": "processes/cross_sections/epem_a_tth/NNLO/integrand/settings.toml",
+          "sha256": "f2b7fdcf76f716f6a37ad993d6a6c8b4cf26edddeca166a9130e4e8b4f17ba6b"
+        },
+        {
+          "path": "processes/cross_sections/epem_a_tth/NNLO/integrand/integrand.bin",
+          "sha256": "aa98b99203a8c7eaca67d02e2993909d7e7ad6e38d6985c09a1c81e2288a6ec0"
+        }
+      ],
+      "temporary_diagnostic_fingerprint_override": {
+        "old": [
+          "ee0483f1ae86ba6a"
+        ],
+        "current_process": [
+          "2591522b7436de0c"
+        ],
+        "checkpoint_sha256": "8df3e9a266ed2bf92b3ba775b36cb0cf65eece74afd3187cf6753f2ee7865215"
+      },
+      "original_manifest": {
+        "version": 3,
+        "slots": [
+          {
+            "process_name": "epem_a_tth",
+            "integrand_name": "NNLO"
+          }
+        ],
+        "targets": [
+          null
+        ],
+        "effective_model_parameters": [
+          {
+            "data": {
+              "Gf": [
+                1.16639e-05,
+                0.0
+              ],
+              "MB": [
+                4.9,
+                0.0
+              ],
+              "MH": [
+                125.0,
+                0.0
+              ],
+              "MT": [
+                173.0,
+                0.0
+              ],
+              "MTA": [
+                1.777,
+                0.0
+              ],
+              "MZ": [
+                91.188,
+                0.0
+              ],
+              "WH": [
+                0.00638233934,
+                0.0
+              ],
+              "WT": [
+                0.0,
+                0.0
+              ],
+              "WW": [
+                2.0476,
+                0.0
+              ],
+              "WZ": [
+                2.441404,
+                0.0
+              ],
+              "aEWM1": [
+                132.507,
+                0.0
+              ],
+              "aS": [
+                0.118,
+                0.0
+              ],
+              "ymb": [
+                4.7,
+                0.0
+              ],
+              "ymt": [
+                173.0,
+                0.0
+              ],
+              "ymtau": [
+                1.777,
+                0.0
+              ]
+            }
+          }
+        ],
+        "integrand_fingerprints": [
+          "ee0483f1ae86ba6a"
+        ],
+        "training_slot": 0,
+        "integrator_settings_slot": 0,
+        "sampling_correlation_mode": "correlated"
+      },
+      "replay_exit": 0,
+      "inspect": {
+        "new_detailed": {
+          "evaluation": {
+            "integrand_result": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "parameterization_jacobian": 1.0,
+            "integrator_weight": 1.0,
+            "event_groups": [],
+            "evaluation_metadata": {
+              "total_timing": {
+                "secs": 0,
+                "nanos": 7398697
+              },
+              "integrand_evaluation_time": {
+                "secs": 0,
+                "nanos": 5493368
+              },
+              "canonical_physical_preparation_time": {
+                "secs": 0,
+                "nanos": 5493368
+              },
+              "evaluator_evaluation_time": {
+                "secs": 0,
+                "nanos": 0
+              },
+              "parameterization_time": {
+                "secs": 0,
+                "nanos": 705054
+              },
+              "canonical_sampling_preparation_time": {
+                "secs": 0,
+                "nanos": 705054
+              },
+              "event_processing_time": {
+                "secs": 0,
+                "nanos": 0
+              },
+              "generated_event_count": 0,
+              "accepted_event_count": 0,
+              "relative_instability_error": {
+                "re": 0.0,
+                "im": 0.0
+              },
+              "is_nan": true,
+              "loop_momenta_escalation": null,
+              "stability_results": [
+                {
+                  "precision": "Double",
+                  "estimated_relative_accuracy": null,
+                  "status": {
+                    "Unstable": 0
+                  },
+                  "total_time": {
+                    "secs": 0,
+                    "nanos": 40
+                  }
+                },
+                {
+                  "precision": "Quad",
+                  "estimated_relative_accuracy": null,
+                  "status": {
+                    "Unstable": 0
+                  },
+                  "total_time": {
+                    "secs": 0,
+                    "nanos": 20731
+                  }
+                },
+                {
+                  "precision": "Arb",
+                  "estimated_relative_accuracy": null,
+                  "status": {
+                    "Unstable": 0
+                  },
+                  "total_time": {
+                    "secs": 0,
+                    "nanos": 2630
+                  }
+                }
+              ],
+              "threshold_counterterm_error": "threshold overlap is not certified: Threshold SOCP for graph 'GL297' and E-surfaces {ExistingEsurfaceId(0): EsurfaceID(1), ExistingEsurfaceId(1): EsurfaceID(3)} returned AlmostPrimalInfeasible without a strictly interior center: primal objective=NaN, dual objective=NaN, primal residual=0.1274421456440971, dual residual=0.00000000000000004016813878407305, iterations=18"
+            }
+          }
+        },
+        "new_arb_detailed": {
+          "evaluation": {
+            "integrand_result": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "parameterization_jacobian": 1.0,
+            "integrator_weight": 1.0,
+            "event_groups": [],
+            "evaluation_metadata": {
+              "total_timing": {
+                "secs": 0,
+                "nanos": 4995435
+              },
+              "integrand_evaluation_time": {
+                "secs": 0,
+                "nanos": 4228122
+              },
+              "canonical_physical_preparation_time": {
+                "secs": 0,
+                "nanos": 4228122
+              },
+              "evaluator_evaluation_time": {
+                "secs": 0,
+                "nanos": 0
+              },
+              "parameterization_time": {
+                "secs": 0,
+                "nanos": 489652
+              },
+              "canonical_sampling_preparation_time": {
+                "secs": 0,
+                "nanos": 489652
+              },
+              "event_processing_time": {
+                "secs": 0,
+                "nanos": 0
+              },
+              "generated_event_count": 0,
+              "accepted_event_count": 0,
+              "relative_instability_error": {
+                "re": 0.0,
+                "im": 0.0
+              },
+              "is_nan": true,
+              "loop_momenta_escalation": null,
+              "stability_results": [
+                {
+                  "precision": "Arb",
+                  "estimated_relative_accuracy": null,
+                  "status": {
+                    "Unstable": 0
+                  },
+                  "total_time": {
+                    "secs": 0,
+                    "nanos": 1650
+                  }
+                }
+              ],
+              "threshold_counterterm_error": "threshold overlap is not certified: Threshold SOCP for graph 'GL297' and E-surfaces {ExistingEsurfaceId(0): EsurfaceID(1), ExistingEsurfaceId(1): EsurfaceID(3)} returned AlmostPrimalInfeasible without a strictly interior center: primal objective=NaN, dual objective=NaN, primal residual=0.1274421456440971, dual residual=0.00000000000000004016813878407305, iterations=18"
+            }
+          }
+        },
+        "old_exit": 1,
+        "new_exit": 0,
+        "new_arb_exit": 0
+      },
+      "integration_result": {
+        "slots": [
+          {
+            "key": "epem_a_tth@NNLO",
+            "process": "epem_a_tth",
+            "integrand": "NNLO",
+            "target": null,
+            "integral": {
+              "neval": 58654720,
+              "real_zero": 1637597,
+              "im_zero": 1612549,
+              "result": {
+                "re": -4.952913746185532e-08,
+                "im": 9.032081299324729e-06
+              },
+              "error": {
+                "re": 5.8939315699775343e-08,
+                "im": 8.868281874066271e-08
+              },
+              "real_chisq": 714.7024290515395,
+              "im_chisq": 818.8170207438543
+            },
+            "table_results": [
+              {
+                "component": "re",
+                "value": -4.952913746185532e-08,
+                "error": 5.8939315699775343e-08,
+                "relative_error_percent": 118.99927743576643,
+                "chi_sq_per_dof": 0.9981877500719826,
+                "target_delta_sigma": null,
+                "target_delta_percent": null,
+                "max_weight_impact": 0.4670728485295809
+              },
+              {
+                "component": "im",
+                "value": 9.032081299324729e-06,
+                "error": 8.868281874066271e-08,
+                "relative_error_percent": 0.9818647087166161,
+                "chi_sq_per_dof": 1.1435991909830368,
+                "target_delta_sigma": null,
+                "target_delta_percent": null,
+                "max_weight_impact": 0.005351801575712502
+              }
+            ],
+            "integration_statistics": {
+              "num_evals": 58654720,
+              "average_total_time_seconds": 0.008500481,
+              "average_parameterization_time_seconds": 0.001171306,
+              "average_integrand_time_seconds": 0.006896973,
+              "average_evaluator_time_seconds": 0.003120457,
+              "average_observable_time_seconds": 0.0,
+              "average_integrator_time_seconds": 7.4563e-05,
+              "f64_percentage": 99.26013115398045,
+              "f128_percentage": 0.7301185650532472,
+              "arb_percentage": 0.009750280966305865,
+              "nan_percentage": 1.7048926326815641e-06,
+              "nan_or_unstable_percentage": 1.7048926326815641e-06,
+              "generated_event_count": 0,
+              "accepted_event_count": 0,
+              "selection_efficiency_percentage": null
+            },
+            "max_weight_info": [
+              {
+                "component": "re",
+                "sign": "+",
+                "max_eval": 1.3569015946262701,
+                "coordinates": "graph: 0, sampling channel: 8, xs: [\n5.3164620918410133e-01 4.3875492135742496e-02 8.1254971785281482e-01\n5.7536763949976522e-01 1.5844757072206984e-02 5.7589312834847262e-01\n7.1945206031022380e-01 1.4795565348011422e-01 8.6562249018878390e-01\n6.2808095788084266e-03 7.8823432510466418e-01 8.7081973702518101e-01 ]"
+              },
+              {
+                "component": "re",
+                "sign": "-",
+                "max_eval": -0.8887598636138768,
+                "coordinates": "graph: 0, sampling channel: 3, xs: [\n3.3669984369183337e-01 4.4811105917502835e-02 3.2379630636753542e-01\n5.1193103566794285e-01 6.1637479285379837e-01 7.0333352363088342e-01\n6.0304227052007409e-01 7.7939114015021149e-01 6.4758339400729670e-01\n6.4630484067358274e-01 8.5304827697507390e-01 5.6348080300916725e-01 ]"
+              },
+              {
+                "component": "im",
+                "sign": "+",
+                "max_eval": 2.8352463963469976,
+                "coordinates": "graph: 0, sampling channel: 3, xs: [\n5.6632957281928875e-01 5.1092779210667527e-01 6.2556491326657215e-01\n5.9013622683370959e-01 4.7817049793174021e-01 5.7350264058872580e-01\n3.5783614076028264e-01 4.8350339595629677e-02 2.7457664230774015e-01\n6.5188596948070748e-02 4.7739925824612001e-01 5.6309295110441149e-01 ]"
+              },
+              {
+                "component": "im",
+                "sign": "-",
+                "max_eval": -0.9504334369222753,
+                "coordinates": "graph: 0, sampling channel: 7, xs: [\n3.3305083052377588e-01 4.7103626627654926e-01 1.6837766976526503e-01\n4.4711059876397935e-01 4.6163592674180870e-01 2.5432768303423642e-01\n4.0492718169479192e-03 4.9829000146842367e-01 1.4254948821649865e-01\n1.1613169593454549e-02 7.9866648017897879e-01 5.7136654646405427e-01 ]"
+              }
+            ],
+            "grid_breakdown": {
+              "re": {
+                "axis_label": "sampling channel",
+                "fixed_coordinates": [
+                  {
+                    "axis_label": "graph",
+                    "bin_index": 0,
+                    "bin_label": "GL297"
+                  }
+                ],
+                "entries": [
+                  {
+                    "bin_index": 0,
+                    "bin_label": "(11,12,13,14)",
+                    "pdf": 0.09018363445409337,
+                    "value": -1.9034321815519434e-08,
+                    "error": 1.5770934813072943e-08,
+                    "chi_sq": 702.72483356334,
+                    "processed_samples": 5676228
+                  },
+                  {
+                    "bin_index": 1,
+                    "bin_label": "(6,11,12,13)",
+                    "pdf": 0.09665695236267871,
+                    "value": -9.703017565875087e-07,
+                    "error": 1.7878632974316167e-08,
+                    "chi_sq": 685.0688434894596,
+                    "processed_samples": 5073607
+                  },
+                  {
+                    "bin_index": 2,
+                    "bin_label": "(7,12,13,14)",
+                    "pdf": 0.09069777389488791,
+                    "value": -1.059387641658216e-06,
+                    "error": 1.629260544451104e-08,
+                    "chi_sq": 680.2962268623314,
+                    "processed_samples": 5379370
+                  },
+                  {
+                    "bin_index": 3,
+                    "bin_label": "(6,7,12,13)",
+                    "pdf": 0.14151424712600993,
+                    "value": -2.533342607976162e-06,
+                    "error": 1.98305862704846e-08,
+                    "chi_sq": 715.2018002318528,
+                    "processed_samples": 8839922
+                  },
+                  {
+                    "bin_index": 4,
+                    "bin_label": "(9,12,13,14)",
+                    "pdf": 0.12613325897672792,
+                    "value": 1.0219300011331815e-06,
+                    "error": 2.2679546510762293e-08,
+                    "chi_sq": 769.1726479110248,
+                    "processed_samples": 5369202
+                  },
+                  {
+                    "bin_index": 5,
+                    "bin_label": "(6,9,12,13)",
+                    "pdf": 0.0897374264094312,
+                    "value": 4.320315644382842e-08,
+                    "error": 1.6489581831350744e-08,
+                    "chi_sq": 726.2065511952273,
+                    "processed_samples": 5140995
+                  },
+                  {
+                    "bin_index": 6,
+                    "bin_label": "(4,11,12,13)",
+                    "pdf": 0.08083036785340746,
+                    "value": 9.46693057350236e-07,
+                    "error": 1.599865259023948e-08,
+                    "chi_sq": 727.7952852718754,
+                    "processed_samples": 4430998
+                  },
+                  {
+                    "bin_index": 7,
+                    "bin_label": "(4,7,12,13)",
+                    "pdf": 0.08997224022643033,
+                    "value": -1.3137267328038055e-09,
+                    "error": 1.7096944263876e-08,
+                    "chi_sq": 668.3887256228559,
+                    "processed_samples": 4807279
+                  },
+                  {
+                    "bin_index": 8,
+                    "bin_label": "(4,9,12,13)",
+                    "pdf": 0.19427409869633325,
+                    "value": 2.5216421829173215e-06,
+                    "error": 2.168143360030339e-08,
+                    "chi_sq": 702.5844924917619,
+                    "processed_samples": 13937119
+                  }
+                ]
+              },
+              "im": {
+                "axis_label": "sampling channel",
+                "fixed_coordinates": [
+                  {
+                    "axis_label": "graph",
+                    "bin_index": 0,
+                    "bin_label": "GL297"
+                  }
+                ],
+                "entries": [
+                  {
+                    "bin_index": 0,
+                    "bin_label": "(11,12,13,14)",
+                    "pdf": 0.09018363445409337,
+                    "value": 1.6718826898913815e-06,
+                    "error": 1.4658838133750432e-08,
+                    "chi_sq": 839.8925497058262,
+                    "processed_samples": 5676228
+                  },
+                  {
+                    "bin_index": 1,
+                    "bin_label": "(6,11,12,13)",
+                    "pdf": 0.09665695236267871,
+                    "value": 6.085624357479787e-07,
+                    "error": 1.3636529048084785e-08,
+                    "chi_sq": 798.3904532038141,
+                    "processed_samples": 5073607
+                  },
+                  {
+                    "bin_index": 2,
+                    "bin_label": "(7,12,13,14)",
+                    "pdf": 0.09069777389488791,
+                    "value": 7.746223942325964e-07,
+                    "error": 1.4744312130900873e-08,
+                    "chi_sq": 821.6394866327428,
+                    "processed_samples": 5379370
+                  },
+                  {
+                    "bin_index": 3,
+                    "bin_label": "(6,7,12,13)",
+                    "pdf": 0.14151424712600993,
+                    "value": 1.579007266089223e-06,
+                    "error": 5.170392096056795e-08,
+                    "chi_sq": 734.63710217056,
+                    "processed_samples": 8839922
+                  },
+                  {
+                    "bin_index": 4,
+                    "bin_label": "(9,12,13,14)",
+                    "pdf": 0.12613325897672792,
+                    "value": 7.844554418807882e-07,
+                    "error": 1.734380775290723e-08,
+                    "chi_sq": 748.0902768782544,
+                    "processed_samples": 5369202
+                  },
+                  {
+                    "bin_index": 5,
+                    "bin_label": "(6,9,12,13)",
+                    "pdf": 0.0897374264094312,
+                    "value": 7.302636508322961e-07,
+                    "error": 1.7654297505007752e-08,
+                    "chi_sq": 732.0306109574085,
+                    "processed_samples": 5140995
+                  },
+                  {
+                    "bin_index": 6,
+                    "bin_label": "(4,11,12,13)",
+                    "pdf": 0.08083036785340746,
+                    "value": 6.19628216191122e-07,
+                    "error": 1.932583729980895e-08,
+                    "chi_sq": 786.1001854377018,
+                    "processed_samples": 4430998
+                  },
+                  {
+                    "bin_index": 7,
+                    "bin_label": "(4,7,12,13)",
+                    "pdf": 0.08997224022643033,
+                    "value": 7.548733842766188e-07,
+                    "error": 4.627094538930284e-08,
+                    "chi_sq": 680.2171067818927,
+                    "processed_samples": 4807279
+                  },
+                  {
+                    "bin_index": 8,
+                    "bin_label": "(4,9,12,13)",
+                    "pdf": 0.19427409869633325,
+                    "value": 1.4914138938831798e-06,
+                    "error": 1.6227018242145686e-08,
+                    "chi_sq": 777.8429734158883,
+                    "processed_samples": 13937119
+                  }
+                ]
+              }
+            },
+            "absolute": {
+              "integral": {
+                "neval": 58654720,
+                "real_zero": 1637532,
+                "im_zero": 1612549,
+                "result": {
+                  "re": 3.650099426834013e-05,
+                  "im": 2.049806461389252e-05
+                },
+                "error": {
+                  "re": 5.8746304624545834e-08,
+                  "im": 8.865026625477598e-08
+                },
+                "real_chisq": 819.5559254742184,
+                "im_chisq": 965.2079533509532
+              },
+              "table_results": [
+                {
+                  "component": "|re|",
+                  "value": 3.650099426834013e-05,
+                  "error": 5.8746304624545834e-08,
+                  "relative_error_percent": 0.160944395631164,
+                  "chi_sq_per_dof": 1.1446311808299139,
+                  "target_delta_sigma": null,
+                  "target_delta_percent": null,
+                  "max_weight_impact": 0.0006337831553149618
+                },
+                {
+                  "component": "|im|",
+                  "value": 2.049806461389252e-05,
+                  "error": 8.865026625477598e-08,
+                  "relative_error_percent": 0.43248115334114745,
+                  "chi_sq_per_dof": 1.3480558007694876,
+                  "target_delta_sigma": null,
+                  "target_delta_percent": null,
+                  "max_weight_impact": 0.0023581693120885466
+                }
+              ],
+              "max_weight_info": [
+                {
+                  "component": "re",
+                  "sign": "+",
+                  "max_eval": 1.3569015946262701,
+                  "coordinates": "graph: 0, sampling channel: 8, xs: [\n5.3164620918410133e-01 4.3875492135742496e-02 8.1254971785281482e-01\n5.7536763949976522e-01 1.5844757072206984e-02 5.7589312834847262e-01\n7.1945206031022380e-01 1.4795565348011422e-01 8.6562249018878390e-01\n6.2808095788084266e-03 7.8823432510466418e-01 8.7081973702518101e-01 ]"
+                },
+                {
+                  "component": "im",
+                  "sign": "+",
+                  "max_eval": 2.8352463963469976,
+                  "coordinates": "graph: 0, sampling channel: 3, xs: [\n5.6632957281928875e-01 5.1092779210667527e-01 6.2556491326657215e-01\n5.9013622683370959e-01 4.7817049793174021e-01 5.7350264058872580e-01\n3.5783614076028264e-01 4.8350339595629677e-02 2.7457664230774015e-01\n6.5188596948070748e-02 4.7739925824612001e-01 5.6309295110441149e-01 ]"
+                }
+              ],
+              "grid_breakdown": {
+                "re": {
+                  "axis_label": "sampling channel",
+                  "fixed_coordinates": [
+                    {
+                      "axis_label": "graph",
+                      "bin_index": 0,
+                      "bin_label": "GL297"
+                    }
+                  ],
+                  "entries": [
+                    {
+                      "bin_index": 0,
+                      "bin_label": "(11,12,13,14)",
+                      "pdf": 0.09018363445409337,
+                      "value": 5.368768941674229e-06,
+                      "error": 1.5609115416152794e-08,
+                      "chi_sq": 748.7358709061809,
+                      "processed_samples": 5676228
+                    },
+                    {
+                      "bin_index": 1,
+                      "bin_label": "(6,11,12,13)",
+                      "pdf": 0.09665695236267871,
+                      "value": 3.4733821831042942e-06,
+                      "error": 1.7817216694851252e-08,
+                      "chi_sq": 712.1859767419846,
+                      "processed_samples": 5073607
+                    },
+                    {
+                      "bin_index": 2,
+                      "bin_label": "(7,12,13,14)",
+                      "pdf": 0.09069777389488791,
+                      "value": 3.54563411903499e-06,
+                      "error": 1.6227157326480618e-08,
+                      "chi_sq": 737.4184573799203,
+                      "processed_samples": 5379370
+                    },
+                    {
+                      "bin_index": 3,
+                      "bin_label": "(6,7,12,13)",
+                      "pdf": 0.14151424712600993,
+                      "value": 6.089411092223648e-06,
+                      "error": 1.974293402862563e-08,
+                      "chi_sq": 760.0191694651221,
+                      "processed_samples": 8839922
+                    },
+                    {
+                      "bin_index": 4,
+                      "bin_label": "(9,12,13,14)",
+                      "pdf": 0.12613325897672792,
+                      "value": 3.5542950775007327e-06,
+                      "error": 2.2631912628131902e-08,
+                      "chi_sq": 869.1563707806563,
+                      "processed_samples": 5369202
+                    },
+                    {
+                      "bin_index": 5,
+                      "bin_label": "(6,9,12,13)",
+                      "pdf": 0.0897374264094312,
+                      "value": 2.490808196730001e-06,
+                      "error": 1.6452959524400095e-08,
+                      "chi_sq": 856.143263354912,
+                      "processed_samples": 5140995
+                    },
+                    {
+                      "bin_index": 6,
+                      "bin_label": "(4,11,12,13)",
+                      "pdf": 0.08083036785340746,
+                      "value": 3.4069206354080686e-06,
+                      "error": 1.5922927580947708e-08,
+                      "chi_sq": 796.8536618468615,
+                      "processed_samples": 4430998
+                    },
+                    {
+                      "bin_index": 7,
+                      "bin_label": "(4,7,12,13)",
+                      "pdf": 0.08997224022643033,
+                      "value": 2.4706300651626907e-06,
+                      "error": 1.7059770203976944e-08,
+                      "chi_sq": 810.0124068897685,
+                      "processed_samples": 4807279
+                    },
+                    {
+                      "bin_index": 8,
+                      "bin_label": "(4,9,12,13)",
+                      "pdf": 0.19427409869633325,
+                      "value": 6.094702583146588e-06,
+                      "error": 2.163043202885596e-08,
+                      "chi_sq": 773.6318086555184,
+                      "processed_samples": 13937119
+                    }
+                  ]
+                },
+                "im": {
+                  "axis_label": "sampling channel",
+                  "fixed_coordinates": [
+                    {
+                      "axis_label": "graph",
+                      "bin_index": 0,
+                      "bin_label": "GL297"
+                    }
+                  ],
+                  "entries": [
+                    {
+                      "bin_index": 0,
+                      "bin_label": "(11,12,13,14)",
+                      "pdf": 0.09018363445409337,
+                      "value": 3.6985208940888593e-06,
+                      "error": 1.459328915396476e-08,
+                      "chi_sq": 843.7178391019625,
+                      "processed_samples": 5676228
+                    },
+                    {
+                      "bin_index": 1,
+                      "bin_label": "(6,11,12,13)",
+                      "pdf": 0.09665695236267871,
+                      "value": 1.5870747251960461e-06,
+                      "error": 1.3620993603386116e-08,
+                      "chi_sq": 842.4907184257063,
+                      "processed_samples": 5073607
+                    },
+                    {
+                      "bin_index": 2,
+                      "bin_label": "(7,12,13,14)",
+                      "pdf": 0.09069777389488791,
+                      "value": 1.8201640812814436e-06,
+                      "error": 1.4727199797746743e-08,
+                      "chi_sq": 819.9289317069051,
+                      "processed_samples": 5379370
+                    },
+                    {
+                      "bin_index": 3,
+                      "bin_label": "(6,7,12,13)",
+                      "pdf": 0.14151424712600993,
+                      "value": 3.4818556674374627e-06,
+                      "error": 5.169338507229596e-08,
+                      "chi_sq": 837.3125257187749,
+                      "processed_samples": 8839922
+                    },
+                    {
+                      "bin_index": 4,
+                      "bin_label": "(9,12,13,14)",
+                      "pdf": 0.12613325897672792,
+                      "value": 1.8270416876409233e-06,
+                      "error": 1.7329182594357968e-08,
+                      "chi_sq": 831.3805294753147,
+                      "processed_samples": 5369202
+                    },
+                    {
+                      "bin_index": 5,
+                      "bin_label": "(6,9,12,13)",
+                      "pdf": 0.0897374264094312,
+                      "value": 1.4660554492351184e-06,
+                      "error": 1.7645392536504292e-08,
+                      "chi_sq": 849.468784112868,
+                      "processed_samples": 5140995
+                    },
+                    {
+                      "bin_index": 6,
+                      "bin_label": "(4,11,12,13)",
+                      "pdf": 0.08083036785340746,
+                      "value": 1.5826050065881452e-06,
+                      "error": 1.9313450801225273e-08,
+                      "chi_sq": 875.9412901244541,
+                      "processed_samples": 4430998
+                    },
+                    {
+                      "bin_index": 7,
+                      "bin_label": "(4,7,12,13)",
+                      "pdf": 0.08997224022643033,
+                      "value": 1.5552804017589054e-06,
+                      "error": 4.626678883288241e-08,
+                      "chi_sq": 899.0315563625481,
+                      "processed_samples": 4807279
+                    },
+                    {
+                      "bin_index": 8,
+                      "bin_label": "(4,9,12,13)",
+                      "pdf": 0.19427409869633325,
+                      "value": 3.4531084359609163e-06,
+                      "error": 1.6205559648550117e-08,
+                      "chi_sq": 881.9431887807241,
+                      "processed_samples": 13937119
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      },
+      "inspect_commands": {
+        "old": [
+          "/common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/gammaloop_before_fix",
+          "-n",
+          "-s",
+          "/common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_optimized/state",
+          "-t",
+          "old",
+          "-L",
+          "debug",
+          "run",
+          "-c",
+          "set process -p epem_a_tth -i NNLO file /common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_optimized/workspace/integrands/epem_a_tth@NNLO/settings.toml; inspect -p epem_a_tth -i NNLO -x 0.33168777529733795 0.9182901767427527 0.8871151234013295 0.5237759320929373 0.405645141194353 0.6190324006441688 0.6178135113081745 0.7667261103805785 0.9016624966708675 0.7373798919654603 0.2773975750381326 0.36987952654913625 -d 0 8 --json-output /common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_optimized/old_inspect.json; quit"
+        ],
+        "new": [
+          "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/gammaloop",
+          "-n",
+          "-s",
+          "/common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_optimized/state",
+          "-t",
+          "new",
+          "-L",
+          "debug",
+          "run",
+          "-c",
+          "set process -p epem_a_tth -i NNLO file /common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_optimized/workspace/integrands/epem_a_tth@NNLO/settings.toml; inspect -p epem_a_tth -i NNLO -x 0.33168777529733795 0.9182901767427527 0.8871151234013295 0.5237759320929373 0.405645141194353 0.6190324006441688 0.6178135113081745 0.7667261103805785 0.9016624966708675 0.7373798919654603 0.2773975750381326 0.36987952654913625 -d 0 8 --json-output /common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_optimized/new_inspect.json; quit"
+        ],
+        "new_arb": [
+          "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/gammaloop",
+          "-n",
+          "-s",
+          "/common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_optimized/state",
+          "-t",
+          "new_arb",
+          "-L",
+          "debug",
+          "run",
+          "-c",
+          "set process -p epem_a_tth -i NNLO file /common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_optimized/workspace/integrands/epem_a_tth@NNLO/settings.toml; inspect -p epem_a_tth -i NNLO -x 0.33168777529733795 0.9182901767427527 0.8871151234013295 0.5237759320929373 0.405645141194353 0.6190324006441688 0.6178135113081745 0.7667261103805785 0.9016624966708675 0.7373798919654603 0.2773975750381326 0.36987952654913625 -d 0 8 -f --json-output /common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_optimized/new_arb_inspect.json; quit"
+        ],
+        "new_detailed": [
+          "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/gammaloop",
+          "-n",
+          "-s",
+          "/common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_optimized/state",
+          "-t",
+          "new_detailed",
+          "-L",
+          "debug",
+          "run",
+          "-c",
+          "set process -p epem_a_tth -i NNLO file /common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_optimized/workspace/integrands/epem_a_tth@NNLO/settings.toml; set process -p epem_a_tth -i NNLO kv general.generate_events=true general.store_additional_weights_in_event=false; inspect -p epem_a_tth -i NNLO -x 0.33168777529733795 0.9182901767427527 0.8871151234013295 0.5237759320929373 0.405645141194353 0.6190324006441688 0.6178135113081745 0.7667261103805785 0.9016624966708675 0.7373798919654603 0.2773975750381326 0.36987952654913625 -d 0 8 --json-output /common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_optimized/new_detailed_inspect.json; quit"
+        ],
+        "new_arb_detailed": [
+          "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/gammaloop",
+          "-n",
+          "-s",
+          "/common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_optimized/state",
+          "-t",
+          "new_arb_detailed",
+          "-L",
+          "debug",
+          "run",
+          "-c",
+          "set process -p epem_a_tth -i NNLO file /common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_optimized/workspace/integrands/epem_a_tth@NNLO/settings.toml; set process -p epem_a_tth -i NNLO kv general.generate_events=true general.store_additional_weights_in_event=false; inspect -p epem_a_tth -i NNLO -x 0.33168777529733795 0.9182901767427527 0.8871151234013295 0.5237759320929373 0.405645141194353 0.6190324006441688 0.6178135113081745 0.7667261103805785 0.9016624966708675 0.7373798919654603 0.2773975750381326 0.36987952654913625 -d 0 8 -f --json-output /common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_optimized/new_arb_detailed_inspect.json; quit"
+        ]
+      },
+      "replay_command": [
+        "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/gammaloop",
+        "-n",
+        "/common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_optimized/synchronized_card.toml",
+        "-s",
+        "/common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_optimized/state",
+        "run",
+        "diagnostic_replay",
+        "-c",
+        "quit"
+      ]
+    },
+    "advanced": {
+      "failure": {
+        "evaluation_metadata": {
+          "accepted_event_count": 0,
+          "canonical_physical_preparation_time": {
+            "nanos": 3639530,
+            "secs": 0
+          },
+          "canonical_sampling_preparation_time": {
+            "nanos": 1382837,
+            "secs": 0
+          },
+          "evaluator_evaluation_time": {
+            "nanos": 0,
+            "secs": 0
+          },
+          "event_processing_time": {
+            "nanos": 0,
+            "secs": 0
+          },
+          "generated_event_count": 0,
+          "integrand_evaluation_time": {
+            "nanos": 3639530,
+            "secs": 0
+          },
+          "is_nan": true,
+          "loop_momenta_escalation": null,
+          "parameterization_time": {
+            "nanos": 1382837,
+            "secs": 0
+          },
+          "relative_instability_error": {
+            "im": 0.0,
+            "re": 0.0
+          },
+          "stability_results": [
+            {
+              "estimated_relative_accuracy": null,
+              "precision": "Double",
+              "status": {
+                "Unstable": 0
+              },
+              "total_time": {
+                "nanos": 60,
+                "secs": 0
+              }
+            },
+            {
+              "estimated_relative_accuracy": null,
+              "precision": "Quad",
+              "status": {
+                "Unstable": 0
+              },
+              "total_time": {
+                "nanos": 2780,
+                "secs": 0
+              }
+            },
+            {
+              "estimated_relative_accuracy": null,
+              "precision": "Arb",
+              "status": {
+                "Unstable": 0
+              },
+              "total_time": {
+                "nanos": 1790,
+                "secs": 0
+              }
+            }
+          ],
+          "threshold_counterterm_error": "threshold overlap is not certified: Threshold SOCP for graph 'GL297' and E-surfaces {ExistingEsurfaceId(0): EsurfaceID(0), ExistingEsurfaceId(1): EsurfaceID(1), ExistingEsurfaceId(2): EsurfaceID(2), ExistingEsurfaceId(3): EsurfaceID(3), ExistingEsurfaceId(4): EsurfaceID(4), ExistingEsurfaceId(5): EsurfaceID(5)} returned AlmostPrimalInfeasible without a strictly interior center: primal objective=NaN, dual objective=NaN, primal residual=0.0010779539713490188, dual residual=0.00000000000000006475509574258224, iterations=19",
+          "total_timing": {
+            "nanos": 5861692,
+            "secs": 0
+          }
+        },
+        "iteration": 650,
+        "sample": {
+          "Discrete": [
+            0.6142401956855419,
+            0,
+            {
+              "Discrete": [
+                0.6142401956855419,
+                3,
+                {
+                  "Continuous": [
+                    0.07334364216107013,
+                    [
+                      0.5156951665734136,
+                      0.5364636794716388,
+                      0.8318524038686087,
+                      0.5710377735171434,
+                      0.7546447565761167,
+                      0.8524813371503793,
+                      0.3525930855038039,
+                      0.014530525876098557,
+                      0.522431365283242,
+                      0.6316763485194195,
+                      0.5120208610432367,
+                      0.5806413236969333
+                    ]
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "schema_version": 1,
+        "slot": {
+          "integrand_name": "NNLO",
+          "process_name": "epem_a_tth"
+        }
+      },
+      "checkpoint_before_sha256": "2147dad76c58b607baf99cfabed5a4bb0d4e891f7dc70a00f9b11181cf6c4f7c",
+      "state_copy_hashes": [
+        {
+          "path": "justfile",
+          "sha256": "49ce845fc918f10f5e41e7d3e13bf8ac862707fdd7144db1221167375556d65c"
+        },
+        {
+          "path": "run.toml.before_long_resume",
+          "sha256": "0a9c91f675164a676cb835d1fcd0489fb040785533fd2b5761584f7cafa5b879"
+        },
+        {
+          "path": "symbolica_state.bin",
+          "sha256": "758c3662421f0dd0a3ac8633474664e99951573e1e9a6e2341ffee0bfb69d755"
+        },
+        {
+          "path": "model.json",
+          "sha256": "73bd6a7f4ed3c2a6f5ef35520fd39152483e77d947852ca9d02e913c0296395a"
+        },
+        {
+          "path": "model_parameters.json",
+          "sha256": "5cf4b422cfe328559dd3cc9322e5e66c264faba54d5d44b4f5772c3a53a43572"
+        },
+        {
+          "path": "global_settings.toml",
+          "sha256": "70189d567cacc87ef882336ffc8c106865d946f19fb0cad141988ed3e08393fb"
+        },
+        {
+          "path": "run.toml",
+          "sha256": "c648ac2ba6e00525c4a917f1ae53514686aa415e1a29e94d5aa3ebbbb118b5fd"
+        },
+        {
+          "path": "default_runtime_settings.toml",
+          "sha256": "5397bcab36ff07a72bb566cb63c8bf492995d0dc762e9fb46620ea1eb4dc8536"
+        },
+        {
+          "path": "state_manifest.toml",
+          "sha256": "8e7423074b68d8504aaa62986b8d6499a216f7c144b401fadc5106c2a6faeac8"
+        },
+        {
+          "path": "processes/cross_sections/epem_a_tth/def.bin",
+          "sha256": "afa2ee02a99a35b2dbaa570d9b40fc6bdfbc3b685f0f99be4c9f267b4835e68b"
+        },
+        {
+          "path": "processes/cross_sections/epem_a_tth/settings_history.toml",
+          "sha256": "a8bc1b47a36a2703382d26760f9881d20899425d2253f7db6b917c3d5870542b"
+        },
+        {
+          "path": "processes/cross_sections/epem_a_tth/NNLO/cs.bin",
+          "sha256": "e4af90768077b8fdd88d6ce9d59cef7a4f3c742b5bc70d89c907e10b4c198343"
+        },
+        {
+          "path": "processes/cross_sections/epem_a_tth/NNLO/generation_summary.json",
+          "sha256": "ad119a37d55e4a4054edda3a72b591208f8b33ca45fb6c52ee076b69c8dc97da"
+        },
+        {
+          "path": "processes/cross_sections/epem_a_tth/NNLO/GL297.dot",
+          "sha256": "f9fdbf60d63abf3e07bcdb294c1bd2b32a846272829fabf7a5b25b99f040f200"
+        },
+        {
+          "path": "processes/cross_sections/epem_a_tth/NNLO/integrand/integrand.bin",
+          "sha256": "cbe8f722ad11c0c6b2407b1e110ea88e6fd2591760b1b21292ce2ded40c93454"
+        },
+        {
+          "path": "processes/cross_sections/epem_a_tth/NNLO/integrand/settings.toml",
+          "sha256": "d2a2102e98c9f9f8bda22b256f5bc9e6ff0e5e5fbbd24cee00ba991bc7396755"
+        },
+        {
+          "path": "drawings/templates/grid.typ",
+          "sha256": "a2aea8505809f39564ff2d0ebb1a1c9ac9ee3b46b211d57c72e32c1f1f0ca11d"
+        },
+        {
+          "path": "drawings/templates/figure.typ",
+          "sha256": "4ab1913e6476ef9f49b4a4bdc07d44589124e5030168fb853963990d7b164672"
+        },
+        {
+          "path": "drawings/templates/layout.typ",
+          "sha256": "069a852cd32f4cb519cbd6eebcc94338ca23e561ad59cee454c89a769ea3568e"
+        },
+        {
+          "path": "drawings/templates/edge-style.typ",
+          "sha256": "0e961db4de2d939cc0bee8fc59fe82850e220cb96a1fe4d7e938bbbd7e9e0789"
+        },
+        {
+          "path": "drawings/templates/crates/linnest/typst/linnest.wasm",
+          "sha256": "655d6c2f3dbdac1d6c8ead2113d0cb576a026e3b9e1bc66b7a6c41439e16cd9d"
+        },
+        {
+          "path": "drawings/templates/crates/linnest/typst/typst.toml",
+          "sha256": "899f5436fa4211c3e98fe022a7968623782a5648980ade9d0c8c0e6cf6ecdfa0"
+        },
+        {
+          "path": "drawings/templates/crates/linnest/typst/src/physics-edge-style.typ",
+          "sha256": "854530edde9152b8adb01cf8e097c4107f0277ac175f6e47c37df97ada735cd7"
+        },
+        {
+          "path": "drawings/templates/crates/linnest/typst/src/draw.typ",
+          "sha256": "7029235345346572dcf7dcd26cf947c9516efdd9828a183d8613b60c6ad8e22f"
+        },
+        {
+          "path": "drawings/templates/crates/linnest/typst/src/curve.typ",
+          "sha256": "4350dfbe4a8e825396e4f476731b9862935d87fb6630c24425350f4071b9e590"
+        },
+        {
+          "path": "drawings/templates/crates/linnest/typst/src/layout.typ",
+          "sha256": "3c06a8413a62fe124c0731fcb6e0ad354051214d055a682520df5c4186d8301c"
+        },
+        {
+          "path": "drawings/templates/crates/linnest/typst/src/graph.typ",
+          "sha256": "3b332b75f3212458ef4815010f5ff645c762d09a1fd9798c9637636590f0f392"
+        },
+        {
+          "path": "drawings/templates/crates/linnest/typst/src/lib.typ",
+          "sha256": "85d9ce54cad4251140acdea0a153a737b465d346b9668665f53c1db2fa6eb200"
+        },
+        {
+          "path": "drawings/templates/crates/linnest/typst/src/subgraph.typ",
+          "sha256": "d318d5e98e902e06f412cd8a1f45ebc6f6c8218a7c4063bf3582333616122c53"
+        },
+        {
+          "path": "drawings/templates/crates/linnest/typst/src/impl/draw.typ",
+          "sha256": "0acb9d50e9f6ac24dbe5b3c9727e3ec4c65843d4dbce57ba5c4f973a0b75f682"
+        },
+        {
+          "path": "drawings/templates/crates/linnest/typst/src/impl/physics-edge-style.typ",
+          "sha256": "1e13992babc10e7310fe24bfe0e4f4f67c5ea51afaf08b413418f4d88d269965"
+        },
+        {
+          "path": "drawings/templates/crates/linnest/typst/src/impl/graph.typ",
+          "sha256": "1dc82dd0099c0810036992a378042a33f5c162fd919d08d79cf218b8716c08dd"
+        },
+        {
+          "path": "drawings/templates/crates/kurvst/typst/kurvst.wasm",
+          "sha256": "50619c0dbe6ec78538f9e8a8587b5b8ad33d464672dec974c2c53ab93f7ebd15"
+        },
+        {
+          "path": "drawings/templates/crates/kurvst/typst/typst.toml",
+          "sha256": "0d7eec512c399c0beeee8402393b32e489856fbdeb30945feff0ed298dd8bbbd"
+        },
+        {
+          "path": "drawings/templates/crates/kurvst/typst/src/lib.typ",
+          "sha256": "90fd7952020cb3162f95acb47389e1dafc0516d03d085fa780b084904e9ad636"
+        },
+        {
+          "path": "drawings/templates/crates/kurvst/typst/src/impl.typ",
+          "sha256": "0feab4012862ea5020e4bc833861f333d0f68ea2fc3b5420af5709edeaaf10d8"
+        }
+      ],
+      "temporary_diagnostic_fingerprint_override": {
+        "old": [
+          "308cd36a9c6e28fc"
+        ],
+        "current_process": [
+          "88e8b467622edb36"
+        ],
+        "checkpoint_sha256": "2147dad76c58b607baf99cfabed5a4bb0d4e891f7dc70a00f9b11181cf6c4f7c"
+      },
+      "original_manifest": {
+        "version": 3,
+        "slots": [
+          {
+            "process_name": "epem_a_tth",
+            "integrand_name": "NNLO"
+          }
+        ],
+        "targets": [
+          null
+        ],
+        "effective_model_parameters": [
+          {
+            "data": {
+              "Gf": [
+                1.16639e-05,
+                0.0
+              ],
+              "MB": [
+                4.9,
+                0.0
+              ],
+              "MH": [
+                125.0,
+                0.0
+              ],
+              "MT": [
+                173.0,
+                0.0
+              ],
+              "MTA": [
+                1.777,
+                0.0
+              ],
+              "MZ": [
+                91.188,
+                0.0
+              ],
+              "WH": [
+                0.00638233934,
+                0.0
+              ],
+              "WT": [
+                0.0,
+                0.0
+              ],
+              "WW": [
+                2.0476,
+                0.0
+              ],
+              "WZ": [
+                2.441404,
+                0.0
+              ],
+              "aEWM1": [
+                132.507,
+                0.0
+              ],
+              "aS": [
+                0.118,
+                0.0
+              ],
+              "ymb": [
+                4.7,
+                0.0
+              ],
+              "ymt": [
+                173.0,
+                0.0
+              ],
+              "ymtau": [
+                1.777,
+                0.0
+              ]
+            }
+          }
+        ],
+        "integrand_fingerprints": [
+          "308cd36a9c6e28fc"
+        ],
+        "training_slot": 0,
+        "integrator_settings_slot": 0,
+        "sampling_correlation_mode": "correlated"
+      },
+      "replay_exit": 0,
+      "inspect": {
+        "new_detailed": {
+          "evaluation": {
+            "integrand_result": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "parameterization_jacobian": 1.0,
+            "integrator_weight": 1.0,
+            "event_groups": [],
+            "evaluation_metadata": {
+              "total_timing": {
+                "secs": 0,
+                "nanos": 3631108
+              },
+              "integrand_evaluation_time": {
+                "secs": 0,
+                "nanos": 2365572
+              },
+              "canonical_physical_preparation_time": {
+                "secs": 0,
+                "nanos": 2365572
+              },
+              "evaluator_evaluation_time": {
+                "secs": 0,
+                "nanos": 0
+              },
+              "parameterization_time": {
+                "secs": 0,
+                "nanos": 778084
+              },
+              "canonical_sampling_preparation_time": {
+                "secs": 0,
+                "nanos": 778084
+              },
+              "event_processing_time": {
+                "secs": 0,
+                "nanos": 0
+              },
+              "generated_event_count": 0,
+              "accepted_event_count": 0,
+              "relative_instability_error": {
+                "re": 0.0,
+                "im": 0.0
+              },
+              "is_nan": true,
+              "loop_momenta_escalation": null,
+              "stability_results": [
+                {
+                  "precision": "Double",
+                  "estimated_relative_accuracy": null,
+                  "status": {
+                    "Unstable": 0
+                  },
+                  "total_time": {
+                    "secs": 0,
+                    "nanos": 40
+                  }
+                },
+                {
+                  "precision": "Quad",
+                  "estimated_relative_accuracy": null,
+                  "status": {
+                    "Unstable": 0
+                  },
+                  "total_time": {
+                    "secs": 0,
+                    "nanos": 1931
+                  }
+                },
+                {
+                  "precision": "Arb",
+                  "estimated_relative_accuracy": null,
+                  "status": {
+                    "Unstable": 0
+                  },
+                  "total_time": {
+                    "secs": 0,
+                    "nanos": 1010
+                  }
+                }
+              ],
+              "threshold_counterterm_error": "threshold overlap is not certified: Threshold SOCP for graph 'GL297' and E-surfaces {ExistingEsurfaceId(0): EsurfaceID(0), ExistingEsurfaceId(1): EsurfaceID(1), ExistingEsurfaceId(2): EsurfaceID(2), ExistingEsurfaceId(3): EsurfaceID(3), ExistingEsurfaceId(4): EsurfaceID(4), ExistingEsurfaceId(5): EsurfaceID(5)} returned AlmostPrimalInfeasible without a strictly interior center: primal objective=NaN, dual objective=NaN, primal residual=0.0010779539713490188, dual residual=0.00000000000000006475509574258224, iterations=19"
+            }
+          }
+        },
+        "new_arb_detailed": {
+          "evaluation": {
+            "integrand_result": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "parameterization_jacobian": 1.0,
+            "integrator_weight": 1.0,
+            "event_groups": [],
+            "evaluation_metadata": {
+              "total_timing": {
+                "secs": 0,
+                "nanos": 5753509
+              },
+              "integrand_evaluation_time": {
+                "secs": 0,
+                "nanos": 3505158
+              },
+              "canonical_physical_preparation_time": {
+                "secs": 0,
+                "nanos": 3505158
+              },
+              "evaluator_evaluation_time": {
+                "secs": 0,
+                "nanos": 0
+              },
+              "parameterization_time": {
+                "secs": 0,
+                "nanos": 1478117
+              },
+              "canonical_sampling_preparation_time": {
+                "secs": 0,
+                "nanos": 1478117
+              },
+              "event_processing_time": {
+                "secs": 0,
+                "nanos": 0
+              },
+              "generated_event_count": 0,
+              "accepted_event_count": 0,
+              "relative_instability_error": {
+                "re": 0.0,
+                "im": 0.0
+              },
+              "is_nan": true,
+              "loop_momenta_escalation": null,
+              "stability_results": [
+                {
+                  "precision": "Arb",
+                  "estimated_relative_accuracy": null,
+                  "status": {
+                    "Unstable": 0
+                  },
+                  "total_time": {
+                    "secs": 0,
+                    "nanos": 3940
+                  }
+                }
+              ],
+              "threshold_counterterm_error": "threshold overlap is not certified: Threshold SOCP for graph 'GL297' and E-surfaces {ExistingEsurfaceId(0): EsurfaceID(0), ExistingEsurfaceId(1): EsurfaceID(1), ExistingEsurfaceId(2): EsurfaceID(2), ExistingEsurfaceId(3): EsurfaceID(3), ExistingEsurfaceId(4): EsurfaceID(4), ExistingEsurfaceId(5): EsurfaceID(5)} returned AlmostPrimalInfeasible without a strictly interior center: primal objective=NaN, dual objective=NaN, primal residual=0.0010779539713490188, dual residual=0.00000000000000006475509574258224, iterations=19"
+            }
+          }
+        },
+        "old_exit": 1,
+        "new_exit": 0,
+        "new_arb_exit": 0
+      },
+      "integration_result": {
+        "slots": [
+          {
+            "key": "epem_a_tth@NNLO",
+            "process": "epem_a_tth",
+            "integrand": "NNLO",
+            "target": null,
+            "integral": {
+              "neval": 53248000,
+              "real_zero": 1187797,
+              "im_zero": 1170248,
+              "result": {
+                "re": 3.202487165814495e-08,
+                "im": 8.884093035894259e-06
+              },
+              "error": {
+                "re": 5.556938229236589e-08,
+                "im": 8.249583674873244e-08
+              },
+              "real_chisq": 676.7922473543746,
+              "im_chisq": 574.2224505920367
+            },
+            "table_results": [
+              {
+                "component": "re",
+                "value": 3.202487165814495e-08,
+                "error": 5.556938229236589e-08,
+                "relative_error_percent": 173.5194535220965,
+                "chi_sq_per_dof": 1.0412188420836532,
+                "target_delta_sigma": null,
+                "target_delta_percent": null,
+                "max_weight_impact": 0.672016211590975
+              },
+              {
+                "component": "im",
+                "value": 8.884093035894259e-06,
+                "error": 8.249583674873244e-08,
+                "relative_error_percent": 0.9285791629536728,
+                "chi_sq_per_dof": 0.8834191547569795,
+                "target_delta_sigma": null,
+                "target_delta_percent": null,
+                "max_weight_impact": 0.006098625624374481
+              }
+            ],
+            "integration_statistics": {
+              "num_evals": 53248000,
+              "average_total_time_seconds": 0.009569204,
+              "average_parameterization_time_seconds": 0.001792371,
+              "average_integrand_time_seconds": 0.007303192,
+              "average_evaluator_time_seconds": 0.003681021,
+              "average_observable_time_seconds": 0.0,
+              "average_integrator_time_seconds": 0.000100421,
+              "f64_percentage": 99.27808180588941,
+              "f128_percentage": 0.7104191706730769,
+              "arb_percentage": 0.011499023437499999,
+              "nan_percentage": 1.8780048076923078e-06,
+              "nan_or_unstable_percentage": 1.8780048076923078e-06,
+              "generated_event_count": 0,
+              "accepted_event_count": 0,
+              "selection_efficiency_percentage": null
+            },
+            "max_weight_info": [
+              {
+                "component": "re",
+                "sign": "+",
+                "max_eval": 1.1459626109711107,
+                "coordinates": "graph: 0, sampling channel: 2, xs: [\n6.6196027835707705e-01 9.3100174759606324e-01 4.0791814639343527e-01\n4.4287585209965086e-03 1.7346243645210636e-02 2.4169184889373979e-01\n7.1924860309806560e-01 5.7931827128143198e-01 8.8330973458574019e-02\n6.5145617744982276e-01 7.1987871144872295e-01 4.9725874336636340e-02 ]"
+              },
+              {
+                "component": "re",
+                "sign": "-",
+                "max_eval": -0.3005558216225227,
+                "coordinates": "graph: 0, sampling channel: 3, xs: [\n5.3501038379164012e-01 7.2836287809230582e-01 6.1632119306185718e-01\n6.5551317922150398e-01 6.9367297156310159e-01 7.2074188774354386e-01\n4.7012957621953927e-02 1.2177840958298565e-01 7.1110509237821484e-01\n6.6079238401127227e-01 2.6261938301177318e-01 9.2117531203060543e-01 ]"
+              },
+              {
+                "component": "im",
+                "sign": "+",
+                "max_eval": 2.8850169720603067,
+                "coordinates": "graph: 0, sampling channel: 2, xs: [\n4.8148381529230733e-01 8.6695581160522506e-01 4.9249369206962701e-01\n7.4005665100901241e-01 5.8600747548060195e-01 8.9588210809742586e-01\n7.1642286236314190e-01 4.9092480146301876e-01 8.5716870564926162e-01\n5.6647128805769176e-01 5.9602935171621696e-01 9.0262924669944222e-01 ]"
+              },
+              {
+                "component": "im",
+                "sign": "-",
+                "max_eval": -1.1957661936982205,
+                "coordinates": "graph: 0, sampling channel: 7, xs: [\n5.3124901234611799e-01 5.4967905624815261e-01 7.7367294708992085e-01\n1.2407290271597302e-01 3.8364276799877839e-01 4.5745714013750750e-02\n7.9067560788650948e-01 7.8671634522993350e-01 9.8837519510427785e-01\n7.3395244967526729e-01 3.2261205756757760e-01 8.1788813320282164e-02 ]"
+              }
+            ],
+            "grid_breakdown": {
+              "re": {
+                "axis_label": "sampling channel",
+                "fixed_coordinates": [
+                  {
+                    "axis_label": "graph",
+                    "bin_index": 0,
+                    "bin_label": "GL297"
+                  }
+                ],
+                "entries": [
+                  {
+                    "bin_index": 0,
+                    "bin_label": "(11,12,13,14)",
+                    "pdf": 0.0737323780223967,
+                    "value": 1.0750353194845305e-07,
+                    "error": 1.3692030208284415e-08,
+                    "chi_sq": 619.9159306609117,
+                    "processed_samples": 4443404
+                  },
+                  {
+                    "bin_index": 1,
+                    "bin_label": "(6,11,12,13)",
+                    "pdf": 0.06306087653953633,
+                    "value": -5.248752747064234e-07,
+                    "error": 1.288536538317352e-08,
+                    "chi_sq": 645.147594045995,
+                    "processed_samples": 3669962
+                  },
+                  {
+                    "bin_index": 2,
+                    "bin_label": "(7,12,13,14)",
+                    "pdf": 0.11987596903181419,
+                    "value": -5.948348444107815e-07,
+                    "error": 2.322959414760342e-08,
+                    "chi_sq": 661.3712177311563,
+                    "processed_samples": 4080525
+                  },
+                  {
+                    "bin_index": 3,
+                    "bin_label": "(6,7,12,13)",
+                    "pdf": 0.11939570441251834,
+                    "value": -1.8281412371525243e-06,
+                    "error": 1.8168951289138812e-08,
+                    "chi_sq": 688.0302498621622,
+                    "processed_samples": 6616871
+                  },
+                  {
+                    "bin_index": 4,
+                    "bin_label": "(9,12,13,14)",
+                    "pdf": 0.0744017301957302,
+                    "value": 8.120924944863301e-07,
+                    "error": 1.4204490128130474e-08,
+                    "chi_sq": 674.2932792689248,
+                    "processed_samples": 4203875
+                  },
+                  {
+                    "bin_index": 5,
+                    "bin_label": "(6,9,12,13)",
+                    "pdf": 0.07517644083526726,
+                    "value": 5.5351008609053495e-08,
+                    "error": 1.4336220710859736e-08,
+                    "chi_sq": 639.6219727873687,
+                    "processed_samples": 4213366
+                  },
+                  {
+                    "bin_index": 6,
+                    "bin_label": "(4,11,12,13)",
+                    "pdf": 0.0722137041434824,
+                    "value": 7.378416822831873e-07,
+                    "error": 1.4655575834767977e-08,
+                    "chi_sq": 697.1942662084202,
+                    "processed_samples": 3720219
+                  },
+                  {
+                    "bin_index": 7,
+                    "bin_label": "(4,7,12,13)",
+                    "pdf": 0.06948598860288291,
+                    "value": 3.926605480812128e-08,
+                    "error": 1.378771649737513e-08,
+                    "chi_sq": 713.1467503321414,
+                    "processed_samples": 3891749
+                  },
+                  {
+                    "bin_index": 8,
+                    "bin_label": "(4,9,12,13)",
+                    "pdf": 0.12274542354272944,
+                    "value": 2.068201538951532e-06,
+                    "error": 1.878949640924026e-08,
+                    "chi_sq": 716.1115662867142,
+                    "processed_samples": 6539060
+                  },
+                  {
+                    "bin_index": 9,
+                    "bin_label": "cut_0",
+                    "pdf": 0.050867661961858726,
+                    "value": -2.396558923422403e-07,
+                    "error": 1.1898391879796963e-08,
+                    "chi_sq": 612.1506072680361,
+                    "processed_samples": 2800542
+                  },
+                  {
+                    "bin_index": 10,
+                    "bin_label": "cut_3",
+                    "pdf": 0.05896386512672309,
+                    "value": -9.974382386877856e-07,
+                    "error": 1.236074594794905e-08,
+                    "chi_sq": 626.2827429832487,
+                    "processed_samples": 3486724
+                  },
+                  {
+                    "bin_index": 11,
+                    "bin_label": "cut_5",
+                    "pdf": 0.027076222470873226,
+                    "value": -8.58096149957553e-07,
+                    "error": 8.272578757941074e-09,
+                    "chi_sq": 709.1627057209587,
+                    "processed_samples": 1641457
+                  },
+                  {
+                    "bin_index": 12,
+                    "bin_label": "cut_6",
+                    "pdf": 0.0502928918883393,
+                    "value": 6.716101881226097e-07,
+                    "error": 1.2127645859819764e-08,
+                    "chi_sq": 734.5632820356946,
+                    "processed_samples": 2635089
+                  },
+                  {
+                    "bin_index": 13,
+                    "bin_label": "cut_7",
+                    "pdf": 0.022711143225847885,
+                    "value": 5.821892350016299e-07,
+                    "error": 7.781713612511167e-09,
+                    "chi_sq": 632.6017557599984,
+                    "processed_samples": 1305157
+                  }
+                ]
+              },
+              "im": {
+                "axis_label": "sampling channel",
+                "fixed_coordinates": [
+                  {
+                    "axis_label": "graph",
+                    "bin_index": 0,
+                    "bin_label": "GL297"
+                  }
+                ],
+                "entries": [
+                  {
+                    "bin_index": 0,
+                    "bin_label": "(11,12,13,14)",
+                    "pdf": 0.0737323780223967,
+                    "value": 6.15820969867495e-07,
+                    "error": 1.1497337776201748e-08,
+                    "chi_sq": 730.2219256491626,
+                    "processed_samples": 4443404
+                  },
+                  {
+                    "bin_index": 1,
+                    "bin_label": "(6,11,12,13)",
+                    "pdf": 0.06306087653953633,
+                    "value": 4.5874643839529175e-07,
+                    "error": 1.443783760414064e-08,
+                    "chi_sq": 673.5331405824004,
+                    "processed_samples": 3669962
+                  },
+                  {
+                    "bin_index": 2,
+                    "bin_label": "(7,12,13,14)",
+                    "pdf": 0.11987596903181419,
+                    "value": 6.565650962219636e-07,
+                    "error": 5.159773349560642e-08,
+                    "chi_sq": 658.2047682829111,
+                    "processed_samples": 4080525
+                  },
+                  {
+                    "bin_index": 3,
+                    "bin_label": "(6,7,12,13)",
+                    "pdf": 0.11939570441251834,
+                    "value": 1.2447120773179406e-06,
+                    "error": 1.8619024886052358e-08,
+                    "chi_sq": 643.7677222909701,
+                    "processed_samples": 6616871
+                  },
+                  {
+                    "bin_index": 4,
+                    "bin_label": "(9,12,13,14)",
+                    "pdf": 0.0744017301957302,
+                    "value": 5.786231690476571e-07,
+                    "error": 1.4066797934475696e-08,
+                    "chi_sq": 708.4316574884663,
+                    "processed_samples": 4203875
+                  },
+                  {
+                    "bin_index": 5,
+                    "bin_label": "(6,9,12,13)",
+                    "pdf": 0.07517644083526726,
+                    "value": 4.961904890801131e-07,
+                    "error": 2.4414258124614563e-08,
+                    "chi_sq": 629.7892376985383,
+                    "processed_samples": 4213366
+                  },
+                  {
+                    "bin_index": 6,
+                    "bin_label": "(4,11,12,13)",
+                    "pdf": 0.0722137041434824,
+                    "value": 4.442891747432787e-07,
+                    "error": 1.9409282320681793e-08,
+                    "chi_sq": 677.4588742590336,
+                    "processed_samples": 3720219
+                  },
+                  {
+                    "bin_index": 7,
+                    "bin_label": "(4,7,12,13)",
+                    "pdf": 0.06948598860288291,
+                    "value": 5.171154778965773e-07,
+                    "error": 2.795726079444654e-08,
+                    "chi_sq": 620.6196435890511,
+                    "processed_samples": 3891749
+                  },
+                  {
+                    "bin_index": 8,
+                    "bin_label": "(4,9,12,13)",
+                    "pdf": 0.12274542354272944,
+                    "value": 1.3617283494962252e-06,
+                    "error": 2.5200828699181325e-08,
+                    "chi_sq": 664.2930762512569,
+                    "processed_samples": 6539060
+                  },
+                  {
+                    "bin_index": 9,
+                    "bin_label": "cut_0",
+                    "pdf": 0.050867661961858726,
+                    "value": 1.5679924821478374e-06,
+                    "error": 1.2129434788745914e-08,
+                    "chi_sq": 587.7652787155666,
+                    "processed_samples": 2800542
+                  },
+                  {
+                    "bin_index": 10,
+                    "bin_label": "cut_3",
+                    "pdf": 0.05896386512672309,
+                    "value": 8.973182401054077e-08,
+                    "error": 5.99283435121849e-09,
+                    "chi_sq": 607.202784020506,
+                    "processed_samples": 3486724
+                  },
+                  {
+                    "bin_index": 11,
+                    "bin_label": "cut_5",
+                    "pdf": 0.027076222470873226,
+                    "value": 3.5366689849984196e-07,
+                    "error": 5.404525161323091e-09,
+                    "chi_sq": 652.973098119066,
+                    "processed_samples": 1641457
+                  },
+                  {
+                    "bin_index": 12,
+                    "bin_label": "cut_6",
+                    "pdf": 0.0502928918883393,
+                    "value": 1.8138317932886588e-07,
+                    "error": 6.662500642274895e-09,
+                    "chi_sq": 634.9876816032116,
+                    "processed_samples": 2635089
+                  },
+                  {
+                    "bin_index": 13,
+                    "bin_label": "cut_7",
+                    "pdf": 0.022711143225847885,
+                    "value": 3.1402391899262677e-07,
+                    "error": 4.713990035840811e-09,
+                    "chi_sq": 634.3959777520922,
+                    "processed_samples": 1305157
+                  }
+                ]
+              }
+            },
+            "absolute": {
+              "integral": {
+                "neval": 53248000,
+                "real_zero": 1187755,
+                "im_zero": 1170248,
+                "result": {
+                  "re": 3.6481296072568736e-05,
+                  "im": 2.049690071360045e-05
+                },
+                "error": {
+                  "re": 5.5344034760341375e-08,
+                  "im": 8.2456991587308e-08
+                },
+                "real_chisq": 706.5817675032158,
+                "im_chisq": 705.7132450343033
+              },
+              "table_results": [
+                {
+                  "component": "|re|",
+                  "value": 3.6481296072568736e-05,
+                  "error": 5.5344034760341375e-08,
+                  "relative_error_percent": 0.15170523177205877,
+                  "chi_sq_per_dof": 1.0870488730818706,
+                  "target_delta_sigma": null,
+                  "target_delta_percent": null,
+                  "max_weight_impact": 0.0005899251190413749
+                },
+                {
+                  "component": "|im|",
+                  "value": 2.049690071360045e-05,
+                  "error": 8.2456991587308e-08,
+                  "relative_error_percent": 0.4022900473562559,
+                  "chi_sq_per_dof": 1.085712684668159,
+                  "target_delta_sigma": null,
+                  "target_delta_percent": null,
+                  "max_weight_impact": 0.0026433634135760178
+                }
+              ],
+              "max_weight_info": [
+                {
+                  "component": "re",
+                  "sign": "+",
+                  "max_eval": 1.1459626109711107,
+                  "coordinates": "graph: 0, sampling channel: 2, xs: [\n6.6196027835707705e-01 9.3100174759606324e-01 4.0791814639343527e-01\n4.4287585209965086e-03 1.7346243645210636e-02 2.4169184889373979e-01\n7.1924860309806560e-01 5.7931827128143198e-01 8.8330973458574019e-02\n6.5145617744982276e-01 7.1987871144872295e-01 4.9725874336636340e-02 ]"
+                },
+                {
+                  "component": "im",
+                  "sign": "+",
+                  "max_eval": 2.8850169720603067,
+                  "coordinates": "graph: 0, sampling channel: 2, xs: [\n4.8148381529230733e-01 8.6695581160522506e-01 4.9249369206962701e-01\n7.4005665100901241e-01 5.8600747548060195e-01 8.9588210809742586e-01\n7.1642286236314190e-01 4.9092480146301876e-01 8.5716870564926162e-01\n5.6647128805769176e-01 5.9602935171621696e-01 9.0262924669944222e-01 ]"
+                }
+              ],
+              "grid_breakdown": {
+                "re": {
+                  "axis_label": "sampling channel",
+                  "fixed_coordinates": [
+                    {
+                      "axis_label": "graph",
+                      "bin_index": 0,
+                      "bin_label": "GL297"
+                    }
+                  ],
+                  "entries": [
+                    {
+                      "bin_index": 0,
+                      "bin_label": "(11,12,13,14)",
+                      "pdf": 0.0737323780223967,
+                      "value": 2.922556055207187e-06,
+                      "error": 1.3621748845255697e-08,
+                      "chi_sq": 720.4244311517832,
+                      "processed_samples": 4443404
+                    },
+                    {
+                      "bin_index": 1,
+                      "bin_label": "(6,11,12,13)",
+                      "pdf": 0.06306087653953633,
+                      "value": 2.0896986776172344e-06,
+                      "error": 1.2842033363057431e-08,
+                      "chi_sq": 677.8157716664682,
+                      "processed_samples": 3669962
+                    },
+                    {
+                      "bin_index": 2,
+                      "bin_label": "(7,12,13,14)",
+                      "pdf": 0.11987596903181419,
+                      "value": 2.3386714462082428e-06,
+                      "error": 2.3202594523316134e-08,
+                      "chi_sq": 728.1437259824343,
+                      "processed_samples": 4080525
+                    },
+                    {
+                      "bin_index": 3,
+                      "bin_label": "(6,7,12,13)",
+                      "pdf": 0.11939570441251834,
+                      "value": 4.630144181922516e-06,
+                      "error": 1.8093533175816865e-08,
+                      "chi_sq": 708.2227966076753,
+                      "processed_samples": 6616871
+                    },
+                    {
+                      "bin_index": 4,
+                      "bin_label": "(9,12,13,14)",
+                      "pdf": 0.0744017301957302,
+                      "value": 2.6724593326338696e-06,
+                      "error": 1.4150105976056258e-08,
+                      "chi_sq": 786.6099814464142,
+                      "processed_samples": 4203875
+                    },
+                    {
+                      "bin_index": 5,
+                      "bin_label": "(6,9,12,13)",
+                      "pdf": 0.07517644083526726,
+                      "value": 1.946965925971698e-06,
+                      "error": 1.430483388034389e-08,
+                      "chi_sq": 760.3276422580244,
+                      "processed_samples": 4213366
+                    },
+                    {
+                      "bin_index": 6,
+                      "bin_label": "(4,11,12,13)",
+                      "pdf": 0.0722137041434824,
+                      "value": 2.4527804605046016e-06,
+                      "error": 1.4605310552236696e-08,
+                      "chi_sq": 746.5875482772426,
+                      "processed_samples": 3720219
+                    },
+                    {
+                      "bin_index": 7,
+                      "bin_label": "(4,7,12,13)",
+                      "pdf": 0.06948598860288291,
+                      "value": 1.931505107525884e-06,
+                      "error": 1.3752923370322663e-08,
+                      "chi_sq": 731.0174094979993,
+                      "processed_samples": 3891749
+                    },
+                    {
+                      "bin_index": 8,
+                      "bin_label": "(4,9,12,13)",
+                      "pdf": 0.12274542354272944,
+                      "value": 5.12227044233396e-06,
+                      "error": 1.8699916145195683e-08,
+                      "chi_sq": 732.3534472765241,
+                      "processed_samples": 6539060
+                    },
+                    {
+                      "bin_index": 9,
+                      "bin_label": "cut_0",
+                      "pdf": 0.050867661961858726,
+                      "value": 2.870024984674943e-06,
+                      "error": 1.1775016132178732e-08,
+                      "chi_sq": 650.8824613029865,
+                      "processed_samples": 2800542
+                    },
+                    {
+                      "bin_index": 10,
+                      "bin_label": "cut_3",
+                      "pdf": 0.05896386512672309,
+                      "value": 2.6740605651184795e-06,
+                      "error": 1.2289123929105931e-08,
+                      "chi_sq": 752.6844713603741,
+                      "processed_samples": 3486724
+                    },
+                    {
+                      "bin_index": 11,
+                      "bin_label": "cut_5",
+                      "pdf": 0.027076222470873226,
+                      "value": 1.6700581729906046e-06,
+                      "error": 8.196644643756999e-09,
+                      "chi_sq": 806.85858480138,
+                      "processed_samples": 1641457
+                    },
+                    {
+                      "bin_index": 12,
+                      "bin_label": "cut_6",
+                      "pdf": 0.0502928918883393,
+                      "value": 1.8853230611183645e-06,
+                      "error": 1.2078993296196665e-08,
+                      "chi_sq": 805.486345406739,
+                      "processed_samples": 2635089
+                    },
+                    {
+                      "bin_index": 13,
+                      "bin_label": "cut_7",
+                      "pdf": 0.022711143225847885,
+                      "value": 1.2676484243305227e-06,
+                      "error": 7.71903778968484e-09,
+                      "chi_sq": 851.3234363735834,
+                      "processed_samples": 1305157
+                    }
+                  ]
+                },
+                "im": {
+                  "axis_label": "sampling channel",
+                  "fixed_coordinates": [
+                    {
+                      "axis_label": "graph",
+                      "bin_index": 0,
+                      "bin_label": "GL297"
+                    }
+                  ],
+                  "entries": [
+                    {
+                      "bin_index": 0,
+                      "bin_label": "(11,12,13,14)",
+                      "pdf": 0.0737323780223967,
+                      "value": 1.6258871491603178e-06,
+                      "error": 1.147515555377258e-08,
+                      "chi_sq": 780.0528054302267,
+                      "processed_samples": 4443404
+                    },
+                    {
+                      "bin_index": 1,
+                      "bin_label": "(6,11,12,13)",
+                      "pdf": 0.06306087653953633,
+                      "value": 9.632013818169527e-07,
+                      "error": 1.4431067204816862e-08,
+                      "chi_sq": 751.8236339234154,
+                      "processed_samples": 3669962
+                    },
+                    {
+                      "bin_index": 2,
+                      "bin_label": "(7,12,13,14)",
+                      "pdf": 0.11987596903181419,
+                      "value": 1.2173175114788392e-06,
+                      "error": 5.159523806016405e-08,
+                      "chi_sq": 738.673360195271,
+                      "processed_samples": 4080525
+                    },
+                    {
+                      "bin_index": 3,
+                      "bin_label": "(6,7,12,13)",
+                      "pdf": 0.11939570441251834,
+                      "value": 2.7466475998906192e-06,
+                      "error": 1.8594679500953396e-08,
+                      "chi_sq": 778.4117167633067,
+                      "processed_samples": 6616871
+                    },
+                    {
+                      "bin_index": 4,
+                      "bin_label": "(9,12,13,14)",
+                      "pdf": 0.0744017301957302,
+                      "value": 1.360625096808374e-06,
+                      "error": 1.405397148427236e-08,
+                      "chi_sq": 759.0733588014691,
+                      "processed_samples": 4203875
+                    },
+                    {
+                      "bin_index": 5,
+                      "bin_label": "(6,9,12,13)",
+                      "pdf": 0.07517644083526726,
+                      "value": 1.2560393407936763e-06,
+                      "error": 2.440778560698163e-08,
+                      "chi_sq": 779.142631868011,
+                      "processed_samples": 4213366
+                    },
+                    {
+                      "bin_index": 6,
+                      "bin_label": "(4,11,12,13)",
+                      "pdf": 0.0722137041434824,
+                      "value": 1.1438276027036552e-06,
+                      "error": 1.9401587965333683e-08,
+                      "chi_sq": 779.7019076171819,
+                      "processed_samples": 3720219
+                    },
+                    {
+                      "bin_index": 7,
+                      "bin_label": "(4,7,12,13)",
+                      "pdf": 0.06948598860288291,
+                      "value": 1.2432476011460653e-06,
+                      "error": 2.7951385979365676e-08,
+                      "chi_sq": 730.4276237540817,
+                      "processed_samples": 3891749
+                    },
+                    {
+                      "bin_index": 8,
+                      "bin_label": "(4,9,12,13)",
+                      "pdf": 0.12274542354272944,
+                      "value": 3.0487543014952225e-06,
+                      "error": 2.5178242535615557e-08,
+                      "chi_sq": 706.2643118628498,
+                      "processed_samples": 6539060
+                    },
+                    {
+                      "bin_index": 9,
+                      "bin_label": "cut_0",
+                      "pdf": 0.050867661961858726,
+                      "value": 2.6489629129006604e-06,
+                      "error": 1.2062151604342962e-08,
+                      "chi_sq": 625.1987873989891,
+                      "processed_samples": 2800542
+                    },
+                    {
+                      "bin_index": 10,
+                      "bin_label": "cut_3",
+                      "pdf": 0.05896386512672309,
+                      "value": 9.737290712074943e-07,
+                      "error": 5.970296623858367e-09,
+                      "chi_sq": 715.4283780670539,
+                      "processed_samples": 3486724
+                    },
+                    {
+                      "bin_index": 11,
+                      "bin_label": "cut_5",
+                      "pdf": 0.027076222470873226,
+                      "value": 9.045405739921959e-07,
+                      "error": 5.365317976874774e-09,
+                      "chi_sq": 735.6925524944672,
+                      "processed_samples": 1641457
+                    },
+                    {
+                      "bin_index": 12,
+                      "bin_label": "cut_6",
+                      "pdf": 0.0502928918883393,
+                      "value": 6.786890893209024e-07,
+                      "error": 6.6503081146341524e-09,
+                      "chi_sq": 720.2779178970459,
+                      "processed_samples": 2635089
+                    },
+                    {
+                      "bin_index": 13,
+                      "bin_label": "cut_7",
+                      "pdf": 0.022711143225847885,
+                      "value": 6.738370270125638e-07,
+                      "error": 4.685014698256776e-09,
+                      "chi_sq": 756.2910811777574,
+                      "processed_samples": 1305157
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      },
+      "inspect_commands": {
+        "old": [
+          "/common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/gammaloop_before_fix",
+          "-n",
+          "-s",
+          "/common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_advanced/state",
+          "-t",
+          "old",
+          "-L",
+          "debug",
+          "run",
+          "-c",
+          "set process -p epem_a_tth -i NNLO file /common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_advanced/workspace/integrands/epem_a_tth@NNLO/settings.toml; inspect -p epem_a_tth -i NNLO -x 0.5156951665734136 0.5364636794716388 0.8318524038686087 0.5710377735171434 0.7546447565761167 0.8524813371503793 0.3525930855038039 0.014530525876098557 0.522431365283242 0.6316763485194195 0.5120208610432367 0.5806413236969333 -d 0 3 --json-output /common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_advanced/old_inspect.json; quit"
+        ],
+        "new": [
+          "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/gammaloop",
+          "-n",
+          "-s",
+          "/common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_advanced/state",
+          "-t",
+          "new",
+          "-L",
+          "debug",
+          "run",
+          "-c",
+          "set process -p epem_a_tth -i NNLO file /common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_advanced/workspace/integrands/epem_a_tth@NNLO/settings.toml; inspect -p epem_a_tth -i NNLO -x 0.5156951665734136 0.5364636794716388 0.8318524038686087 0.5710377735171434 0.7546447565761167 0.8524813371503793 0.3525930855038039 0.014530525876098557 0.522431365283242 0.6316763485194195 0.5120208610432367 0.5806413236969333 -d 0 3 --json-output /common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_advanced/new_inspect.json; quit"
+        ],
+        "new_arb": [
+          "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/gammaloop",
+          "-n",
+          "-s",
+          "/common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_advanced/state",
+          "-t",
+          "new_arb",
+          "-L",
+          "debug",
+          "run",
+          "-c",
+          "set process -p epem_a_tth -i NNLO file /common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_advanced/workspace/integrands/epem_a_tth@NNLO/settings.toml; inspect -p epem_a_tth -i NNLO -x 0.5156951665734136 0.5364636794716388 0.8318524038686087 0.5710377735171434 0.7546447565761167 0.8524813371503793 0.3525930855038039 0.014530525876098557 0.522431365283242 0.6316763485194195 0.5120208610432367 0.5806413236969333 -d 0 3 -f --json-output /common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_advanced/new_arb_inspect.json; quit"
+        ],
+        "new_detailed": [
+          "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/gammaloop",
+          "-n",
+          "-s",
+          "/common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_advanced/state",
+          "-t",
+          "new_detailed",
+          "-L",
+          "debug",
+          "run",
+          "-c",
+          "set process -p epem_a_tth -i NNLO file /common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_advanced/workspace/integrands/epem_a_tth@NNLO/settings.toml; set process -p epem_a_tth -i NNLO kv general.generate_events=true general.store_additional_weights_in_event=false; inspect -p epem_a_tth -i NNLO -x 0.5156951665734136 0.5364636794716388 0.8318524038686087 0.5710377735171434 0.7546447565761167 0.8524813371503793 0.3525930855038039 0.014530525876098557 0.522431365283242 0.6316763485194195 0.5120208610432367 0.5806413236969333 -d 0 3 --json-output /common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_advanced/new_detailed_inspect.json; quit"
+        ],
+        "new_arb_detailed": [
+          "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/gammaloop",
+          "-n",
+          "-s",
+          "/common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_advanced/state",
+          "-t",
+          "new_arb_detailed",
+          "-L",
+          "debug",
+          "run",
+          "-c",
+          "set process -p epem_a_tth -i NNLO file /common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_advanced/workspace/integrands/epem_a_tth@NNLO/settings.toml; set process -p epem_a_tth -i NNLO kv general.generate_events=true general.store_additional_weights_in_event=false; inspect -p epem_a_tth -i NNLO -x 0.5156951665734136 0.5364636794716388 0.8318524038686087 0.5710377735171434 0.7546447565761167 0.8524813371503793 0.3525930855038039 0.014530525876098557 0.522431365283242 0.6316763485194195 0.5120208610432367 0.5806413236969333 -d 0 3 -f --json-output /common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_advanced/new_arb_detailed_inspect.json; quit"
+        ]
+      },
+      "replay_command": [
+        "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/gammaloop",
+        "-n",
+        "/common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_advanced/synchronized_card.toml",
+        "-s",
+        "/common/dev/gammaloop_ir_safe_thresholds/target/gl297_failure_diagnostics/replay_advanced/state",
+        "run",
+        "diagnostic_replay",
+        "-c",
+        "quit"
+      ]
+    }
+  }
+}

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare completed iterations for the GL297/GL638 tth@NNLO runs."""
+"""Compare tth@NNLO integration workspaces, including GL134, GL297 and GL638."""
 
 from __future__ import annotations
 
@@ -12,30 +12,47 @@ from typing import Any
 from colorama import Fore, Style, init
 from prettytable import PrettyTable, TableStyle
 
-
 HERE = Path(__file__).resolve().parent
 
 
-def _defaults(graph: str) -> tuple[Path, Path, Path | None, Path, Path | None, str]:
-    graph = graph.upper()
-    if graph not in {"GL297", "GL638"}:
-        raise ValueError("--graph must be gl297 or gl638")
-    stem = graph
-    advanced = HERE / "workspaces" / f"{stem}_advanced_sampling_workspace"
-    optimized = HERE / "workspaces" / f"{stem}_optimized_lmbs_workspace"
-    advanced_state = HERE / f"gammaloop_state_{stem}_advanced_sampling"
-    if graph == "GL638":
-        augmented = (
-            HERE
-            / "workspaces"
-            / "GL638_advanced_sampling_with_optimized_lmbs_workspace"
-        )
-        augmented_state = (
-            HERE / "gammaloop_state_GL638_advanced_sampling_optimized_lmbs"
-        )
-    else:
-        augmented = augmented_state = None
-    return advanced, optimized, augmented, advanced_state, augmented_state, stem
+def _defaults(workspace_root: Path | None) -> dict[str, dict[str, Path]]:
+    roots = (
+        [workspace_root]
+        if workspace_root is not None
+        else [Path.cwd(), HERE, HERE.parent / "NNLO_experiment"]
+    )
+    groups: dict[str, dict[str, Path]] = {}
+    seen = set()
+    for root in roots:
+        for directory in (
+            root,
+            root / "workspaces",
+            *sorted(root.glob("*/workspaces")),
+        ):
+            directory = directory.resolve()
+            if directory in seen:
+                continue
+            seen.add(directory)
+            local: dict[str, dict[str, Path]] = {}
+            for manifest in sorted(directory.glob("*/manifest.json")):
+                match = re.fullmatch(
+                    r"(GL\d+)_(advanced_sampling(?:_with_optimized_lmbs)?|optimized_lmbs)(?:_workspace)?",
+                    manifest.parent.name,
+                    re.IGNORECASE,
+                )
+                if match is None:
+                    continue  # Explicit comparison names exclude fixed-grid pilots and backups.
+                graph, strategy = match[1].upper(), match[2].lower()
+                paths = local.setdefault(graph, {})
+                if strategy in paths:
+                    raise ValueError(
+                        f"Ambiguous {graph} {strategy}: {paths[strategy]} and {manifest.parent}. "
+                        "Use explicit --advanced-workspace / --optimized-workspace overrides."
+                    )
+                paths[strategy] = manifest.parent
+            for graph, paths in local.items():
+                groups.setdefault(graph, paths)  # Keep a comparison in one directory.
+    return groups
 
 
 def latest_snapshot(workspace: Path) -> tuple[int, dict[str, Any]] | None:
@@ -102,16 +119,16 @@ _ITERATION_RE = re.compile(
     r"Iteration #\s*(\d+)\s*\(\s*completed\s*\).*?# samples total =\s*([0-9.]+)([KMG]?)"
 )
 _OBSERVABLE_RE = re.compile(
-    r"│\s*All\s+(re|\|re\||im|\|im\|)\s+│\s*([+-]?\d+(?:\.\d+)?)\((\d+(?:\.\d+)?)\)e([+-]\d+)\s+.*?[0-9.]+%\s+│\s*[0-9.]+\s+([0-9.]+e[+-]\d+)"
+    r"│\s*All\s+(re|\|re\||im|\|im\|)\s+│\s*([+-]?\d+(?:\.\d+)?)\((\d+(?:\.\d+)?)\)e([+-]?\d+)\s+.*?[0-9.]+%\s+│\s*[0-9.]+\s+([0-9.]+e[+-]?\d+)"
 )
 _ABS_OBSERVABLE_RE = re.compile(
-    r"│\s*(?:All\s+)?(\|re\||\|im\|)\s+│\s*([+-]?\d+(?:\.\d+)?)\((\d+(?:\.\d+)?)\)e([+-]\d+)"
+    r"│\s*(?:All\s+)?(\|re\||\|im\|)\s+│\s*([+-]?\d+(?:\.\d+)?)\((\d+(?:\.\d+)?)\)e([+-]?\d+)"
 )
 _MAX_RE = re.compile(
-    r"│\s*epem_a_tth@NNLO\s+(re|im)\s+\[([+-])\]\s*│\s*([+-]?\d+(?:\.\d+)?)e([+-]\d+)"
+    r"│\s*epem_a_tth@NNLO\s+(re|im)\s+\[([+-])\]\s*│\s*([+-]?\d+(?:\.\d+)?)e([+-]?\d+)"
 )
 _TIMING_RE = re.compile(
-    r"│\s+timing\s+│\s+total\s+([0-9.]+)\s+ms\s+│\s+param\s+([0-9.]+)\s+ms\s+│\s+itg\s+([0-9.]+)\s+ms\s+│\s+evaluators\s+([0-9.]+)\s+ms"
+    r"│\s+timing\s+│\s+total\s+([0-9.]+)\s+(ns|µs|ms|s)\s+│\s+param\s+([0-9.]+)\s+(ns|µs|ms|s)\s+│\s+itg\s+([0-9.]+)\s+(ns|µs|ms|s)\s+│\s+evaluators\s+([0-9.]+)\s+(ns|µs|ms|s)"
 )
 _EVAL_RE = re.compile(
     r"│\s+evals\s+│\s+f64\s+([0-9.]+)%\s+│\s+f128\s+([0-9.]+)%\s+│\s+arb\s+([0-9.]+)%\s+│\s+nans\+unstable\s+([0-9.]+)%"
@@ -122,19 +139,26 @@ def _compact_value(value: str, uncertainty: str, exponent: str) -> tuple[float, 
     coefficient = float(value)
     error = float(uncertainty)
     if "." not in uncertainty:
-        error /= 10 ** len(value.split(".", 1)[1])
+        error /= 10 ** len(value.partition(".")[2])
     scale = 10 ** int(exponent)
     return coefficient * scale, error * scale
 
 
-def live_metrics(log_path: Path) -> tuple[int, dict[str, str]] | None:
-    if not log_path.exists():
+def live_metrics(*log_paths: Path) -> tuple[int, dict[str, str]] | None:
+    log_path = max(
+        (path for path in log_paths if path.exists()),
+        key=lambda path: path.stat().st_mtime,
+        default=None,
+    )
+    if log_path is None:
         return None
     text = log_path.read_text(encoding="utf-8", errors="replace")
     iterations = list(_ITERATION_RE.finditer(text))
     if not iterations:
         return None
     iteration = iterations[-1]
+    if text.rfind("Streaming integration updates disabled") > iteration.end():
+        return None
     samples = (
         float(iteration.group(2))
         * {"": 1, "K": 1e3, "M": 1e6, "G": 1e9}[iteration.group(3)]
@@ -156,7 +180,8 @@ def live_metrics(log_path: Path) -> tuple[int, dict[str, str]] | None:
     maxima: dict[str, float] = {}
     for match in _MAX_RE.finditer(tail):
         maxima[match.group(1)] = max(
-            maxima.get(match.group(1), 0.0), float(f"{match.group(3)}e{match.group(4)}")
+            maxima.get(match.group(1), 0.0),
+            abs(float(f"{match.group(3)}e{match.group(4)}")),
         )
     if (
         not {"re", "|re|", "im", "|im|"} <= values.keys()
@@ -164,8 +189,9 @@ def live_metrics(log_path: Path) -> tuple[int, dict[str, str]] | None:
         or evaluation is None
     ):
         return None
-    total_ms, parameterization_ms, integrand_ms, evaluator_ms = map(
-        float, timing.groups()
+    total, parameterization, integrand, evaluator = (
+        float(value) * {"ns": 1e-9, "µs": 1e-6, "ms": 1e-3, "s": 1}[unit]
+        for value, unit in zip(timing.groups()[::2], timing.groups()[1::2])
     )
     f64, f128, arb, unstable = map(float, evaluation.groups())
     unavailable = "n/a (not logged live)"
@@ -175,8 +201,8 @@ def live_metrics(log_path: Path) -> tuple[int, dict[str, str]] | None:
         "|Re|": format_value(*values["|re|"]),
         "Im": format_value(*values["im"]),
         "|Im|": format_value(*values["|im|"]),
-        "max |Re|": format_value(maxima.get("re", 0.0)),
-        "max |Im|": format_value(maxima.get("im", 0.0)),
+        "max |Re|": format_value(maxima["re"]) if "re" in maxima else unavailable,
+        "max |Im|": format_value(maxima["im"]) if "im" in maxima else unavailable,
         "max abs |Re|": unavailable,
         "max abs |Im|": unavailable,
         "Re impact": f"{impacts['re']:.3%}",
@@ -187,22 +213,32 @@ def live_metrics(log_path: Path) -> tuple[int, dict[str, str]] | None:
         "f128": f"{f128:.3f}%",
         "ArbPrec": f"{arb:.3f}%",
         "unstable": f"{unstable:.3f}%",
-        "time/sample": f"{total_ms / 1000:.4f} s",
-        "sampling time": f"{parameterization_ms / 1000:.4f} s",
-        "evaluator time": f"{evaluator_ms / 1000:.4f} s",
-        "integrand overhead": f"{(integrand_ms - evaluator_ms) / 1000:.4f} s",
+        "time/sample": f"{total:.4f} s",
+        "sampling time": f"{parameterization:.4f} s",
+        "evaluator time": f"{evaluator:.4f} s",
+        "integrand overhead": f"{integrand - evaluator:.4f} s",
     }
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--graph", default="gl638", help="graph selector: gl297 or gl638"
+        "--graph", default="gl638", help="graph name, e.g. gl134, gl297 or gl638"
+    )
+    parser.add_argument(
+        "--list-available-graphs",
+        action="store_true",
+        help="list discovered comparison workspaces and exit",
+    )
+    parser.add_argument(
+        "--workspace-root",
+        type=Path,
+        help="search only this directory (or its workspaces/ children); defaults to the current directory and example directories beside this script",
     )
     parser.add_argument(
         "--live",
         action="store_true",
-        help="read the latest completed summary from integration.log",
+        help="read the latest completed summary from integration.log or *.long.log",
     )
     parser.add_argument("--advanced-workspace", type=Path)
     parser.add_argument("--optimized-workspace", type=Path)
@@ -212,55 +248,85 @@ def main() -> None:
         help="GL638 advanced workspace with optimized-LMB channels",
     )
     args = parser.parse_args()
-    (
-        advanced_default,
-        optimized_default,
-        augmented_default,
-        advanced_state,
-        augmented_state,
-        graph,
-    ) = _defaults(args.graph)
-    advanced_workspace = args.advanced_workspace or advanced_default
-    optimized_workspace = args.optimized_workspace or optimized_default
-    augmented_workspace = args.augmented_workspace or augmented_default
     init(autoreset=True)
-    if args.live:
-        advanced_live = live_metrics(advanced_state / "integration.log")
-        optimized_live = live_metrics(
-            advanced_state.parent
-            / f"gammaloop_state_{graph}_optimized_lmbs"
-            / "integration.log"
+    try:
+        available = (
+            {}
+            if args.advanced_workspace
+            and args.optimized_workspace
+            and not args.list_available_graphs
+            else _defaults(args.workspace_root)
         )
-        augmented_live = (
-            live_metrics(augmented_state / "integration.log")
-            if augmented_state
-            else None
+    except ValueError as error:
+        parser.error(str(error))
+    if args.list_available_graphs:
+        table = PrettyTable(["Graph", "Comparison directory", "Available setups"])
+        table.set_style(TableStyle.SINGLE_BORDER)
+        table.align = "l"
+        for graph, paths in sorted(available.items()):
+            table.add_row(
+                [graph, str(next(iter(paths.values())).parent), ", ".join(paths)]
+            )
+        print(
+            table
+            if available
+            else "No comparison workspaces found. Use --workspace-root PATH."
         )
-        advanced_iter, advanced = advanced_live or (None, None)
-        optimized_iter, optimized = optimized_live or (None, None)
-        augmented_iter, augmented = augmented_live or (None, None)
-    else:
-        advanced_snapshot = latest_snapshot(advanced_workspace)
-        optimized_snapshot = latest_snapshot(optimized_workspace)
-        advanced_iter = advanced_snapshot[0] if advanced_snapshot else None
-        optimized_iter = optimized_snapshot[0] if optimized_snapshot else None
-        advanced = metrics(advanced_snapshot[1]) if advanced_snapshot else None
-        optimized = metrics(optimized_snapshot[1]) if optimized_snapshot else None
-        augmented_snapshot = (
-            latest_snapshot(augmented_workspace) if augmented_workspace else None
+        return
+    graph = args.graph.upper()
+    paths = available.get(graph, {}).copy()
+    for strategy, override in (
+        ("advanced_sampling", args.advanced_workspace),
+        ("optimized_lmbs", args.optimized_workspace),
+        ("advanced_sampling_with_optimized_lmbs", args.augmented_workspace),
+    ):
+        if override is not None:
+            paths[strategy] = override.resolve()
+    if not paths:
+        parser.error(
+            f"No comparison workspaces found for {graph}; use --list-available-graphs or --workspace-root PATH."
         )
-        augmented_iter = augmented_snapshot[0] if augmented_snapshot else None
-        augmented = metrics(augmented_snapshot[1]) if augmented_snapshot else None
+    columns = []
+    for strategy, title, colour in (
+        ("advanced_sampling", "Advanced sampling", Fore.CYAN),
+        ("optimized_lmbs", "Optimized-LMB only", Fore.YELLOW),
+        (
+            "advanced_sampling_with_optimized_lmbs",
+            "Advanced + optimized-LMB",
+            Fore.MAGENTA,
+        ),
+    ):
+        workspace = paths.get(strategy)
+        if strategy == "advanced_sampling_with_optimized_lmbs" and workspace is None:
+            continue
+        result = None
+        source = "iteration dump"
+        if workspace is not None and args.live:
+            base = (
+                workspace.parent.parent
+                if workspace.parent.name == "workspaces"
+                else workspace.parent
+            )
+            state_strategy = strategy.replace("_with_", "_")
+            result = live_metrics(
+                workspace / "integration.log",
+                base / f"gammaloop_state_{graph}_{state_strategy}" / "integration.log",
+                base / "states" / f"{graph}_{strategy}" / "integration.log",
+                base / f"{graph.lower()}_{strategy}.long.log",
+            )
+            if result:
+                source = "live log"
+        if result is None and workspace is not None:
+            snapshot = latest_snapshot(workspace)
+            if snapshot is not None:
+                result = snapshot[0], metrics(snapshot[1])
+        iteration, data = result or (None, None)
+        if data is not None:
+            data["iteration"] = str(iteration)
+            data["source"] = source
+        columns.append((title, data, colour, iteration))
     table = PrettyTable()
     table.set_style(TableStyle.SINGLE_BORDER)
-    columns = [
-        ("Advanced sampling", advanced, Fore.CYAN, advanced_iter),
-        ("Optimized-LMB only", optimized, Fore.YELLOW, optimized_iter),
-    ]
-    if graph == "GL638":
-        columns.append(
-            ("Advanced + optimized-LMB", augmented, Fore.MAGENTA, augmented_iter)
-        )
     table.field_names = ["Observable / statistic"] + [column[0] for column in columns]
     table.align["Observable / statistic"] = "l"
     for title, _, _, _ in columns:
@@ -272,6 +338,8 @@ def main() -> None:
     )
     table.title = f"{graph} {mode}  {iteration_title}"
     rows = [
+        ("Completed iterations", "iteration"),
+        ("Data source", "source"),
         ("Samples", "samples"),
         ("Re", "Re"),
         ("|Re|", "|Re|"),
@@ -311,6 +379,8 @@ def main() -> None:
                 values.append(colour + value + Style.RESET_ALL)
         table.add_row([label] + values)
     print(table)
+    for strategy, workspace in paths.items():
+        print(f"{Style.DIM}{strategy}: {workspace}{Style.RESET_ALL}")
 
 
 if __name__ == "__main__":
