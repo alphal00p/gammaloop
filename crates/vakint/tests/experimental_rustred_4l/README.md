@@ -89,7 +89,7 @@ The ignored `candidate_all_four_loop_parents_match_fmft` test reuses this
 same comparative harness for all four checked-in descriptors (`H`, `FG`,
 `BMW`, and `X`), with parent, dotted, and pinch probes for each descriptor.
 Each descriptor gets a fresh RustRed candidate reducer and an offline catalog
-containing only residuals reached by that run. A matrix pass demonstrates
+containing every finite terminal declared by that run. A matrix pass demonstrates
 routing, FeynKit preprocessing, candidate application, and numerical parity
 for those finite probes only; it does not certify arbitrary-index closure or
 enable four-loop `EvaluationMethod::RustRed`. The production registry remains
@@ -98,8 +98,9 @@ terminal manifest are available.
 
 Set `VAKINT_4L_CANDIDATE_CATALOG_DIR` to persist exact offline values for later
 FORM-free candidate reruns. The harness writes `h.rrcat`, `fg.rrcat`,
-`bmw.rrcat`, or `x.rrcat` atomically after the FMFT phase; each file is bound
-to the RustRed family fingerprint and arity and is revalidated on load. With
+`bmw.rrcat`, or `x.rrcat` atomically after the FMFT phase; each file contains
+every finite terminal declared by that candidate, is marked complete, and is
+bound to the RustRed family fingerprint and arity. With
 `VAKINT_4L_CANDIDATE_CATALOG_ONLY=1`, an existing catalog is required and the
 test uses an invalid FORM path for the RustRed/FeynKit scalar tail. This is an
 experimental value-cache check, not a completeness proof, IBP artifact, or

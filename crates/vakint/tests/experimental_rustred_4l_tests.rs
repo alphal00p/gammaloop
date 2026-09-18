@@ -219,7 +219,24 @@ fn candidate_parent_dotted_and_pinch_match_fmft() {
     let source = std::env::var("VAKINT_4L_CANDIDATE_PARENT_INPUT")
         .map(|path| std::fs::read_to_string(path).unwrap())
         .unwrap_or_else(|_| include_str!("inputs/experimental_four_loop_h.csv").into());
-    run_candidate_finite_family("H", source, None);
+    run_candidate_finite_family("H", source, None, Vec::new());
+}
+
+/// Exercise a genuine tensor-bearing H-family input through the same
+/// candidate/FeynKit/RustRed scalar tail.  This remains finite-target
+/// evidence: the extra numerator is not a family-closure claim.
+#[test]
+#[ignore = "experimental: finite H tensor numerator and explicit offline FMFT oracle"]
+fn candidate_h_rank_four_numerator_matches_fmft() {
+    let source = include_str!("inputs/experimental_four_loop_h.csv").to_owned();
+    let parent = input::ParentInput::from_csv(&source);
+    let numerator = vk_parse!(
+        "k(1,11)*k(2,11)*k(1,22)*k(2,22)+p(1,11)*k(3,11)*k(3,22)*p(2,22)+p(1,11)*p(2,11)*(k(2,22)+k(1,22))*k(2,22)"
+    )
+    .expect("rank-four H numerator parses");
+    let corner = vec![1; 9].into_iter().chain([0]).collect::<Vec<_>>();
+    let integral = numerator * parent.integral(&corner);
+    run_candidate_finite_family("H-rank4", source, None, vec![("rank4", integral)]);
 }
 
 /// Run the same finite-target candidate/FeynKit/FMFT comparison for every
@@ -241,7 +258,7 @@ fn candidate_all_four_loop_parents_match_fmft() {
         // candidate catalog; power three is the first target that exercises
         // an actual recurrence (see the historical BMW evidence in README).
         let forced_dot_power = (name == "BMW").then_some(3);
-        run_candidate_finite_family(name, source.to_owned(), forced_dot_power);
+        run_candidate_finite_family(name, source.to_owned(), forced_dot_power, Vec::new());
     }
 }
 
@@ -249,6 +266,7 @@ fn run_candidate_finite_family(
     family_name: &'static str,
     source: String,
     forced_dot_power: Option<i64>,
+    extra_inputs: Vec<(&'static str, Atom)>,
 ) {
     test_utils::run_multi_lane_acceptance(move || {
         Vakint::initialize_vakint_symbols();
@@ -295,7 +313,12 @@ fn run_candidate_finite_family(
         dotted[0] = dot_power;
         let mut pinch = corner.clone();
         pinch[2] = 0;
-        let cases = [("parent", corner), ("dotted", dotted), ("pinch", pinch)];
+        let mut cases = vec![
+            ("parent", parent.integral(&corner)),
+            ("dotted", parent.integral(&dotted)),
+            ("pinch", parent.integral(&pinch)),
+        ];
+        cases.extend(extra_inputs);
         let vakint = Vakint::new().unwrap();
         let preparation_settings = VakintSettings {
             form_exe_path: "/candidate-preparation-must-not-use-form".into(),
@@ -304,8 +327,7 @@ fn run_candidate_finite_family(
         };
         let mut reached = BTreeSet::new();
         let mut applications = 0usize;
-        for (name, powers) in &cases {
-            let input = parent.integral(powers);
+        for (name, input) in &cases {
             let canonical = vakint
                 .to_canonical(&preparation_settings, input.as_view(), false)
                 .unwrap();
@@ -371,7 +393,10 @@ fn run_candidate_finite_family(
         );
         let generate_catalog = || {
             let mut terms = BTreeMap::new();
-            for terminal in &reached {
+            // Persist every finite terminal declared by the candidate reducer,
+            // not merely those reached by the parent/dotted/pinch probes.
+            // This is a bounded value catalog, not a family-closure claim.
+            for terminal in native.terminals() {
                 let oracle_input = parent.integral(terminal.powers());
                 let value = vakint
                     .evaluate(&oracle_settings, oracle_input.as_view())
@@ -390,7 +415,19 @@ fn run_candidate_finite_family(
                 );
                 terms.insert(terminal.clone(), value);
             }
-            terms
+            let offline = OfflineTerminalCatalog::from_keys(
+                parent.family.fingerprint(),
+                10,
+                native.terminals().iter().cloned(),
+                |terminal| {
+                    terms
+                        .get(terminal)
+                        .cloned()
+                        .ok_or_else(|| format!("missing resolved terminal {:?}", terminal.powers()))
+                },
+            )
+            .unwrap_or_else(|error| panic!("build offline terminal catalog: {error}"));
+            (terms, offline)
         };
         let catalog = if let Some(path) = &catalog_path {
             if path.exists() {
@@ -405,10 +442,16 @@ fn run_candidate_finite_family(
                                 path.display()
                             )
                         });
-                for terminal in &reached {
+                loaded.require_complete().unwrap_or_else(|error| {
+                    panic!(
+                        "offline catalog {} is not a complete declared-terminal catalog: {error}",
+                        path.display()
+                    )
+                });
+                for terminal in native.terminals() {
                     assert!(
                         loaded.terms().contains_key(terminal),
-                        "offline catalog {} is missing reached terminal {:?}",
+                        "offline catalog {} is missing declared terminal {:?}",
                         path.display(),
                         terminal.powers()
                     );
@@ -420,13 +463,7 @@ fn run_candidate_finite_family(
                 );
                 loaded.into_terms()
             } else {
-                let terms = generate_catalog();
-                let offline = OfflineTerminalCatalog::from_terms(
-                    parent.family.fingerprint(),
-                    10,
-                    terms.clone(),
-                )
-                .unwrap_or_else(|error| panic!("build offline terminal catalog: {error}"));
+                let (terms, offline) = generate_catalog();
                 fs::create_dir_all(path.parent().unwrap()).unwrap_or_else(|error| {
                     panic!("create catalog directory {}: {error}", path.display())
                 });
@@ -446,7 +483,7 @@ fn run_candidate_finite_family(
                 terms
             }
         } else {
-            generate_catalog()
+            generate_catalog().0
         };
         if std::env::var_os("VAKINT_ACCEPTANCE_EXACT_DIAGNOSTICS").is_some() {
             let options = FMFTOptions {
@@ -462,8 +499,7 @@ fn run_candidate_finite_family(
             symbolic_settings.integral_normalization_factor = LoopNormalizationFactor::MSbar;
             symbolic_settings.evaluation_order =
                 EvaluationOrder(vec![EvaluationMethod::FMFT(options)]);
-            for (name, powers) in &cases {
-                let input = parent.integral(powers);
+            for (name, input) in &cases {
                 let oracle_symbolic = vakint
                     .evaluate(&symbolic_settings, input.as_view())
                     .unwrap();
@@ -569,8 +605,7 @@ fn run_candidate_finite_family(
         // retrieval of values computed before the offline oracle ran.
         native.clear_cache().unwrap();
         let native_applications_before = native.rule_applications().unwrap();
-        for (name, powers) in &cases {
-            let integral = parent.integral(&powers);
+        for (name, integral) in &cases {
             if catalog_only {
                 let canonical = vakint
                     .to_canonical(&settings, integral.as_view(), false)
@@ -616,7 +651,7 @@ fn run_candidate_finite_family(
         if let Ok(repeats) = std::env::var("VAKINT_4L_CANDIDATE_BENCH_REPEATS") {
             let inputs = cases
                 .iter()
-                .map(|(name, powers)| (*name, parent.integral(powers)))
+                .map(|(name, integral)| (*name, integral.clone()))
                 .collect::<Vec<_>>();
             timing::run(
                 &vakint,
