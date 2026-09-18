@@ -114,6 +114,11 @@ from becoming tiny floating poles; no zero tolerance, epsilon depth or source
 table is changed. All nine finalizer unit checks pass, including genuine
 missing-order rejection and the new exact-cancellation regression.
 
+For bounded matrix runs, set `VAKINT_4L_CANDIDATE_FAMILY_FILTER` to one of
+`H`, `FG`, `BMW`, or `X` to run only that descriptor. The default remains the
+complete four-family matrix; the filter is intended to generate or replay one
+catalog at a time without changing the candidate or catalog semantics.
+
 The added `candidate_h_rank_four_numerator_matches_fmft` lane uses the same
 H tensor numerator and external momenta as the analytic four-loop test, with
 `muvsq=3` and `mursq=5`. Its regenerated catalogue contains 386 declared
@@ -121,8 +126,10 @@ terminals. A fresh strict catalog-only replay loaded all 386 terms, used an
 invalid FORM path, passed parent/dotted/pinch/rank-four probes, and applied
 26,956 rules in 441.43 s. The ordinary FMFT comparison was stopped after
 10m22 without a parity result, so no ordinary rank-four parity claim is made
-yet. The new `candidate_clover_finite_cases_match_fmft` input-driven lane is
-present but remains unrun.
+yet. The new `candidate_fg_clover_numerator_case_matches_fmft` lane reuses the
+registered FG parent witness for the analytic clover numerator; it remains
+unrun. A standalone four-slot clover descriptor is intentionally not shipped:
+the current matcher witness represents that case with eight physical slots.
 
 This checkpoint is **twelve finite-target comparisons plus one strict H
 rank-four catalog-only replay**, not all fifteen existing

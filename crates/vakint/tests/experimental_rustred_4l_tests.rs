@@ -246,23 +246,26 @@ fn candidate_h_rank_four_numerator_matches_fmft() {
     );
 }
 
-/// Exercise the disconnected four-loop clover family through the same finite
-/// candidate/catalogue lane.  The fourth probe contains both loop and
-/// external scalar products; the explicit external values make the comparison
-/// independent of any hidden numerical evaluator.
+/// Exercise the analytic clover numerator through the FG parent descriptor.
+/// Vakint's retained matcher witness currently represents the disconnected
+/// four-tadpole clover as an eight-slot parent, so a standalone four-slot
+/// clover descriptor cannot pass `validate_parent_routing`.  Keeping the
+/// numerator on the registered FG witness still exercises its scalar-product
+/// lowering and the FORM/FeynKit comparison without inventing a topology
+/// registry entry.
 #[test]
 #[ignore = "experimental: finite clover family and explicit offline FMFT oracle"]
-fn candidate_clover_finite_cases_match_fmft() {
-    let source = include_str!("inputs/experimental_four_loop_clover.csv").to_owned();
+fn candidate_fg_clover_numerator_case_matches_fmft() {
+    let source = include_str!("inputs/experimental_four_loop_fg.csv").to_owned();
     let parent = input::ParentInput::from_csv(&source);
     let numerator = vk_parse!(
         "3*k(1,11)*k(2,11)*k(1,22)*k(2,22)+4*p(1,11)*k(3,11)*k(3,22)*p(2,22)+5*p(1,11)*p(2,11)*(k(2,22)+k(1,22))*k(2,22)"
     )
     .expect("clover numerator parses");
-    let corner = vec![1; 4].into_iter().chain([0; 6]).collect::<Vec<_>>();
+    let corner = vec![1; 8].into_iter().chain([0; 2]).collect::<Vec<_>>();
     let integral = numerator * parent.integral(&corner);
     run_candidate_finite_family(
-        "Clover",
+        "FG-clover",
         source,
         None,
         vec![("numerator", integral)],
@@ -280,12 +283,26 @@ fn candidate_clover_finite_cases_match_fmft() {
 #[test]
 #[ignore = "experimental: generates four-loop candidates and uses an explicit offline FMFT oracle"]
 fn candidate_all_four_loop_parents_match_fmft() {
+    let family_filter = std::env::var("VAKINT_4L_CANDIDATE_FAMILY_FILTER")
+        .ok()
+        .map(|value| value.to_ascii_uppercase());
+    if let Some(filter) = &family_filter {
+        assert!(
+            matches!(filter.as_str(), "H" | "FG" | "BMW" | "X"),
+            "VAKINT_4L_CANDIDATE_FAMILY_FILTER must be one of H, FG, BMW, X"
+        );
+    }
+    let mut selected = false;
     for (name, source) in [
         ("H", include_str!("inputs/experimental_four_loop_h.csv")),
         ("FG", include_str!("inputs/experimental_four_loop_fg.csv")),
         ("BMW", include_str!("inputs/experimental_four_loop_bmw.csv")),
         ("X", include_str!("inputs/experimental_four_loop_x.csv")),
     ] {
+        if family_filter.as_deref().is_some_and(|filter| filter != name) {
+            continue;
+        }
+        selected = true;
         // BMW's power-two dotted probe is a declared residual in the current
         // candidate catalog; power three is the first target that exercises
         // an actual recurrence (see the historical BMW evidence in README).
@@ -299,6 +316,10 @@ fn candidate_all_four_loop_parents_match_fmft() {
             Vec::new(),
         );
     }
+    assert!(
+        selected,
+        "the four-loop candidate matrix must select at least one family"
+    );
 }
 
 fn run_candidate_finite_family(
