@@ -14,6 +14,6 @@ bincode-trait-derive = { workspace = true }
 blake3 = "1.8.3"
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-symbolica = { workspace = true, default-features = false, features = ["serde"] }
+symbolica = { workspace = true, default-features = false, features = ["serde", "integer-gmp", "float-mpfr"] }
 thiserror = { workspace = true }
 vectorize = "0.2.0"

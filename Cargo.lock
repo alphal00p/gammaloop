@@ -2220,7 +2220,7 @@ dependencies = [
  "symbolica",
  "symbolica-utils",
  "sysinfo",
- "tabled 0.22.0",
+ "tabled",
  "tempfile",
  "thiserror 2.0.18",
  "toml 0.9.12+spec-1.1.0",
@@ -2257,7 +2257,7 @@ dependencies = [
  "spenso",
  "symbolica",
  "symbolica-utils",
- "tabled 0.22.0",
+ "tabled",
  "toml 0.9.12+spec-1.1.0",
  "tracing",
  "vakint",
@@ -2279,7 +2279,7 @@ dependencies = [
  "serde_json",
  "spenso",
  "symbolica",
- "tabled 0.22.0",
+ "tabled",
  "thiserror 2.0.18",
  "tracing",
  "tracing-subscriber",
@@ -2298,27 +2298,20 @@ name = "gammaloop-workspace-hack"
 version = "0.1.0"
 dependencies = [
  "ahash 0.8.12",
- "aho-corasick",
- "anstream",
  "arrayvec",
  "bincode 2.0.1",
  "bitflags 2.11.1",
- "bitvec",
  "chrono",
  "clap",
  "clap_builder",
  "console 0.16.3",
  "criterion",
  "crossterm 0.28.1",
- "derive_more 2.1.1",
- "derive_more-impl",
  "either",
- "figment",
- "getrandom 0.2.17",
  "indenter",
  "indexmap",
- "insta",
  "libc",
+ "log",
  "matrixmultiply",
  "memchr",
  "num-bigint",
@@ -2327,29 +2320,21 @@ dependencies = [
  "num-traits",
  "numerica",
  "once_cell",
- "papergrid 0.17.0",
- "rand 0.9.4",
- "rand_chacha 0.9.0",
+ "rand 0.8.6",
  "regex",
  "regex-automata",
  "regex-syntax",
- "rug",
  "rust-embed-utils",
  "rustix 1.1.4",
  "serde",
  "serde_core",
  "serde_json",
  "serde_spanned 1.1.1",
- "similar",
  "smallvec",
  "smartstring",
  "symbolica",
- "syn 1.0.109",
  "syn 2.0.117",
- "tabled 0.20.0",
- "testing_table",
  "time",
- "tiny-keccak",
  "toml_datetime 1.1.1+spec-1.1.0",
  "toml_parser",
  "toml_writer",
@@ -2420,7 +2405,7 @@ dependencies = [
  "statrs",
  "symbolica",
  "symbolica-utils",
- "tabled 0.22.0",
+ "tabled",
  "thiserror 2.0.18",
  "toml 0.9.12+spec-1.1.0",
  "tracing",
@@ -4398,19 +4383,6 @@ dependencies = [
 
 [[package]]
 name = "papergrid"
-version = "0.17.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6978128c8b51d8f4080631ceb2302ab51e32cc6e8615f735ee2f83fd269ae3f1"
-dependencies = [
- "ansi-str",
- "ansitok",
- "bytecount",
- "fnv",
- "unicode-width 0.2.2",
-]
-
-[[package]]
-name = "papergrid"
 version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0984e668274d34691bc2b262ef0d115de5fa9973bcdee7ae32213f93099153e"
@@ -6260,7 +6232,7 @@ dependencies = [
  "symbolica",
  "symbolica-typst-atom-payload",
  "symbolica-utils",
- "tabled 0.22.0",
+ "tabled",
  "thiserror 2.0.18",
  "tracing",
 ]
@@ -6276,7 +6248,7 @@ dependencies = [
  "spenso",
  "spenso-macros",
  "symbolica",
- "tabled 0.22.0",
+ "tabled",
  "xpct",
 ]
 
@@ -6311,7 +6283,7 @@ dependencies = [
  "spenso-macros",
  "symbolica",
  "symbolica-typst-atom-payload",
- "tabled 0.22.0",
+ "tabled",
  "thiserror 2.0.18",
  "xpct",
 ]
@@ -6646,41 +6618,15 @@ dependencies = [
 
 [[package]]
 name = "tabled"
-version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e39a2ee1fbcd360805a771e1b300f78cc88fec7b8d3e2f71cd37bbf23e725c7d"
-dependencies = [
- "ansi-str",
- "ansitok",
- "papergrid 0.17.0",
- "tabled_derive 0.11.0",
- "testing_table",
-]
-
-[[package]]
-name = "tabled"
 version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2d2596a104db1900b943f97d793a6c99addca918c4525c999f751a0f17d472eb"
 dependencies = [
  "ansi-str",
  "ansitok",
- "papergrid 0.18.0",
- "tabled_derive 0.12.0",
+ "papergrid",
+ "tabled_derive",
  "testing_table",
-]
-
-[[package]]
-name = "tabled_derive"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ea5d1b13ca6cff1f9231ffd62f15eefd72543dab5e468735f1a456728a02846"
-dependencies = [
- "heck 0.5.0",
- "proc-macro-error2",
- "proc-macro2",
- "quote",
- "syn 2.0.117",
 ]
 
 [[package]]

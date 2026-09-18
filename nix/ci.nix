@@ -16,6 +16,20 @@
       ];
     }
     {
+      name = "feynkit";
+      packages = [
+        "feynkit"
+        "feynkit-cff"
+        "feynkit-generator"
+        "feynkit-graph"
+        "feynkit-kinematics"
+        "feynkit-model"
+        "feynkit-py"
+        "feynkit-tensor"
+        "feynkit-ufo"
+      ];
+    }
+    {
       name = "docs";
       packages = [
         "alphal00p-docs-builder"

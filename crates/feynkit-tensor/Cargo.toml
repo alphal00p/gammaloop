@@ -13,7 +13,7 @@ categories = ["science"]
 feynkit-graph = { workspace = true }
 idenso = { version = "0.3.0", path = "../idenso" }
 spenso = { version = "0.6.0", path = "../spenso", features = ["shadowing"] }
-symbolica = { workspace = true }
+symbolica = { workspace = true, default-features = false, features = ["integer-gmp", "float-mpfr"] }
 thiserror = { workspace = true }
 
 [dev-dependencies]

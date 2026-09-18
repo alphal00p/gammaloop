@@ -13,7 +13,7 @@ bincode = { workspace = true, features = ["serde"] }
 feynkit-graph = { version = "0.1.0", path = "../feynkit-graph" }
 linnet = { workspace = true, features = ["bincode", "serde"] }
 serde = { workspace = true, features = ["derive"] }
-symbolica = { workspace = true, default-features = false }
+symbolica = { workspace = true, default-features = false, features = ["integer-gmp", "float-mpfr"] }
 thiserror = { workspace = true }
 typed-index-collections = { workspace = true, features = ["serde"] }
 

@@ -9,8 +9,8 @@ keywords = ["feynman", "hep", "kinematics", "physics"]
 categories = ["science"]
 
 [dependencies]
-linnet = { workspace = true }
-numerica = { workspace = true, features = ["serde"] }
+linnet = { workspace = true, features = ["serde"] }
+numerica = { workspace = true, features = ["serde", "integer-gmp", "float-mpfr"] }
 serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 

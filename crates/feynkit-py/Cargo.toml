@@ -34,7 +34,7 @@ spynso3 = { path = "../spynso3" }
 [dependencies.symbolica]
 workspace = true
 default-features = false
-features = ["python_export"]
+features = ["float-mpfr", "integer-gmp", "python_export"]
 
 [features]
 default = ["ufo"]
