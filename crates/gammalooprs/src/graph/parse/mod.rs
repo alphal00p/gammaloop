@@ -1,3 +1,4 @@
+use feynkit_graph::DOD;
 use std::{
     collections::{BTreeMap, BTreeSet},
     ops::Deref,
@@ -17,7 +18,7 @@ use crate::{
         aind::{Aind, NewAind},
     },
     processes::DotExportSettings,
-    utils::symbolica_ext::DOD,
+    utils::GS,
     uv::UltravioletGraph,
 };
 use feynkit_cff::SurfaceCache;
@@ -1674,7 +1675,7 @@ impl Graph {
 
                 let dod = match v.dod {
                     Some(dod) => Autogen::explicit(dod),
-                    None => Autogen::generated(num.all_dod()),
+                    None => Autogen::generated(num.all_dod(GS.emr_mom)?),
                 };
 
                 Ok(Vertex {
@@ -1707,7 +1708,7 @@ impl Graph {
 
                 let dod = match e.dod {
                     Some(dod) => Autogen::explicit(dod),
-                    None => Autogen::generated(num.edge_dod(eid) - 2),
+                    None => Autogen::generated(num.edge_dod(GS.emr_mom, usize::from(eid))? - 2),
                 };
 
                 Ok(EdgeData::new(

@@ -8,6 +8,9 @@
 #![forbid(unsafe_code)]
 
 mod display;
+mod power_counting;
+
+pub use power_counting::DOD;
 
 // Symbolica does not permit adding tags after a bare symbol with the same name
 // has been registered. Claim momentum and index heads during global state
@@ -57,13 +60,14 @@ use linnet::{
     half_edge::{
         HedgeGraph, NodeIndex,
         builder::HedgeGraphBuilder,
-        involution::{Flow, HedgePair, Orientation},
+        involution::{EdgeIndex, Flow, HedgePair, Orientation},
         subgraph::{Inclusion, SuBitGraph, SubSetLike, SubSetOps},
         tree::SimpleTraversalTree,
     },
     parser::{DotGraph, set::DotGraphSet},
 };
 use serde::{Deserialize, Serialize};
+use spenso::structure::representation::{Minkowski, RepName};
 use symbolica::{
     atom::{Atom, AtomCore, UserData},
     graph::Graph as CanonicalGraph,
@@ -474,6 +478,8 @@ impl LoopMomentumBasis {
 /// Errors produced while constructing or transforming diagrams.
 #[derive(Debug, Error)]
 pub enum DiagramError {
+    #[error("cannot determine superficial UV degree: {0}")]
+    UvPowerCounting(String),
     #[error(transparent)]
     Model(#[from] ModelError),
     #[error("vertex {vertex} is outside a diagram with {vertices} vertices")]
@@ -684,6 +690,30 @@ impl FeynmanDiagram {
 
     pub fn numerator(&self) -> &Atom {
         &self.numerator
+    }
+
+    /// Product of internal quadratic propagator denominators `q_e² - m_e²`.
+    ///
+    /// Uses the same edge momenta as the numerator and four-dimensional Minkowski
+    /// scalar products. Masses remain symbolic, except the UFO `ZERO` parameter.
+    /// External legs, widths, and an imaginary prescription are excluded. This
+    /// follows the quadratic-propagator convention used by UV power counting;
+    /// custom UFO propagator denominator expressions are not instantiated here.
+    pub fn denominator_expression(&self) -> Result<Atom, DiagramError> {
+        let mut denominator = Atom::num(1);
+        for id in self.topology().internal_edges {
+            let particle = self
+                .model
+                .particle_by_id(self.graph[EdgeIndex(id.0)].particle)?;
+            let mass = particle
+                .symbolic_mass(&self.model)
+                .replace(symbolica::symbol!("UFO::ZERO"))
+                .with(Atom::Zero);
+            let momentum = symbolica::function!(momentum_symbol(), id.0);
+            denominator *=
+                Minkowski {}.new_rep(4).inner_product(&momentum, &momentum) - mass.pow(2);
+        }
+        Ok(denominator)
     }
 
     /// Global numerator multiplier supplied by the generation request.
@@ -2294,6 +2324,39 @@ impl FeynmanDiagram {
         topology.internal_edges.len() + topology.components.len() - topology.internal_vertices.len()
     }
 
+    /// Return the local superficial UV degree in `dimension` spacetime dimensions.
+    ///
+    /// This is `dimension * loops + sum(vertex degrees) + sum(edge degrees - 2)`.
+    /// Degrees come from the stored local numerators; each internal propagator
+    /// contributes its quadratic denominator. External legs, the projector, and
+    /// diagram-wide prefactors are excluded, as in GammaLoop's local UV counting.
+    /// All momenta at a vertex scale together. This is a superficial bound, not
+    /// a test of cancellations in the contracted numerator or of subdivergences.
+    /// Zero means logarithmic, positive means power divergent, and negative means
+    /// superficially convergent.
+    pub fn superficial_degree_of_divergence(&self, dimension: i32) -> Result<i32, DiagramError> {
+        let topology = self.topology();
+        let loops = self.loop_momentum_basis.loop_edges.len();
+        let mut degree = i64::from(dimension) * loops as i64;
+        for vertex in topology.internal_vertices {
+            degree += i64::from(
+                self.graph[NodeIndex(vertex.0)]
+                    .numerator
+                    .all_dod(momentum_symbol())?,
+            );
+        }
+        for edge in topology.internal_edges {
+            degree += i64::from(
+                self.graph[EdgeIndex(edge.0)]
+                    .numerator
+                    .edge_dod(momentum_symbol(), edge.0)?,
+            ) - 2;
+        }
+        i32::try_from(degree).map_err(|_| {
+            DiagramError::UvPowerCounting("degree exceeds the integer range".to_owned())
+        })
+    }
+
     /// Enumerate every spanning-forest-induced loop momentum basis.
     pub fn loop_momentum_bases(&self) -> Result<Vec<LoopMomentumBasis>, DiagramError> {
         self.loop_momentum_bases_with_limit(usize::MAX)
@@ -3272,6 +3335,66 @@ mod tests {
             .add_edge(anti, particle, DiagramEdge::new(fermion, true))
             .unwrap();
         builder.build().unwrap()
+    }
+
+    #[test]
+    fn superficial_uv_degree_counts_local_numerators_and_internal_edges() {
+        let bubble = one_loop();
+        assert_eq!(bubble.superficial_degree_of_divergence(4).unwrap(), 0);
+        assert_eq!(bubble.superficial_degree_of_divergence(6).unwrap(), 2);
+        assert_eq!(bubble.superficial_degree_of_divergence(2).unwrap(), -2);
+        let internal_edges = bubble.topology().internal_edges;
+        let mut with_momenta = bubble
+            .map_data(
+                |_, vertex| {
+                    let mut vertex = vertex.clone();
+                    if !vertex.is_external() {
+                        vertex.numerator =
+                            symbolica::function!(momentum_symbol(), internal_edges[0].0, 0)
+                                + symbolica::symbol!("feynkit_graph::uv_test_mass");
+                    }
+                    vertex
+                },
+                |id, _, edge| {
+                    let mut edge = edge.clone();
+                    if internal_edges.contains(&id) {
+                        edge.numerator = symbolica::function!(momentum_symbol(), id.0, 0)
+                            + symbolica::symbol!("feynkit_graph::uv_test_mass");
+                    }
+                    edge
+                },
+            )
+            .unwrap();
+        with_momenta.numerator = with_momenta
+            .vertices()
+            .map(|(_, vertex)| &vertex.numerator)
+            .chain(with_momenta.edges().map(|(_, _, edge)| &edge.numerator))
+            .fold(Atom::num(1), |product, numerator| product * numerator);
+        assert_eq!(with_momenta.superficial_degree_of_divergence(4).unwrap(), 4);
+        let restored =
+            FeynmanDiagram::from_json(with_momenta.model_arc(), &with_momenta.to_json().unwrap())
+                .unwrap();
+        assert_eq!(restored.superficial_degree_of_divergence(4).unwrap(), 4);
+    }
+
+    #[test]
+    fn denominator_uses_only_internal_edges_and_symbolic_masses() {
+        let bubble = one_loop();
+        let q1 = symbolica::function!(momentum_symbol(), 1);
+        let q2 = symbolica::function!(momentum_symbol(), 2);
+        let mass2 = Atom::var(symbolica::symbol!("UFO::M")).pow(2);
+        let metric = Minkowski {}.new_rep(4);
+        let expected =
+            (metric.inner_product(&q1, &q1) - &mass2) * (metric.inner_product(&q2, &q2) - &mass2);
+        assert_eq!(bubble.topology().internal_edges.len(), 2);
+        assert_eq!(bubble.denominator_expression().unwrap(), expected);
+        let restored =
+            FeynmanDiagram::from_json(bubble.model_arc(), &bubble.to_json().unwrap()).unwrap();
+        assert_eq!(restored.denominator_expression().unwrap(), expected);
+        let contact = FeynmanDiagram::builder(scalar_model(), "empty")
+            .build()
+            .unwrap();
+        assert_eq!(contact.denominator_expression().unwrap(), Atom::num(1));
     }
 
     #[test]

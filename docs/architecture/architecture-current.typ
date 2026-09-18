@@ -188,13 +188,25 @@ directly. Python clients use this ownership flow through
 GammaLoop runtime details.
 
 Python diagram, edge, and vertex numerators use Spenso's `TensorExpression`
-directly, with the existing constructor inferring their tensor interfaces.
+directly, with the existing constructor inferring their tensor interfaces. Diagram
+denominators use the same scalar tensor interface and Spenso Minkowski products,
+with symbolic masses owned by the canonical particle model. They contain one
+quadratic factor per internal edge, excluding widths and the imaginary prescription.
+Local superficial UV power counting lives in `feynkit-graph`. The diagram method combines
+its stored local numerator degrees with the loop measure and quadratic internal denominators;
+GammaLoop's vertex, edge, and rescaled-integrand checks use the same momentum-scaling trait.
+This bound excludes global projectors/prefactors and does not replace subdivergence analysis.
+
 Python's `Model.generate_diagrams()` and `Generator.generate()` accept generation settings
 as keyword arguments and construct the same Rust options. Python dictionaries support reusable
 configurations; no mutable Python options builder accumulates filters. Coupling orders accept
 exact integers or inclusive ranges, while filter and grouping values wrap their Rust settings.
 Valid requests admitting no graphs return a completed empty result through the same generation
-pipeline; invalid settings remain errors, and cancelled requests are marked incomplete.
+pipeline; invalid settings remain errors, and token-cancelled requests are marked incomplete.
+Both Python entry points share signal-aware execution: native generation runs on a worker
+while the Python caller polls signals and cancels through the existing generator hook.
+Browser kernels poll the same hook on their calling thread. Signal-handler exceptions are
+preserved and re-raised, rather than being converted to partial generation results.
 
 The graph crate registers momentum and index symbols before parsing or
 generation. Index identities retain their source, sink, edge, or vertex head;

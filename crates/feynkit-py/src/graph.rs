@@ -1009,6 +1009,27 @@ impl PyFeynmanDiagram {
         self.inner.numerator().to_plain_string()
     }
 
+    /// Return the product of internal propagator denominators as a scalar TensorExpression.
+    ///
+    /// Each factor is q_e² - m_e², with the numerator's edge momentum labels,
+    /// four-dimensional Minkowski scalar products, and symbolic model masses.
+    /// External legs, widths, and an imaginary prescription are excluded.
+    /// This uses FeynKit's quadratic-propagator convention, rather than custom
+    /// UFO denominator formulas. A diagram with no internal edges returns one.
+    ///
+    /// Examples
+    /// --------
+    /// >>> denominator = diagram.denominator_expression()
+    /// >>> integrand = diagram.numerator_expression() / denominator
+    ///
+    fn denominator_expression(&self, py: Python<'_>) -> PyResult<Py<TensorExpression>> {
+        let denominator = self
+            .inner
+            .denominator_expression()
+            .map_err(error::diagram)?;
+        TensorExpression::from_atom_interface(py, denominator, None)
+    }
+
     /// Return the diagram numerator as a Spenso TensorExpression.
     ///
     /// Examples
@@ -1141,6 +1162,31 @@ impl PyFeynmanDiagram {
     #[getter]
     fn loop_count(&self) -> usize {
         self.inner.loop_count()
+    }
+
+    /// Return the local superficial UV degree of divergence.
+    ///
+    /// Counts ``dimension * loops`` plus vertex momentum powers and internal
+    /// propagator numerator powers minus two per internal propagator. Uses the
+    /// stored local numerators; excludes external legs, projectors, and global
+    /// prefactors. Vertex momenta scale together, before tensor cancellations.
+    /// Zero is logarithmic, positive is power divergent, and negative is
+    /// superficially convergent. Subdivergences are not tested.
+    ///
+    /// Examples
+    /// --------
+    /// >>> degree = diagram.superficial_degree_of_divergence()
+    /// >>> degree_in_six_dimensions = diagram.superficial_degree_of_divergence(dimension=6)
+    ///
+    /// Parameters
+    /// ----------
+    /// dimension : int, optional
+    ///     Spacetime dimension for each loop integration measure; defaults to four.
+    #[pyo3(signature = (*, dimension=4))]
+    fn superficial_degree_of_divergence(&self, dimension: i32) -> PyResult<i32> {
+        self.inner
+            .superficial_degree_of_divergence(dimension)
+            .map_err(error::diagram)
     }
 
     /// Return the diagram vertices with stable integer identifiers.

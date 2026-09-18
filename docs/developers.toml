@@ -119,7 +119,7 @@ anchor = "pub struct Model {"
 # FeynKit owner, with GammaLoop application state downstream.
 # Reviewed 2026-09-18: shared mass and particle-style methods now live on the
 # canonical particle type; both graph renderers reuse the same Typst mapping.
-digest = "1ffbcaa1ddc8f5e8b1e00329b4e042221b610b03"
+digest = "832e5646b2f11db6aef936b6713176e0dbd30913"
 
 [[section.note.scope]]
 path = "crates/feynkit-graph/src/lib.rs"
@@ -133,7 +133,7 @@ anchor = "pub struct FeynmanDiagram {"
 # Linnet has removed DOT quoting; physical metadata ownership is unchanged.
 # Reviewed 2026-09-17: the architecture now records graph-owned symbol
 # registration, shared Spenso index display hooks, and typed Python numerators.
-digest = "b3f99de59b3eaded5aa3b7a761486c283faf99fc"
+digest = "01c69fedc5d1bd051dbfed4d0e70e5e9c7c86d5a"
 
 [[section.note.scope]]
 path = "crates/feynkit-tensor/src/lib.rs"

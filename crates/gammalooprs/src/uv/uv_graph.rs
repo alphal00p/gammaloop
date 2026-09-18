@@ -1,3 +1,4 @@
+use feynkit_graph::DOD;
 use std::{cell::RefCell, collections::BTreeSet, ops::Deref};
 
 use ahash::{AHashMap, AHashSet};
@@ -24,7 +25,7 @@ use crate::{
     model::Model,
     momentum::sample::LoopIndex,
     numerator::{AppliedFeynmanRule, Numerator},
-    utils::{GS, W_, symbolica_ext::DOD},
+    utils::{GS, W_},
     uv::{ApproximationType, UVgenerationSettings, settings::CTIdentifier},
 };
 
@@ -462,7 +463,8 @@ impl UltravioletGraph for Graph {
             / denominator;
         let nloops: usize = self.n_loops(subgraph);
         self.uv_rescaled(subgraph.included(), nloops, &lmb, &integrand)
-            .trailing_exponent()
+            .trailing_exponent(GS.rescale)
+            .expect("UV momentum power counting failed")
     }
 
     fn local_dod<S: SubGraphLike>(&self, subgraph: &S) -> i32 {
