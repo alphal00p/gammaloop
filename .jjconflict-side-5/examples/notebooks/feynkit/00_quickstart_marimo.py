@@ -102,9 +102,9 @@ def _(mo):
 
     Particle selectors may be names such as `"scalar_0"`, PDG codes, or
     explicit `ParticleSelector` objects. Here `loops=1` requests exactly one
-    loop. Enabling self-loops lets the generator enumerate the complete set of
-    allowed one-loop topologies; below, we select the first diagram without a
-    self-edge for a particularly clear visualization.
+    loop. Self-loops are allowed, while the default topology filters reject
+    self-energies, tadpoles and zero-momentum snails. Below, we select the first
+    diagram without a self-edge for a particularly clear visualization.
     """)
     return
 

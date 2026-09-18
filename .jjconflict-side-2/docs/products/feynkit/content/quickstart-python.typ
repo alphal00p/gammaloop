@@ -40,7 +40,7 @@ print(cff.to_expression())
 
 `Model`, `Generator`, and `FeynmanDiagram` own their respective operations. Use
 `model.generate_diagrams(...)` for a short workflow, or `Generator(model).generate(process,
-options)` when reusing a configured `Process`. Particle names, PDG codes, and particles obtained
+**settings)` when reusing a configured `Process`. Particle names, PDG codes, and particles obtained
 from that model can select external states.
 
 #callout("Keep the same Symbolica kernel", [

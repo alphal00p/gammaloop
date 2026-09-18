@@ -36,7 +36,23 @@ partially updated model.
 
 Python accepts generation settings directly as keyword arguments. Exact coupling orders use
 integers; pairs specify inclusive bounds, with `None` for an unbounded coupling maximum.
-Filter objects specify which subgraphs to reject. Omitting a filter leaves it disabled.
+Filter objects specify which subgraphs to reject. Python's defaults are ported from the
+GammaLoop CLI: self-loops are permitted, zero-flow edges are rejected, and non-vacuum
+processes filter self-energies, tadpoles and zero-momentum snails. Vacuum processes leave
+those filters off and require one factorized loop topology. Cross sections default to one
+cut blob, no spectators, and symmetrized final states.
+
+`maximum_bridges=0` is the Python default for every process. Use `maximum_bridges=None`
+to include unrestricted bridge topologies, such as tree-level exchange channels.
+Omitting `numerator_grouping` groups up to scalar rescaling; explicit `numerator_grouping=None`
+disables numerator comparison. Diagrams still contain their vertex, propagator and aggregate
+numerators. As in the current GammaLoop `--only-diagrams` path, generation does not construct
+an evaluable integrand. Numerator validation first checks identical factored expressions;
+it expands only when needed to compare differing representations.
+
+For process-dependent filters and grouping, `...` in the signature means automatic defaults.
+Pass an options object to customize a filter, or `None` to disable it. The same distinction
+applies to factorized-loop, cut-blob and spectator ranges.
 
 // docs-example: compile
 ```python
@@ -62,7 +78,7 @@ import symbolica.community.feynkit as fk
 
 process = fk.Process.amplitude(["e-", "e+"], ["mu-", "mu+"])
 process = process.with_loop_count(1, 1)
-result = fk.Generator(model).generate(process, max_vertices=6)
+result = fk.Generator(model).generate(process, max_vertices=6, maximum_bridges=None)
 ```
 
 Here `model` must provide those particles. Loop range, vertex bounds, allowed interactions,
@@ -104,7 +120,7 @@ with mo.status.spinner(title="Generating diagrams") as status:
         )
 
     result = model.generate_diagrams(
-        ["e-", "e+"], ["mu-", "mu+"], loops=1, progress=report
+        ["e-", "e+"], ["mu-", "mu+"], loops=1, maximum_bridges=None, progress=report
     )
 ```
 
@@ -121,7 +137,7 @@ def no_self_edges(topology, completed_vertices):
 
 result = model.generate_diagrams(
     ["e-", "e+"], ["mu-", "mu+"], loops=1,
-    allow_self_loops=True, filter=no_self_edges,
+    allow_self_loops=True, maximum_bridges=None, filter=no_self_edges,
 )
 ```
 
