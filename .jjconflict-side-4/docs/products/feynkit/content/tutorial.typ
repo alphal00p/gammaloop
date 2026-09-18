@@ -76,6 +76,67 @@ interrupt stops generation and raises `KeyboardInterrupt`; exceptions from custo
 signal handlers also propagate. Cancelling an explicit `CancellationToken` instead returns
 an incomplete result, preserving that API's existing partial-result behavior.
 
+== Observe progress and prune partial topologies
+
+Both generation methods accept `progress=callback`. The callback receives an immutable
+`GenerationProgress` with `stage`, `completed`, and `total`. Counts restart at each stage;
+`total is None` means the amount of work is unknown, so show a spinner instead of a
+percentage. Topology enumeration counts discovered unique graphs, not every explored branch.
+Later stages count processed inputs, which may be rejected. `complete` reports the final
+retained count; `cancelled` marks a partial result. The stages are `topologies`,
+`topology_filters`, `interactions`, `interaction_filters`, `numerators`, `selection`,
+`grouping`, and the terminal stage.
+
+Native workers publish snapshots; Python callbacks run on the thread that called generation,
+so Marimo keeps its cell context. Updates within a stage are coalesced to about 150 ms;
+stage transitions and completion are delivered promptly. Browser kernels invoke callbacks on
+their calling thread. Callback delivery itself does not force a browser paint or UI refresh.
+
+// docs-example: compile
+```python
+import marimo as mo
+
+with mo.status.spinner(title="Generating diagrams") as status:
+    def report(progress):
+        status.update(
+            title=progress.stage.replace("_", " ").title(),
+            subtitle=f"{progress.completed:,} processed",
+        )
+
+    result = model.generate_diagrams(
+        ["e-", "e+"], ["mu-", "mu+"], loops=1, progress=report
+    )
+```
+
+Use `filter=callback` for live pruning during enumeration. It receives a Symbolica `Graph`
+snapshot and `completed_vertices`: the first N vertices have all their incident edges fixed,
+while later vertices may still gain edges. Returning `False` rejects that search branch,
+without cancelling the run. Reject only conditions that cannot become acceptable as the
+partial graph grows; a numerator or UV-degree test requires a finished `FeynmanDiagram`.
+
+// docs-example: compile
+```python
+def no_self_edges(topology, completed_vertices):
+    return all(source != target for source, target, directed, pdg in topology.edges())
+
+result = model.generate_diagrams(
+    ["e-", "e+"], ["mu-", "mu+"], loops=1,
+    allow_self_loops=True, filter=no_self_edges,
+)
+```
+
+This example illustrates the callback contract; for this particular condition, prefer the
+built-in `allow_self_loops=False` option to avoid Python callback overhead.
+
+Node data is a Symbolica integer: 0 for an interaction vertex, `-(index+1)` for an incoming
+external leg, and `+(index+1)` for an outgoing leg, using the generator's external-leg index.
+Edge data is the base particle's PDG code; directed edges distinguish particle flow from
+antiparticle flow. These snapshots can be retained or modified without changing generation.
+Keep the filter cheap: it runs synchronously for enumeration candidates, and the current
+Symbolica API requires building each Python snapshot through `Graph.add_node` and
+`Graph.add_edge`. No FeynKit topology wrapper or independent graph algorithms are involved.
+Exceptions from either callback cancel generation and propagate unchanged.
+
 == Inspect the propagator denominator
 
 // docs-example: compile

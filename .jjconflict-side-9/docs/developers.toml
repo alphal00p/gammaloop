@@ -109,7 +109,9 @@ anchor = "pub fn generate("
 # the architecture and this scope now follow its canonical owner.
 # Reviewed 2026-09-16: browser kernels use the same coloring pipeline serially;
 # native Rayon configuration and generation ownership remain unchanged.
-digest = "568be96517f1bc6d10989615eb8ade857c44f5a4"
+# Reviewed 2026-09-18: stage/count snapshots and partial-topology filtering
+# share the existing generator and calling-thread Python execution boundary.
+digest = "c3133a02b987b31a311de3dfeae8d72973d64de9"
 
 [[section.note.scope]]
 path = "crates/feynkit-model/src/model.rs"
