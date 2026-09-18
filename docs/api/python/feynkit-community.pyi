@@ -7,6 +7,7 @@ import enum
 import os
 import pathlib
 import typing
+from symbolica.community.spenso import TensorExpression
 from symbolica.core import Expression
 
 @typing.final
@@ -78,7 +79,7 @@ class CancellationToken:
     r"""
     A thread-safe signal for cancelling a long diagram-generation job.
 
-    Share one token through ``GenerationOptions`` and call ``cancel`` from a
+    Pass one token as ``cancellation_token`` and call ``cancel`` from a
     controlling thread when a large topology search should stop early.
 
     Examples
@@ -688,9 +689,9 @@ class DiagramEdge:
         Raises :class:`DiagramError` for an incomplete imported diagram that has
         no instantiated propagator numerator.
         """
-    def numerator_expression(self) -> Expression:
+    def numerator_expression(self) -> TensorExpression:
         r"""
-        Parse the numerator annotation as a Symbolica expression.
+        Return the numerator annotation as a Spenso TensorExpression.
 
         Examples
         --------
@@ -844,9 +845,9 @@ class DiagramVertex:
         --------
         >>> external_vertices = [vertex for vertex in diagram.vertices if vertex.is_external]
         """
-    def numerator_expression(self) -> Expression:
+    def numerator_expression(self) -> TensorExpression:
         r"""
-        Parse the numerator annotation as a Symbolica expression.
+        Return the numerator annotation as a Spenso TensorExpression.
 
         Examples
         --------
@@ -1140,9 +1141,9 @@ class FeynmanDiagram:
         dot : str
             DOT text containing the diagram topology and FeynKit annotations.
         """
-    def numerator_expression(self) -> Expression:
+    def numerator_expression(self) -> TensorExpression:
         r"""
-        Parse the diagram numerator as a Symbolica expression.
+        Return the diagram numerator as a Spenso TensorExpression.
 
         Examples
         --------
@@ -1718,468 +1719,6 @@ class GenerationError(FeynkitError):
     ...
 
 @typing.final
-class GenerationOptions:
-    r"""
-    Configuration for Feynman-diagram generation and filtering.
-
-    Options control parallelism, topology limits, graph filters, numerator
-    grouping, and cancellation without changing the physical process itself.
-
-    Examples
-    --------
-    >>> import symbolica.community.feynkit as fk
-    >>> options = fk.GenerationOptions(threads=4, max_vertices=8)
-
-    Parameters
-    ----------
-    threads : int, optional
-        Number of worker threads used during generation.
-    max_vertices : int, optional
-        Maximum number of interaction vertices in a generated topology.
-    allow_self_loops : bool, optional
-        Permit propagators that start and end on the same vertex.
-    allow_zero_flow_edges : bool, optional
-        Permit internal edges with identically zero momentum flow.
-    graph_prefix : str, optional
-        Prefix assigned to generated diagram names.
-    """
-    def __new__(cls, *, threads: typing.Optional[builtins.int] = None, max_vertices: typing.Optional[builtins.int] = None, allow_self_loops: builtins.bool = False, allow_zero_flow_edges: builtins.bool = False, graph_prefix: typing.Optional[builtins.str] = None) -> GenerationOptions:
-        r"""
-        Create generation options with resource limits and topology allowances.
-
-        Examples
-        --------
-        >>> options = fk.GenerationOptions(threads=4, max_vertices=8)
-
-        Parameters
-        ----------
-        threads : int or None, optional
-            Number of worker threads; ``None`` uses the generator default.
-        max_vertices : int or None, optional
-            Maximum number of interaction vertices; ``None`` applies no override.
-        allow_self_loops : bool, optional
-            Allow edges whose two endpoints are the same vertex.
-        allow_zero_flow_edges : bool, optional
-            Allow edges carrying zero momentum flow.
-        graph_prefix : str or None, optional
-            Prefix assigned to generated graph names.
-        """
-    def set_cancellation_token(self, token: CancellationToken) -> None:
-        r"""
-        Use a shared token to make generation cancellable.
-
-        Examples
-        --------
-        >>> options.set_cancellation_token(token)
-
-        Parameters
-        ----------
-        token : CancellationToken
-            Token whose cancellation state is checked during generation.
-        """
-    def add_particle_veto(self, particles: typing.Sequence[Particle | builtins.str | builtins.int]) -> None:
-        r"""
-        Reject every graph containing any listed particle.
-
-        Examples
-        --------
-        >>> bottom = model.particle_by_pdg(5)
-        >>> options.add_particle_veto([bottom, bottom.antiparticle])
-
-        Parameters
-        ----------
-        particles : sequence[Particle | str | int]
-            Particles, model names, or signed PDG codes forbidden on graph edges.
-        """
-    def add_vertex_allow(self, vertices: typing.Sequence[VertexRule | builtins.str]) -> None:
-        r"""
-        Keep only graphs whose interaction vertices use allowed vertex names.
-
-        Examples
-        --------
-        >>> options.add_vertex_allow(["QED_vertex"])
-
-        Parameters
-        ----------
-        vertices : sequence[VertexRule | str]
-            Model vertex rules or names allowed in generated graphs.
-        """
-    def add_vertex_veto(self, vertices: typing.Sequence[VertexRule | builtins.str]) -> None:
-        r"""
-        Reject graphs containing any listed interaction vertex.
-
-        Examples
-        --------
-        >>> options.add_vertex_veto(["effective_vertex"])
-
-        Parameters
-        ----------
-        vertices : sequence[VertexRule | str]
-            Model vertex rules or names forbidden in generated graphs.
-        """
-    def set_maximum_bridges(self, maximum: builtins.int) -> None:
-        r"""
-        Reject graphs with more than the specified number of bridge edges.
-
-        Examples
-        --------
-        >>> options.set_maximum_bridges(2)
-
-        Parameters
-        ----------
-        maximum : int
-            Largest allowed number of graph bridges.
-        """
-    def set_self_energy_filter(self, *, veto_massive: builtins.bool = True, veto_massless: builtins.bool = True, only_scaleless: builtins.bool = False) -> None:
-        r"""
-        Configure rejection of self-energy subgraphs by mass category.
-
-        Examples
-        --------
-        >>> options.set_self_energy_filter(veto_massive=True, veto_massless=True)
-
-        Parameters
-        ----------
-        veto_massive : bool, optional
-            Reject self energies carried by massive particles.
-        veto_massless : bool, optional
-            Reject self energies carried by massless particles.
-        only_scaleless : bool, optional
-            Currently unsupported; ``True`` makes generation return an error.
-        """
-    def set_tadpole_filter(self, *, veto_attached_to_massive: builtins.bool = True, veto_attached_to_massless: builtins.bool = True, only_scaleless: builtins.bool = False) -> None:
-        r"""
-        Configure rejection of tadpoles by the mass of their attachment.
-
-        Examples
-        --------
-        >>> options.set_tadpole_filter(veto_attached_to_massless=True)
-
-        Parameters
-        ----------
-        veto_attached_to_massive : bool, optional
-            Reject tadpoles attached through a massive particle.
-        veto_attached_to_massless : bool, optional
-            Reject tadpoles attached through a massless particle.
-        only_scaleless : bool, optional
-            Currently unsupported; ``True`` makes generation return an error.
-        """
-    def set_zero_snail_filter(self, *, veto_attached_to_massive: builtins.bool = False, veto_attached_to_massless: builtins.bool = True, only_scaleless: builtins.bool = False) -> None:
-        r"""
-        Configure rejection of zero-momentum snail subgraphs.
-
-        Examples
-        --------
-        >>> options.set_zero_snail_filter(veto_attached_to_massless=True)
-
-        Parameters
-        ----------
-        veto_attached_to_massive : bool, optional
-            Reject zero-momentum snails attached through a massive particle.
-        veto_attached_to_massless : bool, optional
-            Reject zero-momentum snails attached through a massless particle.
-        only_scaleless : bool, optional
-            Currently unsupported; ``True`` makes generation return an error.
-        """
-    def set_coupling_orders(self, orders: typing.Mapping[builtins.str, tuple[builtins.int, typing.Optional[builtins.int]]]) -> None:
-        r"""
-        Restrict total coupling-order powers to inclusive ranges.
-
-        Examples
-        --------
-        >>> options.set_coupling_orders({"QED": (2, 4), "QCD": (0, None)})
-
-        Parameters
-        ----------
-        orders : dict[str, tuple[int, int or None]]
-            Coupling name mapped to its minimum and optional inclusive maximum power.
-        """
-    def set_loop_count_range(self, minimum: builtins.int, maximum: builtins.int) -> None:
-        r"""
-        Restrict generated graphs to an inclusive loop-count range.
-
-        Examples
-        --------
-        >>> options.set_loop_count_range(1, 2)
-
-        Parameters
-        ----------
-        minimum : int
-            Minimum number of loops.
-        maximum : int
-            Maximum number of loops, inclusive.
-        """
-    def set_fermion_loop_count_range(self, minimum: builtins.int, maximum: builtins.int) -> None:
-        r"""
-        Restrict generated graphs to an inclusive fermion-loop-count range.
-
-        Examples
-        --------
-        >>> options.set_fermion_loop_count_range(0, 1)
-
-        Parameters
-        ----------
-        minimum : int
-            Minimum number of closed fermion loops.
-        maximum : int
-            Maximum number of closed fermion loops, inclusive.
-        """
-    def set_factorized_loop_topologies_count_range(self, minimum: builtins.int, maximum: builtins.int) -> None:
-        r"""
-        Restrict the number of factorized loop-topology components.
-
-        Examples
-        --------
-        >>> options.set_factorized_loop_topologies_count_range(1, 2)
-
-        Parameters
-        ----------
-        minimum : int
-            Minimum number of factorized loop-topology components.
-        maximum : int
-            Maximum number of components, inclusive.
-        """
-    def set_blob_range(self, minimum: builtins.int, maximum: builtins.int) -> None:
-        r"""
-        Restrict cross-section graphs to an inclusive blob-count range.
-
-        Examples
-        --------
-        >>> options.set_blob_range(1, 2)
-
-        Parameters
-        ----------
-        minimum : int
-            Minimum number of blobs.
-        maximum : int
-            Maximum number of blobs, inclusive.
-        """
-    def set_spectator_range(self, minimum: builtins.int, maximum: builtins.int) -> None:
-        r"""
-        Restrict cross-section graphs to an inclusive spectator-count range.
-
-        Examples
-        --------
-        >>> options.set_spectator_range(0, 1)
-
-        Parameters
-        ----------
-        minimum : int
-            Minimum number of spectator lines.
-        maximum : int
-            Maximum number of spectator lines, inclusive.
-        """
-    def set_perturbative_orders(self, orders: typing.Mapping[builtins.str, builtins.int]) -> None:
-        r"""
-        Require exact perturbative orders for cross-section graphs.
-
-        Examples
-        --------
-        >>> options.set_perturbative_orders({"QED": 2, "QCD": 1})
-
-        Parameters
-        ----------
-        orders : dict[str, int]
-            Coupling name mapped to its required perturbative power.
-        """
-    def set_sewn_filter(self, *, filter_tadpoles: builtins.bool = True) -> None:
-        r"""
-        Configure rejection of tadpole topologies revealed by sewing cross-section sides.
-
-        Examples
-        --------
-        >>> options.set_sewn_filter(filter_tadpoles=True)
-
-        Parameters
-        ----------
-        filter_tadpoles : bool, optional
-            Reject sewn tadpole topologies; ``False`` disables this check.
-        """
-    def set_cut_amplitude_coupling_orders(self, orders: typing.Mapping[builtins.str, tuple[builtins.int, typing.Optional[builtins.int]]]) -> None:
-        r"""
-        Restrict coupling orders independently within every cut amplitude.
-
-        Examples
-        --------
-        >>> options.set_cut_amplitude_coupling_orders({"QED": (1, 2)})
-
-        Parameters
-        ----------
-        orders : dict[str, tuple[int, int or None]]
-            Coupling name mapped to its minimum and optional inclusive maximum power.
-        """
-    def set_cut_amplitude_loop_count_range(self, minimum: builtins.int, maximum: builtins.int) -> None:
-        r"""
-        Restrict the summed loop count across both sides of every cut.
-
-        Examples
-        --------
-        >>> options.set_cut_amplitude_loop_count_range(0, 1)
-
-        Parameters
-        ----------
-        minimum : int
-            Minimum combined loop count of the two cut amplitudes.
-        maximum : int
-            Maximum combined loop count, inclusive.
-        """
-    def select_diagrams(self, diagrams: typing.Sequence[FeynmanDiagram | builtins.str]) -> None:
-        r"""
-        Retain only diagrams with the listed finalized names.
-
-        Examples
-        --------
-        >>> options.select_diagrams(["FK0"])
-
-        Parameters
-        ----------
-        diagrams : sequence[FeynmanDiagram | str]
-            Diagram objects, content-derived IDs, or deterministic names to retain.
-        """
-    def veto_diagrams(self, diagrams: typing.Sequence[FeynmanDiagram | builtins.str]) -> None:
-        r"""
-        Remove diagrams with the listed finalized names.
-
-        Examples
-        --------
-        >>> options.veto_diagrams(["FK2"])
-
-        Parameters
-        ----------
-        diagrams : sequence[FeynmanDiagram | str]
-            Diagram objects, content-derived IDs, or deterministic names to remove.
-        """
-    def set_loop_momentum_basis(self, diagram: FeynmanDiagram | builtins.str, edges: typing.Sequence[builtins.int]) -> None:
-        r"""
-        Select the ordered loop-momentum edges for one diagram.
-
-        Examples
-        --------
-        >>> options.set_loop_momentum_basis("FK0", [2])
-
-        Parameters
-        ----------
-        diagram : str
-            Finalized deterministic diagram name.
-        edges : sequence[int]
-            Ordered stable edge IDs carrying independent loop momenta.
-        """
-    def set_numerator_prefactor(self, expression: Expression) -> None:
-        r"""
-        Multiply every generated numerator by a Symbolica expression.
-
-        Examples
-        --------
-        >>> options.set_numerator_prefactor(model.parameter("aS").symbol)
-
-        Parameters
-        ----------
-        expression : Expression
-            Scalar numerator multiplier retained on every finalized diagram.
-        """
-    def set_projector(self, expression: Expression) -> None:
-        r"""
-        Override the automatically generated external-state projector.
-
-        Examples
-        --------
-        >>> from symbolica import S
-        >>> transverse_sum = S("g(mu,nu)-p(mu)*p(nu)/p2")
-        >>> options.set_projector(transverse_sum)
-
-        Parameters
-        ----------
-        expression : Expression
-            Symbolica tensor expression used for external-state contraction.
-            Passing ``S("1")`` explicitly disables external wavefunctions.
-        """
-    def disable_numerator_grouping(self) -> None:
-        r"""
-        Disable numerator parsing, zero detection, and cross-diagram grouping.
-
-        Examples
-        --------
-        >>> options.disable_numerator_grouping()
-        """
-    def detect_zero_numerators(self) -> None:
-        r"""
-        Detect zero numerators without grouping the remaining diagrams.
-
-        Examples
-        --------
-        >>> options.detect_zero_numerators()
-        """
-    def group_identical_numerators(self, *, numerical_sample_seed: builtins.int = 3, number_of_numerical_samples: builtins.int = 5, differentiate_particle_masses_only: builtins.bool = True, fully_numerical_substitution: builtins.bool = False, check_canonical_numerator: builtins.bool = False, symmetric_polarizations: builtins.bool = False) -> None:
-        r"""
-        Group diagrams only when their numerators are identical.
-
-        Examples
-        --------
-        >>> options.group_identical_numerators(number_of_numerical_samples=7)
-
-        Parameters
-        ----------
-        numerical_sample_seed : int, optional
-            Deterministic seed used to choose numerical substitution values.
-        number_of_numerical_samples : int, optional
-            Number of independent substitutions used to compare numerators.
-        differentiate_particle_masses_only : bool, optional
-            Treat internal species with equal mass and spin as interchangeable.
-        fully_numerical_substitution : bool, optional
-            Substitute scalar parameters as well as nonscalar indeterminates.
-        check_canonical_numerator : bool, optional
-            Try an exact canonical comparison before numerical sampling.
-        symmetric_polarizations : bool, optional
-            Reuse wavefunction samples across the two sides of a sewn external state.
-        """
-    def group_numerators_up_to_sign(self, *, numerical_sample_seed: builtins.int = 3, number_of_numerical_samples: builtins.int = 5, differentiate_particle_masses_only: builtins.bool = True, fully_numerical_substitution: builtins.bool = False, check_canonical_numerator: builtins.bool = False, symmetric_polarizations: builtins.bool = False) -> None:
-        r"""
-        Group diagrams whose numerators differ only by an overall sign.
-
-        Examples
-        --------
-        >>> options.group_numerators_up_to_sign(check_canonical_numerator=True)
-
-        Parameters
-        ----------
-        numerical_sample_seed : int, optional
-            Deterministic seed used to choose numerical substitution values.
-        number_of_numerical_samples : int, optional
-            Number of independent substitutions used to compare numerators.
-        differentiate_particle_masses_only : bool, optional
-            Treat internal species with equal mass and spin as interchangeable.
-        fully_numerical_substitution : bool, optional
-            Substitute scalar parameters as well as nonscalar indeterminates.
-        check_canonical_numerator : bool, optional
-            Try an exact canonical comparison before numerical sampling.
-        symmetric_polarizations : bool, optional
-            Reuse wavefunction samples across the two sides of a sewn external state.
-        """
-    def group_numerators_up_to_scalar(self, *, numerical_sample_seed: builtins.int = 3, number_of_numerical_samples: builtins.int = 5, differentiate_particle_masses_only: builtins.bool = True, fully_numerical_substitution: builtins.bool = False, check_canonical_numerator: builtins.bool = False, symmetric_polarizations: builtins.bool = False) -> None:
-        r"""
-        Group diagrams whose numerators differ by a scalar factor.
-
-        Examples
-        --------
-        >>> options.group_numerators_up_to_scalar(fully_numerical_substitution=True)
-
-        Parameters
-        ----------
-        numerical_sample_seed : int, optional
-            Deterministic seed used to choose numerical substitution values.
-        number_of_numerical_samples : int, optional
-            Number of independent substitutions used to compare numerators.
-        differentiate_particle_masses_only : bool, optional
-            Treat internal species with equal mass and spin as interchangeable.
-        fully_numerical_substitution : bool, optional
-            Substitute scalar parameters as well as nonscalar indeterminates.
-        check_canonical_numerator : bool, optional
-            Try an exact canonical comparison before numerical sampling.
-        symmetric_polarizations : bool, optional
-            Reuse wavefunction samples across the two sides of a sewn external state.
-        """
-
-@typing.final
 class GenerationReport:
     r"""
     Counts and completion status from a diagram-generation run.
@@ -2383,7 +1922,7 @@ class Generator:
         model : Model
             Particle model supplying particles, interactions, and parameters.
         """
-    def generate(self, process: Process, options: typing.Optional[GenerationOptions] = None) -> GenerationResult:
+    def generate(self, process: Process, *, threads: typing.Optional[builtins.int] = None, max_vertices: typing.Optional[builtins.int] = None, allow_self_loops: builtins.bool = False, allow_zero_flow_edges: builtins.bool = False, graph_prefix: typing.Optional[builtins.str] = None, particle_veto: typing.Optional[typing.Sequence[Particle | builtins.str | builtins.int]] = None, vertex_allow: typing.Optional[typing.Sequence[VertexRule | builtins.str]] = None, vertex_veto: typing.Optional[typing.Sequence[VertexRule | builtins.str]] = None, maximum_bridges: typing.Optional[builtins.int] = None, self_energy: typing.Optional[SelfEnergyFilterOptions] = None, tadpoles: typing.Optional[TadpoleFilterOptions] = None, zero_snails: typing.Optional[SnailFilterOptions] = None, coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, fermion_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, factorized_loop_topologies_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, blob_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, spectator_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, perturbative_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int]] = None, sewn_tadpoles: typing.Optional[builtins.bool] = None, cut_amplitude_coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, cut_amplitude_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, select_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, veto_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, loop_momentum_bases: typing.Optional[typing.Sequence[tuple[FeynmanDiagram | builtins.str, typing.Sequence[builtins.int]]]] = None, numerator_prefactor: typing.Optional[Expression] = None, projector: typing.Optional[Expression] = None, numerator_grouping: typing.Optional[NumeratorGrouping] = None, cancellation_token: typing.Optional[CancellationToken] = None) -> GenerationResult:
         r"""
         Generate and optionally group all diagrams matching a process.
 
@@ -2394,15 +1933,69 @@ class Generator:
 
         Examples
         --------
-        >>> result = generator.generate(process, options)
+        >>> result = generator.generate(process, max_vertices=6)
         >>> combined_numerator = result.diagrams[0].numerator_expression()
 
         Parameters
         ----------
         process : Process
             Scattering process and loop range to generate.
-        options : GenerationOptions or None, optional
-            Filters, limits, grouping mode, and cancellation state to apply.
+        threads : int or None, optional
+            Number of worker threads; None uses the generator default.
+        max_vertices : int or None, optional
+            Maximum interaction vertices; None applies no override.
+        allow_self_loops : bool, optional
+            Permit propagators that start and end on the same vertex.
+        allow_zero_flow_edges : bool, optional
+            Permit internal edges with identically zero momentum flow.
+        graph_prefix : str or None, optional
+            Prefix assigned to generated diagram names.
+        particle_veto : sequence[Particle | str | int] or None, optional
+            Reject graphs containing these particles, model names, or signed PDG codes.
+        vertex_allow : sequence[VertexRule | str] or None, optional
+            Keep only graphs whose vertices use these model rules or names.
+        vertex_veto : sequence[VertexRule | str] or None, optional
+            Reject graphs containing these interaction vertices.
+        maximum_bridges : int or None, optional
+            Largest allowed number of graph bridges.
+        self_energy : SelfEnergyFilterOptions or None, optional
+            Reject self-energy subgraphs by mass category; None applies no filter.
+        tadpoles : TadpoleFilterOptions or None, optional
+            Reject tadpoles by attachment mass; None applies no filter.
+        zero_snails : SnailFilterOptions or None, optional
+            Reject zero-momentum snails by attachment mass; None applies no filter.
+        coupling_orders : dict[str, int | tuple[int, int or None]] or None, optional
+            Exact coupling powers or inclusive ranges; an upper None is unbounded.
+        fermion_loop_count_range : tuple[int, int] or None, optional
+            Inclusive range of closed fermion loops.
+        factorized_loop_topologies_count_range : tuple[int, int] or None, optional
+            Inclusive range of factorized loop-topology components.
+        blob_range : tuple[int, int] or None, optional
+            Inclusive cross-section blob-count range.
+        spectator_range : tuple[int, int] or None, optional
+            Inclusive cross-section spectator-count range.
+        perturbative_orders : dict[str, int] or None, optional
+            Exact perturbative powers required for cross-section graphs.
+        sewn_tadpoles : bool or None, optional
+            Reject tadpoles revealed by sewing cross-section sides; None applies no filter.
+        cut_amplitude_coupling_orders : dict[str, int | tuple[int, int or None]] or None, optional
+            Coupling-order bounds applied independently within every cut amplitude.
+        cut_amplitude_loop_count_range : tuple[int, int] or None, optional
+            Inclusive combined loop count across both sides of every cut.
+        select_diagrams : sequence[FeynmanDiagram | str] or None, optional
+            Retain only these diagram objects, content-derived IDs, or finalized names.
+        veto_diagrams : sequence[FeynmanDiagram | str] or None, optional
+            Remove these diagram objects, content-derived IDs, or finalized names.
+        loop_momentum_bases : sequence[tuple[FeynmanDiagram | str, sequence[int]]] or None, optional
+            Diagram selectors paired with ordered stable edge IDs for independent loop momenta.
+        numerator_prefactor : Expression or None, optional
+            Scalar multiplier retained on every finalized diagram numerator.
+        projector : Expression or None, optional
+            Override external-state contraction; S("1") disables external wavefunctions.
+        numerator_grouping : NumeratorGrouping or None, optional
+            Zero detection and numerator comparison; None disables parsing and grouping.
+        cancellation_token : CancellationToken or None, optional
+            Shared token for cancelling a running generation task.
         """
 
 @typing.final
@@ -3177,7 +2770,7 @@ class Model:
         json : str
             Serialized model object.
         """
-    def generate_diagrams(self, incoming: typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int], outgoing: typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int], *, kind: builtins.str = 'amplitude', loops: builtins.int | tuple[builtins.int, builtins.int] = 0, options: typing.Optional[GenerationOptions] = None, final_state_alternatives: typing.Optional[typing.Sequence[typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int]]] = None) -> GenerationResult:
+    def generate_diagrams(self, incoming: typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int], outgoing: typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int], *, kind: builtins.str = 'amplitude', loops: builtins.int | tuple[builtins.int, builtins.int] = 0, final_state_alternatives: typing.Optional[typing.Sequence[typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int]]] = None, threads: typing.Optional[builtins.int] = None, max_vertices: typing.Optional[builtins.int] = None, allow_self_loops: builtins.bool = False, allow_zero_flow_edges: builtins.bool = False, graph_prefix: typing.Optional[builtins.str] = None, particle_veto: typing.Optional[typing.Sequence[Particle | builtins.str | builtins.int]] = None, vertex_allow: typing.Optional[typing.Sequence[VertexRule | builtins.str]] = None, vertex_veto: typing.Optional[typing.Sequence[VertexRule | builtins.str]] = None, maximum_bridges: typing.Optional[builtins.int] = None, self_energy: typing.Optional[SelfEnergyFilterOptions] = None, tadpoles: typing.Optional[TadpoleFilterOptions] = None, zero_snails: typing.Optional[SnailFilterOptions] = None, coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, fermion_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, factorized_loop_topologies_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, blob_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, spectator_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, perturbative_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int]] = None, sewn_tadpoles: typing.Optional[builtins.bool] = None, cut_amplitude_coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, cut_amplitude_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, select_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, veto_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, loop_momentum_bases: typing.Optional[typing.Sequence[tuple[FeynmanDiagram | builtins.str, typing.Sequence[builtins.int]]]] = None, numerator_prefactor: typing.Optional[Expression] = None, projector: typing.Optional[Expression] = None, numerator_grouping: typing.Optional[NumeratorGrouping] = None, cancellation_token: typing.Optional[CancellationToken] = None) -> GenerationResult:
         r"""
         Generate amplitude or cross-section diagrams from this model.
 
@@ -3192,11 +2785,10 @@ class Model:
         --------
         Generate one-loop scalar amplitudes directly from their model:
 
-        >>> options = fk.GenerationOptions(max_vertices=3, allow_self_loops=True)
         >>> scalar = model.particle("scalar_0")
         >>> result = model.generate_diagrams(
         ...     [scalar], [scalar, scalar.antiparticle],
-        ...     loops=1, options=options,
+        ...     loops=1, max_vertices=3, allow_self_loops=True,
         ... )
         >>> diagram = result.diagrams[0]
         >>> diagram.numerator_expression()
@@ -3211,8 +2803,62 @@ class Model:
             Graph structure to generate.
         loops : int or tuple[int, int], optional
             Exact loop order or inclusive minimum and maximum.
-        options : GenerationOptions or None, optional
-            Generation filters and limits; defaults to standard options.
+        threads : int or None, optional
+            Number of worker threads; None uses the generator default.
+        max_vertices : int or None, optional
+            Maximum interaction vertices; None applies no override.
+        allow_self_loops : bool, optional
+            Permit propagators that start and end on the same vertex.
+        allow_zero_flow_edges : bool, optional
+            Permit internal edges with identically zero momentum flow.
+        graph_prefix : str or None, optional
+            Prefix assigned to generated diagram names.
+        particle_veto : sequence[Particle | str | int] or None, optional
+            Reject graphs containing these particles, model names, or signed PDG codes.
+        vertex_allow : sequence[VertexRule | str] or None, optional
+            Keep only graphs whose vertices use these model rules or names.
+        vertex_veto : sequence[VertexRule | str] or None, optional
+            Reject graphs containing these interaction vertices.
+        maximum_bridges : int or None, optional
+            Largest allowed number of graph bridges.
+        self_energy : SelfEnergyFilterOptions or None, optional
+            Reject self-energy subgraphs by mass category; None applies no filter.
+        tadpoles : TadpoleFilterOptions or None, optional
+            Reject tadpoles by attachment mass; None applies no filter.
+        zero_snails : SnailFilterOptions or None, optional
+            Reject zero-momentum snails by attachment mass; None applies no filter.
+        coupling_orders : dict[str, int | tuple[int, int or None]] or None, optional
+            Exact coupling powers or inclusive ranges; an upper None is unbounded.
+        fermion_loop_count_range : tuple[int, int] or None, optional
+            Inclusive range of closed fermion loops.
+        factorized_loop_topologies_count_range : tuple[int, int] or None, optional
+            Inclusive range of factorized loop-topology components.
+        blob_range : tuple[int, int] or None, optional
+            Inclusive cross-section blob-count range.
+        spectator_range : tuple[int, int] or None, optional
+            Inclusive cross-section spectator-count range.
+        perturbative_orders : dict[str, int] or None, optional
+            Exact perturbative powers required for cross-section graphs.
+        sewn_tadpoles : bool or None, optional
+            Reject tadpoles revealed by sewing cross-section sides; None applies no filter.
+        cut_amplitude_coupling_orders : dict[str, int | tuple[int, int or None]] or None, optional
+            Coupling-order bounds applied independently within every cut amplitude.
+        cut_amplitude_loop_count_range : tuple[int, int] or None, optional
+            Inclusive combined loop count across both sides of every cut.
+        select_diagrams : sequence[FeynmanDiagram | str] or None, optional
+            Retain only these diagram objects, content-derived IDs, or finalized names.
+        veto_diagrams : sequence[FeynmanDiagram | str] or None, optional
+            Remove these diagram objects, content-derived IDs, or finalized names.
+        loop_momentum_bases : sequence[tuple[FeynmanDiagram | str, sequence[int]]] or None, optional
+            Diagram selectors paired with ordered stable edge IDs for independent loop momenta.
+        numerator_prefactor : Expression or None, optional
+            Scalar multiplier retained on every finalized diagram numerator.
+        projector : Expression or None, optional
+            Override external-state contraction; S("1") disables external wavefunctions.
+        numerator_grouping : NumeratorGrouping or None, optional
+            Zero detection and numerator comparison; None disables parsing and grouping.
+        cancellation_token : CancellationToken or None, optional
+            Shared token for cancelling a running generation task.
         final_state_alternatives : sequence[sequence[Particle | ParticleSelector | str | int]] or None, optional
             Extra outgoing states for a cross section.
         """
@@ -3609,6 +3255,60 @@ class MomentumSignature:
             The IPython pretty-printer object.
         cycle : bool
             Whether this object is part of a recursive formatting cycle.
+        """
+
+@typing.final
+class NumeratorGrouping:
+    r"""
+    Choose numerator zero detection and cross-diagram grouping.
+
+    Examples
+    --------
+    >>> fk.NumeratorGrouping("identical", number_of_numerical_samples=7)
+
+    Parameters
+    ----------
+    mode : {"none", "zeroes", "identical", "up_to_sign", "up_to_scalar"}
+        Disable parsing/grouping, detect only zeroes, or compare numerators
+        exactly, up to a sign, or up to a scalar factor.
+    numerical_sample_seed : int, optional
+        Deterministic seed used to choose numerical substitution values.
+    number_of_numerical_samples : int, optional
+        Number of independent substitutions used to compare numerators.
+    differentiate_particle_masses_only : bool, optional
+        Treat internal species with equal mass and spin as interchangeable.
+    fully_numerical_substitution : bool, optional
+        Substitute scalar parameters as well as nonscalar indeterminates.
+    check_canonical_numerator : bool, optional
+        Try an exact canonical comparison before numerical sampling.
+    symmetric_polarizations : bool, optional
+        Reuse wavefunction samples across the two sides of a sewn external state.
+    """
+    def __new__(cls, mode: builtins.str, *, numerical_sample_seed: builtins.int = 3, number_of_numerical_samples: builtins.int = 5, differentiate_particle_masses_only: builtins.bool = True, fully_numerical_substitution: builtins.bool = False, check_canonical_numerator: builtins.bool = False, symmetric_polarizations: builtins.bool = False) -> NumeratorGrouping:
+        r"""
+        Choose numerator zero detection and cross-diagram grouping.
+
+        Examples
+        --------
+        >>> fk.NumeratorGrouping("identical", number_of_numerical_samples=7)
+
+        Parameters
+        ----------
+        mode : {"none", "zeroes", "identical", "up_to_sign", "up_to_scalar"}
+            Disable parsing/grouping, detect only zeroes, or compare numerators
+            exactly, up to a sign, or up to a scalar factor.
+        numerical_sample_seed : int, optional
+            Deterministic seed used to choose numerical substitution values.
+        number_of_numerical_samples : int, optional
+            Number of independent substitutions used to compare numerators.
+        differentiate_particle_masses_only : bool, optional
+            Treat internal species with equal mass and spin as interchangeable.
+        fully_numerical_substitution : bool, optional
+            Substitute scalar parameters as well as nonscalar indeterminates.
+        check_canonical_numerator : bool, optional
+            Try an exact canonical comparison before numerical sampling.
+        symmetric_polarizations : bool, optional
+            Reuse wavefunction samples across the two sides of a sewn external state.
         """
 
 @typing.final
@@ -4421,6 +4121,114 @@ class Rotation:
         ----------
         momentum : FourMomentum
             Four-momentum whose spatial components are inverse-rotated.
+        """
+
+@typing.final
+class SelfEnergyFilterOptions:
+    r"""
+    Configure rejection of self-energy subgraphs by mass category.
+
+    Examples
+    --------
+    >>> fk.SelfEnergyFilterOptions(veto_massive=True, veto_massless=True)
+
+    Parameters
+    ----------
+    veto_massive : bool, optional
+        Reject self energies carried by massive particles.
+    veto_massless : bool, optional
+        Reject self energies carried by massless particles.
+    only_scaleless : bool, optional
+        Currently unsupported; ``True`` makes generation return an error.
+    """
+    def __new__(cls, *, veto_massive: builtins.bool = True, veto_massless: builtins.bool = True, only_scaleless: builtins.bool = False) -> SelfEnergyFilterOptions:
+        r"""
+        Configure rejection of self-energy subgraphs by mass category.
+
+        Examples
+        --------
+        >>> fk.SelfEnergyFilterOptions(veto_massive=True, veto_massless=True)
+
+        Parameters
+        ----------
+        veto_massive : bool, optional
+            Reject self energies carried by massive particles.
+        veto_massless : bool, optional
+            Reject self energies carried by massless particles.
+        only_scaleless : bool, optional
+            Currently unsupported; ``True`` makes generation return an error.
+        """
+
+@typing.final
+class SnailFilterOptions:
+    r"""
+    Configure rejection of zero-momentum snail subgraphs.
+
+    Examples
+    --------
+    >>> fk.SnailFilterOptions(veto_attached_to_massless=True)
+
+    Parameters
+    ----------
+    veto_attached_to_massive : bool, optional
+        Reject zero-momentum snails attached through a massive particle.
+    veto_attached_to_massless : bool, optional
+        Reject zero-momentum snails attached through a massless particle.
+    only_scaleless : bool, optional
+        Currently unsupported; ``True`` makes generation return an error.
+    """
+    def __new__(cls, *, veto_attached_to_massive: builtins.bool = False, veto_attached_to_massless: builtins.bool = True, only_scaleless: builtins.bool = False) -> SnailFilterOptions:
+        r"""
+        Configure rejection of zero-momentum snail subgraphs.
+
+        Examples
+        --------
+        >>> fk.SnailFilterOptions(veto_attached_to_massless=True)
+
+        Parameters
+        ----------
+        veto_attached_to_massive : bool, optional
+            Reject zero-momentum snails attached through a massive particle.
+        veto_attached_to_massless : bool, optional
+            Reject zero-momentum snails attached through a massless particle.
+        only_scaleless : bool, optional
+            Currently unsupported; ``True`` makes generation return an error.
+        """
+
+@typing.final
+class TadpoleFilterOptions:
+    r"""
+    Configure rejection of tadpoles by the mass of their attachment.
+
+    Examples
+    --------
+    >>> fk.TadpoleFilterOptions(veto_attached_to_massless=True)
+
+    Parameters
+    ----------
+    veto_attached_to_massive : bool, optional
+        Reject tadpoles attached through a massive particle.
+    veto_attached_to_massless : bool, optional
+        Reject tadpoles attached through a massless particle.
+    only_scaleless : bool, optional
+        Currently unsupported; ``True`` makes generation return an error.
+    """
+    def __new__(cls, *, veto_attached_to_massive: builtins.bool = True, veto_attached_to_massless: builtins.bool = True, only_scaleless: builtins.bool = False) -> TadpoleFilterOptions:
+        r"""
+        Configure rejection of tadpoles by the mass of their attachment.
+
+        Examples
+        --------
+        >>> fk.TadpoleFilterOptions(veto_attached_to_massless=True)
+
+        Parameters
+        ----------
+        veto_attached_to_massive : bool, optional
+            Reject tadpoles attached through a massive particle.
+        veto_attached_to_massless : bool, optional
+            Reject tadpoles attached through a massless particle.
+        only_scaleless : bool, optional
+            Currently unsupported; ``True`` makes generation return an error.
         """
 
 @typing.final

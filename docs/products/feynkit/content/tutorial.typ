@@ -34,7 +34,27 @@ evaluation is an explicit boundary. Python callers can pass an evaluator to
 and returns `EvaluatedValues`; incomplete results raise `ModelError` without publishing a
 partially updated model.
 
-In Python, a process can be configured independently of generation:
+Python accepts generation settings directly as keyword arguments. Exact coupling orders use
+integers; pairs specify inclusive bounds, with `None` for an unbounded coupling maximum.
+Filter objects specify which subgraphs to reject. Omitting a filter leaves it disabled.
+
+// docs-example: compile
+```python
+import symbolica.community.feynkit as fk
+
+result = model.generate_diagrams(
+    incoming=["g"],
+    outgoing=["g"],
+    loops=1,
+    coupling_orders={"QCD": 2, "QED": 0},
+    particle_veto=["c", "t", "s", "u", "d"],
+    zero_snails=fk.SnailFilterOptions(veto_attached_to_massless=True),
+    threads=4,
+)
+```
+
+Reuse keyword settings with a Python dictionary and `**kwargs`; each call constructs a fresh
+Rust configuration. A process can also be configured independently of generation:
 
 // docs-example: compile
 ```python
@@ -42,13 +62,13 @@ import symbolica.community.feynkit as fk
 
 process = fk.Process.amplitude(["e-", "e+"], ["mu-", "mu+"])
 process = process.with_loop_count(1, 1)
-options = fk.GenerationOptions(max_vertices=6)
-result = fk.Generator(model).generate(process, options)
+result = fk.Generator(model).generate(process, max_vertices=6)
 ```
 
 Here `model` must provide those particles. Loop range, vertex bounds, allowed interactions,
 particle vetoes, coupling orders, and numerator grouping are explicit generation choices. An
-empty result can therefore mean the chosen constraints admit no graph. Inspect the generation
+empty result can therefore mean the chosen constraints admit no graph. This is a completed
+`GenerationResult` with zero retained diagrams, not a configuration error. Inspect the generation
 report and relax a specific constraint before enlarging the search indiscriminately.
 
 == Use finalized output

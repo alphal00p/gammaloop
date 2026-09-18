@@ -58,14 +58,14 @@ def _():
 
 
 @app.cell
-def _(fk, mo, model, table):
-    _options = fk.GenerationOptions(max_vertices=3, allow_self_loops=True)
-    _options.add_vertex_allow(["V_3_SCALAR_000"])
+def _(mo, model, table):
     _generated = model.generate_diagrams(
         ["scalar_0"],
         [1000, "scalar_0"],
         loops=(0, 1),
-        options=_options,
+        max_vertices=3,
+        allow_self_loops=True,
+        vertex_allow=["V_3_SCALAR_000"],
     )
 
     diagram = next(

@@ -22,9 +22,8 @@ integral-evaluation backend.
 import symbolica.community.feynkit as fk
 
 model = fk.Model("crates/feynkit-model/tests/fixtures/scalars_2p_3p.json")
-options = fk.GenerationOptions(max_vertices=3)
 result = model.generate_diagrams(
-    ["scalar_0"], ["scalar_0", "scalar_0"], loops=0, options=options
+    ["scalar_0"], ["scalar_0", "scalar_0"], loops=0, max_vertices=3
 )
 assert result.diagrams
 
