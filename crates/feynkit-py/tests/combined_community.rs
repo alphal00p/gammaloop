@@ -246,6 +246,11 @@ assert isinstance(indexed, spenso.TensorExpression)
 assert isinstance(indexed, core.Expression)
 assert indexed.rank == 4
 assert indexed.to_expression() == core.Expression.parse(indexed_diagram.numerator)
+assert "::Momentum(" in indexed_diagram.numerator
+assert "Momentum" not in str(indexed)
+assert "q₁" in str(indexed)
+assert "q_{1}" in indexed._repr_latex_()
+assert "Momentum" not in indexed.to_typst()
 for label in ("ˢ⁷.⁰", "ᵗ⁷.⁰", "ᵉ⁷.⁰", "ᵛ⁷.⁰"):
     assert label in str(indexed), str(indexed)
 for label in ("s", "t", "e", "v"):
@@ -264,7 +269,10 @@ else:
     # Scalar graphs use the same dashed-particle styling as exported Typst figures.
     assert "stroke-dasharray" in diagram.to_svg()
     assert "stroke-dasharray" in diagram._repr_html_()
-    for output in (indexed.to_html(), indexed.to_svg()):
+    html = indexed.to_html()
+    assert "Momentum" not in html
+    assert ">𝑞<" in html
+    for output in (html, indexed.to_svg()):
         assert "SourceIndex" not in output
         assert "SinkIndex" not in output
         assert "EdgeDummy" not in output

@@ -133,7 +133,7 @@ anchor = "pub struct FeynmanDiagram {"
 # Linnet has removed DOT quoting; physical metadata ownership is unchanged.
 # Reviewed 2026-09-17: the architecture now records graph-owned symbol
 # registration, shared Spenso index display hooks, and typed Python numerators.
-digest = "80a89f73e15d295ba6450baea9bffbe2292409a1"
+digest = "5b639a868020d1ba379673def4c4b275c88ed91b"
 
 [[section.note.scope]]
 path = "crates/feynkit-tensor/src/lib.rs"
