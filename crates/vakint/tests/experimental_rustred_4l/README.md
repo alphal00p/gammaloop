@@ -127,9 +127,11 @@ invalid FORM path, passed parent/dotted/pinch/rank-four probes, and applied
 26,956 rules in 441.43 s. The ordinary FMFT comparison was stopped after
 10m22 without a parity result, so no ordinary rank-four parity claim is made
 yet. The new `candidate_fg_clover_numerator_case_matches_fmft` lane reuses the
-registered FG parent witness for the analytic clover numerator; it remains
-unrun. A standalone four-slot clover descriptor is intentionally not shipped:
-the current matcher witness represents that case with eight physical slots.
+registered FG parent witness for all four literal Clover probes (unit mass,
+non-unit masses, dotted `k1^2`, and the rank-four numerator); it remains unrun.
+A standalone four-slot clover descriptor is intentionally not shipped: the
+current matcher witness represents that case as a contraction of an eight-slot
+parent.
 
 This checkpoint is **twelve finite-target comparisons plus one strict H
 rank-four catalog-only replay**, not all fifteen existing

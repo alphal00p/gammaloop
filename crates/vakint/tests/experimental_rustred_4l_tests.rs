@@ -219,7 +219,15 @@ fn candidate_parent_dotted_and_pinch_match_fmft() {
     let source = std::env::var("VAKINT_4L_CANDIDATE_PARENT_INPUT")
         .map(|path| std::fs::read_to_string(path).unwrap())
         .unwrap_or_else(|_| include_str!("inputs/experimental_four_loop_h.csv").into());
-    run_candidate_finite_family("H", source, None, Vec::new(), Vec::new(), Vec::new());
+    run_candidate_finite_family(
+        "H",
+        source,
+        None,
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        BTreeMap::new(),
+    );
 }
 
 /// Exercise a genuine tensor-bearing H-family input through the same
@@ -243,6 +251,7 @@ fn candidate_h_rank_four_numerator_matches_fmft() {
         vec![("rank4", integral)],
         vec![(1, (0.34, 1.2, 1.2, 0.6)), (2, (0.51, 1.6, 1.5, 0.72))],
         vec![("muvsq", 3.0), ("mursq", 5.0)],
+        BTreeMap::new(),
     );
 }
 
@@ -267,16 +276,28 @@ fn candidate_fg_clover_numerator_case_matches_fmft() {
         "topo(prop(1,edge(1,1),k(1),muvsq,2)*prop(2,edge(1,1),k(2),muvsq,1)*prop(3,edge(1,1),k(3),muvsq,1)*prop(4,edge(1,1),k(4),muvsq,1))"
     )
     .expect("dotted clover scalar input parses");
+    let clover_scalar = vk_parse!(
+        "topo(prop(1,edge(1,1),k(1),muvsq,1)*prop(2,edge(1,1),k(2),muvsq,1)*prop(3,edge(1,1),k(3),muvsq,1)*prop(4,edge(1,1),k(4),muvsq,1))"
+    )
+    .expect("clover scalar input parses");
+    let mut case_mass_values = BTreeMap::new();
+    case_mass_values.insert("clover", vec![("muvsq", 1.0), ("mursq", 1.0)]);
+    case_mass_values.insert("clover-non-unit", vec![("muvsq", 3.0), ("mursq", 7.0)]);
+    case_mass_values.insert("clover-dotted", vec![("muvsq", 3.0), ("mursq", 1.0)]);
+    case_mass_values.insert("clover-numerator", vec![("muvsq", 0.3), ("mursq", 0.7)]);
     run_candidate_finite_family(
         "FG-clover",
         source,
         None,
         vec![
-            ("clover", numerator.clone() * clover),
-            ("clover-dotted", numerator * clover_dotted),
+            ("clover", clover_scalar.clone()),
+            ("clover-non-unit", clover_scalar),
+            ("clover-dotted", clover_dotted),
+            ("clover-numerator", numerator * clover),
         ],
         vec![(1, (0.34, 1.2, 1.2, 0.6)), (2, (0.51, 1.6, 1.5, 0.72))],
-        vec![("muvsq", 0.3), ("mursq", 0.7)],
+        vec![("muvsq", 1.0), ("mursq", 1.0)],
+        case_mass_values,
     );
 }
 
@@ -323,6 +344,7 @@ fn candidate_all_four_loop_parents_match_fmft() {
             Vec::new(),
             Vec::new(),
             Vec::new(),
+            BTreeMap::new(),
         );
     }
     assert!(
@@ -338,6 +360,7 @@ fn run_candidate_finite_family(
     extra_inputs: Vec<(&'static str, Atom)>,
     external_values: Vec<(usize, (f64, f64, f64, f64))>,
     mass_values: Vec<(&'static str, f64)>,
+    case_mass_values: BTreeMap<&'static str, Vec<(&'static str, f64)>>,
 ) {
     test_utils::run_multi_lane_acceptance(move || {
         Vakint::initialize_vakint_symbols();
@@ -666,18 +689,11 @@ fn run_candidate_finite_family(
             integral_normalization_factor: LoopNormalizationFactor::MSbar,
             ..VakintSettings::default()
         };
-        let mass_values = if mass_values.is_empty() {
+        let default_mass_values = if mass_values.is_empty() {
             vec![("mursq", 1.0), ("muvsq", 1.0)]
         } else {
             mass_values
         };
-        let masses = vakint.params_from_f64(
-            &settings,
-            &mass_values
-                .into_iter()
-                .map(|(name, value)| (name.to_owned(), value))
-                .collect(),
-        );
         // Terminal discovery above necessarily populated the point cache.
         // Empty it so numerical parity also exercises actual recurrence
         // application under the harness's invalid scalar FORM path, not only
@@ -703,6 +719,14 @@ fn run_candidate_finite_family(
             } else {
                 let external_momenta = vakint
                     .externals_from_f64(&settings, &external_values.iter().copied().collect());
+                let case_masses = case_mass_values.get(name).unwrap_or(&default_mass_values);
+                let masses = vakint.params_from_f64(
+                    &settings,
+                    &case_masses
+                        .iter()
+                        .map(|(name, value)| ((*name).to_owned(), *value))
+                        .collect(),
+                );
                 test_utils::compare_evaluations(
                     settings.clone(),
                     &lanes,
