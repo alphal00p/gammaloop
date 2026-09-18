@@ -173,7 +173,7 @@ impl OfflineTerminalCatalog {
 }
 
 fn validate_identity(fingerprint: &str, index_count: usize) -> Result<(), String> {
-    if fingerprint.is_empty() || fingerprint.contains(['\n', '\r', '\t', '=']) {
+    if fingerprint.is_empty() || fingerprint.contains(['\n', '\r', '\t']) {
         return Err("family fingerprint must be nonempty and line-safe".into());
     }
     if index_count == 0 {
@@ -284,7 +284,8 @@ mod tests {
                 .unwrap_err()
                 .contains("arity mismatch")
         );
-        let approximate = encoded.replace("PR4+PR9/2", "1.25`40*PR4");
+        let header = encoded.lines().take(4).collect::<Vec<_>>().join("\n");
+        let approximate = format!("{header}\nterminal=1,1,0,0\t1.25`40*PR4\n");
         assert!(
             OfflineTerminalCatalog::decode(&approximate, "family-test-fingerprint", 4)
                 .unwrap_err()
