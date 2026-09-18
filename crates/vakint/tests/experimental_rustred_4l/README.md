@@ -142,6 +142,22 @@ probe, so no rank-four numerical parity claim is made. A standalone four-slot
 clover descriptor is intentionally not shipped: the current matcher witness
 represents that case as a contraction of an eight-slot parent.
 
+Fresh release-binary parent runs on 2026-09-18 (six candidate workers, FORM
+used only for independent terminal preparation) produced the bundled catalogs
+with the following reproducible measurements:
+
+| parent | fixed residuals | candidate search | total candidate/oracle/parity run | dotted applications |
+| --- | ---: | ---: | ---: | ---: |
+| FG | 145 | 158.23 s | 278.17 s | 3,362 |
+| BMW | 179 | 317.98 s | 472.24 s | 16,113 |
+| X | 445 | 145.31 s | 430.49 s | 82,637 |
+
+The H rank-four catalog-only replay remains 441.43 s with 386 terms and
+26,956 applications. A bundled FG catalog-only replay with an invalid FORM
+path completed in 50.38 s (3,362 applications). These timings include the
+finite candidate/oracle harness boundary and are not claims about a complete
+four-loop artifact or production RustRed evaluation.
+
 This checkpoint is **twelve finite-target comparisons plus one strict H
 rank-four catalog-only replay**, not all fifteen existing
 four-loop numerical acceptance entrypoints or the nineteen registered graph
