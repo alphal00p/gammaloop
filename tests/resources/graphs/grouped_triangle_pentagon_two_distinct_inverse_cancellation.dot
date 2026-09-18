@@ -1,0 +1,45 @@
+digraph triangle {
+    graph [
+        num = 1;
+        overall_factor = 1;
+        group_id = 0;
+    ]
+    edge [
+        pdg = 1001;
+        num = 1;
+    ]
+    node [num=1]
+    ext [style=invis]
+    ext -> v1 [id=0]
+    ext -> v1 [id=1]
+    ext -> v2 [id=2]
+    ext -> v2 [id=3]
+    v3 -> ext [id=4]
+    v1 -> v2 [id=5, lmb_id=0]
+    v2 -> v3 [id=6]
+    v3 -> v1 [id=7]
+}
+
+digraph pentagon_with_two_distinct_inverse_propagators {
+    graph [
+        num = 1;
+        overall_factor = -1;
+        group_id = 0;
+    ]
+    edge [
+        pdg = 1001;
+        num = 1;
+    ]
+    node [num=1]
+    ext [style=invis]
+    ext -> v1 [id=0]
+    ext -> v2 [id=1]
+    ext -> v3 [id=2]
+    ext -> v4 [id=3]
+    v5 -> ext [id=4]
+    v1 -> v2 [id=5, num="Q(5,spenso::mink(4,edge(5,1)))*Q(5,spenso::mink(4,edge(5,1)))-UFO::mass_scalar_1^2"]
+    v2 -> v3 [id=6, lmb_id=0]
+    v3 -> v4 [id=7, num="Q(7,spenso::mink(4,edge(7,1)))*Q(7,spenso::mink(4,edge(7,1)))-UFO::mass_scalar_1^2"]
+    v4 -> v5 [id=8]
+    v5 -> v1 [id=9]
+}

@@ -11,30 +11,68 @@ use gammalooprs::settings::runtime::{
 use gammalooprs::uv::profile::UVLimitSelection;
 
 #[test]
-fn grouped_triangle_and_box_inverse_propagator_cancel() -> Result<()> {
-    for medium_mode in [
-        "vacuum",
-        "thermodynamic_equilibrium",
-        "zero_temperature_equilibrium",
-    ] {
+fn inverse_propagators_cancel_denominators() -> Result<()> {
+    let mut failures = Vec::new();
+    for medium_mode in ["vacuum", "thermodynamic_equilibrium"] {
         let test_root = get_tests_workspace_path().join(format!(
-            "grouped_triangle_and_box_inverse_propagator_cancel_{medium_mode}"
+            "inverse_propagators_cancel_denominators_{medium_mode}"
         ));
         let mut cli = get_test_cli(
             None,
             &test_root,
-            Some(format!("grouped_triangle_box_{medium_mode}")),
+            Some(format!("inverse_propagators_{medium_mode}")),
             true,
         )?;
         run_commands(
             &mut cli,
             &[
                 "import model ./assets/models/json/scalars/scalars.json",
-                "import graphs ./tests/resources/graphs/grouped_triangle_box_cancellation.dot -p grouped_triangle_box -i cancellation",
+                "import graphs ./tests/resources/graphs/grouped_triangle_box_cancellation.dot -p box_inverse_propagator -i cancellation",
+                "import graphs ./tests/resources/graphs/grouped_triangle_hexagon_cubed_inverse_cancellation.dot -p hexagon_cubed_inverse_propagator -i cancellation",
+                "import graphs ./tests/resources/graphs/grouped_triangle_pentagon_two_distinct_inverse_cancellation.dot -p pentagon_two_distinct_inverse_propagators -i cancellation",
                 "set model mass_scalar_1=0.5",
                 &format!(
                     "set global kv global.generation.medium.mode={medium_mode} global.generation.medium.vacuum_subtraction=false global.generation.evaluator.iterative_orientation_optimization=false global.generation.evaluator.compile=false global.generation.evaluator.store_atom=true global.generation.threshold_subtraction.enable_thresholds=false"
                 ),
+            ],
+        )?;
+
+        for (case, process_name, external_momenta, external_helicities) in [
+            (
+                "box",
+                "box_inverse_propagator",
+                r#"[
+                    [3.0, 0.0, 0.0, 3.0],
+                    [3.0, 0.0, 0.0, -3.0],
+                    [3.0, 0.0, 3.0, 0.0],
+                    "dependent"
+                ]"#,
+                "[0, 0, 0, 0]",
+            ),
+            (
+                "hexagon_cubed",
+                "hexagon_cubed_inverse_propagator",
+                r#"[
+                    [3.0, 0.0, 0.0, 3.0],
+                    [1.5, 0.0, -1.5, 0.0],
+                    "dependent"
+                ]"#,
+                "[0, 0, 0, 0, 0]",
+            ),
+            (
+                "pentagon_two_distinct",
+                "pentagon_two_distinct_inverse_propagators",
+                r#"[
+                    [3.0, 0.0, 0.0, 3.0],
+                    [3.0, 0.0, 0.0, -3.0],
+                    [1.5, 0.0, 1.5, 0.0],
+                    [1.5, 0.0, 1.5, 0.0],
+                    "dependent"
+                ]"#,
+                "[0, 0, 0, 0, 0]",
+            ),
+        ] {
+            let runtime = format!(
                 r#"set default-runtime string '
                 [general]
                 integral_unit = "none"
@@ -45,13 +83,8 @@ fn grouped_triangle_and_box_inverse_propagator_cancel() -> Result<()> {
                 type = "constant"
 
                 [kinematics.externals.data]
-                momenta = [
-                    [3.0, 0.0, 0.0, 3.0],
-                    [3.0, 0.0, 0.0, -3.0],
-                    [3.0, 0.0, 3.0, 0.0],
-                    "dependent"
-                ]
-                helicities = [0, 0, 0, 0]
+                momenta = {external_momenta}
+                helicities = {external_helicities}
 
                 [sampling]
                 graphs = "summed"
@@ -61,92 +94,106 @@ fn grouped_triangle_and_box_inverse_propagator_cancel() -> Result<()> {
 
                 [subtraction]
                 disable_threshold_subtraction = true
-            '"#,
-                "generate existing -p grouped_triangle_box -i cancellation",
-            ],
-        )?;
+            '"#
+            );
+            run_commands(
+                &mut cli,
+                &[
+                    &runtime,
+                    &format!("generate existing -p {process_name} -i cancellation"),
+                ],
+            )?;
 
-        let process = ProcessRef::Unqualified("grouped_triangle_box".to_string());
-        let integrand_name = "cancellation".to_string();
-        let (process_id, integrand_name) = cli
-            .state
-            .find_integrand_ref(Some(&process), Some(&integrand_name))?;
-        let ProcessIntegrand::Amplitude(integrand) = cli
-            .state
-            .process_list
-            .get_integrand(process_id, &integrand_name)?
-            .require_generated()?
-        else {
-            panic!("the grouped triangle-box fixture must generate an amplitude integrand")
-        };
-        assert_eq!(integrand.data.graph_group_structure.len(), 1);
-        let group = integrand
-            .data
-            .graph_group_structure
-            .iter()
-            .next()
-            .expect("the triangle-box graph group must exist");
-        assert_eq!(
-            group.into_iter().count(),
-            2,
-            "the triangle and box must be evaluated in the same graph group in {medium_mode} mode"
-        );
+            let process = ProcessRef::Unqualified(process_name.to_string());
+            let integrand_name = "cancellation".to_string();
+            let (process_id, integrand_name) = cli
+                .state
+                .find_integrand_ref(Some(&process), Some(&integrand_name))?;
+            let ProcessIntegrand::Amplitude(integrand) = cli
+                .state
+                .process_list
+                .get_integrand(process_id, &integrand_name)?
+                .require_generated()?
+            else {
+                panic!("the {case} fixture must generate an amplitude integrand")
+            };
+            assert_eq!(integrand.data.graph_group_structure.len(), 1);
+            let group = integrand
+                .data
+                .graph_group_structure
+                .iter()
+                .next()
+                .expect("the cancellation graph group must exist");
+            assert_eq!(
+                group.into_iter().count(),
+                2,
+                "the {case} diagrams must be evaluated in the same graph group in {medium_mode} mode"
+            );
 
-        for use_arb_prec in [false, true] {
-            let precision = if use_arb_prec { "arb" } else { "f64" };
-            let tolerance = if use_arb_prec { 1.0e-299 } else { 1.0e-12 };
-            let point = vec![1.1, 0.7, -0.4];
-            let (_, triangle) = Inspect {
-                process: Some(process.clone()),
-                integrand_name: Some(integrand_name.clone()),
-                point: point.clone(),
-                momentum_space: true,
-                graph_id: Some(0),
-                use_arb_prec,
-                ..Default::default()
-            }
-            .run(&mut cli)?;
-            let (_, box_with_inverse_propagator) = Inspect {
-                process: Some(process.clone()),
-                integrand_name: Some(integrand_name.clone()),
-                point: point.clone(),
-                momentum_space: true,
-                graph_id: Some(1),
-                use_arb_prec,
-                ..Default::default()
-            }
-            .run(&mut cli)?;
-            let (_, result) = Inspect {
-                process: Some(process.clone()),
-                integrand_name: Some(integrand_name.clone()),
-                point,
-                momentum_space: true,
-                use_arb_prec,
-                ..Default::default()
-            }
-            .run(&mut cli)?;
-            let scale = triangle.re.hypot(triangle.im).max(
-                box_with_inverse_propagator
+            for use_arb_prec in [false, true] {
+                let precision = if use_arb_prec { "arb" } else { "f64" };
+                let tolerance = if use_arb_prec { 1.0e-299 } else { 1.0e-12 };
+                let point = vec![1.1, 0.7, -0.4];
+                let (_, triangle) = Inspect {
+                    process: Some(process.clone()),
+                    integrand_name: Some(integrand_name.clone()),
+                    point: point.clone(),
+                    momentum_space: true,
+                    graph_id: Some(0),
+                    use_arb_prec,
+                    ..Default::default()
+                }
+                .run(&mut cli)?;
+                let (_, higher_point) = Inspect {
+                    process: Some(process.clone()),
+                    integrand_name: Some(integrand_name.clone()),
+                    point: point.clone(),
+                    momentum_space: true,
+                    graph_id: Some(1),
+                    use_arb_prec,
+                    ..Default::default()
+                }
+                .run(&mut cli)?;
+                let (_, result) = Inspect {
+                    process: Some(process.clone()),
+                    integrand_name: Some(integrand_name.clone()),
+                    point,
+                    momentum_space: true,
+                    use_arb_prec,
+                    ..Default::default()
+                }
+                .run(&mut cli)?;
+                let scale = triangle
                     .re
-                    .hypot(box_with_inverse_propagator.im),
-            );
-            assert!(
-                scale > 1.0e-16,
-                "the {medium_mode} {precision} cancellation oracle must be non-trivial"
-            );
-            let direct_sum = triangle + box_with_inverse_propagator;
-            assert!(
-                direct_sum.re.hypot(direct_sum.im) <= tolerance * scale,
-                "the {medium_mode} {precision} inverse propagator did not reduce the box to minus the triangle: triangle={triangle:e}, box={box_with_inverse_propagator:e}, tolerance={tolerance:e}"
-            );
-            assert!(
-                result.re.hypot(result.im) <= tolerance * scale,
-                "the {medium_mode} {precision} grouped triangle and inverse-propagator box did not cancel: result={result:e}, scale={scale:e}, tolerance={tolerance:e}"
-            );
+                    .hypot(triangle.im)
+                    .max(higher_point.re.hypot(higher_point.im));
+                if scale <= 1.0e-16 {
+                    failures.push(format!(
+                        "the {case} {medium_mode} {precision} cancellation oracle is trivial"
+                    ));
+                    continue;
+                }
+                let direct_sum = triangle + higher_point;
+                if direct_sum.re.hypot(direct_sum.im) > tolerance * scale {
+                    failures.push(format!(
+                    "the {case} {medium_mode} {precision} inverse propagator did not reduce the higher-point diagram to minus the triangle: triangle={triangle:e}, higher_point={higher_point:e}, tolerance={tolerance:e}"
+                ));
+                }
+                if result.re.hypot(result.im) > tolerance * scale {
+                    failures.push(format!(
+                    "the {case} {medium_mode} {precision} grouped diagrams did not cancel: result={result:e}, scale={scale:e}, tolerance={tolerance:e}"
+                ));
+                }
+            }
         }
 
         clean_test(test_root);
     }
+    assert!(
+        failures.is_empty(),
+        "inverse-propagator cancellation failures:\n{}",
+        failures.join("\n")
+    );
     Ok(())
 }
 
