@@ -63,6 +63,69 @@ impl OfflineTerminalCatalog {
         self.terms
     }
 
+    /// Build a catalog for a complete, finite terminal declaration.
+    ///
+    /// `keys` is normally the immutable terminal set reported by a candidate
+    /// reducer, rather than only the terminals reached by a small probe
+    /// matrix.  Values are obtained through `resolve` at the offline import
+    /// boundary (for example, from FMFT); the resulting catalog itself has no
+    /// oracle dependency.  The map is sorted by `IntegralKey`, so encoding is
+    /// deterministic even when the caller supplies an arbitrary iterator.
+    pub fn from_keys<I, F, E>(
+        family_fingerprint: impl Into<String>,
+        index_count: usize,
+        keys: I,
+        mut resolve: F,
+    ) -> Result<Self, String>
+    where
+        I: IntoIterator<Item = IntegralKey>,
+        F: FnMut(&IntegralKey) -> Result<Atom, E>,
+        E: std::fmt::Display,
+    {
+        let mut terms = BTreeMap::new();
+        for key in keys {
+            let value = resolve(&key)
+                .map_err(|error| format!("resolve terminal {:?}: {error}", key.powers()))?;
+            if terms.insert(key.clone(), value).is_some() {
+                return Err(format!("duplicate terminal key {:?}", key.powers()));
+            }
+        }
+        Self::from_terms(family_fingerprint, index_count, terms)
+    }
+
+    /// Return the required keys that are absent from this catalog.
+    ///
+    /// This is intentionally a coverage check only.  It does not infer rules,
+    /// promote a missing key to a master, or make any statement about family
+    /// closure.
+    pub fn missing_keys<I>(&self, required: I) -> Vec<IntegralKey>
+    where
+        I: IntoIterator<Item = IntegralKey>,
+    {
+        required
+            .into_iter()
+            .filter(|key| !self.terms.contains_key(key))
+            .collect()
+    }
+
+    /// Fail with a concise coverage diagnostic if any declared terminal is
+    /// absent.  Callers can use `missing_keys` when they need to report or
+    /// recover the individual keys.
+    pub fn require_keys<I>(&self, required: I) -> Result<(), String>
+    where
+        I: IntoIterator<Item = IntegralKey>,
+    {
+        let missing = self.missing_keys(required);
+        if missing.is_empty() {
+            return Ok(());
+        }
+        Err(format!(
+            "offline terminal catalog is missing {} declared key(s), first {:?}",
+            missing.len(),
+            missing[0].powers()
+        ))
+    }
+
     /// Encode a deterministic, human-auditable representation.
     pub fn encode(&self) -> String {
         let mut output = String::new();
@@ -302,6 +365,35 @@ mod tests {
             OfflineTerminalCatalog::decode(&encoded, "family-test-fingerprint", 4)
                 .unwrap_err()
                 .contains("duplicate terminal key")
+        );
+    }
+
+    #[test]
+    fn from_keys_and_coverage_check_cover_declared_terminals() {
+        let keys = vec![
+            IntegralKey::try_new([2, 1, 0, 0]).unwrap(),
+            IntegralKey::try_new([1, 1, 0, 0]).unwrap(),
+        ];
+        let catalog =
+            OfflineTerminalCatalog::from_keys("family-test-fingerprint", 4, keys.clone(), |key| {
+                Ok::<_, std::convert::Infallible>(
+                    vk_parse!(format!("PR{}", key.powers()[0])).unwrap(),
+                )
+            })
+            .unwrap();
+        assert!(catalog.require_keys(keys.clone()).is_ok());
+        let absent = IntegralKey::try_new([3, 1, 0, 0]).unwrap();
+        assert_eq!(catalog.missing_keys([absent.clone()]), vec![absent]);
+        assert!(
+            catalog
+                .require_keys([IntegralKey::try_new([3, 1, 0, 0]).unwrap()])
+                .is_err()
+        );
+        // BTreeMap ownership keeps the serialized key order deterministic,
+        // independent of the declaration order above.
+        assert!(
+            catalog.encode().find("terminal=1,1,0,0").unwrap()
+                < catalog.encode().find("terminal=2,1,0,0").unwrap()
         );
     }
 }
