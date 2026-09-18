@@ -1,10 +1,11 @@
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use serde::{Deserialize, Serialize};
+use symbolica::domains::integer::Integer;
 
 use crate::{
     LinearEnergyExpr, MediumMode, ParsedGraph, ThermalDistributionFactor, ThermalNumerator,
-    ThermalWeight,
+    ThermalWeight, utils::Rational,
 };
 use linnet::half_edge::involution::EdgeIndex;
 
@@ -236,8 +237,9 @@ impl CffGenerationGraph {
     fn strip_thermal_distribution_factors(
         &mut self,
         signs: &[i32],
-    ) -> Vec<ThermalDistributionFactor> {
+    ) -> (Vec<ThermalDistributionFactor>, Rational) {
         let mut factors = Vec::new();
+        let mut prefactor = Rational::one();
         loop {
             let self_edges = self
                 .vertices
@@ -273,10 +275,21 @@ impl CffGenerationGraph {
                     )
                 })
             {
+                // An m-edge cyclic chain contributes (-1)^(m-1)/(m-1)! times the
+                // ordinary (m-1)th energy derivative. Apply it only when removing
+                // the cycle; self-loops keep factor 1.
+                let derivative_order = cycle.len() - 1;
+                let sign = if derivative_order.is_multiple_of(2) {
+                    1
+                } else {
+                    -1
+                };
+                prefactor *= Rational::from(sign)
+                    / Rational::from(&Integer::factorial(derivative_order as u32));
                 factors.push(ThermalDistributionFactor {
                     edge_id: EdgeIndex(*cycle.iter().min().expect("cycle has edges")),
                     sign: 1,
-                    derivative_order: cycle.len() - 1,
+                    derivative_order,
                 });
                 removed.extend(cycle.iter().copied());
                 self.remove_virtual_edges(&cycle.into_iter().collect());
@@ -285,7 +298,7 @@ impl CffGenerationGraph {
                 break;
             }
         }
-        factors
+        (factors, prefactor)
     }
 
     fn remove_virtual_edges(&mut self, edges: &BTreeSet<usize>) {
@@ -377,7 +390,7 @@ impl CffGenerationGraph {
 pub(crate) struct CffSurfaceChain {
     pub surfaces: Vec<LinearEnergyExpr>,
     pub thermal_weight: ThermalWeight,
-    pub sign: i32,
+    pub prefactor: Rational,
 }
 
 pub(crate) fn enumerate_cff_surface_chains(
@@ -459,33 +472,21 @@ fn enumerate_cff_branches(
 ) {
     let mut graph = graph.clone();
     let thermal = medium_mode != MediumMode::Vacuum;
+    let (distributions, reduction_prefactor) = if thermal {
+        graph.strip_thermal_distribution_factors(edge_signs)
+    } else {
+        (Vec::new(), Rational::one())
+    };
     let weight = ThermalWeight {
         medium_mode,
-        distributions: if thermal {
-            graph.strip_thermal_distribution_factors(edge_signs)
-        } else {
-            Vec::new()
-        },
+        distributions,
         numerators: Vec::new(),
     };
-    // An m-edge cyclic chain contributes (-1)^(m-1) times the ordinary
-    // (m-1)th energy derivative. Count only factors stripped at this step.
-    let reduction_sign = weight
-        .distributions
-        .iter()
-        .map(|factor| {
-            if factor.derivative_order.is_multiple_of(2) {
-                1
-            } else {
-                -1
-            }
-        })
-        .product::<i32>();
     if graph.vertices.len() < 2 {
         branch_acc.push(CffSurfaceChain {
             surfaces: Vec::new(),
             thermal_weight: weight,
-            sign: reduction_sign,
+            prefactor: reduction_prefactor,
         });
         return;
     }
@@ -513,7 +514,7 @@ fn enumerate_cff_branches(
         branch_acc.push(CffSurfaceChain {
             surfaces: vec![surface],
             thermal_weight: weight,
-            sign: 1,
+            prefactor: Rational::one(),
         });
         return;
     }
@@ -525,7 +526,7 @@ fn enumerate_cff_branches(
             continue;
         }
         let mut branch_weight = weight.clone();
-        let mut sign = reduction_sign;
+        let mut prefactor = reduction_prefactor.clone();
         if thermal {
             // Edges joining the contracted vertices carry the thermal numerator
             // for that contraction, with outgoing minus incoming ordering.
@@ -547,7 +548,7 @@ fn enumerate_cff_branches(
                 .collect();
             let (numerator, numerator_sign) =
                 ThermalNumerator::from_edge_lists_canonicalized(outgoing, incoming);
-            sign *= surface_sign * numerator_sign;
+            prefactor *= Rational::from(surface_sign * numerator_sign);
             if !numerator.is_trivial() {
                 branch_weight.numerators.push(numerator);
             }
@@ -557,7 +558,7 @@ fn enumerate_cff_branches(
         for mut chain in sub {
             chain.surfaces.insert(0, surface.clone());
             chain.thermal_weight = branch_weight.product(&chain.thermal_weight);
-            chain.sign *= sign;
+            chain.prefactor *= &prefactor;
             branch_acc.push(chain);
             emitted = true;
         }
@@ -566,7 +567,7 @@ fn enumerate_cff_branches(
         branch_acc.push(CffSurfaceChain {
             surfaces: vec![surface],
             thermal_weight: weight,
-            sign: 1,
+            prefactor: Rational::one(),
         });
     }
 }
@@ -872,7 +873,7 @@ mod thermal_tests {
             let mut graph = CffGenerationGraph::new(vertices);
             let signs = vec![1; edges.len()];
             assert_eq!(
-                graph.strip_thermal_distribution_factors(&signs),
+                graph.strip_thermal_distribution_factors(&signs).0,
                 expected_factors
                     .into_iter()
                     .map(|(edge, derivative_order)| ThermalDistributionFactor {
@@ -917,7 +918,10 @@ mod thermal_tests {
             }
             let fixed_point = graph.clone();
             assert!(
-                graph.strip_thermal_distribution_factors(&signs).is_empty(),
+                graph
+                    .strip_thermal_distribution_factors(&signs)
+                    .0
+                    .is_empty(),
                 "{name}"
             );
             assert_eq!(graph, fixed_point, "{name}");
@@ -956,7 +960,7 @@ mod thermal_tests {
         assert_eq!(vertex.incoming, vec![edge(0)]);
         assert_eq!(vertex.outgoing, vec![edge(0), edge(2)]);
         assert_eq!(
-            graph.strip_thermal_distribution_factors(&[-1, 1, 1]),
+            graph.strip_thermal_distribution_factors(&[-1, 1, 1]).0,
             vec![ThermalDistributionFactor {
                 edge_id: EdgeIndex(0),
                 sign: -1,
@@ -979,7 +983,9 @@ mod thermal_tests {
         for edge in &mut parsed.internal_edges {
             edge.signature.external_signature.clear();
         }
-        for (count, derivative_order, sign) in [(1, 0, 1), (2, 1, -1), (3, 2, 1), (4, 3, -1)] {
+        for (count, derivative_order, numerator, denominator) in
+            [(1, 0, 1, 1), (2, 1, -1, 1), (3, 2, 1, 2), (4, 3, -1, 6)]
+        {
             let mut cycle = parsed.clone();
             cycle.internal_edges.truncate(count);
             cycle.internal_edges[count - 1].head = 0;
@@ -990,7 +996,7 @@ mod thermal_tests {
             );
             assert_eq!(chains.len(), 1);
             assert!(chains[0].surfaces.is_empty());
-            assert_eq!(chains[0].sign, sign);
+            assert_eq!(chains[0].prefactor, Rational::new(numerator, denominator));
             assert_eq!(
                 chains[0].thermal_weight.distributions,
                 vec![ThermalDistributionFactor {
@@ -1003,17 +1009,23 @@ mod thermal_tests {
     }
 
     #[test]
-    fn thermal_cycle_signs_compose_across_stripping_and_recursion() {
+    fn thermal_cycle_prefactors_compose_across_stripping_and_recursion() {
         for (edges, expected) in [
             (
                 vec![(0, 1), (1, 0), (0, 2), (2, 0)],
-                vec![(0, 1, vec![(0, 1), (2, 1)])],
+                vec![(0, Rational::one(), vec![(0, 1), (2, 1)])],
             ),
-            (vec![(0, 1), (1, 0), (0, 2)], vec![(1, -1, vec![(0, 1)])]),
+            (
+                vec![(0, 1), (1, 0), (0, 2)],
+                vec![(1, Rational::from(-1), vec![(0, 1)])],
+            ),
             (
                 // Contracting 0 with 2 exposes a two-edge cycle below recursion.
                 vec![(0, 1), (0, 2), (2, 0), (1, 2)],
-                vec![(1, -1, vec![(0, 1)]), (2, 1, vec![])],
+                vec![
+                    (1, Rational::from(-1), vec![(0, 1)]),
+                    (2, Rational::one(), vec![]),
+                ],
             ),
         ] {
             let mut parsed = crate::graph_io::test_graphs::box_graph();
@@ -1034,7 +1046,7 @@ mod thermal_tests {
                     .map(|chain| {
                         (
                             chain.surfaces.len(),
-                            chain.sign,
+                            chain.prefactor,
                             chain
                                 .thermal_weight
                                 .distributions
@@ -1054,7 +1066,12 @@ mod thermal_tests {
     fn thermal_cycles_with_multiple_attachments_are_not_stripped() {
         let parsed = crate::graph_io::test_graphs::box_graph();
         let mut graph = build_base_graph_from_parsed(&parsed);
-        assert!(graph.strip_thermal_distribution_factors(&[1; 4]).is_empty());
+        assert!(
+            graph
+                .strip_thermal_distribution_factors(&[1; 4])
+                .0
+                .is_empty()
+        );
         let chains =
             enumerate_cff_surface_chains(&parsed, &[1; 4], MediumMode::ThermodynamicEquilibrium);
         assert!(!chains.is_empty());

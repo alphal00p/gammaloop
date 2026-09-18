@@ -39,6 +39,8 @@ commands = [
 
 ]
 
+# target at inverse_temperature 1.0 is -5.722097773870135
+
 [default_runtime_settings.general]
 evaluator_method = "SummedFunctionMap"
 enable_cache = false

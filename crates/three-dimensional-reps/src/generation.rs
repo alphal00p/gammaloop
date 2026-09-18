@@ -1657,7 +1657,8 @@ fn generate_pure_cff_expression_from_parsed_with_duplicate_excess(
             }
         }));
         let data = OrientationData::new(orientation);
-        let mut groups = BTreeMap::<(crate::ThermalWeight, i32), Vec<Vec<HybridSurfaceID>>>::new();
+        let mut groups =
+            BTreeMap::<(crate::ThermalWeight, Rational), Vec<Vec<HybridSurfaceID>>>::new();
         for chain in surface_chains {
             let denominators = chain
                 .surfaces
@@ -1667,17 +1668,17 @@ fn generate_pure_cff_expression_from_parsed_with_duplicate_excess(
                 })
                 .collect();
             groups
-                .entry((chain.thermal_weight, chain.sign))
+                .entry((chain.thermal_weight, chain.prefactor))
                 .or_default()
                 .push(denominators);
         }
         let variants = groups
             .into_iter()
-            .map(
-                |((thermal_weight, sign), denominator_chains)| crate::expression::CFFVariant {
+            .map(|((thermal_weight, prefactor), denominator_chains)| {
+                crate::expression::CFFVariant {
+                    prefactor: rational_coeff_atom(Rational::from(overall_sign) * prefactor),
                     thermal_weight,
                     origin: Some("pure_cff".to_string()),
-                    prefactor: rational_coeff_new(overall_sign * i64::from(sign), 1),
                     half_edges: denominator_edge_ids
                         .iter()
                         .copied()
@@ -1693,8 +1694,8 @@ fn generate_pure_cff_expression_from_parsed_with_duplicate_excess(
                     uniform_scale_power: 0,
                     numerator_surfaces: Vec::new(),
                     denominator: denominator_tree_from_chains(&denominator_chains),
-                },
-            )
+                }
+            })
             .collect();
 
         expression.orientations.push(OrientationExpression {
