@@ -81,7 +81,7 @@ use symbolica::{
         WildcardRestriction,
     },
     poly::series::Series,
-    printer::{AtomPrinter, PrintOptions},
+    printer::{AtomPrinter, CanonicalOrderingSettings, PrintOptions},
     symbol,
     transformer::Transformer,
 };

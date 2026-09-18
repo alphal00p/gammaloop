@@ -47,7 +47,7 @@ fn run_network_informed() {
                 i + 1
             )))
             .min_level(0)
-            .max_level(0)
+            .max_level(Some(0))
             .rhs_cache_size(1000)
             .with(&rhs_subs);
     }

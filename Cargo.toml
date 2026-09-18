@@ -41,9 +41,10 @@ insta = "1.46.3"
 itertools = "0.14"
 json5 = "0.4.1"
 linnest = { path = "crates/linnest/" }
-linnet = { version = "0.17.0", path = "crates/linnet/" }
+linnet = { path = "crates/linnet/", default-features = false }
 momtrop = "0.3.0"
 ndarray = "0.17.2"
+notify = "8.2.0"
 numerica = { version = "=3.0.0", default-features = false }
 nu-ansi-term = "0.50.3"
 numpy = "0.28"
@@ -56,7 +57,7 @@ rand = "0.9.4"
 ratatui = "0.30.0"
 rayon = "1.5"
 regex = "1.12.3"
-rustred = { git = "https://github.com/alphal00p/rustred.git", rev = "8e22f2fb9c4640474fac7d08f50038ee0ea4c5de" }
+rustred = { git = "https://github.com/alphal00p/rustred.git", rev = "f803d2bc" }
 schemars = "1.2.1"
 serde = "1.0.228"
 self_cell = "1.2.2"
@@ -64,11 +65,11 @@ serde_json = "1"
 serde_repr = "0.1.20"
 serde_yaml = "0.9.34"
 smartstring = "1.0.1"
-spenso = { path = "crates/spenso/" }
-spenso-hep-lib = { path = "crates/spenso-hep-lib/" }
-spenso-macros = { path = "crates/spenso-macros/" }
-symbolica-utils = { path = "crates/symbolica-utils/" }
-symbolica = { version = "=3.0.0", default-features = false, features = ["integer-gmp", "float-mpfr", "native_code_generation"] }
+spenso = { path = "crates/spenso/", default-features = false }
+spenso-hep-lib = { path = "crates/spenso-hep-lib/", default-features = false }
+spenso-macros = { path = "crates/spenso-macros/", default-features = false }
+symbolica-utils = { path = "crates/symbolica-utils/", default-features = false }
+symbolica = { version = "3.0.0", default-features = false }
 sysinfo = "0.33.1"
 tabled = "0.22.0"
 thiserror = "2.0"
@@ -78,22 +79,17 @@ tracing = "0.1.44"
 tracing-appender = "0.2.4"
 tracing-indicatif = "0.3.13"
 tracing-subscriber = "0.3.23"
-typed-index-collections = "=3.3.0"
+symbolica-typst-atom-payload = { git = "https://github.com/symbolica-dev/symbolica-typst-plugin", rev = "18e0491628f9eac5c788659cabfcdb7575f6986d", default-features = false }
+typed-index-collections = "3.5.0"
 vakint = { path = "crates/vakint/" }
 walkdir = "2.5.0"
 
 which = "8.0.0"
 
 [patch.crates-io]
-# graphica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
-# numerica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
-# symbolica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
 graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "953e26e2754e9a4b918404fbdea590725d8e863d" }
 numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "953e26e2754e9a4b918404fbdea590725d8e863d" }
 symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "953e26e2754e9a4b918404fbdea590725d8e863d" }
-# graphica = { git = "https://github.com/benruijl/symbolica", rev = "309a156264f1b535af653803497d91330fc5abfc" }
-# numerica = { git = "https://github.com/benruijl/symbolica", rev = "309a156264f1b535af653803497d91330fc5abfc" }
-# symbolica = { git = "https://github.com/benruijl/symbolica", rev = "309a156264f1b535af653803497d91330fc5abfc" }
 
 [profile.bench]
 opt-level = 3

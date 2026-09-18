@@ -74,7 +74,7 @@ fn spenso_bare_symb_vertex_substitution() {
                 i + 1
             )))
             .min_level(0)
-            .max_level(0)
+            .max_level(Some(0))
             .rhs_cache_size(1000)
             .with_map(move |matches| {
                 gluon_rule
@@ -144,7 +144,7 @@ fn substituted_three_vertex_reproducer() -> (Atom, [(&'static str, Atom); 3]) {
         r = r
             .replace(parse!(format!("vx({i}, k1_, k2_, k3_, mu1_, mu2_, mu3_)",)))
             .min_level(0)
-            .max_level(0)
+            .max_level(Some(0))
             .rhs_cache_size(1000)
             .with_map(move |matches| {
                 gluon_rule

@@ -431,10 +431,7 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
         }
 
         let rep_pattern = Atom::var(SPENSO_TAG.rep_).to_pattern();
-        let settings = MatchSettings::new()
-            .min_level(0)
-            .max_level(0)
-            .partial(false);
+        let settings = MatchSettings::new().max_level(0).partial(false);
         let mut matches = arg.pattern_match(&rep_pattern, None, Some(&settings));
         let matched = matches.next_detailed()?;
         let rep = rep_pattern.replace_wildcards_with_matches(matched.match_stack);

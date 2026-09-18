@@ -32,7 +32,7 @@ use symbolica::{
         polynomial::MultivariatePolynomial,
         series::{Series, SeriesError},
     },
-    solve::{SolutionSet, SolveError},
+    solve::SolveError,
     state::RecycledAtom,
     tensors::matrix::Matrix,
     utils::{BorrowedOrOwned, Settable},
@@ -1339,19 +1339,6 @@ impl<S: TensorStructure> DenseTensor<Atom, S> {
         <Atom as AtomCore>::nsolve_system::<N, Atom>(&self.data, vars, init, prec, max_iterations)
     }
 
-    /// Solve a system that is linear in `vars`, if possible.
-    /// Each expression in `system` is understood to yield 0.
-    /// The native solution set retains global coverage/guards as well as
-    /// branch conditions and free variables; none of these are discarded.
-    pub fn solve_linear_system<E: PositiveExponent + 'static, T: AtomCore>(
-        &self,
-        vars: &[T],
-    ) -> Result<SolutionSet, SolveError> {
-        // The general solver also accepts nonlinear systems; keep this
-        // wrapper's linearity contract through the native matrix boundary.
-        self.system_to_matrix::<E, T>(vars)?;
-        Atom::solve(&self.data).wrt_with_exponent::<E, T>(vars)
-    }
     /// Convert a system of linear equations to a matrix representation, returning the matrix
     /// and the right-hand side.
     #[allow(clippy::type_complexity)]
@@ -1366,98 +1353,6 @@ impl<S: TensorStructure> DenseTensor<Atom, S> {
         SolveError,
     > {
         <Atom as AtomCore>::system_to_matrix::<E, Atom, T>(&self.data, vars)
-    }
-}
-
-#[cfg(test)]
-mod linear_system_tests {
-    use super::*;
-    use crate::structure::{
-        OrderedStructure,
-        representation::{Euclidean, RepName},
-    };
-    use symbolica::{
-        parse,
-        solve::{SolutionCondition, SolveCoverage},
-    };
-
-    #[test]
-    fn linear_forwarding_preserves_ordered_exact_solutions() {
-        let structure: OrderedStructure<Euclidean> =
-            OrderedStructure::new(vec![Euclidean {}.new_slot(2, 1)]).structure;
-        let tensor =
-            DenseTensor::from_data(vec![parse!("x+y-3"), parse!("x-y-1")], structure).unwrap();
-        let branches = tensor
-            .solve_linear_system::<u8, _>(&[parse!("x"), parse!("y")])
-            .unwrap();
-        assert_eq!(branches.coverage(), SolveCoverage::Complete);
-        assert!(branches.coverage_guard().is_empty());
-        assert_eq!(branches.len(), 1);
-        let solution = &branches[0];
-        assert!(solution.is_point());
-        let values = solution
-            .coordinates()
-            .iter()
-            .map(|(_, value)| value.clone())
-            .collect::<Vec<_>>();
-        assert_eq!(values, vec![Atom::num(2), Atom::num(1)]);
-    }
-
-    #[test]
-    fn linear_forwarding_retains_conditions_and_free_variables() {
-        let structure: OrderedStructure<Euclidean> =
-            OrderedStructure::new(vec![Euclidean {}.new_slot(1, 1)]).structure;
-        let conditional = DenseTensor::from_data(vec![parse!("a*x-1")], structure.clone()).unwrap();
-        let branches = conditional
-            .solve_linear_system::<u8, _>(&[parse!("x")])
-            .unwrap();
-        assert_eq!(branches.len(), 1);
-        // Native Symbolica 3 keeps parameter-pivot obligations globally;
-        // retaining only the point branch would lose the a != 0 condition.
-        assert_eq!(branches.coverage(), SolveCoverage::Generic);
-        assert_eq!(branches.coverage_guard(), &[parse!("a")]);
-        assert_eq!(branches[0].coordinates()[0].1, parse!("1/a"));
-        let underdetermined = DenseTensor::from_data(vec![parse!("x+y-1")], structure).unwrap();
-        let branches = underdetermined
-            .solve_linear_system::<u8, _>(&[parse!("x"), parse!("y")])
-            .unwrap();
-        assert_eq!(branches.len(), 1);
-        assert_eq!(branches.coverage(), SolveCoverage::Complete);
-        assert!(branches.coverage_guard().is_empty());
-        assert!(!branches[0].free_variables().is_empty());
-    }
-
-    #[test]
-    fn linear_forwarding_does_not_silently_accept_nonlinear_equations() {
-        let structure: OrderedStructure<Euclidean> =
-            OrderedStructure::new(vec![Euclidean {}.new_slot(1, 1)]).structure;
-        let tensor = DenseTensor::from_data(vec![parse!("x^2-1")], structure).unwrap();
-        assert!(tensor.solve_linear_system::<u8, _>(&[parse!("x")]).is_err());
-    }
-
-    #[test]
-    fn linear_forwarding_preserves_guards_after_solution_cancellation() {
-        let structure: OrderedStructure<Euclidean> =
-            OrderedStructure::new(vec![Euclidean {}.new_slot(1, 1)]).structure;
-        for (equation, coverage) in [
-            (parse!("a*x"), SolveCoverage::Generic),
-            (parse!("x/a"), SolveCoverage::Complete),
-        ] {
-            let tensor = DenseTensor::from_data(vec![equation], structure.clone()).unwrap();
-            let branches = tensor.solve_linear_system::<u8, _>(&[parse!("x")]).unwrap();
-            assert_eq!(branches.len(), 1);
-            assert_eq!(branches[0].coordinates()[0].1, Atom::num(0));
-            assert_eq!(branches.coverage(), coverage);
-            if coverage == SolveCoverage::Generic {
-                assert_eq!(branches.coverage_guard(), &[parse!("a")]);
-            } else {
-                assert!(branches.coverage_guard().is_empty());
-                assert_eq!(
-                    branches[0].conditions(),
-                    &[SolutionCondition::NonZero(parse!("a"))]
-                );
-            }
-        }
     }
 }
 

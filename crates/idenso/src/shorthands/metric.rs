@@ -124,7 +124,7 @@ pub fn wrap_indices_impl(view: AtomView, header: Symbol) -> Atom {
             )
             .when(RS.a_.filter_match(not_wraped_aind(header)))
             .min_level(0)
-            .max_level(1),
+            .max_level(Some(1)),
         );
     }
 
@@ -137,7 +137,7 @@ pub fn wrap_indices_impl(view: AtomView, header: Symbol) -> Atom {
             )
             .when(RS.a_.filter_match(not_wraped_aind(header)))
             .min_level(0)
-            .max_level(1),
+            .max_level(Some(1)),
         );
         reps.push(
             Replacement::new(
@@ -146,7 +146,7 @@ pub fn wrap_indices_impl(view: AtomView, header: Symbol) -> Atom {
             )
             .when(RS.a_.filter_match(not_wraped_aind(header)))
             .min_level(0)
-            .max_level(1),
+            .max_level(Some(1)),
         );
     }
     let mut atom = Atom::new();
@@ -189,7 +189,7 @@ pub fn wrap_dummies_impl<Aind: ParseableAind + AbsInd + DummyAind>(
         .collect();
 
     let mut expr = view.to_owned();
-    let settings = MatchSettings::new().min_level(0).max_level(0);
+    let settings = MatchSettings::new().min_level(0).max_level(Some(0));
 
     for i in LibraryRep::all_self_duals().chain(LibraryRep::all_inline_metrics()) {
         let ipat = i.to_symbolic([RS.d_, RS.a_]).to_pattern();
@@ -322,7 +322,7 @@ pub fn to_dots_impl(expr: AtomView) -> Atom {
         ),
     )
     .min_level(0)
-    .max_level(0)
+    .max_level(Some(0))
     .when(not_slot(RS.a___) & not_slot(RS.b___))
     .repeat()
     .with_map(move |m| {
@@ -344,7 +344,7 @@ pub fn to_dots_impl(expr: AtomView) -> Atom {
         .pow(2),
     )
     .min_level(0)
-    .max_level(0)
+    .max_level(Some(0))
     .when(not_slot(RS.a___))
     .repeat()
     .with_map(move |m| {
@@ -368,7 +368,7 @@ pub fn to_dots_impl(expr: AtomView) -> Atom {
         ),
     )
     .min_level(0)
-    .max_level(0)
+    .max_level(Some(0))
     .when(not_slot(RS.a___) & not_slot(RS.b___))
     .repeat()
     .with_map(move |m| {
@@ -387,7 +387,7 @@ pub fn to_dots_impl(expr: AtomView) -> Atom {
     })
     .replace(function!(ETS.metric, RS.f_, RS.g_))
     .min_level(0)
-    .max_level(0)
+    .max_level(Some(0))
     .when(not_slot(RS.f_) & not_slot(RS.g_))
     .repeat()
     .with(function!(SPENSO_TAG.dot, RS.f_, RS.g_))
