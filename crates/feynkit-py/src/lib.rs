@@ -72,19 +72,33 @@ pub fn initialize_feynkit(module: &Bound<'_, PyModule>) -> PyResult<()> {
 pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
     // Unqualified dependency classes belong to Symbolica; FeynKit declarations
     // explicitly name their community module.
-    let info = pyo3_stub_gen::StubInfo::from_project_root(
+    let mut info = pyo3_stub_gen::StubInfo::from_project_root(
         "symbolica".to_owned(),
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("python"),
     )?;
     let module = info
         .modules
-        .get("symbolica.community.feynkit")
+        .get_mut("symbolica.community.feynkit")
         .ok_or_else(|| {
             std::io::Error::new(
                 std::io::ErrorKind::NotFound,
                 "FeynKit did not contribute a symbolica.community.feynkit stub module",
             )
         })?;
+    // Type overrides preserve Rust default expressions verbatim in stubgen.
+    // Render the automatic policy sentinel as its Python Ellipsis spelling.
+    for class in module.class.values_mut() {
+        for method in class.methods.values_mut().flatten() {
+            if matches!(method.name, "generate" | "generate_diagrams") {
+                for parameter in &mut method.parameters.keyword_only {
+                    if parameter.type_info.name.contains("types.EllipsisType") {
+                        parameter.default =
+                            pyo3_stub_gen::generate::ParameterDefault::Expr("...".to_owned());
+                    }
+                }
+            }
+        }
+    }
     validate_stub_documentation(&module.to_string())?;
     Ok(info)
 }

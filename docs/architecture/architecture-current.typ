@@ -199,7 +199,13 @@ This bound excludes global projectors/prefactors and does not replace subdiverge
 
 Python's `Model.generate_diagrams()` and `Generator.generate()` accept generation settings
 as keyword arguments and construct the same Rust options. Python dictionaries support reusable
-configurations; no mutable Python options builder accumulates filters. Coupling orders accept
+configurations; no mutable Python options builder accumulates filters. The Python boundary
+owns the ported CLI default policy, including process-dependent topology filters and
+up-to-scalar grouping. Explicit None disables a default; Ellipsis requests automatic settings.
+Python defaults to zero internal bridges and permits self-loops. The reusable low-level Rust
+options remain explicit. Coupling upper bounds prune impossible vertex signatures before
+enumeration. Numerator construction reuses identical comparison/output diagrams, validation
+avoids expanding equal factored expressions, and unchanged cut inventories are retained. Coupling orders accept
 exact integers or inclusive ranges, while filter and grouping values wrap their Rust settings.
 Valid requests admitting no graphs return a completed empty result through the same generation
 pipeline; invalid settings remain errors, and token-cancelled requests are marked incomplete.

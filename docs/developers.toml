@@ -111,7 +111,9 @@ anchor = "pub fn generate("
 # native Rayon configuration and generation ownership remain unchanged.
 # Reviewed 2026-09-18: stage/count snapshots and partial-topology filtering
 # share the existing generator and calling-thread Python execution boundary.
-digest = "c3133a02b987b31a311de3dfeae8d72973d64de9"
+# Reviewed 2026-09-18: coupling bounds prune signatures before enumeration,
+# and identical materialized diagrams and cut inventories are reused.
+digest = "6549e46968866e0e142d1a12e6a89ff6a1bb0f4e"
 
 [[section.note.scope]]
 path = "crates/feynkit-model/src/model.rs"
@@ -135,7 +137,9 @@ anchor = "pub struct FeynmanDiagram {"
 # Linnet has removed DOT quoting; physical metadata ownership is unchanged.
 # Reviewed 2026-09-17: the architecture now records graph-owned symbol
 # registration, shared Spenso index display hooks, and typed Python numerators.
-digest = "01c69fedc5d1bd051dbfed4d0e70e5e9c7c86d5a"
+# Reviewed 2026-09-18: numerator validation checks structural equality before
+# expansion, retaining algebraic comparison for differing representations.
+digest = "2384f141ae81d64e011e44ce9f856aeab79995e1"
 
 [[section.note.scope]]
 path = "crates/feynkit-tensor/src/lib.rs"

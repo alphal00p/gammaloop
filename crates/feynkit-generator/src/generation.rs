@@ -1425,23 +1425,30 @@ impl Generator {
                 break;
             }
             let name = format!("{}{index:0width$}", options.graph_prefix);
-            diagram_pairs.push(DiagramPair {
-                comparison: self.to_diagram(
-                    name.clone(),
-                    process.generation_type(),
-                    comparison,
-                    fermion_loop_count,
-                    signs,
-                    options,
-                )?,
-                representative: self.to_diagram(
+            let identical = comparison == representative;
+            let comparison = self.to_diagram(
+                name.clone(),
+                process.generation_type(),
+                comparison,
+                fermion_loop_count,
+                signs,
+                options,
+            )?;
+            let representative = if identical {
+                comparison.clone()
+            } else {
+                self.to_diagram(
                     name,
                     process.generation_type(),
                     representative,
                     fermion_loop_count,
                     signs,
                     options,
-                )?,
+                )?
+            };
+            diagram_pairs.push(DiagramPair {
+                comparison,
+                representative,
                 reversed_edges,
             });
             options.report_progress("numerators", index + 1, Some(total));
@@ -1607,21 +1614,27 @@ impl Generator {
                         "group {output_index} references unknown source diagram {source_diagram}"
                     ))
                 })?;
-            let cut_partitions = transport_cut_metadata(comparison_master.cuts(), reversed_edges)
-                .into_iter()
-                .map(|cut| (cut.left.half_edges, cut.right.half_edges))
-                .collect();
-            let threshold_partitions = transport_threshold_candidate_metadata(
+            let cuts = transport_cut_metadata(comparison_master.cuts(), reversed_edges);
+            let thresholds = transport_threshold_candidate_metadata(
                 comparison_master.topology_threshold_candidates(),
                 reversed_edges,
-            )
-            .into_iter()
-            .map(|candidate| (candidate.left, candidate.right))
-            .collect();
-            let mut representative = source_representative
-                .clone()
-                .with_cut_partitions(cut_partitions)?
-                .with_topology_threshold_partitions(threshold_partitions)?;
+            );
+            let mut representative = source_representative.clone();
+            if cuts != representative.cuts() {
+                representative = representative.with_cut_partitions(
+                    cuts.into_iter()
+                        .map(|cut| (cut.left.half_edges, cut.right.half_edges))
+                        .collect(),
+                )?;
+            }
+            if thresholds != representative.topology_threshold_candidates() {
+                representative = representative.with_topology_threshold_partitions(
+                    thresholds
+                        .into_iter()
+                        .map(|candidate| (candidate.left, candidate.right))
+                        .collect(),
+                )?;
+            }
             if representative.loop_momentum_basis().loop_edges
                 != comparison_master.loop_momentum_basis().loop_edges
             {
@@ -3086,6 +3099,7 @@ impl fmt::Display for ColoredNode {
     }
 }
 
+#[derive(PartialEq, Eq)]
 struct ColoredTopology {
     graph: Graph<ColoredNode, EdgeColor>,
     symmetry: u64,
@@ -3367,6 +3381,17 @@ impl InteractionSignatures {
                     .as_ref()
                     .is_some_and(|vetoed| vetoed.contains(&rule_id))
             {
+                continue;
+            }
+            // Coupling powers are nonnegative. A vertex exceeding a graph-wide
+            // upper bound cannot occur in an accepted graph, so exclude its
+            // signature before enumerating topologies (especially QED=0).
+            let orders = rule.coupling_orders(model);
+            if options.graph_filters.iter().any(|filter| {
+                matches!(filter, GenerationFilter::CouplingOrders(required)
+                    if required.iter().any(|(name, (_, maximum))|
+                        maximum.is_some_and(|maximum| orders.get(name).copied().unwrap_or(0) > maximum)))
+            }) {
                 continue;
             }
             let mut signature = Vec::new();
@@ -5938,6 +5963,28 @@ mod tests {
         assert!(numerator.contains("spenso::dind"));
         assert_eq!(numerator.matches("spenso::g(").count(), 2);
         assert!(!numerator.contains("UFO::Identity("));
+    }
+
+    #[test]
+    fn coupling_upper_bounds_prune_vertex_signatures_without_applying_lower_bounds() {
+        let model = standard_model();
+        let options = GenerationOptions::default().with_graph_filter(
+            GenerationFilter::CouplingOrders(BTreeMap::from([
+                ("QCD".to_owned(), (6, Some(6))),
+                ("QED".to_owned(), (0, Some(0))),
+            ])),
+        );
+        let signatures = InteractionSignatures::new(&model, &options).unwrap();
+        let rules: BTreeSet<_> = signatures.0.values().flatten().copied().collect();
+        assert!(!rules.is_empty());
+        for (index, rule) in model.vertex_rules().iter().enumerate() {
+            let orders = rule.coupling_orders(&model);
+            assert_eq!(
+                rules.contains(&model.vertex_rule_id_at(index).unwrap()),
+                orders.get("QED").copied().unwrap_or(0) == 0
+                    && orders.get("QCD").copied().unwrap_or(0) <= 6
+            );
+        }
     }
 
     #[test]
