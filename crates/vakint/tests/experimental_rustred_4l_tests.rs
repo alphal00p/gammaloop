@@ -369,8 +369,18 @@ fn run_candidate_finite_family(
 ) {
     test_utils::run_multi_lane_acceptance(move || {
         Vakint::initialize_vakint_symbols();
-        let catalog_directory =
-            std::env::var_os("VAKINT_4L_CANDIDATE_CATALOG_DIR").map(PathBuf::from);
+        // Keep the finite terminal values shipped with this experimental
+        // harness as the default.  An explicit directory still overrides the
+        // bundle for regeneration or isolated experiments.  This remains
+        // deliberately outside the production artifact registry.
+        let catalog_directory = std::env::var_os("VAKINT_4L_CANDIDATE_CATALOG_DIR")
+            .map(PathBuf::from)
+            .or_else(|| {
+                Some(
+                    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                        .join("tests/inputs/experimental_four_loop_catalogs"),
+                )
+            });
         let catalog_only = std::env::var_os("VAKINT_4L_CANDIDATE_CATALOG_ONLY").is_some();
         let form = std::env::var("VAKINT_4L_CANDIDATE_ORACLE_FORM_PATH").unwrap_or_else(|_| {
             assert!(

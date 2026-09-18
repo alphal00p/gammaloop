@@ -96,11 +96,13 @@ enable four-loop `EvaluationMethod::RustRed`. The production registry remains
 sealed-artifact-only until a complete authenticated four-loop artifact and
 terminal manifest are available.
 
-Set `VAKINT_4L_CANDIDATE_CATALOG_DIR` to persist exact offline values for later
-FORM-free candidate reruns. The harness writes `h.rrcat`, `fg.rrcat`,
+The harness ships complete finite catalogs for the four checked-in parent
+descriptors under `tests/inputs/experimental_four_loop_catalogs/`; these are
+loaded by default and are bound to each RustRed family fingerprint and arity.
+Set `VAKINT_4L_CANDIDATE_CATALOG_DIR` to override that bundle and persist a
+fresh exact offline value set. The harness writes `h.rrcat`, `fg.rrcat`,
 `bmw.rrcat`, or `x.rrcat` atomically after the FMFT phase; each file contains
-every finite terminal declared by that candidate, is marked complete, and is
-bound to the RustRed family fingerprint and arity. With
+every finite terminal declared by that candidate and is marked complete. With
 `VAKINT_4L_CANDIDATE_CATALOG_ONLY=1`, an existing catalog is required and the
 test uses an invalid FORM path for the RustRed/FeynKit scalar tail. This is an
 experimental value-cache check, not a completeness proof, IBP artifact, or
