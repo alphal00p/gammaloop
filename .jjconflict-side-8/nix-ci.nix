@@ -280,6 +280,7 @@
       "packages.x86_64-linux.crate-test-dependencies-feynkit-model"
       "packages.x86_64-linux.crate-test-dependencies-feynkit-tensor"
       "packages.x86_64-linux.crate-test-dependencies-feynkit-ufo"
+      "packages.x86_64-linux.crate-test-dependencies-linnet-py"
       "packages.x86_64-linux.crate-test-dependencies-spynso3"
     ];
     "packages.x86_64-linux.crate-test-dependencies-feynkit-tensor" = [

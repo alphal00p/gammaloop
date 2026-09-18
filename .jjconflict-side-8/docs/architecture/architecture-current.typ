@@ -194,6 +194,13 @@ generation. Index identities retain their source, sink, edge, or vertex head;
 label metadata drives Spenso's shared plain, LaTeX, and Typst printers,
 including portable render trees.
 
+FeynKit graph figures and GammaLoop drawings share the canonical particle-to-style
+mapping and Typst physics callbacks. Line patterns and labels derive from model
+metadata; the Python host embeds those same styles for standalone notebook rendering.
+FeynKit passes its generated Typst sources to `linnet-py::PreparedRender`, which owns
+asset staging, bundled packages, font configuration, and SVG compilation for both
+graph APIs.
+
 GammaLoop converts each finalized diagram once into its
 evaluator-oriented runtime graph. That conversion translates identifiers
 and builds derived caches; it does not repeat model loading, rule
