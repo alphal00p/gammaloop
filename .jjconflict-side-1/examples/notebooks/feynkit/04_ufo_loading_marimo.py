@@ -196,15 +196,13 @@ def _(mo):
 
 
 @app.cell
-def _(fk, model):
-    options = fk.GenerationOptions(max_vertices=3)
-    options.add_vertex_allow(["V_3_SCALAR_000"])
-
+def _(model):
     generated = model.generate_diagrams(
         incoming=["scalar_0"],
         outgoing=["scalar_0", "scalar_0"],
         loops=0,
-        options=options,
+        max_vertices=3,
+        vertex_allow=["V_3_SCALAR_000"],
     )
     {
         "diagrams": len(generated.diagrams),

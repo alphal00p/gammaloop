@@ -60,8 +60,6 @@ pub enum GenerationError {
     ThreadPool(#[from] ThreadPoolBuildError),
     #[error("graph automorphism factor cannot be represented by u64: {0}")]
     SymmetryFactor(String),
-    #[error("no graph was generated for the requested process")]
-    NoGraphs,
     #[error("could not assign an interaction to node {node} with signature {signature:?}")]
     MissingInteraction { node: usize, signature: Vec<String> },
     #[error("option {option} for filter {filter} in the {scope} scope is not implemented")]
@@ -1281,9 +1279,6 @@ impl Generator {
         };
         if options.cancellation_requested() {
             completed = false;
-        }
-        if raw_graphs.is_empty() && completed {
-            return Err(GenerationError::NoGraphs);
         }
 
         let mut raw_graphs: Vec<_> = raw_graphs.into_iter().collect();
@@ -5177,6 +5172,26 @@ mod tests {
                     SelectorError::ModelMismatch { .. }
                 ))
             ));
+        }
+    }
+
+    #[test]
+    fn empty_generation_returns_a_completed_result() {
+        let generator = Generator::new(scalar_model());
+        let process = Process::amplitude(["phi"], ["phi", "phi"]);
+        for options in [
+            GenerationOptions::default().max_vertices(0),
+            GenerationOptions::default().with_graph_filter(GenerationFilter::ParticleVeto(vec![
+                ParticleSelector::Name("phi".to_owned()),
+            ])),
+        ] {
+            let result = generator.generate(&process, &options).unwrap();
+            assert!(result.report.completed);
+            assert!(result.diagrams.is_empty());
+            assert!(result.groups.is_empty());
+            assert_eq!(result.report.topology_count, 0);
+            assert_eq!(result.report.interaction_assignment_count, 0);
+            assert_eq!(result.report.retained_count, 0);
         }
     }
 

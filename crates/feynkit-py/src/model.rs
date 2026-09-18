@@ -18,7 +18,9 @@ use crate::{
     display::escape_html,
     error,
     generation::{
-        LoopOrderInput, PyGenerationOptions, PyGenerationResult, SelectorInput,
+        DiagramSelectionInput, GenerationSettings, OrderRangeInput, ParticleInput,
+        PyCancellationToken, PyGenerationResult, PyNumeratorGrouping, PySelfEnergyFilterOptions,
+        PySnailFilterOptions, PyTadpoleFilterOptions, SelectorInput, VertexInput,
         generate_diagrams_for_model,
     },
 };
@@ -1529,11 +1531,10 @@ impl PyModel {
     /// --------
     /// Generate one-loop scalar amplitudes directly from their model:
     ///
-    /// >>> options = fk.GenerationOptions(max_vertices=3, allow_self_loops=True)
     /// >>> scalar = model.particle("scalar_0")
     /// >>> result = model.generate_diagrams(
     /// ...     [scalar], [scalar, scalar.antiparticle],
-    /// ...     loops=1, options=options,
+    /// ...     loops=1, max_vertices=3, allow_self_loops=True,
     /// ... )
     /// >>> diagram = result.diagrams[0]
     /// >>> diagram.numerator_expression()
@@ -1548,11 +1549,65 @@ impl PyModel {
     ///     Graph structure to generate.
     /// loops : int or tuple[int, int], optional
     ///     Exact loop order or inclusive minimum and maximum.
-    /// options : GenerationOptions or None, optional
-    ///     Generation filters and limits; defaults to standard options.
+    /// threads : int or None, optional
+    ///     Number of worker threads; None uses the generator default.
+    /// max_vertices : int or None, optional
+    ///     Maximum interaction vertices; None applies no override.
+    /// allow_self_loops : bool, optional
+    ///     Permit propagators that start and end on the same vertex.
+    /// allow_zero_flow_edges : bool, optional
+    ///     Permit internal edges with identically zero momentum flow.
+    /// graph_prefix : str or None, optional
+    ///     Prefix assigned to generated diagram names.
+    /// particle_veto : sequence[Particle | str | int] or None, optional
+    ///     Reject graphs containing these particles, model names, or signed PDG codes.
+    /// vertex_allow : sequence[VertexRule | str] or None, optional
+    ///     Keep only graphs whose vertices use these model rules or names.
+    /// vertex_veto : sequence[VertexRule | str] or None, optional
+    ///     Reject graphs containing these interaction vertices.
+    /// maximum_bridges : int or None, optional
+    ///     Largest allowed number of graph bridges.
+    /// self_energy : SelfEnergyFilterOptions or None, optional
+    ///     Reject self-energy subgraphs by mass category; None applies no filter.
+    /// tadpoles : TadpoleFilterOptions or None, optional
+    ///     Reject tadpoles by attachment mass; None applies no filter.
+    /// zero_snails : SnailFilterOptions or None, optional
+    ///     Reject zero-momentum snails by attachment mass; None applies no filter.
+    /// coupling_orders : dict[str, int | tuple[int, int or None]] or None, optional
+    ///     Exact coupling powers or inclusive ranges; an upper None is unbounded.
+    /// fermion_loop_count_range : tuple[int, int] or None, optional
+    ///     Inclusive range of closed fermion loops.
+    /// factorized_loop_topologies_count_range : tuple[int, int] or None, optional
+    ///     Inclusive range of factorized loop-topology components.
+    /// blob_range : tuple[int, int] or None, optional
+    ///     Inclusive cross-section blob-count range.
+    /// spectator_range : tuple[int, int] or None, optional
+    ///     Inclusive cross-section spectator-count range.
+    /// perturbative_orders : dict[str, int] or None, optional
+    ///     Exact perturbative powers required for cross-section graphs.
+    /// sewn_tadpoles : bool or None, optional
+    ///     Reject tadpoles revealed by sewing cross-section sides; None applies no filter.
+    /// cut_amplitude_coupling_orders : dict[str, int | tuple[int, int or None]] or None, optional
+    ///     Coupling-order bounds applied independently within every cut amplitude.
+    /// cut_amplitude_loop_count_range : tuple[int, int] or None, optional
+    ///     Inclusive combined loop count across both sides of every cut.
+    /// select_diagrams : sequence[FeynmanDiagram | str] or None, optional
+    ///     Retain only these diagram objects, content-derived IDs, or finalized names.
+    /// veto_diagrams : sequence[FeynmanDiagram | str] or None, optional
+    ///     Remove these diagram objects, content-derived IDs, or finalized names.
+    /// loop_momentum_bases : sequence[tuple[FeynmanDiagram | str, sequence[int]]] or None, optional
+    ///     Diagram selectors paired with ordered stable edge IDs for independent loop momenta.
+    /// numerator_prefactor : Expression or None, optional
+    ///     Scalar multiplier retained on every finalized diagram numerator.
+    /// projector : Expression or None, optional
+    ///     Override external-state contraction; S("1") disables external wavefunctions.
+    /// numerator_grouping : NumeratorGrouping or None, optional
+    ///     Zero detection and numerator comparison; None disables parsing and grouping.
+    /// cancellation_token : CancellationToken or None, optional
+    ///     Shared token for cancelling a running generation task.
     /// final_state_alternatives : sequence[sequence[Particle | ParticleSelector | str | int]] or None, optional
     ///     Extra outgoing states for a cross section.
-    #[pyo3(signature = (incoming, outgoing, *, kind="amplitude", loops=LoopOrderInput::default(), options=None, final_state_alternatives=None))]
+    #[pyo3(signature = (incoming, outgoing, *, kind="amplitude", loops=OrderRangeInput::default(), final_state_alternatives=None, threads=None, max_vertices=None, allow_self_loops=false, allow_zero_flow_edges=false, graph_prefix=None, particle_veto=None, vertex_allow=None, vertex_veto=None, maximum_bridges=None, self_energy=None, tadpoles=None, zero_snails=None, coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=None, blob_range=None, spectator_range=None, perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, cancellation_token=None))]
     #[allow(clippy::too_many_arguments)]
     fn generate_diagrams(
         &self,
@@ -1560,10 +1615,68 @@ impl PyModel {
         incoming: Vec<SelectorInput>,
         outgoing: Vec<SelectorInput>,
         kind: &str,
-        loops: LoopOrderInput,
-        options: Option<&PyGenerationOptions>,
+        loops: OrderRangeInput,
         final_state_alternatives: Option<Vec<Vec<SelectorInput>>>,
+        threads: Option<usize>,
+        max_vertices: Option<usize>,
+        allow_self_loops: bool,
+        allow_zero_flow_edges: bool,
+        graph_prefix: Option<String>,
+        particle_veto: Option<Vec<ParticleInput>>,
+        vertex_allow: Option<Vec<VertexInput>>,
+        vertex_veto: Option<Vec<VertexInput>>,
+        maximum_bridges: Option<usize>,
+        self_energy: Option<PySelfEnergyFilterOptions>,
+        tadpoles: Option<PyTadpoleFilterOptions>,
+        zero_snails: Option<PySnailFilterOptions>,
+        coupling_orders: Option<BTreeMap<String, OrderRangeInput<true>>>,
+        fermion_loop_count_range: Option<(usize, usize)>,
+        factorized_loop_topologies_count_range: Option<(usize, usize)>,
+        blob_range: Option<(usize, usize)>,
+        spectator_range: Option<(usize, usize)>,
+        perturbative_orders: Option<BTreeMap<String, usize>>,
+        sewn_tadpoles: Option<bool>,
+        cut_amplitude_coupling_orders: Option<BTreeMap<String, OrderRangeInput<true>>>,
+        cut_amplitude_loop_count_range: Option<(usize, usize)>,
+        select_diagrams: Option<Vec<DiagramSelectionInput>>,
+        veto_diagrams: Option<Vec<DiagramSelectionInput>>,
+        loop_momentum_bases: Option<Vec<(DiagramSelectionInput, Vec<usize>)>>,
+        numerator_prefactor: Option<PythonExpression>,
+        projector: Option<PythonExpression>,
+        numerator_grouping: Option<PyNumeratorGrouping>,
+        cancellation_token: Option<PyCancellationToken>,
     ) -> PyResult<PyGenerationResult> {
+        let options = GenerationSettings::new(
+            threads,
+            max_vertices,
+            allow_self_loops,
+            allow_zero_flow_edges,
+            graph_prefix,
+            particle_veto,
+            vertex_allow,
+            vertex_veto,
+            maximum_bridges,
+            self_energy,
+            tadpoles,
+            zero_snails,
+            coupling_orders,
+            fermion_loop_count_range,
+            factorized_loop_topologies_count_range,
+            blob_range,
+            spectator_range,
+            perturbative_orders,
+            sewn_tadpoles,
+            cut_amplitude_coupling_orders,
+            cut_amplitude_loop_count_range,
+            select_diagrams,
+            veto_diagrams,
+            loop_momentum_bases,
+            numerator_prefactor,
+            projector,
+            numerator_grouping,
+            cancellation_token,
+        )
+        .inner;
         generate_diagrams_for_model(
             py,
             self,

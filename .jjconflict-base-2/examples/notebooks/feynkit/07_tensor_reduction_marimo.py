@@ -305,20 +305,17 @@ def _(E, Path, fk, mo, table):
     )
     _vacuum_model = fk.Model(_model_path)
 
-    _vacuum_options = fk.GenerationOptions(max_vertices=2)
-    _vacuum_options.set_coupling_orders({"QCD": (2, 2), "QED": (0, 0)})
-    _vacuum_options.add_particle_veto(
-        [
-            _particle
-            for _particle in _vacuum_model.particles
-            if abs(_particle.pdg_code) != 21
-        ]
-    )
     _vacuum_result = _vacuum_model.generate_diagrams(
         incoming=[],
         outgoing=[],
         loops=2,
-        options=_vacuum_options,
+        max_vertices=2,
+        coupling_orders={"QCD": 2, "QED": 0},
+        particle_veto=[
+            _particle
+            for _particle in _vacuum_model.particles
+            if abs(_particle.pdg_code) != 21
+        ],
     )
     if len(_vacuum_result) != 1:
         raise RuntimeError("expected one pure-gluon theta vacuum graph")

@@ -189,6 +189,13 @@ GammaLoop runtime details.
 
 Python diagram, edge, and vertex numerators use Spenso's `TensorExpression`
 directly, with the existing constructor inferring their tensor interfaces.
+Python's `Model.generate_diagrams()` and `Generator.generate()` accept generation settings
+as keyword arguments and construct the same Rust options. Python dictionaries support reusable
+configurations; no mutable Python options builder accumulates filters. Coupling orders accept
+exact integers or inclusive ranges, while filter and grouping values wrap their Rust settings.
+Valid requests admitting no graphs return a completed empty result through the same generation
+pipeline; invalid settings remain errors, and cancelled requests are marked incomplete.
+
 The graph crate registers momentum and index symbols before parsing or
 generation. Index identities retain their source, sink, edge, or vertex head;
 label metadata drives Spenso's shared plain, LaTeX, and Typst printers,

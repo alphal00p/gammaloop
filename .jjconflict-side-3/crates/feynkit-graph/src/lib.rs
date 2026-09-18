@@ -15,7 +15,11 @@ mod display;
 // Use Spenso's canonical tag names and shared printer so FeynKit interoperates
 // with the Spenso instance embedded by the host.
 symbolica::initialize!(|| {
-    let _ = momentum_symbol();
+    symbolica::symbol!(
+        "FeynKit::Momentum",
+        tags = ["spenso::tensor", "spenso::rank1", "spenso::tensor-label:q"],
+        print = spenso::network::tags::tensor_print
+    );
     for (name, label) in [
         ("SourceIndex", "s"),
         ("SinkIndex", "t"),
@@ -36,11 +40,7 @@ symbolica::initialize!(|| {
 });
 
 pub fn momentum_symbol() -> symbolica::atom::Symbol {
-    symbolica::symbol!(
-        "FeynKit::Momentum",
-        tags = ["spenso::tensor", "spenso::rank1", "spenso::tensor-label:q"],
-        print = spenso::network::tags::tensor_print
-    )
+    symbolica::symbol!("FeynKit::Momentum")
 }
 
 use std::{
