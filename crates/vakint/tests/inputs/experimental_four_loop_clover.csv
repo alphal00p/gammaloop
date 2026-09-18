@@ -1,0 +1,12 @@
+# Four physical one-scale propagators followed by six ISP coordinates.
+# Rows: edge_from, edge_to, k1, k2, k3, k4.
+1,1,1,0,0,0
+1,1,0,1,0,0
+1,1,0,0,1,0
+1,1,0,0,0,1
+0,0,1,-1,0,0
+0,0,1,0,-1,0
+0,0,1,0,0,-1
+0,0,1,1,0,0
+0,0,0,1,1,0
+0,0,0,1,0,1
