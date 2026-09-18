@@ -43,8 +43,8 @@ impl MediumMode {
 pub struct ThermalDistributionFactor {
     pub edge_id: EdgeIndex,
     pub sign: i32,
-    /// Ordinary energy derivative order at fixed temperature, chemical potential,
-    /// and orientation. Cyclic-chain reduction signs belong to the CFF coefficient.
+    /// Ordinary energy derivative order at fixed temperature, chemical potential, and orientation.
+    /// Cyclic-chain reduction signs and overall factors belong to the CFF coefficient.
     pub derivative_order: usize,
 }
 

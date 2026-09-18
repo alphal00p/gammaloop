@@ -178,7 +178,7 @@ contraction numerators, and distribution derivatives separately from rational
 coefficients, keeping physical distributions outside Laurent interpolation.
 Distribution derivatives are ordinary energy derivatives at fixed temperature,
 chemical potential, and orientation. Reducing an m-edge cyclic chain contributes
-`(-1)^(m-1)` to the CFF coefficient and a distribution derivative of order `m-1`.
+`(-1)^(m-1)/(m-1)!` to the CFF coefficient and a distribution derivative of order `m-1`.
 These weights survive serialization, variant fusion, source-edge remapping, and
 products of disconnected components. Initial-state cuts remain external energy
 aliases and never acquire thermal distribution factors. GammaLoop's graph and
