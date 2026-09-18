@@ -8,7 +8,10 @@ For complete executable examples, open the #link("guides/showcases/")[FeynKit sh
 Use a diagram produced by the #link("quickstart/python/")[Python quickstart]. Its
 `to_linnest()` method returns complete Typst source; it does not compile a figure. `to_svg()`,
 `to_html()`, `_repr_svg_()`, and `_repr_html_()` compile that source with Python's Typst package.
-The native module embeds the compatible Linnest/Kurvst source and Wasm files.
+Rendering uses Linnet’s Python preparation and compilation pipeline.
+The native module embeds the compatible Linnest/Kurvst source, Wasm files, and shared
+physics styles. Particle metadata selects dashed scalar lines, fermion arrows,
+photon waves, gluon coils, and mathematical labels from the model's TeX names.
 
 // docs-example: syntax
 ```sh

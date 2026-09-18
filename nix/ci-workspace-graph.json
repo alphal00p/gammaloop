@@ -80,6 +80,7 @@
       "feynkit-model",
       "feynkit-tensor",
       "feynkit-ufo",
+      "linnet-py",
       "spynso3"
     ],
     "feynkit-tensor": [
@@ -308,6 +309,7 @@
       "feynkit-model": [],
       "feynkit-tensor": [],
       "feynkit-ufo": [],
+      "linnet-py": [],
       "spynso3": []
     },
     "feynkit-tensor": {
@@ -658,7 +660,10 @@
       "feynkit-ufo",
       "gammaloop-workspace-hack",
       "idenso",
+      "kurvst",
+      "linnest",
       "linnet",
+      "linnet-py",
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
@@ -911,7 +916,10 @@
       "feynkit-ufo",
       "gammaloop-workspace-hack",
       "idenso",
+      "kurvst",
+      "linnest",
       "linnet",
+      "linnet-py",
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
@@ -1198,6 +1206,7 @@
       "feynkit-model",
       "feynkit-tensor",
       "feynkit-ufo",
+      "linnet-py",
       "spynso3"
     ],
     "feynkit-tensor": [
@@ -1431,6 +1440,7 @@
       "feynkit-model": [],
       "feynkit-tensor": [],
       "feynkit-ufo": [],
+      "linnet-py": [],
       "spynso3": []
     },
     "feynkit-tensor": {

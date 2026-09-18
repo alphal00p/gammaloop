@@ -261,6 +261,9 @@ try:
 except ImportError:
     pass
 else:
+    # Scalar graphs use the same dashed-particle styling as exported Typst figures.
+    assert "stroke-dasharray" in diagram.to_svg()
+    assert "stroke-dasharray" in diagram._repr_html_()
     for output in (indexed.to_html(), indexed.to_svg()):
         assert "SourceIndex" not in output
         assert "SinkIndex" not in output
