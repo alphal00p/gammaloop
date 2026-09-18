@@ -6,8 +6,12 @@
 
 #![cfg(feature = "experimental-rustred")]
 
+#[path = "experimental_rustred_4l/acceptance_inputs.rs"]
+mod acceptance_inputs;
 #[path = "experimental_rustred_4l/input.rs"]
 mod input;
+#[path = "experimental_rustred_4l/numerator.rs"]
+mod numerator;
 mod test_utils;
 #[path = "experimental_rustred_4l/timing.rs"]
 mod timing;
@@ -402,15 +406,14 @@ fn run_candidate_finite_family(
         assert!(dot_power >= 2, "dotted target power must be at least two");
         let parent = input::ParentInput::from_csv(&source);
         let started = std::time::Instant::now();
-        let native = Arc::new(
-            NativeCandidate::<10>::solve(
-                parent.family.clone(),
-                parent.physical_momenta.clone(),
-                workers,
-                None,
-            )
-            .expect("RustRed candidate generation and pointwise bridge"),
-        );
+        let native = NativeCandidate::<10>::solve(
+            parent.family.clone(),
+            parent.physical_momenta.clone(),
+            workers,
+            None,
+        )
+        .expect("RustRed candidate generation and pointwise bridge");
+        let native = Arc::new(native);
         println!(
             "candidate {family_name} search: {:?}; fixed residuals: {}",
             started.elapsed(),

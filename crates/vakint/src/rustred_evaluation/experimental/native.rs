@@ -26,6 +26,34 @@ pub struct NativeCandidate<const N: usize> {
 }
 
 impl<const N: usize> NativeCandidate<N> {
+    /// Steer an existing RustRed candidate applier without running discovery.
+    ///
+    /// The caller may load it with RustRed's candidate-bundle loader. Its
+    /// formulas remain explicitly uncertified; loading does not promote them
+    /// to a closed artifact. Binding the supplied family here ensures scalar
+    /// numerator lowering uses the same denominator coordinates as reduction.
+    pub fn from_reducer(
+        family: Arc<IntegralFamily>,
+        parent_momenta: Vec<Atom>,
+        reducer: CandidateReducer<N>,
+    ) -> Result<Self, String> {
+        if family.denominator_count() != N
+            || parent_momenta.is_empty()
+            || parent_momenta.len() > N
+            || family.fingerprint() != reducer.family_fingerprint()
+        {
+            return Err("candidate reducer/family binding or physical-slot arity differs".into());
+        }
+        let terminals = reducer.terminals().clone();
+        Ok(Self {
+            reducer: Mutex::new(reducer),
+            dimension: family.dimension().to_expression(),
+            family,
+            parent_momenta,
+            terminals,
+        })
+    }
+
     /// Solve an explicitly supplied family with the existing RustRed engine.
     ///
     /// The bounded experiment enumerates sectors only through arity 16.
@@ -98,14 +126,7 @@ impl<const N: usize> NativeCandidate<N> {
             ReductionLimits::default(),
         )
         .map_err(|e| e.to_string())?;
-        let terminals = reducer.terminals().clone();
-        Ok(Self {
-            reducer: Mutex::new(reducer),
-            family: family.clone(),
-            parent_momenta,
-            dimension: family.dimension().to_expression(),
-            terminals,
-        })
+        Self::from_reducer(family, parent_momenta, reducer)
     }
 
     pub fn terminals(&self) -> &BTreeSet<IntegralKey> {

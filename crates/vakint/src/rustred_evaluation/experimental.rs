@@ -124,7 +124,13 @@ pub fn prepare_candidate_integrals(
                 .as_ref()
                 .map(|(_, coordinates)| coordinates.as_ref()),
         );
-        let family_numerator = (1..=integral.n_loops).fold(routed_numerator, |value, axis| {
+        // Parent routing expands vector sums at component level. Restore the
+        // scalar-product representation before replacing vector labels, just
+        // as the production materializer does. Otherwise k(i,mu) is not
+        // matched by k(i), so loop components become opaque spectators in the
+        // family-bound scalar lowerer.
+        let scalar_numerator = Vakint::convert_to_dot_notation(routed_numerator.as_view());
+        let family_numerator = (1..=integral.n_loops).fold(scalar_numerator, |value, axis| {
             value
                 .replace(function!(S.k, Atom::num(axis)).to_pattern())
                 .with(
@@ -133,6 +139,11 @@ pub fn prepare_candidate_integrals(
                         .to_pattern(),
                 )
         });
+        if family_numerator.contains_symbol(S.k) {
+            return Err(candidate_error(
+                "parent-routed numerator retains loop-vector components; tensor preprocessing must produce scalar products",
+            ));
+        }
         let expression = integral
             .canonical_expression
             .as_ref()
