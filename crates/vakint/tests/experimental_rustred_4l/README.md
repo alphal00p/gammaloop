@@ -72,18 +72,16 @@ timer. FORM process startup and temporary I/O remain part of FMFT evaluation.
 Linux CPU deltas include waited-for child processes; RSS fields are explicitly
 parent-process before/after snapshots, not phase peaks or FORM-child memory.
 
-On 2026-09-16 the H parent, dotted parent and pinch passed the unchanged strict
-comparative harness. The invalid-FORM scalar tail performed 26,956 new rule
-applications after its cache was cleared; parent and pinch themselves are
-declared terminals. A separate source/evidence audit confirmed the pass. The
-same binary also passed the three FG targets, with 3,362 new applications.
-The three X targets also passed, with 82,637 new applications.
+Historical probe results from 2026-09-16 are retained here for provenance:
+the H parent, dotted parent and pinch passed the unchanged strict comparative
+harness, with 26,956 invalid-FORM scalar-tail applications after cache clear;
+the same binary passed the three FG targets with 3,362 applications and the
+three X targets with 82,637 applications.
 These experiments use exact offline projections of only the actually reached
 fixed residuals, not guessed master declarations or oracle-supplied IBP rules.
-The BMW parent, dotted power-three target and pinch now use the same harness;
-the dotted target passed with 16,113 new applications.  The power-two BMW
-probe is a declared residual and is therefore not counted as recurrence
-evidence.
+The historical BMW dotted power-three probe passed with 16,113 applications.
+Together these are twelve historical parent/dotted/pinch comparisons, not a
+measurement of the newer fifteen-entrypoint analytic inventory.
 
 The ignored `candidate_all_four_loop_parents_match_fmft` test reuses this
 same comparative harness for all four checked-in descriptors (`H`, `FG`,
@@ -126,9 +124,11 @@ H tensor numerator and external momenta as the analytic four-loop test, with
 `muvsq=3` and `mursq=5`. Its regenerated catalogue contains 386 declared
 terminals. A fresh strict catalog-only replay loaded all 386 terms, used an
 invalid FORM path, passed parent/dotted/pinch/rank-four probes, and applied
-26,956 rules in 441.43 s. The ordinary FMFT comparison was stopped after
-10m22 without a parity result, so no ordinary rank-four parity claim is made
-yet. The new `candidate_fg_clover_numerator_case_matches_fmft` lane reuses the
+26,956 rules in 441.43 s. The ordinary FMFT comparison in that historical
+rank-four lane was stopped after 10m22 without a parity result. No newer
+ordinary rank-four H parity result is claimed here. The new
+`candidate_fg_clover_numerator_case_matches_fmft`
+lane reuses the
 registered FG parent witness for all four literal Clover probes (unit mass,
 non-unit masses, dotted `k1^2`, and the rank-four numerator). The scalar
 probes pass finite-target parity. The rank-four probe uses the exact
@@ -140,9 +140,9 @@ rule applications and an invalid scalar FORM path. A standalone four-slot
 clover descriptor is intentionally not shipped: the current matcher witness
 represents that case as a contraction of an eight-slot parent.
 
-Fresh release-binary parent runs on 2026-09-18 (six candidate workers, FORM
-used only for independent terminal preparation) produced the bundled catalogs
-with the following reproducible measurements:
+Historical release-binary parent runs on 2026-09-18 (six candidate workers)
+produced the bundled catalogs
+with the following measurements. They are retained for comparison only:
 
 | parent | fixed residuals | candidate search | total candidate/oracle/parity run | dotted applications |
 | --- | ---: | ---: | ---: | ---: |
@@ -156,10 +156,85 @@ path completed in 50.38 s (3,362 applications). These timings include the
 finite candidate/oracle harness boundary and are not claims about a complete
 four-loop artifact or production RustRed evaluation.
 
-This checkpoint is **twelve finite-target comparisons plus one strict H
-rank-four catalog-only replay**, not all fifteen existing
-four-loop numerical acceptance entrypoints or the nineteen registered graph
-classes. It does not prove arbitrary-index closure, ship a four-loop production
-catalog, or establish twenty-thousand-digit master accuracy. Tensor-bearing
-candidate acceptance and non-unit-mass candidate comparisons remain separate
-gates.
+The implemented `candidate_all_four_loop_analytic_acceptance_cases_match_fmft`
+inventory contains **fifteen numerical acceptance entrypoints**, spanning the
+H, FG, BMW and X descriptors, registered numerator and non-unit-mass cases,
+and the historically mislabelled four-tadpole entrypoint. Inventory
+implementation and input validation do not imply that these numerical runs
+have all passed. A previous serial filtered-results table has been withdrawn:
+its complete run logs were not available for independent verification. The
+historical twelve-probe evidence and the explicitly limited H rank-four
+catalog-only evidence above remain separate from this new inventory.
+
+The inherited environment of a later six-worker attempt lacked
+`SYMBOLICA_LICENSE`; Symbolica consequently entered restricted mode and
+reported `requested 6 sector workers, but Symbolica permits 1 on execution
+threads`. This is not evidence that the user's supplied license is limited to
+one worker. Export the current license before running either the serial or
+parallel matrix; no new six-worker timing is inferred from that failed setup.
+
+## Expanded propagator numerators versus explicit pinches
+
+The new `propagator_pinches.rs` lane defines sixteen paired-input checks: four
+for each of H, FG, BMW and X. Numbering propagators from one, the expanded
+numerator is respectively `D1`, `D7`, `D1*D2`, or `D5*D6`, where each `Di`
+includes the mass term with the input propagator's sign convention. The
+paired input has no such numerator and instead contracts the corresponding
+one or two propagators. Scalar products and products of denominators are
+expanded, so the test exercises numerator handling, not a textual cancellation
+of identical factors. The selected double pinches preserve four-loop,
+non-scaleless cases.
+
+Both inputs are matched independently through Vakint's existing topology
+matcher; their retained routing witnesses select the candidate family. A
+pinch may therefore use a different registered parent from the numerator
+input. The harness uses the FeynKit tensor prepass and tests both the FMFT peer
+and the experimental RustRed scalar peer, including comparison between the
+peers. The RustRed peer uses an invalid FORM path. These checks use
+`muvsq=3`, `mursq=7`, 32-digit numerical arithmetic, and relative tolerance
+`1e-20`, making missing mass terms or powers observable.
+
+Run the numerical matrix explicitly:
+
+```sh
+export SYMBOLICA_LICENSE="<your current Symbolica license>"
+export VAKINT_4L_CANDIDATE_ORACLE_FORM_PATH=/absolute/path/to/form
+export VAKINT_4L_CANDIDATE_WORKERS=1
+cargo test -p vakint --release --locked --features experimental-rustred \
+  --test experimental_rustred_4l_tests \
+  sixteen_numerator_propagator_pinches_match_fmft_and_rustred \
+  -- --ignored --nocapture --test-threads=1
+```
+
+Set `VAKINT_4L_CANDIDATE_FAMILY_FILTER=H`, `FG`, `BMW`, or `X` to select the
+four numerator inputs belonging to one parent. An explicitly pinched partner
+can still require a candidate reducer for another matched parent. Candidate
+reducers are shared within a run and the bundled finite terminal catalogs
+are reused; the harness does not use FMFT to discover IBP rules. The numerical
+matrix's first release run stopped at the failure recorded below. The
+unignored `sixteen_inputs_are_expanded_and_have_registered_four_loop_witnesses`
+test checks fixture construction separately and cannot establish numerical
+parity by itself.
+
+Checkpoint on 2026-09-18: the expanded-input/matcher fixture test passed for
+all sixteen pairs (2.42 s). The six-worker numerical run completed with a
+failure after 67.37 s: all four H pairs and FG/D1 passed both the within-backend
+and cross-backend checks. FG/D7 versus its single pinch then failed **inside
+FMFT**, before the RustRed lane: the real epsilon^-4 coefficients were 1.5 and
+0. The other ten pairs were not reached. The H double pinch D5*D6 exercised
+12,554 new RustRed recurrence applications; the other passing pairs used
+declared terminals. No tolerance was weakened. Investigate the fixture,
+canonical routing, FeynKit prepass and FMFT adapter before attributing this to
+any particular reducer. The user requested a quota stop at this point.
+
+Even a passing sixteen-pair matrix would establish these concrete cancellation
+and routing identities, not arbitrary-index family closure or comprehensive
+coverage of every four-loop input.
+
+The measurements exercise the experimental runtime candidate bridge and its
+offline finite-terminal catalogs.  They do **not** establish arbitrary-index
+closure, do not constitute a sealed four-loop RustRed artifact, and do not
+claim twenty-thousand-digit master accuracy.  Production
+`EvaluationMethod::RustRed` remains sealed-artifact-only; the next delivery
+step is to serialize and authenticate a family-bound candidate/closure artifact
+and then run the same fifteen-case harness from a cold reload.

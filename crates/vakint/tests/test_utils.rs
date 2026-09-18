@@ -728,6 +728,177 @@ pub fn compare_evaluations(
     });
 }
 
+/// Compare two algebraically related inputs lane-by-lane.
+///
+/// This is intentionally separate from [`compare_evaluations`]: the latter
+/// compares independent reduction backends for one input, while this helper
+/// compares the *same* backend on two inputs.  It is used by the four-loop
+/// numerator-equals-propagator probes to assert both of the following facts:
+/// each input agrees with the FMFT oracle, and each input agrees with its
+/// corresponding peer inside every lane (including the FORM-free RustRed
+/// scalar lane).
+#[allow(clippy::too_many_arguments)]
+pub fn compare_input_pair(
+    vakint_default_settings: VakintSettings,
+    lanes: &[(EvaluationTestLane, EvaluationTestLane)],
+    tensor_prepass: TensorPrepass,
+    first: AtomView,
+    second: AtomView,
+    numerical_masses: HashMap<String, Float, ahash::RandomState>,
+    numerical_external_momenta: HashMap<usize, Momentum, ahash::RandomState>,
+    rel_threshold: f64,
+    max_pull: f64,
+) {
+    assert!(
+        lanes.len() >= 2,
+        "a pair comparison needs an independent oracle"
+    );
+    let lanes = lanes.to_vec();
+    let first = first.to_owned();
+    let second = second.to_owned();
+    run_multi_lane_acceptance(move || {
+        let python_exe = vakint_default_settings.python_exe_path.clone();
+        let lanes = lanes
+            .into_iter()
+            .map(|(first, second)| {
+                let mut adjusted = adjusted_lanes(
+                    &[first, second],
+                    Some(true),
+                    rel_threshold * 1.0e-2,
+                    &numerical_masses,
+                    &numerical_external_momenta,
+                )
+                .into_iter();
+                (adjusted.next().unwrap(), adjusted.next().unwrap())
+            })
+            .collect::<Vec<_>>();
+        if lanes
+            .iter()
+            .flat_map(|(first, second)| [first, second])
+            .any(|lane| evaluation_requires_pysecdec(&lane.evaluation_order))
+            && !pysecdec_available(&python_exe)
+        {
+            eprintln!("Skipping pair test: PySecDec not available.");
+            return;
+        }
+        let settings = VakintSettings {
+            allow_unknown_integrals: false,
+            use_dot_product_notation: true,
+            evaluation_order: lanes[0].0.evaluation_order.clone(),
+            ..vakint_default_settings
+        };
+        let original_form_path = settings.form_exe_path.clone();
+        let mut vakint = get_vakint(settings);
+        let (canonical_first, tensor_first) =
+            prepare_comparison_inputs(&mut vakint, first.as_view(), tensor_prepass);
+        let (canonical_second, tensor_second) =
+            prepare_comparison_inputs(&mut vakint, second.as_view(), tensor_prepass);
+
+        let mut first_results = Vec::with_capacity(lanes.len());
+        let mut second_results = Vec::with_capacity(lanes.len());
+        for (lane, second_lane) in &lanes {
+            let first_value = evaluate_lane(
+                &mut vakint,
+                lane,
+                &canonical_first,
+                &tensor_first,
+                &original_form_path,
+            );
+            let second_value = evaluate_lane(
+                &mut vakint,
+                second_lane,
+                &canonical_second,
+                &tensor_second,
+                &original_form_path,
+            );
+            let first_numerical = Vakint::full_numerical_evaluation(
+                &vakint.settings,
+                first_value.as_view(),
+                &numerical_masses,
+                &HashMap::default(),
+                Some(&numerical_external_momenta),
+            )
+            .unwrap_or_else(|error| {
+                panic!("numerical evaluation of first pair input failed: {error}")
+            });
+            let second_numerical = Vakint::full_numerical_evaluation(
+                &vakint.settings,
+                second_value.as_view(),
+                &numerical_masses,
+                &HashMap::default(),
+                Some(&numerical_external_momenta),
+            )
+            .unwrap_or_else(|error| {
+                panic!("numerical evaluation of second pair input failed: {error}")
+            });
+            assert!(
+                first_numerical
+                    .0
+                    .get_epsilon_coefficients()
+                    .iter()
+                    .any(|(_, value)| { value.norm_squared() > Float::with_val(32, 0) }),
+                "scaleless/zero numerator-pinch fixture gives vacuous coverage"
+            );
+            let combined_error = match (&first_numerical.1, &second_numerical.1) {
+                (Some(first), Some(second)) => Some(first.aggregate_errors(second)),
+                (Some(first), None) => Some(first.clone()),
+                (None, Some(second)) => Some(second.clone()),
+                (None, None) => None,
+            };
+            let (matches, message) = first_numerical.0.does_approx_match(
+                &second_numerical.0,
+                combined_error.as_ref(),
+                rel_threshold,
+                max_pull,
+            );
+            assert!(
+                matches,
+                "numerator-equals-propagator pair differs in {}: {message}",
+                lane.evaluation_order
+            );
+            first_results.push((lane.evaluation_order.clone(), first_numerical));
+            second_results.push((lane.evaluation_order.clone(), second_numerical));
+        }
+        let (benchmark_order, (benchmark_central, benchmark_error)) = &first_results[0];
+        for (tested_order, (tested_central, tested_error)) in &first_results[1..] {
+            let combined_error = match (benchmark_error, tested_error) {
+                (Some(first), Some(second)) => Some(first.aggregate_errors(second)),
+                (Some(first), None) => Some(first.clone()),
+                (None, Some(second)) => Some(second.clone()),
+                (None, None) => None,
+            };
+            let (matches, message) = benchmark_central.does_approx_match(
+                tested_central,
+                combined_error.as_ref(),
+                rel_threshold,
+                max_pull,
+            );
+            assert!(
+                matches,
+                "first pair input: {tested_order} differs from {benchmark_order}: {message}"
+            );
+        }
+        for (tested_order, (tested_central, tested_error)) in &second_results {
+            let combined_error = match (benchmark_error, tested_error) {
+                (Some(first), Some(second)) => Some(first.aggregate_errors(second)),
+                (Some(first), None) => Some(first.clone()),
+                (None, Some(second)) => Some(second.clone()),
+                (None, None) => None,
+            };
+            let (matches, message) = benchmark_central.does_approx_match(
+                tested_central,
+                combined_error.as_ref(),
+                rel_threshold,
+                max_pull,
+            );
+            assert!(
+                matches,
+                "cross-backend numerator/pinch comparison {tested_order}: {message}"
+            );
+        }
+    });
+}
+
 #[allow(unused, clippy::too_many_arguments)]
 pub fn compare_two_evaluations(
     vakint_default_settings: VakintSettings,

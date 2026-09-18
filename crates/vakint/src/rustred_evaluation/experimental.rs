@@ -22,8 +22,8 @@ use crate::fmft::FMFT;
 use crate::symbols::S;
 use crate::utils::vakint_macros::{vk_parse, vk_symbol};
 use crate::{
-    FMFTOptions, Vakint, VakintError, VakintExpression, VakintSettings, get_integer_from_atom,
-    get_prop_with_id,
+    FMFTOptions, ReplacementRules, Vakint, VakintError, VakintExpression, VakintSettings,
+    get_integer_from_atom, get_prop_with_id,
 };
 
 /// Exact output from RustRed's experimental per-target rule application.
@@ -81,6 +81,36 @@ pub struct PreparedCandidateIntegral {
     scalar_numerator: Atom,
     coefficient: Atom,
     common_mass_squared_power: u32,
+}
+
+impl ReplacementRules {
+    /// Ordered physical momenta from the existing four-loop match witness.
+    ///
+    /// This authenticates the retained defining parent and contracted routing
+    /// before exposing a descriptor for finite candidate selection. It neither
+    /// matches another topology nor selects a reducer from a topology name.
+    pub fn candidate_parent_momenta(&mut self) -> Result<Vec<Atom>, VakintError> {
+        self.apply_replacement_rules()?;
+        let integral = self.canonical_topology.get_integral();
+        if integral.n_loops != 4 {
+            return Err(candidate_error("candidate parent requires four loops"));
+        }
+        let (parent, _) = integral
+            .parent_routing
+            .as_ref()
+            .ok_or_else(|| candidate_error("matched family has no retained parent routing"))?;
+        let momenta = (1..=integral.n_props)
+            .map(|slot| {
+                get_prop_with_id(parent.as_view(), slot)
+                    .and_then(|properties| properties.get(&vk_symbol!("q_")).cloned())
+                    .ok_or_else(|| {
+                        candidate_error(format!("defining parent slot {slot} is absent"))
+                    })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        integral.validate_parent_routing(&momenta)?;
+        Ok(momenta)
+    }
 }
 
 /// Prepare actual matched target keys before an offline terminal catalog exists.
@@ -257,7 +287,7 @@ impl ExperimentalRustRed {
         input: AtomView,
     ) -> Result<CandidateEvaluation, VakintError> {
         let terms = prepare_candidate_integrals(vakint, settings, input, self.reducer.as_ref())?;
-        let mut value = Atom::Zero;
+        let mut contributions = BTreeMap::<Atom, Atom>::new();
         let mut applied_rules = 0usize;
         for term in &terms {
             let reduction = self
@@ -301,12 +331,17 @@ impl ExperimentalRustRed {
             raw *= term.mass_squared.clone().pow(Atom::num(exponent))
                 * &term.coefficient
                 * &term.scalar_numerator;
-            value += FMFT::with_settings(settings.clone()).finalize_native_reduced_masters(
-                raw,
-                &term.mass_squared,
-                &self.master_options,
-            )?;
+            contributions
+                .entry(term.mass_squared.clone())
+                .and_modify(|sum| *sum += raw.clone())
+                .or_insert(raw);
         }
+        // Keep every exact contribution with the same common mass together.
+        // Native FMFT finalization expands Laurent series and substitutes
+        // finite master tables; doing that per target can expose an
+        // unsupported pole before another target cancels it exactly.
+        let value =
+            finalize_candidate_contributions(settings, contributions, &self.master_options)?;
         Ok(CandidateEvaluation {
             value,
             targets: terms.len(),
@@ -315,8 +350,52 @@ impl ExperimentalRustRed {
     }
 }
 
+fn finalize_candidate_contributions(
+    settings: &VakintSettings,
+    contributions: BTreeMap<Atom, Atom>,
+    options: &FMFTOptions,
+) -> Result<Atom, VakintError> {
+    let fmft = FMFT::with_settings(settings.clone());
+    contributions
+        .into_iter()
+        .try_fold(Atom::Zero, |mut value, (mass, raw)| {
+            value += fmft.finalize_native_reduced_masters(raw.together(), &mass, options)?;
+            Ok(value)
+        })
+}
+
 fn candidate_error(detail: impl Into<String>) -> VakintError {
     VakintError::RustRedEvaluation(super::RustRedEvaluationError::Reduction {
         detail: format!("experimental candidate: {}", detail.into()),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn candidate_finalization_cancels_unknown_orders_before_expansion() {
+        Vakint::initialize_vakint_symbols();
+        let settings = VakintSettings {
+            form_exe_path: "/definitely/not/a/form/executable".into(),
+            number_of_terms_in_epsilon_expansion: 5,
+            run_time_decimal_precision: 25,
+            integral_normalization_factor: crate::LoopNormalizationFactor::FMFTandMATAD,
+            use_dot_product_notation: true,
+            ..VakintSettings::default()
+        };
+        let mut contributions = BTreeMap::new();
+        let mass = Atom::num(1);
+        contributions.insert(mass.clone(), vk_parse!("PR9x").unwrap());
+        contributions
+            .entry(mass)
+            .and_modify(|sum| *sum += vk_parse!("-PR9x").unwrap())
+            .or_insert_with(|| vk_parse!("-PR9x").unwrap());
+
+        let value =
+            finalize_candidate_contributions(&settings, contributions, &FMFTOptions::default())
+                .expect("exact cancellation should remove unsupported master orders");
+        assert!(value.is_zero());
+    }
 }

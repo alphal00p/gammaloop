@@ -10,7 +10,7 @@ use vakint::{LoopNormalizationFactor, Vakint, VakintSettings, vakint_parse};
 pub type ExternalMomentum = (usize, (f64, f64, f64, f64));
 pub type LaurentReference = (i64, (String, String));
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ParentDescriptor {
     H,
     X,

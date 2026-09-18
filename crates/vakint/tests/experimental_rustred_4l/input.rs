@@ -11,8 +11,24 @@ use vakint::vakint_parse as vk_parse;
 pub struct ParentInput {
     pub family: Arc<IntegralFamily>,
     pub physical_momenta: Vec<Atom>,
+    physical_coefficients: Vec<[i64; 4]>,
     momenta: Vec<Atom>,
     edges: Vec<(i64, i64)>,
+}
+
+/// A numerator identity used by the four-loop coverage probes.
+///
+/// `with_numerator` contains the expanded scalar denominator
+/// `q_i.q_i-muvsq` multiplying the parent family.  It must therefore be
+/// identical to the corresponding input with that propagator pinched.  The
+/// construction is deliberately derived from the supplied family descriptor;
+/// it is not a topology-name rule in the RustRed engine.
+#[derive(Clone)]
+pub struct NumeratorPropagatorPinch {
+    pub numerator_name: &'static str,
+    pub with_numerator: Atom,
+    pub pinch_name: &'static str,
+    pub pinched: Atom,
 }
 
 impl ParentInput {
@@ -33,6 +49,7 @@ impl ParentInput {
             "complete four-loop family needs ten denominators"
         );
         let mut physical_momenta = Vec::new();
+        let mut physical_coefficients = Vec::new();
         let mut momenta = Vec::new();
         let mut edges = Vec::new();
         let mut propagators = Vec::new();
@@ -66,6 +83,7 @@ impl ParentInput {
             });
             if !auxiliary {
                 physical_momenta.push(momentum.clone());
+                physical_coefficients.push(row[2..].try_into().unwrap());
             }
             momenta.push(momentum);
             edges.push((row[0], row[1]));
@@ -89,6 +107,7 @@ impl ParentInput {
         Self {
             family: Arc::new(family),
             physical_momenta,
+            physical_coefficients,
             momenta,
             edges,
         }
@@ -124,5 +143,55 @@ impl ParentInput {
             }
         }
         numerator * function!(S.topo, propagators)
+    }
+
+    /// Build a product of expanded physical denominator factors.  Vakint uses
+    /// Minkowski denominators `q^2-m^2`, so each factor lowers the corresponding
+    /// unit power to zero and gives the same multiply-pinched topology.
+    pub fn numerator_equals_propagators(
+        &self,
+        slots: &[usize],
+        numerator_name: &'static str,
+        pinch_name: &'static str,
+    ) -> NumeratorPropagatorPinch {
+        let mut powers = (0..self.momenta.len())
+            .map(|slot| i64::from(slot < self.physical_momenta.len()))
+            .collect::<Vec<_>>();
+        let parent = self.integral(&powers);
+        let mut numerator = Atom::num(1);
+        for &slot in slots {
+            assert!(
+                slot < self.physical_momenta.len(),
+                "physical slot out of range"
+            );
+            assert_eq!(powers[slot], 1, "duplicate cancellation slot");
+            // Expand q.q in the loop-momentum basis.  Keeping the bilinear
+            // expansion explicit makes the identity independent of any
+            // topology-specific tensor-reducer simplification.
+            let coefficients = self.physical_coefficients[slot];
+            let mut square = Atom::Zero;
+            for (left, &left_coefficient) in coefficients.iter().enumerate() {
+                for (right, &right_coefficient) in coefficients.iter().enumerate() {
+                    if left_coefficient != 0 && right_coefficient != 0 {
+                        square += Atom::num(left_coefficient * right_coefficient)
+                            * function!(
+                                S.dot,
+                                function!(S.k, Atom::num((left + 1) as i64)),
+                                function!(S.k, Atom::num((right + 1) as i64))
+                            );
+                    }
+                }
+            }
+            numerator *= square - vk_parse!("muvsq").unwrap();
+            powers[slot] = 0;
+        }
+        let with_numerator = numerator.expand() * parent;
+        let pinched = self.integral(&powers);
+        NumeratorPropagatorPinch {
+            numerator_name,
+            with_numerator,
+            pinch_name,
+            pinched,
+        }
     }
 }

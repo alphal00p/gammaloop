@@ -12,6 +12,8 @@ mod acceptance_inputs;
 mod input;
 #[path = "experimental_rustred_4l/numerator.rs"]
 mod numerator;
+#[path = "experimental_rustred_4l/propagator_pinches.rs"]
+mod propagator_pinches;
 mod test_utils;
 #[path = "experimental_rustred_4l/timing.rs"]
 mod timing;
@@ -29,7 +31,8 @@ use vakint::rustred_evaluation::experimental::{
     catalog::OfflineTerminalCatalog, prepare_candidate_integrals,
 };
 use vakint::{
-    EvaluationMethod, EvaluationOrder, FMFTOptions, LoopNormalizationFactor, Vakint, VakintSettings,
+    EvaluationMethod, EvaluationOrder, FMFTOptions, LoopNormalizationFactor, Vakint,
+    VakintExpression, VakintSettings,
 };
 use vakint::{vakint_parse as vk_parse, vakint_symbol as vk_symbol};
 
@@ -37,7 +40,7 @@ use vakint::{vakint_parse as vk_parse, vakint_symbol as vk_symbol};
 /// by Vakint.  This is intentionally kept as an explicit list: a future
 /// sealed four-loop RustRed artifact must exercise every one of these inputs,
 /// not just the finite parent/dotted/pinch probes below.
-const FOUR_LOOP_ANALYTIC_FMFT_CASES: [&str; 14] = [
+const FOUR_LOOP_ANALYTIC_FMFT_CASES: [&str; 15] = [
     "test_integrate_4l_h",
     "test_integrate_4l_h_squared_mass",
     "test_integrate_4l_h_rank_4",
@@ -52,6 +55,8 @@ const FOUR_LOOP_ANALYTIC_FMFT_CASES: [&str; 14] = [
     "test_integrate_4l_clover_with_non_unit_scales",
     "test_integrate_4l_dotted_clover",
     "test_integrate_4l_clover_with_numerator",
+    // Historical name is misleading: this input is a four-tadpole.
+    "test_integrate_1l_decorated_indices_fmft",
 ];
 
 /// Inventory-only gate for the eventual complete four-loop lane.
@@ -64,7 +69,11 @@ const FOUR_LOOP_ANALYTIC_FMFT_CASES: [&str; 14] = [
 #[test]
 #[ignore = "requires a sealed four-loop RustRed artifact and terminal catalog"]
 fn four_loop_rustred_fmft_inventory_requires_sealed_artifact() {
-    let source = include_str!("integral_evaluation_analytic_tests.rs");
+    let source = [
+        include_str!("integral_evaluation_analytic_tests.rs"),
+        include_str!("integral_evaluation_freeform_tests.rs"),
+    ]
+    .concat();
     for case in FOUR_LOOP_ANALYTIC_FMFT_CASES {
         assert!(
             source.contains(&format!("fn {case}()")),
@@ -231,6 +240,10 @@ fn candidate_parent_dotted_and_pinch_match_fmft() {
         Vec::new(),
         Vec::new(),
         BTreeMap::new(),
+        BTreeMap::new(),
+        BTreeMap::new(),
+        BTreeMap::new(),
+        true,
     );
 }
 
@@ -256,6 +269,10 @@ fn candidate_h_rank_four_numerator_matches_fmft() {
         vec![(1, (0.34, 1.2, 1.2, 0.6)), (2, (0.51, 1.6, 1.5, 0.72))],
         vec![("muvsq", 3.0), ("mursq", 5.0)],
         BTreeMap::new(),
+        BTreeMap::new(),
+        BTreeMap::new(),
+        BTreeMap::new(),
+        true,
     );
 }
 
@@ -295,7 +312,7 @@ fn candidate_fg_clover_numerator_case_matches_fmft() {
         ],
     );
     run_candidate_finite_family(
-        "FG-clover",
+        "FG",
         source,
         None,
         vec![
@@ -307,6 +324,10 @@ fn candidate_fg_clover_numerator_case_matches_fmft() {
         vec![(1, (0.34, 1.2, 1.2, 0.6)), (2, (0.51, 1.6, 1.5, 0.72))],
         vec![("muvsq", 1.0), ("mursq", 1.0)],
         case_mass_values,
+        BTreeMap::new(),
+        BTreeMap::new(),
+        BTreeMap::new(),
+        true,
     );
 }
 
@@ -354,12 +375,136 @@ fn candidate_all_four_loop_parents_match_fmft() {
             Vec::new(),
             Vec::new(),
             BTreeMap::new(),
+            BTreeMap::new(),
+            BTreeMap::new(),
+            BTreeMap::new(),
+            true,
         );
     }
     assert!(
         selected,
         "the four-loop candidate matrix must select at least one family"
     );
+}
+
+/// Exercise every literal four-loop FMFT input through the same
+/// matcher/FeynKit/RustRed scalar tail.  The historical free-form name of one
+/// four-tadpole entry is retained in the inventory and does not change its
+/// four-loop candidate routing.
+#[test]
+#[ignore = "experimental: complete finite four-loop analytic inventory and explicit offline FMFT oracle"]
+fn candidate_all_four_loop_analytic_acceptance_cases_match_fmft() {
+    let mut grouped: BTreeMap<acceptance_inputs::ParentDescriptor, Vec<_>> = BTreeMap::new();
+    for case in acceptance_inputs::cases() {
+        let parent = retained_parent_descriptor(&case.input);
+        grouped.entry(parent).or_default().push(case);
+    }
+    assert_eq!(grouped.values().map(Vec::len).sum::<usize>(), 15);
+    let family_filter = std::env::var("VAKINT_4L_CANDIDATE_FAMILY_FILTER").ok();
+    if let Some(filter) = &family_filter {
+        assert!(
+            matches!(filter.as_str(), "H" | "FG" | "BMW" | "X"),
+            "VAKINT_4L_CANDIDATE_FAMILY_FILTER must be one of H, FG, BMW, X"
+        );
+    }
+    let mut selected = false;
+    for (parent, cases) in grouped {
+        let family_name = match parent {
+            acceptance_inputs::ParentDescriptor::H => "H",
+            acceptance_inputs::ParentDescriptor::X => "X",
+            acceptance_inputs::ParentDescriptor::Bmw => "BMW",
+            acceptance_inputs::ParentDescriptor::Fg => "FG",
+        };
+        if family_filter
+            .as_deref()
+            .is_some_and(|filter| filter != family_name)
+        {
+            continue;
+        }
+        selected = true;
+        let source = parent.csv().to_owned();
+        let first_external = cases
+            .first()
+            .map(|case| case.external_momenta.clone())
+            .unwrap_or_default();
+        let extras = cases
+            .iter()
+            .map(|case| (case.name, case.input.clone()))
+            .collect();
+        let case_mass_values = cases
+            .iter()
+            .map(|case| (case.name, case.parameters.clone()))
+            .collect();
+        let case_external_values = cases
+            .iter()
+            .map(|case| (case.name, case.external_momenta.clone()))
+            .collect();
+        let case_settings = cases
+            .iter()
+            .map(|case| (case.name, case.settings.clone()))
+            .collect();
+        let case_expected = cases
+            .iter()
+            .map(|case| (case.name, case.expected.clone()))
+            .collect();
+        run_candidate_finite_family(
+            family_name,
+            source,
+            None,
+            extras,
+            first_external,
+            vec![("muvsq", 1.0), ("mursq", 1.0)],
+            case_mass_values,
+            case_external_values,
+            case_settings,
+            case_expected,
+            false,
+        );
+    }
+    assert!(
+        selected,
+        "the four-loop analytic inventory must select a family"
+    );
+}
+
+/// Select the RustRed candidate family from the one retained matcher witness.
+/// The historical acceptance label is metadata for the FORM fixture and is
+/// deliberately ignored here; a contracted input may be named after a larger
+/// family while matching a different defining parent.
+fn retained_parent_descriptor(input: &Atom) -> acceptance_inputs::ParentDescriptor {
+    Vakint::initialize_vakint_symbols();
+    let vakint = Vakint::new().unwrap();
+    let term = VakintExpression::split_integrals(input.as_view())
+        .unwrap()
+        .into_iter()
+        .next()
+        .expect("acceptance input contains one integral term");
+    let mut matched = vakint
+        .topologies
+        .match_topologies_to_user_input(term.integral.as_view(), false)
+        .unwrap()
+        .expect("acceptance input has a registered topology match");
+    let witness = matched.candidate_parent_momenta().unwrap();
+    [
+        (acceptance_inputs::ParentDescriptor::H, "H"),
+        (acceptance_inputs::ParentDescriptor::X, "X"),
+        (acceptance_inputs::ParentDescriptor::Bmw, "BMW"),
+        (acceptance_inputs::ParentDescriptor::Fg, "FG"),
+    ]
+    .into_iter()
+    .find_map(|(descriptor, _)| {
+        let candidate = input::ParentInput::from_csv(descriptor.csv());
+        (candidate.physical_momenta == witness).then_some(descriptor)
+    })
+    .unwrap_or_else(|| {
+        panic!(
+            "retained matcher parent has no candidate descriptor: {:?}",
+            witness
+                .iter()
+                .map(Atom::to_canonical_string)
+                .collect::<Vec<_>>()
+        )
+    })
 }
 
 fn run_candidate_finite_family(
@@ -370,6 +515,10 @@ fn run_candidate_finite_family(
     external_values: Vec<(usize, (f64, f64, f64, f64))>,
     mass_values: Vec<(&'static str, f64)>,
     case_mass_values: BTreeMap<&'static str, Vec<(&'static str, f64)>>,
+    case_external_values: BTreeMap<&'static str, Vec<(usize, (f64, f64, f64, f64))>>,
+    case_settings: BTreeMap<&'static str, VakintSettings>,
+    case_expected: BTreeMap<&'static str, Vec<(i64, (String, String))>>,
+    require_application: bool,
 ) {
     test_utils::run_multi_lane_acceptance(move || {
         Vakint::initialize_vakint_symbols();
@@ -474,10 +623,21 @@ fn run_candidate_finite_family(
                 }
             }
         }
-        assert!(
-            applications > 0,
-            "terminal-only comparisons do not test IBP application"
-        );
+        if applications == 0 && require_application {
+            panic!("finite candidate probes did not exercise IBP application");
+        } else if applications == 0 {
+            // A finite acceptance input can already be one of this
+            // experimental candidate's declared terminals (BMW/PR11d is an
+            // observed example). The H/X/FG lanes and the dedicated parent /
+            // dotted / pinch probes exercise non-terminal recurrence
+            // application; this family-level inventory must not reject a
+            // valid terminal-only numerical comparison.
+            println!("candidate {family_name}: all inventory probes were declared terminals");
+        } else {
+            println!(
+                "candidate {family_name}: {applications} recurrence applications across inventory"
+            );
+        }
         assert!(
             reached.len() <= 512,
             "explicit offline terminal budget exceeded"
@@ -700,7 +860,7 @@ fn run_candidate_finite_family(
                 ),
             ])
         };
-        let settings = VakintSettings {
+        let base_settings = VakintSettings {
             form_exe_path: form,
             run_time_decimal_precision: 25,
             number_of_terms_in_epsilon_expansion: 5,
@@ -719,6 +879,14 @@ fn run_candidate_finite_family(
         native.clear_cache().unwrap();
         let native_applications_before = native.rule_applications().unwrap();
         for (name, integral) in &cases {
+            // Preserve each upstream acceptance case's normalization and 32
+            // digit runtime precision. The bundled fixture references below
+            // are checked through the shared fixed-reference comparison lane.
+            let mut settings = case_settings
+                .get(name)
+                .cloned()
+                .unwrap_or_else(|| base_settings.clone());
+            settings.form_exe_path = base_settings.form_exe_path.clone();
             if catalog_only {
                 let canonical = vakint
                     .to_canonical(&settings, integral.as_view(), false)
@@ -735,6 +903,7 @@ fn run_candidate_finite_family(
                     result.targets, result.applied_rules
                 );
             } else {
+                let external_values = case_external_values.get(name).unwrap_or(&external_values);
                 let external_momenta = vakint
                     .externals_from_f64(&settings, &external_values.iter().copied().collect());
                 let case_masses = case_mass_values.get(name).unwrap_or(&default_mass_values);
@@ -745,17 +914,31 @@ fn run_candidate_finite_family(
                         .map(|(name, value)| ((*name).to_owned(), *value))
                         .collect(),
                 );
-                test_utils::compare_evaluations(
-                    settings.clone(),
-                    &lanes,
-                    test_utils::TensorPrepass::FeynKit,
-                    integral.as_view(),
-                    masses.clone(),
-                    external_momenta,
-                    1e-20,
-                    10.0,
-                    true,
-                );
+                if let Some(expected) = case_expected.get(name) {
+                    test_utils::compare_vakint_evaluations_vs_reference(
+                        settings.clone(),
+                        &lanes,
+                        test_utils::TensorPrepass::FeynKit,
+                        integral.as_view(),
+                        masses.clone(),
+                        external_momenta,
+                        expected.clone(),
+                        settings.run_time_decimal_precision,
+                        10.0,
+                    );
+                } else {
+                    test_utils::compare_evaluations(
+                        settings.clone(),
+                        &lanes,
+                        test_utils::TensorPrepass::FeynKit,
+                        integral.as_view(),
+                        masses.clone(),
+                        external_momenta,
+                        1e-20,
+                        10.0,
+                        true,
+                    );
+                }
                 println!(
                     "finite-target numerical parity PASS: {family_name}/{name}; no family-closure claim"
                 );
@@ -766,10 +949,12 @@ fn run_candidate_finite_family(
             .unwrap()
             .checked_sub(native_applications_before)
             .expect("candidate rule counter must not decrease");
-        assert!(
-            native_applications > 0,
-            "cold candidate application must include an actual recurrence"
-        );
+        if require_application {
+            assert!(
+                native_applications > 0,
+                "cold candidate application must include an actual recurrence"
+            );
+        }
         println!("invalid-FORM cold scalar lane: {native_applications} new rule applications");
         if let Ok(repeats) = std::env::var("VAKINT_4L_CANDIDATE_BENCH_REPEATS") {
             let inputs = cases
@@ -778,7 +963,7 @@ fn run_candidate_finite_family(
                 .collect::<Vec<_>>();
             timing::run(
                 &vakint,
-                &settings,
+                &base_settings,
                 native.as_ref(),
                 evaluator.as_ref(),
                 &inputs,
