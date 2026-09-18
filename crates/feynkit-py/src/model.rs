@@ -1605,13 +1605,23 @@ impl PyModel {
     ///     Override external-state contraction; S("1") disables external wavefunctions.
     /// numerator_grouping : NumeratorGrouping or None, optional
     ///     Zero detection and numerator comparison; None disables parsing and grouping.
+    /// progress : Callable[[GenerationProgress], None] or None, optional
+    ///     Observe stage changes and coalesced counts on the calling Python thread.
+    ///     Callback exceptions propagate and stop generation.
+    /// filter : Callable[[symbolica.core.Graph, int], bool] or None, optional
+    ///     Prune partial topologies during enumeration. The first N vertices are
+    ///     complete. False rejects only this search branch. Edge data is the base
+    ///     particle PDG code; node data is 0 internally, -(index+1) for incoming
+    ///     legs and +(index+1) for outgoing legs. Mutating the snapshot does not
+    ///     change enumeration. Keep callbacks cheap: each snapshot is constructed
+    ///     using Symbolica's Python Graph API.
     /// cancellation_token : CancellationToken or None, optional
     ///     Shared token for cancelling a running generation task. Token cancellation
     ///     returns an incomplete result; Python signal-handler exceptions, including
     ///     KeyboardInterrupt, stop generation and propagate to the caller.
     /// final_state_alternatives : sequence[sequence[Particle | ParticleSelector | str | int]] or None, optional
     ///     Extra outgoing states for a cross section.
-    #[pyo3(signature = (incoming, outgoing, *, kind="amplitude", loops=OrderRangeInput::default(), final_state_alternatives=None, threads=None, max_vertices=None, allow_self_loops=false, allow_zero_flow_edges=false, graph_prefix=None, particle_veto=None, vertex_allow=None, vertex_veto=None, maximum_bridges=None, self_energy=None, tadpoles=None, zero_snails=None, coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=None, blob_range=None, spectator_range=None, perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, cancellation_token=None))]
+    #[pyo3(signature = (incoming, outgoing, *, kind="amplitude", loops=OrderRangeInput::default(), final_state_alternatives=None, threads=None, max_vertices=None, allow_self_loops=false, allow_zero_flow_edges=false, graph_prefix=None, particle_veto=None, vertex_allow=None, vertex_veto=None, maximum_bridges=None, self_energy=None, tadpoles=None, zero_snails=None, coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=None, blob_range=None, spectator_range=None, perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, cancellation_token=None, progress=None, filter=None))]
     #[allow(clippy::too_many_arguments)]
     fn generate_diagrams(
         &self,
@@ -1649,6 +1659,10 @@ impl PyModel {
         projector: Option<PythonExpression>,
         numerator_grouping: Option<PyNumeratorGrouping>,
         cancellation_token: Option<PyCancellationToken>,
+        #[gen_stub(override_type(type_repr = "collections.abc.Callable[[GenerationProgress], None] | None", imports = ("collections.abc")))]
+        progress: Option<Py<PyAny>>,
+        #[gen_stub(override_type(type_repr = "collections.abc.Callable[[symbolica.core.Graph, int], bool] | None", imports = ("collections.abc", "symbolica.core")))]
+        filter: Option<Py<PyAny>>,
     ) -> PyResult<PyGenerationResult> {
         let options = GenerationSettings::new(
             threads,
@@ -1734,7 +1748,14 @@ impl PyModel {
                 ));
             }
         };
-        generate_diagrams(py, Generator::new(self.inner.clone()), process, options)
+        generate_diagrams(
+            py,
+            Generator::new(self.inner.clone()),
+            process,
+            options,
+            progress,
+            filter,
+        )
     }
 
     /// Return the model name.

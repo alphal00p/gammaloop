@@ -6,6 +6,7 @@ import collections.abc
 import enum
 import os
 import pathlib
+import symbolica.core
 import typing
 from symbolica.community.spenso import TensorExpression
 from symbolica.core import Expression
@@ -1755,6 +1756,37 @@ class GenerationError(FeynkitError):
     ...
 
 @typing.final
+class GenerationProgress:
+    r"""
+    A progress snapshot delivered on the Python thread running generation.
+
+    Counts restart at each stage and measure processed work, not retained diagrams.
+    ``total`` is None when the amount of work is not yet known.
+
+    Examples
+    --------
+    >>> def report(progress):
+    ...     print(progress.stage, progress.completed, progress.total)
+    >>> result = generator.generate(process, progress=report)
+    """
+    @property
+    def stage(self) -> builtins.str:
+        r"""
+        Pipeline stage: topologies, topology_filters, interactions,
+        interaction_filters, numerators, selection, grouping, complete or cancelled.
+        """
+    @property
+    def completed(self) -> builtins.int:
+        r"""
+        Work items processed within this stage.
+        """
+    @property
+    def total(self) -> typing.Optional[builtins.int]:
+        r"""
+        Stage total, or None while the amount of work is unknown.
+        """
+
+@typing.final
 class GenerationReport:
     r"""
     Counts and completion status from a diagram-generation run.
@@ -1958,7 +1990,7 @@ class Generator:
         model : Model
             Particle model supplying particles, interactions, and parameters.
         """
-    def generate(self, process: Process, *, threads: typing.Optional[builtins.int] = None, max_vertices: typing.Optional[builtins.int] = None, allow_self_loops: builtins.bool = False, allow_zero_flow_edges: builtins.bool = False, graph_prefix: typing.Optional[builtins.str] = None, particle_veto: typing.Optional[typing.Sequence[Particle | builtins.str | builtins.int]] = None, vertex_allow: typing.Optional[typing.Sequence[VertexRule | builtins.str]] = None, vertex_veto: typing.Optional[typing.Sequence[VertexRule | builtins.str]] = None, maximum_bridges: typing.Optional[builtins.int] = None, self_energy: typing.Optional[SelfEnergyFilterOptions] = None, tadpoles: typing.Optional[TadpoleFilterOptions] = None, zero_snails: typing.Optional[SnailFilterOptions] = None, coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, fermion_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, factorized_loop_topologies_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, blob_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, spectator_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, perturbative_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int]] = None, sewn_tadpoles: typing.Optional[builtins.bool] = None, cut_amplitude_coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, cut_amplitude_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, select_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, veto_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, loop_momentum_bases: typing.Optional[typing.Sequence[tuple[FeynmanDiagram | builtins.str, typing.Sequence[builtins.int]]]] = None, numerator_prefactor: typing.Optional[Expression] = None, projector: typing.Optional[Expression] = None, numerator_grouping: typing.Optional[NumeratorGrouping] = None, cancellation_token: typing.Optional[CancellationToken] = None) -> GenerationResult:
+    def generate(self, process: Process, *, threads: typing.Optional[builtins.int] = None, max_vertices: typing.Optional[builtins.int] = None, allow_self_loops: builtins.bool = False, allow_zero_flow_edges: builtins.bool = False, graph_prefix: typing.Optional[builtins.str] = None, particle_veto: typing.Optional[typing.Sequence[Particle | builtins.str | builtins.int]] = None, vertex_allow: typing.Optional[typing.Sequence[VertexRule | builtins.str]] = None, vertex_veto: typing.Optional[typing.Sequence[VertexRule | builtins.str]] = None, maximum_bridges: typing.Optional[builtins.int] = None, self_energy: typing.Optional[SelfEnergyFilterOptions] = None, tadpoles: typing.Optional[TadpoleFilterOptions] = None, zero_snails: typing.Optional[SnailFilterOptions] = None, coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, fermion_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, factorized_loop_topologies_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, blob_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, spectator_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, perturbative_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int]] = None, sewn_tadpoles: typing.Optional[builtins.bool] = None, cut_amplitude_coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, cut_amplitude_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, select_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, veto_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, loop_momentum_bases: typing.Optional[typing.Sequence[tuple[FeynmanDiagram | builtins.str, typing.Sequence[builtins.int]]]] = None, numerator_prefactor: typing.Optional[Expression] = None, projector: typing.Optional[Expression] = None, numerator_grouping: typing.Optional[NumeratorGrouping] = None, cancellation_token: typing.Optional[CancellationToken] = None, progress: collections.abc.Callable[[GenerationProgress], None] | None = None, filter: collections.abc.Callable[[symbolica.core.Graph, int], bool] | None = None) -> GenerationResult:
         r"""
         Generate and optionally group all diagrams matching a process.
 
@@ -2030,6 +2062,16 @@ class Generator:
             Override external-state contraction; S("1") disables external wavefunctions.
         numerator_grouping : NumeratorGrouping or None, optional
             Zero detection and numerator comparison; None disables parsing and grouping.
+        progress : Callable[[GenerationProgress], None] or None, optional
+            Observe stage changes and coalesced counts on the calling Python thread.
+            Callback exceptions propagate and stop generation.
+        filter : Callable[[symbolica.core.Graph, int], bool] or None, optional
+            Prune partial topologies during enumeration. The first N vertices are
+            complete. False rejects only this search branch. Edge data is the base
+            particle PDG code; node data is 0 internally, -(index+1) for incoming
+            legs and +(index+1) for outgoing legs. Mutating the snapshot does not
+            change enumeration. Keep callbacks cheap: each snapshot is constructed
+            using Symbolica's Python Graph API.
         cancellation_token : CancellationToken or None, optional
             Shared token for cancelling a running generation task. Token cancellation
             returns an incomplete result; Python signal-handler exceptions, including
@@ -2808,7 +2850,7 @@ class Model:
         json : str
             Serialized model object.
         """
-    def generate_diagrams(self, incoming: typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int], outgoing: typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int], *, kind: builtins.str = 'amplitude', loops: builtins.int | tuple[builtins.int, builtins.int] = 0, final_state_alternatives: typing.Optional[typing.Sequence[typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int]]] = None, threads: typing.Optional[builtins.int] = None, max_vertices: typing.Optional[builtins.int] = None, allow_self_loops: builtins.bool = False, allow_zero_flow_edges: builtins.bool = False, graph_prefix: typing.Optional[builtins.str] = None, particle_veto: typing.Optional[typing.Sequence[Particle | builtins.str | builtins.int]] = None, vertex_allow: typing.Optional[typing.Sequence[VertexRule | builtins.str]] = None, vertex_veto: typing.Optional[typing.Sequence[VertexRule | builtins.str]] = None, maximum_bridges: typing.Optional[builtins.int] = None, self_energy: typing.Optional[SelfEnergyFilterOptions] = None, tadpoles: typing.Optional[TadpoleFilterOptions] = None, zero_snails: typing.Optional[SnailFilterOptions] = None, coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, fermion_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, factorized_loop_topologies_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, blob_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, spectator_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, perturbative_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int]] = None, sewn_tadpoles: typing.Optional[builtins.bool] = None, cut_amplitude_coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, cut_amplitude_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, select_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, veto_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, loop_momentum_bases: typing.Optional[typing.Sequence[tuple[FeynmanDiagram | builtins.str, typing.Sequence[builtins.int]]]] = None, numerator_prefactor: typing.Optional[Expression] = None, projector: typing.Optional[Expression] = None, numerator_grouping: typing.Optional[NumeratorGrouping] = None, cancellation_token: typing.Optional[CancellationToken] = None) -> GenerationResult:
+    def generate_diagrams(self, incoming: typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int], outgoing: typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int], *, kind: builtins.str = 'amplitude', loops: builtins.int | tuple[builtins.int, builtins.int] = 0, final_state_alternatives: typing.Optional[typing.Sequence[typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int]]] = None, threads: typing.Optional[builtins.int] = None, max_vertices: typing.Optional[builtins.int] = None, allow_self_loops: builtins.bool = False, allow_zero_flow_edges: builtins.bool = False, graph_prefix: typing.Optional[builtins.str] = None, particle_veto: typing.Optional[typing.Sequence[Particle | builtins.str | builtins.int]] = None, vertex_allow: typing.Optional[typing.Sequence[VertexRule | builtins.str]] = None, vertex_veto: typing.Optional[typing.Sequence[VertexRule | builtins.str]] = None, maximum_bridges: typing.Optional[builtins.int] = None, self_energy: typing.Optional[SelfEnergyFilterOptions] = None, tadpoles: typing.Optional[TadpoleFilterOptions] = None, zero_snails: typing.Optional[SnailFilterOptions] = None, coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, fermion_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, factorized_loop_topologies_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, blob_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, spectator_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, perturbative_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int]] = None, sewn_tadpoles: typing.Optional[builtins.bool] = None, cut_amplitude_coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, cut_amplitude_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, select_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, veto_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, loop_momentum_bases: typing.Optional[typing.Sequence[tuple[FeynmanDiagram | builtins.str, typing.Sequence[builtins.int]]]] = None, numerator_prefactor: typing.Optional[Expression] = None, projector: typing.Optional[Expression] = None, numerator_grouping: typing.Optional[NumeratorGrouping] = None, cancellation_token: typing.Optional[CancellationToken] = None, progress: collections.abc.Callable[[GenerationProgress], None] | None = None, filter: collections.abc.Callable[[symbolica.core.Graph, int], bool] | None = None) -> GenerationResult:
         r"""
         Generate amplitude or cross-section diagrams from this model.
 
@@ -2895,6 +2937,16 @@ class Model:
             Override external-state contraction; S("1") disables external wavefunctions.
         numerator_grouping : NumeratorGrouping or None, optional
             Zero detection and numerator comparison; None disables parsing and grouping.
+        progress : Callable[[GenerationProgress], None] or None, optional
+            Observe stage changes and coalesced counts on the calling Python thread.
+            Callback exceptions propagate and stop generation.
+        filter : Callable[[symbolica.core.Graph, int], bool] or None, optional
+            Prune partial topologies during enumeration. The first N vertices are
+            complete. False rejects only this search branch. Edge data is the base
+            particle PDG code; node data is 0 internally, -(index+1) for incoming
+            legs and +(index+1) for outgoing legs. Mutating the snapshot does not
+            change enumeration. Keep callbacks cheap: each snapshot is constructed
+            using Symbolica's Python Graph API.
         cancellation_token : CancellationToken or None, optional
             Shared token for cancelling a running generation task. Token cancellation
             returns an incomplete result; Python signal-handler exceptions, including

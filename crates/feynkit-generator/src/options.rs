@@ -13,10 +13,11 @@ use feynkit_model::Model;
 use serde::{Deserialize, Serialize};
 use symbolica::{
     atom::{Atom, AtomCore},
+    graph::Graph,
     parser::ParseSettings,
 };
 
-use crate::{ParticleSelector, SelectorError, VertexSelector};
+use crate::{EdgeColor, NodeColor, ParticleSelector, SelectorError, VertexSelector};
 
 #[derive(
     Debug,
@@ -295,7 +296,12 @@ impl fmt::Display for GenerationFilter {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GenerationProgress {
-    pub generated_graphs: usize,
+    /// Stable pipeline stage; counts restart at each stage.
+    pub stage: &'static str,
+    /// Work items processed in this stage, not the number retained.
+    pub completed: usize,
+    /// Unknown while enumerating topologies or grouping numerators.
+    pub total: Option<usize>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -324,6 +330,8 @@ impl CancellationToken {
 
 type ProgressCallback =
     Arc<dyn Fn(GenerationProgress) -> GenerationControl + Send + Sync + 'static>;
+type TopologyFilter =
+    Arc<dyn Fn(&Graph<NodeColor, EdgeColor>, usize) -> bool + Send + Sync + 'static>;
 type CancellationCheck = Arc<dyn Fn() -> bool + Send + Sync + 'static>;
 
 #[derive(Clone)]
@@ -348,6 +356,7 @@ pub struct GenerationOptions {
     pub(crate) cancellation: CancellationToken,
     pub(crate) cancellation_check: Option<CancellationCheck>,
     pub(crate) progress: Option<ProgressCallback>,
+    pub(crate) filter: Option<TopologyFilter>,
 }
 
 /// Stable persistent portion of [`GenerationOptions`]. Callbacks and
@@ -498,6 +507,7 @@ impl Default for GenerationOptions {
             cancellation: CancellationToken::new(),
             cancellation_check: None,
             progress: None,
+            filter: None,
         }
     }
 }
@@ -559,6 +569,7 @@ impl GenerationOptions {
             cancellation: CancellationToken::new(),
             cancellation_check: None,
             progress: None,
+            filter: None,
         })
     }
 
@@ -630,6 +641,7 @@ impl fmt::Debug for GenerationOptions {
             .field("cancelled", &self.cancellation.is_cancelled())
             .field("cancellation_check", &self.cancellation_check.is_some())
             .field("progress", &self.progress.is_some())
+            .field("filter", &self.filter.is_some())
             .finish()
     }
 }
@@ -794,6 +806,33 @@ impl GenerationOptions {
         self
     }
 
+    /// Prune partial topologies during enumeration. The first `completed_vertices`
+    /// nodes have all their incident edges assigned; the rest may still grow.
+    pub fn filter(
+        mut self,
+        callback: impl Fn(&Graph<NodeColor, EdgeColor>, usize) -> bool + Send + Sync + 'static,
+    ) -> Self {
+        self.filter = Some(Arc::new(callback));
+        self
+    }
+
+    pub(crate) fn report_progress(
+        &self,
+        stage: &'static str,
+        completed: usize,
+        total: Option<usize>,
+    ) {
+        if self.progress.as_ref().is_some_and(|callback| {
+            callback(GenerationProgress {
+                stage,
+                completed,
+                total,
+            }) == GenerationControl::Cancel
+        }) {
+            self.cancellation.cancel();
+        }
+    }
+
     pub(crate) fn max_bridges(&self) -> Option<usize> {
         self.graph_filters.iter().find_map(|filter| match filter {
             GenerationFilter::MaxNumberOfBridges(maximum) => Some(*maximum),
@@ -817,6 +856,19 @@ mod tests {
     use super::{GenerationFilter, GenerationOptions, GraphGroupingOptions, NumeratorGrouping};
     use crate::{ParticleSelector, VertexSelector};
     use feynkit_graph::{DiagramId, EdgeId};
+
+    #[test]
+    fn runtime_callbacks_are_not_serialized() {
+        let options = GenerationOptions::default()
+            .filter(|_, _| false)
+            .progress(|_| super::GenerationControl::Cancel);
+        let encoded = bincode::encode_to_vec(&options, bincode::config::standard()).unwrap();
+        let (decoded, _): (GenerationOptions, usize) =
+            bincode::decode_from_slice(&encoded, bincode::config::standard()).unwrap();
+        assert_eq!(decoded, options);
+        assert!(decoded.filter.is_none());
+        assert!(decoded.progress.is_none());
+    }
 
     #[test]
     fn projector_serde_distinguishes_automatic_from_explicit_one() {

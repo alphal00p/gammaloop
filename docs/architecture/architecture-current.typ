@@ -207,6 +207,13 @@ Both Python entry points share signal-aware execution: native generation runs on
 while the Python caller polls signals and cancels through the existing generator hook.
 Browser kernels poll the same hook on their calling thread. Signal-handler exceptions are
 preserved and re-raised, rather than being converted to partial generation results.
+The same execution boundary delivers coalesced `GenerationProgress` stage/count snapshots
+and synchronous partial-topology `filter` requests on the calling Python thread. A rejected
+filter prunes an enumeration branch; callback exceptions cancel and propagate. The filter
+receives Symbolica's existing `Graph`, with integer external-leg labels and particle PDG
+edge data. Until Symbolica exposes a Rust constructor for its Python graph, the bridge uses
+its Python node/edge construction API. Generation, topology queries and pruning remain
+owned by the existing Symbolica graph implementation.
 
 The graph crate registers momentum and index symbols before parsing or
 generation. Index identities retain their source, sink, edge, or vertex head;

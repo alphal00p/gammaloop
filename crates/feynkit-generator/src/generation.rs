@@ -2,10 +2,7 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     fmt,
     hash::{Hash, Hasher},
-    sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
-    },
+    sync::{Arc, Mutex},
 };
 
 use feynkit_graph::{
@@ -40,10 +37,10 @@ use symbolica::{
 use thiserror::Error;
 
 use crate::{
-    FilterScope, GenerationControl, GenerationFilter, GenerationFilterKind, GenerationOptions,
-    GenerationProgress, GenerationType, GroupingError, NumeratorGrouping, ParticleSelector,
-    Process, ProcessError, SelectorError, SelfEnergyFilterOptions, SewnFilterOptions,
-    SnailFilterOptions, TadpoleFilterOptions, VertexSelector, grouping, momentum_symbol,
+    FilterScope, GenerationFilter, GenerationFilterKind, GenerationOptions, GenerationType,
+    GroupingError, NumeratorGrouping, ParticleSelector, Process, ProcessError, SelectorError,
+    SelfEnergyFilterOptions, SewnFilterOptions, SnailFilterOptions, TadpoleFilterOptions,
+    VertexSelector, grouping, momentum_symbol,
 };
 
 #[derive(Debug, Error)]
@@ -1223,12 +1220,9 @@ impl Generator {
         let external_edges = resolved.external_edges(&self.model)?;
         let generation_signatures: Vec<_> = signatures.keys().cloned().collect();
 
-        let progress_count = Arc::new(AtomicUsize::new(0));
-        let callback = options.progress.clone();
-        let cancellation = options.cancellation.clone();
-        let progress_counter = progress_count.clone();
-        let progress_cancellation = cancellation.clone();
-        let progress_cancellation_check = options.cancellation_check.clone();
+        let progress_count = Arc::new(Mutex::new(0));
+        let progress_options = options.clone();
+        options.report_progress("topologies", 0, None);
         // Fast cut filter switch multiplicity is no longer a separate CLI option;
         // FeynKit owns the physical-cut filtering strategy.
         let mut settings = GenerationSettings::new()
@@ -1236,23 +1230,17 @@ impl Generator {
             .allow_self_loops(options.allow_self_loops)
             .allow_zero_flow_edges(options.allow_zero_flow_edges)
             .progress_fn(Box::new(move |_| {
-                let generated_graphs = progress_counter.fetch_add(1, Ordering::Relaxed) + 1;
-                let control = callback
-                    .as_ref()
-                    .map_or(GenerationControl::Continue, |callback| {
-                        callback(GenerationProgress { generated_graphs })
-                    });
-                if control == GenerationControl::Cancel {
-                    progress_cancellation.cancel();
-                }
-                if progress_cancellation_check
-                    .as_ref()
-                    .is_some_and(|check| check())
-                {
-                    progress_cancellation.cancel();
-                }
-                !progress_cancellation.is_cancelled()
+                let mut count = progress_count.lock().unwrap();
+                *count += 1;
+                progress_options.report_progress("topologies", *count, None);
+                !progress_options.cancellation_requested()
             }));
+        if let Some(filter) = options.filter.clone() {
+            let filter_options = options.clone();
+            settings = settings.filter_fn(Box::new(move |graph, completed_vertices| {
+                !filter_options.cancellation_requested() && filter(graph, completed_vertices)
+            }));
+        }
         if let Some(maximum) = options.max_vertices {
             // Symbolica counts the degree-one external nodes as vertices. The
             // public FeynKit option counts interaction vertices instead.
@@ -1263,14 +1251,8 @@ impl Generator {
         if let Some(maximum) = options.max_bridges() {
             settings = settings.max_bridges(maximum);
         }
-        let abort_cancellation = cancellation.clone();
-        let abort_cancellation_check = options.cancellation_check.clone();
-        settings = settings.abort_check(Box::new(move || {
-            abort_cancellation.is_cancelled()
-                || abort_cancellation_check
-                    .as_ref()
-                    .is_some_and(|check| check())
-        }));
+        let abort_options = options.clone();
+        settings = settings.abort_check(Box::new(move || abort_options.cancellation_requested()));
 
         let generated = Graph::generate(&external_edges, &generation_signatures, settings);
         let (raw_graphs, mut completed) = match generated {
@@ -1287,7 +1269,9 @@ impl Generator {
         raw_graphs.sort_by(|left, right| left.0.cmp(&right.0));
         raw_graphs.retain(|(graph, _)| process.loop_count().contains(&graph.num_loops()));
         let mut filtered_graphs = Vec::with_capacity(raw_graphs.len());
-        for entry in raw_graphs {
+        let total = raw_graphs.len();
+        options.report_progress("topology_filters", 0, Some(total));
+        for (index, entry) in raw_graphs.into_iter().enumerate() {
             if options.cancellation_requested() {
                 completed = false;
                 break;
@@ -1295,10 +1279,13 @@ impl Generator {
             if self.passes_topology_filters(&entry.0, options)? {
                 filtered_graphs.push(entry);
             }
+            options.report_progress("topology_filters", index + 1, Some(total));
         }
         let raw_graphs = filtered_graphs;
         let topology_count = raw_graphs.len();
 
+        let assignments = Mutex::new(0);
+        options.report_progress("interactions", 0, Some(topology_count));
         let color_graphs = || {
             #[cfg(target_arch = "wasm32")]
             let graphs = raw_graphs.iter();
@@ -1315,10 +1302,13 @@ impl Generator {
                             return Some(Err(GenerationError::SymmetryFactor(error.to_string())));
                         }
                     };
-                    Some(
-                        self.assign_interactions(graph, &signatures)
-                            .map(|graphs| (graphs, symmetry)),
-                    )
+                    let result = self
+                        .assign_interactions(graph, &signatures)
+                        .map(|graphs| (graphs, symmetry));
+                    let mut count = assignments.lock().unwrap();
+                    *count += 1;
+                    options.report_progress("interactions", *count, Some(topology_count));
+                    Some(result)
                 })
                 .collect::<Result<Vec<_>, GenerationError>>()
         };
@@ -1355,7 +1345,13 @@ impl Generator {
         let interaction_assignment_count = colored.len();
 
         let mut diagram_inputs = Vec::new();
-        for mut topology in colored {
+        options.report_progress("interaction_filters", 0, Some(interaction_assignment_count));
+        for (index, mut topology) in colored.into_iter().enumerate() {
+            options.report_progress(
+                "interaction_filters",
+                index,
+                Some(interaction_assignment_count),
+            );
             if options.cancellation_requested() {
                 completed = false;
                 break;
@@ -1410,6 +1406,15 @@ impl Generator {
                 normalized.reversed_edges,
             ));
         }
+        if !options.cancellation_requested() {
+            options.report_progress(
+                "interaction_filters",
+                interaction_assignment_count,
+                Some(interaction_assignment_count),
+            );
+        }
+        let total = diagram_inputs.len();
+        options.report_progress("numerators", 0, Some(total));
         let width = diagram_inputs.len().saturating_sub(1).to_string().len();
         let mut diagram_pairs = Vec::with_capacity(diagram_inputs.len());
         for (index, (comparison, representative, fermion_loop_count, signs, reversed_edges)) in
@@ -1439,7 +1444,9 @@ impl Generator {
                 )?,
                 reversed_edges,
             });
+            options.report_progress("numerators", index + 1, Some(total));
         }
+        options.report_progress("selection", 0, None);
         if !options.forced_cuts.is_empty() {
             let mut matched = vec![false; options.forced_cuts.len()];
             let mut retained = Vec::new();
@@ -1542,6 +1549,7 @@ impl Generator {
             comparison_diagrams.push(pair.comparison);
             representatives.push((pair.representative, pair.reversed_edges));
         }
+        options.report_progress("grouping", 0, None);
         let grouped = if options.cancellation_requested() {
             completed = false;
             grouping::group_diagrams(
@@ -1650,6 +1658,11 @@ impl Generator {
             groups,
         };
         result.validate_groups()?;
+        options.report_progress(
+            if completed { "complete" } else { "cancelled" },
+            result.diagrams.len(),
+            Some(result.diagrams.len()),
+        );
         Ok(result)
     }
 
@@ -2908,9 +2921,9 @@ impl Generator {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-struct EdgeColor {
-    particle: ParticleId,
-    direction: Option<bool>,
+pub struct EdgeColor {
+    pub particle: ParticleId,
+    pub direction: Option<bool>,
 }
 
 impl fmt::Display for EdgeColor {
@@ -2985,10 +2998,10 @@ fn vertex_rule_signature(
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-struct ExternalNode {
-    index: usize,
-    state: ExternalState,
-    particle: ParticleId,
+pub struct ExternalNode {
+    pub index: usize,
+    pub state: ExternalState,
+    pub particle: ParticleId,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -2998,8 +3011,8 @@ enum ExternalCanonicalClass {
 }
 
 #[derive(Debug, Clone, Default)]
-struct NodeColor {
-    external: Option<ExternalNode>,
+pub struct NodeColor {
+    pub external: Option<ExternalNode>,
     external_class: Option<ExternalCanonicalClass>,
 }
 
