@@ -19,9 +19,12 @@ The ignored test `candidate_parent_dotted_and_pinch_match_fmft` has three phases
    candidate RustRed scalar peer. The candidate peer has an invalid FORM path
    and uses Vakint's existing pure-Rust FMFT master finalizer.
 
-The first test is deliberately limited to loop-momentum-free scalar numerators.
-Connecting tensor-bearing cases requires RustRed's family-based scalar-product
-lowering service; this adapter does not reimplement it.
+Tensor/scalar-product terms are routed through the RustRed-owned
+`FamilyScalarNumeratorService` before candidate rule application.  The adapter
+does not expand scalar products itself: each lowered key, exact spectator, and
+common-mass power is carried into the same candidate reducer.  This exercises
+the FORM-free scalar tail after the existing FeynKit tensor prepass, while the
+finite-target scope remains unchanged.
 
 The default CSV under `tests/inputs/experimental_four_loop_h.csv` is test input,
 not an engine dispatch. Its rows define physical graph edges and momentum
@@ -92,6 +95,15 @@ for those finite probes only; it does not certify arbitrary-index closure or
 enable four-loop `EvaluationMethod::RustRed`. The production registry remains
 sealed-artifact-only until a complete authenticated four-loop artifact and
 terminal manifest are available.
+
+Set `VAKINT_4L_CANDIDATE_CATALOG_DIR` to persist exact offline values for later
+FORM-free candidate reruns. The harness writes `h.rrcat`, `fg.rrcat`,
+`bmw.rrcat`, or `x.rrcat` atomically after the FMFT phase; each file is bound
+to the RustRed family fingerprint and arity and is revalidated on load. With
+`VAKINT_4L_CANDIDATE_CATALOG_ONLY=1`, an existing catalog is required and the
+test uses an invalid FORM path for the RustRed/FeynKit scalar tail. This is an
+experimental value-cache check, not a completeness proof, IBP artifact, or
+production master catalog.
 
 The existing FMFT finalizer now expands exact Laurent coefficients before
 approximate table substitution. This prevents exact cancelling coefficients

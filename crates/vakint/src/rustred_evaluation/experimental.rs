@@ -16,6 +16,7 @@ use std::sync::Arc;
 
 use rustred::family::IntegralKey;
 use symbolica::atom::{Atom, AtomCore, AtomView};
+use symbolica::function;
 
 use crate::fmft::FMFT;
 use crate::symbols::S;
@@ -46,6 +47,22 @@ pub trait CandidateScalarReduction: Debug + Send + Sync {
     fn parent_momenta(&self) -> &[Atom];
     fn dimension(&self) -> &Atom;
     fn reduce_unit_mass(&self, target: &IntegralKey) -> Result<CandidateReduction, String>;
+    fn lower_scalar_numerator(
+        &self,
+        numerator: &Atom,
+        base: &IntegralKey,
+    ) -> Result<Vec<CandidateLoweredTerm>, String>;
+}
+
+/// One exact term emitted by RustRed's family-bound scalar-numerator service.
+/// This adapter only transports the service result; it does not expand or
+/// simplify scalar products itself.
+#[derive(Clone, Debug)]
+pub struct CandidateLoweredTerm {
+    pub target: IntegralKey,
+    pub coefficient: Atom,
+    pub scalar_spectator: Atom,
+    pub common_mass_squared_power: u32,
 }
 
 /// Observable finite-target coverage, separate from family closure.
@@ -62,6 +79,8 @@ pub struct PreparedCandidateIntegral {
     pub target: IntegralKey,
     mass_squared: Atom,
     scalar_numerator: Atom,
+    coefficient: Atom,
+    common_mass_squared_power: u32,
 }
 
 /// Prepare actual matched target keys before an offline terminal catalog exists.
@@ -94,11 +113,26 @@ pub fn prepare_candidate_integrals(
             ));
         }
         integral.validate_parent_routing(reducer.parent_momenta())?;
-        if term.numerator.contains_symbol(S.k) {
-            return Err(candidate_error(
-                "candidate scalar-product lowering is not connected; surviving loop momentum",
-            ));
-        }
+        let canonical_loop_momenta = (1..=integral.n_loops)
+            .map(|axis| function!(S.k, Atom::num(axis)))
+            .collect::<Vec<_>>();
+        let routed_numerator = super::numerator::route_to_parent(
+            term.numerator.as_view(),
+            &canonical_loop_momenta,
+            integral
+                .parent_routing
+                .as_ref()
+                .map(|(_, coordinates)| coordinates.as_ref()),
+        );
+        let family_numerator = (1..=integral.n_loops).fold(routed_numerator, |value, axis| {
+            value
+                .replace(function!(S.k, Atom::num(axis)).to_pattern())
+                .with(
+                    vk_parse!(format!("k{axis}"))
+                        .expect("family loop label parses")
+                        .to_pattern(),
+                )
+        });
         let expression = integral
             .canonical_expression
             .as_ref()
@@ -123,12 +157,24 @@ pub fn prepare_candidate_integrals(
             }
             mass.get_or_insert_with(|| current.clone());
         }
-        prepared.push(PreparedCandidateIntegral {
-            target: IntegralKey::try_new(powers)
-                .map_err(|error| candidate_error(error.to_string()))?,
-            mass_squared: mass.ok_or_else(|| candidate_error("candidate input has no mass"))?,
-            scalar_numerator: term.numerator,
-        });
+        let base =
+            IntegralKey::try_new(powers).map_err(|error| candidate_error(error.to_string()))?;
+        let lowered = reducer
+            .lower_scalar_numerator(&family_numerator, &base)
+            .map_err(candidate_error)?;
+        if lowered.is_empty() {
+            return Err(candidate_error(
+                "scalar-numerator lowering returned no terms",
+            ));
+        }
+        let mass_squared = mass.ok_or_else(|| candidate_error("candidate input has no mass"))?;
+        prepared.extend(lowered.into_iter().map(|term| PreparedCandidateIntegral {
+            target: term.target,
+            mass_squared: mass_squared.clone(),
+            scalar_numerator: term.scalar_spectator,
+            coefficient: term.coefficient,
+            common_mass_squared_power: term.common_mass_squared_power,
+        }));
     }
     Ok(prepared)
 }
@@ -191,9 +237,8 @@ impl ExperimentalRustRed {
 
     /// Consume the existing matcher once, then run a FORM-free scalar tail.
     ///
-    /// Initially only loop-momentum-free scalar numerators are supported.
-    /// Tensor/scalar-product lowering must later use RustRed's family-bound
-    /// numerator service, not another implementation in this adapter.
+    /// Scalar-product lowering is delegated to RustRed's family-bound service;
+    /// this adapter only applies the resulting integral-key decomposition.
     pub fn evaluate_integral(
         &self,
         vakint: &Vakint,
@@ -239,7 +284,12 @@ impl ExperimentalRustRed {
                 // Laurent truncation, so intermediate poles cannot request
                 // unknown master orders that cancel in the complete sum.
                 .together();
-            raw *= term.mass_squared.clone().pow(Atom::num(exponent)) * &term.scalar_numerator;
+            let exponent = exponent
+                .checked_add(i64::from(term.common_mass_squared_power))
+                .ok_or_else(|| candidate_error("lowered mass exponent overflow"))?;
+            raw *= term.mass_squared.clone().pow(Atom::num(exponent))
+                * &term.coefficient
+                * &term.scalar_numerator;
             value += FMFT::with_settings(settings.clone()).finalize_native_reduced_masters(
                 raw,
                 &term.mass_squared,

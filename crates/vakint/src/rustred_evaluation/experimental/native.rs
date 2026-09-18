@@ -12,11 +12,14 @@ use rustred::solver::{
 use symbolica::atom::Atom;
 
 use super::{CandidateReduction, CandidateScalarReduction};
+use crate::symbols::S;
+use crate::vakint_parse;
 
 /// Owns candidate rules, not a `ClosedArtifact` and not a family-closure proof.
 #[derive(Debug)]
 pub struct NativeCandidate<const N: usize> {
     reducer: Mutex<CandidateReducer<N>>,
+    family: Arc<IntegralFamily>,
     parent_momenta: Vec<Atom>,
     dimension: Atom,
     terminals: BTreeSet<IntegralKey>,
@@ -29,7 +32,7 @@ impl<const N: usize> NativeCandidate<N> {
     /// Parent momenta are the family's physical slots, not topology names.
     /// No algebra, source generation or rule application is implemented here.
     pub fn solve(
-        family: &IntegralFamily,
+        family: Arc<IntegralFamily>,
         parent_momenta: Vec<Atom>,
         workers: usize,
         permutation: Option<[usize; N]>,
@@ -43,7 +46,7 @@ impl<const N: usize> NativeCandidate<N> {
         }
         let root: [bool; N] = std::array::from_fn(|axis| axis < parent_momenta.len());
         let ordering = candidate_ordering(permutation)?;
-        let analyzer = zero::Analyzer::try_unrestricted(family).map_err(|e| e.to_string())?;
+        let analyzer = zero::Analyzer::try_unrestricted(&family).map_err(|e| e.to_string())?;
         let mut certificates = Vec::new();
         let mut zero_sectors = Vec::new();
         let mut sectors = Vec::new();
@@ -75,7 +78,7 @@ impl<const N: usize> NativeCandidate<N> {
             zero_sectors: Arc::from(zero_sectors),
             ..SectorConfig::default()
         };
-        let source = SourceSystem::<N>::from_family(family).map_err(|e| e.to_string())?;
+        let source = SourceSystem::<N>::from_family(&family).map_err(|e| e.to_string())?;
         let solutions = SectorExecutor::new(workers)
             .map_err(|e| e.to_string())?
             .map(
@@ -87,7 +90,7 @@ impl<const N: usize> NativeCandidate<N> {
             )
             .map_err(|e| e.to_string())?;
         let reducer = CandidateReducer::try_new(
-            family,
+            &family,
             root,
             ordering,
             solutions,
@@ -98,6 +101,7 @@ impl<const N: usize> NativeCandidate<N> {
         let terminals = reducer.terminals().clone();
         Ok(Self {
             reducer: Mutex::new(reducer),
+            family: family.clone(),
             parent_momenta,
             dimension: family.dimension().to_expression(),
             terminals,
@@ -205,5 +209,41 @@ impl<const N: usize> CandidateScalarReduction for NativeCandidate<N> {
                 .collect(),
             applied_rules,
         })
+    }
+
+    fn lower_scalar_numerator(
+        &self,
+        numerator: &Atom,
+        base: &IntegralKey,
+    ) -> Result<Vec<super::CandidateLoweredTerm>, String> {
+        let loop_momenta = self
+            .family
+            .loop_momenta()
+            .iter()
+            .map(|label| {
+                vakint_parse!(label.as_str())
+                    .map_err(|error| format!("parse family loop momentum {label}: {error}"))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let service = rustred::scalar_numerator::FamilyScalarNumeratorService::try_new(
+            &self.family,
+            S.dot,
+            loop_momenta,
+            rustred::scalar_numerator::ScalarNumeratorLimits::default(),
+        )
+        .map_err(|error| error.to_string())?;
+        let lowering = service
+            .lower(numerator, base)
+            .map_err(|error| error.to_string())?;
+        Ok(lowering
+            .terms()
+            .iter()
+            .map(|term| super::CandidateLoweredTerm {
+                target: term.integral().clone(),
+                coefficient: term.coefficient().to_expression(),
+                scalar_spectator: term.scalar_spectator().clone(),
+                common_mass_squared_power: term.common_mass_squared_power(),
+            })
+            .collect())
     }
 }

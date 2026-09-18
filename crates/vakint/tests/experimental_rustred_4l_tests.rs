@@ -13,13 +13,16 @@ mod test_utils;
 mod timing;
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::fs;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use rustred::family::IntegralKey;
 use symbolica::atom::{Atom, AtomCore, AtomView};
 use vakint::rustred_evaluation::experimental::native::NativeCandidate;
 use vakint::rustred_evaluation::experimental::{
-    CandidateReduction, CandidateScalarReduction, ExperimentalRustRed, prepare_candidate_integrals,
+    CandidateReduction, CandidateScalarReduction, ExperimentalRustRed,
+    catalog::OfflineTerminalCatalog, prepare_candidate_integrals,
 };
 use vakint::{
     EvaluationMethod, EvaluationOrder, FMFTOptions, LoopNormalizationFactor, Vakint, VakintSettings,
@@ -90,6 +93,14 @@ impl CandidateScalarReduction for RejectingReducer {
     }
     fn reduce_unit_mass(&self, _target: &IntegralKey) -> Result<CandidateReduction, String> {
         Err("sentinel: no candidate rules supplied".into())
+    }
+
+    fn lower_scalar_numerator(
+        &self,
+        _numerator: &Atom,
+        _base: &IntegralKey,
+    ) -> Result<Vec<vakint::rustred_evaluation::experimental::CandidateLoweredTerm>, String> {
+        Err("sentinel: no scalar-numerator lowerer supplied".into())
     }
 }
 
@@ -241,8 +252,16 @@ fn run_candidate_finite_family(
 ) {
     test_utils::run_multi_lane_acceptance(move || {
         Vakint::initialize_vakint_symbols();
-        let form = std::env::var("VAKINT_4L_CANDIDATE_ORACLE_FORM_PATH")
-            .expect("explicit offline FMFT oracle executable required");
+        let catalog_directory =
+            std::env::var_os("VAKINT_4L_CANDIDATE_CATALOG_DIR").map(PathBuf::from);
+        let catalog_only = std::env::var_os("VAKINT_4L_CANDIDATE_CATALOG_ONLY").is_some();
+        let form = std::env::var("VAKINT_4L_CANDIDATE_ORACLE_FORM_PATH").unwrap_or_else(|_| {
+            assert!(
+                catalog_only,
+                "explicit offline FMFT oracle executable required unless catalog-only mode is enabled"
+            );
+            "/candidate-catalog-only-must-not-use-form".into()
+        });
         let workers = std::env::var("VAKINT_4L_CANDIDATE_WORKERS")
             .map_or(1, |value| value.parse::<usize>().unwrap());
         assert!(
@@ -258,7 +277,7 @@ fn run_candidate_finite_family(
         let started = std::time::Instant::now();
         let native = Arc::new(
             NativeCandidate::<10>::solve(
-                &parent.family,
+                parent.family.clone(),
                 parent.physical_momenta.clone(),
                 workers,
                 None,
@@ -343,26 +362,92 @@ fn run_candidate_finite_family(
             use_dot_product_notation: true,
             ..VakintSettings::default()
         };
-        let mut catalog = BTreeMap::new();
-        for terminal in reached {
-            let oracle_input = parent.integral(terminal.powers());
-            let value = vakint
-                .evaluate(&oracle_settings, oracle_input.as_view())
-                .unwrap_or_else(|error| {
-                    panic!("offline FMFT terminal {:?}: {error}", terminal.powers())
-                })
-                .replace(vk_parse!("mursq").unwrap().to_pattern())
-                .with(Atom::num(1).to_pattern())
-                .replace(vk_parse!("muvsq").unwrap().to_pattern())
-                .with(Atom::num(1).to_pattern())
-                .together();
-            println!(
-                "offline terminal {:?}\t{}",
-                terminal.powers(),
-                value.to_canonical_string()
-            );
-            catalog.insert(terminal, value);
-        }
+        let catalog_path = catalog_directory
+            .map(|directory| directory.join(format!("{}.rrcat", family_name.to_ascii_lowercase())));
+        assert!(
+            !catalog_only || catalog_path.as_ref().is_some_and(|path| path.exists()),
+            "catalog-only mode requires an existing validated {}.rrcat",
+            family_name.to_ascii_lowercase()
+        );
+        let generate_catalog = || {
+            let mut terms = BTreeMap::new();
+            for terminal in &reached {
+                let oracle_input = parent.integral(terminal.powers());
+                let value = vakint
+                    .evaluate(&oracle_settings, oracle_input.as_view())
+                    .unwrap_or_else(|error| {
+                        panic!("offline FMFT terminal {:?}: {error}", terminal.powers())
+                    })
+                    .replace(vk_parse!("mursq").unwrap().to_pattern())
+                    .with(Atom::num(1).to_pattern())
+                    .replace(vk_parse!("muvsq").unwrap().to_pattern())
+                    .with(Atom::num(1).to_pattern())
+                    .together();
+                println!(
+                    "offline terminal {:?}\t{}",
+                    terminal.powers(),
+                    value.to_canonical_string()
+                );
+                terms.insert(terminal.clone(), value);
+            }
+            terms
+        };
+        let catalog = if let Some(path) = &catalog_path {
+            if path.exists() {
+                let encoded = fs::read_to_string(path).unwrap_or_else(|error| {
+                    panic!("read offline terminal catalog {}: {error}", path.display())
+                });
+                let loaded =
+                    OfflineTerminalCatalog::decode(&encoded, parent.family.fingerprint(), 10)
+                        .unwrap_or_else(|error| {
+                            panic!(
+                                "decode offline terminal catalog {}: {error}",
+                                path.display()
+                            )
+                        });
+                for terminal in &reached {
+                    assert!(
+                        loaded.terms().contains_key(terminal),
+                        "offline catalog {} is missing reached terminal {:?}",
+                        path.display(),
+                        terminal.powers()
+                    );
+                }
+                println!(
+                    "loaded offline terminal catalog {} ({} terms)",
+                    path.display(),
+                    loaded.terms().len()
+                );
+                loaded.into_terms()
+            } else {
+                let terms = generate_catalog();
+                let offline = OfflineTerminalCatalog::from_terms(
+                    parent.family.fingerprint(),
+                    10,
+                    terms.clone(),
+                )
+                .unwrap_or_else(|error| panic!("build offline terminal catalog: {error}"));
+                fs::create_dir_all(path.parent().unwrap()).unwrap_or_else(|error| {
+                    panic!("create catalog directory {}: {error}", path.display())
+                });
+                let temporary = path.with_extension("rrcat.tmp");
+                fs::write(&temporary, offline.encode()).unwrap_or_else(|error| {
+                    panic!(
+                        "write offline terminal catalog {}: {error}",
+                        temporary.display()
+                    )
+                });
+                fs::rename(&temporary, path).unwrap_or_else(|error| {
+                    panic!(
+                        "publish offline terminal catalog {}: {error}",
+                        path.display()
+                    )
+                });
+                terms
+            }
+        } else {
+            generate_catalog()
+        };
         if std::env::var_os("VAKINT_ACCEPTANCE_EXACT_DIAGNOSTICS").is_some() {
             let options = FMFTOptions {
                 expand_masters: true,
@@ -448,16 +533,25 @@ fn run_candidate_finite_family(
             }
         }
         let evaluator = Arc::new(ExperimentalRustRed::new(native.clone(), catalog).unwrap());
-        let lanes = [
-            test_utils::EvaluationTestLane::oracle(
-                EvaluationOrder(vec![EvaluationMethod::FMFT(FMFTOptions::default())]),
-                test_utils::EvaluationTestInput::TensorReduced,
-            ),
-            test_utils::EvaluationTestLane::experimental_rustred_scalar(
-                test_utils::EvaluationTestInput::TensorReduced,
-                evaluator.clone(),
-            ),
-        ];
+        let lanes = if catalog_only {
+            Vec::from(
+                [test_utils::EvaluationTestLane::experimental_rustred_scalar(
+                    test_utils::EvaluationTestInput::TensorReduced,
+                    evaluator.clone(),
+                )],
+            )
+        } else {
+            Vec::from([
+                test_utils::EvaluationTestLane::oracle(
+                    EvaluationOrder(vec![EvaluationMethod::FMFT(FMFTOptions::default())]),
+                    test_utils::EvaluationTestInput::TensorReduced,
+                ),
+                test_utils::EvaluationTestLane::experimental_rustred_scalar(
+                    test_utils::EvaluationTestInput::TensorReduced,
+                    evaluator.clone(),
+                ),
+            ])
+        };
         let settings = VakintSettings {
             form_exe_path: form,
             run_time_decimal_precision: 25,
@@ -477,20 +571,37 @@ fn run_candidate_finite_family(
         let native_applications_before = native.rule_applications().unwrap();
         for (name, powers) in &cases {
             let integral = parent.integral(&powers);
-            test_utils::compare_evaluations(
-                settings.clone(),
-                &lanes,
-                test_utils::TensorPrepass::FeynKit,
-                integral.as_view(),
-                masses.clone(),
-                std::collections::HashMap::default(),
-                1e-20,
-                10.0,
-                true,
-            );
-            println!(
-                "finite-target numerical parity PASS: {family_name}/{name}; no family-closure claim"
-            );
+            if catalog_only {
+                let canonical = vakint
+                    .to_canonical(&settings, integral.as_view(), false)
+                    .unwrap();
+                let scalar = vakint
+                    .tensor_reduce(&settings, canonical.as_view())
+                    .unwrap();
+                let result = evaluator
+                    .evaluate_integral(&vakint, &settings, scalar.as_view())
+                    .unwrap();
+                assert!(result.targets > 0);
+                println!(
+                    "catalog-only FORM-free candidate PASS: {family_name}/{name}; {} targets; {} applications",
+                    result.targets, result.applied_rules
+                );
+            } else {
+                test_utils::compare_evaluations(
+                    settings.clone(),
+                    &lanes,
+                    test_utils::TensorPrepass::FeynKit,
+                    integral.as_view(),
+                    masses.clone(),
+                    std::collections::HashMap::default(),
+                    1e-20,
+                    10.0,
+                    true,
+                );
+                println!(
+                    "finite-target numerical parity PASS: {family_name}/{name}; no family-closure claim"
+                );
+            }
         }
         let native_applications = native
             .rule_applications()
@@ -499,7 +610,7 @@ fn run_candidate_finite_family(
             .expect("candidate rule counter must not decrease");
         assert!(
             native_applications > 0,
-            "invalid-FORM scalar comparisons must include cold candidate-rule application"
+            "cold candidate application must include an actual recurrence"
         );
         println!("invalid-FORM cold scalar lane: {native_applications} new rule applications");
         if let Ok(repeats) = std::env::var("VAKINT_4L_CANDIDATE_BENCH_REPEATS") {

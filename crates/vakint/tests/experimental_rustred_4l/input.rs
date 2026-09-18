@@ -2,13 +2,14 @@
 
 use rustred::family::IntegralFamily;
 use rustred::input::{Compiler, Limits, LoweringLimits, TextProject, TextPropagator};
+use std::sync::Arc;
 use symbolica::atom::{Atom, AtomCore};
 use symbolica::function;
 use vakint::symbols::S;
 use vakint::vakint_parse as vk_parse;
 
 pub struct ParentInput {
-    pub family: IntegralFamily,
+    pub family: Arc<IntegralFamily>,
     pub physical_momenta: Vec<Atom>,
     momenta: Vec<Atom>,
     edges: Vec<(i64, i64)>,
@@ -86,7 +87,7 @@ impl ParentInput {
             .unwrap()
             .into_family();
         Self {
-            family,
+            family: Arc::new(family),
             physical_momenta,
             momenta,
             edges,
