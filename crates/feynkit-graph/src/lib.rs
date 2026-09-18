@@ -38,7 +38,8 @@ symbolica::initialize!(|| {
 pub fn momentum_symbol() -> symbolica::atom::Symbol {
     symbolica::symbol!(
         "FeynKit::Momentum",
-        tags = ["spenso::tensor", "spenso::rank1"]
+        tags = ["spenso::tensor", "spenso::rank1", "spenso::tensor-label:q"],
+        print = spenso::network::tags::tensor_print
     )
 }
 
