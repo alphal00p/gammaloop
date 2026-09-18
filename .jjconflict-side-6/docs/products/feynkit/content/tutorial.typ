@@ -71,6 +71,43 @@ empty result can therefore mean the chosen constraints admit no graph. This is a
 `GenerationResult` with zero retained diagrams, not a configuration error. Inspect the generation
 report and relax a specific constraint before enlarging the search indiscriminately.
 
+Both generation entry points check Python signals while they run. Ctrl-C or a notebook
+interrupt stops generation and raises `KeyboardInterrupt`; exceptions from custom Python
+signal handlers also propagate. Cancelling an explicit `CancellationToken` instead returns
+an incomplete result, preserving that API's existing partial-result behavior.
+
+== Inspect the propagator denominator
+
+// docs-example: compile
+```python
+denominator = diagram.denominator_expression()
+integrand = diagram.numerator_expression() / denominator
+```
+
+The denominator is a scalar Spenso `TensorExpression`: the product of
+$q_e^2 - m_e^2$ over internal edges, with four-dimensional Minkowski scalar products.
+Its momentum labels match the numerator and its masses remain symbolic model parameters;
+the UFO `ZERO` mass becomes zero. External legs, widths, and an imaginary prescription
+are excluded. This follows FeynKit's quadratic-propagator convention; custom UFO
+denominator formulas are not instantiated. A diagram without internal edges returns one.
+The ratio above still requires the diagram's separate overall factor and any unapplied
+projector or numerator prefactor when assembling a complete integrand.
+
+== Inspect superficial UV power counting
+
+// docs-example: compile
+```python
+degree = diagram.superficial_degree_of_divergence()
+degree_in_six_dimensions = diagram.superficial_degree_of_divergence(dimension=6)
+```
+
+The local superficial degree adds the loop integration measures, momentum powers in the
+stored vertex and internal-edge numerators, and minus two for each quadratic propagator
+denominator. External legs, projectors, and global prefactors do not enter this count.
+Zero denotes a logarithmic superficial divergence, a positive value a power divergence,
+and a negative value superficial convergence. This local bound scales all momenta at each
+vertex together; it does not account for tensor cancellations or rule out UV subdivergences.
+
 == Use finalized output
 
 Generation performs topology expansion, interaction assignment, filters, canonicalization,

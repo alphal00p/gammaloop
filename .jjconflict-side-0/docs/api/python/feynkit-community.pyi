@@ -1141,6 +1141,21 @@ class FeynmanDiagram:
         dot : str
             DOT text containing the diagram topology and FeynKit annotations.
         """
+    def denominator_expression(self) -> TensorExpression:
+        r"""
+        Return the product of internal propagator denominators as a scalar TensorExpression.
+
+        Each factor is q_e² - m_e², with the numerator's edge momentum labels,
+        four-dimensional Minkowski scalar products, and symbolic model masses.
+        External legs, widths, and an imaginary prescription are excluded.
+        This uses FeynKit's quadratic-propagator convention, rather than custom
+        UFO denominator formulas. A diagram with no internal edges returns one.
+
+        Examples
+        --------
+        >>> denominator = diagram.denominator_expression()
+        >>> integrand = diagram.numerator_expression() / denominator
+        """
     def numerator_expression(self) -> TensorExpression:
         r"""
         Return the diagram numerator as a Spenso TensorExpression.
@@ -1231,6 +1246,27 @@ class FeynmanDiagram:
         ----------
         reducer : TensorReducer
             Tensor projector and integrated-momentum selection to apply.
+        """
+    def superficial_degree_of_divergence(self, *, dimension: builtins.int = 4) -> builtins.int:
+        r"""
+        Return the local superficial UV degree of divergence.
+
+        Counts ``dimension * loops`` plus vertex momentum powers and internal
+        propagator numerator powers minus two per internal propagator. Uses the
+        stored local numerators; excludes external legs, projectors, and global
+        prefactors. Vertex momenta scale together, before tensor cancellations.
+        Zero is logarithmic, positive is power divergent, and negative is
+        superficially convergent. Subdivergences are not tested.
+
+        Examples
+        --------
+        >>> degree = diagram.superficial_degree_of_divergence()
+        >>> degree_in_six_dimensions = diagram.superficial_degree_of_divergence(dimension=6)
+
+        Parameters
+        ----------
+        dimension : int, optional
+            Spacetime dimension for each loop integration measure; defaults to four.
         """
     def validate(self) -> None:
         r"""
@@ -1995,7 +2031,9 @@ class Generator:
         numerator_grouping : NumeratorGrouping or None, optional
             Zero detection and numerator comparison; None disables parsing and grouping.
         cancellation_token : CancellationToken or None, optional
-            Shared token for cancelling a running generation task.
+            Shared token for cancelling a running generation task. Token cancellation
+            returns an incomplete result; Python signal-handler exceptions, including
+            KeyboardInterrupt, stop generation and propagate to the caller.
         """
 
 @typing.final
@@ -2858,7 +2896,9 @@ class Model:
         numerator_grouping : NumeratorGrouping or None, optional
             Zero detection and numerator comparison; None disables parsing and grouping.
         cancellation_token : CancellationToken or None, optional
-            Shared token for cancelling a running generation task.
+            Shared token for cancelling a running generation task. Token cancellation
+            returns an incomplete result; Python signal-handler exceptions, including
+            KeyboardInterrupt, stop generation and propagate to the caller.
         final_state_alternatives : sequence[sequence[Particle | ParticleSelector | str | int]] or None, optional
             Extra outgoing states for a cross section.
         """

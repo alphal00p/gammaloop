@@ -1,0 +1,23 @@
+[target.x86_64-unknown-linux-gnu]
+linker = "cc"
+
+[target.wasm32-unknown-unknown]
+linker = "rust-lld"
+# `getrandom` 0.3 requires an explicit opt-in for JavaScript's Web Crypto
+# backend on the otherwise capability-free wasm32-unknown-unknown target.
+rustflags = ["--cfg", "getrandom_backend=\"wasm_js\""]
+
+# The CLI registers its application license at startup. Library builds use
+# SYMBOLICA_LICENSE at runtime; no workspace-wide compile-time key is needed.
+
+# [target.aarch64-apple-darwin]
+# rustflags = [
+#     "-C",
+#     "link-arg=-fuse-ld=/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld",
+#     "-C",
+#     "link-arg=-ld_new",
+# ]
+
+[target.'cfg(target_os = "macos")']
+# GCC's Darwin driver disables compact unwind tables, breaking Rust panic handling.
+linker = "/usr/bin/clang"
