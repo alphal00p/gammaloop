@@ -77,6 +77,21 @@ same binary also passed the three FG targets, with 3,362 new applications.
 The three X targets also passed, with 82,637 new applications.
 These experiments use exact offline projections of only the actually reached
 fixed residuals, not guessed master declarations or oracle-supplied IBP rules.
+The BMW parent, dotted power-three target and pinch now use the same harness;
+the dotted target passed with 16,113 new applications.  The power-two BMW
+probe is a declared residual and is therefore not counted as recurrence
+evidence.
+
+The ignored `candidate_all_four_loop_parents_match_fmft` test reuses this
+same comparative harness for all four checked-in descriptors (`H`, `FG`,
+`BMW`, and `X`), with parent, dotted, and pinch probes for each descriptor.
+Each descriptor gets a fresh RustRed candidate reducer and an offline catalog
+containing only residuals reached by that run. A matrix pass demonstrates
+routing, FeynKit preprocessing, candidate application, and numerical parity
+for those finite probes only; it does not certify arbitrary-index closure or
+enable four-loop `EvaluationMethod::RustRed`. The production registry remains
+sealed-artifact-only until a complete authenticated four-loop artifact and
+terminal manifest are available.
 
 The existing FMFT finalizer now expands exact Laurent coefficients before
 approximate table substitution. This prevents exact cancelling coefficients
@@ -84,7 +99,7 @@ from becoming tiny floating poles; no zero tolerance, epsilon depth or source
 table is changed. All nine finalizer unit checks pass, including genuine
 missing-order rejection and the new exact-cancellation regression.
 
-This checkpoint is **nine finite-target comparisons**, not all fifteen existing
+This checkpoint is **twelve finite-target comparisons**, not all fifteen existing
 four-loop numerical acceptance entrypoints or the nineteen registered graph
 classes. It does not prove arbitrary-index closure, ship a four-loop production
 catalog, or establish twenty-thousand-digit master accuracy. Tensor-bearing

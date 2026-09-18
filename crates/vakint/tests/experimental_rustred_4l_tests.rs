@@ -205,7 +205,33 @@ fn offline_fmft_candidate_terminal_catalog() {
 #[test]
 #[ignore = "experimental: generates actual four-loop candidates and uses an explicit offline FMFT oracle"]
 fn candidate_parent_dotted_and_pinch_match_fmft() {
-    test_utils::run_multi_lane_acceptance(|| {
+    let source = std::env::var("VAKINT_4L_CANDIDATE_PARENT_INPUT")
+        .map(|path| std::fs::read_to_string(path).unwrap())
+        .unwrap_or_else(|_| include_str!("inputs/experimental_four_loop_h.csv").into());
+    run_candidate_finite_family("H", source);
+}
+
+/// Run the same finite-target candidate/FeynKit/FMFT comparison for every
+/// supplied complete four-loop parent descriptor.  This remains an ignored,
+/// offline experiment: each family gets its own RustRed candidate reducer and
+/// terminal catalog, and no result is registered in the production artifact
+/// registry.  Keeping the matrix here reuses exactly the same harness as the
+/// historical H probe instead of silently testing a weaker direct evaluator.
+#[test]
+#[ignore = "experimental: generates four-loop candidates and uses an explicit offline FMFT oracle"]
+fn candidate_all_four_loop_parents_match_fmft() {
+    for (name, source) in [
+        ("H", include_str!("inputs/experimental_four_loop_h.csv")),
+        ("FG", include_str!("inputs/experimental_four_loop_fg.csv")),
+        ("BMW", include_str!("inputs/experimental_four_loop_bmw.csv")),
+        ("X", include_str!("inputs/experimental_four_loop_x.csv")),
+    ] {
+        run_candidate_finite_family(name, source.to_owned());
+    }
+}
+
+fn run_candidate_finite_family(family_name: &'static str, source: String) {
+    test_utils::run_multi_lane_acceptance(move || {
         Vakint::initialize_vakint_symbols();
         let form = std::env::var("VAKINT_4L_CANDIDATE_ORACLE_FORM_PATH")
             .expect("explicit offline FMFT oracle executable required");
@@ -218,9 +244,6 @@ fn candidate_parent_dotted_and_pinch_match_fmft() {
         let dot_power = std::env::var("VAKINT_4L_CANDIDATE_DOT_POWER")
             .map_or(2, |value| value.parse::<i64>().expect("integer dot power"));
         assert!(dot_power >= 2, "dotted target power must be at least two");
-        let source = std::env::var("VAKINT_4L_CANDIDATE_PARENT_INPUT")
-            .map(|path| std::fs::read_to_string(path).unwrap())
-            .unwrap_or_else(|_| include_str!("inputs/experimental_four_loop_h.csv").into());
         let parent = input::ParentInput::from_csv(&source);
         let started = std::time::Instant::now();
         let native = Arc::new(
@@ -233,7 +256,7 @@ fn candidate_parent_dotted_and_pinch_match_fmft() {
             .expect("RustRed candidate generation and pointwise bridge"),
         );
         println!(
-            "candidate search: {:?}; fixed residuals: {}",
+            "candidate {family_name} search: {:?}; fixed residuals: {}",
             started.elapsed(),
             native.terminals().len()
         );
@@ -455,7 +478,7 @@ fn candidate_parent_dotted_and_pinch_match_fmft() {
                 10.0,
                 true,
             );
-            println!("finite-target numerical parity PASS: {name}; no family-closure claim");
+            println!("finite-target numerical parity PASS: {family_name}/{name}; no family-closure claim");
         }
         let native_applications = native
             .rule_applications()
