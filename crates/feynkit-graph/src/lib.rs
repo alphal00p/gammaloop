@@ -1816,7 +1816,9 @@ impl FeynmanDiagram {
                 });
             }
         }
-        if fragment_numerator.expand() != self.numerator.expand() {
+        if fragment_numerator != self.numerator
+            && fragment_numerator.expand() != self.numerator.expand()
+        {
             return Err(DiagramError::NumeratorFragmentMismatch);
         }
         self.loop_momentum_basis.validate(self)?;
@@ -3435,6 +3437,21 @@ mod tests {
                 .iter()
                 .all(|diagram| diagram.cuts() == first.cuts())
         );
+    }
+
+    #[test]
+    fn validates_factored_and_expanded_numerators_and_rejects_mismatches() {
+        let factored =
+            Atom::parse("(x+y)*(x-y)", "validation_test", ParseSettings::default()).unwrap();
+        let mut diagram = one_loop().with_numerator(factored.clone()).unwrap();
+        diagram.validate().unwrap();
+        diagram.numerator = factored.expand();
+        diagram.validate().unwrap();
+        diagram.numerator += Atom::one();
+        assert!(matches!(
+            diagram.validate(),
+            Err(DiagramError::NumeratorFragmentMismatch)
+        ));
     }
 
     #[test]

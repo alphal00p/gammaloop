@@ -17,7 +17,7 @@ use pyo3::{
     FromPyObject, IntoPyObjectExt,
     exceptions::{PyIndexError, PyTypeError, PyValueError},
     prelude::*,
-    types::{PyAny, PyBool, PyList, PyModule},
+    types::{PyAny, PyBool, PyEllipsis, PyList, PyModule},
 };
 
 #[cfg(feature = "python_stubgen")]
@@ -556,7 +556,8 @@ impl PyProcess {
             inner: Process::cross_section(
                 incoming.into_iter().map(ParticleSelector::from),
                 outgoing.into_iter().map(ParticleSelector::from),
-            ),
+            )
+            .symmetrize_final(true),
         }
     }
 
@@ -1090,6 +1091,8 @@ pub(crate) struct GenerationSettings {
 impl GenerationSettings {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
+        py: Python<'_>,
+        process: &Process,
         threads: Option<usize>,
         max_vertices: Option<usize>,
         allow_self_loops: bool,
@@ -1099,14 +1102,14 @@ impl GenerationSettings {
         vertex_allow: Option<Vec<VertexInput>>,
         vertex_veto: Option<Vec<VertexInput>>,
         maximum_bridges: Option<usize>,
-        self_energy: Option<PySelfEnergyFilterOptions>,
-        tadpoles: Option<PyTadpoleFilterOptions>,
-        zero_snails: Option<PySnailFilterOptions>,
+        self_energy: Option<Py<PyAny>>,
+        tadpoles: Option<Py<PyAny>>,
+        zero_snails: Option<Py<PyAny>>,
         coupling_orders: Option<BTreeMap<String, OrderRangeInput<true>>>,
         fermion_loop_count_range: Option<(usize, usize)>,
-        factorized_loop_topologies_count_range: Option<(usize, usize)>,
-        blob_range: Option<(usize, usize)>,
-        spectator_range: Option<(usize, usize)>,
+        factorized_loop_topologies_count_range: Option<Py<PyAny>>,
+        blob_range: Option<Py<PyAny>>,
+        spectator_range: Option<Py<PyAny>>,
         perturbative_orders: Option<BTreeMap<String, usize>>,
         sewn_tadpoles: Option<bool>,
         cut_amplitude_coupling_orders: Option<BTreeMap<String, OrderRangeInput<true>>>,
@@ -1116,9 +1119,90 @@ impl GenerationSettings {
         loop_momentum_bases: Option<Vec<(DiagramSelectionInput, Vec<usize>)>>,
         numerator_prefactor: Option<PythonExpression>,
         projector: Option<PythonExpression>,
-        numerator_grouping: Option<PyNumeratorGrouping>,
+        numerator_grouping: Option<Py<PyAny>>,
         cancellation_token: Option<PyCancellationToken>,
-    ) -> Self {
+    ) -> PyResult<Self> {
+        // Ported from GammaLoop's CLI policy. Explicit None disables a default;
+        // Ellipsis selects the process-dependent default without a mutable preset.
+        let cross_section = process.generation_type() == GenerationType::CrossSection;
+        let vacuum = process.incoming().is_empty()
+            && (cross_section || process.outgoing_alternatives().iter().all(Vec::is_empty));
+        let self_energy = match self_energy {
+            Some(value) if value.bind(py).is_instance_of::<PyEllipsis>() => {
+                (!vacuum).then(SelfEnergyFilterOptions::default)
+            }
+            value => value
+                .map(|value| {
+                    value
+                        .extract::<PySelfEnergyFilterOptions>(py)
+                        .map_err(PyErr::from)
+                        .map(|value| value.inner)
+                })
+                .transpose()?,
+        };
+        let tadpoles = match tadpoles {
+            Some(value) if value.bind(py).is_instance_of::<PyEllipsis>() => {
+                (!vacuum).then(TadpoleFilterOptions::default)
+            }
+            value => value
+                .map(|value| {
+                    value
+                        .extract::<PyTadpoleFilterOptions>(py)
+                        .map_err(PyErr::from)
+                        .map(|value| value.inner)
+                })
+                .transpose()?,
+        };
+        let zero_snails = match zero_snails {
+            Some(value) if value.bind(py).is_instance_of::<PyEllipsis>() => {
+                (!vacuum).then(SnailFilterOptions::default)
+            }
+            value => value
+                .map(|value| {
+                    value
+                        .extract::<PySnailFilterOptions>(py)
+                        .map_err(PyErr::from)
+                        .map(|value| value.inner)
+                })
+                .transpose()?,
+        };
+        let numerator_grouping = match numerator_grouping {
+            Some(value) if value.bind(py).is_instance_of::<PyEllipsis>() => Some(
+                NumeratorGrouping::UpToScalar(GraphGroupingOptions::default()),
+            ),
+            value => value
+                .map(|value| {
+                    value
+                        .extract::<PyNumeratorGrouping>(py)
+                        .map_err(PyErr::from)
+                        .map(|value| value.inner)
+                })
+                .transpose()?,
+        };
+        let factorized_loop_topologies_count_range = match factorized_loop_topologies_count_range {
+            Some(value) if value.bind(py).is_instance_of::<PyEllipsis>() => {
+                vacuum.then_some((1, 1))
+            }
+            value => value
+                .map(|value| value.extract::<(usize, usize)>(py))
+                .transpose()?,
+        };
+        let blob_range = match blob_range {
+            Some(value) if value.bind(py).is_instance_of::<PyEllipsis>() => {
+                cross_section.then_some((1, 1))
+            }
+            value => value
+                .map(|value| value.extract::<(usize, usize)>(py))
+                .transpose()?,
+        };
+        let spectator_range = match spectator_range {
+            Some(value) if value.bind(py).is_instance_of::<PyEllipsis>() => {
+                cross_section.then_some((0, 0))
+            }
+            value => value
+                .map(|value| value.extract::<(usize, usize)>(py))
+                .transpose()?,
+        };
         let mut inner = GenerationOptions::default()
             .allow_self_loops(allow_self_loops)
             .allow_zero_flow_edges(allow_zero_flow_edges);
@@ -1150,13 +1234,13 @@ impl GenerationSettings {
             inner = inner.with_graph_filter(GenerationFilter::MaxNumberOfBridges(value));
         }
         if let Some(value) = self_energy {
-            inner = inner.with_graph_filter(GenerationFilter::SelfEnergy(value.inner));
+            inner = inner.with_graph_filter(GenerationFilter::SelfEnergy(value));
         }
         if let Some(value) = tadpoles {
-            inner = inner.with_graph_filter(GenerationFilter::Tadpoles(value.inner));
+            inner = inner.with_graph_filter(GenerationFilter::Tadpoles(value));
         }
         if let Some(value) = zero_snails {
-            inner = inner.with_graph_filter(GenerationFilter::ZeroSnails(value.inner));
+            inner = inner.with_graph_filter(GenerationFilter::ZeroSnails(value));
         }
         for (scope, orders) in [
             (FilterScope::Graph, coupling_orders),
@@ -1230,12 +1314,12 @@ impl GenerationSettings {
             inner = inner.projector(value.expr);
         }
         if let Some(value) = numerator_grouping {
-            inner = inner.numerator_grouping(value.inner);
+            inner = inner.numerator_grouping(value);
         }
         if let Some(value) = cancellation_token {
             inner = inner.cancellation_token(value.inner);
         }
-        Self { inner }
+        Ok(Self { inner })
     }
 }
 
@@ -1810,7 +1894,7 @@ impl PyGenerator {
     /// max_vertices : int or None, optional
     ///     Maximum interaction vertices; None applies no override.
     /// allow_self_loops : bool, optional
-    ///     Permit propagators that start and end on the same vertex.
+    ///     Permit propagators that start and end on the same vertex; defaults to True.
     /// allow_zero_flow_edges : bool, optional
     ///     Permit internal edges with identically zero momentum flow.
     /// graph_prefix : str or None, optional
@@ -1822,23 +1906,30 @@ impl PyGenerator {
     /// vertex_veto : sequence[VertexRule | str] or None, optional
     ///     Reject graphs containing these interaction vertices.
     /// maximum_bridges : int or None, optional
-    ///     Largest allowed number of graph bridges.
+    ///     Largest allowed number of internal graph bridges; defaults to 0.
+    ///     Pass None to allow unrestricted bridges, including exchange-channel trees.
     /// self_energy : SelfEnergyFilterOptions or None, optional
-    ///     Reject self-energy subgraphs by mass category; None applies no filter.
+    ///     Reject self-energy subgraphs. Omission enables the default filter for
+    ///     non-vacuum processes; explicit None disables it. Ellipsis selects automatic defaults.
     /// tadpoles : TadpoleFilterOptions or None, optional
-    ///     Reject tadpoles by attachment mass; None applies no filter.
+    ///     Reject tadpole subgraphs. Omission enables the default filter for
+    ///     non-vacuum processes; explicit None disables it. Ellipsis selects automatic defaults.
     /// zero_snails : SnailFilterOptions or None, optional
-    ///     Reject zero-momentum snails by attachment mass; None applies no filter.
+    ///     Reject zero-snail subgraphs. Omission enables the default filter for
+    ///     non-vacuum processes; explicit None disables it. Ellipsis selects automatic defaults.
     /// coupling_orders : dict[str, int | tuple[int, int or None]] or None, optional
     ///     Exact coupling powers or inclusive ranges; an upper None is unbounded.
     /// fermion_loop_count_range : tuple[int, int] or None, optional
     ///     Inclusive range of closed fermion loops.
     /// factorized_loop_topologies_count_range : tuple[int, int] or None, optional
-    ///     Inclusive range of factorized loop-topology components.
+    ///     Inclusive range of factorized loop-topology components. Defaults to
+    ///     ``(1, 1)`` for vacuum processes; ``None`` disables the restriction.
     /// blob_range : tuple[int, int] or None, optional
-    ///     Inclusive cross-section blob-count range.
+    ///     Inclusive cross-section blob-count range. Defaults to ``(1, 1)`` for
+    ///     cross sections; ``None`` disables the restriction.
     /// spectator_range : tuple[int, int] or None, optional
-    ///     Inclusive cross-section spectator-count range.
+    ///     Inclusive cross-section spectator-count range. Defaults to ``(0, 0)`` for
+    ///     cross sections; ``None`` disables the restriction.
     /// perturbative_orders : dict[str, int] or None, optional
     ///     Exact perturbative powers required for cross-section graphs.
     /// sewn_tadpoles : bool or None, optional
@@ -1858,7 +1949,8 @@ impl PyGenerator {
     /// projector : Expression or None, optional
     ///     Override external-state contraction; S("1") disables external wavefunctions.
     /// numerator_grouping : NumeratorGrouping or None, optional
-    ///     Zero detection and numerator comparison; None disables parsing and grouping.
+    ///     Omission groups up to scalar rescaling, matching the GammaLoop CLI.
+    ///     Explicit None disables comparison, but diagrams still contain numerators.
     /// progress : Callable[[GenerationProgress], None] or None, optional
     ///     Observe stage changes and coalesced counts on the calling Python thread.
     ///     Callback exceptions propagate and stop generation.
@@ -1873,7 +1965,7 @@ impl PyGenerator {
     ///     Shared token for cancelling a running generation task. Token cancellation
     ///     returns an incomplete result; Python signal-handler exceptions, including
     ///     KeyboardInterrupt, stop generation and propagate to the caller.
-    #[pyo3(signature = (process, *, threads=None, max_vertices=None, allow_self_loops=false, allow_zero_flow_edges=false, graph_prefix=None, particle_veto=None, vertex_allow=None, vertex_veto=None, maximum_bridges=None, self_energy=None, tadpoles=None, zero_snails=None, coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=None, blob_range=None, spectator_range=None, perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, cancellation_token=None, progress=None, filter=None))]
+    #[pyo3(signature = (process, *, threads=None, max_vertices=None, allow_self_loops=true, allow_zero_flow_edges=false, graph_prefix=None, particle_veto=None, vertex_allow=None, vertex_veto=None, maximum_bridges=0, self_energy=Some(Python::attach(|py| py.Ellipsis())), tadpoles=Some(Python::attach(|py| py.Ellipsis())), zero_snails=Some(Python::attach(|py| py.Ellipsis())), coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=Some(Python::attach(|py| py.Ellipsis())), blob_range=Some(Python::attach(|py| py.Ellipsis())), spectator_range=Some(Python::attach(|py| py.Ellipsis())), perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=Some(Python::attach(|py| py.Ellipsis())), cancellation_token=None, progress=None, filter=None))]
     #[allow(clippy::too_many_arguments)]
     fn generate(
         &self,
@@ -1887,15 +1979,21 @@ impl PyGenerator {
         particle_veto: Option<Vec<ParticleInput>>,
         vertex_allow: Option<Vec<VertexInput>>,
         vertex_veto: Option<Vec<VertexInput>>,
-        maximum_bridges: Option<usize>,
-        self_energy: Option<PySelfEnergyFilterOptions>,
-        tadpoles: Option<PyTadpoleFilterOptions>,
-        zero_snails: Option<PySnailFilterOptions>,
+        #[gen_stub(override_type(type_repr = "int | None"))] maximum_bridges: Option<usize>,
+        #[gen_stub(override_type(type_repr = "SelfEnergyFilterOptions | types.EllipsisType | None", imports = ("types")))]
+        self_energy: Option<Py<PyAny>>,
+        #[gen_stub(override_type(type_repr = "TadpoleFilterOptions | types.EllipsisType | None", imports = ("types")))]
+        tadpoles: Option<Py<PyAny>>,
+        #[gen_stub(override_type(type_repr = "SnailFilterOptions | types.EllipsisType | None", imports = ("types")))]
+        zero_snails: Option<Py<PyAny>>,
         coupling_orders: Option<BTreeMap<String, OrderRangeInput<true>>>,
         fermion_loop_count_range: Option<(usize, usize)>,
-        factorized_loop_topologies_count_range: Option<(usize, usize)>,
-        blob_range: Option<(usize, usize)>,
-        spectator_range: Option<(usize, usize)>,
+        #[gen_stub(override_type(type_repr = "tuple[int, int] | types.EllipsisType | None", imports = ("types")))]
+        factorized_loop_topologies_count_range: Option<Py<PyAny>>,
+        #[gen_stub(override_type(type_repr = "tuple[int, int] | types.EllipsisType | None", imports = ("types")))]
+        blob_range: Option<Py<PyAny>>,
+        #[gen_stub(override_type(type_repr = "tuple[int, int] | types.EllipsisType | None", imports = ("types")))]
+        spectator_range: Option<Py<PyAny>>,
         perturbative_orders: Option<BTreeMap<String, usize>>,
         sewn_tadpoles: Option<bool>,
         cut_amplitude_coupling_orders: Option<BTreeMap<String, OrderRangeInput<true>>>,
@@ -1905,7 +2003,8 @@ impl PyGenerator {
         loop_momentum_bases: Option<Vec<(DiagramSelectionInput, Vec<usize>)>>,
         numerator_prefactor: Option<PythonExpression>,
         projector: Option<PythonExpression>,
-        numerator_grouping: Option<PyNumeratorGrouping>,
+        #[gen_stub(override_type(type_repr = "NumeratorGrouping | types.EllipsisType | None", imports = ("types")))]
+        numerator_grouping: Option<Py<PyAny>>,
         cancellation_token: Option<PyCancellationToken>,
         #[gen_stub(override_type(type_repr = "collections.abc.Callable[[GenerationProgress], None] | None", imports = ("collections.abc")))]
         progress: Option<Py<PyAny>>,
@@ -1915,6 +2014,8 @@ impl PyGenerator {
         let generator = self.inner.clone();
         let process = process.inner.clone();
         let options = GenerationSettings::new(
+            py,
+            &process,
             threads,
             max_vertices,
             allow_self_loops,
@@ -1943,7 +2044,7 @@ impl PyGenerator {
             projector,
             numerator_grouping,
             cancellation_token,
-        )
+        )?
         .inner;
         generate_diagrams(py, generator, process, options, progress, filter)
     }
@@ -2185,6 +2286,67 @@ mod tests {
     use pyo3::types::PyDict;
 
     use super::*;
+
+    #[test]
+    fn generation_defaults_match_the_ported_cli_policy() {
+        Python::initialize();
+        Python::attach(|py| {
+            let module = PyModule::new(py, "symbolica.community.feynkit").unwrap();
+            crate::initialize_feynkit(&module).unwrap();
+            let locals = PyDict::new(py);
+            locals.set_item("fk", &module).unwrap();
+            locals
+                .set_item(
+                    "MODEL_JSON",
+                    include_str!("../tests/fixtures/scalars_2p_3p.json"),
+                )
+                .unwrap();
+            let code = CString::new(r#"
+import inspect
+model = fk.Model.from_json(MODEL_JSON)
+generator = fk.Generator(model)
+settings = dict(max_vertices=3, vertex_allow=["V_3_SCALAR_000"])
+explicit = dict(
+    maximum_bridges=0, allow_self_loops=True,
+    self_energy=fk.SelfEnergyFilterOptions(), tadpoles=fk.TadpoleFilterOptions(),
+    zero_snails=fk.SnailFilterOptions(), numerator_grouping=fk.NumeratorGrouping("up_to_scalar"),
+)
+for via_model in (True, False):
+    def generate(incoming, outgoing, loops=0, **kwargs):
+        if via_model:
+            return model.generate_diagrams(incoming, outgoing, loops=loops, **settings, **kwargs)
+        process = fk.Process.amplitude(incoming, outgoing).with_loop_count(loops, loops)
+        return generator.generate(process, **settings, **kwargs)
+
+    implicit = generate([1000], [1000, 1000], loops=1)
+    configured = generate([1000], [1000, 1000], loops=1, **explicit)
+    assert implicit.report.completed and len(implicit) > 0
+    assert [d.to_json() for d in implicit.diagrams] == [d.to_json() for d in configured.diagrams]
+
+    # A tree with two cubic vertices needs an internal bridge. None explicitly
+    # restores unrestricted generation; omitting maximum_bridges rejects it.
+    assert len(generate([1000, 1000], [1000, 1000], numerator_grouping=None)) == 0
+    unrestricted = generate([1000, 1000], [1000, 1000], maximum_bridges=None, numerator_grouping=None)
+    assert len(unrestricted) > 0
+    assert len(unrestricted.groups) == len(unrestricted)
+    assert all(len(group.members) == 1 for group in unrestricted.groups)
+
+    vacuum = generate([], [], loops=2, numerator_grouping=None)
+    configured_vacuum = generate([], [], loops=2, numerator_grouping=None,
+        maximum_bridges=0, allow_self_loops=True, self_energy=None,
+        tadpoles=None, zero_snails=None, factorized_loop_topologies_count_range=(1, 1))
+    assert [d.to_json() for d in vacuum.diagrams] == [d.to_json() for d in configured_vacuum.diagrams]
+
+assert fk.Process.cross_section([1000], [1000]).symmetrizes_final
+for generate in (model.generate_diagrams, generator.generate):
+    parameters = inspect.signature(generate).parameters
+    assert parameters["maximum_bridges"].default == 0
+    assert parameters["allow_self_loops"].default is True
+    assert parameters["numerator_grouping"].default is Ellipsis
+"#).unwrap();
+            py.run(&code, Some(&locals), Some(&locals)).unwrap();
+        });
+    }
 
     #[test]
     fn progress_and_partial_filters_use_the_calling_python_thread() {
