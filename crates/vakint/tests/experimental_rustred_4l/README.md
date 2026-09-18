@@ -114,7 +114,18 @@ from becoming tiny floating poles; no zero tolerance, epsilon depth or source
 table is changed. All nine finalizer unit checks pass, including genuine
 missing-order rejection and the new exact-cancellation regression.
 
-This checkpoint is **twelve finite-target comparisons**, not all fifteen existing
+The added `candidate_h_rank_four_numerator_matches_fmft` lane uses the same
+H tensor numerator and external momenta as the analytic four-loop test, with
+`muvsq=3` and `mursq=5`. Its regenerated catalogue contains 386 declared
+terminals. A fresh strict catalog-only replay loaded all 386 terms, used an
+invalid FORM path, passed parent/dotted/pinch/rank-four probes, and applied
+26,956 rules in 441.43 s. The ordinary FMFT comparison was stopped after
+10m22 without a parity result, so no ordinary rank-four parity claim is made
+yet. The new `candidate_clover_finite_cases_match_fmft` input-driven lane is
+present but remains unrun.
+
+This checkpoint is **twelve finite-target comparisons plus one strict H
+rank-four catalog-only replay**, not all fifteen existing
 four-loop numerical acceptance entrypoints or the nineteen registered graph
 classes. It does not prove arbitrary-index closure, ship a four-loop production
 catalog, or establish twenty-thousand-digit master accuracy. Tensor-bearing
