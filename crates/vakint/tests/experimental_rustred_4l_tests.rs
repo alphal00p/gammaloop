@@ -208,7 +208,7 @@ fn candidate_parent_dotted_and_pinch_match_fmft() {
     let source = std::env::var("VAKINT_4L_CANDIDATE_PARENT_INPUT")
         .map(|path| std::fs::read_to_string(path).unwrap())
         .unwrap_or_else(|_| include_str!("inputs/experimental_four_loop_h.csv").into());
-    run_candidate_finite_family("H", source);
+    run_candidate_finite_family("H", source, None);
 }
 
 /// Run the same finite-target candidate/FeynKit/FMFT comparison for every
@@ -226,11 +226,19 @@ fn candidate_all_four_loop_parents_match_fmft() {
         ("BMW", include_str!("inputs/experimental_four_loop_bmw.csv")),
         ("X", include_str!("inputs/experimental_four_loop_x.csv")),
     ] {
-        run_candidate_finite_family(name, source.to_owned());
+        // BMW's power-two dotted probe is a declared residual in the current
+        // candidate catalog; power three is the first target that exercises
+        // an actual recurrence (see the historical BMW evidence in README).
+        let forced_dot_power = (name == "BMW").then_some(3);
+        run_candidate_finite_family(name, source.to_owned(), forced_dot_power);
     }
 }
 
-fn run_candidate_finite_family(family_name: &'static str, source: String) {
+fn run_candidate_finite_family(
+    family_name: &'static str,
+    source: String,
+    forced_dot_power: Option<i64>,
+) {
     test_utils::run_multi_lane_acceptance(move || {
         Vakint::initialize_vakint_symbols();
         let form = std::env::var("VAKINT_4L_CANDIDATE_ORACLE_FORM_PATH")
@@ -241,8 +249,10 @@ fn run_candidate_finite_family(family_name: &'static str, source: String) {
             (1..=6).contains(&workers),
             "experimental worker budget is 1..=6"
         );
-        let dot_power = std::env::var("VAKINT_4L_CANDIDATE_DOT_POWER")
-            .map_or(2, |value| value.parse::<i64>().expect("integer dot power"));
+        let dot_power = std::env::var("VAKINT_4L_CANDIDATE_DOT_POWER").map_or_else(
+            |_| forced_dot_power.unwrap_or(2),
+            |value| value.parse::<i64>().expect("integer dot power"),
+        );
         assert!(dot_power >= 2, "dotted target power must be at least two");
         let parent = input::ParentInput::from_csv(&source);
         let started = std::time::Instant::now();
@@ -478,7 +488,9 @@ fn run_candidate_finite_family(family_name: &'static str, source: String) {
                 10.0,
                 true,
             );
-            println!("finite-target numerical parity PASS: {family_name}/{name}; no family-closure claim");
+            println!(
+                "finite-target numerical parity PASS: {family_name}/{name}; no family-closure claim"
+            );
         }
         let native_applications = native
             .rule_applications()
