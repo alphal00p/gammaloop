@@ -343,32 +343,10 @@ fn topology_spec(graph: &PyGraph) -> PyResult<Vec<u8>> {
 }
 
 fn prepare(topology: Vec<u8>, transport: RenderConfigTransport) -> PyResult<PreparedRender> {
-    let build_dir =
-        tempfile::tempdir().map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
-    let build_root = canonicalize(build_dir.path(), "render directory")?;
-    write_embedded_assets::<EmbeddedTypstPackages>(&build_root.join(TYPST_PACKAGES_DIR))?;
-    let package_store = canonicalize(
-        &build_root.join(TYPST_PACKAGES_DIR),
-        "bundled Typst package store",
-    )?;
-    for (variable, description) in [
-        ("TYPST_PACKAGE_CACHE_PATH", "Typst package cache"),
-        ("TYPST_PACKAGE_PATH", "Typst package path"),
-    ] {
-        if let Some(path) = env::var_os(variable) {
-            let path = Path::new(&path);
-            if variable == "TYPST_PACKAGE_CACHE_PATH" && !path.exists() {
-                continue;
-            }
-            let path = canonicalize(path, description)?;
-            copy_directory(&path, &package_store, description)?;
-        }
-    }
-
-    let mut files = BTreeMap::new();
-    insert_embedded_assets::<EmbeddedLinnestPackage>(&mut files, &build_root, LINNEST_PACKAGE_DIR)?;
-    insert_embedded_assets::<EmbeddedKurvstPackage>(&mut files, &build_root, KURVST_PACKAGE_DIR)?;
-    write_project_asset(&build_root, TOPOLOGY, &topology)?;
+    let mut prepared = PreparedRender::from_sources(BTreeMap::new())?;
+    let build_root = &prepared.root;
+    let files = &mut prepared.files;
+    write_project_asset(build_root, TOPOLOGY, &topology)?;
 
     let mut source_paths = transport.template.iter().cloned().collect::<Vec<_>>();
     source_paths.extend(transport.imports.iter().filter_map(|import| {
@@ -379,8 +357,8 @@ fn prepare(topology: Vec<u8>, transport: RenderConfigTransport) -> PyResult<Prep
         }
     }));
     let mut staged_sources = collect_user_sources(
-        &mut files,
-        &build_root,
+        files,
+        build_root,
         &source_paths,
         transport.source_root.as_deref(),
     )?
@@ -405,12 +383,7 @@ fn prepare(topology: Vec<u8>, transport: RenderConfigTransport) -> PyResult<Prep
         .collect::<PyResult<Vec<_>>>()?;
     let source = entrypoint_source(&transport, &template, &module_files, TOPOLOGY)?;
     files.insert(ENTRYPOINT.to_owned(), source.into_bytes());
-    Ok(PreparedRender {
-        _build_dir: build_dir,
-        files,
-        root: build_root,
-        package_store,
-    })
+    Ok(prepared)
 }
 
 fn insert_embedded_assets<E: RustEmbed>(
@@ -676,7 +649,7 @@ fn entrypoint_source(
 /// One Typst render whose virtual project and generated entrypoint share a lifetime.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(module = "linnet_py", frozen)]
-pub(crate) struct PreparedRender {
+pub struct PreparedRender {
     _build_dir: tempfile::TempDir,
     files: BTreeMap<String, Vec<u8>>,
     root: PathBuf,
@@ -684,6 +657,53 @@ pub(crate) struct PreparedRender {
 }
 
 impl PreparedRender {
+    /// Prepare a virtual Typst project with bundled Linnest, Kurvst, and packages.
+    /// Sources must include `main.typ` before compilation; binary assets are staged on disk.
+    pub fn from_sources(sources: BTreeMap<String, Vec<u8>>) -> PyResult<Self> {
+        let build_dir =
+            tempfile::tempdir().map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
+        let build_root = canonicalize(build_dir.path(), "render directory")?;
+        write_embedded_assets::<EmbeddedTypstPackages>(&build_root.join(TYPST_PACKAGES_DIR))?;
+        let package_store = canonicalize(
+            &build_root.join(TYPST_PACKAGES_DIR),
+            "bundled Typst package store",
+        )?;
+        for (variable, description) in [
+            ("TYPST_PACKAGE_CACHE_PATH", "Typst package cache"),
+            ("TYPST_PACKAGE_PATH", "Typst package path"),
+        ] {
+            if let Some(path) = env::var_os(variable) {
+                let path = Path::new(&path);
+                if variable == "TYPST_PACKAGE_CACHE_PATH" && !path.exists() {
+                    continue;
+                }
+                let path = canonicalize(path, description)?;
+                copy_directory(&path, &package_store, description)?;
+            }
+        }
+
+        let mut files = BTreeMap::new();
+        insert_embedded_assets::<EmbeddedLinnestPackage>(
+            &mut files,
+            &build_root,
+            LINNEST_PACKAGE_DIR,
+        )?;
+        insert_embedded_assets::<EmbeddedKurvstPackage>(
+            &mut files,
+            &build_root,
+            KURVST_PACKAGE_DIR,
+        )?;
+        for (path, contents) in sources {
+            insert_project_asset(&mut files, &build_root, &path, &contents)?;
+        }
+        Ok(Self {
+            _build_dir: build_dir,
+            files,
+            root: build_root,
+            package_store,
+        })
+    }
+
     fn typst_source_value(&self) -> PyResult<String> {
         String::from_utf8(
             self.files
@@ -711,7 +731,8 @@ impl PreparedRender {
         Ok(output)
     }
 
-    fn svg(&self, py: Python<'_>) -> PyResult<String> {
+    /// Compile the prepared project to a single SVG page.
+    pub fn svg(&self, py: Python<'_>) -> PyResult<String> {
         let rendered = compile_typst(py, self, None, "svg")?;
         let bytes = if let Ok(bytes) = rendered.cast::<PyBytes>() {
             bytes.as_bytes().to_vec()
@@ -837,4 +858,41 @@ pub(crate) fn prepare_graph(
 ) -> PyResult<PreparedRender> {
     let (topology, transport) = request(py, graph, config)?;
     prepare(topology, transport)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn extracts_typst_packages_for_offline_rendering() {
+        let prepared = PreparedRender::from_sources(BTreeMap::new()).unwrap();
+        assert!(prepared
+            .package_store
+            .join("preview/cetz/0.5.1/typst.toml")
+            .is_file());
+    }
+
+    #[test]
+    fn embeds_linnest_and_kurvst_with_their_wasm_modules() {
+        let prepared = PreparedRender::from_sources(BTreeMap::new()).unwrap();
+        assert!(prepared
+            .files
+            .contains_key("crates/linnest/typst/src/graph.typ"));
+        assert!(
+            fs::metadata(prepared.root.join("crates/linnest/typst/linnest.wasm"))
+                .unwrap()
+                .len()
+                > 0
+        );
+        assert!(prepared
+            .files
+            .contains_key("crates/kurvst/typst/src/lib.typ"));
+        assert!(
+            fs::metadata(prepared.root.join("crates/kurvst/typst/kurvst.wasm"))
+                .unwrap()
+                .len()
+                > 0
+        );
+    }
 }

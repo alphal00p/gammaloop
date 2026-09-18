@@ -821,7 +821,6 @@ impl PropagatorIdGammaLoopExt for PropagatorId {
 /// Symbolica and tensor operations derived from a canonical particle record.
 pub trait ParticleGammaLoopExt {
     fn symbolic_mass(&self, model: &Model) -> Atom;
-    fn is_massless(&self, model: &Model) -> bool;
     fn resolved_mass_value(&self, model: &Model) -> Result<Complex<F<f64>>, Report>;
     fn has_zero_resolved_mass(&self, model: &Model) -> Result<bool, Report>;
     fn random_helicity(&self, seed: u64) -> Helicity;
@@ -834,7 +833,6 @@ pub trait ParticleGammaLoopExt {
         average: bool,
         gauge: VectorPolarizationSumGauge,
     ) -> Result<Option<Replacement>, Report>;
-    fn generate_edge_typst_dict(&self, model: &Model) -> String;
 }
 
 impl ParticleGammaLoopExt for Particle {
@@ -842,18 +840,6 @@ impl ParticleGammaLoopExt for Particle {
         Atom::from(UFOSymbol::from(
             &model.parameter_by_id(self.mass).unwrap().name,
         ))
-    }
-
-    fn is_massless(&self, model: &Model) -> bool {
-        let mass = model.parameter_by_id(self.mass).unwrap();
-        mass.name == "ZERO"
-            || mass
-                .value
-                .is_some_and(|value| value.re == 0.0 && value.im == 0.0)
-            || mass
-                .expression
-                .as_ref()
-                .is_some_and(|expression| expression.is_zero())
     }
 
     fn resolved_mass_value(&self, model: &Model) -> Result<Complex<F<f64>>, Report> {
@@ -1017,47 +1003,6 @@ impl ParticleGammaLoopExt for Particle {
                 ));
             }
         })
-    }
-
-    fn generate_edge_typst_dict(&self, model: &Model) -> String {
-        let label = format!("mi(`{}`)", self.texname);
-        let thickness = if self.is_massless(model) {
-            "massless"
-        } else {
-            "massive"
-        };
-        let color = if self.charge.abs() > 0.0 {
-            "palette.accent"
-        } else {
-            "palette.ink"
-        };
-        let source = format!("source-stroke(c: {color}, thickness: {thickness})");
-        let sink = format!("sink-stroke(c: {color}, thickness: {thickness})");
-        let (source, sink) = if self.is_ghost() {
-            (
-                format!("source-stroke(c: {color}, thickness: {thickness}, dash: dotted)"),
-                format!("sink-stroke(c: {color}, thickness: {thickness}, dash: dotted)"),
-            )
-        } else if self.is_vector() && self.charge == 0.0 && self.color == 1 {
-            (format!("{source} + wave"), format!("{sink} + wave"))
-        } else if self.is_vector() && self.charge == 0.0 && self.color == 8 {
-            (format!("{source} + coil"), format!("{sink} + coil"))
-        } else if self.is_vector() {
-            (format!("{source} + zigzag"), format!("{sink} + zigzag"))
-        } else if self.is_scalar() {
-            (
-                format!("source-stroke(c: {color}, thickness: {thickness}, dash: dashed)"),
-                format!("sink-stroke(c: {color}, thickness: {thickness}, dash: dashed)"),
-            )
-        } else {
-            (source, sink)
-        };
-        let flow_marker = if self.is_fermion() && !self.is_ghost() {
-            " + fermion-flow"
-        } else {
-            ""
-        };
-        format!("(source:{source}, sink:{sink}, label:{label}){flow_marker}")
     }
 }
 

@@ -1,4 +1,7 @@
-use std::{collections::BTreeMap, fmt::Write};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt::Write,
+};
 
 use crate::{DiagramVertex, ExternalState, FeynmanDiagram, VertexId};
 use symbolica::atom::AtomCore;
@@ -51,7 +54,10 @@ impl FeynmanDiagram {
     ///
     /// The document imports the canonical Linnest package tree at
     /// `crates/linnest/typst`, which must be available below the Typst project
-    /// root together with its sibling Kurvst package. Interaction vertices are
+    /// root together with its sibling Kurvst package and the shared physics
+    /// styles in `assets/embedded/drawing/templates`. Particle spin, color,
+    /// charge, mass, and TeX names select line patterns, arrows, and labels.
+    /// Interaction vertices are
     /// densely remapped to valid Linnest node identifiers. FeynKit external
     /// vertices become Linnest dangling half-edges and retain their names,
     /// indices, and incoming/outgoing states as edge data.
@@ -111,12 +117,32 @@ impl FeynmanDiagram {
 #import "crates/linnest/typst/src/draw.typ": draw
 #import "crates/linnest/typst/src/graph.typ" as graph
 #import "crates/linnest/typst/src/layout.typ" as layout
+#import "assets/embedded/drawing/templates/physics-edge-style.typ" as physics
+#import physics: mi, palette, massive, massless, dashed, dotted, source-stroke, sink-stroke, fermion-flow, wave, coil, zigzag
 #import graph: build, edge, node, sink, source
 
-#context {
-  let raw = build({
+#let particle-map = (
 "##,
         );
+
+        for particle in self
+            .edges()
+            .map(|(_, _, edge)| edge.particle)
+            .collect::<BTreeSet<_>>()
+        {
+            let particle = self
+                .model()
+                .particle_by_id(particle)
+                .expect("validated particle ID");
+            writeln!(
+                output,
+                "  {}: {},",
+                typst_string(&particle.name),
+                particle.generate_edge_typst_dict(self.model())
+            )
+            .expect("writing to a string cannot fail");
+        }
+        output.push_str(")\n\n#context {\n  let raw = build({\n");
 
         for (id, vertex) in &internal_vertices {
             let dense_id = internal_ids[id];
@@ -248,7 +274,13 @@ impl FeynmanDiagram {
         write!(
             output,
             r##"
-  let edge-label(edge) = edge.data.at("label", default: none)
+  let edge-label(edge) = {{
+    let label = physics.edge-entry(edge, map: particle-map).label
+    let external-name = edge.data.at("external-name", default: none)
+    if external-name == none {{ label }} else {{
+      [#label #text("(" + external-name + ")")]
+    }}
+  }}
   let edge-label-style(edge) = (
     anchor: edge.data.at("label-anchor", default: "south"),
     padding: 0.08,
@@ -277,20 +309,7 @@ impl FeynmanDiagram {
     layout-direction: "right",
     layout-roots: {roots},
   )
-  let directed-edge-style(edge) = (
-    stroke: (paint: rgb("#315b8a"), thickness: 0.75pt, cap: "round"),
-    mark: (
-      end: (
-        symbol: ">",
-        fill: rgb("#315b8a"),
-        anchor: "center",
-        shorten-to: auto,
-      ),
-      scale: 0.7,
-    ),
-    mark-position: "center-if-dangling",
-    mark-orientation: "edge",
-  )
+  let particle-style = physics.style(map: particle-map, orientation-split: false)
   draw(
     positioned,
     unit: 1.5,
@@ -299,8 +318,8 @@ impl FeynmanDiagram {
     node-radius: 0.10,
     node-fill: black,
     node-stroke: black,
-    source-style: directed-edge-style,
-    sink-style: directed-edge-style,
+    source-style: particle-style.source-style,
+    sink-style: particle-style.sink-style,
     edge-label: edge-label,
     edge-label-style: edge-label-style,
     padding: 0.55,
@@ -385,7 +404,9 @@ mod tests {
         assert!(source.contains("layout.layout("));
         assert!(source.contains("k-spring: 4.5"));
         assert!(source.contains("label-layout: \"dangling-tangent\""));
-        assert!(source.contains("mark-orientation: \"edge\""));
+        assert!(source.contains("source-style: particle-style.source-style"));
+        assert!(source.contains("sink-style: particle-style.sink-style"));
+        assert!(source.contains("dash: dashed"));
         assert!(source.ends_with("}\n"));
     }
 

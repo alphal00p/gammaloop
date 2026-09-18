@@ -1950,7 +1950,7 @@ dependencies = [
  "feynkit-model",
  "feynkit-tensor",
  "feynkit-ufo",
- "include_dir",
+ "linnet-py",
  "pyo3",
  "pyo3-stub-gen",
  "pyo3-stub-gen-derive",

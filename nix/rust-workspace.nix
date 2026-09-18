@@ -372,11 +372,8 @@
 
   workspacePackageExtraSourceRoots.production = {
     "feynkit-py" = [
-      "crates/linnet-py/vendor/typst-packages"
-      "crates/kurvst/typst/kurvst.wasm"
-      "crates/kurvst/typst/src"
-      "crates/linnest/typst/linnest.wasm"
-      "crates/linnest/typst/src"
+      "assets/embedded/drawing/templates/physics-edge-style.typ"
+      "assets/embedded/drawing/templates/impl/physics-edge-style.typ"
     ];
     "alphal00p-docs-catalogs" = documentationCatalogAnnotatedItemSourcePaths;
     "alphal00p-docs-examples" = [

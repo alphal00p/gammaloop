@@ -117,7 +117,9 @@ symbol = "feynkit_model::Model"
 anchor = "pub struct Model {"
 # Reviewed 2026-09-16: the current architecture documents this standalone
 # FeynKit owner, with GammaLoop application state downstream.
-digest = "f5ee43a07152b48d75714103bfa70ed68be0e407"
+# Reviewed 2026-09-18: shared mass and particle-style methods now live on the
+# canonical particle type; both graph renderers reuse the same Typst mapping.
+digest = "1ffbcaa1ddc8f5e8b1e00329b4e042221b610b03"
 
 [[section.note.scope]]
 path = "crates/feynkit-graph/src/lib.rs"
@@ -961,7 +963,10 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # Reviewed 2026-09-16: stage the Python sources linked from the FeynKit guides.
 # Reviewed 2026-09-16: stage linked community showcase sources with existing documentation inputs.
 # Reviewed 2026-09-16: embed the pinned Typst packages for offline FeynKit rendering.
-digest = "d393637bcb7762ccd0e30f5ccdb4f9cffd8e6c82"
+# No cache-architecture impact 2026-09-18: FeynKit's Python renderer declares
+# the two shared physics-style files it now embeds as production source inputs.
+# Linnest, Kurvst, and package assets now arrive through its linnet-py dependency.
+digest = "24a84cf07db49d3c05173bb6b2d64192e783351a"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
