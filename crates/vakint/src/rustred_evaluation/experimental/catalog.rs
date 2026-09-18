@@ -78,6 +78,21 @@ impl OfflineTerminalCatalog {
         Ok(catalog)
     }
 
+    /// Build a declaration-complete catalog when values have already been
+    /// resolved into a deterministic map by the caller.
+    pub fn from_complete_terms(
+        family_fingerprint: impl Into<String>,
+        index_count: usize,
+        terms: BTreeMap<IntegralKey, Atom>,
+    ) -> Result<Self, String> {
+        Self::from_terms_with_coverage(
+            family_fingerprint,
+            index_count,
+            CatalogCoverage::Complete,
+            terms,
+        )
+    }
+
     pub fn family_fingerprint(&self) -> &str {
         &self.family_fingerprint
     }
