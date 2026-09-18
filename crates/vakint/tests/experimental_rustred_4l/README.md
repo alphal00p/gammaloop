@@ -128,10 +128,17 @@ invalid FORM path, passed parent/dotted/pinch/rank-four probes, and applied
 10m22 without a parity result, so no ordinary rank-four parity claim is made
 yet. The new `candidate_fg_clover_numerator_case_matches_fmft` lane reuses the
 registered FG parent witness for all four literal Clover probes (unit mass,
-non-unit masses, dotted `k1^2`, and the rank-four numerator); it remains unrun.
-A standalone four-slot clover descriptor is intentionally not shipped: the
-current matcher witness represents that case as a contraction of an eight-slot
-parent.
+non-unit masses, dotted `k1^2`, and the rank-four numerator). The scalar
+probes pass finite-target parity. The rank-four probe now uses the exact
+upstream `user_space::A/B/C` numerator and the dotted first propagator; the
+current RustRed/FeynKit tail reaches the expected lowered expression but
+fails closed because the evaluator has no parameter-map entry for the
+remaining tensor scalar `dot(k(3),k(3))`. This is a pending tensor-bridge
+issue, not a catalog or closure failure: the optimized run on 2026-09-18
+completed the six scalar probes in 82.16 s and exited 101 on that final
+probe, so no rank-four numerical parity claim is made. A standalone four-slot
+clover descriptor is intentionally not shipped: the current matcher witness
+represents that case as a contraction of an eight-slot parent.
 
 This checkpoint is **twelve finite-target comparisons plus one strict H
 rank-four catalog-only replay**, not all fifteen existing

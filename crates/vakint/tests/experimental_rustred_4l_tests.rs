@@ -265,13 +265,9 @@ fn candidate_h_rank_four_numerator_matches_fmft() {
 fn candidate_fg_clover_numerator_case_matches_fmft() {
     let source = include_str!("inputs/experimental_four_loop_fg.csv").to_owned();
     let numerator = vk_parse!(
-        "3*k(1,11)*k(2,11)*k(1,22)*k(2,22)+4*p(1,11)*k(3,11)*k(3,22)*p(2,22)+5*p(1,11)*p(2,11)*(k(2,22)+k(1,22))*k(2,22)"
+        "user_space::A*k(1,11)*k(2,11)*k(1,22)*k(2,22)+user_space::B*p(1,11)*k(3,11)*k(3,22)*p(2,22)+user_space::C*p(1,11)*p(2,11)*(k(2,22)+k(1,22))*k(2,22)"
     )
     .expect("clover numerator parses");
-    let clover = vk_parse!(
-        "topo(prop(1,edge(1,1),k(1),muvsq,1)*prop(2,edge(1,1),k(2),muvsq,1)*prop(3,edge(1,1),k(3),muvsq,1)*prop(4,edge(1,1),k(4),muvsq,1))"
-    )
-    .expect("clover scalar input parses");
     let clover_dotted = vk_parse!(
         "topo(prop(1,edge(1,1),k(1),muvsq,2)*prop(2,edge(1,1),k(2),muvsq,1)*prop(3,edge(1,1),k(3),muvsq,1)*prop(4,edge(1,1),k(4),muvsq,1))"
     )
@@ -284,7 +280,16 @@ fn candidate_fg_clover_numerator_case_matches_fmft() {
     case_mass_values.insert("clover", vec![("muvsq", 1.0), ("mursq", 1.0)]);
     case_mass_values.insert("clover-non-unit", vec![("muvsq", 3.0), ("mursq", 7.0)]);
     case_mass_values.insert("clover-dotted", vec![("muvsq", 3.0), ("mursq", 1.0)]);
-    case_mass_values.insert("clover-numerator", vec![("muvsq", 0.3), ("mursq", 0.7)]);
+    case_mass_values.insert(
+        "clover-numerator",
+        vec![
+            ("muvsq", 0.3),
+            ("mursq", 0.7),
+            ("user_space::A", 3.0),
+            ("user_space::B", 4.0),
+            ("user_space::C", 5.0),
+        ],
+    );
     run_candidate_finite_family(
         "FG-clover",
         source,
@@ -292,8 +297,8 @@ fn candidate_fg_clover_numerator_case_matches_fmft() {
         vec![
             ("clover", clover_scalar.clone()),
             ("clover-non-unit", clover_scalar),
-            ("clover-dotted", clover_dotted),
-            ("clover-numerator", numerator * clover),
+            ("clover-dotted", clover_dotted.clone()),
+            ("clover-numerator", numerator * clover_dotted.clone()),
         ],
         vec![(1, (0.34, 1.2, 1.2, 0.6)), (2, (0.51, 1.6, 1.5, 0.72))],
         vec![("muvsq", 1.0), ("mursq", 1.0)],
