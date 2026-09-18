@@ -7,6 +7,7 @@
 //! Vakint only consumes its existing match/routing witness and an explicitly
 //! supplied, offline terminal-value catalog. There is no FORM fallback here.
 
+pub mod catalog;
 pub mod native;
 
 use std::collections::BTreeMap;
