@@ -167,15 +167,26 @@ def _(mo):
 
 
 @app.cell
-def _(incoming_particles, model, outgoing_particles, table):
-    generated = model.generate_diagrams(
-        incoming=incoming_particles,
-        outgoing=outgoing_particles,
-        loops=(0, 1),
-        max_vertices=3,
-        allow_self_loops=True,
-        vertex_allow=["V_3_SCALAR_000"],
-    )
+def _(incoming_particles, mo, model, outgoing_particles, table):
+    with mo.status.spinner(title="Generating diagrams") as _status:
+
+        def _report(progress):
+            _count = f"{progress.completed:,} processed"
+            if progress.total is not None:
+                _count += f" / {progress.total:,}"
+            _status.update(
+                title=progress.stage.replace("_", " ").title(), subtitle=_count
+            )
+
+        generated = model.generate_diagrams(
+            incoming=incoming_particles,
+            outgoing=outgoing_particles,
+            loops=(0, 1),
+            progress=_report,
+            max_vertices=3,
+            allow_self_loops=True,
+            vertex_allow=["V_3_SCALAR_000"],
+        )
 
     table(
         [

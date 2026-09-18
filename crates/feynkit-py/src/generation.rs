@@ -1,10 +1,15 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::{
+    collections::{BTreeMap, VecDeque},
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
 
 use feynkit_generator::{
-    CancellationToken, DiagramGroup, FilterScope, GenerationFilter, GenerationOptions,
-    GenerationReport, GenerationResult, GenerationType, Generator, GraphGroupingOptions,
-    GroupMember, NumeratorGrouping, ParticleSelector, Process, SelfEnergyFilterOptions,
-    SewnFilterOptions, SnailFilterOptions, TadpoleFilterOptions, VertexSelector,
+    CancellationToken, DiagramGroup, EdgeColor, FilterScope, GenerationControl, GenerationFilter,
+    GenerationOptions, GenerationProgress, GenerationReport, GenerationResult, GenerationType,
+    Generator, GraphGroupingOptions, GroupMember, NodeColor, NumeratorGrouping, ParticleSelector,
+    Process, SelfEnergyFilterOptions, SewnFilterOptions, SnailFilterOptions, TadpoleFilterOptions,
+    VertexSelector,
 };
 use feynkit_graph::{DiagramId, EdgeId};
 use feynkit_model::Model;
@@ -27,7 +32,10 @@ use crate::{
     graph::PyFeynmanDiagram,
     model::{PyModel, PyParticle, PyVertexRule},
 };
-use symbolica::api::python::PythonExpression;
+use symbolica::{
+    api::python::{PythonExpression, PythonGraph},
+    graph::Graph,
+};
 
 /// Select whether diagrams describe an amplitude or a squared cross section.
 ///
@@ -1231,6 +1239,52 @@ impl GenerationSettings {
     }
 }
 
+/// A progress snapshot delivered on the Python thread running generation.
+///
+/// Counts restart at each stage and measure processed work, not retained diagrams.
+/// ``total`` is None when the amount of work is not yet known.
+///
+/// Examples
+/// --------
+/// >>> def report(progress):
+/// ...     print(progress.stage, progress.completed, progress.total)
+/// >>> result = generator.generate(process, progress=report)
+///
+#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
+#[pyclass(
+    name = "GenerationProgress",
+    module = "symbolica.community.feynkit",
+    frozen,
+    from_py_object
+)]
+#[derive(Clone)]
+pub struct PyGenerationProgress {
+    inner: GenerationProgress,
+}
+
+#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[pymethods]
+impl PyGenerationProgress {
+    /// Pipeline stage: topologies, topology_filters, interactions,
+    /// interaction_filters, numerators, selection, grouping, complete or cancelled.
+    #[getter]
+    fn stage(&self) -> &'static str {
+        self.inner.stage
+    }
+
+    /// Work items processed within this stage.
+    #[getter]
+    fn completed(&self) -> usize {
+        self.inner.completed
+    }
+
+    /// Stage total, or None while the amount of work is unknown.
+    #[getter]
+    fn total(&self) -> Option<usize> {
+        self.inner.total
+    }
+}
+
 /// Counts and completion status from a diagram-generation run.
 ///
 /// The report distinguishes explored topologies and interaction assignments
@@ -1708,6 +1762,7 @@ pub struct PyGenerator {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyGenerator {
     /// Create a diagram generator backed by a loaded particle model.
@@ -1804,11 +1859,21 @@ impl PyGenerator {
     ///     Override external-state contraction; S("1") disables external wavefunctions.
     /// numerator_grouping : NumeratorGrouping or None, optional
     ///     Zero detection and numerator comparison; None disables parsing and grouping.
+    /// progress : Callable[[GenerationProgress], None] or None, optional
+    ///     Observe stage changes and coalesced counts on the calling Python thread.
+    ///     Callback exceptions propagate and stop generation.
+    /// filter : Callable[[symbolica.core.Graph, int], bool] or None, optional
+    ///     Prune partial topologies during enumeration. The first N vertices are
+    ///     complete. False rejects only this search branch. Edge data is the base
+    ///     particle PDG code; node data is 0 internally, -(index+1) for incoming
+    ///     legs and +(index+1) for outgoing legs. Mutating the snapshot does not
+    ///     change enumeration. Keep callbacks cheap: each snapshot is constructed
+    ///     using Symbolica's Python Graph API.
     /// cancellation_token : CancellationToken or None, optional
     ///     Shared token for cancelling a running generation task. Token cancellation
     ///     returns an incomplete result; Python signal-handler exceptions, including
     ///     KeyboardInterrupt, stop generation and propagate to the caller.
-    #[pyo3(signature = (process, *, threads=None, max_vertices=None, allow_self_loops=false, allow_zero_flow_edges=false, graph_prefix=None, particle_veto=None, vertex_allow=None, vertex_veto=None, maximum_bridges=None, self_energy=None, tadpoles=None, zero_snails=None, coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=None, blob_range=None, spectator_range=None, perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, cancellation_token=None))]
+    #[pyo3(signature = (process, *, threads=None, max_vertices=None, allow_self_loops=false, allow_zero_flow_edges=false, graph_prefix=None, particle_veto=None, vertex_allow=None, vertex_veto=None, maximum_bridges=None, self_energy=None, tadpoles=None, zero_snails=None, coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=None, blob_range=None, spectator_range=None, perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, cancellation_token=None, progress=None, filter=None))]
     #[allow(clippy::too_many_arguments)]
     fn generate(
         &self,
@@ -1842,6 +1907,10 @@ impl PyGenerator {
         projector: Option<PythonExpression>,
         numerator_grouping: Option<PyNumeratorGrouping>,
         cancellation_token: Option<PyCancellationToken>,
+        #[gen_stub(override_type(type_repr = "collections.abc.Callable[[GenerationProgress], None] | None", imports = ("collections.abc")))]
+        progress: Option<Py<PyAny>>,
+        #[gen_stub(override_type(type_repr = "collections.abc.Callable[[symbolica.core.Graph, int], bool] | None", imports = ("collections.abc", "symbolica.core")))]
+        filter: Option<Py<PyAny>>,
     ) -> PyResult<PyGenerationResult> {
         let generator = self.inner.clone();
         let process = process.inner.clone();
@@ -1876,65 +1945,215 @@ impl PyGenerator {
             cancellation_token,
         )
         .inner;
-        generate_diagrams(py, generator, process, options)
+        generate_diagrams(py, generator, process, options, progress, filter)
     }
 }
 
-/// Run both Python generation entry points with Python-owned signal handling.
+/// Run both entry points with callbacks and signals on the calling Python thread.
 pub(crate) fn generate_diagrams(
     py: Python<'_>,
     generator: Generator,
     process: Process,
-    options: GenerationOptions,
+    mut options: GenerationOptions,
+    progress: Option<Py<PyAny>>,
+    filter: Option<Py<PyAny>>,
 ) -> PyResult<PyGenerationResult> {
     py.check_signals()?;
+    for (name, callback) in [("progress", &progress), ("filter", &filter)] {
+        if callback
+            .as_ref()
+            .is_some_and(|callback| !callback.bind(py).is_callable())
+        {
+            return Err(PyTypeError::new_err(format!("{name} must be callable")));
+        }
+    }
+    let interruption = Arc::new(Mutex::new(None));
+    let snapshots = Arc::new(Mutex::new(VecDeque::<GenerationProgress>::new()));
+    let delivery = Mutex::new((Instant::now(), None));
+    let pending = snapshots.clone();
+    let has_progress = progress.is_some();
+    let deliver_progress = Arc::new(move |force: bool| -> PyResult<()> {
+        let mut pending = pending.lock().unwrap();
+        let mut delivery = delivery.lock().unwrap();
+        let changed = pending.front().is_some_and(|p| Some(p.stage) != delivery.1);
+        let finished = pending.back().is_some_and(|p| p.total == Some(p.completed));
+        if !force
+            && !changed
+            && !finished
+            && pending.len() < 2
+            && delivery.0.elapsed() < Duration::from_millis(150)
+        {
+            return Ok(());
+        }
+        let updates = std::mem::take(&mut *pending);
+        if let Some(last) = updates.back() {
+            *delivery = (Instant::now(), Some(last.stage));
+        }
+        drop(pending);
+        drop(delivery);
+        if let Some(callback) = &progress {
+            Python::attach(|py| -> PyResult<()> {
+                for inner in updates {
+                    callback.call1(py, (PyGenerationProgress { inner },))?;
+                }
+                Ok(())
+            })?;
+        }
+        Ok(())
+    });
+    if has_progress {
+        #[cfg(target_arch = "wasm32")]
+        let (deliver, error) = (deliver_progress.clone(), interruption.clone());
+        options = options.progress(move |snapshot| {
+            let mut pending = snapshots.lock().unwrap();
+            if pending
+                .back()
+                .is_some_and(|last| last.stage == snapshot.stage)
+            {
+                *pending.back_mut().unwrap() = snapshot;
+            } else {
+                pending.push_back(snapshot);
+            }
+            drop(pending);
+            #[cfg(target_arch = "wasm32")]
+            if error.lock().unwrap().is_none() {
+                let result = deliver(false);
+                if let Err(exception) = result {
+                    *error.lock().unwrap() = Some(exception);
+                    return GenerationControl::Cancel;
+                }
+            }
+            GenerationControl::Continue
+        });
+    }
+    let has_filter = filter.is_some();
+    let pdgs: Vec<_> = generator
+        .model()
+        .particles()
+        .iter()
+        .map(|p| p.pdg_code)
+        .collect();
+    let apply_filter =
+        move |graph: &Graph<NodeColor, EdgeColor>, completed_vertices| -> PyResult<bool> {
+            Python::attach(|py| {
+                // Replace these Python API calls with PythonGraph::from once Symbolica
+                // exposes its constructor. Keep the callback's Graph type unchanged.
+                let snapshot = py.get_type::<PythonGraph>().call0()?;
+                for node in graph.nodes() {
+                    let label = node.data.external.as_ref().map_or(0, |external| {
+                        let index = external.index as i64 + 1;
+                        match external.state {
+                            feynkit_graph::ExternalState::Incoming => -index,
+                            feynkit_graph::ExternalState::Outgoing => index,
+                        }
+                    });
+                    snapshot.call_method1("add_node", (label,))?;
+                }
+                for edge in graph.edges() {
+                    snapshot.call_method1(
+                        "add_edge",
+                        (
+                            edge.vertices.0,
+                            edge.vertices.1,
+                            edge.directed,
+                            pdgs[edge.data.particle.index()],
+                        ),
+                    )?;
+                }
+                filter
+                    .as_ref()
+                    .unwrap()
+                    .call1(py, (snapshot, completed_vertices))?
+                    .extract(py)
+            })
+        };
     #[cfg(not(target_arch = "wasm32"))]
-    let (result, interruption) = {
+    let result = {
         let cancellation = CancellationToken::new();
         let check = cancellation.clone();
-        let options = options.cancellation_check(move || check.is_cancelled());
+        options = options.cancellation_check(move || check.is_cancelled());
+        let (requests, receiver) = std::sync::mpsc::sync_channel(1);
+        if has_filter {
+            options = options.filter(move |graph, completed_vertices| {
+                let (reply, response) = std::sync::mpsc::sync_channel(1);
+                requests
+                    .send((graph.clone(), completed_vertices, reply))
+                    .is_ok()
+                    && response.recv().unwrap_or(false)
+            });
+        }
+        let interruption = interruption.clone();
+        let deliver_progress = deliver_progress.clone();
         py.detach(move || {
             std::thread::scope(|scope| {
                 let worker = scope.spawn(|| generator.generate(&process, &options));
-                let mut interruption = None;
                 // Python handles signals only on its main thread, including while
                 // generation is inside Rayon's parallel interaction assignment.
+                // Filter requests wake this thread immediately; never impose the
+                // progress refresh interval on each enumeration decision.
                 while !worker.is_finished() {
-                    if interruption.is_none() {
-                        interruption = Python::attach(|py| py.check_signals()).err();
-                        if interruption.is_some() {
+                    if interruption.lock().unwrap().is_none() {
+                        let result = Python::attach(|py| py.check_signals())
+                            .and_then(|()| deliver_progress(false));
+                        if let Err(error) = result {
+                            *interruption.lock().unwrap() = Some(error);
                             cancellation.cancel();
                         }
                     }
-                    std::thread::sleep(std::time::Duration::from_millis(25));
+                    if let Ok((graph, completed_vertices, reply)) =
+                        receiver.recv_timeout(Duration::from_millis(25))
+                    {
+                        let accepted = if interruption.lock().unwrap().is_some() {
+                            false
+                        } else {
+                            match apply_filter(&graph, completed_vertices) {
+                                Ok(accepted) => accepted,
+                                Err(error) => {
+                                    *interruption.lock().unwrap() = Some(error);
+                                    cancellation.cancel();
+                                    false
+                                }
+                            }
+                        };
+                        let _ = reply.send(accepted);
+                    }
                 }
-                let result = worker
+                worker
                     .join()
-                    .unwrap_or_else(|panic| std::panic::resume_unwind(panic));
-                (result, interruption)
+                    .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
             })
         })
     };
     #[cfg(target_arch = "wasm32")]
-    let (result, interruption) = {
+    let result = {
         // Browser kernels execute generation on the calling thread. Poll the
         // existing cancellation hook there instead of creating a native thread.
-        let interruption = Arc::new(std::sync::Mutex::new(None));
         let signal_error = interruption.clone();
-        let options = options.cancellation_check(move || {
-            let mut error = signal_error.lock().unwrap();
-            if error.is_none() {
-                *error = Python::attach(|py| py.check_signals()).err();
+        options = options.cancellation_check(move || {
+            if signal_error.lock().unwrap().is_none() {
+                let error = Python::attach(|py| py.check_signals()).err();
+                *signal_error.lock().unwrap() = error;
             }
-            error.is_some()
+            signal_error.lock().unwrap().is_some()
         });
-        let result = py.detach(move || generator.generate(&process, &options));
-        let error = interruption.lock().unwrap().take();
-        (result, error)
+        if has_filter {
+            let error = interruption.clone();
+            options = options.filter(move |graph, completed_vertices| {
+                match apply_filter(graph, completed_vertices) {
+                    Ok(accepted) => accepted,
+                    Err(exception) => {
+                        *error.lock().unwrap() = Some(exception);
+                        false
+                    }
+                }
+            });
+        }
+        py.detach(|| generator.generate(&process, &options))
     };
-    if let Some(error) = interruption {
+    if let Some(error) = interruption.lock().unwrap().take() {
         return Err(error);
     }
+    deliver_progress(true)?;
     py.check_signals()?;
     result
         .map(|inner| PyGenerationResult { inner })
@@ -1950,6 +2169,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyTadpoleFilterOptions>()?;
     module.add_class::<PySnailFilterOptions>()?;
     module.add_class::<PyNumeratorGrouping>()?;
+    module.add_class::<PyGenerationProgress>()?;
     module.add_class::<PyGenerationReport>()?;
     module.add_class::<PyGroupMember>()?;
     module.add_class::<PyDiagramGroup>()?;
@@ -1965,6 +2185,100 @@ mod tests {
     use pyo3::types::PyDict;
 
     use super::*;
+
+    #[test]
+    fn progress_and_partial_filters_use_the_calling_python_thread() {
+        Python::initialize();
+        Python::attach(|py| {
+            let module = PyModule::new(py, "symbolica.community.feynkit").unwrap();
+            crate::initialize_feynkit(&module).unwrap();
+            let locals = PyDict::new(py);
+            locals.set_item("fk", &module).unwrap();
+            locals
+                .set_item("Graph", py.get_type::<PythonGraph>())
+                .unwrap();
+            locals
+                .set_item(
+                    "MODEL_JSON",
+                    include_str!("../tests/fixtures/scalars_2p_3p.json"),
+                )
+                .unwrap();
+            let code = CString::new(r#"
+import threading
+
+model = fk.Model.from_json(MODEL_JSON)
+generator = fk.Generator(model)
+process = fk.Process.amplitude([1000], [1000, 1000]).with_loop_count(1, 1)
+settings = dict(max_vertices=3, threads=2, vertex_allow=["V_3_SCALAR_000"])
+caller = threading.get_ident()
+
+for via_model in (True, False):
+    def generate(**callbacks):
+        if via_model:
+            return model.generate_diagrams([1000], [1000, 1000], loops=1, **settings, **callbacks)
+        return generator.generate(process, **settings, **callbacks)
+
+    baseline = generate()
+    assert baseline.report.completed and len(baseline) > 0
+    updates = []
+    topologies = []
+
+    def report(p):
+        assert threading.get_ident() == caller
+        assert isinstance(p, fk.GenerationProgress)
+        assert p.completed >= 0
+        assert p.total is None or p.completed <= p.total
+        updates.append(p)
+
+    def keep(graph, completed_vertices):
+        assert threading.get_ident() == caller
+        assert isinstance(graph, Graph)
+        assert 0 <= completed_vertices <= graph.num_nodes()
+        assert all(data == 1000 for source, target, directed, data in graph.edges())
+        topologies.append((graph, completed_vertices))
+        return True
+
+    result = generate(progress=report, filter=keep)
+    assert result.report.completed and len(result) == len(baseline)
+    assert topologies and any(n < g.num_nodes() for g, n in topologies)
+    assert updates[0].stage == "topologies"
+    assert updates[-1].stage == "complete"
+    assert updates[-1].completed == len(result)
+    stages = ["topologies", "topology_filters", "interactions", "interaction_filters", "numerators", "selection", "grouping", "complete"]
+    assert list(dict.fromkeys(p.stage for p in updates)) == stages
+    for before, after in zip(updates, updates[1:]):
+        if before.stage == after.stage:
+            assert before.completed <= after.completed
+    # Snapshots outlive enumeration and never mutate its internal graph.
+    topologies[0][0].add_node(42)
+    assert len(generate()) == len(baseline)
+
+    updates.clear()
+    empty = generate(progress=report, filter=lambda graph, n: False)
+    assert empty.report.completed and len(empty) == 0
+    assert updates[-1].stage == "complete" and updates[-1].completed == 0
+
+    for keyword in ("progress", "filter"):
+        expected = RuntimeError("callback failed")
+        def fail(*args):
+            raise expected
+        try:
+            generate(**{keyword: fail})
+        except RuntimeError as error:
+            assert error is expected
+        else:
+            raise AssertionError("callback exception was lost")
+        try:
+            generate(**{keyword: 1})
+        except TypeError:
+            pass
+        else:
+            raise AssertionError("non-callable callback was accepted")
+    assert len(generate()) == len(baseline)
+"#).unwrap();
+            py.run(&code, Some(&locals), Some(&locals)).unwrap();
+        });
+    }
 
     #[cfg(unix)]
     #[test]

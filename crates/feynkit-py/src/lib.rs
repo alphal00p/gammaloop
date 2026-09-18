@@ -16,9 +16,10 @@ use symbolica::api::python::SymbolicaCommunityModule;
 
 pub use cff::{PyCffGenerator, PyCffOrientation, PyCffReport, PyCffResult, PyCffSurface};
 pub use generation::{
-    PyCancellationToken, PyDiagramGroup, PyGenerationReport, PyGenerationResult, PyGenerationType,
-    PyGenerator, PyGroupMember, PyNumeratorGrouping, PyParticleSelector, PyProcess,
-    PySelfEnergyFilterOptions, PySnailFilterOptions, PyTadpoleFilterOptions,
+    PyCancellationToken, PyDiagramGroup, PyGenerationProgress, PyGenerationReport,
+    PyGenerationResult, PyGenerationType, PyGenerator, PyGroupMember, PyNumeratorGrouping,
+    PyParticleSelector, PyProcess, PySelfEnergyFilterOptions, PySnailFilterOptions,
+    PyTadpoleFilterOptions,
 };
 pub use graph::{
     PyDiagramEdge, PyDiagramVertex, PyFeynmanDiagram, PyLoopMomentumBasis, PyMomentumSignature,
