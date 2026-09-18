@@ -158,23 +158,23 @@ def _(model, table):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    `GenerationOptions` is a mutable configuration object. Methods named
-    `add_*` and the current `set_*_filter` methods add filters; configure each
-    filter family once to avoid duplicate-filter errors.
+    Pass generation settings directly as keyword arguments. Use an integer
+    for an exact loop or coupling order, or a pair for an inclusive range.
+    Reuse a configuration with a dictionary and `**kwargs`; each call constructs
+    fresh settings, so rerunning a cell does not accumulate filters.
     """)
     return
 
 
 @app.cell
-def _(fk, incoming_particles, model, outgoing_particles, table):
-    _options = fk.GenerationOptions(max_vertices=3, allow_self_loops=True)
-    _options.add_vertex_allow(["V_3_SCALAR_000"])
-
+def _(incoming_particles, model, outgoing_particles, table):
     generated = model.generate_diagrams(
         incoming=incoming_particles,
         outgoing=outgoing_particles,
         loops=(0, 1),
-        options=_options,
+        max_vertices=3,
+        allow_self_loops=True,
+        vertex_allow=["V_3_SCALAR_000"],
     )
 
     table(

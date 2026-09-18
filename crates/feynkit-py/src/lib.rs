@@ -16,9 +16,9 @@ use symbolica::api::python::SymbolicaCommunityModule;
 
 pub use cff::{PyCffGenerator, PyCffOrientation, PyCffReport, PyCffResult, PyCffSurface};
 pub use generation::{
-    PyCancellationToken, PyDiagramGroup, PyGenerationOptions, PyGenerationReport,
-    PyGenerationResult, PyGenerationType, PyGenerator, PyGroupMember, PyParticleSelector,
-    PyProcess,
+    PyCancellationToken, PyDiagramGroup, PyGenerationReport, PyGenerationResult, PyGenerationType,
+    PyGenerator, PyGroupMember, PyNumeratorGrouping, PyParticleSelector, PyProcess,
+    PySelfEnergyFilterOptions, PySnailFilterOptions, PyTadpoleFilterOptions,
 };
 pub use graph::{
     PyDiagramEdge, PyDiagramVertex, PyFeynmanDiagram, PyLoopMomentumBasis, PyMomentumSignature,
@@ -332,19 +332,17 @@ assert isinstance(process, fk.Process)
 assert process.generation_type == "amplitude"
 assert process.loop_count == (0, 1)
 
-options = fk.GenerationOptions(max_vertices=3, allow_self_loops=True)
-options.add_vertex_allow(["V_3_SCALAR_000"])
-options.add_particle_veto([model.particle("scalar_1"), 1002])
-options.set_coupling_orders({"QCD": (0, None)})
-options.set_loop_count_range(0, 1)
-options.set_fermion_loop_count_range(0, 0)
-options.set_factorized_loop_topologies_count_range(0, 1)
-assert options.disable_numerator_grouping() is None
+generation_arguments = dict(
+    max_vertices=3,
+    allow_self_loops=True,
+    vertex_allow=["V_3_SCALAR_000"],
+    particle_veto=[model.particle("scalar_1"), 1002],
+    coupling_orders={"QCD": (0, None)},
+    fermion_loop_count_range=(0, 0),
+    factorized_loop_topologies_count_range=(0, 1),
+)
 generated = model.generate_diagrams(
-    [scalar],
-    [1000, scalar.antiparticle],
-    loops=(0, 1),
-    options=options,
+    [scalar], [1000, scalar.antiparticle], loops=(0, 1), **generation_arguments,
 )
 assert len(generated) > 0
 assert generated[0].name == next(iter(generated)).name
@@ -476,36 +474,16 @@ assert_feynkit_error(
 
 generator = fk.Generator(model)
 
-filter_options = fk.GenerationOptions()
-assert filter_options.set_self_energy_filter(
-    veto_massive=False,
-    veto_massless=True,
-    only_scaleless=False,
-) is None
-assert filter_options.set_tadpole_filter(
-    veto_attached_to_massive=False,
-    veto_attached_to_massless=True,
-    only_scaleless=False,
-) is None
-assert filter_options.set_zero_snail_filter(
-    veto_attached_to_massive=True,
-    veto_attached_to_massless=False,
-    only_scaleless=False,
-) is None
-assert filter_options.set_coupling_orders({"QCD": (0, None)}) is None
-assert filter_options.set_loop_count_range(0, 2) is None
-assert filter_options.set_fermion_loop_count_range(0, 1) is None
-assert filter_options.set_factorized_loop_topologies_count_range(0, 1) is None
-assert filter_options.set_blob_range(0, 1) is None
-assert filter_options.set_spectator_range(0, 1) is None
-assert filter_options.set_cut_amplitude_coupling_orders(
-    {"QCD": (0, None)}
-) is None
-assert filter_options.set_cut_amplitude_loop_count_range(0, 1) is None
-
-grouping_options = fk.GenerationOptions()
-assert grouping_options.disable_numerator_grouping() is None
-assert grouping_options.detect_zero_numerators() is None
+filter_arguments = dict(
+    self_energy=fk.SelfEnergyFilterOptions(veto_massive=False),
+    tadpoles=fk.TadpoleFilterOptions(veto_attached_to_massive=False),
+    zero_snails=fk.SnailFilterOptions(
+        veto_attached_to_massive=True, veto_attached_to_massless=False,
+    ),
+    coupling_orders={"QCD": (0, None)},
+    fermion_loop_count_range=(0, 1),
+    factorized_loop_topologies_count_range=(0, 1),
+)
 grouping_arguments = dict(
     numerical_sample_seed=7,
     number_of_numerical_samples=11,
@@ -514,68 +492,78 @@ grouping_arguments = dict(
     check_canonical_numerator=True,
     symmetric_polarizations=True,
 )
-assert grouping_options.group_identical_numerators(**grouping_arguments) is None
-assert grouping_options.group_numerators_up_to_sign(**grouping_arguments) is None
-assert grouping_options.group_numerators_up_to_scalar(**grouping_arguments) is None
-assert not hasattr(fk.GenerationOptions, "set_numerator_grouping")
+assert not hasattr(fk, "GenerationOptions")
 
 amplitude = fk.Process.amplitude(
-    ["scalar_0"],
-    ["scalar_0", "scalar_0"],
+    ["scalar_0"], ["scalar_0", "scalar_0"],
 )
+assert generator.generate(amplitude, max_vertices=3, **filter_arguments).report.completed
+for mode in ("none", "zeroes", "identical", "up_to_sign", "up_to_scalar"):
+    grouping = fk.NumeratorGrouping(mode, **grouping_arguments)
+    assert generator.generate(
+        amplitude, max_vertices=3, numerator_grouping=grouping,
+    ).report.completed
 
-def assert_generation_configuration_error(configure):
-    invalid_options = fk.GenerationOptions(max_vertices=3)
-    configure(invalid_options)
+for invalid_arguments in (
+    dict(self_energy=fk.SelfEnergyFilterOptions(only_scaleless=True)),
+    dict(tadpoles=fk.TadpoleFilterOptions(only_scaleless=True)),
+    dict(zero_snails=fk.SnailFilterOptions(only_scaleless=True)),
+    dict(fermion_loop_count_range=(2, 1)),
+    dict(factorized_loop_topologies_count_range=(2, 1)),
+    dict(blob_range=(0, 1)),
+    dict(spectator_range=(0, 1)),
+    dict(cut_amplitude_coupling_orders={"QCD": (0, None)}),
+    dict(cut_amplitude_loop_count_range=(0, 1)),
+):
     assert_feynkit_error(
         fk.GenerationError,
-        lambda: generator.generate(amplitude, invalid_options),
+        lambda: generator.generate(amplitude, max_vertices=3, **invalid_arguments),
     )
 
-assert_generation_configuration_error(
-    lambda value: value.set_self_energy_filter(only_scaleless=True)
-)
-assert_generation_configuration_error(
-    lambda value: value.set_tadpole_filter(only_scaleless=True)
-)
-assert_generation_configuration_error(
-    lambda value: value.set_zero_snail_filter(only_scaleless=True)
-)
-assert_generation_configuration_error(
-    lambda value: value.set_coupling_orders({"QCD": (2, 1)})
-)
-assert_generation_configuration_error(
-    lambda value: value.set_loop_count_range(2, 1)
-)
-assert_generation_configuration_error(
-    lambda value: value.set_fermion_loop_count_range(2, 1)
-)
-assert_generation_configuration_error(
-    lambda value: value.set_factorized_loop_topologies_count_range(2, 1)
-)
-assert_generation_configuration_error(
-    lambda value: value.set_blob_range(0, 1)
-)
-assert_generation_configuration_error(
-    lambda value: value.set_spectator_range(0, 1)
-)
-assert_generation_configuration_error(
-    lambda value: value.set_cut_amplitude_coupling_orders({"QCD": (0, None)})
-)
-assert_generation_configuration_error(
-    lambda value: value.set_cut_amplitude_loop_count_range(0, 1)
-)
+for invalid_arguments in (
+    dict(coupling_orders={"QCD": (2, 1)}),
+    dict(loops=(2, 1)),
+    dict(loops=(0, None)),
+):
+    try:
+        model.generate_diagrams(["scalar_0"], ["scalar_0", "scalar_0"], **invalid_arguments)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("invalid generation range was accepted")
 
-valid_grouping = fk.GenerationOptions(max_vertices=3)
-valid_grouping.group_identical_numerators(**grouping_arguments)
-assert generator.generate(amplitude, valid_grouping).report.completed
+# Both entry points share configuration, including reusable exact/ranged orders.
+kwargs = dict(max_vertices=3, vertex_allow=["V_3_SCALAR_000"], coupling_orders={"QCD": 1})
+exact = generator.generate(amplitude, **kwargs)
+ranged = model.generate_diagrams(
+    ["scalar_0"], ["scalar_0", "scalar_0"],
+    **dict(kwargs, coupling_orders={"QCD": (1, 1)}),
+)
+assert len(exact) > 0
+assert [d.id for d in exact] == [d.id for d in ranged]
+assert [d.id for d in generator.generate(amplitude, **kwargs)] == [d.id for d in exact]
+assert kwargs["coupling_orders"] == {"QCD": 1}
+assert len(generator.generate(amplitude, **dict(kwargs, coupling_orders={"QCD": 0}))) == 0
+assert len(generator.generate(amplitude, **dict(kwargs, particle_veto=["scalar_0"]))) == 0
+assert len(generator.generate(amplitude, **dict(kwargs, vertex_veto=["V_3_SCALAR_000"]))) == 0
+assert len(generator.generate(amplitude, select_diagrams=[exact[0]], **kwargs)) == 1
+assert len(generator.generate(amplitude, veto_diagrams=[d.id for d in exact], **kwargs)) == 0
 
-options = fk.GenerationOptions(max_vertices=3)
-options.add_vertex_allow(["V_3_SCALAR_000"])
+for invalid_arguments in (dict(options=None), dict(coupling_order={"QCD": 0}), dict(coupling_orders={"QCD": True})):
+    try:
+        generator.generate(amplitude, **invalid_arguments)
+    except TypeError:
+        pass
+    else:
+        raise AssertionError("invalid generation keyword/type was accepted")
+
+token = fk.CancellationToken()
+token.cancel()
+assert not generator.generate(amplitude, cancellation_token=token, **kwargs).report.completed
+
 diagram = generator.generate(
-    fk.Process.amplitude(["scalar_0"], ["scalar_0", "scalar_0"])
-    .with_loop_count(1, 1),
-    options,
+    amplitude.with_loop_count(1, 1), max_vertices=3,
+    vertex_allow=["V_3_SCALAR_000"],
 ).diagrams[0]
 assert_feynkit_error(
     fk.CffError,
