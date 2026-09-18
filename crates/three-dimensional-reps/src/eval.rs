@@ -3870,7 +3870,6 @@ mod thermal_reference_tests {
     }
 
     #[test]
-    #[ignore = "pre-existing triple-pole Bose distribution second-derivative coefficient is twice its exact value"]
     fn thermal_triple_pole_bose_derivatives() {
         check_thermal_energy_numerator_cases(&["triple_pole"]);
     }
@@ -4206,6 +4205,26 @@ mod thermal_reference_tests {
                 (0, 0),
             ),
             (
+                "thermal_triangle",
+                vec![(0, 1), (1, 2), (2, 0)],
+                vec![vec![1], vec![1], vec![1]],
+                vec![
+                    (vec![[0.1, 0.2, 0.3]], 3.644_315_196_044_68e2, 1.0e-14),
+                    (vec![[1.3, 1.2, 0.1]], 3.232_700_472_845_54e-2, 1.0e-14),
+                ],
+                (3, 0),
+            ),
+            (
+                "thermal_box",
+                vec![(0, 1), (1, 2), (2, 3), (3, 0)],
+                vec![vec![1], vec![1], vec![1], vec![1]],
+                vec![
+                    (vec![[0.1, 0.2, 0.3]], 2.603_082_049_961_321e3, 1.0e-14),
+                    (vec![[1.3, 1.2, 0.1]], 1.028_743_567_114_515e-2, 1.0e-14),
+                ],
+                (6, 0),
+            ),
+            (
                 "thermal_bubble_chain",
                 vec![(0, 0), (0, 1), (1, 0), (1, 1)],
                 vec![vec![1, 0, 0], vec![0, 1, 0], vec![0, 1, 0], vec![0, 0, 1]],
@@ -4248,6 +4267,41 @@ mod thermal_reference_tests {
                     ),
                 ],
                 (6, 19),
+            ),
+            (
+                "thermal_triangle_tadpoles",
+                vec![(0, 0), (0, 1), (1, 2), (2, 0), (1, 1), (2, 2)],
+                vec![
+                    vec![1, 0, 0, 0],
+                    vec![0, 1, 0, 0],
+                    vec![0, 1, 0, 0],
+                    vec![0, 1, 0, 0],
+                    vec![0, 0, 1, 0],
+                    vec![0, 0, 0, 1],
+                ],
+                vec![
+                    (
+                        vec![
+                            [0.1, 0.2, 0.3],
+                            [0.5, 0.4, 0.6],
+                            [0.9, 0.8, 0.7],
+                            [1.1, 1.2, 1.3],
+                        ],
+                        2.909_296_300_604_124,
+                        1.0e-14,
+                    ),
+                    (
+                        vec![
+                            [1.1, 0.2, 0.3],
+                            [0.5, 1.4, 0.6],
+                            [0.9, 1.8, 0.7],
+                            [1.1, 2.2, 1.3],
+                        ],
+                        2.956_965_500_316_591e-3,
+                        1.0e-14,
+                    ),
+                ],
+                (3, 0),
             ),
             (
                 "thermal_bugblatter",
@@ -4415,6 +4469,7 @@ mod thermal_reference_tests {
                         0 => (f64::from(sign) + coth) / 2.0,
                         1 => -(coth * coth - 1.0) / 4.0,
                         2 => (coth * coth - 1.0) * coth / 4.0,
+                        3 => (coth * coth * (4.0 - 3.0 * coth * coth) - 1.0) / 8.0,
                         _ => {
                             panic!("{name}: unexpected distribution derivative {derivative_order}")
                         }
