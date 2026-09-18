@@ -1,3 +1,4 @@
+use feynkit_graph::DOD;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     fmt::{Display, Formatter},
@@ -34,7 +35,7 @@ use crate::{
     momentum::Helicity,
     numerator::aind::Aind,
     settings::global::VectorPolarizationSumGauge,
-    utils::{F, GS, W_, serde_utils::SmartSerde, symbolica_ext::DOD},
+    utils::{F, GS, W_, serde_utils::SmartSerde},
 };
 
 pub use feynkit_model::{
@@ -820,7 +821,6 @@ impl PropagatorIdGammaLoopExt for PropagatorId {
 
 /// Symbolica and tensor operations derived from a canonical particle record.
 pub trait ParticleGammaLoopExt {
-    fn symbolic_mass(&self, model: &Model) -> Atom;
     fn resolved_mass_value(&self, model: &Model) -> Result<Complex<F<f64>>, Report>;
     fn has_zero_resolved_mass(&self, model: &Model) -> Result<bool, Report>;
     fn random_helicity(&self, seed: u64) -> Helicity;
@@ -836,12 +836,6 @@ pub trait ParticleGammaLoopExt {
 }
 
 impl ParticleGammaLoopExt for Particle {
-    fn symbolic_mass(&self, model: &Model) -> Atom {
-        Atom::from(UFOSymbol::from(
-            &model.parameter_by_id(self.mass).unwrap().name,
-        ))
-    }
-
     fn resolved_mass_value(&self, model: &Model) -> Result<Complex<F<f64>>, Report> {
         model
             .parameter_by_id(self.mass)
@@ -1087,7 +1081,8 @@ impl VertexRuleGammaLoopExt for VertexRule {
                     .lorentz_structure_by_id(*id)
                     .unwrap()
                     .structure
-                    .all_dod()
+                    .all_dod(GS.emr_mom)
+                    .expect("model momentum power counting failed")
             })
             .max()
             .unwrap_or_default()
@@ -1111,6 +1106,8 @@ impl PropagatorGammaLoopExt for Propagator {
     }
 
     fn degree_of_divergence(&self) -> i32 {
-        (self.numerator_atom() / self.denominator_atom()).all_dod()
+        (self.numerator_atom() / self.denominator_atom())
+            .all_dod(GS.emr_mom)
+            .expect("model momentum power counting failed")
     }
 }

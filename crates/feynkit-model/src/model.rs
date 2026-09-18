@@ -287,6 +287,14 @@ pub struct Particle {
 }
 
 impl Particle {
+    /// Symbolic UFO mass parameter, without substituting its numerical value.
+    pub fn symbolic_mass(&self, model: &Model) -> Atom {
+        Atom::var(symbol!(&format!(
+            "UFO::{}",
+            model.parameter_by_id(self.mass).unwrap().name
+        )))
+    }
+
     /// Whether the model declares this particle's mass to be zero.
     pub fn is_massless(&self, model: &Model) -> bool {
         let mass = model.parameter_by_id(self.mass).unwrap();

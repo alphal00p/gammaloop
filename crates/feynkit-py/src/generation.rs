@@ -1805,7 +1805,9 @@ impl PyGenerator {
     /// numerator_grouping : NumeratorGrouping or None, optional
     ///     Zero detection and numerator comparison; None disables parsing and grouping.
     /// cancellation_token : CancellationToken or None, optional
-    ///     Shared token for cancelling a running generation task.
+    ///     Shared token for cancelling a running generation task. Token cancellation
+    ///     returns an incomplete result; Python signal-handler exceptions, including
+    ///     KeyboardInterrupt, stop generation and propagate to the caller.
     #[pyo3(signature = (process, *, threads=None, max_vertices=None, allow_self_loops=false, allow_zero_flow_edges=false, graph_prefix=None, particle_veto=None, vertex_allow=None, vertex_veto=None, maximum_bridges=None, self_energy=None, tadpoles=None, zero_snails=None, coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=None, blob_range=None, spectator_range=None, perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, cancellation_token=None))]
     #[allow(clippy::too_many_arguments)]
     fn generate(
@@ -1874,79 +1876,67 @@ impl PyGenerator {
             cancellation_token,
         )
         .inner;
-        py.detach(move || generator.generate(&process, &options))
-            .map(|inner| PyGenerationResult { inner })
-            .map_err(error::generation)
+        generate_diagrams(py, generator, process, options)
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn generate_diagrams_for_model(
+/// Run both Python generation entry points with Python-owned signal handling.
+pub(crate) fn generate_diagrams(
     py: Python<'_>,
-    model: &PyModel,
-    incoming: Vec<SelectorInput>,
-    outgoing: Vec<SelectorInput>,
-    kind: &str,
-    loops: OrderRangeInput,
+    generator: Generator,
+    process: Process,
     options: GenerationOptions,
-    final_state_alternatives: Option<Vec<Vec<SelectorInput>>>,
 ) -> PyResult<PyGenerationResult> {
-    let OrderRangeInput { minimum, maximum } = loops;
-    let maximum =
-        maximum.ok_or_else(|| PyValueError::new_err("loops requires a finite maximum"))?;
-    let incoming = incoming
-        .into_iter()
-        .map(ParticleSelector::from)
-        .collect::<Vec<_>>();
-    let outgoing = outgoing
-        .into_iter()
-        .map(ParticleSelector::from)
-        .collect::<Vec<_>>();
-    let alternatives = final_state_alternatives
-        .unwrap_or_default()
-        .into_iter()
-        .map(|alternative| {
-            alternative
-                .into_iter()
-                .map(ParticleSelector::from)
-                .collect::<Vec<_>>()
+    py.check_signals()?;
+    #[cfg(not(target_arch = "wasm32"))]
+    let (result, interruption) = {
+        let cancellation = CancellationToken::new();
+        let check = cancellation.clone();
+        let options = options.cancellation_check(move || check.is_cancelled());
+        py.detach(move || {
+            std::thread::scope(|scope| {
+                let worker = scope.spawn(|| generator.generate(&process, &options));
+                let mut interruption = None;
+                // Python handles signals only on its main thread, including while
+                // generation is inside Rayon's parallel interaction assignment.
+                while !worker.is_finished() {
+                    if interruption.is_none() {
+                        interruption = Python::attach(|py| py.check_signals()).err();
+                        if interruption.is_some() {
+                            cancellation.cancel();
+                        }
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(25));
+                }
+                let result = worker
+                    .join()
+                    .unwrap_or_else(|panic| std::panic::resume_unwind(panic));
+                (result, interruption)
+            })
         })
-        .collect::<Vec<_>>();
-
-    let process = match kind {
-        "amplitude" => {
-            if !alternatives.is_empty() {
-                return Err(PyValueError::new_err(
-                    "final_state_alternatives is only supported for cross sections",
-                ));
-            }
-            Process::amplitude(incoming, outgoing)
-                .with_loop_count(minimum, maximum)
-                .map_err(error::process)?
-        }
-        "cross_section" => {
-            let mut process = Process::cross_section(incoming, outgoing.clone())
-                .with_loop_count(minimum, maximum)
-                .map_err(error::process)?;
-            if !alternatives.is_empty() {
-                let mut final_states = Vec::with_capacity(alternatives.len() + 1);
-                final_states.push(outgoing);
-                final_states.extend(alternatives);
-                process = process
-                    .with_final_state_alternatives(final_states)
-                    .map_err(error::process)?;
-            }
-            process
-        }
-        _ => {
-            return Err(PyValueError::new_err(
-                "kind must be 'amplitude' or 'cross_section'",
-            ));
-        }
     };
-
-    let generator = Generator::new(model.inner.clone());
-    py.detach(move || generator.generate(&process, &options))
+    #[cfg(target_arch = "wasm32")]
+    let (result, interruption) = {
+        // Browser kernels execute generation on the calling thread. Poll the
+        // existing cancellation hook there instead of creating a native thread.
+        let interruption = Arc::new(std::sync::Mutex::new(None));
+        let signal_error = interruption.clone();
+        let options = options.cancellation_check(move || {
+            let mut error = signal_error.lock().unwrap();
+            if error.is_none() {
+                *error = Python::attach(|py| py.check_signals()).err();
+            }
+            error.is_some()
+        });
+        let result = py.detach(move || generator.generate(&process, &options));
+        let error = interruption.lock().unwrap().take();
+        (result, error)
+    };
+    if let Some(error) = interruption {
+        return Err(error);
+    }
+    py.check_signals()?;
+    result
         .map(|inner| PyGenerationResult { inner })
         .map_err(error::generation)
 }
@@ -1975,6 +1965,63 @@ mod tests {
     use pyo3::types::PyDict;
 
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn python_signals_interrupt_both_generation_entry_points() {
+        Python::initialize();
+        Python::attach(|py| {
+            let module = PyModule::new(py, "symbolica.community.feynkit").unwrap();
+            crate::initialize_feynkit(&module).unwrap();
+            let locals = PyDict::new(py);
+            locals.set_item("fk", &module).unwrap();
+            locals
+                .set_item(
+                    "MODEL_JSON",
+                    include_str!("../tests/fixtures/scalars_2p_3p.json"),
+                )
+                .unwrap();
+            let code = CString::new(
+                r#"
+import signal
+
+model = fk.Model.from_json(MODEL_JSON)
+generator = fk.Generator(model)
+process = fk.Process.amplitude([1000], [1000, 1000]).with_loop_count(6, 6)
+settings = dict(max_vertices=13, threads=2, vertex_allow=["V_3_SCALAR_000"])
+
+def interrupt(signum, frame):
+    raise expected_error("generation interrupted")
+
+previous_handler = signal.signal(signal.SIGALRM, interrupt)
+try:
+    for expected_error in (KeyboardInterrupt, RuntimeError):
+        for via_model in (True, False):
+            signal.setitimer(signal.ITIMER_REAL, 0.05)
+            try:
+                if via_model:
+                    model.generate_diagrams([1000], [1000, 1000], loops=6, **settings)
+                else:
+                    generator.generate(process, **settings)
+            except expected_error as error:
+                assert str(error) == "generation interrupted"
+            else:
+                raise AssertionError("generation ignored its Python signal handler")
+            finally:
+                signal.setitimer(signal.ITIMER_REAL, 0)
+finally:
+    signal.signal(signal.SIGALRM, previous_handler)
+
+# Interruption belongs to one call; subsequent generation must still complete.
+result = model.generate_diagrams([1000], [1000, 1000], loops=0, **settings)
+assert result.report.completed
+assert len(result) == 1
+"#,
+            )
+            .unwrap();
+            py.run(&code, Some(&locals), Some(&locals)).unwrap();
+        });
+    }
 
     #[test]
     fn process_metadata_and_selectors_are_typed_and_round_trip() {

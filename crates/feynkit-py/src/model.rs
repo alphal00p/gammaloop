@@ -1,5 +1,6 @@
 use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
 
+use feynkit_generator::{Generator, ParticleSelector, Process};
 use feynkit_model::{
     ComplexValue, Coupling, CouplingId, EvaluatedValues, EvaluationRequest, LorentzStructure,
     LorentzStructureId, Model, ModelEvaluator, ModelExpression, ModelFormFactor, ModelFormFactorId,
@@ -7,6 +8,7 @@ use feynkit_model::{
     ParameterType, Particle, ParticleId, Propagator, PropagatorId, VertexRule, VertexRuleId,
 };
 use pyo3::{
+    exceptions::PyValueError,
     prelude::*,
     types::{PyAny, PyComplex, PyModule},
 };
@@ -21,7 +23,7 @@ use crate::{
         DiagramSelectionInput, GenerationSettings, OrderRangeInput, ParticleInput,
         PyCancellationToken, PyGenerationResult, PyNumeratorGrouping, PySelfEnergyFilterOptions,
         PySnailFilterOptions, PyTadpoleFilterOptions, SelectorInput, VertexInput,
-        generate_diagrams_for_model,
+        generate_diagrams,
     },
 };
 use symbolica::api::python::PythonExpression;
@@ -1604,7 +1606,9 @@ impl PyModel {
     /// numerator_grouping : NumeratorGrouping or None, optional
     ///     Zero detection and numerator comparison; None disables parsing and grouping.
     /// cancellation_token : CancellationToken or None, optional
-    ///     Shared token for cancelling a running generation task.
+    ///     Shared token for cancelling a running generation task. Token cancellation
+    ///     returns an incomplete result; Python signal-handler exceptions, including
+    ///     KeyboardInterrupt, stop generation and propagate to the caller.
     /// final_state_alternatives : sequence[sequence[Particle | ParticleSelector | str | int]] or None, optional
     ///     Extra outgoing states for a cross section.
     #[pyo3(signature = (incoming, outgoing, *, kind="amplitude", loops=OrderRangeInput::default(), final_state_alternatives=None, threads=None, max_vertices=None, allow_self_loops=false, allow_zero_flow_edges=false, graph_prefix=None, particle_veto=None, vertex_allow=None, vertex_veto=None, maximum_bridges=None, self_energy=None, tadpoles=None, zero_snails=None, coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=None, blob_range=None, spectator_range=None, perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, cancellation_token=None))]
@@ -1677,16 +1681,60 @@ impl PyModel {
             cancellation_token,
         )
         .inner;
-        generate_diagrams_for_model(
-            py,
-            self,
-            incoming,
-            outgoing,
-            kind,
-            loops,
-            options,
-            final_state_alternatives,
-        )
+        let OrderRangeInput { minimum, maximum } = loops;
+        let maximum =
+            maximum.ok_or_else(|| PyValueError::new_err("loops requires a finite maximum"))?;
+        let incoming = incoming
+            .into_iter()
+            .map(ParticleSelector::from)
+            .collect::<Vec<_>>();
+        let outgoing = outgoing
+            .into_iter()
+            .map(ParticleSelector::from)
+            .collect::<Vec<_>>();
+        let alternatives = final_state_alternatives
+            .unwrap_or_default()
+            .into_iter()
+            .map(|alternative| {
+                alternative
+                    .into_iter()
+                    .map(ParticleSelector::from)
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+
+        let process = match kind {
+            "amplitude" => {
+                if !alternatives.is_empty() {
+                    return Err(PyValueError::new_err(
+                        "final_state_alternatives is only supported for cross sections",
+                    ));
+                }
+                Process::amplitude(incoming, outgoing)
+                    .with_loop_count(minimum, maximum)
+                    .map_err(error::process)?
+            }
+            "cross_section" => {
+                let mut process = Process::cross_section(incoming, outgoing.clone())
+                    .with_loop_count(minimum, maximum)
+                    .map_err(error::process)?;
+                if !alternatives.is_empty() {
+                    let mut final_states = Vec::with_capacity(alternatives.len() + 1);
+                    final_states.push(outgoing);
+                    final_states.extend(alternatives);
+                    process = process
+                        .with_final_state_alternatives(final_states)
+                        .map_err(error::process)?;
+                }
+                process
+            }
+            _ => {
+                return Err(PyValueError::new_err(
+                    "kind must be 'amplitude' or 'cross_section'",
+                ));
+            }
+        };
+        generate_diagrams(py, Generator::new(self.inner.clone()), process, options)
     }
 
     /// Return the model name.

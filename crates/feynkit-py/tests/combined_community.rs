@@ -241,6 +241,14 @@ assert len(scalar_graphs) == 1
 assert scalar_graphs[0].numerator_expression() == tensor_expected
 assert isinstance(scalar_graphs[0].numerator_expression(), spenso.TensorExpression)
 assert scalar_graphs[0].numerator_expression().rank == 0
+denominator = indexed_diagram.denominator_expression()
+assert isinstance(denominator, spenso.TensorExpression)
+assert denominator.rank == 0
+assert "ZERO" not in str(denominator)
+assert "Momentum" not in denominator._repr_latex_()
+assert indexed_diagram.numerator_expression() / denominator == (
+    indexed_diagram.numerator_expression() * denominator ** -1
+)
 indexed = indexed_diagram.numerator_expression()
 assert isinstance(indexed, spenso.TensorExpression)
 assert isinstance(indexed, core.Expression)

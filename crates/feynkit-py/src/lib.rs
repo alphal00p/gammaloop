@@ -363,6 +363,13 @@ loop_diagram = next(
     and all(edge.source != edge.target for edge in diagram.edges)
 )
 loop_diagram.validate()
+assert loop_diagram.superficial_degree_of_divergence() == -2
+assert loop_diagram.superficial_degree_of_divergence(dimension=6) == 0
+denominator = loop_diagram.denominator_expression()
+assert denominator.rank == 0
+assert "ZERO" not in str(denominator)
+assert denominator != 1
+integrand = loop_diagram.numerator_expression() / denominator
 try:
     diagram_svg = loop_diagram.to_svg()
 except ImportError as error:
