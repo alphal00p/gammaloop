@@ -192,7 +192,13 @@
     ctx.identity,
     (1,),
   )
-  if display == none { (ctx.default)() } else { _display-node(display) }
+  if display != none { return _display-node(display) }
+  let labels = ctx.tags.filter(tag => tag.starts-with("spenso::tensor-label:"))
+  if labels.len() > 0 {
+    _display-symbol(labels.first().slice("spenso::tensor-label:".len()))
+  } else {
+    (ctx.default)()
+  }
 }
 
 #let _visual(ctx, node) = (ctx.render-visual)(node)

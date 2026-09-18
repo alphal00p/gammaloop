@@ -192,7 +192,9 @@ directly, with the existing constructor inferring their tensor interfaces.
 The graph crate registers momentum and index symbols before parsing or
 generation. Index identities retain their source, sink, edge, or vertex head;
 label metadata drives Spenso's shared plain, LaTeX, and Typst printers,
-including portable render trees.
+including portable render trees. Momentum heads retain their algebraic names and
+carry `spenso::tensor-label:q`; the shared indexed-symbol printer and portable
+Typst head resolver display them as $q$ with the edge identifier and tensor index.
 
 FeynKit graph figures and GammaLoop drawings share the canonical particle-to-style
 mapping and Typst physics callbacks. Line patterns and labels derive from model
