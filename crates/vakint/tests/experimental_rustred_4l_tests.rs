@@ -246,31 +246,37 @@ fn candidate_h_rank_four_numerator_matches_fmft() {
     );
 }
 
-/// Exercise the analytic clover numerator through the FG parent descriptor.
-/// Vakint's retained matcher witness currently represents the disconnected
-/// four-tadpole clover as an eight-slot parent, so a standalone four-slot
-/// clover descriptor cannot pass `validate_parent_routing`.  Keeping the
-/// numerator on the registered FG witness still exercises its scalar-product
-/// lowering and the FORM/FeynKit comparison without inventing a topology
-/// registry entry.
+/// Exercise the literal analytic clover inputs through the registered FG
+/// parent descriptor.  The retained matcher witness represents the
+/// disconnected four-tadpole clover as a contraction of that eight-slot
+/// parent; the candidate reducer therefore comes from FG, while the actual
+/// inputs below remain the four-tadpole topology (including its dotted case).
 #[test]
 #[ignore = "experimental: finite clover family and explicit offline FMFT oracle"]
 fn candidate_fg_clover_numerator_case_matches_fmft() {
     let source = include_str!("inputs/experimental_four_loop_fg.csv").to_owned();
-    let parent = input::ParentInput::from_csv(&source);
     let numerator = vk_parse!(
         "3*k(1,11)*k(2,11)*k(1,22)*k(2,22)+4*p(1,11)*k(3,11)*k(3,22)*p(2,22)+5*p(1,11)*p(2,11)*(k(2,22)+k(1,22))*k(2,22)"
     )
     .expect("clover numerator parses");
-    let corner = vec![1; 8].into_iter().chain([0; 2]).collect::<Vec<_>>();
-    let integral = numerator * parent.integral(&corner);
+    let clover = vk_parse!(
+        "topo(prop(1,edge(1,1),k(1),muvsq,1)*prop(2,edge(1,1),k(2),muvsq,1)*prop(3,edge(1,1),k(3),muvsq,1)*prop(4,edge(1,1),k(4),muvsq,1))"
+    )
+    .expect("clover scalar input parses");
+    let clover_dotted = vk_parse!(
+        "topo(prop(1,edge(1,1),k(1),muvsq,2)*prop(2,edge(1,1),k(2),muvsq,1)*prop(3,edge(1,1),k(3),muvsq,1)*prop(4,edge(1,1),k(4),muvsq,1))"
+    )
+    .expect("dotted clover scalar input parses");
     run_candidate_finite_family(
         "FG-clover",
         source,
         None,
-        vec![("numerator", integral)],
+        vec![
+            ("clover", numerator.clone() * clover),
+            ("clover-dotted", numerator * clover_dotted),
+        ],
         vec![(1, (0.34, 1.2, 1.2, 0.6)), (2, (0.51, 1.6, 1.5, 0.72))],
-        vec![("muvsq", 3.0), ("mursq", 7.0)],
+        vec![("muvsq", 0.3), ("mursq", 0.7)],
     );
 }
 
@@ -299,7 +305,10 @@ fn candidate_all_four_loop_parents_match_fmft() {
         ("BMW", include_str!("inputs/experimental_four_loop_bmw.csv")),
         ("X", include_str!("inputs/experimental_four_loop_x.csv")),
     ] {
-        if family_filter.as_deref().is_some_and(|filter| filter != name) {
+        if family_filter
+            .as_deref()
+            .is_some_and(|filter| filter != name)
+        {
             continue;
         }
         selected = true;
