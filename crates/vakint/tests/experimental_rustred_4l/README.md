@@ -105,6 +105,8 @@ bound to the RustRed family fingerprint and arity. With
 test uses an invalid FORM path for the RustRed/FeynKit scalar tail. This is an
 experimental value-cache check, not a completeness proof, IBP artifact, or
 production master catalog.
+Catalogs produced by the earlier probe-only harness are marked partial and
+are intentionally rejected by this strict complete-terminal reload path.
 
 The existing FMFT finalizer now expands exact Laurent coefficients before
 approximate table substitution. This prevents exact cancelling coefficients
