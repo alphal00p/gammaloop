@@ -3859,7 +3859,8 @@ mod tests {
 mod thermal_reference_tests {
     use super::*;
     use crate::{
-        Generate3DExpressionOptions, MediumMode, MomentumSignature, generate_3d_expression,
+        Generate3DExpressionOptions, MediumMode, MomentumSignature, NumeratorSamplingScaleMode,
+        generate_3d_expression,
         graph_io::{ParsedGraphExternalEdge, ParsedGraphInternalEdge},
         surface::LinearSurfaceKind,
     };
@@ -3976,21 +3977,55 @@ mod thermal_reference_tests {
                 external_names: Vec::new(),
                 node_name_to_internal: (0..n_nodes).map(|i| (format!("v{i}"), i)).collect(),
             };
-            for medium_mode in [
-                MediumMode::Vacuum,
-                MediumMode::ThermodynamicEquilibrium,
-                MediumMode::ZeroTemperatureEquilibrium,
-            ] {
+            for (medium_mode, sampling_mode, uniform_scale) in itertools::iproduct!(
+                [
+                    MediumMode::Vacuum,
+                    MediumMode::ThermodynamicEquilibrium,
+                    MediumMode::ZeroTemperatureEquilibrium,
+                ],
+                [
+                    NumeratorSamplingScaleMode::None,
+                    NumeratorSamplingScaleMode::BeyondQuadratic,
+                    NumeratorSamplingScaleMode::All,
+                ],
+                [0.75, 2.25],
+            ) {
+                let input = EvaluationInput {
+                    uniform_scale: Some(uniform_scale),
+                    ..input.clone()
+                };
                 let generated = generate_3d_expression(
                     &parsed,
                     &Generate3DExpressionOptions {
                         medium_mode,
                         energy_degree_bounds: Some(bounds.clone()),
+                        numerator_sampling_scale: sampling_mode,
                         ..Default::default()
                     },
                 )
                 .unwrap();
                 let expression = &generated.expression;
+                let uses_uniform_scale = bounds
+                    .iter()
+                    .any(|(_, degree)| sampling_mode.is_active_for_degree(*degree));
+                assert_eq!(
+                    expression
+                        .orientations
+                        .iter()
+                        .flat_map(|orientation| &orientation.edge_energy_map)
+                        .any(LinearEnergyExpr::uses_uniform_scale),
+                    uses_uniform_scale,
+                    "{name}, {medium_mode:?}, {sampling_mode:?}: numerator sampling nodes"
+                );
+                assert_eq!(
+                    expression
+                        .orientations
+                        .iter()
+                        .flat_map(|orientation| &orientation.variants)
+                        .any(|variant| variant.uniform_scale_power != 0),
+                    uses_uniform_scale,
+                    "{name}, {medium_mode:?}, {sampling_mode:?}: compensating M powers"
+                );
                 let evaluator = ExpressionEvaluator::new(&parsed, expression, &input);
                 let energies = &evaluator.internal_energies;
                 let source_conversion =
@@ -4150,7 +4185,7 @@ mod thermal_reference_tests {
                         let scale = actual.abs().max(expected.abs()).max(f64::MIN_POSITIVE);
                         assert!(
                             (actual - expected).abs() <= 2.0e-10 * scale,
-                            "{name}, {medium_mode:?}, vacuum_limit={vacuum_limit}, numerator={numerator}: actual={actual:.17e}, exact={expected:.17e}"
+                            "{name}, {medium_mode:?}, {sampling_mode:?}, M={uniform_scale}, vacuum_limit={vacuum_limit}, numerator={numerator}: actual={actual:.17e}, exact={expected:.17e}"
                         );
                     }
                 }

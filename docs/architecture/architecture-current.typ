@@ -185,8 +185,7 @@ aliases and never acquire thermal distribution factors. GammaLoop's graph and
 parameter layer expands the symbolic weights using particle statistics,
 chemical potentials, and inverse temperature; the shared generator does not
 own the physics model. Thermal terminal sectors retain their full distribution
-weights rather than applying the vacuum contour-closure normalization. Thermal
-generation continues to reject explicit uniform numerator sampling scales.
+weights rather than applying the vacuum contour-closure normalization.
 
 Medium modes use direct local 3D UV subtraction. Their local UV kernels take the
 vacuum limit while the surrounding observable retains its medium dependence;

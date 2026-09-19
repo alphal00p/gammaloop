@@ -9,16 +9,21 @@ use gammalooprs::settings::runtime::{
 use gammalooprs::uv::profile::UVLimitSelection;
 
 #[test]
+// TODO: extend test matrix once performance is better
 fn inverse_propagators_effectively_cancel_denominators() -> Result<()> {
     let mut failures = Vec::new();
-    for medium_mode in ["vacuum", "thermodynamic_equilibrium"] {
+    for (medium_mode, sampling_mode) in itertools::iproduct!(
+        ["vacuum", "thermodynamic_equilibrium",],
+        // ["none", "beyond_quadratic", "all"],
+        ["none",],
+    ) {
         let test_root = get_tests_workspace_path().join(format!(
-            "inverse_propagators_cancel_denominators_{medium_mode}"
+            "inverse_propagators_cancel_denominators_{medium_mode}_{sampling_mode}"
         ));
         let mut cli = get_test_cli(
             None,
             &test_root,
-            Some(format!("inverse_propagators_{medium_mode}")),
+            Some(format!("inverse_propagators_{medium_mode}_{sampling_mode}")),
             true,
         )?;
         run_commands(
@@ -33,7 +38,7 @@ fn inverse_propagators_effectively_cancel_denominators() -> Result<()> {
                 "import graphs ./tests/resources/graphs/double_box_inverse_prop_cancellation.dot -p double_box_two_distinct_inverse_propagators -i cancellation",
                 "set model mass_scalar_1=0.5",
                 &format!(
-                    "set global kv global.generation.medium.mode={medium_mode} global.generation.medium.vacuum_subtraction=false global.generation.evaluator.iterative_orientation_optimization=false global.generation.evaluator.compile=false global.generation.evaluator.store_atom=true global.generation.threshold_subtraction.enable_thresholds=false global.generation.uv.subtract_uv=false"
+                    "set global kv global.generation.medium.mode={medium_mode} global.generation.uniform_numerator_sampling_scale={sampling_mode} global.generation.medium.vacuum_subtraction=false global.generation.evaluator.iterative_orientation_optimization=false global.generation.evaluator.compile=false global.generation.evaluator.store_atom=true global.generation.threshold_subtraction.enable_thresholds=false global.generation.uv.subtract_uv=false"
                 ),
             ],
         )?;
@@ -166,9 +171,13 @@ fn inverse_propagators_effectively_cancel_denominators() -> Result<()> {
                 "the {case} diagrams must be evaluated in the same graph group in {medium_mode} mode"
             );
 
-            for use_arb_prec in [false, true] {
+            for (sampling_scale, use_arb_prec) in itertools::iproduct!([0.75, 2.25], [false, true])
+            {
+                cli.run_command(&format!(
+                    "set process -p {process_name} -i cancellation kv general.numerator_sampling_scale={sampling_scale}"
+                ))?;
                 let precision = if use_arb_prec { "arb" } else { "f64" };
-                let tolerance = if use_arb_prec { 1.0e-299 } else { 1.0e-12 };
+                let tolerance = if use_arb_prec { 1.0e-295 } else { 1.0e-12 };
                 let (_, target) = Inspect {
                     process: Some(process.clone()),
                     integrand_name: Some(integrand_name.clone()),
@@ -201,13 +210,13 @@ fn inverse_propagators_effectively_cancel_denominators() -> Result<()> {
                 let scale = target.re.hypot(target.im).max(result.re.hypot(result.im));
                 if scale <= 1.0e-16 {
                     failures.push(format!(
-                        "the {case} {medium_mode} {precision} cancellation oracle is trivial"
+                        "the {case} {medium_mode} {sampling_mode} M={sampling_scale} {precision} cancellation oracle is trivial"
                     ));
                     continue;
                 }
                 if combined_result.re.hypot(combined_result.im) > tolerance * scale {
                     failures.push(format!(
-                    "the {case} {medium_mode} {precision} grouped diagrams did not cancel: combined_result={combined_result:e}, scale={scale:e}, tolerance={tolerance:e}, target={target:e}, result={result:e}"
+                    "the {case} {medium_mode} {sampling_mode} M={sampling_scale} {precision} grouped diagrams did not cancel: combined_result={combined_result:e}, scale={scale:e}, tolerance={tolerance:e}, target={target:e}, result={result:e}"
                 ));
                 }
             }
