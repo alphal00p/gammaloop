@@ -9,7 +9,7 @@ Each parent (H, FG, BMW and X) has:
 - a `.csv` ordered physical/auxiliary momentum descriptor;
 - a `.toml` topology-generic RustRed family-generation input;
 - a `.candidates.rrbin.gz` saved native-binary parametric candidate program;
-- a `.rrcat` exact map of its declared finite terminals onto FMFT's PR basis.
+- a `.rrcat.bin` native exact map of its declared finite terminals onto FMFT's PR basis.
 
 Labels identify data files, not engine dispatch. Vakint selects a program from
 the defining parent and simultaneous routing already retained by its topology
@@ -31,6 +31,39 @@ are trusted, build-time embedded data for the pinned RustRed/Symbolica stack;
 the native decoder is not an untrusted-file parser. Decompression and framing
 have explicit size limits. Native transport does not change rule applicability,
 the terminal basis or certification status.
+
+The terminal-value files use RustRed's distinct `TerminalValues` envelope and
+deduplicate exact Symbolica Atoms with a shared native state. Vakint delegates
+their encode/decode to RustRed; runtime loading performs no expression-text
+parsing. Their family fingerprint, arity, declared coverage and all 1,155 raw
+integral keys are unchanged. These catalogs carry no IBP or closure authority.
+The consumer still checks equality with the candidate's declared terminal set.
+
+The catalog-only migration compared every value exactly against the saved text,
+then repeated that comparison in a fresh process with unrelated Symbolica state:
+
+| Catalog | Keys | Distinct exact values | Former text bytes | Native bytes |
+| --- | ---: | ---: | ---: | ---: |
+| H | 386 | 23 | 25,632 | 8,845 |
+| FG | 145 | 18 | 10,309 | 5,654 |
+| BMW | 179 | 20 | 13,514 | 6,391 |
+| X | 445 | 21 | 33,565 | 9,417 |
+| Total | 1,155 | 26 across parents | 83,020 | 30,307 |
+
+This 63.5% reduction is a transport/dictionary improvement, not a smaller
+physical master basis. No FMFT calculations or IBP generation were repeated.
+Native atom bytes may depend on ambient Symbolica IDs; imported exact values
+and their namespaces do not. Earlier text catalogs are deliberately unsupported.
+
+The catalog migration pins RustRed `d51721b6`. Its default-feature public backend
+again passes all fifteen numerical references and all sixteen expanded-numerator/
+pinch comparisons, with forbidden FORM paths in both native stages. The two
+whole-process correctness gates took 33.04 s and 115.23 s respectively, including
+the separate FMFT oracle, with peak RSS of 1,990,636 and 2,689,952 KiB. These are
+shared-host validation observations, not a new paired performance benchmark.
+The unchanged 83-test through-three-loop selection, seven catalog/loader unit
+checks and three four-loop fixture checks also pass. The new library terminal-
+alias optimization remains disabled in this rollout; only catalog I/O changes.
 
 These are **candidate programs, not `ClosedArtifact`s**. The loader does not
 assert independent regenerated-source replay or unlimited family closure.
@@ -62,14 +95,14 @@ the same deterministic `gzip -n -9` command.
 
 `RustRedEvaluationOptions { substitute_masters: false }` leaves the raw PR master
 basis unexpanded. With substitution enabled, the existing finite FMFT expansion
-tables are used. The `.rrcat` records are exact PR expressions, **not new
+tables are used. The `.rrcat.bin` records are exact PR expressions, **not new
 20,000-digit master evaluations**. Requesting more precision than a surviving
 master/constant source contains emits the existing warning through Vakint's
 logger; it does not increase source accuracy. Missing Laurent orders are errors.
 
 ## Offline reproduction
 
-Use the matching RustRed runtime pin `d6718733bee4d20f4554e9d694b288ddaae60475`
+Use the matching RustRed runtime pin `d51721b6558d2e6bc4dfdd29c794202376b2c464`
 for the offline example commands below, with the Symbolica license supplied
 in the environment. These commands generate fresh programs when intentionally
 requested; the shipped migration itself converted the saved programs without
@@ -84,7 +117,7 @@ cargo run --release --locked --offline --no-default-features \
 cargo run --release --locked --offline --no-default-features \
   -p rustred-app --example candidate_bundle -- \
   verify 10 /path/to/new/h.candidates.rrbin \
-  /path/to/vakint/data/rustred/four_loop/h.rrcat
+  /path/to/vakint/data/rustred/four_loop/h.rrcat.bin
 
 gzip -n -9 -c /path/to/new/h.candidates.rrbin > /path/to/new/h.candidates.rrbin.gz
 ```

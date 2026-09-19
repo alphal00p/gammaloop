@@ -39,7 +39,7 @@ struct Input {
     label: &'static str,
     csv: &'static str,
     program: &'static [u8],
-    catalog: &'static str,
+    catalog: &'static [u8],
 }
 
 macro_rules! input {
@@ -52,7 +52,11 @@ macro_rules! input {
                 $name,
                 ".candidates.rrbin.gz"
             )),
-            catalog: include_str!(concat!("../../data/rustred/four_loop/", $name, ".rrcat")),
+            catalog: include_bytes!(concat!(
+                "../../data/rustred/four_loop/",
+                $name,
+                ".rrcat.bin"
+            )),
         }
     };
 }
@@ -173,7 +177,8 @@ fn load(index: usize) -> Result<ExperimentalRustRed, String> {
     if family.fingerprint() != descriptor.family_fingerprint {
         return Err("shipped program differs from its physical/auxiliary descriptor".into());
     }
-    let catalog = OfflineTerminalCatalog::decode(input.catalog, family.fingerprint(), 10)?;
+    let catalog =
+        OfflineTerminalCatalog::decode_generated(input.catalog, family.fingerprint(), 10)?;
     catalog.require_complete()?;
     if catalog.terms().keys().ne(reducer.terminals().iter()) {
         return Err("offline catalog does not exactly cover declared program terminals".into());

@@ -143,8 +143,8 @@ The harness ships complete finite catalogs for the four checked-in parent
 descriptors under `data/rustred/four_loop/`; these are
 loaded by default and are bound to each RustRed family fingerprint and arity.
 Set `VAKINT_4L_CANDIDATE_CATALOG_DIR` to override that bundle and persist a
-fresh exact offline value set. The harness writes `h.rrcat`, `fg.rrcat`,
-`bmw.rrcat`, or `x.rrcat` atomically after the FMFT phase; each file contains
+fresh exact offline value set. The harness writes `h.rrcat.bin`, `fg.rrcat.bin`,
+`bmw.rrcat.bin`, or `x.rrcat.bin` atomically after the FMFT phase; each file contains
 every finite terminal declared by that candidate and is marked complete. With
 `VAKINT_4L_CANDIDATE_CATALOG_ONLY=1`, an existing catalog is required and the
 test uses an invalid FORM path for the RustRed/FeynKit scalar tail. This is an
@@ -153,6 +153,16 @@ The same canonical catalog directory serves the public loader; there is no
 separately maintained test-catalog copy.
 Catalogs produced by the earlier probe-only harness are marked partial and
 are intentionally rejected by this strict complete-terminal reload path.
+The native catalog codec lives in RustRed and uses Symbolica's Atom/state
+serialization; the former line-oriented schema is no longer a runtime input.
+The four shipped files preserve all 1,155 exact values and keys and total
+30,307 bytes. Loading accepts trusted generated native data, not hostile files.
+The `d51721b6` native-catalog runtime gate passes the fifteen-reference and
+sixteen-pinch public suites with the existing tolerances and forbidden FORM
+paths in the native stages. Retained evidence is under
+`TMP/gamma-native-catalog-migration.jP7cXc/` in the RustRed workspace, including
+the independent `public-audit.md`. No alias optimization was activated for this
+format-only comparison.
 
 The existing FMFT finalizer expands exact Laurent coefficients before
 approximate table substitution. This prevents exact cancelling coefficients
@@ -296,7 +306,7 @@ coverage of every four-loop input.
 
 `catalog_validation::shipped_terminal_projections_match_fmft` evaluates only
 the already-declared terminal keys with FMFT and compares their exact master
-projections with `data/rustred/four_loop/*.rrcat`. It does not solve IBPs or
+projections with `data/rustred/four_loop/*.rrcat.bin`. It does not solve IBPs or
 declare additional terminals. With the license and explicit oracle environment
 set as above, run this separate offline diagnostic:
 

@@ -562,11 +562,12 @@ fn run_candidate_finite_family(
             use_dot_product_notation: true,
             ..VakintSettings::default()
         };
-        let catalog_path = catalog_directory
-            .map(|directory| directory.join(format!("{}.rrcat", family_name.to_ascii_lowercase())));
+        let catalog_path = catalog_directory.map(|directory| {
+            directory.join(format!("{}.rrcat.bin", family_name.to_ascii_lowercase()))
+        });
         assert!(
             !catalog_only || catalog_path.as_ref().is_some_and(|path| path.exists()),
-            "catalog-only mode requires an existing validated {}.rrcat",
+            "catalog-only mode requires an existing validated {}.rrcat.bin",
             family_name.to_ascii_lowercase()
         );
         let generate_catalog = || {
@@ -609,17 +610,20 @@ fn run_candidate_finite_family(
         };
         let catalog = if let Some(path) = &catalog_path {
             if path.exists() {
-                let encoded = fs::read_to_string(path).unwrap_or_else(|error| {
+                let encoded = fs::read(path).unwrap_or_else(|error| {
                     panic!("read offline terminal catalog {}: {error}", path.display())
                 });
-                let loaded =
-                    OfflineTerminalCatalog::decode(&encoded, parent.family.fingerprint(), 10)
-                        .unwrap_or_else(|error| {
-                            panic!(
-                                "decode offline terminal catalog {}: {error}",
-                                path.display()
-                            )
-                        });
+                let loaded = OfflineTerminalCatalog::decode_generated(
+                    &encoded,
+                    parent.family.fingerprint(),
+                    10,
+                )
+                .unwrap_or_else(|error| {
+                    panic!(
+                        "decode offline terminal catalog {}: {error}",
+                        path.display()
+                    )
+                });
                 loaded.require_complete().unwrap_or_else(|error| {
                     panic!(
                         "offline catalog {} is not a complete declared-terminal catalog: {error}",
@@ -645,8 +649,12 @@ fn run_candidate_finite_family(
                 fs::create_dir_all(path.parent().unwrap()).unwrap_or_else(|error| {
                     panic!("create catalog directory {}: {error}", path.display())
                 });
-                let temporary = path.with_extension("rrcat.tmp");
-                fs::write(&temporary, offline.encode()).unwrap_or_else(|error| {
+                let temporary = path.with_extension("bin.tmp");
+                fs::write(
+                    &temporary,
+                    offline.encode().expect("encode exact native catalog"),
+                )
+                .unwrap_or_else(|error| {
                     panic!(
                         "write offline terminal catalog {}: {error}",
                         temporary.display()

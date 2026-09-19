@@ -8,6 +8,7 @@
 use std::collections::HashMap;
 use std::time::Instant;
 
+use rustred::persistence::{BinaryIoLimits, ExactTerminalCatalog};
 use symbolica::atom::Atom;
 use vakint::{
     EvaluationMethod, EvaluationOrder, FMFTOptions, LoopNormalizationFactor, TensorReductionMethod,
@@ -31,48 +32,17 @@ struct Workload {
 impl Workload {
     fn matrix() -> Vec<Self> {
         let mut matrix = Vec::new();
-        for (parent, catalog) in [
-            (
-                ParentDescriptor::H,
-                include_str!("../../data/rustred/four_loop/h.rrcat"),
-            ),
-            (
-                ParentDescriptor::Fg,
-                include_str!("../../data/rustred/four_loop/fg.rrcat"),
-            ),
-            (
-                ParentDescriptor::Bmw,
-                include_str!("../../data/rustred/four_loop/bmw.rrcat"),
-            ),
-            (
-                ParentDescriptor::X,
-                include_str!("../../data/rustred/four_loop/x.rrcat"),
-            ),
+        for parent in [
+            ParentDescriptor::H,
+            ParentDescriptor::Fg,
+            ParentDescriptor::Bmw,
+            ParentDescriptor::X,
         ] {
             let descriptor = ParentInput::from_csv(parent.csv());
             let mut powers = (0..10)
                 .map(|i| i64::from(i < descriptor.physical_momenta.len()))
                 .collect::<Vec<_>>();
             powers[0] = 3;
-            let mut signature = powers.clone();
-            signature.sort_unstable();
-            // No routing permutation can turn this full-parent probe into a
-            // declared terminal. The measured public call must apply rules.
-            for line in catalog
-                .lines()
-                .filter_map(|line| line.strip_prefix("terminal="))
-            {
-                let key = line.split_once('\t').unwrap().0;
-                let mut terminal = key
-                    .split(',')
-                    .map(|p| p.parse::<i64>().unwrap())
-                    .collect::<Vec<_>>();
-                terminal.sort_unstable();
-                assert_ne!(
-                    terminal, signature,
-                    "{parent:?} dotted timing probe is a declared terminal"
-                );
-            }
             matrix.push(Self {
                 name: format!("{parent:?}/D1_cubed"),
                 parent,
@@ -99,6 +69,50 @@ impl Workload {
             first_parent_use: false,
         });
         matrix
+    }
+
+    fn assert_nonterminal_probe(&self) {
+        if !self.first_parent_use {
+            return;
+        }
+        let descriptor = ParentInput::from_csv(self.parent.csv());
+        let mut signature = (0..10)
+            .map(|i| i64::from(i < descriptor.physical_momenta.len()))
+            .collect::<Vec<_>>();
+        signature[0] = 3;
+        signature.sort_unstable();
+        let bytes = match self.parent {
+            ParentDescriptor::H => {
+                include_bytes!("../../data/rustred/four_loop/h.rrcat.bin").as_slice()
+            }
+            ParentDescriptor::Fg => {
+                include_bytes!("../../data/rustred/four_loop/fg.rrcat.bin").as_slice()
+            }
+            ParentDescriptor::Bmw => {
+                include_bytes!("../../data/rustred/four_loop/bmw.rrcat.bin").as_slice()
+            }
+            ParentDescriptor::X => {
+                include_bytes!("../../data/rustred/four_loop/x.rrcat.bin").as_slice()
+            }
+        };
+        let catalog = ExactTerminalCatalog::decode_generated(
+            bytes,
+            descriptor.family.fingerprint(),
+            10,
+            BinaryIoLimits::default(),
+        )
+        .unwrap();
+        // No routing permutation can turn this probe into a declared terminal.
+        // Inspect after timing so native import cannot prewarm first-use state.
+        for key in catalog.terms().keys() {
+            let mut terminal = key.powers().to_vec();
+            terminal.sort_unstable();
+            assert_ne!(
+                terminal, signature,
+                "{:?} dotted timing probe is a declared terminal",
+                self.parent
+            );
+        }
     }
 }
 
@@ -234,6 +248,7 @@ fn representative_public_scalar_timings() {
                 native.report(&workload.name, "repeated-public-call", "rustred", repeat);
                 legacy.report(&workload.name, "repeated-public-call", "fmft", repeat);
             }
+            workload.assert_nonterminal_probe();
             println!("PUBLIC_SCALAR_PASS\t{}", workload.name);
         }
     });

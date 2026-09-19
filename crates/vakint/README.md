@@ -53,8 +53,22 @@ shared symbol state and still replays the proof on cold loading. The embedded
 files are trusted generated data, not an arbitrary-file import interface.
 The K1/K3/K6 migration re-encoded the existing saved rules without a new search;
 the exact families, guards, source traces and terminal sets remain unchanged.
-Their native files are 2,790, 36,692 and 3,725,739 bytes respectively. Vakint's
-terminal catalogs and scalar application algorithm are unchanged.
+Their native files are 2,790, 36,692 and 3,725,739 bytes respectively. That migration
+did not change terminal catalogs or the scalar application algorithm.
+
+The four-loop terminal-value catalogs now also use RustRed's native Atom/state
+codec, under a separate value-only envelope kind. All 1,155 exact PR expressions,
+typed keys, family identities and coverage declarations were compared unchanged
+in fresh processes; dictionary encoding reduces their total from 83,020 to
+30,307 bytes. This is storage deduplication, not a claim of fewer physical masters
+or stronger closure. Vakint only steers the RustRed loader and retains the exact
+raw terminal-set check. No FORM invocation or IBP generation occurs during
+catalog loading. See the [catalog migration details](data/rustred/four_loop/README.md).
+On RustRed `d51721b6`, the unchanged 83-test selection through three loops and
+all fifteen four-loop references plus sixteen expanded-numerator/pinch pairs
+pass again, with invalid FORM paths in the native lanes. Seven catalog/loader
+checks and three fixture checks also pass. Terminal-alias optimization is not
+enabled by this I/O-only rollout.
 
 The [historical RustRed acceptance inventory](tests/RUSTRED_ACCEPTANCE.md) maps
 all existing single-common-mass inputs through three loops to native peers.
