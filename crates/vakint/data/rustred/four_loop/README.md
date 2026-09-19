@@ -8,7 +8,7 @@ Each parent (H, FG, BMW and X) has:
 
 - a `.csv` ordered physical/auxiliary momentum descriptor;
 - a `.toml` topology-generic RustRed family-generation input;
-- a `.candidates.toml.gz` saved parametric candidate program;
+- a `.candidates.rrbin.gz` saved native-binary parametric candidate program;
 - a `.rrcat` exact map of its declared finite terminals onto FMFT's PR basis.
 
 Labels identify data files, not engine dispatch. Vakint selects a program from
@@ -25,6 +25,13 @@ No rule-generation campaign or FORM executable is invoked. Vakint consumes the
 result and reuses its pure-Rust/Symbolica FMFT master finalizer. FeynKit's normal
 tensor prepass permits a fully FORM-less evaluation chain.
 
+The binary programs contain Symbolica's native rational-polynomial atoms and
+shared state, native family geometry and structural rule/source records. They
+are trusted, build-time embedded data for the pinned RustRed/Symbolica stack;
+the native decoder is not an untrusted-file parser. Decompression and framing
+have explicit size limits. Native transport does not change rule applicability,
+the terminal basis or certification status.
+
 These are **candidate programs, not `ClosedArtifact`s**. The loader does not
 assert independent regenerated-source replay or unlimited family closure.
 Runtime guards, descent checks and the explicit terminal set remain enforced;
@@ -32,10 +39,18 @@ missing rules or unknown terminal values fail rather than falling back to FORM
 or inventing masters. Numerical comparison tests establish the tested inputs,
 not completeness for every numerator rank. On 2026-09-19, the public backend
 passed all fifteen original four-loop numerical references and all sixteen
-expanded-propagator/pinch comparisons against FMFT, using an invalid FORM path
-for FeynKit and RustRed. Full-process times were 132.59 s and 208.69 s
-respectively, including both peers and program loading, not scalar-only
-timings. See the [acceptance commands and evidence](../../../tests/experimental_rustred_4l/README.md).
+expanded-propagator/pinch comparisons against FMFT after the native-binary
+migration, using an invalid FORM path for FeynKit and RustRed. Full-process
+times were 32.45 s and 104.98 s respectively, including both peers and program
+loading, not scalar-only timings. These suites ran concurrently on disjoint
+CPU sets. Three fixture checks and three loader/catalog/raw-master unit checks
+also passed. See the [acceptance commands and evidence](../../../tests/experimental_rustred_4l/README.md).
+
+Migration preserved all 59,636 rules and 1,155 declared terminal keys. Every
+saved coefficient, source, guard and family component was compared exactly
+offline; no rules were regenerated. The four compressed programs total
+20,511,348 bytes, versus 29,947,045 bytes for the former text programs, using
+the same deterministic `gzip -n -9` command.
 
 `RustRedEvaluationOptions { substitute_masters: false }` leaves the raw PR master
 basis unexpanded. With substitution enabled, the existing finite FMFT expansion
@@ -46,25 +61,24 @@ logger; it does not increase source accuracy. Missing Laurent orders are errors.
 
 ## Offline reproduction
 
-The GammaLoop runtime pin `13bc9474` remains compatible with these assets.
-For the offline example commands below, use RustRed `91751eb2` or a compatible
-later revision: that helper amendment raises its collection-entry allowance
-for the large four-loop bundles without changing the runtime loader or schema.
-From that RustRed checkout, with the Symbolica license supplied in the
-environment:
+Use the matching RustRed runtime pin `3e6218596894649f4c5e052efa4b3caca46198c9`
+for the offline example commands below, with the Symbolica license supplied
+in the environment. These commands generate fresh programs when intentionally
+requested; the shipped migration itself converted the saved programs without
+generating new rules.
 
 ```sh
 cargo run --release --locked --offline --no-default-features \
   -p rustred-app --example candidate_bundle -- \
   generate /path/to/vakint/data/rustred/four_loop/h.toml 9 6 default \
-  /path/to/new/h.candidates.toml /path/to/new/h.report.toml
+  /path/to/new/h.candidates.rrbin /path/to/new/h.report.toml
 
 cargo run --release --locked --offline --no-default-features \
   -p rustred-app --example candidate_bundle -- \
-  verify 10 /path/to/new/h.candidates.toml \
+  verify 10 /path/to/new/h.candidates.rrbin \
   /path/to/vakint/data/rustred/four_loop/h.rrcat
 
-gzip -n -9 -c /path/to/new/h.candidates.toml > /path/to/new/h.candidates.toml.gz
+gzip -n -9 -c /path/to/new/h.candidates.rrbin > /path/to/new/h.candidates.rrbin.gz
 ```
 
 The helper requires new output paths. The zero-based nonpositive index list is
@@ -124,7 +138,7 @@ reduction and master substitution remain inside it. Any matching or dispatch
 performed internally by `evaluate_integral` is also included: this is a public
 backend measurement, not a bare `CandidateReducer` kernel timing.
 
-### Measured public-backend snapshot, 19 September 2026
+### Native-binary public-backend snapshot, 19 September 2026
 
 All nine inputs passed the initial comparison and five paired repetitions at
 relative tolerance `1e-20`, with zero uncertainty allowance. The release build
@@ -134,30 +148,36 @@ one. Shared-host contention was not otherwise eliminated.
 
 | Input | First RustRed call (s) | Repeated RustRed median (ms) | Repeated FMFT median (ms) | FMFT / RustRed |
 | --- | ---: | ---: | ---: | ---: |
-| H, first propagator cubed | 35.353 | 106.624 | 1483.568 | 13.91 |
-| H, expanded D7 numerator | 0.021 | 21.055 | 138.442 | 6.58 |
-| FG, first propagator cubed | 11.450 | 86.678 | 225.339 | 2.60 |
-| FG, expanded D7 numerator | 1.661 | 32.252 | 147.771 | 4.58 |
-| BMW, first propagator cubed | 20.907 | 79.288 | 716.347 | 9.03 |
-| BMW, expanded D7 numerator | 0.055 | 41.740 | 140.989 | 3.38 |
-| X, first propagator cubed | 127.140 | 156.553 | 4717.944 | 30.14 |
-| X, expanded D7 numerator | 2.683 | 78.877 | 169.894 | 2.15 |
-| Factorized four-tadpole | 0.016 | 14.816 | 134.338 | 9.07 |
+| H, first propagator cubed | 15.962 | 105.526 | 1669.229 | 15.82 |
+| H, expanded D7 numerator | 0.023 | 21.514 | 143.815 | 6.68 |
+| FG, first propagator cubed | 1.643 | 83.668 | 244.900 | 2.93 |
+| FG, expanded D7 numerator | 1.610 | 32.444 | 152.148 | 4.69 |
+| BMW, first propagator cubed | 6.288 | 75.208 | 716.279 | 9.52 |
+| BMW, expanded D7 numerator | 0.055 | 41.284 | 136.986 | 3.32 |
+| X, first propagator cubed | 82.864 | 150.665 | 4662.828 | 30.95 |
+| X, expanded D7 numerator | 2.934 | 84.236 | 177.525 | 2.11 |
+| Factorized four-tadpole | 0.015 | 15.136 | 132.988 | 8.79 |
 
 Each cubed-parent first call includes that parent's lazy load and uncached
 application. Subsequent inputs can reuse earlier subproblems. In particular,
-the 127.140 s X observation is **not a loader-only timing**. Repeated calls are
+the 82.864 s X observation is **not a loader-only timing**. Repeated calls are
 faster than FMFT on this finite matrix, but first-use costs remain substantial.
 Even with the parent program already loaded, initial FG/X expanded-D7 calls
-took 1.661/2.683 s, versus FMFT's 0.149/0.194 s. The repeated-call advantage
+took 1.610/2.934 s, versus FMFT's 0.169/0.240 s. The repeated-call advantage
 therefore must not be generalized to previously unseen targets.
 
-The complete benchmark process took 251.79 s wall, 231.27 s user CPU and 18.63 s
-system CPU; peak RSS was 14,686,292 KiB, with no swaps. This process includes
+The complete benchmark process took 167.33 s wall, 161.29 s user CPU and 4.85 s
+system CPU; peak RSS was 2,863,816 KiB, with no swaps. This process includes
 all nine inputs, both backends, initialization and untimed comparisons. CPU
 observations have 10 ms granularity. Per-call RSS records are snapshots, not
 independent backend peaks. Raw observations and the derived summary are kept
 in the local RustRed workspace's ignored
-`TMP/four-loop-public-benchmark.{log,time}` and
-`TMP/four-loop-public-benchmark-summary.tsv`; the test above reproduces the
-workload without those files.
+`TMP/gamma-native-migration-20260919/public-timing.{log,time}`; the test above
+reproduces the workload without those files.
+
+The previous same-workload text-program snapshot took 251.79 s overall and
+14,686,292 KiB peak RSS; its first H/FG/BMW/X calls took
+35.353/11.450/20.907/127.140 s. These separate shared-host runs are diagnostic
+comparisons, not a controlled statistical speedup claim. Native transport
+removes text-loading overhead; it does not change the application algorithm or
+make uncached reductions as fast as the repeated-cache timings.

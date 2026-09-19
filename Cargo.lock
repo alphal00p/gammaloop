@@ -5671,8 +5671,9 @@ dependencies = [
 [[package]]
 name = "rustred"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/rustred.git?rev=13bc9474#13bc947419f49d8d728e5a2617b54ae7899766eb"
+source = "git+https://github.com/alphal00p/rustred.git?rev=3e6218596894649f4c5e052efa4b3caca46198c9#3e6218596894649f4c5e052efa4b3caca46198c9"
 dependencies = [
+ "bincode 2.0.1",
  "blake3",
  "rand 0.9.4",
  "rayon",
@@ -5682,8 +5683,9 @@ dependencies = [
 [[package]]
 name = "rustred-app"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/rustred.git?rev=13bc9474#13bc947419f49d8d728e5a2617b54ae7899766eb"
+source = "git+https://github.com/alphal00p/rustred.git?rev=3e6218596894649f4c5e052efa4b3caca46198c9#3e6218596894649f4c5e052efa4b3caca46198c9"
 dependencies = [
+ "bincode 2.0.1",
  "rustred",
  "serde",
  "symbolica",

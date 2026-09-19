@@ -4,6 +4,8 @@
 //! RustRed's candidate applier finds guarded, descending rules ending in the
 //! declared terminal catalog. Unknown leaves remain errors. Discovery and
 //! FMFT terminal preparation are offline tasks, never runtime fallbacks.
+//! Native Symbolica programs are trusted, build-time embedded data from the
+//! pinned RustRed/Symbolica stack, not a public untrusted-file input boundary.
 
 use std::io::Read;
 use std::sync::{Arc, LazyLock};
@@ -11,7 +13,9 @@ use std::sync::{Arc, LazyLock};
 use flate2::read::GzDecoder;
 use rustred::input::{Compiler, Limits, LoweringLimits, TextProject, TextPropagator};
 use rustred::reduction::ReductionLimits;
-use rustred_app::{CandidateBundleLimits, MAX_CANDIDATE_BUNDLE_BYTES, load_candidate_bundle};
+use rustred_app::{
+    CandidateBundleLimits, MAX_CANDIDATE_BUNDLE_BYTES, load_generated_candidate_bundle,
+};
 use symbolica::atom::{Atom, AtomView};
 use symbolica::function;
 
@@ -26,8 +30,8 @@ use crate::{
     get_prop_with_id,
 };
 
-// Explicit shipped-data policy. This does not relax ClosedArtifact ingress or
-// the default candidate limit for callers accepting arbitrary external files.
+// Explicit shipped-data policy. These caps bound decompressed/framed data;
+// Symbolica's native readers still require trusted generated provenance.
 const MAX_PROGRAM_BYTES: usize = MAX_CANDIDATE_BUNDLE_BYTES;
 const MAX_COEFFICIENT_BYTES: usize = 512 * 1024 * 1024;
 
@@ -46,7 +50,7 @@ macro_rules! input {
             program: include_bytes!(concat!(
                 "../../data/rustred/four_loop/",
                 $name,
-                ".candidates.toml.gz"
+                ".candidates.rrbin.gz"
             )),
             catalog: include_str!(concat!("../../data/rustred/four_loop/", $name, ".rrcat")),
         }
@@ -163,8 +167,9 @@ fn load(index: usize) -> Result<ExperimentalRustRed, String> {
         max_total_coefficient_bytes: MAX_COEFFICIENT_BYTES,
         ..CandidateBundleLimits::default()
     };
-    let (family, reducer) = load_candidate_bundle::<10>(&bytes, limits, ReductionLimits::default())
-        .map_err(|error| error.to_string())?;
+    let (family, reducer) =
+        load_generated_candidate_bundle::<10>(&bytes, limits, ReductionLimits::default())
+            .map_err(|error| error.to_string())?;
     if family.fingerprint() != descriptor.family_fingerprint {
         return Err("shipped program differs from its physical/auxiliary descriptor".into());
     }
