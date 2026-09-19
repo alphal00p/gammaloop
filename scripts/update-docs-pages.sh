@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly products=(gammaloop linnet spenso idenso vakint)
+readonly products=(gammaloop linnet spenso idenso vakint feynkit)
 
 usage() {
     echo "usage: $0 <latest|snapshot> <build-root> <gh-pages-worktree> [snapshot-tag]" >&2
@@ -160,8 +160,6 @@ require_bundle() {
         tutorial/index.html \
         reference/interfaces/index.html \
         version-history/index.html \
-        manual/interfaces/index.html \
-        manual/releases/index.html \
         assets/site.css \
         assets/site.js \
         assets/local-unitarity-light.svg \
@@ -175,6 +173,13 @@ require_bundle() {
     do
         [ -f "$bundle/$required" ] || fail "incomplete product bundle: $bundle/$required is missing"
     done
+    case "$product" in
+        gammaloop|linnet|spenso|idenso|vakint)
+            for required in manual/interfaces/index.html manual/releases/index.html; do
+                [ -f "$bundle/$required" ] || fail "incomplete product bundle: $bundle/$required is missing"
+            done
+            ;;
+    esac
     case "$product" in
         gammaloop)
             [ -f "$bundle/reference/cli/index.html" ] ||

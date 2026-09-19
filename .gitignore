@@ -291,3 +291,6 @@ crates/gammaloop-api/test_path.toml
 
 # Marimo editor session state
 __marimo__/
+
+# Versioned browser wheels and generated Marimo islands for local docs previews.
+/docs/generated/notebooks/

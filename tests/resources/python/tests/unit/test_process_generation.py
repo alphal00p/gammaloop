@@ -276,9 +276,9 @@ class TestProcessGeneration:
             "import_model sm"))
         # autopep8: off
         tests: list[tuple[str, int, str | None]] = [
-            ('a a > t t~ | a t g b ghg QED^2==4 [{{1}} QCD=0] -num_grouping only_detect_zeroes --max_multiplicity_for_fast_cut_filter 0', snapshot(4), snapshot("-4")),
-            ('a a > t t~ | a t g b ghg QED^2==4 [{{2}} QCD=1] -num_grouping only_detect_zeroes --max_multiplicity_for_fast_cut_filter 0', snapshot(40), snapshot("-40")),
-            ('a a > t t~ | a t g b ghg QED^2==4 [{{3}} QCD=2] -num_grouping only_detect_zeroes --max_multiplicity_for_fast_cut_filter 0', snapshot(874), snapshot("-266")),
+            ('a a > t t~ | a t g b ghg QED^2==4 [{{1}} QCD=0] -num_grouping only_detect_zeroes', snapshot(4), snapshot("-4")),
+            ('a a > t t~ | a t g b ghg QED^2==4 [{{2}} QCD=1] -num_grouping only_detect_zeroes', snapshot(40), snapshot("-40")),
+            ('a a > t t~ | a t g b ghg QED^2==4 [{{3}} QCD=2] -num_grouping only_detect_zeroes', snapshot(874), snapshot("-266")),
         ]
         # autopep8: on
         TestProcessGeneration.run_tests(gloop, tests)

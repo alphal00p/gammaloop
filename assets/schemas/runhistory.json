@@ -4771,12 +4771,6 @@
             "$ref": "#/$defs/KvPair"
           }
         },
-        "max_multiplicity_for_fast_cut_filter": {
-          "description": "Fast cut filter switch multiplicity",
-          "type": "integer",
-          "format": "uint",
-          "minimum": 0
-        },
         "max_n_bridges": {
           "description": "Extra filters / constraints",
           "type": [
@@ -4990,8 +4984,7 @@
         "tokens",
         "append",
         "clear_existing_processes",
-        "only_diagrams",
-        "max_multiplicity_for_fast_cut_filter"
+        "only_diagrams"
       ]
     },
     "StabilityLevelSetting": {
@@ -5420,9 +5413,27 @@
             "string",
             "null"
           ]
+        },
+        "tensor_reduction_method": {
+          "$ref": "#/$defs/VakintTensorReductionMethod"
         }
       },
       "additionalProperties": false
+    },
+    "VakintTensorReductionMethod": {
+      "description": "Numerator tensor-reduction backend used by Vakint.",
+      "oneOf": [
+        {
+          "description": "Historical FORM implementation shipped with AlphaLoop.",
+          "type": "string",
+          "const": "alphaloop"
+        },
+        {
+          "description": "Native, FORM-less FeynKit tensor projector.",
+          "type": "string",
+          "const": "feynkit"
+        }
+      ]
     },
     "ValueRangeSelectorSerdeTag": {
       "type": "string",

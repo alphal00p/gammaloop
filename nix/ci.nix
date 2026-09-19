@@ -7,6 +7,10 @@
   testFeatures."gammaloop-integration-tests" = ["python-api-tests"];
   groups = [
     {
+      name = "feynkit";
+      packages = ["feynkit" "feynkit-cff" "feynkit-generator" "feynkit-graph" "feynkit-kinematics" "feynkit-model" "feynkit-py" "feynkit-tensor" "feynkit-ufo"];
+    }
+    {
       name = "core";
       packages = [
         "gammaloop-api"

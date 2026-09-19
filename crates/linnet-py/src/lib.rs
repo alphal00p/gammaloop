@@ -10,6 +10,7 @@ mod graph;
 mod mutations;
 mod native_graph;
 mod render;
+pub use render::PreparedRender;
 mod streaming;
 mod topology;
 mod typst;

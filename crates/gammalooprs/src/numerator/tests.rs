@@ -1,4 +1,7 @@
 use brotli::CompressorWriter;
+use feynkit_generator::{
+    GenerationFilter, GenerationOptions, Generator, NumeratorGrouping, Process, VertexSelector,
+};
 use idenso::{dirac::GammaSimplifier, representations::Bispinor};
 use insta::assert_snapshot;
 use linnet::half_edge::involution::Orientation;
@@ -20,6 +23,7 @@ use std::{
     fs::File,
     io::BufWriter,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 use symbolica::{
     atom::{Atom, AtomCore},
@@ -29,7 +33,7 @@ use symbolica::{
 
 use crate::{
     cross_section::Amplitude,
-    feyngen::diagram_generator::{EdgeColor, NodeColorWithVertexRule},
+    feyngen::feynkit::FeynmanDiagramGammaLoopExt,
     graph::{BareGraph, Graph},
     initialize_reps,
     model::Model,
@@ -915,27 +919,35 @@ fn one_loop_lbl_concretize() {
 #[test]
 fn dumb_four_gluon() {
     let model = load_generic_model("sm");
-
-    let gggg = NodeColorWithVertexRule {
-        external_tag: 0,
-        vertex_rule: model.get_vertex_rule("V_37"),
-    };
-    let mut four_gluon = symbolica::graph::Graph::new();
-    let v = four_gluon.add_node(gggg);
-    let g = EdgeColor::from_particle(model.get_particle("g"));
-
-    four_gluon.add_edge(v, v, false, g).unwrap();
-    four_gluon.add_edge(v, v, false, g).unwrap();
-
-    let graph = BareGraph::from_symbolica_graph(
-        &model,
-        "gggg".into(),
-        &four_gluon,
-        Atom::num(1),
-        vec![],
-        None,
-    )
-    .unwrap();
+    let process = Process::amplitude(Vec::<i64>::new(), Vec::<i64>::new())
+        .with_loop_count(2, 2)
+        .unwrap();
+    let options = GenerationOptions::default()
+        .allow_self_loops(true)
+        .max_vertices(1)
+        .numerator_grouping(NumeratorGrouping::None)
+        .with_graph_filter(GenerationFilter::VertexAllow(vec![VertexSelector::Name(
+            "V_37".to_owned(),
+        )]));
+    let generated = Generator::new(Arc::new(model.clone()))
+        .generate(&process, &options)
+        .unwrap();
+    let diagram = generated
+        .diagrams
+        .into_iter()
+        .find(|diagram| {
+            diagram.vertices().count() == 1
+                && diagram.edges().count() == 2
+                && diagram.vertices().all(|(_, vertex)| {
+                    vertex.interaction.is_some_and(|rule| {
+                        model.vertex_rule_by_id(rule).unwrap().name == "V_37"
+                    })
+                })
+        })
+        .expect("canonical generation should produce the two-loop four-gluon vacuum graph");
+    let graph = diagram
+        .to_gamma_loop_graph(None, true)
+        .unwrap();
 
     let num = Numerator::default().from_graph(&graph, &GlobalPrefactor::default());
     // println!("{}", num.state.color);

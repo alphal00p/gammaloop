@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Lint, export, and smoke-test the editable Linnet Marimo notebooks."""
+"""Lint, export, and smoke-test the editable documentation Marimo notebooks."""
 
 from __future__ import annotations
 
@@ -28,7 +28,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 EXAMPLES_DIR = Path(__file__).resolve().parent
-PUBLISHED_REQUIREMENT = '#     "linnet-py==0.1.0",'
+PUBLISHED_REQUIREMENTS = {
+    "linnet-py": '#     "linnet-py==0.1.0",',
+    "symbolica": '#     "symbolica==3.0.0",',
+    "ufo-model-loader": '#     "ufo-model-loader @ git+https://github.com/alphal00p/ufo_model_loader.git@70ddee6b416f8c8b340e0d087646d77095c5d24b",',
+}
 
 
 @dataclass(frozen=True)
@@ -37,6 +41,7 @@ class Notebook:
     ready_value: str
     docs_product: str
     docs_route: str
+    package: str = "linnet-py"
 
     @property
     def source(self) -> Path:
@@ -48,8 +53,10 @@ class Notebook:
 
     @property
     def ready_selector(self) -> str:
+        if self.package == "symbolica":
+            return f'[data-notebook-ready="{Path(self.filename).stem}"]'
         if self.ready_value == "quickstart":
-            return '[data-linnet-notebook="python_quickstart"] svg[width$="pt"]'
+            return '[data-notebook="python_quickstart"] svg[width$="pt"]'
         return f'[data-linnet-render-ready="{self.ready_value}"] svg'
 
 
@@ -57,21 +64,48 @@ NOTEBOOKS = (
     Notebook("rendering_api.py", "generic", "linnet", "guides/python-rendering/"),
     Notebook("physics_render_settings.py", "physics", "gammaloop", "guides/dot-input/"),
     Notebook("layout_stream.py", "stream", "linnet", "playground/"),
+    Notebook(
+        "../../../examples/notebooks/spenso_idenso_display.py",
+        "spenso_idenso_display",
+        "spenso",
+        "guides/showcase/",
+        "symbolica",
+    ),
+    *(
+        Notebook(
+            f"../../../examples/notebooks/feynkit/{filename}.py",
+            filename,
+            "feynkit",
+            f"guides/showcases/{route}/",
+            "symbolica",
+        )
+        for filename, route in (
+            ("00_quickstart_marimo", "first-diagram"),
+            ("01_models_and_diagrams_marimo", "models-and-diagrams"),
+            ("02_cff_and_symbolica_marimo", "cff"),
+            ("03_kinematics_and_jets_marimo", "kinematics"),
+            ("04_ufo_loading_marimo", "ufo"),
+            ("07_tensor_reduction_marimo", "tensor-reduction"),
+        )
+    ),
 )
 
 
-def validate_wasm_wheel(wheel: Path) -> Path:
+def validate_notebook_wheel(wheel: Path, package: str = "linnet-py") -> Path:
     wheel = wheel.expanduser().resolve()
     filename = wheel.name.lower()
     if not wheel.is_file() or wheel.suffix != ".whl":
-        raise ValueError(f"Linnet WASM wheel does not exist: {wheel}")
-    if not filename.startswith("linnet_py-"):
-        raise ValueError(f"Expected a linnet-py wheel, got {wheel.name}")
+        raise ValueError(f"WASM wheel does not exist: {wheel}")
+    if not filename.startswith(package.replace("-", "_") + "-"):
+        raise ValueError(f"Expected a {package} wheel, got {wheel.name}")
     if re.fullmatch(r"[a-z0-9_.+\-]+\.whl", filename) is None:
         raise ValueError(f"Wheel filename is not safe for PEP 723: {wheel.name}")
 
     platform = filename.removesuffix(".whl").rsplit("-", 1)[-1]
-    if "emscripten" not in platform and "wasm32" not in platform:
+    if package == "ufo-model-loader":
+        if not filename.endswith("-py3-none-any.whl"):
+            raise ValueError("The UFO loader must be a pure Python wheel")
+    elif "emscripten" not in platform and "wasm32" not in platform:
         raise ValueError(
             "The local wheel must target Emscripten/wasm32, not the host "
             f"platform: {wheel.name}"
@@ -96,21 +130,25 @@ def validate_wasm_wheel(wheel: Path) -> Path:
         for line in wheel_metadata.splitlines()
         if line.lower().startswith("tag:")
     ]
-    if not any("emscripten" in tag or "wasm32" in tag for tag in tags):
+    if package == "ufo-model-loader":
+        if "py3-none-any" not in tags:
+            raise ValueError("The UFO loader metadata must declare py3-none-any")
+    elif not any("emscripten" in tag or "wasm32" in tag for tag in tags):
         raise ValueError(f"Wheel metadata has no Emscripten/wasm32 tag: {wheel}")
     return wheel
 
 
-def with_local_wheel(source: str, wheel_name: str) -> str:
+def with_local_wheel(source: str, wheel_name: str, package: str = "linnet-py") -> str:
     """Replace the published dependency in a temporary notebook copy."""
 
-    if source.count(PUBLISHED_REQUIREMENT) != 1:
+    published_requirement = PUBLISHED_REQUIREMENTS[package]
+    if source.count(published_requirement) != 1:
         raise ValueError(
-            "Expected exactly one pinned linnet-py dependency in notebook "
+            f"Expected exactly one pinned {package} dependency in notebook "
             "PEP 723 metadata"
         )
-    local_requirement = f'#     "linnet-py @ ./wheels/{wheel_name}",'
-    return source.replace(PUBLISHED_REQUIREMENT, local_requirement)
+    local_requirement = f'#     "{package} @ ./wheels/{wheel_name}",'
+    return source.replace(published_requirement, local_requirement)
 
 
 @contextlib.contextmanager
@@ -118,21 +156,28 @@ def staged_notebooks(
     wheel: Path | None,
     notebooks: Sequence[Notebook],
     gammaloop: Path | None = None,
+    dependency_wheel: Path | None = None,
 ) -> Iterator[tuple[tuple[Notebook, Path], ...]]:
     """Stage copies so a local wheel override never edits the notebooks."""
 
-    with tempfile.TemporaryDirectory(prefix="linnet-marimo-wasm-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="docs-marimo-wasm-") as temporary:
         stage = Path(temporary)
         if wheel is not None:
             wheels = stage / "wheels"
             wheels.mkdir()
             shutil.copy2(wheel, wheels / wheel.name)
+            if dependency_wheel is not None:
+                shutil.copy2(dependency_wheel, wheels / dependency_wheel.name)
 
         staged = []
         for notebook in notebooks:
             source = notebook.source.read_text(encoding="utf-8")
             if wheel is not None:
-                source = with_local_wheel(source, wheel.name)
+                source = with_local_wheel(source, wheel.name, notebook.package)
+            if dependency_wheel is not None:
+                dependency = dependency_wheel.name.split("-")[0].replace("_", "-")
+                if PUBLISHED_REQUIREMENTS[dependency] in source:
+                    source = with_local_wheel(source, dependency_wheel.name, dependency)
             if notebook.ready_value == "physics":
                 repository = EXAMPLES_DIR.parents[2]
                 if gammaloop is None:
@@ -264,7 +309,11 @@ def staged_notebooks(
                     )
                 encoded = base64.b64encode(bundle.read_bytes()).decode("ascii")
                 source = source.replace(marker, f"    drawing_bundle = {encoded!r}")
-            path = stage / notebook.filename
+            if notebook.docs_product == "feynkit":
+                source = source.replace(
+                    "Path(__file__).resolve().parents[3]", 'Path("/feynkit-data")'
+                )
+            path = stage / Path(notebook.filename).name
             path.write_text(source, encoding="utf-8")
             staged.append((notebook, path))
         yield tuple(staged)
@@ -301,6 +350,7 @@ def export(
     artifacts = []
     if docs:
         import marimo as mo
+        from marimo._session.notebook.loader import load_notebook
 
         generators = []
         # Islands omit PEP 723 metadata. Install the staged wheel explicitly and
@@ -312,21 +362,68 @@ def export(
                 "dependencies"
             ]
             requirements = [
-                "__LINNET_WHEEL_URL__" if item.startswith("linnet-py @") else item
+                "__NOTEBOOK_WHEEL_URL__"
+                if item.startswith(notebook.package + " @")
+                else "__DEPENDENCY_WHEEL_URL__"
+                if " @ ./wheels/" in item
+                else item
                 for item in requirements
                 if not item.startswith("marimo==")
             ]
             source.write_text(
-                text.replace("    import ", "    linnet_browser_ready\n    import ", 1),
+                re.sub(
+                    r"(?m)^(    )(import |from )",
+                    r"\1notebook_browser_ready\n\1\2",
+                    text,
+                ),
                 encoding="utf-8",
             )
             generator = mo.MarimoIslandGenerator.from_file(
-                str(source), display_code=notebook.ready_value == "generic"
+                str(source),
+                display_code=notebook.ready_value == "generic"
+                or notebook.package == "symbolica",
             )
+            if notebook.package == "symbolica":
+                # Marimo 0.24's from_file applies one display flag to every cell.
+                # Preserve the notebook's prose/control cells and expose computation code.
+                cells = load_notebook(str(source)).app.cell_manager.cell_data()
+                for island, cell in zip(generator.stubs, cells, strict=True):
+                    island._display_code = not cell.config.hide_code
+            bootstrap = ""
+            if notebook.docs_product == "feynkit":
+                repository = EXAMPLES_DIR.parents[2]
+                assets = [
+                    repository
+                    / "crates/feynkit-model/tests/fixtures/scalars_2p_3p.json",
+                    repository / "crates/feynkit-model/tests/fixtures/sm.json",
+                    *(
+                        asset
+                        for asset in (repository / "assets/models/ufo/scalars").rglob(
+                            "*"
+                        )
+                        if asset.is_file() and "__pycache__" not in asset.parts
+                    ),
+                ]
+                bundle = source.parent / "feynkit-data.zip"
+                with zipfile.ZipFile(bundle, "w") as archive:
+                    for asset in sorted(assets):
+                        entry = zipfile.ZipInfo(
+                            asset.relative_to(repository).as_posix(),
+                            date_time=(1980, 1, 1, 0, 0, 0),
+                        )
+                        entry.compress_type = zipfile.ZIP_DEFLATED
+                        archive.writestr(entry, asset.read_bytes())
+                encoded = base64.b64encode(bundle.read_bytes()).decode("ascii")
+                bootstrap = (
+                    "import base64 as _base64, io as _io, zipfile as _zipfile\n"
+                    f"with _zipfile.ZipFile(_io.BytesIO(_base64.b64decode({encoded!r}))) as _zip:\n"
+                    "    _zip.extractall('/feynkit-data')\n"
+                )
             generator.add_code(
                 "import micropip as _micropip\n"
                 f"await _micropip.install({requirements!r}, reinstall=True)\n"
-                "linnet_browser_ready = True",
+                + bootstrap
+                + "notebook_browser_ready = True",
             )
             generators.append((notebook, generator))
 
@@ -348,11 +445,11 @@ def export(
             generator = mo.MarimoIslandGenerator()
             generator.add_code(
                 "import micropip as _micropip\n"
-                "await _micropip.install('__LINNET_WHEEL_URL__')\n"
-                "linnet_browser_ready = True",
+                "await _micropip.install('__NOTEBOOK_WHEEL_URL__')\n"
+                "notebook_browser_ready = True",
             )
             generator.add_code(
-                "linnet_browser_ready\n" + match.group(1) + "\n\n"
+                "notebook_browser_ready\n" + match.group(1) + "\n\n"
                 "import marimo as mo\n"
                 "mo.Html(graph.to_svg())",
                 display_code=True,
@@ -368,10 +465,16 @@ def export(
                     generator,
                 )
             )
-        wheel = next((staged[0][1].parent / "wheels").glob("*.whl"))
+        wheels = sorted((staged[0][1].parent / "wheels").glob("*.whl"))
+        wheel = next(
+            wheel
+            for wheel in wheels
+            if wheel.name.startswith(staged[0][0].package.replace("-", "_") + "-")
+        )
         hosted_wheel = output / "public" / "wheels" / wheel.name
         hosted_wheel.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(wheel, hosted_wheel)
+        for local_wheel in wheels:
+            shutil.copy2(local_wheel, hosted_wheel.parent / local_wheel.name)
         for notebook, generator in generators:
             body = generator.render_body(
                 include_init_island=False, include_payload=True
@@ -390,6 +493,14 @@ def export(
                         "head": generator.render_head(),
                         "body": body,
                         "wheel": "public/wheels/" + wheel.name,
+                        "dependency_wheel": next(
+                            (
+                                "public/wheels/" + item.name
+                                for item in wheels
+                                if item != wheel
+                            ),
+                            None,
+                        ),
                     }
                 ),
                 encoding="utf-8",
@@ -465,7 +576,7 @@ def http_smoke(
                 payload = json.loads(body)
                 if (
                     "<marimo-island" not in payload["body"]
-                    or "__LINNET_WHEEL_URL__" not in body
+                    or "__NOTEBOOK_WHEEL_URL__" not in body
                 ):
                     raise RuntimeError(
                         f"{artifact.name} is missing its executable islands"
@@ -536,7 +647,7 @@ def browser_smoke(
                 if response is None or not response.ok:
                     raise RuntimeError(f"Browser failed to load {url}")
                 if docs:
-                    page.locator("[data-linnet-notebook]").scroll_into_view_if_needed()
+                    page.locator("[data-notebook]").scroll_into_view_if_needed()
                 else:
                     page.locator(".cm-editor").first.wait_for(
                         state="visible",
@@ -548,6 +659,21 @@ def browser_smoke(
                     state="visible",
                     timeout=timeout,
                 )
+                if docs:
+                    page.wait_for_function(
+                        """() => !document.querySelector(
+                            'marimo-island[data-status="running"], marimo-island[data-status="queued"]'
+                        )""",
+                        timeout=timeout,
+                    )
+                    runtime_errors = page.locator(
+                        "marimo-island .text-error"
+                    ).all_text_contents()
+                    if runtime_errors:
+                        raise RuntimeError(
+                            f"Notebook errors while loading {artifact.name}: "
+                            + "; ".join(runtime_errors)
+                        )
                 if notebook.ready_value == "physics":
                     settings = page.get_by_role(
                         "button", name="Layout settings", exact=True
@@ -603,7 +729,7 @@ def parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
     selection = parser.add_mutually_exclusive_group()
     selection.add_argument(
         "--docs",
-        choices=("linnet", "gammaloop"),
+        choices=("linnet", "gammaloop", "spenso", "idenso", "feynkit"),
         help="Export this product's live cells into its built assets/notebooks directory (requires --wheel)",
     )
     selection.add_argument(
@@ -615,9 +741,15 @@ def parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
         "--wheel",
         type=Path,
         help=(
-            "Local linnet-py Emscripten wheel. Without this option the "
+            "Local Emscripten wheel: linnet-py for Linnet/GammaLoop, or symbolica "
+            "with FeynKit/Spenso/Idenso for community showcases. Without this option the "
             "published linnet-py==0.1.0 dependency is used."
         ),
+    )
+    parser.add_argument(
+        "--dependency-wheel",
+        type=Path,
+        help="Linnet WASM wheel for Spenso/Idenso, or the pinned UFO loader wheel for FeynKit",
     )
     parser.add_argument(
         "--gammaloop",
@@ -647,9 +779,8 @@ def main(arguments: Sequence[str] | None = None) -> int:
     options = parse_args(arguments)
     if options.timeout <= 0:
         raise ValueError("--timeout must be greater than zero")
-    wheel = validate_wasm_wheel(options.wheel) if options.wheel else None
     output = options.output.expanduser().resolve()
-    if options.docs and wheel is None:
+    if options.docs and options.wheel is None:
         raise ValueError("--docs requires --wheel")
     if options.docs and (output.parent.name, output.name) != ("assets", "notebooks"):
         raise ValueError(
@@ -659,13 +790,48 @@ def main(arguments: Sequence[str] | None = None) -> int:
         notebook
         for notebook in NOTEBOOKS
         if (
-            notebook.docs_product == options.docs
+            (
+                notebook.docs_product == options.docs
+                or options.docs == "idenso"
+                and notebook.docs_product == "spenso"
+            )
             if options.docs
-            else options.notebook is None
+            else (options.notebook is None and notebook.package == "linnet-py")
             or Path(notebook.filename).stem == options.notebook
         )
     )
-    with staged_notebooks(wheel, notebooks, options.gammaloop) as staged:
+    packages = {notebook.package for notebook in notebooks}
+    if len(packages) != 1:
+        raise ValueError(
+            "Select --docs or --notebook so one host wheel serves the export"
+        )
+    package = packages.pop()
+    if package == "symbolica" and not options.docs:
+        raise ValueError(
+            "Community showcases require --docs and a combined Symbolica WASM wheel"
+        )
+    wheel = validate_notebook_wheel(options.wheel, package) if options.wheel else None
+    dependency_wheel = (
+        validate_notebook_wheel(
+            options.dependency_wheel,
+            "ufo-model-loader" if options.docs == "feynkit" else "linnet-py",
+        )
+        if options.dependency_wheel
+        else None
+    )
+    if options.docs in {"spenso", "idenso", "feynkit"} and dependency_wheel is None:
+        raise ValueError(
+            "Community showcases require --dependency-wheel (Linnet or UFO loader)"
+        )
+    if dependency_wheel is not None and options.docs not in {
+        "spenso",
+        "idenso",
+        "feynkit",
+    }:
+        raise ValueError("--dependency-wheel applies only to community showcases")
+    with staged_notebooks(
+        wheel, notebooks, options.gammaloop, dependency_wheel
+    ) as staged:
         lint(staged)
         artifacts = export(staged, output, docs=options.docs)
 

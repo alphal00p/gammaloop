@@ -243,6 +243,10 @@
           "alphal00p-docs-cargo-artifacts" = alphal00pDocsCargoArtifacts;
           "alphal00p-docs-pages" = alphal00pDocsPages;
           "alphal00p-docs-snapshot-fixture" = alphal00pDocsSnapshotFixture;
+          "notebook-wasm-toolchain" = fenix.packages.${system}.combine [
+            ciToolchain
+            fenix.packages.${system}.targets.wasm32-unknown-emscripten.stable.rust-std
+          ];
           "ci-workspace-graph-json" = guppyWorkspaceGraphJson;
           "nix-ci-config" = nixCiConfiguration;
           inherit linnest-wasm;

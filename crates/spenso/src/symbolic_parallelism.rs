@@ -8,7 +8,7 @@ use symbolica::license::LicenseManager;
 /// Policy used to configure Rayon for operations that manipulate Symbolica atoms.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SymbolicParallelism {
-    /// Permit Rayon when licensed and use workload heuristics where available.
+    /// Permit Rayon on native targets when licensed, using workload heuristics.
     Auto,
     /// Keep symbolic operations on the calling thread.
     Serial,
@@ -66,7 +66,9 @@ fn resolved_setting() -> ResolvedSymbolicParallelism {
 impl SymbolicParallelism {
     fn resolve_with(self, is_licensed: impl FnOnce() -> bool) -> ResolvedSymbolicParallelism {
         match self {
-            Self::Auto if is_licensed() => ResolvedSymbolicParallelism::Adaptive,
+            Self::Auto if !cfg!(target_arch = "wasm32") && is_licensed() => {
+                ResolvedSymbolicParallelism::Adaptive
+            }
             Self::Auto | Self::Serial => ResolvedSymbolicParallelism::Serial,
             Self::Parallel => ResolvedSymbolicParallelism::Parallel,
         }

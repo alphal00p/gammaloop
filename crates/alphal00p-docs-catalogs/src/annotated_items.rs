@@ -8,6 +8,76 @@
 
 use alphal00p_docs_schema::DocItem;
 
+#[alphal00p_docs::ty(
+    id = "Model",
+    title = "Model",
+    summary = "Owns validated particles, interactions, parameters, and indexed model lookups.",
+    format = "rust-markdown",
+    source = "crates/feynkit-model/src/model.rs",
+    source_id = "feynkit_model::model::Model"
+)]
+fn feynkit_model_entry() {}
+
+#[alphal00p_docs::ty(
+    id = "UfoLoader",
+    title = "UfoLoader",
+    summary = "Imports a UFO model through a caller-owned Python interpreter.",
+    format = "rust-markdown",
+    source = "crates/feynkit-ufo/src/lib.rs",
+    source_id = "feynkit_ufo::UfoLoader"
+)]
+fn feynkit_ufo_entry() {}
+
+#[alphal00p_docs::ty(
+    id = "FourMomentum",
+    title = "FourMomentum",
+    summary = "Represents contravariant four-momenta with the mostly-minus metric.",
+    format = "rust-markdown",
+    source = "crates/feynkit-kinematics/src/momentum.rs",
+    source_id = "feynkit_kinematics::momentum::FourMomentum"
+)]
+fn feynkit_kinematics_entry() {}
+
+#[alphal00p_docs::ty(
+    id = "FeynmanDiagram",
+    title = "FeynmanDiagram",
+    summary = "Carries model-aware diagrams, momentum routing, and symbolic numerators.",
+    format = "rust-markdown",
+    source = "crates/feynkit-graph/src/lib.rs",
+    source_id = "feynkit_graph::FeynmanDiagram"
+)]
+fn feynkit_graph_entry() {}
+
+#[alphal00p_docs::ty(
+    id = "Generator",
+    title = "Generator",
+    summary = "Generates Feynman diagrams from a validated model and process specification.",
+    format = "rust-markdown",
+    source = "crates/feynkit-generator/src/generation.rs",
+    source_id = "feynkit_generator::generation::Generator"
+)]
+fn feynkit_generator_entry() {}
+
+#[alphal00p_docs::ty(
+    id = "CffGenerator",
+    title = "CffGenerator",
+    summary = "Builds cross-free families with explicit ownership of the surface cache.",
+    format = "rust-markdown",
+    source = "crates/feynkit-cff/src/generation.rs",
+    source_id = "feynkit_cff::generation::CffGenerator"
+)]
+fn feynkit_cff_entry() {}
+
+#[alphal00p_docs::ty(
+    id = "TensorReducer",
+    title = "TensorReducer",
+    summary = "Reduces selected integrated vectors using native Spenso tensor projectors.",
+    format = "rust-markdown",
+    source = "crates/feynkit-tensor/src/reduction.rs",
+    source_id = "feynkit_tensor::reduction::TensorReducer"
+)]
+fn feynkit_tensor_entry() {}
+
 #[alphal00p_docs::trait_item(
     id = "GammaLoopContext",
     title = "GammaLoopContext",
@@ -1220,6 +1290,19 @@ pub(super) fn for_component(component: &str) -> Option<Vec<DocItem>> {
             __alphal00p_docs_func_vakint_expression_evaluate_integral(),
             __alphal00p_docs_ty_vakint_numerical_evaluation_result(),
         ],
+        "feynkit" => {
+            let mut model = __alphal00p_docs_ty_feynkit_model_entry();
+            // Keep the implementation source while linking through the facade export.
+            model.source.as_mut()?.identifier = "feynkit::Model".to_owned();
+            vec![model]
+        }
+        "feynkit-model" => vec![__alphal00p_docs_ty_feynkit_model_entry()],
+        "feynkit-ufo" => vec![__alphal00p_docs_ty_feynkit_ufo_entry()],
+        "feynkit-kinematics" => vec![__alphal00p_docs_ty_feynkit_kinematics_entry()],
+        "feynkit-graph" => vec![__alphal00p_docs_ty_feynkit_graph_entry()],
+        "feynkit-generator" => vec![__alphal00p_docs_ty_feynkit_generator_entry()],
+        "feynkit-cff" => vec![__alphal00p_docs_ty_feynkit_cff_entry()],
+        "feynkit-tensor" => vec![__alphal00p_docs_ty_feynkit_tensor_entry()],
         _ => return None,
     })
 }

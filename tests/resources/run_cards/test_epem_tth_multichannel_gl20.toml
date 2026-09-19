@@ -16,8 +16,6 @@ commands = [
       --global-prefactor-num "1𝑖"
       --only-diagrams
   """,
-  "select -p epem_a_tth -i NLO --with-graph-names GL20",
-  "generate existing -p epem_a_tth -i NLO",
 ]
 
 [default_runtime_settings.general]

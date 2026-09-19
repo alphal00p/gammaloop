@@ -33,6 +33,11 @@ workspace-members = [
     "alphal00p-docs-examples",
     "alphal00p-docs-python-exporter",
     "clinnet",
+    "feynkit-cff",
+    "feynkit-generator",
+    "feynkit-graph",
+    "feynkit-py",
+    "feynkit-tensor",
     "idenso",
     # These reusable crates expose a mutually exclusive `wasm` feature for
     # Tydenso's nested workspace. Their normal native feature sets are still
@@ -55,12 +60,27 @@ third-party = [
     { name = "pyo3-stub-gen" },
 ]
 
-# Proc-macro crates build on the host side and should not carry the workspace
-# hack into normal target-side artifact archives.
+# Publishable libraries must not depend on the private workspace hack. Kurvst
+# also stays independent for its WebAssembly target. Proc-macro crates build on
+# the host side and should not carry the hack into normal target-side artifact
+# archives.
 [final-excludes]
 workspace-members = [
+    "feynkit",
+    "feynkit-cff",
+    "feynkit-generator",
+    "feynkit-graph",
+    "feynkit-kinematics",
+    "feynkit-model",
+    "feynkit-tensor",
+    "feynkit-ufo",
     "gammaloop-tracing-filter-macros",
+    "kurvst",
+    "linnet",
+    "spenso",
+    "spenso-hep-lib",
     "spenso-macros",
+    "symbolica-utils",
 ]
 # These std feature anchors are maintained outside Hakari's generated section.
 # Keep traversing their dependencies, but do not emit duplicate declarations.

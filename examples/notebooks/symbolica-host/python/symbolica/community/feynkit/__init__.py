@@ -1,0 +1,1 @@
+../../../../../../../crates/feynkit-py/python/symbolica/community/feynkit/__init__.py

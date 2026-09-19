@@ -216,7 +216,14 @@ and #link("reference/python/spynso3/ExecutionMode/")[`ExecutionMode`].
 `TensorExpression`, `Tensor`, and `TensorNetwork` share semantic display methods.
 `DisplaySettings` controls the ports, Schoonschip, and call layouts, dimensions, parentheses,
 commas, symbol scripts, and index/factor spacing. Positional calls such as `to_typst(True)`
-and `formatted(True)` still request dimensions.
+and `formatted(True)` still request dimensions. Rich Typst output collects inverse factors
+at the same product level into a single fraction, including rational coefficients.
+Graph endpoint labels use subscripts, with the ordinary first slot implicit (`s_7`);
+additional slots remain distinct (`s_(7.2)`). Dummy labels retain both identifiers.
+These display conventions preserve the underlying expressions and exact notebook payloads.
+After `to_expression()`, ordinary Symbolica printing owns namespace elision and nested
+bracket highlighting. Use `format(show_namespaces=True)` to display qualified names.
+
 
 // docs-example: compile
 ```python
@@ -256,6 +263,12 @@ Wasm plugin. Explicit `to_html` and `to_svg` calls raise an install-guidance `Im
 when the compiler is absent. Notebook `_repr_html_` and `formatted()` fall back to existing
 LaTeX or text. `TensorNetwork.__str__` remains Graphviz DOT; `to_dot()` makes that intention
 explicit. These display methods do not replace Symbolica's inherited `to_latex` API.
+
+HTML output keeps selectable native MathML and embeds the same STIX Two Math font as
+the documentation site, including in standalone offline notebooks. Math defaults to
+21 px with padding and horizontal scrolling for long expressions. Set the CSS custom
+property `--spenso-math-font-size` on the notebook or an output container to change
+the base size; nested scripts retain their relative sizing.
 
 Idenso transformations still return ordinary Symbolica expressions. Module-level
 `spenso.formatted(expression)` or `spenso.as_tensor(expression)` provides tensor-aware display.

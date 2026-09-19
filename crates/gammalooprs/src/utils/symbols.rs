@@ -6,6 +6,7 @@ use linnet::half_edge::involution::{EdgeIndex, Orientation};
 use spenso::{
     network::{library::symbolic::ETS, tags::SPENSO_TAG},
     shadowing::symbolica_utils::SpensoPrintSettings,
+    spenso_print_scripted_indexed,
     structure::{
         abstract_index::AIND_SYMBOLS,
         concrete_index::ExpandedIndex,
@@ -361,84 +362,6 @@ pub static W_: LazyLock<WildCards> = LazyLock::new(|| WildCards {
     z___: symbol!("z___"),
 });
 
-macro_rules! spenso_print_scripted_indexed {
-    ($a:ident, $opt:ident, $symbol:expr) => {
-        spenso_print_scripted_indexed!($a, $opt, $symbol, $symbol)
-    };
-    ($a:ident, $opt:ident, $symbol:expr, $typst_symbol:expr) => {{
-        match $opt.custom_print_mode.get("spenso") {
-            Some(PrintUserData::Integer(i)) => {
-                let SpensoPrintSettings {
-                    parens,
-                    symbol_scripts,
-                    commas,
-                    with_dim,
-                    ..
-                } = SpensoPrintSettings::from(*i as usize);
-
-                let AtomView::Fun(f) = $a else {
-                    return None;
-                };
-
-                let mut argiter = f.iter();
-                let id = argiter.next().unwrap();
-                let Ok(i) = usize::try_from(id) else {
-                    return None;
-                };
-
-                let is_typst = $opt.typst_mode().is_some();
-                let mut out = if is_typst {
-                    $typst_symbol.to_string()
-                } else {
-                    $symbol.to_string()
-                };
-                if is_typst {
-                    out.push('_');
-                    out.push_str(&i.to_string());
-                } else {
-                    out.push_str(&to_subscript(i as isize));
-                }
-                if $opt.color_builtin_symbols && !is_typst {
-                    out = nu_ansi_term::Color::Magenta.paint(out).to_string();
-                }
-
-                let mut printed_args = false;
-                for arg in argiter {
-                    let hidden_representation = matches!(
-                        arg,
-                        AtomView::Fun(a)
-                            if a.get_symbol().has_tag(&SPENSO_TAG.representation)
-                                && a.get_nargs() == 1
-                                && !with_dim
-                    );
-                    if hidden_representation {
-                        continue;
-                    }
-
-                    if printed_args {
-                        out.push(if commas { ',' } else { ' ' });
-                    } else {
-                        if symbol_scripts {
-                            out.push('^');
-                        }
-                        if parens {
-                            out.push('(');
-                        }
-                        printed_args = true;
-                    }
-
-                    arg.format(&mut out, $opt, PrintState::new()).unwrap();
-                }
-                if printed_args && parens {
-                    out.push(')');
-                }
-                Some(out)
-            }
-            _ => None,
-        }
-    }};
-}
-
 macro_rules! spenso_print_simple_indexed {
     ($a:ident, $opt:ident, $symbol:expr) => {
         spenso_print_simple_indexed!($a, $opt, $symbol, $symbol)
@@ -534,124 +457,23 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
     localizing_integrand: symbol!("int_loc"),
     uvaind: symbol!(
         "uvind",
-        print = |a, opt, _state| {
-            match opt.custom_print_mode.get("spenso") {
-                Some(PrintUserData::Integer(_i)) => {
-                    let AtomView::Fun(f) = a else {
-                        return None;
-                    };
-
-                    let mut out = "ᵘ".to_string();
-                    let mut first = true;
-                    for arg in f.iter() {
-                        let Ok(i) = isize::try_from(arg) else {
-                            return None;
-                        };
-
-                        if !first {
-                            out.push('.');
-                        } else {
-                            first = false;
-                        }
-                        out.push_str(&to_superscript(i));
-                    }
-                    Some(out)
-                }
-                _ => None,
-            }
-        },
-        tags = [SPENSO_TAG.index.clone()]
+        print = spenso::network::tags::tensor_print,
+        tags = [SPENSO_TAG.index.clone(), "spenso::index-label:u".to_owned()]
     ),
     edgeaind: symbol!(
         "edge",
-        print = |a, opt, _state| {
-            match opt.custom_print_mode.get("spenso") {
-                Some(PrintUserData::Integer(_i)) => {
-                    let AtomView::Fun(f) = a else {
-                        return None;
-                    };
-
-                    let mut out = "ᵉ".to_string();
-                    let mut first = true;
-                    for arg in f.iter() {
-                        let Ok(i) = isize::try_from(arg) else {
-                            return None;
-                        };
-
-                        if !first {
-                            out.push('.');
-                        }
-                        first = false;
-
-                        out.push_str(&to_superscript(i));
-                    }
-                    Some(out)
-                }
-                _ => None,
-            }
-        },
-        tags = [SPENSO_TAG.index.clone()]
+        print = spenso::network::tags::tensor_print,
+        tags = [SPENSO_TAG.index.clone(), "spenso::index-label:e".to_owned()]
     ),
     vertexaind: symbol!(
         "vertex",
-        print = |a, opt, _state| {
-            match opt.custom_print_mode.get("spenso") {
-                Some(PrintUserData::Integer(_i)) => {
-                    let AtomView::Fun(f) = a else {
-                        return None;
-                    };
-
-                    let mut out = "ᵛ".to_string();
-
-                    let mut first = true;
-                    for arg in f.iter() {
-                        let Ok(i) = isize::try_from(arg) else {
-                            return None;
-                        };
-
-                        if !first {
-                            out.push('.');
-                        }
-                        first = false;
-
-                        out.push_str(&to_superscript(i));
-                    }
-                    Some(out)
-                }
-                _ => None,
-            }
-        },
-        tags = [SPENSO_TAG.index.clone()]
+        print = spenso::network::tags::tensor_print,
+        tags = [SPENSO_TAG.index.clone(), "spenso::index-label:v".to_owned()]
     ),
     dummyaind: symbol!(
         "dummy",
-        print = |a, opt, _state| {
-            match opt.custom_print_mode.get("spenso") {
-                Some(PrintUserData::Integer(_i)) => {
-                    let AtomView::Fun(f) = a else {
-                        return None;
-                    };
-
-                    let mut out = "ᵈ".to_string();
-                    let mut first = true;
-                    for arg in f.iter() {
-                        let Ok(i) = isize::try_from(arg) else {
-                            return None;
-                        };
-
-                        if !first {
-                            out.push('.');
-                        }
-                        first = false;
-
-                        out.push_str(&to_superscript(i));
-                    }
-                    Some(out)
-                }
-                _ => None,
-            }
-        },
-        tags = [SPENSO_TAG.index.clone()]
+        print = spenso::network::tags::tensor_print,
+        tags = [SPENSO_TAG.index.clone(), "spenso::index-label:d".to_owned()]
     ),
     hedgeaind: symbol!(
         "hedge",
@@ -920,8 +742,8 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
     ),
     emr_mom: symbol!(
         "Q",
-        print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "q") },
-        tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
+        print = spenso::network::tags::tensor_print,
+        tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone(), "spenso::tensor-label:q".to_owned()]
     ),
     orientation_delta: symbol!("orientation_delta"),
     emr_vec: symbol!(

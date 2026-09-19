@@ -1,13 +1,23 @@
-digraph scalar_box {
-num=1;
-overall_factor=1;
-ext    [style=invis]
-ext -> A:1 [particle="scalar_0" id=0];
-ext -> B:2 [particle="scalar_0" id=1];
-C:3 -> ext [particle="scalar_0" id=2];
-D:0 -> ext [particle="scalar_0" id=3];
-A -> B [particle="scalar_1" id=4, lmb_index=0];
-B -> C [particle="scalar_1" id=5];
-C -> D [particle="scalar_1" id=6];
-D -> A [particle="scalar_1" id=7];
+digraph scalar_box{
+  num = "1";
+  overall_factor = "1";
+  overall_factor_evaluated = "1";
+  projector = "1";
+  A[dod="0" int_id="V_3_SCALAR_011" num="UFO::SCALAR_COUPLING"];
+  B[dod="0" int_id="V_3_SCALAR_011" num="UFO::SCALAR_COUPLING"];
+  C[dod="0" int_id="V_3_SCALAR_011" num="UFO::SCALAR_COUPLING"];
+  D[dod="0" int_id="V_3_SCALAR_011" num="UFO::SCALAR_COUPLING"];
+
+  ext0	 [style=invis];
+  ext0	-> A:1	 [id=0 dir=none sink="{ufo_order:0}" dod="-2" lmb_rep="P(1,a___)" name="e0" num="1𝑖" particle="scalar_0"];
+  ext1	 [style=invis];
+  ext1	-> B:2	 [id=1 dir=none sink="{ufo_order:0}" dod="-2" lmb_rep="P(2,a___)" name="e1" num="1𝑖" particle="scalar_0"];
+  ext2	 [style=invis];
+  C:3	-> ext2	 [id=2 dir=none source="{ufo_order:0}" dod="-2" lmb_rep="-1*P(0,a___)+P(1,a___)+P(2,a___)" name="e2" num="1𝑖" particle="scalar_0"];
+  ext3	 [style=invis];
+  D:0	-> ext3	 [id=3 dir=none source="{ufo_order:0}" dod="-2" lmb_rep="P(0,a___)" name="e3" num="1𝑖" particle="scalar_0"];
+  A:4	-> B:5	 [id=4 dir=none source="{ufo_order:1}" sink="{ufo_order:1}"  dod="-2" lmb_rep="-1*P(2,a___)+K(0,a___)" name="e4" num="1𝑖" particle="scalar_1"];
+  B:6	-> C:7	 [id=5 dir=none source="{ufo_order:2}" sink="{ufo_order:1}"  dod="-2" lmb_id="0" lmb_rep="K(0,a___)" name="e5" num="1𝑖" particle="scalar_1"];
+  C:8	-> D:9	 [id=6 dir=none source="{ufo_order:2}" sink="{ufo_order:1}"  dod="-2" lmb_rep="-1*P(1,a___)+-1*P(2,a___)+K(0,a___)+P(0,a___)" name="e6" num="1𝑖" particle="scalar_1"];
+  D:10	-> A:11	 [id=7 dir=none source="{ufo_order:2}" sink="{ufo_order:2}"  dod="-2" lmb_rep="-1*P(1,a___)+-1*P(2,a___)+K(0,a___)" name="e7" num="1𝑖" particle="scalar_1"];
 }

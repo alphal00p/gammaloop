@@ -34,9 +34,13 @@ console = "0.16.3"
 crossterm = "0.28.1"
 dirs = { workspace = true }
 eyre = { workspace = true }
+feynkit-cff = { workspace = true }
+feynkit-generator = { workspace = true }
+feynkit-graph = { workspace = true }
 figment = { version = "0.10.19", features = ["json", "toml"] }
 gammaloop-tracing-filter = { workspace = true, features = ["clap"] }
 gammalooprs = { workspace = true }
+feynkit-ufo = { workspace = true, optional = true }
 idenso = { workspace = true, features = ["native"] }
 include_dir = { workspace = true }
 indicatif = { workspace = true }
@@ -148,4 +152,4 @@ python_stubgen = [
   "gammalooprs/python_stubgen",
   "python_api",
 ]
-ufo_support = ["dep:pyo3", "pyo3/auto-initialize"]
+ufo_support = ["dep:feynkit-ufo", "dep:pyo3", "pyo3/auto-initialize"]

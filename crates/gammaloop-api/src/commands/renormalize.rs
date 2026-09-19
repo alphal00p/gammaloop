@@ -7,6 +7,7 @@ use crate::CLISettings;
 use clap::Args;
 use color_eyre::Result;
 use colored::Colorize;
+use gammalooprs::model::ModelGammaLoopExt;
 use gammalooprs::uv::ApproximationType;
 use idenso::color::{ColorSimplifier, CS};
 use idenso::shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip};
@@ -107,14 +108,17 @@ impl Renormalize {
         };
 
         for (index, graph_term) in amplitude.graphs.iter_mut().enumerate() {
-            let mut part = graph_term.renormalization_part(&settings)?.expression;
+            let mut part = graph_term
+                .renormalization_part(&state.model, &settings)?
+                .expression;
 
-            part = state
-                .model
-                .apply_parameter_replacement_rules(&state.model.apply_coupling_replacement_rules(
-                    &part.simplify_color().expand().simplify_metrics().to_dots(),
-                ))
-                .collect_factors();
+            part =
+                state
+                    .model
+                    .apply_parameter_replacement_rules(&state.model.expand_couplings(
+                        &part.simplify_color().expand().simplify_metrics().to_dots(),
+                    ))
+                    .collect_factors();
 
             if self.align_to_rqft {
                 part = (part
