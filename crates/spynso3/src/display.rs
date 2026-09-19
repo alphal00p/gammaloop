@@ -3,7 +3,8 @@ use std::{cmp::Reverse, collections::BinaryHeap, fmt::Write};
 use pyo3::{
     exceptions::{PyImportError, PyRuntimeError, PyValueError},
     prelude::*,
-    types::PyDict,
+    sync::PyOnceLock,
+    types::{PyBytes, PyDict},
 };
 use spenso::{
     algebra::complex::RealOrComplexRef,
@@ -44,6 +45,7 @@ use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pyfunction, gen_stub_pyme
 
 const RENDER_TYP: &str = include_str!("../typst/render.typ");
 const NOTATION_TYP: &str = include_str!("../typst/notation.typ");
+static NOTEBOOK_STYLE: PyOnceLock<String> = PyOnceLock::new();
 
 /// Presentation settings shared by Typst source, HTML, and SVG rendering.
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
@@ -509,7 +511,25 @@ pub(crate) fn atom_to_html(
     let html = String::from_utf8(html).map_err(|error| {
         PyRuntimeError::new_err(format!("Typst returned invalid UTF-8: {error}"))
     })?;
-    extract_html_fragment(&html).map_err(PyRuntimeError::new_err)
+    let fragment = extract_html_fragment(&html).map_err(PyRuntimeError::new_err)?;
+    // Embed the shared font so standalone notebooks also render consistently offline.
+    let style = NOTEBOOK_STYLE.get_or_try_init(py, || -> PyResult<String> {
+        let font: String = py
+            .import("base64")?
+            .call_method1(
+                "b64encode",
+                (PyBytes::new(
+                    py,
+                    include_bytes!("../typst/STIXTwoMath-Regular.woff2"),
+                ),),
+            )?
+            .call_method1("decode", ("ascii",))?
+            .extract()?;
+        Ok(include_str!("../typst/notebook.css").replace("__FONT_BASE64__", &font))
+    })?;
+    Ok(format!(
+        "<style>{style}</style><div data-spenso-math>{fragment}</div>"
+    ))
 }
 
 pub(crate) fn atom_to_svg(

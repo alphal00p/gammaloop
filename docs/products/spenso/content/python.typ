@@ -264,6 +264,12 @@ when the compiler is absent. Notebook `_repr_html_` and `formatted()` fall back 
 LaTeX or text. `TensorNetwork.__str__` remains Graphviz DOT; `to_dot()` makes that intention
 explicit. These display methods do not replace Symbolica's inherited `to_latex` API.
 
+HTML output keeps selectable native MathML and embeds the same STIX Two Math font as
+the documentation site, including in standalone offline notebooks. Math defaults to
+21 px with padding and horizontal scrolling for long expressions. Set the CSS custom
+property `--spenso-math-font-size` on the notebook or an output container to change
+the base size; nested scripts retain their relative sizing.
+
 Idenso transformations still return ordinary Symbolica expressions. Module-level
 `spenso.formatted(expression)` or `spenso.as_tensor(expression)` provides tensor-aware display.
 HTML, SVG, and rich-display functions accept `notation_source` as a trusted, complete

@@ -294,6 +294,11 @@ else:
     assert fraction_html.count("<mfrac>") == 1, fraction_html
     assert rational.to_expression() == before_render
     html = indexed.to_html()
+    # Standalone notebook fragments carry their font without a docs server.
+    import base64
+    font = html.split("data:font/woff2;base64,", 1)[1].split('"', 1)[0]
+    assert base64.b64decode(font).startswith(b"wOF2")
+    assert "<div data-spenso-math>" in html
     assert "Momentum" not in html
     assert ">𝑞<" in html
     for output in (html, indexed.to_svg()):
