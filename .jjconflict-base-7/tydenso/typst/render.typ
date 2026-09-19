@@ -268,6 +268,8 @@
   if _kind(node) != "number" { return none }
   let source = _source(node)
   if type(source) != str or not source.starts-with("-") { return none }
+  // A complex coefficient's leading minus belongs only to its real part.
+  if source.contains("𝑖") { return none }
   let positive = node
   positive.insert("source", source.slice(1))
   let text = _field(positive, ("text", "value"), default: none)
@@ -451,7 +453,14 @@
       let base-node = _field(node, ("base", "lhs", "left"), default: none)
       let exponent-node = _field(node, ("exponent", "exp", "rhs", "right"), default: none)
       if base-node == none or exponent-node == none { panic("a power node needs a base and exponent") }
+      let positive = _negative-number(exponent-node)
+      if positive != none {
+        let denominator = node
+        denominator.insert("exponent", positive)
+        return math.frac(_source-content("1"), render-node(denominator, exact: exact))
+      }
       let base = render-node(base-node, exact: exact)
+      if _source(exponent-node) == "1" { return base }
       if _kind(base-node) in ("sum", "product") { base = _parenthesize(base) }
       return math.attach(base, t: render-node(exponent-node, exact: exact))
     }
@@ -459,6 +468,40 @@
     if kind == "product" {
       let factors = _as-array(_field(node, ("factors", "arguments", "args", "children"), default: ()))
       if factors.len() == 0 { return _source-content("1") }
+      // Collect inverse factors into one denominator without changing Atom
+      // payloads on the rendered leaves or custom function calls.
+      let numerator = ()
+      let denominator = ()
+      for factor in factors {
+        if _kind(factor) == "number" {
+          let source = _source(factor)
+          let rational = if type(source) == str { source.match(regex("^(-?[0-9]+)/([0-9]+)$")) }
+          if rational != none {
+            let (num, denom) = rational.captures
+            if num != "1" { numerator.push((kind: "number", source: num)) }
+            if denom != "1" { denominator.push((kind: "number", source: denom)) }
+            continue
+          }
+        }
+        let positive = if _kind(factor) == "power" {
+          _negative-number(_field(factor, ("exponent", "exp", "rhs", "right")))
+        }
+        if positive == none {
+          numerator.push(factor)
+        } else if _source(positive) == "1" {
+          denominator.push(_field(factor, ("base", "lhs", "left")))
+        } else {
+          let reciprocal = factor
+          reciprocal.insert("exponent", positive)
+          denominator.push(reciprocal)
+        }
+      }
+      if denominator.len() > 0 {
+        return math.frac(
+          render-node((kind: "product", factors: numerator), exact: exact),
+          render-node((kind: "product", factors: denominator), exact: exact),
+        )
+      }
       return factors.map(factor => {
         let visual = render-node(factor, exact: exact)
         if _kind(factor) == "sum" { _parenthesize(visual) } else { visual }

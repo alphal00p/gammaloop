@@ -259,11 +259,11 @@ assert "Momentum" not in str(indexed)
 assert "q₁" in str(indexed)
 assert "q_{1}" in indexed._repr_latex_()
 assert "Momentum" not in indexed.to_typst()
-for label in ("ˢ⁷.⁰", "ᵗ⁷.⁰", "ᵉ⁷.⁰", "ᵛ⁷.⁰"):
+for label in ("s₇.₀", "t₇.₀", "e₇.₀", "v₇.₀"):
     assert label in str(indexed), str(indexed)
 for label in ("s", "t", "e", "v"):
-    assert f"{label}^{{7.0}}" in indexed._repr_latex_()
-    assert f"attach({label},t:(7.0))" in indexed.to_typst()
+    assert f"{label}_{{7.0}}" in indexed._repr_latex_()
+    assert f"attach({label},b:(7.0))" in indexed.to_typst()
 for vertex in indexed_diagram.vertices:
     assert isinstance(vertex.numerator_expression(), spenso.TensorExpression)
 for edge in indexed_diagram.edges:
@@ -277,6 +277,12 @@ else:
     # Scalar graphs use the same dashed-particle styling as exported Typst figures.
     assert "stroke-dasharray" in diagram.to_svg()
     assert "stroke-dasharray" in diagram._repr_html_()
+    # The portable renderer combines inverse factors without changing the tensor.
+    rational = indexed / core.Expression.parse("feynkit_py_test::x*feynkit_py_test::y")
+    before_render = rational.to_expression()
+    fraction_html = rational.to_html()
+    assert fraction_html.count("<mfrac>") == 1, fraction_html
+    assert rational.to_expression() == before_render
     html = indexed.to_html()
     assert "Momentum" not in html
     assert ">𝑞<" in html

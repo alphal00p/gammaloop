@@ -646,13 +646,18 @@ pub fn tensor_print(
         if !matches!(label, "s" | "t" | "e" | "v" | "d" | "u") {
             return None;
         }
-        let arguments = function
+        let mut arguments = function
             .iter()
             .map(isize::try_from)
             .collect::<Result<Vec<_>, _>>()
             .ok()?;
         if arguments.is_empty() {
             return None;
+        }
+        // Endpoint slot one is implicit; additional higher-spin slots remain
+        // distinct. Dummy indices keep their local identifier in every case.
+        if matches!(label, "s" | "t") && arguments.len() == 2 && arguments[1] == 1 {
+            arguments.pop();
         }
         let body = arguments
             .iter()
@@ -661,24 +666,15 @@ pub fn tensor_print(
             .join(".");
         return Some(match resolved.backend {
             SpensoPrintBackend::Plain => {
-                let prefix = match label {
-                    "s" => "ˢ",
-                    "t" => "ᵗ",
-                    "e" => "ᵉ",
-                    "v" => "ᵛ",
-                    "d" => "ᵈ",
-                    "u" => "ᵘ",
-                    _ => return None,
-                };
                 let body = arguments
                     .into_iter()
-                    .map(crate::utils::to_superscript)
+                    .map(crate::utils::to_subscript)
                     .collect::<Vec<_>>()
                     .join(".");
-                format!("{prefix}{body}")
+                format!("{label}{body}")
             }
-            SpensoPrintBackend::Latex => format!("{label}^{{{body}}}"),
-            SpensoPrintBackend::Typst => format!("attach({label},t:({body}))"),
+            SpensoPrintBackend::Latex => format!("{label}_{{{body}}}"),
+            SpensoPrintBackend::Typst => format!("attach({label},b:({body}))"),
         });
     }
     let symbol = function.get_symbol();
@@ -2257,6 +2253,54 @@ mod tests {
         assert_eq!(momentum.printer(latex).to_string(), "q_{6}^{(16)}");
         assert_eq!(typst_tensor_head(head), "q");
         assert!(momentum.to_string().contains("Momentum"));
+    }
+
+    #[test]
+    fn graph_index_labels_use_subscripts_and_keep_nondefault_slots() {
+        for label in ["s", "t", "e", "v"] {
+            let head = SymbolBuilder::new(NamespacedSymbol::parse(&format!(
+                "spenso_index_label_tests::{label}"
+            )))
+            .with_tags([
+                "spenso::index".to_owned(),
+                format!("spenso::index-label:{label}"),
+            ])
+            .with_print_function(super::tensor_print)
+            .build()
+            .unwrap();
+            for (slot, decimal, unicode) in
+                [(0, "7.0", "₇.₀"), (1, "7.1", "₇.₁"), (2, "7.2", "₇.₂")]
+            {
+                let index = function!(head, 7, slot);
+                let canonical = index.to_canonical_string();
+                let (decimal, unicode) = if matches!(label, "s" | "t") && slot == 1 {
+                    ("7", "₇")
+                } else {
+                    (decimal, unicode)
+                };
+                let mut plain = SpensoPrintSettings::typst().nice_symbolica();
+                plain.color_builtin_symbols = false;
+                assert_eq!(
+                    index.printer(plain).to_string(),
+                    format!("{label}{unicode}")
+                );
+                let latex = PrintOptions {
+                    custom_print_mode: SpensoPrintSettings::typst().into(),
+                    ..PrintOptions::latex()
+                };
+                assert_eq!(
+                    index.printer(latex).to_string(),
+                    format!("{label}_{{{decimal}}}")
+                );
+                assert_eq!(
+                    index
+                        .printer(SpensoPrintSettings::typst_options())
+                        .to_string(),
+                    format!("attach({label},b:({decimal}))")
+                );
+                assert_eq!(index.to_canonical_string(), canonical);
+            }
+        }
     }
 
     #[test]

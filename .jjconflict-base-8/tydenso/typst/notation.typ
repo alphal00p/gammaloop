@@ -192,7 +192,13 @@
     ctx.identity,
     (1,),
   )
-  if display == none { (ctx.default)() } else { _display-node(display) }
+  if display != none { return _display-node(display) }
+  let labels = ctx.tags.filter(tag => tag.starts-with("spenso::tensor-label:"))
+  if labels.len() > 0 {
+    _display-symbol(labels.first().slice("spenso::tensor-label:".len()))
+  } else {
+    (ctx.default)()
+  }
 }
 
 #let _visual(ctx, node) = (ctx.render-visual)(node)
@@ -743,6 +749,30 @@
       "spenso::trace": ctx => _render-trace(ctx, settings),
     ),
     tags: (
+      "spenso::index": ctx => {
+        let labels = ctx.tags.filter(tag => tag.starts-with("spenso::index-label:"))
+        if ctx.kind != "function" or labels.len() != 1 {
+          (ctx.default)()
+        } else {
+          let label = labels.first().split(":").last()
+          let arguments = ctx.visual-arguments
+          // The first endpoint slot is implicit; higher-spin slots and dummy
+          // identifiers remain visible, matching the native index printer.
+          if (
+            label in ("s", "t") and ctx.arguments.len() == 2
+              and _kind(ctx.arguments.at(1)) == "number"
+              and ctx.arguments.at(1).at("source", default: none) == "1"
+          ) {
+            arguments = arguments.slice(0, 1)
+          }
+          // Use a math symbol, not italic text: text boxes scale incorrectly
+          // when this label is itself nested inside a tensor's script.
+          let head = (ctx.render-visual)((kind: "variable", source: label, symbol: (name: label)))
+          // Math's smallest script style stops shrinking at deeper levels.
+          // Keep the numeric identifier subordinate even inside a fraction.
+          math.attach(head, b: text(size: 0.75em, arguments.join([.])))
+        }
+      },
       tensor: tensor,
       "spenso::tensor": tensor,
     ),
