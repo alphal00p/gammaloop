@@ -340,8 +340,6 @@ pub enum GenerationError {
         "this generalized CFF higher energy-numerator sector is not supported by the current Rust port"
     )]
     CffHigherEnergyPowerNotImplemented,
-    #[error("thermal CFF does not support uniform numerator sampling scales")]
-    ThermalNumeratorSamplingScaleUnsupported,
     #[error("cut-structure generation failed: {0}")]
     CutStructure(#[from] crate::cut_structure::CutStructureError),
     #[error("could not find a nonsingular loop-energy basis")]
@@ -500,14 +498,11 @@ fn generate_3d_expression_from_parsed_generated(
         assign_numerator_map_labels(&mut generated.expression.orientations);
         return Ok(generated);
     }
-    if options.medium_mode != crate::MediumMode::Vacuum
-        && options.numerator_sampling_scale != NumeratorSamplingScaleMode::None
-    {
-        return Err(GenerationError::ThermalNumeratorSamplingScaleUnsupported);
-    }
     // Thermal distributions belong to each surviving denominator sector.
     // Keep them outside the shared polynomial Laurent interpolation, which
     // reconstructs only the numerator and its denominator-cancelling contacts.
+    // Uniform sampling rescales those polynomial nodes, never the physical
+    // energies in the distributions or their derivatives.
     let bounds = normalize_energy_degree_bounds(
         options.energy_degree_bounds.as_deref().unwrap_or(&[]),
         parsed.internal_edges.len(),
