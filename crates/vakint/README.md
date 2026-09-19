@@ -23,6 +23,23 @@ substitutions. This scalar tail neither invokes nor falls back to FORM. The
 default evaluation order is unchanged; tensor-bearing inputs continue to use
 Vakint's existing tensor prepass before scalar evaluation.
 
+The same opt-in backend also has a four-loop candidate-program lane for the
+H, FG, BMW and X parents and their matched contractions. Its
+[bundled programs and offline master catalogs](data/rustred/four_loop/README.md)
+are loaded lazily once; ordinary evaluation never regenerates IBPs or invokes
+FORM. RustRed applies the rules and checks applicability, descent and known
+terminal leaves at each requested integer target. These programs are explicitly
+**not** unrestricted closing artifacts: unresolved targets produce an error,
+and passing a numerical test is not a proof of arbitrary-rank coverage. The
+four-loop public-backend gates passed on 2026-09-19: all fifteen original
+numerical references and sixteen expanded-numerator/pinch comparisons against
+FMFT, with invalid FORM paths for both FeynKit and the RustRed scalar tail.
+The [test instructions and evidence](tests/experimental_rustred_4l/README.md)
+record the original precision/tolerances and corrected offline catalog audit.
+The measured 132.59 s and 208.69 s are full comparison-process times, not
+RustRed scalar-only performance. This finite acceptance does not establish
+unrestricted family closure or arbitrary-rank coverage.
+
 The embedded artifacts and Vakint's pinned RustRed revision form one atomic
 build-time contract and must use RustRed's current artifact schema. Vakint does
 not migrate or decode obsolete RustRed artifact schemas. This is separate from
@@ -35,15 +52,15 @@ recorded 83-test selection passes on the pinned Symbolica 3 / RustRed
 `09cef8e3` stack with regenerated current-schema K6 bytes, following the earlier
 34-test targeted gate for MATAD's signed numerator-routing correction. Both previously failing
 all-class comparisons pass. Native FeynKit/RustRed stages use an invalid FORM
-path; separate legacy oracles use FORM. The inventory distinguishes the
-83-test matrix from the 40-entry/46-input legacy census and does not claim
-four-loop RustRed acceptance.
+path; separate legacy oracles use FORM. That historical inventory distinguishes
+the 83-test matrix from the 40-entry/46-input legacy census; the new four-loop
+acceptance results are recorded separately above.
 
 The shared parent-routing validator is also tested against all 19 registered
 four-loop classes and their 123 surviving propagator slots. It reuses the
 matcher's signed simultaneous witness, without graph rematching or topology-name
-dispatch. Four-loop RustRed evaluation remains unavailable until closing
-artifacts and terminal catalogs are shipped. This routing follow-up passes 39
+dispatch. The new four-loop candidate-program lane uses this same witness.
+The earlier routing-only follow-up passes 39
 focused tests, including the existing 16-test K6 pipeline; it is not a fresh
 rerun of the complete 83-test selection or a four-loop numerical-parity claim.
 

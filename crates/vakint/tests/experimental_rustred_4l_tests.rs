@@ -8,16 +8,17 @@
 
 #[path = "experimental_rustred_4l/acceptance_inputs.rs"]
 mod acceptance_inputs;
+#[path = "experimental_rustred_4l/catalog_validation.rs"]
+mod catalog_validation;
 #[path = "experimental_rustred_4l/input.rs"]
 mod input;
 #[path = "experimental_rustred_4l/numerator.rs"]
 mod numerator;
-#[path = "experimental_rustred_4l/propagator_pinches.rs"]
-mod propagator_pinches;
 mod test_utils;
 #[path = "experimental_rustred_4l/timing.rs"]
 mod timing;
 
+use input::retained_parent_descriptor;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::PathBuf;
@@ -31,61 +32,9 @@ use vakint::rustred_evaluation::experimental::{
     catalog::OfflineTerminalCatalog, prepare_candidate_integrals,
 };
 use vakint::{
-    EvaluationMethod, EvaluationOrder, FMFTOptions, LoopNormalizationFactor, Vakint,
-    VakintExpression, VakintSettings,
+    EvaluationMethod, EvaluationOrder, FMFTOptions, LoopNormalizationFactor, Vakint, VakintSettings,
 };
 use vakint::{vakint_parse as vk_parse, vakint_symbol as vk_symbol};
-
-/// The complete four-loop analytic/FMFT acceptance inventory currently used
-/// by Vakint.  This is intentionally kept as an explicit list: a future
-/// sealed four-loop RustRed artifact must exercise every one of these inputs,
-/// not just the finite parent/dotted/pinch probes below.
-const FOUR_LOOP_ANALYTIC_FMFT_CASES: [&str; 15] = [
-    "test_integrate_4l_h",
-    "test_integrate_4l_h_squared_mass",
-    "test_integrate_4l_h_rank_4",
-    "test_integrate_4l_h_rank_4_additional_symbols_numerator",
-    "test_integrate_4l_PR9d_from_H",
-    "test_integrate_4l_PR9d_from_X",
-    "test_integrate_4l_PR9d_from_H_pinch",
-    "test_integrate_4l_PR9d_from_FG",
-    "test_integrate_4l_PR9d_from_FG_pinch",
-    "test_integrate_4l_PR11d",
-    "test_integrate_4l_clover",
-    "test_integrate_4l_clover_with_non_unit_scales",
-    "test_integrate_4l_dotted_clover",
-    "test_integrate_4l_clover_with_numerator",
-    // Historical name is misleading: this input is a four-tadpole.
-    "test_integrate_1l_decorated_indices_fmft",
-];
-
-/// Inventory-only gate for the eventual complete four-loop lane.
-///
-/// This deliberately remains ignored until a sealed four-loop artifact and
-/// terminal catalog are shipped.  It checks that the upstream FMFT cases are
-/// still present and reports the precise production prerequisite instead of
-/// pretending that finite candidate experiments constitute whole-family
-/// acceptance.
-#[test]
-#[ignore = "requires a sealed four-loop RustRed artifact and terminal catalog"]
-fn four_loop_rustred_fmft_inventory_requires_sealed_artifact() {
-    let source = [
-        include_str!("integral_evaluation_analytic_tests.rs"),
-        include_str!("integral_evaluation_freeform_tests.rs"),
-    ]
-    .concat();
-    for case in FOUR_LOOP_ANALYTIC_FMFT_CASES {
-        assert!(
-            source.contains(&format!("fn {case}()")),
-            "upstream four-loop FMFT case disappeared: {case}"
-        );
-    }
-    panic!(
-        "four-loop RustRed lane is not enabled: {} FMFT cases are inventoried, \
-         but no authenticated artifact/catalog is registered in Vakint",
-        FOUR_LOOP_ANALYTIC_FMFT_CASES.len()
-    );
-}
 
 /// A negative-boundary stub only; never a numerical reduction oracle.
 #[derive(Debug)]
@@ -467,46 +416,6 @@ fn candidate_all_four_loop_analytic_acceptance_cases_match_fmft() {
     );
 }
 
-/// Select the RustRed candidate family from the one retained matcher witness.
-/// The historical acceptance label is metadata for the FORM fixture and is
-/// deliberately ignored here; a contracted input may be named after a larger
-/// family while matching a different defining parent.
-fn retained_parent_descriptor(input: &Atom) -> acceptance_inputs::ParentDescriptor {
-    Vakint::initialize_vakint_symbols();
-    let vakint = Vakint::new().unwrap();
-    let term = VakintExpression::split_integrals(input.as_view())
-        .unwrap()
-        .into_iter()
-        .next()
-        .expect("acceptance input contains one integral term");
-    let mut matched = vakint
-        .topologies
-        .match_topologies_to_user_input(term.integral.as_view(), false)
-        .unwrap()
-        .expect("acceptance input has a registered topology match");
-    let witness = matched.candidate_parent_momenta().unwrap();
-    [
-        (acceptance_inputs::ParentDescriptor::H, "H"),
-        (acceptance_inputs::ParentDescriptor::X, "X"),
-        (acceptance_inputs::ParentDescriptor::Bmw, "BMW"),
-        (acceptance_inputs::ParentDescriptor::Fg, "FG"),
-    ]
-    .into_iter()
-    .find_map(|(descriptor, _)| {
-        let candidate = input::ParentInput::from_csv(descriptor.csv());
-        (candidate.physical_momenta == witness).then_some(descriptor)
-    })
-    .unwrap_or_else(|| {
-        panic!(
-            "retained matcher parent has no candidate descriptor: {:?}",
-            witness
-                .iter()
-                .map(Atom::to_canonical_string)
-                .collect::<Vec<_>>()
-        )
-    })
-}
-
 fn run_candidate_finite_family(
     family_name: &'static str,
     source: String,
@@ -529,10 +438,7 @@ fn run_candidate_finite_family(
         let catalog_directory = std::env::var_os("VAKINT_4L_CANDIDATE_CATALOG_DIR")
             .map(PathBuf::from)
             .or_else(|| {
-                Some(
-                    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                        .join("tests/inputs/experimental_four_loop_catalogs"),
-                )
+                Some(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data/rustred/four_loop"))
             });
         let catalog_only = std::env::var_os("VAKINT_4L_CANDIDATE_CATALOG_ONLY").is_some();
         let form = std::env::var("VAKINT_4L_CANDIDATE_ORACLE_FORM_PATH").unwrap_or_else(|_| {

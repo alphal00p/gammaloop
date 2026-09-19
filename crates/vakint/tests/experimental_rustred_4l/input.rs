@@ -7,6 +7,43 @@ use symbolica::atom::{Atom, AtomCore};
 use symbolica::function;
 use vakint::symbols::S;
 use vakint::vakint_parse as vk_parse;
+use vakint::{Vakint, VakintExpression};
+
+/// Select test data using the retained matcher witness, never a fixture name.
+/// Contracted inputs may retain a different defining parent from their label.
+pub fn retained_parent_descriptor(input: &Atom) -> super::acceptance_inputs::ParentDescriptor {
+    use super::acceptance_inputs::ParentDescriptor;
+    Vakint::initialize_vakint_symbols();
+    let vakint = Vakint::new().unwrap();
+    let term = VakintExpression::split_integrals(input.as_view())
+        .unwrap()
+        .into_iter()
+        .next()
+        .expect("acceptance input contains one integral term");
+    let mut matched = vakint
+        .topologies
+        .match_topologies_to_user_input(term.integral.as_view(), false)
+        .unwrap()
+        .expect("acceptance input has a registered topology match");
+    let witness = matched.candidate_parent_momenta().unwrap();
+    [
+        ParentDescriptor::H,
+        ParentDescriptor::X,
+        ParentDescriptor::Bmw,
+        ParentDescriptor::Fg,
+    ]
+    .into_iter()
+    .find(|descriptor| ParentInput::from_csv(descriptor.csv()).physical_momenta == witness)
+    .unwrap_or_else(|| {
+        panic!(
+            "retained matcher parent has no supplied descriptor: {:?}",
+            witness
+                .iter()
+                .map(Atom::to_canonical_string)
+                .collect::<Vec<_>>()
+        )
+    })
+}
 
 pub struct ParentInput {
     pub family: Arc<IntegralFamily>,

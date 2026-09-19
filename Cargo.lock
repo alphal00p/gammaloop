@@ -5671,12 +5671,23 @@ dependencies = [
 [[package]]
 name = "rustred"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/rustred.git?rev=f803d2bc#f803d2bc7248d0b791b614108e21f172f5b5265e"
+source = "git+https://github.com/alphal00p/rustred.git?rev=13bc9474#13bc947419f49d8d728e5a2617b54ae7899766eb"
 dependencies = [
  "blake3",
  "rand 0.9.4",
  "rayon",
  "symbolica",
+]
+
+[[package]]
+name = "rustred-app"
+version = "0.1.0"
+source = "git+https://github.com/alphal00p/rustred.git?rev=13bc9474#13bc947419f49d8d728e5a2617b54ae7899766eb"
+dependencies = [
+ "rustred",
+ "serde",
+ "symbolica",
+ "toml 1.1.2+spec-1.1.0",
 ]
 
 [[package]]
@@ -8033,6 +8044,7 @@ dependencies = [
  "colored 3.1.1",
  "eyre",
  "feynkit-tensor",
+ "flate2",
  "log",
  "phf 0.13.1",
  "pyo3",
@@ -8040,6 +8052,7 @@ dependencies = [
  "regex",
  "rug",
  "rustred",
+ "rustred-app",
  "spenso",
  "string-template-plus",
  "symbolica",

@@ -1,8 +1,9 @@
 //! Opt-in, per-integral comparisons of unsealed RustRed candidate rules.
 //!
-//! This development seam is deliberately absent from `EvaluationMethod` and
-//! the shipped artifact registry. Successful numerical comparisons certify
-//! neither a whole family nor arbitrary indices. Rule selection, pointwise
+//! This diagnostic seam accepts explicitly supplied candidate programs. The
+//! shipped four-loop backend reuses its already-matched-input adapter.
+//! Successful numerical comparisons certify neither a whole family nor
+//! arbitrary indices. Rule selection, pointwise
 //! guards, descent, memoization and unresolved-leaf errors belong to RustRed.
 //! Vakint only consumes its existing match/routing witness and an explicitly
 //! supplied, offline terminal-value catalog. There is no FORM fallback here.
@@ -136,91 +137,111 @@ pub fn prepare_candidate_integrals(
             .ok_or_else(|| candidate_error("input has no registered topology match"))?;
         matched.apply_replacement_rules()?;
         term.apply_numerator_replacement_rules(&matched, settings)?;
-        let integral = matched.canonical_topology.get_integral();
-        if integral.n_loops != 4 {
-            return Err(candidate_error(
-                "experimental FMFT finalization requires four loops",
-            ));
-        }
-        integral.validate_parent_routing(reducer.parent_momenta())?;
-        let canonical_loop_momenta = (1..=integral.n_loops)
-            .map(|axis| function!(S.k, Atom::num(axis)))
-            .collect::<Vec<_>>();
-        let routed_numerator = super::numerator::route_to_parent(
+        prepared.extend(prepare_matched_candidate_integral(
             term.numerator.as_view(),
-            &canonical_loop_momenta,
-            integral
-                .parent_routing
-                .as_ref()
-                .map(|(_, coordinates)| coordinates.as_ref()),
-        );
-        // Parent routing expands vector sums at component level. Restore the
-        // scalar-product representation before replacing vector labels, just
-        // as the production materializer does. Otherwise k(i,mu) is not
-        // matched by k(i), so loop components become opaque spectators in the
-        // family-bound scalar lowerer.
-        let scalar_numerator = Vakint::convert_to_dot_notation(routed_numerator.as_view());
-        let family_numerator = (1..=integral.n_loops).fold(scalar_numerator, |value, axis| {
-            value
-                .replace(function!(S.k, Atom::num(axis)).to_pattern())
-                .with(
-                    vk_parse!(format!("k{axis}"))
-                        .expect("family loop label parses")
-                        .to_pattern(),
-                )
-        });
-        if family_numerator.contains_symbol(S.k) {
-            return Err(candidate_error(
-                "parent-routed numerator retains loop-vector components; tensor preprocessing must produce scalar products",
-            ));
-        }
-        let expression = integral
-            .canonical_expression
+            &matched,
+            reducer,
+        )?);
+    }
+    Ok(prepared)
+}
+
+/// Consume the match and simultaneous routing supplied by Vakint's dispatcher.
+/// Unlike the diagnostic convenience entry point, this never rematches input.
+fn prepare_matched_candidate_integral(
+    numerator: AtomView,
+    matched: &ReplacementRules,
+    reducer: &dyn CandidateScalarReduction,
+) -> Result<Vec<PreparedCandidateIntegral>, VakintError> {
+    let integral = matched.canonical_topology.get_integral();
+    if integral.n_loops != 4 {
+        return Err(candidate_error(
+            "experimental FMFT finalization requires four loops",
+        ));
+    }
+    integral.validate_parent_routing(reducer.parent_momenta())?;
+    let canonical_loop_momenta = (1..=integral.n_loops)
+        .map(|axis| function!(S.k, Atom::num(axis)))
+        .collect::<Vec<_>>();
+    let routed_numerator = super::numerator::route_to_parent(
+        numerator,
+        &canonical_loop_momenta,
+        integral
+            .parent_routing
             .as_ref()
-            .ok_or_else(|| candidate_error("matched canonical expression is absent"))?;
-        let mut powers = vec![0; reducer.index_count()];
-        let mut mass: Option<Atom> = None;
-        for slot in 1..=integral.n_props {
-            let Some(properties) = get_prop_with_id(expression.as_view(), slot) else {
-                continue;
-            };
-            powers[slot - 1] = properties
-                .get(&vk_symbol!("pow_"))
-                .and_then(|power| get_integer_from_atom(power.as_view()))
-                .ok_or_else(|| candidate_error("noninteger matched propagator power"))?;
-            let current = properties
-                .get(&vk_symbol!("mUVsq_"))
-                .ok_or_else(|| candidate_error("matched propagator mass is absent"))?;
-            if current.is_zero() || mass.as_ref().is_some_and(|mass| mass != current) {
-                return Err(candidate_error(
-                    "candidate input requires one nonzero common mass",
-                ));
-            }
-            mass.get_or_insert_with(|| current.clone());
-        }
-        let base =
-            IntegralKey::try_new(powers).map_err(|error| candidate_error(error.to_string()))?;
-        let lowered = reducer
-            .lower_scalar_numerator(&family_numerator, &base)
-            .map_err(candidate_error)?;
-        if lowered.is_empty() {
+            .map(|(_, coordinates)| coordinates.as_ref()),
+    );
+    // Parent routing expands vector sums at component level. Restore the
+    // scalar-product representation before replacing vector labels, just
+    // as the production materializer does. Otherwise k(i,mu) is not
+    // matched by k(i), so loop components become opaque spectators in the
+    // family-bound scalar lowerer.
+    let scalar_numerator = Vakint::convert_to_dot_notation(routed_numerator.as_view());
+    let family_numerator = (1..=integral.n_loops).fold(scalar_numerator, |value, axis| {
+        value
+            .replace(function!(S.k, Atom::num(axis)).to_pattern())
+            .with(
+                vk_parse!(format!("k{axis}"))
+                    .expect("family loop label parses")
+                    .to_pattern(),
+            )
+    });
+    if family_numerator.contains_symbol(S.k) {
+        return Err(candidate_error(
+            "parent-routed numerator retains loop-vector components; tensor preprocessing must produce scalar products",
+        ));
+    }
+    let expression = integral
+        .canonical_expression
+        .as_ref()
+        .ok_or_else(|| candidate_error("matched canonical expression is absent"))?;
+    let mut powers = vec![0; reducer.index_count()];
+    let mut mass: Option<Atom> = None;
+    for slot in 1..=integral.n_props {
+        let Some(properties) = get_prop_with_id(expression.as_view(), slot) else {
+            continue;
+        };
+        powers[slot - 1] = properties
+            .get(&vk_symbol!("pow_"))
+            .and_then(|power| get_integer_from_atom(power.as_view()))
+            .ok_or_else(|| candidate_error("noninteger matched propagator power"))?;
+        let current = properties
+            .get(&vk_symbol!("mUVsq_"))
+            .ok_or_else(|| candidate_error("matched propagator mass is absent"))?;
+        if current.is_zero() || mass.as_ref().is_some_and(|mass| mass != current) {
             return Err(candidate_error(
-                "scalar-numerator lowering returned no terms",
+                "candidate input requires one nonzero common mass",
             ));
         }
-        let mass_squared = mass.ok_or_else(|| candidate_error("candidate input has no mass"))?;
-        prepared.extend(lowered.into_iter().map(|term| PreparedCandidateIntegral {
+        mass.get_or_insert_with(|| current.clone());
+    }
+    let base = IntegralKey::try_new(powers).map_err(|error| candidate_error(error.to_string()))?;
+    let lowered = reducer
+        .lower_scalar_numerator(&family_numerator, &base)
+        .map_err(candidate_error)?;
+    if lowered.is_empty() {
+        return Err(candidate_error(
+            "scalar-numerator lowering returned no terms",
+        ));
+    }
+    let mass_squared = mass.ok_or_else(|| candidate_error("candidate input has no mass"))?;
+    Ok(lowered
+        .into_iter()
+        .map(|term| PreparedCandidateIntegral {
             target: term.target,
             mass_squared: mass_squared.clone(),
             scalar_numerator: term.scalar_spectator,
             coefficient: term.coefficient,
             common_mass_squared_power: term.common_mass_squared_power,
-        }));
-    }
-    Ok(prepared)
+        })
+        .collect())
 }
 
-/// Development-only adapter with an explicit offline FMFT terminal catalog.
+/// Unsealed-program adapter with an explicit offline FMFT terminal catalog.
+///
+/// Diagnostics supply their own program. The public four-loop backend uses
+/// only the bundled, finite-tested programs selected from its structural
+/// registry and passes the existing matcher witness directly.
 #[derive(Debug)]
 pub struct ExperimentalRustRed {
     reducer: Arc<dyn CandidateScalarReduction>,
@@ -287,9 +308,36 @@ impl ExperimentalRustRed {
         input: AtomView,
     ) -> Result<CandidateEvaluation, VakintError> {
         let terms = prepare_candidate_integrals(vakint, settings, input, self.reducer.as_ref())?;
+        self.evaluate_prepared(settings, &terms, &self.master_options)
+    }
+
+    pub(super) fn evaluate_matched(
+        &self,
+        settings: &VakintSettings,
+        numerator: AtomView,
+        matched: &ReplacementRules,
+        substitute_masters: bool,
+    ) -> Result<CandidateEvaluation, VakintError> {
+        let terms = prepare_matched_candidate_integral(numerator, matched, self.reducer.as_ref())?;
+        self.evaluate_prepared(
+            settings,
+            &terms,
+            &FMFTOptions {
+                expand_masters: substitute_masters,
+                susbstitute_masters: substitute_masters,
+            },
+        )
+    }
+
+    fn evaluate_prepared(
+        &self,
+        settings: &VakintSettings,
+        terms: &[PreparedCandidateIntegral],
+        master_options: &FMFTOptions,
+    ) -> Result<CandidateEvaluation, VakintError> {
         let mut contributions = BTreeMap::<Atom, Atom>::new();
         let mut applied_rules = 0usize;
-        for term in &terms {
+        for term in terms {
             let reduction = self
                 .reducer
                 .reduce_unit_mass(&term.target)
@@ -340,8 +388,7 @@ impl ExperimentalRustRed {
         // Native FMFT finalization expands Laurent series and substitutes
         // finite master tables; doing that per target can expose an
         // unsupported pole before another target cancels it exactly.
-        let value =
-            finalize_candidate_contributions(settings, contributions, &self.master_options)?;
+        let value = finalize_candidate_contributions(settings, contributions, master_options)?;
         Ok(CandidateEvaluation {
             value,
             targets: terms.len(),

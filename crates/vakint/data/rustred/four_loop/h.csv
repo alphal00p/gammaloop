@@ -1,0 +1,13 @@
+# Input-only physical parent and auxiliary momentum descriptor.
+# Rows: edge_from, edge_to, k1, k2, k3, k4.
+# Physical propagators precede auxiliary slots; an auxiliary edge is 0,0.
+5,1,1,0,0,0
+2,6,0,1,0,0
+6,5,0,0,1,0
+3,4,0,0,0,1
+4,5,1,0,-1,0
+6,3,0,1,-1,0
+4,1,-1,0,1,1
+2,3,0,-1,1,1
+1,2,0,0,1,1
+0,0,1,-1,0,0

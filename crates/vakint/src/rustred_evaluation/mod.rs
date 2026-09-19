@@ -1,6 +1,11 @@
-//! FORM-independent scalar reduction through sealed RustRed artifacts.
+//! FORM-independent scalar reduction through shipped RustRed programs.
+//!
+//! One through three loops use sealed artifacts. Four loops use finite-tested
+//! candidate programs with pointwise guard, descent, and terminal checks;
+//! successful evaluation is not an unrestricted family-closure claim.
 
 mod artifact;
+mod four_loop;
 mod matching;
 mod materialize;
 mod numerator;
@@ -8,6 +13,8 @@ mod terminal;
 
 #[cfg(feature = "experimental-rustred")]
 pub mod experimental;
+#[cfg(not(feature = "experimental-rustred"))]
+mod experimental;
 
 use std::fmt;
 
@@ -85,14 +92,15 @@ pub enum RustRedEvaluationError {
     MassExponentAdditionOverflow { reduction: i128, numerator: u32 },
 }
 
-/// Whether the opt-in scalar backend owns a sealed artifact for this matcher class.
+/// Whether the opt-in scalar backend owns a shipped program for this matcher class.
 pub(crate) fn supports(
     settings: &VakintSettings,
     topology: &Topology,
     options: &RustRedEvaluationOptions,
 ) -> bool {
     (!options.substitute_masters || settings.number_of_terms_in_epsilon_expansion <= 5)
-        && MatchedScalarFamily::try_from_topology(topology).is_ok()
+        && (MatchedScalarFamily::try_from_topology(topology).is_ok()
+            || four_loop::supports(topology))
 }
 
 impl Vakint {
@@ -107,6 +115,9 @@ impl Vakint {
         integral_specs: &ReplacementRules,
         options: &RustRedEvaluationOptions,
     ) -> Result<Atom, VakintError> {
+        if integral_specs.canonical_topology.get_integral().n_loops == 4 {
+            return four_loop::evaluate(settings, numerator, integral_specs, options);
+        }
         MatchedScalarFamily::try_new(integral_specs)?
             .evaluate(settings, numerator, options)
             .map_err(Into::into)

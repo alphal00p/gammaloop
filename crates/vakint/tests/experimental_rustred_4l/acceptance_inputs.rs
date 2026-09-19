@@ -361,7 +361,7 @@ pub fn cases() -> Vec<AcceptanceInput> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod fixture_checks {
     use super::*;
 
     const ANALYTIC: &str = include_str!("../integral_evaluation_analytic_tests.rs");
@@ -400,8 +400,7 @@ mod tests {
         literal.split('"').next().unwrap().replace("\\\n", "")
     }
 
-    #[test]
-    fn all_literal_inputs_and_numerical_settings_match_existing_acceptance() {
+    pub(crate) fn all_literal_inputs_and_numerical_settings_match_existing_acceptance() {
         let cases = cases();
         assert_eq!(cases.len(), 15);
         assert_eq!(ANALYTIC.matches("fn test_integrate_4l_").count(), 14);

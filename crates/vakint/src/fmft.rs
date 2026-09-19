@@ -1,6 +1,8 @@
 use std::collections::{BTreeMap, HashMap};
 
 mod finalize;
+#[cfg(test)]
+mod routing_tests;
 
 use crate::fmft_numerics::{MASTERS_EXPANSION, MASTERS_NUMERIC_SUBSTITUTIONS};
 use crate::utils::vakint_macros::{vk_parse, vk_symbol};
@@ -35,6 +37,23 @@ pub struct FMFT {
 impl FMFT {
     pub fn with_settings(settings: VakintSettings) -> Self {
         FMFT { settings }
+    }
+
+    /// Signed FMFT momentum IDs for each registered physical propagator.
+    /// Denominators only depend on the absolute ID, but numerator scalar
+    /// products must retain the relative orientations. In particular, FG's
+    /// fifth edge carries `k(4) = -p6`: its seventh edge then gives
+    /// `k(1)-k(3)+k(4) = p1-p4-p6 = p8`, as required by `sp2den`.
+    fn oriented_edge_map(integral_name: &str) -> Result<&'static [i32], VakintError> {
+        match integral_name.split("_pinch_").next().unwrap() {
+            "I4L_H" => Ok(&[2, 3, 4, 5, 6, 7, 8, 9, 1]),
+            "I4L_X" => Ok(&[2, 3, 4, 5, 6, 7, 8, 9, 10]),
+            "I4L_BMW" => Ok(&[3, 4, 5, 6, 7, 8, 9, 10]),
+            "I4L_FG" => Ok(&[1, 3, 4, 5, -6, 7, 8, 9]),
+            _ => Err(VakintError::InvalidGenericExpression(format!(
+                "Integral {integral_name} is not supported by FMFT."
+            ))),
+        }
     }
 
     pub fn process_fmft_form_output(
@@ -257,20 +276,7 @@ impl Vakint {
         let (muv_atom, muv_sq_atom) =
             Vakint::identify_uv_mass_symbols(integral.canonical_expression.as_ref().unwrap())?;
 
-        // Here we map the propagators in the correct order for the definition of the topology in FMFT
-        let vakint_to_fmft_edge_map = match integral_name.as_str().split("_pinch_").next().unwrap()
-        {
-            "I4L_H" => vec![2, 3, 4, 5, 6, 7, 8, 9, 1],
-            "I4L_X" => vec![2, 3, 4, 5, 6, 7, 8, 9, 10],
-            "I4L_BMW" => vec![3, 4, 5, 6, 7, 8, 9, 10],
-            "I4L_FG" => vec![1, 3, 4, 5, 6, 7, 8, 9],
-            _ => {
-                return Err(VakintError::InvalidGenericExpression(format!(
-                    "Integral {} is not supported by FMFT.",
-                    integral_name
-                )));
-            }
-        };
+        let vakint_to_fmft_edge_map = FMFT::oriented_edge_map(&integral_name)?;
 
         let mut numerator = Vakint::convert_to_dot_notation(input_numerator);
 
@@ -311,7 +317,7 @@ impl Vakint {
             }
         }
 
-        let vakint_to_fmft_edge_map_copy = vakint_to_fmft_edge_map.clone();
+        let vakint_to_fmft_edge_map_copy = vakint_to_fmft_edge_map;
         let muv_sq_atom_clone = muv_sq_atom.clone();
         numerator = numerator.replace(
                 function!(S.dot, function!(S.k, S.id1_a), function!(S.k, S.id2_a))
@@ -339,7 +345,8 @@ impl Vakint {
                     // in FMFT, the loop momenta dot products need to be written p<i>.p<i>
                     // The outter dot will be converted to an inner dot in the next step
                     // Again we must normalize by the dimensionality muv^2
-                    vk_parse!(format!("dot(p{},p{})", i_edge1, i_edge2).as_str()).unwrap()
+                    Atom::num(i_edge1.signum() * i_edge2.signum())
+                        * vk_parse!(format!("dot(p{},p{})", i_edge1.abs(), i_edge2.abs()).as_str()).unwrap()
                         * (muv_sq_atom_clone.clone())
                 }
             );
@@ -385,7 +392,7 @@ impl Vakint {
         let integral_string = powers
             .iter()
             .zip(vakint_to_fmft_edge_map)
-            .map(|(pwr, fmft_edge_index)| format!("d{}^{}", fmft_edge_index, -pwr))
+            .map(|(pwr, fmft_edge_index)| format!("d{}^{}", fmft_edge_index.abs(), -pwr))
             .collect::<Vec<_>>()
             .join("*");
 

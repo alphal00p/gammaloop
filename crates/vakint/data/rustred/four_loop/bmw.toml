@@ -1,0 +1,21 @@
+schema = "rustred.project.toml.v1"
+# Physical BMW parent followed by two auxiliary ISPs; no custom family name.
+[family]
+loop_momenta = ["k1", "k2", "k3", "k4"]
+external_momenta = []
+dimension = "d"
+denominators = [
+  {id="D1", expression="k1^2-1"},
+  {id="D2", expression="k2^2-1"},
+  {id="D3", expression="k3^2-1"},
+  {id="D4", expression="k4^2-1"},
+  {id="D5", expression="(k1-k2)^2-1"},
+  {id="D6", expression="(k3-k4)^2-1"},
+  {id="D7", expression="(k2+k3-k1)^2-1"},
+  {id="D8", expression="(k3-k4-k1)^2-1"},
+  {id="D9", expression="(k1-k3)^2-1"},
+  {id="D10", expression="(k2-k4)^2-1"},
+]
+[target]
+powers = [1,1,1,1,1,1,1,1,0,0]
+numerator = "1"
