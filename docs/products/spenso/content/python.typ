@@ -221,6 +221,9 @@ at the same product level into a single fraction, including rational coefficient
 Graph endpoint labels use subscripts, with the ordinary first slot implicit (`s_7`);
 additional slots remain distinct (`s_(7.2)`). Dummy labels retain both identifiers.
 These display conventions preserve the underlying expressions and exact notebook payloads.
+After `to_expression()`, ordinary Symbolica printing owns namespace elision and nested
+bracket highlighting. Use `format(show_namespaces=True)` to display qualified names.
+
 
 // docs-example: compile
 ```python
