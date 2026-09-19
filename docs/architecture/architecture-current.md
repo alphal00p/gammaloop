@@ -135,6 +135,16 @@ chemical potentials, and inverse temperature; the shared generator does not
 own the physics model. Thermal terminal sectors retain their full distribution
 weights rather than applying the vacuum contour-closure normalization.
 
+The bounded and known-factor numerator builders share occurrence sampling and
+polynomial reduction across all medium modes. Every resulting scalar sector,
+including a contact, a terminal residue basis, or the zero-edge unit, goes
+through `LowerSectorCffBuilder`. That boundary owns duplicate parity, component
+factorization, terminal closure selection, and conversion into the immutable
+source convention. Thermal sectors discard inherited vacuum closure rows and
+retain both weighted poles. Variant lifting remaps thermal weights, energy IDs,
+surface IDs, and sign provenance together before attaching numerator factors;
+it applies no further medium-dependent normalization.
+
 Medium modes use direct local 3D UV subtraction. Their local UV kernels take the
 vacuum limit while the surrounding observable retains its medium dependence;
 optional vacuum subtraction is a complete-observable 3D operation. Generation

@@ -320,33 +320,21 @@ impl CFFVariant {
             * self.denominator.to_atom_inv()
     }
 
-    pub fn remap_energy_edge_indices(&mut self, edge_map: &EnergyEdgeIndexMap) {
-        self.thermal_weight.remap_internal_edges(&edge_map.internal);
+    pub fn remap_indices(
+        &mut self,
+        edge_map: &BTreeMap<usize, usize>,
+        map_surface: impl Fn(HybridSurfaceID) -> HybridSurfaceID,
+    ) {
+        self.thermal_weight.remap_internal_edges(edge_map);
         self.half_edges = self
             .half_edges
             .iter()
-            .map(|edge_id| {
-                EdgeIndex(
-                    edge_map
-                        .internal
-                        .get(&edge_id.0)
-                        .copied()
-                        .unwrap_or(edge_id.0),
-                )
-            })
+            .map(|edge_id| EdgeIndex(edge_map.get(&edge_id.0).copied().unwrap_or(edge_id.0)))
             .collect();
         self.denominator_edges = self
             .denominator_edges
             .iter()
-            .map(|edge_id| {
-                EdgeIndex(
-                    edge_map
-                        .internal
-                        .get(&edge_id.0)
-                        .copied()
-                        .unwrap_or(edge_id.0),
-                )
-            })
+            .map(|edge_id| EdgeIndex(edge_map.get(&edge_id.0).copied().unwrap_or(edge_id.0)))
             .collect();
         self.denominator_edge_support_signs = self
             .denominator_edge_support_signs
@@ -355,13 +343,7 @@ impl CFFVariant {
                 let mut mapped_support = support_edges
                     .iter()
                     .map(|edge_id| {
-                        EdgeIndex(
-                            edge_map
-                                .internal
-                                .get(&edge_id.0)
-                                .copied()
-                                .unwrap_or(edge_id.0),
-                        )
+                        EdgeIndex(edge_map.get(&edge_id.0).copied().unwrap_or(edge_id.0))
                     })
                     .collect::<Vec<_>>();
                 mapped_support.sort_unstable();
@@ -369,6 +351,17 @@ impl CFFVariant {
                 (mapped_support, *sign)
             })
             .collect();
+        for surface in &mut self.numerator_surfaces {
+            *surface = map_surface(*surface);
+        }
+        self.denominator
+            .map_mut(|surface| *surface = map_surface(*surface));
+        self.denominator_surface_signs = std::mem::take(&mut self.denominator_surface_signs)
+            .into_iter()
+            .fold(BTreeMap::new(), |mut signs, (surface, sign)| {
+                *signs.entry(map_surface(surface)).or_insert(1) *= sign;
+                signs
+            });
     }
 
     fn clear_selected_denominator_surface_sign(
@@ -693,7 +686,7 @@ impl OrientationExpression {
         self.data.label = Some(format_graph_orientation_label(&self.data.orientation));
 
         for variant in &mut self.variants {
-            variant.remap_energy_edge_indices(edge_map);
+            variant.remap_indices(&edge_map.internal, std::convert::identity);
         }
     }
 }
