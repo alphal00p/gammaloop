@@ -4545,7 +4545,7 @@ mod thermal_reference_tests {
                         .iter()
                         .map(|edge| 2.0 * evaluator.internal_energies[edge.0])
                         .product::<f64>();
-                    result += rational_to_f64(&variant.prefactor)
+                    result += variant.prefactor.to_f64()
                         * thermal
                         * evaluator.tree_sum(&variant.denominator).unwrap()
                         / energy_product;

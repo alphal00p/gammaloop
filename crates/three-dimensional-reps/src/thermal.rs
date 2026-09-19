@@ -331,16 +331,8 @@ mod tests {
                     .collect::<BTreeSet<_>>()
                     .len()
             );
-            assert!(
-                variants
-                    .iter()
-                    .any(|variant| variant.prefactor == Atom::num(-1))
-            );
-            assert!(
-                variants
-                    .iter()
-                    .any(|variant| variant.prefactor == Atom::num(1))
-            );
+            assert!(variants.iter().any(|variant| variant.prefactor == -1));
+            assert!(variants.iter().any(|variant| variant.prefactor == 1));
         }
     }
 
@@ -375,7 +367,7 @@ mod tests {
         assert_eq!((orientation.to_atom() - before).expand(), Atom::Zero);
         assert!(orientation.variants.iter().any(|variant| {
             variant.thermal_weight == original.thermal_weight
-                && variant.prefactor == Atom::num(2) * &original.prefactor
+                && variant.prefactor == &original.prefactor * 2
         }));
         assert!(orientation.variants.iter().any(|variant| {
             variant.thermal_weight == distinct.thermal_weight
