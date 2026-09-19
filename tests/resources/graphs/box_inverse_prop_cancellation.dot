@@ -1,4 +1,4 @@
-digraph triangle {
+digraph oracle {
     graph [
         num = 1;
         overall_factor = 1;
