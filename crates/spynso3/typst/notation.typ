@@ -755,7 +755,22 @@
           (ctx.default)()
         } else {
           let label = labels.first().split(":").last()
-          math.attach(math.italic(label), t: ctx.visual-arguments.join([.]))
+          let arguments = ctx.visual-arguments
+          // The first endpoint slot is implicit; higher-spin slots and dummy
+          // identifiers remain visible, matching the native index printer.
+          if (
+            label in ("s", "t") and ctx.arguments.len() == 2
+              and _kind(ctx.arguments.at(1)) == "number"
+              and ctx.arguments.at(1).at("source", default: none) == "1"
+          ) {
+            arguments = arguments.slice(0, 1)
+          }
+          // Use a math symbol, not italic text: text boxes scale incorrectly
+          // when this label is itself nested inside a tensor's script.
+          let head = (ctx.render-visual)((kind: "variable", source: label, symbol: (name: label)))
+          // Math's smallest script style stops shrinking at deeper levels.
+          // Keep the numeric identifier subordinate even inside a fraction.
+          math.attach(head, b: text(size: 0.75em, arguments.join([.])))
         }
       },
       tensor: tensor,

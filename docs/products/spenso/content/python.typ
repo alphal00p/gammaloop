@@ -216,7 +216,11 @@ and #link("reference/python/spynso3/ExecutionMode/")[`ExecutionMode`].
 `TensorExpression`, `Tensor`, and `TensorNetwork` share semantic display methods.
 `DisplaySettings` controls the ports, Schoonschip, and call layouts, dimensions, parentheses,
 commas, symbol scripts, and index/factor spacing. Positional calls such as `to_typst(True)`
-and `formatted(True)` still request dimensions.
+and `formatted(True)` still request dimensions. Rich Typst output collects inverse factors
+at the same product level into a single fraction, including rational coefficients.
+Graph endpoint labels use subscripts, with the ordinary first slot implicit (`s_7`);
+additional slots remain distinct (`s_(7.2)`). Dummy labels retain both identifiers.
+These display conventions preserve the underlying expressions and exact notebook payloads.
 
 // docs-example: compile
 ```python
