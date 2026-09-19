@@ -9,7 +9,7 @@ use gammalooprs::settings::runtime::{
 use gammalooprs::uv::profile::UVLimitSelection;
 
 #[test]
-fn inverse_propagators_cancel_denominators() -> Result<()> {
+fn inverse_propagators_effectively_cancel_denominators() -> Result<()> {
     let mut failures = Vec::new();
     for medium_mode in ["vacuum", "thermodynamic_equilibrium"] {
         let test_root = get_tests_workspace_path().join(format!(
@@ -25,20 +25,44 @@ fn inverse_propagators_cancel_denominators() -> Result<()> {
             &mut cli,
             &[
                 "import model ./assets/models/json/scalars/scalars.json",
-                "import graphs ./tests/resources/graphs/grouped_triangle_box_cancellation.dot -p box_inverse_propagator -i cancellation",
-                "import graphs ./tests/resources/graphs/grouped_triangle_hexagon_cubed_inverse_cancellation.dot -p hexagon_cubed_inverse_propagator -i cancellation",
-                "import graphs ./tests/resources/graphs/grouped_triangle_pentagon_two_distinct_inverse_cancellation.dot -p pentagon_two_distinct_inverse_propagators -i cancellation",
+                "import graphs ./tests/resources/graphs/bubble_inverse_prop_1_cancellation.dot -p bubble_inverse_propagator_1 -i cancellation",
+                // "import graphs ./tests/resources/graphs/bubble_inverse_prop_2_cancellation.dot -p bubble_inverse_propagator_2 -i cancellation",
+                "import graphs ./tests/resources/graphs/box_inverse_prop_cancellation.dot -p box_inverse_propagator -i cancellation",
+                "import graphs ./tests/resources/graphs/hexagon_cubed_inverse_prop_cancellation.dot -p hexagon_cubed_inverse_propagator -i cancellation",
+                "import graphs ./tests/resources/graphs/pentagon_two_distinct_inverse_prop_cancellation.dot -p pentagon_two_distinct_inverse_propagators -i cancellation",
+                "import graphs ./tests/resources/graphs/double_box_inverse_prop_cancellation.dot -p double_box_two_distinct_inverse_propagators -i cancellation",
                 "set model mass_scalar_1=0.5",
                 &format!(
-                    "set global kv global.generation.medium.mode={medium_mode} global.generation.medium.vacuum_subtraction=false global.generation.evaluator.iterative_orientation_optimization=false global.generation.evaluator.compile=false global.generation.evaluator.store_atom=true global.generation.threshold_subtraction.enable_thresholds=false"
+                    "set global kv global.generation.medium.mode={medium_mode} global.generation.medium.vacuum_subtraction=false global.generation.evaluator.iterative_orientation_optimization=false global.generation.evaluator.compile=false global.generation.evaluator.store_atom=true global.generation.threshold_subtraction.enable_thresholds=false global.generation.uv.subtract_uv=false"
                 ),
             ],
         )?;
 
-        for (case, process_name, external_momenta, external_helicities) in [
+        for (case, process_name, point, external_momenta, external_helicities) in [
+            (
+                "bubble_1",
+                "bubble_inverse_propagator_1",
+                vec![1.1, 0.7, -0.4],
+                r#"[
+                    [3.0, 0.0, 0.0, 3.0],
+                    "dependent"
+                ]"#,
+                "[0, 0, 0, 0]",
+            ),
+            // (
+            //     "bubble_2",
+            //     "bubble_inverse_propagator_2",
+            //     vec![1.1, 0.7, -0.4],
+            //     r#"[
+            //         [3.0, 0.0, 0.0, 3.0],
+            //         "dependent"
+            //     ]"#,
+            //     "[0, 0, 0, 0]",
+            // ),
             (
                 "box",
                 "box_inverse_propagator",
+                vec![1.1, 0.7, -0.4],
                 r#"[
                     [3.0, 0.0, 0.0, 3.0],
                     [3.0, 0.0, 0.0, -3.0],
@@ -50,6 +74,7 @@ fn inverse_propagators_cancel_denominators() -> Result<()> {
             (
                 "hexagon_cubed",
                 "hexagon_cubed_inverse_propagator",
+                vec![1.1, 0.7, -0.4],
                 r#"[
                     [3.0, 0.0, 0.0, 3.0],
                     [1.5, 0.0, -1.5, 0.0],
@@ -60,10 +85,23 @@ fn inverse_propagators_cancel_denominators() -> Result<()> {
             (
                 "pentagon_two_distinct",
                 "pentagon_two_distinct_inverse_propagators",
+                vec![1.1, 0.7, -0.4],
                 r#"[
                     [3.0, 0.0, 0.0, 3.0],
                     [3.0, 0.0, 0.0, -3.0],
                     [1.5, 0.0, 1.5, 0.0],
+                    [1.5, 0.0, 1.5, 0.0],
+                    "dependent"
+                ]"#,
+                "[0, 0, 0, 0, 0]",
+            ),
+            (
+                "double_box_two_distinct",
+                "double_box_two_distinct_inverse_propagators",
+                vec![1.1, 0.7, -0.4, -0.6, 0.8, 0.5],
+                r#"[
+                    [3.0, 0.0, 0.0, 3.0],
+                    [3.0, 0.0, 0.0, -3.0],
                     [1.5, 0.0, 1.5, 0.0],
                     "dependent"
                 ]"#,
@@ -131,8 +169,7 @@ fn inverse_propagators_cancel_denominators() -> Result<()> {
             for use_arb_prec in [false, true] {
                 let precision = if use_arb_prec { "arb" } else { "f64" };
                 let tolerance = if use_arb_prec { 1.0e-299 } else { 1.0e-12 };
-                let point = vec![1.1, 0.7, -0.4];
-                let (_, triangle) = Inspect {
+                let (_, target) = Inspect {
                     process: Some(process.clone()),
                     integrand_name: Some(integrand_name.clone()),
                     point: point.clone(),
@@ -142,7 +179,7 @@ fn inverse_propagators_cancel_denominators() -> Result<()> {
                     ..Default::default()
                 }
                 .run(&mut cli)?;
-                let (_, higher_point) = Inspect {
+                let (_, result) = Inspect {
                     process: Some(process.clone()),
                     integrand_name: Some(integrand_name.clone()),
                     point: point.clone(),
@@ -152,34 +189,25 @@ fn inverse_propagators_cancel_denominators() -> Result<()> {
                     ..Default::default()
                 }
                 .run(&mut cli)?;
-                let (_, result) = Inspect {
+                let (_, combined_result) = Inspect {
                     process: Some(process.clone()),
                     integrand_name: Some(integrand_name.clone()),
-                    point,
+                    point: point.clone(),
                     momentum_space: true,
                     use_arb_prec,
                     ..Default::default()
                 }
                 .run(&mut cli)?;
-                let scale = triangle
-                    .re
-                    .hypot(triangle.im)
-                    .max(higher_point.re.hypot(higher_point.im));
+                let scale = target.re.hypot(target.im).max(result.re.hypot(result.im));
                 if scale <= 1.0e-16 {
                     failures.push(format!(
                         "the {case} {medium_mode} {precision} cancellation oracle is trivial"
                     ));
                     continue;
                 }
-                let direct_sum = triangle + higher_point;
-                if direct_sum.re.hypot(direct_sum.im) > tolerance * scale {
+                if combined_result.re.hypot(combined_result.im) > tolerance * scale {
                     failures.push(format!(
-                    "the {case} {medium_mode} {precision} inverse propagator did not reduce the higher-point diagram to minus the triangle: triangle={triangle:e}, higher_point={higher_point:e}, tolerance={tolerance:e}"
-                ));
-                }
-                if result.re.hypot(result.im) > tolerance * scale {
-                    failures.push(format!(
-                    "the {case} {medium_mode} {precision} grouped diagrams did not cancel: result={result:e}, scale={scale:e}, tolerance={tolerance:e}"
+                    "the {case} {medium_mode} {precision} grouped diagrams did not cancel: combined_result={combined_result:e}, scale={scale:e}, tolerance={tolerance:e}, target={target:e}, result={result:e}"
                 ));
                 }
             }

@@ -1,0 +1,34 @@
+digraph oracle {
+    graph [
+        num = 1;
+        overall_factor = 1;
+        group_id = 0;
+    ]
+    edge [
+        pdg = 1001;
+        num = 1;
+    ]
+    node [num=1]
+    ext [style=invis]
+    ext -> v1 [id=0]
+    v1 -> ext [id=1]
+    v1 -> v1 [id=2, lmb_id=0]
+}
+
+digraph bubble_with_inverse_propagator {
+    graph [
+        num = 1;
+        overall_factor = -1;
+        group_id = 0;
+    ]
+    edge [
+        pdg = 1001;
+        num = 1;
+    ]
+    node [num=1]
+    ext [style=invis]
+    ext -> v1 [id=0]
+    v2 -> ext [id=1]
+    v1 -> v2 [id=2, num="Q(2,spenso::mink(4,edge(2,1)))*Q(2,spenso::mink(4,edge(2,1)))-UFO::mass_scalar_1^2"]
+    v2 -> v1 [id=3, lmb_id=0]
+}
