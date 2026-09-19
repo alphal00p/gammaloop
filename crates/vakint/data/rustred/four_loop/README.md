@@ -20,7 +20,7 @@ terminal catalog must agree exactly.
 
 Each program is decompressed and loaded once, on first use, through RustRed's
 candidate loader. At that boundary, RustRed also prepares and verifies a
-same-family terminal-routing plan once. A shared native RustRed applier then handles scalar-numerator
+same-family vacuum terminal-equivalence plan once. A shared native RustRed applier then handles scalar-numerator
 lowering, guard selection, strictly descending rule application and memoization.
 No rule-generation campaign or FORM executable is invoked. Vakint consumes the
 result and reuses its pure-Rust/Symbolica FMFT master finalizer. FeynKit's normal
@@ -66,29 +66,35 @@ The unchanged 83-test through-three-loop selection, seven catalog/loader unit
 checks and three four-loop fixture checks also pass. Terminal aliases were
 disabled for that catalog-only milestone; the later activation is described below.
 
-## Exact terminal-routing normalization
+## Exact vacuum terminal normalization
 
-The `f91c47ab` runtime pin adds explicit load-time steering of
-`TerminalAliasPlan::vacuum_routing_equivalences`. RustRed proves unit-Jacobian
-momentum routings for independent tadpole products and full-rank supports with
-one more active line than loops. It then coalesces equivalent terminal keys
-inside its existing memoized applier, before ancestor coefficient accumulation.
-Vakint implements neither the routing proof nor new coefficient arithmetic.
+The `2b50267c` runtime pin explicitly steers
+`TerminalAliasPlan::vacuum_parametric_equivalences` with its default preparation
+bounds. RustRed verifies equality of the full restricted first Symanzik
+polynomial U, including its scale, under a power-preserving parameter
+permutation. For supported positive-power unit-mass vacuum keys this proves a
+unit-coefficient integral equality; it does not assert an integer loop-momentum
+map. Native Symbolica graph canonicalization proposes permutations and exact
+polynomial comparison verifies them. Equivalent terminals coalesce inside the
+existing memoized applier, before ancestor coefficient accumulation. Vakint
+implements neither the proof nor new coefficient arithmetic.
 
-| Parent | Raw catalog keys (unchanged) | Output representatives | Verified aliases |
-| --- | ---: | ---: | ---: |
-| H | 386 | 176 | 210 |
-| FG | 145 | 53 | 92 |
-| BMW | 179 | 68 | 111 |
-| X | 445 | 208 | 237 |
-| Total | 1,155 | 505 | 650 |
+| Parent | Raw catalog keys (unchanged) | Prior routing representatives | U representatives | Verified U aliases |
+| --- | ---: | ---: | ---: | ---: |
+| H | 386 | 176 | 52 | 334 |
+| FG | 145 | 53 | 26 | 119 |
+| BMW | 179 | 68 | 37 | 142 |
+| X | 445 | 208 | 64 | 381 |
+| Total | 1,155 | 505 | 179 | 976 |
 
-These are family-local representatives, **not 505 independent masters**.
-Unsupported terminal shapes retain their original keys. All 650 aliases were
-independently checked against the saved exact catalog expressions in the core
-gate. The raw-key coverage check, saved files, guard checks, descent, source
-conditions and unresolved-leaf errors remain unchanged. No programs or master
-values are regenerated, and the plan adds no family-closure certificate.
+These are family-local representatives, **not 179 independent masters**. They
+comprise 74 positive-power keys and all 105 unchanged negative-index keys.
+Unsupported shapes and exhausted preparation bounds retain the original keys;
+none of these four saved parents reached a bound. All 976 aliases were checked
+against the exact saved catalog expressions in the core gate. The raw-key
+coverage check, saved files, guard checks, descent, source conditions and
+unresolved-leaf errors remain unchanged. No programs or master values are
+regenerated, and the plan adds no family-closure certificate.
 
 The production loader opts into `from_reducer_with_terminal_aliases` on a fresh
 owner. The existing experimental `from_reducer` constructor retains its original
@@ -101,13 +107,16 @@ terminal. It is amortized across later reductions of that parent; the public
 benchmark below includes it in the first-parent call rather than presenting
 isolated core application times as whole-backend timings.
 
-The activation passes the unchanged 83-test selection through three loops,
-all fifteen original four-loop numerical references and all sixteen expanded-
-numerator/pinch pairs. Nine focused constructor/catalog/loader checks and three
-fixture checks pass too. The independently executed four-loop gates took
-24.71/47.88 s whole-process wall time, with peak RSS 1,890,784/2,153,024 KiB;
-these correctness runs include the separate FMFT oracle. FeynKit and RustRed
-use forbidden FORM paths. No numerical tolerance or expected value changed.
+The independently executed U-activation four-loop gates pass all fifteen
+original numerical references and all sixteen expanded-numerator/pinch pairs.
+The unchanged 83-test selection through three loops, nine focused constructor/
+catalog/loader checks and three four-loop fixture checks also pass.
+The two four-loop processes took 22.56/46.90 s wall time, with peak RSS
+1,859,076/2,092,664 KiB; these correctness runs include the separate FMFT oracle.
+FeynKit and RustRed use forbidden FORM paths. No numerical tolerance or expected
+value changed. The previous routing-only activation (`f91c47ab`) passed the same
+gates at 24.71/47.88 s; those validation observations are not a controlled timing
+comparison. The separately matched public benchmark appears below.
 
 These are **candidate programs, not `ClosedArtifact`s**. The loader does not
 assert independent regenerated-source replay or unlimited family closure.
@@ -146,7 +155,7 @@ logger; it does not increase source accuracy. Missing Laurent orders are errors.
 
 ## Offline reproduction
 
-Use the matching RustRed runtime pin `f91c47abf820c9b9a376860b9c421675589b8a9c`
+Use the matching RustRed runtime pin `2b50267c5b1df10e4cd2798d7863d3f8c1b47383`
 for the offline example commands below, with the Symbolica license supplied
 in the environment. These commands generate fresh programs when intentionally
 requested; the shipped migration itself converted the saved programs without
@@ -282,3 +291,48 @@ before/after driver are retained in the RustRed workspace's ignored
 and `run-benchmark.sh`. The public test above reproduces the workload without
 those local files. The earlier native-I/O-only snapshot remains in Git history
 and `TMP/gamma-native-migration-20260919/`; it is not the baseline used here.
+
+### Matched U-plan comparison, 19 September 2026
+
+This later comparison uses the **routing-enabled** `f91c47ab` runtime as its
+control, not the earlier no-alias `d51721b6` runtime. The new pin is `2b50267c`.
+A fresh process was run for each, using the identical nine inputs, unchanged
+saved programs/catalogs and the same five alternating paired repetitions.
+Both pass all 54 numerical comparisons (108 timed calls). Affinity, release
+profile, single scalar caller, nested pool caps and timing boundaries are
+identical to the preceding experiment. Compiler and independent validation
+processes occupied disjoint CPU sets on the same shared host; the table is
+diagnostic evidence, not a statistical speedup guarantee.
+
+| Input | First RustRed call (s), routing → U | Warm RustRed median (ms), routing → U | Warm FMFT median (ms), routing → U |
+| --- | ---: | ---: | ---: |
+| H, first propagator cubed | 7.177 → 6.263 | 90.211 → 82.422 | 1502.284 → 1476.941 |
+| H, expanded D7 numerator | 0.022 → 0.021 | 20.902 → 20.370 | 148.245 → 132.621 |
+| FG, first propagator cubed | 1.429 → 1.042 | 80.646 → 76.979 | 229.253 → 221.330 |
+| FG, expanded D7 numerator | 0.833 → 0.765 | 31.417 → 31.417 | 173.022 → 144.075 |
+| BMW, first propagator cubed | 3.967 → 3.247 | 73.561 → 63.989 | 772.049 → 713.649 |
+| BMW, expanded D7 numerator | 0.032 → 0.030 | 29.689 → 26.132 | 167.386 → 136.908 |
+| X, first propagator cubed | 31.272 → 29.450 | 125.005 → 116.638 | 4678.632 → 4798.671 |
+| X, expanded D7 numerator | 0.857 → 0.634 | 54.329 → 51.662 | 161.097 → 162.069 |
+| Factorized four-tadpole | 0.015 → 0.015 | 15.591 → 14.810 | 133.482 → 129.176 |
+
+The first H/X calls improve by about 1.15×/1.06× in these observations, including
+lazy loading and plan preparation. FG's repeated expanded-D7 cost is effectively
+unchanged. Repeated RustRed calls are faster than FMFT on all nine tested
+inputs, but initial cubed-parent calls still cost more than FMFT: H/X
+6.263/29.450 s versus 1.485/5.052 s. These warm observations do not predict
+unseen-point costs. The smaller representative set does not imply a proportional
+speedup because loading, nonterminal recursion and coefficient arithmetic remain.
+
+| Whole benchmark process | Routing plan | U plan |
+| --- | ---: | ---: |
+| Wall time | 98.78 s | 95.83 s |
+| User + system CPU | 94.32 + 3.81 s | 91.82 + 3.40 s |
+| Peak RSS | 2,215,440 KiB | 2,161,216 KiB |
+
+These process totals include **both backends**, initialization and untimed
+comparisons; they are not isolated RustRed application times. Neither run
+regenerated rules or master values. Raw records, executable hashes, exact
+commands and independently recomputed median tables are retained in
+`TMP/gamma-terminal-u-rollout.oFoQwr/` as `baseline-f91.*` and
+`u-2b50267.*`. The unchanged public command above reproduces the workload.

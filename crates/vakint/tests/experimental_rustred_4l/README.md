@@ -178,6 +178,21 @@ are in the [asset README](../../data/rustred/four_loop/README.md#public-scalar-t
 Evidence, exact binary hashes, commands and independent audit are retained at
 `TMP/gamma-terminal-alias-rollout.4Zi7ej/` in the RustRed workspace.
 
+The subsequent `2b50267c` pin changes only that explicit fresh-owner factory to
+RustRed's native U-polynomial equivalence plan with default preparation bounds.
+The raw-key binding, plain constructor, public options, assets and numerical
+assertions are unchanged. All 83 lower-loop cases, fifteen original four-loop
+references, sixteen expanded-numerator/pinch pairs, nine focused checks and
+three fixtures pass again. The independent public four-loop gates took
+22.56/46.90 s whole-process wall time and retained forbidden FORM paths in both
+native stages. These correctness observations include the separate FMFT oracle.
+The frozen routing-only executable and the U-enabled executable each pass the
+same nine-input timing test, with all 54 numerical comparisons. The measured
+table, warm-cache and first-use boundaries are in the asset README; retained
+commands, logs, hashes and audit are under
+`TMP/gamma-terminal-u-rollout.oFoQwr/` in the RustRed workspace. No rules or
+catalog values were regenerated.
+
 The existing FMFT finalizer expands exact Laurent coefficients before
 approximate table substitution. This prevents exact cancelling coefficients
 from becoming tiny floating poles; no zero tolerance, epsilon depth or source

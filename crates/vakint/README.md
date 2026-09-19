@@ -70,17 +70,20 @@ pass again, with invalid FORM paths in the native lanes. Seven catalog/loader
 checks and three fixture checks also pass. That I/O-only milestone did not
 enable terminal aliases.
 
-The subsequent `f91c47ab` pin enables RustRed's verified terminal-routing plan
-once per loaded four-loop parent. The 1,155 raw catalog declarations remain
-unchanged; the applier coalesces them onto 505 family-local representatives
-before memoizing coefficients. These are not a minimal master basis or a new
-closure claim. Vakint delegates preparation and application entirely to
-RustRed; its options, defaults and existing FORM-backed modes stay unchanged.
-All 83 lower-loop cases, all 31 four-loop comparisons and nine focused checks
-pass on this pin. In the matched nine-input benchmark, first H/X cubed-line
-calls decrease from 14.86/84.17 s to 7.16/30.99 s; warm calls remain faster than
-FMFT on the tested matrix, but initial cubed-parent reductions are still slower than FMFT
-and preparation is not free. See the [complete timings and boundaries](data/rustred/four_loop/README.md#public-scalar-timing-probe).
+The current `2b50267c` pin prepares RustRed's verified U-polynomial terminal
+equivalences once per loaded four-loop parent. The 1,155 raw catalog declarations
+remain unchanged; the applier coalesces them onto 179 family-local representatives
+before memoizing coefficients, compared with 505 for the prior `f91c47ab`
+momentum-routing plan. These are not a minimal master basis or a new closure
+claim; all 105 negative-index terminals retain their original keys. Vakint
+delegates preparation and application entirely to RustRed; options, defaults
+and existing FORM-backed modes stay unchanged. All 83 lower-loop cases, all
+31 four-loop comparisons, nine focused checks and three fixtures pass again.
+In a fresh matched nine-input benchmark, first H/X cubed-line calls decrease
+from 7.18/31.27 s to 6.26/29.45 s. Warm calls remain faster than FMFT on this
+matrix, but initial cubed-parent reductions are still slower than FMFT and the
+smaller terminal set does not imply a proportional speedup. See the
+[complete timings and boundaries](data/rustred/four_loop/README.md#public-scalar-timing-probe).
 
 The [historical RustRed acceptance inventory](tests/RUSTRED_ACCEPTANCE.md) maps
 all existing single-common-mass inputs through three loops to native peers.

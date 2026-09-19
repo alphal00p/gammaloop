@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 
 use rustred::family::{IntegralFamily, IntegralKey};
 use rustred::reduction::ReductionLimits;
-use rustred::reduction::terminal_normalization::TerminalAliasPlan;
+use rustred::reduction::terminal_normalization::{TerminalAliasPlan, VacuumParametricLimits};
 use rustred::sector::{CoordinatePriority, CoordinatePriorityLimits, Mask, OrderingPolicy, zero};
 use rustred::solver::{
     CandidateReducer, IntegralOrder, SectorConfig, SectorExecutor, SectorSolveOptions, SourceSystem,
@@ -55,11 +55,12 @@ impl<const N: usize> NativeCandidate<N> {
         })
     }
 
-    /// Bind a fresh owner and prepare RustRed's exact terminal routing aliases.
+    /// Bind a fresh owner and prepare RustRed's exact vacuum terminal aliases.
     ///
     /// Raw declarations still bind the offline catalog. The plan is prepared
-    /// once and used by the core applier before memoization. A previously used
-    /// reducer must have its point cache explicitly cleared by the caller;
+    /// once using native U-polynomial equality, then used by the core applier
+    /// before memoization. A previously used reducer must have its point cache
+    /// explicitly cleared by the caller;
     /// unlike `from_reducer`, this constructor changes output representatives.
     pub fn from_reducer_with_terminal_aliases(
         family: Arc<IntegralFamily>,
@@ -71,10 +72,11 @@ impl<const N: usize> NativeCandidate<N> {
             .reducer
             .get_mut()
             .map_err(|_| "candidate reducer lock poisoned")?;
-        let aliases = TerminalAliasPlan::vacuum_routing_equivalences(
+        let aliases = TerminalAliasPlan::vacuum_parametric_equivalences(
             &native.family,
             &native.terminals,
             reducer.ordering(),
+            VacuumParametricLimits::default(),
         )
         .map_err(|error| error.to_string())?;
         reducer
@@ -217,7 +219,7 @@ mod tests {
 
         crate::Vakint::initialize_vakint_symbols();
         // Only declare three equal dotted terminals. This fixture has no rules
-        // and never runs IBP discovery; the core owns the routing proof.
+        // and never runs IBP discovery; the core owns the equality proof.
         let family = Arc::new(
             Compiler::new(Limits::default())
                 .unwrap()
