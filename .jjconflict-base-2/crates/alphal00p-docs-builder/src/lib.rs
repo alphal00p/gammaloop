@@ -1262,8 +1262,8 @@ impl SiteBuilder {
         self.require_file(Path::new("docs/assets/site.css"))?;
         self.require_file(Path::new("docs/assets/site.js"))?;
         self.require_file(Path::new("docs/assets/rustdoc.css"))?;
-        self.require_file(Path::new("docs/assets/STIXTwoMath-Regular.woff2"))?;
-        self.require_file(Path::new("docs/assets/STIX-Two-OFL.txt"))?;
+        self.require_file(Path::new("crates/spynso3/typst/STIXTwoMath-Regular.woff2"))?;
+        self.require_file(Path::new("crates/spynso3/typst/STIX-Two-OFL.txt"))?;
         self.require_file(Path::new("scripts/render-docs-svg-assets.sh"))?;
         for source in [
             "docs/portal/main.typ",
@@ -2250,10 +2250,10 @@ impl SiteBuilder {
             ("docs/assets/site.css", "site.css"),
             ("docs/assets/site.js", "site.js"),
             (
-                "docs/assets/STIXTwoMath-Regular.woff2",
+                "crates/spynso3/typst/STIXTwoMath-Regular.woff2",
                 "STIXTwoMath-Regular.woff2",
             ),
-            ("docs/assets/STIX-Two-OFL.txt", "STIX-Two-OFL.txt"),
+            ("crates/spynso3/typst/STIX-Two-OFL.txt", "STIX-Two-OFL.txt"),
             (
                 "docs/assets/local-unitarity-light.svg",
                 "local-unitarity-light.svg",
@@ -12312,7 +12312,12 @@ mod tests {
 
         assert_eq!(
             fs::read(font).unwrap(),
-            fs::read(builder.root.join("docs/assets/STIXTwoMath-Regular.woff2")).unwrap()
+            fs::read(
+                builder
+                    .root
+                    .join("crates/spynso3/typst/STIXTwoMath-Regular.woff2")
+            )
+            .unwrap()
         );
     }
 

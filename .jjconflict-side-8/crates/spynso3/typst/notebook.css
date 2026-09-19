@@ -1,0 +1,21 @@
+/* STIX Two Math 2.13, SIL Open Font License 1.1; see STIX-Two-OFL.txt. */
+@font-face {
+  font-family: "Spenso STIX Two Math";
+  src: url("data:font/woff2;base64,__FONT_BASE64__") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+[data-spenso-math] {
+  box-sizing: border-box;
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 0.6em 0.3em;
+}
+
+[data-spenso-math] math {
+  font-family: "Spenso STIX Two Math", math;
+  font-size: var(--spenso-math-font-size, 21px);
+  font-synthesis: none;
+}
