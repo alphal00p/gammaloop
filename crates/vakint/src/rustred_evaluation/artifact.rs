@@ -5,9 +5,9 @@ use rustred::foundry::artifact::{ArtifactPersistenceError, ArtifactSchemaVersion
 use super::RustRedEvaluationError;
 use super::terminal::{TerminalCatalog, TerminalManifest, TerminalSource};
 
-const K1_BYTES: &[u8] = include_bytes!("../../data/rustred/unit_mass_vacuum_k1.rr");
-const K3_BYTES: &[u8] = include_bytes!("../../data/rustred/unit_mass_vacuum_k3.rr");
-const K6_BYTES: &[u8] = include_bytes!("../../data/rustred/unit_mass_vacuum_k6.rr");
+const K1_BYTES: &[u8] = include_bytes!("../../data/rustred/unit_mass_vacuum_k1.rrbin");
+const K3_BYTES: &[u8] = include_bytes!("../../data/rustred/unit_mass_vacuum_k3.rrbin");
+const K6_BYTES: &[u8] = include_bytes!("../../data/rustred/unit_mass_vacuum_k6.rrbin");
 
 const K1_ALGORITHM_ID: &str = "rustred.generated.one-loop-unit-mass-tadpole.v1";
 const K1_FAMILY_FINGERPRINT: &str = "rustred-integral-family-v2;N37:rustred-one-loop-unit-mass-tadpole-v1;L1;1:k;E0;P1;1:d;Q1,0,1;M;RY1,1;I+1;X1;Y1,1;I+1;X0;D1;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;G0;U1;RY1,0;Y1,1;I+1;X0;";
@@ -22,7 +22,8 @@ fn decode_current_artifact(bytes: &[u8]) -> Result<ClosedArtifact, ArtifactPersi
 }
 
 // The embedded files and the pinned RustRed revision are one atomic build-time
-// contract. Decode only the current RustRed schema: obsolete artifact schemas
+// contract. These are trusted generated native Symbolica payloads, not arbitrary
+// user files. Decode and replay only the current RustRed schema: obsolete schemas
 // intentionally have no Vakint migration, compatibility reader, or fallback.
 struct FamilyAssets {
     artifact: ClosedArtifact,
@@ -49,7 +50,7 @@ static K1_ASSETS: LazyLock<Result<FamilyAssets, String>> = LazyLock::new(|| {
     load_assets(
         K1_BYTES,
         &TerminalManifest::new(
-            ArtifactSchemaVersion::V5,
+            ArtifactSchemaVersion::V6,
             K1_ALGORITHM_ID,
             K1_FAMILY_FINGERPRINT,
             &sources,
@@ -64,7 +65,7 @@ static K3_ASSETS: LazyLock<Result<FamilyAssets, String>> = LazyLock::new(|| {
     load_assets(
         K3_BYTES,
         &TerminalManifest::new(
-            ArtifactSchemaVersion::V5,
+            ArtifactSchemaVersion::V6,
             K3_ALGORITHM_ID,
             K3_FAMILY_FINGERPRINT,
             &sources,
@@ -76,7 +77,7 @@ static K6_ASSETS: LazyLock<Result<FamilyAssets, String>> = LazyLock::new(|| {
     load_assets(
         K6_BYTES,
         &TerminalManifest::new(
-            ArtifactSchemaVersion::V5,
+            ArtifactSchemaVersion::V6,
             K6_ALGORITHM_ID,
             K6_FAMILY_FINGERPRINT,
             &super::terminal::k6::SOURCES,
@@ -185,6 +186,9 @@ mod tests {
         ArtifactPersistenceError, derive_one_loop_unit_mass_tadpole,
         derive_two_loop_unit_mass_sunset,
     };
+    use rustred::persistence::{
+        BinarySection, SectionTag, encode_program, equivalent_generated_programs, inspect_program,
+    };
 
     use super::{
         ArtifactFamily, K1_BYTES, K3_BYTES, decode_current_artifact, shipped_family_for_loop_count,
@@ -218,17 +222,37 @@ mod tests {
             .encode_durable()
             .expect("encode the registered K=3 artifact");
 
-        assert_eq!(k1, K1_BYTES);
-        assert_eq!(k3, K3_BYTES);
+        // Symbol IDs in the saved state can depend on unrelated ambient symbols.
+        // Compare all structural records and ordered native coefficient values,
+        // including their variable maps, rather than process-local wire IDs.
+        assert!(equivalent_generated_programs(&k1, K1_BYTES, Default::default()).unwrap());
+        assert!(equivalent_generated_programs(&k3, K3_BYTES, Default::default()).unwrap());
     }
 
     #[test]
     fn embedded_artifact_contract_rejects_obsolete_schemas() {
-        let schema_offset = b"RRIBP\0\r\n".len();
-        for schema in [1_u32, 2, 3, 4] {
-            let mut obsolete = K1_BYTES.to_vec();
-            obsolete[schema_offset..schema_offset + std::mem::size_of::<u32>()]
+        let envelope = inspect_program(K1_BYTES, Default::default()).unwrap();
+        let program = envelope.section(SectionTag::PROGRAM).unwrap();
+        let proof_magic = b"RRPROOF\0";
+        assert!(program.starts_with(proof_magic));
+        let schema_offset = proof_magic.len();
+        for schema in [1_u32, 2, 3, 4, 5] {
+            let mut obsolete_program = program.to_vec();
+            obsolete_program[schema_offset..schema_offset + std::mem::size_of::<u32>()]
                 .copy_from_slice(&schema.to_le_bytes());
+            let sections: Vec<_> = envelope
+                .sections()
+                .iter()
+                .map(|section| BinarySection {
+                    tag: section.tag,
+                    bytes: if section.tag == SectionTag::PROGRAM {
+                        &obsolete_program
+                    } else {
+                        section.bytes
+                    },
+                })
+                .collect();
+            let obsolete = encode_program(envelope.kind(), &sections, Default::default()).unwrap();
             assert!(matches!(
                 decode_current_artifact(&obsolete),
                 Err(ArtifactPersistenceError::UnsupportedSchema { actual })

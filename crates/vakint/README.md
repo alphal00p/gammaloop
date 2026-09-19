@@ -36,7 +36,7 @@ numerical references and sixteen expanded-numerator/pinch comparisons against
 FMFT, with invalid FORM paths for both FeynKit and the RustRed scalar tail.
 The [test instructions and evidence](tests/experimental_rustred_4l/README.md)
 record the original precision/tolerances and corrected offline catalog audit.
-The measured 132.59 s and 208.69 s are full comparison-process times, not
+The measured 34.42 s and 104.55 s are full comparison-process times, not
 RustRed scalar-only performance. This finite acceptance does not establish
 unrestricted family closure or arbitrary-rank coverage.
 
@@ -46,15 +46,32 @@ not migrate or decode obsolete RustRed artifact schemas. This is separate from
 Vakint's backward-compatibility contract for its public API, defaults, and
 existing FORM-backed evaluation methods.
 
-The [RustRed acceptance inventory](tests/RUSTRED_ACCEPTANCE.md) maps all existing
-single-common-mass inputs through three loops to native peers. The complete
-recorded 83-test selection passes on the pinned Symbolica 3 / RustRed
-`09cef8e3` stack with regenerated current-schema K6 bytes, following the earlier
-34-test targeted gate for MATAD's signed numerator-routing correction. Both previously failing
-all-class comparisons pass. Native FeynKit/RustRed stages use an invalid FORM
-path; separate legacy oracles use FORM. That historical inventory distinguishes
-the 83-test matrix from the 40-entry/46-input legacy census; the new four-loop
-acceptance results are recorded separately above.
+The one-, two- and three-loop certified programs now use the same native binary
+envelope as the four-loop candidate programs, with separate certified/candidate
+payload kinds. Certified schema V6 stores Symbolica's native coefficients and
+shared symbol state and still replays the proof on cold loading. The embedded
+files are trusted generated data, not an arbitrary-file import interface.
+The K1/K3/K6 migration re-encoded the existing saved rules without a new search;
+the exact families, guards, source traces and terminal sets remain unchanged.
+Their native files are 2,790, 36,692 and 3,725,739 bytes respectively. Vakint's
+terminal catalogs and scalar application algorithm are unchanged.
+
+The [historical RustRed acceptance inventory](tests/RUSTRED_ACCEPTANCE.md) maps
+all existing single-common-mass inputs through three loops to native peers.
+Its unchanged 83-test selection passes again after the V6 migration on
+2026-09-19, with Symbolica 3 and RustRed `d6718733`, including the offline MATAD
+check of all 38 K6 terminals. Native FeynKit/RustRed stages use an invalid FORM
+path; separate legacy oracles use FORM. The full 16-test K6 pipeline, 26 focused
+native library checks and three four-loop fixture checks also pass; these
+overlap the selection rather than adding distinct numerical inputs. The
+historical inventory distinguishes the 83-test matrix from the 40-entry/46-input
+legacy census; the four-loop acceptance results are recorded separately above.
+
+The migration gate used release builds and the actual public backend, with no
+regeneration of shipped artifacts or changed tolerances. Both RustRed dependencies are pinned to
+the published revision together with the embedded native assets. Workspace
+dependency verification and CI metadata regeneration pass; this focused gate
+does not claim a complete GammaLoop workspace CI run.
 
 The shared parent-routing validator is also tested against all 19 registered
 four-loop classes and their 123 surviving propagator slots. It reuses the

@@ -366,7 +366,7 @@ mod tests {
 
     #[test]
     fn generic_complete_vacuum_catalog_admission_is_arity_independent() {
-        let bytes = include_bytes!("../../data/rustred/unit_mass_vacuum_k6.rr");
+        let bytes = include_bytes!("../../data/rustred/unit_mass_vacuum_k6.rrbin");
         let artifact = rustred::foundry::artifact::ClosedArtifact::decode_durable(bytes).unwrap();
         let sources = super::k6::SOURCES;
         let catalog = TerminalCatalog::compile_for_complete_unit_mass_vacuum(&artifact, &sources)
@@ -386,7 +386,7 @@ mod tests {
     fn catalog_requires_an_exact_cover_of_authenticated_terminals() {
         let artifact = derive_one_loop_unit_mass_tadpole().unwrap();
         let missing_manifest = TerminalManifest::new(
-            ArtifactSchemaVersion::V5,
+            ArtifactSchemaVersion::V6,
             artifact.algorithm_id(),
             artifact.family_fingerprint(),
             &[],
@@ -399,7 +399,7 @@ mod tests {
             TerminalSource::exact_matad_basis(&[2], "1"),
         ];
         let foreign_manifest = TerminalManifest::new(
-            ArtifactSchemaVersion::V5,
+            ArtifactSchemaVersion::V6,
             artifact.algorithm_id(),
             artifact.family_fingerprint(),
             &foreign_sources,
@@ -413,7 +413,7 @@ mod tests {
         let artifact = derive_one_loop_unit_mass_tadpole().unwrap();
         let sources = [TerminalSource::exact_matad_basis(&[1], "1")];
         let wrong_algorithm = TerminalManifest::new(
-            ArtifactSchemaVersion::V5,
+            ArtifactSchemaVersion::V6,
             "rustred.generated.some-other-family.v1",
             artifact.family_fingerprint(),
             &sources,
@@ -422,7 +422,7 @@ mod tests {
         assert!(error.contains("algorithm"), "{error}");
 
         let wrong_family = TerminalManifest::new(
-            ArtifactSchemaVersion::V5,
+            ArtifactSchemaVersion::V6,
             artifact.algorithm_id(),
             "rustred-integral-family-v2;wrong",
             &sources,
@@ -440,7 +440,7 @@ mod tests {
             &["2", "3", "5"],
         )];
         let manifest = TerminalManifest::new(
-            ArtifactSchemaVersion::V5,
+            ArtifactSchemaVersion::V6,
             artifact.algorithm_id(),
             artifact.family_fingerprint(),
             &sources,
@@ -484,7 +484,7 @@ mod tests {
             let coefficients = [coefficient];
             let sources = [TerminalSource::numerical_laurent(&[1], 0, &coefficients)];
             let manifest = TerminalManifest::new(
-                ArtifactSchemaVersion::V5,
+                ArtifactSchemaVersion::V6,
                 artifact.algorithm_id(),
                 artifact.family_fingerprint(),
                 &sources,
@@ -503,7 +503,7 @@ mod tests {
             &["1.23456789", "2.34567891"],
         )];
         let manifest = TerminalManifest::new(
-            ArtifactSchemaVersion::V5,
+            ArtifactSchemaVersion::V6,
             artifact.algorithm_id(),
             artifact.family_fingerprint(),
             &sources,

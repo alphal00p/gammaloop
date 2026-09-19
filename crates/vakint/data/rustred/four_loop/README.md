@@ -46,6 +46,14 @@ loading, not scalar-only timings. These suites ran concurrently on disjoint
 CPU sets. Three fixture checks and three loader/catalog/raw-master unit checks
 also passed. See the [acceptance commands and evidence](../../../tests/experimental_rustred_4l/README.md).
 
+The later atomic K1/K3/K6 certified-V6 migration pins RustRed `d6718733` and
+leaves these four candidate files and all master catalogs unchanged. The full
+fifteen-reference and sixteen-pinch public gates pass again on that pin, at
+34.42 s and 104.55 s full-process wall time, respectively. An independent
+auditor ran them sequentially on CPUs 80–85 with nested pools capped at one;
+the through-three-loop selection ran concurrently on disjoint CPUs. These are
+correctness-run timings, not a new paired performance comparison.
+
 Migration preserved all 59,636 rules and 1,155 declared terminal keys. Every
 saved coefficient, source, guard and family component was compared exactly
 offline; no rules were regenerated. The four compressed programs total
@@ -61,7 +69,7 @@ logger; it does not increase source accuracy. Missing Laurent orders are errors.
 
 ## Offline reproduction
 
-Use the matching RustRed runtime pin `3e6218596894649f4c5e052efa4b3caca46198c9`
+Use the matching RustRed runtime pin `d6718733bee4d20f4554e9d694b288ddaae60475`
 for the offline example commands below, with the Symbolica license supplied
 in the environment. These commands generate fresh programs when intentionally
 requested; the shipped migration itself converted the saved programs without
