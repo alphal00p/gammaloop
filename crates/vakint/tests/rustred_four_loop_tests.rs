@@ -12,6 +12,8 @@ mod input;
 mod propagator_pinches;
 #[path = "experimental_rustred_4l/public_acceptance.rs"]
 mod public_acceptance;
+#[path = "experimental_rustred_4l/public_timing.rs"]
+mod public_timing;
 mod test_utils;
 
 use input::retained_parent_descriptor;

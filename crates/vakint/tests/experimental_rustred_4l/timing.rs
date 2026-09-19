@@ -13,29 +13,9 @@ use vakint::{
     EvaluationMethod, EvaluationOrder, FMFTOptions, TensorReductionMethod, Vakint, VakintSettings,
 };
 
-fn cpu_ticks() -> Option<u64> {
-    let status = std::fs::read_to_string("/proc/self/stat").ok()?;
-    // Field two (comm) may contain spaces and parentheses.
-    let fields = status
-        .rsplit_once(')')?
-        .1
-        .split_whitespace()
-        .collect::<Vec<_>>();
-    [11, 12, 13, 14].into_iter().try_fold(0u64, |sum, field| {
-        sum.checked_add(fields.get(field)?.parse::<u64>().ok()?)
-    })
-}
-
-fn resident_kib() -> Option<u64> {
-    std::fs::read_to_string("/proc/self/status")
-        .ok()?
-        .lines()
-        .find_map(|line| line.strip_prefix("VmRSS:"))?
-        .split_whitespace()
-        .next()?
-        .parse()
-        .ok()
-}
+#[path = "timing_metrics.rs"]
+mod metrics;
+use metrics::{clock_ticks_per_second, cpu_ticks, resident_kib};
 
 fn scalar_input(vakint: &Vakint, settings: &VakintSettings, input: &Atom) -> Atom {
     let canonical = vakint
@@ -56,14 +36,7 @@ pub fn run<const N: usize>(
         (1..=9).contains(&repeats),
         "bounded timing repeats are 1..=9"
     );
-    let clock_ticks = std::process::Command::new("getconf")
-        .arg("CLK_TCK")
-        .output()
-        .ok()
-        .filter(|output| output.status.success())
-        .and_then(|output| String::from_utf8(output.stdout).ok())
-        .and_then(|output| output.trim().parse::<f64>().ok())
-        .filter(|ticks| ticks.is_finite() && *ticks > 0.0);
+    let clock_ticks = clock_ticks_per_second();
     let mut legacy_settings = settings.clone();
     legacy_settings.evaluation_order =
         EvaluationOrder(vec![EvaluationMethod::FMFT(FMFTOptions::default())]);
