@@ -240,6 +240,16 @@ assert diagram_tensor_reduced == tensor_expected
 assert len(scalar_graphs) == 1
 assert scalar_graphs[0].numerator_expression() == tensor_expected
 assert isinstance(scalar_graphs[0].numerator_expression(), spenso.TensorExpression)
+# Converting back to an ordinary expression keeps Symbolica's namespace and
+# nested bracket colors, just as if mink had no custom Spenso printer.
+ordinary_numerator = scalar_graphs[0].numerator_expression().to_expression()
+control_numerator = ordinary_numerator.replace(
+    mink(tensor_dimension), core.S("printer_control::mink")(tensor_dimension)
+)
+assert ordinary_numerator._repr_html_() == control_numerator._repr_html_()
+assert "spenso::" not in ordinary_numerator._repr_html_()
+assert "spenso::mink" in ordinary_numerator.format(show_namespaces=True, color_builtin_symbols=False, bracket_level_colors=None)
+
 assert scalar_graphs[0].numerator_expression().rank == 0
 denominator = indexed_diagram.denominator_expression()
 assert isinstance(denominator, spenso.TensorExpression)
