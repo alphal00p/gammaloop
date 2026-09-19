@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 
 use rustred::family::{IntegralFamily, IntegralKey};
 use rustred::reduction::ReductionLimits;
+use rustred::reduction::terminal_normalization::TerminalAliasPlan;
 use rustred::sector::{CoordinatePriority, CoordinatePriorityLimits, Mask, OrderingPolicy, zero};
 use rustred::solver::{
     CandidateReducer, IntegralOrder, SectorConfig, SectorExecutor, SectorSolveOptions, SourceSystem,
@@ -52,6 +53,34 @@ impl<const N: usize> NativeCandidate<N> {
             parent_momenta,
             terminals,
         })
+    }
+
+    /// Bind a fresh owner and prepare RustRed's exact terminal routing aliases.
+    ///
+    /// Raw declarations still bind the offline catalog. The plan is prepared
+    /// once and used by the core applier before memoization. A previously used
+    /// reducer must have its point cache explicitly cleared by the caller;
+    /// unlike `from_reducer`, this constructor changes output representatives.
+    pub fn from_reducer_with_terminal_aliases(
+        family: Arc<IntegralFamily>,
+        parent_momenta: Vec<Atom>,
+        reducer: CandidateReducer<N>,
+    ) -> Result<Self, String> {
+        let mut native = Self::from_reducer(family, parent_momenta, reducer)?;
+        let reducer = native
+            .reducer
+            .get_mut()
+            .map_err(|_| "candidate reducer lock poisoned")?;
+        let aliases = TerminalAliasPlan::vacuum_routing_equivalences(
+            &native.family,
+            &native.terminals,
+            reducer.ordering(),
+        )
+        .map_err(|error| error.to_string())?;
+        reducer
+            .install_terminal_aliases(aliases)
+            .map_err(|error| error.to_string())?;
+        Ok(native)
     }
 
     /// Solve an explicitly supplied family with the existing RustRed engine.
@@ -180,6 +209,120 @@ fn candidate_ordering<const N: usize>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn candidate_binding_installs_aliases_without_changing_raw_catalog_keys() {
+        use rustred::input::{Compiler, Limits, LoweringLimits, TextProject, TextPropagator};
+        use rustred::solver::{Integral, SectorSolution, SectorStats};
+
+        crate::Vakint::initialize_vakint_symbols();
+        // Only declare three equal dotted terminals. This fixture has no rules
+        // and never runs IBP discovery; the core owns the routing proof.
+        let family = Arc::new(
+            Compiler::new(Limits::default())
+                .unwrap()
+                .compile_text(TextProject {
+                    name: None,
+                    parameters: None,
+                    loop_momenta: vec!["k1".into(), "k2".into()],
+                    external_momenta: Vec::new(),
+                    dimension: "d".into(),
+                    propagators: ["k1^2-1", "k2^2-1", "(k1+k2)^2-1"]
+                        .into_iter()
+                        .enumerate()
+                        .map(|(slot, expression)| TextPropagator {
+                            id: format!("D{}", slot + 1),
+                            expression: expression.into(),
+                            target_power: 1,
+                            power_shift: None,
+                        })
+                        .collect(),
+                    external_gram: Vec::new(),
+                    numerator: None,
+                })
+                .unwrap()
+                .into_lowered(LoweringLimits::default())
+                .unwrap()
+                .into_family(),
+        );
+        let solution = SectorSolution {
+            rules: Vec::new(),
+            finite_residuals: [[2, 1, 1], [1, 2, 1], [1, 1, 2]]
+                .into_iter()
+                .map(|powers| Integral::numeric(powers).unwrap())
+                .collect(),
+            stats: SectorStats::default(),
+        };
+        let mut reducer = CandidateReducer::try_new(
+            &family,
+            [true; 3],
+            OrderingPolicy::SpiredUncutV1,
+            [([true; 3], solution)],
+            Vec::new(),
+            ReductionLimits::default(),
+        )
+        .unwrap();
+        let raw = reducer.terminals().clone();
+        assert!(reducer.terminal_aliases().is_none());
+        let momenta = ["k(1)", "k(2)", "k(1)+k(2)"]
+            .into_iter()
+            .map(|momentum| vakint_parse!(momentum).unwrap())
+            .collect();
+        let raw_key = raw.first().unwrap().clone();
+        reducer.reduce_unit_mass(&raw_key).unwrap();
+        // The existing constructor must still accept populated reducers and
+        // preserve their raw output convention without implicit normalization.
+        let raw_native = NativeCandidate::from_reducer(family.clone(), momenta, reducer).unwrap();
+        assert!(
+            raw_native
+                .reducer
+                .lock()
+                .unwrap()
+                .terminal_aliases()
+                .is_none()
+        );
+        assert_eq!(
+            raw_native.reduce_unit_mass(&raw_key).unwrap().terms,
+            vec![(raw_key, Atom::num(1))]
+        );
+        raw_native.clear_cache().unwrap();
+        let native = NativeCandidate::from_reducer_with_terminal_aliases(
+            family.clone(),
+            raw_native.parent_momenta,
+            raw_native.reducer.into_inner().unwrap(),
+        )
+        .unwrap();
+        assert_eq!(native.terminals(), &raw);
+        let (source, representative) = {
+            let reducer = native.reducer.lock().unwrap();
+            let plan = reducer.terminal_aliases().unwrap();
+            assert_eq!(plan.raw_terminals(), &raw);
+            assert_eq!(plan.statistics().verified_aliases, 2);
+            assert_eq!(reducer.canonical_terminals().len(), 1);
+            let (source, alias) = plan.aliases().first_key_value().unwrap();
+            (source.clone(), alias.representative().clone())
+        };
+        let output = native.reduce_unit_mass(&source).unwrap();
+        assert_eq!(output.terms, vec![(representative, Atom::num(1))]);
+        assert_eq!(output.applied_rules, 0);
+        assert_eq!(
+            native.reduce_unit_mass(&source).unwrap().terms,
+            output.terms
+        );
+        native.clear_cache().unwrap();
+        assert_eq!(native.terminals(), &raw);
+        assert_eq!(
+            native.reduce_unit_mass(&source).unwrap().terms,
+            output.terms
+        );
+        let error = NativeCandidate::from_reducer_with_terminal_aliases(
+            family,
+            native.parent_momenta,
+            native.reducer.into_inner().unwrap(),
+        )
+        .unwrap_err();
+        assert!(error.contains("empty reduction cache"));
+    }
 
     #[test]
     fn candidate_ordering_inverts_non_involutive_solver_permutation() {

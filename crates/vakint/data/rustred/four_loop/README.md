@@ -19,7 +19,8 @@ terminal catalog must agree exactly.
 ## Runtime contract
 
 Each program is decompressed and loaded once, on first use, through RustRed's
-candidate loader. A shared native RustRed applier then handles scalar-numerator
+candidate loader. At that boundary, RustRed also prepares and verifies a
+same-family terminal-routing plan once. A shared native RustRed applier then handles scalar-numerator
 lowering, guard selection, strictly descending rule application and memoization.
 No rule-generation campaign or FORM executable is invoked. Vakint consumes the
 result and reuses its pure-Rust/Symbolica FMFT master finalizer. FeynKit's normal
@@ -62,8 +63,51 @@ whole-process correctness gates took 33.04 s and 115.23 s respectively, includin
 the separate FMFT oracle, with peak RSS of 1,990,636 and 2,689,952 KiB. These are
 shared-host validation observations, not a new paired performance benchmark.
 The unchanged 83-test through-three-loop selection, seven catalog/loader unit
-checks and three four-loop fixture checks also pass. The new library terminal-
-alias optimization remains disabled in this rollout; only catalog I/O changes.
+checks and three four-loop fixture checks also pass. Terminal aliases were
+disabled for that catalog-only milestone; the later activation is described below.
+
+## Exact terminal-routing normalization
+
+The `f91c47ab` runtime pin adds explicit load-time steering of
+`TerminalAliasPlan::vacuum_routing_equivalences`. RustRed proves unit-Jacobian
+momentum routings for independent tadpole products and full-rank supports with
+one more active line than loops. It then coalesces equivalent terminal keys
+inside its existing memoized applier, before ancestor coefficient accumulation.
+Vakint implements neither the routing proof nor new coefficient arithmetic.
+
+| Parent | Raw catalog keys (unchanged) | Output representatives | Verified aliases |
+| --- | ---: | ---: | ---: |
+| H | 386 | 176 | 210 |
+| FG | 145 | 53 | 92 |
+| BMW | 179 | 68 | 111 |
+| X | 445 | 208 | 237 |
+| Total | 1,155 | 505 | 650 |
+
+These are family-local representatives, **not 505 independent masters**.
+Unsupported terminal shapes retain their original keys. All 650 aliases were
+independently checked against the saved exact catalog expressions in the core
+gate. The raw-key coverage check, saved files, guard checks, descent, source
+conditions and unresolved-leaf errors remain unchanged. No programs or master
+values are regenerated, and the plan adds no family-closure certificate.
+
+The production loader opts into `from_reducer_with_terminal_aliases` on a fresh
+owner. The existing experimental `from_reducer` constructor retains its original
+behavior, including accepting a populated cache. Installing aliases requires
+an explicitly empty cache and never silently clears caller data. Vakint's
+evaluation options, default method order and FORM-backed methods are unchanged.
+
+Plan preparation adds first-use work, including for inputs already equal to a
+terminal. It is amortized across later reductions of that parent; the public
+benchmark below includes it in the first-parent call rather than presenting
+isolated core application times as whole-backend timings.
+
+The activation passes the unchanged 83-test selection through three loops,
+all fifteen original four-loop numerical references and all sixteen expanded-
+numerator/pinch pairs. Nine focused constructor/catalog/loader checks and three
+fixture checks pass too. The independently executed four-loop gates took
+24.71/47.88 s whole-process wall time, with peak RSS 1,890,784/2,153,024 KiB;
+these correctness runs include the separate FMFT oracle. FeynKit and RustRed
+use forbidden FORM paths. No numerical tolerance or expected value changed.
 
 These are **candidate programs, not `ClosedArtifact`s**. The loader does not
 assert independent regenerated-source replay or unlimited family closure.
@@ -102,7 +146,7 @@ logger; it does not increase source accuracy. Missing Laurent orders are errors.
 
 ## Offline reproduction
 
-Use the matching RustRed runtime pin `d51721b6558d2e6bc4dfdd29c794202376b2c464`
+Use the matching RustRed runtime pin `f91c47abf820c9b9a376860b9c421675589b8a9c`
 for the offline example commands below, with the Symbolica license supplied
 in the environment. These commands generate fresh programs when intentionally
 requested; the shipped migration itself converted the saved programs without
@@ -179,46 +223,62 @@ reduction and master substitution remain inside it. Any matching or dispatch
 performed internally by `evaluate_integral` is also included: this is a public
 backend measurement, not a bare `CandidateReducer` kernel timing.
 
-### Native-binary public-backend snapshot, 19 September 2026
+### Matched terminal-alias comparison, 19 September 2026
 
-All nine inputs passed the initial comparison and five paired repetitions at
-relative tolerance `1e-20`, with zero uncertainty allowance. The release build
-used optimization level 3 with LTO disabled, on an AMD EPYC 9754 host, pinned to
-physical cores 88–93 with one scalar caller and nested thread pools capped at
-one. Shared-host contention was not otherwise eliminated.
+Both the frozen no-alias runtime (`d51721b6`) and the alias-enabled runtime
+(`f91c47ab`) passed all nine inputs, each with an initial comparison and five
+paired repetitions: 108 timed calls and 54 numerical comparisons per process.
+Relative tolerance is `1e-20` with zero uncertainty allowance. Both release
+builds use optimization level 3 with LTO disabled, on an AMD EPYC 9754 host,
+affinity 88–93, one scalar caller and nested pools capped at one. Shared-host
+contention was not eliminated; other validation/build work used disjoint CPU
+sets. These separate process runs are diagnostics, not confidence bounds.
 
-| Input | First RustRed call (s) | Repeated RustRed median (ms) | Repeated FMFT median (ms) | FMFT / RustRed |
-| --- | ---: | ---: | ---: | ---: |
-| H, first propagator cubed | 15.962 | 105.526 | 1669.229 | 15.82 |
-| H, expanded D7 numerator | 0.023 | 21.514 | 143.815 | 6.68 |
-| FG, first propagator cubed | 1.643 | 83.668 | 244.900 | 2.93 |
-| FG, expanded D7 numerator | 1.610 | 32.444 | 152.148 | 4.69 |
-| BMW, first propagator cubed | 6.288 | 75.208 | 716.279 | 9.52 |
-| BMW, expanded D7 numerator | 0.055 | 41.284 | 136.986 | 3.32 |
-| X, first propagator cubed | 82.864 | 150.665 | 4662.828 | 30.95 |
-| X, expanded D7 numerator | 2.934 | 84.236 | 177.525 | 2.11 |
-| Factorized four-tadpole | 0.015 | 15.136 | 132.988 | 8.79 |
+Times shown as before → after compare the same saved programs and public test
+inputs. The FMFT column gives five-call medians from both runs, so movement in
+the reference backend is visible too.
 
-Each cubed-parent first call includes that parent's lazy load and uncached
-application. Subsequent inputs can reuse earlier subproblems. In particular,
-the 82.864 s X observation is **not a loader-only timing**. Repeated calls are
-faster than FMFT on this finite matrix, but first-use costs remain substantial.
-Even with the parent program already loaded, initial FG/X expanded-D7 calls
-took 1.610/2.934 s, versus FMFT's 0.169/0.240 s. The repeated-call advantage
-therefore must not be generalized to previously unseen targets.
+| Input | First RustRed call (s), before → after | Warm RustRed median (ms), before → after | Warm FMFT median (ms), before → after |
+| --- | ---: | ---: | ---: |
+| H, first propagator cubed | 14.859 → 7.155 | 103.061 → 90.010 | 1536.791 → 1490.813 |
+| H, expanded D7 numerator | 0.021 → 0.021 | 20.953 → 20.826 | 139.285 → 134.571 |
+| FG, first propagator cubed | 1.244 → 1.339 | 83.896 → 80.593 | 234.677 → 220.815 |
+| FG, expanded D7 numerator | 1.715 → 0.782 | 32.275 → 30.931 | 147.154 → 145.719 |
+| BMW, first propagator cubed | 7.326 → 3.623 | 75.680 → 69.522 | 721.270 → 715.237 |
+| BMW, expanded D7 numerator | 0.054 → 0.032 | 41.319 → 27.482 | 139.454 → 135.494 |
+| X, first propagator cubed | 84.167 → 30.990 | 150.270 → 126.704 | 4710.187 → 4726.422 |
+| X, expanded D7 numerator | 2.707 → 0.872 | 76.313 → 54.745 | 181.094 → 163.144 |
+| Factorized four-tadpole | 0.015 → 0.015 | 14.616 → 15.312 | 130.457 → 142.288 |
 
-The complete benchmark process took 167.33 s wall, 161.29 s user CPU and 4.85 s
-system CPU; peak RSS was 2,863,816 KiB, with no swaps. This process includes
-all nine inputs, both backends, initialization and untimed comparisons. CPU
-observations have 10 ms granularity. Per-call RSS records are snapshots, not
-independent backend peaks. Raw observations and the derived summary are kept
-in the local RustRed workspace's ignored
-`TMP/gamma-native-migration-20260919/public-timing.{log,time}`; the test above
-reproduces the workload without those files.
+The observed H/X first-call improvements are 2.08×/2.72×, including lazy load
+and new plan preparation. They are **not loader-only improvements**. FG's
+first cubed-line call is slightly slower, and the terminal-heavy factorized
+control gains nothing: preparation and scheduling still cost time. The public
+dotted probes have power three; separate core-only diagnostics using power two
+are a different workload and must not be substituted for this table.
 
-The previous same-workload text-program snapshot took 251.79 s overall and
-14,686,292 KiB peak RSS; its first H/FG/BMW/X calls took
-35.353/11.450/20.907/127.140 s. These separate shared-host runs are diagnostic
-comparisons, not a controlled statistical speedup claim. Native transport
-removes text-loading overhead; it does not change the application algorithm or
-make uncached reductions as fast as the repeated-cache timings.
+Repeated alias-enabled calls are faster than FMFT on this finite matrix, but
+first use is still slower than FMFT for every cubed parent. For example, initial
+H/X FMFT calls took 1.502/4.734 s versus RustRed's 7.155/30.990 s. Initial FG/X
+expanded-D7 calls also remain slower at 0.782/0.872 s versus 0.144/0.190 s for
+FMFT. The warm-cache advantage is not a bound for unseen targets.
+
+| Whole benchmark process | No aliases | Aliases enabled |
+| --- | ---: | ---: |
+| Wall time | 164.83 s | 96.35 s |
+| User + system CPU | 158.66 + 4.83 s | 92.19 + 3.53 s |
+| Peak RSS | 2,864,780 KiB | 2,218,696 KiB |
+
+These process totals include both backends, initialization and untimed
+comparisons. RSS includes loaded programs, caches and temporary values, not
+only cached coefficient payload. Per-call CPU has 10 ms granularity; RSS
+snapshots are not independent backend peaks. Neither run regenerated rules or
+master catalogs. The workspace-only Cargo cache was initialized between the
+runs; copying dependencies, compilation and download time are excluded.
+
+Raw observations, exact executable hashes, phase tables and an identical
+before/after driver are retained in the RustRed workspace's ignored
+`TMP/gamma-terminal-alias-rollout.4Zi7ej/` as `baseline-d517.*`, `aliases-f91.*`
+and `run-benchmark.sh`. The public test above reproduces the workload without
+those local files. The earlier native-I/O-only snapshot remains in Git history
+and `TMP/gamma-native-migration-20260919/`; it is not the baseline used here.

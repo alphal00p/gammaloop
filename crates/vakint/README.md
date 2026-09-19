@@ -67,8 +67,20 @@ catalog loading. See the [catalog migration details](data/rustred/four_loop/READ
 On RustRed `d51721b6`, the unchanged 83-test selection through three loops and
 all fifteen four-loop references plus sixteen expanded-numerator/pinch pairs
 pass again, with invalid FORM paths in the native lanes. Seven catalog/loader
-checks and three fixture checks also pass. Terminal-alias optimization is not
-enabled by this I/O-only rollout.
+checks and three fixture checks also pass. That I/O-only milestone did not
+enable terminal aliases.
+
+The subsequent `f91c47ab` pin enables RustRed's verified terminal-routing plan
+once per loaded four-loop parent. The 1,155 raw catalog declarations remain
+unchanged; the applier coalesces them onto 505 family-local representatives
+before memoizing coefficients. These are not a minimal master basis or a new
+closure claim. Vakint delegates preparation and application entirely to
+RustRed; its options, defaults and existing FORM-backed modes stay unchanged.
+All 83 lower-loop cases, all 31 four-loop comparisons and nine focused checks
+pass on this pin. In the matched nine-input benchmark, first H/X cubed-line
+calls decrease from 14.86/84.17 s to 7.16/30.99 s; warm calls remain faster than
+FMFT on the tested matrix, but initial cubed-parent reductions are still slower than FMFT
+and preparation is not free. See the [complete timings and boundaries](data/rustred/four_loop/README.md#public-scalar-timing-probe).
 
 The [historical RustRed acceptance inventory](tests/RUSTRED_ACCEPTANCE.md) maps
 all existing single-common-mass inputs through three loops to native peers.

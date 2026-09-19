@@ -183,7 +183,7 @@ fn load(index: usize) -> Result<ExperimentalRustRed, String> {
     if catalog.terms().keys().ne(reducer.terminals().iter()) {
         return Err("offline catalog does not exactly cover declared program terminals".into());
     }
-    let native = NativeCandidate::from_reducer(
+    let native = NativeCandidate::from_reducer_with_terminal_aliases(
         Arc::new(family),
         descriptor.physical_momenta.clone(),
         reducer,

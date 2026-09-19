@@ -164,6 +164,20 @@ paths in the native stages. Retained evidence is under
 the independent `public-audit.md`. No alias optimization was activated for this
 format-only comparison.
 
+The later `f91c47ab` runtime explicitly installs RustRed's verified terminal
+routing plan only in the production four-loop loader. The old experimental
+`NativeCandidate::from_reducer` keeps raw outputs and accepts populated caches;
+`from_reducer_with_terminal_aliases` is the explicit fresh-owner constructor.
+All raw catalog declarations and saved program bytes are unchanged. The full
+fifteen-reference and sixteen-pinch gates pass again with forbidden FORM paths
+in the native stages, at 24.71/47.88 s whole-process wall time. Nine focused
+checks include both constructor conventions, and the unchanged 83-test lower-
+loop selection also passes. The same nine-input public timing test passes all
+54 numerical comparisons; its full table and first-use/warm-cache boundaries
+are in the [asset README](../../data/rustred/four_loop/README.md#public-scalar-timing-probe).
+Evidence, exact binary hashes, commands and independent audit are retained at
+`TMP/gamma-terminal-alias-rollout.4Zi7ej/` in the RustRed workspace.
+
 The existing FMFT finalizer expands exact Laurent coefficients before
 approximate table substitution. This prevents exact cancelling coefficients
 from becoming tiny floating poles; no zero tolerance, epsilon depth or source
