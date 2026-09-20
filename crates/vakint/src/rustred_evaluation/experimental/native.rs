@@ -28,6 +28,7 @@ pub struct NativeCandidate<const N: usize> {
     parent_momenta: Vec<Atom>,
     dimension: Atom,
     terminals: BTreeSet<IntegralKey>,
+    output_terminals: BTreeSet<IntegralKey>,
 }
 
 impl<const N: usize> NativeCandidate<N> {
@@ -50,18 +51,20 @@ impl<const N: usize> NativeCandidate<N> {
             return Err("candidate reducer/family binding or physical-slot arity differs".into());
         }
         let terminals = reducer.terminals().clone();
+        let output_terminals = reducer.canonical_terminals().clone();
         Ok(Self {
             reducer: Mutex::new(reducer),
             dimension: family.dimension().to_expression(),
             family,
             parent_momenta,
             terminals,
+            output_terminals,
         })
     }
 
     /// Bind a fresh owner and prepare RustRed's exact vacuum terminal aliases.
     ///
-    /// Raw declarations still bind the offline catalog. The plan is prepared
+    /// Raw declarations still bind the rule program. The plan is prepared
     /// once using native U-polynomial equality, then used by the core applier
     /// before memoization. A previously used reducer must have its point cache
     /// explicitly cleared by the caller;
@@ -86,6 +89,7 @@ impl<const N: usize> NativeCandidate<N> {
         reducer
             .install_terminal_aliases(aliases)
             .map_err(|error| error.to_string())?;
+        native.output_terminals = reducer.canonical_terminals().clone();
         Ok(native)
     }
 
@@ -93,7 +97,7 @@ impl<const N: usize> NativeCandidate<N> {
     ///
     /// RustRed reconstructs the exact terminal proof and compares the complete
     /// stored output once, then owns weighted application and memoization.
-    /// The raw terminal set still binds the offline catalog. As with explicit
+    /// The raw terminal set still binds the rule program. As with explicit
     /// aliases, the caller must clear an already populated point cache itself.
     /// Native bytes must come from the matching trusted RustRed/Symbolica stack;
     /// this changes neither candidate authority nor the plain constructor.
@@ -120,6 +124,7 @@ impl<const N: usize> NativeCandidate<N> {
         reducer
             .install_terminal_normalization(plan)
             .map_err(|error| error.to_string())?;
+        native.output_terminals = reducer.canonical_terminals().clone();
         Ok(native)
     }
 
@@ -200,6 +205,13 @@ impl<const N: usize> NativeCandidate<N> {
 
     pub fn terminals(&self) -> &BTreeSet<IntegralKey> {
         &self.terminals
+    }
+
+    /// Exact possible outputs of the installed RustRed terminal convention.
+    /// Offline values need only cover these keys; raw declarations remain
+    /// available through `terminals()` and owned by the rule program.
+    pub fn output_terminals(&self) -> &BTreeSet<IntegralKey> {
+        &self.output_terminals
     }
 
     /// Drop pointwise memoized results without rerunning candidate search.
@@ -333,6 +345,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(native.terminals(), &raw);
+        assert_eq!(native.output_terminals().len(), 1);
         let (source, representative) = {
             let reducer = native.reducer.lock().unwrap();
             let plan = reducer.terminal_aliases().unwrap();
@@ -351,6 +364,7 @@ mod tests {
         );
         native.clear_cache().unwrap();
         assert_eq!(native.terminals(), &raw);
+        assert_eq!(native.output_terminals().len(), 1);
         assert_eq!(
             native.reduce_unit_mass(&source).unwrap().terms,
             output.terms
@@ -477,6 +491,11 @@ mod tests {
             (scalar, vakint_parse!("1/3").unwrap()),
             (pinch, vakint_parse!("4/3").unwrap()),
         ]);
+        assert_eq!(
+            native.output_terminals(),
+            &expected.keys().cloned().collect()
+        );
+        assert!(!native.output_terminals().contains(&numerator));
         // The four-line circuit symmetry gives D5 -> (D1+D2+D3+D4+1)/3
         // after integration. All four positive pinches have the same value.
         for _ in 0..2 {

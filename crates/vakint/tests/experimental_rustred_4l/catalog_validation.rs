@@ -39,11 +39,12 @@ fn shipped_terminal_projections_match_fmft() {
                 continue;
             }
             let parent = ParentInput::from_csv(descriptor.csv());
-            let filename = format!("{}.rrcat.bin", name.to_ascii_lowercase());
-            let old = OfflineTerminalCatalog::decode_generated(
+            let filename = format!("{}.rrcat.bin.gz", name.to_ascii_lowercase());
+            let old = OfflineTerminalCatalog::decode_generated_compressed(
                 &std::fs::read(directory.join(&filename)).unwrap(),
                 parent.family.fingerprint(),
                 10,
+                rustred::persistence::BinaryIoLimits::default(),
             )
             .unwrap();
             old.require_complete().unwrap();
@@ -82,7 +83,11 @@ fn shipped_terminal_projections_match_fmft() {
                 )
                 .unwrap();
                 std::fs::create_dir_all(output).unwrap();
-                std::fs::write(output.join(filename), refreshed.encode().unwrap()).unwrap();
+                std::fs::write(
+                    output.join(filename),
+                    refreshed.encode_compressed().unwrap(),
+                )
+                .unwrap();
             } else {
                 assert_eq!(changes, 0, "shipped {name} catalog differs from FMFT");
             }

@@ -354,9 +354,22 @@ coverage of every four-loop input.
 
 ## Offline shipped-catalog audit
 
+The 2026-09-20 output-only catalog rollout retains exactly 74 normalized keys
+(H 22, FG 16, BMW 17, X 19) in compressed native files. Every one of the previous
+1,155 raw projections was checked exactly against the retained values composed
+with the unchanged normalization sidecars. The default-feature public release
+gate again passes all fifteen reference cases, all sixteen pinch pairs and all
+54 paired scalar comparisons, using invalid FORM paths in the RustRed/FeynKit
+lanes. The 83-case lower-loop selection, fifteen focused loader/normalizer/
+transport checks and three fixture checks also pass; some filters overlap.
+No IBP program or numerical master value was regenerated. See the shipped
+data README for storage, loading measurements and current receipt locations.
+
 `catalog_validation::shipped_terminal_projections_match_fmft` evaluates only
-the already-declared terminal keys with FMFT and compares their exact master
-projections with `data/rustred/four_loop/*.rrcat.bin`. It does not solve IBPs or
+the 74 normalized output keys in the shipped value catalogs with FMFT and compares
+their exact master projections with `data/rustred/four_loop/*.rrcat.bin.gz`.
+The programs and separate normalization sidecars retain all 1,155 raw declarations
+and their exact projection relations. The audit does not solve IBPs or
 declare additional terminals. With the license and explicit oracle environment
 set as above, run this separate offline diagnostic:
 

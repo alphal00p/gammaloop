@@ -7,11 +7,10 @@
 //! Native Symbolica programs are trusted, build-time embedded data from the
 //! pinned RustRed/Symbolica stack, not a public untrusted-file input boundary.
 
-use std::io::Read;
 use std::sync::{Arc, LazyLock};
 
-use flate2::read::GzDecoder;
 use rustred::input::{Compiler, Limits, LoweringLimits, TextProject, TextPropagator};
+use rustred::persistence::BinaryIoLimits;
 use rustred::reduction::ReductionLimits;
 use rustred_app::{
     CandidateBundleLimits, MAX_CANDIDATE_BUNDLE_BYTES, load_generated_candidate_bundle,
@@ -34,6 +33,16 @@ use crate::{
 // Symbolica's native readers still require trusted generated provenance.
 const MAX_PROGRAM_BYTES: usize = MAX_CANDIDATE_BUNDLE_BYTES;
 const MAX_COEFFICIENT_BYTES: usize = 512 * 1024 * 1024;
+fn catalog_limits() -> BinaryIoLimits {
+    BinaryIoLimits {
+        max_program_bytes: 64 * 1024,
+        max_collection_entries: 4096,
+        max_state_bytes: 32 * 1024,
+        max_atom_bytes: 32 * 1024,
+        max_total_atom_bytes: 32 * 1024,
+        ..BinaryIoLimits::default()
+    }
+}
 
 struct Input {
     label: &'static str,
@@ -56,7 +65,7 @@ macro_rules! input {
             catalog: include_bytes!(concat!(
                 "../../data/rustred/four_loop/",
                 $name,
-                ".rrcat.bin"
+                ".rrcat.bin.gz"
             )),
             normalization: include_bytes!(concat!(
                 "../../data/rustred/four_loop/",
@@ -163,14 +172,8 @@ fn descriptor(source: &str) -> Result<Descriptor, String> {
 fn load(index: usize) -> Result<ExperimentalRustRed, String> {
     let input = &INPUTS[index];
     let descriptor = &DESCRIPTORS.as_ref().map_err(Clone::clone)?[index];
-    let mut bytes = Vec::new();
-    GzDecoder::new(input.program)
-        .take(MAX_PROGRAM_BYTES as u64 + 1)
-        .read_to_end(&mut bytes)
+    let bytes = super::experimental::compressed::decode(input.program, MAX_PROGRAM_BYTES)
         .map_err(|error| format!("decompress {}: {error}", input.label))?;
-    if bytes.len() > MAX_PROGRAM_BYTES {
-        return Err("shipped program exceeds byte limit".into());
-    }
     let limits = CandidateBundleLimits {
         max_bundle_bytes: MAX_PROGRAM_BYTES,
         max_collection_entries: 8_000_000,
@@ -183,18 +186,20 @@ fn load(index: usize) -> Result<ExperimentalRustRed, String> {
     if family.fingerprint() != descriptor.family_fingerprint {
         return Err("shipped program differs from its physical/auxiliary descriptor".into());
     }
-    let catalog =
-        OfflineTerminalCatalog::decode_generated(input.catalog, family.fingerprint(), 10)?;
-    catalog.require_complete()?;
-    if catalog.terms().keys().ne(reducer.terminals().iter()) {
-        return Err("offline catalog does not exactly cover declared program terminals".into());
-    }
+    let catalog = OfflineTerminalCatalog::decode_generated_compressed(
+        input.catalog,
+        family.fingerprint(),
+        family.denominator_count(),
+        catalog_limits(),
+    )?;
     let native = NativeCandidate::from_reducer_with_terminal_normalization(
         Arc::new(family),
         descriptor.physical_momenta.clone(),
         reducer,
         input.normalization,
     )?;
+    catalog.require_complete()?;
+    catalog.require_exact_keys(native.output_terminals())?;
     ExperimentalRustRed::new(Arc::new(native), catalog.into_terms())
         .map_err(|error| error.to_string())
 }
@@ -266,22 +271,26 @@ pub(super) fn evaluate(
     options: &RustRedEvaluationOptions,
 ) -> Result<Atom, VakintError> {
     let index = select(&matched.canonical_topology)?;
-    let program = match index {
+    let program =
+        loaded(index)
+            .as_ref()
+            .map_err(|detail| RustRedEvaluationError::ArtifactLoad {
+                family: INPUTS[index].label,
+                detail: detail.clone(),
+            })?;
+    program
+        .evaluate_matched(settings, numerator, matched, options.substitute_masters)
+        .map(|result| result.value)
+}
+
+fn loaded(index: usize) -> &'static Result<ExperimentalRustRed, String> {
+    match index {
         0 => &*H,
         1 => &*FG,
         2 => &*BMW,
         3 => &*X,
         _ => unreachable!(),
-    };
-    let program = program
-        .as_ref()
-        .map_err(|detail| RustRedEvaluationError::ArtifactLoad {
-            family: INPUTS[index].label,
-            detail: detail.clone(),
-        })?;
-    program
-        .evaluate_matched(settings, numerator, matched, options.substitute_masters)
-        .map(|result| result.value)
+    }
 }
 
 #[cfg(test)]
@@ -310,7 +319,10 @@ mod tests {
     #[test]
     fn shipped_programs_cold_load_with_exact_terminal_catalogs() {
         for index in 0..INPUTS.len() {
-            load(index).unwrap_or_else(|error| panic!("{}: {error}", INPUTS[index].label));
+            let first = loaded(index)
+                .as_ref()
+                .unwrap_or_else(|error| panic!("{}: {error}", INPUTS[index].label));
+            assert!(std::ptr::eq(first, loaded(index).as_ref().unwrap()));
         }
     }
 
@@ -322,16 +334,16 @@ mod tests {
         };
 
         // These are expectations for vendored input data, not engine limits or
-        // a dispatch based on a topology name. Original rules/catalogs stay raw.
+        // a dispatch based on a topology name. Original rules stay raw; catalog
+        // values cover only the exact output convention installed by RustRed.
         for (input, (raw_count, output_count)) in
             INPUTS
                 .iter()
                 .zip([(386, 22), (145, 16), (179, 17), (445, 19)])
         {
-            let mut bytes = Vec::new();
-            GzDecoder::new(input.program)
-                .read_to_end(&mut bytes)
-                .unwrap();
+            let bytes =
+                super::super::experimental::compressed::decode(input.program, MAX_PROGRAM_BYTES)
+                    .unwrap();
             let (family, reducer) = load_generated_candidate_bundle::<10>(
                 &bytes,
                 CandidateBundleLimits {
@@ -366,6 +378,16 @@ mod tests {
                     .all(|key| key.powers().iter().all(|power| *power >= 0))
             );
             assert!(plan.canonical_terminals().is_subset(plan.raw_terminals()));
+            let catalog = OfflineTerminalCatalog::decode_generated_compressed(
+                input.catalog,
+                family.fingerprint(),
+                family.denominator_count(),
+                catalog_limits(),
+            )
+            .unwrap();
+            assert_eq!(catalog.terms().len(), output_count);
+            assert!(catalog.terms().keys().eq(plan.canonical_terminals().iter()));
+            assert!(catalog.terms().len() < raw_count);
         }
     }
 

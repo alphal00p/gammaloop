@@ -4,7 +4,7 @@
 //! native files have trusted generated provenance. Complete means producer-
 //! declared finite coverage; the consumer still checks the exact terminal set.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use rustred::family::IntegralKey;
 pub use rustred::persistence::TerminalCatalogCoverage as CatalogCoverage;
@@ -132,11 +132,47 @@ impl OfflineTerminalCatalog {
         ))
     }
 
+    /// Bind values to an installed output convention, with no unused raw keys.
+    pub fn require_exact_keys(&self, required: &BTreeSet<IntegralKey>) -> Result<(), String> {
+        self.require_keys(required.iter().cloned())?;
+        if self.terms().len() != required.len() {
+            return Err(
+                "offline terminal catalog contains keys outside the installed output convention"
+                    .into(),
+            );
+        }
+        Ok(())
+    }
+
     /// Native Atom/state persistence; no canonical strings or expression parse.
     pub fn encode(&self) -> Result<Vec<u8>, String> {
         self.0
             .encode_native(BinaryIoLimits::default())
             .map_err(|error| error.to_string())
+    }
+
+    /// Deterministic gzip around the unchanged native Atom/state catalog.
+    pub fn encode_compressed(&self) -> Result<Vec<u8>, String> {
+        super::compressed::encode(&self.encode()?)
+    }
+
+    /// Bound decompression before the native decoder and retain its trusted-
+    /// generated provenance requirement. No text or legacy fallback is tried.
+    pub fn decode_generated_compressed(
+        input: &[u8],
+        expected_family_fingerprint: &str,
+        expected_index_count: usize,
+        limits: BinaryIoLimits,
+    ) -> Result<Self, String> {
+        let bytes = super::compressed::decode(input, limits.max_program_bytes)?;
+        ExactTerminalCatalog::decode_generated(
+            &bytes,
+            expected_family_fingerprint,
+            expected_index_count,
+            limits,
+        )
+        .map(Self)
+        .map_err(|error| error.to_string())
     }
 
     /// Load trusted generated native data and bind its family and index arity.
@@ -236,6 +272,60 @@ mod tests {
             )
             .unwrap_err()
             .contains("duplicate terminal key")
+        );
+    }
+
+    #[test]
+    fn compressed_catalog_preserves_exact_values_and_native_binding() {
+        let catalog = sample();
+        let bytes = catalog.encode_compressed().unwrap();
+        assert_eq!(bytes, catalog.encode_compressed().unwrap());
+        let decoded = OfflineTerminalCatalog::decode_generated_compressed(
+            &bytes,
+            catalog.family_fingerprint(),
+            catalog.index_count(),
+            BinaryIoLimits::default(),
+        )
+        .unwrap();
+        assert_eq!(decoded, catalog);
+        assert!(
+            OfflineTerminalCatalog::decode_generated_compressed(
+                &bytes,
+                "foreign",
+                catalog.index_count(),
+                BinaryIoLimits::default()
+            )
+            .is_err()
+        );
+        assert!(
+            OfflineTerminalCatalog::decode_generated_compressed(
+                &catalog.encode().unwrap(),
+                catalog.family_fingerprint(),
+                catalog.index_count(),
+                BinaryIoLimits::default()
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn exact_output_coverage_rejects_missing_and_unused_raw_values() {
+        let catalog = sample();
+        let expected = catalog.terms().keys().cloned().collect::<BTreeSet<_>>();
+        catalog.require_exact_keys(&expected).unwrap();
+        assert!(
+            catalog
+                .require_exact_keys(&BTreeSet::new())
+                .unwrap_err()
+                .contains("outside")
+        );
+        let mut missing = expected;
+        missing.insert(IntegralKey::try_new([2, 1, 0, 0]).unwrap());
+        assert!(
+            catalog
+                .require_exact_keys(&missing)
+                .unwrap_err()
+                .contains("missing")
         );
     }
 

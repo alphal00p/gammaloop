@@ -6,9 +6,12 @@
 //! process-local cache and must not be advertised as cold point timings.
 
 use std::collections::HashMap;
+use std::io::Read;
 use std::time::Instant;
 
-use rustred::persistence::{BinaryIoLimits, ExactTerminalCatalog};
+use flate2::read::GzDecoder;
+use rustred::reduction::ReductionLimits;
+use rustred_app::{CandidateBundleLimits, load_generated_candidate_bundle};
 use symbolica::atom::Atom;
 use vakint::{
     EvaluationMethod, EvaluationOrder, FMFTOptions, LoopNormalizationFactor, TensorReductionMethod,
@@ -83,28 +86,36 @@ impl Workload {
         signature.sort_unstable();
         let bytes = match self.parent {
             ParentDescriptor::H => {
-                include_bytes!("../../data/rustred/four_loop/h.rrcat.bin").as_slice()
+                include_bytes!("../../data/rustred/four_loop/h.candidates.rrbin.gz").as_slice()
             }
             ParentDescriptor::Fg => {
-                include_bytes!("../../data/rustred/four_loop/fg.rrcat.bin").as_slice()
+                include_bytes!("../../data/rustred/four_loop/fg.candidates.rrbin.gz").as_slice()
             }
             ParentDescriptor::Bmw => {
-                include_bytes!("../../data/rustred/four_loop/bmw.rrcat.bin").as_slice()
+                include_bytes!("../../data/rustred/four_loop/bmw.candidates.rrbin.gz").as_slice()
             }
             ParentDescriptor::X => {
-                include_bytes!("../../data/rustred/four_loop/x.rrcat.bin").as_slice()
+                include_bytes!("../../data/rustred/four_loop/x.candidates.rrbin.gz").as_slice()
             }
         };
-        let catalog = ExactTerminalCatalog::decode_generated(
-            bytes,
-            descriptor.family.fingerprint(),
-            10,
-            BinaryIoLimits::default(),
+        let mut native = Vec::new();
+        GzDecoder::new(bytes).read_to_end(&mut native).unwrap();
+        let (family, reducer) = load_generated_candidate_bundle::<10>(
+            &native,
+            CandidateBundleLimits {
+                max_collection_entries: 8_000_000,
+                max_total_coefficient_bytes: 512 * 1024 * 1024,
+                ..CandidateBundleLimits::default()
+            },
+            ReductionLimits::default(),
         )
         .unwrap();
+        assert_eq!(family.fingerprint(), descriptor.family.fingerprint());
         // No routing permutation can turn this probe into a declared terminal.
         // Inspect after timing so native import cannot prewarm first-use state.
-        for key in catalog.terms().keys() {
+        // Read the unchanged raw rule declarations, not the now-pruned value
+        // catalog: a missing catalog entry alone cannot prove nonterminality.
+        for key in reducer.terminals() {
             let mut terminal = key.powers().to_vec();
             terminal.sort_unstable();
             assert_ne!(

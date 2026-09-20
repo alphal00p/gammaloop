@@ -9,6 +9,7 @@
 //! supplied, offline terminal-value catalog. There is no FORM fallback here.
 
 pub mod catalog;
+pub(crate) mod compressed;
 pub mod native;
 
 use std::collections::BTreeMap;

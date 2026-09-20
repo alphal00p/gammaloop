@@ -9,7 +9,7 @@ Each parent (H, FG, BMW and X) has:
 - a `.csv` ordered physical/auxiliary momentum descriptor;
 - a `.toml` topology-generic RustRed family-generation input;
 - a `.candidates.rrbin.gz` saved native-binary parametric candidate program;
-- a `.rrcat.bin` native exact map of its declared finite terminals onto FMFT's PR basis;
+- a `.rrcat.bin.gz` compressed native exact map of its normalized output terminals onto FMFT's PR basis;
 - a `.rrnorm.bin` native weighted terminal-normalization sidecar.
 
 Labels identify data files, not engine dispatch. Vakint selects a program from
@@ -19,8 +19,9 @@ terminal catalog must agree exactly.
 
 ## Runtime contract
 
-Each program is decompressed and loaded once, on first use, through RustRed's
-candidate loader. At that boundary, RustRed also decodes and independently
+Each program and its small value catalog are decompressed and loaded once,
+on first use. RustRed owns candidate loading and the native value codec.
+At that boundary, RustRed also decodes and independently
 rebuilds the same-family weighted vacuum terminal-normalization plan once.
 A shared native RustRed applier then handles scalar-numerator
 lowering, guard selection, strictly descending rule application and memoization.
@@ -39,9 +40,88 @@ normalization sidecar defines the effective output convention.
 The terminal-value files use RustRed's distinct `TerminalValues` envelope and
 deduplicate exact Symbolica Atoms with a shared native state. Vakint delegates
 their encode/decode to RustRed; runtime loading performs no expression-text
-parsing. Their family fingerprint, arity, declared coverage and all 1,155 raw
-integral keys are unchanged. These catalogs carry no IBP or closure authority.
-The consumer still checks equality with the candidate's declared terminal set.
+parsing. Their family fingerprint, arity, declared coverage and retained exact
+values are unchanged. Only the 74 possible normalized outputs require catalog
+entries; all 1,155 raw keys and their relations remain in the separate program
+and normalization sidecar. These catalogs carry no IBP or closure authority.
+The consumer checks exact equality with RustRed's installed output-terminal
+set, rejecting missing values and unused raw entries. No legacy catalog fallback
+exists. Single-member gzip transport rejects truncated/corrupt/trailing data
+and applies a 64-KiB input/decompressed catalog bound before native import.
+
+## Compressed output-only catalogs
+
+The value-only migration neither generates rules nor changes the terminal
+normalizer. Every retained value is copied as an exact native Atom. All 1,155
+previous raw projections agree exactly with the 74-value catalog composed with
+the unchanged sidecars (1,260 coefficients checked). Original master precision
+and numerical tolerances are unaffected.
+
+| Parent | Raw declarations retained in program | Catalog outputs | Previous native bytes | Output-only native bytes | Shipped gzip bytes |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| H | 386 | 22 | 8,845 | 5,777 | 929 |
+| FG | 145 | 16 | 5,654 | 5,115 | 821 |
+| BMW | 179 | 17 | 6,391 | 5,431 | 861 |
+| X | 445 | 19 | 9,417 | 5,609 | 897 |
+| Total | 1,155 | 74 | 30,307 | 21,932 | 3,508 |
+
+The shipped value catalogs are 88.4% smaller than the previous uncompressed
+native files. This is a catalog-storage improvement, not an 88.4% reduction of
+the much larger candidate programs or a new master-basis reduction. Compression
+has zero timestamp and no filename metadata. The runtime retains the existing
+per-program lazy owner and RustRed memoized rule applier.
+
+With the same compressor applied to the original raw catalogs, they would total
+6,157 bytes; pruning therefore reduces even that compressed baseline by 43.0%.
+Without compression the native subset alone is 27.6% smaller. The four large
+compressed candidate programs are unchanged at 20,511,348 bytes, as are the
+30,795 bytes of normalization sidecars. The combined binary payload changes
+from 20,572,450 to 20,545,651 bytes; pruning values does not shrink rule storage.
+
+Three fresh processes per family/transport give the following median times from
+file read through native import, excluding process launch (milliseconds):
+
+| Parent | Previous native catalog | Output-only native catalog | Shipped compressed catalog |
+| --- | ---: | ---: | ---: |
+| H | 0.742 | 0.587 | 0.608 |
+| FG | 0.535 | 0.545 | 0.550 |
+| BMW | 0.540 | 0.543 | 0.562 |
+| X | 0.795 | 0.564 | 0.592 |
+
+These are small shared-host observations, not a statistical speed guarantee or
+cold-filesystem test. Imports start in fresh Symbolica processes, and gzip adds
+approximately 0.067 ms of transport work. Other compiles used disjoint CPUs.
+Some smaller inputs get slower; catalog compression is primarily a storage
+improvement and is not claimed to accelerate the full integral reduction.
+
+The 2026-09-20 release gate passes the unchanged 83-case through-three-loop
+selection, fifteen focused catalog/normalization/transport checks, three
+four-loop fixture checks, all fifteen original numerical references and all
+sixteen expanded-numerator/pinch pairs. The public scalar harness additionally
+passes 54 paired numerical comparisons (108 measured calls across nine inputs).
+The RustRed/FeynKit branches retain invalid FORM paths; only the separate FMFT
+oracle receives an executable. Input precision, nonunit scales, tolerances,
+default evaluation order and existing backends are unchanged. The optional
+offline-catalog audit target also compiles with `experimental-rustred` enabled.
+Focused filters overlap the inventory and are not extra physical inputs.
+
+The reference/pinch processes took 60.74/82.94 seconds wall time and peaked at
+1,859,864/2,115,584 KiB RSS. These shared-host correctness runs used CPU 94 with
+concurrent compiler contention, not an isolated performance comparison. The
+focused unit process moved from CPU 94 to 92 near completion. The timing
+harness also reloads raw rule declarations outside its measured intervals to
+verify that its nonterminal probes remain nonterminal; its whole-process time
+must not be compared as a scalar-application speedup.
+
+All frozen source/asset and executable hashes matched before/after the gate.
+An independent audit reran the exact catalog migration in four fresh processes,
+obtained byte-identical shipped gzip files, and checked adversarial transport
+inputs. Migration, load timings and numerical receipts are retained in
+`TMP/gamma-output-catalog-rollout.B4yQ1n/`; the independent audit is in
+`TMP/compressed-catalog-audit.GINagg/` in the RustRed workspace. Neither these
+tests nor the 74-output convention constitute arbitrary-index family closure.
+
+## Historical full-raw-catalog native migration
 
 The catalog-only migration compared every value exactly against the saved text,
 then repeated that comparison in a fresh process with unrelated Symbolica state:
@@ -81,7 +161,7 @@ symmetries. The implementation does not dispatch on these parent names or on
 four loops. Strict output descent, declared-terminal binding and one-hop
 fixed-point closure are checked before installation.
 
-| Parent | Raw catalog keys | Prior U outputs | Weighted positive outputs | Projected numerators | Sidecar bytes |
+| Parent | Raw program keys | Prior U outputs | Weighted positive outputs | Projected numerators | Sidecar bytes |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | H | 386 | 52 | 22 | 30 | 8,934 |
 | FG | 145 | 26 | 16 | 10 | 5,759 |
@@ -90,8 +170,10 @@ fixed-point closure are checked before installation.
 | Total | 1,155 | 179 | 74 | 105 | 30,795 |
 
 These are 74 family-local positive outputs, not 74 independent or minimal
-masters. All twelve existing program/catalog/descriptor assets remain
-byte-identical; no candidate rules or master values were regenerated. Export
+masters. At the weighted-normalization milestone all twelve existing
+program/catalog/descriptor assets remained byte-identical; the subsequent
+value-only pruning above changes catalogs but not programs or sidecars. No
+candidate rules or master values were regenerated. Export
 and fresh dirty-context reload independently checked every one of the 1,155
 raw expansions, all 1,260 output coefficients and both ordered native variable
 maps. Each family's retained symmetry generators and affine projection columns
@@ -104,7 +186,8 @@ limits instead returns a typed error.
 The sidecar uses a distinct native envelope and is trusted generated data for
 this pinned stack. Its decoder regenerates the finite proof and compares every
 saved expansion before returning an installable owner; framing alone conveys
-no authority. The raw catalog coverage check remains exact and unchanged.
+no authority. The current catalog check binds the exact final output set;
+the normalizer itself still checks every raw program declaration.
 The thin Vakint constructor `from_reducer_with_terminal_normalization` installs
 that owner into an empty cache. The plain and unit-alias constructors retain
 their prior behavior, and no cache is silently cleared. Hot application uses
@@ -204,7 +287,7 @@ the same deterministic `gzip -n -9` command.
 
 `RustRedEvaluationOptions { substitute_masters: false }` leaves the raw PR master
 basis unexpanded. With substitution enabled, the existing finite FMFT expansion
-tables are used. The `.rrcat.bin` records are exact PR expressions, **not new
+tables are used. The compressed `.rrcat.bin.gz` records are exact PR expressions, **not new
 20,000-digit master evaluations**. Requesting more precision than a surviving
 master/constant source contains emits the existing warning through Vakint's
 logger; it does not increase source accuracy. Missing Laurent orders are errors.
@@ -226,7 +309,7 @@ cargo run --release --locked --offline --no-default-features \
 cargo run --release --locked --offline --no-default-features \
   -p rustred-app --example candidate_bundle -- \
   verify 10 /path/to/new/h.candidates.rrbin \
-  /path/to/vakint/data/rustred/four_loop/h.rrcat.bin
+  /path/to/offline/raw/h.rrcat.bin
 
 gzip -n -9 -c /path/to/new/h.candidates.rrbin > /path/to/new/h.candidates.rrbin.gz
 ```
@@ -236,7 +319,10 @@ The helper requires new output paths. The zero-based nonpositive index list is
 not physical propagators. The worker count above is an explicit example and can
 be changed. Generation uses ordinary RustRed IBPs and no FMFT-derived rules.
 The fresh-process `verify` operation checks the family/catalog binding and
-declared terminal keys; it is not a symbolic closure certificate.
+declared raw terminal keys; it requires a separately prepared full raw diagnostic
+catalog, not the shipped output-only catalog. Runtime validation instead binds
+the compressed catalog to the installed normalizer. Neither operation is a
+symbolic closure certificate.
 
 FMFT is needed only when preparing or independently revalidating the offline PR
 catalog and in the separate oracle test lane. It is not a dependency of runtime
