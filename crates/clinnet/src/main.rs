@@ -908,7 +908,7 @@ fn figure_render_config(plan: &FigurePlan, inputs: &[(String, String)]) -> Resul
         bail!("typst-fields is not supported by the V1 renderer; fields are always plain data");
     }
     let mut layout = Vec::new();
-    for key in ["steps", "seed"] {
+    for key in ["steps", "epochs", "seed"] {
         if let Some(value) = inputs.get(key) {
             layout.push((key, TypstValue::Integer(integer_input(key, value)?)));
         }
@@ -916,7 +916,7 @@ fn figure_render_config(plan: &FigurePlan, inputs: &[(String, String)]) -> Resul
 
     let options = inputs
         .iter()
-        .filter(|(key, _)| !matches!(**key, "steps" | "seed"))
+        .filter(|(key, _)| !matches!(**key, "steps" | "epochs" | "seed"))
         .map(|(key, value)| (*key, typst_native_value(value)));
 
     let TypstValue::Dictionary(fields) = typed_dictionary([

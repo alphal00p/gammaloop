@@ -139,7 +139,9 @@ anchor = "pub struct FeynmanDiagram {"
 # registration, shared Spenso index display hooks, and typed Python numerators.
 # Reviewed 2026-09-18: numerator validation checks structural equality before
 # expansion, retaining algebraic comparison for differing representations.
-digest = "2384f141ae81d64e011e44ce9f856aeab79995e1"
+# No architecture impact 2026-09-20: rendering tests verify that finalized
+# cuts select cross-section placement using existing external connection IDs.
+digest = "2d9ac805765a575bbced3ef88d7479729743e721"
 
 [[section.note.scope]]
 path = "crates/feynkit-tensor/src/lib.rs"
@@ -972,7 +974,9 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # No cache-architecture impact 2026-09-18: FeynKit's Python renderer declares
 # the two shared physics-style files it now embeds as production source inputs.
 # Linnest, Kurvst, and package assets now arrive through its linnet-py dependency.
-digest = "24a84cf07db49d3c05173bb6b2d64192e783351a"
+# Reviewed 2026-09-20: FeynKit embeds the shared physics layout template;
+# placement and style policy now come from the same owner as GammaLoop drawing.
+digest = "e94f71d3afd28ec5a4b228af5bf15f447b5d8b28"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
