@@ -1,0 +1,44 @@
+[package]
+name = "feynkit-py"
+version = "0.1.0"
+edition.workspace = true
+description = "Symbolica community Python bindings for FeynKit"
+repository = "https://github.com/alphal00p/gammaloop"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+keywords = ["feynman", "hep", "physics", "python"]
+categories = ["science"]
+
+[[bin]]
+name = "feynkit-stubgen"
+path = "src/bin/stubgen.rs"
+required-features = ["python_stubgen"]
+
+[dependencies]
+feynkit-cff = { version = "0.1.0", path = "../feynkit-cff", default-features = false }
+feynkit-generator = { version = "0.1.0", path = "../feynkit-generator", default-features = false }
+feynkit-graph = { version = "0.1.0", path = "../feynkit-graph", default-features = false }
+feynkit-kinematics = { version = "0.1.0", path = "../feynkit-kinematics" }
+feynkit-model = { version = "0.1.0", path = "../feynkit-model" }
+feynkit-tensor = { version = "0.1.0", path = "../feynkit-tensor", default-features = false }
+feynkit-ufo = { version = "0.1.0", path = "../feynkit-ufo", optional = true }
+linnet-py = { path = "../linnet-py" }
+pyo3 = { workspace = true }
+pyo3-stub-gen = { workspace = true, default-features = false, features = ["infer_signature"], optional = true }
+pyo3-stub-gen-derive = { workspace = true }
+spynso3 = { path = "../spynso3", default-features = false }
+
+[dev-dependencies]
+tempfile = "3.8"
+
+[dependencies.symbolica]
+workspace = true
+default-features = false
+features = ["python_export"]
+
+[features]
+default = ["ufo", "native"]
+native = ["spynso3/native", "feynkit-cff/native", "feynkit-generator/native", "feynkit-graph/native", "feynkit-tensor/native"]
+wasm = ["spynso3/wasm", "feynkit-cff/wasm", "feynkit-generator/wasm", "feynkit-graph/wasm", "feynkit-tensor/wasm"]
+python_stubgen = ["spynso3/python_stubgen", "dep:pyo3-stub-gen", "symbolica/python_stubgen"]
+ufo = ["dep:feynkit-ufo"]

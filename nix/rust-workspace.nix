@@ -375,6 +375,11 @@
     sortedUnique (map builtins.head sourceMatches);
 
   workspacePackageExtraSourceRoots.production = {
+    "feynkit-py" = [
+      "assets/embedded/drawing/templates/layout-core.typ"
+      "assets/embedded/drawing/templates/physics-edge-style.typ"
+      "assets/embedded/drawing/templates/impl/physics-edge-style.typ"
+    ];
     "alphal00p-docs-catalogs" = documentationCatalogAnnotatedItemSourcePaths;
     "alphal00p-docs-examples" = [
       "crates/linnet-py/pyproject.toml"
@@ -429,6 +434,12 @@
   };
 
   workspacePackageExtraSourceRoots.compileTimeTest = {
+    "gammaloop-integration-tests" = ["crates/feynkit-model/tests/fixtures"];
+    "feynkit-tensor" = ["crates/feynkit-model/tests/fixtures"];
+    "feynkit-cff" = ["crates/feynkit-model/tests/fixtures"];
+    "feynkit-generator" = ["crates/feynkit-model/tests/fixtures"];
+    "feynkit-model" = ["crates/feynkit-model/tests/fixtures"];
+    "feynkit-py" = ["crates/feynkit-model/tests/fixtures" "crates/feynkit-py/python/symbolica/community/feynkit/__init__.py" "crates/feynkit-py/tests/fixtures"];
     "alphal00p-docs-macros" = ["crates/alphal00p-docs-macros/tests/ui"];
     "alphal00p-docs-python-exporter" = ["crates/linnet-py/linnet_py.pyi" "docs/api/python"];
     clinnet = [
@@ -440,6 +451,7 @@
       "tests/resources/graphs/epemttbar.dot"
     ];
     gammalooprs = [
+      "crates/gammalooprs/tests/fixtures/renormalization"
       "tests/resources/graphs/scalar/dod2_bubble.dot"
     ];
   };
@@ -450,6 +462,8 @@
       "assets/gammalooplogo-dark.svg"
       "assets/gammalooplogo-light.svg"
       "crates/clinnet/CHANGELOG.typ"
+      "crates/feynkit-py/examples/ufo_generation.py"
+      "crates/feynkit-py/python/symbolica/community/feynkit/__init__.py"
       "crates/idenso/CHANGELOG.typ"
       "crates/kurvst/typst/docs"
       "crates/linnest/typst/docs"
@@ -464,6 +478,7 @@
       "docs"
       "examples/cli/aa_aa/2L/graphs"
       "examples/cli/gg_hhh/3L/3L_graph.dot"
+      "examples/notebooks"
       "flake.nix"
       "scripts/render-docs-svg-assets.sh"
       "tests/resources/graphs"
@@ -492,9 +507,7 @@
 
   workspacePackageExtraSourceRoots.ownTest = {
     gammalooprs = [
-      "crates/gammalooprs/src/feyngen/test.rs"
       "crates/gammalooprs/src/graph/parse/tests.rs"
-      "crates/gammalooprs/src/model/test_polarization_sums.rs"
       "crates/gammalooprs/src/numerator/spensotests.rs"
       "crates/gammalooprs/src/numerator/tests.rs"
       "crates/gammalooprs/src/utils/test_utils.rs"
@@ -718,6 +731,7 @@
   };
 
   workspaceFeatureUnificationExcludedPackages = [
+    "feynkit-py"
     "alphal00p-docs-python-exporter"
     "linnet-py"
     "spynso3"
@@ -1094,8 +1108,16 @@
   };
   cranePythonFeaturesFor = package:
     sortedUnique (craneCiFeaturesFor package ++ (cranePythonExtraFeatureSets.${package} or []));
+  # The Python feature set enables optional workspace dependencies that are
+  # absent from the default resolved closure used by ordinary package builds.
+  cranePythonSourcePackageNames =
+    workspaceDependencyClosureFor workspaceDependencyNamesFor "gammaloop-api";
+  cranePythonSrc = workspacePackageSrcForSourcePackages {
+    sourcePackages = cranePythonSourcePackageNames;
+    packageSourcePackages = ["gammaloop-api"];
+  };
   cranePythonCargoArgs = let
-    featurePackages = workspaceNormalSourcePackageNamesFor "gammaloop-api";
+    featurePackages = cranePythonSourcePackageNames;
     selectedFeaturePackages =
       lib.filter (
         featurePackage:
@@ -1266,7 +1288,7 @@
       cargoArtifacts = cranePythonBuildArtifacts;
       CARGO_BUILD_INCREMENTAL = "true";
       pname = "gammaloop-api-python";
-      src = workspacePackageSrcFor "gammaloop-api";
+      src = cranePythonSrc;
       cargoExtraArgs = cranePythonCargoArgs;
       doCheck = false;
       postPatch = workspaceMissingCargoTargetsScript;
@@ -2280,7 +2302,7 @@
     // {
       cargoArtifacts = cranePythonDependencyArtifacts;
       pname = "gammaloop-api-python-build";
-      dummySrc = workspacePackageSrcFor "gammaloop-api";
+      dummySrc = cranePythonSrc;
       buildPhaseCargoCommand = "cargoWithProfile build ${cranePythonCargoArgs}";
       keepIncrementalState = true;
       previousArtifacts =

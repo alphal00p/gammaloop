@@ -6,6 +6,7 @@
 #import "content/tutorial.typ": tutorial
 #import "content/algebra.typ": algebra
 #import "content/form-symbolica-color-and-dirac.typ": form-color-dirac-content
+#import "content/showcase.typ": showcase
 #import "content/api.typ": api
 #import "content/changelog.typ": changelog
 #import "content/idenso-releases.typ": idenso-releases
@@ -23,6 +24,7 @@
     #tutorial
     #algebra
     #form-color-dirac-content("manual")
+    #showcase
     #api
     #changelog
     #idenso-releases

@@ -1,5 +1,6 @@
 use crate::GammaLoopContext;
-use crate::cff::esurface::EsurfaceCollection;
+use crate::cff::esurface::EnergySurfaceCollection;
+use crate::cff::esurface::EnergySurfaceExt;
 use crate::cff::esurface::ExistingEsurfaceId;
 use crate::cff::esurface::ExistingThresholds;
 use crate::cff::esurface::esurface_value_is_strictly_inside;
@@ -400,7 +401,7 @@ pub(crate) struct OverlapInput<'a> {
     pub settings: &'a RuntimeSettings,
     pub subspace: &'a SubspaceData,
     pub lmbs: &'a TiVec<LmbIndex, LoopMomentumBasis>,
-    pub thresholds: &'a EsurfaceCollection,
+    pub thresholds: &'a EnergySurfaceCollection,
     pub edge_masses: EdgeVec<F<f64>>,
 }
 
@@ -865,15 +866,13 @@ impl EsurfacePairs {
 mod tests {
     use super::*;
     use crate::{
-        cff::{
-            cff_graph::VertexSet,
-            esurface::{Esurface, EsurfaceExistence, EsurfaceID},
-        },
-        dot,
-        graph::{LMBext, parse::from_dot::IntoGraph},
+        cff::esurface::EsurfaceExistence,
+        finalized_runtime_dot,
+        graph::{LMBext, parse::from_dot::IntoFinalizedRuntimeGraph},
         initialisation::test_initialise,
         momentum::{FourMomentum, Rotatable, Rotation, RotationMethod},
     };
+    use feynkit_cff::{EnergySurface, EnergySurfaceId, VertexSet};
     use linnet::half_edge::involution::EdgeIndex;
     use linnet::half_edge::subgraph::{SuBitGraph, SubSetOps};
     use typed_index_collections::ti_vec;
@@ -881,16 +880,17 @@ mod tests {
     #[test]
     fn global_center_check_preserves_fixed_complement_for_multidimensional_subspace() {
         test_initialise().unwrap();
-        let graph: Graph = dot!(digraph subspace_center {
+        let graph: Graph = finalized_runtime_dot!(digraph subspace_center {
+            graph [projector=1]
             ext [style=invis]
             edge [num=1 mass=0]
             node [num=1]
-            ext->v1:0 [id=0]
-            v1->v2 [id=1]
-            v2->v1 [id=2]
-            v1->v2 [id=3]
-            v2->v1 [id=4]
-            ext->v2:1 [id=5]
+            ext->v1:0 [id=0 sink="{ufo_order:0}"]
+            v1->v2 [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            v2->v1 [id=2 lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:2}"]
+            v1->v2 [id=3 lmb_id=2 source="{ufo_order:3}" sink="{ufo_order:2}"]
+            v2->v1 [id=4 source="{ufo_order:3}" sink="{ufo_order:4}"]
+            ext->v2:1 [id=5 sink="{ufo_order:4}"]
         })
         .unwrap();
 
@@ -915,15 +915,16 @@ mod tests {
             "two graph-parallel defining edges without their spanning support contain only one independent loop"
         );
 
-        let raised_graph: Graph = dot!(digraph raised_signature_subspace {
+        let raised_graph: Graph = finalized_runtime_dot!(digraph raised_signature_subspace {
+            graph [projector=1]
             ext [style=invis]
             edge [num=1 mass=0]
             node [num=1]
-            ext->a [id=0]
-            a->b [id=1]
-            b->c [id=2]
-            c->a [id=3]
-            ext->c [id=4]
+            ext->a [id=0 sink="{ufo_order:0}"]
+            a->b [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            b->c [id=2 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            c->a [id=3 source="{ufo_order:1}" sink="{ufo_order:2}"]
+            ext->c [id=4 sink="{ufo_order:2}"]
         })
         .unwrap();
         let raised_group = raised_graph
@@ -988,9 +989,9 @@ mod tests {
         .unwrap();
         assert_eq!(subspace.loopcount(), 2);
 
-        let radial_surface = Esurface {
+        let radial_surface = EnergySurface {
             energies: vec![graph.loop_momentum_basis.loop_edges[LoopIndex(0)]],
-            external_shift: vec![(EdgeIndex::from(0), -1)],
+            external_shift: vec![(EdgeIndex::from(0), -1)].into(),
             vertex_set: VertexSet::dummy(),
         };
         assert!(radial_surface.has_radial_dependence_in_subspace(&subspace, &all_lmbs, &graph,));
@@ -1030,14 +1031,14 @@ mod tests {
         ));
 
         let complement_edge = graph.loop_momentum_basis.loop_edges[LoopIndex(2)];
-        let thresholds: crate::cff::esurface::EsurfaceCollection = vec![Esurface {
+        let thresholds: crate::cff::esurface::EnergySurfaceCollection = vec![EnergySurface {
             energies: vec![complement_edge],
-            external_shift: vec![(EdgeIndex::from(0), -1)],
+            external_shift: vec![(EdgeIndex::from(0), -1)].into(),
             vertex_set: VertexSet::dummy(),
         }]
         .into();
         assert!(
-            !thresholds[EsurfaceID::from(0)]
+            !thresholds[EnergySurfaceId::from(0)]
                 .has_radial_dependence_in_subspace(&subspace, &all_lmbs, &graph,)
         );
         let masses = graph.underlying.new_edgevec(|_, _, _| F(0.0));
@@ -1066,7 +1067,7 @@ mod tests {
             ThreeMomentum::new(F(2.0), F(0.0), F(0.0)),
         ]);
 
-        let origin_value = overlap_input.thresholds[EsurfaceID::from(0)].compute_from_momenta(
+        let origin_value = overlap_input.thresholds[EnergySurfaceId::from(0)].compute_from_momenta(
             subspace.get_lmb(&all_lmbs),
             &overlap_input.edge_masses,
             &center,
@@ -1075,14 +1076,14 @@ mod tests {
         assert!(origin_value < F(0.0));
         assert!(!check_global_center(
             &overlap_input,
-            &ti_vec![EsurfaceID::from(0)],
+            &ti_vec![EnergySurfaceId::from(0)],
             &center,
             &sampled_momenta,
             &external_momenta,
         ));
         assert!(check_global_center(
             &overlap_input,
-            &ti_vec![EsurfaceID::from(0)],
+            &ti_vec![EnergySurfaceId::from(0)],
             &center,
             &center,
             &external_momenta,
@@ -1118,7 +1119,7 @@ mod tests {
 
         let forced_overlap = find_maximal_overlap(
             &forced_overlap_input,
-            &ti_vec![EsurfaceID::from(0)],
+            &ti_vec![EnergySurfaceId::from(0)],
             &center,
             &external_momenta,
             &probe_rotation,
@@ -1143,7 +1144,7 @@ mod tests {
             &alternate_lmbs,
         )
         .unwrap();
-        let empty_thresholds: EsurfaceCollection = Vec::new().into();
+        let empty_thresholds: EnergySurfaceCollection = Vec::new().into();
         let alternate_overlap_input = OverlapInput {
             graph: &graph,
             settings: &forced_settings,
@@ -1242,12 +1243,12 @@ mod tests {
             .map(EdgeIndex::from)
             .find(|edge| !graph.loop_momentum_basis.loop_edges.contains(edge))
             .unwrap();
-        let covariant_thresholds = vec![Esurface {
+        let covariant_thresholds = vec![EnergySurface {
             energies: vec![
                 graph.loop_momentum_basis.loop_edges[LoopIndex(0)],
                 support_edge,
             ],
-            external_shift: vec![(EdgeIndex::from(0), -1)],
+            external_shift: vec![(EdgeIndex::from(0), -1)].into(),
             vertex_set: VertexSet::dummy(),
         }]
         .into();
@@ -1268,7 +1269,7 @@ mod tests {
             FourMomentum::from_args(F(20.0), F(6.0), F(8.0), F(0.0)),
             FourMomentum::from_args(F(-20.0), F(-6.0), F(-8.0), F(0.0)),
         ]);
-        let existing = ti_vec![EsurfaceID::from(0)];
+        let existing = ti_vec![EnergySurfaceId::from(0)];
         let identity_center = find_center(
             &covariant_overlap_input,
             &[ExistingEsurfaceId::from(0)],

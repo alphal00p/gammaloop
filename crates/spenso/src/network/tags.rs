@@ -80,6 +80,104 @@ pub fn scalar_store_alias_index(value: AtomView<'_>) -> Option<usize> {
     }
 }
 
+/// Format an indexed tensor head using the shared Spenso presentation settings.
+#[macro_export]
+macro_rules! spenso_print_scripted_indexed {
+    ($a:ident, $opt:ident, $symbol:expr) => {
+        $crate::spenso_print_scripted_indexed!($a, $opt, $symbol, $symbol)
+    };
+    ($a:ident, $opt:ident, $symbol:expr, $typst_symbol:expr) => {{
+        use $crate::{
+            network::tags::SPENSO_TAG,
+            shadowing::symbolica_utils::SpensoPrintSettings,
+            utils::to_subscript,
+        };
+        use symbolica::{
+            atom::{AtomCore, AtomView},
+            printer::{PrintState, PrintUserData},
+        };
+        use symbolica_utils::PrintSettingsExt;
+        match $opt.custom_print_mode.get("spenso") {
+            Some(PrintUserData::Integer(i)) => {
+                let SpensoPrintSettings {
+                    parens,
+                    symbol_scripts,
+                    commas,
+                    with_dim,
+                    ..
+                } = SpensoPrintSettings::from(*i as usize);
+
+                let AtomView::Fun(f) = $a else {
+                    return None;
+                };
+
+                let mut argiter = f.iter();
+                let id = argiter.next()?;
+                let Ok(i) = usize::try_from(id) else {
+                    return None;
+                };
+
+                let is_typst = $opt.typst_mode().is_some();
+                let mut out = if is_typst {
+                    $typst_symbol.to_string()
+                } else {
+                    $symbol.to_string()
+                };
+                if is_typst {
+                    out.push('_');
+                    out.push_str(&i.to_string());
+                } else if $opt.mode.is_latex() {
+                    out.push_str(&format!("_{{{i}}}"));
+                } else {
+                    out.push_str(&to_subscript(i as isize));
+                }
+                if $opt.color_builtin_symbols && !is_typst {
+                    out = nu_ansi_term::Color::Magenta.paint(out).to_string();
+                }
+
+                let mut printed_args = false;
+                for arg in argiter {
+                    let hidden_representation = matches!(
+                        arg,
+                        AtomView::Fun(a)
+                            if a.get_symbol().has_tag(&SPENSO_TAG.representation)
+                                && a.get_nargs() == 1
+                                && !with_dim
+                    );
+                    if hidden_representation {
+                        continue;
+                    }
+
+                    if printed_args {
+                        out.push(if commas { ',' } else { ' ' });
+                    } else {
+                        if symbol_scripts {
+                            out.push('^');
+                            if $opt.mode.is_latex() {
+                                out.push('{');
+                            }
+                        }
+                        if parens {
+                            out.push('(');
+                        }
+                        printed_args = true;
+                    }
+
+                    arg.format(&mut out, $opt, PrintState::new()).unwrap();
+                }
+                if printed_args && parens {
+                    out.push(')');
+                }
+                if printed_args && symbol_scripts && $opt.mode.is_latex() {
+                    out.push('}');
+                }
+                Some(out)
+            }
+            _ => None,
+        }
+    }};
+}
+
 fn typst_builtin_name(name: &str) -> bool {
     matches!(
         name,
@@ -151,7 +249,11 @@ fn typst_tensor_head(symbol: Symbol) -> String {
         _ => {}
     }
 
-    let name = symbol.get_stripped_name();
+    let name = symbol
+        .get_tags()
+        .iter()
+        .find_map(|tag| tag.strip_prefix("spenso::tensor-label:"))
+        .unwrap_or_else(|| symbol.get_stripped_name());
     if (name.chars().count() == 1
         && name
             .chars()
@@ -519,25 +621,75 @@ fn qualified_typst_index(
 /// Every script occupies the same horizontal column in the top and bottom
 /// rows. The opposite row receives a hidden copy, following Physica's tensor
 /// layout technique. Each representation owns its preferred row; only the
-/// dual orientation of a dualizable representation flips that row.
+/// dual orientation of a dualizable representation flips that row. Tagged index
+/// calls share this hook for plain, LaTeX, and Typst label rendering. The
+/// `spenso::tensor-label:<name>` tag supplies a presentation-only head label
+/// for both native printers and portable notebook rendering.
 pub fn tensor_print(
     atom: AtomView<'_>,
     options: &PrintOptions,
     _state: &PrintState,
 ) -> Option<String> {
-    if !options.mode.is_typst() {
-        return None;
-    }
-
     let resolved = SpensoPrintSettings::resolve(options)?;
-    if !matches!(resolved.backend, SpensoPrintBackend::Typst) {
-        return None;
-    }
     let settings = resolved.presentation;
-
     let AtomView::Fun(function) = atom else {
         return None;
     };
+    // Index labels share the same hook in every consumer. The label tag also
+    // travels with portable render trees, where Typst supplies its own layout.
+    if function.get_symbol().has_tag(&SPENSO_TAG.index) {
+        let symbol = function.get_symbol();
+        let label = symbol
+            .get_tags()
+            .iter()
+            .find_map(|tag| tag.strip_prefix("spenso::index-label:"))?;
+        if !matches!(label, "s" | "t" | "e" | "v" | "d" | "u") {
+            return None;
+        }
+        let mut arguments = function
+            .iter()
+            .map(isize::try_from)
+            .collect::<Result<Vec<_>, _>>()
+            .ok()?;
+        if arguments.is_empty() {
+            return None;
+        }
+        // Endpoint slot one is implicit; additional higher-spin slots remain
+        // distinct. Dummy indices keep their local identifier in every case.
+        if matches!(label, "s" | "t") && arguments.len() == 2 && arguments[1] == 1 {
+            arguments.pop();
+        }
+        let body = arguments
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(".");
+        return Some(match resolved.backend {
+            SpensoPrintBackend::Plain => {
+                let body = arguments
+                    .into_iter()
+                    .map(crate::utils::to_subscript)
+                    .collect::<Vec<_>>()
+                    .join(".");
+                format!("{label}{body}")
+            }
+            SpensoPrintBackend::Latex => format!("{label}_{{{body}}}"),
+            SpensoPrintBackend::Typst => format!("attach({label},b:({body}))"),
+        });
+    }
+    let symbol = function.get_symbol();
+    if symbol.has_tag(&SPENSO_TAG.tensor)
+        && symbol.has_tag(&SPENSO_TAG.rank1)
+        && let Some(label) = symbol
+            .get_tags()
+            .iter()
+            .find_map(|tag| tag.strip_prefix("spenso::tensor-label:"))
+    {
+        return crate::spenso_print_scripted_indexed!(atom, options, label);
+    }
+    if !matches!(resolved.backend, SpensoPrintBackend::Typst) {
+        return None;
+    }
     if !function.get_symbol().has_tag(&SPENSO_TAG.tensor) {
         return None;
     }
@@ -2070,6 +2222,84 @@ mod tests {
         for (left, right) in invalid_pairs {
             let dot = function!(SPENSO_TAG.dot, left, right);
             assert!(SpensoTags::print_dot(dot.as_view(), &options, &state).is_none());
+        }
+    }
+
+    #[test]
+    fn tensor_labels_preserve_indexed_momentum_notation() {
+        let head = SymbolBuilder::new(wrap_symbol!("spenso_typst_tests::Momentum"))
+            .with_tags([
+                SPENSO_TAG.tensor.as_str(),
+                SPENSO_TAG.rank1.as_str(),
+                "spenso::tensor-label:q",
+            ])
+            .with_print_function(super::tensor_print)
+            .build()
+            .unwrap();
+        let momentum = function!(head, 6, 16);
+        assert_eq!(
+            momentum
+                .printer(SpensoPrintSettings::typst_options())
+                .to_string(),
+            "q_6^(16)"
+        );
+        let mut plain = SpensoPrintSettings::typst().nice_symbolica();
+        plain.color_builtin_symbols = false;
+        assert_eq!(momentum.printer(plain).to_string(), "q₆^(16)");
+        let latex = PrintOptions {
+            custom_print_mode: SpensoPrintSettings::typst().into(),
+            ..PrintOptions::latex()
+        };
+        assert_eq!(momentum.printer(latex).to_string(), "q_{6}^{(16)}");
+        assert_eq!(typst_tensor_head(head), "q");
+        assert!(momentum.to_string().contains("Momentum"));
+    }
+
+    #[test]
+    fn graph_index_labels_use_subscripts_and_keep_nondefault_slots() {
+        for label in ["s", "t", "e", "v"] {
+            let head = SymbolBuilder::new(NamespacedSymbol::parse(&format!(
+                "spenso_index_label_tests::{label}"
+            )))
+            .with_tags([
+                "spenso::index".to_owned(),
+                format!("spenso::index-label:{label}"),
+            ])
+            .with_print_function(super::tensor_print)
+            .build()
+            .unwrap();
+            for (slot, decimal, unicode) in
+                [(0, "7.0", "₇.₀"), (1, "7.1", "₇.₁"), (2, "7.2", "₇.₂")]
+            {
+                let index = function!(head, 7, slot);
+                let canonical = index.to_canonical_string();
+                let (decimal, unicode) = if matches!(label, "s" | "t") && slot == 1 {
+                    ("7", "₇")
+                } else {
+                    (decimal, unicode)
+                };
+                let mut plain = SpensoPrintSettings::typst().nice_symbolica();
+                plain.color_builtin_symbols = false;
+                assert_eq!(
+                    index.printer(plain).to_string(),
+                    format!("{label}{unicode}")
+                );
+                let latex = PrintOptions {
+                    custom_print_mode: SpensoPrintSettings::typst().into(),
+                    ..PrintOptions::latex()
+                };
+                assert_eq!(
+                    index.printer(latex).to_string(),
+                    format!("{label}_{{{decimal}}}")
+                );
+                assert_eq!(
+                    index
+                        .printer(SpensoPrintSettings::typst_options())
+                        .to_string(),
+                    format!("attach({label},b:({decimal}))")
+                );
+                assert_eq!(index.to_canonical_string(), canonical);
+            }
         }
     }
 

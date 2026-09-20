@@ -1577,7 +1577,6 @@ impl LibraryRep {
             return Ok(existing);
         }
 
-        let print_name = name.to_owned();
         SymbolBuilder::new(namespaced)
             .with_tags(tags)
             .with_user_data(metadata.to_user_data())
@@ -1664,28 +1663,9 @@ impl LibraryRep {
                     return None;
                 }
 
-                let AtomView::Fun(f) = a else {
-                    return None;
-                };
-
-                let mut out = if opt.color_builtin_symbols {
-                    nu_ansi_term::Color::DarkGray.paint(&print_name).to_string()
-                } else {
-                    return None;
-                };
-
-                out.push('(');
-                let mut first = true;
-                for arg in f.iter() {
-                    if !first {
-                        out.push_str(", ");
-                    } else {
-                        first = false;
-                    }
-                    out.push_str(&arg.to_string());
-                }
-                out.push(')');
-                Some(out)
+                // Ordinary expressions use Symbolica's namespace, bracket,
+                // and color handling, including the current nested print state.
+                None
             })
             .build()
             .map_err(|error| RepLibraryError::SymbolRegistration {
@@ -2856,6 +2836,51 @@ mod shadowing_tests {
     #[test]
     fn unknown_math_display_heads_cannot_be_constructed() {
         assert!(IndexDisplay::math("raw-code", vec![]).is_err());
+    }
+
+    #[test]
+    fn ordinary_representation_calls_reuse_symbolica_namespace_and_color_handling() {
+        use symbolica::{
+            atom::AtomCore,
+            function,
+            printer::{ColorMode, PrintOptions},
+            symbol,
+        };
+
+        let dimension = function!(
+            symbol!("representation_print_test::dim"),
+            symbol!("representation_print_test::D")
+        );
+        let representation = LibraryRep::from(Minkowski {}).to_symbolic([dimension.clone()]);
+        let ordinary = function!(symbol!("representation_print_control::mink"), dimension);
+        let outer = symbol!("representation_print_test::P");
+        let actual = function!(outer, representation);
+        let control = function!(outer, ordinary);
+        let canonical = actual.to_canonical_string();
+
+        for brackets in [('(', ')'), ('[', ']')] {
+            let options = PrintOptions {
+                function_brackets: brackets,
+                hide_all_namespaces: true,
+                color_mode: ColorMode::Always,
+                ..PrintOptions::new()
+            };
+            let actual_text = actual.printer(options.clone()).to_string();
+            let expected_text = control.printer(options).to_string();
+            assert!(!actual_text.contains("::"));
+            assert!(actual_text.contains("\x1b["));
+            assert_eq!(actual_text, expected_text);
+        }
+        let explicit = actual
+            .printer(PrintOptions {
+                hide_all_namespaces: false,
+                color_mode: ColorMode::Never,
+                ..PrintOptions::new()
+            })
+            .to_string();
+        assert!(explicit.contains("spenso::mink("));
+        assert!(explicit.contains("representation_print_test::D"));
+        assert_eq!(actual.to_canonical_string(), canonical);
     }
 
     #[test]

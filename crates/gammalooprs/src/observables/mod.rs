@@ -1,4 +1,4 @@
-use crate::model::Model;
+use crate::model::{Model, ParticleGammaLoopExt};
 use crate::momentum::FourMomentum;
 use crate::settings::RuntimeSettings;
 use crate::utils::serde_utils::{
@@ -475,6 +475,11 @@ struct ResolvedJetClusteringSettings {
 
 impl JetClusteringSettings {
     fn resolve(&self, model: Option<&Model>) -> Result<ResolvedJetClusteringSettings> {
+        if !self.min_jpt.is_finite() || self.min_jpt < 0.0 {
+            return Err(eyre!(
+                "minimum jet transverse momentum must be finite and nonnegative"
+            ));
+        }
         Ok(ResolvedJetClusteringSettings {
             algorithm: self.algorithm,
             d_r: self.dR,
@@ -497,13 +502,18 @@ impl JetClusteringSettings {
 
     fn default_clustered_pdgs(model: &Model) -> Result<Vec<isize>> {
         Ok(model
-            .particles
+            .particles()
             .iter()
             .filter(|particle| particle.is_qcd_charged())
             .map(|particle| {
-                particle
-                    .has_zero_resolved_mass(model)
-                    .map(|has_zero_mass| has_zero_mass.then_some(particle.pdg_code))
+                particle.has_zero_resolved_mass(model).map(|has_zero_mass| {
+                    has_zero_mass.then(|| {
+                        particle
+                            .pdg_code
+                            .try_into()
+                            .expect("PDG code must fit in an isize")
+                    })
+                })
             })
             .collect::<Result<Vec<_>>>()?
             .into_iter()
@@ -4471,6 +4481,20 @@ mod tests {
                 .to_string()
                 .contains("Cannot resolve default clustered_pdgs without a model")
         );
+    }
+
+    #[test]
+    fn jet_clustering_settings_reject_invalid_minimum_pt() {
+        for min_jpt in [-1.0, f64::NAN, f64::INFINITY] {
+            let error = JetClusteringSettings {
+                min_jpt,
+                clustered_pdgs: Some(Vec::new()),
+                ..JetClusteringSettings::default()
+            }
+            .resolve(None)
+            .expect_err("invalid minimum jet transverse momentum must be rejected");
+            assert!(error.to_string().contains("finite and nonnegative"));
+        }
     }
 
     #[test]
