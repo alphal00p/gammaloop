@@ -148,8 +148,9 @@ For drawing an existing DOT collection, use the #link("guides/clinnet/")[Clinnet
 #product-link("gammaloop", page: "guides/dot-input/", label: "GammaLoop's DOT input guide")
 explains which indices select external kinematics, identify numerator data, or appear in
 momentum labels. Amplitude kinematics follow increasing dangling half-edge order. GammaLoop
-uses the same order for initial drawing rows, with incoming and outgoing legs in separate
-columns; its cross-section rows follow numeric `is_cut` order. Its example deliberately gives edges different indices from their
+uses that order for initial drawing rows in both modes, with incoming and outgoing legs in
+separate movable X groups. Cross sections also share movable Y groups by `is_cut` identity;
+dangling-centroid repulsion spreads the endpoints. Its example deliberately gives edges different indices from their
 half-edges: changing drawing order does not renumber the edge-based $q$ labels. Cross-section
 physics import can subsequently sew and renumber records, as described in that guide.
 ]

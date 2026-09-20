@@ -70,8 +70,8 @@
 }
 #assert(graph.nodes(positioned).all(node => node.statements.at("pos-z") == "2"))
 
-// Numeric cut tags, not their spelling, incoming edge IDs, or incoming half-edge
-// IDs, determine cross-section rows. Both halves of each cut occupy the same row.
+// Both modes start in half-edge order. Numeric cut tags, independent of spelling,
+// group cross-section Y coordinates without fixing either half to its start.
 #let cross-section = (
   graph
     .parse(
@@ -81,7 +81,7 @@
         a [pos="-2,0!"]; b [pos="2,0!"];
         ext -> a:0 [id=0 is_cut=10 particle=fermion];
         ext -> a:6 [id=1 is_cut=2 particle=fermion];
-        b:1 -> ext [id=2 is_cut=2 particle=fermion];
+        b:1 -> ext [id=2 is_cut="02" particle=fermion];
         b:4 -> ext [id=3 is_cut=10 particle=fermion];
         b:5 -> ext [id=4 is_cut=99 particle=fermion];
         a -> b [id=5 particle=fermion];
@@ -96,12 +96,13 @@
   match-field: "is_cut",
 )
 #let edges = graph.edges(cross-section)
-#for (eid, y) in ((0, -5), (1, 5), (2, 5), (3, -5)) {
+#for (eid, y) in ((0, 5), (1, -5), (2, 10), (3, 0), (4, -10)) {
   assert(edges.at(eid).pos.y == y)
+  assert(edges.at(eid).statements.at("pin").contains("y:@is_cut-"))
 }
-// A cut tag without an incoming counterpart does not acquire automatic XY
-// placement. The unconditional external depth pin still applies.
-#assert(not edges.at(4).at("pos-x-set") and not edges.at(4).at("pos-y-set"))
+// A cut tag without an incoming counterpart still joins its side's X group
+// and starts in half-edge order. The external depth pin still applies.
+#assert(edges.at(4).at("pos-x-set") and edges.at(4).at("pos-y-set"))
 #for eid in range(5) {
   assert(edges.at(eid).statements.at("pos-z") == "0")
   assert(edges.at(eid).statements.at("pos-z-mode") == "pin")
@@ -111,9 +112,12 @@
   solver: (algorithm: "force", seed: 42, steps: 8, epochs: 1, depth-scale: 2),
   labels: (steps: 0),
 )
-#for (eid, y) in ((0, -5), (1, 5), (2, 5), (3, -5)) {
-  assert(graph.edges(cross-section).at(eid).pos.y == y)
-}
+#let solved = graph.edges(cross-section)
+#assert(solved.at(0).pos.y == solved.at(3).pos.y)
+#assert(solved.at(1).pos.y == solved.at(2).pos.y)
+#assert(solved.at(0).pos.x == solved.at(1).pos.x)
+#assert(solved.at(2).pos.x == solved.at(3).pos.x and solved.at(3).pos.x == solved.at(4).pos.x)
+#assert(solved.at(0).pos.y != edges.at(0).pos.y)
 
 // Placement ranks never renumber q_(eid), including paired and unmatched cuts.
 #let styles = physics.style(momentum-arrows: true, show-particle: false)
@@ -128,7 +132,7 @@
 
 
 // FeynKit supplies native graphs to the same pipeline as DOT. Amplitudes use
-// half-edge order, whereas cross sections match native numeric sewing IDs.
+// half-edge starts in both modes; cross sections also group native sewing IDs.
 #import "gamma-layout-core.typ" as physics-layout
 #import "crates/linnest/typst/src/render/layout.typ" as renderer
 #context for is-cross-section in (false, true) {
@@ -148,9 +152,13 @@
       attach-elements: renderer.attach-elements,
       layout-graph: (config, g) => {
         let edges = graph.edges(g)
-        let expected = if is-cross-section { (-5, 5, 5, -5) } else { (5, -5, 5, -5) }
-        for (i, y) in expected.enumerate() {
+        assert(config.layout-defaults.at("gamma-dangling-centroid") == 1.25)
+        for (i, y) in (5, -5, 5, -5).enumerate() {
           assert(edges.at(i).pos.y == y)
+          let pins = edges.at(i).statements.at("pin")
+          assert(pins.contains("x:@"))
+          assert(pins.contains("y:") == is-cross-section)
+          if is-cross-section { assert(pins.contains("y:@is_cut-")) }
           assert(edges.at(i).statements.at("pos-z-mode") == "pin")
           assert(edges.at(i).statements.at("pos-z") == "0")
         }
