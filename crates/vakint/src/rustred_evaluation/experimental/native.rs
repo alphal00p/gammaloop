@@ -4,8 +4,12 @@ use std::collections::BTreeSet;
 use std::sync::{Arc, Mutex};
 
 use rustred::family::{IntegralFamily, IntegralKey};
+use rustred::persistence::BinaryIoLimits;
 use rustred::reduction::ReductionLimits;
-use rustred::reduction::terminal_normalization::{TerminalAliasPlan, VacuumParametricLimits};
+use rustred::reduction::terminal_normalization::{
+    TerminalAliasPlan, TerminalNormalizationLimits, TerminalNormalizationPlan,
+    VacuumParametricLimits,
+};
 use rustred::sector::{CoordinatePriority, CoordinatePriorityLimits, Mask, OrderingPolicy, zero};
 use rustred::solver::{
     CandidateReducer, IntegralOrder, SectorConfig, SectorExecutor, SectorSolveOptions, SourceSystem,
@@ -81,6 +85,40 @@ impl<const N: usize> NativeCandidate<N> {
         .map_err(|error| error.to_string())?;
         reducer
             .install_terminal_aliases(aliases)
+            .map_err(|error| error.to_string())?;
+        Ok(native)
+    }
+
+    /// Load a generated finite output convention into a fresh native owner.
+    ///
+    /// RustRed reconstructs the exact terminal proof and compares the complete
+    /// stored output once, then owns weighted application and memoization.
+    /// The raw terminal set still binds the offline catalog. As with explicit
+    /// aliases, the caller must clear an already populated point cache itself.
+    /// Native bytes must come from the matching trusted RustRed/Symbolica stack;
+    /// this changes neither candidate authority nor the plain constructor.
+    pub fn from_reducer_with_terminal_normalization(
+        family: Arc<IntegralFamily>,
+        parent_momenta: Vec<Atom>,
+        reducer: CandidateReducer<N>,
+        bytes: &[u8],
+    ) -> Result<Self, String> {
+        let mut native = Self::from_reducer(family, parent_momenta, reducer)?;
+        let reducer = native
+            .reducer
+            .get_mut()
+            .map_err(|_| "candidate reducer lock poisoned")?;
+        let plan = TerminalNormalizationPlan::decode_generated(
+            bytes,
+            &native.family,
+            reducer.terminals(),
+            reducer.ordering(),
+            TerminalNormalizationLimits::default(),
+            BinaryIoLimits::default(),
+        )
+        .map_err(|error| error.to_string())?;
+        reducer
+            .install_terminal_normalization(plan)
             .map_err(|error| error.to_string())?;
         Ok(native)
     }
@@ -321,6 +359,147 @@ mod tests {
             family,
             native.parent_momenta,
             native.reducer.into_inner().unwrap(),
+        )
+        .unwrap_err();
+        assert!(error.contains("empty reduction cache"));
+    }
+
+    #[test]
+    fn candidate_binding_loads_weighted_terminal_outputs_without_discovery() {
+        use rustred::input::{Compiler, Limits, LoweringLimits, TextProject, TextPropagator};
+        use rustred::solver::{Integral, SectorSolution, SectorStats};
+        use std::collections::BTreeMap;
+
+        crate::Vakint::initialize_vakint_symbols();
+        let family = Arc::new(
+            Compiler::new(Limits::default())
+                .unwrap()
+                .compile_text(TextProject {
+                    name: None,
+                    parameters: None,
+                    loop_momenta: vec!["k1".into(), "k2".into(), "k3".into()],
+                    external_momenta: Vec::new(),
+                    dimension: "d".into(),
+                    propagators: [
+                        "k1^2-1",
+                        "k2^2-1",
+                        "k3^2-1",
+                        "(k1+k2+k3)^2-1",
+                        "(k1+k2)^2-1",
+                        "(k1+k3)^2-1",
+                    ]
+                    .into_iter()
+                    .enumerate()
+                    .map(|(slot, expression)| TextPropagator {
+                        id: format!("D{}", slot + 1),
+                        expression: expression.into(),
+                        target_power: i64::from(slot < 4),
+                        power_shift: None,
+                    })
+                    .collect(),
+                    external_gram: Vec::new(),
+                    numerator: None,
+                })
+                .unwrap()
+                .into_lowered(LoweringLimits::default())
+                .unwrap()
+                .into_family(),
+        );
+        let scalar = [1, 1, 1, 1, 0, 0];
+        let numerator = [1, 1, 1, 1, -1, 0];
+        let mut declarations = vec![scalar, numerator];
+        for slot in 0..4 {
+            let mut pinch = scalar;
+            pinch[slot] = 0;
+            declarations.push(pinch);
+        }
+        let mut solutions = BTreeMap::new();
+        for powers in declarations {
+            let sector = powers.map(|power| power > 0);
+            solutions
+                .entry(sector)
+                .or_insert_with(|| SectorSolution {
+                    rules: Vec::new(),
+                    finite_residuals: Vec::new(),
+                    stats: SectorStats::default(),
+                })
+                .finite_residuals
+                .push(Integral::numeric(powers).unwrap());
+        }
+        let mut reducer = CandidateReducer::try_new(
+            &family,
+            [true, true, true, true, false, false],
+            OrderingPolicy::SpiredUncutV1,
+            solutions,
+            Vec::new(),
+            ReductionLimits::default(),
+        )
+        .unwrap();
+        let raw = reducer.terminals().clone();
+        let plan = TerminalNormalizationPlan::vacuum_quadratic_numerators(
+            &family,
+            &raw,
+            reducer.ordering(),
+            TerminalNormalizationLimits::default(),
+        )
+        .unwrap();
+        assert_eq!(plan.statistics().projected_numerators, 1);
+        assert_eq!(plan.canonical_terminals().len(), 2);
+        let bytes = plan.encode_native(BinaryIoLimits::default()).unwrap();
+        let numerator = IntegralKey::try_new(numerator.map(i64::from).to_vec()).unwrap();
+        let scalar = IntegralKey::try_new(scalar.map(i64::from).to_vec()).unwrap();
+        let pinch = plan
+            .canonical_terminals()
+            .iter()
+            .find(|key| **key != scalar)
+            .unwrap()
+            .clone();
+        let momenta = ["k(1)", "k(2)", "k(3)", "k(1)+k(2)+k(3)"]
+            .into_iter()
+            .map(|value| vakint_parse!(value).unwrap())
+            .collect();
+        reducer.reduce_unit_mass(&numerator).unwrap();
+        let raw_native = NativeCandidate::from_reducer(family.clone(), momenta, reducer).unwrap();
+        assert_eq!(
+            raw_native.reduce_unit_mass(&numerator).unwrap().terms,
+            vec![(numerator.clone(), Atom::num(1))]
+        );
+        raw_native.clear_cache().unwrap();
+        let native = NativeCandidate::from_reducer_with_terminal_normalization(
+            family.clone(),
+            raw_native.parent_momenta,
+            raw_native.reducer.into_inner().unwrap(),
+            &bytes,
+        )
+        .unwrap();
+        assert_eq!(native.terminals(), &raw);
+        let expected = BTreeMap::from([
+            (scalar, vakint_parse!("1/3").unwrap()),
+            (pinch, vakint_parse!("4/3").unwrap()),
+        ]);
+        // The four-line circuit symmetry gives D5 -> (D1+D2+D3+D4+1)/3
+        // after integration. All four positive pinches have the same value.
+        for _ in 0..2 {
+            let result = native.reduce_unit_mass(&numerator).unwrap();
+            assert_eq!(
+                result.terms.into_iter().collect::<BTreeMap<_, _>>(),
+                expected
+            );
+            assert_eq!(result.applied_rules, 0);
+        }
+        assert!(
+            native
+                .reducer
+                .lock()
+                .unwrap()
+                .terminal_normalization()
+                .is_some()
+        );
+        let error = NativeCandidate::from_reducer_with_terminal_normalization(
+            family,
+            native.parent_momenta,
+            native.reducer.into_inner().unwrap(),
+            &bytes,
         )
         .unwrap_err();
         assert!(error.contains("empty reduction cache"));

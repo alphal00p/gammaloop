@@ -40,6 +40,7 @@ struct Input {
     csv: &'static str,
     program: &'static [u8],
     catalog: &'static [u8],
+    normalization: &'static [u8],
 }
 
 macro_rules! input {
@@ -56,6 +57,11 @@ macro_rules! input {
                 "../../data/rustred/four_loop/",
                 $name,
                 ".rrcat.bin"
+            )),
+            normalization: include_bytes!(concat!(
+                "../../data/rustred/four_loop/",
+                $name,
+                ".rrnorm.bin"
             )),
         }
     };
@@ -183,10 +189,11 @@ fn load(index: usize) -> Result<ExperimentalRustRed, String> {
     if catalog.terms().keys().ne(reducer.terminals().iter()) {
         return Err("offline catalog does not exactly cover declared program terminals".into());
     }
-    let native = NativeCandidate::from_reducer_with_terminal_aliases(
+    let native = NativeCandidate::from_reducer_with_terminal_normalization(
         Arc::new(family),
         descriptor.physical_momenta.clone(),
         reducer,
+        input.normalization,
     )?;
     ExperimentalRustRed::new(Arc::new(native), catalog.into_terms())
         .map_err(|error| error.to_string())
@@ -304,6 +311,61 @@ mod tests {
     fn shipped_programs_cold_load_with_exact_terminal_catalogs() {
         for index in 0..INPUTS.len() {
             load(index).unwrap_or_else(|error| panic!("{}: {error}", INPUTS[index].label));
+        }
+    }
+
+    #[test]
+    fn shipped_normalizations_keep_raw_keys_and_close_onto_positive_outputs() {
+        use rustred::persistence::BinaryIoLimits;
+        use rustred::reduction::terminal_normalization::{
+            TerminalNormalizationLimits, TerminalNormalizationPlan,
+        };
+
+        // These are expectations for vendored input data, not engine limits or
+        // a dispatch based on a topology name. Original rules/catalogs stay raw.
+        for (input, (raw_count, output_count)) in
+            INPUTS
+                .iter()
+                .zip([(386, 22), (145, 16), (179, 17), (445, 19)])
+        {
+            let mut bytes = Vec::new();
+            GzDecoder::new(input.program)
+                .read_to_end(&mut bytes)
+                .unwrap();
+            let (family, reducer) = load_generated_candidate_bundle::<10>(
+                &bytes,
+                CandidateBundleLimits {
+                    max_bundle_bytes: MAX_PROGRAM_BYTES,
+                    max_collection_entries: 8_000_000,
+                    max_total_coefficient_bytes: MAX_COEFFICIENT_BYTES,
+                    ..CandidateBundleLimits::default()
+                },
+                ReductionLimits::default(),
+            )
+            .unwrap();
+            let plan = TerminalNormalizationPlan::decode_generated(
+                input.normalization,
+                &family,
+                reducer.terminals(),
+                reducer.ordering(),
+                TerminalNormalizationLimits::default(),
+                BinaryIoLimits::default(),
+            )
+            .unwrap();
+            assert_eq!(plan.raw_terminals(), reducer.terminals());
+            assert_eq!(plan.raw_terminals().len(), raw_count, "{}", input.label);
+            assert_eq!(
+                plan.canonical_terminals().len(),
+                output_count,
+                "{}",
+                input.label
+            );
+            assert!(
+                plan.canonical_terminals()
+                    .iter()
+                    .all(|key| key.powers().iter().all(|power| *power >= 0))
+            );
+            assert!(plan.canonical_terminals().is_subset(plan.raw_terminals()));
         }
     }
 

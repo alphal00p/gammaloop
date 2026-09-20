@@ -70,7 +70,7 @@ pass again, with invalid FORM paths in the native lanes. Seven catalog/loader
 checks and three fixture checks also pass. That I/O-only milestone did not
 enable terminal aliases.
 
-The current `2b50267c` pin prepares RustRed's verified U-polynomial terminal
+The preceding `2b50267c` pin prepared RustRed's verified U-polynomial terminal
 equivalences once per loaded four-loop parent. The 1,155 raw catalog declarations
 remain unchanged; the applier coalesces them onto 179 family-local representatives
 before memoizing coefficients, compared with 505 for the prior `f91c47ab`
@@ -84,6 +84,22 @@ from 7.18/31.27 s to 6.26/29.45 s. Warm calls remain faster than FMFT on this
 matrix, but initial cubed-parent reductions are still slower than FMFT and the
 smaller terminal set does not imply a proportional speedup. See the
 [complete timings and boundaries](data/rustred/four_loop/README.md#public-scalar-timing-probe).
+
+The current `8ad62b96` pin adds four native weighted-normalization sidecars.
+RustRed combines its exact U equivalences with authenticated support-symmetry
+projections of all 105 remaining quadratic numerators, producing 74 family-local
+positive outputs while preserving every raw candidate/catalog declaration.
+Fresh-process native replay and exact comparison of all 1,155 expansions pass.
+The thin Vakint adapter delegates all proof, arithmetic and memoization to
+RustRed; default methods and existing constructors remain unchanged. These
+outputs are not a minimal-master or family-closure claim. The unchanged 83
+lower-loop cases, all 31 four-loop reference/pinch comparisons, eleven focused
+checks and three fixtures pass on this pin. The same nine-input benchmark also
+passes all 54 numerical comparisons. First H/X cubed-parent calls change from
+6.231/30.811 s to 5.587/21.411 s; FG's first call and some warm controls regress,
+so this is not a uniform speedup. Both process totals include FMFT as well as
+RustRed, and first cubed-parent calls remain slower than FMFT. See the
+[weighted sidecar contract](data/rustred/four_loop/README.md#weighted-vacuum-terminal-normalization).
 
 The [historical RustRed acceptance inventory](tests/RUSTRED_ACCEPTANCE.md) maps
 all existing single-common-mass inputs through three loops to native peers.

@@ -193,6 +193,27 @@ commands, logs, hashes and audit are under
 `TMP/gamma-terminal-u-rollout.oFoQwr/` in the RustRed workspace. No rules or
 catalog values were regenerated.
 
+The current `8ad62b96` pin loads four additional `.rrnorm.bin` sidecars through
+the explicit `from_reducer_with_terminal_normalization` constructor. The core
+rebuilds the exact finite proof on cold loading and installs weighted terminal
+rows before memoization; Vakint implements no new reduction arithmetic. The
+plain and U-alias constructors, original raw catalogs, saved candidate programs,
+default evaluation order and numerical assertions remain unchanged. Exact
+export and fresh dirty-context reload checked all 1,155 raw expansions and all
+105 supported numerator projections, giving 74 family-local positive outputs
+(H 22, FG 16, BMW 17, X 19), not a minimal-master or closure certificate.
+The pinned gate passes all 83 lower-loop selections, all fifteen original
+references, all sixteen expanded-propagator/pinch pairs, eleven focused checks
+and three fixtures. The two public correctness processes take 20.58/36.04 s
+wall time including FMFT, with unchanged nonunit scales, tolerances and invalid
+FORM paths in the native stages. A fresh U-only control and weighted runtime
+each pass all 54 comparisons in the same nine-input benchmark. Whole-process
+wall times are 97.22/89.82 s and include both backends; the asset README retains
+every first/warm observation, regressions and shared-host caveats. Evidence is retained at
+`TMP/gamma-terminal-normalization-rollout.GN7v1b/` in the RustRed workspace;
+the [asset README](../../data/rustred/four_loop/README.md#weighted-vacuum-terminal-normalization)
+describes the native proof and unchanged raw-catalog boundary.
+
 The existing FMFT finalizer expands exact Laurent coefficients before
 approximate table substitution. This prevents exact cancelling coefficients
 from becoming tiny floating poles; no zero tolerance, epsilon depth or source

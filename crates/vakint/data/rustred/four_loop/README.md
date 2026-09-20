@@ -9,7 +9,8 @@ Each parent (H, FG, BMW and X) has:
 - a `.csv` ordered physical/auxiliary momentum descriptor;
 - a `.toml` topology-generic RustRed family-generation input;
 - a `.candidates.rrbin.gz` saved native-binary parametric candidate program;
-- a `.rrcat.bin` native exact map of its declared finite terminals onto FMFT's PR basis.
+- a `.rrcat.bin` native exact map of its declared finite terminals onto FMFT's PR basis;
+- a `.rrnorm.bin` native weighted terminal-normalization sidecar.
 
 Labels identify data files, not engine dispatch. Vakint selects a program from
 the defining parent and simultaneous routing already retained by its topology
@@ -19,8 +20,9 @@ terminal catalog must agree exactly.
 ## Runtime contract
 
 Each program is decompressed and loaded once, on first use, through RustRed's
-candidate loader. At that boundary, RustRed also prepares and verifies a
-same-family vacuum terminal-equivalence plan once. A shared native RustRed applier then handles scalar-numerator
+candidate loader. At that boundary, RustRed also decodes and independently
+rebuilds the same-family weighted vacuum terminal-normalization plan once.
+A shared native RustRed applier then handles scalar-numerator
 lowering, guard selection, strictly descending rule application and memoization.
 No rule-generation campaign or FORM executable is invoked. Vakint consumes the
 result and reuses its pure-Rust/Symbolica FMFT master finalizer. FeynKit's normal
@@ -30,8 +32,9 @@ The binary programs contain Symbolica's native rational-polynomial atoms and
 shared state, native family geometry and structural rule/source records. They
 are trusted, build-time embedded data for the pinned RustRed/Symbolica stack;
 the native decoder is not an untrusted-file parser. Decompression and framing
-have explicit size limits. Native transport does not change rule applicability,
-the terminal basis or certification status.
+have explicit size limits. Candidate-program transport alone does not change
+rule applicability, declared raw terminals or certification status; the separate
+normalization sidecar defines the effective output convention.
 
 The terminal-value files use RustRed's distinct `TerminalValues` envelope and
 deduplicate exact Symbolica Atoms with a shared native state. Vakint delegates
@@ -66,9 +69,62 @@ The unchanged 83-test through-three-loop selection, seven catalog/loader unit
 checks and three four-loop fixture checks also pass. Terminal aliases were
 disabled for that catalog-only milestone; the later activation is described below.
 
-## Exact vacuum terminal normalization
+## Weighted vacuum terminal normalization
 
-The `2b50267c` runtime pin explicitly steers
+The current RustRed pin is `8ad62b964de6f3a508fd165dc6ac2509f25839fe`.
+The four new sidecars retain the verified positive-power U equivalences and
+add exact weighted projections for quadratic numerator terminals. RustRed's
+generic service authenticates integer unit-Jacobian momentum symmetries of the
+active unit-mass denominators, then uses native Symbolica linear algebra to
+express each supported numerator as a scalar/pinch combination modulo those
+symmetries. The implementation does not dispatch on these parent names or on
+four loops. Strict output descent, declared-terminal binding and one-hop
+fixed-point closure are checked before installation.
+
+| Parent | Raw catalog keys | Prior U outputs | Weighted positive outputs | Projected numerators | Sidecar bytes |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| H | 386 | 52 | 22 | 30 | 8,934 |
+| FG | 145 | 26 | 16 | 10 | 5,759 |
+| BMW | 179 | 37 | 17 | 20 | 6,291 |
+| X | 445 | 64 | 19 | 45 | 9,811 |
+| Total | 1,155 | 179 | 74 | 105 | 30,795 |
+
+These are 74 family-local positive outputs, not 74 independent or minimal
+masters. All twelve existing program/catalog/descriptor assets remain
+byte-identical; no candidate rules or master values were regenerated. Export
+and fresh dirty-context reload independently checked every one of the 1,155
+raw expansions, all 1,260 output coefficients and both ordered native variable
+maps. Each family's retained symmetry generators and affine projection columns
+were independently replayed before opening that family's unchanged exact value
+catalog (84 generators in total). The corpus has no preparation skips.
+Unsupported shapes and exhausted inherited U-preparation bounds can retain
+their original keys; exhaustion of the weighted preparation's structural
+limits instead returns a typed error.
+
+The sidecar uses a distinct native envelope and is trusted generated data for
+this pinned stack. Its decoder regenerates the finite proof and compares every
+saved expansion before returning an installable owner; framing alone conveys
+no authority. The raw catalog coverage check remains exact and unchanged.
+The thin Vakint constructor `from_reducer_with_terminal_normalization` installs
+that owner into an empty cache. The plain and unit-alias constructors retain
+their prior behavior, and no cache is silently cleared. Hot application uses
+the core's existing coefficient arithmetic and memoization; Vakint adds no
+algebra or reduction engine.
+
+The pinned Vakint gates pass the unchanged 83-case through-three-loop selection,
+all fifteen original references, all sixteen expanded-numerator/pinch pairs,
+eleven focused constructor/catalog/loader checks and three fixtures. The two
+four-loop correctness processes took 20.58/36.04 s wall time, with peak RSS
+1,842,588/2,003,816 KiB. They ran sequentially on CPU 83 and include the separate
+FMFT oracle; these are not scalar-only timings. The original nonunit mass/scale
+inputs, precision and tolerances remain unchanged, with forbidden FORM paths
+in both native stages. The matched benchmark below also passes all 54 numerical
+comparisons. Focused and inventory filters overlap; these are not additional
+distinct physical inputs.
+
+## Historical U-only vacuum terminal normalization
+
+The preceding `2b50267c` runtime pin explicitly steered
 `TerminalAliasPlan::vacuum_parametric_equivalences` with its default preparation
 bounds. RustRed verifies equality of the full restricted first Symanzik
 polynomial U, including its scale, under a power-preserving parameter
@@ -96,7 +152,7 @@ coverage check, saved files, guard checks, descent, source conditions and
 unresolved-leaf errors remain unchanged. No programs or master values are
 regenerated, and the plan adds no family-closure certificate.
 
-The production loader opts into `from_reducer_with_terminal_aliases` on a fresh
+That production loader opted into `from_reducer_with_terminal_aliases` on a fresh
 owner. The existing experimental `from_reducer` constructor retains its original
 behavior, including accepting a populated cache. Installing aliases requires
 an explicitly empty cache and never silently clears caller data. Vakint's
@@ -155,7 +211,7 @@ logger; it does not increase source accuracy. Missing Laurent orders are errors.
 
 ## Offline reproduction
 
-Use the matching RustRed runtime pin `2b50267c5b1df10e4cd2798d7863d3f8c1b47383`
+Use the matching RustRed runtime pin `8ad62b964de6f3a508fd165dc6ac2509f25839fe`
 for the offline example commands below, with the Symbolica license supplied
 in the environment. These commands generate fresh programs when intentionally
 requested; the shipped migration itself converted the saved programs without
@@ -231,6 +287,57 @@ are outside the scalar timer; normal public settings validation, FORM startup an
 reduction and master substitution remain inside it. Any matching or dispatch
 performed internally by `evaluate_integral` is also included: this is a public
 backend measurement, not a bare `CandidateReducer` kernel timing.
+
+### Matched weighted-sidecar comparison, 20 September 2026
+
+The control is a fresh run of the frozen U-only `2b50267c` executable; the new
+runtime pins `8ad62b96` and uses the four independently replayed sidecars. Each
+passes the same nine inputs and 54 numerical comparisons, with 108 timed calls.
+Both use the preceding public test unchanged, release optimization level 3,
+LTO disabled, affinity 88–93, one scalar caller and nested pools capped at one.
+The processes run separately, with a 600-second deadline and 8-GiB virtual-address
+cap each; actual RSS is measured independently. Other builds/validation use
+disjoint CPUs on the same shared host. This is one observed pair of pinned
+runtimes, not a statistical speedup distribution or an isolated kernel change.
+
+| Input | First RustRed call (s), U → weighted | Warm RustRed median (ms), U → weighted | Warm FMFT median (ms), U → weighted |
+| --- | ---: | ---: | ---: |
+| H, first propagator cubed | 6.231 → 5.587 | 84.985 → 80.665 | 1493.497 → 1492.737 |
+| H, expanded D7 numerator | 0.021 → 0.021 | 20.887 → 21.106 | 135.081 → 135.994 |
+| FG, first propagator cubed | 1.043 → 1.110 | 79.621 → 76.572 | 223.242 → 223.695 |
+| FG, expanded D7 numerator | 0.763 → 0.654 | 31.135 → 30.704 | 149.504 → 152.586 |
+| BMW, first propagator cubed | 3.594 → 2.941 | 67.392 → 62.268 | 709.840 → 726.586 |
+| BMW, expanded D7 numerator | 0.030 → 0.024 | 26.026 → 22.702 | 136.294 → 136.249 |
+| X, first propagator cubed | 30.811 → 21.411 | 120.613 → 113.522 | 4780.624 → 5857.101 |
+| X, expanded D7 numerator | 0.631 → 0.367 | 52.306 → 53.005 | 163.334 → 196.491 |
+| Factorized four-tadpole | 0.015 → 0.016 | 14.751 → 15.309 | 128.703 → 135.580 |
+
+Observed H/X first-parent calls improve by 1.12×/1.44×, including lazy program
+load and native sidecar proof reconstruction. This is not a loader-only result.
+FG's first cubed-line call regresses, as do the warm H/X expanded-D7 calls and
+the factorized control. The substantial movement in the independent FMFT X
+warm median also cautions against attributing all timing movement to normalization
+on this shared host; no observations were removed.
+The dotted public targets have power three, unlike the separate core D1² study.
+
+Warm RustRed medians are below FMFT for all nine tested inputs, but the first
+four cubed-parent calls remain slower than FMFT. For H/X the new initial FMFT
+calls are 1.479/4.787 s versus RustRed's 5.587/21.411 s. Initial FG/X expanded-D7
+calls also remain slower than FMFT. Cached repeats do not predict unseen-target
+costs, and 179→74 outputs does not imply a proportional runtime improvement.
+
+| Whole benchmark process | U plan | Weighted sidecars |
+| --- | ---: | ---: |
+| Wall time | 97.22 s | 89.82 s |
+| User + system CPU | 92.97 + 3.63 s | 85.44 + 3.75 s |
+| Peak RSS | 2,155,424 KiB | 2,039,496 KiB |
+
+These totals include both backends, initialization and untimed comparisons;
+RSS is not a per-backend cache measurement. No rules, raw catalog values or
+numerical master precision changed. The frozen executables, full observations,
+commands, exact medians and audits are retained in the RustRed workspace's
+`TMP/gamma-terminal-normalization-rollout.GN7v1b/`. The earlier comparisons
+below remain historical evidence and use different controls.
 
 ### Matched terminal-alias comparison, 19 September 2026
 
