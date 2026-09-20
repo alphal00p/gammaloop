@@ -1,5 +1,6 @@
-# Number of steps for the simulated annealing
-steps := "1200"
+# Number of layout steps per epoch and epochs.
+steps := "100"
+epochs := "30"
 seed := "42"
 
 # Number of columns per amplitude or xs
@@ -43,6 +44,7 @@ _draw-output OUTPUT *EXTRA_INPUTS:
 	  {{drawing_templates}} \
 	  {{drawing_styles}} \
 	  --input steps={{steps}} \
+	  --input epochs={{epochs}} \
 	  --input seed={{seed}} \
 	  --input columns={{columns}} \
 	  --input rows={{rows}} \
@@ -72,6 +74,7 @@ draw-momentum *EXTRA_INPUTS:
 	  --input 'show-node-index={{show_node_index}}' \
 	  {{drawing_styles}} \
 	  --input steps={{steps}} \
+	  --input epochs={{epochs}} \
 	  --input seed={{seed}} \
 	  --input columns={{columns}} \
 	  --input rows={{rows}} \
@@ -92,6 +95,7 @@ draw-momentum-labels *EXTRA_INPUTS:
 	  --input 'show-particle={{show_particle}}' \
 	  {{drawing_styles}} \
 	  --input steps={{steps}} \
+	  --input epochs={{epochs}} \
 	  --input seed={{seed}} \
 	  --input columns={{columns}} \
 	  --input rows={{rows}} \
@@ -109,6 +113,7 @@ draw-momentum-lines *EXTRA_INPUTS:
 	  --input 'show-node-index={{show_node_index}}' \
 	  {{drawing_styles}} \
 	  --input steps={{steps}} \
+	  --input epochs={{epochs}} \
 	  --input seed={{seed}} \
 	  --input columns={{columns}} \
 	  --input rows={{rows}} \
@@ -122,7 +127,7 @@ draw-single FIGURE *EXTRA_INPUTS:
 	linnet \
 	  --build-dir drawings redraw-figure {{FIGURE}} \
 	  --input seed={{seed}} \
-	  --input steps={{steps}} {{EXTRA_INPUTS}}
+	  --input steps={{steps}} --input epochs={{epochs}} {{EXTRA_INPUTS}}
 	linnet \
 	  --build-dir drawings redraw-grid \
 	  --input columns={{columns}} \

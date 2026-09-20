@@ -98,7 +98,8 @@ fn parsed_dot_layout_keys_do_not_configure_layout() {
         graph.layout_config.layout_algo,
         crate::LayoutAlgo::Force
     ));
-    assert_eq!(graph.layout_config.schedule.steps, 30);
+    assert_eq!(graph.layout_config.schedule.steps, 100);
+    assert_eq!(graph.layout_config.schedule.epochs, 30);
     assert_eq!(graph.layout_config.seed, 2);
     assert_eq!(
         graph.global_statements.get("steps").map(String::as_str),

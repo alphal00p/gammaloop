@@ -338,10 +338,10 @@ def _(mo):
         0,
         2400,
         100,
-        1200,
+        100,
         debounce=True,
         show_value=True,
-        label="Force iterations",
+        label="Steps per epoch (30 epochs)",
     )
     force_seed = mo.ui.slider(
         0,

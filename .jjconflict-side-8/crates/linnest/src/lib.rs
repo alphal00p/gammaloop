@@ -1896,7 +1896,7 @@ fn default_eps() -> f64 {
 }
 
 fn default_steps() -> usize {
-    30
+    100
 }
 
 fn default_epochs() -> usize {

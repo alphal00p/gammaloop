@@ -160,8 +160,9 @@
       + physics.style(..options)
       + style-options
   )
-  for g in graph.parse(input) {
-    g = renderer.attach-elements(g, elements)
+  // Native callers already have a graph; DOT callers share the same pipeline.
+  for g in if type(input) == dictionary { (input,) } else { graph.parse(input) } {
+    g = (renderer.attach-elements)(g, elements)
     let mode = _resolved-mode(
       g,
       graph: graph,
@@ -195,12 +196,12 @@
         label-layout: "dangling-tangent",
       )
     } else { (:) }
-    renderer.layout-graph(
+    (renderer.layout-graph)(
       (
         style: styles,
         draw: (show-half-edge-ids: debug) + diagram-options,
         layouts: layout-passes,
-        layout-defaults: defaults + additional-data,
+        layout-defaults: (seed: 42) + defaults + additional-data,
       ),
       g,
     )

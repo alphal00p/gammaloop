@@ -310,7 +310,7 @@
   /// integration steps within the single depth-flattening schedule;
   /// in `"anneal"` mode this is the number of proposals per temperature epoch.
   /// -> int
-  steps: 30,
+  steps: 100,
   /// Seed for deterministic initialization, force-mode jitter, and annealing
   /// proposals. Applies to both modes. -> int
   seed: 2,

@@ -23,6 +23,11 @@ pub(crate) fn render_diagram_svg(py: Python<'_>, diagram: &FeynmanDiagram) -> Py
         [
             ("main.typ", diagram.to_linnest()),
             (
+                "assets/embedded/drawing/templates/layout-core.typ",
+                include_str!("../../../assets/embedded/drawing/templates/layout-core.typ")
+                    .to_owned(),
+            ),
+            (
                 "assets/embedded/drawing/templates/physics-edge-style.typ",
                 include_str!("../../../assets/embedded/drawing/templates/physics-edge-style.typ")
                     .to_owned(),

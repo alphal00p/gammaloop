@@ -3,10 +3,8 @@ use std::{
     fmt::Write,
 };
 
-use crate::{DiagramVertex, ExternalState, FeynmanDiagram, VertexId};
+use crate::{ExternalState, FeynmanDiagram};
 use symbolica::atom::AtomCore;
-
-const EXTERNAL_Y_SCALE: f64 = 10.0;
 
 fn typst_string(value: &str) -> String {
     let mut output = String::with_capacity(value.len() + 2);
@@ -29,26 +27,6 @@ fn typst_string(value: &str) -> String {
     output
 }
 
-fn centered_external_y(count: usize, rank: usize) -> f64 {
-    ((count as f64 - 1.0) / 2.0 - rank as f64) * EXTERNAL_Y_SCALE
-}
-
-fn external_vertices<'a>(
-    vertices: &'a BTreeMap<VertexId, &'a DiagramVertex>,
-    state: ExternalState,
-) -> Vec<(VertexId, &'a DiagramVertex)> {
-    vertices
-        .iter()
-        .filter_map(|(id, vertex)| {
-            vertex
-                .external
-                .as_ref()
-                .is_some_and(|external| external.state == state)
-                .then_some((*id, *vertex))
-        })
-        .collect()
-}
-
 impl FeynmanDiagram {
     /// Emit a complete Typst document that renders this diagram with Linnest.
     ///
@@ -62,10 +40,9 @@ impl FeynmanDiagram {
     /// vertices become Linnest dangling half-edges and retain their names,
     /// indices, and incoming/outgoing states as edge data.
     ///
-    /// Layout uses the deterministic seed and force-layout settings from
-    /// GammaLoop's amplitude renderer. Incoming and outgoing legs are constrained
-    /// to the left and right respectively, while force layout separates loops and
-    /// parallel propagators.
+    /// GammaLoop's shared physics layout owns particle styling, label measurement,
+    /// force settings, and left/right amplitude placement. Finalized cross sections
+    /// instead pair external legs by their sewing connection IDs.
     pub fn to_linnest(&self) -> String {
         let vertices: BTreeMap<_, _> = self.vertices().collect();
         let internal_vertices: Vec<_> = vertices
@@ -78,45 +55,12 @@ impl FeynmanDiagram {
             .map(|(dense_id, (id, _))| (*id, dense_id))
             .collect();
 
-        let mut incoming = external_vertices(&vertices, ExternalState::Incoming);
-        let mut outgoing = external_vertices(&vertices, ExternalState::Outgoing);
-        incoming.sort_by_key(|(id, vertex)| {
-            (
-                vertex
-                    .external
-                    .as_ref()
-                    .expect("external vertex has external metadata")
-                    .index,
-                id.0,
-            )
-        });
-        outgoing.sort_by_key(|(id, vertex)| {
-            (
-                vertex
-                    .external
-                    .as_ref()
-                    .expect("external vertex has external metadata")
-                    .index,
-                id.0,
-            )
-        });
-        let incoming_ranks: BTreeMap<_, _> = incoming
-            .iter()
-            .enumerate()
-            .map(|(rank, (id, _))| (*id, rank))
-            .collect();
-        let outgoing_ranks: BTreeMap<_, _> = outgoing
-            .iter()
-            .enumerate()
-            .map(|(rank, (id, _))| (*id, rank))
-            .collect();
-
         let mut output = String::from(
             r##"#set page(width: auto, height: auto, margin: (x: 2mm, y: 2mm))
 #set text(size: 9pt)
-#import "crates/linnest/typst/src/draw.typ": draw
 #import "crates/linnest/typst/src/graph.typ" as graph
-#import "crates/linnest/typst/src/layout.typ" as layout
+#import "crates/linnest/typst/src/render/layout.typ" as renderer
+#import "assets/embedded/drawing/templates/layout-core.typ" as physics-layout
 #import "assets/embedded/drawing/templates/physics-edge-style.typ" as physics
 #import physics: mi, palette, massive, massless, dashed, dotted, source-stroke, sink-stroke, fermion-flow, wave, coil, zigzag
 #import graph: build, edge, node, sink, source
@@ -125,11 +69,14 @@ impl FeynmanDiagram {
 "##,
         );
 
-        for particle in self
+        let particles = self
             .edges()
             .map(|(_, _, edge)| edge.particle)
-            .collect::<BTreeSet<_>>()
-        {
+            .collect::<BTreeSet<_>>();
+        if particles.is_empty() {
+            output.push(':');
+        }
+        for particle in particles {
             let particle = self
                 .model()
                 .particle_by_id(particle)
@@ -178,10 +125,9 @@ impl FeynmanDiagram {
                     };
                     writeln!(
                         output,
-                        "    edge(source(<v{source}>), <e{}>, sink(<v{target}>), id: {}, orientation: {orientation:?}, label: text({}), particle: {}, pdg: {}, directed: {}, numerator: {}, feynkit-source: {}, feynkit-target: {})",
+                        "    edge(source(<v{source}>), <e{}>, sink(<v{target}>), id: {}, orientation: {orientation:?}, particle: {}, pdg: {}, directed: {}, numerator: {}, feynkit-source: {}, feynkit-target: {})",
                         id.0,
                         id.0,
-                        typst_string(&particle.name),
                         typst_string(&particle.name),
                         particle.pdg_code,
                         edge.directed,
@@ -211,33 +157,19 @@ impl FeynmanDiagram {
                     } else {
                         "reversed"
                     };
-                    let (rank, count, side, side_constraint, label_anchor) = match external.state {
-                        ExternalState::Incoming => (
-                            incoming_ranks[&external_id],
-                            incoming.len(),
-                            "left",
-                            "-",
-                            "east",
-                        ),
-                        ExternalState::Outgoing => (
-                            outgoing_ranks[&external_id],
-                            outgoing.len(),
-                            "right",
-                            "+",
-                            "west",
-                        ),
+                    let cut_pair = if self.cuts().is_empty() {
+                        String::new()
+                    } else {
+                        format!(", is_cut: {}", external.connection)
                     };
-                    let y = centered_external_y(count, rank);
-                    let display_label = format!("{} ({})", particle.name, external_vertex.name);
                     let endpoint_spec = match external.state {
                         ExternalState::Incoming => format!("<e{}>, sink(<v{internal}>)", id.0),
                         ExternalState::Outgoing => format!("source(<v{internal}>), <e{}>", id.0),
                     };
                     writeln!(
                         output,
-                        "    edge({endpoint_spec}, id: {}, orientation: {orientation:?}, label: text({}), label-anchor: {label_anchor:?}, particle: {}, pdg: {}, directed: {}, numerator: {}, external-state: {:?}, external-index: {}, external-name: {}, feynkit-source: {}, feynkit-target: {}, pos: graph.pos(x: graph.group({side:?}, side: {side_constraint:?}), y: graph.start({y:.1})))",
+                        "    edge({endpoint_spec}, id: {}, orientation: {orientation:?}, particle: {}, pdg: {}, directed: {}, numerator: {}, external-state: {:?}, external-index: {}, external-name: {}, feynkit-source: {}, feynkit-target: {}{cut_pair})",
                         id.0,
-                        typst_string(&display_label),
                         typst_string(&particle.name),
                         particle.pdg_code,
                         edge.directed,
@@ -256,11 +188,6 @@ impl FeynmanDiagram {
             }
         }
 
-        let roots = if internal_vertices.is_empty() {
-            "()"
-        } else {
-            "(0,)"
-        };
         writeln!(
             output,
             "  }}, name: {}, data: (symmetry-factor: {}, overall-factor: {}, numerator: {}, loop-count: {}))",
@@ -274,58 +201,21 @@ impl FeynmanDiagram {
         write!(
             output,
             r##"
-  let edge-label(edge) = {{
-    let label = physics.edge-entry(edge, map: particle-map).label
-    let external-name = edge.data.at("external-name", default: none)
-    if external-name == none {{ label }} else {{
-      [#label #text("(" + external-name + ")")]
-    }}
-  }}
-  let edge-label-style(edge) = (
-    anchor: edge.data.at("label-anchor", default: "south"),
-    padding: 0.08,
-  )
-  let styled = graph.style(
+  physics-layout.layout(
     raw,
+    graph: graph,
+    renderer: renderer,
+    physics: physics,
+    edge-style: (map: particle-map, default-edge: physics.default-edge),
     unit: 1.5,
-    node-label: none,
-    edge-label: edge-label,
-    edge-label-style: edge-label-style,
-  )
-  let positioned = layout.layout(
-    styled,
-    seed: 2,
-    steps: 30,
-    epochs: 30,
-    step: 0.6,
-    k-spring: 4.5,
-    eps: 1e-7,
-    gamma-dangling: 2.3,
-    directional-force: 4.5,
-    label-length-scale: 1.2,
-    label-steps: 100,
-    label-layout: "dangling-tangent",
-    layout-algo: "force",
-    layout-direction: "right",
-    layout-roots: {roots},
-  )
-  let particle-style = physics.style(map: particle-map, orientation-split: false)
-  draw(
-    positioned,
-    unit: 1.5,
-    title: auto,
-    node-label: none,
-    node-radius: 0.10,
-    node-fill: black,
-    node-stroke: black,
-    source-style: particle-style.source-style,
-    sink-style: particle-style.sink-style,
-    edge-label: edge-label,
-    edge-label-style: edge-label-style,
-    padding: 0.55,
+    amplitude-mode: {},
+    cross-section-mode: {},
+    style-options: (node-label: none),
   )
 }}
 "##,
+            self.cuts().is_empty(),
+            !self.cuts().is_empty(),
         )
         .expect("writing to a string cannot fail");
         output
@@ -389,29 +279,24 @@ mod tests {
 
         assert_eq!(source, diagram.to_linnest());
         assert!(source.starts_with("#set page(width: auto"));
-        assert!(source.contains("#import \"crates/linnest/typst/src/draw.typ\": draw"));
         assert!(source.contains("#import \"crates/linnest/typst/src/graph.typ\" as graph"));
-        assert!(source.contains("#import \"crates/linnest/typst/src/layout.typ\" as layout"));
         assert_eq!(source.matches("    node(").count(), 2);
         assert!(source.contains("node(<v0>, id: 0"));
         assert!(source.contains("node(<v1>, id: 1"));
         assert!(source.contains("edge(<e0>, sink(<v0>), id: 0"));
         assert!(source.contains("edge(source(<v1>), <e3>, id: 3"));
         assert_eq!(source.matches("edge(source(<v0>), <e").count(), 2);
-        assert!(source.contains("graph.group(\"left\", side: \"-\")"));
-        assert!(source.contains("graph.group(\"right\", side: \"+\")"));
-        assert!(source.contains("layout-algo: \"force\""));
-        assert!(source.contains("layout.layout("));
-        assert!(source.contains("k-spring: 4.5"));
-        assert!(source.contains("label-layout: \"dangling-tangent\""));
-        assert!(source.contains("source-style: particle-style.source-style"));
-        assert!(source.contains("sink-style: particle-style.sink-style"));
+        assert!(source.contains("physics-layout.layout("));
+        assert!(source.contains("amplitude-mode: true"));
+        assert!(source.contains("cross-section-mode: false"));
+        assert!(!source.contains("is_cut:"));
+        assert!(!source.contains("pos: graph.pos"));
         assert!(source.contains("dash: dashed"));
         assert!(source.ends_with("}\n"));
     }
 
     #[test]
-    fn sorts_external_legs_and_centers_each_side() {
+    fn delegates_external_placement_without_reordering_edges() {
         let model = display_model();
         let rule = model.vertex_rule_id("V_3").unwrap();
         let particle = model.particle_id("phi").unwrap();
@@ -442,8 +327,8 @@ mod tests {
         let low = source.find("external-name: \"out-low\"").unwrap();
         let high = source.find("external-name: \"out-high\"").unwrap();
         assert!(low > high, "edge emission remains stable by edge id");
-        assert!(source.contains("external-name: \"out-high\", feynkit-source: 3, feynkit-target: 1, pos: graph.pos(x: graph.group(\"right\", side: \"+\"), y: graph.start(-5.0))"));
-        assert!(source.contains("external-name: \"out-low\", feynkit-source: 3, feynkit-target: 2, pos: graph.pos(x: graph.group(\"right\", side: \"+\"), y: graph.start(5.0))"));
+        assert!(source.contains("amplitude-mode: true"));
+        assert!(!source.contains("pos: graph.pos"));
     }
 
     #[test]
