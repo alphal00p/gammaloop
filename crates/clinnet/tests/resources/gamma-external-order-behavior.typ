@@ -125,3 +125,41 @@
   }
   context draw(graph.style(g, ..styles), title: none)
 }
+
+
+// FeynKit supplies native graphs to the same pipeline as DOT. Amplitudes use
+// half-edge order, whereas cross sections match native numeric sewing IDs.
+#import "gamma-layout-core.typ" as physics-layout
+#import "crates/linnest/typst/src/render/layout.typ" as renderer
+#context for is-cross-section in (false, true) {
+  let native = graph.build({
+    graph.node(<a>)
+    graph.node(<b>)
+    graph.edge(<in0>, graph.sink(<a>), particle: "fermion", is_cut: 10)
+    graph.edge(<in1>, graph.sink(<a>), particle: "fermion", is_cut: 2)
+    graph.edge(graph.source(<b>), <out0>, particle: "fermion", is_cut: 2)
+    graph.edge(graph.source(<b>), <out1>, particle: "fermion", is_cut: 10)
+    graph.edge(graph.source(<a>), <internal>, graph.sink(<b>), particle: "photon")
+  })
+  physics-layout.layout(
+    native,
+    graph: graph,
+    renderer: (
+      attach-elements: renderer.attach-elements,
+      layout-graph: (config, g) => {
+        let edges = graph.edges(g)
+        let expected = if is-cross-section { (-5, 5, 5, -5) } else { (5, -5, 5, -5) }
+        for (i, y) in expected.enumerate() {
+          assert(edges.at(i).pos.y == y)
+          assert(edges.at(i).statements.at("pos-z-mode") == "pin")
+          assert(edges.at(i).statements.at("pos-z") == "0")
+        }
+        renderer.layout-graph(config, g)
+      },
+    ),
+    physics: physics,
+    edge-style: (map: (:), default-edge: physics.default-edge),
+    amplitude-mode: not is-cross-section,
+    cross-section-mode: is-cross-section,
+  )
+}

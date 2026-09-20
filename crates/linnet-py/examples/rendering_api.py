@@ -217,7 +217,6 @@ def _(
         _layouts = lp.LayoutOptions(
             algorithm=lp.LayoutAlgorithm.Force,
             direction=lp.LayoutDirection.Right,
-            steps=260,
             directional_force=0.55,
             label_steps=60,
         )

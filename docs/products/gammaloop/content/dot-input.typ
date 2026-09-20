@@ -37,7 +37,7 @@ Try changing an internal edge's `particle`: `a` draws a photon wave, `g` a gluon
 dashed scalar, and `t` a fermion with its model label. The same generated particle map and
 Typst callbacks control these styles in exported GammaLoop drawings.
 
-The initial settings match ordinary `just draw`: 1200 iterations, seed 42, and momentum arrows
+The initial settings match ordinary `just draw`: 100 steps per epoch, 30 epochs, seed 42, and momentum arrows
 and labels disabled. The preview draws edited DOT without importing it into a GammaLoop
 calculation, so it does not validate interactions or numerators against the model.
 

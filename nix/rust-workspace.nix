@@ -376,6 +376,7 @@
 
   workspacePackageExtraSourceRoots.production = {
     "feynkit-py" = [
+      "assets/embedded/drawing/templates/layout-core.typ"
       "assets/embedded/drawing/templates/physics-edge-style.typ"
       "assets/embedded/drawing/templates/impl/physics-edge-style.typ"
     ];

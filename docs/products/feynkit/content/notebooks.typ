@@ -12,6 +12,11 @@ Rendering uses Linnet’s Python preparation and compilation pipeline.
 The native module embeds the compatible Linnest/Kurvst source, Wasm files, and shared
 physics styles. Particle metadata selects dashed scalar lines, fermion arrows,
 photon waves, gluon coils, and mathematical labels from the model's TeX names.
+FeynKit, the physics showcase, and `just draw` use the same physics layout template:
+100 steps per epoch and 30 epochs by default. Amplitudes place incoming legs on the
+left and outgoing legs on the right using Linnest half-edge ordering. Finalized
+cross-section diagrams instead pair both sides by their external connection IDs.
+The shared template owns label placement, force presets, and particle styles.
 
 // docs-example: syntax
 ```sh
