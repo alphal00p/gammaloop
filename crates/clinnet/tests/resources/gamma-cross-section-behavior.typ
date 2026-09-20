@@ -12,19 +12,19 @@
 )
 
 // Exercise the actual Gamma entrypoint: automatic cross-section detection must
-// enable placement, pair by inherited invisible-node cut tags, and pin each row.
+// enable placement, pair by inherited invisible-node cut tags, and freely group each row.
 #context gamma-layout(input, auto-mode: true,
   edge-style-options: (momentum-arrows: true, show-particle: false),
-  layout-passes: ((solver: (seed: 42, steps: 1200, depth-scale: 2), labels: (steps: 2)),),
+  layout-passes: ((solver: (seed: 42, depth-scale: 2), labels: (steps: 2)),),
   diagram-options: (title: none, draw-after: (g, _) => {
     let nodes = graph.nodes(g)
     let edges = graph.edges(g)
     let left = calc.min(..nodes.map(node => node.pos.x))
     let right = calc.max(..nodes.map(node => node.pos.x))
     let labels = graph.info(g).data.at("linnest-style").at("edge-label")
-    for (eid, y) in ((0, -5), (1, 5), (2, 5), (3, -5)) {
+    for eid in range(4) {
       let edge = edges.at(eid)
-      assert(calc.abs(edge.pos.y - y) < 1e-9)
+      assert(edge.statements.at("pin").contains("y:@is_cut-"))
       assert(edge.statements.at("pos-z") == "0")
       assert(edge.statements.at("pos-z-mode") == "pin")
       if eid < 2 { assert(edge.pos.x > right) }
@@ -35,6 +35,8 @@
       assert(label.contains("base: [q]"))
       assert(label.contains("b: [" + str(eid) + "]"))
     }
+    assert(edges.at(0).pos.y == edges.at(3).pos.y)
+    assert(edges.at(1).pos.y == edges.at(2).pos.y)
     assert(edges.at(0).pos.x == edges.at(1).pos.x)
     assert(edges.at(2).pos.x == edges.at(3).pos.x)
     assert(edges.at(0).statements.at("is_cut") == edges.at(3).statements.at("is_cut"))
@@ -67,8 +69,10 @@
 #assert(edges.at(0).pos.x > 0)
 #assert(edges.at(1).pos == before.at(1).pos)
 #assert(edges.at(2).pos.x == -30)
-#assert(edges.at(2).pos.y == 5)
-#assert(edges.at(3).pos.y == -5)
+#for eid in (2, 3) {
+  assert(edges.at(eid).statements.at("pin").contains("y:@is_cut-"))
+  assert(edges.at(eid).pos.y != prepared-edges.at(eid).pos.y)
+}
 #for eid in (0, 1, 2, 3) {
   assert(edges.at(eid).statements.at("pos-z") == "0")
   assert(edges.at(eid).statements.at("pos-z-mode") == "pin")

@@ -30,11 +30,10 @@
 }
 
 // Match GammaLoop external-edge conventions with outward-facing particle
-// labels. Relative half-edge order follows amplitude kinematics; numeric cut
-// tags order and pair cross-section legs without becoming momentum-label indices.
-// Matched legs share fixed Y coordinates
-// across the left and right columns. Every dangling endpoint stays at raw
-// depth zero, independently of explicit XY placement or an unmatched cut tag.
+// labels. Both modes start in half-edge order, with one free X group per side.
+// Cross-section cut tags share free Y groups without becoming momentum-label
+// indices; dangling-centroid repulsion spreads the endpoints. Every endpoint
+// stays at raw depth zero, independently of explicit XY placement or an unmatched cut tag.
 #let autogen-external-edge-fields(
   g,
   graph: none,
@@ -46,22 +45,15 @@
   let right = ()
   let edges = graph.edges(g)
   for edge in edges {
-    let id = if match-field == none { edge.edge } else {
-      _field(edge, match-field)
-    }
-    if id != none and edge.source == none and edge.sink != none {
-      left.push(id)
-    } else if id != none and edge.source != none and edge.sink == none {
-      right.push(id)
+    if edge.source == none and edge.sink != none {
+      left.push(edge.edge)
+    } else if edge.source != none and edge.sink == none {
+      right.push(edge.edge)
     }
   }
   if place {
-    if match-field == none {
-      left = left.sorted(key: id => edges.at(id).sink.hedge)
-      right = right.sorted(key: id => edges.at(id).source.hedge)
-    } else if match-field == "is_cut" {
-      left = left.map(value => int(value)).sorted()
-    }
+    left = left.sorted(key: id => edges.at(id).sink.hedge)
+    right = right.sorted(key: id => edges.at(id).source.hedge)
   }
   graph.map(g, edge: edge => {
     let side = if edge.source == none and edge.sink != none { "left" } else if (
@@ -79,13 +71,9 @@
       // incoming or outgoing legs on either side of the graph.
       generated.insert("label-anchor", auto)
     }
-    let id = if match-field == none { edge.edge } else {
-      _field(edge, match-field)
-    }
-    if place and match-field == "is_cut" and id != none { id = int(id) }
-    let ids = if match-field != none or side == "left" { left } else { right }
-    let rank = ids.position(value => value == id)
-    if rank != none and place {
+    if place {
+      let ids = if side == "left" { left } else { right }
+      let rank = ids.position(id => id == edge.edge)
       let position = (z: graph.pin(0))
       if not edge.at("pos-x-set", default: false) {
         position.x = graph.group(side, side: if side == "left" { "-" } else {
@@ -95,8 +83,10 @@
       }
       if not edge.at("pos-y-set", default: false) {
         let y = ((ids.len() - 1) / 2 - rank) * y-scale
-        position.y = if match-field == none { graph.start(y) } else {
-          graph.pin(y)
+        let tag = if match-field == none { none } else { _field(edge, match-field) }
+        position.y = if tag == none { graph.start(y) } else {
+          if match-field == "is_cut" { tag = int(tag) }
+          graph.group(match-field + "-" + str(tag), start: y)
         }
       }
       generated.pos = graph.pos(..position)
@@ -196,6 +186,9 @@
         label-layout: "dangling-tangent",
       )
     } else { (:) }
+    if mode.amplitude or mode.cross-section {
+      defaults.insert("gamma-dangling-centroid", 1.25)
+    }
     (renderer.layout-graph)(
       (
         style: styles,

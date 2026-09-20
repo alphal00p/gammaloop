@@ -80,9 +80,9 @@ follow parser order, which need not be DOT statement order; see
   table.header([*Input*], [*Drawing*], [*GammaLoop calculation*]),
   [Edge `id=n`], [Names the momentum label $q_n$.],
     [Identifies an edge in momentum expressions such as `Q(n, ...)`.],
-  [Numeric port `vertex:h`], [Sets initial amplitude row order and identifies half-edge debug labels.],
+  [Numeric port `vertex:h`], [Sets initial row order in both drawing modes and identifies half-edge debug labels.],
     [Orders amplitude external momentum and helicity entries; also supplies tensor-index identities.],
-  [Edge `is_cut=k`], [Orders cross-section rows numerically and pairs legs at the same vertical position.],
+  [Edge `is_cut=k`], [Groups matching cross-section legs at a shared, movable vertical position.],
     [Marks an initial-state cut and orders its external momentum entries; equal tags sew split legs.],
   [Edge `lmb_id=k`], [Does not rename the edge's $q$ label.],
     [Selects this edge as the carrier of loop momentum `K(k, ...)`.],
@@ -92,7 +92,7 @@ DOT arrow direction determines incoming versus outgoing, independently of these 
 `dir`, which controls the displayed or particle orientation. For an amplitude, the runtime
 external momentum and helicity lists follow increasing dangling half-edge index. Incoming
 momenta enter the conservation equation with a plus sign and outgoing momenta with a minus sign.
-Automatic amplitude placement uses this same half-edge order, separately for the incoming left
+Automatic placement in both modes uses this half-edge order, separately for the incoming left
 column and outgoing right column. Gaps in the indices do not create empty rows. These are initial
 vertical positions that layout may adjust; explicit positions still take precedence. Moving a
 port index to another leg changes its kinematic-list position and its initial drawing order.
@@ -145,13 +145,15 @@ values: they need not be contiguous or name an existing half-edge. The index bou
 above apply to `id` and numeric ports, not to these tags.
 
 The notebook and `just draw` render DOT directly, without this physics import or sewing.
-Cross-section placement follows the same numeric `is_cut` order as the calculation: incoming
-legs occupy rows from top to bottom, and outgoing legs find their row through the matching tag.
-For example, tag `2` precedes tag `10`; gaps do not create empty rows. Incoming legs go on the left
-and outgoing legs on the right. These cross-section rows are pinned vertically, while amplitude
-rows use the adjustable starting positions described above. All dangling depths are pinned to
-zero, and explicit horizontal and vertical placements retain precedence. An outgoing cut tag
-without an incoming counterpart can still be drawn, but receives no automatic row placement.
+Both modes give incoming legs one shared, movable X coordinate on the left and outgoing legs
+another on the right. Initial Y positions follow half-edge order separately on each side.
+Cross sections additionally group Y coordinates by numeric `is_cut` identity: matching tags
+share a freely moving row, seeded from the mean of their starting positions. The tag's numeric
+order does not determine drawing order. The existing dangling-centroid repulsion spreads
+external endpoints in both modes; its default strength is `gamma-dangling-centroid=1.25`.
+Neither mode automatically pins X or Y. All dangling depths are pinned to zero, and explicit
+horizontal and vertical placements retain precedence. A tag without a counterpart still gets
+its side's X group and its own movable Y group; an untagged leg keeps an independent Y coordinate.
 
 Generated momentum labels use the current drawing edge's `eid`, including on split cut legs: the
 example's labels are $q_0$ and $q_5$. With edge IDs fixed, changing `is_cut`, a half-edge port, or

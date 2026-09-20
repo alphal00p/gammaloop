@@ -13,9 +13,12 @@ The native module embeds the compatible Linnest/Kurvst source, Wasm files, and s
 physics styles. Particle metadata selects dashed scalar lines, fermion arrows,
 photon waves, gluon coils, and mathematical labels from the model's TeX names.
 FeynKit, the physics showcase, and `just draw` use the same physics layout template:
-100 steps per epoch and 30 epochs by default. Amplitudes place incoming legs on the
-left and outgoing legs on the right using Linnest half-edge ordering. Finalized
-cross-section diagrams instead pair both sides by their external connection IDs.
+100 steps per epoch and 30 epochs by default. Both modes group incoming X coordinates on the
+left and outgoing X coordinates on the right, and start Y coordinates in half-edge order.
+Amplitudes keep Y independent; finalized cross-section diagrams share movable Y groups by
+external connection ID (`is_cut`). Dangling-centroid repulsion spreads external endpoints,
+with default strength `gamma-dangling-centroid=1.25`. Neither mode automatically pins X or Y;
+explicit positions still take precedence.
 The shared template owns label placement, force presets, and particle styles.
 
 // docs-example: syntax

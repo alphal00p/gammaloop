@@ -256,8 +256,10 @@ def _(mo):
     and Linnest measures, lays out, and draws the graph.
 
     **Automatic** placement recognizes amplitude legs and cross-section cut
-    pairs. Existing X/Y positions are preserved, and external depth is pinned
-    to zero. Particle labels face outward; optional momentum labels use `qₑ`
+    pairs. Both modes group X by side and start Y in half-edge order. Cut pairs
+    also share movable Y groups. Dangling-centroid repulsion spreads endpoints;
+    X/Y are not automatically pinned. Existing positions are preserved, and
+    external depth is pinned to zero. Particle labels face outward; optional momentum labels use `qₑ`
     with the original edge ID. Debug mode adds node and half-edge IDs.
 
     Open **Layout settings** for the sliders. GammaLoop's mode-specific presets
