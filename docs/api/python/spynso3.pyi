@@ -1071,6 +1071,49 @@ class TensorExpression(Expression):
         r"""
         Collect terms while preserving the tensor interface. Callback results are validated.
         """
+    def expand_num(self) -> TensorExpression:
+        r"""
+        Distribute numerical factors while preserving the tensor interface.
+        """
+    def collect_num(self) -> TensorExpression:
+        r"""
+        Extract common numerical factors while preserving the tensor interface.
+        """
+    def collect_factors(self) -> TensorExpression:
+        r"""
+        Collect common factors from nested sums while preserving the tensor interface.
+        """
+    def collect_by_coefficient(self) -> TensorExpression:
+        r"""
+        Group terms with equal numerical coefficients while preserving the tensor interface.
+        """
+    def together(self) -> TensorExpression:
+        r"""
+        Combine scalar denominators while preserving the tensor interface.
+        """
+    def cancel(self) -> TensorExpression:
+        r"""
+        Cancel common numerator and denominator factors while preserving the tensor interface.
+        """
+    def collect_symbol(self, x: Expression, key_map: typing.Optional[typing.Any] = None, coeff_map: typing.Optional[typing.Any] = None) -> TensorExpression:
+        r"""
+        Collect powers of a symbol while preserving the tensor interface.
+        Callback results are validated, as for `collect`.
+        """
+    def collect_horner(self, vars: typing.Optional[typing.Sequence[Expression]] = None) -> TensorExpression:
+        r"""
+        Rewrite in Horner form while preserving the tensor interface.
+        Omit `vars` to choose the variable order heuristically.
+        """
+    def apart(self, *variables: typing.Any) -> TensorExpression:
+        r"""
+        Decompose scalar denominators into partial fractions while preserving the tensor interface.
+        Omit `variables` to decompose in all variables.
+        """
+    def __copy__(self) -> TensorExpression:
+        r"""
+        Copy the expression together with its ordered interface and data identity.
+        """
     def with_lorentz_dimension(self, dimension: builtins.int | Expression | str) -> TensorExpression:
         r"""
         Replace four-dimensional Lorentz slots and compact representations by dimension `D`.

@@ -56,8 +56,13 @@ four-dimensional Lorentz slots in the numerator and projector to `D`, and return
 prefactor remains separate, and at least one internal edge is required.
 
 For standalone tensors, `TensorExpression(expression)` performs the same conversion as
-`as_tensor(expression)`. The `factor()` and `collect(...)` methods return tensor expressions
-with their ordered interfaces preserved; transformations that change the interface are rejected.
+`as_tensor(expression)`. Algebraic rearrangements return tensor expressions with their ordered
+interfaces and data identities preserved: `expand`, `expand_num`, `factor`, `collect`,
+`collect_symbol`, `collect_num`, `collect_factors`, `collect_by_coefficient`, `collect_horner`,
+`together`, `cancel`, and `apart`. Python's `copy.copy` also preserves tensor metadata.
+The transformation methods validate the result and reject incompatible interfaces, including
+changes introduced by collection callbacks. Arbitrary replacement, differentiation, and
+numerical conversion retain Symbolica's return types because they can change index structure.
 Use `tensor.with_lorentz_dimension(D)` before contracting indices to promote four-dimensional
 Lorentz slots, including compact representations. Spinor/color dimensions, scalar coefficients,
 and Lorentz slots already in other dimensions remain unchanged.
