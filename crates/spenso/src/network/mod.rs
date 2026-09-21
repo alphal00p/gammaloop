@@ -4944,7 +4944,7 @@ impl<LT, L, K, FK, FL, Aind, Store> ExecuteOp<FL, L, K, FK, Aind> for Store
 where
     LT: LibraryTensor + Clone,
     Store: NetworkStoreAccess,
-    Store::Tensor: HasStructure
+    Store::Tensor: ScalarTensor
         + TensorStructure
         + Neg<Output = Store::Tensor>
         + Clone
@@ -4965,6 +4965,7 @@ where
         + Clone
         + for<'a> AddAssign<<Store::Tensor as HasStructure>::ScalarRef<'a>>
         + From<<Store::Tensor as HasStructure>::Scalar>
+        + Into<<Store::Tensor as HasStructure>::Scalar>
         + Ref
         + for<'a> MulAssign<<Store::Scalar as Ref>::Ref<'a>>
         + 'static,
@@ -5557,9 +5558,14 @@ where
                     return Err(TensorNetworkError::ChildlessNeg);
                 };
                 if let NetworkLeaf::Scalar(si) = leaf {
-                    let mut s = self.scalar_ref(*si).ref_one();
+                    if pow == 1 {
+                        return Ok(leaf.clone());
+                    }
+                    let tensor = Store::Tensor::new_scalar(self.scalar_ref(*si).clone().into());
+                    let base = Store::Scalar::from(tensor.scalar_power_base().unwrap());
+                    let mut s = base.ref_one();
                     for _ in 0..n {
-                        s *= self.scalar_ref(*si).refer();
+                        s *= base.refer();
                     }
                     if pow < 0 {
                         s = s.ref_one() / s;
@@ -5618,7 +5624,7 @@ where
                     _ => {
                         let (mut s, exponent) = if t.is_scalar() {
                             // Preserve the scalar boundary before repeating a contraction.
-                            (Store::Scalar::from(t.scalar().unwrap()), n)
+                            (Store::Scalar::from(t.scalar_power_base().unwrap()), n)
                         } else {
                             let squares = n / 2;
                             let square = t.contract(&t)?;
@@ -5635,9 +5641,14 @@ where
                                         "".to_string(),
                                     ));
                                 }
-                                (Store::Scalar::from(t.scalar().unwrap()), 1)
+                                (Store::Scalar::from(t.scalar_power_base().unwrap()), 1)
                             } else {
-                                (Store::Scalar::from(square.scalar().unwrap()), squares)
+                                let scalar = if pow < 0 || squares > 1 {
+                                    square.scalar_power_base()
+                                } else {
+                                    square.scalar()
+                                };
+                                (Store::Scalar::from(scalar.unwrap()), squares)
                             }
                         };
                         let base = s.clone();
