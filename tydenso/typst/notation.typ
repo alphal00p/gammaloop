@@ -306,11 +306,30 @@
   let label = _display-node(labels.at(position))
   if cycle == 0 { label } else { math.attach(label, b: $ #cycle $) }
 }
-#let _slot-index(slot, ctx) = {
+#let _slot-index(slot, ctx, settings) = {
   let index = _natural-index(slot.index)
   if index != none {
     let display = _palette-index(slot.palette, index)
     if display != none { return display }
+  }
+  // Aliases affect only the visible slot. The complete tensor call keeps its
+  // original Atom annotation, including its named graph-index identities.
+  if _is-function(slot.index) {
+    let arguments = slot.index.arguments.map(_natural-index)
+    if none not in arguments {
+      for alias in settings.at("index-aliases", default: ()) {
+        if (
+          alias.at(0) == slot.identity
+            and alias.at(1) == _name(slot.index)
+            and alias.at(2) == arguments
+        ) {
+          let label = alias.at(3)
+          if type(label) == content { return label }
+          let display = _palette-index(slot.palette, label)
+          if display != none { return display }
+        }
+      }
+    }
   }
   // Exact document heads are resolved by the common renderer before its
   // payload-head fallback, so they beat spenso.math-display overlays.
@@ -471,7 +490,7 @@
     let slot = _slot(argument, ctx)
     if slot != none {
       columns.push((
-        source: _qualified-index(slot, _slot-index(slot, ctx), ctx, settings),
+        source: _qualified-index(slot, _slot-index(slot, ctx, settings), ctx, settings),
         row: slot.row,
       ))
       continue
@@ -522,7 +541,7 @@
   let visual-arguments = ctx.arguments.map(argument => {
     let slot = _slot(argument, ctx)
     if slot != none {
-      return _qualified-index(slot, _slot-index(slot, ctx), ctx, settings)
+      return _qualified-index(slot, _slot-index(slot, ctx, settings), ctx, settings)
     }
     let compact = _compact-vector(argument, ctx, settings)
     if compact != none {
@@ -562,7 +581,7 @@
       columns.push((source: _visual(ctx, argument), row: "bottom"))
     } else {
       columns.push((
-        source: _qualified-index(slot, _slot-index(slot, ctx), ctx, settings),
+        source: _qualified-index(slot, _slot-index(slot, ctx, settings), ctx, settings),
         row: slot.row,
       ))
     }
@@ -607,7 +626,7 @@
     prefix = compact.label
   } else if slot != none {
     columns.push((
-      source: _qualified-index(slot, _slot-index(slot, ctx), ctx, settings),
+      source: _qualified-index(slot, _slot-index(slot, ctx, settings), ctx, settings),
       row: slot.row,
     ))
   } else {
@@ -620,7 +639,7 @@
     suffix = compact.label
   } else if slot != none {
     columns.push((
-      source: _qualified-index(slot, _slot-index(slot, ctx), ctx, settings),
+      source: _qualified-index(slot, _slot-index(slot, ctx, settings), ctx, settings),
       row: slot.row,
     ))
   } else {
