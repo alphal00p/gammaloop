@@ -22,6 +22,9 @@ use crate::error;
 /// in ``D`` until afterward: at fixed positive integer dimension below half
 /// the rank, dimension-specific identities make the universal metric basis
 /// singular. The all-equal isotropic fast path remains well defined.
+/// For denominators depending on external momenta, add an independent basis
+/// with :meth:`with_external_vector`. Only the transverse components are then
+/// rotationally averaged; odd total ranks need not vanish.
 ///
 /// Examples
 /// --------
@@ -148,6 +151,29 @@ impl PyTensorReducer {
                 .inner
                 .clone()
                 .with_integrated_vector(vector.expr.clone()),
+        }
+    }
+
+    /// Include an independent external momentum in the denominator's basis.
+    ///
+    /// With an external basis, only transverse loop components are rotationally
+    /// averaged. Longitudinal components remain scalar products with that
+    /// basis. The Gram matrix must be invertible; supply an auxiliary momentum
+    /// for a degenerate basis. Entries override integrated-head selectors.
+    ///
+    /// Examples
+    /// --------
+    /// >>> reducer = fk.TensorReducer(D).with_integrated_vector(k(mink(D)))
+    /// >>> reducer = reducer.with_external_vector(p(mink(D)))
+    /// >>> reduced = reducer.reduce(k(mink(D, mu)))
+    ///
+    /// Parameters
+    /// ----------
+    /// vector : Expression
+    ///     Compact Spenso vector, for example ``p(spenso::mink(D))``.
+    fn with_external_vector(&self, vector: &PythonExpression) -> Self {
+        Self {
+            inner: self.inner.clone().with_external_vector(vector.expr.clone()),
         }
     }
 

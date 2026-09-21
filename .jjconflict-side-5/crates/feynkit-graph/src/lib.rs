@@ -10,12 +10,14 @@
 mod display;
 pub mod expressions;
 mod finalization;
+mod integrals;
 mod power_counting;
 pub mod routing;
 pub mod symbols;
 pub mod thresholds;
 mod uv;
 
+pub use integrals::{IntegralFamily, IntegralFamilyError, IntegralMapping, PropagatorMapping};
 pub use power_counting::DOD;
 
 // Symbolica does not permit adding tags after a bare symbol with the same name
@@ -417,6 +419,8 @@ impl LoopMomentumBasis {
 /// Errors produced while constructing or transforming diagrams.
 #[derive(Debug, Error)]
 pub enum DiagramError {
+    #[error(transparent)]
+    IntegralFamily(#[from] IntegralFamilyError),
     #[error("cannot expand UV counterterm: {0}")]
     UvExpansion(String),
     #[error("cannot determine superficial UV degree: {0}")]
@@ -3183,6 +3187,45 @@ mod tests {
             FeynmanDiagram::from_json(with_momenta.model_arc(), &with_momenta.to_json().unwrap())
                 .unwrap();
         assert_eq!(restored.superficial_degree_of_divergence(4).unwrap(), 4);
+    }
+
+    #[test]
+    fn diagram_integral_family_matches_bubble_for_every_routing() {
+        let bubble = one_loop();
+        let generic = bubble
+            .integral_family(&feynkit_kinematics::Kinematics::new())
+            .unwrap();
+        assert_eq!(generic.loop_momenta().len(), 1);
+        assert_eq!(generic.external_momenta().len(), 1);
+        assert_eq!(generic.denominators().len(), 2);
+        let kin = generic
+            .kinematics()
+            .clone()
+            .with_mass_squared(&generic.external_momenta()[0], symbolica::parse!("s"))
+            .unwrap();
+        let reference = bubble.integral_family(&kin).unwrap();
+        for basis in bubble.loop_momentum_bases().unwrap() {
+            let diagram = bubble
+                .clone()
+                .with_loop_momentum_edges(&basis.loop_edges)
+                .unwrap();
+            let family = diagram.integral_family(&kin).unwrap();
+            assert!(family.is_complete() && family.is_independent());
+            let (u, f) = family
+                .symanzik(&[symbolica::parse!("x"), symbolica::parse!("y")])
+                .unwrap();
+            assert_eq!(u, symbolica::parse!("x+y"));
+            assert!(
+                (f - symbolica::parse!("UFO::M^2*(x+y)^2-s*x*y"))
+                    .expand()
+                    .is_zero()
+            );
+            assert!(family.find_mapping(&reference, 100).unwrap().is_some());
+        }
+        assert!(matches!(
+            directed_fermion_line().integral_family(&kin),
+            Err(DiagramError::IntegralFamily(IntegralFamilyError::NoLoops))
+        ));
     }
 
     #[test]

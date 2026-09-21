@@ -8,6 +8,7 @@ use linnest::{
     encode_graph_spec_bytes, TypstEdgeSpec, TypstEndpointSpec, TypstGraphSpec, TypstNodeSpec,
 };
 use linnet::half_edge::involution::{Flow, Hedge, HedgePair, Orientation};
+use linnet::half_edge::subgraph::{Inclusion, SubSetLike};
 use pyo3::exceptions::{PyReferenceError, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyBytes, PyDict, PyDictMethods, PyList, PyListMethods, PyModule};
@@ -17,6 +18,7 @@ use walkdir::WalkDir;
 use crate::drawing::DrawingKind;
 use crate::graph::{PyEdge, PyGraph, PyHalfEdge, PyNode};
 use crate::native_graph::PyHedgeGraph;
+use crate::topology::PySubgraph;
 use crate::typst::{
     evaluate_selector, render_config_transport, typst_string, RenderConfigTransport,
     SelectorCallbacks, TypstModuleSource,
@@ -29,6 +31,7 @@ const USER_SOURCES_DIR: &str = "user-sources";
 const DEFAULT_TEMPLATE: &str = "crates/linnest/typst/src/render/figure.typ";
 const ENTRYPOINT: &str = "main.typ";
 const TOPOLOGY: &str = "diagram.cbor";
+const SUBGRAPH_STYLE: &str = "subgraph.typ";
 
 #[derive(RustEmbed)]
 #[folder = "$CARGO_MANIFEST_DIR/../linnest/typst"]
@@ -342,7 +345,11 @@ fn topology_spec(graph: &PyGraph) -> PyResult<Vec<u8>> {
     encode_graph_spec_bytes(&spec).map_err(PyRuntimeError::new_err)
 }
 
-fn prepare(topology: Vec<u8>, transport: RenderConfigTransport) -> PyResult<PreparedRender> {
+fn prepare(
+    topology: Vec<u8>,
+    transport: RenderConfigTransport,
+    selection: Option<(Vec<bool>, Vec<usize>)>,
+) -> PyResult<PreparedRender> {
     let mut prepared = PreparedRender::from_sources(BTreeMap::new())?;
     let build_root = &prepared.root;
     let files = &mut prepared.files;
@@ -381,7 +388,28 @@ fn prepare(topology: Vec<u8>, transport: RenderConfigTransport) -> PyResult<Prep
             TypstModuleSource::Package(_) => Ok(None),
         })
         .collect::<PyResult<Vec<_>>>()?;
-    let source = entrypoint_source(&transport, &template, &module_files, TOPOLOGY)?;
+    let mut source = entrypoint_source(&transport, &template, &module_files, TOPOLOGY)?;
+    if let Some((hedges, nodes)) = selection {
+        files.insert(
+            SUBGRAPH_STYLE.to_owned(),
+            include_bytes!("../typst/subgraph.typ").to_vec(),
+        );
+        let hedges = hedges
+            .iter()
+            .map(|value| format!("{value},"))
+            .collect::<String>();
+        let nodes = nodes
+            .iter()
+            .map(|value| format!("{value},"))
+            .collect::<String>();
+        source.push_str(&format!(
+            "\n#import \"/{SUBGRAPH_STYLE}\" as _linnet_subgraph\n\
+             #set page(fill: none)\n\
+             #_linnet_template.render(_linnet_subgraph.focus(_linnet_config, ({hedges}), ({nodes})))\n"
+        ));
+    } else {
+        source.push_str("\n#_linnet_template.render(_linnet_config)\n");
+    }
     files.insert(ENTRYPOINT.to_owned(), source.into_bytes());
     Ok(prepared)
 }
@@ -642,7 +670,7 @@ fn entrypoint_source(
         ")\n  if type(value) != dictionary {\n    panic(\"Linnet render config must be a dictionary\")\n  }\n  value + (graph-spec-path: ",
     );
     source.push_str(&topology_path);
-    source.push_str(",)\n}\n\n#_linnet_template.render(_linnet_config)\n");
+    source.push_str(",)\n}\n");
     Ok(source)
 }
 
@@ -840,7 +868,7 @@ pub(crate) fn render_graph(
     output: PathBuf,
     config: Option<&Bound<'_, PyAny>>,
 ) -> PyResult<PathBuf> {
-    prepare_graph(py, graph, config)?.render_to(py, output)
+    prepare_graph(py, graph, config, None)?.render_to(py, output)
 }
 
 pub(crate) fn graph_to_svg(
@@ -848,16 +876,41 @@ pub(crate) fn graph_to_svg(
     graph: &Py<PyGraph>,
     config: Option<&Bound<'_, PyAny>>,
 ) -> PyResult<String> {
-    prepare_graph(py, graph, config)?.svg(py)
+    prepare_graph(py, graph, config, None)?.svg(py)
 }
 
 pub(crate) fn prepare_graph(
     py: Python<'_>,
     graph: &Py<PyGraph>,
     config: Option<&Bound<'_, PyAny>>,
+    subgraph: Option<&PySubgraph>,
 ) -> PyResult<PreparedRender> {
+    // Validate before callbacks and again after preparation of the graph records.
+    if let Some(subgraph) = subgraph {
+        subgraph.selection_for(py, graph, graph.borrow(py).revision()?)?;
+    }
     let (topology, transport) = request(py, graph, config)?;
-    prepare(topology, transport)
+    let selection = if let Some(subgraph) = subgraph {
+        let owner = graph.borrow(py);
+        let (selected, isolated) = subgraph.selection_for(py, graph, owner.revision()?)?;
+        let state = owner.state.borrow();
+        let state = state.as_ref().expect("checked selection owner");
+        let hedges = (0..selected.size())
+            .map(|index| selected.includes(&Hedge(index)))
+            .collect();
+        let nodes = state
+            .graph
+            .iter_nodes()
+            .filter_map(|(node, mut crown, _)| {
+                (isolated.contains(&node.0) || crown.any(|hedge| selected.includes(&hedge)))
+                    .then_some(node.0)
+            })
+            .collect();
+        Some((hedges, nodes))
+    } else {
+        None
+    };
+    prepare(topology, transport, selection)
 }
 
 #[cfg(test)]

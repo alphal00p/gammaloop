@@ -1,0 +1,140 @@
+name: Mirror Typst packages
+
+on:
+  push:
+    branches:
+      - '**'
+    paths:
+      - '.github/workflows/mirror-typst-packages.yml'
+      - 'crates/kurvst/typst/**'
+      - 'crates/linnest/typst/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mirror-typst-packages-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    if: github.repository == 'alphal00p/gammaloop'
+    name: Mirror standalone packages
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out GammaLoop
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref_name }}
+          path: source
+          persist-credentials: false
+
+      - id: source
+        name: Record source revision
+        run: echo "sha=$(git -C source rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - id: target
+        name: Select mirror branch
+        shell: bash
+        env:
+          SOURCE_BRANCH: ${{ github.ref_name }}
+        run: |
+          if [ "$GITHUB_REF" = refs/heads/main ]; then
+            branch=main
+          else
+            branch="mirror-test/$SOURCE_BRANCH"
+          fi
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+
+      - name: Require mirror credentials
+        env:
+          TOKEN: ${{ secrets.TYPST_MIRROR_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo '::error::TYPST_MIRROR_TOKEN must have Contents: read and write access to lcnbr/kurvst and lcnbr/linnest'
+            exit 1
+          fi
+
+      - name: Check out Kurvst mirror
+        uses: actions/checkout@v7
+        with:
+          repository: lcnbr/kurvst
+          ref: main
+          path: mirrors/kurvst
+          token: ${{ secrets.TYPST_MIRROR_TOKEN }}
+
+      - name: Check out Linnest mirror
+        uses: actions/checkout@v7
+        with:
+          repository: lcnbr/linnest
+          ref: main
+          path: mirrors/linnest
+          token: ${{ secrets.TYPST_MIRROR_TOKEN }}
+
+      - name: Check out mirror test branches
+        if: steps.target.outputs.branch != 'main'
+        shell: bash
+        env:
+          TARGET_BRANCH: ${{ steps.target.outputs.branch }}
+        run: |
+          set -euo pipefail
+          for package in kurvst linnest; do
+            mirror="mirrors/$package"
+            if git -C "$mirror" ls-remote --exit-code --heads origin "$TARGET_BRANCH" >/dev/null; then
+              git -C "$mirror" fetch origin "$TARGET_BRANCH"
+              git -C "$mirror" switch --force-create "$TARGET_BRANCH" FETCH_HEAD
+            else
+              git -C "$mirror" switch --create "$TARGET_BRANCH"
+            fi
+          done
+
+      - name: Stage package snapshots
+        shell: bash
+        run: |
+          set -euo pipefail
+          for package in kurvst linnest; do
+            rsync \
+              --archive \
+              --checksum \
+              --delete \
+              --exclude='.git/' \
+              "source/crates/$package/typst/" \
+              "mirrors/$package/"
+          done
+
+          # The monorepo uses a sibling source import; the standalone package
+          # resolves the matching mirrored Kurvst package instead.
+          kurvst_version=$(sed -n 's/^version = "\([^"]*\)"/\1/p' source/crates/kurvst/typst/typst.toml)
+          test -n "$kurvst_version"
+          sed -i \
+            "s|\"../../../kurvst/typst/src/lib.typ\"|\"@local/kurvst:$kurvst_version\"|" \
+            mirrors/linnest/src/curve.typ
+          grep -Fqx \
+            "#import \"@local/kurvst:$kurvst_version\": *" \
+            mirrors/linnest/src/curve.typ
+
+      - name: Push mirror snapshots
+        shell: bash
+        env:
+          SOURCE_REPOSITORY: ${{ github.repository }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          TARGET_BRANCH: ${{ steps.target.outputs.branch }}
+        run: |
+          set -euo pipefail
+          for package in kurvst linnest; do
+            mirror="mirrors/$package"
+            git -C "$mirror" add --all
+            if git -C "$mirror" diff --cached --quiet; then
+              echo "$package is already current"
+              continue
+            fi
+
+            git -C "$mirror" config user.name 'github-actions[bot]'
+            git -C "$mirror" config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git -C "$mirror" commit \
+              -m "mirror from $SOURCE_REPOSITORY@${SOURCE_SHA:0:12}" \
+              -m "Source: https://github.com/$SOURCE_REPOSITORY/commit/$SOURCE_SHA"
+            git -C "$mirror" push origin "HEAD:$TARGET_BRANCH"
+          done

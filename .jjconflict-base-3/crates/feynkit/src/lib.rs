@@ -30,10 +30,14 @@ pub use feynkit_generator::{
     SpinSum, SpinSumError,
 };
 #[cfg(feature = "graph")]
-pub use feynkit_graph::{FeynmanDiagram, LoopMomentumBasis};
+pub use feynkit_graph::{
+    FeynmanDiagram, IntegralFamily, IntegralFamilyError, IntegralMapping, LoopMomentumBasis,
+    PropagatorMapping,
+};
 #[cfg(feature = "kinematics")]
 pub use feynkit_kinematics::{
-    Boost, FourMomentum, Helicity, JetDefinition, Rotation, ThreeMomentum,
+    Boost, FourMomentum, Helicity, InitialStateFlux, JetDefinition, Kinematics, Rotation,
+    SymbolicKinematicsError, ThreeMomentum,
 };
 #[cfg(feature = "model")]
 pub use feynkit_model::{Model, ParameterCard};

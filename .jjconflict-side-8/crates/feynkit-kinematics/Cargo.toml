@@ -13,6 +13,13 @@ linnet = { workspace = true }
 numerica = { workspace = true, features = ["serde"] }
 serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
+symbolica = { workspace = true }
+spenso = { workspace = true, features = ["shadowing"] }
 
 [dev-dependencies]
 serde_json = { workspace = true }
+
+[features]
+default = ["native"]
+native = ["spenso/native"]
+wasm = ["spenso/wasm"]

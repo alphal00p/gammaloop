@@ -125,6 +125,63 @@ impl PyParticle {
         .map_err(|error| PyValueError::new_err(error.to_string()))
     }
 
+    /// Sum paired generated external wavefunctions for one edge.
+    ///
+    /// Replace this particle's wavefunction and its adjoint using the same
+    /// completeness relation as ``spin_sum``. The expression may be a sewn
+    /// diagram's ``projector_expression()`` or a squared amplitude. Only pairs
+    /// with the supplied edge label are replaced; unpaired wavefunctions stay
+    /// unchanged. Scalar particles have no external wavefunction factors.
+    /// External states are four-dimensional; reference and gauge conventions
+    /// are those of ``spin_sum``. This does not sum color or helicity-resolved
+    /// states, conjugate amplitudes, or apply graph symmetry factors.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> p = S("p")
+    /// >>> projector = diagram.projector_expression()
+    /// >>> summed = model.particle_by_pdg(11).sum_spins(projector, p, edge=0, average=True)
+    ///
+    /// Parameters
+    /// ----------
+    /// expression : Expression
+    ///     Projector or squared expression containing paired wavefunctions.
+    /// momentum : Expression
+    ///     Unindexed external momentum in the physical particle direction.
+    /// edge : int
+    ///     Generated edge label of the pair to replace.
+    /// average : bool
+    ///     Divide by the number of physical spin states.
+    /// reference : Expression | None
+    ///     Axial reference for a massless vector; need not be null.
+    /// covariant : bool
+    ///     Use the Feynman-gauge vector numerator even for a massive vector.
+    #[pyo3(signature = (expression, momentum, *, edge, average=false, reference=None, covariant=false))]
+    #[allow(clippy::too_many_arguments)]
+    fn sum_spins(
+        &self,
+        expression: &PythonExpression,
+        momentum: &PythonExpression,
+        edge: usize,
+        average: bool,
+        reference: Option<&PythonExpression>,
+        covariant: bool,
+    ) -> PyResult<PythonExpression> {
+        feynkit_generator::SpinSum::new(self.inner(), &self.model)
+            .map_err(|error| PyValueError::new_err(error.to_string()))?
+            .averaged(average)
+            .covariant(covariant)
+            .apply(
+                &expression.expr,
+                &momentum.expr,
+                edge,
+                reference.map(|reference| &reference.expr),
+            )
+            .map(|expr| PythonExpression { expr })
+            .map_err(|error| PyValueError::new_err(error.to_string()))
+    }
+
     /// Return the particle name used by the model.
     #[getter]
     fn name(&self) -> &str {

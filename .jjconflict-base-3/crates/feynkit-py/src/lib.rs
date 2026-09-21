@@ -6,6 +6,7 @@ mod error;
 mod generation;
 mod graph;
 mod graph_interop;
+mod integrals;
 mod kinematics;
 mod model;
 mod tensor;
@@ -29,9 +30,10 @@ pub use graph::{
     PyDiagramCut, PyDiagramCutSide, PyDiagramEdge, PyDiagramThresholdCandidate, PyDiagramVertex,
     PyFeynmanDiagram, PyLoopMomentumBasis, PyMomentumSignature,
 };
+pub use integrals::{PyIntegralFamily, PyIntegralMapping, PyPropagatorMapping};
 pub use kinematics::{
     PyAxis, PyBoost, PyClusteringResult, PyFourMomentum, PyHelicity, PyJet, PyJetAlgorithm,
-    PyJetDefinition, PyRotation, PyThreeMomentum,
+    PyJetDefinition, PyKinematics, PyRotation, PyThreeMomentum,
 };
 pub use model::{
     PyCoupling, PyEvaluatedValues, PyEvaluationRequest, PyFormFactor, PyLorentzStructure, PyModel,
@@ -67,6 +69,7 @@ pub fn initialize_feynkit(module: &Bound<'_, PyModule>) -> PyResult<()> {
     kinematics::register(module)?;
     cff::register(module)?;
     tensor::register(module)?;
+    integrals::register(module)?;
     #[cfg(feature = "ufo")]
     ufo::register(module)?;
     Ok(())

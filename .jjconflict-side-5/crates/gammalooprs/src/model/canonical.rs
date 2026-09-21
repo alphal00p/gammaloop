@@ -29,7 +29,6 @@ use spenso::tensors::{
 };
 use symbolica::domains::rational::Fraction;
 use symbolica::prelude::*;
-use symbolica_utils::Replaces;
 
 use crate::{
     momentum::Helicity,
@@ -925,13 +924,7 @@ impl ParticleGammaLoopExt for Particle {
                 let slash = GS.emr_mom(edge, mu.to_atom())
                     * function!(AGS.gamma, W_.a_, W_.b_, mu.to_atom());
                 let rhs = sum.fermion(slash, &W_.a_.into(), &W_.b_.into())?;
-                Some(if !self.is_antiparticle() {
-                    (function!(GS.u, edge.0, W_.a_) * function!(GS.ubar, edge.0, W_.b_))
-                        .replace_with(rhs)
-                } else {
-                    (function!(GS.v, edge.0, W_.a_) * function!(GS.vbar, edge.0, W_.b_))
-                        .replace_with(rhs)
-                })
+                sum.replacement(edge.0, [W_.a_.into(), W_.b_.into()], rhs)
             }
             3 => {
                 let reference = match gauge {
@@ -961,11 +954,7 @@ impl ParticleGammaLoopExt for Particle {
                     &W_.b_.into(),
                     reference.as_ref(),
                 )?;
-                Some(
-                    (function!(GS.epsilon, edge.0, W_.a_)
-                        * function!(GS.epsilonbar, edge.0, W_.b_))
-                    .replace_with(rhs),
-                )
+                sum.replacement(edge.0, [W_.a_.into(), W_.b_.into()], rhs)
             }
             spin => {
                 return Err(eyre!(

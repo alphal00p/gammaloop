@@ -33,7 +33,8 @@ use crate::{
     display::{escape_html, render_diagram_html, render_diagram_svg},
     error,
     graph_interop::LinnetCache,
-    kinematics::{PyFourMomentum, PyThreeMomentum},
+    integrals::PyIntegralFamily,
+    kinematics::{PyFourMomentum, PyKinematics, PyThreeMomentum},
     model::{PyModel, PyParticle},
     tensor::PyTensorReducer,
 };
@@ -1759,14 +1760,30 @@ impl PyFeynmanDiagram {
 
     /// Return the diagram-wide multiplicative factor as a Symbolica expression.
     ///
+    /// ``evaluate=True`` evaluates the generator's sign, multiplicity and
+    /// symmetry annotations using the shared graph-factor evaluator. Other
+    /// symbolic factors remain unchanged.
+    ///
     /// Examples
     /// --------
     /// >>> factor = diagram.overall_factor_expression()
     /// >>> weighted_numerator = factor * diagram.numerator_expression()
     /// >>> weighted_numerator
-    fn overall_factor_expression(&self) -> PythonExpression {
+    ///
+    /// Parameters
+    /// ----------
+    /// evaluate : bool
+    ///     Evaluate known graph-factor annotations while preserving other symbols.
+    #[pyo3(signature = (*, evaluate=false))]
+    fn overall_factor_expression(&self, evaluate: bool) -> PythonExpression {
         PythonExpression {
-            expr: self.inner.overall_factor().clone(),
+            expr: if evaluate {
+                feynkit_graph::expressions::evaluate_overall_factor(
+                    self.inner.overall_factor().as_view(),
+                )
+            } else {
+                self.inner.overall_factor().clone()
+            },
         }
     }
 
@@ -1855,6 +1872,49 @@ impl PyFeynmanDiagram {
             None => denominator,
         };
         TensorExpression::from_atom_interface(py, denominator, None)
+    }
+
+    /// Build a scalar integral family using the diagram's stored momentum routing.
+    ///
+    /// Reuses the shared propagator builder and model masses. Denominators follow
+    /// ascending internal edge IDs, as in ``internal_edges``, retaining bridges
+    /// and repeated propagators. Dependent external coordinates are eliminated;
+    /// external carriers and dummy edges are excluded. Widths, prescriptions and
+    /// custom UFO denominator formulas are not inferred. Tree diagrams raise
+    /// DiagramError because they contain no loop integral.
+    ///
+    /// Examples
+    /// --------
+    /// >>> family = diagram.integral_family()
+    /// >>> p = family.external_momenta[0]
+    /// >>> kin = family.kinematics.with_scalar_product(p, p, s)
+    /// >>> family = diagram.integral_family(kinematics=kin)
+    /// >>> U, F = family.symanzik(parameters)
+    ///
+    /// Parameters
+    /// ----------
+    /// kinematics : Kinematics or None, optional
+    ///     Assumptions on routed momentum names and the Lorentz dimension.
+    ///     None uses the shared symbolic dimension with no on-shell assumptions.
+    #[pyo3(signature = (*, kinematics=None))]
+    fn integral_family(&self, kinematics: Option<&PyKinematics>) -> PyResult<PyIntegralFamily> {
+        let default;
+        let kinematics = match kinematics {
+            Some(context) => &context.inner,
+            None => {
+                default = feynkit_kinematics::Kinematics::in_dimension(&Atom::var(
+                    feynkit_graph::symbols::dimension(),
+                ))
+                .expect("the shared dimension is a Symbolica symbol");
+                &default
+            }
+        };
+        Ok(PyIntegralFamily {
+            inner: self
+                .inner
+                .integral_family(kinematics)
+                .map_err(error::diagram)?,
+        })
     }
 
     /// Return the diagram numerator as a Spenso TensorExpression.

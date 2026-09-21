@@ -1181,6 +1181,20 @@ class Subgraph:
     def __lt__(self, other: Subgraph) -> builtins.bool: ...
     def __ge__(self, other: Subgraph) -> builtins.bool: ...
     def __gt__(self, other: Subgraph) -> builtins.bool: ...
+    def prepare_render(self, *, config: RenderConfig | None = None) -> PreparedRender:
+        r"""
+        Prepare the full owner graph with this selection highlighted and its complement dotted.
+        The owner's layout, drawing configuration, and topology remain unchanged.
+        """
+    def to_svg(self, *, config: RenderConfig | None = None) -> builtins.str:
+        r"""
+        Render this selection in the context of the full graph, including isolated nodes.
+        """
+    def _repr_svg_(self) -> builtins.str: ...
+    def _repr_html_(self) -> builtins.str:
+        r"""
+        Show the selected half-edges within their complete graph in notebook output.
+        """
     def __repr__(self) -> builtins.str: ...
 
 @typing.final

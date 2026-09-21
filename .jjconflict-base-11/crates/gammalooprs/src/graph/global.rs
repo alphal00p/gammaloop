@@ -1,9 +1,7 @@
 use eyre::Context;
+use feynkit_graph::expressions::evaluate_overall_factor;
 use linnet::parser::GlobalData;
-use symbolica::{
-    atom::{Atom, AtomCore, AtomView},
-    function, symbol,
-};
+use symbolica::atom::Atom;
 
 use crate::graph::GroupId;
 
@@ -11,49 +9,6 @@ use super::{
     Graph,
     parse::{ParseGraph, StripParse, ToQuoted},
 };
-
-/// Evaluate the bookkeeping heads in a finalized diagram's overall factor.
-pub fn evaluate_overall_factor(factor: AtomView<'_>) -> Atom {
-    let mut result = factor.to_owned();
-    for head in [
-        "AutG",
-        "CouplingsMultiplicity",
-        "InternalFermionLoopSign",
-        "ExternalFermionOrderingSign",
-        "AntiFermionSpinSumSign",
-        "NumeratorIndependentSymmetryGrouping",
-    ] {
-        for symbol in [
-            symbol!(head),
-            symbol!(&format!("feynkit_generator_factor::{head}")),
-        ] {
-            result = result
-                .replace(function!(symbol, Atom::var(symbol!("x_"))).to_pattern())
-                .with(Atom::var(symbol!("x_")).to_pattern());
-        }
-    }
-    for head in [
-        symbol!("NumeratorDependentGrouping"),
-        symbol!("feynkit_generator::NumeratorDependentGrouping"),
-        symbol!("feynkit_generator_factor::NumeratorDependentGrouping"),
-    ] {
-        result = result
-            .replace(
-                function!(
-                    head,
-                    Atom::var(symbol!("GraphId_")),
-                    Atom::var(symbol!("ratio_")),
-                    Atom::var(symbol!("GraphSymmetryFactor_"))
-                )
-                .to_pattern(),
-            )
-            .with(
-                (Atom::var(symbol!("ratio_")) * Atom::var(symbol!("GraphSymmetryFactor_")))
-                    .to_pattern(),
-            );
-    }
-    result.expand()
-}
 
 #[derive(Clone, Debug)]
 pub struct ParseData {

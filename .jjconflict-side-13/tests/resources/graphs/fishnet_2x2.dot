@@ -1,0 +1,33 @@
+digraph fishnet_2x2_0 {
+overall_factor=1;
+multiplicity_factor=1;
+v1;
+v2;
+v3;
+v4;
+v5 [int_id="V_3_SCALAR_000"];
+v6 [int_id="V_3_SCALAR_000"];
+v7 [int_id="V_3_SCALAR_000"];
+v8 [int_id="V_3_SCALAR_000"];
+v9 [int_id="V_4_SCALAR_0000"];
+v10 [int_id="V_3_SCALAR_000"];
+v11 [int_id="V_3_SCALAR_000"];
+v12 [int_id="V_3_SCALAR_000"];
+v13 [int_id="V_3_SCALAR_000"];
+v1 -> v5 [pdg=1000, name=p1, mom=p1];
+v2 -> v11 [pdg=1000, name=p2, mom=p2];
+v7 -> v3 [pdg=1000, name=p3, mom=p3];
+v13 -> v4 [pdg=1000, name=p4, mom=p4];
+v5 -> v6 [pdg=1000, name=q1];
+v6 -> v7 [pdg=1000, name=q2];
+v8 -> v9 [pdg=1000, name=q3, lmb_index=0];
+v9 -> v10 [pdg=1000, name=q4, lmb_index=1];
+v11 -> v12 [pdg=1000, name=q5];
+v12 -> v13 [pdg=1000, name=q6];
+v5 -> v8 [pdg=1000, name=q7];
+v6 -> v9 [pdg=1000, name=q8];
+v7 -> v10 [pdg=1000, name=q9];
+v8 -> v11 [pdg=1000, name=q10];
+v9 -> v12 [pdg=1000, name=q11, lmb_index=2];
+v10 -> v13 [pdg=1000, name=q12, lmb_index=3];
+}

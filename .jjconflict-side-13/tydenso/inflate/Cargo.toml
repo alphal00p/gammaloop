@@ -1,0 +1,18 @@
+[package]
+name = "tydenso-inflate-plugin"
+version.workspace = true
+edition.workspace = true
+publish = false
+license.workspace = true
+
+[lib]
+name = "tydenso_inflate_plugin"
+crate-type = ["cdylib"]
+
+[[bin]]
+name = "tydenso-compress"
+path = "src/bin/compress.rs"
+
+[dependencies]
+miniz_oxide = "0.8.9"
+wasm-minimal-protocol = "0.1"

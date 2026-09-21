@@ -393,3 +393,21 @@ fn benchmark_modes_output() {
     assert_eq!(depth_first_depth_one, full_top);
     assert_eq!(breadth_first_depth_one, full_top);
 }
+
+#[test]
+fn mixed_registered_and_ordinary_momentum_dot() {
+    test_initialize();
+    let ordinary = symbol!("mixed_dot_ordinary");
+    let mink = Minkowski {}.new_rep(4);
+    let rep = mink.to_symbolic([]);
+    let vector = function!(ordinary, &rep);
+    let compact = p!(0, &vector);
+    let expected = spenso::dot!(p!(0, &rep), &vector);
+    assert_eq!(compact.to_dots(), expected);
+    assert_eq!(expected.to_dots(), expected);
+    let expanded = p!(0, slot!(mink, mu)) * function!(ordinary, slot!(mink, mu));
+    assert_eq!(expanded.to_dots(), expected);
+    // A scalar function of a vector is not itself a rank-one tensor.
+    let scalar = function!(symbol!("mixed_dot_scalar"), vector);
+    assert_eq!(scalar.normalize_dots(), scalar);
+}

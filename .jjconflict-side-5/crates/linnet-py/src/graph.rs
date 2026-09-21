@@ -1533,7 +1533,7 @@ impl PyGraph {
             &Bound<'_, PyAny>,
         >,
     ) -> PyResult<crate::render::PreparedRender> {
-        crate::render::prepare_graph(py, &slf, config)
+        crate::render::prepare_graph(py, &slf, config, None)
     }
 
     #[pyo3(signature = (output, *, config=None))]

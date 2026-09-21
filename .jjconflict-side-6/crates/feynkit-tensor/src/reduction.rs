@@ -1,4 +1,4 @@
-//! Spenso-facing tensor reduction of vacuum numerators.
+//! Spenso-facing covariant tensor reduction of loop numerators.
 //!
 //! The reducer consumes ordinary Symbolica atoms whose rank-one tensors use
 //! Spenso slots, for example
@@ -40,6 +40,8 @@ use spenso::network::{library::symbolic::ETS, parsing::AtomStructureExt, tags::S
 use spenso::structure::representation::{BaseRepName, Minkowski};
 use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol};
 use thiserror::Error;
+
+mod external;
 
 use crate::{
     OrthogonalWeingarten, WeingartenError,
@@ -300,6 +302,7 @@ pub struct TensorReducer {
     dimension: Atom,
     integrated_heads: BTreeSet<String>,
     integrated_vectors: BTreeSet<Atom>,
+    external_vectors: BTreeSet<Atom>,
     pairing_limit: u128,
     pairing_product_limit: u128,
     output_term_limit: usize,
@@ -323,6 +326,7 @@ impl TensorReducer {
             dimension,
             integrated_heads: BTreeSet::new(),
             integrated_vectors: BTreeSet::new(),
+            external_vectors: BTreeSet::new(),
             pairing_limit: DEFAULT_PAIRING_LIMIT,
             pairing_product_limit: DEFAULT_PAIRING_PRODUCT_LIMIT,
             output_term_limit: DEFAULT_OUTPUT_TERM_LIMIT,
@@ -353,6 +357,20 @@ impl TensorReducer {
     /// Select one exact compact vector, such as `K(1,spenso::mink(D))`.
     pub fn with_integrated_vector(mut self, vector: Atom) -> Self {
         self.integrated_vectors.insert(vector);
+        self
+    }
+
+    /// Add an independent external momentum appearing in the denominators.
+    ///
+    /// Pass compact Spenso vectors such as `p(spenso::mink(D))`. The reducer
+    /// resolves loop vectors along this basis and averages only their
+    /// transverse components, reusing the vacuum projector in `D - n`
+    /// dimensions. The external Gram matrix must be invertible. Include an
+    /// auxiliary vector for a degenerate basis, such as one lightlike momentum.
+    /// The resulting scalar products are left for integral-family reduction.
+    /// External vectors take precedence over integrated-head selectors.
+    pub fn with_external_vector(mut self, vector: Atom) -> Self {
+        self.external_vectors.insert(vector);
         self
     }
 
@@ -440,6 +458,7 @@ impl TensorReducer {
         if self.integrated_heads.is_empty() && self.integrated_vectors.is_empty() {
             return Err(TensorReductionError::NoIntegratedVectorsSelected);
         }
+        let external = self.external_projector()?;
         // Generated Feynman rules commonly contain products of vertex sums.
         // Distribute those sums before metric simplification so Idenso sees
         // each complete tensor monomial and can sew all propagator indices.
@@ -476,10 +495,11 @@ impl TensorReducer {
                     maximum: OrthogonalWeingarten::MAX_RANK,
                 });
             }
-            if monomial.integrated.len() % 2 == 1 {
-                continue;
+            if let Some(external) = &external {
+                terms.extend(self.reduce_external_monomial(monomial, external)?);
+            } else if monomial.integrated.len() % 2 == 0 {
+                terms.extend(self.reduce_monomial(monomial)?);
             }
-            terms.extend(self.reduce_monomial(monomial)?);
             if terms.len() > self.output_term_limit {
                 return Err(TensorReductionError::OutputLimit {
                     terms: terms.len(),
@@ -487,11 +507,14 @@ impl TensorReducer {
                 });
             }
         }
-        let fully_contracted = terms.iter().try_fold(true, |fully_contracted, term| {
-            Ok::<bool, TensorReductionError>(
-                fully_contracted && !has_dangling_minkowski_indices(&term.tensor, &self.dimension)?,
-            )
-        })?;
+        let mut fully_contracted = true;
+        for term in &terms {
+            // External-basis projectors contain sums of tensors. Count indices
+            // within each monomial, not across alternative summands.
+            for summand in self.distribute_summands(term.tensor.as_view())? {
+                fully_contracted &= !has_dangling_minkowski_indices(&summand, &self.dimension)?;
+            }
+        }
 
         Ok(TensorReduction {
             terms,
@@ -633,8 +656,9 @@ impl TensorReducer {
     }
 
     fn is_integrated(&self, vector: &IndexedVector) -> bool {
-        self.integrated_heads.contains(vector.head.get_name())
-            || self.integrated_vectors.contains(&vector.compact)
+        !self.external_vectors.contains(&vector.compact)
+            && (self.integrated_heads.contains(vector.head.get_name())
+                || self.integrated_vectors.contains(&vector.compact))
     }
 
     fn indexed_vector(
@@ -1084,6 +1108,14 @@ impl FeynmanDiagramTensorExt for FeynmanDiagram {
 /// Failures while parsing or materializing a tensor reduction.
 #[derive(Debug, Error)]
 pub enum TensorReductionError {
+    /// External basis entries must be compact Lorentz vectors.
+    #[error("invalid compact external vector: {0}")]
+    InvalidExternalVector(Atom),
+    /// A nondegenerate external span is required for covariant projection.
+    #[error(
+        "cannot invert the external Gram matrix; choose an independent nondegenerate basis: {0}"
+    )]
+    ExternalGram(String),
     /// A reduction requires at least one loop/integrated-momentum selector.
     #[error("no integrated vectors selected; add a head or exact-vector selector")]
     NoIntegratedVectorsSelected,

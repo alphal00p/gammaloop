@@ -1,5 +1,6 @@
 //! External-state completeness relations shared by FeynKit and GammaLoop.
 
+use feynkit_graph::symbols;
 use feynkit_model::{Model, Particle};
 use idenso::{dirac::AGS, representations::Bispinor};
 use spenso::network::library::symbolic::ETS;
@@ -7,6 +8,7 @@ use spenso::structure::representation::{Minkowski, RepName};
 use symbolica::{
     atom::{Atom, AtomCore},
     function,
+    id::Replacement,
 };
 use thiserror::Error;
 
@@ -57,8 +59,10 @@ impl SpinSum {
         let massless = particle.is_massless(model);
         Ok(Self {
             spin: particle.spin,
-            mass: particle.symbolic_mass(model)
-                .replace(symbolica::symbol!("UFO::ZERO")).with(Atom::Zero),
+            mass: particle
+                .symbolic_mass(model)
+                .replace(symbolica::symbol!("UFO::ZERO"))
+                .with(Atom::Zero),
             massless,
             antiparticle: particle.is_antiparticle(),
             average: false,
@@ -142,6 +146,55 @@ impl SpinSum {
         Atom::one() / Atom::num(states)
     }
 
+    /// Sum this particle's paired wavefunctions on one labeled edge.
+    ///
+    /// Unpaired wavefunctions and other edge labels are left unchanged. The
+    /// momentum and reference conventions are those of [`Self::expression`].
+    pub fn apply(
+        &self,
+        expression: &Atom,
+        momentum: &Atom,
+        edge: usize,
+        reference: Option<&Atom>,
+    ) -> Result<Atom, SpinSumError> {
+        let indices = [
+            symbolica::symbol!("feynkit::spin_left_").into(),
+            symbolica::symbol!("feynkit::spin_right_").into(),
+        ];
+        let tensor = self.expression(momentum, indices.clone(), reference)?;
+        let slots = indices.map(|index| match self.spin {
+            2 => Bispinor {}.new_rep(4).pattern(index),
+            _ => Minkowski {}.new_rep(4).pattern(index),
+        });
+        Ok(match self.replacement(edge, slots, tensor) {
+            Some(replacement) => expression.replace_multiple(&[replacement]),
+            None => expression.clone(),
+        })
+    }
+
+    /// Replace a paired external wavefunction with its completeness tensor.
+    ///
+    /// `indices` are full Spenso slots (possibly patterns) appearing in `tensor`.
+    /// Keeping the tensor supplied by the caller lets symbolic calculations
+    /// and GammaLoop's runtime gauge reference share the same wavefunction rule.
+    /// Scalars have no wavefunctions and require no replacement.
+    pub fn replacement(
+        &self,
+        edge: usize,
+        indices: [Atom; 2],
+        tensor: Atom,
+    ) -> Option<Replacement> {
+        let (ket, bra) = match (self.spin, self.antiparticle) {
+            (1, _) => return None,
+            (2, false) => (symbols::u(), symbols::ubar()),
+            (2, true) => (symbols::v(), symbols::vbar()),
+            (3, _) => (symbols::epsilon(), symbols::epsilonbar()),
+            _ => unreachable!("SpinSum::new validates the spin"),
+        };
+        let pair = function!(ket, edge, &indices[0]) * function!(bra, edge, &indices[1]);
+        Some(Replacement::new(pair.to_pattern(), tensor))
+    }
+
     /// Return `(slash(p) +/- m identity)` with optional spin averaging.
     ///
     /// `slashed_momentum` must have the supplied open spinor slots. Passing
@@ -197,5 +250,170 @@ impl SpinSum {
             }
         }
         Ok(projector * self.averaging_factor())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use idenso::{dirac::GammaSimplifier, shorthands::schoonschip::Schoonschip};
+    use symbolica::{parse, symbol};
+
+    #[test]
+    fn wavefunction_pairs_preserve_species_edges_and_unpaired_states() {
+        let model =
+            Model::from_json(include_str!("../../feynkit-model/tests/fixtures/sm.json")).unwrap();
+        let p = parse!("p");
+        let indices = [parse!("i"), parse!("j")];
+        for (pdg, ket, bra) in [
+            (11, symbols::u(), symbols::ubar()),
+            (-11, symbols::v(), symbols::vbar()),
+            (22, symbols::epsilon(), symbols::epsilonbar()),
+            (23, symbols::epsilon(), symbols::epsilonbar()),
+        ] {
+            let particle = model
+                .particle_by_id(model.particle_id_by_pdg(pdg).unwrap())
+                .unwrap();
+            let sum = SpinSum::new(particle, &model).unwrap().averaged(true);
+            let slots = indices.clone().map(|index| match particle.spin {
+                2 => Bispinor {}.new_rep(4).pattern(index),
+                _ => Minkowski {}.new_rep(4).pattern(index),
+            });
+            let pair = function!(ket, 7, &slots[0]) * function!(bra, 7, &slots[1]);
+            let spectator = function!(ket, 8, &slots[0]) * function!(bra, 8, &slots[1]);
+            let unpaired = function!(ket, 7, &slots[0]);
+            let input = &pair * &spectator + &unpaired;
+            let tensor = sum.expression(&p, indices.clone(), None).unwrap();
+            let output = sum.apply(&input, &p, 7, None).unwrap();
+            assert!(
+                (output.clone() - tensor * spectator - unpaired)
+                    .expand()
+                    .is_zero()
+            );
+            assert_eq!(sum.apply(&output, &p, 7, None).unwrap(), output);
+            let wrong =
+                function!(symbols::v(), 7, &slots[0]) * function!(symbols::ubar(), 7, &slots[1]);
+            assert_eq!(sum.apply(&wrong, &p, 7, None).unwrap(), wrong);
+        }
+        let scalar = model
+            .particle_by_id(model.particle_id_by_pdg(25).unwrap())
+            .unwrap();
+        let input = parse!("a+b");
+        assert_eq!(
+            SpinSum::new(scalar, &model)
+                .unwrap()
+                .apply(&input, &p, 7, None)
+                .unwrap(),
+            input
+        );
+    }
+
+    #[test]
+    fn fermion_and_antifermion_have_opposite_mass_terms() {
+        let model =
+            Model::from_json(include_str!("../../feynkit-model/tests/fixtures/sm.json")).unwrap();
+        let p = parse!("p");
+        let indices = [parse!("i"), parse!("j")];
+        let particle = model
+            .particle_by_id(model.particle_id_by_pdg(13).unwrap())
+            .unwrap();
+        let antiparticle = model.particle_by_id(particle.antiparticle).unwrap();
+        let u = SpinSum::new(particle, &model)
+            .unwrap()
+            .expression(&p, indices.clone(), None)
+            .unwrap();
+        let v = SpinSum::new(antiparticle, &model)
+            .unwrap()
+            .expression(&p, indices.clone(), None)
+            .unwrap();
+        let identity = Bispinor {}.new_rep(4).id(&indices[0], &indices[1]);
+        assert!(
+            (u.clone() - v - Atom::num(2) * particle.symbolic_mass(&model) * identity)
+                .expand()
+                .is_zero()
+        );
+        let averaged = SpinSum::new(particle, &model)
+            .unwrap()
+            .averaged(true)
+            .expression(&p, indices, None)
+            .unwrap();
+        assert!((Atom::num(2) * averaged - u).expand().is_zero());
+    }
+
+    #[test]
+    fn vector_projectors_are_transverse_and_count_physical_states() {
+        let model =
+            Model::from_json(include_str!("../../feynkit-model/tests/fixtures/sm.json")).unwrap();
+        let p = symbol!("spin_test::p").to_atom();
+        let n = symbol!("spin_test::n").to_atom();
+        let mu = parse!("mu");
+        let nu = parse!("nu");
+        let rep = Minkowski {}.new_rep(4);
+        let p2 = rep.inner_product(&p, &p);
+        for (pdg, states, reference) in [(22, 2, Some(&n)), (23, 3, None)] {
+            let particle = model
+                .particle_by_id(model.particle_id_by_pdg(pdg).unwrap())
+                .unwrap();
+            let projector = SpinSum::new(particle, &model)
+                .unwrap()
+                .expression(&p, [mu.clone(), nu.clone()], reference)
+                .unwrap();
+            let mass_squared = if pdg == 22 {
+                Atom::Zero
+            } else {
+                particle.symbolic_mass(&model).pow(2)
+            };
+            let longitudinal = (projector.clone() * rep.vector(p.as_view(), [mu.clone()]))
+                .expand()
+                .to_dots()
+                .replace(p2.to_pattern())
+                .with(mass_squared.to_pattern())
+                .together();
+            assert!(longitudinal.is_zero(), "{longitudinal}");
+            if let Some(reference) = reference {
+                let axial = (projector.clone() * rep.vector(reference.as_view(), [mu.clone()]))
+                    .expand()
+                    .to_dots()
+                    .together();
+                assert!(axial.is_zero(), "{axial}");
+            }
+            let trace = (projector * rep.id(&mu, &nu))
+                .expand()
+                .to_dots()
+                .replace(p2.to_pattern())
+                .with(mass_squared.to_pattern())
+                .together();
+            assert_eq!(trace, Atom::num(-states));
+        }
+    }
+
+    #[test]
+    fn spinor_trace_and_scalar_sum() {
+        let model =
+            Model::from_json(include_str!("../../feynkit-model/tests/fixtures/sm.json")).unwrap();
+        for (pdg, expected) in [(13, 4), (-13, -4)] {
+            let particle = model
+                .particle_by_id(model.particle_id_by_pdg(pdg).unwrap())
+                .unwrap();
+            let projector = SpinSum::new(particle, &model)
+                .unwrap()
+                .expression(&parse!("p"), [parse!("i"), parse!("i")], None)
+                .unwrap();
+            assert_eq!(
+                projector.simplify_gamma().expand(),
+                expected * particle.symbolic_mass(&model)
+            );
+        }
+        let scalar = model
+            .particle_by_id(model.particle_id_by_pdg(25).unwrap())
+            .unwrap();
+        assert_eq!(
+            SpinSum::new(scalar, &model)
+                .unwrap()
+                .averaged(true)
+                .expression(&parse!("p"), [parse!("i"), parse!("j")], None)
+                .unwrap(),
+            Atom::one()
+        );
     }
 }

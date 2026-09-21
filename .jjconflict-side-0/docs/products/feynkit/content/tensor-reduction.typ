@@ -1,12 +1,13 @@
 #import "../../shared.typ": callout, product-link
 
 #let tensor-reduction = [
-= Vacuum tensor reduction and momentum selectors
+= Covariant tensor reduction and momentum selectors
 
-FeynKit reduces Lorentz-covariant vacuum tensor numerators to scalar Spenso invariants, retaining
+FeynKit reduces Lorentz-covariant tensor numerators to scalar Spenso invariants, retaining
 metric tensors when free Lorentz indices remain. Vectors carry `spenso::mink(D,index)` slots;
 compact vectors omit the index, and scalar contractions are represented by `spenso::dot`.
 The reducer's dimension must match every input slot exactly.
+Without an external basis, the denominator must have vacuum rotational symmetry.
 
 == Select what is integrated
 
@@ -48,11 +49,44 @@ Selecting an entire head with `with_integrated_head(...)` is appropriate only wh
 under that qualified name is integrated. Ordinary generated FeynKit rules carry dimension `4`;
 a Taylor-expanded expression whose slots carry symbolic `D` requires that same `D` instead.
 
+== Denominators with external momenta
+
+Add every independent external direction in the denominator using
+`with_external_vector(p_compact)`. The reducer decomposes loop vectors into
+components parallel and perpendicular to that span. Symbolica inverts the
+external Gram matrix, and the existing vacuum projector averages the transverse
+components in dimension `D - n`, where `n` is the basis size. Odd total ranks can
+then be nonzero.
+
+// docs-example: compile feynkit-tensor-external-basis
+```python
+from symbolica import S, E
+import symbolica.community.feynkit as fk
+
+D, k, p, mu = S("external_docs::D", "external_docs::k", "external_docs::p", "external_docs::mu")
+mink, dot = S("spenso::mink", "spenso::dot")
+kc, pc = k(mink(D)), p(mink(D))
+reducer = fk.TensorReducer(D).with_integrated_vector(kc).with_external_vector(pc)
+result = reducer.reduce(k(mink(D, mu)))
+expected = dot(kc, pc) / dot(pc, pc) * p(mink(D, mu))
+assert (result - expected).together() == E("0")
+```
+
+The Gram determinant must remain nonzero after imposing kinematics. For a
+lightlike one-vector basis, supply an additional independent auxiliary direction
+before reducing, then impose its scalar products on the result. The reducer
+works with symbolic scalar products and cannot infer an unstated on-shell or
+momentum-conservation relation. It leaves loop scalar products in the numerator;
+it does not perform momentum shifts, partial fractions or IBP reduction.
+External basis vectors take precedence over integrated-head selectors.
+
 == Reduce a diagram or a standalone expression
 
 `diagram.tensor_reduce(D)` selects the graph's internal edge momenta automatically, promotes
 four-dimensional Lorentz slots in the numerator and projector to `D`, and returns a
-`TensorExpression`. External edge momenta remain projector vectors. The scalar numerator
+`TensorExpression`. External edge momenta remain projector vectors; they do not automatically define
+the denominator's external basis. Use a configured `TensorReducer` for a
+non-vacuum denominator. The scalar numerator
 prefactor remains separate, and at least one internal edge is required.
 
 Use `diagram.tensor_reduce(D, expression=prepared)` after contractions or a UV expansion.

@@ -12,6 +12,247 @@ use pyo3::{
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_pymethods};
 
 use crate::error;
+use symbolica::api::python::PythonExpression;
+
+/// Scoped symbolic scalar products and two-to-two Mandelstam kinematics.
+///
+/// The immutable object uses Spenso's dot products and metric
+/// shorthand. Apply it after contracting tensors with Idenso. Momentum inputs
+/// are unindexed names, and mass inputs are squared masses.
+///
+/// Examples
+/// --------
+/// >>> from symbolica import S, E
+/// >>> p1, p2, p3, p4, s, t, u = S("p1", "p2", "p3", "p4", "s", "t", "u")
+/// >>> kin = fk.Kinematics.mandelstam([p1, p2, p3, p4], [E("0")]*4, [s, t, u])
+/// >>> assert kin.scalar_product(p1, p2) == s/2
+#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
+#[pyclass(
+    name = "Kinematics",
+    module = "symbolica.community.feynkit",
+    frozen,
+    from_py_object
+)]
+#[derive(Clone)]
+pub struct PyKinematics {
+    pub(crate) inner: feynkit_kinematics::Kinematics,
+}
+
+#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[pymethods]
+impl PyKinematics {
+    /// Start with no scalar-product assumptions in the chosen dimension.
+    ///
+    /// Examples
+    /// --------
+    /// >>> kin = fk.Kinematics()
+    /// >>> dimensional = fk.Kinematics(S("D"))
+    ///
+    /// Parameters
+    /// ----------
+    /// dimension : Expression | None
+    ///     Integer or symbolic Lorentz dimension; defaults to four.
+    /// momenta : list[Expression] | None
+    ///     Momentum names used in linear combinations with scalar coefficients.
+    #[new]
+    #[pyo3(signature = (dimension=None, *, momenta=None))]
+    fn new(
+        dimension: Option<&PythonExpression>,
+        momenta: Option<Vec<PythonExpression>>,
+    ) -> PyResult<Self> {
+        let inner = match dimension {
+            None => feynkit_kinematics::Kinematics::new(),
+            Some(dimension) => feynkit_kinematics::Kinematics::in_dimension(&dimension.expr)
+                .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?,
+        };
+        let inner = inner
+            .with_momenta(momenta.unwrap_or_default().into_iter().map(|p| p.expr))
+            .map_err(error::kinematics)?;
+        Ok(Self { inner })
+    }
+
+    /// Lorentz dimension as a Symbolica integer or symbol.
+    #[getter]
+    fn dimension(&self) -> PythonExpression {
+        PythonExpression {
+            expr: self.inner.dimension().to_symbolic(),
+        }
+    }
+
+    /// Set the invariants for ``p1 + p2 -> p3 + p4``.
+    ///
+    /// The convention is ``s=(p1+p2)^2``, ``t=(p1-p3)^2``, and
+    /// ``u=(p1-p4)^2``. These obey ``s+t+u=sum(mass_squared)``; use Symbolica
+    /// substitution when you want to eliminate one invariant.
+    ///
+    /// Examples
+    /// --------
+    /// >>> kin = fk.Kinematics.mandelstam([p1, p2, p3, p4], [E("0")]*4, [s, t, u])
+    ///
+    /// Parameters
+    /// ----------
+    /// momenta : list[Expression]
+    ///     Four unindexed momenta, with the incoming pair first.
+    /// mass_squared : list[Expression]
+    ///     Four squared masses in the same order.
+    /// invariants : list[Expression]
+    ///     The three symbols or expressions ``s, t, u``.
+    #[staticmethod]
+    fn mandelstam(
+        momenta: [PythonExpression; 4],
+        mass_squared: [PythonExpression; 4],
+        invariants: [PythonExpression; 3],
+    ) -> PyResult<Self> {
+        Ok(Self {
+            inner: feynkit_kinematics::Kinematics::mandelstam(
+                momenta.each_ref().map(|p| &p.expr),
+                mass_squared.map(|m| m.expr),
+                invariants.map(|s| s.expr),
+            )
+            .map_err(error::kinematics)?,
+        })
+    }
+
+    /// Return a new context with one scalar product set.
+    ///
+    /// Examples
+    /// --------
+    /// >>> kin = fk.Kinematics().with_scalar_product(p, p, m**2)
+    ///
+    /// Parameters
+    /// ----------
+    /// left : Expression
+    ///     First unindexed momentum.
+    /// right : Expression
+    ///     Second unindexed momentum.
+    /// value : Expression
+    ///     Assumed scalar product.
+    fn with_scalar_product(
+        &self,
+        left: &PythonExpression,
+        right: &PythonExpression,
+        value: &PythonExpression,
+    ) -> PyResult<Self> {
+        Ok(Self {
+            inner: self
+                .inner
+                .clone()
+                .with_scalar_product(&left.expr, &right.expr, value.expr.clone())
+                .map_err(error::kinematics)?,
+        })
+    }
+
+    /// Expand a bilinear scalar product and apply known assumptions.
+    ///
+    /// For linear combinations, declare the momentum names in the constructor
+    /// or by setting scalar products. Other symbols are scalar coefficients.
+    /// Nonlinear momentum expressions raise ``KinematicsError``.
+    ///
+    /// Examples
+    /// --------
+    /// >>> assert kin.scalar_product(p1, p2) == s/2
+    /// >>> assert kin.scalar_product(p1 + p2, p1 + p2) == s
+    ///
+    /// Parameters
+    /// ----------
+    /// left : Expression
+    ///     First unindexed momentum or linear combination.
+    /// right : Expression
+    ///     Second unindexed momentum or linear combination.
+    fn scalar_product(
+        &self,
+        left: &PythonExpression,
+        right: &PythonExpression,
+    ) -> PyResult<PythonExpression> {
+        Ok(PythonExpression {
+            expr: self
+                .inner
+                .scalar_product(&left.expr, &right.expr)
+                .map_err(error::kinematics)?,
+        })
+    }
+
+    /// Return the initial-state denominator for a cross section or decay rate.
+    ///
+    /// Two momenta give ``4*sqrt((p1.p2)**2-p1**2*p2**2)``. One momentum
+    /// gives ``2*sqrt(p**2)`` for a decay in its rest frame. Divide the squared
+    /// matrix element times phase space by this value. Inputs must be physical,
+    /// future-directed on-shell momenta. Symbolica retains square-root branches;
+    /// declare positive invariants with ``S("s", is_positive=True)`` when known.
+    ///
+    /// Examples
+    /// --------
+    /// >>> denominator = kin.flux(p1, p2)
+    /// >>> rest_frame_decay_denominator = kin.flux(parent)
+    ///
+    /// Parameters
+    /// ----------
+    /// first : Expression
+    ///     Incoming unindexed momentum or declared linear combination.
+    /// second : Expression | None
+    ///     Other incoming momentum; None selects a rest-frame decay.
+    #[pyo3(signature = (first, second=None))]
+    fn flux(
+        &self,
+        first: &PythonExpression,
+        second: Option<&PythonExpression>,
+    ) -> PyResult<PythonExpression> {
+        Ok(PythonExpression {
+            expr: self
+                .inner
+                .flux(&first.expr, second.map(|p| &p.expr))
+                .map_err(error::kinematics)?,
+        })
+    }
+
+    /// Return four-dimensional two-body phase space per unit solid angle.
+    ///
+    /// This is ``dPhi_2/dOmega`` in the final pair's rest frame, with
+    /// ``(2*pi)**4*delta**4(P-p1-p2)`` and ``d**3p/((2*pi)**3*2E)`` for each
+    /// final particle. Use physical on-shell momenta above threshold. Flux,
+    /// spin/color averages and identical-particle factors are separate. For an
+    /// angle-independent amplitude, integrating this measure gives ``4*pi``
+    /// times the returned expression. Non-four-dimensional contexts are rejected.
+    ///
+    /// Examples
+    /// --------
+    /// >>> differential_cross_section = squared * kin.two_body_phase_space(k1, k2) / kin.flux(p1, p2)
+    ///
+    /// Parameters
+    /// ----------
+    /// first : Expression
+    ///     First outgoing unindexed momentum or declared linear combination.
+    /// second : Expression
+    ///     Second outgoing unindexed momentum or declared linear combination.
+    fn two_body_phase_space(
+        &self,
+        first: &PythonExpression,
+        second: &PythonExpression,
+    ) -> PyResult<PythonExpression> {
+        Ok(PythonExpression {
+            expr: self
+                .inner
+                .two_body_phase_space(&first.expr, &second.expr)
+                .map_err(error::kinematics)?,
+        })
+    }
+
+    /// Substitute scalar products without mutating global assumptions.
+    ///
+    /// Examples
+    /// --------
+    /// >>> invariant_expression = kin.apply(contracted_squared_amplitude)
+    ///
+    /// Parameters
+    /// ----------
+    /// expression : Expression
+    ///     Expression after tensor contractions have been simplified.
+    fn apply(&self, expression: &PythonExpression) -> PythonExpression {
+        PythonExpression {
+            expr: self.inner.apply(&expression.expr),
+        }
+    }
+}
 
 /// A spin projection along a particle's direction of motion.
 ///
@@ -708,6 +949,29 @@ impl PyFourMomentum {
     fn mass_squared(&self) -> f64 {
         self.inner.mass_squared()
     }
+
+    /// Return the decay denominator ``2E`` or the invariant two-particle flux.
+    ///
+    /// Inputs must be physical, future-directed on-shell momenta. Decay rates
+    /// refer to this momentum's frame; the rest-frame result is ``2M``.
+    /// No unit conversion, spin/color average or symmetry factor is included.
+    ///
+    /// Examples
+    /// --------
+    /// >>> p = fk.FourMomentum(5.0, 0.0, 0.0, 5.0)
+    /// >>> q = fk.FourMomentum(5.0, 0.0, 0.0, -5.0)
+    /// >>> p.flux(q)
+    /// 200.0
+    ///
+    /// Parameters
+    /// ----------
+    /// other : FourMomentum | None
+    ///     Other incoming momentum; None selects a decay in this frame.
+    #[pyo3(signature = (other=None))]
+    fn flux(&self, other: Option<&PyFourMomentum>) -> f64 {
+        self.inner.flux(other.map(|p| &p.inner))
+    }
+
     /// Return the invariant mass.
     ///
     /// Examples
@@ -1575,6 +1839,7 @@ impl PyJetDefinition {
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_class::<PyKinematics>()?;
     module.add_class::<PyHelicity>()?;
     module.add_class::<PyAxis>()?;
     module.add_class::<PyJetAlgorithm>()?;

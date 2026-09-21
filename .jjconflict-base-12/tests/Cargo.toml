@@ -1,0 +1,54 @@
+[package]
+name = "gammaloop-integration-tests"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[[test]]
+name = "test_python_api"
+path = "tests/test_python_api.rs"
+required-features = ["python-api-tests"]
+
+[dependencies]
+bincode = { workspace = true }
+color-eyre = { workspace = true }
+colored = { workspace = true }
+eyre = { workspace = true }
+feynkit-generator = { workspace = true }
+feynkit-model = { workspace = true }
+gammaloop-api = { workspace = true }
+gammalooprs = { workspace = true }
+idenso = { workspace = true }
+insta = { workspace = true, features = ["json", "ron", "serde", "toml"] }
+itertools = { workspace = true }
+linnet = { workspace = true }
+momtrop = { workspace = true }
+ndarray = { workspace = true }
+rand = { workspace = true, features = ["small_rng"] }
+rayon.workspace = true
+serde_json = { workspace = true }
+serial_test = "3.2.0"
+spenso = { workspace = true, features = ["native", "shadowing"] }
+symbolica-utils = { workspace = true, features = ["native"] }
+tabled = { workspace = true, features = ["ansi"] }
+three-dimensional-reps = { workspace = true, features = ["eval"] }
+toml = { workspace = true }
+tracing = { workspace = true, features = ["release_max_level_info"] }
+vakint = { workspace = true }
+which = { workspace = true }
+gammaloop-workspace-hack = { version = "0.1", path = "../crates/gammaloop-workspace-hack" }
+
+[dependencies.symbolica]
+workspace = true
+default-features = false
+features = ["bincode", "serde"]
+
+[build-dependencies]
+cc = "1.1"
+
+[features]
+default = []
+python-api-tests = []

@@ -1926,6 +1926,8 @@ dependencies = [
  "numerica",
  "serde",
  "serde_json",
+ "spenso",
+ "symbolica",
  "thiserror 2.0.18",
 ]
 
@@ -2339,7 +2341,6 @@ dependencies = [
  "num-integer",
  "num-traits",
  "numerica",
- "once_cell",
  "rand 0.8.6",
  "regex",
  "regex-automata",

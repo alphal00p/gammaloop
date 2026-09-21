@@ -1,0 +1,128 @@
+[package]
+name = "spenso"
+version = "0.6.0"
+edition = "2024"
+description = "A tensor (n-dim array) network, iterating, and contraction (using automatic abstract index matching) library."
+documentation = "https://docs.rs/spenso/latest/spenso/"
+license = "MIT OR Apache-2.0"
+keywords = ["contraction", "tensors"]
+
+[package.metadata.docs.rs]
+all-features = true
+
+[lib]
+path = "src/spenso.rs"
+
+[[example]]
+name = "symbolica_lazy_deadlock_mwe"
+path = "examples/symbolica_lazy_deadlock_mwe.rs"
+required-features = ["shadowing"]
+
+[[bench]]
+name = "symbolic_parallelism"
+harness = false
+required-features = ["shadowing"]
+
+# [[test]]
+# name = "three_loop"
+# path = "tests/three_loop.rs"
+# required-features = ["shadowing"]
+
+[dependencies]
+ahash = { workspace = true, features = ["serde"] }
+append-only-vec = "0.1.6"
+# approxim = "0.6.6"
+# auto_enums = "0.8.6"
+bincode = { workspace = true, features = ["serde"] }
+# ambassador = "0.3.6"
+#
+bincode-trait-derive = { version = "0.1.1" }
+# bincode = "2"
+bitvec = { version = "1.0.1", features = ["serde"] }
+# const_format = { version = "0.2.32", features = ["rust_1_51"] }
+constcat = "0.5.0"
+delegate = "0.12.0"
+derive_more = "0.99.17"
+# disjoint_impls = "0.7.1"
+duplicate = "1.0.0"
+dyn-clone = "1.0.17"
+enum-try-as-inner = "0.1.1"
+env_logger = "0.11.5"
+eyre = { workspace = true }
+features = "0.10.0"
+# flexi_logger = "0.28.5"
+gat-lending-iterator = "0.1.5"
+indexmap = { workspace = true, features = ["serde"] }
+linnet = { workspace = true, default-features = false, features = ["bincode", "nodestore-vec", "serde"] }
+
+log = "0.4.22"
+num = { version = "0.4.3", features = ["serde"] }
+once_cell = "1.20.2"
+rand = "0.9"
+rand_xoshiro = "0.6.0"
+rayon = "1.10.0"
+ref-ops = "0.2.5"
+serde = "1.0"
+serde_json = "1.0"
+spenso-macros = { workspace = true, default-features = false }
+# serde_toml = "0.0.1"
+# slotmap = { version = "1.0.7", features = ["serde"] }
+# smartstring = { version = "1.0.1", features = ["serde"] }
+symbolica-utils = { workspace = true, default-features = false }
+tabled = "0.22.0"
+thiserror = { workspace = true }
+tracing = { workspace = true }
+# approx-derive = "0.2.6"
+
+pyo3 = { workspace = true, optional = true }
+
+colored = { workspace = true }
+itertools = "0.14.0"
+nu-ansi-term = { workspace = true }
+pyo3-stub-gen = { workspace = true, optional = true }
+gammaloop-workspace-hack = { version = "0.1", path = "../gammaloop-workspace-hack", optional = true }
+ciborium = { version = "0.2.2", optional = true }
+blake3 = { version = "1.8.3", optional = true }
+symbolica-typst-atom-payload = { workspace = true, optional = true }
+
+[dependencies.symbolica]
+version = "3.0.0"
+default-features = false
+features = ["bincode", "serde"]
+optional = true
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+insta = { version = "1.38.0", features = ["json", "ron", "toml", "yaml"] }
+ron = "0.8"
+
+[features]
+default = ["native"]
+native = [
+  "linnet/native",
+  "symbolica?/integer-gmp",
+  "symbolica?/float-mpfr",
+  "symbolica-utils/native",
+  "symbolica-typst-atom-payload?/native",
+]
+native-code-generation = [
+  "native",
+  "shadowing",
+  "symbolica/native_code_generation",
+  "dep:gammaloop-workspace-hack",
+]
+portable-payload = [
+  "shadowing",
+  "dep:blake3",
+  "dep:ciborium",
+  "dep:symbolica-typst-atom-payload",
+]
+python = ["dep:pyo3"]
+python_stubgen = ["dep:pyo3-stub-gen", "python"]
+shadowing = ["dep:symbolica", "linnet/symbolica"]
+wasm = [
+  "linnet/wasm",
+  "symbolica?/wasm",
+  "symbolica-utils/wasm",
+  "symbolica-typst-atom-payload?/wasm",
+]

@@ -112,6 +112,17 @@ pub(crate) fn kinematics(error: impl std::fmt::Display) -> PyErr {
     KinematicsError::new_err(error.to_string())
 }
 
+define_exception!(
+    IntegralFamilyError,
+    FeynkitError,
+    pyo3_stub_gen::TypeInfo::unqualified("FeynkitError"),
+    "Invalid loop-integral family, dependent propagators, or incomplete scalar-product basis.\n\nExamples\n--------\nCatch a family that needs partial fractioning before completion:\n\n>>> try:\n...     completed = family.complete()\n... except fk.IntegralFamilyError as error:\n...     print(error)"
+);
+
+pub(crate) fn integral_family(error: feynkit_graph::IntegralFamilyError) -> PyErr {
+    IntegralFamilyError::new_err(error.to_string())
+}
+
 pub(crate) fn tensor(error: feynkit_tensor::TensorReductionError) -> PyErr {
     TensorReductionError::new_err(error.to_string())
 }
@@ -129,6 +140,7 @@ pub(crate) fn register(module: &pyo3::Bound<'_, pyo3::types::PyModule>) -> pyo3:
     module.add("GenerationError", py.get_type::<GenerationError>())?;
     module.add("CffError", py.get_type::<CffError>())?;
     module.add("KinematicsError", py.get_type::<KinematicsError>())?;
+    module.add("IntegralFamilyError", py.get_type::<IntegralFamilyError>())?;
     module.add(
         "TensorReductionError",
         py.get_type::<TensorReductionError>(),
