@@ -245,6 +245,23 @@ fn parse_div() {
 }
 
 #[test]
+fn inverse_bracket_preserves_the_contracted_denominator() {
+    test_initialize();
+    let denominator = spenso::bracket!(
+        vector!(inverse_bracket_p, mink!(4, 1)) * vector!(inverse_bracket_q, mink!(4, 1))
+    );
+    for exponent in [-1, -2, -3] {
+        let expression = Atom::num(2) * denominator.clone().pow(exponent);
+        let expanded = expression
+            .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap()
+            .simple_execute::<()>()
+            .unwrap();
+        assert_eq!(expanded, expression);
+    }
+}
+
+#[test]
 fn parse_scalar_tensor() {
     test_initialize();
     let expr = parse!("(

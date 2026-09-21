@@ -53,6 +53,24 @@ the figure automatically. In another notebook frontend, display `diagram.to_html
 frontend's HTML object when it does not consume the standard rich-display methods. Model,
 generation, and CFF objects also expose compact representations for inspection.
 
+Pass a Linnet selection as `highlight` to draw a region with Linnest's subgraph
+highlighting while keeping the complete diagram visible:
+
+// docs-example: compile
+```python
+graph = diagram.to_linnet()
+selected = graph.filter(edge=lambda edge: edge.data.particle_name == "b")
+Path("highlighted-diagram.svg").write_text(
+    diagram.to_svg(highlight=selected), encoding="utf-8"
+)
+```
+
+`to_linnest(highlight=selected)` and `to_html(highlight=selected)` accept the same
+selection; omitting `highlight` keeps the usual drawing. Selections may identify
+individual half-edges as well as complete edges. They must belong to this diagram's
+exported graph at its current topology revision; foreign or stale selections raise
+an error, as they do for the physics operations.
+
 `diagram.numerator_expression()` returns Spenso’s `TensorExpression`, retaining the tensor interface
 and index display hooks. `diagram.build_cff().to_expression()` returns a native Symbolica
 expression. Displaying those algebraic results is separate from rendering a graph. Use

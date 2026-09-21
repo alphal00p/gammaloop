@@ -1,4 +1,5 @@
 use feynkit_graph::FeynmanDiagram;
+use linnet::half_edge::subgraph::SuBitGraph;
 use linnet_py::PreparedRender;
 use pyo3::prelude::*;
 
@@ -18,7 +19,11 @@ pub(crate) fn escape_html(value: &str) -> String {
 }
 
 /// Compile a diagram's Linnest source with typst-py and return its SVG page.
-pub(crate) fn render_diagram_svg(py: Python<'_>, diagram: &FeynmanDiagram) -> PyResult<String> {
+pub(crate) fn render_diagram_svg(
+    py: Python<'_>,
+    diagram: &FeynmanDiagram,
+    highlight: Option<&SuBitGraph>,
+) -> PyResult<String> {
     py.import("typst").map_err(|error| {
         if error.is_instance_of::<pyo3::exceptions::PyImportError>(py) {
             pyo3::exceptions::PyImportError::new_err(format!(
@@ -30,7 +35,7 @@ pub(crate) fn render_diagram_svg(py: Python<'_>, diagram: &FeynmanDiagram) -> Py
     })?;
     let svg = PreparedRender::from_sources(
         [
-            ("main.typ", diagram.to_linnest()),
+            ("main.typ", diagram.to_linnest(highlight)),
             (
                 "assets/embedded/drawing/templates/layout-core.typ",
                 include_str!("../../../assets/embedded/drawing/templates/layout-core.typ")
@@ -65,6 +70,8 @@ pub(crate) fn render_diagram_svg(py: Python<'_>, diagram: &FeynmanDiagram) -> Py
         ("accent", "#6f4d85", "#d8b9e3"),
         ("ink-sink", "#948899", "#fbf6fc"),
         ("accent-sink", "#b09dbc", "#ead9f0"),
+        // Keep pale diagram strokes legible over Linnest's native underlay in dark mode.
+        ("highlight", "#ffd166", "#8a681f"),
     ] {
         light.push_str(&format!("--feynkit-{name}:{light_color};"));
         dark.push_str(&format!("--feynkit-{name}:{dark_color};"));
@@ -87,8 +94,12 @@ pub(crate) fn render_diagram_svg(py: Python<'_>, diagram: &FeynmanDiagram) -> Py
         .replacen('>', &format!(">{styles}"), 1))
 }
 
-pub(crate) fn render_diagram_html(py: Python<'_>, diagram: &FeynmanDiagram) -> PyResult<String> {
-    let svg = render_diagram_svg(py, diagram)?;
+pub(crate) fn render_diagram_html(
+    py: Python<'_>,
+    diagram: &FeynmanDiagram,
+    highlight: Option<&SuBitGraph>,
+) -> PyResult<String> {
+    let svg = render_diagram_svg(py, diagram, highlight)?;
     Ok(format!(
         "<figure class=\"feynkit-diagram\" style=\"max-width:100%;margin:.5rem 0\">\
          <div style=\"max-width:100%;overflow-x:auto\">{svg}</div>\
