@@ -6188,6 +6188,45 @@ mod tests {
     }
 
     #[test]
+    fn closed_ghost_loops_contribute_a_grassmann_minus_sign() {
+        let generator = Generator::new(standard_model());
+        let generated = generator
+            .generate(
+                &Process::amplitude(["g"], ["g"])
+                    .with_loop_count(1, 1)
+                    .unwrap(),
+                &GenerationOptions::default()
+                    .threads(1)
+                    .max_vertices(2)
+                    .with_graph_filter(GenerationFilter::VertexAllow(vec![VertexSelector::Name(
+                        "V_35".to_owned(),
+                    )])),
+            )
+            .unwrap();
+        assert_eq!(generated.diagrams.len(), 1);
+        let diagram = &generated.diagrams[0];
+        assert_eq!(
+            diagram
+                .edges()
+                .filter(|(_, _, edge)| {
+                    generator.model.particle_by_id(edge.particle).unwrap().spin == -1
+                })
+                .count(),
+            2,
+        );
+
+        // The ghost-gluon vertex and propagator supply no closed-loop sign.
+        let factor = diagram.overall_factor();
+        let without_loop_sign = factor
+            .replace(factor_atom("InternalFermionLoopSign(-1)").to_pattern())
+            .with(Atom::one().to_pattern());
+        assert_ne!(
+            factor, &without_loop_sign,
+            "a closed ghost loop must carry its Grassmann minus sign in the overall factor",
+        );
+    }
+
+    #[test]
     fn positive_external_fermion_signs_keep_symbolic_provenance() {
         let generator = Generator::new(fermion_model());
         let diagram = generator
