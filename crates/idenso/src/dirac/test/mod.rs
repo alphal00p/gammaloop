@@ -350,6 +350,29 @@ fn gamma_simplification_reaches_fixed_point_after_metric_contraction() {
     );
 }
 
+#[test]
+fn gamma_metric_contraction_preserves_unevaluated_trace() {
+    let r = test_initialize();
+    let expr = g!(slot!(r.bis4, a), slot!(r.bis4, b))
+        * gamma!(b, c, slot!(r.mink_d, mu))
+        * gamma!(c, a, slot!(r.mink_d, nu));
+    let expected = trace!(
+        r.bis4.to_symbolic([]),
+        gamma!(slot!(r.mink_d, mu)),
+        gamma!(slot!(r.mink_d, nu)),
+    );
+
+    for settings in [
+        GammaSimplifySettings::repeated_pairs(),
+        GammaSimplifySettings::canonical(),
+    ] {
+        let settings = settings.without_trace_evaluation();
+        let simplified = expr.simplify_gamma_with(settings);
+        assert_eq!(simplified, expected);
+        assert_eq!(simplified.simplify_gamma_with(settings), simplified);
+    }
+}
+
 mod form_reference;
 
 mod feyncalc_reference;
@@ -588,7 +611,7 @@ fn gammaloop_uv_factored_vertex_chain_reduces_in_d_dimensions() {
         .expand_num();
 
     // 4 (d - 4) q_rho slash(p) + 8 p_rho slash(q) + 8 (p.q) gamma_rho.
-    assert_snapshot!(simplified.to_bare_ordered_string(), @"(-16*chain(bis(d,i),bis(d,j),gamma(in,out,p(mink(d))))+4*chain(bis(d,i),bis(d,j),gamma(in,out,p(mink(d))))*d)*q(mink(d,rho))+8*chain(bis(d,i),bis(d,j),gamma(in,out,mink(d,rho)))*g(p(mink(d)),q(mink(d)))+8*chain(bis(d,i),bis(d,j),gamma(in,out,q(mink(d))))*p(mink(d,rho))");
+    assert_snapshot!(simplified.to_bare_ordered_string(), @"(-16+4*d)*chain(bis(d,i),bis(d,j),gamma(in,out,p(mink(d))))*q(mink(d,rho))+8*chain(bis(d,i),bis(d,j),gamma(in,out,mink(d,rho)))*g(p(mink(d)),q(mink(d)))+8*chain(bis(d,i),bis(d,j),gamma(in,out,q(mink(d))))*p(mink(d,rho))");
 }
 
 #[test]

@@ -357,15 +357,15 @@ impl<'settings> DiracSimplifier<'settings> {
     }
 
     pub(crate) fn simplify(self, expr: AtomView) -> Atom {
-        let mut expr = expr.to_owned().collect_gamma_chains();
+        let mut expr = expr.to_owned();
 
         loop {
+            // Close metric-linked chains before rewriting, including inert traces.
             let next = self
                 .settings
-                .rewrite_expression(expr.clone())
+                .rewrite_expression(expr.schoonschip().collect_gamma_chains())
                 .simplify_epsilon()
-                .normalize_dots()
-                .schoonschip();
+                .normalize_dots();
 
             if next == expr {
                 return next;

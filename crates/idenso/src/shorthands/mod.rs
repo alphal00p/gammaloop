@@ -171,18 +171,42 @@ impl<'a> UndoShorthands for AtomView<'a> {
 #[cfg(test)]
 mod tests {
     use spenso::{
-        chain, chain_factor, mink, network::tags::SPENSO_TAG,
+        chain, chain_factor, dot, mink, network::tags::SPENSO_TAG,
         structure::abstract_index::AbstractIndex, vector,
     };
     use symbolica::{
-        atom::{Atom, FunctionBuilder},
+        atom::{Atom, AtomCore, FunctionBuilder},
         symbol,
     };
     use symbolica_utils::AtomPrintExt;
 
+    use crate::shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip};
     use crate::test_support::test_initialize;
 
     use super::*;
+
+    #[test]
+    fn undo_dots_positive_integer_powers_roundtrip() {
+        let _ = test_initialize();
+        let product = dot!(
+            vector!(powered_dot_p, mink!(4)),
+            vector!(powered_dot_q, mink!(4))
+        );
+
+        for exponent in [2, 3] {
+            let expression = product.clone().pow(Atom::num(exponent));
+            let expanded = expression.undo_dots::<AbstractIndex>().unwrap();
+
+            assert_eq!(
+                expanded
+                    .schoonschip_net::<AbstractIndex>()
+                    .unwrap()
+                    .metric_shorthand_to_dot(),
+                expression,
+                "independent contractions must survive power {exponent}"
+            );
+        }
+    }
 
     #[test]
     fn undo_schoonschip_across_chain() {

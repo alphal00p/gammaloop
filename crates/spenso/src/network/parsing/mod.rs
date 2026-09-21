@@ -824,11 +824,18 @@ where
         if !settings.depth_is_product_depth {
             state.depth += 1;
         }
-        let (base, exp) = value.get_base_exp();
+        let (base_expression, exp) = value.get_base_exp();
 
         if let Ok(n) = i8::try_from(exp) {
-            // println!("base:{base}");
-            let base = Self::try_from_view_impl(base, state, library, function_library, settings)?;
+            // println!("base:{base_expression}");
+            let next_dummy = state.next_dummy.get();
+            let base = Self::try_from_view_impl(
+                base_expression,
+                state.clone(),
+                library,
+                function_library,
+                settings,
+            )?;
 
             // println!("base state {:?}", base.state);
             if settings.precontract_scalars
@@ -839,28 +846,40 @@ where
             }
 
             if let NetworkState::Tensor = base.state {
-                Err(TensorNetworkError::NonSelfDualTensorPower(
+                return Err(TensorNetworkError::NonSelfDualTensorPower(
                     value.as_view().to_plain_string(),
-                ))
-            } else if n < 0 {
-                // An even power of a self_dual tensor, or scalar is a scalar
-                if n % 2 == 0 || base.state.is_scalar() {
-                    let out = base.pow(n);
-                    // println!("{:?}", out.state);
-                    Ok(out)
-                } else {
-                    Err(TensorNetworkError::NegativeExponentNonScalar(format!(
-                        "Atom:{},graph of base: {}, dangling indices: {:?}",
-                        value.as_view().to_plain_string(),
-                        base.dot(),
-                        base.graph.dangling_indices()
-                    )))
-                }
-            } else {
-                let out = base.pow(n);
-                // println!("{:?}", out.state);
-                Ok(out)
+                ));
             }
+            // An even power of a self_dual tensor, or scalar is a scalar
+            if n < 0 && n % 2 != 0 && !base.state.is_scalar() {
+                return Err(TensorNetworkError::NegativeExponentNonScalar(format!(
+                    "Atom:{},graph of base: {}, dangling indices: {:?}",
+                    value.as_view().to_plain_string(),
+                    base.dot(),
+                    base.graph.dangling_indices()
+                )));
+            }
+
+            let out = if n > 1 && state.next_dummy.get() != next_dummy {
+                // Each lowered shorthand copy needs independent internal indices.
+                let rest = (1..n)
+                    .map(|_| {
+                        Self::try_from_view_impl(
+                            base_expression,
+                            state.clone(),
+                            library,
+                            function_library,
+                            settings,
+                        )
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                base.n_mul(rest)
+            } else {
+                // println!("{:?}", base.state);
+                base.pow(n)
+            };
+            // println!("{:?}", out.state);
+            Ok(out)
         } else {
             Ok(Self::from_scalar(value.as_view().try_into()?))
         }
