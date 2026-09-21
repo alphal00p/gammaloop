@@ -1,0 +1,140 @@
+"""Exercise optional expression routing in an installed FeynKit community host.
+
+Pass the community module name as the first argument (``hep`` for that host).
+"""
+
+import importlib
+import json
+import sys
+from pathlib import Path
+
+from symbolica import S
+from symbolica.community.spenso import TensorExpression
+
+fk = importlib.import_module(
+    f"symbolica.community.{sys.argv[1] if len(sys.argv) > 1 else 'feynkit'}"
+)
+model = fk.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
+diagrams = model.generate_diagrams(
+    ["scalar_0"],
+    ["scalar_0", "scalar_0"],
+    loops=1,
+    max_vertices=3,
+    vertex_allow=["V_3_SCALAR_000"],
+    allow_self_loops=True,
+).diagrams
+diagram = next(
+    candidate
+    for candidate in diagrams
+    if len(
+        {
+            edge.source if edge.source is not None else edge.target
+            for edge in candidate.external_edges
+        }
+    )
+    == 3
+)
+loop_edge = next(
+    edge
+    for edge in diagram.internal_edges
+    if edge.id == diagram.loop_momentum_basis.loop_edges[0]
+)
+
+# Give one vertex an indexed momentum on a real edge and keep every local
+# numerator consistent with the aggregate serialized numerator.
+payload = json.loads(diagram.to_json())
+payload["numerator"] = f"gammalooprs::Q({loop_edge.id},spenso::mink(4,lmb_test::mu))"
+for vertex in payload["vertices"]:
+    vertex["numerator"] = "1"
+for _, edge in payload["edges"]:
+    edge["numerator"] = "1"
+payload["vertices"][loop_edge.source]["numerator"] = payload["numerator"]
+diagram = fk.FeynmanDiagram.from_json(model, json.dumps(payload))
+basis = diagram.loop_momentum_basis
+assert isinstance(basis, fk.LoopMomentumBasis)
+alternate = next(
+    candidate
+    for candidate in diagram.loop_momentum_bases()
+    if candidate.loop_edges != basis.loop_edges
+)
+raw_numerator = diagram.numerator_expression()
+assert raw_numerator.rank == 1
+assert raw_numerator == diagram.numerator_expression(in_lmb=False, lmb=None)
+assert basis.route_expression(raw_numerator) != raw_numerator
+assert alternate.route_expression(raw_numerator) != basis.route_expression(
+    raw_numerator
+)
+
+for expression in (diagram.numerator_expression, diagram.denominator_expression):
+    raw = expression()
+    assert raw == expression(in_lmb=False, lmb=None)
+    for options, selected_basis in (
+        ({"in_lmb": True}, basis),
+        ({"lmb": basis}, basis),
+        ({"lmb": alternate}, alternate),
+        ({"in_lmb": False, "lmb": alternate}, alternate),
+        ({"in_lmb": True, "lmb": alternate}, alternate),
+    ):
+        routed = expression(**options)
+        assert isinstance(routed, TensorExpression)
+        assert routed.interface == raw.interface
+        assert routed == selected_basis.route_expression(raw)
+        assert routed != raw
+
+graph = diagram.to_linnet()
+full = graph.full_subgraph()
+empty = graph.empty_subgraph()
+region = diagram.filter(edge=lambda edge: edge.data.id == loop_edge.id)
+region_basis = diagram.momentum_basis(subgraph=region)
+for expression in (diagram.numerator_expression, diagram.denominator_expression):
+    assert expression(subgraph=full, in_lmb=True) == expression(in_lmb=True)
+    for selection, selected_basis in ((region, region_basis), (empty, basis)):
+        raw = expression(subgraph=selection)
+        assert expression(subgraph=selection, in_lmb=True) == basis.route_expression(
+            raw
+        )
+        routed = expression(subgraph=selection, lmb=selected_basis)
+        assert isinstance(routed, TensorExpression)
+        assert routed == selected_basis.route_expression(raw)
+    assert expression(subgraph=empty, in_lmb=True) == 1
+    assert expression(subgraph=empty, lmb=alternate) == 1
+
+without_region = diagram.numerator_expression(without=region)
+assert without_region == 1
+assert diagram.numerator_expression(without=region, in_lmb=True) == (
+    basis.route_expression(without_region)
+)
+assert diagram.numerator_expression(without=region, lmb=alternate) == (
+    alternate.route_expression(without_region)
+)
+
+powers = {
+    edge.id: power
+    for edge, power in zip(diagram.internal_edges, (2, -1, 0), strict=True)
+}
+for dimension in (4, S("lmb_test::D")):
+    options = {"edge_powers": powers, "dimension": dimension}
+    raw = diagram.denominator_expression(**options)
+    for selected_basis in (basis, alternate):
+        routed = diagram.denominator_expression(**options, lmb=selected_basis)
+        assert isinstance(routed, TensorExpression)
+        assert routed.rank == 0
+        assert routed == selected_basis.route_expression(raw)
+    assert diagram.denominator_expression(**options, in_lmb=True) == (
+        basis.route_expression(raw)
+    )
+    partial = diagram.denominator_expression(subgraph=region, **options)
+    assert diagram.denominator_expression(
+        subgraph=region, **options, lmb=region_basis
+    ) == region_basis.route_expression(partial)
+
+restored = fk.FeynmanDiagram.from_json(model, diagram.to_json())
+foreign_basis = restored.loop_momentum_basis
+for expression in (diagram.numerator_expression, diagram.denominator_expression):
+    for in_lmb in (False, True):
+        try:
+            expression(in_lmb=in_lmb, lmb=foreign_basis)
+        except fk.DiagramError as error:
+            assert "momentum basis belongs to a different diagram" in str(error)
+        else:
+            raise AssertionError("a supplied basis must belong to the diagram instance")

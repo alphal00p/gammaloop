@@ -218,6 +218,25 @@ A selection without internal propagators returns one.
 The ratio above still requires the diagram's separate overall factor and any unapplied
 projector or numerator prefactor when assembling a complete integrand.
 
+Use `in_lmb=True` on both expressions to replace edge momenta by the diagram's
+stored loop and external momentum coordinates. Python already exposes the routing as
+`LoopMomentumBasis`; obtain the stored basis with `diagram.loop_momentum_basis`, or
+select another basis from `diagram.loop_momentum_bases()`.
+
+// docs-example: compile
+```python
+numerator = diagram.numerator_expression(in_lmb=True)
+denominator = diagram.denominator_expression(in_lmb=True)
+basis = diagram.loop_momentum_bases()[0]
+numerator = diagram.numerator_expression(lmb=basis)
+denominator = diagram.denominator_expression(lmb=basis)
+```
+
+Supplying `lmb` enables routing and takes precedence over `in_lmb`. The basis must
+belong to the same diagram instance; bases for a subgraph or contracted region are
+accepted. Region selection, ignored numerator regions, denominator dimensions, and
+propagator powers are applied before routing. Both methods return `TensorExpression`.
+
 == Inspect superficial UV power counting
 
 // docs-example: compile
