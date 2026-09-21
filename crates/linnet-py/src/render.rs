@@ -648,7 +648,7 @@ fn entrypoint_source(
 
 /// One Typst render whose virtual project and generated entrypoint share a lifetime.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "linnet_py", frozen)]
+#[pyclass(module = "linnet", frozen)]
 pub struct PreparedRender {
     _build_dir: tempfile::TempDir,
     files: BTreeMap<String, Vec<u8>>,

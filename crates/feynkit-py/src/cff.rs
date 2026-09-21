@@ -833,13 +833,14 @@ impl PyCffGenerator {
     /// ----------
     /// diagram : FeynmanDiagram
     ///     Diagram whose energy-flow orientations are enumerated.
-    /// subgraph : linnet_py.Subgraph, optional
+    /// subgraph : linnet.Subgraph, optional
     ///     Graph-bound selection from diagram.to_linnet().
     #[pyo3(signature = (diagram, *, subgraph=None))]
     fn generate(
         &self,
         py: Python<'_>,
         diagram: &PyFeynmanDiagram,
+        #[gen_stub(override_type(type_repr="linnet.Subgraph | None", imports=("linnet")))]
         subgraph: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<PyCffResult> {
         let selection = diagram.selection(py, subgraph)?;

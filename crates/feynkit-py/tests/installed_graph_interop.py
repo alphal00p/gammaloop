@@ -9,7 +9,7 @@ import sys
 import weakref
 from pathlib import Path
 
-import linnet_py
+import linnet
 
 fk = importlib.import_module(
     f"symbolica.community.{sys.argv[1] if len(sys.argv) > 1 else 'feynkit'}"
@@ -35,7 +35,8 @@ diagram = next(
     > 1
 )
 graph = diagram.to_linnet()
-assert type(graph) is linnet_py.Graph
+assert type(graph) is linnet.Graph
+assert type(graph).__module__ == "linnet"
 assert graph is diagram.to_linnet()
 assert graph.n_nodes == len(diagram.vertices)
 assert graph.n_edges == len(diagram.edges)
@@ -45,9 +46,9 @@ for edge in graph.edges():
     if edge.data.is_external:
         half = edge.source if edge.source is not None else edge.sink
         assert half.flow == (
-            linnet_py.Flow.Sink
+            linnet.Flow.Sink
             if edge.data.external_state == "incoming"
-            else linnet_py.Flow.Source
+            else linnet.Flow.Source
         )
 
 assert all(not edge.is_external for edge in diagram.internal_edges)
@@ -56,6 +57,7 @@ assert sorted(half.data for half in graph.half_edges()) == list(
 )
 
 full = graph.full_subgraph()
+assert type(full).__module__ == "linnet"
 empty = graph.empty_subgraph()
 internal = graph.filter(edge=lambda edge: not edge.data.is_external)
 assert diagram.numerator_expression(subgraph=full) == diagram.numerator_expression()
@@ -88,17 +90,15 @@ assert (
 
 cycles, covered = diagram.cycle_basis(internal)
 assert len(cycles) == diagram.loop_count
-assert isinstance(covered, linnet_py.Subgraph)
-assert isinstance(diagram.bridges(full), linnet_py.Subgraph)
-assert isinstance(diagram.boundary(internal), linnet_py.Subgraph)
+assert isinstance(covered, linnet.Subgraph)
+assert isinstance(diagram.bridges(full), linnet.Subgraph)
+assert isinstance(diagram.boundary(internal), linnet.Subgraph)
 assert diagram.all_spanning_forests(internal)
 assert diagram.all_bonds(subgraph=full)
 assert diagram.all_cuts([0], [1])
+assert isinstance(diagram.depth_first_traverse(0, subgraph=full), linnet.TraversalTree)
 assert isinstance(
-    diagram.depth_first_traverse(0, subgraph=full), linnet_py.TraversalTree
-)
-assert isinstance(
-    diagram.breadth_first_traverse(0, subgraph=full), linnet_py.TraversalTree
+    diagram.breadth_first_traverse(0, subgraph=full), linnet.TraversalTree
 )
 
 restored = fk.FeynmanDiagram.from_json(model, diagram.to_json())
@@ -154,14 +154,14 @@ for cut in cross_section.cuts:
     assert cut.left.loop_count == cut.right.loop_count == 0
     assert len(cut.particles) == len(cut.edges) == 2
     assert all(particle.name == "scalar_0" for particle in cut.particles)
-    assert isinstance(cut.left.subgraph, linnet_py.Subgraph)
-    assert isinstance(cut.right.subgraph, linnet_py.Subgraph)
+    assert isinstance(cut.left.subgraph, linnet.Subgraph)
+    assert isinstance(cut.right.subgraph, linnet.Subgraph)
     assert cross_section.numerator_expression(subgraph=cut.left.subgraph) != 1
     assert len(cut.propagators()) == 2
     assert len(cut.propagators(edge_powers={cut.edges[0].id: 2})) == 2
 for candidate in cross_section.topology_threshold_candidates:
-    assert isinstance(candidate.left, linnet_py.Subgraph)
-    assert isinstance(candidate.right, linnet_py.Subgraph)
+    assert isinstance(candidate.left, linnet.Subgraph)
+    assert isinstance(candidate.right, linnet.Subgraph)
 assert "is_cut:" in cross_section.to_linnest()
 assert (
     fk.FeynmanDiagram.from_json(model, cross_section.to_json()).to_json()

@@ -1,6 +1,6 @@
 = Bundled Typst packages
 
-These unmodified packages are embedded in the `linnet-py` wheel so rendering
+These unmodified packages are embedded in the `linnet` wheel so rendering
 does not depend on a network connection or an installed Typst package cache.
 
 - CeTZ 0.5.1 (`preview/cetz/0.5.1`), LGPL-3.0-or-later

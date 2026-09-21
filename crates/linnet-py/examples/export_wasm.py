@@ -29,7 +29,7 @@ from pathlib import Path
 
 EXAMPLES_DIR = Path(__file__).resolve().parent
 PUBLISHED_REQUIREMENTS = {
-    "linnet-py": '#     "linnet-py==0.1.0",',
+    "linnet": '#     "linnet==0.1.0",',
     "symbolica": '#     "symbolica==3.0.0",',
     "ufo-model-loader": '#     "ufo-model-loader @ git+https://github.com/alphal00p/ufo_model_loader.git@70ddee6b416f8c8b340e0d087646d77095c5d24b",',
 }
@@ -41,7 +41,7 @@ class Notebook:
     ready_value: str
     docs_product: str
     docs_route: str
-    package: str = "linnet-py"
+    package: str = "linnet"
 
     @property
     def source(self) -> Path:
@@ -91,7 +91,7 @@ NOTEBOOKS = (
 )
 
 
-def validate_notebook_wheel(wheel: Path, package: str = "linnet-py") -> Path:
+def validate_notebook_wheel(wheel: Path, package: str = "linnet") -> Path:
     wheel = wheel.expanduser().resolve()
     filename = wheel.name.lower()
     if not wheel.is_file() or wheel.suffix != ".whl":
@@ -138,7 +138,7 @@ def validate_notebook_wheel(wheel: Path, package: str = "linnet-py") -> Path:
     return wheel
 
 
-def with_local_wheel(source: str, wheel_name: str, package: str = "linnet-py") -> str:
+def with_local_wheel(source: str, wheel_name: str, package: str = "linnet") -> str:
     """Replace the published dependency in a temporary notebook copy."""
 
     published_requirement = PUBLISHED_REQUIREMENTS[package]
@@ -741,9 +741,9 @@ def parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
         "--wheel",
         type=Path,
         help=(
-            "Local Emscripten wheel: linnet-py for Linnet/GammaLoop, or symbolica "
+            "Local Emscripten wheel: linnet for Linnet/GammaLoop, or symbolica "
             "with FeynKit/Spenso/Idenso for community showcases. Without this option the "
-            "published linnet-py==0.1.0 dependency is used."
+            "published linnet==0.1.0 dependency is used."
         ),
     )
     parser.add_argument(
@@ -796,7 +796,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 and notebook.docs_product == "spenso"
             )
             if options.docs
-            else (options.notebook is None and notebook.package == "linnet-py")
+            else (options.notebook is None and notebook.package == "linnet")
             or Path(notebook.filename).stem == options.notebook
         )
     )
@@ -814,7 +814,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
     dependency_wheel = (
         validate_notebook_wheel(
             options.dependency_wheel,
-            "ufo-model-loader" if options.docs == "feynkit" else "linnet-py",
+            "ufo-model-loader" if options.docs == "feynkit" else "linnet",
         )
         if options.dependency_wheel
         else None

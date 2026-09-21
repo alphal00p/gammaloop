@@ -1,6 +1,6 @@
-# linnet-py
+# linnet
 
-`linnet-py` exposes Linnet's native half-edge graph, node-store variants,
+`linnet` exposes Linnet's native half-edge graph, node-store variants,
 topology editing, subgraphs, algorithms, arbitrary Python element data, and
 typed drawing configuration as a standalone Python package.
 
@@ -10,12 +10,12 @@ inputs. Rendering converts graph topology to a versioned CBOR graph spec and
 never serializes arbitrary Python `.data`. Clinnet and a Typst executable are
 not runtime dependencies.
 
-The linnet-py, Linnest, and Kurvst sources are MIT-licensed under `LICENSE`;
+The linnet, Linnest, and Kurvst sources are MIT-licensed under `LICENSE`;
 the distribution also carries the licenses and provenance of its vendored
 Typst packages.
 
 ```python
-import linnet_py as lp
+import linnet as lp
 
 left = lp.node("left", data=object(), label="Left")
 right = lp.node("right", data=object(), label="Right")
@@ -53,7 +53,7 @@ WASM pages without changing their checked-in dependency metadata:
 ```console
 nix develop --command uv run --no-project --with marimo==0.24.0 \
   python crates/linnet-py/examples/export_wasm.py \
-  --wheel dist/linnet_py-0.1.0-cp310-abi3-pyemscripten_2026_0_wasm32.whl \
+  --wheel dist/linnet-0.1.0-cp310-abi3-pyemscripten_2026_0_wasm32.whl \
   --output dist/linnet-wasm
 ```
 

@@ -102,10 +102,10 @@ impl LinnetCache {
         let Some(selection) = selection else {
             return Ok(diagram.inner.underlying().full_filter());
         };
-        let module = py.import("linnet_py")?;
+        let module = py.import("linnet")?;
         if !selection.is_instance(&module.getattr("Subgraph")?)? {
             return Err(pyo3::exceptions::PyTypeError::new_err(
-                "subgraph must be a linnet_py.Subgraph from diagram.to_linnet()",
+                "subgraph must be a linnet.Subgraph from diagram.to_linnet()",
             ));
         }
         let graph = self.graph(py, diagram)?;
@@ -162,7 +162,7 @@ impl LinnetCache {
 
 impl LinnetExport {
     fn build(py: Python<'_>, diagram: &PyFeynmanDiagram) -> PyResult<Self> {
-        let module = py.import("linnet_py")?;
+        let module = py.import("linnet")?;
         let native = diagram.inner.underlying();
         let mut items = Vec::new();
         for vertex in diagram.vertices() {
