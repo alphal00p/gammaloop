@@ -6,9 +6,10 @@ use feynkit_graph::{
 use feynkit_model::Model;
 use feynkit_tensor::FeynmanDiagramTensorExt;
 use pyo3::{
+    PyTraverseError, PyVisit,
     exceptions::PyTypeError,
     prelude::*,
-    types::{PyAny, PyModule},
+    types::{PyAny, PyDict, PyModule},
 };
 use spynso3::expression::TensorExpression;
 use symbolica::{
@@ -29,6 +30,7 @@ use crate::{
     cff::{PyCffResult, build_cff_for_diagram},
     display::{escape_html, render_diagram_html, render_diagram_svg},
     error,
+    graph_interop::LinnetCache,
     kinematics::{PyFourMomentum, PyThreeMomentum},
     model::PyModel,
     tensor::PyTensorReducer,
@@ -911,17 +913,236 @@ submit! {
 #[derive(Clone)]
 pub struct PyFeynmanDiagram {
     pub(crate) inner: FeynmanDiagram,
+    linnet: LinnetCache,
 }
 
 impl From<FeynmanDiagram> for PyFeynmanDiagram {
     fn from(inner: FeynmanDiagram) -> Self {
-        Self { inner }
+        Self {
+            inner,
+            linnet: LinnetCache::default(),
+        }
+    }
+}
+
+impl PyFeynmanDiagram {
+    pub(crate) fn selection(
+        &self,
+        py: Python<'_>,
+        subgraph: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<linnet::half_edge::subgraph::SuBitGraph> {
+        self.linnet.selection(py, self, subgraph)
     }
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyFeynmanDiagram {
+    /// Return the canonical installed Linnet graph with physics objects as payloads.
+    ///
+    /// Node, edge, and half-edge identities are mapped explicitly. Structural
+    /// edits affect this analysis graph only; the next export starts a fresh
+    /// graph, and selections from the modified topology cannot be used here.
+    fn to_linnet(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.linnet.graph(py, self)
+    }
+
+    fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
+        self.linnet.traverse(visit)
+    }
+
+    fn __clear__(&self) {
+        self.linnet.clear();
+    }
+
+    /// Select graph elements using the canonical Linnet IDs.
+    #[pyo3(signature = (*, nodes=None, edges=None, half_edges=None))]
+    fn subgraph(
+        &self,
+        py: Python<'_>,
+        nodes: Option<Vec<usize>>,
+        edges: Option<Vec<usize>>,
+        half_edges: Option<Vec<usize>>,
+    ) -> PyResult<Py<PyAny>> {
+        let graph = self.to_linnet(py)?;
+        let kwargs = PyDict::new(py);
+        if let Some(nodes) = nodes {
+            kwargs.set_item("nodes", nodes)?;
+        }
+        if let Some(edges) = edges {
+            kwargs.set_item("edges", edges)?;
+        }
+        if let Some(half_edges) = half_edges {
+            kwargs.set_item("half_edges", half_edges)?;
+        }
+        Ok(graph
+            .bind(py)
+            .call_method("subgraph", (), Some(&kwargs))?
+            .unbind())
+    }
+
+    /// Select by predicates on Linnet views; their ``data`` is a physics object.
+    #[pyo3(signature = (*, node=None, edge=None, half_edge=None))]
+    fn filter(
+        &self,
+        py: Python<'_>,
+        node: Option<Py<PyAny>>,
+        edge: Option<Py<PyAny>>,
+        half_edge: Option<Py<PyAny>>,
+    ) -> PyResult<Py<PyAny>> {
+        let graph = self.to_linnet(py)?;
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("node", node)?;
+        kwargs.set_item("edge", edge)?;
+        kwargs.set_item("half_edge", half_edge)?;
+        Ok(graph
+            .bind(py)
+            .call_method("filter", (), Some(&kwargs))?
+            .unbind())
+    }
+
+    /// Return boundaries around the selected interaction region.
+    fn boundary(&self, py: Python<'_>, subgraph: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        Ok(self
+            .to_linnet(py)?
+            .bind(py)
+            .call_method1("boundary", (subgraph,))?
+            .unbind())
+    }
+
+    /// Return connected interaction regions as reusable selections.
+    #[pyo3(signature = (subgraph=None))]
+    fn connected_components(
+        &self,
+        py: Python<'_>,
+        subgraph: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<Py<PyAny>> {
+        Ok(self
+            .to_linnet(py)?
+            .bind(py)
+            .call_method1("connected_components", (subgraph,))?
+            .unbind())
+    }
+
+    /// Test connectivity of an optional selection.
+    #[pyo3(signature = (subgraph=None))]
+    fn is_connected(&self, py: Python<'_>, subgraph: Option<&Bound<'_, PyAny>>) -> PyResult<bool> {
+        self.to_linnet(py)?
+            .bind(py)
+            .call_method1("is_connected", (subgraph,))?
+            .extract()
+    }
+
+    /// Return lines whose removal disconnects the selection.
+    #[pyo3(signature = (subgraph=None))]
+    fn bridges(&self, py: Python<'_>, subgraph: Option<&Bound<'_, PyAny>>) -> PyResult<Py<PyAny>> {
+        Ok(self
+            .to_linnet(py)?
+            .bind(py)
+            .call_method1("bridges", (subgraph,))?
+            .unbind())
+    }
+
+    /// Return a cycle basis and its covered half-edges.
+    #[pyo3(signature = (subgraph=None))]
+    fn cycle_basis(
+        &self,
+        py: Python<'_>,
+        subgraph: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<Py<PyAny>> {
+        Ok(self
+            .to_linnet(py)?
+            .bind(py)
+            .call_method1("cycle_basis", (subgraph,))?
+            .unbind())
+    }
+
+    /// Enumerate spanning forests within the selected topology.
+    #[pyo3(signature = (subgraph=None))]
+    fn all_spanning_forests(
+        &self,
+        py: Python<'_>,
+        subgraph: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<Py<PyAny>> {
+        Ok(self
+            .to_linnet(py)?
+            .bind(py)
+            .call_method1("all_spanning_forests", (subgraph,))?
+            .unbind())
+    }
+
+    /// Enumerate minimal cutsets, independently of physical final-state cuts.
+    #[pyo3(signature = (*, subgraph=None, min_size=None, max_size=None))]
+    fn all_bonds(
+        &self,
+        py: Python<'_>,
+        subgraph: Option<&Bound<'_, PyAny>>,
+        min_size: Option<usize>,
+        max_size: Option<usize>,
+    ) -> PyResult<Py<PyAny>> {
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("subgraph", subgraph)?;
+        kwargs.set_item("min_size", min_size)?;
+        kwargs.set_item("max_size", max_size)?;
+        Ok(self
+            .to_linnet(py)?
+            .bind(py)
+            .call_method("all_bonds", (), Some(&kwargs))?
+            .unbind())
+    }
+
+    /// Enumerate separating partitions between disjoint interaction vertex groups.
+    fn all_cuts(
+        &self,
+        py: Python<'_>,
+        source: Vec<usize>,
+        target: Vec<usize>,
+    ) -> PyResult<Py<PyAny>> {
+        Ok(self
+            .to_linnet(py)?
+            .bind(py)
+            .call_method1("all_cuts", (source, target))?
+            .unbind())
+    }
+
+    /// Traverse a selected interaction region in depth-first order.
+    #[pyo3(signature = (root, *, subgraph=None, include=None))]
+    fn depth_first_traverse(
+        &self,
+        py: Python<'_>,
+        root: usize,
+        subgraph: Option<&Bound<'_, PyAny>>,
+        include: Option<usize>,
+    ) -> PyResult<Py<PyAny>> {
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("subgraph", subgraph)?;
+        kwargs.set_item("include", include)?;
+        Ok(self
+            .to_linnet(py)?
+            .bind(py)
+            .call_method("depth_first_traverse", (root,), Some(&kwargs))?
+            .unbind())
+    }
+
+    /// Traverse a selected interaction region in breadth-first order.
+    #[pyo3(signature = (root, *, subgraph=None, include=None))]
+    fn breadth_first_traverse(
+        &self,
+        py: Python<'_>,
+        root: usize,
+        subgraph: Option<&Bound<'_, PyAny>>,
+        include: Option<usize>,
+    ) -> PyResult<Py<PyAny>> {
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("subgraph", subgraph)?;
+        kwargs.set_item("include", include)?;
+        Ok(self
+            .to_linnet(py)?
+            .bind(py)
+            .call_method("breadth_first_traverse", (root,), Some(&kwargs))?
+            .unbind())
+    }
+
     /// Deserialize a Feynman diagram from its JSON representation.
     ///
     /// Examples
@@ -1223,7 +1444,7 @@ impl PyFeynmanDiagram {
 
     /// Return the diagram vertices with stable integer identifiers.
     #[getter]
-    fn vertices(&self) -> Vec<PyDiagramVertex> {
+    pub(crate) fn vertices(&self) -> Vec<PyDiagramVertex> {
         let model = self.inner.model_arc();
         self.inner
             .vertices()
@@ -1237,7 +1458,7 @@ impl PyFeynmanDiagram {
 
     /// Return all diagram edges with their endpoint identifiers.
     #[getter]
-    fn edges(&self) -> Vec<PyDiagramEdge> {
+    pub(crate) fn edges(&self) -> Vec<PyDiagramEdge> {
         let model = self.inner.model_arc();
         self.inner
             .edges()

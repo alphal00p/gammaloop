@@ -27,6 +27,7 @@
 
 #![forbid(unsafe_code)]
 
+mod algebra;
 mod error;
 mod expression;
 mod generation;
@@ -36,6 +37,7 @@ mod orientation;
 mod surface;
 mod tree;
 
+pub use algebra::{CutPropagator, SurfacePole};
 pub use error::CffError;
 pub use expression::{CffExpression, OrientationData, OrientationExpression};
 pub use generation::{

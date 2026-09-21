@@ -3,7 +3,8 @@ use std::{
     fmt::Write,
 };
 
-use crate::{ExternalState, FeynmanDiagram};
+use crate::FeynmanDiagram;
+use linnet::half_edge::involution::{EdgeIndex, Orientation};
 use symbolica::atom::AtomCore;
 
 fn typst_string(value: &str) -> String {
@@ -35,24 +36,18 @@ impl FeynmanDiagram {
     /// root together with its sibling Kurvst package and the shared physics
     /// styles in `assets/embedded/drawing/templates`. Particle spin, color,
     /// charge, mass, and TeX names select line patterns, arrows, and labels.
-    /// Interaction vertices are
-    /// densely remapped to valid Linnest node identifiers. FeynKit external
-    /// vertices become Linnest dangling half-edges and retain their names,
-    /// indices, and incoming/outgoing states as edge data.
+    /// Interaction vertices retain their native identifiers. Amplitude external
+    /// legs are dangling half-edges and retain their names, indices, and
+    /// incoming/outgoing states as edge data.
     ///
     /// GammaLoop's shared physics layout owns particle styling, label measurement,
     /// force settings, and left/right amplitude placement. Finalized cross sections
-    /// instead pair external legs by their sewing connection IDs.
+    /// already contain paired initial-state edges with their sewing connection IDs.
     pub fn to_linnest(&self) -> String {
-        let vertices: BTreeMap<_, _> = self.vertices().collect();
-        let internal_vertices: Vec<_> = vertices
-            .iter()
-            .filter_map(|(id, vertex)| (!vertex.is_external()).then_some((*id, *vertex)))
-            .collect();
+        let internal_vertices: Vec<_> = self.vertices().collect();
         let internal_ids: BTreeMap<_, _> = internal_vertices
             .iter()
-            .enumerate()
-            .map(|(dense_id, (id, _))| (*id, dense_id))
+            .map(|(id, _)| (*id, id.0))
             .collect();
 
         let mut output = String::from(
@@ -115,78 +110,35 @@ impl FeynmanDiagram {
                 .model()
                 .particle_by_id(edge.particle)
                 .expect("validated diagram particle IDs resolve in the owned model");
-            let source_internal = internal_ids.get(&endpoints.source).copied();
-            let target_internal = internal_ids.get(&endpoints.target).copied();
-            match (source_internal, target_internal) {
-                (Some(source), Some(target)) => {
-                    let orientation = if edge.directed {
-                        "default"
-                    } else {
-                        "undirected"
-                    };
-                    writeln!(
-                        output,
-                        "    edge(source(<v{source}>), <e{}>, sink(<v{target}>), id: {}, orientation: {orientation:?}, particle: {}, pdg: {}, directed: {}, numerator: {}, feynkit-source: {}, feynkit-target: {})",
-                        id.0,
-                        id.0,
-                        typst_string(&particle.name),
-                        particle.pdg_code,
-                        edge.directed,
-                        typst_string(&edge.numerator.to_canonical_string()),
-                        endpoints.source.0,
-                        endpoints.target.0,
-                    )
-                    .expect("writing to a string cannot fail");
-                }
-                (Some(internal), None) | (None, Some(internal)) => {
-                    let external_id = if source_internal.is_none() {
-                        endpoints.source
-                    } else {
-                        endpoints.target
-                    };
-                    let external_vertex = vertices[&external_id];
-                    let external = external_vertex
-                        .external
-                        .as_ref()
-                        .expect("an edge with one internal endpoint has one external endpoint");
-                    let original_external_is_source = endpoints.source == external_id;
-                    let represented_external_is_source = external.state == ExternalState::Incoming;
-                    let orientation = if !edge.directed {
-                        "undirected"
-                    } else if original_external_is_source == represented_external_is_source {
-                        "default"
-                    } else {
-                        "reversed"
-                    };
-                    let cut_pair = if self.cuts().is_empty() {
-                        String::new()
-                    } else {
-                        format!(", is_cut: {}", external.connection)
-                    };
-                    let endpoint_spec = match external.state {
-                        ExternalState::Incoming => format!("<e{}>, sink(<v{internal}>)", id.0),
-                        ExternalState::Outgoing => format!("source(<v{internal}>), <e{}>", id.0),
-                    };
-                    writeln!(
-                        output,
-                        "    edge({endpoint_spec}, id: {}, orientation: {orientation:?}, particle: {}, pdg: {}, directed: {}, numerator: {}, external-state: {:?}, external-index: {}, external-name: {}, feynkit-source: {}, feynkit-target: {}{cut_pair})",
-                        id.0,
-                        typst_string(&particle.name),
-                        particle.pdg_code,
-                        edge.directed,
-                        typst_string(&edge.numerator.to_canonical_string()),
-                        external.state.as_str(),
-                        external.index,
-                        typst_string(&external_vertex.name),
-                        endpoints.source.0,
-                        endpoints.target.0,
-                    )
-                    .expect("writing to a string cannot fail");
-                }
-                (None, None) => {
-                    unreachable!("validated diagrams cannot connect two external vertices")
-                }
-            }
+            let source_internal = endpoints.source.map(|vertex| internal_ids[&vertex]);
+            let target_internal = endpoints.target.map(|vertex| internal_ids[&vertex]);
+            let orientation = match self.underlying()[&EdgeIndex(id.0)].0.orientation {
+                Orientation::Default => "default",
+                Orientation::Reversed => "reversed",
+                Orientation::Undirected => "undirected",
+            };
+            let endpoint_spec = match (source_internal, target_internal) {
+                (Some(source), Some(target)) => format!("source(<v{source}>), <e{}>, sink(<v{target}>)", id.0),
+                (Some(source), None) => format!("source(<v{source}>), <e{}>", id.0),
+                (None, Some(target)) => format!("<e{}>, sink(<v{target}>)", id.0),
+                (None, None) => unreachable!("every native edge has an incident interaction"),
+            };
+            let external_metadata = edge.external.as_ref().map(|external| format!(
+                ", external-state: {:?}, external-index: {}, external-name: {}, external-connection: {}",
+                external.state.as_str(), external.index, typst_string(&external.name), external.connection,
+            )).unwrap_or_default();
+            writeln!(
+                output,
+                "    edge({endpoint_spec}, id: {}, orientation: {orientation:?}, particle: {}, pdg: {}, directed: {}, numerator: {}, feynkit-source: {}, feynkit-target: {}{external_metadata})",
+                id.0,
+                typst_string(&particle.name),
+                particle.pdg_code,
+                edge.directed,
+                typst_string(&edge.numerator.to_canonical_string()),
+                endpoints.source.map(|vertex| vertex.0.to_string()).unwrap_or_else(|| "none".to_owned()),
+                endpoints.target.map(|vertex| vertex.0.to_string()).unwrap_or_else(|| "none".to_owned()),
+            )
+            .expect("writing to a string cannot fail");
         }
 
         writeln!(

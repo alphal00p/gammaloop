@@ -1,0 +1,67 @@
+---
+source: crates/idenso/src/reference_cases.rs
+assertion_line: 490
+expression: snapshot
+---
+dirac_form_two_gamma_trace [Dirac4, GammaDefault, enabled]
+4*g(mink(4,mu),mink(4,nu))
+
+dirac_form_odd_gamma_trace [Dirac4, GammaDefault, enabled]
+0
+
+dirac_form_four_gamma_trace [Dirac4, GammaDefault, enabled]
+-4*g(mink(4,mu),mink(4,rho))*g(mink(4,nu),mink(4,sigma))+4*g(mink(4,mu),mink(4,nu))*g(mink(4,rho),mink(4,sigma))+4*g(mink(4,mu),mink(4,sigma))*g(mink(4,nu),mink(4,rho))
+
+dirac_feyncalc_open_chain_chisholm_id2 [Dirac4, GammaDefault, enabled]
+-2*chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,sigma)),gamma(in,out,mink(4,rho)),gamma(in,out,mink(4,nu)))
+
+dirac_feyncalc_open_chain_chisholm_id3 [Dirac4, GammaDefault, enabled]
+chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,rho)),gamma(in,out,mink(4,beta)),gamma(in,out,mink(4,alpha)),gamma(in,out,mink(4,sigma)))+chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,sigma)),gamma(in,out,mink(4,alpha)),gamma(in,out,mink(4,beta)),gamma(in,out,mink(4,rho)))
+
+dirac_feyncalc_slash_sandwich_id4 [Dirac4, GammaDefault, enabled]
+-2*chain(bis(4,i),bis(4,j),gamma(in,out,p(mink(4))))*g(p(mink(4)),q(mink(4)))+chain(bis(4,i),bis(4,j),gamma(in,out,q(mink(4))))*g(p(mink(4)),p(mink(4)))+g(bis(4,i),bis(4,j))*g(p(mink(4)),p(mink(4)))*m
+
+dirac_feyncalc_gamma5_anticommutes_id5 [Dirac4, GammaDefault, enabled]
+-1*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,mu)),gamma5(in,out))
+
+dirac_feyncalc_order_anticommutator_id30 [Dirac4, GammaCanonical, enabled]
+0
+
+dirac_gamma0_square [Dirac4, GammaDefault, enabled]
+g(bis(4,a),bis(4,b))
+
+dirac_gamma0_conjugates_gamma5 [Dirac4, GammaDefault, enabled]
+-1*chain(bis(4,a),bis(4,b),gamma5(in,out))
+
+dirac_gamma5_four_gamma_trace_is_epsilon [Dirac4, GammaDefault, enabled]
+4*epsilon(mink(4,mu),mink(4,nu),mink(4,rho),mink(4,sigma))
+
+color_form_one_generator_trace [ColorSu3, ColorDefault, enabled]
+0
+
+color_form_two_generator_trace [ColorSu3, ColorDefault, enabled]
+g(coad(8,a),coad(8,b))*idx(2,cof(3))
+
+color_form_fierz_generator_contraction [ColorSu3, ColorDefault, enabled]
+-1/3*g(cof(3,i),dind(cof(3,j)))*g(cof(3,k),dind(cof(3,l)))*idx(2,cof(3))+g(cof(3,i),dind(cof(3,l)))*g(cof(3,k),dind(cof(3,j)))*idx(2,cof(3))
+
+color_feyncalc_open_chain_separated_casimir_id2 [ColorSu3, ColorDefault, enabled]
+-1/2*cas(2,coad(8))*chain(cof(3,i),dind(cof(3,j)),t(coad(8,b),in,out))+cas(2,cof(3))*chain(cof(3,i),dind(cof(3,j)),t(coad(8,b),in,out))
+
+color_feyncalc_structure_loop_to_adjoint_delta_id3 [ColorSu3, ColorDefault, enabled]
+cas(2,coad(8))*g(coad(8,a),coad(8,b))
+
+color_feyncalc_structure_times_open_chain_id4 [ColorSu3, ColorDefault, enabled]
+1𝑖/2*cas(2,coad(8))*chain(cof(3,i),dind(cof(3,j)),t(coad(8,a),in,out))
+
+color_feyncalc_delta_closes_doubled_two_generator_chain_id18 [ColorSu3, ColorDefault, enabled]
+2*g(coad(8,i),coad(8,j))*idx(2,cof(3))
+
+color_feyncalc_three_generator_trace_terminal_id30 [ColorSu3, ColorDefault, enabled]
+1𝑖/2*f(coad(8,i),coad(8,j),coad(8,k))*idx(2,cof(3))+trace(cof(3),sym(t(coad(8,i),in,out),t(coad(8,j),in,out),t(coad(8,k),in,out)))
+
+color_feyncalc_repeated_trace_pair_id52 [ColorSu3, ColorDefault, enabled]
+-4*cas(2,coad(8))*idx(2,cof(3))+8*cas(2,cof(3))*idx(2,cof(3))
+
+color_form_four_generator_trace_terminal [ColorSu3, ColorDefault, enabled]
+-1/6*f(coad(8,a),coad(8,c),coad(8,x))*f(coad(8,b),coad(8,d),coad(8,x))*idx(2,cof(3))+1/3*f(coad(8,a),coad(8,d),coad(8,x))*f(coad(8,b),coad(8,c),coad(8,x))*idx(2,cof(3))+1𝑖/2*f(coad(8,a),coad(8,b),coad(8,x))*trace(cof(3),sym(t(coad(8,c),in,out),t(coad(8,d),in,out),t(coad(8,x),in,out)))+1𝑖/2*f(coad(8,c),coad(8,d),coad(8,x))*trace(cof(3),sym(t(coad(8,a),in,out),t(coad(8,b),in,out),t(coad(8,x),in,out)))+trace(cof(3),sym(t(coad(8,a),in,out),t(coad(8,b),in,out),t(coad(8,c),in,out),t(coad(8,d),in,out)))
