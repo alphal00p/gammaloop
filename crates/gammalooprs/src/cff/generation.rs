@@ -41,27 +41,10 @@ impl GammaLoopSurfaceCacheExt for SurfaceCache {
     }
 
     fn get_all_replacements(&self, cut_edges: &[EdgeIndex]) -> Vec<Replacement> {
-        let energy = self
-            .energy_surfaces()
-            .iter()
-            .enumerate()
-            .map(|(index, surface)| {
-                Replacement::new(
-                    Pattern::from(Atom::from(feynkit_cff::EnergySurfaceId::from(index))),
-                    Pattern::from(surface.to_atom(cut_edges)),
-                )
-            });
-        let h = self
-            .h_surfaces()
-            .iter()
-            .enumerate()
-            .map(|(index, surface)| {
-                Replacement::new(
-                    Pattern::from(Atom::from(feynkit_cff::HSurfaceId::from(index))),
-                    Pattern::from(surface.to_atom(cut_edges)),
-                )
-            });
-        energy.chain(h).collect()
+        self.replacements_with(
+            |edge| if cut_edges.contains(&edge) { crate::utils::cut_energy(edge) } else { crate::utils::ose_atom_from_index(edge) },
+            crate::utils::external_energy_atom_from_index,
+        )
     }
 
     fn get_all_replacements_in_lmb(

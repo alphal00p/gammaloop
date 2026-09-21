@@ -23,6 +23,7 @@ feynkit-model = { version = "0.1.0", path = "../feynkit-model" }
 feynkit-tensor = { version = "0.1.0", path = "../feynkit-tensor", default-features = false }
 feynkit-ufo = { version = "0.1.0", path = "../feynkit-ufo", optional = true }
 linnet-py = { path = "../linnet-py" }
+linnet.workspace = true
 pyo3 = { workspace = true }
 pyo3-stub-gen = { workspace = true, default-features = false, features = ["infer_signature"], optional = true }
 pyo3-stub-gen-derive = { workspace = true }

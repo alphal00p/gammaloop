@@ -1,5 +1,4 @@
 use crate::utils::{cut_energy, external_energy_atom_from_index, ose_atom_from_index};
-use itertools::Itertools;
 use linnet::half_edge::involution::EdgeIndex;
 use symbolica::atom::Atom;
 
@@ -45,40 +44,10 @@ impl HSurfaceExt for HSurface {
         cut_edges: &[EdgeIndex],
         external_shift_atom: impl Fn(EdgeIndex) -> Atom,
     ) -> Atom {
-        let (symbolic_positive_energies, symbolic_negative_energies) =
-            [&self.positive_energies, &self.negative_energies]
-                .iter()
-                .map(|energies| {
-                    energies
-                        .iter()
-                        .map(|i| {
-                            if cut_edges.contains(i) {
-                                cut_energy(*i)
-                            } else {
-                                ose_atom_from_index(*i)
-                            }
-                        })
-                        .collect_vec()
-                })
-                .collect_tuple()
-                .unwrap_or_else(|| unreachable!());
-
-        let symbolic_shift = self
-            .external_shift
-            .iter()
-            .fold(Atom::new(), |sum, (i, sign)| {
-                Atom::num(*sign) * external_shift_atom(*i) + &sum
-            });
-
-        let symbolic_sum_positive_energies = symbolic_positive_energies
-            .iter()
-            .fold(Atom::new(), |sum, e| sum + e);
-
-        let symbolic_sum_negative_energies = symbolic_negative_energies
-            .iter()
-            .fold(Atom::new(), |sum, e| sum + e);
-
-        symbolic_sum_positive_energies - &symbolic_sum_negative_energies + &symbolic_shift
+        self.to_atom_with(
+            |edge| if cut_edges.contains(&edge) { cut_energy(edge) } else { ose_atom_from_index(edge) },
+            external_shift_atom,
+        )
     }
 }
 

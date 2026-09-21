@@ -1906,6 +1906,7 @@ version = "0.1.0"
 dependencies = [
  "feynkit-kinematics",
  "feynkit-model",
+ "itertools 0.14.0",
  "linnet",
  "serde",
  "serde_json",
@@ -1950,6 +1951,7 @@ dependencies = [
  "feynkit-model",
  "feynkit-tensor",
  "feynkit-ufo",
+ "linnet",
  "linnet-py",
  "pyo3",
  "pyo3-stub-gen",

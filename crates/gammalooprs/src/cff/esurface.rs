@@ -359,31 +359,10 @@ impl EnergySurfaceExt for EnergySurface {
         cut_edges: &[EdgeIndex],
         external_shift_atom: impl Fn(EdgeIndex) -> Atom,
     ) -> Atom {
-        let symbolic_energies = self
-            .energies
-            .iter()
-            .map(|i| {
-                if cut_edges.contains(i) {
-                    cut_energy(*i)
-                } else {
-                    ose_atom_from_index(*i)
-                }
-            })
-            .collect_vec();
-
-        let symbolic_shift = self
-            .external_shift
-            .iter()
-            .fold(Atom::new(), |sum, (i, sign)| {
-                external_shift_atom(*i) * &Atom::num(*sign) + &sum
-            });
-
-        let builder_atom = Atom::new();
-        let energy_sum = symbolic_energies
-            .iter()
-            .fold(builder_atom, |acc, energy| acc + energy);
-
-        energy_sum + &symbolic_shift
+        self.to_atom_with(
+            |edge| if cut_edges.contains(&edge) { cut_energy(edge) } else { ose_atom_from_index(edge) },
+            external_shift_atom,
+        )
     }
 
     #[inline]
