@@ -19,7 +19,7 @@ pub(crate) fn escape_html(value: &str) -> String {
 
 /// Compile a diagram's Linnest source with typst-py and return its SVG page.
 pub(crate) fn render_diagram_svg(py: Python<'_>, diagram: &FeynmanDiagram) -> PyResult<String> {
-    PreparedRender::from_sources(
+    let svg = PreparedRender::from_sources(
         [
             ("main.typ", diagram.to_linnest()),
             (
@@ -44,7 +44,29 @@ pub(crate) fn render_diagram_svg(py: Python<'_>, diagram: &FeynmanDiagram) -> Py
         .map(|(path, source)| (path.to_owned(), source.into_bytes()))
         .collect(),
     )?
-    .svg(py)
+    .svg(py)?;
+    // Keep the particle palette and source/sink contrast while adapting all ink,
+    // including Typst's outlined text. The page itself has no background fill.
+    // Explicit notebook themes override the OS preference used by standalone SVGs.
+    Ok(svg
+        .replacen("<svg ", "<svg class=\"feynkit-diagram-svg\" ", 1)
+        .replacen(
+            '>',
+            r#"><style>
+.feynkit-diagram-svg { filter: none; }
+@media (prefers-color-scheme: dark) {
+  .feynkit-diagram-svg { filter: invert(1) hue-rotate(180deg); }
+}
+:is(.dark, [data-theme="dark"], [data-jp-theme-light="false"]) .feynkit-diagram-svg {
+  filter: invert(1) hue-rotate(180deg);
+}
+:is(.light, [data-theme="light"], [data-jp-theme-light="true"]) .feynkit-diagram-svg {
+  filter: none;
+}
+@media print { .feynkit-diagram-svg { filter: none !important; } }
+</style>"#,
+            1,
+        ))
 }
 
 pub(crate) fn render_diagram_html(py: Python<'_>, diagram: &FeynmanDiagram) -> PyResult<String> {
