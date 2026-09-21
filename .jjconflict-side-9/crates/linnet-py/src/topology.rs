@@ -22,7 +22,7 @@ use crate::native_graph::PyHedgeGraph;
     feature = "python_stubgen",
     pyo3_stub_gen::derive::gen_stub_pyclass_enum
 )]
-#[pyclass(from_py_object, eq, eq_int, name = "DirectionBasis")]
+#[pyclass(module = "linnet", from_py_object, eq, eq_int, name = "DirectionBasis")]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum PyDirectionBasis {
     /// Follow the source/sink roles stored by the half-edge involution.
@@ -43,7 +43,7 @@ impl From<PyDirectionBasis> for DirectionBasis {
 
 /// A graph-bound structural selection.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(unsendable, name = "Subgraph")]
+#[pyclass(module = "linnet", unsendable, name = "Subgraph")]
 pub struct PySubgraph {
     graph: Option<Py<PyGraph>>,
     revision: u64,
@@ -383,7 +383,7 @@ impl PySubgraph {
 
 /// A cycle in a particular graph revision.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(unsendable, name = "Cycle")]
+#[pyclass(module = "linnet", unsendable, name = "Cycle")]
 pub struct PyCycle {
     graph: Option<Py<PyGraph>>,
     revision: u64,
@@ -453,7 +453,7 @@ impl PyCycle {
 
 /// An oriented cut in a particular graph revision.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(unsendable, name = "OrientedCut")]
+#[pyclass(module = "linnet", unsendable, name = "OrientedCut")]
 pub struct PyOrientedCut {
     graph: Option<Py<PyGraph>>,
     revision: u64,
@@ -487,7 +487,7 @@ impl PyOrientedCut {
 
 /// One source-side, oriented-boundary, target-side cut partition.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(unsendable, name = "CutPartition")]
+#[pyclass(module = "linnet", unsendable, name = "CutPartition")]
 pub struct PyCutPartition {
     graph: Option<Py<PyGraph>>,
     revision: u64,
@@ -687,7 +687,7 @@ impl PyOrientedCut {
 
 /// A graph-bound DFS or BFS traversal tree.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(unsendable, name = "TraversalTree")]
+#[pyclass(module = "linnet", unsendable, name = "TraversalTree")]
 pub struct PyTraversalTree {
     graph: Option<Py<PyGraph>>,
     revision: u64,

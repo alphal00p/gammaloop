@@ -15,7 +15,7 @@ mod streaming;
 mod topology;
 mod typst;
 
-#[pymodule]
+#[pymodule(name = "linnet")]
 fn linnet_py(module: &Bound<'_, PyModule>) -> PyResult<()> {
     graph::register(module)?;
     topology::register(module)?;
@@ -195,8 +195,8 @@ pub fn canonical_stub() -> pyo3_stub_gen::Result<String> {
     let info = stub_info()?;
     let module = info
         .modules
-        .get("linnet_py")
-        .expect("linnet StubInfo must contain the linnet_py module");
+        .get("linnet")
+        .expect("linnet StubInfo must contain the linnet module");
     let mut exports = module
         .class
         .values()

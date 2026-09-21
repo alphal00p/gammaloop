@@ -8,7 +8,7 @@ use pyo3::prelude::*;
 
 /// A position snapshot from one continuous force-layout run.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(frozen, name = "LayoutFrame", get_all)]
+#[pyclass(module = "linnet", frozen, name = "LayoutFrame", get_all)]
 pub(crate) struct PyLayoutFrame {
     nodes: Vec<(f64, f64)>,
     edges: Vec<(f64, f64)>,
@@ -22,7 +22,7 @@ pub(crate) struct PyLayoutFrame {
 /// Topology is fixed for the lifetime of the stream. Frames contain only
 /// coordinates and progress, so notebook viewers can retain their SVG elements.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(unsendable, name = "LayoutStream")]
+#[pyclass(module = "linnet", unsendable, name = "LayoutStream")]
 pub(crate) struct PyLayoutStream {
     stream: ForceLayoutStream,
     every: usize,

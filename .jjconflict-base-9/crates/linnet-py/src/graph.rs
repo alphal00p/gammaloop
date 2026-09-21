@@ -28,7 +28,7 @@ static SPEC_ID: AtomicU64 = AtomicU64::new(0);
     feature = "python_stubgen",
     pyo3_stub_gen::derive::gen_stub_pyclass_enum
 )]
-#[pyclass(from_py_object, eq, eq_int, name = "Flow")]
+#[pyclass(module = "linnet", from_py_object, eq, eq_int, name = "Flow")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PyFlow {
     Source,
@@ -58,7 +58,7 @@ impl From<Flow> for PyFlow {
     feature = "python_stubgen",
     pyo3_stub_gen::derive::gen_stub_pyclass_enum
 )]
-#[pyclass(from_py_object, eq, eq_int, name = "Orientation")]
+#[pyclass(module = "linnet", from_py_object, eq, eq_int, name = "Orientation")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum PyOrientation {
     #[default]
@@ -89,7 +89,7 @@ impl From<Orientation> for PyOrientation {
 
 /// A reusable declarative node description accepted by `build()` and `Graph.add_node()`.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(unsendable, name = "NodeSpec")]
+#[pyclass(module = "linnet", unsendable, name = "NodeSpec")]
 pub struct PyNodeSpec {
     token: u64,
     name: Option<String>,
@@ -183,7 +183,7 @@ impl EndpointRole {
 
 /// A declarative edge endpoint produced by `source()` or `sink()`.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(unsendable, name = "HalfEdgeSpec")]
+#[pyclass(module = "linnet", unsendable, name = "HalfEdgeSpec")]
 pub struct PyHalfEdgeSpec {
     node: Option<Py<PyAny>>,
     role: EndpointRole,
@@ -238,7 +238,7 @@ impl PyHalfEdgeSpec {
 
 /// A reusable declarative edge description accepted by `build()` and `Graph.add_edge()`.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(unsendable, name = "EdgeSpec")]
+#[pyclass(module = "linnet", unsendable, name = "EdgeSpec")]
 pub struct PyEdgeSpec {
     name: Option<String>,
     first: Option<Py<PyHalfEdgeSpec>>,
@@ -521,7 +521,7 @@ impl GraphState {
 
 /// An owned topology with arbitrary element data and typed rendering configuration.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(unsendable, name = "Graph")]
+#[pyclass(module = "linnet", unsendable, name = "Graph")]
 pub struct PyGraph {
     pub(crate) state: RefCell<Option<GraphState>>,
 }
@@ -635,7 +635,7 @@ macro_rules! graph_view {
     ($doc:literal, $rust:ident, $python:literal, $index_variant:ident) => {
         #[doc = $doc]
         #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-        #[pyclass(unsendable, name = $python)]
+        #[pyclass(module = "linnet", unsendable, name = $python)]
         pub struct $rust {
             graph: Option<Py<PyGraph>>,
             index: usize,

@@ -6,7 +6,7 @@ description = "Python bindings for linnet"
 license = "MIT"
 
 [package.metadata.maturin]
-name = "linnet_py"
+name = "linnet"
 
 [lib]
 crate-type = ["cdylib", "rlib"]

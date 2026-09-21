@@ -3,7 +3,7 @@
 import unittest
 from dataclasses import dataclass
 
-import linnet_py as lp
+import linnet as lp
 
 DOT = r"""digraph browser {
   0;

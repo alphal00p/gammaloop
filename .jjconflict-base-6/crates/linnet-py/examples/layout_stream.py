@@ -2,7 +2,7 @@
 # requires-python = ">=3.10"
 # dependencies = [
 #     "anywidget==0.9.18",
-#     "linnet-py==0.1.0",
+#     "linnet==0.1.0",
 #     "marimo==0.24.0",
 #     "typst==0.15.0",
 # ]
@@ -22,7 +22,7 @@ def _():
     import sys
 
     import anywidget
-    import linnet_py as lp
+    import linnet as lp
     import marimo as mo
     import traitlets
 

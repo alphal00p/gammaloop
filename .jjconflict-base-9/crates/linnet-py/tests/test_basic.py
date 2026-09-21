@@ -12,7 +12,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-import linnet_py as lp
+import linnet as lp
 import typst
 
 
