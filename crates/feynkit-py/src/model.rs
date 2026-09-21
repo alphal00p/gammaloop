@@ -71,6 +71,60 @@ impl PyParticle {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyParticle {
+    /// Construct this particle's external-state spin or polarization sum.
+    ///
+    /// Return an ordinary Symbolica expression using Spenso gamma matrices
+    /// and metrics. Indices are bare symbols; momentum and reference are
+    /// unindexed symbols or labeled calls such as ``Q(1)``. The calculation
+    /// uses four-dimensional external states. Massive vectors use the Proca
+    /// projector. For massless vectors, supply a reference for a physical
+    /// axial sum, or omit it for the covariant sum of a gauge-invariant
+    /// amplitude. Subsequent kinematic substitutions must enforce on-shell
+    /// conditions and a nonzero momentum-reference scalar product.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> p, i, j = S("p", "i", "j")
+    /// >>> projector = model.particle_by_pdg(11).spin_sum(p, i, j, average=True)
+    ///
+    /// Parameters
+    /// ----------
+    /// momentum : Expression
+    ///     Unindexed external momentum.
+    /// left : Expression
+    ///     Open index on the amplitude.
+    /// right : Expression
+    ///     Open index on the conjugate amplitude.
+    /// average : bool
+    ///     Divide by the number of physical spin states.
+    /// reference : Expression | None
+    ///     Axial reference momentum for a massless vector; need not be null.
+    /// covariant : bool
+    ///     Use the Feynman-gauge vector numerator even for a massive vector.
+    #[pyo3(signature = (momentum, left, right, *, average=false, reference=None, covariant=false))]
+    fn spin_sum(
+        &self,
+        momentum: &PythonExpression,
+        left: &PythonExpression,
+        right: &PythonExpression,
+        average: bool,
+        reference: Option<&PythonExpression>,
+        covariant: bool,
+    ) -> PyResult<PythonExpression> {
+        let sum = feynkit_generator::SpinSum::new(self.inner(), &self.model)
+            .map_err(|error| PyValueError::new_err(error.to_string()))?
+            .averaged(average)
+            .covariant(covariant);
+        sum.expression(
+            &momentum.expr,
+            [left.expr.clone(), right.expr.clone()],
+            reference.map(|reference| &reference.expr),
+        )
+        .map(|expr| PythonExpression { expr })
+        .map_err(|error| PyValueError::new_err(error.to_string()))
+    }
+
     /// Return the particle name used by the model.
     #[getter]
     fn name(&self) -> &str {

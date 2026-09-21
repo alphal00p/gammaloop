@@ -735,6 +735,7 @@ pub struct PyCffGenerator {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyCffGenerator {
     /// Create a configurable Cross-Free Family generator.

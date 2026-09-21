@@ -1946,12 +1946,15 @@ impl PyFeynmanDiagram {
     ) -> PyResult<Py<TensorExpression>> {
         let selected = self.selection(py, subgraph)?;
         let numerator = numerator.map(|value| value.to_expression().expr);
-        let expanded = self.inner.uv_expansion_of(
-            &selected,
-            &uv_mass.to_expression().expr,
-            dimension,
-            numerator.as_ref(),
-        ).map_err(error::diagram)?;
+        let expanded = self
+            .inner
+            .uv_expansion_of(
+                &selected,
+                &uv_mass.to_expression().expr,
+                dimension,
+                numerator.as_ref(),
+            )
+            .map_err(error::diagram)?;
         TensorExpression::from_atom_interface(py, expanded, None)
     }
 
@@ -1971,7 +1974,8 @@ impl PyFeynmanDiagram {
         numerator: Option<ConvertibleToExpression>,
     ) -> PyResult<Py<TensorExpression>> {
         let expanded = self.uv_expansion(py, uv_mass, subgraph, dimension, numerator)?;
-        expanded.bind(py).call_method0("__neg__")?.extract()
+        let counterterm = -&expanded.borrow(py).as_super().expr;
+        TensorExpression::from_atom_interface(py, counterterm, None)
     }
 
     /// Return the request-wide numerator multiplier as a Symbolica expression.

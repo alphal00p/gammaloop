@@ -2,7 +2,12 @@
 
 use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike, SubSetOps};
 use spenso::structure::representation::{Minkowski, RepName};
-use symbolica::{atom::{Atom, AtomCore}, function, id::Replacement, symbol};
+use symbolica::{
+    atom::{Atom, AtomCore},
+    function,
+    id::Replacement,
+    symbol,
+};
 
 use crate::{DiagramError, EdgeId, FeynmanDiagram, expressions::GraphExpressions, symbols};
 
@@ -46,15 +51,17 @@ impl FeynmanDiagram {
         let args = symbol!("feynkit_graph::uv_expansion_args___");
         let loop_pattern = function!(symbols::loop_momentum(), args);
         let rescale = |expression: &Atom| {
-            basis.route_expression(expression)
-                .replace(&loop_pattern)
+            basis
+                .route_expression(expression)
+                .replace(loop_pattern.to_pattern())
                 .with(&loop_pattern / scale)
         };
         let local_numerator;
         let numerator = match numerator {
             Some(numerator) => numerator,
             None => {
-                local_numerator = self.numerator_of(&selected, &self.graph.empty_subgraph::<SuBitGraph>());
+                local_numerator =
+                    self.numerator_of(&selected, &self.graph.empty_subgraph::<SuBitGraph>());
                 &local_numerator
             }
         };
@@ -64,43 +71,61 @@ impl FeynmanDiagram {
         let denominator = self.graph.denominator_of(
             &selected.intersection(&self.internal_subgraph()),
             |edge, data| -> Result<Atom, DiagramError> {
-                let mass = self.model.particle_by_id(data.particle)?
+                let mass = self
+                    .model
+                    .particle_by_id(data.particle)?
                     .symbolic_mass(&self.model)
-                    .replace(symbol!("UFO::ZERO")).with(Atom::Zero);
-                let momentum = rescale(&symbols::momentum().call(edge.0));
+                    .replace(symbol!("UFO::ZERO"))
+                    .with(Atom::Zero);
+                let edge_momentum = symbols::momentum().call(edge.0);
+                let momentum = rescale(&edge_momentum);
                 let hard = (&momentum * scale).expand().replace(scale).with(Atom::Zero);
-                let quadratic = metric.inner_product(&momentum, &momentum) - mass.pow(2);
+                let quadratic =
+                    rescale(&metric.inner_product(&edge_momentum, &edge_momentum)) - mass.pow(2);
                 if hard == Atom::Zero {
                     // Bridges carry only soft momentum and remain spectator propagators.
                     return Ok(symbols::denominator().call_args([
-                        Atom::num(edge.0), momentum, mass.pow(2), quadratic,
+                        Atom::num(edge.0),
+                        momentum,
+                        mass.pow(2),
+                        quadratic,
                     ]));
                 }
-                let quadratic = (quadratic * &scale_squared
-                    + &uv_mass_squared * &scale_squared - &uv_mass_squared).expand();
+                let quadratic = (quadratic * &scale_squared + &uv_mass_squared * &scale_squared
+                    - &uv_mass_squared)
+                    .expand();
                 Ok(symbols::denominator().call_args([
-                    Atom::num(edge.0), hard, uv_mass_squared.clone(), quadratic,
+                    Atom::num(edge.0),
+                    hard,
+                    uv_mass_squared.clone(),
+                    quadratic,
                 ]) / &scale_squared)
             },
             |_, _| 1,
         )?;
         let measured = rescale(numerator) / denominator
             * Atom::var(scale).pow(-i64::from(dimension) * basis.loop_edges.len() as i64);
-        let expanded = measured.series(scale, Atom::Zero, 0)
+        let expanded = measured
+            .series(scale, Atom::Zero, 0)
             .map_err(|error| DiagramError::UvExpansion(error.to_string()))?
-            .to_atom().replace(scale).with(Atom::one());
+            .to_atom()
+            .replace(scale)
+            .with(Atom::one());
         // Restore the edge coordinates expected by diagram tensor reduction.
         let replacements = [
             (symbols::loop_momentum(), &basis.loop_edges),
             (symbols::external_momentum(), &basis.external_edges),
-        ].into_iter().flat_map(|(head, edges)| {
+        ]
+        .into_iter()
+        .flat_map(|(head, edges)| {
             edges.iter().enumerate().map(move |(index, EdgeId(edge))| {
                 Replacement::new(
                     function!(head, index, args).to_pattern(),
                     function!(symbols::momentum(), *edge, args).to_pattern(),
                 )
             })
-        }).collect::<Vec<_>>();
+        })
+        .collect::<Vec<_>>();
         Ok(expanded.replace_multiple(&replacements))
     }
 }

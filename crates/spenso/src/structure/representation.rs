@@ -526,28 +526,32 @@ impl<T: RepName> Representation<T> {
     /// a is dualized, b is not.
     ///
     pub fn inner_product<'a, It: Into<AtomOrView<'a>>>(&self, a: It, b: It) -> Atom {
-        fn with_rep(value: AtomView<'_>, rep: &Atom) -> Atom {
-            match value {
-                AtomView::Fun(fun) => {
-                    let mut rebuilt = FunctionBuilder::new(fun.get_symbol());
-                    for arg in fun.iter() {
-                        rebuilt = rebuilt.add_arg(arg);
-                    }
-                    rebuilt.add_arg(rep).finish()
-                }
-                AtomView::Var(var) => FunctionBuilder::new(var.get_symbol()).add_arg(rep).finish(),
-                _ => value.to_owned(),
-            }
-        }
-
         let a: AtomOrView<'a> = a.into();
         let b: AtomOrView<'a> = b.into();
-        let rep = self.to_symbolic([]);
         function!(
             SPENSO_TAG.dot,
-            with_rep(a.as_view(), &rep),
-            with_rep(b.as_view(), &rep)
+            self.vector(a.as_view(), []),
+            self.vector(b.as_view(), [])
         )
+    }
+
+    /// Attach this representation, optionally with an index, to a vector name.
+    ///
+    /// For example, `p` becomes `p(mink(D,mu))`, while `Q(1)` becomes
+    /// `Q(1,mink(D,mu))`. An empty index list produces the compact vector used
+    /// by scalar products and Dirac slashes. Non-function expressions are
+    /// retained, matching the scalar-product convention.
+    #[cfg(feature = "shadowing")]
+    pub fn vector(&self, value: AtomView<'_>, indices: impl IntoIterator<Item = Atom>) -> Atom {
+        let rep = self.to_symbolic(indices);
+        match value {
+            AtomView::Fun(fun) => FunctionBuilder::new(fun.get_symbol())
+                .add_args(fun.iter())
+                .add_arg(rep)
+                .finish(),
+            AtomView::Var(var) => FunctionBuilder::new(var.get_symbol()).add_arg(rep).finish(),
+            _ => value.to_owned(),
+        }
     }
 
     pub fn base(self) -> Representation<T::Base> {
