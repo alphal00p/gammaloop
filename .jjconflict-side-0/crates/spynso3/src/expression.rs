@@ -190,6 +190,8 @@ impl TensorExpression {
     ) -> PyResult<Py<Self>> {
         let inferred = if atom.as_view().is_zero() {
             self_.interface.clone()
+        } else if !has_structured_syntax(atom.as_view()) {
+            PartialStructure::from_logical_slots([])
         } else {
             merge_explicit_interface_sequence(&[infer_interface(&atom)?])?.canonicalize_open_ports()
         };
@@ -1839,6 +1841,96 @@ impl TensorExpression {
     ) -> PyResult<Py<Self>> {
         let result = self_.as_super().collect(x, key_map, coeff_map)?;
         Self::preserving_interface(&self_, py, result.expr)
+    }
+
+    /// Distribute numerical factors while preserving the tensor interface.
+    fn expand_num(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
+        let result = self_.as_super().expand_num();
+        Self::preserving_interface(&self_, py, result.expr)
+    }
+
+    /// Extract common numerical factors while preserving the tensor interface.
+    fn collect_num(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
+        let result = self_.as_super().collect_num();
+        Self::preserving_interface(&self_, py, result.expr)
+    }
+
+    /// Collect common factors from nested sums while preserving the tensor interface.
+    fn collect_factors(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
+        let result = self_.as_super().collect_factors();
+        Self::preserving_interface(&self_, py, result.expr)
+    }
+
+    /// Group terms with equal numerical coefficients while preserving the tensor interface.
+    fn collect_by_coefficient(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
+        let result = self_.as_super().collect_by_coefficient();
+        Self::preserving_interface(&self_, py, result.expr)
+    }
+
+    /// Combine scalar denominators while preserving the tensor interface.
+    fn together(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
+        let result = self_.as_super().together()?;
+        Self::preserving_interface(&self_, py, result.expr)
+    }
+
+    /// Cancel common numerator and denominator factors while preserving the tensor interface.
+    fn cancel(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
+        let result = self_.as_super().cancel()?;
+        Self::preserving_interface(&self_, py, result.expr)
+    }
+
+    /// Collect powers of a symbol while preserving the tensor interface.
+    /// Callback results are validated, as for `collect`.
+    #[pyo3(signature = (x, key_map = None, coeff_map = None))]
+    fn collect_symbol(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        x: PythonExpression,
+        key_map: Option<Py<PyAny>>,
+        coeff_map: Option<Py<PyAny>>,
+    ) -> PyResult<Py<Self>> {
+        let result = self_.as_super().collect_symbol(x, key_map, coeff_map)?;
+        Self::preserving_interface(&self_, py, result.expr)
+    }
+
+    /// Rewrite in Horner form while preserving the tensor interface.
+    /// Omit `vars` to choose the variable order heuristically.
+    #[pyo3(signature = (vars = None))]
+    fn collect_horner(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        vars: Option<Vec<PythonExpression>>,
+    ) -> PyResult<Py<Self>> {
+        let result = self_.as_super().collect_horner(vars)?;
+        Self::preserving_interface(&self_, py, result.expr)
+    }
+
+    /// Decompose scalar denominators into partial fractions while preserving the tensor interface.
+    /// Omit `variables` to decompose in all variables.
+    #[pyo3(signature = (*variables))]
+    fn apart(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        variables: &Bound<'_, PyTuple>,
+    ) -> PyResult<Py<Self>> {
+        // Zero has no partial fractions; Symbolica's multivariate path cannot
+        // lift an empty numerator polynomial into its coefficient ring.
+        if self_.as_super().expr.is_zero() {
+            return Self::__copy__(self_, py);
+        }
+        let result = self_.as_super().apart(variables)?;
+        Self::preserving_interface(&self_, py, result.expr)
+    }
+
+    /// Copy the expression together with its ordered interface and data identity.
+    fn __copy__(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
+        Self::from_atom_interface_descriptor(
+            py,
+            self_.as_super().expr.clone(),
+            self_.interface.clone(),
+            self_.name,
+            self_.name_args.clone(),
+        )
     }
 
     /// Replace four-dimensional Lorentz slots and compact representations by dimension `D`.
@@ -3710,6 +3802,115 @@ mod tests {
             assert_eq!(wrapped.expr, atom.wrap_indices(header));
             let wrapped = wrapped.into_pyobject(py)?;
             assert!(!wrapped.is_instance_of::<TensorExpression>());
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn inherited_algebra_preserves_open_indexed_zero_and_scalar_tensors() {
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let open = TensorExpression::gamma(py, ConvertibleToDimension(4.into()))?;
+            let indexed = open
+                .bind(py)
+                .call1(("j", "i", "mu"))?
+                .extract::<Py<TensorExpression>>()?;
+            let zero = TensorExpression::from_atom_interface(
+                py,
+                Atom::Zero,
+                open.borrow(py).interface.clone(),
+            )?;
+            let scalar = TensorExpression::from_atom_interface(py, Atom::one(), None)?;
+            let x = Atom::var(symbol!("algebra_x"));
+            let y = Atom::var(symbol!("algebra_y"));
+            let denominator = &x + Atom::one();
+            let coefficient =
+                (Atom::num(2) * &x + Atom::num(4) * x.clone().pow(2) + Atom::num(6) * &y)
+                    / &denominator
+                    + (x.clone().pow(2) - Atom::one()) / denominator;
+            let x_py = PythonExpression { expr: x }.into_pyobject(py)?;
+            let y_py = PythonExpression { expr: y }.into_pyobject(py)?;
+            let empty = PyTuple::empty(py);
+            let one = PyTuple::new(py, [x_py.as_any()])?;
+            let two = PyTuple::new(py, [x_py.as_any(), y_py.as_any()])?;
+            let variables = PyTuple::new(py, [&two])?;
+            let name = symbol!("algebra_tensor_data");
+            for tensor in [open, indexed, zero, scalar] {
+                let tensor = tensor.borrow(py);
+                let expression = TensorExpression::from_atom_interface_descriptor(
+                    py,
+                    &coefficient * &tensor.as_super().expr,
+                    tensor.interface.clone(),
+                    Some(name),
+                    vec![Atom::num(7)],
+                )?;
+                let original = expression.borrow(py);
+                for (method, args) in [
+                    ("expand_num", &empty),
+                    ("collect_num", &empty),
+                    ("collect_factors", &empty),
+                    ("collect_by_coefficient", &empty),
+                    ("collect_symbol", &one),
+                    ("collect_horner", &empty),
+                    ("collect_horner", &variables),
+                    ("together", &empty),
+                    ("cancel", &empty),
+                    ("apart", &empty),
+                    ("apart", &one),
+                    ("apart", &two),
+                ] {
+                    let result = expression.bind(py).call_method1(method, args)?;
+                    let result = result.extract::<PyRef<'_, TensorExpression>>()?;
+                    assert_eq!(result.interface, original.interface, "{method}");
+                    assert_eq!(result.name, original.name, "{method}");
+                    assert_eq!(result.name_args, original.name_args, "{method}");
+                    assert!(
+                        (result.as_super().expr.clone() - original.as_super().expr.clone())
+                            .together()
+                            .cancel()
+                            .expand()
+                            .is_zero(),
+                        "{method}"
+                    );
+                }
+                let copied = py
+                    .import("copy")?
+                    .call_method1("copy", (expression.bind(py),))?;
+                let copied = copied.extract::<PyRef<'_, TensorExpression>>()?;
+                assert_eq!(copied.interface, original.interface);
+                assert_eq!(copied.name, original.name);
+                assert_eq!(copied.name_args, original.name_args);
+                assert_eq!(copied.as_super().expr, original.as_super().expr);
+            }
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn collect_symbol_rejects_callbacks_that_strip_the_tensor_interface() {
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let tensor = TensorExpression::gamma(py, ConvertibleToDimension(4.into()))?;
+            let x = PythonExpression {
+                expr: Atom::var(symbol!("collect_symbol_x")),
+            };
+            let expression = TensorExpression::from_atom_interface(
+                py,
+                &x.expr * &tensor.borrow(py).as_super().expr,
+                tensor.borrow(py).interface.clone(),
+            )?;
+            let kwargs = pyo3::types::PyDict::new(py);
+            let callback = pyo3::types::PyCFunction::new_closure(py, None, None, |_, _| {
+                Ok::<_, PyErr>(PythonExpression { expr: Atom::one() })
+            })?;
+            kwargs.set_item("coeff_map", callback)?;
+            let error = expression
+                .bind(py)
+                .call_method("collect_symbol", (x,), Some(&kwargs))
+                .unwrap_err();
+            assert!(error.is_instance_of::<PyValueError>(py));
             Ok(())
         })
         .unwrap();
