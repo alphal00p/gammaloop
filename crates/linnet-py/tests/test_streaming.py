@@ -3,7 +3,7 @@
 import math
 import unittest
 
-import linnet_py as lp
+import linnet as lp
 
 DOT = """digraph {
     incoming [style=invis]
