@@ -522,13 +522,13 @@ pub static CS, CS_INNER: ColorSymbols = || {
         ca: symbol!("spenso::CA";Real;eval = EvaluationInfo::constant(|_tags, prec| Ok(Rational::new(3,1).to_multi_prec_float(prec).into()))),
         cf: symbol!("spenso::CF";Real; eval = EvaluationInfo::constant(|_tags, prec| Ok(Rational::new(4,3).to_multi_prec_float(prec).into()))),
         d: tensor_symbol!("spenso::d"),
-        gram: symbol!("spenso::gram"; Real; print = |a, opt, _state| {
+        gram: symbol!("spenso::gram"; Real, Scalar; print = |a, opt, _state| {
             print_color_invariant(a, opt, ColorInvariantPrintKind::Gram)
         }),
-        cas: symbol!("spenso::cas"; Real; print = |a, opt, _state| {
+        cas: symbol!("spenso::cas"; Real, Scalar; print = |a, opt, _state| {
             print_color_invariant(a, opt, ColorInvariantPrintKind::Casimir)
         }),
-        idx: symbol!("spenso::idx"; Real; print = |a, opt, _state| {
+        idx: symbol!("spenso::idx"; Real, Scalar; print = |a, opt, _state| {
             print_color_invariant(a, opt, ColorInvariantPrintKind::Index)
         }),
         trace_dummy: symbol!("x"),

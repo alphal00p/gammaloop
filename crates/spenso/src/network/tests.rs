@@ -225,6 +225,84 @@ fn fast_tensor_sum_parallel_candidate_rejects_light_or_unbalanced_work() {
 }
 
 #[test]
+fn tensor_powers_preserve_the_requested_exponent() {
+    use crate::{
+        network::{
+            ExecutionResult, Network, NetworkLeaf, NetworkNode, Sequential, SmallestDegree,
+            graph::ScaledTensorRef,
+            library::{DummyLibrary, DummyLibraryTensor, panicing::ErroringLibrary},
+            store::{NetworkStore, TensorScalarStore},
+        },
+        structure::{
+            OrderedStructure,
+            representation::{Euclidean, RepName},
+        },
+        tensors::data::DenseTensor,
+    };
+
+    type Tensor = DenseTensor<f64, OrderedStructure<Euclidean>>;
+    type Net = Network<NetworkStore<Tensor, f64>, DummyKey, DummyKey>;
+    let lib = DummyLibrary::<Tensor, DummyKey>::new();
+    let functions = ErroringLibrary::<DummyKey>::new();
+
+    for (slots, data) in [
+        (vec![], vec![2.0]),
+        (vec![Euclidean {}.new_slot(2, 1)], vec![1.0, 2.0]),
+    ] {
+        let is_scalar = slots.is_empty();
+        let structure = OrderedStructure::new(slots).into_canonical();
+        let mut tensor = Net::from_tensor(
+            DenseTensor::from_storage_data(data.clone(), structure.clone()).unwrap(),
+        );
+        let doubled = tensor.store.add_tensor(
+            DenseTensor::from_storage_data(data.iter().map(|x| 2.0 * x).collect(), structure)
+                .unwrap(),
+        );
+        let two = tensor.store.add_scalar(2.0);
+
+        for leaf in [
+            NetworkLeaf::LocalTensor(doubled),
+            NetworkLeaf::TensorSum(vec![0, 0]),
+            NetworkLeaf::ScaledTensor(ScaledTensorRef::scaled(0, two)),
+            NetworkLeaf::ScaledTensorSum(vec![
+                ScaledTensorRef::tensor(0),
+                ScaledTensorRef::tensor(0),
+            ]),
+        ] {
+            for exponent in [-5_i8, -3, -2, -1, 1, 2, 3, 4, 5] {
+                if exponent < 0 && !is_scalar {
+                    continue;
+                }
+                let mut power = tensor.clone();
+                let root = power.graph.result().unwrap().1;
+                power.graph.graph[root] = NetworkNode::Leaf(leaf.clone());
+                let mut power = power.pow(exponent);
+                power
+                    .execute::<Sequential, SmallestDegree, DummyLibraryTensor<Tensor>, _, _>(
+                        &lib, &functions,
+                    )
+                    .unwrap();
+                let ExecutionResult::Val(actual) = power
+                    .result_tensor::<DummyLibraryTensor<Tensor>, _>(&lib)
+                    .unwrap()
+                else {
+                    panic!("expected a value for {leaf:?} to power {exponent}");
+                };
+                let expected = if is_scalar {
+                    vec![4.0_f64.powi(exponent.into())]
+                } else if exponent % 2 == 0 {
+                    vec![20.0_f64.powi(i32::from(exponent) / 2)]
+                } else {
+                    let pairs = 20.0_f64.powi(i32::from(exponent) / 2);
+                    vec![2.0 * pairs, 4.0 * pairs]
+                };
+                assert_eq!(actual.data, expected, "{leaf:?} to power {exponent}");
+            }
+        }
+    }
+}
+
+#[test]
 fn executed_scaled_tensors_add_distinct_tensors() {
     use crate::{
         network::{

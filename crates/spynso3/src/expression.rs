@@ -3399,7 +3399,7 @@ mod tests {
                 for endpoint in [&a, &c] {
                     let original = idenso::gamma!(&a, &b, &mu)
                         * vector.clone()
-                        * idenso::gamma!(&b, endpoint, &nu);
+                        * idenso::gamma!(&b, endpoint.as_view(), &nu);
                     let tensor = TensorExpression::from_atom_interface(py, original.clone(), None)?;
                     let compact = TensorExpression::schoonschip(tensor.borrow(py), py, None)?;
                     let collected = TensorExpression::collect_gamma_chains(compact.borrow(py), py)?;
@@ -3437,30 +3437,42 @@ mod tests {
             .add_arg(mink.to_symbolic([]))
             .finish();
         let invalid = [
-            idenso::gamma!(wrong_bis.to_symbolic([]), bis.to_symbolic([]), &compact),
-            idenso::gamma!(
-                bis.to_symbolic([]),
-                bis.to_symbolic([]),
-                FunctionBuilder::new(momentum)
-                    .add_arg(wrong_rep.to_symbolic([]))
-                    .finish()
-            ),
-            idenso::gamma!(
-                bis.to_symbolic([]),
-                bis.to_symbolic([]),
-                FunctionBuilder::new(momentum)
-                    .add_arg(
-                        mink.slot::<AbstractIndex, _>(AbstractIndex::Normal(106))
-                            .to_atom()
-                    )
-                    .finish()
-            ),
-            idenso::gamma!(
-                bis.to_symbolic([]),
-                bis.to_symbolic([]),
-                ETS.metric(mink.to_symbolic([]), mink.to_symbolic([]))
-            ),
-            idenso::gamma!(bis.to_symbolic([]), bis.to_symbolic([]), Atom::num(1)),
+            FunctionBuilder::new(AGS.gamma)
+                .add_arg(wrong_bis.to_symbolic([]))
+                .add_arg(bis.to_symbolic([]))
+                .add_arg(&compact)
+                .finish(),
+            FunctionBuilder::new(AGS.gamma)
+                .add_arg(bis.to_symbolic([]))
+                .add_arg(bis.to_symbolic([]))
+                .add_arg(
+                    FunctionBuilder::new(momentum)
+                        .add_arg(wrong_rep.to_symbolic([]))
+                        .finish(),
+                )
+                .finish(),
+            FunctionBuilder::new(AGS.gamma)
+                .add_arg(bis.to_symbolic([]))
+                .add_arg(bis.to_symbolic([]))
+                .add_arg(
+                    FunctionBuilder::new(momentum)
+                        .add_arg(
+                            mink.slot::<AbstractIndex, _>(AbstractIndex::Normal(106))
+                                .to_atom(),
+                        )
+                        .finish(),
+                )
+                .finish(),
+            FunctionBuilder::new(AGS.gamma)
+                .add_arg(bis.to_symbolic([]))
+                .add_arg(bis.to_symbolic([]))
+                .add_arg(ETS.metric(mink.to_symbolic([]), mink.to_symbolic([])))
+                .finish(),
+            FunctionBuilder::new(AGS.gamma)
+                .add_arg(bis.to_symbolic([]))
+                .add_arg(bis.to_symbolic([]))
+                .add_arg(Atom::num(1))
+                .finish(),
             SPENSO_TAG.trace(wrong_bis.to_symbolic([]), [idenso::gamma!(&compact)]),
         ];
         for atom in invalid {

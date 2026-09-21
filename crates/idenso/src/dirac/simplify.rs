@@ -362,12 +362,12 @@ impl<'settings> DiracSimplifier<'settings> {
         loop {
             // Metric contraction can close a chain or connect separate chains.
             // Include their collection in the fixed point of the complete pass.
+            // Close metric-linked chains before rewriting, including inert traces.
             let next = self
                 .settings
-                .rewrite_expression(expr.collect_gamma_chains())
+                .rewrite_expression(expr.schoonschip().collect_gamma_chains())
                 .simplify_epsilon()
-                .normalize_dots()
-                .schoonschip();
+                .normalize_dots();
 
             if next == expr {
                 return next;
