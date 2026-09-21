@@ -3282,6 +3282,87 @@ mod tests {
     }
 
     #[test]
+    fn default_color_simplification_preserves_external_tensor_ports() {
+        use idenso::color::ColorSimplifier;
+
+        idenso::representations::initialize();
+        Python::initialize();
+        let mink = Minkowski {}.new_rep(Dimension::from(symbol!("color_ports_D")));
+        let adjoint = ColorAdjoint {}.new_rep(8);
+        let fundamental = ColorFundamental {}.new_rep(3);
+        let [mu, nu] = [1, 2].map(|index| {
+            mink.slot::<AbstractIndex, _>(AbstractIndex::Normal(index))
+                .to_atom()
+        });
+        let [a, b, c, d] = [3, 4, 5, 6].map(|index| {
+            adjoint
+                .slot::<AbstractIndex, _>(AbstractIndex::Normal(index))
+                .to_atom()
+        });
+        let color_factors = [
+            idenso::color_f!(&a, &c, &d) * idenso::color_f!(&b, &c, &d),
+            SPENSO_TAG.trace(
+                fundamental.to_symbolic([]),
+                [idenso::color_t!(&a), idenso::color_t!(&b)],
+            ),
+        ];
+
+        for color in color_factors {
+            let numerator = ETS.metric(&mu, &nu) * color;
+            let expected = infer_interface(&numerator).unwrap();
+            assert_eq!(expected.canonical().order(), 4);
+
+            // Casimir/index representation arguments are scalar metadata, not ports.
+            let simplified = numerator.simplify_color();
+            let actual = infer_interface(&simplified).unwrap();
+            assert_eq!(actual.canonical(), expected.canonical(), "{simplified}");
+        }
+    }
+
+    #[test]
+    fn raw_gamma_trace_accepts_longitudinal_projection() {
+        use idenso::shorthands::schoonschip::{Schoonschip, SchoonschipSettings};
+
+        idenso::representations::initialize();
+        Python::initialize();
+        let mink = Minkowski {}.new_rep(Dimension::from(symbol!("gamma_projection_D")));
+        let bis = Bispinor {}.new_rep(4);
+        let [mu, nu] = [1, 2].map(|index| {
+            mink.slot::<AbstractIndex, _>(AbstractIndex::Normal(index))
+                .to_atom()
+        });
+        let momentum = spenso::vector_symbol!("gamma_projection_p");
+        let numerator = SPENSO_TAG.trace(
+            bis.to_symbolic([]),
+            [idenso::gamma!(&mu), idenso::gamma!(&nu)],
+        );
+        let projector = FunctionBuilder::new(momentum).add_arg(&mu).finish()
+            * FunctionBuilder::new(momentum).add_arg(&nu).finish();
+        let numerator =
+            StructuredAtom::new(numerator.clone(), infer_interface(&numerator).unwrap());
+        let projector =
+            StructuredAtom::new(projector.clone(), infer_interface(&projector).unwrap());
+        let contracted = composition::contract(
+            &numerator,
+            &projector,
+            composition::PortPair { left: 0, right: 0 },
+        )
+        .unwrap();
+        assert!(contracted.is_scalar());
+
+        let projected = contracted
+            .atom
+            .schoonschip_with_net::<false, AbstractIndex>(
+                &SchoonschipSettings::default_network().with_expanded_contracted_sums(),
+            )
+            .unwrap();
+        // Network contraction produces valid slashed gamma factors inside the trace.
+        let interface = infer_interface(&projected)
+            .expect("projecting a valid gamma trace must retain a valid tensor expression");
+        assert!(interface.canonical().is_scalar());
+    }
+
+    #[test]
     fn tensor_expression_public_surface_has_runtime_docstrings() {
         Python::initialize();
         Python::attach(|py| -> PyResult<()> {
