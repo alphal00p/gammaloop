@@ -183,6 +183,30 @@ impl TensorExpression {
         )
     }
 
+    fn preserving_interface(
+        self_: &PyRef<'_, Self>,
+        py: Python<'_>,
+        atom: Atom,
+    ) -> PyResult<Py<Self>> {
+        let inferred = if atom.as_view().is_zero() {
+            self_.interface.clone()
+        } else {
+            merge_explicit_interface_sequence(&[infer_interface(&atom)?])?.canonicalize_open_ports()
+        };
+        if !additive_interfaces_match(&self_.interface, &inferred) {
+            return Err(PyValueError::new_err(
+                "transformed expression does not preserve a compatible tensor interface",
+            ));
+        }
+        Self::from_atom_interface_descriptor(
+            py,
+            atom,
+            self_.interface.clone(),
+            self_.name,
+            self_.name_args.clone(),
+        )
+    }
+
     pub(crate) fn from_structured(py: Python<'_>, value: StructuredAtom) -> PyResult<Py<Self>> {
         Self::from_atom_interface(py, value.atom, value.interface)
     }
@@ -1515,6 +1539,23 @@ fn inferred_descriptor(atom: AtomView<'_>) -> (Option<Symbol>, Vec<Atom>) {
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl TensorExpression {
+    /// Construct a tensor expression, preserving existing tensor metadata or inferring it.
+    #[new]
+    #[gen_stub(override_return_type(type_repr = "TensorExpression"))]
+    fn new(
+        py: Python<'_>,
+        expression: &Bound<'_, PyAny>,
+    ) -> PyResult<(TensorExpression, PythonExpression)> {
+        let tensor = as_tensor(py, expression)?;
+        let tensor = tensor.borrow(py);
+        Ok((
+            tensor.clone(),
+            PythonExpression {
+                expr: tensor.as_super().expr.clone(),
+            },
+        ))
+    }
+
     /// Create an unresolved metric tensor for `rep`.
     ///
     /// Call the result with two indices to fill its ports in logical order.
@@ -1772,20 +1813,60 @@ impl TensorExpression {
         } else {
             self_.as_super().expr.expand()
         };
-        let inferred = if atom.as_view().is_zero() {
-            self_.interface.clone()
-        } else {
-            merge_explicit_interface_sequence(&[infer_interface(&atom)?])?.canonicalize_open_ports()
-        };
-        if !additive_interfaces_match(&self_.interface, &inferred) {
-            return Err(PyValueError::new_err(
-                "expanded expression does not preserve a compatible tensor interface",
-            ));
-        }
+        Self::preserving_interface(&self_, py, atom)
+    }
+
+    /// Factor scalar algebra while preserving and validating the tensor interface.
+    #[pyo3(signature = (complex = false, extension = None))]
+    fn factor(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        complex: bool,
+        extension: Option<Vec<ConvertibleToExpression>>,
+    ) -> PyResult<Py<Self>> {
+        let result = self_.as_super().factor(complex, extension)?;
+        Self::preserving_interface(&self_, py, result.expr)
+    }
+
+    /// Collect terms while preserving the tensor interface. Callback results are validated.
+    #[pyo3(signature = (*x, key_map = None, coeff_map = None))]
+    fn collect(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        x: &Bound<'_, PyTuple>,
+        key_map: Option<Py<PyAny>>,
+        coeff_map: Option<Py<PyAny>>,
+    ) -> PyResult<Py<Self>> {
+        let result = self_.as_super().collect(x, key_map, coeff_map)?;
+        Self::preserving_interface(&self_, py, result.expr)
+    }
+
+    /// Replace four-dimensional Lorentz slots and compact representations by dimension `D`.
+    ///
+    /// Spinor and color dimensions, scalar coefficients, and other Lorentz dimensions
+    /// are unchanged. Apply this before contracting four-dimensional Lorentz indices.
+    fn with_lorentz_dimension(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        dimension: ConvertibleToDimension,
+    ) -> PyResult<Py<Self>> {
+        let atom = self_
+            .as_super()
+            .expr
+            .with_lorentz_dimension(dimension.0.to_symbolic().as_view());
+        let interface = PartialStructure::from_logical_slots(
+            self_.interface.logical_slots().into_iter().map(|slot| {
+                let mut rep = slot.rep();
+                if rep.rep == (Minkowski {}).into() && rep.dim == Dimension::Concrete(4) {
+                    rep.dim = dimension.0;
+                }
+                rep.slot(slot.aind)
+            }),
+        );
         Self::from_atom_interface_descriptor(
             py,
             atom,
-            self_.interface.clone(),
+            interface,
             self_.name,
             self_.name_args.clone(),
         )
@@ -2704,9 +2785,7 @@ pub fn as_tensor(py: Python<'_>, expression: &Bound<'_, PyAny>) -> PyResult<Py<T
     }
     let expression = expression
         .extract::<ConvertibleToExpression>()
-        .map_err(|_| {
-            PyTypeError::new_err("as_tensor() expects an Expression or TensorExpression")
-        })?;
+        .map_err(|_| PyTypeError::new_err("expected an Expression or TensorExpression"))?;
     TensorExpression::from_atom_interface(py, expression.to_expression().expr, None)
 }
 
@@ -3631,6 +3710,123 @@ mod tests {
             assert_eq!(wrapped.expr, atom.wrap_indices(header));
             let wrapped = wrapped.into_pyobject(py)?;
             assert!(!wrapped.is_instance_of::<TensorExpression>());
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn tensor_constructor_factor_collect_and_dimension_preserve_metadata() {
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let tensor = TensorExpression::gamma(py, ConvertibleToDimension(4.into()))?;
+            let tensor = TensorExpression::with_name(
+                tensor.borrow(py),
+                py,
+                ConvertibleToSpensoName(
+                    SpensoName {
+                        name: symbol!("tensor_convenience_name"),
+                    },
+                    Vec::new(),
+                ),
+            )?;
+            let constructed = py
+                .get_type::<TensorExpression>()
+                .call1((tensor.bind(py),))?;
+            let constructed = constructed.extract::<PyRef<'_, TensorExpression>>()?;
+            assert_eq!(constructed.interface, tensor.borrow(py).interface);
+            assert_eq!(constructed.name, tensor.borrow(py).name);
+            let ordinary = TensorExpression::to_expression(tensor.borrow(py)).into_pyobject(py)?;
+            let inferred = py.get_type::<TensorExpression>().call1((&ordinary,))?;
+            assert_eq!(
+                inferred.extract::<PyRef<'_, TensorExpression>>()?.interface,
+                tensor.borrow(py).interface
+            );
+
+            let x = PythonExpression {
+                expr: Atom::var(symbol!("tensor_convenience_x")),
+            };
+            let atom =
+                (x.expr.clone() + Atom::one()).pow(2) * tensor.borrow(py).as_super().expr.clone();
+            let expression = TensorExpression::from_atom_interface_descriptor(
+                py,
+                atom.expand(),
+                tensor.borrow(py).interface.clone(),
+                tensor.borrow(py).name,
+                vec![Atom::num(7)],
+            )?;
+            let x = x.into_pyobject(py)?;
+            let factored = expression.bind(py).call_method0("factor")?;
+            let collected = factored.call_method1("collect", (&x,))?;
+            let collected = collected.extract::<PyRef<'_, TensorExpression>>()?;
+            assert_eq!(collected.interface, expression.borrow(py).interface);
+            assert_eq!(collected.name, expression.borrow(py).name);
+            assert_eq!(collected.name_args, vec![Atom::num(7)]);
+            assert!(
+                (collected.as_super().expr.clone() - expression.borrow(py).as_super().expr.clone())
+                    .expand()
+                    .is_zero()
+            );
+
+            let kwargs = pyo3::types::PyDict::new(py);
+            let strip_tensor = pyo3::types::PyCFunction::new_closure(py, None, None, |_, _| {
+                Ok::<_, PyErr>(PythonExpression { expr: Atom::one() })
+            })?;
+            kwargs.set_item("coeff_map", strip_tensor)?;
+            let error = factored
+                .call_method("collect", (&x,), Some(&kwargs))
+                .unwrap_err();
+            assert!(error.is_instance_of::<PyValueError>(py));
+            let zero = TensorExpression::from_atom_interface(
+                py,
+                Atom::Zero,
+                tensor.borrow(py).interface.clone(),
+            )?;
+            let zero = zero.bind(py).call_method0("factor")?;
+            assert_eq!(
+                zero.extract::<PyRef<'_, TensorExpression>>()?.interface,
+                tensor.borrow(py).interface
+            );
+
+            let d = Dimension::from(symbol!("tensor_convenience_D"));
+            let promoted = TensorExpression::with_lorentz_dimension(
+                tensor.borrow(py),
+                py,
+                ConvertibleToDimension(d),
+            )?;
+            assert_eq!(
+                promoted
+                    .borrow(py)
+                    .interface
+                    .logical_slots()
+                    .iter()
+                    .map(IsAbstractSlot::dim)
+                    .collect::<Vec<_>>(),
+                vec![4.into(), 4.into(), d]
+            );
+            let expected = TensorExpression::gamma(py, ConvertibleToDimension(d))?;
+            let promoted_indexed = promoted.bind(py).call1(("i", "j", "mu"))?;
+            let expected_indexed = expected.bind(py).call1(("i", "j", "mu"))?;
+            assert_eq!(
+                promoted_indexed
+                    .extract::<PyRef<'_, TensorExpression>>()?
+                    .as_super()
+                    .expr,
+                expected_indexed
+                    .extract::<PyRef<'_, TensorExpression>>()?
+                    .as_super()
+                    .expr,
+            );
+            let again = TensorExpression::with_lorentz_dimension(
+                promoted.borrow(py),
+                py,
+                ConvertibleToDimension(d),
+            )?;
+            assert_eq!(
+                again.borrow(py).as_super().expr,
+                promoted.borrow(py).as_super().expr
+            );
+            assert_eq!(promoted.borrow(py).name, tensor.borrow(py).name);
             Ok(())
         })
         .unwrap();
