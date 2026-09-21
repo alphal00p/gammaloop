@@ -1933,19 +1933,17 @@ impl GraphTerm for CrossSectionGraphTerm {
                 self.graph.initial_state_cut.iter_edges(&self.graph).count(),
             );
         let flux_factor = if context.settings.general.disable_flux_factor {
-            F::from_f64(1.0)
+            momentum_sample.one()
         } else {
             match momentum_sample.external_moms().len() {
                 1 => {
-                    momentum_sample.one()
-                        / (F::from_f64(2.0)
-                            * &momentum_sample
-                                .external_moms()
-                                .first()
-                                .as_ref()
-                                .unwrap()
-                                .temporal
-                                .value)
+                    let energy = momentum_sample.external_moms()[ExternalIndex::from(0)]
+                        .temporal
+                        .value
+                        .clone();
+                    let flux = feynkit_kinematics::InitialStateFlux::Decay { energy }
+                        .denominator(|value| value.sqrt());
+                    momentum_sample.one() / flux
                 }
                 2 => {
                     let mom_1 = &(momentum_sample.external_moms()[ExternalIndex::from(0)]);
@@ -1965,7 +1963,11 @@ impl GraphTerm for CrossSectionGraphTerm {
                         })
                         .re;
 
-                    let f = F::from_f64(4.0) * (mom_1.dot(mom_2).square() - mass_factor).sqrt();
+                    let f = feynkit_kinematics::InitialStateFlux::Scattering {
+                        momentum_dot: mom_1.dot(mom_2),
+                        mass_squared_product: mass_factor,
+                    }
+                    .denominator(|value| value.sqrt());
 
                     momentum_sample.one() / f
                         * barn_conversion_factor(resolved_integral_unit, momentum_sample.one())

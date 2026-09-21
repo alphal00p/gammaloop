@@ -2,22 +2,28 @@
 //!
 //! This crate owns only language- and application-independent physics types:
 //! three- and four-momenta, spatial rotations, Lorentz boosts, signed momentum
-//! combinations, and generalized-kt jet clustering. Event records, particle
+//! combinations, scoped symbolic scalar products, Mandelstam kinematics,
+//! initial-state flux and symbolic two-body phase-space measures,
+//! and generalized-kt jet clustering. Event records, particle
 //! selection, phase-space sampling, and observables belong to callers.
 
 #![forbid(unsafe_code)]
 
 mod clustering;
+mod flux;
 mod helicity;
 mod momentum;
 mod signature;
+mod symbolic;
 mod transform;
 
 pub use clustering::{ClusteringError, ClusteringResult, Jet, JetAlgorithm, JetDefinition};
+pub use flux::InitialStateFlux;
 pub use helicity::{Helicity, HelicityError};
 pub use linnet::num_traits::{Sign, SignError, SignOrZero};
 pub use momentum::{Energy, FourMomentum, ThreeMomentum};
 pub use signature::{MomentumSignature, Signature, SignatureError};
+pub use symbolic::{Kinematics, SymbolicKinematicsError};
 pub use transform::{Axis, Boost, BoostError, Rotation};
 
 use numerica::domains::float::{Real, SingleFloat};

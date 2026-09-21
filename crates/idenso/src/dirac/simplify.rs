@@ -1102,7 +1102,7 @@ impl DiracSimplifier<'_> {
     /// Evaluates a Dirac trace.
     ///
     /// The pass first handles four-dimensional special factors (`gamma0`,
-    /// `gamma5`), then falls back to ordinary gamma traces:
+    /// `gamma5`, chiral projectors), then falls back to ordinary gamma traces:
     /// odd traces vanish and even traces recurse by contracting the first gamma
     /// with each later gamma.
     fn simplify_trace_node(self, f: FunView) -> Option<Atom> {
@@ -1121,6 +1121,32 @@ impl DiracSimplifier<'_> {
                 factor
             })
             .collect::<Vec<_>>();
+
+        if factor_kinds.has_projector
+            && has_four_dimensional_trace_rep(rep)
+            && factors.iter().all(|factor| match factor {
+                DiracFactor::Gamma { dimension, .. } => dimension.is_some_and(is_four_dimension),
+                DiracFactor::Other(_) => false,
+                _ => true,
+            })
+        {
+            for (position, factor) in factors.iter().enumerate() {
+                let sign = match factor {
+                    DiracFactor::ProjectorPlus(_) => 1,
+                    DiracFactor::ProjectorMinus(_) => -1,
+                    _ => continue,
+                };
+                // P± = (1 ± gamma5)/2. Expand one projector per pass so the
+                // existing fixed point and gamma5 trace rules own the reduction.
+                let mut rest = Vec::with_capacity(factors.len());
+                Self::extend_factors(&mut rest, &factors[..position]);
+                Self::extend_factors(&mut rest, &factors[position + 1..]);
+                let ordinary = Self::trace_or_terminal(rep, rest.clone());
+                rest.insert(position, gamma5_factor());
+                let axial = Self::trace_or_terminal(rep, rest);
+                return Some((ordinary + Atom::num(sign) * axial) / 2);
+            }
+        }
 
         if factor_kinds.has_gamma_five_or_zero()
             && let Some(rewritten) = Self::simplify_special_trace_pair(rep, &factors)

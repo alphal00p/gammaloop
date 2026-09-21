@@ -319,6 +319,22 @@ svg = graph.to_svg()
 graph  # the final expression in a notebook renders inline
 ```
 
+A `Subgraph` also renders directly as the final expression of a notebook cell:
+
+```python
+region = graph.subgraph(edges=["propagator"])
+region
+```
+
+Its `_repr_html_()` and `_repr_svg_()` show the full owning graph, highlight the selected
+half-edges, and draw the complement dotted and muted through Linnest's subgraph drawing mode.
+Selecting one half of a paired edge highlights only that half; selected isolated nodes are
+highlighted too. The display uses the owner's layout, drawing values, and render configuration
+without changing the graph or its stored settings. `region.to_svg(config=None)` returns the
+same SVG explicitly, and `region.prepare_render(config=None)` prepares it for inspection or
+export through `PreparedRender`. Like other selection operations, rendering checks the topology
+revision and raises `ReferenceError` for a stale selection.
+
 The selected template's defaults are overlaid by the graph's `render_config` and then by a sparse
 per-call `config`. `render(output, config=None)` writes PDF, SVG, or PNG according to the output
 suffix. `to_svg(config=None)` returns SVG text, and `_repr_svg_()` supports notebooks. These are

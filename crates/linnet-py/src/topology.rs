@@ -359,6 +359,51 @@ impl PySubgraph {
             && (self.subgraph != other.subgraph || self.isolated_nodes != other.isolated_nodes))
     }
 
+    /// Prepare the full owner graph with this selection highlighted and its complement dotted.
+    /// The owner's layout, drawing configuration, and topology remain unchanged.
+    #[pyo3(signature = (*, config=None))]
+    fn prepare_render(
+        &self,
+        py: Python<'_>,
+        #[gen_stub(override_type(type_repr = "RenderConfig | None"))] config: Option<
+            &Bound<'_, PyAny>,
+        >,
+    ) -> PyResult<crate::render::PreparedRender> {
+        crate::render::prepare_graph(py, self.owner(py)?.as_unbound(), config, Some(self))
+    }
+
+    /// Render this selection in the context of the full graph, including isolated nodes.
+    #[pyo3(signature = (*, config=None))]
+    fn to_svg(
+        &self,
+        py: Python<'_>,
+        #[gen_stub(override_type(type_repr = "RenderConfig | None"))] config: Option<
+            &Bound<'_, PyAny>,
+        >,
+    ) -> PyResult<String> {
+        let svg = self.prepare_render(py, config)?.svg(py)?;
+        Ok(svg
+            .replacen("<svg ", "<svg class=\"linnet-subgraph\" ", 1)
+            .replacen(
+                '>',
+                concat!(
+                    "> <style>",
+                    include_str!("../typst/subgraph.css"),
+                    "</style>"
+                ),
+                1,
+            ))
+    }
+
+    fn _repr_svg_(&self, py: Python<'_>) -> PyResult<String> {
+        self.to_svg(py, None)
+    }
+
+    /// Show the selected half-edges within their complete graph in notebook output.
+    fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
+        self.to_svg(py, None)
+    }
+
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         self.owner(py)?;
         let size = self.size(py)?;

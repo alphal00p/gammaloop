@@ -71,7 +71,8 @@
       "symbolica-utils"
     ],
     "feynkit-kinematics": [
-      "linnet"
+      "linnet",
+      "spenso"
     ],
     "feynkit-model": [],
     "feynkit-py": [
@@ -306,7 +307,10 @@
       "symbolica-utils": []
     },
     "feynkit-kinematics": {
-      "linnet": []
+      "linnet": [],
+      "spenso": [
+        "shadowing"
+      ]
     },
     "feynkit-model": {},
     "feynkit-py": {
@@ -657,7 +661,11 @@
       "symbolica-utils"
     ],
     "feynkit-kinematics": [
-      "linnet"
+      "gammaloop-workspace-hack",
+      "linnet",
+      "spenso",
+      "spenso-macros",
+      "symbolica-utils"
     ],
     "feynkit-model": [],
     "feynkit-py": [
@@ -913,7 +921,11 @@
       "symbolica-utils"
     ],
     "feynkit-kinematics": [
-      "linnet"
+      "gammaloop-workspace-hack",
+      "linnet",
+      "spenso",
+      "spenso-macros",
+      "symbolica-utils"
     ],
     "feynkit-model": [],
     "feynkit-py": [
@@ -1207,7 +1219,8 @@
       "symbolica-utils"
     ],
     "feynkit-kinematics": [
-      "linnet"
+      "linnet",
+      "spenso"
     ],
     "feynkit-model": [],
     "feynkit-py": [
@@ -1447,7 +1460,10 @@
       "symbolica-utils": []
     },
     "feynkit-kinematics": {
-      "linnet": []
+      "linnet": [],
+      "spenso": [
+        "shadowing"
+      ]
     },
     "feynkit-model": {},
     "feynkit-py": {

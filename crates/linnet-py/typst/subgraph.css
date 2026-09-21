@@ -1,0 +1,14 @@
+.linnet-subgraph { --linnet-ink: #000000; --linnet-highlight: #c58b13; }
+.linnet-subgraph [fill="#000000"] { fill: var(--linnet-ink); }
+.linnet-subgraph [stroke="#000000"] { stroke: var(--linnet-ink); }
+.linnet-subgraph [fill="#c58b13"] { fill: var(--linnet-highlight); }
+.linnet-subgraph [stroke="#c58b13"] { stroke: var(--linnet-highlight); }
+@media (prefers-color-scheme: dark) {
+  .linnet-subgraph { --linnet-ink: #f3f4f6; --linnet-highlight: #ffd166; }
+}
+:is(.dark, [data-theme="dark"], [data-jp-theme-light="false"]) .linnet-subgraph {
+  --linnet-ink: #f3f4f6; --linnet-highlight: #ffd166;
+}
+:is(.light, [data-theme="light"], [data-jp-theme-light="true"]) .linnet-subgraph {
+  --linnet-ink: #000000; --linnet-highlight: #c58b13;
+}

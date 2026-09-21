@@ -311,8 +311,12 @@ impl Schoonschip for AtomView<'_> {
     }
 
     fn to_dots(&self) -> Atom {
-        self.schoonschip_with_settings(&SchoonschipSettings::default().with_rank1_tensors())
-            .metric_shorthand_to_dot()
+        let simplified = self
+            .schoonschip_with_settings(&SchoonschipSettings::default().with_rank1_tensors())
+            .metric_shorthand_to_dot();
+        // Explicit representation slots also identify vectors whose heads
+        // were created as ordinary Symbolica symbols without rank-one tags.
+        crate::shorthands::metric::to_dots_impl(simplified.as_view())
     }
 
     fn schoonschip_net<Aind: AbsInd + DummyAind + ParseableAind + 'static>(

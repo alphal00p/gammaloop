@@ -979,6 +979,7 @@ dependencies = [
  "feynkit-graph",
  "linnet",
  "serde",
+ "spenso",
  "symbolica",
  "thiserror",
  "typed-index-collections",
@@ -1008,11 +1009,14 @@ version = "0.1.0"
 dependencies = [
  "feynkit-kinematics",
  "feynkit-model",
+ "itertools 0.14.0",
  "linnet",
+ "nu-ansi-term",
  "serde",
  "serde_json",
  "spenso",
  "symbolica",
+ "symbolica-utils",
  "thiserror",
 ]
 
@@ -1023,6 +1027,8 @@ dependencies = [
  "linnet",
  "numerica",
  "serde",
+ "spenso",
+ "symbolica",
  "thiserror",
 ]
 
@@ -1051,6 +1057,7 @@ dependencies = [
  "feynkit-model",
  "feynkit-tensor",
  "feynkit-ufo",
+ "linnet",
  "linnet-py",
  "pyo3",
  "pyo3-stub-gen-derive",
@@ -1064,6 +1071,7 @@ version = "0.1.0"
 dependencies = [
  "feynkit-graph",
  "idenso",
+ "linnet",
  "spenso",
  "symbolica",
  "thiserror",
@@ -1164,7 +1172,6 @@ dependencies = [
  "num-integer",
  "num-traits",
  "numerica",
- "once_cell",
  "rand 0.8.8",
  "regex",
  "regex-automata",

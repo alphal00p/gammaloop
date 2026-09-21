@@ -7,6 +7,7 @@ import re
 import shutil
 import unittest
 import weakref
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -3108,6 +3109,104 @@ class TestTypedTypstSurface(unittest.TestCase):
 
 
 class TestRendering(unittest.TestCase):
+    def test_subgraph_rendering_highlights_exact_halves_without_mutating_owner(self):
+        graph, _, _, _ = sample_graph(codec=lp.DotCodec.topology())
+        selected = graph.subgraph(half_edges=[graph.edge("propagator").source.index])
+        before = graph.to_dot()
+        revision = selected.revision
+        configuration = graph.render_config
+
+        def strokes(svg):
+            return [
+                element.attrib
+                for element in ET.fromstring(svg).iter()
+                if "stroke" in element.attrib
+            ]
+
+        svg = selected.to_svg()
+        painted = strokes(svg)
+        self.assertTrue(any(element["stroke"] == "#c58b13" for element in painted))
+        self.assertTrue(
+            any(
+                element["stroke"] == "#77777773" and "stroke-dasharray" in element
+                for element in painted
+            )
+        )
+        self.assertIn("prefers-color-scheme: dark", svg)
+        self.assertIn('data-theme="dark"', svg)
+        self.assertNotIn('fill="#ffffff"', svg)
+        self.assertIn('class="linnet-subgraph"', selected._repr_html_())
+        self.assertIn("<svg", selected._repr_svg_())
+        self.assertEqual(graph.to_dot(), before)
+        self.assertEqual(selected.revision, revision)
+        self.assertIs(graph.render_config, configuration)
+
+        full = strokes(graph.full_subgraph().to_svg())
+        empty = strokes(graph.empty_subgraph().to_svg())
+        self.assertFalse(any("stroke-dasharray" in element for element in full))
+        self.assertTrue(any("stroke-dasharray" in element for element in empty))
+        self.assertFalse(any(element["stroke"] == "#c58b13" for element in empty))
+
+    def test_subgraph_rendering_preserves_callbacks_and_isolated_node_selection(self):
+        with TemporaryDirectory(prefix="linnet selection ") as directory:
+            root = Path(directory)
+            styles = root / "styles.typ"
+            styles.write_text(
+                "#let node-style(node) = (radius: 0.7, stroke: blue)\n",
+                encoding="utf-8",
+            )
+            template = root / "template.typ"
+            template.write_text(
+                "#let render(config) = {\n"
+                '  assert(config.options.marker == "custom")\n'
+                "  assert(config.layouts.at(0).steps == 0)\n"
+                "  assert(config.elements.nodes.len() == 3)\n"
+                "  assert(config.elements.edges.len() == 2)\n"
+                '  assert(config.elements.nodes.at(0).at("node-style")((:)).radius == 0.7)\n'
+                '  assert(config.elements.nodes.at(2).at("node-style")((:)).stroke == rgb("#c58b13") + 1.2pt)\n'
+                '  assert(config.elements.edges.at(0).at("selector-marker") == "owner")\n'
+                "  assert(config.draw.subgraph.at(1).subgraph == (false, false, false))\n"
+                "  set page(width: auto, height: auto)\n"
+                "  [isolated selection]\n"
+                "}\n",
+                encoding="utf-8",
+            )
+            config = lp.RenderConfig(
+                template=template,
+                layouts=lp.LayoutOptions(steps=0),
+                selectors=lp.DrawingSelectors(
+                    edge=lambda edge: lp.EdgeDrawing(
+                        extensions={"selector-marker": "owner"}
+                    )
+                ),
+                template_options={"marker": "custom"},
+            )
+            graph, _, _, _ = sample_graph(render_config=config)
+            graph.add_node(lp.node("isolated"))
+            graph.node("left").drawing.style = lp.TypstModule.file(styles).function(
+                "node-style"
+            )
+            selected = graph.subgraph(nodes=["isolated"])
+            before = graph.prepare_render().typst_source
+            self.assertIn("<svg", selected.prepare_render().to_svg())
+            self.assertEqual(selected.isolated_node_indices(), [2])
+            self.assertEqual(graph.prepare_render().typst_source, before)
+
+    def test_subgraph_rendering_rejects_stale_selection_before_compilation(self):
+        graph, _, _, _ = sample_graph()
+        selected = graph.full_subgraph()
+        graph.add_node(lp.node("new"))
+        with patch.object(typst, "compile") as compile_mock:
+            for render in (
+                selected.prepare_render,
+                selected.to_svg,
+                selected._repr_svg_,
+                selected._repr_html_,
+            ):
+                with self.assertRaisesRegex(ReferenceError, "stale"):
+                    render()
+        compile_mock.assert_not_called()
+
     def test_typst_py_version_matches_the_supported_typst_runtime(self):
         self.assertEqual(typst.__version__, "0.15.0")
 

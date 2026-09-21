@@ -12,7 +12,7 @@ categories = ["science"]
 itertools = { workspace = true }
 nu-ansi-term = { workspace = true }
 symbolica-utils = { workspace = true }
-feynkit-kinematics = { version = "0.1.0", path = "../feynkit-kinematics" }
+feynkit-kinematics = { version = "0.1.0", path = "../feynkit-kinematics", default-features = false }
 feynkit-model = { version = "0.1.0", path = "../feynkit-model" }
 linnet = { version = "0.17.0", path = "../linnet", default-features = false, features = ["serde"] }
 serde = { workspace = true, features = ["derive"] }
@@ -23,5 +23,5 @@ spenso = { workspace = true, features = ["shadowing"] }
 
 [features]
 default = ["native"]
-native = ["linnet/native", "feynkit-model/native"]
-wasm = ["linnet/wasm", "symbolica/wasm", "spenso/wasm"]
+native = ["linnet/native", "feynkit-model/native", "feynkit-kinematics/native"]
+wasm = ["linnet/wasm", "symbolica/wasm", "spenso/wasm", "feynkit-kinematics/wasm"]

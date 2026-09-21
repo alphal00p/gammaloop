@@ -5,7 +5,7 @@ import builtins
 import collections.abc
 import decimal
 import enum
-import linnet_py
+import linnet
 import os
 import pathlib
 import symbolica.core
@@ -211,7 +211,7 @@ class CffGenerator:
         edge : int
             Diagram edge ID to classify as initial state.
         """
-    def generate(self, diagram: FeynmanDiagram, *, subgraph: typing.Optional[typing.Any] = None) -> CffResult:
+    def generate(self, diagram: FeynmanDiagram, *, subgraph: linnet.Subgraph | None = None) -> CffResult:
         r"""
         Generate a Cross-Free Family representation for a diagram.
 
@@ -224,7 +224,7 @@ class CffGenerator:
         ----------
         diagram : FeynmanDiagram
             Diagram whose energy-flow orientations are enumerated.
-        subgraph : linnet_py.Subgraph, optional
+        subgraph : linnet.Subgraph, optional
             Graph-bound selection from diagram.to_linnet().
         """
 
@@ -811,7 +811,7 @@ class DiagramCut:
         Return the right amplitude and its generation metadata.
         """
     @property
-    def subgraph(self) -> linnet_py.Subgraph:
+    def subgraph(self) -> linnet.Subgraph:
         r"""
         Return the oriented crossing half-edges as a reusable selection.
         """
@@ -868,7 +868,7 @@ class DiagramCutSide:
     >>> side_numerator = diagram.numerator_expression(subgraph=side.subgraph)
     """
     @property
-    def subgraph(self) -> linnet_py.Subgraph:
+    def subgraph(self) -> linnet.Subgraph:
         r"""
         Return the reusable Linnet selection for this amplitude side.
         """
@@ -1093,17 +1093,17 @@ class DiagramThresholdCandidate:
     >>> crossing_lines = threshold.edges
     """
     @property
-    def left(self) -> linnet_py.Subgraph:
+    def left(self) -> linnet.Subgraph:
         r"""
         Return the left topology selection.
         """
     @property
-    def right(self) -> linnet_py.Subgraph:
+    def right(self) -> linnet.Subgraph:
         r"""
         Return the right topology selection.
         """
     @property
-    def subgraph(self) -> linnet_py.Subgraph:
+    def subgraph(self) -> linnet.Subgraph:
         r"""
         Return the oriented crossing half-edge selection.
         """
@@ -1404,7 +1404,7 @@ class FeynmanDiagram:
         Return every particle line, including dangling and sewn external carriers.
         """
     @property
-    def half_edges(self) -> list[linnet_py.HalfEdge]:
+    def half_edges(self) -> list[linnet.HalfEdge]:
         r"""
         Return native Linnet half-edge views; ``data`` records their native diagram IDs.
         """
@@ -1427,7 +1427,7 @@ class FeynmanDiagram:
         --------
         >>> external_particles = [edge.particle_name for edge in diagram.external_edges]
         """
-    def to_linnet(self) -> linnet_py.Graph:
+    def to_linnet(self) -> linnet.Graph:
         r"""
         Return the canonical installed Linnet graph with physics objects as payloads.
 
@@ -1440,7 +1440,7 @@ class FeynmanDiagram:
         >>> graph = diagram.to_linnet()
         >>> gluons = graph.filter(edge=lambda edge: edge.data.particle_name == "g")
         """
-    def subgraph(self, *, nodes: typing.Optional[typing.Sequence[builtins.int]] = None, edges: typing.Optional[typing.Sequence[builtins.int]] = None, half_edges: typing.Optional[typing.Sequence[builtins.int]] = None) -> linnet_py.Subgraph:
+    def subgraph(self, *, nodes: typing.Optional[typing.Sequence[builtins.int]] = None, edges: typing.Optional[typing.Sequence[builtins.int]] = None, half_edges: typing.Optional[typing.Sequence[builtins.int]] = None) -> linnet.Subgraph:
         r"""
         Select graph elements using the canonical Linnet IDs.
 
@@ -1458,7 +1458,7 @@ class FeynmanDiagram:
         half_edges : list[int] or None, optional
             Canonical Linnet half-edges IDs to include.
         """
-    def filter(self, *, node: typing.Optional[typing.Any] = None, edge: typing.Optional[typing.Any] = None, half_edge: typing.Optional[typing.Any] = None) -> linnet_py.Subgraph:
+    def filter(self, *, node: typing.Callable[[linnet.Node], bool] | None = None, edge: typing.Callable[[linnet.Edge], bool] | None = None, half_edge: typing.Callable[[linnet.HalfEdge], bool] | None = None) -> linnet.Subgraph:
         r"""
         Select by predicates on Linnet views; their ``data`` is a physics object.
 
@@ -1475,7 +1475,7 @@ class FeynmanDiagram:
         half_edge : callable or None, optional
             Predicate on canonical Linnet half-edge views.
         """
-    def boundary(self, subgraph: linnet_py.Subgraph) -> linnet_py.Subgraph:
+    def boundary(self, subgraph: linnet.Subgraph) -> linnet.Subgraph:
         r"""
         Return boundaries around the selected interaction region.
 
@@ -1486,10 +1486,10 @@ class FeynmanDiagram:
 
         Parameters
         ----------
-        subgraph : linnet_py.Subgraph
+        subgraph : linnet.Subgraph
             Region from this diagram's analysis graph.
         """
-    def connected_components(self, subgraph: linnet_py.Subgraph | None = None) -> list[linnet_py.Subgraph]:
+    def connected_components(self, subgraph: linnet.Subgraph | None = None) -> list[linnet.Subgraph]:
         r"""
         Return connected interaction regions as reusable selections.
 
@@ -1499,10 +1499,10 @@ class FeynmanDiagram:
 
         Parameters
         ----------
-        subgraph : linnet_py.Subgraph or None, optional
+        subgraph : linnet.Subgraph or None, optional
             Region from this diagram's analysis graph; None selects the complete graph.
         """
-    def is_connected(self, subgraph: linnet_py.Subgraph | None = None) -> builtins.bool:
+    def is_connected(self, subgraph: linnet.Subgraph | None = None) -> builtins.bool:
         r"""
         Test connectivity of an optional selection.
 
@@ -1512,10 +1512,10 @@ class FeynmanDiagram:
 
         Parameters
         ----------
-        subgraph : linnet_py.Subgraph or None, optional
+        subgraph : linnet.Subgraph or None, optional
             Region from this diagram's analysis graph; None selects the complete graph.
         """
-    def bridges(self, subgraph: linnet_py.Subgraph | None = None) -> linnet_py.Subgraph:
+    def bridges(self, subgraph: linnet.Subgraph | None = None) -> linnet.Subgraph:
         r"""
         Return lines whose removal disconnects the selection.
 
@@ -1525,10 +1525,10 @@ class FeynmanDiagram:
 
         Parameters
         ----------
-        subgraph : linnet_py.Subgraph or None, optional
+        subgraph : linnet.Subgraph or None, optional
             Region from this diagram's analysis graph; None selects the complete graph.
         """
-    def cycle_basis(self, subgraph: linnet_py.Subgraph | None = None) -> tuple[list[linnet_py.Cycle], linnet_py.Subgraph]:
+    def cycle_basis(self, subgraph: linnet.Subgraph | None = None) -> tuple[list[linnet.Cycle], linnet.Subgraph]:
         r"""
         Return a cycle basis and its covered half-edges.
 
@@ -1538,10 +1538,10 @@ class FeynmanDiagram:
 
         Parameters
         ----------
-        subgraph : linnet_py.Subgraph or None, optional
+        subgraph : linnet.Subgraph or None, optional
             Region from this diagram's analysis graph; None selects the complete graph.
         """
-    def all_spanning_forests(self, subgraph: linnet_py.Subgraph | None = None) -> list[linnet_py.Subgraph]:
+    def all_spanning_forests(self, subgraph: linnet.Subgraph | None = None) -> list[linnet.Subgraph]:
         r"""
         Enumerate spanning forests within the selected topology.
 
@@ -1551,10 +1551,10 @@ class FeynmanDiagram:
 
         Parameters
         ----------
-        subgraph : linnet_py.Subgraph or None, optional
+        subgraph : linnet.Subgraph or None, optional
             Region from this diagram's analysis graph; None selects the complete graph.
         """
-    def all_bonds(self, *, subgraph: linnet_py.Subgraph | None = None, min_size: typing.Optional[builtins.int] = None, max_size: typing.Optional[builtins.int] = None) -> list[linnet_py.Subgraph]:
+    def all_bonds(self, *, subgraph: linnet.Subgraph | None = None, min_size: typing.Optional[builtins.int] = None, max_size: typing.Optional[builtins.int] = None) -> list[linnet.Subgraph]:
         r"""
         Enumerate minimal cutsets, independently of physical final-state cuts.
 
@@ -1564,14 +1564,14 @@ class FeynmanDiagram:
 
         Parameters
         ----------
-        subgraph : linnet_py.Subgraph or None, optional
+        subgraph : linnet.Subgraph or None, optional
             Region from this diagram's analysis graph; None selects the complete graph.
         min_size : int or None, optional
             Minimum number of crossing edges.
         max_size : int or None, optional
             Maximum number of crossing edges.
         """
-    def all_cuts(self, source: typing.Sequence[builtins.int], target: typing.Sequence[builtins.int]) -> list[linnet_py.CutPartition]:
+    def all_cuts(self, source: typing.Sequence[builtins.int], target: typing.Sequence[builtins.int]) -> list[linnet.CutPartition]:
         r"""
         Enumerate separating partitions between disjoint interaction vertex groups.
 
@@ -1586,7 +1586,7 @@ class FeynmanDiagram:
         target : list[int]
             Canonical Linnet vertices required on the opposite side.
         """
-    def depth_first_traverse(self, root: builtins.int, *, subgraph: linnet_py.Subgraph | None = None, include: typing.Optional[builtins.int] = None) -> linnet_py.TraversalTree:
+    def depth_first_traverse(self, root: builtins.int, *, subgraph: linnet.Subgraph | None = None, include: typing.Optional[builtins.int] = None) -> linnet.TraversalTree:
         r"""
         Traverse a selected interaction region in depth-first order.
 
@@ -1598,12 +1598,12 @@ class FeynmanDiagram:
         ----------
         root : int
             Canonical Linnet vertex ID at which traversal starts.
-        subgraph : linnet_py.Subgraph or None, optional
+        subgraph : linnet.Subgraph or None, optional
             Region from this diagram's analysis graph; None selects the complete graph.
         include : int or None, optional
             Canonical Linnet half-edge ID to prioritize at the root.
         """
-    def breadth_first_traverse(self, root: builtins.int, *, subgraph: linnet_py.Subgraph | None = None, include: typing.Optional[builtins.int] = None) -> linnet_py.TraversalTree:
+    def breadth_first_traverse(self, root: builtins.int, *, subgraph: linnet.Subgraph | None = None, include: typing.Optional[builtins.int] = None) -> linnet.TraversalTree:
         r"""
         Traverse a selected interaction region in breadth-first order.
 
@@ -1615,7 +1615,7 @@ class FeynmanDiagram:
         ----------
         root : int
             Canonical Linnet vertex ID at which traversal starts.
-        subgraph : linnet_py.Subgraph or None, optional
+        subgraph : linnet.Subgraph or None, optional
             Region from this diagram's analysis graph; None selects the complete graph.
         include : int or None, optional
             Canonical Linnet half-edge ID to prioritize at the root.
@@ -1659,17 +1659,26 @@ class FeynmanDiagram:
         dot : str
             DOT text containing the diagram topology and FeynKit annotations.
         """
-    def overall_factor_expression(self) -> Expression:
+    def overall_factor_expression(self, *, evaluate: builtins.bool = False) -> Expression:
         r"""
         Return the diagram-wide multiplicative factor as a Symbolica expression.
+
+        ``evaluate=True`` evaluates the generator's sign, multiplicity and
+        symmetry annotations using the shared graph-factor evaluator. Other
+        symbolic factors remain unchanged.
 
         Examples
         --------
         >>> factor = diagram.overall_factor_expression()
         >>> weighted_numerator = factor * diagram.numerator_expression()
         >>> weighted_numerator
+
+        Parameters
+        ----------
+        evaluate : bool
+            Evaluate known graph-factor annotations while preserving other symbols.
         """
-    def denominator_expression(self, *, subgraph: linnet_py.Subgraph | None = None, edge_powers: typing.Optional[typing.Mapping[builtins.int, builtins.int]] = None, dimension: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None, in_lmb: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None) -> TensorExpression:
+    def denominator_expression(self, *, subgraph: linnet.Subgraph | None = None, edge_powers: typing.Optional[typing.Mapping[builtins.int, builtins.int]] = None, dimension: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None, in_lmb: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None) -> TensorExpression:
         r"""
         Return the product of internal propagator denominators as a scalar TensorExpression.
 
@@ -1690,7 +1699,7 @@ class FeynmanDiagram:
 
         Parameters
         ----------
-        subgraph : linnet_py.Subgraph or None, optional
+        subgraph : linnet.Subgraph or None, optional
             Region from this diagram; None selects internal propagators only.
         edge_powers : mapping[int, int] or None, optional
             Signed propagator powers by diagram edge ID; omitted edges have power one.
@@ -1702,7 +1711,32 @@ class FeynmanDiagram:
             Basis from this diagram instance. Supplying it enables routing and
             takes precedence over ``in_lmb``, including for a selected region.
         """
-    def numerator_expression(self, *, subgraph: linnet_py.Subgraph | None = None, without: linnet_py.Subgraph | None = None, in_lmb: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None) -> TensorExpression:
+    def integral_family(self, *, kinematics: typing.Optional[Kinematics] = None) -> IntegralFamily:
+        r"""
+        Build a scalar integral family using the diagram's stored momentum routing.
+
+        Reuses the shared propagator builder and model masses. Denominators follow
+        ascending internal edge IDs, as in ``internal_edges``, retaining bridges
+        and repeated propagators. Dependent external coordinates are eliminated;
+        external carriers and dummy edges are excluded. Widths, prescriptions and
+        custom UFO denominator formulas are not inferred. Tree diagrams raise
+        DiagramError because they contain no loop integral.
+
+        Examples
+        --------
+        >>> family = diagram.integral_family()
+        >>> p = family.external_momenta[0]
+        >>> kin = family.kinematics.with_scalar_product(p, p, s)
+        >>> family = diagram.integral_family(kinematics=kin)
+        >>> U, F = family.symanzik(parameters)
+
+        Parameters
+        ----------
+        kinematics : Kinematics or None, optional
+            Assumptions on routed momentum names and the Lorentz dimension.
+            None uses the shared symbolic dimension with no on-shell assumptions.
+        """
+    def numerator_expression(self, *, subgraph: linnet.Subgraph | None = None, without: linnet.Subgraph | None = None, in_lmb: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None) -> TensorExpression:
         r"""
         Return the diagram numerator as a Spenso TensorExpression.
 
@@ -1716,9 +1750,9 @@ class FeynmanDiagram:
 
         Parameters
         ----------
-        subgraph : linnet_py.Subgraph or None, optional
+        subgraph : linnet.Subgraph or None, optional
             Region from this diagram's analysis graph; None selects the complete graph.
-        without : linnet_py.Subgraph or None, optional
+        without : linnet.Subgraph or None, optional
             Ignored region, using GammaLoop boundary and local-factor selection semantics.
         in_lmb : bool, optional
             Express edge momenta in the diagram's stored loop-momentum basis.
@@ -1726,19 +1760,66 @@ class FeynmanDiagram:
             Basis from this diagram instance. Supplying it enables routing and
             takes precedence over ``in_lmb``, including for a selected region.
         """
-    def uv_expansion(self, uv_mass: Expression | int, *, subgraph: linnet_py.Subgraph | None = None, dimension: builtins.int = 4, numerator: Expression | int | None = None) -> TensorExpression:
-        """Return the massive local UV expansion through logarithmic divergence.
+    def uv_expansion(self, uv_mass: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], *, subgraph: linnet.Subgraph | None = None, dimension: builtins.int = 4, numerator: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None) -> TensorExpression:
+        r"""
+        Expand the local integrand through its UV degree of divergence.
 
-        Only selected loops scale. Numerator overrides use edge momenta;
-        projectors and diagram-wide factors remain separate. The result retains
-        tagged denom propagators. This is a single unintegrated UV limit.
+        The selected region's loop momenta are scaled together. Propagators are
+        expanded about the auxiliary mass ``uv_mass``, retaining every power
+        through logarithmic divergence in ``dimension`` spacetime dimensions.
+        The result uses edge momenta and the same tagged ``denom`` convention as
+        :meth:`denominator_expression`; the diagram is unchanged.
+
+        ``numerator`` optionally replaces the local numerator (in edge momenta),
+        for example after contracting a projector. Overall factors, numerator
+        prefactors and projectors remain separate unless supplied in it.
+        Empty, tree and UV-convergent regions return zero. This performs one UV
+        limit; it does not enumerate forests or integrate the counterterm.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> mass = S("mUV", is_scalar=True)
+        >>> expansion = diagram.uv_expansion(mass)
+        >>> region = diagram.filter(edge=lambda e: e.data.id in selected_edge_ids)
+        >>> local_ct = diagram.uv_counterterm(mass, subgraph=region)
+
+        Parameters
+        ----------
+        uv_mass : Expression or int
+            Auxiliary mass used for the propagator expansion.
+        subgraph : linnet.Subgraph or None, optional
+            Region from this diagram's analysis graph; None selects the complete graph.
+        dimension : int, optional
+            Positive spacetime dimension for UV power counting; defaults to four.
+        numerator : Expression or TensorExpression or None, optional
+            Prepared numerator in edge momenta; None uses the selected local numerator.
         """
-        ...
+    def uv_counterterm(self, uv_mass: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], *, subgraph: linnet.Subgraph | None = None, dimension: builtins.int = 4, numerator: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None) -> TensorExpression:
+        r"""
+        Return the additive local UV counterterm, the negative of ``uv_expansion``.
 
-    def uv_counterterm(self, uv_mass: Expression | int, *, subgraph: linnet_py.Subgraph | None = None, dimension: builtins.int = 4, numerator: Expression | int | None = None) -> TensorExpression:
-        """Return the negative of uv_expansion, with identical arguments."""
-        ...
+        Arguments and selection semantics are those of :meth:`uv_expansion`.
+        Add this unintegrated expression to the selected integrand to subtract
+        its simultaneous UV limit. Subdivergences require separate forest terms.
 
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> mass = S("mUV", is_scalar=True)
+        >>> counterterm = diagram.uv_counterterm(mass)
+
+        Parameters
+        ----------
+        uv_mass : Expression or int
+            Auxiliary mass used for the propagator expansion.
+        subgraph : linnet.Subgraph or None, optional
+            Region from this diagram's analysis graph; None selects the complete graph.
+        dimension : int, optional
+            Positive spacetime dimension for UV power counting; defaults to four.
+        numerator : Expression or TensorExpression or None, optional
+            Prepared numerator in edge momenta; None uses the selected local numerator.
+        """
     def numerator_prefactor_expression(self) -> Expression:
         r"""
         Return the request-wide numerator multiplier as a Symbolica expression.
@@ -1759,7 +1840,7 @@ class FeynmanDiagram:
         >>> projected_numerator = projector * diagram.numerator_expression()
         >>> projected_numerator
         """
-    def tensor_reduce(self, dimension: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], *, expression: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None, subgraph: linnet_py.Subgraph | None = None, projector: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None) -> TensorExpression:
+    def tensor_reduce(self, dimension: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], *, expression: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None, subgraph: linnet.Subgraph | None = None, projector: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None) -> TensorExpression:
         r"""
         Reduce the numerator and projector using the diagram's internal edge momenta.
 
@@ -1781,7 +1862,7 @@ class FeynmanDiagram:
         expression : Expression or TensorExpression, optional
             Complete prepared input to reduce instead of the numerator and projector.
             Cannot be combined with an explicit projector.
-        subgraph : linnet_py.Subgraph or None, optional
+        subgraph : linnet.Subgraph or None, optional
             Region from this diagram's analysis graph; None selects the complete graph.
         projector : Expression or None, optional
             Explicit external tensor projector, required for partial regions unless expression is supplied.
@@ -1864,7 +1945,7 @@ class FeynmanDiagram:
         edges : list[int]
             Diagram edge IDs specifying the requested routing coordinates.
         """
-    def momentum_basis(self, *, subgraph: linnet_py.Subgraph | None = None) -> LoopMomentumBasis:
+    def momentum_basis(self, *, subgraph: linnet.Subgraph | None = None) -> LoopMomentumBasis:
         r"""
         Construct the canonical routing of the selected interaction region.
 
@@ -1875,10 +1956,10 @@ class FeynmanDiagram:
 
         Parameters
         ----------
-        subgraph : linnet_py.Subgraph or None, optional
+        subgraph : linnet.Subgraph or None, optional
             Region from this diagram's analysis graph; None selects the complete graph.
         """
-    def compatible_momentum_basis(self, parent: LoopMomentumBasis, *, subgraph: linnet_py.Subgraph | None = None) -> LoopMomentumBasis:
+    def compatible_momentum_basis(self, parent: LoopMomentumBasis, *, subgraph: linnet.Subgraph | None = None) -> LoopMomentumBasis:
         r"""
         Reuse a parent basis's loop coordinates wherever the selected topology permits it.
 
@@ -1890,10 +1971,10 @@ class FeynmanDiagram:
         ----------
         parent : LoopMomentumBasis
             Parent coordinates belonging to this same diagram instance.
-        subgraph : linnet_py.Subgraph or None, optional
+        subgraph : linnet.Subgraph or None, optional
             Region from this diagram's analysis graph; None selects the complete graph.
         """
-    def contracted_momentum_basis(self, contracted: linnet_py.Subgraph, *, subgraph: linnet_py.Subgraph | None = None) -> LoopMomentumBasis:
+    def contracted_momentum_basis(self, contracted: linnet.Subgraph, *, subgraph: linnet.Subgraph | None = None) -> LoopMomentumBasis:
         r"""
         Route the selected region after contracting complete internal edges.
 
@@ -1904,12 +1985,12 @@ class FeynmanDiagram:
 
         Parameters
         ----------
-        contracted : linnet_py.Subgraph
+        contracted : linnet.Subgraph
             Complete internal edges to contract, selected from this diagram.
-        subgraph : linnet_py.Subgraph or None, optional
+        subgraph : linnet.Subgraph or None, optional
             Region from this diagram's analysis graph; None selects the complete graph.
         """
-    def loop_count_of(self, *, subgraph: linnet_py.Subgraph | None = None) -> builtins.int:
+    def loop_count_of(self, *, subgraph: linnet.Subgraph | None = None) -> builtins.int:
         r"""
         Count independent loops within a selected region.
 
@@ -1920,10 +2001,10 @@ class FeynmanDiagram:
 
         Parameters
         ----------
-        subgraph : linnet_py.Subgraph or None, optional
+        subgraph : linnet.Subgraph or None, optional
             Region from this diagram's analysis graph; None selects the complete graph.
         """
-    def superficial_degree_of_divergence(self, *, dimension: builtins.int = 4, subgraph: linnet_py.Subgraph | None = None) -> builtins.int:
+    def superficial_degree_of_divergence(self, *, dimension: builtins.int = 4, subgraph: linnet.Subgraph | None = None) -> builtins.int:
         r"""
         Return the local superficial UV degree of divergence.
 
@@ -1943,7 +2024,7 @@ class FeynmanDiagram:
         ----------
         dimension : int, optional
             Spacetime dimension for each loop integration measure; defaults to four.
-        subgraph : linnet_py.Subgraph or None, optional
+        subgraph : linnet.Subgraph or None, optional
             Region from this diagram's analysis graph; None selects the complete graph.
         """
     def validate(self) -> None:
@@ -1957,7 +2038,7 @@ class FeynmanDiagram:
 
         >>> diagram.validate()
         """
-    def build_cff(self, *, max_orientations: typing.Optional[builtins.int] = None, fixed_orientations: typing.Optional[typing.Mapping[builtins.int, builtins.bool]] = None, contracted_edges: typing.Optional[typing.Sequence[builtins.int]] = None, initial_state_edges: typing.Optional[typing.Sequence[builtins.int]] = None, subgraph: linnet_py.Subgraph | None = None) -> CffResult:
+    def build_cff(self, *, max_orientations: typing.Optional[builtins.int] = None, fixed_orientations: typing.Optional[typing.Mapping[builtins.int, builtins.bool]] = None, contracted_edges: typing.Optional[typing.Sequence[builtins.int]] = None, initial_state_edges: typing.Optional[typing.Sequence[builtins.int]] = None, subgraph: linnet.Subgraph | None = None) -> CffResult:
         r"""
         Build the diagram's Cross-Free Family representation.
 
@@ -1982,7 +2063,7 @@ class FeynmanDiagram:
             Edge IDs to contract before constructing denominator surfaces.
         initial_state_edges : iterable[int], optional
             Edge IDs to classify as incoming external lines.
-        subgraph : linnet_py.Subgraph or None, optional
+        subgraph : linnet.Subgraph or None, optional
             Region from this diagram's analysis graph; None selects the complete graph.
         """
     def to_json(self) -> builtins.str:
@@ -2005,7 +2086,7 @@ class FeynmanDiagram:
         >>> restored = FeynmanDiagram.from_dot(model, dot)
         >>> restored.validate()
         """
-    def to_linnest(self, *, highlight: linnet_py.Subgraph | None = None) -> builtins.str:
+    def to_linnest(self, *, highlight: linnet.Subgraph | None = None) -> builtins.str:
         r"""
         Emit a complete Typst document that draws the graph with Linnest.
 
@@ -2020,12 +2101,12 @@ class FeynmanDiagram:
 
         Parameters
         ----------
-        highlight : linnet_py.Subgraph or None, optional
+        highlight : linnet.Subgraph or None, optional
             Highlight a region from this diagram's analysis graph with Linnest's
             edge underlay. The complete diagram is retained; half-edge selections
             preserve their source/sink sides. Foreign or stale selections are rejected.
         """
-    def to_svg(self, *, highlight: linnet_py.Subgraph | None = None) -> builtins.str:
+    def to_svg(self, *, highlight: linnet.Subgraph | None = None) -> builtins.str:
         r"""
         Render the Linnest diagram as a self-contained SVG with ``typst-py``.
 
@@ -2036,11 +2117,11 @@ class FeynmanDiagram:
 
         Parameters
         ----------
-        highlight : linnet_py.Subgraph or None, optional
+        highlight : linnet.Subgraph or None, optional
             Region from this diagram's analysis graph to highlight. Linnest draws
             an underlay behind the selected half-edges without changing the diagram.
         """
-    def to_html(self, *, highlight: linnet_py.Subgraph | None = None) -> builtins.str:
+    def to_html(self, *, highlight: linnet.Subgraph | None = None) -> builtins.str:
         r"""
         Render the Linnest diagram as a self-contained HTML figure.
 
@@ -2053,7 +2134,7 @@ class FeynmanDiagram:
 
         Parameters
         ----------
-        highlight : linnet_py.Subgraph or None, optional
+        highlight : linnet.Subgraph or None, optional
             Region from this diagram's analysis graph to highlight in the full figure.
         """
     def _repr_html_(self) -> builtins.str:
@@ -2088,7 +2169,7 @@ class FeynmanDiagram:
         cycle : bool
             Whether this object is part of a recursive formatting cycle.
         """
-    def loop_momentum_bases(self, limit: typing.Optional[builtins.int] = None, *, subgraph: linnet_py.Subgraph | None = None) -> builtins.list[LoopMomentumBasis]:
+    def loop_momentum_bases(self, limit: typing.Optional[builtins.int] = None, *, subgraph: linnet.Subgraph | None = None) -> builtins.list[LoopMomentumBasis]:
         r"""
         Enumerate valid loop-momentum bases for this diagram.
 
@@ -2107,7 +2188,7 @@ class FeynmanDiagram:
         limit : int or None
             Maximum number of bases to return. Pass ``None`` to enumerate every
             valid basis.
-        subgraph : linnet_py.Subgraph or None, optional
+        subgraph : linnet.Subgraph or None, optional
             Region from this diagram's analysis graph; None selects the complete graph.
         """
     def __repr__(self) -> builtins.str:
@@ -2314,6 +2395,26 @@ class FourMomentum:
         ----------
         other : FourMomentum
             Momentum to contract with this one.
+        """
+    def flux(self, other: typing.Optional[FourMomentum] = None) -> builtins.float:
+        r"""
+        Return the decay denominator ``2E`` or the invariant two-particle flux.
+
+        Inputs must be physical, future-directed on-shell momenta. Decay rates
+        refer to this momentum's frame; the rest-frame result is ``2M``.
+        No unit conversion, spin/color average or symmetry factor is included.
+
+        Examples
+        --------
+        >>> p = fk.FourMomentum(5.0, 0.0, 0.0, 5.0)
+        >>> q = fk.FourMomentum(5.0, 0.0, 0.0, -5.0)
+        >>> p.flux(q)
+        200.0
+
+        Parameters
+        ----------
+        other : FourMomentum | None
+            Other incoming momentum; None selects a decay in this frame.
         """
     def delta_phi(self, other: FourMomentum) -> builtins.float:
         r"""
@@ -2973,6 +3074,382 @@ class Helicity:
         """
 
 @typing.final
+class IntegralFamily:
+    r"""
+    An ordered family of affine inverse propagators in loop scalar products.
+
+    Construct denominators with ``Kinematics.scalar_product``. External momenta
+    must form an independent basis. Rank, completion, and numerator rewriting
+    use Symbolica's exact linear algebra. Verified momentum shifts are available
+    through ``mapping_to`` and ``find_mapping``. Parametric scaling certificates
+    detect scaleless sectors in dimensional regularization. Integration
+    prescriptions and IBP reduction are separate operations.
+
+    Examples
+    --------
+    >>> kin = fk.Kinematics(D, momenta=[k, p]).with_scalar_product(p, p, s)
+    >>> denominators = [kin.scalar_product(k, k), kin.scalar_product(k-p, k-p)]
+    >>> family = fk.IntegralFamily([k], [p], denominators, kinematics=kin)
+    >>> assert family.is_complete and family.is_independent
+    >>> reduced = family.rewrite_numerator(kin.scalar_product(k, p)**2, [d1, d2])
+    """
+    @property
+    def loop_momenta(self) -> builtins.list[Expression]:
+        r"""
+        Integrated momentum names in their original order.
+        """
+    @property
+    def kinematics(self) -> Kinematics:
+        r"""
+        Scoped kinematics, including the family momentum declarations.
+        """
+    @property
+    def external_momenta(self) -> builtins.list[Expression]:
+        r"""
+        Independent external momentum names in their original order.
+        """
+    @property
+    def scalar_products(self) -> builtins.list[Expression]:
+        r"""
+        Loop-loop and loop-external products spanning the numerator space.
+        """
+    @property
+    def denominators(self) -> builtins.list[Expression]:
+        r"""
+        Ordered inverse propagators, including any auxiliary completion terms.
+        """
+    @property
+    def rank(self) -> builtins.int:
+        r"""
+        Number of independent affine forms in the loop scalar products.
+        """
+    @property
+    def is_complete(self) -> builtins.bool:
+        r"""
+        Whether the inverse propagators span every loop scalar product.
+        """
+    @property
+    def is_independent(self) -> builtins.bool:
+        r"""
+        Whether no denominator can be eliminated by an affine relation.
+        """
+    def __new__(cls, loop_momenta: typing.Sequence[Expression], external_momenta: typing.Sequence[Expression], denominators: typing.Sequence[Expression], *, kinematics: typing.Optional[Kinematics] = None) -> IntegralFamily:
+        r"""
+        Compute the independent loop scalar products and denominator rank.
+
+        Examples
+        --------
+        >>> family = fk.IntegralFamily([k], [p], denominators, kinematics=kin)
+        >>> assert family.rank == 2
+
+        Parameters
+        ----------
+        loop_momenta : list[Expression]
+            Distinct unindexed integrated momentum names.
+        external_momenta : list[Expression]
+            Independent unindexed external momentum names.
+        denominators : list[Expression]
+            Ordered inverse propagators, not their reciprocals.
+        kinematics : Kinematics | None
+            External assumptions and dimension; defaults to unconstrained 4D.
+        """
+    def complete(self) -> IntegralFamily:
+        r"""
+        Append irreducible scalar products to obtain a complete family.
+
+        Original propagators retain their positions. Dependent families must
+        first be partial-fractioned. Added propagators carry nonpositive powers
+        when used to represent numerator factors in an IBP integral list.
+
+        Examples
+        --------
+        >>> completed = family.complete()
+        >>> assert completed.is_complete
+        """
+    def partial_fraction(self, powers: typing.Sequence[builtins.int], *, max_states: builtins.int = 100000) -> builtins.list[tuple[Expression, builtins.list[builtins.int]]]:
+        r"""
+        Partial-fraction dependent propagators while preserving family order.
+
+        Both affine mass shifts and homogeneous dependencies are supported.
+        The identity is algebraic: no momentum shifts or scaleless-term removal
+        are applied. Impose exceptional kinematics before building the family;
+        generic external invariants may appear in the returned coefficients.
+
+        Examples
+        --------
+        >>> terms = family.partial_fraction([1, 1])
+        >>> for coefficient, powers in terms:
+        ...     print(coefficient, powers)
+
+        Parameters
+        ----------
+        powers : list[int]
+            Signed powers in family order; negative powers are numerator factors.
+        max_states : int
+            Maximum number of intermediate exponent vectors; defaults to 100000.
+
+        Returns
+        -------
+        list[tuple[Expression, list[int]]]
+            Coefficients and powers whose positive-power denominators are independent.
+        """
+    def mapping_to(self, target: IntegralFamily, loop_images: typing.Sequence[Expression]) -> typing.Optional[IntegralMapping]:
+        r"""
+        Verify explicit source-loop images in another family's coordinates.
+
+        Real affine images must have loop determinant +1 or -1 and map every
+        source propagator to a distinct equal target propagator. External names,
+        dimensions and scalar-product assumptions must agree. Additional target
+        propagators are allowed for subtopology embeddings.
+
+        Examples
+        --------
+        >>> mapping = source.mapping_to(target, [l - p])
+        >>> assert mapping is not None
+        >>> target_powers = mapping.map_powers([1, 2])
+
+        Parameters
+        ----------
+        target : IntegralFamily
+            Family in whose coordinates the images are expressed.
+        loop_images : list[Expression]
+            One image per source loop momentum, in source order.
+
+        Returns
+        -------
+        IntegralMapping | None
+            Verified mapping, or None when the images fail the equivalence checks.
+        """
+    def find_mapping(self, target: IntegralFamily, *, max_candidates: builtins.int = 100000) -> typing.Optional[IntegralMapping]:
+        r"""
+        Find a verified affine loop-momentum shift into the target family.
+
+        Search derives candidates from independent quadratic propagators, then
+        checks every propagator, including eikonal and auxiliary entries. It
+        includes loop mixtures, reversals and external shifts. It does not test
+        parametric identities that have no affine loop-momentum map.
+
+        Examples
+        --------
+        >>> mapping = source.find_mapping(target)
+        >>> if mapping is not None:
+        ...     transformed = mapping.apply(scalar_numerator)
+
+        Parameters
+        ----------
+        target : IntegralFamily
+            Target family with the same external kinematics and loop count.
+        max_candidates : int
+            Candidate budget; exhaustion raises IntegralFamilyError.
+
+        Returns
+        -------
+        IntegralMapping | None
+            Verified mapping, or None if no supported candidate matches.
+        """
+    def sector(self, powers: typing.Sequence[builtins.int]) -> IntegralFamily:
+        r"""
+        Select the positive-power propagators of an integral's sector.
+
+        Zero and negative powers are omitted. Loop variables and external
+        kinematics are retained. This selects sector support; it does not remove
+        numerator factors algebraically from the original integrand.
+
+        Examples
+        --------
+        >>> sector = family.sector([1, 2, -1])
+        >>> assert len(sector.denominators) == 2
+
+        Parameters
+        ----------
+        powers : list[int]
+            One signed propagator power per family denominator.
+        """
+    def scaleless_scaling(self, parameters: typing.Sequence[Expression]) -> typing.Optional[builtins.list[Expression]]:
+        r"""
+        Find parameter weights proving a sector scaleless in dimensional regularization.
+
+        For G=U+F, the returned weights satisfy sum(w_i*x_i*dG/dx_i)=G.
+        None means this criterion did not detect scalelessness, not that the
+        integral is nonzero. Every denominator is treated as present; use
+        ``sector(powers)`` first to select positive-power entries. Singular
+        quadratic loop forms raise IntegralFamilyError as in ``symanzik``.
+
+        Examples
+        --------
+        >>> sector = family.sector([1, 1, 0])
+        >>> weights = sector.scaleless_scaling([x1, x2])
+        >>> if weights is not None:
+        ...     print("Scaleless in dimensional regularization", weights)
+
+        Parameters
+        ----------
+        parameters : list[Expression]
+            One distinct new symbol or labeled call per sector denominator.
+
+        Returns
+        -------
+        list[Expression] | None
+            Exact scaling weights in parameter order, or no certificate.
+        """
+    def parametric_mapping(self, target: IntegralFamily, parameters: typing.Sequence[Expression]) -> typing.Optional[PropagatorMapping]:
+        r"""
+        Find a parameter permutation identifying both Symanzik polynomials.
+
+        Symbolica canonizes polynomial incidence graphs, preserving coefficients,
+        powers and the distinction between U and F. This can identify families
+        without a loop shift at fixed external momenta. The result supplies no
+        momentum or tensor-numerator substitution and does not check contours or
+        propagator prescriptions. Both families must have equal denominator
+        counts and the same external kinematics.
+
+        Examples
+        --------
+        >>> mapping = source.parametric_mapping(target, [x1, x2])
+        >>> if mapping is not None:
+        ...     target_powers = mapping.map_powers([1, 2])
+
+        Parameters
+        ----------
+        target : IntegralFamily
+            Family whose U and F polynomials are compared.
+        parameters : list[Expression]
+            One distinct new symbol or labeled call per source denominator.
+
+        Returns
+        -------
+        PropagatorMapping | None
+            Formal parameter permutation, or None if the polynomials differ.
+        """
+    def symanzik(self, parameters: typing.Sequence[Expression]) -> tuple[Expression, Expression]:
+        r"""
+        Compute the Symanzik polynomials U and F in propagator order.
+
+        Uses Minkowski inverse propagators: k^2-m^2 gives U=x and F=m^2*x^2.
+        For a weighted denominator k.M.k + 2 k.Q + J, this returns
+        U=det(M) and F=U*(Q.M^-1.Q-J). The quadratic loop matrix must be
+        nonsingular. This prepares polynomials without performing integration.
+
+        Examples
+        --------
+        >>> U, F = family.symanzik([x1, x2])
+        >>> assert U == x1 + x2  # two standard one-loop propagators
+
+        Parameters
+        ----------
+        parameters : list[Expression]
+            One distinct new symbol or labeled call per inverse propagator.
+
+        Returns
+        -------
+        tuple[Expression, Expression]
+            First and second Symanzik polynomials, respectively.
+        """
+    def scalar_product_rules(self, labels: typing.Sequence[Expression]) -> builtins.list[tuple[Expression, Expression]]:
+        r"""
+        Solve loop scalar products in terms of inverse-propagator labels.
+
+        Examples
+        --------
+        >>> rules = family.scalar_product_rules([d1, d2])
+        >>> assert len(rules) == 2
+
+        Parameters
+        ----------
+        labels : list[Expression]
+            One distinct symbol or labeled call per denominator, in family order.
+
+        Returns
+        -------
+        list[tuple[Expression, Expression]]
+            Simultaneous replacement pairs for an independent, complete family.
+        """
+    def rewrite_numerator(self, numerator: Expression, labels: typing.Sequence[Expression]) -> Expression:
+        r"""
+        Rewrite a numerator in inverse-propagator variables and expand it.
+
+        Examples
+        --------
+        >>> numerator = kin.scalar_product(k, p)**2
+        >>> reduced = family.rewrite_numerator(numerator, [d1, d2])
+
+        Parameters
+        ----------
+        numerator : Expression
+            Scalar numerator after tensor reduction and momentum routing.
+        labels : list[Expression]
+            One distinct symbol or labeled call per denominator, in family order.
+        """
+
+class IntegralFamilyError(FeynkitError):
+    r"""
+    Invalid loop-integral family, dependent propagators, or incomplete scalar-product basis.
+
+    Examples
+    --------
+    Catch a family that needs partial fractioning before completion:
+
+    >>> try:
+    ...     completed = family.complete()
+    ... except fk.IntegralFamilyError as error:
+    ...     print(error)
+    """
+    ...
+
+@typing.final
+class IntegralMapping:
+    r"""
+    A verified real loop-momentum shift and propagator embedding.
+
+    Obtain a mapping from ``IntegralFamily.find_mapping`` or ``mapping_to``.
+    The loop determinant has absolute value one, so the loop integration measure
+    is unchanged. Numerator substitutions use the same scalar-product rules
+    that verified the propagator identities.
+
+    Examples
+    --------
+    >>> mapping = source.find_mapping(target)
+    >>> assert mapping is not None
+    >>> print(mapping.momentum_rules, mapping.denominator_map)
+    """
+    @property
+    def momentum_rules(self) -> builtins.list[tuple[Expression, Expression]]:
+        r"""
+        Source loop momentum names paired with their target-coordinate images.
+        """
+    @property
+    def denominator_map(self) -> builtins.list[builtins.int]:
+        r"""
+        Zero-based target denominator index for each source denominator.
+        """
+    def map_powers(self, powers: typing.Sequence[builtins.int]) -> builtins.list[builtins.int]:
+        r"""
+        Reorder signed powers and insert zeros for unused target propagators.
+
+        Examples
+        --------
+        >>> powers = mapping.map_powers([1, 2])
+
+        Parameters
+        ----------
+        powers : list[int]
+            One signed power per source denominator, in source order.
+        """
+    def apply(self, expression: Expression) -> Expression:
+        r"""
+        Apply the verified scalar-product substitutions simultaneously.
+
+        Examples
+        --------
+        >>> transformed_numerator = mapping.apply(numerator)
+
+        Parameters
+        ----------
+        expression : Expression
+            Scalar expression in compact Spenso dot notation; contract tensors first.
+        """
+
+@typing.final
 class Jet:
     r"""
     A reconstructed collider jet and its input-particle constituents.
@@ -3161,6 +3638,160 @@ class JetDefinition:
         ----------
         momenta : sequence of FourMomentum
             Input four-momenta to cluster.
+        """
+
+@typing.final
+class Kinematics:
+    r"""
+    Scoped symbolic scalar products and two-to-two Mandelstam kinematics.
+
+    The immutable object uses Spenso's dot products and metric
+    shorthand. Apply it after contracting tensors with Idenso. Momentum inputs
+    are unindexed names, and mass inputs are squared masses.
+
+    Examples
+    --------
+    >>> from symbolica import S, E
+    >>> p1, p2, p3, p4, s, t, u = S("p1", "p2", "p3", "p4", "s", "t", "u")
+    >>> kin = fk.Kinematics.mandelstam([p1, p2, p3, p4], [E("0")]*4, [s, t, u])
+    >>> assert kin.scalar_product(p1, p2) == s/2
+    """
+    @property
+    def dimension(self) -> Expression:
+        r"""
+        Lorentz dimension as a Symbolica integer or symbol.
+        """
+    def __new__(cls, dimension: typing.Optional[Expression] = None, *, momenta: typing.Optional[typing.Sequence[Expression]] = None) -> Kinematics:
+        r"""
+        Start with no scalar-product assumptions in the chosen dimension.
+
+        Examples
+        --------
+        >>> kin = fk.Kinematics()
+        >>> dimensional = fk.Kinematics(S("D"))
+
+        Parameters
+        ----------
+        dimension : Expression | None
+            Integer or symbolic Lorentz dimension; defaults to four.
+        momenta : list[Expression] | None
+            Momentum names used in linear combinations with scalar coefficients.
+        """
+    @staticmethod
+    def mandelstam(momenta: typing.Sequence[Expression], mass_squared: typing.Sequence[Expression], invariants: typing.Sequence[Expression]) -> Kinematics:
+        r"""
+        Set the invariants for ``p1 + p2 -> p3 + p4``.
+
+        The convention is ``s=(p1+p2)^2``, ``t=(p1-p3)^2``, and
+        ``u=(p1-p4)^2``. These obey ``s+t+u=sum(mass_squared)``; use Symbolica
+        substitution when you want to eliminate one invariant.
+
+        Examples
+        --------
+        >>> kin = fk.Kinematics.mandelstam([p1, p2, p3, p4], [E("0")]*4, [s, t, u])
+
+        Parameters
+        ----------
+        momenta : list[Expression]
+            Four unindexed momenta, with the incoming pair first.
+        mass_squared : list[Expression]
+            Four squared masses in the same order.
+        invariants : list[Expression]
+            The three symbols or expressions ``s, t, u``.
+        """
+    def with_scalar_product(self, left: Expression, right: Expression, value: Expression) -> Kinematics:
+        r"""
+        Return a new context with one scalar product set.
+
+        Examples
+        --------
+        >>> kin = fk.Kinematics().with_scalar_product(p, p, m**2)
+
+        Parameters
+        ----------
+        left : Expression
+            First unindexed momentum.
+        right : Expression
+            Second unindexed momentum.
+        value : Expression
+            Assumed scalar product.
+        """
+    def scalar_product(self, left: Expression, right: Expression) -> Expression:
+        r"""
+        Expand a bilinear scalar product and apply known assumptions.
+
+        For linear combinations, declare the momentum names in the constructor
+        or by setting scalar products. Other symbols are scalar coefficients.
+        Nonlinear momentum expressions raise ``KinematicsError``.
+
+        Examples
+        --------
+        >>> assert kin.scalar_product(p1, p2) == s/2
+        >>> assert kin.scalar_product(p1 + p2, p1 + p2) == s
+
+        Parameters
+        ----------
+        left : Expression
+            First unindexed momentum or linear combination.
+        right : Expression
+            Second unindexed momentum or linear combination.
+        """
+    def flux(self, first: Expression, second: typing.Optional[Expression] = None) -> Expression:
+        r"""
+        Return the initial-state denominator for a cross section or decay rate.
+
+        Two momenta give ``4*sqrt((p1.p2)**2-p1**2*p2**2)``. One momentum
+        gives ``2*sqrt(p**2)`` for a decay in its rest frame. Divide the squared
+        matrix element times phase space by this value. Inputs must be physical,
+        future-directed on-shell momenta. Symbolica retains square-root branches;
+        declare positive invariants with ``S("s", is_positive=True)`` when known.
+
+        Examples
+        --------
+        >>> denominator = kin.flux(p1, p2)
+        >>> rest_frame_decay_denominator = kin.flux(parent)
+
+        Parameters
+        ----------
+        first : Expression
+            Incoming unindexed momentum or declared linear combination.
+        second : Expression | None
+            Other incoming momentum; None selects a rest-frame decay.
+        """
+    def two_body_phase_space(self, first: Expression, second: Expression) -> Expression:
+        r"""
+        Return four-dimensional two-body phase space per unit solid angle.
+
+        This is ``dPhi_2/dOmega`` in the final pair's rest frame, with
+        ``(2*pi)**4*delta**4(P-p1-p2)`` and ``d**3p/((2*pi)**3*2E)`` for each
+        final particle. Use physical on-shell momenta above threshold. Flux,
+        spin/color averages and identical-particle factors are separate. For an
+        angle-independent amplitude, integrating this measure gives ``4*pi``
+        times the returned expression. Non-four-dimensional contexts are rejected.
+
+        Examples
+        --------
+        >>> differential_cross_section = squared * kin.two_body_phase_space(k1, k2) / kin.flux(p1, p2)
+
+        Parameters
+        ----------
+        first : Expression
+            First outgoing unindexed momentum or declared linear combination.
+        second : Expression
+            Second outgoing unindexed momentum or declared linear combination.
+        """
+    def apply(self, expression: Expression) -> Expression:
+        r"""
+        Substitute scalar products without mutating global assumptions.
+
+        Examples
+        --------
+        >>> invariant_expression = kin.apply(contracted_squared_amplitude)
+
+        Parameters
+        ----------
+        expression : Expression
+            Expression after tensor contractions have been simplified.
         """
 
 class KinematicsError(FeynkitError):
@@ -4520,6 +5151,75 @@ class Particle:
         >>> model.particle_by_pdg(22).is_massless
         True
         """
+    def spin_sum(self, momentum: Expression, left: Expression, right: Expression, *, average: builtins.bool = False, reference: typing.Optional[Expression] = None, covariant: builtins.bool = False) -> Expression:
+        r"""
+        Construct this particle's external-state spin or polarization sum.
+
+        Return an ordinary Symbolica expression using Spenso gamma matrices
+        and metrics. Indices are bare symbols; momentum and reference are
+        unindexed symbols or labeled calls such as ``Q(1)``. The calculation
+        uses four-dimensional external states. Massive vectors use the Proca
+        projector. For massless vectors, supply a reference for a physical
+        axial sum, or omit it for the covariant sum of a gauge-invariant
+        amplitude. Subsequent kinematic substitutions must enforce on-shell
+        conditions and a nonzero momentum-reference scalar product.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> p, i, j = S("p", "i", "j")
+        >>> projector = model.particle_by_pdg(11).spin_sum(p, i, j, average=True)
+
+        Parameters
+        ----------
+        momentum : Expression
+            Unindexed external momentum.
+        left : Expression
+            Open index on the amplitude.
+        right : Expression
+            Open index on the conjugate amplitude.
+        average : bool
+            Divide by the number of physical spin states.
+        reference : Expression | None
+            Axial reference momentum for a massless vector; need not be null.
+        covariant : bool
+            Use the Feynman-gauge vector numerator even for a massive vector.
+        """
+    def sum_spins(self, expression: Expression, momentum: Expression, *, edge: builtins.int, average: builtins.bool = False, reference: typing.Optional[Expression] = None, covariant: builtins.bool = False) -> Expression:
+        r"""
+        Sum paired generated external wavefunctions for one edge.
+
+        Replace this particle's wavefunction and its adjoint using the same
+        completeness relation as ``spin_sum``. The expression may be a sewn
+        diagram's ``projector_expression()`` or a squared amplitude. Only pairs
+        with the supplied edge label are replaced; unpaired wavefunctions stay
+        unchanged. Scalar particles have no external wavefunction factors.
+        External states are four-dimensional; reference and gauge conventions
+        are those of ``spin_sum``. This does not sum color or helicity-resolved
+        states, conjugate amplitudes, or apply graph symmetry factors.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> p = S("p")
+        >>> projector = diagram.projector_expression()
+        >>> summed = model.particle_by_pdg(11).sum_spins(projector, p, edge=0, average=True)
+
+        Parameters
+        ----------
+        expression : Expression
+            Projector or squared expression containing paired wavefunctions.
+        momentum : Expression
+            Unindexed external momentum in the physical particle direction.
+        edge : int
+            Generated edge label of the pair to replace.
+        average : bool
+            Divide by the number of physical spin states.
+        reference : Expression | None
+            Axial reference for a massless vector; need not be null.
+        covariant : bool
+            Use the Feynman-gauge vector numerator even for a massive vector.
+        """
     def __repr__(self) -> builtins.str:
         r"""
         Return a concise representation containing the name and PDG code.
@@ -4855,6 +5555,40 @@ class Propagator:
         """
 
 @typing.final
+class PropagatorMapping:
+    r"""
+    A formal propagator permutation determined from Symanzik polynomials.
+
+    Unlike a momentum mapping, this supplies no tensor-numerator substitution
+    or check of integration prescriptions. Signed propagator powers can be
+    reordered; scalar numerators must first be expressed in family coordinates.
+
+    Examples
+    --------
+    >>> mapping = source.parametric_mapping(target, [x1, x2])
+    >>> if mapping is not None:
+    ...     print(mapping.denominator_map, mapping.map_powers([1, 2]))
+    """
+    @property
+    def denominator_map(self) -> builtins.list[builtins.int]:
+        r"""
+        Zero-based target denominator index for each source denominator.
+        """
+    def map_powers(self, powers: typing.Sequence[builtins.int]) -> builtins.list[builtins.int]:
+        r"""
+        Reorder signed propagator powers into target-family order.
+
+        Examples
+        --------
+        >>> reordered = mapping.map_powers([1, -2])
+
+        Parameters
+        ----------
+        powers : list[int]
+            One signed power per source denominator.
+        """
+
+@typing.final
 class Rotation:
     r"""
     A spatial rotation acting on three- and four-momenta.
@@ -5085,6 +5819,9 @@ class TensorReducer:
     in ``D`` until afterward: at fixed positive integer dimension below half
     the rank, dimension-specific identities make the universal metric basis
     singular. The all-equal isotropic fast path remains well defined.
+    For denominators depending on external momenta, add an independent basis
+    with :meth:`with_external_vector`. Only the transverse components are then
+    rotationally averaged; odd total ranks need not vanish.
 
     Examples
     --------
@@ -5180,6 +5917,26 @@ class TensorReducer:
         ----------
         vector : Expression
             Exact indexed-free vector to integrate.
+        """
+    def with_external_vector(self, vector: Expression) -> TensorReducer:
+        r"""
+        Include an independent external momentum in the denominator's basis.
+
+        With an external basis, only transverse loop components are rotationally
+        averaged. Longitudinal components remain scalar products with that
+        basis. The Gram matrix must be invertible; supply an auxiliary momentum
+        for a degenerate basis. Entries override integrated-head selectors.
+
+        Examples
+        --------
+        >>> reducer = fk.TensorReducer(D).with_integrated_vector(k(mink(D)))
+        >>> reducer = reducer.with_external_vector(p(mink(D)))
+        >>> reduced = reducer.reduce(k(mink(D, mu)))
+
+        Parameters
+        ----------
+        vector : Expression
+            Compact Spenso vector, for example ``p(spenso::mink(D))``.
         """
     def with_pairing_limit(self, limit: builtins.int) -> TensorReducer:
         r"""

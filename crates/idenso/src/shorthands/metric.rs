@@ -269,7 +269,7 @@ pub fn not_slot(sym: Symbol) -> Condition<PatternRestriction> {
 //         }))
 // }
 
-pub fn to_dots_impl(expr: AtomView) -> Atom {
+pub(crate) fn to_dots_impl(expr: AtomView) -> Atom {
     fn append_rep(atom: Atom, rep: &Atom) -> Atom {
         match atom.as_view() {
             AtomView::Fun(fun) => {

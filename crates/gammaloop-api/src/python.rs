@@ -1,4 +1,5 @@
 use feynkit_cff::{CffError, CffOptions, CffResult, HedgeGraphCffExt, SurfaceCache};
+use feynkit_graph::expressions::evaluate_overall_factor;
 use gammaloop_tracing_filter::LogFormat;
 use gammalooprs::{
     graph::{self, FeynmanGraph, Graph, LMBext},
@@ -164,11 +165,7 @@ pub(crate) fn atom_to_canonical_string(atom_str: &str) -> Result<String> {
 #[pyfunction]
 #[pyo3(name = "to_dots")]
 pub(crate) fn atom_to_dots(atom_str: &str) -> Result<String> {
-    let dotted = to_dots_impl(
-        parse!(atom_str, default_namespace = "python")
-            .to_dots()
-            .as_view(),
-    );
+    let dotted = parse!(atom_str, default_namespace = "python").to_dots();
     Ok(format!(
         "{}",
         dotted.as_view().printer(PrintOptions {

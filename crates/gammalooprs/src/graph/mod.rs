@@ -1,3 +1,4 @@
+use feynkit_graph::expressions::evaluate_overall_factor;
 use std::{
     collections::{BTreeMap, BTreeSet},
     ops::Index,

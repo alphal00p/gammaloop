@@ -5,6 +5,7 @@ use walkdir::WalkDir;
 fn main() {
     let manifest = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("manifest directory"));
     for directory in [
+        manifest.join("typst"),
         manifest.join("../linnest/typst"),
         manifest.join("../kurvst/typst"),
         manifest.join("vendor/typst-packages"),

@@ -5,7 +5,7 @@
 
 FeynKit is a standalone particle-physics toolkit for validated models, Feynman diagrams,
 deterministic generation, Cross-Free Family (CFF) expressions, relativistic kinematics, and
-vacuum tensor reduction. Rust clients use the focused crates or the `feynkit` facade. Python
+covariant tensor reduction. Rust clients use the focused crates or the `feynkit` facade. Python
 clients use `symbolica.community.feynkit` inside a shared Symbolica kernel.
 
 == Choose a task
@@ -14,8 +14,10 @@ clients use `symbolica.community.feynkit` inside a shared Symbolica kernel.
   #link("quickstart/python/")[Python] quickstart.
 - Load a UFO model, configure generation, or retain symbolic couplings with the
   #link("tutorial/")[model-to-diagram tutorial].
-- Reduce vacuum numerators while keeping external momenta distinct with the
+- Reduce vacuum or external-momentum tensor numerators with the
   #link("guides/tensor-reduction/")[tensor-reduction guide].
+- Compare supported algebra and outstanding calculations with the
+  #link("guides/feyncalc-coverage/")[FeynCalc example audit].
 - Explore every component in the #link("guides/showcases/")[executable notebook showcases].
 - Render diagrams and inspect CFF results with the #link("guides/notebooks/")[notebook guide].
 - Embed the Python module in a Symbolica distribution using the

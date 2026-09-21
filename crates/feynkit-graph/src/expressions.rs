@@ -14,7 +14,53 @@ use spenso::structure::{
     dimension::Dimension,
     representation::{Minkowski, RepName},
 };
-use symbolica::atom::{Atom, AtomCore, Symbol};
+use symbolica::{
+    atom::{Atom, AtomCore, AtomView, Symbol},
+    function, symbol,
+};
+
+/// Evaluate the bookkeeping heads in a finalized diagram's overall factor.
+pub fn evaluate_overall_factor(factor: AtomView<'_>) -> Atom {
+    let mut result = factor.to_owned();
+    for head in [
+        "AutG",
+        "CouplingsMultiplicity",
+        "InternalFermionLoopSign",
+        "ExternalFermionOrderingSign",
+        "AntiFermionSpinSumSign",
+        "NumeratorIndependentSymmetryGrouping",
+    ] {
+        for symbol in [
+            symbol!(&format!("gammalooprs::{head}")),
+            symbol!(&format!("feynkit_generator_factor::{head}")),
+        ] {
+            result = result
+                .replace(function!(symbol, Atom::var(symbol!("x_"))).to_pattern())
+                .with(Atom::var(symbol!("x_")).to_pattern());
+        }
+    }
+    for head in [
+        symbol!("gammalooprs::NumeratorDependentGrouping"),
+        symbol!("feynkit_generator::NumeratorDependentGrouping"),
+        symbol!("feynkit_generator_factor::NumeratorDependentGrouping"),
+    ] {
+        result = result
+            .replace(
+                function!(
+                    head,
+                    Atom::var(symbol!("GraphId_")),
+                    Atom::var(symbol!("ratio_")),
+                    Atom::var(symbol!("GraphSymmetryFactor_"))
+                )
+                .to_pattern(),
+            )
+            .with(
+                (Atom::var(symbol!("ratio_")) * Atom::var(symbol!("GraphSymmetryFactor_")))
+                    .to_pattern(),
+            );
+    }
+    result.expand()
+}
 
 /// Application data access is supplied by callers; the selection rules are shared.
 pub trait GraphExpressions<E, V> {
@@ -204,6 +250,29 @@ impl crate::FeynmanDiagram {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn evaluates_factor_annotations_without_erasing_unknown_heads() {
+        for namespace in ["gammalooprs", "feynkit_generator_factor"] {
+            let factor = Atom::parse(
+                "InternalFermionLoopSign(-1)*CouplingsMultiplicity(2)/AutG(4) + NumeratorDependentGrouping(7,2,3) + unknown(5)",
+                namespace,
+                symbolica::parser::ParseSettings::default(),
+            ).unwrap();
+            let expected = Atom::parse(
+                "11/2+unknown(5)",
+                namespace,
+                symbolica::parser::ParseSettings::default(),
+            )
+            .unwrap();
+            let evaluated = super::evaluate_overall_factor(factor.as_view());
+            assert_eq!(evaluated, expected);
+            assert_eq!(
+                super::evaluate_overall_factor(evaluated.as_view()),
+                evaluated
+            );
+        }
+    }
+
     use super::*;
     use linnet::half_edge::{
         builder::HedgeGraphBuilder,
