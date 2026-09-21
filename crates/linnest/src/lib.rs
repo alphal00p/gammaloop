@@ -1481,7 +1481,12 @@ struct LayoutConfig {
         default = "default_label_length_scale",
         deserialize_with = "deserialize_f64"
     )]
-    label_length_scale: f64,
+    internal_label_length_scale: f64,
+    #[serde(
+        default = "default_label_length_scale",
+        deserialize_with = "deserialize_f64"
+    )]
+    external_label_length_scale: f64,
     #[serde(default = "default_label_charge", deserialize_with = "deserialize_f64")]
     label_charge: f64,
     #[serde(default = "default_label_spring", deserialize_with = "deserialize_f64")]
@@ -1556,7 +1561,8 @@ impl Default for LayoutConfig {
             label_steps: default_label_steps(),
             label_layout: default_label_layout(),
             label_step: default_label_step(),
-            label_length_scale: default_label_length_scale(),
+            internal_label_length_scale: default_label_length_scale(),
+            external_label_length_scale: default_label_length_scale(),
             label_charge: default_label_charge(),
             label_spring: default_label_spring(),
             label_early_tol: default_label_early_tol(),
@@ -1606,7 +1612,8 @@ impl LayoutConfig {
                 | "label-charge"
                 | "label-early-tol"
                 | "label-layout"
-                | "label-length-scale"
+                | "internal-label-length-scale"
+                | "external-label-length-scale"
                 | "label-max-delta-scale"
                 | "label-spring"
                 | "label-step"
@@ -2785,7 +2792,14 @@ impl TypstGraph {
             return;
         }
 
-        let label_length = cfg.label_length_scale * spring_length;
+        let label_lengths = self.new_edgevec(|_, _, pair| {
+            let scale = if matches!(pair, HedgePair::Unpaired { .. }) {
+                cfg.external_label_length_scale
+            } else {
+                cfg.internal_label_length_scale
+            };
+            scale * spring_length
+        });
         let label_charge = cfg.label_charge * spring_length.powi(2);
         let label_spring = cfg.label_spring;
         let step = cfg.label_step;
@@ -2799,7 +2813,7 @@ impl TypstGraph {
 
         let mut labels: EdgeVec<Point2<f64>> = self.new_edgevec(|_e, idx, _pair| {
             let edge_pos = self.graph[idx].pos;
-            edge_pos + axes[idx] * label_length
+            edge_pos + axes[idx] * label_lengths[idx]
         });
 
         for _ in 0..cfg.label_steps {
@@ -2810,7 +2824,7 @@ impl TypstGraph {
                 let edge_pos = self.graph[idx].pos;
                 let mut force = match cfg.label_layout {
                     LabelLayout::DanglingTangent | LabelLayout::Normal => {
-                        let target = edge_pos + axes[idx] * label_length;
+                        let target = edge_pos + axes[idx] * label_lengths[idx];
                         if label_spring != 0.0 {
                             (target - labels[idx]) * label_spring
                         } else {
@@ -2892,13 +2906,13 @@ impl TypstGraph {
                         }
                     }
                     LabelLayout::FixedLength => {
-                        let radius = label_length.abs();
+                        let radius = label_lengths[idx].abs();
                         labels[idx] = if radius <= 1e-12 {
                             edge_pos
                         } else if offset.magnitude2() > 1e-12 {
                             edge_pos + offset.normalize() * radius
                         } else {
-                            edge_pos + axes[idx] * label_length
+                            edge_pos + axes[idx] * label_lengths[idx]
                         };
                     }
                 }
@@ -2916,7 +2930,7 @@ impl TypstGraph {
         self.separate_edge_label_positions_from_boxes(
             &mut labels,
             &axes,
-            label_length,
+            &label_lengths,
             label_gap,
             spring_length,
         );
@@ -2973,7 +2987,7 @@ impl TypstGraph {
         &self,
         labels: &mut EdgeVec<Point2<f64>>,
         axes: &EdgeVec<Vector2<f64>>,
-        label_length: f64,
+        label_lengths: &EdgeVec<f64>,
         label_gap: f64,
         spring_length: f64,
     ) {
@@ -3021,6 +3035,7 @@ impl TypstGraph {
             let edge_pos = self.graph[edge].pos;
             let normal_step = (2.0 * half_height + label_gap).max(spring_length * 0.10);
             let tangent_step = (2.0 * half_width + label_gap).max(spring_length * 0.10);
+            let label_length = label_lengths[edge];
             let min_axis_distance = (label_length.abs() * 0.20).min(label_length.abs());
             let candidates = Self::edge_label_collision_candidates(
                 base_target,

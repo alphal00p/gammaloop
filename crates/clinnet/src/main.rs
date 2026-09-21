@@ -914,9 +914,28 @@ fn figure_render_config(plan: &FigurePlan, inputs: &[(String, String)]) -> Resul
         }
     }
 
+    for key in ["internal-label-length-scale", "external-label-length-scale"] {
+        if let Some(value) = inputs.get(key) {
+            let value = typst_native_value(value);
+            if !matches!(value, TypstValue::Float(_) | TypstValue::Integer(_)) {
+                bail!("{key} must be a number");
+            }
+            layout.push((key, value));
+        }
+    }
+
     let options = inputs
         .iter()
-        .filter(|(key, _)| !matches!(**key, "steps" | "epochs" | "seed"))
+        .filter(|(key, _)| {
+            !matches!(
+                **key,
+                "steps"
+                    | "epochs"
+                    | "seed"
+                    | "internal-label-length-scale"
+                    | "external-label-length-scale"
+            )
+        })
         .map(|(key, value)| (*key, typst_native_value(value)));
 
     let TypstValue::Dictionary(fields) = typed_dictionary([

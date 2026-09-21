@@ -1,11 +1,10 @@
 //! Interoperate with the installed Linnet extension, not a second set of PyO3 classes.
 
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 use linnet::half_edge::{
-    EdgeAccessors,
     involution::{Flow, Hedge, HedgePair, Orientation},
-    subgraph::{SuBitGraph, SubSetLike, SubSetOps},
+    subgraph::{ModifySubSet, SuBitGraph, SubSetLike},
 };
 use pyo3::{
     PyTraverseError, PyVisit,
@@ -16,8 +15,8 @@ use pyo3::{
 
 use crate::graph::PyFeynmanDiagram;
 
-#[derive(Clone, Default)]
-pub(crate) struct LinnetCache(Arc<Mutex<Option<LinnetExport>>>);
+#[derive(Default)]
+pub(crate) struct LinnetCache(Mutex<Option<LinnetExport>>);
 
 struct LinnetExport {
     graph: Py<PyAny>,
@@ -25,6 +24,25 @@ struct LinnetExport {
     /// Indexed by the exported half-edge ID; entries are native half-edge IDs.
     native_hedges: Vec<usize>,
     exported_hedges: Vec<usize>,
+}
+
+impl Clone for LinnetCache {
+    fn clone(&self) -> Self {
+        Python::attach(|py| {
+            let cloned = self
+                .0
+                .lock()
+                .expect("Linnet cache lock")
+                .as_ref()
+                .map(|export| LinnetExport {
+                    graph: export.graph.clone_ref(py),
+                    revision: export.revision,
+                    native_hedges: export.native_hedges.clone(),
+                    exported_hedges: export.exported_hedges.clone(),
+                });
+            Self(Mutex::new(cloned))
+        })
+    }
 }
 
 impl LinnetCache {
@@ -38,9 +56,8 @@ impl LinnetCache {
     }
 
     pub(crate) fn clear(&self) {
-        if let Ok(mut cache) = self.0.lock() {
-            *cache = None;
-        }
+        let previous = self.0.lock().ok().and_then(|mut cache| cache.take());
+        drop(previous);
     }
 
     pub(crate) fn graph(&self, py: Python<'_>, diagram: &PyFeynmanDiagram) -> PyResult<Py<PyAny>> {
@@ -67,10 +84,12 @@ impl LinnetCache {
         }
         let export = LinnetExport::build(py, diagram)?;
         let graph = export.graph.clone_ref(py);
-        *self
+        let previous = self
             .0
             .lock()
-            .map_err(|_| PyRuntimeError::new_err("Linnet cache poisoned"))? = Some(export);
+            .map_err(|_| PyRuntimeError::new_err("Linnet cache poisoned"))?
+            .replace(export);
+        drop(previous);
         Ok(graph)
     }
 

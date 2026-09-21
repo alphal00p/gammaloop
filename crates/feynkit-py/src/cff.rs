@@ -1,14 +1,25 @@
-use std::collections::BTreeMap;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 
 use feynkit_cff::{
-    CffGenerator, CffOptions, CffReport, CffResult, EdgeOrientation, FeynmanDiagramCffExt,
-    OrientationExpression, Surface, SurfaceCache, SurfaceId,
+    CffExpression, CffGenerator, CffOptions, CffReport, CffResult, CutPropagator, EdgeOrientation,
+    FeynmanDiagramCffExt, OrientationExpression, RaisedEnergySurfaceGroup, Surface, SurfaceCache,
+    SurfaceId, SurfacePole,
+};
+use linnet::half_edge::{
+    involution::HedgePair,
+    subgraph::{ModifySubSet, SuBitGraph},
 };
 use pyo3::{
     prelude::*,
     types::{PyAny, PyModule},
 };
-use symbolica::{api::python::PythonExpression, atom::Atom, symbol};
+use symbolica::{
+    api::python::{ConvertibleToExpression, PythonExpression},
+    atom::{Atom, AtomCore, AtomView, Symbol},
+};
 
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
@@ -37,20 +48,22 @@ use crate::{error, graph::PyFeynmanDiagram};
 pub struct PyCffSurface {
     id: SurfaceId,
     surface: Option<Surface>,
+    owner: Arc<()>,
 }
 
 impl PyCffSurface {
-    fn new(id: SurfaceId, cache: &SurfaceCache) -> Self {
+    fn new(id: SurfaceId, cache: &SurfaceCache, owner: &Arc<()>) -> Self {
         Self {
             id,
             surface: cache.get(id),
+            owner: Arc::clone(owner),
         }
     }
 
     fn symbol_name_for(id: SurfaceId) -> Option<String> {
         match id {
-            SurfaceId::Energy(id) => Some(format!("feynkit::E{}", id.index())),
-            SurfaceId::H(id) => Some(format!("feynkit::H{}", id.index())),
+            SurfaceId::Energy(id) => Some(Atom::from(id).to_canonical_string()),
+            SurfaceId::H(id) => Some(Atom::from(id).to_canonical_string()),
             SurfaceId::Unit | SurfaceId::Infinite => None,
         }
     }
@@ -140,11 +153,10 @@ impl PyCffSurface {
         .collect()
     }
 
-    /// Return the dense CFF vertex IDs enclosed by this surface.
+    /// Return the original diagram vertex IDs enclosed by this surface.
     ///
-    /// CFF generation remaps the diagram's internal vertices to a compact
-    /// zero-based range. These IDs therefore index the contracted CFF graph;
-    /// they are not the original ``diagram.vertices`` identifiers.
+    /// Contracted CFF vertices retain the identities of all interaction
+    /// vertices they contain, including for selected subgraphs.
     #[getter]
     fn vertices(&self) -> Vec<usize> {
         match &self.surface {
@@ -160,7 +172,7 @@ impl PyCffSurface {
     ///
     /// Examples
     /// --------
-    /// >>> print(surface)  # Symbolica denominator variable, for example feynkit::E0
+    /// >>> print(surface)  # Symbolica denominator variable, for example feynkit_cff::η(0)
     ///
     fn __repr__(&self) -> String {
         Self::symbol_name_for(self.id).unwrap_or_else(|| self.kind().to_owned())
@@ -189,6 +201,7 @@ impl PyCffSurface {
 pub struct PyCffOrientation {
     inner: OrientationExpression,
     surfaces: SurfaceCache,
+    owner: Arc<()>,
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
@@ -233,7 +246,7 @@ impl PyCffOrientation {
             .into_iter()
             .map(|term| {
                 term.into_iter()
-                    .map(|surface| PyCffSurface::new(surface, &self.surfaces))
+                    .map(|surface| PyCffSurface::new(surface, &self.surfaces, &self.owner))
                     .collect()
             })
             .collect()
@@ -372,6 +385,8 @@ impl PyCffReport {
 #[derive(Clone)]
 pub struct PyCffResult {
     inner: CffResult,
+    owner: Arc<()>,
+    normalization: Atom,
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
@@ -396,6 +411,7 @@ impl PyCffResult {
             .map(|inner| PyCffOrientation {
                 inner,
                 surfaces: self.inner.surfaces.clone(),
+                owner: Arc::clone(&self.owner),
             })
             .collect()
     }
@@ -407,51 +423,204 @@ impl PyCffResult {
             PyCffSurface::new(
                 SurfaceId::Energy(feynkit_cff::EnergySurfaceId(index)),
                 &self.inner.surfaces,
+                &self.owner,
             )
         });
         let h = (0..self.inner.surfaces.h_surfaces().len()).map(|index| {
             PyCffSurface::new(
                 SurfaceId::H(feynkit_cff::HSurfaceId(index)),
                 &self.inner.surfaces,
+                &self.owner,
             )
         });
         energy.chain(h).collect()
     }
 
-    /// Convert the typed denominator forest into a native Symbolica expression.
+    /// Convert to the canonical eta/H denominator expression.
     ///
-    /// Surface variables are named `feynkit::E<N>` and `feynkit::H<N>`; their
-    /// definitions remain available through `surfaces`.
+    /// ``expand_surfaces`` substitutes on-shell/external energies. ``normalized``
+    /// additionally includes the -1/(2 E) factors and GammaLoop loop measure;
+    /// it implies ``expand_surfaces``. Numerators and global weights stay separate.
     ///
     /// Examples
     /// --------
-    /// >>> expression = result.to_expression()
-    /// >>> expression  # native Symbolica display in a notebook
+    /// >>> result.to_expression(normalized=True)
     ///
-    fn to_expression(&self) -> PythonExpression {
-        let mut expression = Atom::Zero;
-        for orientation in self.inner.expression.orientations() {
-            for product in orientation.denominator_products() {
-                let mut term = Atom::num(1);
-                for surface in product {
-                    match surface {
-                        SurfaceId::Unit => {}
-                        SurfaceId::Infinite => {
-                            term = Atom::Zero;
-                            break;
-                        }
-                        id => {
-                            let Some(name) = PyCffSurface::symbol_name_for(id) else {
-                                continue;
-                            };
-                            term /= Atom::var(symbol!(&name));
-                        }
-                    }
-                }
-                expression += term;
-            }
+    /// Parameters
+    /// ----------
+    /// expand_surfaces : bool
+    ///     Substitute canonical on-shell and external energies.
+    /// normalized : bool
+    ///     Include the energy products and spatial loop measure.
+    #[pyo3(signature = (*, expand_surfaces=false, normalized=false))]
+    fn to_expression(&self, expand_surfaces: bool, normalized: bool) -> PythonExpression {
+        let mut expr = self.inner.expression.to_atom();
+        if expand_surfaces || normalized {
+            expr = expr.replace_multiple(self.inner.surfaces.replacements_with(
+                feynkit_cff::symbols::on_shell_atom,
+                feynkit_cff::symbols::external_energy_atom,
+            ));
         }
-        PythonExpression { expr: expression }
+        if normalized {
+            expr *= &self.normalization;
+        }
+        PythonExpression { expr }
+    }
+
+    /// Expand one surface belonging to this result into canonical energy symbols.
+    ///
+    /// Examples
+    /// --------
+    /// >>> result.surface_expression(result.surfaces[0])
+    ///
+    /// Parameters
+    /// ----------
+    /// surface : CffSurface
+    ///     A surface obtained from this result.
+    fn surface_expression(&self, surface: &PyCffSurface) -> PyResult<PythonExpression> {
+        if !Arc::ptr_eq(&self.owner, &surface.owner) {
+            return Err(error::CffError::new_err(
+                "surface belongs to a different CFF result",
+            ));
+        }
+        let surface = surface
+            .surface
+            .as_ref()
+            .ok_or_else(|| error::CffError::new_err("surface is absent from the result arena"))?;
+        Ok(PythonExpression {
+            expr: surface.to_atom_with(
+                feynkit_cff::symbols::on_shell_atom,
+                feynkit_cff::symbols::external_energy_atom,
+            ),
+        })
+    }
+
+    /// Group equivalent energy surfaces after identifying raised propagator edges.
+    /// ``edge_representatives`` maps repeated edges to their canonical edge.
+    ///
+    /// Examples
+    /// --------
+    /// >>> groups = result.raised_surface_groups({3: 2})
+    /// >>> [group.max_order for group in groups]
+    ///
+    /// Parameters
+    /// ----------
+    /// edge_representatives : dict[int, int], optional
+    ///     Repeated propagator edge IDs mapped to their canonical representative.
+    #[pyo3(signature = (edge_representatives=None))]
+    fn raised_surface_groups(
+        &self,
+        edge_representatives: Option<BTreeMap<usize, usize>>,
+    ) -> PyResult<Vec<PyCffSurfaceGroup>> {
+        let representatives = edge_representatives.unwrap_or_default();
+        let groups = self
+            .inner
+            .expression
+            .raised_energy_surfaces(&self.inner.surfaces, |edge| {
+                feynkit_cff::EdgeId::new(
+                    representatives
+                        .get(&edge.index())
+                        .copied()
+                        .unwrap_or(edge.index()),
+                )
+            })
+            .map_err(error::cff)?;
+        Ok(groups
+            .groups
+            .into_iter()
+            .map(|inner| PyCffSurfaceGroup {
+                inner,
+                surfaces: self.inner.surfaces.clone(),
+                owner: Arc::clone(&self.owner),
+            })
+            .collect())
+    }
+
+    /// Return coefficients of each inverse surface power, indexed from order one.
+    /// These are pole coefficients, before analytic residue derivatives.
+    ///
+    /// Examples
+    /// --------
+    /// >>> coefficients = result.pole_coefficients(result.raised_surface_groups()[0])
+    /// >>> [coefficient.to_expression() for coefficient in coefficients]
+    ///
+    /// Parameters
+    /// ----------
+    /// group : CffSurfaceGroup
+    ///     A raised-surface group belonging to this result.
+    fn pole_coefficients(&self, group: &PyCffSurfaceGroup) -> PyResult<Vec<Self>> {
+        self.validate_group(group)?;
+        Ok(self
+            .inner
+            .select_energy_surface_residue(&group.inner)
+            .into_iter()
+            .map(|inner| Self {
+                inner,
+                owner: Arc::clone(&self.owner),
+                normalization: self.normalization.clone(),
+            })
+            .collect())
+    }
+
+    /// Evaluate all pole-order contributions to a residue in an explicit variable.
+    /// ``surface`` must be the group's energy surface expressed in that variable;
+    /// ``coefficient`` is the complete remaining coefficient, including any factors
+    /// whose derivatives must act. The supplied root is assumed to be a simple zero.
+    ///
+    /// Examples
+    /// --------
+    /// >>> result.residue(group, variable=t, root=t_star, surface=eta, coefficient=numerator)
+    ///
+    /// Parameters
+    /// ----------
+    /// group : CffSurfaceGroup
+    ///     A raised-surface group belonging to this result.
+    /// variable : Expression
+    ///     Independent integration variable.
+    /// root : Expression
+    ///     Simple zero of the surface, independent of variable.
+    /// surface : Expression
+    ///     Energy surface expressed in the integration variable.
+    /// coefficient : Expression
+    ///     Complete remaining coefficient to differentiate.
+    /// normalized : bool
+    ///     Include the generated CFF normalization in the coefficient.
+    /// replacements : list[tuple[Expression, Expression]], optional
+    ///     Route all energy dependence to the integration variable before differentiating.
+    #[pyo3(signature = (group, *, variable, root, surface, coefficient, normalized=false, replacements=None))]
+    fn residue(
+        &self,
+        group: &PyCffSurfaceGroup,
+        variable: ConvertibleToExpression,
+        root: ConvertibleToExpression,
+        surface: ConvertibleToExpression,
+        coefficient: ConvertibleToExpression,
+        normalized: bool,
+        replacements: Option<Vec<(ConvertibleToExpression, ConvertibleToExpression)>>,
+    ) -> PyResult<PythonExpression> {
+        let variable = expression_variable(variable)?;
+        let root = root.to_expression().expr;
+        let surface = surface.to_expression().expr;
+        let coefficient = coefficient.to_expression().expr;
+        let replacements = replacements
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(from, to)| {
+                symbolica::id::Replacement::new(from.to_expression().expr, to.to_expression().expr)
+            })
+            .collect::<Vec<_>>();
+        let mut result = Atom::Zero;
+        for (index, term) in self.pole_coefficients(group)?.iter().enumerate() {
+            let remaining = (coefficient.clone() * term.to_expression(true, normalized).expr)
+                .replace_multiple(&replacements);
+            result += SurfacePole {
+                surface: surface.clone(),
+                order: index + 1,
+            }
+            .residue(&remaining, variable, &root)
+            .map_err(error::cff)?;
+        }
+        Ok(PythonExpression { expr: result })
     }
 
     /// Return the number of unfolded denominator terms.
@@ -493,7 +662,7 @@ impl PyCffResult {
             inner: self.inner.report,
         }
         ._repr_html_();
-        let expression = self.to_expression()._repr_html_()?;
+        let expression = self.to_expression(false, false)._repr_html_()?;
         Ok(format!(
             "<section class=\"feynkit-cff-result\" style=\"max-width:100%\">\
              <h3 style=\"margin:.25rem 0\">Cross-free family</h3>{report}\
@@ -531,7 +700,8 @@ impl PyCffResult {
                     + self.inner.surfaces.h_surfaces().len(),
             ),),
         )?;
-        self.to_expression()._repr_pretty_(pretty, false)?;
+        self.to_expression(false, false)
+            ._repr_pretty_(pretty, false)?;
         pretty.call_method1("text", (")",))?;
         Ok(())
     }
@@ -662,12 +832,17 @@ impl PyCffGenerator {
     /// ----------
     /// diagram : FeynmanDiagram
     ///     Diagram whose energy-flow orientations are enumerated.
-    fn generate(&self, py: Python<'_>, diagram: &PyFeynmanDiagram) -> PyResult<PyCffResult> {
-        let options = self.inner.options().clone();
-        let diagram = diagram.inner.clone();
-        py.detach(move || diagram.build_cff(options))
-            .map(|inner| PyCffResult { inner })
-            .map_err(error::cff)
+    /// subgraph : linnet_py.Subgraph, optional
+    ///     Graph-bound selection from diagram.to_linnet().
+    #[pyo3(signature = (diagram, *, subgraph=None))]
+    fn generate(
+        &self,
+        py: Python<'_>,
+        diagram: &PyFeynmanDiagram,
+        subgraph: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<PyCffResult> {
+        let selection = diagram.selection(py, subgraph)?;
+        PyCffResult::build(py, diagram, self.inner.options().clone(), selection)
     }
 }
 
@@ -678,6 +853,7 @@ pub(crate) fn build_cff_for_diagram(
     fixed_orientations: Option<BTreeMap<usize, bool>>,
     contracted_edges: Option<Vec<usize>>,
     initial_state_edges: Option<Vec<usize>>,
+    subgraph: Option<SuBitGraph>,
 ) -> PyResult<PyCffResult> {
     let mut options = max_orientations.map_or_else(CffOptions::default, |maximum| {
         CffOptions::default().with_max_orientations(maximum)
@@ -699,10 +875,8 @@ pub(crate) fn build_cff_for_diagram(
         options = options.with_initial_state_edge(feynkit_cff::EdgeId::new(edge));
     }
 
-    let diagram = diagram.inner.clone();
-    py.detach(move || diagram.build_cff(options))
-        .map(|inner| PyCffResult { inner })
-        .map_err(error::cff)
+    let selection = subgraph.unwrap_or_else(|| diagram.inner.underlying().full_filter());
+    PyCffResult::build(py, diagram, options, selection)
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -711,5 +885,236 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyCffReport>()?;
     module.add_class::<PyCffResult>()?;
     module.add_class::<PyCffGenerator>()?;
+    module.add_class::<PyCffSurfaceGroup>()?;
+    module.add_class::<PyCutPropagator>()?;
     Ok(())
+}
+
+impl PyCffResult {
+    fn validate_group(&self, group: &PyCffSurfaceGroup) -> PyResult<()> {
+        if !Arc::ptr_eq(&self.owner, &group.owner) {
+            return Err(error::CffError::new_err(
+                "surface group belongs to a different CFF result",
+            ));
+        }
+        Ok(())
+    }
+
+    fn build(
+        py: Python<'_>,
+        diagram: &PyFeynmanDiagram,
+        options: CffOptions,
+        selection: SuBitGraph,
+    ) -> PyResult<Self> {
+        let diagram = diagram.inner.clone();
+        py.detach(move || {
+            let graph = diagram.underlying();
+            let initial_edges = graph
+                .iter_edges()
+                .filter_map(|(pair, edge, data)| {
+                    (data.data.external.is_some() && matches!(pair, HedgePair::Paired { .. }))
+                        .then_some(edge)
+                })
+                .collect::<BTreeSet<_>>();
+            let mut selected_internal: SuBitGraph = graph.empty_subgraph();
+            let mut contracted: SuBitGraph = graph.empty_subgraph();
+            let mut energies = Vec::new();
+            for (pair, edge, data) in graph.iter_edges_of(&selection) {
+                if let HedgePair::Paired { source, sink } = pair {
+                    if initial_edges.contains(&edge) || data.data.is_dummy {
+                        continue;
+                    }
+                    selected_internal.add(source);
+                    selected_internal.add(sink);
+                    if options.contracted_edges().contains(&edge) {
+                        contracted.add(source);
+                        contracted.add(sink);
+                    } else {
+                        energies.push(feynkit_cff::symbols::on_shell_atom(edge));
+                    }
+                }
+            }
+            let loops = graph
+                .cyclotomatic_number(&selected_internal)
+                .saturating_sub(graph.cyclotomatic_number(&contracted));
+            let normalization = CffExpression::measure_normalization(loops)
+                * CffExpression::inverse_energy_product(energies);
+            let inner = diagram
+                .build_cff_subgraph(&selection, options)
+                .map_err(error::cff)?;
+            Ok(Self {
+                inner,
+                owner: Arc::new(()),
+                normalization,
+            })
+        })
+    }
+}
+
+/// Equivalent energy surfaces and their maximum simultaneous pole order.
+///
+/// Examples
+/// --------
+/// >>> group = result.raised_surface_groups()[0]
+/// >>> print(group.max_order, group.surfaces)
+#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
+#[pyclass(
+    name = "CffSurfaceGroup",
+    module = "symbolica.community.feynkit",
+    frozen,
+    from_py_object
+)]
+#[derive(Clone)]
+pub struct PyCffSurfaceGroup {
+    inner: RaisedEnergySurfaceGroup,
+    surfaces: SurfaceCache,
+    owner: Arc<()>,
+}
+
+#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[pymethods]
+impl PyCffSurfaceGroup {
+    #[getter]
+    /// Highest inverse surface power occurring on one CFF branch.
+    fn max_order(&self) -> usize {
+        self.inner.max_occurrence
+    }
+    #[getter]
+    /// Canonical energy surfaces identified by this group.
+    fn surfaces(&self) -> Vec<PyCffSurface> {
+        self.inner
+            .surface_ids
+            .iter()
+            .map(|id| PyCffSurface::new(SurfaceId::Energy(*id), &self.surfaces, &self.owner))
+            .collect()
+    }
+}
+
+fn expression_variable(value: ConvertibleToExpression) -> PyResult<Symbol> {
+    match value.to_expression().expr.as_view() {
+        AtomView::Var(variable) => Ok(variable.get_symbol()),
+        _ => Err(pyo3::exceptions::PyValueError::new_err(
+            "integration variable must be a Symbolica symbol",
+        )),
+    }
+}
+
+/// An oriented generalized cut distribution for a possibly raised propagator.
+/// ``orientation`` selects q0=+E or q0=-E; ``prescription`` is the sign of i0.
+/// The default normalization is -2 pi i. The positive ``on_shell_energy`` includes
+/// the mass. Raised cuts act on the entire coefficient, including the uncut factor.
+///
+/// Examples
+/// --------
+/// >>> cut = CutPropagator(q0, E, power=2)
+/// >>> cut.apply(q0**2, q0)
+#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
+#[pyclass(
+    name = "CutPropagator",
+    module = "symbolica.community.feynkit",
+    frozen,
+    from_py_object
+)]
+#[derive(Clone)]
+pub struct PyCutPropagator {
+    pub(crate) inner: CutPropagator,
+}
+
+#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[pymethods]
+impl PyCutPropagator {
+    /// Construct a reciprocal-propagator cut with explicit orientation and i0 sign.
+    ///
+    /// Examples
+    /// --------
+    /// >>> cut = CutPropagator(q0, E, power=3, orientation=-1)
+    ///
+    /// Parameters
+    /// ----------
+    /// energy : Expression
+    ///     Time component of the propagator momentum.
+    /// on_shell_energy : Expression
+    ///     Positive square root of spatial momentum squared plus mass squared.
+    /// power : int
+    ///     Positive propagator power.
+    /// orientation : int
+    ///     Select the positive (+1) or negative (-1) energy root.
+    /// prescription : int
+    ///     Sign of the imaginary infinitesimal, +1 or -1.
+    /// normalization : Expression, optional
+    ///     Replacement prefactor, default -2 pi i.
+    #[new]
+    #[pyo3(signature = (energy, on_shell_energy, *, power=1, orientation=1, prescription=1, normalization=None))]
+    fn new(
+        energy: ConvertibleToExpression,
+        on_shell_energy: ConvertibleToExpression,
+        power: usize,
+        orientation: i8,
+        prescription: i8,
+        normalization: Option<ConvertibleToExpression>,
+    ) -> PyResult<Self> {
+        let inner = CutPropagator {
+            energy: energy.to_expression().expr,
+            on_shell_energy: on_shell_energy.to_expression().expr,
+            power,
+            orientation,
+            prescription,
+            normalization: normalization.map_or_else(
+                || -2 * Atom::var(Symbol::PI) * Atom::i(),
+                |value| value.to_expression().expr,
+            ),
+        };
+        inner.validate().map_err(error::cff)?;
+        Ok(Self { inner })
+    }
+
+    /// Emit a covariant CutDelta or energy-space generalized Delta expression.
+    /// Delta(n,x) acts as f^(n-1)(0)/(n-1)!; it is not the usual delta derivative.
+    ///
+    /// Examples
+    /// --------
+    /// >>> cut.to_expression(covariant=False)
+    ///
+    /// Parameters
+    /// ----------
+    /// covariant : bool
+    ///     Emit a mass-shell CutDelta; otherwise show the energy-space Delta.
+    #[pyo3(signature = (*, covariant=true))]
+    fn to_expression(&self, covariant: bool) -> PyResult<PythonExpression> {
+        Ok(PythonExpression {
+            expr: if covariant {
+                self.inner.to_atom()
+            } else {
+                self.inner.to_energy_atom()
+            }
+            .map_err(error::cff)?,
+        })
+    }
+
+    /// Apply the complete derivative action and then set the energy on shell.
+    /// Route the integrand to this independent energy variable before applying.
+    ///
+    /// Examples
+    /// --------
+    /// >>> cut.apply(q0**2, q0)
+    ///
+    /// Parameters
+    /// ----------
+    /// coefficient : Expression
+    ///     All remaining factors of the integrand.
+    /// variable : Expression
+    ///     Independent energy symbol, equal to this cut's energy.
+    fn apply(
+        &self,
+        coefficient: ConvertibleToExpression,
+        variable: ConvertibleToExpression,
+    ) -> PyResult<PythonExpression> {
+        let variable = expression_variable(variable)?;
+        Ok(PythonExpression {
+            expr: self
+                .inner
+                .apply(&coefficient.to_expression().expr, variable)
+                .map_err(error::cff)?,
+        })
+    }
 }

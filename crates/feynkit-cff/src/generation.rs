@@ -176,12 +176,55 @@ pub struct CffGenerator {
 /// CFF construction directly on FeynKit diagrams without wrapping the graph type.
 pub trait FeynmanDiagramCffExt {
     fn build_cff(&self, options: CffOptions) -> Result<CffResult, CffError>;
+    fn build_cff_subgraph<S: SubGraphLike>(
+        &self,
+        subgraph: &S,
+        options: CffOptions,
+    ) -> Result<CffResult, CffError>;
 }
 
 impl FeynmanDiagramCffExt for FeynmanDiagram {
     fn build_cff(&self, options: CffOptions) -> Result<CffResult, CffError> {
-        let graph = CffGraph::try_from(self)?;
-        CffGenerator::new(options).generate(&graph)
+        self.build_cff_subgraph(&self.underlying().full_filter(), options)
+    }
+
+    fn build_cff_subgraph<S: SubGraphLike>(
+        &self,
+        subgraph: &S,
+        options: CffOptions,
+    ) -> Result<CffResult, CffError> {
+        let roles = self
+            .underlying()
+            .iter_edges()
+            .map(|(pair, edge, data)| {
+                let role = if data.data.is_dummy {
+                    HedgeEdgeRole::Omitted
+                } else if pair.is_unpaired() {
+                    HedgeEdgeRole::UnorientedExternal
+                } else if data.data.external.is_some() {
+                    HedgeEdgeRole::InitialState
+                } else {
+                    HedgeEdgeRole::Standard
+                };
+                (edge, role)
+            })
+            .collect::<BTreeMap<_, _>>();
+        if let Some(edge) = options
+            .contracted_edges()
+            .iter()
+            .find(|edge| roles.get(edge) == Some(&HedgeEdgeRole::InitialState))
+        {
+            return Err(CffError::Invariant(format!(
+                "initial-state edge {edge} cannot be contracted during CFF generation"
+            )));
+        }
+        self.underlying().build_cff_from_subgraph_with_edge_roles(
+            subgraph,
+            options,
+            &[],
+            |edge| roles[&edge],
+            &mut SurfaceCache::default(),
+        )
     }
 }
 
@@ -431,6 +474,23 @@ impl HedgeSubgraphCffInput {
                         dense_vertex(graph.node_id(source), edge)?,
                         dense_vertex(graph.node_id(sink), edge)?,
                     )
+                }
+                (
+                    HedgeEdgeRole::InitialState,
+                    HedgePair::Split {
+                        source,
+                        sink,
+                        split,
+                    },
+                ) => {
+                    // A selected side of a sewn external line still carries the
+                    // positive external momentum, never an on-shell loop energy.
+                    unoriented_external_edges.insert(edge);
+                    let (hedge, flow) = match split {
+                        Flow::Source => (source, EdgeFlow::Outgoing),
+                        Flow::Sink => (sink, EdgeFlow::Incoming),
+                    };
+                    CffEdge::external(edge, dense_vertex(graph.node_id(hedge), edge)?, flow)
                 }
                 (HedgeEdgeRole::InitialState, _) => {
                     return Err(CffError::Invariant(format!(
@@ -1495,18 +1555,28 @@ mod tests {
             .unwrap(),
         );
         let mut builder = FeynmanDiagram::builder(Arc::clone(&model), "bubble");
-        let incoming =
-            builder.add_vertex(DiagramVertex::external("p1", 0, ExternalState::Incoming));
-        let outgoing =
-            builder.add_vertex(DiagramVertex::external("p2", 1, ExternalState::Outgoing));
         let rule = model.vertex_rule_id("V_3_SCALAR_000").unwrap();
         let left = builder.add_vertex(DiagramVertex::interaction("left", rule));
         let right = builder.add_vertex(DiagramVertex::interaction("right", rule));
         let scalar = || DiagramEdge::new(model.particle_id("scalar_0").unwrap(), false);
-        builder.add_edge(incoming, left, scalar()).unwrap();
+        let external = |index, state| {
+            let mut edge = scalar();
+            edge.external = Some(feynkit_graph::ExternalLeg {
+                name: format!("p{index}"),
+                index,
+                state,
+                connection: index,
+            });
+            edge
+        };
+        builder
+            .add_edge(None, left, external(0, ExternalState::Incoming))
+            .unwrap();
+        builder
+            .add_edge(right, None, external(1, ExternalState::Outgoing))
+            .unwrap();
         builder.add_edge(left, right, scalar()).unwrap();
         builder.add_edge(left, right, scalar()).unwrap();
-        builder.add_edge(right, outgoing, scalar()).unwrap();
         let diagram = builder.build().unwrap();
 
         let result = diagram.build_cff(CffOptions::default()).unwrap();

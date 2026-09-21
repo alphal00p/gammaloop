@@ -999,7 +999,10 @@
   After either graph layout mode, labels are relaxed separately. If $L_l$ is the
   label target distance and $q_l$ is the label repulsion strength, then
   $L_l = alpha_l L$ and $q_l = beta_l L^2$. The Typst names are
-  `label-length-scale` for $alpha_l$ and `label-charge` for $beta_l$.
+  `internal-label-length-scale` for $alpha_l$ on paired edges,
+  `external-label-length-scale` on dangling edges, and `label-charge` for $beta_l$.
+  The semantic `labels` dictionary exposes these as `internal-distance` and
+  `external-distance`; changing either leaves the other target distance unchanged.
   `label-spring` is the spring constant pulling each label toward its target.
   `label-layout: "normal"` uses a perpendicular offset target. With
   `label-layout: "dangling-tangent"`, paired edges still use that perpendicular

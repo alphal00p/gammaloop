@@ -133,7 +133,7 @@
   if show-momentum == auto {
     show-momentum = options.at("momentum-arrows", default: false)
   }
-  let label-length-scale = if show-momentum in (true, "true", "\"true\"") {
+  let external-label-length-scale = if show-momentum in (true, "true", "\"true\"") {
     0.45
   } else { 0.30 }
   let styles = (
@@ -173,7 +173,8 @@
         eps: 1e-7,
         step: 0.6,
         gamma-dangling: 2.3,
-        label-length-scale: label-length-scale,
+        internal-label-length-scale: external-label-length-scale + 0.30,
+        external-label-length-scale: external-label-length-scale,
         label-steps: 100,
         directional-force: 4.5,
         label-layout: "dangling-tangent",
@@ -181,7 +182,8 @@
     } else if mode.cross-section {
       (
         length-scale: 0.4,
-        label-length-scale: label-length-scale,
+        internal-label-length-scale: external-label-length-scale + 0.30,
+        external-label-length-scale: external-label-length-scale,
         label-steps: 100,
         label-layout: "dangling-tangent",
       )

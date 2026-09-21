@@ -11,6 +11,7 @@ categories = ["science"]
 
 [dependencies]
 feynkit-graph = { version = "0.1.0", path = "../feynkit-graph", default-features = false }
+linnet.workspace = true
 idenso = { version = "0.3.0", path = "../idenso", default-features = false }
 spenso = { version = "0.6.0", path = "../spenso", default-features = false, features = ["shadowing"] }
 symbolica = { workspace = true }

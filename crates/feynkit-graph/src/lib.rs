@@ -8,9 +8,12 @@
 #![forbid(unsafe_code)]
 
 mod display;
+pub mod expressions;
+mod finalization;
 mod power_counting;
 pub mod routing;
 pub mod symbols;
+pub mod thresholds;
 
 pub use power_counting::DOD;
 
@@ -20,36 +23,28 @@ pub use power_counting::DOD;
 // Use Spenso's canonical tag names and shared printer so FeynKit interoperates
 // with the Spenso instance embedded by the host.
 symbolica::initialize!(|| {
-    symbolica::symbol!(
-        "FeynKit::Momentum",
-        tags = ["spenso::tensor", "spenso::rank1", "spenso::tensor-label:q"],
-        print = spenso::network::tags::tensor_print
-    );
-    for (name, label) in [
-        ("SourceIndex", "s"),
-        ("SinkIndex", "t"),
-        ("EdgeDummy", "e"),
-        ("VertexDummy", "v"),
-    ] {
-        symbolica::atom::SymbolBuilder::new(symbolica::atom::NamespacedSymbol::parse(&format!(
-            "FeynKit::{name}"
-        )))
-        .with_tags([
-            "spenso::index".to_owned(),
-            format!("spenso::index-label:{label}"),
-        ])
-        .with_print_function(spenso::network::tags::tensor_print)
-        .build()
-        .expect("FeynKit index symbols must be registered before use");
-    }
+    symbols::momentum();
+    symbols::loop_momentum();
+    symbols::external_momentum();
+    symbols::edge_index();
+    symbols::vertex_index();
+    symbols::hedge_index();
+    symbols::dimension();
+    symbols::denominator();
+    symbols::u();
+    symbols::ubar();
+    symbols::v();
+    symbols::vbar();
+    symbols::epsilon();
+    symbols::epsilonbar();
 });
 
 pub fn momentum_symbol() -> symbolica::atom::Symbol {
-    symbolica::symbol!("FeynKit::Momentum")
+    symbols::momentum()
 }
 
 use std::{
-    collections::{BTreeMap, BTreeSet, VecDeque},
+    collections::{BTreeMap, BTreeSet},
     fmt::{self, Write},
     str::FromStr,
     sync::Arc,
@@ -69,6 +64,7 @@ use linnet::{
     parser::{DotGraph, set::DotGraphSet},
 };
 use serde::{Deserialize, Serialize};
+#[cfg(test)]
 use spenso::structure::representation::{Minkowski, RepName};
 use symbolica::{
     atom::{Atom, AtomCore, UserData},
@@ -127,7 +123,7 @@ impl FromStr for DiagramId {
     }
 }
 
-/// Whether an external vertex is in the initial or final state.
+/// Whether an external momentum carrier belongs to the initial or final state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ExternalState {
@@ -142,17 +138,9 @@ impl ExternalState {
             Self::Outgoing => "outgoing",
         }
     }
-
-    fn parse(value: &str) -> Result<Self, DiagramError> {
-        match value {
-            "incoming" | "in" | "sink" => Ok(Self::Incoming),
-            "outgoing" | "out" | "source" => Ok(Self::Outgoing),
-            _ => Err(DiagramError::InvalidExternalState(value.to_owned())),
-        }
-    }
 }
 
-/// Metadata carried by an external vertex.
+/// Metadata carried by an external edge, including sewn initial-state connections.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct ExternalLeg {
     pub name: String,
@@ -169,7 +157,6 @@ pub struct ExternalLeg {
 pub struct DiagramVertex {
     pub name: String,
     pub interaction: Option<VertexRuleId>,
-    pub external: Option<ExternalLeg>,
     pub numerator: Atom,
 }
 
@@ -178,37 +165,8 @@ impl DiagramVertex {
         Self {
             name: name.into(),
             interaction: Some(rule),
-            external: None,
             numerator: Atom::one(),
         }
-    }
-
-    pub fn external(name: impl Into<String>, index: usize, state: ExternalState) -> Self {
-        Self::external_in_connection(name, index, state, index)
-    }
-
-    pub fn external_in_connection(
-        name: impl Into<String>,
-        index: usize,
-        state: ExternalState,
-        connection: usize,
-    ) -> Self {
-        let name = name.into();
-        Self {
-            name: name.clone(),
-            interaction: None,
-            external: Some(ExternalLeg {
-                name,
-                index,
-                state,
-                connection,
-            }),
-            numerator: Atom::one(),
-        }
-    }
-
-    pub fn is_external(&self) -> bool {
-        self.external.is_some()
     }
 }
 
@@ -344,6 +302,8 @@ pub enum CanonicalDiagramEdge {
     Diagram {
         endpoints: EdgeEndpoints,
         particle: ParticleId,
+        external: Option<ExternalLeg>,
+        is_dummy: bool,
         directed: bool,
         source_slot: VertexSlot,
         target_slot: VertexSlot,
@@ -370,6 +330,8 @@ pub struct CanonicalDiagramKey {
 enum CanonicalEdgeColor {
     Diagram {
         particle: ParticleId,
+        external: Option<ExternalLeg>,
+        is_dummy: bool,
         source_slot: VertexSlot,
         target_slot: VertexSlot,
     },
@@ -395,45 +357,12 @@ impl LoopMomentumBasis {
     /// must be a spanning forest, and every stored signature must agree with
     /// the routing induced by that forest and the requested loop-edge order.
     pub fn validate(&self, diagram: &FeynmanDiagram) -> Result<(), DiagramError> {
-        let topology = diagram.topology();
-        let unique = |edges: &[EdgeId]| edges.iter().copied().collect::<BTreeSet<_>>();
-        let tree = unique(&self.tree_edges);
-        let loops = unique(&self.loop_edges);
-        let external = unique(&self.external_edges);
-        let dependent = unique(&self.dependent_externals);
-        if tree.len() != self.tree_edges.len()
-            || loops.len() != self.loop_edges.len()
-            || external.len() != self.external_edges.len()
-            || dependent.len() != self.dependent_externals.len()
-        {
-            return Err(DiagramError::InvalidLoopMomentumBasis(
-                "edge roles contain duplicates".to_owned(),
-            ));
-        }
-
-        let internal = unique(&topology.internal_edges);
-        let expected_external = unique(&topology.external_edges);
-        if !tree.is_subset(&internal)
-            || !loops.is_subset(&internal)
-            || !tree.is_disjoint(&loops)
-            || tree.union(&loops).copied().collect::<BTreeSet<_>>() != internal
-            || external != expected_external
-            || !dependent.is_subset(&external)
-            || !topology.is_spanning_forest(&self.tree_edges)
-        {
-            return Err(DiagramError::InvalidLoopMomentumBasis(
-                "tree, loop, external, or dependent edge roles do not match the diagram topology"
-                    .to_owned(),
-            ));
-        }
-
-        let expected = topology
-            .basis(self.tree_edges.clone())?
+        let expected = diagram
+            .basis_from_tree(&self.tree_edges)?
             .with_loop_edge_order(&self.loop_edges)?;
         if *self != expected {
             return Err(DiagramError::InvalidLoopMomentumBasis(
-                "stored dependent externals or momentum signatures do not match the selected spanning forest"
-                    .to_owned(),
+                "stored signatures or edge roles do not match the shared graph routing".into(),
             ));
         }
         Ok(())
@@ -576,7 +505,7 @@ pub enum DiagramError {
         "diagram-wide numerator differs from the product of the vertex and edge numerator fragments"
     )]
     NumeratorFragmentMismatch,
-    #[error("cannot replace the numerator of a diagram without a non-external vertex")]
+    #[error("cannot replace the numerator of a diagram without an interaction vertex")]
     MissingNumeratorAnchor,
     #[error("diagram invariant failed while {operation}: {message}")]
     Invariant {
@@ -610,6 +539,7 @@ struct DiagramSerde {
     name: String,
     vertices: Vec<DiagramVertexSerde>,
     edges: Vec<(EdgeEndpoints, DiagramEdgeSerde)>,
+    half_edge_order: Vec<DiagramHalfEdge>,
     symmetry_factor: u64,
     overall_factor: String,
     numerator: String,
@@ -621,15 +551,18 @@ struct DiagramSerde {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct DiagramVertexSerde {
     name: String,
     interaction: Option<VertexRuleId>,
-    external: Option<ExternalLeg>,
     numerator: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct DiagramEdgeSerde {
+    external: Option<ExternalLeg>,
+    is_dummy: bool,
+    orientation: Orientation,
     particle: ParticleId,
     directed: bool,
     numerator: String,
@@ -701,28 +634,15 @@ impl FeynmanDiagram {
         &self.numerator
     }
 
-    /// Product of internal quadratic propagator denominators `q_e² - m_e²`.
+    /// Product of internal quadratic propagators in GammaLoop's tagged form.
     ///
-    /// Uses the same edge momenta as the numerator and four-dimensional Minkowski
-    /// scalar products. Masses remain symbolic, except the UFO `ZERO` parameter.
-    /// External legs, widths, and an imaginary prescription are excluded. This
-    /// follows the quadratic-propagator convention used by UV power counting;
-    /// custom UFO propagator denominator expressions are not instantiated here.
+    /// Each `denom(edge, Q(edge), mass², Q(edge)² - mass²)` uses the symbolic
+    /// dimension `gammalooprs::dim` and the same momenta as the numerator. Masses
+    /// remain symbolic except the UFO `ZERO` parameter. External carriers,
+    /// widths, and an imaginary prescription are excluded. Custom UFO
+    /// propagator denominators are not instantiated here.
     pub fn denominator_expression(&self) -> Result<Atom, DiagramError> {
-        let mut denominator = Atom::num(1);
-        for id in self.topology().internal_edges {
-            let particle = self
-                .model
-                .particle_by_id(self.graph[EdgeIndex(id.0)].particle)?;
-            let mass = particle
-                .symbolic_mass(&self.model)
-                .replace(symbolica::symbol!("UFO::ZERO"))
-                .with(Atom::Zero);
-            let momentum = symbolica::function!(momentum_symbol(), id.0);
-            denominator *=
-                Minkowski {}.new_rep(4).inner_product(&momentum, &momentum) - mass.pow(2);
-        }
-        Ok(denominator)
+        self.denominator_of(&self.internal_subgraph(), &BTreeMap::new())
     }
 
     /// Global numerator multiplier supplied by the generation request.
@@ -761,14 +681,35 @@ impl FeynmanDiagram {
     }
 
     pub fn edges(&self) -> impl Iterator<Item = (EdgeId, EdgeEndpoints, &DiagramEdge)> {
-        self.graph.iter_edges().filter_map(|(pair, id, data)| {
-            self.paired_endpoints(pair, data.orientation)
-                .map(|endpoints| (EdgeId(id.0), endpoints, data.data))
+        self.graph.iter_edges().map(|(pair, id, data)| {
+            let endpoints = match pair {
+                HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } => {
+                    EdgeEndpoints {
+                        source: Some(VertexId(self.graph.node_id(source).0)),
+                        target: Some(VertexId(self.graph.node_id(sink).0)),
+                    }
+                }
+                HedgePair::Unpaired { hedge, flow } => {
+                    let vertex = Some(VertexId(self.graph.node_id(hedge).0));
+                    match flow {
+                        Flow::Source => EdgeEndpoints {
+                            source: vertex,
+                            target: None,
+                        },
+                        Flow::Sink => EdgeEndpoints {
+                            source: None,
+                            target: vertex,
+                        },
+                    }
+                }
+            };
+            (EdgeId(id.0), endpoints, data.data)
         })
     }
 
-    pub fn vertex(&self, id: VertexId) -> Option<&DiagramVertex> {
-        (id.0 < self.graph.n_nodes()).then(|| &self.graph[NodeIndex(id.0)])
+    pub fn vertex(&self, id: impl Into<Option<VertexId>>) -> Option<&DiagramVertex> {
+        id.into()
+            .and_then(|id| (id.0 < self.graph.n_nodes()).then(|| &self.graph[NodeIndex(id.0)]))
     }
 
     /// Transform vertex and edge metadata without changing the diagram
@@ -778,34 +719,20 @@ impl FeynmanDiagram {
         V: FnMut(VertexId, &DiagramVertex) -> DiagramVertex,
         E: FnMut(EdgeId, EdgeEndpoints, &DiagramEdge) -> DiagramEdge,
     {
-        let loop_edges = self.loop_momentum_basis.loop_edges.clone();
-        let mut builder = Self::builder(Arc::clone(&self.model), &self.name)
-            .symmetry_factor(self.symmetry_factor)
-            .overall_factor(self.overall_factor.clone())
-            .numerator(self.numerator.clone())
-            .numerator_prefactor(self.numerator_prefactor.clone())
-            .projector(self.projector.clone())
-            .cuts(self.cuts.clone())
-            .topology_threshold_candidates(self.topology_threshold_candidates.clone());
-        for (id, vertex) in self.vertices() {
-            builder.add_vertex(map_vertex(id, vertex));
-        }
-        for (id, endpoints, edge) in self.edges() {
-            let edge = map_edge(id, endpoints, edge);
-            builder.add_edge_with_slots(
-                endpoints.source,
-                endpoints.target,
-                edge.clone(),
-                edge.source_slot,
-                edge.target_slot,
-            )?;
-        }
-        let diagram = builder.build()?;
-        if diagram.loop_momentum_basis.loop_edges == loop_edges {
-            Ok(diagram)
-        } else {
-            diagram.with_loop_momentum_edges(&loop_edges)
-        }
+        let mut diagram = self.clone();
+        let endpoints = self
+            .edges()
+            .map(|(id, endpoints, _)| (id, endpoints))
+            .collect::<BTreeMap<_, _>>();
+        diagram.graph = self.graph.clone().map(
+            |_, id, vertex| map_vertex(VertexId(id.0), &vertex),
+            |_, _, _, id, edge| {
+                edge.map(|edge| map_edge(EdgeId(id.0), endpoints[&EdgeId(id.0)], &edge))
+            },
+            |_, data| data,
+        );
+        diagram.id = DiagramId::from_key(diagram.model.fingerprint(), &diagram.structural_key()?)?;
+        Ok(diagram)
     }
 
     /// Build a deterministic key for the model-resolved colored topology.
@@ -830,7 +757,7 @@ impl FeynmanDiagram {
         for (_, vertex) in self.vertices() {
             graph.add_node(CanonicalDiagramVertex::Diagram {
                 interaction: vertex.interaction,
-                external: vertex.external.clone(),
+                external: None,
             });
         }
         let endpoints = self
@@ -859,12 +786,12 @@ impl FeynmanDiagram {
                 let vertices = half_edges
                     .iter()
                     .filter_map(|half_edge| {
-                        endpoints
-                            .get(&half_edge.edge)
-                            .map(|endpoints| match half_edge.endpoint {
+                        endpoints.get(&half_edge.edge).and_then(|endpoints| {
+                            match half_edge.endpoint {
                                 DiagramEndpoint::Source => endpoints.source,
                                 DiagramEndpoint::Target => endpoints.target,
-                            })
+                            }
+                        })
                     })
                     .collect::<BTreeSet<_>>();
                 for vertex in vertices {
@@ -894,12 +821,12 @@ impl FeynmanDiagram {
                 let vertices = half_edges
                     .iter()
                     .filter_map(|half_edge| {
-                        endpoints
-                            .get(&half_edge.edge)
-                            .map(|endpoints| match half_edge.endpoint {
+                        endpoints.get(&half_edge.edge).and_then(|endpoints| {
+                            match half_edge.endpoint {
                                 DiagramEndpoint::Source => endpoints.source,
                                 DiagramEndpoint::Target => endpoints.target,
-                            })
+                            }
+                        })
                     })
                     .collect::<BTreeSet<_>>();
                 for vertex in vertices {
@@ -914,7 +841,20 @@ impl FeynmanDiagram {
         }
         for (edge_id, endpoints, edge) in self.edges() {
             let mut particle = edge.particle;
-            let (mut source, mut target) = (endpoints.source.0, endpoints.target.0);
+            let mut external = edge.external.clone();
+            if let Some(leg) = &mut external {
+                leg.name.clear();
+            }
+            let mut terminal = || {
+                graph.add_node(CanonicalDiagramVertex::Diagram {
+                    interaction: None,
+                    external: external.clone(),
+                })
+            };
+            let (mut source, mut target) = (
+                endpoints.source.map_or_else(&mut terminal, |v| v.0),
+                endpoints.target.map_or_else(&mut terminal, |v| v.0),
+            );
             let (mut source_slot, mut target_slot) = (edge.source_slot, edge.target_slot);
             if normalize_particle_orientation {
                 let (resolved, base) = self.resolve_particle(edge_id, edge)?;
@@ -931,6 +871,8 @@ impl FeynmanDiagram {
                     edge.directed,
                     CanonicalEdgeColor::Diagram {
                         particle,
+                        external,
+                        is_dummy: edge.is_dummy,
                         source_slot,
                         target_slot,
                     },
@@ -948,20 +890,24 @@ impl FeynmanDiagram {
                 .iter()
                 .map(|edge| {
                     let endpoints = EdgeEndpoints {
-                        source: VertexId(edge.vertices.0),
-                        target: VertexId(edge.vertices.1),
+                        source: Some(VertexId(edge.vertices.0)),
+                        target: Some(VertexId(edge.vertices.1)),
                     };
-                    match edge.data {
+                    match &edge.data {
                         CanonicalEdgeColor::Diagram {
                             particle,
+                            external,
+                            is_dummy,
                             source_slot,
                             target_slot,
                         } => CanonicalDiagramEdge::Diagram {
                             endpoints,
-                            particle,
+                            particle: *particle,
+                            external: external.clone(),
+                            is_dummy: *is_dummy,
                             directed: edge.directed,
-                            source_slot,
-                            target_slot,
+                            source_slot: *source_slot,
+                            target_slot: *target_slot,
                         },
                         CanonicalEdgeColor::CutPair => CanonicalDiagramEdge::CutPair { endpoints },
                         CanonicalEdgeColor::CutMembership => {
@@ -1070,8 +1016,8 @@ impl FeynmanDiagram {
         relabeling: &BTreeMap<usize, usize>,
     ) -> Result<Self, DiagramError> {
         let external_indices: BTreeSet<_> = self
-            .vertices()
-            .filter_map(|(_, vertex)| vertex.external.as_ref().map(|leg| leg.index))
+            .edges()
+            .filter_map(|(_, _, edge)| edge.external.as_ref().map(|leg| leg.index))
             .collect();
         if let Some(index) = relabeling
             .keys()
@@ -1080,18 +1026,20 @@ impl FeynmanDiagram {
             return Err(DiagramError::UnknownExternalIndex(*index));
         }
 
-        self.map_data(
-            |_, vertex| {
-                let mut vertex = vertex.clone();
-                if let Some(external) = &mut vertex.external
+        let diagram = self.map_data(
+            |_, vertex| vertex.clone(),
+            |_, _, edge| {
+                let mut edge = edge.clone();
+                if let Some(external) = &mut edge.external
                     && let Some(index) = relabeling.get(&external.index)
                 {
                     external.index = *index;
                 }
-                vertex
+                edge
             },
-            |_, _, edge| edge.clone(),
-        )
+        )?;
+        diagram.validate()?;
+        Ok(diagram)
     }
 
     /// Return this diagram with a finalized deterministic name.
@@ -1109,15 +1057,16 @@ impl FeynmanDiagram {
     /// Return this diagram with a replacement scalar or tensor numerator.
     ///
     /// The replacement becomes the numerator fragment of the first
-    /// non-external vertex; every other vertex and edge fragment becomes one.
+    /// interaction vertex; every other vertex and edge fragment becomes one.
     /// This keeps the aggregate numerator authoritative while preserving the
     /// interaction and particle assignments needed to interpret the topology.
-    /// A diagram without a non-external vertex cannot own such a replacement.
+    /// A diagram without an interaction vertex cannot own such a replacement.
     /// Diagram IDs identify the model-resolved topology and remain unchanged.
     pub fn with_numerator(self, numerator: Atom) -> Result<Self, DiagramError> {
         let anchor = self
             .vertices()
-            .find_map(|(id, vertex)| (!vertex.is_external()).then_some(id))
+            .map(|(id, _)| id)
+            .next()
             .ok_or(DiagramError::MissingNumeratorAnchor)?;
         let anchor_numerator = numerator.clone();
         let mut replaced = self.map_data(
@@ -1160,7 +1109,7 @@ impl FeynmanDiagram {
             cut.right.half_edges.sort();
             cut.right.half_edges.dedup();
         }
-        cuts.sort();
+        cuts.sort_by_cached_key(|cut| self.cut_order_key(&cut.cut));
         cuts.dedup();
         self.cuts = cuts;
         self.validate()?;
@@ -1181,7 +1130,18 @@ impl FeynmanDiagram {
             candidate.right.sort();
             candidate.right.dedup();
         }
-        candidates.sort();
+        let ignored = self.initial_state_tree().0;
+        for candidate in &mut candidates {
+            candidate.left.retain(|half_edge| {
+                self.half_edge_id(*half_edge)
+                    .is_none_or(|hedge| !ignored.includes(&hedge))
+            });
+            candidate.right.retain(|half_edge| {
+                self.half_edge_id(*half_edge)
+                    .is_none_or(|hedge| !ignored.includes(&hedge))
+            });
+        }
+        candidates.sort_by_cached_key(|candidate| self.cut_order_key(&candidate.cut));
         candidates.dedup();
         self.topology_threshold_candidates = candidates;
         self.validate()?;
@@ -1199,18 +1159,24 @@ impl FeynmanDiagram {
             .into_iter()
             .enumerate()
             .map(|(candidate, (left, right))| {
-                self.cut_from_partitions(candidate, &left, &right, &vertex_half_edges)
-                    .map(|cut| DiagramThresholdCandidate {
-                        cut: cut.cut,
-                        left: cut.left.half_edges,
-                        right: cut.right.half_edges,
-                    })
-                    .map_err(|error| match error {
-                        DiagramError::InvalidCut { message, .. } => {
-                            DiagramError::InvalidThresholdCandidate { candidate, message }
-                        }
-                        error => error,
-                    })
+                self.cut_from_partitions(
+                    candidate,
+                    &left,
+                    &right,
+                    &vertex_half_edges,
+                    Some(&self.initial_state_tree().0),
+                )
+                .map(|cut| DiagramThresholdCandidate {
+                    cut: cut.cut,
+                    left: cut.left.half_edges,
+                    right: cut.right.half_edges,
+                })
+                .map_err(|error| match error {
+                    DiagramError::InvalidCut { message, .. } => {
+                        DiagramError::InvalidThresholdCandidate { candidate, message }
+                    }
+                    error => error,
+                })
             })
             .collect::<Result<Vec<_>, _>>()?;
         self.with_topology_threshold_candidates(candidates)
@@ -1232,25 +1198,67 @@ impl FeynmanDiagram {
             .into_iter()
             .enumerate()
             .map(|(cut, (left, right))| {
-                self.cut_from_partitions(cut, &left, &right, &vertex_half_edges)
+                self.cut_from_partitions(cut, &left, &right, &vertex_half_edges, None)
             })
             .collect::<Result<Vec<_>, _>>()?;
         self.with_cuts(cuts)
     }
 
-    fn vertex_half_edges(&self) -> Vec<Vec<DiagramHalfEdge>> {
-        let mut vertex_half_edges = vec![Vec::new(); self.graph.n_nodes()];
-        for (edge, endpoints, _) in self.edges() {
-            vertex_half_edges[endpoints.source.0].push(DiagramHalfEdge {
-                edge,
-                endpoint: DiagramEndpoint::Source,
-            });
-            vertex_half_edges[endpoints.target.0].push(DiagramHalfEdge {
-                edge,
-                endpoint: DiagramEndpoint::Target,
-            });
+    /// Resolve a stable endpoint reference to its native Linnet half-edge.
+    pub fn half_edge_id(
+        &self,
+        half_edge: DiagramHalfEdge,
+    ) -> Option<linnet::half_edge::involution::Hedge> {
+        if half_edge.edge.0 >= self.graph.n_edges() {
+            return None;
         }
-        vertex_half_edges
+        let pair = self.graph[&EdgeIndex(half_edge.edge.0)].1;
+        match (pair, half_edge.endpoint) {
+            (
+                HedgePair::Paired { source, .. } | HedgePair::Split { source, .. },
+                DiagramEndpoint::Source,
+            ) => Some(source),
+            (
+                HedgePair::Paired { sink, .. } | HedgePair::Split { sink, .. },
+                DiagramEndpoint::Target,
+            ) => Some(sink),
+            (
+                HedgePair::Unpaired {
+                    hedge,
+                    flow: Flow::Source,
+                },
+                DiagramEndpoint::Source,
+            )
+            | (
+                HedgePair::Unpaired {
+                    hedge,
+                    flow: Flow::Sink,
+                },
+                DiagramEndpoint::Target,
+            ) => Some(hedge),
+            _ => None,
+        }
+    }
+
+    /// Enumerate existing half-edges, in their native channel order.
+    pub fn half_edges(&self) -> impl Iterator<Item = DiagramHalfEdge> + '_ {
+        self.graph.iter_hedges().map(|(hedge, _)| DiagramHalfEdge {
+            edge: EdgeId(self.graph[&hedge].0),
+            endpoint: if self.graph.flow(hedge) == Flow::Source {
+                DiagramEndpoint::Source
+            } else {
+                DiagramEndpoint::Target
+            },
+        })
+    }
+
+    fn vertex_half_edges(&self) -> Vec<Vec<DiagramHalfEdge>> {
+        let mut result = vec![Vec::new(); self.graph.n_nodes()];
+        for half_edge in self.half_edges() {
+            let hedge = self.half_edge_id(half_edge).expect("existing half-edge");
+            result[self.graph.node_id(hedge).0].push(half_edge);
+        }
+        result
     }
 
     fn summarize_cut_side(
@@ -1258,27 +1266,18 @@ impl FeynmanDiagram {
         half_edges: &BTreeSet<DiagramHalfEdge>,
         vertex_half_edges: &[Vec<DiagramHalfEdge>],
     ) -> Result<DiagramCutSide, DiagramError> {
-        let vertices = vertex_half_edges
-            .iter()
-            .enumerate()
-            .filter_map(|(vertex, incident)| {
-                incident
-                    .first()
-                    .is_some_and(|edge| half_edges.contains(edge))
-                    .then_some(VertexId(vertex))
-            })
-            .collect::<BTreeSet<_>>();
-        let internal = vertices
-            .iter()
-            .copied()
-            .filter(|vertex| {
-                self.vertex(*vertex)
-                    .is_some_and(|vertex| !vertex.is_external())
-            })
-            .collect::<BTreeSet<_>>();
+        use linnet::half_edge::subgraph::ModifySubSet;
+        let mut selected = self.graph.empty_subgraph::<SuBitGraph>();
+        for half_edge in half_edges {
+            if let Some(hedge) = self.half_edge_id(*half_edge) {
+                selected.add(hedge);
+            }
+        }
         let mut coupling_orders = BTreeMap::new();
-        for vertex in &internal {
-            if let Some(rule) = self.vertex(*vertex).and_then(|vertex| vertex.interaction) {
+        for (vertex, incident) in vertex_half_edges.iter().enumerate() {
+            if incident.iter().any(|edge| half_edges.contains(edge))
+                && let Some(rule) = self.vertex(VertexId(vertex)).and_then(|v| v.interaction)
+            {
                 for (name, order) in self
                     .model
                     .vertex_rule_by_id(rule)?
@@ -1288,39 +1287,10 @@ impl FeynmanDiagram {
                 }
             }
         }
-        let internal_edges = self
-            .edges()
-            .filter(|(_, endpoints, _)| {
-                internal.contains(&endpoints.source) && internal.contains(&endpoints.target)
-            })
-            .map(|(edge, endpoints, _)| (edge, endpoints))
-            .collect::<Vec<_>>();
-        let mut remaining = internal.clone();
-        let mut components = 0;
-        while let Some(start) = remaining.pop_first() {
-            components += 1;
-            let mut queue = VecDeque::from([start]);
-            while let Some(vertex) = queue.pop_front() {
-                for (_, endpoints) in &internal_edges {
-                    let neighbor = if endpoints.source == vertex {
-                        Some(endpoints.target)
-                    } else if endpoints.target == vertex {
-                        Some(endpoints.source)
-                    } else {
-                        None
-                    };
-                    if let Some(neighbor) = neighbor
-                        && remaining.remove(&neighbor)
-                    {
-                        queue.push_back(neighbor);
-                    }
-                }
-            }
-        }
         Ok(DiagramCutSide {
             half_edges: half_edges.iter().copied().collect(),
             coupling_orders,
-            loop_count: internal_edges.len() + components - internal.len(),
+            loop_count: self.graph.cyclotomatic_number(&selected),
         })
     }
 
@@ -1330,6 +1300,7 @@ impl FeynmanDiagram {
         left_half_edges: &[DiagramHalfEdge],
         right_half_edges: &[DiagramHalfEdge],
         vertex_half_edges: &[Vec<DiagramHalfEdge>],
+        ignored: Option<&SuBitGraph>,
     ) -> Result<DiagramCut, DiagramError> {
         let left = left_half_edges.iter().copied().collect::<BTreeSet<_>>();
         let right = right_half_edges.iter().copied().collect::<BTreeSet<_>>();
@@ -1339,20 +1310,15 @@ impl FeynmanDiagram {
                 message: "half-edge sets contain duplicates".to_owned(),
             });
         }
-        let universe = self
-            .edges()
-            .flat_map(|(edge, _, _)| {
-                [
-                    DiagramHalfEdge {
-                        edge,
-                        endpoint: DiagramEndpoint::Source,
-                    },
-                    DiagramHalfEdge {
-                        edge,
-                        endpoint: DiagramEndpoint::Target,
-                    },
-                ]
+        let is_ignored = |half_edge: &DiagramHalfEdge| {
+            ignored.is_some_and(|ignored| {
+                self.half_edge_id(*half_edge)
+                    .is_some_and(|hedge| ignored.includes(&hedge))
             })
+        };
+        let universe = self
+            .half_edges()
+            .filter(|half_edge| !is_ignored(half_edge))
             .collect::<BTreeSet<_>>();
         if !left.is_disjoint(&right)
             || left.union(&right).copied().collect::<BTreeSet<_>>() != universe
@@ -1365,7 +1331,10 @@ impl FeynmanDiagram {
         }
 
         let mut oriented = BTreeSet::new();
-        for (edge, _, _) in self.edges() {
+        for (edge, endpoints, data) in self.edges() {
+            if data.external.is_some() || endpoints.source.is_none() || endpoints.target.is_none() {
+                continue;
+            }
             let source = DiagramHalfEdge {
                 edge,
                 endpoint: DiagramEndpoint::Source,
@@ -1374,7 +1343,10 @@ impl FeynmanDiagram {
                 edge,
                 endpoint: DiagramEndpoint::Target,
             };
-            match (left.contains(&source), left.contains(&target)) {
+            match (
+                left.contains(&source) && right.contains(&target),
+                left.contains(&target) && right.contains(&source),
+            ) {
                 (true, false) => {
                     oriented.insert(source);
                 }
@@ -1385,11 +1357,9 @@ impl FeynmanDiagram {
             }
         }
         for (vertex, incident) in vertex_half_edges.iter().enumerate() {
-            if incident.first().is_some_and(|first| {
-                incident
-                    .iter()
-                    .any(|edge| left.contains(edge) != left.contains(first))
-            }) {
+            if incident.iter().any(|edge| left.contains(edge))
+                && incident.iter().any(|edge| right.contains(edge))
+            {
                 return Err(DiagramError::InvalidCut {
                     cut,
                     message: format!("vertex {vertex} is split between the two sides"),
@@ -1407,26 +1377,17 @@ impl FeynmanDiagram {
     /// Select a spanning-forest routing by its ordered independent edges.
     pub fn with_loop_momentum_edges(mut self, requested: &[EdgeId]) -> Result<Self, DiagramError> {
         let requested_set: BTreeSet<_> = requested.iter().copied().collect();
-        let topology = self.topology();
-        let tree_edges = topology
-            .internal_edges
-            .iter()
-            .copied()
-            .filter(|edge| !requested_set.contains(edge))
+        let internal = self.internal_subgraph();
+        let tree_edges = self
+            .graph
+            .iter_edges_of(&internal)
+            .filter_map(|(_, edge, _)| {
+                (!requested_set.contains(&EdgeId(edge.0))).then_some(EdgeId(edge.0))
+            })
             .collect::<Vec<_>>();
-        if requested.len() != requested_set.len()
-            || tree_edges.len() + requested.len() != topology.internal_edges.len()
-            || !topology.is_spanning_forest(&tree_edges)
-        {
-            return Err(DiagramError::InvalidLoopMomentumEdges {
-                requested: requested.to_vec(),
-                available: self.loop_momentum_basis.loop_edges.clone(),
-            });
-        }
-        let basis = topology
-            .basis(tree_edges)?
+        self.loop_momentum_basis = self
+            .basis_from_tree(&tree_edges)?
             .with_loop_edge_order(requested)?;
-        self.loop_momentum_basis = basis;
         Ok(self)
     }
 
@@ -1439,27 +1400,7 @@ impl FeynmanDiagram {
         mut self,
         requested: &[EdgeId],
     ) -> Result<Self, DiagramError> {
-        let requested_set: BTreeSet<_> = requested.iter().copied().collect();
-        let topology = self.topology();
-        let tree_size = topology
-            .internal_vertices
-            .len()
-            .saturating_sub(topology.components.len());
-        let internal = topology
-            .internal_edges
-            .iter()
-            .copied()
-            .collect::<BTreeSet<_>>();
-        if requested.len() != tree_size
-            || requested.len() != requested_set.len()
-            || !requested_set.is_subset(&internal)
-            || !topology.is_spanning_forest(requested)
-        {
-            return Err(DiagramError::InvalidLoopMomentumBasis(format!(
-                "requested tree edges {requested:?} do not form a spanning forest"
-            )));
-        }
-        self.loop_momentum_basis = topology.basis(requested.to_vec())?;
+        self.loop_momentum_basis = self.basis_from_tree(requested)?;
         Ok(self)
     }
 
@@ -1475,11 +1416,10 @@ impl FeynmanDiagram {
         self,
         ordered: &[EdgeId],
     ) -> Result<Self, DiagramError> {
-        let topology = self.topology();
-        let internal = topology
-            .internal_edges
-            .iter()
-            .copied()
+        let internal = self
+            .graph
+            .iter_edges_of(&self.internal_subgraph())
+            .map(|(_, edge, _)| EdgeId(edge.0))
             .collect::<BTreeSet<_>>();
         let ordered_set = ordered.iter().copied().collect::<BTreeSet<_>>();
         if ordered.len() != ordered_set.len() || ordered_set != internal {
@@ -1494,7 +1434,6 @@ impl FeynmanDiagram {
         let mut builder = HedgeGraphBuilder::<EdgeId, ()>::new();
         let nodes = self
             .vertices()
-            .filter(|(_, data)| !data.is_external())
             .map(|(vertex, _)| (vertex, builder.add_node(())))
             .collect::<BTreeMap<_, _>>();
         let endpoints = self
@@ -1503,22 +1442,10 @@ impl FeynmanDiagram {
             .collect::<BTreeMap<_, _>>();
         let mut external_attachments =
             BTreeMap::<usize, (Option<VertexId>, Option<VertexId>)>::new();
-        for (_, endpoints, _) in self.edges() {
-            let external = self
-                .vertex(endpoints.source)
-                .and_then(|vertex| vertex.external.as_ref())
-                .map(|external| (external, endpoints.target))
-                .or_else(|| {
-                    self.vertex(endpoints.target)
-                        .and_then(|vertex| vertex.external.as_ref())
-                        .map(|external| (external, endpoints.source))
-                });
-            if let Some((external, attachment)) = external {
-                let connection = external_attachments.entry(external.connection).or_default();
-                match external.state {
-                    ExternalState::Incoming => connection.0 = Some(attachment),
-                    ExternalState::Outgoing => connection.1 = Some(attachment),
-                }
+        for (_, endpoints, edge) in self.edges() {
+            if let Some(external) = &edge.external {
+                external_attachments
+                    .insert(external.connection, (endpoints.source, endpoints.target));
             }
         }
         for edge in ordered {
@@ -1527,8 +1454,8 @@ impl FeynmanDiagram {
                 message: format!("missing internal edge {}", edge.0),
             })?;
             builder.add_edge(
-                nodes[&endpoints.source],
-                nodes[&endpoints.target],
+                nodes[&endpoints.source.expect("internal edge source")],
+                nodes[&endpoints.target.expect("internal edge target")],
                 *edge,
                 Orientation::Undirected,
             );
@@ -1591,55 +1518,53 @@ impl FeynmanDiagram {
     pub fn validate(&self) -> Result<(), DiagramError> {
         let mut degrees = vec![0_usize; self.graph.n_nodes()];
         let mut fragment_numerator = Atom::one();
-        let mut external_connections = BTreeMap::<usize, Vec<(ExternalState, EdgeId)>>::new();
+        let mut external_indices = BTreeSet::new();
+        let mut external_connections = BTreeSet::new();
+        let mut paired_external_edges = BTreeSet::new();
         let mut vertex_slots = vec![BTreeSet::new(); self.graph.n_nodes()];
-        let mut vertex_half_edges = vec![Vec::new(); self.graph.n_nodes()];
+        let vertex_half_edges = self.vertex_half_edges();
         for (edge_id, endpoints, edge) in self.edges() {
             self.resolve_particle(edge_id, edge)?;
-            degrees[endpoints.source.0] += 1;
-            degrees[endpoints.target.0] += 1;
-            let source_external = self.graph[NodeIndex(endpoints.source.0)].is_external();
-            let target_external = self.graph[NodeIndex(endpoints.target.0)].is_external();
-            if source_external && target_external {
-                return Err(DiagramError::ExternalToExternalEdge { edge: edge_id.0 });
-            }
-            if (source_external || target_external) && edge.numerator != Atom::one() {
-                return Err(DiagramError::ExternalEdgeNumerator { edge: edge_id.0 });
+            if let Some(external) = &edge.external {
+                if !external_indices.insert(external.index) {
+                    return Err(DiagramError::DuplicateExternalIndex(external.index));
+                }
+                if !external_connections.insert(external.connection) {
+                    return Err(DiagramError::InvalidExternalConnectionSize {
+                        connection: external.connection,
+                        legs: 2,
+                    });
+                }
+                if edge.numerator != Atom::one() {
+                    return Err(DiagramError::ExternalEdgeNumerator { edge: edge_id.0 });
+                }
+                if endpoints.source.is_some() && endpoints.target.is_some() {
+                    paired_external_edges.insert(edge_id);
+                } else if (external.state == ExternalState::Incoming) != endpoints.source.is_none()
+                {
+                    return Err(DiagramError::Invariant {
+                        operation: "validating external flow",
+                        message: format!("edge {} disagrees with its process state", edge_id.0),
+                    });
+                }
             }
             for (vertex, slot) in [
                 (endpoints.source, edge.source_slot),
                 (endpoints.target, edge.target_slot),
             ] {
-                if !vertex_slots[vertex.0].insert(slot.0) {
-                    return Err(DiagramError::DuplicateVertexSlot {
-                        vertex: vertex.0,
-                        slot: slot.0,
-                    });
+                if let Some(vertex) = vertex {
+                    degrees[vertex.0] += 1;
+                    if !vertex_slots[vertex.0].insert(slot.0) {
+                        return Err(DiagramError::DuplicateVertexSlot {
+                            vertex: vertex.0,
+                            slot: slot.0,
+                        });
+                    }
                 }
             }
-            vertex_half_edges[endpoints.source.0].push(DiagramHalfEdge {
-                edge: edge_id,
-                endpoint: DiagramEndpoint::Source,
-            });
-            vertex_half_edges[endpoints.target.0].push(DiagramHalfEdge {
-                edge: edge_id,
-                endpoint: DiagramEndpoint::Target,
-            });
             fragment_numerator *= &edge.numerator;
         }
         for (vertex_id, vertex) in self.vertices() {
-            if vertex.external.is_some() && degrees[vertex_id.0] != 1 {
-                return Err(DiagramError::InvalidExternalDegree {
-                    vertex: vertex_id.0,
-                    degree: degrees[vertex_id.0],
-                });
-            }
-            if let Some(external) = &vertex.external {
-                external_connections
-                    .entry(external.connection)
-                    .or_default()
-                    .push((external.state, vertex_half_edges[vertex_id.0][0].edge));
-            }
             let actual = vertex_slots[vertex_id.0]
                 .iter()
                 .copied()
@@ -1652,11 +1577,6 @@ impl FeynmanDiagram {
                     expected,
                 });
             }
-            if vertex.external.is_some() && vertex.numerator != Atom::one() {
-                return Err(DiagramError::ExternalVertexNumerator {
-                    vertex: vertex_id.0,
-                });
-            }
             fragment_numerator *= &vertex.numerator;
             if let Some(interaction) = vertex.interaction {
                 let rule = self.model.vertex_rule_by_id(interaction)?;
@@ -1664,16 +1584,26 @@ impl FeynmanDiagram {
                 for (edge_id, endpoints, edge) in self.edges() {
                     let (particle, base_id) = self.resolve_particle(edge_id, edge)?;
                     let base = self.model.particle_by_id(base_id)?;
-                    if endpoints.source == vertex_id {
+                    if endpoints.source == Some(vertex_id) {
                         actual[edge.source_slot.0] = Some((
                             base.pdg_code,
-                            edge.directed.then_some(!particle.is_antiparticle()),
+                            edge.directed.then_some(
+                                !particle.is_antiparticle()
+                                    ^ (edge.external.is_some()
+                                        && endpoints.source.is_some()
+                                        && endpoints.target.is_some()),
+                            ),
                         ));
                     }
-                    if endpoints.target == vertex_id {
+                    if endpoints.target == Some(vertex_id) {
                         actual[edge.target_slot.0] = Some((
                             base.pdg_code,
-                            edge.directed.then_some(particle.is_antiparticle()),
+                            edge.directed.then_some(
+                                particle.is_antiparticle()
+                                    ^ (edge.external.is_some()
+                                        && endpoints.source.is_some()
+                                        && endpoints.target.is_some()),
+                            ),
                         ));
                     }
                 }
@@ -1705,30 +1635,7 @@ impl FeynmanDiagram {
                 }
             }
         }
-        let mut has_paired_external_connection = false;
-        let mut paired_external_edges = BTreeSet::new();
-        for (connection, states) in external_connections {
-            match states.as_slice() {
-                [_] => {}
-                [(left, left_edge), (right, right_edge)] if left != right => {
-                    has_paired_external_connection = true;
-                    paired_external_edges.insert(*left_edge);
-                    paired_external_edges.insert(*right_edge);
-                }
-                [(state, _), _] => {
-                    return Err(DiagramError::InvalidExternalConnectionStates {
-                        connection,
-                        state: state.as_str(),
-                    });
-                }
-                _ => {
-                    return Err(DiagramError::InvalidExternalConnectionSize {
-                        connection,
-                        legs: states.len(),
-                    });
-                }
-            }
-        }
+        let has_paired_external_connection = !paired_external_edges.is_empty();
         if has_paired_external_connection && self.cuts.is_empty() {
             return Err(DiagramError::MissingCrossSectionCuts);
         }
@@ -1760,6 +1667,7 @@ impl FeynmanDiagram {
                 &cut.left.half_edges,
                 &cut.right.half_edges,
                 &vertex_half_edges,
+                None,
             )?;
             if oriented != normalized.cut.iter().copied().collect::<BTreeSet<_>>() {
                 return Err(DiagramError::InvalidCut {
@@ -1795,6 +1703,7 @@ impl FeynmanDiagram {
                     &candidate.left,
                     &candidate.right,
                     &vertex_half_edges,
+                    Some(&self.initial_state_tree().0),
                 )
                 .map_err(|error| match error {
                     DiagramError::InvalidCut { message, .. } => {
@@ -1837,6 +1746,7 @@ impl FeynmanDiagram {
     /// Serialize to a stable DOT dialect that can be parsed by [`Self::from_dot`].
     pub fn to_dot(&self) -> Result<String, DiagramError> {
         let mut output = String::new();
+        let snapshot = self.serde_view();
         let loop_momentum_edges = self
             .loop_momentum_basis
             .loop_edges
@@ -1844,25 +1754,23 @@ impl FeynmanDiagram {
             .map(|edge| edge.0.to_string())
             .collect::<Vec<_>>()
             .join(",");
-        let cuts = serde_json::to_string(&self.cuts)?;
-        let topology_threshold_candidates =
-            serde_json::to_string(&self.topology_threshold_candidates)?;
         writeln!(output, "digraph feynkit {{")?;
         writeln!(
             output,
-            "  graph [feynkit_name={}, model_fingerprint={}, symmetry_factor={}, overall_factor={}, numerator={}, numerator_prefactor={}, projector={}, loop_momentum_edges={}, cuts={}, topology_threshold_candidates={}];",
+            "  graph [feynkit_name={}, model_fingerprint={}, symmetry_factor={}, overall_factor={}, numerator={}, numerator_prefactor={}, projector={}, loop_momentum_edges={}, loop_momentum_basis={}, half_edge_order={}, cuts={}, topology_threshold_candidates={}];",
             Self::dot_string(&self.name)?,
             Self::dot_string(&self.model.fingerprint().to_string())?,
             self.symmetry_factor,
-            Self::dot_string(&self.overall_factor.to_canonical_string())?,
-            Self::dot_string(&self.numerator.to_canonical_string())?,
-            Self::dot_string(&self.numerator_prefactor.to_canonical_string())?,
-            Self::dot_string(&self.projector.to_canonical_string())?,
+            Self::dot_string(&snapshot.overall_factor)?,
+            Self::dot_string(&snapshot.numerator)?,
+            Self::dot_string(&snapshot.numerator_prefactor)?,
+            Self::dot_string(&snapshot.projector)?,
             Self::dot_string(&loop_momentum_edges)?,
-            Self::dot_string(&cuts)?,
-            Self::dot_string(&topology_threshold_candidates)?,
+            Self::dot_string(&serde_json::to_string(&self.loop_momentum_basis)?)?,
+            Self::dot_string(&serde_json::to_string(&snapshot.half_edge_order)?)?,
+            Self::dot_string(&serde_json::to_string(&self.cuts)?)?,
+            Self::dot_string(&serde_json::to_string(&self.topology_threshold_candidates)?)?,
         )?;
-
         for (id, vertex) in self.vertices() {
             write!(
                 output,
@@ -1872,38 +1780,44 @@ impl FeynmanDiagram {
                 Self::dot_string(&vertex.name)?
             )?;
             if let Some(rule) = vertex.interaction {
-                let rule_name = &self.model.vertex_rule_by_id(rule)?.name;
                 write!(
                     output,
                     ", interaction_id={}, interaction={}",
                     rule.index(),
-                    Self::dot_string(rule_name)?
+                    Self::dot_string(&self.model.vertex_rule_by_id(rule)?.name)?
                 )?;
             }
-            if let Some(external) = &vertex.external {
-                write!(
-                    output,
-                    ", external_state={}, external_index={}, external_connection={}",
-                    Self::dot_string(external.state.as_str())?,
-                    external.index,
-                    external.connection,
-                )?;
-            }
-            write!(
+            writeln!(
                 output,
-                ", numerator={}",
+                ", numerator={}];",
                 Self::dot_string(&vertex.numerator.to_canonical_string())?
             )?;
-            writeln!(output, "];")?;
         }
-
         for (id, endpoints, edge) in self.edges() {
+            let source = endpoints
+                .source
+                .map(|vertex| format!("v{}", vertex.0))
+                .unwrap_or_else(|| format!("ext{}", id.0));
+            let target = endpoints
+                .target
+                .map(|vertex| format!("v{}", vertex.0))
+                .unwrap_or_else(|| format!("ext{}", id.0));
+            if endpoints.source.is_none() || endpoints.target.is_none() {
+                // Linnet consumes invisible DOT endpoints as dangling half-edges,
+                // never as interaction vertices in the imported graph.
+                writeln!(output, "  ext{} [style=invis];", id.0)?;
+            }
             let particle = self.model.particle_by_id(edge.particle)?;
-            write!(
+            let orientation =
+                linnet::half_edge::EdgeAccessors::orientation(&self.graph, EdgeIndex(id.0));
+            let direction = match orientation {
+                Orientation::Default => "forward",
+                Orientation::Reversed => "back",
+                Orientation::Undirected => "none",
+            };
+            writeln!(
                 output,
-                "  v{} -> v{} [id={}, particle_id={}, pdg={}, particle={}, directed={}, source_slot={}, target_slot={}",
-                endpoints.source.0,
-                endpoints.target.0,
+                "  {source} -> {target} [id={}, particle_id={}, pdg={}, particle={}, directed={}, source_slot={}, target_slot={}, dir={}, external={}, is_dummy={}, numerator={}];",
                 id.0,
                 edge.particle.index(),
                 particle.pdg_code,
@@ -1911,16 +1825,11 @@ impl FeynmanDiagram {
                 edge.directed,
                 edge.source_slot.0,
                 edge.target_slot.0,
+                direction,
+                Self::dot_string(&serde_json::to_string(&edge.external)?)?,
+                edge.is_dummy,
+                Self::dot_string(&edge.numerator.to_canonical_string())?,
             )?;
-            if !edge.directed {
-                write!(output, ", dir=none")?;
-            }
-            write!(
-                output,
-                ", numerator={}",
-                Self::dot_string(&edge.numerator.to_canonical_string())?
-            )?;
-            writeln!(output, "];")?;
         }
         writeln!(output, "}}")?;
         Ok(output)
@@ -2077,47 +1986,15 @@ impl FeynmanDiagram {
                         .and_then(|id| model.vertex_rule_id_at(id).map_err(Into::into))
                 })
                 .transpose()?;
-            let external = data
-                .statements
-                .get("external_state")
-                .map(|state| -> Result<ExternalLeg, DiagramError> {
-                    let index = data
-                        .statements
-                        .get("external_index")
-                        .ok_or_else(|| DiagramError::MissingDotAttribute {
-                            target: target.clone(),
-                            attribute: "external_index",
-                        })?
-                        .parse()
-                        .map_err(|_| DiagramError::InvalidDotAttribute {
-                            target: target.clone(),
-                            attribute: "external_index",
-                            value: data.statements["external_index"].clone(),
-                        })?;
-                    let connection = data
-                        .statements
-                        .get("external_connection")
-                        .ok_or_else(|| DiagramError::MissingDotAttribute {
-                            target: target.clone(),
-                            attribute: "external_connection",
-                        })?
-                        .parse()
-                        .map_err(|_| DiagramError::InvalidDotAttribute {
-                            target: target.clone(),
-                            attribute: "external_connection",
-                            value: data.statements["external_connection"].clone(),
-                        })?;
-                    Ok(ExternalLeg {
-                        index,
-                        state: ExternalState::parse(state)?,
-                        connection,
-                    })
-                })
-                .transpose()?;
+            if data.statements.contains_key("external_state") {
+                return Err(DiagramError::Invariant {
+                    operation: "reading finalized DOT vertices",
+                    message: "external states must be represented by dangling or sewn edges, not vertices".into(),
+                });
+            }
             let vertex = DiagramVertex {
                 name: vertex_name,
                 interaction,
-                external,
                 numerator: Self::parse_expression(
                     "vertex numerator",
                     data.statements
@@ -2130,17 +2007,17 @@ impl FeynmanDiagram {
         }
 
         let mut next_external = 0;
-        for external in builder
-            .vertices
-            .iter()
-            .filter_map(|vertex| vertex.external.as_ref())
-        {
-            next_external = next_external.max(
-                external
-                    .index
-                    .checked_add(1)
-                    .ok_or(DiagramError::DotExternalIndexOverflow(external.index))?,
-            );
+        for (_, _, data) in parsed.iter_edges() {
+            if let Some(value) = data.data.statements.get("external")
+                && let Some(external) = serde_json::from_str::<Option<ExternalLeg>>(value)?
+            {
+                next_external = next_external.max(
+                    external
+                        .index
+                        .checked_add(1)
+                        .ok_or(DiagramError::DotExternalIndexOverflow(external.index))?,
+                );
+            }
         }
         for (pair, edge_id, data) in parsed.iter_edges() {
             let target = format!("edge {}", edge_id.0);
@@ -2182,6 +2059,28 @@ impl FeynmanDiagram {
                     value: data.data.statements["particle_id"].clone(),
                 })?;
             let mut edge = DiagramEdge {
+                external: data
+                    .data
+                    .statements
+                    .get("external")
+                    .map(|value| serde_json::from_str::<Option<ExternalLeg>>(value))
+                    .transpose()?
+                    .flatten(),
+                is_dummy: data
+                    .data
+                    .statements
+                    .get("is_dummy")
+                    .map(|value| {
+                        value
+                            .parse::<bool>()
+                            .map_err(|_| DiagramError::InvalidDotAttribute {
+                                target: target.clone(),
+                                attribute: "is_dummy",
+                                value: value.clone(),
+                            })
+                    })
+                    .transpose()?
+                    .unwrap_or(false),
                 particle: model.particle_id_at(particle_id)?,
                 directed: data.orientation != Orientation::Undirected,
                 numerator: Self::parse_expression(
@@ -2240,20 +2139,16 @@ impl FeynmanDiagram {
                 HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } => {
                     let source_id = parsed.node_id(source);
                     let sink_id = parsed.node_id(sink);
-                    let mut source =
-                        *node_map
-                            .get(&source_id)
-                            .ok_or(DiagramError::UnknownVertex {
-                                vertex: source_id.0,
-                                vertices: node_map.len(),
-                            })?;
-                    let mut sink = *node_map.get(&sink_id).ok_or(DiagramError::UnknownVertex {
+                    let source = *node_map
+                        .get(&source_id)
+                        .ok_or(DiagramError::UnknownVertex {
+                            vertex: source_id.0,
+                            vertices: node_map.len(),
+                        })?;
+                    let sink = *node_map.get(&sink_id).ok_or(DiagramError::UnknownVertex {
                         vertex: sink_id.0,
                         vertices: node_map.len(),
                     })?;
-                    if data.orientation == Orientation::Reversed {
-                        std::mem::swap(&mut source, &mut sink);
-                    }
                     builder.add_edge_with_slots(source, sink, edge, source_slot, target_slot)?;
                 }
                 HedgePair::Unpaired { hedge, flow } => {
@@ -2265,40 +2160,55 @@ impl FeynmanDiagram {
                                 vertex: internal_id.0,
                                 vertices: node_map.len(),
                             })?;
-                    let state = match flow {
-                        Flow::Sink => ExternalState::Incoming,
-                        Flow::Source => ExternalState::Outgoing,
+                    if edge.external.is_none() && !edge.is_dummy {
+                        let index = next_external;
+                        next_external = next_external
+                            .checked_add(1)
+                            .ok_or(DiagramError::DotExternalIndexOverflow(next_external))?;
+                        edge.external = Some(ExternalLeg {
+                            name: format!("ext{index}"),
+                            index,
+                            connection: index,
+                            state: match flow {
+                                Flow::Sink => ExternalState::Incoming,
+                                Flow::Source => ExternalState::Outgoing,
+                            },
+                        });
+                    }
+                    let (source, target) = match flow {
+                        Flow::Source => (Some(internal), None),
+                        Flow::Sink => (None, Some(internal)),
                     };
-                    let external_index = next_external;
-                    next_external = next_external
-                        .checked_add(1)
-                        .ok_or(DiagramError::DotExternalIndexOverflow(next_external))?;
-                    let external = builder.add_vertex(DiagramVertex::external(
-                        format!("ext{external_index}"),
-                        external_index,
-                        state,
-                    ));
-                    match state {
-                        ExternalState::Incoming => builder.add_edge_with_slots(
-                            external,
-                            internal,
-                            edge,
-                            source_slot,
-                            target_slot,
-                        )?,
-                        ExternalState::Outgoing => builder.add_edge_with_slots(
-                            internal,
-                            external,
-                            edge,
-                            source_slot,
-                            target_slot,
-                        )?,
-                    };
+                    builder.add_edge_with_slots(source, target, edge, source_slot, target_slot)?;
                 }
             }
         }
+        builder.edge_orientations = Some(
+            parsed
+                .iter_edges()
+                .map(|(_, _, edge)| edge.orientation)
+                .collect(),
+        );
+        builder.half_edge_order =
+            Some(match parsed.global_data.statements.get("half_edge_order") {
+                Some(order) => serde_json::from_str(order)?,
+                None => parsed
+                    .iter_hedges()
+                    .map(|(hedge, _)| DiagramHalfEdge {
+                        edge: EdgeId(parsed[&hedge].0),
+                        endpoint: match parsed.flow(hedge) {
+                            Flow::Source => DiagramEndpoint::Source,
+                            Flow::Sink => DiagramEndpoint::Target,
+                        },
+                    })
+                    .collect(),
+            });
+        if let Some(basis) = parsed.global_data.statements.get("loop_momentum_basis") {
+            builder.loop_momentum_basis = Some(serde_json::from_str(basis)?);
+        }
+        let stored_basis = builder.loop_momentum_basis.is_some();
         let diagram = builder.build()?;
-        let diagram = match loop_momentum_edges {
+        let diagram = match loop_momentum_edges.filter(|_| !stored_basis) {
             Some(edges) => diagram.with_loop_momentum_edges(&edges),
             None => Ok(diagram),
         }?;
@@ -2331,8 +2241,7 @@ impl FeynmanDiagram {
     }
 
     pub fn loop_count(&self) -> usize {
-        let topology = self.topology();
-        topology.internal_edges.len() + topology.components.len() - topology.internal_vertices.len()
+        self.loop_momentum_basis.loop_edges.len()
     }
 
     /// Return the local superficial UV degree in `dimension` spacetime dimensions.
@@ -2346,26 +2255,7 @@ impl FeynmanDiagram {
     /// Zero means logarithmic, positive means power divergent, and negative means
     /// superficially convergent.
     pub fn superficial_degree_of_divergence(&self, dimension: i32) -> Result<i32, DiagramError> {
-        let topology = self.topology();
-        let loops = self.loop_momentum_basis.loop_edges.len();
-        let mut degree = i64::from(dimension) * loops as i64;
-        for vertex in topology.internal_vertices {
-            degree += i64::from(
-                self.graph[NodeIndex(vertex.0)]
-                    .numerator
-                    .all_dod(momentum_symbol())?,
-            );
-        }
-        for edge in topology.internal_edges {
-            degree += i64::from(
-                self.graph[EdgeIndex(edge.0)]
-                    .numerator
-                    .edge_dod(momentum_symbol(), edge.0)?,
-            ) - 2;
-        }
-        i32::try_from(degree).map_err(|_| {
-            DiagramError::UvPowerCounting("degree exceeds the integer range".to_owned())
-        })
+        self.superficial_degree_of_divergence_of(&self.momentum_subgraph(), dimension)
     }
 
     /// Enumerate every spanning-forest-induced loop momentum basis.
@@ -2378,39 +2268,7 @@ impl FeynmanDiagram {
         &self,
         limit: usize,
     ) -> Result<Vec<LoopMomentumBasis>, DiagramError> {
-        let topology = self.topology();
-        let tree_size = topology
-            .internal_vertices
-            .len()
-            .saturating_sub(topology.components.len());
-        let mut selections = Vec::new();
-        Self::spanning_forests(
-            &topology,
-            &topology.internal_edges,
-            tree_size,
-            0,
-            &mut Vec::new(),
-            &mut selections,
-            limit,
-        );
-
-        let bases = selections
-            .into_iter()
-            .map(|tree_edges| topology.basis(tree_edges))
-            .collect::<Result<_, _>>()?;
-        Ok(bases)
-    }
-
-    fn paired_endpoints(&self, pair: HedgePair, orientation: Orientation) -> Option<EdgeEndpoints> {
-        let HedgePair::Paired { source, sink } = pair else {
-            return None;
-        };
-        let mut source = VertexId(self.graph.node_id(source).0);
-        let mut target = VertexId(self.graph.node_id(sink).0);
-        if orientation == Orientation::Reversed {
-            std::mem::swap(&mut source, &mut target);
-        }
-        Some(EdgeEndpoints { source, target })
+        self.loop_momentum_bases_of(&self.graph.full_filter(), limit)
     }
 
     fn resolve_particle(
@@ -2438,16 +2296,21 @@ impl FeynmanDiagram {
                 .map(|(_, vertex)| DiagramVertexSerde {
                     name: vertex.name.clone(),
                     interaction: vertex.interaction,
-                    external: vertex.external.clone(),
                     numerator: vertex.numerator.to_canonical_string(),
                 })
                 .collect(),
             edges: self
                 .edges()
-                .map(|(_, endpoints, edge)| {
+                .map(|(id, endpoints, edge)| {
                     (
                         endpoints,
                         DiagramEdgeSerde {
+                            external: edge.external.clone(),
+                            is_dummy: edge.is_dummy,
+                            orientation: linnet::half_edge::EdgeAccessors::orientation(
+                                &self.graph,
+                                EdgeIndex(id.0),
+                            ),
                             particle: edge.particle,
                             directed: edge.directed,
                             numerator: edge.numerator.to_canonical_string(),
@@ -2457,6 +2320,7 @@ impl FeynmanDiagram {
                     )
                 })
                 .collect(),
+            half_edge_order: self.half_edges().collect(),
             symmetry_factor: self.symmetry_factor,
             overall_factor: self.overall_factor.to_canonical_string(),
             numerator: self.numerator.to_canonical_string(),
@@ -2492,11 +2356,17 @@ impl FeynmanDiagram {
             .loop_momentum_basis(data.loop_momentum_basis)
             .cuts(data.cuts)
             .topology_threshold_candidates(data.topology_threshold_candidates);
+        builder.half_edge_order = Some(data.half_edge_order);
+        builder.edge_orientations = Some(
+            data.edges
+                .iter()
+                .map(|(_, edge)| edge.orientation)
+                .collect(),
+        );
         for vertex in data.vertices {
             builder.add_vertex(DiagramVertex {
                 name: vertex.name,
                 interaction: vertex.interaction,
-                external: vertex.external,
                 numerator: Self::parse_expression("vertex numerator", vertex.numerator)?,
             });
         }
@@ -2505,6 +2375,8 @@ impl FeynmanDiagram {
                 endpoints.source,
                 endpoints.target,
                 DiagramEdge {
+                    external: edge.external,
+                    is_dummy: edge.is_dummy,
                     particle: edge.particle,
                     directed: edge.directed,
                     numerator: Self::parse_expression("edge numerator", edge.numerator)?,
@@ -2553,39 +2425,6 @@ impl FeynmanDiagram {
                 message,
             })
     }
-
-    fn spanning_forests(
-        topology: &Topology,
-        values: &[EdgeId],
-        size: usize,
-        start: usize,
-        current: &mut Vec<EdgeId>,
-        output: &mut Vec<Vec<EdgeId>>,
-        limit: usize,
-    ) {
-        if output.len() >= limit {
-            return;
-        }
-        if current.len() == size {
-            if topology.is_spanning_forest(current) {
-                output.push(current.clone());
-            }
-            return;
-        }
-        let missing = size - current.len();
-        for index in start..=values.len().saturating_sub(missing) {
-            current.push(values[index]);
-            Self::spanning_forests(topology, values, size, index + 1, current, output, limit);
-            current.pop();
-            if output.len() >= limit {
-                break;
-            }
-        }
-    }
-
-    fn topology(&self) -> Topology {
-        Topology::new(self)
-    }
 }
 
 /// Incremental owner for enforcing diagram-construction invariants.
@@ -2593,7 +2432,10 @@ pub struct FeynmanDiagramBuilder {
     model: Arc<Model>,
     name: String,
     vertices: Vec<DiagramVertex>,
+    generation_externals: BTreeMap<VertexId, ExternalLeg>,
     edges: Vec<(EdgeEndpoints, DiagramEdge)>,
+    half_edge_order: Option<Vec<DiagramHalfEdge>>,
+    edge_orientations: Option<Vec<Orientation>>,
     symmetry_factor: u64,
     overall_factor: Atom,
     numerator: Atom,
@@ -2610,7 +2452,10 @@ impl FeynmanDiagramBuilder {
             model: model.into(),
             name: name.into(),
             vertices: Vec::new(),
+            generation_externals: BTreeMap::new(),
             edges: Vec::new(),
+            half_edge_order: None,
+            edge_orientations: None,
             symmetry_factor: 1,
             overall_factor: Atom::one(),
             numerator: Atom::one(),
@@ -2674,23 +2519,53 @@ impl FeynmanDiagramBuilder {
         id
     }
 
+    /// Reserve a temporary Symbolica-generation endpoint, removed during finalization.
+    /// Public diagrams carry this metadata on the resulting external edge.
+    #[doc(hidden)]
+    pub fn add_generation_external(
+        &mut self,
+        name: impl Into<String>,
+        index: usize,
+        state: ExternalState,
+        connection: usize,
+    ) -> VertexId {
+        let name = name.into();
+        let vertex = self.add_vertex(DiagramVertex {
+            name: name.clone(),
+            interaction: None,
+            numerator: Atom::one(),
+        });
+        self.generation_externals.insert(
+            vertex,
+            ExternalLeg {
+                name,
+                index,
+                state,
+                connection,
+            },
+        );
+        vertex
+    }
+
     pub fn add_edge(
         &mut self,
-        source: VertexId,
-        target: VertexId,
+        source: impl Into<Option<VertexId>>,
+        target: impl Into<Option<VertexId>>,
         mut edge: DiagramEdge,
     ) -> Result<EdgeId, DiagramError> {
-        let degree = |vertex: VertexId| {
+        let (source, target) = (source.into(), target.into());
+        let degree = |vertex: Option<VertexId>| {
             self.edges
                 .iter()
                 .map(|(endpoints, _)| {
-                    usize::from(endpoints.source == vertex)
-                        + usize::from(endpoints.target == vertex)
+                    usize::from(vertex.is_some() && endpoints.source == vertex)
+                        + usize::from(vertex.is_some() && endpoints.target == vertex)
                 })
                 .sum()
         };
         let source_slot = VertexSlot(degree(source));
-        let target_slot = VertexSlot(degree(target) + usize::from(source == target));
+        let target_slot =
+            VertexSlot(degree(target) + usize::from(source.is_some() && source == target));
         edge.source_slot = source_slot;
         edge.target_slot = target_slot;
         self.add_edge_with_slots(source, target, edge, source_slot, target_slot)
@@ -2698,13 +2573,20 @@ impl FeynmanDiagramBuilder {
 
     pub fn add_edge_with_slots(
         &mut self,
-        source: VertexId,
-        target: VertexId,
+        source: impl Into<Option<VertexId>>,
+        target: impl Into<Option<VertexId>>,
         mut edge: DiagramEdge,
         source_slot: VertexSlot,
         target_slot: VertexSlot,
     ) -> Result<EdgeId, DiagramError> {
-        for vertex in [source, target] {
+        let (source, target) = (source.into(), target.into());
+        if source.is_none() && target.is_none() {
+            return Err(DiagramError::Invariant {
+                operation: "adding an edge",
+                message: "an edge must have an attached half-edge".into(),
+            });
+        }
+        for vertex in [source, target].into_iter().flatten() {
             if vertex.0 >= self.vertices.len() {
                 return Err(DiagramError::UnknownVertex {
                     vertex: vertex.0,
@@ -2719,403 +2601,8 @@ impl FeynmanDiagramBuilder {
         Ok(id)
     }
 
-    pub fn build(mut self) -> Result<FeynmanDiagram, DiagramError> {
-        for cut in &mut self.cuts {
-            cut.cut.sort();
-            cut.cut.dedup();
-            cut.left.half_edges.sort();
-            cut.left.half_edges.dedup();
-            cut.right.half_edges.sort();
-            cut.right.half_edges.dedup();
-        }
-        self.cuts.sort();
-        self.cuts.dedup();
-        for candidate in &mut self.topology_threshold_candidates {
-            candidate.cut.sort();
-            candidate.cut.dedup();
-            candidate.left.sort();
-            candidate.left.dedup();
-            candidate.right.sort();
-            candidate.right.dedup();
-        }
-        self.topology_threshold_candidates.sort();
-        self.topology_threshold_candidates.dedup();
-        let mut external_indices = BTreeSet::new();
-        let mut degrees = vec![0_usize; self.vertices.len()];
-        for vertex in &self.vertices {
-            if let Some(external) = &vertex.external
-                && !external_indices.insert(external.index)
-            {
-                return Err(DiagramError::DuplicateExternalIndex(external.index));
-            }
-        }
-        for (edge, (endpoints, _)) in self.edges.iter().enumerate() {
-            degrees[endpoints.source.0] += 1;
-            degrees[endpoints.target.0] += 1;
-            if self.vertices[endpoints.source.0].is_external()
-                && self.vertices[endpoints.target.0].is_external()
-            {
-                return Err(DiagramError::ExternalToExternalEdge { edge });
-            }
-        }
-        for (vertex, (data, degree)) in self.vertices.iter().zip(degrees).enumerate() {
-            if data.is_external() && degree != 1 {
-                return Err(DiagramError::InvalidExternalDegree { vertex, degree });
-            }
-        }
-
-        let mut graph_builder = HedgeGraphBuilder::new();
-        let nodes: Vec<_> = self
-            .vertices
-            .into_iter()
-            .map(|vertex| graph_builder.add_node(vertex))
-            .collect();
-        for (endpoints, edge) in self.edges {
-            graph_builder.add_edge(
-                nodes[endpoints.source.0],
-                nodes[endpoints.target.0],
-                edge.clone(),
-                edge.directed,
-            );
-        }
-        let mut diagram = FeynmanDiagram {
-            model: self.model,
-            id: DiagramId(0),
-            name: self.name,
-            graph: graph_builder.build(),
-            symmetry_factor: self.symmetry_factor,
-            overall_factor: self.overall_factor,
-            numerator: self.numerator,
-            numerator_prefactor: self.numerator_prefactor,
-            projector: self.projector,
-            loop_momentum_basis: self.loop_momentum_basis.unwrap_or(LoopMomentumBasis {
-                tree_edges: Vec::new(),
-                loop_edges: Vec::new(),
-                external_edges: Vec::new(),
-                dependent_externals: Vec::new(),
-                edge_signatures: BTreeMap::new(),
-            }),
-            cuts: self.cuts,
-            topology_threshold_candidates: self.topology_threshold_candidates,
-        };
-        if diagram.loop_momentum_basis.edge_signatures.is_empty() && diagram.graph.n_edges() != 0 {
-            diagram.loop_momentum_basis = diagram
-                .loop_momentum_bases_with_limit(1)?
-                .into_iter()
-                .next()
-                .ok_or(DiagramError::MissingLoopMomentumBasis)?;
-        }
-        diagram.id = DiagramId::from_key(diagram.model.fingerprint(), &diagram.structural_key()?)?;
-        Ok(diagram)
-    }
-}
-
-#[derive(Clone)]
-struct TopologyEdge {
-    source: VertexId,
-    target: VertexId,
-}
-
-struct Topology {
-    internal_vertices: Vec<VertexId>,
-    internal_edges: Vec<EdgeId>,
-    external_edges: Vec<EdgeId>,
-    edges: BTreeMap<EdgeId, TopologyEdge>,
-    components: Vec<Vec<VertexId>>,
-    external_state: BTreeMap<EdgeId, ExternalState>,
-}
-
-impl Topology {
-    fn new(diagram: &FeynmanDiagram) -> Self {
-        let internal_vertices: Vec<_> = diagram
-            .vertices()
-            .filter_map(|(id, vertex)| (!vertex.is_external()).then_some(id))
-            .collect();
-        let internal_set: BTreeSet<_> = internal_vertices.iter().copied().collect();
-        let mut internal_edges = Vec::new();
-        let mut external_edges = Vec::new();
-        let mut edges = BTreeMap::new();
-        let mut external_state = BTreeMap::new();
-
-        for (id, endpoints, _) in diagram.edges() {
-            edges.insert(
-                id,
-                TopologyEdge {
-                    source: endpoints.source,
-                    target: endpoints.target,
-                },
-            );
-            match (
-                internal_set.contains(&endpoints.source),
-                internal_set.contains(&endpoints.target),
-            ) {
-                (true, true) => internal_edges.push(id),
-                (true, false) => {
-                    external_edges.push(id);
-                    if let Some(leg) = diagram
-                        .vertex(endpoints.target)
-                        .and_then(|v| v.external.as_ref())
-                    {
-                        external_state.insert(id, leg.state);
-                    }
-                }
-                (false, true) => {
-                    external_edges.push(id);
-                    if let Some(leg) = diagram
-                        .vertex(endpoints.source)
-                        .and_then(|v| v.external.as_ref())
-                    {
-                        external_state.insert(id, leg.state);
-                    }
-                }
-                (false, false) => {}
-            }
-        }
-
-        let components = Self::components(&internal_vertices, &internal_edges, &edges);
-        Self {
-            internal_vertices,
-            internal_edges,
-            external_edges,
-            edges,
-            components,
-            external_state,
-        }
-    }
-
-    fn components(
-        vertices: &[VertexId],
-        edges: &[EdgeId],
-        edge_data: &BTreeMap<EdgeId, TopologyEdge>,
-    ) -> Vec<Vec<VertexId>> {
-        let mut remaining: BTreeSet<_> = vertices.iter().copied().collect();
-        let mut components = Vec::new();
-        while let Some(start) = remaining.pop_first() {
-            let mut component = vec![start];
-            let mut queue = VecDeque::from([start]);
-            while let Some(vertex) = queue.pop_front() {
-                for edge_id in edges {
-                    let edge = &edge_data[edge_id];
-                    let next = if edge.source == vertex {
-                        Some(edge.target)
-                    } else if edge.target == vertex {
-                        Some(edge.source)
-                    } else {
-                        None
-                    };
-                    if let Some(next) = next
-                        && remaining.remove(&next)
-                    {
-                        component.push(next);
-                        queue.push_back(next);
-                    }
-                }
-            }
-            component.sort();
-            components.push(component);
-        }
-        components
-    }
-
-    fn is_spanning_forest(&self, selected: &[EdgeId]) -> bool {
-        let components = Self::components(&self.internal_vertices, selected, &self.edges);
-        components == self.components
-    }
-
-    fn basis(&self, tree_edges: Vec<EdgeId>) -> Result<LoopMomentumBasis, DiagramError> {
-        let tree_set: BTreeSet<_> = tree_edges.iter().copied().collect();
-        let loop_edges: Vec<_> = self
-            .internal_edges
-            .iter()
-            .copied()
-            .filter(|edge| !tree_set.contains(edge))
-            .collect();
-        let mut coefficients: BTreeMap<_, _> = self
-            .edges
-            .keys()
-            .copied()
-            .map(|edge| {
-                (
-                    edge,
-                    (
-                        vec![0_i8; loop_edges.len()],
-                        vec![0_i8; self.external_edges.len()],
-                    ),
-                )
-            })
-            .collect();
-
-        for (loop_index, loop_edge) in loop_edges.iter().enumerate() {
-            coefficients
-                .get_mut(loop_edge)
-                .ok_or_else(|| DiagramError::Invariant {
-                    operation: "constructing a loop-momentum basis",
-                    message: format!("missing loop edge {}", loop_edge.0),
-                })?
-                .0[loop_index] = 1;
-            let edge = self
-                .edges
-                .get(loop_edge)
-                .ok_or_else(|| DiagramError::Invariant {
-                    operation: "constructing a loop-momentum basis",
-                    message: format!("missing topology edge {}", loop_edge.0),
-                })?;
-            for (path_edge, sign) in self.path(edge.target, edge.source, &tree_edges) {
-                coefficients
-                    .get_mut(&path_edge)
-                    .ok_or_else(|| DiagramError::Invariant {
-                        operation: "constructing a loop-momentum basis",
-                        message: format!("missing path edge {}", path_edge.0),
-                    })?
-                    .0[loop_index] = sign;
-            }
-        }
-
-        let mut dependent_externals = Vec::new();
-        for component in &self.components {
-            let component_set: BTreeSet<_> = component.iter().copied().collect();
-            let attached: Vec<_> = self
-                .external_edges
-                .iter()
-                .copied()
-                .filter(|edge| {
-                    let edge = &self.edges[edge];
-                    component_set.contains(&edge.source) || component_set.contains(&edge.target)
-                })
-                .collect();
-            let Some(root) = attached.last().copied() else {
-                continue;
-            };
-            dependent_externals.push(root);
-            let root_attachment = self.attachment(root);
-            let root_flow = self.flow_into_internal(root);
-            for edge_id in attached.into_iter().filter(|edge| *edge != root) {
-                let external_index = self
-                    .external_edges
-                    .iter()
-                    .position(|edge| *edge == edge_id)
-                    .ok_or_else(|| DiagramError::Invariant {
-                        operation: "constructing a loop-momentum basis",
-                        message: format!("missing external edge {}", edge_id.0),
-                    })?;
-                let flow = self.flow_into_internal(edge_id);
-                coefficients
-                    .get_mut(&edge_id)
-                    .ok_or_else(|| DiagramError::Invariant {
-                        operation: "constructing a loop-momentum basis",
-                        message: format!("missing external coefficient edge {}", edge_id.0),
-                    })?
-                    .1[external_index] = 1;
-                coefficients
-                    .get_mut(&root)
-                    .ok_or_else(|| DiagramError::Invariant {
-                        operation: "constructing a loop-momentum basis",
-                        message: format!("missing dependent external edge {}", root.0),
-                    })?
-                    .1[external_index] = -flow * root_flow;
-                for (path_edge, sign) in
-                    self.path(self.attachment(edge_id), root_attachment, &tree_edges)
-                {
-                    coefficients
-                        .get_mut(&path_edge)
-                        .ok_or_else(|| DiagramError::Invariant {
-                            operation: "constructing a loop-momentum basis",
-                            message: format!("missing external path edge {}", path_edge.0),
-                        })?
-                        .1[external_index] = flow * sign;
-                }
-            }
-        }
-
-        let edge_signatures = coefficients
-            .into_iter()
-            .map(|(edge, (loops, external))| {
-                Ok((
-                    edge,
-                    MomentumSignature::new(
-                        Signature::try_from_integers(loops).map_err(|error| {
-                            DiagramError::Invariant {
-                                operation: "constructing a loop-momentum basis",
-                                message: error.to_string(),
-                            }
-                        })?,
-                        Signature::try_from_integers(external).map_err(|error| {
-                            DiagramError::Invariant {
-                                operation: "constructing a loop-momentum basis",
-                                message: error.to_string(),
-                            }
-                        })?,
-                    ),
-                ))
-            })
-            .collect::<Result<_, DiagramError>>()?;
-
-        Ok(LoopMomentumBasis {
-            tree_edges,
-            loop_edges,
-            external_edges: self.external_edges.clone(),
-            dependent_externals,
-            edge_signatures,
-        })
-    }
-
-    fn attachment(&self, edge: EdgeId) -> VertexId {
-        let edge = &self.edges[&edge];
-        if self.internal_vertices.contains(&edge.source) {
-            edge.source
-        } else {
-            edge.target
-        }
-    }
-
-    fn flow_into_internal(&self, edge: EdgeId) -> i8 {
-        match self.external_state.get(&edge) {
-            Some(ExternalState::Incoming) => 1,
-            Some(ExternalState::Outgoing) => -1,
-            None => 1,
-        }
-    }
-
-    fn path(&self, start: VertexId, target: VertexId, tree_edges: &[EdgeId]) -> Vec<(EdgeId, i8)> {
-        if start == target {
-            return Vec::new();
-        }
-        let mut queue = VecDeque::from([start]);
-        let mut previous: BTreeMap<VertexId, (VertexId, EdgeId, i8)> = BTreeMap::new();
-        previous.insert(start, (start, EdgeId(usize::MAX), 0));
-        while let Some(vertex) = queue.pop_front() {
-            for edge_id in tree_edges {
-                let edge = &self.edges[edge_id];
-                let step = if edge.source == vertex {
-                    Some((edge.target, 1))
-                } else if edge.target == vertex {
-                    Some((edge.source, -1))
-                } else {
-                    None
-                };
-                if let Some((next, sign)) = step
-                    && !previous.contains_key(&next)
-                {
-                    previous.insert(next, (vertex, *edge_id, sign));
-                    if next == target {
-                        break;
-                    }
-                    queue.push_back(next);
-                }
-            }
-        }
-
-        let mut path = Vec::new();
-        let mut cursor = target;
-        while cursor != start {
-            let Some((parent, edge, sign)) = previous.get(&cursor).copied() else {
-                return Vec::new();
-            };
-            path.push((edge, sign));
-            cursor = parent;
-        }
-        path.reverse();
-        path
+    pub fn build(self) -> Result<FeynmanDiagram, DiagramError> {
+        self.finalize()
     }
 }
 
@@ -3142,22 +2629,49 @@ mod tests {
         .unwrap())
     }
 
+    fn external_edge(
+        particle: ParticleId,
+        name: &str,
+        index: usize,
+        state: ExternalState,
+    ) -> DiagramEdge {
+        let mut edge = DiagramEdge::new(particle, false);
+        edge.external = Some(ExternalLeg {
+            name: name.into(),
+            index,
+            state,
+            connection: index,
+        });
+        edge
+    }
+
     fn one_loop() -> FeynmanDiagram {
         let model = scalar_model();
         let rule = model.vertex_rule_id("V_1").unwrap();
         let particle = model.particle_id("phi").unwrap();
         let mut builder = FeynmanDiagram::builder(Arc::clone(&model), "bubble");
-        let incoming =
-            builder.add_vertex(DiagramVertex::external("p1", 0, ExternalState::Incoming));
-        let outgoing =
-            builder.add_vertex(DiagramVertex::external("p2", 1, ExternalState::Outgoing));
         let left = builder.add_vertex(DiagramVertex::interaction("v0", rule));
         let right = builder.add_vertex(DiagramVertex::interaction("v1", rule));
-        let scalar = || DiagramEdge::new(particle, false);
-        builder.add_edge(incoming, left, scalar()).unwrap();
-        builder.add_edge(left, right, scalar()).unwrap();
-        builder.add_edge(left, right, scalar()).unwrap();
-        builder.add_edge(right, outgoing, scalar()).unwrap();
+        builder
+            .add_edge(
+                None,
+                left,
+                external_edge(particle, "p1", 0, ExternalState::Incoming),
+            )
+            .unwrap();
+        builder
+            .add_edge(left, right, DiagramEdge::new(particle, false))
+            .unwrap();
+        builder
+            .add_edge(left, right, DiagramEdge::new(particle, false))
+            .unwrap();
+        builder
+            .add_edge(
+                right,
+                None,
+                external_edge(particle, "p2", 1, ExternalState::Outgoing),
+            )
+            .unwrap();
         builder.build().unwrap()
     }
 
@@ -3167,23 +2681,42 @@ mod tests {
         let particle = model.particle_id("phi").unwrap();
         let mut builder = FeynmanDiagram::builder(Arc::clone(&model), "renamed");
         let right = builder.add_vertex(DiagramVertex::interaction("right", rule));
-        let incoming =
-            builder.add_vertex(DiagramVertex::external("in", 0, ExternalState::Incoming));
         let left = builder.add_vertex(DiagramVertex::interaction("left", rule));
-        let outgoing =
-            builder.add_vertex(DiagramVertex::external("out", 1, ExternalState::Outgoing));
-        let scalar = || DiagramEdge::new(particle, false);
         builder
-            .add_edge_with_slots(right, outgoing, scalar(), VertexSlot(2), VertexSlot(0))
+            .add_edge_with_slots(
+                right,
+                None,
+                external_edge(particle, "out", 1, ExternalState::Outgoing),
+                VertexSlot(2),
+                VertexSlot(0),
+            )
             .unwrap();
         builder
-            .add_edge_with_slots(left, right, scalar(), VertexSlot(1), VertexSlot(0))
+            .add_edge_with_slots(
+                left,
+                right,
+                DiagramEdge::new(particle, false),
+                VertexSlot(1),
+                VertexSlot(0),
+            )
             .unwrap();
         builder
-            .add_edge_with_slots(incoming, left, scalar(), VertexSlot(0), VertexSlot(0))
+            .add_edge_with_slots(
+                None,
+                left,
+                external_edge(particle, "in", 0, ExternalState::Incoming),
+                VertexSlot(0),
+                VertexSlot(0),
+            )
             .unwrap();
         builder
-            .add_edge_with_slots(left, right, scalar(), VertexSlot(2), VertexSlot(1))
+            .add_edge_with_slots(
+                left,
+                right,
+                DiagramEdge::new(particle, false),
+                VertexSlot(2),
+                VertexSlot(1),
+            )
             .unwrap();
         builder.build().unwrap()
     }
@@ -3192,56 +2725,44 @@ mod tests {
         let model = scalar_model();
         let particle = model.particle_id("phi").unwrap();
         let mut builder = FeynmanDiagram::builder(model, "cut-scalar-line");
-        let incoming = builder.add_vertex(DiagramVertex::external_in_connection(
-            "p-in",
-            0,
-            ExternalState::Incoming,
-            0,
-        ));
-        let interaction = builder.add_vertex(DiagramVertex {
-            name: "interaction".to_owned(),
+        let left = builder.add_vertex(DiagramVertex {
+            name: "left".into(),
             interaction: None,
-            external: None,
             numerator: Atom::one(),
         });
-        let outgoing = builder.add_vertex(DiagramVertex::external_in_connection(
-            "p-out",
-            1,
-            ExternalState::Outgoing,
-            0,
-        ));
-        let incoming_edge = builder
-            .add_edge(incoming, interaction, DiagramEdge::new(particle, false))
+        let right = builder.add_vertex(DiagramVertex {
+            name: "right".into(),
+            interaction: None,
+            numerator: Atom::one(),
+        });
+        let initial = builder
+            .add_edge(
+                left,
+                right,
+                external_edge(particle, "p", 0, ExternalState::Incoming),
+            )
             .unwrap();
-        let outgoing_edge = builder
-            .add_edge(interaction, outgoing, DiagramEdge::new(particle, false))
+        let crossing = builder
+            .add_edge(left, right, DiagramEdge::new(particle, false))
             .unwrap();
-        let incoming_source = DiagramHalfEdge {
-            edge: incoming_edge,
+        let source = |edge| DiagramHalfEdge {
+            edge,
             endpoint: DiagramEndpoint::Source,
         };
-        let incoming_target = DiagramHalfEdge {
-            edge: incoming_edge,
+        let target = |edge| DiagramHalfEdge {
+            edge,
             endpoint: DiagramEndpoint::Target,
         };
-        let outgoing_source = DiagramHalfEdge {
-            edge: outgoing_edge,
-            endpoint: DiagramEndpoint::Source,
-        };
-        let outgoing_target = DiagramHalfEdge {
-            edge: outgoing_edge,
-            endpoint: DiagramEndpoint::Target,
-        };
-        let empty_side = |half_edges| DiagramCutSide {
+        let side = |half_edges| DiagramCutSide {
             half_edges,
             coupling_orders: BTreeMap::new(),
             loop_count: 0,
         };
         builder
             .cuts(vec![DiagramCut {
-                cut: vec![outgoing_source],
-                left: empty_side(vec![incoming_source, incoming_target, outgoing_source]),
-                right: empty_side(vec![outgoing_target]),
+                cut: vec![target(crossing)],
+                left: side(vec![target(initial), target(crossing)]),
+                right: side(vec![source(initial), source(crossing)]),
             }])
             .build()
             .unwrap()
@@ -3252,46 +2773,32 @@ mod tests {
         let rule = model.vertex_rule_id("V_1").unwrap();
         let particle = model.particle_id("phi").unwrap();
         let mut builder = FeynmanDiagram::builder(model, "cut-scalar-bubble");
-        let incoming = builder.add_vertex(DiagramVertex::external_in_connection(
-            "p-in",
-            0,
-            ExternalState::Incoming,
-            0,
-        ));
-        let left_vertex = builder.add_vertex(DiagramVertex::interaction("left", rule));
-        let right_vertex = builder.add_vertex(DiagramVertex::interaction("right", rule));
-        let outgoing = builder.add_vertex(DiagramVertex::external_in_connection(
-            "p-out",
-            1,
-            ExternalState::Outgoing,
-            0,
-        ));
-        let scalar = || DiagramEdge::new(particle, false);
-        let incoming_edge = builder.add_edge(incoming, left_vertex, scalar()).unwrap();
-        let first_loop_edge = builder
-            .add_edge(left_vertex, right_vertex, scalar())
+        let a = builder.add_vertex(DiagramVertex::interaction("left", rule));
+        let b = builder.add_vertex(DiagramVertex::interaction("right", rule));
+        let initial = builder
+            .add_edge(
+                a,
+                b,
+                external_edge(particle, "p", 0, ExternalState::Incoming),
+            )
             .unwrap();
-        let second_loop_edge = builder
-            .add_edge(left_vertex, right_vertex, scalar())
+        let first = builder
+            .add_edge(a, b, DiagramEdge::new(particle, false))
             .unwrap();
-        let outgoing_edge = builder.add_edge(right_vertex, outgoing, scalar()).unwrap();
-        let half_edge = |edge, endpoint| DiagramHalfEdge { edge, endpoint };
-        let left = vec![
-            half_edge(incoming_edge, DiagramEndpoint::Source),
-            half_edge(incoming_edge, DiagramEndpoint::Target),
-            half_edge(first_loop_edge, DiagramEndpoint::Source),
-            half_edge(second_loop_edge, DiagramEndpoint::Source),
-        ];
-        let right = vec![
-            half_edge(first_loop_edge, DiagramEndpoint::Target),
-            half_edge(second_loop_edge, DiagramEndpoint::Target),
-            half_edge(outgoing_edge, DiagramEndpoint::Source),
-            half_edge(outgoing_edge, DiagramEndpoint::Target),
-        ];
-        let cut = vec![
-            half_edge(first_loop_edge, DiagramEndpoint::Source),
-            half_edge(second_loop_edge, DiagramEndpoint::Source),
-        ];
+        let second = builder
+            .add_edge(a, b, DiagramEdge::new(particle, false))
+            .unwrap();
+        let source = |edge| DiagramHalfEdge {
+            edge,
+            endpoint: DiagramEndpoint::Source,
+        };
+        let target = |edge| DiagramHalfEdge {
+            edge,
+            endpoint: DiagramEndpoint::Target,
+        };
+        let left = vec![target(initial), target(first), target(second)];
+        let right = vec![source(initial), source(first), source(second)];
+        let cut = vec![target(first), target(second)];
         let side = |half_edges| DiagramCutSide {
             half_edges,
             coupling_orders: BTreeMap::new(),
@@ -3354,16 +2861,18 @@ mod tests {
         assert_eq!(bubble.superficial_degree_of_divergence(4).unwrap(), 0);
         assert_eq!(bubble.superficial_degree_of_divergence(6).unwrap(), 2);
         assert_eq!(bubble.superficial_degree_of_divergence(2).unwrap(), -2);
-        let internal_edges = bubble.topology().internal_edges;
+        let internal_edges = bubble
+            .underlying()
+            .iter_edges_of(&bubble.internal_subgraph())
+            .map(|(_, edge, _)| EdgeId(edge.0))
+            .collect::<Vec<_>>();
         let mut with_momenta = bubble
             .map_data(
                 |_, vertex| {
                     let mut vertex = vertex.clone();
-                    if !vertex.is_external() {
-                        vertex.numerator =
-                            symbolica::function!(momentum_symbol(), internal_edges[0].0, 0)
-                                + symbolica::symbol!("feynkit_graph::uv_test_mass");
-                    }
+                    vertex.numerator =
+                        symbolica::function!(momentum_symbol(), internal_edges[0].0, 0)
+                            + symbolica::symbol!("feynkit_graph::uv_test_mass");
                     vertex
                 },
                 |id, _, edge| {
@@ -3397,7 +2906,15 @@ mod tests {
         let metric = Minkowski {}.new_rep(4);
         let expected =
             (metric.inner_product(&q1, &q1) - &mass2) * (metric.inner_product(&q2, &q2) - &mass2);
-        assert_eq!(bubble.topology().internal_edges.len(), 2);
+        assert_eq!(
+            bubble
+                .underlying()
+                .iter_edges_of(&bubble.internal_subgraph())
+                .map(|(_, edge, _)| EdgeId(edge.0))
+                .collect::<Vec<_>>()
+                .len(),
+            2
+        );
         assert_eq!(bubble.denominator_expression().unwrap(), expected);
         let restored =
             FeynmanDiagram::from_json(bubble.model_arc(), &bubble.to_json().unwrap()).unwrap();
@@ -3474,7 +2991,6 @@ mod tests {
         assert_eq!(
             replaced
                 .vertices()
-                .filter(|(_, vertex)| !vertex.is_external())
                 .filter(|(_, vertex)| vertex.numerator != Atom::one())
                 .count(),
             1
@@ -3520,7 +3036,7 @@ mod tests {
         let source = diagram.to_linnest();
         assert!(source.contains("amplitude-mode: false"));
         assert!(source.contains("cross-section-mode: true"));
-        assert_eq!(source.matches("is_cut: 0").count(), 2);
+        assert_eq!(source.matches("is_cut: 0").count(), 1);
 
         let mut invalid_cut = diagram.cuts()[0].clone();
         invalid_cut.cut.clear();
@@ -3628,9 +3144,9 @@ mod tests {
         };
         assert!(matches!(
             line.with_topology_threshold_candidates(vec![DiagramThresholdCandidate {
-                cut: vec![source(0), target(1)],
-                left: vec![source(0), target(1)],
-                right: vec![target(0), source(1)],
+                cut: vec![target(1)],
+                left: vec![target(0), target(1)],
+                right: vec![source(0), source(1)],
             }]),
             Err(DiagramError::InvalidThresholdCandidate {
                 candidate: 0,
@@ -3688,7 +3204,7 @@ mod tests {
         assert!(matches!(
             diagram.with_cut_partitions(vec![(split_left, split_right)]),
             Err(DiagramError::InvalidCut { cut: 0, message })
-                if message.contains("vertex 1 is split")
+                if message.contains("is split")
         ));
     }
 
@@ -3702,17 +3218,17 @@ mod tests {
                 diagram.model_arc(),
                 &serde_json::to_string(&missing_edge).unwrap()
             ),
-            Err(error) if error.to_string().contains("external vertex 0 has degree 0")
+            Err(DiagramError::UnknownEdge { .. } | DiagramError::Invariant { .. })
         ));
 
         let mut external_edge = diagram.serde_view();
-        external_edge.edges[0].0.target = VertexId(1);
+        external_edge.edges[0].0.target = None;
         assert!(matches!(
             FeynmanDiagram::from_json(
                 diagram.model_arc(),
                 &serde_json::to_string(&external_edge).unwrap()
             ),
-            Err(error) if error.to_string().contains("edge 0 connects two external vertices")
+            Err(error) if error.to_string().contains("attached half-edge")
         ));
     }
 
@@ -3730,9 +3246,12 @@ mod tests {
     #[test]
     fn dot_import_rejects_external_index_overflow() {
         let diagram = one_loop();
+        let metadata = diagram.edges().next().unwrap().2.external.clone();
+        let mut overflow = metadata.clone();
+        overflow.as_mut().unwrap().index = usize::MAX;
         let dot = diagram.to_dot().unwrap().replacen(
-            "external_index=0",
-            &format!("external_index={}", usize::MAX),
+            &FeynmanDiagram::dot_string(&serde_json::to_string(&metadata).unwrap()).unwrap(),
+            &FeynmanDiagram::dot_string(&serde_json::to_string(&overflow).unwrap()).unwrap(),
             1,
         );
         assert!(matches!(
@@ -3903,16 +3422,16 @@ mod tests {
 
         let changed_state = diagram
             .map_data(
-                |_, vertex| {
-                    let mut vertex = vertex.clone();
-                    if let Some(external) = &mut vertex.external
+                |_, vertex| vertex.clone(),
+                |_, _, edge| {
+                    let mut edge = edge.clone();
+                    if let Some(external) = &mut edge.external
                         && external.index == 0
                     {
-                        external.state = ExternalState::Outgoing;
+                        external.connection = 2;
                     }
-                    vertex
+                    edge
                 },
-                |_, _, edge| edge.clone(),
             )
             .unwrap();
         assert_ne!(key, changed_state.canonical_key().unwrap());
@@ -3921,7 +3440,7 @@ mod tests {
             .map_data(
                 |id, vertex| {
                     let mut vertex = vertex.clone();
-                    if id == VertexId(2) {
+                    if id == VertexId(0) {
                         vertex.interaction = None;
                     }
                     vertex
@@ -3941,8 +3460,8 @@ mod tests {
 
         let reversed = diagram.reverse_edge(EdgeId(0)).unwrap();
         let (_, endpoints, edge) = reversed.edges().next().unwrap();
-        assert_eq!(endpoints.source, VertexId(1));
-        assert_eq!(endpoints.target, VertexId(0));
+        assert_eq!(endpoints.source, Some(VertexId(1)));
+        assert_eq!(endpoints.target, Some(VertexId(0)));
         assert_eq!(edge.particle, reversed.model().particle_id("f~").unwrap());
         assert_eq!(reversed.canonical_key().unwrap(), original_key);
 
@@ -3959,26 +3478,11 @@ mod tests {
         let diagram = one_loop();
         let swap = BTreeMap::from([(0, 1), (1, 0)]);
         let relabeled = diagram.relabel_external_legs(&swap).unwrap();
-        assert_eq!(
-            relabeled
-                .vertex(VertexId(0))
-                .unwrap()
-                .external
-                .as_ref()
-                .unwrap()
-                .index,
-            1
-        );
-        assert_eq!(
-            relabeled
-                .vertex(VertexId(1))
-                .unwrap()
-                .external
-                .as_ref()
-                .unwrap()
-                .index,
-            0
-        );
+        let indices = relabeled
+            .edges()
+            .filter_map(|(_, _, edge)| edge.external.as_ref().map(|leg| leg.index))
+            .collect::<Vec<_>>();
+        assert_eq!(indices, vec![1, 0]);
         assert_eq!(
             relabeled
                 .relabel_external_legs(&swap)
@@ -4000,11 +3504,30 @@ mod tests {
 
     #[test]
     fn rejects_duplicate_external_indices() {
-        let mut builder = FeynmanDiagram::builder(scalar_model(), "invalid");
-        builder.add_vertex(DiagramVertex::external("p1", 0, ExternalState::Incoming));
-        builder.add_vertex(DiagramVertex::external("p2", 0, ExternalState::Outgoing));
+        let model = scalar_model();
+        let particle = model.particle_id("phi").unwrap();
+        let mut builder = FeynmanDiagram::builder(model, "invalid");
+        let vertex = builder.add_vertex(DiagramVertex {
+            name: "v".into(),
+            interaction: None,
+            numerator: Atom::one(),
+        });
+        builder
+            .add_edge(
+                None,
+                vertex,
+                external_edge(particle, "p1", 0, ExternalState::Incoming),
+            )
+            .unwrap();
+        builder
+            .add_edge(
+                vertex,
+                None,
+                external_edge(particle, "p2", 0, ExternalState::Outgoing),
+            )
+            .unwrap();
         assert!(matches!(
-            builder.build(),
+            builder.build().and_then(|diagram| diagram.validate()),
             Err(DiagramError::DuplicateExternalIndex(0))
         ));
     }

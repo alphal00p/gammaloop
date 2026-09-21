@@ -550,52 +550,24 @@ impl Graph {
         None
     }
 
-    /// Return the loop-momentum-independent tree attached to the sewn initial state.
+    /// Return the shared loop-momentum-independent initial-state attachment tree.
     ///
-    /// Canonical FeynKit threshold partitions still include this tree. Runtime
-    /// threshold construction historically removes it after sewing, so the
-    /// mechanical bridge applies this exact topology cleanup once.
+    /// Threshold sides are normalized during FeynKit finalization; runtime
+    /// threshold queries reuse the same selection without changing those sides.
     pub(crate) fn get_initial_state_tree(&self) -> (SuBitGraph, Vec<EdgeIndex>) {
-        let mut tree_like_edges = Vec::new();
-        let full_graph = self.underlying.full_filter();
-        let full_initial_state_cut = self
-            .initial_state_cut
-            .left
-            .union(&self.initial_state_cut.right);
-        let graph_without_initial_state_cut = full_graph.subtract(&full_initial_state_cut);
-        let mut result = self.underlying.empty_subgraph::<SuBitGraph>();
-
-        for (pair, edge_id, _) in self
-            .underlying
-            .iter_edges_of(&graph_without_initial_state_cut)
-        {
-            if let HedgePair::Paired { source, sink } = pair
-                && self.loop_momentum_basis.edge_signatures[edge_id]
+        use feynkit_graph::thresholds::InitialStateTreeExt;
+        self.underlying.initial_state_tree(
+            &self
+                .initial_state_cut
+                .left
+                .union(&self.initial_state_cut.right),
+            |edge| {
+                self.loop_momentum_basis.edge_signatures[edge]
                     .internal
                     .iter()
                     .all(|sign| sign.is_zero())
-            {
-                tree_like_edges.push(edge_id);
-                let source_node = self.underlying.node_id(source);
-                let sink_node = self.underlying.node_id(sink);
-                let source_connects_initial_state =
-                    self.underlying.iter_crown(source_node).any(|hedge| {
-                        let mut one_hedge = self.underlying.empty_subgraph::<SuBitGraph>();
-                        one_hedge.add(hedge);
-                        one_hedge.intersects(&full_initial_state_cut)
-                    });
-                let initial_node = if source_connects_initial_state {
-                    source_node
-                } else {
-                    sink_node
-                };
-                for hedge in self.underlying.iter_crown(initial_node) {
-                    result.add(hedge);
-                }
-            }
-        }
-
-        (result, tree_like_edges)
+            },
+        )
     }
 
     pub(crate) fn get_raised_edge_groups(&self) -> Vec<Vec<EdgeIndex>> {
@@ -748,21 +720,12 @@ pub fn get_cff_inverse_energy_product_impl<E, V, H, S: SubSetLike>(
     subgraph: &S,
     contract_edges: &[EdgeIndex],
 ) -> Atom {
-    Atom::num(1)
-        / graph
-            .iter_edges_of(subgraph)
-            .filter_map(|(pair, edge_index, _)| match pair {
-                HedgePair::Paired { .. } => {
-                    if contract_edges.contains(&edge_index) {
-                        None
-                    } else {
-                        Some(-Atom::num(2) * ose_atom_from_index(edge_index))
-                    }
-                }
-                _ => None,
-            })
-            .reduce(|acc, x| acc * x)
-            .unwrap_or_else(|| Atom::num(1))
+    feynkit_cff::CffExpression::inverse_energy_product(graph.iter_edges_of(subgraph).filter_map(
+        |(pair, edge, _)| {
+            (matches!(pair, HedgePair::Paired { .. }) && !contract_edges.contains(&edge))
+                .then(|| ose_atom_from_index(edge))
+        },
+    ))
 }
 
 #[cfg(test)]

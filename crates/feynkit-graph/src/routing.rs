@@ -3,16 +3,21 @@
 //! External carriers are half-edge selections, independent of whether the full
 //! graph pairs them (sewn initial states) or leaves them dangling (amplitudes).
 
-use feynkit_kinematics::{MomentumSignature, Signature, SignOrZero};
+use feynkit_kinematics::{MomentumSignature, SignOrZero, Signature};
 use itertools::Itertools;
 use linnet::half_edge::{
     HedgeGraph, HedgeGraphError, NoData,
     involution::{EdgeData, EdgeIndex, EdgeVec, Flow, Hedge, HedgePair, Orientation},
-    subgraph::{Inclusion, InternalSubGraph, ModifySubSet, SuBitGraph, SubGraphLike,
-        SubGraphOps, SubSetLike, SubSetOps, cycle::SignedCycle},
+    subgraph::{
+        Inclusion, InternalSubGraph, ModifySubSet, SuBitGraph, SubGraphLike, SubGraphOps,
+        SubSetLike, SubSetOps, cycle::SignedCycle,
+    },
     tree::SimpleTraversalTree,
 };
-use symbolica::{atom::{Atom, AtomCore, AtomOrView, FunctionBuilder, Symbol}, id::Replacement};
+use symbolica::{
+    atom::{Atom, AtomOrView, FunctionBuilder, Symbol},
+    id::Replacement,
+};
 use thiserror::Error;
 
 /// A spanning-forest routing in the underlying graph's edge coordinates.
@@ -103,20 +108,32 @@ pub enum LmbError {
     },
 }
 
-
 impl MomentumBasis {
     /// Expand and reorder external columns without changing any edge momentum.
     pub fn canonicalize_external_order(&mut self, external_edge_order: &[EdgeIndex]) {
-        if external_edge_order.is_empty() { return; }
+        if external_edge_order.is_empty() {
+            return;
+        }
         let current = self.ext_edges.clone();
         let mut ordered = external_edge_order.to_vec();
-        ordered.extend(current.iter().copied().filter(|edge| !external_edge_order.contains(edge)).sorted());
-        if ordered == current { return; }
+        ordered.extend(
+            current
+                .iter()
+                .copied()
+                .filter(|edge| !external_edge_order.contains(edge))
+                .sorted(),
+        );
+        if ordered == current {
+            return;
+        }
         for (_, signature) in self.edge_signatures.iter_mut() {
             let mut external = vec![SignOrZero::Zero; ordered.len()];
             for (old, edge) in current.iter().enumerate() {
                 if let Some(new) = ordered.iter().position(|candidate| candidate == edge) {
-                    external[new] = signature.external.get(old).expect("routing signature covers external carriers");
+                    external[new] = signature
+                        .external
+                        .get(old)
+                        .expect("routing signature covers external carriers");
                 }
             }
             signature.external = Signature::new(external);
@@ -135,24 +152,72 @@ impl MomentumBasis {
         }
     }
 
-    pub fn loop_atom<'a, I>(&self, edge: EdgeIndex, symbol: Symbol, args: &'a [I], edge_ids: bool) -> Atom
-    where &'a I: Into<AtomOrView<'a>> {
-        self.signature_atom(&self.edge_signatures[edge].loops, &self.loop_edges, symbol, args, edge_ids)
+    pub fn loop_atom<'a, I>(
+        &self,
+        edge: EdgeIndex,
+        symbol: Symbol,
+        args: &'a [I],
+        edge_ids: bool,
+    ) -> Atom
+    where
+        &'a I: Into<AtomOrView<'a>>,
+    {
+        Self::signature_atom(
+            &self.edge_signatures[edge].loops,
+            &self.loop_edges,
+            symbol,
+            args,
+            edge_ids,
+        )
     }
 
-    pub fn ext_atom<'a, I>(&self, edge: EdgeIndex, symbol: Symbol, args: &'a [I], edge_ids: bool) -> Atom
-    where &'a I: Into<AtomOrView<'a>> {
-        self.signature_atom(&self.edge_signatures[edge].external, &self.ext_edges, symbol, args, edge_ids)
+    pub fn ext_atom<'a, I>(
+        &self,
+        edge: EdgeIndex,
+        symbol: Symbol,
+        args: &'a [I],
+        edge_ids: bool,
+    ) -> Atom
+    where
+        &'a I: Into<AtomOrView<'a>>,
+    {
+        Self::signature_atom(
+            &self.edge_signatures[edge].external,
+            &self.ext_edges,
+            symbol,
+            args,
+            edge_ids,
+        )
     }
 
-    fn signature_atom<'a, I>(&self, signature: &Signature, edges: &[EdgeIndex], symbol: Symbol, args: &'a [I], edge_ids: bool) -> Atom
-    where &'a I: Into<AtomOrView<'a>> {
-        signature.iter().enumerate().fold(Atom::Zero, |sum, (index, sign)| {
-            if sign == SignOrZero::Zero { return sum; }
-            let index = if edge_ids { edges[index].0 } else { index };
-            let term = FunctionBuilder::new(symbol).add_arg(index).add_args(args).finish();
-            match sign { SignOrZero::Plus => sum + term, SignOrZero::Minus => sum - term, SignOrZero::Zero => sum }
-        })
+    fn signature_atom<'a, I>(
+        signature: &Signature,
+        edges: &[EdgeIndex],
+        symbol: Symbol,
+        args: &'a [I],
+        edge_ids: bool,
+    ) -> Atom
+    where
+        &'a I: Into<AtomOrView<'a>>,
+    {
+        signature
+            .iter()
+            .enumerate()
+            .fold(Atom::Zero, |sum, (index, sign)| {
+                if sign == SignOrZero::Zero {
+                    return sum;
+                }
+                let index = if edge_ids { edges[index].0 } else { index };
+                let term = FunctionBuilder::new(symbol)
+                    .add_arg(index)
+                    .add_args(args)
+                    .finish();
+                match sign {
+                    SignOrZero::Plus => sum + term,
+                    SignOrZero::Minus => sum - term,
+                    SignOrZero::Zero => sum,
+                }
+            })
     }
 }
 
@@ -162,10 +227,7 @@ pub trait MomentumRouting {
     ///
     /// Each spanning forest covering the same nodes as `subgraph` produces one
     /// basis. Empty subgraphs return an empty list.
-    fn generate_loop_momentum_bases_of<S: SubGraphLike>(
-        &self,
-        subgraph: &S,
-    ) -> Vec<MomentumBasis>
+    fn generate_loop_momentum_bases_of<S: SubGraphLike>(&self, subgraph: &S) -> Vec<MomentumBasis>
     where
         S::Base: SubGraphLike<Base = S::Base>
             + SubSetOps
@@ -175,14 +237,6 @@ pub trait MomentumRouting {
 
     /// Enumerate all loop-momentum bases for the full graph.
     fn generate_loop_momentum_bases(&self) -> Vec<MomentumBasis>;
-
-
-
-
-
-
-
-
 
     /// Core implementation shared by the public replacement constructors.
     ///
@@ -251,8 +305,7 @@ pub trait MomentumRouting {
 
     /// Construct the canonical shrunken-subgraph LMB using the full crown of
     /// `outer` as external-flow carriers.
-    fn shrunken_lmb_of(&self, outer: &SuBitGraph, shrunken: &InternalSubGraph)
-    -> MomentumBasis;
+    fn shrunken_lmb_of(&self, outer: &SuBitGraph, shrunken: &InternalSubGraph) -> MomentumBasis;
 
     /// Construct a basis for `subgraph` that reuses loop edges from `lmb`
     /// whenever the induced cut still spans the same connected components.
@@ -324,8 +377,8 @@ impl<E, V, H> MomentumRouting for HedgeGraph<E, V, H> {
     fn empty_lmb(&self) -> MomentumBasis {
         MomentumBasis {
             tree: SuBitGraph::empty(0),
-            loop_edges: vec![].into(),
-            ext_edges: vec![].into(),
+            loop_edges: vec![],
+            ext_edges: vec![],
             edge_signatures: self.new_edgevec(|_, _, _| MomentumSignature::default()),
         }
     }
@@ -406,19 +459,13 @@ impl<E, V, H> MomentumRouting for HedgeGraph<E, V, H> {
             })
     }
 
-    fn shrunken_lmb_of(
-        &self,
-        outer: &SuBitGraph,
-        shrunken: &InternalSubGraph,
-    ) -> MomentumBasis {
+    fn shrunken_lmb_of(&self, outer: &SuBitGraph, shrunken: &InternalSubGraph) -> MomentumBasis {
         let externals = self.full_crown(outer);
         self.shrunken_sub_lmb(outer, shrunken, externals)
             .unwrap_or_else(|err| {
                 panic!("Failed to build shrunken-subgraph loop momentum basis:\n{err}")
             })
     }
-
-
 
     fn lmb_of<S: SubGraphLike<Base = SuBitGraph>>(&self, subgraph: &S) -> MomentumBasis {
         if subgraph.is_empty() {
@@ -568,10 +615,10 @@ impl<E, V, H> MomentumRouting for HedgeGraph<E, V, H> {
             .unique()
             .collect_vec();
 
-        let mut external_flows: Vec<_> = vec![].into();
-        let mut ext_edges: Vec<EdgeIndex> = vec![].into();
+        let mut external_flows: Vec<_> = vec![];
+        let mut ext_edges: Vec<EdgeIndex> = vec![];
 
-        let mut loop_edges: Vec<EdgeIndex> = vec![].into();
+        let mut loop_edges: Vec<EdgeIndex> = vec![];
         let mut cycles = vec![];
 
         loop {
@@ -888,10 +935,7 @@ impl<E, V, H> MomentumRouting for HedgeGraph<E, V, H> {
         Ok(lmb)
     }
 
-    fn generate_loop_momentum_bases_of<S: SubGraphLike>(
-        &self,
-        subgraph: &S,
-    ) -> Vec<MomentumBasis>
+    fn generate_loop_momentum_bases_of<S: SubGraphLike>(&self, subgraph: &S) -> Vec<MomentumBasis>
     where
         S::Base: SubGraphLike<Base = S::Base>
             + SubSetOps
@@ -900,10 +944,10 @@ impl<E, V, H> MomentumRouting for HedgeGraph<E, V, H> {
             + ModifySubSet<Hedge>,
     {
         let Some(_) = subgraph.included_iter().next() else {
-            return vec![].into();
+            return vec![];
         };
 
-        let mut lmbs: Vec<MomentumBasis> = vec![].into();
+        let mut lmbs: Vec<MomentumBasis> = vec![];
 
         let externals = self.full_crown(subgraph);
 
@@ -958,8 +1002,417 @@ impl<E, V, H> MomentumRouting for HedgeGraph<E, V, H> {
     fn dot_lmb_of<S: SubGraphLike>(&self, subgraph: &S, lmb: &MomentumBasis) -> String {
         self.map_data_ref(
             |_, _, _| "",
-            |_, edge, _, _| EdgeData::new(lmb.edge_signatures[edge].format_momentum(), Orientation::Default),
+            |_, edge, _, _| {
+                EdgeData::new(
+                    lmb.edge_signatures[edge].format_momentum(),
+                    Orientation::Default,
+                )
+            },
             |_, _| NoData {},
-        ).dot_label(subgraph)
+        )
+        .dot_label(subgraph)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use linnet::half_edge::builder::HedgeGraphBuilder;
+
+    fn bubble() -> HedgeGraph<(), ()> {
+        let mut builder = HedgeGraphBuilder::new();
+        let a = builder.add_node(());
+        let b = builder.add_node(());
+        builder.add_external_edge(a, (), Orientation::Default, Flow::Sink);
+        builder.add_edge(a, b, (), Orientation::Default);
+        builder.add_edge(a, b, (), Orientation::Default);
+        builder.add_external_edge(b, (), Orientation::Default, Flow::Source);
+        builder.build()
+    }
+
+    #[test]
+    fn all_parallel_edge_routings_conserve_signed_momentum() {
+        let graph = bubble();
+        let bases = graph.generate_loop_momentum_bases();
+        assert_eq!(bases.len(), 2);
+        for basis in bases {
+            assert_eq!(basis.loop_edges.len(), 1);
+            assert_eq!(basis.ext_edges, vec![EdgeIndex(0), EdgeIndex(3)]);
+            for node in [
+                linnet::half_edge::NodeIndex(0),
+                linnet::half_edge::NodeIndex(1),
+            ] {
+                let mut sum = vec![0; 3];
+                for hedge in graph.iter_crown(node) {
+                    let sign = if graph.flow(hedge) == Flow::Source {
+                        1
+                    } else {
+                        -1
+                    };
+                    let signature = &basis.edge_signatures[graph[&hedge]];
+                    for (total, coefficient) in sum.iter_mut().zip(
+                        signature
+                            .loops
+                            .integer_coefficients()
+                            .into_iter()
+                            .chain(signature.external.integer_coefficients()),
+                    ) {
+                        *total += sign * coefficient;
+                    }
+                }
+                assert_eq!(sum, vec![0; 3]);
+            }
+        }
+    }
+
+    #[test]
+    fn promotion_and_external_reordering_preserve_edge_momenta() {
+        let graph = bubble();
+        let mut basis = graph.lmb();
+        let original = basis.clone();
+        let loop_edge = basis.loop_edges[0];
+        basis.put_loop_to_ext(0);
+        basis.canonicalize_external_order(&[loop_edge, EdgeIndex(3), EdgeIndex(0)]);
+        assert!(basis.loop_edges.is_empty());
+        for (edge, signature) in &basis.edge_signatures {
+            let previous = &original.edge_signatures[edge];
+            assert_eq!(
+                signature.external.integer_coefficients(),
+                vec![
+                    previous.loops.integer_coefficients()[0],
+                    previous.external.integer_coefficients()[1],
+                    previous.external.integer_coefficients()[0],
+                ]
+            );
+        }
+    }
+}
+
+impl crate::LoopMomentumBasis {
+    /// Convert graph coordinates without changing the selected momentum basis.
+    pub fn from_routing(
+        graph: &HedgeGraph<crate::DiagramEdge, crate::DiagramVertex>,
+        basis: MomentumBasis,
+    ) -> Self {
+        let dependent_externals = basis
+            .ext_edges
+            .iter()
+            .enumerate()
+            .filter_map(|(position, edge)| {
+                (!graph[*edge].is_dummy
+                    && basis.edge_signatures[*edge].external.get(position)
+                        == Some(SignOrZero::Zero))
+                .then_some(crate::EdgeId(edge.0))
+            })
+            .collect();
+        Self {
+            tree_edges: graph
+                .iter_edges_of(&basis.tree)
+                .filter_map(|(pair, edge, data)| {
+                    (pair.is_paired() && data.data.external.is_none() && !data.data.is_dummy)
+                        .then_some(crate::EdgeId(edge.0))
+                })
+                .collect(),
+            loop_edges: basis
+                .loop_edges
+                .into_iter()
+                .map(|edge| crate::EdgeId(edge.0))
+                .collect(),
+            external_edges: basis
+                .ext_edges
+                .into_iter()
+                .map(|edge| crate::EdgeId(edge.0))
+                .collect(),
+            dependent_externals,
+            edge_signatures: basis
+                .edge_signatures
+                .iter()
+                .map(|(edge, signature)| (crate::EdgeId(edge.0), signature.clone()))
+                .collect(),
+        }
+    }
+
+    pub fn to_routing(
+        &self,
+        graph: &HedgeGraph<crate::DiagramEdge, crate::DiagramVertex>,
+    ) -> MomentumBasis {
+        let mut tree: SuBitGraph = graph.empty_subgraph();
+        for edge in &self.tree_edges {
+            tree.add(graph[&EdgeIndex(edge.0)].1);
+        }
+        MomentumBasis {
+            tree,
+            loop_edges: self
+                .loop_edges
+                .iter()
+                .map(|edge| EdgeIndex(edge.0))
+                .collect(),
+            ext_edges: self
+                .external_edges
+                .iter()
+                .map(|edge| EdgeIndex(edge.0))
+                .collect(),
+            edge_signatures: graph
+                .new_edgevec(|_, edge, _| self.edge_signatures[&crate::EdgeId(edge.0)].clone()),
+        }
+    }
+}
+
+impl crate::FeynmanDiagram {
+    /// Momentum-carrying half-edges, excluding dummy attachments.
+    pub fn momentum_subgraph(&self) -> SuBitGraph {
+        let mut selected = self.graph.full_filter();
+        for (pair, _, edge) in self.graph.iter_edges() {
+            if edge.data.is_dummy {
+                selected.sub(pair);
+            }
+        }
+        selected
+    }
+
+    /// Propagator half-edges, excluding both dangling and sewn externals.
+    pub fn internal_subgraph(&self) -> SuBitGraph {
+        let mut selected = self.momentum_subgraph();
+        for (pair, _, edge) in self.graph.iter_edges() {
+            if edge.data.external.is_some() {
+                selected.sub(pair);
+            }
+        }
+        selected
+    }
+
+    fn normalize_routing(&self, mut basis: MomentumBasis) -> crate::LoopMomentumBasis {
+        for (pair, edge_id, edge) in self.graph.iter_edges() {
+            if pair.is_paired()
+                && edge.data.external.is_some()
+                && let Some(position) = basis.loop_edges.iter().position(|edge| *edge == edge_id)
+            {
+                basis.put_loop_to_ext(position);
+            }
+        }
+        let external_order = self
+            .graph
+            .iter_edges()
+            .filter_map(|(_, edge_id, edge)| edge.data.external.as_ref().map(|_| edge_id))
+            .collect::<Vec<_>>();
+        basis.canonicalize_external_order(&external_order);
+        crate::LoopMomentumBasis::from_routing(&self.graph, basis)
+    }
+
+    fn routing_externals(&self, selected: &SuBitGraph) -> SuBitGraph {
+        let mut externals = self.graph.full_crown(selected);
+        for (pair, _, edge) in self.graph.iter_edges() {
+            if edge.data.is_dummy {
+                externals.sub(pair);
+            }
+        }
+        externals
+    }
+
+    pub fn momentum_basis_of(
+        &self,
+        subgraph: &SuBitGraph,
+    ) -> Result<crate::LoopMomentumBasis, crate::DiagramError> {
+        let selected = subgraph.intersection(&self.momentum_subgraph());
+        let mut forest = selected.intersection(&self.internal_subgraph());
+        let externals = self.routing_externals(&selected);
+        forest.union_with(&externals);
+        self.graph
+            .lmb_impl(&selected, &forest, externals)
+            .map(|basis| self.normalize_routing(basis))
+            .map_err(|error| crate::DiagramError::InvalidLoopMomentumBasis(error.to_string()))
+    }
+
+    pub fn loop_momentum_bases_of(
+        &self,
+        subgraph: &SuBitGraph,
+        limit: usize,
+    ) -> Result<Vec<crate::LoopMomentumBasis>, crate::DiagramError> {
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+        let selected = subgraph.intersection(&self.momentum_subgraph());
+        let internal = selected.intersection(&self.internal_subgraph());
+        if limit == 1 || internal.is_empty() {
+            return self.momentum_basis_of(&selected).map(|basis| vec![basis]);
+        }
+        self.graph
+            .all_spanning_forests_of(&internal)
+            .into_iter()
+            .take(limit)
+            .map(|mut forest| {
+                let externals = self.routing_externals(&selected);
+                forest.union_with(&externals);
+                self.graph
+                    .lmb_impl(&selected, &forest, externals)
+                    .map(|basis| self.normalize_routing(basis))
+                    .map_err(|error| {
+                        crate::DiagramError::InvalidLoopMomentumBasis(error.to_string())
+                    })
+            })
+            .collect()
+    }
+
+    pub fn compatible_momentum_basis_of(
+        &self,
+        subgraph: &SuBitGraph,
+        parent: &crate::LoopMomentumBasis,
+    ) -> Result<crate::LoopMomentumBasis, crate::DiagramError> {
+        let selected = subgraph.intersection(&self.momentum_subgraph());
+        self.graph
+            .try_compatible_sub_lmb(
+                &selected,
+                self.routing_externals(&selected),
+                &parent.to_routing(&self.graph),
+            )
+            .map(|basis| self.normalize_routing(basis))
+            .map_err(|error| crate::DiagramError::InvalidLoopMomentumBasis(error.to_string()))
+    }
+
+    pub fn contracted_momentum_basis_of(
+        &self,
+        subgraph: &SuBitGraph,
+        contracted: &InternalSubGraph,
+    ) -> Result<crate::LoopMomentumBasis, crate::DiagramError> {
+        let selected = subgraph.intersection(&self.momentum_subgraph());
+        self.graph
+            .shrunken_sub_lmb(&selected, contracted, self.routing_externals(&selected))
+            .map(|basis| self.normalize_routing(basis))
+            .map_err(|error| crate::DiagramError::InvalidLoopMomentumBasis(error.to_string()))
+    }
+
+    pub(crate) fn basis_from_tree(
+        &self,
+        requested: &[crate::EdgeId],
+    ) -> Result<crate::LoopMomentumBasis, crate::DiagramError> {
+        let internal = self.internal_subgraph();
+        let mut forest: SuBitGraph = self.graph.empty_subgraph();
+        let unique = requested
+            .iter()
+            .copied()
+            .collect::<std::collections::BTreeSet<_>>();
+        if unique.len() != requested.len() {
+            return Err(crate::DiagramError::InvalidLoopMomentumBasis(
+                "tree edges contain duplicates".into(),
+            ));
+        }
+        for edge in requested {
+            let Some((pair, _, _)) = self.graph.iter_edges().find(|(_, id, _)| id.0 == edge.0)
+            else {
+                return Err(crate::DiagramError::InvalidLoopMomentumBasis(format!(
+                    "unknown tree edge {}",
+                    edge.0
+                )));
+            };
+            if !pair.is_paired() || !internal.includes(&pair) {
+                return Err(crate::DiagramError::InvalidLoopMomentumBasis(format!(
+                    "tree edge {} is not internal",
+                    edge.0
+                )));
+            }
+            forest.add(pair);
+        }
+        let missing_nodes = self
+            .graph
+            .number_of_nodes_in_subgraph(&internal)
+            .saturating_sub(self.graph.number_of_nodes_in_subgraph(&forest));
+        if self.graph.cyclotomatic_number(&forest) != 0
+            || self.graph.count_connected_components(&forest) + missing_nodes
+                != self.graph.count_connected_components(&internal)
+        {
+            return Err(crate::DiagramError::InvalidLoopMomentumBasis(format!(
+                "requested tree edges {requested:?} do not form a spanning forest"
+            )));
+        }
+        let selected = self.momentum_subgraph();
+        let externals = self.routing_externals(&selected);
+        forest.union_with(&externals);
+        self.graph
+            .lmb_impl(&selected, &forest, externals)
+            .map(|basis| self.normalize_routing(basis))
+            .map_err(|error| crate::DiagramError::InvalidLoopMomentumBasis(error.to_string()))
+    }
+}
+
+impl crate::LoopMomentumBasis {
+    /// Replace every edge momentum by the same loop and external coordinates
+    /// used by numerical routing, retaining any tensor indices on that momentum.
+    pub fn momentum_replacements(&self) -> Vec<Replacement> {
+        use symbolica::{atom::AtomCore, function, symbol};
+        let arguments = symbol!("feynkit_graph::routing_arguments___");
+        let loop_edges = self
+            .loop_edges
+            .iter()
+            .map(|edge| EdgeIndex(edge.0))
+            .collect::<Vec<_>>();
+        let external_edges = self
+            .external_edges
+            .iter()
+            .map(|edge| EdgeIndex(edge.0))
+            .collect::<Vec<_>>();
+        let args = [Atom::var(arguments)];
+        self.edge_signatures
+            .iter()
+            .map(|(edge, signature)| {
+                let internal = MomentumBasis::signature_atom(
+                    &signature.loops,
+                    &loop_edges,
+                    crate::symbols::loop_momentum(),
+                    &args,
+                    false,
+                );
+                let external = MomentumBasis::signature_atom(
+                    &signature.external,
+                    &external_edges,
+                    crate::symbols::external_momentum(),
+                    &args,
+                    false,
+                );
+                Replacement::new(
+                    function!(crate::symbols::momentum(), edge.0, arguments).to_pattern(),
+                    (internal + external).to_pattern(),
+                )
+            })
+            .collect()
+    }
+
+    pub fn route_expression(&self, expression: &Atom) -> Atom {
+        use symbolica::atom::AtomCore;
+        expression.replace_multiple(&self.momentum_replacements())
+    }
+}
+
+impl crate::DiagramEdge {
+    /// Recover the canonical unoriented endpoints and signed particle species
+    /// used by GammaLoop when ordering propagators before momentum selection.
+    pub fn canonical_order_key(
+        &self,
+        model: &feynkit_model::Model,
+        edge: crate::EdgeId,
+        endpoints: crate::EdgeEndpoints,
+    ) -> Result<
+        (
+            Option<crate::VertexId>,
+            Option<crate::VertexId>,
+            i64,
+            crate::EdgeId,
+        ),
+        crate::DiagramError,
+    > {
+        let (source, target, particle) = if endpoints.source <= endpoints.target {
+            (endpoints.source, endpoints.target, self.particle)
+        } else {
+            (
+                endpoints.target,
+                endpoints.source,
+                model.particle_by_id(self.particle)?.antiparticle,
+            )
+        };
+        Ok((
+            source,
+            target,
+            model.particle_by_id(particle)?.pdg_code,
+            edge,
+        ))
     }
 }

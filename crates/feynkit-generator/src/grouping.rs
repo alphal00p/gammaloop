@@ -12,7 +12,7 @@ use feynkit_model::{Model, ModelError, ParameterId, ParticleId};
 use idenso::{
     IndexTooling,
     color::{CS, ColorSimplifier, ColorSimplifySettings},
-    dirac::{AGS, PS},
+    dirac::AGS,
     representations::Bispinor,
 };
 use spenso::{
@@ -108,8 +108,7 @@ pub enum GroupingError {
 enum GroupingIndex {
     Normal(usize),
     Symbol(Symbol),
-    Source(usize, usize),
-    Sink(usize, usize),
+    Hedge(usize, usize),
     Vertex(usize, usize),
     Edge(usize, usize),
     Dummy(usize),
@@ -138,8 +137,7 @@ impl fmt::Display for GroupingIndex {
         match self {
             Self::Normal(index) => index.fmt(formatter),
             Self::Symbol(symbol) => symbol.fmt(formatter),
-            Self::Source(owner, local) => write!(formatter, "source({owner},{local})"),
-            Self::Sink(owner, local) => write!(formatter, "sink({owner},{local})"),
+            Self::Hedge(owner, local) => write!(formatter, "hedge({owner},{local})"),
             Self::Vertex(owner, local) => write!(formatter, "vertex({owner},{local})"),
             Self::Edge(owner, local) => write!(formatter, "edge({owner},{local})"),
             Self::Dummy(index) => write!(formatter, "dummy({index})"),
@@ -196,14 +194,12 @@ impl ParseableAind for GroupingIndex {
             AtomView::Var(variable) => Ok(Self::Symbol(variable.get_symbol())),
             AtomView::Fun(function) => {
                 let head = function.get_symbol();
-                if head == symbol!("FeynKit::SourceIndex") {
-                    owned_index(function, "FeynKit::SourceIndex", Self::Source)
-                } else if head == symbol!("FeynKit::SinkIndex") {
-                    owned_index(function, "FeynKit::SinkIndex", Self::Sink)
-                } else if head == symbol!("FeynKit::VertexDummy") {
-                    owned_index(function, "FeynKit::VertexDummy", Self::Vertex)
-                } else if head == symbol!("FeynKit::EdgeDummy") {
-                    owned_index(function, "FeynKit::EdgeDummy", Self::Edge)
+                if head == feynkit_graph::symbols::hedge_index() {
+                    owned_index(function, "gammalooprs::hedge", Self::Hedge)
+                } else if head == feynkit_graph::symbols::vertex_index() {
+                    owned_index(function, "gammalooprs::vertex", Self::Vertex)
+                } else if head == feynkit_graph::symbols::edge_index() {
+                    owned_index(function, "gammalooprs::edge", Self::Edge)
                 } else if head == symbol!("FeynKit::DummyIndex") {
                     if function.get_nargs() != 1 {
                         return Err(GroupingIndexError::InvalidArity {
@@ -232,17 +228,26 @@ impl From<GroupingIndex> for Atom {
         match index {
             GroupingIndex::Normal(index) => Atom::num(index as i64),
             GroupingIndex::Symbol(symbol) => Atom::var(symbol),
-            GroupingIndex::Source(owner, local) => {
-                function!(symbol!("FeynKit::SourceIndex"), owner as i64, local as i64)
-            }
-            GroupingIndex::Sink(owner, local) => {
-                function!(symbol!("FeynKit::SinkIndex"), owner as i64, local as i64)
+            GroupingIndex::Hedge(owner, local) => {
+                function!(
+                    feynkit_graph::symbols::hedge_index(),
+                    owner as i64,
+                    local as i64
+                )
             }
             GroupingIndex::Vertex(owner, local) => {
-                function!(symbol!("FeynKit::VertexDummy"), owner as i64, local as i64)
+                function!(
+                    feynkit_graph::symbols::vertex_index(),
+                    owner as i64,
+                    local as i64
+                )
             }
             GroupingIndex::Edge(owner, local) => {
-                function!(symbol!("FeynKit::EdgeDummy"), owner as i64, local as i64)
+                function!(
+                    feynkit_graph::symbols::edge_index(),
+                    owner as i64,
+                    local as i64
+                )
             }
             GroupingIndex::Dummy(index) => {
                 function!(symbol!("FeynKit::DummyIndex"), index as i64)
@@ -281,6 +286,7 @@ enum TopologyEdge {
     External {
         particle: ParticleId,
         directed: bool,
+        external: ExternalLeg,
     },
 }
 
@@ -510,74 +516,43 @@ fn normalize_momentum_routing(diagram: &FeynmanDiagram, mut numerator: Atom) -> 
     let basis = diagram.loop_momentum_basis();
     let external_connections = diagram
         .edges()
-        .filter_map(|(edge, endpoints, _)| {
-            diagram
-                .vertex(endpoints.source)
-                .and_then(|vertex| vertex.external.as_ref())
-                .or_else(|| {
-                    diagram
-                        .vertex(endpoints.target)
-                        .and_then(|vertex| vertex.external.as_ref())
-                })
-                .map(|external| (edge, external.connection))
-        })
+        .filter_map(|(id, _, edge)| edge.external.as_ref().map(|leg| (id, leg.connection)))
         .collect::<BTreeMap<_, _>>();
-    let polarization_symbols = [PS.u, PS.ubar, PS.v, PS.vbar, PS.eps, PS.ebar];
+    numerator = basis.route_expression(&numerator);
+    let args = symbol!("feynkit_generator::routing_args___");
+    let replacements = basis
+        .external_edges
+        .iter()
+        .enumerate()
+        .filter_map(|(slot, edge)| {
+            external_connections.get(edge).map(|connection| {
+                Replacement::new(
+                    function!(feynkit_graph::symbols::external_momentum(), slot, args).to_pattern(),
+                    function!(
+                        feynkit_graph::symbols::external_momentum(),
+                        *connection,
+                        args
+                    )
+                    .to_pattern(),
+                )
+            })
+        })
+        .collect::<Vec<_>>();
+    numerator = numerator.replace_multiple(&replacements);
+    let polarization_symbols = [
+        feynkit_graph::symbols::u(),
+        feynkit_graph::symbols::ubar(),
+        feynkit_graph::symbols::v(),
+        feynkit_graph::symbols::vbar(),
+        feynkit_graph::symbols::epsilon(),
+        feynkit_graph::symbols::epsilonbar(),
+    ];
 
     numerator = numerator.replace_map(|term, _, output| {
         let AtomView::Fun(function) = term else {
             return;
         };
-        if function.get_symbol() == crate::momentum_symbol()
-            && (1..=2).contains(&function.get_nargs())
-        {
-            let mut arguments = function.iter();
-            let Some(edge) = arguments.next().and_then(momentum_edge) else {
-                return;
-            };
-            let Some(signature) = basis.edge_signatures.get(&edge) else {
-                return;
-            };
-            let tensor_index = arguments.next().map(|argument| argument.to_owned());
-            let mut replacement = Atom::Zero;
-            for (loop_index, coefficient) in signature
-                .loops
-                .integer_coefficients()
-                .into_iter()
-                .enumerate()
-            {
-                if coefficient != 0 {
-                    replacement += coefficient
-                        * routed_momentum(
-                            symbol!("FeynKit::LoopMomentum").call(loop_index as i64),
-                            tensor_index.as_ref(),
-                        );
-                }
-            }
-            for (external_position, coefficient) in signature
-                .external
-                .integer_coefficients()
-                .into_iter()
-                .enumerate()
-            {
-                if coefficient == 0 {
-                    continue;
-                }
-                let Some(external_edge) = basis.external_edges.get(external_position) else {
-                    return;
-                };
-                let Some(connection) = external_connections.get(external_edge) else {
-                    return;
-                };
-                replacement += coefficient
-                    * routed_momentum(
-                        symbol!("FeynKit::ExternalMomentum").call(*connection as i64),
-                        tensor_index.as_ref(),
-                    );
-            }
-            **output = replacement;
-        } else if polarization_symbols.contains(&function.get_symbol()) && function.get_nargs() == 2
-        {
+        if polarization_symbols.contains(&function.get_symbol()) && function.get_nargs() == 2 {
             let mut arguments = function.iter();
             let Some(edge) = arguments.next().and_then(momentum_edge) else {
                 return;
@@ -603,10 +578,22 @@ fn normalize_symmetric_polarizations(numerator: &Atom) -> Atom {
         let AtomView::Fun(function) = term else {
             return;
         };
-        let normalized_head = if [PS.eps, PS.ebar].contains(&function.get_symbol()) {
-            PS.eps
-        } else if [PS.u, PS.ubar, PS.v, PS.vbar].contains(&function.get_symbol()) {
-            PS.u
+        let normalized_head = if [
+            feynkit_graph::symbols::epsilon(),
+            feynkit_graph::symbols::epsilonbar(),
+        ]
+        .contains(&function.get_symbol())
+        {
+            feynkit_graph::symbols::epsilon()
+        } else if [
+            feynkit_graph::symbols::u(),
+            feynkit_graph::symbols::ubar(),
+            feynkit_graph::symbols::v(),
+            feynkit_graph::symbols::vbar(),
+        ]
+        .contains(&function.get_symbol())
+        {
+            feynkit_graph::symbols::u()
         } else {
             return;
         };
@@ -621,14 +608,6 @@ fn momentum_edge(argument: AtomView<'_>) -> Option<EdgeId> {
         .ok()
         .and_then(|edge| usize::try_from(edge).ok())
         .map(EdgeId)
-}
-
-fn routed_momentum(label: Atom, tensor_index: Option<&Atom>) -> Atom {
-    let mut momentum = FunctionBuilder::new(crate::momentum_symbol()).add_arg(label);
-    if let Some(index) = tensor_index {
-        momentum = momentum.add_arg(index);
-    }
-    momentum.finish()
 }
 
 fn partition_vertices(
@@ -650,9 +629,14 @@ fn partition_vertices(
                     message: format!("unknown source edge {}", half_edge.edge.0),
                 }
             })?;
-            Ok(match half_edge.endpoint {
+            match half_edge.endpoint {
                 DiagramEndpoint::Source => endpoints.source,
                 DiagramEndpoint::Target => endpoints.target,
+            }
+            .ok_or_else(|| GroupingError::PartitionTransport {
+                member: diagram.name().to_owned(),
+                master: master.name().to_owned(),
+                message: format!("half-edge {:?} is absent", half_edge),
             })
         })
         .collect()
@@ -714,14 +698,16 @@ fn remap_partition(
         .edges()
         .flat_map(|(edge, endpoints, _)| {
             [
-                mapped_vertices
-                    .contains(&endpoints.source)
+                endpoints
+                    .source
+                    .is_some_and(|vertex| mapped_vertices.contains(&vertex))
                     .then_some(DiagramHalfEdge {
                         edge,
                         endpoint: DiagramEndpoint::Source,
                     }),
-                mapped_vertices
-                    .contains(&endpoints.target)
+                endpoints
+                    .target
+                    .is_some_and(|vertex| mapped_vertices.contains(&vertex))
                     .then_some(DiagramHalfEdge {
                         edge,
                         endpoint: DiagramEndpoint::Target,
@@ -1002,8 +988,8 @@ fn tensor_sample_library(
     for loop_index in 0..diagram.loop_momentum_basis().loop_edges.len() {
         insert_sample_vector(
             &mut library,
-            crate::momentum_symbol(),
-            symbol!("FeynKit::LoopMomentum").call(loop_index as i64),
+            feynkit_graph::symbols::loop_momentum(),
+            Atom::num(loop_index),
             &format!("loop-momentum:{loop_index}"),
             false,
             options,
@@ -1013,16 +999,10 @@ fn tensor_sample_library(
 
     let mut external_legs = diagram
         .edges()
-        .filter_map(|(_, endpoints, edge)| {
-            diagram
-                .vertex(endpoints.source)
-                .and_then(|vertex| vertex.external.as_ref())
-                .or_else(|| {
-                    diagram
-                        .vertex(endpoints.target)
-                        .and_then(|vertex| vertex.external.as_ref())
-                })
-                .map(|external| (external.clone(), edge.particle))
+        .filter_map(|(_, _, edge)| {
+            edge.external
+                .as_ref()
+                .map(|leg| (leg.clone(), edge.particle))
         })
         .collect::<Vec<_>>();
     external_legs.sort_by_key(|(external, particle)| {
@@ -1034,8 +1014,8 @@ fn tensor_sample_library(
         if inserted_momenta.insert(external.connection) {
             insert_sample_vector(
                 &mut library,
-                crate::momentum_symbol(),
-                symbol!("FeynKit::ExternalMomentum").call(external.connection as i64),
+                feynkit_graph::symbols::external_momentum(),
+                Atom::num(external.connection),
                 &format!("external-momentum:{}", external.connection),
                 false,
                 options,
@@ -1045,12 +1025,12 @@ fn tensor_sample_library(
 
         let particle = diagram.model().particle_by_id(particle_id)?;
         let head = match (particle.spin, external.state, particle.is_antiparticle()) {
-            (2, ExternalState::Incoming, false) => PS.u,
-            (2, ExternalState::Incoming, true) => PS.vbar,
-            (2, ExternalState::Outgoing, false) => PS.ubar,
-            (2, ExternalState::Outgoing, true) => PS.v,
-            (3, ExternalState::Incoming, _) => PS.eps,
-            (3, ExternalState::Outgoing, _) => PS.ebar,
+            (2, ExternalState::Incoming, false) => feynkit_graph::symbols::u(),
+            (2, ExternalState::Incoming, true) => feynkit_graph::symbols::vbar(),
+            (2, ExternalState::Outgoing, false) => feynkit_graph::symbols::ubar(),
+            (2, ExternalState::Outgoing, true) => feynkit_graph::symbols::v(),
+            (3, ExternalState::Incoming, _) => feynkit_graph::symbols::epsilon(),
+            (3, ExternalState::Outgoing, _) => feynkit_graph::symbols::epsilonbar(),
             _ => continue,
         };
         let label = if options.symmetric_polarizations {
@@ -1331,30 +1311,26 @@ fn canonical_topologies(
 }
 
 fn left_right_partners(diagram: &FeynmanDiagram) -> Option<BTreeMap<ExternalLeg, ExternalLeg>> {
-    let legs = diagram
-        .vertices()
-        .filter_map(|(_, vertex)| vertex.external.clone())
+    let external = diagram
+        .edges()
+        .filter(|(_, _, edge)| edge.external.is_some())
         .collect::<Vec<_>>();
-    let by_connection = legs
-        .iter()
-        .cloned()
-        .map(|leg| ((leg.connection, leg.state), leg))
-        .collect::<BTreeMap<_, _>>();
-    if by_connection.len() != legs.len() {
+    if external.is_empty()
+        || external
+            .iter()
+            .any(|(_, endpoints, _)| endpoints.source.is_none() || endpoints.target.is_none())
+    {
         return None;
     }
-    legs.into_iter()
-        .map(|leg| {
-            let opposite = match leg.state {
-                feynkit_graph::ExternalState::Incoming => feynkit_graph::ExternalState::Outgoing,
-                feynkit_graph::ExternalState::Outgoing => feynkit_graph::ExternalState::Incoming,
-            };
-            by_connection
-                .get(&(leg.connection, opposite))
-                .cloned()
-                .map(|partner| (leg, partner))
-        })
-        .collect()
+    Some(
+        external
+            .into_iter()
+            .map(|(_, _, edge)| {
+                let leg = edge.external.as_ref().expect("external edge").clone();
+                (leg.clone(), leg)
+            })
+            .collect(),
+    )
 }
 
 fn topology_key_variant(
@@ -1364,22 +1340,11 @@ fn topology_key_variant(
     left_right_partners: Option<&BTreeMap<ExternalLeg, ExternalLeg>>,
 ) -> Result<CanonicalTopology, GroupingError> {
     let mut graph = Graph::new();
-    for (_, vertex) in diagram.vertices() {
-        let external = vertex.external.clone().map(|leg| {
-            left_right_partners
-                .and_then(|partners| partners.get(&leg))
-                .cloned()
-                .unwrap_or(leg)
-        });
-        graph.add_node(external.map_or(TopologyVertex::Internal, TopologyVertex::External));
+    for _ in diagram.vertices() {
+        graph.add_node(TopologyVertex::Internal);
     }
     for (_, endpoints, edge) in diagram.edges() {
-        let external = diagram
-            .vertex(endpoints.source)
-            .is_some_and(|vertex| vertex.is_external())
-            || diagram
-                .vertex(endpoints.target)
-                .is_some_and(|vertex| vertex.is_external());
+        let external = edge.external.is_some();
         let (directed, color) = if external {
             // External edges retain both their exact particle species and
             // direction: exchanging different mass-degenerate external states
@@ -1389,6 +1354,7 @@ fn topology_key_variant(
                 TopologyEdge::External {
                     particle: edge.particle,
                     directed: edge.directed,
+                    external: edge.external.clone().expect("external edge"),
                 },
             )
         } else {
@@ -1405,11 +1371,29 @@ fn topology_key_variant(
             };
             (false, TopologyEdge::Internal(color))
         };
-        let (source, target) = if left_right_partners.is_some() && external && directed {
-            (endpoints.target.0, endpoints.source.0)
-        } else {
-            (endpoints.source.0, endpoints.target.0)
-        };
+        let mut source = endpoints.source.map(|vertex| vertex.0);
+        let mut target = endpoints.target.map(|vertex| vertex.0);
+        if source.is_none() || target.is_none() {
+            let node = graph.add_node(TopologyVertex::External(edge.external.clone().ok_or_else(
+                || {
+                    GroupingError::TopologyConstruction(
+                        "dangling edge has no external metadata".into(),
+                    )
+                },
+            )?));
+            if source.is_none() {
+                source = Some(node);
+            } else {
+                target = Some(node);
+            }
+        }
+        let (mut source, mut target) = (
+            source.expect("completed endpoint"),
+            target.expect("completed endpoint"),
+        );
+        if left_right_partners.is_some() && external && directed {
+            std::mem::swap(&mut source, &mut target);
+        }
         graph
             .add_edge(source, target, directed, color)
             .map_err(|error| GroupingError::TopologyConstruction(error.to_string()))?;
@@ -1417,7 +1401,7 @@ fn topology_key_variant(
     let canonical = graph.canonize();
     Ok(CanonicalTopology {
         key: canonical.graph,
-        vertex_map: canonical.vertex_map,
+        vertex_map: canonical.vertex_map[..diagram.vertices().count()].to_vec(),
         left_right_swapped: left_right_partners.is_some(),
     })
 }
@@ -1524,11 +1508,11 @@ mod tests {
         let mut builder = FeynmanDiagram::builder(Arc::clone(model), name)
             .numerator(numerator)
             .projector(projector);
-        builder.add_vertex(DiagramVertex::external("in", 0, ExternalState::Incoming));
+        builder.add_generation_external("in", 0, ExternalState::Incoming, 0);
         let interaction = model.vertex_rule_id("V").unwrap();
         builder.add_vertex(DiagramVertex::interaction("left", interaction));
         builder.add_vertex(DiagramVertex::interaction("right", interaction));
-        builder.add_vertex(DiagramVertex::external("out", 1, ExternalState::Outgoing));
+        builder.add_generation_external("out", 1, ExternalState::Outgoing, 1);
         builder
             .add_edge(
                 VertexId(0),
@@ -1559,21 +1543,11 @@ mod tests {
         internal_edges_first: bool,
     ) -> FeynmanDiagram {
         let mut builder = FeynmanDiagram::builder(Arc::clone(model), name);
-        let incoming = builder.add_vertex(DiagramVertex::external_in_connection(
-            "in",
-            0,
-            ExternalState::Incoming,
-            0,
-        ));
+        let incoming = builder.add_generation_external("in", 0, ExternalState::Incoming, 0);
         let interaction = model.vertex_rule_id("V").unwrap();
         let left = builder.add_vertex(DiagramVertex::interaction("left", interaction));
         let right = builder.add_vertex(DiagramVertex::interaction("right", interaction));
-        let outgoing = builder.add_vertex(DiagramVertex::external_in_connection(
-            "out",
-            1,
-            ExternalState::Outgoing,
-            1,
-        ));
+        let outgoing = builder.add_generation_external("out", 1, ExternalState::Outgoing, 1);
         let scalar = || DiagramEdge::new(particle(model, 25), false);
         let vector = || DiagramEdge::new(particle(model, 21), false);
         let add_internals = |builder: &mut feynkit_graph::FeynmanDiagramBuilder| {
@@ -1591,13 +1565,14 @@ mod tests {
             builder.add_edge(right, outgoing, vector()).unwrap();
             (incoming_edge, loop_edge)
         };
-        let endpoint = symbol!("FeynKit::SinkIndex").call((incoming_edge.0 as i64, 1_i64));
+        let endpoint =
+            feynkit_graph::symbols::hedge_index().call(((2 * incoming_edge.0 + 1) as i64, 1_i64));
         let index = Minkowski {}.new_rep(4).to_symbolic([endpoint]);
         let numerator = FunctionBuilder::new(crate::momentum_symbol())
             .add_arg(loop_edge.0 as i64)
             .add_arg(index.clone())
             .finish();
-        let projector = FunctionBuilder::new(PS.eps)
+        let projector = FunctionBuilder::new(feynkit_graph::symbols::epsilon())
             .add_arg(incoming_edge.0 as i64)
             .add_arg(index)
             .finish();
@@ -1612,22 +1587,12 @@ mod tests {
 
     fn cut_diagram(model: &Arc<Model>, mirrored: bool) -> FeynmanDiagram {
         let mut builder = FeynmanDiagram::builder(Arc::clone(model), "cut-line");
-        let incoming = builder.add_vertex(DiagramVertex::external_in_connection(
-            "in",
-            0,
-            ExternalState::Incoming,
-            0,
-        ));
+        let incoming = builder.add_generation_external("in", 0, ExternalState::Incoming, 0);
         let interaction = builder.add_vertex(DiagramVertex::interaction(
             "interaction",
             model.vertex_rule_id("V").unwrap(),
         ));
-        let outgoing = builder.add_vertex(DiagramVertex::external_in_connection(
-            "out",
-            1,
-            ExternalState::Outgoing,
-            0,
-        ));
+        let outgoing = builder.add_generation_external("out", 1, ExternalState::Outgoing, 0);
         let scalar = || DiagramEdge::new(particle(model, 25), false);
         let incoming_edge = builder.add_edge(incoming, interaction, scalar()).unwrap();
         let outgoing_edge = builder.add_edge(interaction, outgoing, scalar()).unwrap();
@@ -1680,41 +1645,21 @@ mod tests {
         let internal = |name: &str| DiagramVertex {
             name: name.to_owned(),
             interaction: None,
-            external: None,
+
             numerator: Atom::one(),
         };
         let (incoming, left, right, outgoing, marker) = if permuted_ids {
             let marker = builder.add_vertex(internal("marker"));
-            let outgoing = builder.add_vertex(DiagramVertex::external_in_connection(
-                "out",
-                1,
-                ExternalState::Outgoing,
-                0,
-            ));
+            let outgoing = builder.add_generation_external("out", 1, ExternalState::Outgoing, 0);
             let right = builder.add_vertex(internal("right"));
-            let incoming = builder.add_vertex(DiagramVertex::external_in_connection(
-                "in",
-                0,
-                ExternalState::Incoming,
-                0,
-            ));
+            let incoming = builder.add_generation_external("in", 0, ExternalState::Incoming, 0);
             let left = builder.add_vertex(internal("left"));
             (incoming, left, right, outgoing, marker)
         } else {
-            let incoming = builder.add_vertex(DiagramVertex::external_in_connection(
-                "in",
-                0,
-                ExternalState::Incoming,
-                0,
-            ));
+            let incoming = builder.add_generation_external("in", 0, ExternalState::Incoming, 0);
             let left = builder.add_vertex(internal("left"));
             let right = builder.add_vertex(internal("right"));
-            let outgoing = builder.add_vertex(DiagramVertex::external_in_connection(
-                "out",
-                1,
-                ExternalState::Outgoing,
-                0,
-            ));
+            let outgoing = builder.add_generation_external("out", 1, ExternalState::Outgoing, 0);
             let marker = builder.add_vertex(internal("marker"));
             (incoming, left, right, outgoing, marker)
         };
@@ -1814,30 +1759,10 @@ mod tests {
     fn left_right_diagram(model: &Arc<Model>, attachment: LeftRightAttachment) -> FeynmanDiagram {
         let mut builder = FeynmanDiagram::builder(Arc::clone(model), "left-right");
         let external = [
-            builder.add_vertex(DiagramVertex::external_in_connection(
-                "in0",
-                0,
-                ExternalState::Incoming,
-                0,
-            )),
-            builder.add_vertex(DiagramVertex::external_in_connection(
-                "in1",
-                1,
-                ExternalState::Incoming,
-                1,
-            )),
-            builder.add_vertex(DiagramVertex::external_in_connection(
-                "out0",
-                2,
-                ExternalState::Outgoing,
-                0,
-            )),
-            builder.add_vertex(DiagramVertex::external_in_connection(
-                "out1",
-                3,
-                ExternalState::Outgoing,
-                1,
-            )),
+            builder.add_generation_external("in0", 0, ExternalState::Incoming, 0),
+            builder.add_generation_external("in1", 1, ExternalState::Incoming, 1),
+            builder.add_generation_external("out0", 2, ExternalState::Outgoing, 0),
+            builder.add_generation_external("out1", 3, ExternalState::Outgoing, 1),
         ];
         let interaction = model.vertex_rule_id("V").unwrap();
         let left = builder.add_vertex(DiagramVertex::interaction("left", interaction));

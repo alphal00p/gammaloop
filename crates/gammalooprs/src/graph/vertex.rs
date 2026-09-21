@@ -12,7 +12,6 @@ use crate::{
 };
 use color_eyre::Result;
 use eyre::{Context, eyre};
-use feynkit_graph::VertexId as FeynkitVertexId;
 
 use super::{
     Autogen,
@@ -78,9 +77,7 @@ impl Vertex {}
 #[derive(Debug, Clone)]
 pub struct ParseVertex {
     pub name: Option<String>,
-    /// Transient identity used only by the finalized FeynKit runtime bridge.
-    /// It is deliberately not serialized into runtime DOT artifacts.
-    pub(crate) feynkit_id: Option<FeynkitVertexId>,
+
     // pub strict: bool,
     pub vertex_rule: Option<VertexRuleId>,
     pub num: Option<Atom>,
@@ -122,7 +119,7 @@ impl From<VertexRuleId> for ParseVertex {
     fn from(vertex_rule: VertexRuleId) -> Self {
         ParseVertex {
             name: None,
-            feynkit_id: None,
+
             // strict: false,
             vertex_rule: Some(vertex_rule),
             dod: None,
@@ -160,7 +157,7 @@ impl ParseVertex {
                 Ok(ParseVertex {
                     dod,
                     name,
-                    feynkit_id: None,
+
                     vertex_rule: None,
                     num: Some(num.strip_parse().with_context(|| {
                         format!(
@@ -179,7 +176,7 @@ impl ParseVertex {
                 Ok(ParseVertex {
                     dod,
                     name,
-                    feynkit_id: None,
+
                     vertex_rule,
                     num: None,
                 })
@@ -189,7 +186,7 @@ impl ParseVertex {
                 Ok(ParseVertex {
                     dod,
                     name,
-                    feynkit_id: None,
+
                     vertex_rule,
                     num: None,
                 })
@@ -208,7 +205,7 @@ impl ParseVertex {
                         Ok(ParseVertex {
                             dod,
                             name,
-                            feynkit_id: None,
+
                             vertex_rule: Some(rules[0]),
                             num: None,
                         })

@@ -7,7 +7,7 @@ use eyre::eyre;
 use idenso::shorthands::schoonschip::Schoonschip;
 use linnet::half_edge::{
     HedgeGraph, PowersetIterator,
-    involution::{Flow, Hedge, HedgePair},
+    involution::{Flow, Hedge},
     subgraph::{
         Cycle, InternalSubGraph, ModifySubSet, PairwiseSubSetOps, SuBitGraph, SubGraphLike,
         SubGraphOps, SubSetLike, SubSetOps, subset::SubSet,
@@ -470,34 +470,28 @@ impl UltravioletGraph for Graph {
         model: &Model,
         edge_powers: T,
     ) -> Atom {
-        let mut den = Atom::num(1);
-
-        for (pair, eid, d) in self.underlying.iter_edges_of(subgraph) {
-            if matches!(pair, HedgePair::Paired { .. }) {
-                let m2 = d.data.mass_atom(model).pow(2);
-                let edge_power = edge_powers(d.data);
-                let is_power_negative = edge_power < 0;
-                let prop_den = GS.den(
-                    usize::from(eid),
-                    function!(GS.emr_mom, usize::from(eid)),
-                    &m2,
-                    spenso_lor_atom(usize::from(eid) as i32, usize::from(eid), GS.dim)
-                        .pow(2)
-                        .to_dots()
-                        - &m2,
-                );
-                for _i in 0..edge_power.abs() {
-                    if is_power_negative {
-                        den /= prop_den.clone();
-                    } else {
-                        den *= prop_den.clone();
-                    }
-                }
-            }
+        let symbols = feynkit_graph::expressions::PropagatorSymbols {
+            momentum: GS.emr_mom,
+            denominator: GS.den,
+        };
+        let result = feynkit_graph::expressions::GraphExpressions::denominator_of(
+            &self.underlying,
+            subgraph,
+            |edge_id, edge| {
+                Ok::<_, std::convert::Infallible>(symbols.denominator(
+                    edge_id,
+                    &edge.mass_atom(model).pow(2),
+                    GS.dim,
+                ))
+            },
+            |_, edge| edge_powers(edge),
+        );
+        match result {
+            Ok(denominator) => denominator,
+            Err(never) => match never {},
         }
-
-        den
     }
+
     fn numerator<S: SubGraphLike + SubSetOps>(
         &self,
         subgraph: &S,
@@ -560,4 +554,32 @@ pub trait UVE {
     fn mass_atom(&self, model: &crate::model::Model) -> Atom;
     fn particle_pdg_code(&self, model: &crate::model::Model) -> Option<isize>;
     fn is_massive(&self, model: &crate::model::Model) -> bool;
+}
+
+#[cfg(test)]
+mod shared_expression_tests {
+    use super::*;
+    use linnet::half_edge::involution::EdgeIndex;
+
+    #[test]
+    fn shared_propagator_matches_runtime_tensor_contraction() {
+        crate::initialisation::test_initialise().unwrap();
+        let edge = EdgeIndex(7);
+        let mass_squared = symbolica::symbol!("shared_propagator_test::m").pow(2);
+        let previous = GS.den(
+            edge.0,
+            GS.emr_mom.call(edge.0),
+            &mass_squared,
+            spenso_lor_atom(edge.0 as i32, edge.0, GS.dim)
+                .pow(2)
+                .to_dots()
+                - &mass_squared,
+        );
+        let shared = feynkit_graph::expressions::PropagatorSymbols {
+            momentum: GS.emr_mom,
+            denominator: GS.den,
+        }
+        .denominator(edge, &mass_squared, GS.dim);
+        assert_eq!(shared, previous);
+    }
 }

@@ -1876,6 +1876,7 @@ dependencies = [
  "linnet",
  "serde",
  "serde_json",
+ "spenso",
  "symbolica",
  "thiserror 2.0.18",
  "typed-index-collections",
@@ -1908,10 +1909,12 @@ dependencies = [
  "feynkit-model",
  "itertools 0.14.0",
  "linnet",
+ "nu-ansi-term",
  "serde",
  "serde_json",
  "spenso",
  "symbolica",
+ "symbolica-utils",
  "thiserror 2.0.18",
 ]
 
@@ -1968,6 +1971,7 @@ dependencies = [
  "feynkit-graph",
  "feynkit-model",
  "idenso",
+ "linnet",
  "spenso",
  "symbolica",
  "thiserror 2.0.18",

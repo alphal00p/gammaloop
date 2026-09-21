@@ -73,13 +73,13 @@ impl PyTensorReducer {
         }
     }
 
-    /// Construct a reducer that selects every ``FeynKit::Momentum`` tensor.
+    /// Construct a reducer that selects every ``gammalooprs::Q`` tensor.
     ///
     /// This is the convenient constructor for vacuum numerators produced by
     /// FeynKit's native Feynman-rule generator. It selects the entire
-    /// ``FeynKit::Momentum`` head and is therefore intended for pure vacuum
+    /// ``gammalooprs::Q`` head and is therefore intended for pure vacuum
     /// numerators, where every such momentum is integrated. If a graph still
-    /// contains external ``FeynKit::Momentum`` tensors, construct a reducer
+    /// contains external ``gammalooprs::Q`` tensors, construct a reducer
     /// with exact :meth:`with_integrated_vector` selectors for its internal
     /// momenta instead.
     ///

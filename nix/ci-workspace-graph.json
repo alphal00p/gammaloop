@@ -52,7 +52,8 @@
     ],
     "feynkit-cff": [
       "feynkit-graph",
-      "linnet"
+      "linnet",
+      "spenso"
     ],
     "feynkit-generator": [
       "feynkit-graph",
@@ -66,7 +67,8 @@
       "feynkit-kinematics",
       "feynkit-model",
       "linnet",
-      "spenso"
+      "spenso",
+      "symbolica-utils"
     ],
     "feynkit-kinematics": [
       "linnet"
@@ -80,12 +82,14 @@
       "feynkit-model",
       "feynkit-tensor",
       "feynkit-ufo",
+      "linnet",
       "linnet-py",
       "spynso3"
     ],
     "feynkit-tensor": [
       "feynkit-graph",
       "idenso",
+      "linnet",
       "spenso"
     ],
     "feynkit-ufo": [
@@ -273,6 +277,9 @@
       "linnet": [
         "bincode",
         "serde"
+      ],
+      "spenso": [
+        "shadowing"
       ]
     },
     "feynkit-generator": {
@@ -295,7 +302,8 @@
       ],
       "spenso": [
         "shadowing"
-      ]
+      ],
+      "symbolica-utils": []
     },
     "feynkit-kinematics": {
       "linnet": []
@@ -309,12 +317,14 @@
       "feynkit-model": [],
       "feynkit-tensor": [],
       "feynkit-ufo": [],
+      "linnet": [],
       "linnet-py": [],
       "spynso3": []
     },
     "feynkit-tensor": {
       "feynkit-graph": [],
       "idenso": [],
+      "linnet": [],
       "spenso": [
         "shadowing"
       ]
@@ -1178,7 +1188,8 @@
     "feynkit-cff": [
       "feynkit-graph",
       "feynkit-model",
-      "linnet"
+      "linnet",
+      "spenso"
     ],
     "feynkit-generator": [
       "feynkit-graph",
@@ -1192,7 +1203,8 @@
       "feynkit-kinematics",
       "feynkit-model",
       "linnet",
-      "spenso"
+      "spenso",
+      "symbolica-utils"
     ],
     "feynkit-kinematics": [
       "linnet"
@@ -1206,6 +1218,7 @@
       "feynkit-model",
       "feynkit-tensor",
       "feynkit-ufo",
+      "linnet",
       "linnet-py",
       "spynso3"
     ],
@@ -1213,6 +1226,7 @@
       "feynkit-graph",
       "feynkit-model",
       "idenso",
+      "linnet",
       "spenso"
     ],
     "feynkit-ufo": [
@@ -1404,6 +1418,9 @@
       "linnet": [
         "bincode",
         "serde"
+      ],
+      "spenso": [
+        "shadowing"
       ]
     },
     "feynkit-generator": {
@@ -1426,7 +1443,8 @@
       ],
       "spenso": [
         "shadowing"
-      ]
+      ],
+      "symbolica-utils": []
     },
     "feynkit-kinematics": {
       "linnet": []
@@ -1440,6 +1458,7 @@
       "feynkit-model": [],
       "feynkit-tensor": [],
       "feynkit-ufo": [],
+      "linnet": [],
       "linnet-py": [],
       "spynso3": []
     },
@@ -1447,6 +1466,7 @@
       "feynkit-graph": [],
       "feynkit-model": [],
       "idenso": [],
+      "linnet": [],
       "spenso": [
         "shadowing"
       ]

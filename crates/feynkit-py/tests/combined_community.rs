@@ -166,7 +166,7 @@ fn feynkit_and_spenso_share_one_symbolica_kernel_in_both_import_orders() {
                 Atom::parse("x + 1", "feynkit_py_test", ParseSettings::default()).unwrap(),
             );
             let indexed = Atom::parse(
-                "FeynKit::Momentum(1,spenso::mink(4,FeynKit::SourceIndex(7,0)))*FeynKit::Momentum(2,spenso::mink(4,FeynKit::SinkIndex(7,0)))*FeynKit::Momentum(3,spenso::mink(4,FeynKit::EdgeDummy(7,0)))*FeynKit::Momentum(4,spenso::mink(4,FeynKit::VertexDummy(7,0)))",
+                "gammalooprs::Q(1,spenso::mink(4,gammalooprs::hedge(7)))*gammalooprs::Q(2,spenso::mink(4,gammalooprs::hedge(8)))*gammalooprs::Q(3,spenso::mink(4,gammalooprs::edge(7,0)))*gammalooprs::Q(4,spenso::mink(4,gammalooprs::vertex(7,0)))",
                 "feynkit_py_test",
                 ParseSettings::default(),
             ).unwrap();
@@ -267,14 +267,15 @@ assert isinstance(indexed, spenso.TensorExpression)
 assert isinstance(indexed, core.Expression)
 assert indexed.rank == 4
 assert indexed.to_expression() == core.Expression.parse(indexed_diagram.numerator)
-assert "::Momentum(" in indexed_diagram.numerator
+assert "gammalooprs::Q(" in indexed_diagram.numerator
+assert "FeynKit::" not in indexed_diagram.numerator
 assert "Momentum" not in str(indexed)
 assert "q₁" in str(indexed)
 assert "q_{1}" in indexed._repr_latex_()
 assert "Momentum" not in indexed.to_typst()
-for label in ("s₇.₀", "t₇.₀", "e₇.₀", "v₇.₀"):
+for label in ("e₇.₀", "v₇.₀"):
     assert label in str(indexed), str(indexed)
-for label in ("s", "t", "e", "v"):
+for label in ("e", "v"):
     assert f"{label}_{{7.0}}" in indexed._repr_latex_()
     assert f"attach({label},b:(7.0))" in indexed.to_typst()
 for vertex in indexed_diagram.vertices:

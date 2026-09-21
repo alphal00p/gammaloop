@@ -35,6 +35,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use feynkit_graph::FeynmanDiagram;
 use idenso::shorthands::metric::MetricSimplifier;
+use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
 use spenso::network::{library::symbolic::ETS, parsing::AtomStructureExt, tags::SPENSO_TAG};
 use spenso::structure::representation::{BaseRepName, Minkowski};
 use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol};
@@ -328,13 +329,13 @@ impl TensorReducer {
         }
     }
 
-    /// Construct a reducer for every `FeynKit::Momentum` vector.
+    /// Construct a reducer for every canonical diagram `gammalooprs::Q` vector.
     ///
     /// This constructor stores the qualified head name without registering a
     /// bare Symbolica symbol, so FeynKit's tensor tags remain initialization
     /// order independent.
     pub fn feynkit(dimension: Atom) -> Self {
-        Self::new(dimension).with_integrated_head_name("FeynKit::Momentum")
+        Self::new(dimension).with_integrated_head(feynkit_graph::momentum_symbol())
     }
 
     /// Select every vector with this Symbolica function head.
@@ -964,6 +965,15 @@ pub trait FeynmanDiagramTensorExt {
     /// As with `TensorReducer`, reduction requires at least one integrated vector.
     fn tensor_reduce(&self, dimension: Atom) -> Result<TensorReduction, TensorReductionError>;
 
+    /// Reduce a selected region using an explicitly supplied projector and its
+    /// paired internal momenta; boundary and external-state momenta stay fixed.
+    fn tensor_reduce_of(
+        &self,
+        subgraph: &SuBitGraph,
+        dimension: Atom,
+        projector: &Atom,
+    ) -> Result<TensorReduction, TensorReductionError>;
+
     /// Reduce the finalized diagram numerator and external-state projector.
     ///
     /// The request-wide numerator prefactor is scalar by construction and is
@@ -993,21 +1003,39 @@ pub trait FeynmanDiagramTensorExt {
 
 impl FeynmanDiagramTensorExt for FeynmanDiagram {
     fn tensor_reduce(&self, dimension: Atom) -> Result<TensorReduction, TensorReductionError> {
+        self.tensor_reduce_of(
+            &self.underlying().full_filter(),
+            dimension,
+            self.projector(),
+        )
+    }
+
+    fn tensor_reduce_of(
+        &self,
+        subgraph: &SuBitGraph,
+        dimension: Atom,
+        projector: &Atom,
+    ) -> Result<TensorReduction, TensorReductionError> {
         let representation = FunctionBuilder::new(Minkowski::selfless_symbol())
             .add_arg(&dimension)
             .finish();
         let mut reducer = TensorReducer::new(dimension.clone());
-        let basis = self.loop_momentum_basis();
-        for edge in basis.tree_edges.iter().chain(&basis.loop_edges) {
-            let vector = FunctionBuilder::new(feynkit_graph::momentum_symbol())
-                .add_arg(edge.0)
-                .add_arg(&representation)
-                .finish();
-            reducer = reducer.with_integrated_vector(vector);
+        for (pair, edge, data) in self.underlying().iter_edges_of(subgraph) {
+            if pair.is_paired() && data.data.external.is_none() && !data.data.is_dummy {
+                let vector = FunctionBuilder::new(feynkit_graph::momentum_symbol())
+                    .add_arg(edge.0)
+                    .add_arg(&representation)
+                    .finish();
+                reducer = reducer.with_integrated_vector(vector);
+            }
         }
-        let numerator =
-            (self.numerator() * self.projector()).with_lorentz_dimension(dimension.as_view());
-        reducer.reduce(numerator.as_view())
+        let numerator = if *subgraph == self.underlying().full_filter() {
+            self.numerator().clone()
+        } else {
+            self.numerator_of(subgraph, &SuBitGraph::empty(self.underlying().n_hedges()))
+        };
+        let projected = (numerator * projector).with_lorentz_dimension(dimension.as_view());
+        reducer.reduce(projected.as_view())
     }
 
     fn reduce_tensor_numerator(
@@ -1915,28 +1943,28 @@ mod tests {
         let mut builder = FeynmanDiagram::builder(model, "internal-selection");
         let left = builder.add_vertex(DiagramVertex::interaction("left", rule));
         let right = builder.add_vertex(DiagramVertex::interaction("right", rule));
-        let external = builder.add_vertex(DiagramVertex::external(
-            "in",
-            0,
-            feynkit_graph::ExternalState::Incoming,
-        ));
+        let mut incoming = DiagramEdge::new(particle, false);
+        incoming.external = Some(feynkit_graph::ExternalLeg {
+            name: "in".into(),
+            index: 0,
+            state: feynkit_graph::ExternalState::Incoming,
+            connection: 0,
+        });
         let internal = builder
             .add_edge(left, right, DiagramEdge::new(particle, false))
             .unwrap();
         builder
             .add_edge(left, right, DiagramEdge::new(particle, false))
             .unwrap();
-        let outside = builder
-            .add_edge(external, left, DiagramEdge::new(particle, false))
-            .unwrap();
-        let outgoing = builder.add_vertex(DiagramVertex::external(
-            "out",
-            1,
-            feynkit_graph::ExternalState::Outgoing,
-        ));
-        builder
-            .add_edge(right, outgoing, DiagramEdge::new(particle, false))
-            .unwrap();
+        let outside = builder.add_edge(None, left, incoming).unwrap();
+        let mut outgoing = DiagramEdge::new(particle, false);
+        outgoing.external = Some(feynkit_graph::ExternalLeg {
+            name: "out".into(),
+            index: 1,
+            state: feynkit_graph::ExternalState::Outgoing,
+            connection: 1,
+        });
+        builder.add_edge(right, None, outgoing).unwrap();
         let momentum = feynkit_graph::momentum_symbol();
         let d = Atom::var(symbol!("graph_reduce_D"));
         let mu = Atom::var(symbol!("graph_reduce_mu"));
@@ -1955,9 +1983,31 @@ mod tests {
         let result = diagram.tensor_reduce(d.clone()).unwrap().into_expression();
         let k = compact(momentum, internal.0 as i64, &d);
         let p = compact(momentum, outside.0 as i64, &d);
-        let expected = dot(&k, &k) * dot(&p, &p) / d;
-        assert!((result - expected).expand().is_zero());
+        let expected = dot(&k, &k) * dot(&p, &p) / &d;
+        assert!((result - &expected).expand().is_zero());
         assert_eq!(diagram.numerator_prefactor(), &Atom::num(7));
+
+        use linnet::half_edge::{
+            involution::{EdgeIndex, HedgePair},
+            subgraph::ModifySubSet,
+        };
+        let pair = diagram.underlying()[&EdgeIndex(internal.0)].1;
+        let mut selected = diagram.underlying().empty_subgraph();
+        selected.add(pair);
+        let partial = diagram
+            .tensor_reduce_of(&selected, d.clone(), diagram.projector())
+            .unwrap()
+            .into_expression();
+        assert!((partial - expected).expand().is_zero());
+        let HedgePair::Paired { source, .. } = pair else {
+            panic!("internal propagator")
+        };
+        let mut boundary = diagram.underlying().empty_subgraph();
+        boundary.add(source);
+        assert!(matches!(
+            diagram.tensor_reduce_of(&boundary, d, diagram.projector()),
+            Err(TensorReductionError::NoIntegratedVectorsSelected)
+        ));
     }
 
     #[test]

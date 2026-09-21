@@ -150,6 +150,48 @@ Symbolica API requires building each Python snapshot through `Graph.add_node` an
 `Graph.add_edge`. No FeynKit topology wrapper or independent graph algorithms are involved.
 Exceptions from either callback cancel generation and propagate unchanged.
 
+== Analyze interaction regions with Linnet
+
+Finalized diagrams use GammaLoop's half-edge conventions. Amplitude external states are
+dangling half-edges, incoming at a sink and outgoing at a source. Cross-section initial
+states are sewn paired edges; their `is_external` metadata still identifies external
+momentum carriers. Every item in `diagram.vertices` is an interaction. A missing edge
+endpoint is `None`, and external names, indices, and states belong to the edge.
+
+Install the matching `linnet-py` extension to use the graph analysis interface.
+`to_linnet()` returns that module's canonical `Graph`, with `DiagramVertex` and
+`DiagramEdge` payloads. Its selection algebra and graph algorithms therefore work directly:
+
+// docs-example: compile
+```python
+graph = diagram.to_linnet()
+selected = graph.filter(edge=lambda edge: not edge.data.is_external)
+numerator = diagram.numerator_expression(subgraph=selected)
+components = diagram.connected_components(selected)
+boundary = diagram.boundary(selected)
+basis = diagram.momentum_basis(subgraph=selected)
+routed = basis.route_expression(numerator)
+```
+
+Optional `subgraph` filters also apply to denominators, momentum-basis enumeration,
+parent-compatible and contracted routing, superficial divergence, CFF construction, and
+tensor reduction. Numerator `without` excludes edges and their incident vertex factors,
+using the shared GammaLoop traversal. Full-graph defaults retain whole-diagram behavior.
+Partial tensor reduction requires an explicit `projector`; a boundary momentum is never
+implicitly integrated. Overall factors, numerator prefactors, and projectors remain separate.
+
+Selections belong to one exported graph revision. A structural edit to that graph leaves
+the physics diagram unchanged and invalidates its selections. The next `to_linnet()` call
+creates a fresh analysis graph. Foreign or stale selections raise an error. Half-edge
+views carry their native diagram half-edge ID in `data`; the bridge preserves this mapping
+even when the exported builder assigns different half-edge numbers.
+
+`diagram.cuts` contains generated physical cuts with reusable `left.subgraph` and
+`right.subgraph`, coupling orders, side loop counts, crossing edges, and momentum signatures.
+`diagram.topology_threshold_candidates` records the distinct process-independent partitions.
+Linnet's `all_bonds` and `all_cuts` describe structural cuts, without assigning physical
+final-state validity.
+
 == Inspect the propagator denominator
 
 // docs-example: compile
@@ -158,12 +200,15 @@ denominator = diagram.denominator_expression()
 integrand = diagram.numerator_expression() / denominator
 ```
 
-The denominator is a scalar Spenso `TensorExpression`: the product of
-$q_e^2 - m_e^2$ over internal edges, with four-dimensional Minkowski scalar products.
-Its momentum labels match the numerator and its masses remain symbolic model parameters;
-the UFO `ZERO` mass becomes zero. External legs, widths, and an imaginary prescription
-are excluded. This follows FeynKit's quadratic-propagator convention; custom UFO
-denominator formulas are not instantiated. A diagram without internal edges returns one.
+The denominator is a scalar Spenso `TensorExpression` using GammaLoop's
+`denom(edge, momentum, mass_squared, quadratic)` annotation. The quadratic is
+$q_e^2 - m_e^2$, with the shared symbolic dimension by default; pass `dimension=4`
+for a fixed dimension. `edge_powers` maps edge IDs to signed powers, including zero.
+Momentum labels match the numerator, masses remain symbolic model parameters, and the
+UFO `ZERO` mass becomes zero. The default region excludes external carriers and dummy
+edges; an explicit selection includes every paired edge, matching GammaLoop. Widths and
+an imaginary prescription are excluded. Custom UFO denominator formulas are not instantiated.
+A selection without internal propagators returns one.
 The ratio above still requires the diagram's separate overall factor and any unapplied
 projector or numerator prefactor when assembling a complete integrand.
 

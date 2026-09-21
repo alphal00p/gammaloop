@@ -35,7 +35,8 @@
     "same-rank": "rank-groups",
   ),
   labels: (
-    distance: "number",
+    "internal-distance": "number",
+    "external-distance": "number",
     spring: "number",
     repulsion: "number",
     steps: "integer",
@@ -274,7 +275,8 @@
   /// These override the corresponding flat parameters below.
   /// -> none | dictionary
   constraints: none,
-  /// Semantic label-layout options. Supported fields are `distance`, `spring`,
+  /// Semantic label-layout options. Supported fields are `internal-distance`,
+  /// `external-distance`, `spring`,
   /// `repulsion`, `steps`, `model`, `step`, `tolerance`, and `max-movement`.
   /// These override the corresponding flat parameters below.
   /// -> none | dictionary
@@ -372,9 +374,12 @@
   /// anneal mode treats it as a dimensionless multiplier on proposal steps.
   /// Applies to both modes. -> float
   directional-force: 5.0,
-  /// Edge-label target offset as a multiple of the graph spring length. Label
-  /// layout runs after both graph layout modes. -> float
-  label-length-scale: 0.6,
+  /// Paired-edge label target offset as a multiple of the graph spring length.
+  /// Label layout runs after both graph layout modes. -> float
+  internal-label-length-scale: 0.6,
+  /// Dangling-edge label target offset as a multiple of the graph spring length.
+  /// Independent of internal label spacing. -> float
+  external-label-length-scale: 0.6,
   /// Spring strength pulling each label toward its target offset in the
   /// spring-based label layouts. -> float
   label-spring: 23.0,
@@ -518,7 +523,8 @@
       "side-strength",
       default: directional-force,
     )),
-    label-length-scale: str(labels.at("distance", default: label-length-scale)),
+    internal-label-length-scale: str(labels.at("internal-distance", default: internal-label-length-scale)),
+    external-label-length-scale: str(labels.at("external-distance", default: external-label-length-scale)),
     label-spring: str(labels.at("spring", default: label-spring)),
     label-charge: str(labels.at("repulsion", default: label-charge)),
     label-steps: str(labels.at("steps", default: label-steps)),

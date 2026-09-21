@@ -35,9 +35,8 @@ use eyre::{Context, Ok, eyre};
 use itertools::Itertools;
 use linnet::{
     half_edge::{
-        HedgeGraph, NodeIndex,
-        builder::HedgeGraphBuilder,
-        involution::{EdgeData, EdgeIndex, Flow, Hedge, HedgePair, Orientation},
+        HedgeGraph,
+        involution::{EdgeData, EdgeIndex, Flow, Hedge, HedgePair},
         nodestore::NodeStorageVec,
         subgraph::{ModifySubSet, OrientedCut, SuBitGraph, SubSetOps},
         swap::Swap,
@@ -46,10 +45,7 @@ use linnet::{
     permutation::Permutation,
 };
 use spenso::{network::parsing::ParseSettings, structure::slot::IsAbstractSlot};
-use symbolica::{
-    atom::{Atom, AtomCore, AtomView, FunctionBuilder},
-    symbol,
-};
+use symbolica::atom::{Atom, AtomCore};
 use tracing::instrument;
 use tracing::{debug, warn};
 use typed_index_collections::TiVec;
@@ -61,25 +57,6 @@ use super::{
     hedge_data::{NumIndices, ParseHedgeData},
     vertex::ParseVertex,
 };
-
-fn feynkit_legacy_internal_order_key(
-    model: &Model,
-    edge_id: FeynkitEdgeId,
-    endpoints: FeynkitEdgeEndpoints,
-    edge: &FeynkitDiagramEdge,
-) -> Result<(FeynkitVertexId, FeynkitVertexId, i64, FeynkitEdgeId)> {
-    let (source, target, particle) = if endpoints.source <= endpoints.target {
-        (endpoints.source, endpoints.target, edge.particle)
-    } else {
-        (
-            endpoints.target,
-            endpoints.source,
-            model.particle_by_id(edge.particle)?.antiparticle,
-        )
-    };
-    let signed_pdg = model.particle_by_id(particle)?.pdg_code;
-    Ok((source, target, signed_pdg, edge_id))
-}
 
 /// Extract oriented particles from hedges, filtering out dummy edges
 pub fn extract_oriented_particles_from_vertex_hedges<I, V>(
@@ -178,329 +155,63 @@ impl ParseGraph {
             .collect()
     }
 
-    /// Build the mechanical GammaLoop half-edge representation of a finalized
-    /// FeynKit diagram.
-    ///
-    /// This conversion never resolves a vertex rule or regenerates a numerator.
-    /// FeynKit has already made those physics decisions. The temporary parse
-    /// graph is used only to reuse the mature cut sewing and runtime-cache
-    /// construction below.
-    fn from_feynkit_diagram(
-        diagram: &FeynmanDiagram,
-        model: &Model,
-        external_connections: &[(Option<usize>, Option<usize>)],
-    ) -> Result<(Self, BTreeMap<FeynkitEdgeId, usize>)> {
-        #[derive(Clone, Copy)]
-        struct ExternalEdge {
-            edge: FeynkitEdgeId,
-            internal: FeynkitVertexId,
-            internal_flow: Flow,
-        }
+    /// Attach runtime parse payloads to the finalized half-edge storage.
+    /// The map retains every vertex, edge, half-edge, orientation and expression.
+    fn from_feynkit_diagram(diagram: &FeynmanDiagram) -> Result<Self> {
+        let underlying = diagram.underlying();
+        let graph = underlying.map_data_ref_result(
+            |_, _, vertex| {
+                Ok(ParseVertex {
+                    name: Some(vertex.name.clone()),
 
-        fn particle_orientation(
-            model: &Model,
-            particle: feynkit_model::ParticleId,
-            directed: bool,
-        ) -> Result<Orientation> {
-            let particle = model.particle_by_id(particle)?;
-            Ok(if !directed {
-                Orientation::Undirected
-            } else if particle.is_antiparticle() {
-                Orientation::Reversed
-            } else {
-                Orientation::Default
-            })
-        }
-
-        fn external_index(tag: usize) -> Result<usize> {
-            tag.checked_sub(1)
-                .ok_or_else(|| eyre!("external connection tags are one-based, found zero"))
-        }
-
-        let mut builder = HedgeGraphBuilder::new();
-        let mut vertex_map = BTreeMap::new();
-        for (vertex_id, vertex) in diagram.vertices() {
-            if vertex.external.is_some() {
-                continue;
-            }
-            let runtime = builder.add_node(ParseVertex {
-                name: Some(vertex.name.clone()),
-                feynkit_id: Some(vertex_id),
-                vertex_rule: vertex.interaction,
-                num: Some(vertex.numerator.clone()),
-                dod: None,
-            });
-            vertex_map.insert(vertex_id, runtime);
-        }
-
-        let mut external_edges = BTreeMap::<usize, ExternalEdge>::new();
-        let mut edges = BTreeMap::new();
-        for (edge_id, endpoints, edge) in diagram.edges() {
-            edges.insert(edge_id, (endpoints, edge));
-            let source_external = diagram
-                .vertex(endpoints.source)
-                .and_then(|vertex| vertex.external.as_ref());
-            let target_external = diagram
-                .vertex(endpoints.target)
-                .and_then(|vertex| vertex.external.as_ref());
-            let external = match (source_external, target_external) {
-                (Some(external), None) => Some((
-                    external,
-                    ExternalEdge {
-                        edge: edge_id,
-                        internal: endpoints.target,
-                        internal_flow: Flow::Sink,
-                    },
-                )),
-                (None, Some(external)) => Some((
-                    external,
-                    ExternalEdge {
-                        edge: edge_id,
-                        internal: endpoints.source,
-                        internal_flow: Flow::Source,
-                    },
-                )),
-                (None, None) => None,
-                (Some(_), Some(_)) => {
-                    return Err(eyre!(
-                        "FeynKit diagram '{}' has an edge between two external vertices",
-                        diagram.name()
-                    ));
-                }
-            };
-            if let Some((external, edge)) = external
-                && external_edges.insert(external.index, edge).is_some()
-            {
-                return Err(eyre!(
-                    "FeynKit diagram '{}' has duplicate external index {}",
-                    diagram.name(),
-                    external.index
-                ));
-            }
-        }
-
-        let mut seen_edges = BTreeSet::new();
-        // Half-edge insertion order determines spanning-forest enumeration and
-        // therefore the ordered channel LMB selected later by `build_lmbs`.
-        // EdgeIndex is instead the stable logical identity used by routing and
-        // serialized FeynKit metadata. Track those two orders independently so
-        // the graph preserves legacy channel-coordinate semantics while still
-        // exposing the canonical FeynKit edge IDs after initial-state sewing.
-        let mut logical_edge_targets = BTreeMap::new();
-        let mut next_logical_edge = 0_usize;
-        let add_external =
-            |external: ExternalEdge,
-             flow: Flow,
-             cut: Option<Hedge>,
-             seen_edges: &mut BTreeSet<FeynkitEdgeId>,
-             builder: &mut HedgeGraphBuilder<ParseEdge, ParseVertex, ParseHedgeData>|
-             -> Result<()> {
-                if !seen_edges.insert(external.edge) {
-                    return Err(eyre!(
-                        "external FeynKit edge {} is connected more than once",
-                        external.edge.0
-                    ));
-                }
-                let (_, edge) = edges
-                    .get(&external.edge)
-                    .ok_or_else(|| eyre!("missing FeynKit edge {}", external.edge.0))?;
-                let mut orientation = particle_orientation(model, edge.particle, edge.directed)?;
-                let mut data = ParseEdge::new(edge.particle)
-                    .with_label(format!("feynkit_edge_{}", external.edge.0))
-                    .with_num(edge.numerator.clone());
-                data.feynkit_id = Some(external.edge);
-                data.is_cut = cut;
-                data.initial_state_connection = cut.is_some();
-
-                // A dangling runtime edge carries the process flow. If the
-                // FeynKit internal half-edge has the opposite flow, reverse only
-                // the particle representation; the finalized symbolic numerator
-                // is translated independently below.
-                if external.internal_flow != flow {
-                    data.particle = data.particle.reverse(model);
-                    orientation = orientation.reverse();
-                }
-                let node = *vertex_map.get(&external.internal).ok_or_else(|| {
-                    eyre!(
-                        "external FeynKit edge {} is not attached to an internal vertex",
-                        external.edge.0
-                    )
-                })?;
-                builder.add_external_edge(node, data, orientation, flow);
-                Ok(())
-            };
-
-        // Keep the same cut ordering expected by the runtime: incoming cut
-        // hedges first, ordinary outgoing amplitude legs next, internal edges,
-        // and finally the outgoing partners of initial-state cuts.
-        for (connection, (incoming, outgoing)) in external_connections.iter().enumerate() {
-            if let Some(incoming) = incoming {
-                let index = external_index(*incoming)?;
-                let edge = *external_edges
-                    .get(&index)
-                    .ok_or_else(|| eyre!("missing incoming FeynKit external leg {index}"))?;
-                let state = diagram
-                    .vertex(if edge.internal_flow == Flow::Sink {
-                        edges[&edge.edge].0.source
-                    } else {
-                        edges[&edge.edge].0.target
-                    })
-                    .and_then(|vertex| vertex.external.as_ref())
-                    .map(|external| external.state);
-                if state != Some(FeynkitExternalState::Incoming) {
-                    return Err(eyre!("FeynKit external leg {index} is not incoming"));
-                }
-                logical_edge_targets.insert(edge.edge, next_logical_edge);
-                next_logical_edge += 1;
-                add_external(
-                    edge,
-                    Flow::Sink,
-                    outgoing.map(|_| Hedge(connection)),
-                    &mut seen_edges,
-                    &mut builder,
-                )?;
-            }
-        }
-        for (incoming, outgoing) in external_connections {
-            if incoming.is_none()
-                && let Some(outgoing) = outgoing
-            {
-                let index = external_index(*outgoing)?;
-                let edge = *external_edges
-                    .get(&index)
-                    .ok_or_else(|| eyre!("missing outgoing FeynKit external leg {index}"))?;
-                logical_edge_targets.insert(edge.edge, next_logical_edge);
-                next_logical_edge += 1;
-                add_external(edge, Flow::Source, None, &mut seen_edges, &mut builder)?;
-            }
-        }
-        let mut internal_edges = Vec::new();
-        for (edge_id, (endpoints, edge)) in &edges {
-            if seen_edges.contains(edge_id) {
-                continue;
-            }
-            if !vertex_map.contains_key(&endpoints.source)
-                || !vertex_map.contains_key(&endpoints.target)
-            {
-                continue;
-            }
-            let legacy_order =
-                feynkit_legacy_internal_order_key(model, *edge_id, *endpoints, edge)?;
-            logical_edge_targets.insert(*edge_id, next_logical_edge);
-            next_logical_edge += 1;
-            internal_edges.push((*edge_id, *endpoints, edge, legacy_order));
-        }
-        // Match the canonical UFO/GammaLoop `sorted_g` topology order used by
-        // the legacy CFF construction. Stable FeynKit IDs remain only the
-        // tie-breaker for otherwise identical parallel edges.
-        internal_edges.sort_by_key(|(_, _, _, legacy_order)| *legacy_order);
-        for (edge_id, endpoints, edge, _) in internal_edges {
-            let orientation = particle_orientation(model, edge.particle, edge.directed)?;
-            let mut data = ParseEdge::new(edge.particle)
-                .with_label(format!("feynkit_edge_{}", edge_id.0))
-                .with_num(edge.numerator.clone());
-            data.feynkit_id = Some(edge_id);
-            builder.add_edge(
-                vertex_map[&endpoints.source],
-                vertex_map[&endpoints.target],
-                data,
-                orientation,
-            );
-            seen_edges.insert(edge_id);
-        }
-        for (connection, (incoming, outgoing)) in external_connections.iter().enumerate() {
-            if incoming.is_some()
-                && let Some(outgoing) = outgoing
-            {
-                let index = external_index(*outgoing)?;
-                let edge = *external_edges
-                    .get(&index)
-                    .ok_or_else(|| eyre!("missing outgoing FeynKit external leg {index}"))?;
-                let incoming_index = external_index(incoming.expect("incoming was checked"))?;
-                let incoming_edge = external_edges
-                    .get(&incoming_index)
-                    .ok_or_else(|| eyre!("missing incoming FeynKit external leg {incoming_index}"))?
-                    .edge;
-                let target = *logical_edge_targets.get(&incoming_edge).ok_or_else(|| {
-                    eyre!(
-                        "incoming FeynKit edge {} has no logical runtime edge",
-                        incoming_edge.0
-                    )
-                })?;
-                logical_edge_targets.insert(edge.edge, target);
-                add_external(
-                    edge,
-                    Flow::Source,
-                    Some(Hedge(connection)),
-                    &mut seen_edges,
-                    &mut builder,
-                )?;
-            }
-        }
-        if seen_edges.len() != edges.len() {
-            let missing = edges
-                .keys()
-                .filter(|edge| !seen_edges.contains(edge))
-                .map(|edge| edge.0)
-                .collect_vec();
-            return Err(eyre!(
-                "FeynKit diagram '{}' contains edges outside the requested external connections: {missing:?}",
-                diagram.name()
-            ));
-        }
-
-        let mut graph: HedgeGraph<ParseEdge, ParseVertex, ParseHedgeData> = builder.into();
-        let mut hedge_orders = Vec::new();
-        for (pair, runtime_edge, edge) in graph.iter_edges() {
-            let feynkit_id = edge.data.feynkit_id.ok_or_else(|| {
-                eyre!("runtime edge {runtime_edge} lost its transient FeynKit identity")
-            })?;
-            let (endpoints, source_edge) = edges
-                .get(&feynkit_id)
-                .ok_or_else(|| eyre!("unknown FeynKit edge {}", feynkit_id.0))?;
-            let source_order = u8::try_from(source_edge.source_slot().0)
-                .map_err(|_| eyre!("FeynKit source slot does not fit in u8"))?;
-            let target_order = u8::try_from(source_edge.target_slot().0)
-                .map_err(|_| eyre!("FeynKit target slot does not fit in u8"))?;
-            match pair {
-                HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } => {
-                    hedge_orders.push((source, source_order));
-                    hedge_orders.push((sink, target_order));
-                }
-                HedgePair::Unpaired { hedge, .. } => {
-                    let order = if diagram
-                        .vertex(endpoints.source)
-                        .is_some_and(|vertex| !vertex.is_external())
-                    {
-                        source_order
-                    } else {
-                        target_order
-                    };
-                    hedge_orders.push((hedge, order));
-                }
-            }
-        }
-        for (hedge, order) in hedge_orders {
-            graph[hedge].ufo_order = Some(order);
-        }
-
-        Ok((
-            Self {
-                global_data: ParseData {
-                    name: diagram.name().to_owned(),
-                    overall_factor: diagram.overall_factor().clone(),
-                    projectors: Some(diagram.projector().clone()),
-                    num: diagram.numerator_prefactor().clone(),
-                    ..Default::default()
-                },
-                graph,
+                    vertex_rule: vertex.interaction,
+                    num: Some(vertex.numerator.clone()),
+                    dod: None,
+                })
             },
-            logical_edge_targets,
-        ))
+            |_, edge_id, pair, data| {
+                let mut edge = ParseEdge::new(data.data.particle)
+                    .with_label(format!("edge_{}", edge_id.0))
+                    .with_num(data.data.numerator.clone());
+                edge.is_dummy = data.data.is_dummy;
+                edge.lmb_id = diagram
+                    .loop_momentum_basis()
+                    .loop_edges
+                    .iter()
+                    .position(|candidate| candidate.0 == edge_id.0)
+                    .map(LoopIndex);
+                if let (HedgePair::Paired { sink, .. }, Some(_)) = (pair, &data.data.external) {
+                    edge.is_cut = Some(sink);
+                    edge.initial_state_connection = true;
+                }
+                Ok(EdgeData::new(edge, data.orientation))
+            },
+            |(hedge, _)| {
+                let edge = &underlying[underlying[&hedge]];
+                let slot = match underlying.flow(hedge) {
+                    Flow::Source => edge.source_slot(),
+                    Flow::Sink => edge.target_slot(),
+                };
+                Ok(ParseHedgeData {
+                    ufo_order: Some(
+                        u8::try_from(slot.0)
+                            .map_err(|_| eyre!("finalized UFO slot {} exceeds u8", slot.0))?,
+                    ),
+                })
+            },
+        )?;
+        Ok(Self {
+            global_data: ParseData {
+                name: diagram.name().to_owned(),
+                overall_factor: diagram.overall_factor().clone(),
+                projectors: Some(diagram.projector().clone()),
+                num: diagram.numerator_prefactor().clone(),
+                ..Default::default()
+            },
+            graph,
+        })
     }
-}
 
-impl ParseGraph {
     pub(crate) fn from_parsed(graph: DotGraph, model: &Model) -> Result<Self> {
         warn_about_unknown_attributes(&graph);
         if graph
@@ -580,575 +291,6 @@ impl CutProcessingResult {
     }
 }
 
-/// Mechanical correspondence between the finalized FeynKit graph and the
-/// post-sewing GammaLoop half-edge storage. Physics expressions are translated
-/// through this table exactly once; no rule lookup or numerator regeneration is
-/// permitted on this path.
-struct FeynkitRuntimeMap {
-    edges: BTreeMap<FeynkitEdgeId, EdgeIndex>,
-    vertices: BTreeMap<FeynkitVertexId, NodeIndex>,
-    half_edges: BTreeMap<(FeynkitEdgeId, Flow), Hedge>,
-    momentum_signs: BTreeMap<FeynkitEdgeId, i8>,
-}
-
-fn feynkit_external_edges(diagram: &FeynmanDiagram) -> BTreeMap<usize, FeynkitEdgeId> {
-    let mut result = BTreeMap::new();
-    for (edge_id, endpoints, _) in diagram.edges() {
-        let external = diagram
-            .vertex(endpoints.source)
-            .and_then(|vertex| vertex.external.as_ref())
-            .or_else(|| {
-                diagram
-                    .vertex(endpoints.target)
-                    .and_then(|vertex| vertex.external.as_ref())
-            });
-        if let Some(external) = external {
-            result.insert(external.index, edge_id);
-        }
-    }
-    result
-}
-
-fn feynkit_external_connections(
-    diagram: &FeynmanDiagram,
-) -> Result<Vec<(Option<usize>, Option<usize>)>> {
-    let mut connections = BTreeMap::<usize, (Option<usize>, Option<usize>)>::new();
-    for (_, vertex) in diagram.vertices() {
-        let Some(external) = &vertex.external else {
-            continue;
-        };
-        let tag = external
-            .index
-            .checked_add(1)
-            .ok_or_else(|| eyre!("external index {} cannot be incremented", external.index))?;
-        let connection = connections.entry(external.connection).or_default();
-        match external.state {
-            FeynkitExternalState::Incoming => connection.0 = Some(tag),
-            FeynkitExternalState::Outgoing => connection.1 = Some(tag),
-        }
-    }
-    Ok(connections.into_values().collect())
-}
-
-fn feynkit_tag_index(tag: usize) -> Result<usize> {
-    tag.checked_sub(1)
-        .ok_or_else(|| eyre!("external connection tags are one-based, found zero"))
-}
-
-fn feynkit_runtime_map(
-    diagram: &FeynmanDiagram,
-    graph: &NumGraph,
-    external_connections: &[(Option<usize>, Option<usize>)],
-) -> Result<FeynkitRuntimeMap> {
-    let mut vertices = BTreeMap::new();
-    for (node, _, vertex) in graph.iter_nodes() {
-        if let Some(id) = vertex.feynkit_id {
-            vertices.insert(id, node);
-        }
-    }
-
-    let mut edges = BTreeMap::new();
-    for (_, edge_id, edge) in graph.iter_edges() {
-        if let Some(id) = edge.data.feynkit_id {
-            edges.insert(id, edge_id);
-        }
-    }
-
-    // Sewing retains one of the two cut-edge payloads. Restore both canonical
-    // FeynKit IDs as aliases of the resulting runtime edge.
-    let external_edges = feynkit_external_edges(diagram);
-    for (connection, (incoming, outgoing)) in external_connections.iter().enumerate() {
-        if let (Some(incoming), Some(outgoing)) = (incoming, outgoing) {
-            let incoming = external_edges
-                .get(&feynkit_tag_index(*incoming)?)
-                .ok_or_else(|| eyre!("missing incoming FeynKit external edge"))?;
-            let outgoing = external_edges
-                .get(&feynkit_tag_index(*outgoing)?)
-                .ok_or_else(|| eyre!("missing outgoing FeynKit external edge"))?;
-            let runtime = EdgeIndex::from(connection);
-            edges.insert(*incoming, runtime);
-            edges.insert(*outgoing, runtime);
-        }
-    }
-
-    let choose_hedge = |vertex: FeynkitVertexId, flow: Flow, pair: HedgePair| -> Result<Hedge> {
-        let candidates = match pair {
-            HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } => {
-                vec![source, sink]
-            }
-            HedgePair::Unpaired { hedge, .. } => vec![hedge],
-        };
-        if let Some(runtime_node) = vertices.get(&vertex) {
-            let attached = candidates
-                .iter()
-                .copied()
-                .filter(|hedge| graph.node_id(*hedge) == *runtime_node)
-                .collect_vec();
-            if let Some(hedge) = attached
-                .iter()
-                .copied()
-                .find(|hedge| graph.flow(*hedge) == flow)
-                .or_else(|| attached.first().copied())
-            {
-                return Ok(hedge);
-            }
-        }
-        candidates
-            .iter()
-            .copied()
-            .find(|hedge| graph.flow(*hedge) == flow)
-            .or_else(|| candidates.first().copied())
-            .ok_or_else(|| eyre!("runtime edge has no half-edge"))
-    };
-
-    let mut half_edges = BTreeMap::new();
-    let mut momentum_signs = BTreeMap::new();
-    for (edge_id, endpoints, _) in diagram.edges() {
-        let runtime = *edges.get(&edge_id).ok_or_else(|| {
-            eyre!(
-                "finalized FeynKit edge {} was lost during mechanical sewing",
-                edge_id.0
-            )
-        })?;
-        let pair = graph[&runtime].1;
-        let source = choose_hedge(endpoints.source, Flow::Source, pair)?;
-        let sink = choose_hedge(endpoints.target, Flow::Sink, pair)?;
-        half_edges.insert((edge_id, Flow::Source), source);
-        half_edges.insert((edge_id, Flow::Sink), sink);
-
-        let (internal_flow, internal_hedge) = if diagram
-            .vertex(endpoints.source)
-            .is_some_and(|vertex| !vertex.is_external())
-        {
-            (Flow::Source, source)
-        } else {
-            (Flow::Sink, sink)
-        };
-        momentum_signs.insert(
-            edge_id,
-            if graph.flow(internal_hedge) == internal_flow {
-                1
-            } else {
-                -1
-            },
-        );
-    }
-
-    Ok(FeynkitRuntimeMap {
-        edges,
-        vertices,
-        half_edges,
-        momentum_signs,
-    })
-}
-
-fn feynkit_runtime_half_edge(
-    half_edge: FeynkitDiagramHalfEdge,
-    mapping: &FeynkitRuntimeMap,
-) -> Result<Hedge> {
-    let flow = match half_edge.endpoint {
-        FeynkitDiagramEndpoint::Source => Flow::Source,
-        FeynkitDiagramEndpoint::Target => Flow::Sink,
-    };
-    mapping
-        .half_edges
-        .get(&(half_edge.edge, flow))
-        .copied()
-        .ok_or_else(|| {
-            eyre!(
-                "finalized FeynKit cut references missing {:?} endpoint of edge {}",
-                half_edge.endpoint,
-                half_edge.edge.0
-            )
-        })
-}
-
-/// Return whether an authoritative FeynKit partition must be swapped into the
-/// legacy runtime initial-cut frame.
-///
-/// This must be determined before runtime sewing: both external edges in one
-/// connection become aliases of the same runtime edge, so their partition
-/// membership is no longer recoverable from the sewn half-edge sets alone.
-/// FeynKit stores source/incoming on the left, while GammaLoop's
-/// `initial_state_cut.left` is the retained sewn sink/outgoing half-edge.
-fn feynkit_partition_requires_runtime_swap(
-    diagram: &FeynmanDiagram,
-    left: &[FeynkitDiagramHalfEdge],
-    right: &[FeynkitDiagramHalfEdge],
-) -> Result<bool> {
-    let mut incoming = BTreeSet::new();
-    let mut outgoing = BTreeSet::new();
-    for (edge, endpoints, _) in diagram.edges() {
-        for (vertex, endpoint) in [
-            (endpoints.source, FeynkitDiagramEndpoint::Source),
-            (endpoints.target, FeynkitDiagramEndpoint::Target),
-        ] {
-            let Some(external) = diagram
-                .vertex(vertex)
-                .and_then(|vertex| vertex.external.as_ref())
-            else {
-                continue;
-            };
-            let half_edge = FeynkitDiagramHalfEdge { edge, endpoint };
-            match external.state {
-                FeynkitExternalState::Incoming => incoming.insert(half_edge),
-                FeynkitExternalState::Outgoing => outgoing.insert(half_edge),
-            };
-        }
-    }
-    let left = left.iter().copied().collect::<BTreeSet<_>>();
-    let right = right.iter().copied().collect::<BTreeSet<_>>();
-    let aligned = incoming.is_subset(&left) && outgoing.is_subset(&right);
-    let reversed = incoming.is_subset(&right) && outgoing.is_subset(&left);
-    match (aligned, reversed) {
-        (true, false) => Ok(true),
-        (false, true) => Ok(false),
-        _ => Err(eyre!(
-            "FeynKit s-t partition does not select one unambiguous incoming/outgoing side"
-        )),
-    }
-}
-
-fn feynkit_runtime_cuts(
-    diagram: &FeynmanDiagram,
-    graph: &NumGraph,
-    mapping: &FeynkitRuntimeMap,
-) -> Result<Vec<FinalizedCut>> {
-    diagram
-        .cuts()
-        .iter()
-        .map(|cut| {
-            let reversed = feynkit_partition_requires_runtime_swap(
-                diagram,
-                &cut.left.half_edges,
-                &cut.right.half_edges,
-            )?;
-            let mut left = graph.empty_subgraph::<SuBitGraph>();
-            for half_edge in &cut.left.half_edges {
-                left.add(feynkit_runtime_half_edge(*half_edge, mapping)?);
-            }
-            let mut right = graph.empty_subgraph::<SuBitGraph>();
-            for half_edge in &cut.right.half_edges {
-                right.add(feynkit_runtime_half_edge(*half_edge, mapping)?);
-            }
-            let mut oriented_left = graph.empty_subgraph::<SuBitGraph>();
-            for half_edge in &cut.cut {
-                oriented_left.add(feynkit_runtime_half_edge(*half_edge, mapping)?);
-            }
-            let cut = OrientedCut::from_underlying_strict(oriented_left, graph)
-                .map_err(|error| eyre!("invalid finalized FeynKit cut orientation: {error}"))?;
-            let mut finalized = FinalizedCut { cut, left, right };
-            if reversed {
-                std::mem::swap(&mut finalized.left, &mut finalized.right);
-                std::mem::swap(&mut finalized.cut.left, &mut finalized.cut.right);
-            }
-            Ok(finalized)
-        })
-        .collect()
-}
-
-fn feynkit_runtime_topology_threshold_candidates(
-    diagram: &FeynmanDiagram,
-    graph: &NumGraph,
-    mapping: &FeynkitRuntimeMap,
-) -> Result<Vec<FinalizedTopologyThresholdCandidate>> {
-    diagram
-        .topology_threshold_candidates()
-        .iter()
-        .map(|candidate| {
-            let reversed = feynkit_partition_requires_runtime_swap(
-                diagram,
-                &candidate.left,
-                &candidate.right,
-            )?;
-            let mut left = graph.empty_subgraph::<SuBitGraph>();
-            for half_edge in &candidate.left {
-                left.add(feynkit_runtime_half_edge(*half_edge, mapping)?);
-            }
-            let mut right = graph.empty_subgraph::<SuBitGraph>();
-            for half_edge in &candidate.right {
-                right.add(feynkit_runtime_half_edge(*half_edge, mapping)?);
-            }
-            let mut oriented_left = graph.empty_subgraph::<SuBitGraph>();
-            for half_edge in &candidate.cut {
-                oriented_left.add(feynkit_runtime_half_edge(*half_edge, mapping)?);
-            }
-            let cut =
-                OrientedCut::from_underlying_strict(oriented_left, graph).map_err(|error| {
-                    eyre!("invalid finalized FeynKit topology-threshold orientation: {error}")
-                })?;
-            let mut finalized = FinalizedTopologyThresholdCandidate { cut, left, right };
-            if reversed {
-                std::mem::swap(&mut finalized.left, &mut finalized.right);
-                std::mem::swap(&mut finalized.cut.left, &mut finalized.cut.right);
-            }
-            Ok(finalized)
-        })
-        .collect()
-}
-
-fn translate_feynkit_atom(atom: &Atom, mapping: &FeynkitRuntimeMap) -> Result<Atom> {
-    fn natural(argument: AtomView<'_>, owner: &str) -> Result<usize> {
-        let value = i64::try_from(argument)
-            .map_err(|_| eyre!("{owner} expects a non-negative integer, found {argument}"))?;
-        usize::try_from(value)
-            .map_err(|_| eyre!("{owner} expects a non-negative integer, found {value}"))
-    }
-
-    let source_index = symbol!("FeynKit::SourceIndex");
-    let sink_index = symbol!("FeynKit::SinkIndex");
-    let edge_dummy = symbol!("FeynKit::EdgeDummy");
-    let vertex_dummy = symbol!("FeynKit::VertexDummy");
-    let momentum = symbol!("FeynKit::Momentum");
-
-    let mut error = None;
-    let indexed = atom.replace_map(|term, _, out| {
-        if error.is_some() {
-            return;
-        }
-        let AtomView::Fun(function) = term else {
-            return;
-        };
-        let symbol = function.get_symbol();
-        if ![source_index, sink_index, edge_dummy, vertex_dummy].contains(&symbol) {
-            return;
-        }
-        let arguments = function.iter().collect_vec();
-        let translated = (|| -> Result<Atom> {
-            let [owner, local] = arguments.as_slice() else {
-                return Err(eyre!("{} expects two arguments", term));
-            };
-            let owner = natural(*owner, "a FeynKit index owner")?;
-            let local = u16::try_from(natural(*local, "a FeynKit local index")?)
-                .map_err(|_| eyre!("FeynKit local index does not fit in u16"))?;
-            if symbol == vertex_dummy {
-                let node = mapping
-                    .vertices
-                    .get(&FeynkitVertexId(owner))
-                    .ok_or_else(|| eyre!("unknown FeynKit vertex {owner}"))?;
-                return Ok(node.aind(local).into());
-            }
-            let edge = FeynkitEdgeId(owner);
-            if symbol == edge_dummy {
-                let edge = mapping
-                    .edges
-                    .get(&edge)
-                    .ok_or_else(|| eyre!("unknown FeynKit edge {owner}"))?;
-                return Ok(edge.aind(local).into());
-            }
-            let flow = if symbol == source_index {
-                Flow::Source
-            } else {
-                Flow::Sink
-            };
-            let hedge = mapping
-                .half_edges
-                .get(&(edge, flow))
-                .ok_or_else(|| eyre!("unknown {flow:?} half-edge for FeynKit edge {owner}"))?;
-            Ok(hedge.aind(local).into())
-        })();
-        match translated {
-            std::result::Result::Ok(replacement) => **out = replacement,
-            Err(reason) => error = Some(reason),
-        }
-    });
-    if let Some(error) = error {
-        return Err(error);
-    }
-
-    error = None;
-    let translated = indexed.replace_map(|term, _, out| {
-        if error.is_some() {
-            return;
-        }
-        let AtomView::Fun(function) = term else {
-            return;
-        };
-        let function_symbol = function.get_symbol();
-        if [PS.u, PS.ubar, PS.v, PS.vbar, PS.eps, PS.ebar].contains(&function_symbol) {
-            let arguments = function.iter().collect_vec();
-            let replacement = (|| -> Result<Atom> {
-                let [edge, index] = arguments.as_slice() else {
-                    return Err(eyre!(
-                        "a FeynKit external wavefunction expects an edge and an index"
-                    ));
-                };
-                let edge = FeynkitEdgeId(natural(*edge, "a FeynKit external-state edge")?);
-                let runtime = mapping
-                    .edges
-                    .get(&edge)
-                    .ok_or_else(|| eyre!("unknown FeynKit external-state edge {}", edge.0))?;
-                let head = match function_symbol {
-                    symbol if symbol == PS.u => crate::utils::GS.u,
-                    symbol if symbol == PS.ubar => crate::utils::GS.ubar,
-                    symbol if symbol == PS.v => crate::utils::GS.v,
-                    symbol if symbol == PS.vbar => crate::utils::GS.vbar,
-                    symbol if symbol == PS.eps => crate::utils::GS.epsilon,
-                    symbol if symbol == PS.ebar => crate::utils::GS.epsilonbar,
-                    _ => unreachable!("the polarization symbol was checked above"),
-                };
-                Ok(FunctionBuilder::new(head)
-                    .add_arg(
-                        i64::try_from(runtime.0).map_err(|_| eyre!("runtime edge is too large"))?,
-                    )
-                    .add_arg(index.to_owned())
-                    .finish())
-            })();
-            match replacement {
-                std::result::Result::Ok(replacement) => **out = replacement,
-                Err(reason) => error = Some(reason),
-            }
-            return;
-        }
-        if function_symbol != momentum {
-            return;
-        }
-        let arguments = function.iter().collect_vec();
-        let replacement = (|| -> Result<Atom> {
-            let [edge, index] = arguments.as_slice() else {
-                return Err(eyre!("FeynKit::Momentum expects an edge and an index"));
-            };
-            let edge = FeynkitEdgeId(natural(*edge, "FeynKit::Momentum edge")?);
-            let runtime = mapping
-                .edges
-                .get(&edge)
-                .ok_or_else(|| eyre!("unknown FeynKit momentum edge {}", edge.0))?;
-            let momentum = FunctionBuilder::new(crate::utils::GS.emr_mom)
-                .add_arg(i64::try_from(runtime.0).map_err(|_| eyre!("runtime edge is too large"))?)
-                .add_arg(index.to_owned())
-                .finish();
-            Ok(if mapping.momentum_signs.get(&edge) == Some(&-1) {
-                -momentum
-            } else {
-                momentum
-            })
-        })();
-        match replacement {
-            std::result::Result::Ok(replacement) => **out = replacement,
-            Err(reason) => error = Some(reason),
-        }
-    });
-    if let Some(error) = error {
-        return Err(error);
-    }
-    Ok(translated)
-}
-
-fn feynkit_runtime_lmb(
-    diagram: &FeynmanDiagram,
-    graph: &NumGraph,
-    mapping: &FeynkitRuntimeMap,
-    external_connections: &[(Option<usize>, Option<usize>)],
-) -> Result<LoopMomentumBasis> {
-    let source = diagram.loop_momentum_basis();
-    let external_edges = feynkit_external_edges(diagram);
-
-    let mut tree: SuBitGraph = graph.empty_subgraph();
-    let mut seen_tree_edges = BTreeSet::new();
-    for edge in &source.tree_edges {
-        let runtime = *mapping
-            .edges
-            .get(edge)
-            .ok_or_else(|| eyre!("unknown FeynKit tree edge {}", edge.0))?;
-        if seen_tree_edges.insert(runtime) {
-            tree.add(graph[&runtime].1);
-        }
-    }
-
-    let selected_loop_edges = source
-        .loop_edges
-        .iter()
-        .map(|edge| {
-            mapping
-                .edges
-                .get(edge)
-                .copied()
-                .ok_or_else(|| eyre!("unknown FeynKit loop edge {}", edge.0))
-        })
-        .collect::<Result<Vec<_>>>()?;
-
-    // Runtime cross sections identify each incoming/outgoing pair as one cut
-    // edge. Amplitudes retain the one canonical external edge per connection.
-    let mut ext_edges = Vec::new();
-    for (connection, (incoming, outgoing)) in external_connections.iter().enumerate() {
-        let runtime = if incoming.is_some() && outgoing.is_some() {
-            EdgeIndex::from(connection)
-        } else {
-            let tag = (*incoming)
-                .or(*outgoing)
-                .ok_or_else(|| eyre!("external connection {connection} contains no FeynKit leg"))?;
-            let edge = *external_edges
-                .get(&feynkit_tag_index(tag)?)
-                .ok_or_else(|| eyre!("missing FeynKit external edge for tag {tag}"))?;
-            *mapping
-                .edges
-                .get(&edge)
-                .ok_or_else(|| eyre!("missing runtime external edge for connection {connection}"))?
-        };
-        ext_edges.push(runtime);
-    }
-
-    // Materialize the already-selected FeynKit tree in the sewn runtime frame.
-    // In particular, the cut edge retained by sewing defines each incoming
-    // momentum with the runtime +P convention; transporting a pre-sewing
-    // signature through a reversed retained partner would incorrectly yield
-    // -P. This call propagates signatures only and never chooses another tree.
-    let mut full = graph.full_filter();
-    for (pair, _, edge) in graph.iter_edges() {
-        if edge.data.is_dummy {
-            full.sub(pair);
-        }
-    }
-    let external = graph.internal_crown(&full);
-    let mut basis = graph
-        .lmb_impl(&full, &tree, external)
-        .map_err(|error| eyre!("failed to materialize the selected FeynKit tree: {error}"))?;
-
-    for (connection, (incoming, outgoing)) in external_connections.iter().enumerate() {
-        if incoming.is_some() && outgoing.is_some() {
-            let edge = EdgeIndex::from(connection);
-            let loop_index = basis
-                .loop_edges
-                .iter()
-                .position(|candidate| *candidate == edge)
-                .ok_or_else(|| {
-                    eyre!(
-                        "sewn initial-state edge {edge} is not independent of the selected FeynKit tree"
-                    )
-                })?;
-            basis.put_loop_to_ext(LoopIndex(loop_index));
-        }
-    }
-
-    let materialized = basis.loop_edges.iter().copied().collect::<BTreeSet<_>>();
-    let selected = selected_loop_edges.iter().copied().collect::<BTreeSet<_>>();
-    if materialized != selected {
-        return Err(eyre!(
-            "selected FeynKit loop edges {selected:?} materialized as {materialized:?} after sewing"
-        ));
-    }
-    for (target, edge) in selected_loop_edges.iter().enumerate() {
-        let current = basis
-            .loop_edges
-            .iter()
-            .position(|candidate| candidate == edge)
-            .ok_or_else(|| eyre!("selected FeynKit loop edge {edge} disappeared after sewing"))?;
-        if current != target {
-            basis.swap_loops(LoopIndex(current), LoopIndex(target));
-        }
-    }
-
-    let materialized_externals = basis.ext_edges.iter().copied().collect::<BTreeSet<_>>();
-    let selected_externals = ext_edges.iter().copied().collect::<BTreeSet<_>>();
-    if materialized_externals != selected_externals {
-        return Err(eyre!(
-            "FeynKit external edges {selected_externals:?} materialized as {materialized_externals:?} after sewing"
-        ));
-    }
-    basis.canonicalize_external_order(&ext_edges);
-    Ok(basis)
-}
-
 fn display_graph_source_path(path: &Path) -> PathBuf {
     if path.is_absolute() {
         return path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
@@ -1225,111 +367,76 @@ impl Graph {
         })?;
 
         let model = diagram.model();
-        let external_connections = feynkit_external_connections(diagram)?;
-
-        let (mut parsed, logical_edge_targets) =
-            ParseGraph::from_feynkit_diagram(diagram, model, &external_connections)?;
+        let mut parsed = ParseGraph::from_feynkit_diagram(diagram)?;
         parsed.global_data.group_id = group_id;
         parsed.global_data.is_group_master = is_group_master;
-        let (mut initial_data, mut graph) = Self::extract_initial_data(&parsed, model)?;
+        let (initial_data, graph) = Self::extract_initial_data(&parsed, model)?;
 
-        graph
-            .sew(
-                |_, left, _, right| {
-                    matches!((left.data.is_cut, right.data.is_cut), (Some(a), Some(b)) if a == b)
-                },
-                |left_flow, left, right_flow, right| match (left_flow, right_flow) {
-                    // FeynKit inserts the incoming half of every sewn
-                    // connection before its outgoing partner.  Orient the
-                    // resulting runtime edge from the incoming attachment to
-                    // the outgoing attachment while retaining the incoming
-                    // payload.  This is the legacy GammaLoop +P coordinate
-                    // frame; keeping the dangling incoming `Sink` flow would
-                    // reverse every dependent external signature.
-                    (Flow::Sink, Flow::Source) => (Flow::Source, left),
-                    (Flow::Source, Flow::Sink) => (Flow::Sink, right),
-                    _ => panic!(
-                        "cannot sew FeynKit cut hedges with flows {left_flow:?} and {right_flow:?}"
-                    ),
-                },
-            )
-            .map_err(|error| eyre!("FeynKit graph sewing failed: {error:?}"))?;
-        let mut cut_result = Self::process_cut_edges(&graph)?;
-        cut_result.permute(&mut graph)?;
-
-        let logical_edge_mappings = graph
-            .iter_edges()
-            .map(|(_, runtime_edge, edge)| {
-                let feynkit_id = edge.data.feynkit_id.ok_or_else(|| {
-                    eyre!("runtime edge {runtime_edge} lost its transient FeynKit identity")
-                })?;
-                let target = logical_edge_targets
-                    .get(&feynkit_id)
-                    .copied()
-                    .ok_or_else(|| {
-                        eyre!(
-                            "FeynKit edge {} has no logical runtime edge target",
-                            feynkit_id.0
-                        )
-                    })?;
-                Ok((runtime_edge.0, target))
+        let filter = |half_edges: &[FeynkitDiagramHalfEdge]| -> Result<SuBitGraph> {
+            let mut filter: SuBitGraph = graph.empty_subgraph();
+            for half_edge in half_edges {
+                let pair = diagram.underlying()[&EdgeIndex(half_edge.edge.0)].1;
+                let flow = match half_edge.endpoint {
+                    FeynkitDiagramEndpoint::Source => Flow::Source,
+                    FeynkitDiagramEndpoint::Target => Flow::Sink,
+                };
+                let hedge = match pair {
+                    HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } => {
+                        if flow == Flow::Source {
+                            source
+                        } else {
+                            sink
+                        }
+                    }
+                    HedgePair::Unpaired {
+                        hedge,
+                        flow: attached,
+                    } if attached == flow => hedge,
+                    _ => {
+                        return Err(eyre!(
+                            "finalized selection refers to absent endpoint {half_edge:?}"
+                        ));
+                    }
+                };
+                filter.add(hedge);
+            }
+            Ok(filter)
+        };
+        let mut initial_hedges: SuBitGraph = graph.empty_subgraph();
+        for (pair, _, edge) in diagram.underlying().iter_edges() {
+            if edge.data.external.is_some()
+                && let HedgePair::Paired { sink, .. } = pair
+            {
+                initial_hedges.add(sink);
+            }
+        }
+        let initial_state_cut = OrientedCut::from_underlying_strict(initial_hedges, &graph)?;
+        let finalized_cuts = diagram
+            .cuts()
+            .iter()
+            .map(|cut| {
+                Ok(FinalizedCut {
+                    cut: OrientedCut::from_underlying_strict(filter(&cut.cut)?, &graph)?,
+                    left: filter(&cut.left.half_edges)?,
+                    right: filter(&cut.right.half_edges)?,
+                })
             })
             .collect::<Result<Vec<_>>>()?;
-        let logical_edge_permutation = Permutation::from_mappings(
-            logical_edge_mappings,
-            graph.n_edges(),
-        )
-        .map_err(|error| {
-            eyre!(
-                "FeynKit logical edge targets do not form a permutation of {} runtime edges: \
-                 {error:?}",
-                graph.n_edges(),
-            )
-        })?;
-        <HedgeGraph<_, _, _> as Swap<EdgeIndex>>::permute(&mut graph, &logical_edge_permutation);
-
-        let mapping = feynkit_runtime_map(diagram, &graph, &external_connections)?;
-        for (_, _, vertex) in graph.iter_nodes_mut() {
-            let numerator = vertex.num.as_ref().ok_or_else(|| {
-                eyre!("FeynKit runtime vertex is missing its finalized numerator")
-            })?;
-            vertex.num = Some(translate_feynkit_atom(numerator, &mapping)?);
-        }
-        let edge_ids = (0..graph.n_edges()).map(EdgeIndex::from).collect_vec();
-        for edge in edge_ids {
-            let numerator = graph[edge]
-                .num
-                .as_ref()
-                .ok_or_else(|| eyre!("FeynKit runtime edge {edge} is missing its numerator"))?;
-            graph[edge].num = Some(translate_feynkit_atom(numerator, &mapping)?);
-        }
-        initial_data.overall_factor =
-            translate_feynkit_atom(&initial_data.overall_factor, &mapping)?;
-        initial_data.global_prefactor.num =
-            translate_feynkit_atom(&initial_data.global_prefactor.num, &mapping)?;
-        initial_data.global_prefactor.projector =
-            translate_feynkit_atom(&initial_data.global_prefactor.projector, &mapping)?;
-        let translated_numerator = translate_feynkit_atom(diagram.numerator(), &mapping)?;
-        let initial_state_cut =
-            OrientedCut::from_underlying_strict(cut_result.initial_hedges, &graph)?;
-        let mut finalized_cuts = feynkit_runtime_cuts(diagram, &graph, &mapping)?;
-        let mut finalized_topology_threshold_candidates =
-            feynkit_runtime_topology_threshold_candidates(diagram, &graph, &mapping)?;
-        for cut in &mut finalized_cuts {
-            // Before sewing, FeynKit cut sides contain ordinary external legs.
-            // Sewing identifies each incoming/outgoing pair and would make
-            // those two legs look like an extra loop on one amplitude side.
-            // GammaLoop represents the same momenta as the initial-state
-            // external basis, so discard the sewn partner half-edges from the
-            // side subgraphs while retaining the physical oriented cut.
-            cut.left.subtract_with(&initial_state_cut.right);
-            cut.right.subtract_with(&initial_state_cut.left);
-        }
-        finalized_cuts.sort_by(|left, right| left.cut.cmp(&right.cut));
-        finalized_topology_threshold_candidates.sort_by(|left, right| left.cut.cmp(&right.cut));
-
-        let loop_momentum_basis =
-            feynkit_runtime_lmb(diagram, &graph, &mapping, &external_connections)?;
+        let finalized_topology_threshold_candidates = diagram
+            .topology_threshold_candidates()
+            .iter()
+            .map(|candidate| {
+                Ok(FinalizedTopologyThresholdCandidate {
+                    cut: OrientedCut::from_underlying_strict(filter(&candidate.cut)?, &graph)?,
+                    left: filter(&candidate.left)?,
+                    right: filter(&candidate.right)?,
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let loop_momentum_basis: LoopMomentumBasis = diagram
+            .loop_momentum_basis()
+            .to_routing(diagram.underlying())
+            .into();
         let global_prefactor = initial_data.global_prefactor;
         let polarizations = global_prefactor.polarizations();
         let param_builder = ParamBuilder::new(
@@ -1367,36 +474,6 @@ impl Graph {
             finalized_cuts,
             finalized_topology_threshold_candidates,
         };
-        let initial_state_tree = result.get_initial_state_tree().0;
-        for candidate in &mut result.finalized_topology_threshold_candidates {
-            // Match the former `all_st_cuts_for_cs` normalization exactly:
-            // sewn initial-state halves never belong to a topology threshold,
-            // and its loop-independent attachment tree belongs to neither side.
-            candidate
-                .cut
-                .left
-                .subtract_with(&result.initial_state_cut.left);
-            candidate
-                .cut
-                .right
-                .subtract_with(&result.initial_state_cut.left);
-            candidate
-                .cut
-                .left
-                .subtract_with(&result.initial_state_cut.right);
-            candidate
-                .cut
-                .right
-                .subtract_with(&result.initial_state_cut.right);
-            candidate
-                .left
-                .subtract_with(&result.initial_state_cut.right);
-            candidate
-                .right
-                .subtract_with(&result.initial_state_cut.left);
-            candidate.left.subtract_with(&initial_state_tree);
-            candidate.right.subtract_with(&initial_state_tree);
-        }
         result.param_builder = ParamBuilder::new(
             &result,
             model,
@@ -1406,7 +483,7 @@ impl Graph {
         let runtime_numerator = result
             .numerator(&result.full_filter(), &result.empty_subgraph())
             .get_single_atom()?;
-        if runtime_numerator.expand() != translated_numerator.expand() {
+        if runtime_numerator.expand() != diagram.numerator().expand() {
             return Err(eyre!(
                 "GammaLoop runtime conversion of FeynKit diagram '{}' did not preserve its finalized numerator",
                 diagram.name()

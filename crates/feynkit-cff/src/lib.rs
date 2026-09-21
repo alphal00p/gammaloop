@@ -35,6 +35,7 @@ mod graph;
 mod ids;
 mod orientation;
 mod surface;
+pub mod symbols;
 mod tree;
 
 pub use algebra::{CutPropagator, SurfacePole};
