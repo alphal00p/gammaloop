@@ -5,6 +5,7 @@ import builtins
 import collections.abc
 import decimal
 import enum
+import linnet_py
 import os
 import pathlib
 import symbolica.core
@@ -210,7 +211,7 @@ class CffGenerator:
         edge : int
             Diagram edge ID to classify as initial state.
         """
-    def generate(self, diagram: FeynmanDiagram) -> CffResult:
+    def generate(self, diagram: FeynmanDiagram, *, subgraph: typing.Optional[typing.Any] = None) -> CffResult:
         r"""
         Generate a Cross-Free Family representation for a diagram.
 
@@ -223,6 +224,8 @@ class CffGenerator:
         ----------
         diagram : FeynmanDiagram
             Diagram whose energy-flow orientations are enumerated.
+        subgraph : linnet_py.Subgraph, optional
+            Graph-bound selection from diagram.to_linnet().
         """
 
 @typing.final
@@ -356,17 +359,95 @@ class CffResult:
         r"""
         Return all unique energy and H surfaces in this result.
         """
-    def to_expression(self) -> Expression:
+    def to_expression(self, *, expand_surfaces: builtins.bool = False, normalized: builtins.bool = False) -> Expression:
         r"""
-        Convert the typed denominator forest into a native Symbolica expression.
+        Convert to the canonical eta/H denominator expression.
 
-        Surface variables are named `feynkit::E<N>` and `feynkit::H<N>`; their
-        definitions remain available through `surfaces`.
+        ``expand_surfaces`` substitutes on-shell/external energies. ``normalized``
+        additionally includes the -1/(2 E) factors and GammaLoop loop measure;
+        it implies ``expand_surfaces``. Numerators and global weights stay separate.
 
         Examples
         --------
-        >>> expression = result.to_expression()
-        >>> expression  # native Symbolica display in a notebook
+        >>> result.to_expression(normalized=True)
+
+        Parameters
+        ----------
+        expand_surfaces : bool
+            Substitute canonical on-shell and external energies.
+        normalized : bool
+            Include the energy products and spatial loop measure.
+        """
+    def surface_expression(self, surface: CffSurface) -> Expression:
+        r"""
+        Expand one surface belonging to this result into canonical energy symbols.
+
+        Examples
+        --------
+        >>> result.surface_expression(result.surfaces[0])
+
+        Parameters
+        ----------
+        surface : CffSurface
+            A surface obtained from this result.
+        """
+    def raised_surface_groups(self, edge_representatives: typing.Optional[typing.Mapping[builtins.int, builtins.int]] = None) -> builtins.list[CffSurfaceGroup]:
+        r"""
+        Group equivalent energy surfaces after identifying raised propagator edges.
+        ``edge_representatives`` maps repeated edges to their canonical edge.
+
+        Examples
+        --------
+        >>> groups = result.raised_surface_groups({3: 2})
+        >>> [group.max_order for group in groups]
+
+        Parameters
+        ----------
+        edge_representatives : dict[int, int], optional
+            Repeated propagator edge IDs mapped to their canonical representative.
+        """
+    def pole_coefficients(self, group: CffSurfaceGroup) -> builtins.list[CffResult]:
+        r"""
+        Return coefficients of each inverse surface power, indexed from order one.
+        These are pole coefficients, before analytic residue derivatives.
+
+        Examples
+        --------
+        >>> coefficients = result.pole_coefficients(result.raised_surface_groups()[0])
+        >>> [coefficient.to_expression() for coefficient in coefficients]
+
+        Parameters
+        ----------
+        group : CffSurfaceGroup
+            A raised-surface group belonging to this result.
+        """
+    def residue(self, group: CffSurfaceGroup, *, variable: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], root: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], surface: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], coefficient: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], normalized: builtins.bool = False, replacements: typing.Optional[typing.Sequence[tuple[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]]]] = None) -> Expression:
+        r"""
+        Evaluate all pole-order contributions to a residue in an explicit variable.
+        ``surface`` must be the group's energy surface expressed in that variable;
+        ``coefficient`` is the complete remaining coefficient, including any factors
+        whose derivatives must act. The supplied root is assumed to be a simple zero.
+
+        Examples
+        --------
+        >>> result.residue(group, variable=t, root=t_star, surface=eta, coefficient=numerator)
+
+        Parameters
+        ----------
+        group : CffSurfaceGroup
+            A raised-surface group belonging to this result.
+        variable : Expression
+            Independent integration variable.
+        root : Expression
+            Simple zero of the surface, independent of variable.
+        surface : Expression
+            Energy surface expressed in the integration variable.
+        coefficient : Expression
+            Complete remaining coefficient to differentiate.
+        normalized : bool
+            Include the generated CFF normalization in the coefficient.
+        replacements : list[tuple[Expression, Expression]], optional
+            Route all energy dependence to the integration variable before differentiating.
         """
     def __len__(self) -> builtins.int:
         r"""
@@ -463,11 +544,10 @@ class CffSurface:
     @property
     def vertices(self) -> builtins.list[builtins.int]:
         r"""
-        Return the dense CFF vertex IDs enclosed by this surface.
+        Return the original diagram vertex IDs enclosed by this surface.
 
-        CFF generation remaps the diagram's internal vertices to a compact
-        zero-based range. These IDs therefore index the contracted CFF graph;
-        they are not the original ``diagram.vertices`` identifiers.
+        Contracted CFF vertices retain the identities of all interaction
+        vertices they contain, including for selected subgraphs.
         """
     def __repr__(self) -> builtins.str:
         r"""
@@ -475,7 +555,28 @@ class CffSurface:
 
         Examples
         --------
-        >>> print(surface)  # Symbolica denominator variable, for example feynkit::E0
+        >>> print(surface)  # Symbolica denominator variable, for example feynkit_cff::η(0)
+        """
+
+@typing.final
+class CffSurfaceGroup:
+    r"""
+    Equivalent energy surfaces and their maximum simultaneous pole order.
+
+    Examples
+    --------
+    >>> group = result.raised_surface_groups()[0]
+    >>> print(group.max_order, group.surfaces)
+    """
+    @property
+    def max_order(self) -> builtins.int:
+        r"""
+        Highest inverse surface power occurring on one CFF branch.
+        """
+    @property
+    def surfaces(self) -> builtins.list[CffSurface]:
+        r"""
+        Canonical energy surfaces identified by this group.
         """
 
 @typing.final
@@ -623,6 +724,166 @@ class Coupling:
         """
 
 @typing.final
+class CutPropagator:
+    r"""
+    An oriented generalized cut distribution for a possibly raised propagator.
+    ``orientation`` selects q0=+E or q0=-E; ``prescription`` is the sign of i0.
+    The default normalization is -2 pi i. The positive ``on_shell_energy`` includes
+    the mass. Raised cuts act on the entire coefficient, including the uncut factor.
+
+    Examples
+    --------
+    >>> cut = CutPropagator(q0, E, power=2)
+    >>> cut.apply(q0**2, q0)
+    """
+    def __new__(cls, energy: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], on_shell_energy: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], *, power: builtins.int = 1, orientation: builtins.int = 1, prescription: builtins.int = 1, normalization: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None) -> CutPropagator:
+        r"""
+        Construct a reciprocal-propagator cut with explicit orientation and i0 sign.
+
+        Examples
+        --------
+        >>> cut = CutPropagator(q0, E, power=3, orientation=-1)
+
+        Parameters
+        ----------
+        energy : Expression
+            Time component of the propagator momentum.
+        on_shell_energy : Expression
+            Positive square root of spatial momentum squared plus mass squared.
+        power : int
+            Positive propagator power.
+        orientation : int
+            Select the positive (+1) or negative (-1) energy root.
+        prescription : int
+            Sign of the imaginary infinitesimal, +1 or -1.
+        normalization : Expression, optional
+            Replacement prefactor, default -2 pi i.
+        """
+    def to_expression(self, *, covariant: builtins.bool = True) -> Expression:
+        r"""
+        Emit a covariant CutDelta or energy-space generalized Delta expression.
+        Delta(n,x) acts as f^(n-1)(0)/(n-1)!; it is not the usual delta derivative.
+
+        Examples
+        --------
+        >>> cut.to_expression(covariant=False)
+
+        Parameters
+        ----------
+        covariant : bool
+            Emit a mass-shell CutDelta; otherwise show the energy-space Delta.
+        """
+    def apply(self, coefficient: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], variable: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]) -> Expression:
+        r"""
+        Apply the complete derivative action and then set the energy on shell.
+        Route the integrand to this independent energy variable before applying.
+
+        Examples
+        --------
+        >>> cut.apply(q0**2, q0)
+
+        Parameters
+        ----------
+        coefficient : Expression
+            All remaining factors of the integrand.
+        variable : Expression
+            Independent energy symbol, equal to this cut's energy.
+        """
+
+@typing.final
+class DiagramCut:
+    r"""
+    A generated physical final-state cut; each side retains its physics metadata.
+
+    Examples
+    --------
+    >>> cut = diagram.cuts[0]
+    >>> factors = cut.propagators()
+    """
+    @property
+    def left(self) -> DiagramCutSide:
+        r"""
+        Return the left amplitude and its generation metadata.
+        """
+    @property
+    def right(self) -> DiagramCutSide:
+        r"""
+        Return the right amplitude and its generation metadata.
+        """
+    @property
+    def subgraph(self) -> linnet_py.Subgraph:
+        r"""
+        Return the oriented crossing half-edges as a reusable selection.
+        """
+    @property
+    def edges(self) -> builtins.list[DiagramEdge]:
+        r"""
+        Return the crossing particle lines in their stored cut order.
+        """
+    @property
+    def particles(self) -> builtins.list[Particle]:
+        r"""
+        Return physical particles crossing from the left amplitude to the right.
+        Sink-oriented lines become antiparticles, matching generation's final-state filter.
+        """
+    @property
+    def orientations(self) -> builtins.dict[builtins.int, builtins.int]:
+        r"""
+        Orient crossing lines from the left side to the right side.
+        """
+    @property
+    def momentum_signatures(self) -> builtins.dict[builtins.int, MomentumSignature]:
+        r"""
+        Return stored edge momenta in the diagram's selected routing.
+        Multiply by :attr:`orientations` for momenta directed from left to right.
+        """
+    def propagators(self, *, edge_powers: typing.Optional[typing.Mapping[builtins.int, builtins.int]] = None, prescription: builtins.int = 1, normalization: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None) -> builtins.list[CutPropagator]:
+        r"""
+        Construct the oriented cut-propagator distributions, separately from
+        the remaining numerator, uncut propagators, and global factors.
+
+        Examples
+        --------
+        >>> factors = diagram.cuts[0].propagators(edge_powers={2: 2})
+        >>> distributions = [factor.to_expression() for factor in factors]
+
+        Parameters
+        ----------
+        edge_powers : mapping[int, int] or None, optional
+            Positive propagator powers by diagram edge ID; omitted edges have power one.
+        prescription : int, optional
+            Sign of the imaginary prescription, either +1 or -1.
+        normalization : Expression or None, optional
+            Explicit replacement normalization; defaults to -2*pi*i.
+        """
+
+@typing.final
+class DiagramCutSide:
+    r"""
+    One amplitude region of a physical cut, with generation metadata.
+
+    Examples
+    --------
+    >>> side = diagram.cuts[0].left
+    >>> side_numerator = diagram.numerator_expression(subgraph=side.subgraph)
+    """
+    @property
+    def subgraph(self) -> linnet_py.Subgraph:
+        r"""
+        Return the reusable Linnet selection for this amplitude side.
+        """
+    @property
+    def coupling_orders(self) -> builtins.dict[builtins.str, builtins.int]:
+        r"""
+        Return coupling powers of this amplitude side.
+        """
+    @property
+    def loop_count(self) -> builtins.int:
+        r"""
+        Return the number of loops in this amplitude side.
+        """
+
+@typing.final
 class DiagramEdge:
     r"""
     A particle propagator joining two vertices in a Feynman diagram.
@@ -642,9 +903,9 @@ class DiagramEdge:
         Return this edge's integer ID within the diagram.
         """
     @property
-    def source(self) -> builtins.int:
+    def source(self) -> typing.Optional[builtins.int]:
         r"""
-        Return the source vertex ID.
+        Return the source interaction ID, or None at a dangling sink.
 
         Examples
         --------
@@ -652,14 +913,64 @@ class DiagramEdge:
         >>> source_vertex = diagram.vertices[edge.source]
         """
     @property
-    def target(self) -> builtins.int:
+    def target(self) -> typing.Optional[builtins.int]:
         r"""
-        Return the target vertex ID.
+        Return the target interaction ID, or None at a dangling source.
 
         Examples
         --------
         >>> edge = diagram.edges[0]
         >>> target_vertex = diagram.vertices[edge.target]
+        """
+    @property
+    def external_index(self) -> builtins.int:
+        r"""
+        Return the external-leg index.
+
+        Raises :class:`DiagramError` for an internal edge. Use
+        :attr:`is_external` before accessing external-state metadata.
+
+        Examples
+        --------
+        >>> external = [v for v in diagram.vertices if v.is_external]
+        >>> sorted(v.external_index for v in external) == list(range(len(external)))
+        True
+        """
+    @property
+    def external_state(self) -> builtins.str:
+        r"""
+        Return ``"incoming"`` or ``"outgoing"`` for an external edge.
+
+        Raises :class:`DiagramError` for an internal edge.
+        """
+    @property
+    def is_external(self) -> builtins.bool:
+        r"""
+        Report whether this edge represents an external particle state.
+
+        Examples
+        --------
+        >>> external_edges = [edge for edge in diagram.edges if edge.is_external]
+        """
+    @property
+    def external_connection(self) -> typing.Optional[builtins.int]:
+        r"""
+        Return the shared sewing identity of an external momentum carrier.
+        """
+    @property
+    def external_name(self) -> typing.Optional[builtins.str]:
+        r"""
+        Return the external-state label retained during finalization.
+        """
+    @property
+    def is_dummy(self) -> builtins.bool:
+        r"""
+        Report whether this line is a dummy graph attachment.
+        """
+    @property
+    def is_dangling(self) -> builtins.bool:
+        r"""
+        Report whether this line has only one incident interaction vertex.
         """
     @property
     def particle_name(self) -> builtins.str:
@@ -772,20 +1083,47 @@ class DiagramGroup:
         """
 
 @typing.final
+class DiagramThresholdCandidate:
+    r"""
+    A topology threshold partition, independent of the requested physical final state.
+
+    Examples
+    --------
+    >>> threshold = diagram.topology_threshold_candidates[0]
+    >>> crossing_lines = threshold.edges
+    """
+    @property
+    def left(self) -> linnet_py.Subgraph:
+        r"""
+        Return the left topology selection.
+        """
+    @property
+    def right(self) -> linnet_py.Subgraph:
+        r"""
+        Return the right topology selection.
+        """
+    @property
+    def subgraph(self) -> linnet_py.Subgraph:
+        r"""
+        Return the oriented crossing half-edge selection.
+        """
+    @property
+    def edges(self) -> builtins.list[DiagramEdge]:
+        r"""
+        Return threshold-crossing lines in their stored order.
+        """
+
+@typing.final
 class DiagramVertex:
     r"""
-    A named interaction point or external state in a Feynman diagram.
+    An interaction point in a Feynman diagram.
 
-    Internal vertices reference a model interaction rule, while external
-    vertices identify an incoming or outgoing particle leg.
+    External states belong to edges; every public vertex references an interaction.
 
     Examples
     --------
     >>> vertex = next(iter(diagram.vertices))
-    >>> if vertex.is_external:
-    ...     print(vertex.external_state, vertex.external_index)
-    ... else:
-    ...     interaction = model.vertex_rule(vertex.interaction)
+    >>> interaction = model.vertex_rule(vertex.interaction)
     """
     @property
     def id(self) -> builtins.int:
@@ -800,15 +1138,13 @@ class DiagramVertex:
     @property
     def interaction(self) -> builtins.str:
         r"""
-        Return the interaction name for an internal vertex.
+        Return the interaction name.
 
-        Raises :class:`DiagramError` when called on an external vertex or on an
-        incomplete imported diagram. Use :attr:`is_external` to distinguish the
-        two vertex kinds.
+        Raises :class:`DiagramError` for an incomplete imported diagram.
 
         Examples
         --------
-        >>> vertex = next(v for v in diagram.vertices if not v.is_external)
+        >>> vertex = diagram.vertices[0]
         >>> rule = model.vertex_rule(vertex.interaction)
         """
     @property
@@ -819,43 +1155,13 @@ class DiagramVertex:
         Raises :class:`DiagramError` when the diagram does not carry an
         instantiated Feynman-rule numerator for this vertex.
         """
-    @property
-    def external_index(self) -> builtins.int:
-        r"""
-        Return the external-leg index.
-
-        Raises :class:`DiagramError` for an internal vertex. Use
-        :attr:`is_external` before accessing external-state metadata.
-
-        Examples
-        --------
-        >>> external = [v for v in diagram.vertices if v.is_external]
-        >>> sorted(v.external_index for v in external) == list(range(len(external)))
-        True
-        """
-    @property
-    def external_state(self) -> builtins.str:
-        r"""
-        Return ``"incoming"`` or ``"outgoing"`` for an external vertex.
-
-        Raises :class:`DiagramError` for an internal vertex.
-        """
-    @property
-    def is_external(self) -> builtins.bool:
-        r"""
-        Report whether this vertex represents an external particle state.
-
-        Examples
-        --------
-        >>> external_vertices = [vertex for vertex in diagram.vertices if vertex.is_external]
-        """
     def numerator_expression(self) -> TensorExpression:
         r"""
         Return the numerator annotation as a Spenso TensorExpression.
 
         Examples
         --------
-        >>> vertex = next(v for v in diagram.vertices if not v.is_external)
+        >>> vertex = diagram.vertices[0]
         >>> vertex_factor = vertex.numerator_expression()
         >>> weighted_vertex_factor = diagram.overall_factor_expression() * vertex_factor
         """
@@ -1062,6 +1368,16 @@ class FeynmanDiagram:
         Return the diagram numerator annotation as source text.
         """
     @property
+    def cuts(self) -> builtins.list[DiagramCut]:
+        r"""
+        Return physical final-state cuts selected during generation.
+        """
+    @property
+    def topology_threshold_candidates(self) -> builtins.list[DiagramThresholdCandidate]:
+        r"""
+        Return topology threshold candidates separately from physical cuts.
+        """
+    @property
     def loop_momentum_basis(self) -> LoopMomentumBasis:
         r"""
         Return the loop-momentum routing selected during generation.
@@ -1080,17 +1396,22 @@ class FeynmanDiagram:
     @property
     def vertices(self) -> builtins.list[DiagramVertex]:
         r"""
-        Return the diagram vertices with stable integer identifiers.
+        Return the diagram's interaction vertices with stable integer identifiers.
         """
     @property
     def edges(self) -> builtins.list[DiagramEdge]:
         r"""
-        Return all diagram edges with their endpoint identifiers.
+        Return every particle line, including dangling and sewn external carriers.
+        """
+    @property
+    def half_edges(self) -> list[linnet_py.HalfEdge]:
+        r"""
+        Return native Linnet half-edge views; ``data`` records their native diagram IDs.
         """
     @property
     def internal_edges(self) -> builtins.list[DiagramEdge]:
         r"""
-        Return propagator edges whose endpoints are both internal vertices.
+        Return propagators excluding external momentum carriers and dummy edges.
 
         Examples
         --------
@@ -1100,11 +1421,204 @@ class FeynmanDiagram:
     @property
     def external_edges(self) -> builtins.list[DiagramEdge]:
         r"""
-        Return edges attached to incoming or outgoing external states.
+        Return incoming or outgoing external-state momentum carriers.
 
         Examples
         --------
         >>> external_particles = [edge.particle_name for edge in diagram.external_edges]
+        """
+    def to_linnet(self) -> linnet_py.Graph:
+        r"""
+        Return the canonical installed Linnet graph with physics objects as payloads.
+
+        Node, edge, and half-edge identities are mapped explicitly. Structural
+        edits affect this analysis graph only; the next export starts a fresh
+        graph, and selections from the modified topology cannot be used here.
+
+        Examples
+        --------
+        >>> graph = diagram.to_linnet()
+        >>> gluons = graph.filter(edge=lambda edge: edge.data.particle_name == "g")
+        """
+    def subgraph(self, *, nodes: typing.Optional[typing.Sequence[builtins.int]] = None, edges: typing.Optional[typing.Sequence[builtins.int]] = None, half_edges: typing.Optional[typing.Sequence[builtins.int]] = None) -> linnet_py.Subgraph:
+        r"""
+        Select graph elements using the canonical Linnet IDs.
+
+        Examples
+        --------
+        >>> region = diagram.subgraph(edges=[0, 1])
+        >>> numerator = diagram.numerator_expression(subgraph=region)
+
+        Parameters
+        ----------
+        nodes : list[int] or None, optional
+            Canonical Linnet nodes IDs to include.
+        edges : list[int] or None, optional
+            Canonical Linnet edges IDs to include.
+        half_edges : list[int] or None, optional
+            Canonical Linnet half-edges IDs to include.
+        """
+    def filter(self, *, node: typing.Optional[typing.Any] = None, edge: typing.Optional[typing.Any] = None, half_edge: typing.Optional[typing.Any] = None) -> linnet_py.Subgraph:
+        r"""
+        Select by predicates on Linnet views; their ``data`` is a physics object.
+
+        Examples
+        --------
+        >>> region = diagram.filter(edge=lambda edge: edge.data.particle_name == "g")
+
+        Parameters
+        ----------
+        node : callable or None, optional
+            Predicate on canonical Linnet node views.
+        edge : callable or None, optional
+            Predicate on canonical Linnet edge views.
+        half_edge : callable or None, optional
+            Predicate on canonical Linnet half-edge views.
+        """
+    def boundary(self, subgraph: linnet_py.Subgraph) -> linnet_py.Subgraph:
+        r"""
+        Return boundaries around the selected interaction region.
+
+        Examples
+        --------
+        >>> region = diagram.subgraph(nodes=[0])
+        >>> boundary = diagram.boundary(region)
+
+        Parameters
+        ----------
+        subgraph : linnet_py.Subgraph
+            Region from this diagram's analysis graph.
+        """
+    def connected_components(self, subgraph: linnet_py.Subgraph | None = None) -> list[linnet_py.Subgraph]:
+        r"""
+        Return connected interaction regions as reusable selections.
+
+        Examples
+        --------
+        >>> components = diagram.connected_components()
+
+        Parameters
+        ----------
+        subgraph : linnet_py.Subgraph or None, optional
+            Region from this diagram's analysis graph; None selects the complete graph.
+        """
+    def is_connected(self, subgraph: linnet_py.Subgraph | None = None) -> builtins.bool:
+        r"""
+        Test connectivity of an optional selection.
+
+        Examples
+        --------
+        >>> connected = diagram.is_connected()
+
+        Parameters
+        ----------
+        subgraph : linnet_py.Subgraph or None, optional
+            Region from this diagram's analysis graph; None selects the complete graph.
+        """
+    def bridges(self, subgraph: linnet_py.Subgraph | None = None) -> linnet_py.Subgraph:
+        r"""
+        Return lines whose removal disconnects the selection.
+
+        Examples
+        --------
+        >>> bridges = diagram.bridges()
+
+        Parameters
+        ----------
+        subgraph : linnet_py.Subgraph or None, optional
+            Region from this diagram's analysis graph; None selects the complete graph.
+        """
+    def cycle_basis(self, subgraph: linnet_py.Subgraph | None = None) -> tuple[list[linnet_py.Cycle], linnet_py.Subgraph]:
+        r"""
+        Return a cycle basis and its covered half-edges.
+
+        Examples
+        --------
+        >>> cycles, covered = diagram.cycle_basis()
+
+        Parameters
+        ----------
+        subgraph : linnet_py.Subgraph or None, optional
+            Region from this diagram's analysis graph; None selects the complete graph.
+        """
+    def all_spanning_forests(self, subgraph: linnet_py.Subgraph | None = None) -> list[linnet_py.Subgraph]:
+        r"""
+        Enumerate spanning forests within the selected topology.
+
+        Examples
+        --------
+        >>> forests = diagram.all_spanning_forests()
+
+        Parameters
+        ----------
+        subgraph : linnet_py.Subgraph or None, optional
+            Region from this diagram's analysis graph; None selects the complete graph.
+        """
+    def all_bonds(self, *, subgraph: linnet_py.Subgraph | None = None, min_size: typing.Optional[builtins.int] = None, max_size: typing.Optional[builtins.int] = None) -> list[linnet_py.Subgraph]:
+        r"""
+        Enumerate minimal cutsets, independently of physical final-state cuts.
+
+        Examples
+        --------
+        >>> bonds = diagram.all_bonds(min_size=2, max_size=3)
+
+        Parameters
+        ----------
+        subgraph : linnet_py.Subgraph or None, optional
+            Region from this diagram's analysis graph; None selects the complete graph.
+        min_size : int or None, optional
+            Minimum number of crossing edges.
+        max_size : int or None, optional
+            Maximum number of crossing edges.
+        """
+    def all_cuts(self, source: typing.Sequence[builtins.int], target: typing.Sequence[builtins.int]) -> list[linnet_py.CutPartition]:
+        r"""
+        Enumerate separating partitions between disjoint interaction vertex groups.
+
+        Examples
+        --------
+        >>> partitions = diagram.all_cuts([0], [1])
+
+        Parameters
+        ----------
+        source : list[int]
+            Canonical Linnet vertices required on the first side.
+        target : list[int]
+            Canonical Linnet vertices required on the opposite side.
+        """
+    def depth_first_traverse(self, root: builtins.int, *, subgraph: linnet_py.Subgraph | None = None, include: typing.Optional[builtins.int] = None) -> linnet_py.TraversalTree:
+        r"""
+        Traverse a selected interaction region in depth-first order.
+
+        Examples
+        --------
+        >>> tree = diagram.depth_first_traverse(0)
+
+        Parameters
+        ----------
+        root : int
+            Canonical Linnet vertex ID at which traversal starts.
+        subgraph : linnet_py.Subgraph or None, optional
+            Region from this diagram's analysis graph; None selects the complete graph.
+        include : int or None, optional
+            Canonical Linnet half-edge ID to prioritize at the root.
+        """
+    def breadth_first_traverse(self, root: builtins.int, *, subgraph: linnet_py.Subgraph | None = None, include: typing.Optional[builtins.int] = None) -> linnet_py.TraversalTree:
+        r"""
+        Traverse a selected interaction region in breadth-first order.
+
+        Examples
+        --------
+        >>> tree = diagram.breadth_first_traverse(0)
+
+        Parameters
+        ----------
+        root : int
+            Canonical Linnet vertex ID at which traversal starts.
+        subgraph : linnet_py.Subgraph or None, optional
+            Region from this diagram's analysis graph; None selects the complete graph.
+        include : int or None, optional
+            Canonical Linnet half-edge ID to prioritize at the root.
         """
     @staticmethod
     def from_json(model: Model, json: builtins.str) -> FeynmanDiagram:
@@ -1145,22 +1659,43 @@ class FeynmanDiagram:
         dot : str
             DOT text containing the diagram topology and FeynKit annotations.
         """
-    def denominator_expression(self) -> TensorExpression:
+    def overall_factor_expression(self) -> Expression:
+        r"""
+        Return the diagram-wide multiplicative factor as a Symbolica expression.
+
+        Examples
+        --------
+        >>> factor = diagram.overall_factor_expression()
+        >>> weighted_numerator = factor * diagram.numerator_expression()
+        >>> weighted_numerator
+        """
+    def denominator_expression(self, *, subgraph: linnet_py.Subgraph | None = None, edge_powers: typing.Optional[typing.Mapping[builtins.int, builtins.int]] = None, dimension: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None) -> TensorExpression:
         r"""
         Return the product of internal propagator denominators as a scalar TensorExpression.
 
-        Each factor is q_e² - m_e², with the numerator's edge momentum labels,
-        four-dimensional Minkowski scalar products, and symbolic model masses.
-        External legs, widths, and an imaginary prescription are excluded.
-        This uses FeynKit's quadratic-propagator convention, rather than custom
-        UFO denominator formulas. A diagram with no internal edges returns one.
+        Each factor retains GammaLoop's four-argument ``denom`` annotation around
+        q_e² - m_e², with matching momentum labels and symbolic masses. Dimension
+        defaults to GammaLoop's symbolic dimension; powers may be signed.
+        The default region excludes external carriers and dummy edges. An explicit
+        region follows GammaLoop and includes every complete selected edge. Widths,
+        an imaginary prescription, and custom UFO denominator formulas are excluded.
+        A selection without internal edges returns one.
 
         Examples
         --------
         >>> denominator = diagram.denominator_expression()
         >>> integrand = diagram.numerator_expression() / denominator
+
+        Parameters
+        ----------
+        subgraph : linnet_py.Subgraph or None, optional
+            Region from this diagram; None selects internal propagators only.
+        edge_powers : mapping[int, int] or None, optional
+            Signed propagator powers by diagram edge ID; omitted edges have power one.
+        dimension : Expression or int or None, optional
+            Lorentz dimension; defaults to the shared symbolic dimension.
         """
-    def numerator_expression(self) -> TensorExpression:
+    def numerator_expression(self, *, subgraph: linnet_py.Subgraph | None = None, without: linnet_py.Subgraph | None = None) -> TensorExpression:
         r"""
         Return the diagram numerator as a Spenso TensorExpression.
 
@@ -1169,15 +1704,13 @@ class FeynmanDiagram:
         >>> numerator = diagram.numerator_expression()
         >>> integrand_numerator = diagram.overall_factor_expression() * numerator
         >>> integrand_numerator  # native Symbolica algebra and rich display
-        """
-    def overall_factor_expression(self) -> Expression:
-        r"""
-        Parse the diagram-wide factor as a Symbolica expression.
 
-        Examples
-        --------
-        >>> factor = diagram.overall_factor_expression()
-        >>> factor  # supports Symbolica algebra and native rich display
+        Parameters
+        ----------
+        subgraph : linnet_py.Subgraph or None, optional
+            Region from this diagram's analysis graph; None selects the complete graph.
+        without : linnet_py.Subgraph or None, optional
+            Ignored region, using GammaLoop boundary and local-factor selection semantics.
         """
     def numerator_prefactor_expression(self) -> Expression:
         r"""
@@ -1199,13 +1732,15 @@ class FeynmanDiagram:
         >>> projected_numerator = projector * diagram.numerator_expression()
         >>> projected_numerator
         """
-    def tensor_reduce(self, dimension: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]) -> TensorExpression:
+    def tensor_reduce(self, dimension: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], *, expression: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None, subgraph: linnet_py.Subgraph | None = None, projector: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None) -> TensorExpression:
         r"""
         Reduce the numerator and projector using the diagram's internal edge momenta.
 
         Four-dimensional Lorentz slots are promoted to `D` before reduction.
         External momenta remain projector vectors, and the scalar numerator
         prefactor remains separate. Requires at least one internal edge.
+        A supplied expression replaces the numerator and projector, for example
+        after a UV expansion; it must use the diagram's edge momentum names.
 
         Examples
         --------
@@ -1216,6 +1751,13 @@ class FeynmanDiagram:
         ----------
         dimension : Expression or int
             Lorentz dimension used for the reduction and four-dimensional input slots.
+        expression : Expression or TensorExpression, optional
+            Complete prepared input to reduce instead of the numerator and projector.
+            Cannot be combined with an explicit projector.
+        subgraph : linnet_py.Subgraph or None, optional
+            Region from this diagram's analysis graph; None selects the complete graph.
+        projector : Expression or None, optional
+            Explicit external tensor projector, required for partial regions unless expression is supplied.
         """
     def reduce_tensor_numerator(self, reducer: TensorReducer) -> Expression:
         r"""
@@ -1269,7 +1811,92 @@ class FeynmanDiagram:
         reducer : TensorReducer
             Tensor projector and integrated-momentum selection to apply.
         """
-    def superficial_degree_of_divergence(self, *, dimension: builtins.int = 4) -> builtins.int:
+    def with_loop_momentum_edges(self, edges: typing.Sequence[builtins.int]) -> FeynmanDiagram:
+        r"""
+        Return a diagram using the specified loop-edge coordinates, in the supplied order.
+
+        Examples
+        --------
+        >>> rerouted = diagram.with_loop_momentum_edges(diagram.loop_momentum_basis.loop_edges)
+
+        Parameters
+        ----------
+        edges : list[int]
+            Diagram edge IDs specifying the requested routing coordinates.
+        """
+    def with_loop_momentum_tree_edges(self, edges: typing.Sequence[builtins.int]) -> FeynmanDiagram:
+        r"""
+        Return a diagram whose momentum routing uses the specified spanning forest.
+
+        Examples
+        --------
+        >>> rerouted = diagram.with_loop_momentum_tree_edges(diagram.loop_momentum_basis.tree_edges)
+
+        Parameters
+        ----------
+        edges : list[int]
+            Diagram edge IDs specifying the requested routing coordinates.
+        """
+    def momentum_basis(self, *, subgraph: linnet_py.Subgraph | None = None) -> LoopMomentumBasis:
+        r"""
+        Construct the canonical routing of the selected interaction region.
+
+        Examples
+        --------
+        >>> basis = diagram.momentum_basis()
+        >>> routed = basis.route_expression(diagram.numerator_expression())
+
+        Parameters
+        ----------
+        subgraph : linnet_py.Subgraph or None, optional
+            Region from this diagram's analysis graph; None selects the complete graph.
+        """
+    def compatible_momentum_basis(self, parent: LoopMomentumBasis, *, subgraph: linnet_py.Subgraph | None = None) -> LoopMomentumBasis:
+        r"""
+        Reuse a parent basis's loop coordinates wherever the selected topology permits it.
+
+        Examples
+        --------
+        >>> basis = diagram.compatible_momentum_basis(diagram.loop_momentum_basis)
+
+        Parameters
+        ----------
+        parent : LoopMomentumBasis
+            Parent coordinates belonging to this same diagram instance.
+        subgraph : linnet_py.Subgraph or None, optional
+            Region from this diagram's analysis graph; None selects the complete graph.
+        """
+    def contracted_momentum_basis(self, contracted: linnet_py.Subgraph, *, subgraph: linnet_py.Subgraph | None = None) -> LoopMomentumBasis:
+        r"""
+        Route the selected region after contracting complete internal edges.
+
+        Examples
+        --------
+        >>> contracted = diagram.filter(edge=lambda edge: edge.data.is_dummy)
+        >>> basis = diagram.contracted_momentum_basis(contracted)
+
+        Parameters
+        ----------
+        contracted : linnet_py.Subgraph
+            Complete internal edges to contract, selected from this diagram.
+        subgraph : linnet_py.Subgraph or None, optional
+            Region from this diagram's analysis graph; None selects the complete graph.
+        """
+    def loop_count_of(self, *, subgraph: linnet_py.Subgraph | None = None) -> builtins.int:
+        r"""
+        Count independent loops within a selected region.
+
+        Examples
+        --------
+        >>> region = diagram.filter(edge=lambda edge: not edge.data.is_external)
+        >>> loops = diagram.loop_count_of(subgraph=region)
+
+        Parameters
+        ----------
+        subgraph : linnet_py.Subgraph or None, optional
+            Region from this diagram's analysis graph; None selects the complete graph.
+        """
+    def superficial_degree_of_divergence(self, *, dimension: builtins.int = 4, subgraph: linnet_py.Subgraph | None = None) -> builtins.int:
         r"""
         Return the local superficial UV degree of divergence.
 
@@ -1289,6 +1916,8 @@ class FeynmanDiagram:
         ----------
         dimension : int, optional
             Spacetime dimension for each loop integration measure; defaults to four.
+        subgraph : linnet_py.Subgraph or None, optional
+            Region from this diagram's analysis graph; None selects the complete graph.
         """
     def validate(self) -> None:
         r"""
@@ -1301,7 +1930,7 @@ class FeynmanDiagram:
 
         >>> diagram.validate()
         """
-    def build_cff(self, *, max_orientations: typing.Optional[builtins.int] = None, fixed_orientations: typing.Optional[typing.Mapping[builtins.int, builtins.bool]] = None, contracted_edges: typing.Optional[typing.Sequence[builtins.int]] = None, initial_state_edges: typing.Optional[typing.Sequence[builtins.int]] = None) -> CffResult:
+    def build_cff(self, *, max_orientations: typing.Optional[builtins.int] = None, fixed_orientations: typing.Optional[typing.Mapping[builtins.int, builtins.bool]] = None, contracted_edges: typing.Optional[typing.Sequence[builtins.int]] = None, initial_state_edges: typing.Optional[typing.Sequence[builtins.int]] = None, subgraph: linnet_py.Subgraph | None = None) -> CffResult:
         r"""
         Build the diagram's Cross-Free Family representation.
 
@@ -1326,6 +1955,8 @@ class FeynmanDiagram:
             Edge IDs to contract before constructing denominator surfaces.
         initial_state_edges : iterable[int], optional
             Edge IDs to classify as incoming external lines.
+        subgraph : linnet_py.Subgraph or None, optional
+            Region from this diagram's analysis graph; None selects the complete graph.
         """
     def to_json(self) -> builtins.str:
         r"""
@@ -1412,7 +2043,7 @@ class FeynmanDiagram:
         cycle : bool
             Whether this object is part of a recursive formatting cycle.
         """
-    def loop_momentum_bases(self, limit: typing.Optional[builtins.int] = None) -> builtins.list[LoopMomentumBasis]:
+    def loop_momentum_bases(self, limit: typing.Optional[builtins.int] = None, *, subgraph: linnet_py.Subgraph | None = None) -> builtins.list[LoopMomentumBasis]:
         r"""
         Enumerate valid loop-momentum bases for this diagram.
 
@@ -1431,6 +2062,8 @@ class FeynmanDiagram:
         limit : int or None
             Maximum number of bases to return. Pass ``None`` to enumerate every
             valid basis.
+        subgraph : linnet_py.Subgraph or None, optional
+            Region from this diagram's analysis graph; None selects the complete graph.
         """
     def __repr__(self) -> builtins.str:
         r"""
@@ -2632,6 +3265,29 @@ class LoopMomentumBasis:
         ... }
         >>> for edge in diagram.edges:
         ...     print(edge.particle_name, momentum_by_edge[edge.id])
+        """
+    def momentum_replacements(self) -> builtins.list[typing.Any]:
+        r"""
+        Return Symbolica Replacement objects using the same routing as numerical momenta.
+        Tensor index arguments are retained on every routed vector.
+
+        Examples
+        --------
+        >>> rules = diagram.loop_momentum_basis.momentum_replacements()
+        >>> routed = diagram.numerator_expression().replace_multiple(rules)
+        """
+    def route_expression(self, expression: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]) -> Expression:
+        r"""
+        Express edge momenta in this basis while retaining any tensor index arguments.
+
+        Examples
+        --------
+        >>> routed = diagram.loop_momentum_basis.route_expression(diagram.numerator_expression())
+
+        Parameters
+        ----------
+        expression : Expression or TensorExpression
+            Expression with canonical indexed edge momenta to route.
         """
     def __repr__(self) -> builtins.str:
         r"""
@@ -4422,13 +5078,13 @@ class TensorReducer:
     @staticmethod
     def feynkit(dimension: Expression) -> TensorReducer:
         r"""
-        Construct a reducer that selects every ``FeynKit::Momentum`` tensor.
+        Construct a reducer that selects every ``gammalooprs::Q`` tensor.
 
         This is the convenient constructor for vacuum numerators produced by
         FeynKit's native Feynman-rule generator. It selects the entire
-        ``FeynKit::Momentum`` head and is therefore intended for pure vacuum
+        ``gammalooprs::Q`` head and is therefore intended for pure vacuum
         numerators, where every such momentum is integrated. If a graph still
-        contains external ``FeynKit::Momentum`` tensors, construct a reducer
+        contains external ``gammalooprs::Q`` tensors, construct a reducer
         with exact :meth:`with_integrated_vector` selectors for its internal
         momenta instead.
 

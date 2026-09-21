@@ -63,7 +63,7 @@ def _():
     from symbolica import E, S
 
     D = S("D")
-    momentum = S("FeynKit::Momentum")
+    momentum = S("gammalooprs::Q")
     external = S("TensorTutorial::p")
     mink = S("spenso::mink")
     return D, E, Path, S, external, fk, math, mink, momentum, time
@@ -75,7 +75,7 @@ def _(mo):
     ## Rank two: the basic projector
 
     We distinguish the integrated momentum by its complete compact Spenso
-    form, `Momentum(10, mink(D))`. This is more precise than selecting every
+    form, `Q(10, mink(D))`. This is more precise than selecting every
     momentum with the same head and is useful for multiloop graphs.
 
     Contracting the free tensor with $p_\mu p_\nu$ gives
@@ -266,14 +266,14 @@ def _(mo):
     below generates the two-loop pure-gluon theta vacuum graph from FeynKit's
     normalized Standard Model. Its two three-gluon vertices give a rank-two
     momentum numerator. Since the graph has no external legs, every native
-    `FeynKit::Momentum` is an integrated vacuum momentum and the convenience
+    `gammalooprs::Q` is an integrated vacuum momentum and the convenience
     reducer is unambiguous.
 
     The reducer dimension must match the graph's `spenso::mink` slots; native
     generated rules currently carry `4`, while a vacuum expression prepared
     directly in symbolic dimension uses `D` as above. Use exact
     `with_integrated_vector(...)` selectors when a numerator also contains
-    external objects with the `FeynKit::Momentum` head.
+    external objects with the `gammalooprs::Q` head.
 
     `reduce_tensor_numerator` reduces the product of the stored numerator and
     external-state projector, returning the compact sum as one Expression. The

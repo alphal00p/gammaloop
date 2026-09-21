@@ -1014,80 +1014,6 @@ impl<E, V, H> MomentumRouting for HedgeGraph<E, V, H> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use linnet::half_edge::builder::HedgeGraphBuilder;
-
-    fn bubble() -> HedgeGraph<(), ()> {
-        let mut builder = HedgeGraphBuilder::new();
-        let a = builder.add_node(());
-        let b = builder.add_node(());
-        builder.add_external_edge(a, (), Orientation::Default, Flow::Sink);
-        builder.add_edge(a, b, (), Orientation::Default);
-        builder.add_edge(a, b, (), Orientation::Default);
-        builder.add_external_edge(b, (), Orientation::Default, Flow::Source);
-        builder.build()
-    }
-
-    #[test]
-    fn all_parallel_edge_routings_conserve_signed_momentum() {
-        let graph = bubble();
-        let bases = graph.generate_loop_momentum_bases();
-        assert_eq!(bases.len(), 2);
-        for basis in bases {
-            assert_eq!(basis.loop_edges.len(), 1);
-            assert_eq!(basis.ext_edges, vec![EdgeIndex(0), EdgeIndex(3)]);
-            for node in [
-                linnet::half_edge::NodeIndex(0),
-                linnet::half_edge::NodeIndex(1),
-            ] {
-                let mut sum = vec![0; 3];
-                for hedge in graph.iter_crown(node) {
-                    let sign = if graph.flow(hedge) == Flow::Source {
-                        1
-                    } else {
-                        -1
-                    };
-                    let signature = &basis.edge_signatures[graph[&hedge]];
-                    for (total, coefficient) in sum.iter_mut().zip(
-                        signature
-                            .loops
-                            .integer_coefficients()
-                            .into_iter()
-                            .chain(signature.external.integer_coefficients()),
-                    ) {
-                        *total += sign * coefficient;
-                    }
-                }
-                assert_eq!(sum, vec![0; 3]);
-            }
-        }
-    }
-
-    #[test]
-    fn promotion_and_external_reordering_preserve_edge_momenta() {
-        let graph = bubble();
-        let mut basis = graph.lmb();
-        let original = basis.clone();
-        let loop_edge = basis.loop_edges[0];
-        basis.put_loop_to_ext(0);
-        basis.canonicalize_external_order(&[loop_edge, EdgeIndex(3), EdgeIndex(0)]);
-        assert!(basis.loop_edges.is_empty());
-        for (edge, signature) in &basis.edge_signatures {
-            let previous = &original.edge_signatures[edge];
-            assert_eq!(
-                signature.external.integer_coefficients(),
-                vec![
-                    previous.loops.integer_coefficients()[0],
-                    previous.external.integer_coefficients()[1],
-                    previous.external.integer_coefficients()[0],
-                ]
-            );
-        }
-    }
-}
-
 impl crate::LoopMomentumBasis {
     /// Convert graph coordinates without changing the selected momentum basis.
     pub fn from_routing(
@@ -1216,7 +1142,11 @@ impl crate::FeynmanDiagram {
         let selected = subgraph.intersection(&self.momentum_subgraph());
         let mut forest = selected.intersection(&self.internal_subgraph());
         let externals = self.routing_externals(&selected);
-        forest.union_with(&externals);
+        for (pair, _, _) in self.graph.iter_edges_of(&selected) {
+            if matches!(pair, HedgePair::Unpaired { .. }) {
+                forest.add(pair);
+            }
+        }
         self.graph
             .lmb_impl(&selected, &forest, externals)
             .map(|basis| self.normalize_routing(basis))
@@ -1242,7 +1172,11 @@ impl crate::FeynmanDiagram {
             .take(limit)
             .map(|mut forest| {
                 let externals = self.routing_externals(&selected);
-                forest.union_with(&externals);
+                for (pair, _, _) in self.graph.iter_edges_of(&selected) {
+                    if matches!(pair, HedgePair::Unpaired { .. }) {
+                        forest.add(pair);
+                    }
+                }
                 self.graph
                     .lmb_impl(&selected, &forest, externals)
                     .map(|basis| self.normalize_routing(basis))
@@ -1326,7 +1260,11 @@ impl crate::FeynmanDiagram {
         }
         let selected = self.momentum_subgraph();
         let externals = self.routing_externals(&selected);
-        forest.union_with(&externals);
+        for (pair, _, _) in self.graph.iter_edges_of(&selected) {
+            if matches!(pair, HedgePair::Unpaired { .. }) {
+                forest.add(pair);
+            }
+        }
         self.graph
             .lmb_impl(&selected, &forest, externals)
             .map(|basis| self.normalize_routing(basis))
@@ -1378,7 +1316,7 @@ impl crate::LoopMomentumBasis {
 
     pub fn route_expression(&self, expression: &Atom) -> Atom {
         use symbolica::atom::AtomCore;
-        expression.replace_multiple(&self.momentum_replacements())
+        expression.replace_multiple(self.momentum_replacements())
     }
 }
 
@@ -1414,5 +1352,79 @@ impl crate::DiagramEdge {
             model.particle_by_id(particle)?.pdg_code,
             edge,
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use linnet::half_edge::builder::HedgeGraphBuilder;
+
+    fn bubble() -> HedgeGraph<(), ()> {
+        let mut builder = HedgeGraphBuilder::new();
+        let a = builder.add_node(());
+        let b = builder.add_node(());
+        builder.add_external_edge(a, (), Orientation::Default, Flow::Sink);
+        builder.add_edge(a, b, (), Orientation::Default);
+        builder.add_edge(a, b, (), Orientation::Default);
+        builder.add_external_edge(b, (), Orientation::Default, Flow::Source);
+        builder.build()
+    }
+
+    #[test]
+    fn all_parallel_edge_routings_conserve_signed_momentum() {
+        let graph = bubble();
+        let bases = graph.generate_loop_momentum_bases();
+        assert_eq!(bases.len(), 2);
+        for basis in bases {
+            assert_eq!(basis.loop_edges.len(), 1);
+            assert_eq!(basis.ext_edges, vec![EdgeIndex(0), EdgeIndex(3)]);
+            for node in [
+                linnet::half_edge::NodeIndex(0),
+                linnet::half_edge::NodeIndex(1),
+            ] {
+                let mut sum = vec![0; 3];
+                for hedge in graph.iter_crown(node) {
+                    let sign = if graph.flow(hedge) == Flow::Source {
+                        1
+                    } else {
+                        -1
+                    };
+                    let signature = &basis.edge_signatures[graph[&hedge]];
+                    for (total, coefficient) in sum.iter_mut().zip(
+                        signature
+                            .loops
+                            .integer_coefficients()
+                            .into_iter()
+                            .chain(signature.external.integer_coefficients()),
+                    ) {
+                        *total += sign * coefficient;
+                    }
+                }
+                assert_eq!(sum, vec![0; 3]);
+            }
+        }
+    }
+
+    #[test]
+    fn promotion_and_external_reordering_preserve_edge_momenta() {
+        let graph = bubble();
+        let mut basis = graph.lmb();
+        let original = basis.clone();
+        let loop_edge = basis.loop_edges[0];
+        basis.put_loop_to_ext(0);
+        basis.canonicalize_external_order(&[loop_edge, EdgeIndex(3), EdgeIndex(0)]);
+        assert!(basis.loop_edges.is_empty());
+        for (edge, signature) in &basis.edge_signatures {
+            let previous = &original.edge_signatures[edge];
+            assert_eq!(
+                signature.external.integer_coefficients(),
+                vec![
+                    previous.loops.integer_coefficients()[0],
+                    previous.external.integer_coefficients()[1],
+                    previous.external.integer_coefficients()[0],
+                ]
+            );
+        }
     }
 }

@@ -55,7 +55,7 @@ pub struct PyParticle {
 }
 
 impl PyParticle {
-    fn new(id: ParticleId, model: Arc<Model>) -> Self {
+    pub(crate) fn new(id: ParticleId, model: Arc<Model>) -> Self {
         Self { id, model }
     }
 

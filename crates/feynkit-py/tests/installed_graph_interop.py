@@ -5,9 +5,9 @@ Pass the community module name as the first argument (``hep`` for that host).
 
 import gc
 import importlib
-from pathlib import Path
 import sys
 import weakref
+from pathlib import Path
 
 import linnet_py
 
@@ -16,7 +16,12 @@ fk = importlib.import_module(
 )
 model = fk.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
 diagrams = model.generate_diagrams(
-    ["scalar_0"], ["scalar_0", "scalar_0"], loops=1
+    ["scalar_0"],
+    ["scalar_0", "scalar_0"],
+    loops=1,
+    max_vertices=3,
+    vertex_allow=["V_3_SCALAR_000"],
+    allow_self_loops=True,
 ).diagrams
 diagram = next(
     candidate
@@ -81,6 +86,21 @@ assert (
     == diagram.build_cff().to_expression()
 )
 
+cycles, covered = diagram.cycle_basis(internal)
+assert len(cycles) == diagram.loop_count
+assert isinstance(covered, linnet_py.Subgraph)
+assert isinstance(diagram.bridges(full), linnet_py.Subgraph)
+assert isinstance(diagram.boundary(internal), linnet_py.Subgraph)
+assert diagram.all_spanning_forests(internal)
+assert diagram.all_bonds(subgraph=full)
+assert diagram.all_cuts([0], [1])
+assert isinstance(
+    diagram.depth_first_traverse(0, subgraph=full), linnet_py.TraversalTree
+)
+assert isinstance(
+    diagram.breadth_first_traverse(0, subgraph=full), linnet_py.TraversalTree
+)
+
 restored = fk.FeynmanDiagram.from_json(model, diagram.to_json())
 assert restored.to_json() == diagram.to_json()
 from_dot = fk.FeynmanDiagram.from_dot(model, diagram.to_dot())
@@ -105,7 +125,7 @@ for invalid in [restored.to_linnet().full_subgraph(), object()]:
 graph.reverse_edge(0)
 try:
     diagram.numerator_expression(subgraph=full)
-except ValueError:
+except (ValueError, ReferenceError):
     pass
 else:
     raise AssertionError("stale selections must be rejected")
@@ -116,9 +136,47 @@ assert (
     == diagram.numerator_expression()
 )
 
+cross_section = model.generate_diagrams(
+    ["scalar_0"],
+    ["scalar_0", "scalar_0"],
+    kind="cross_section",
+    loops=1,
+    max_vertices=2,
+    vertex_allow=["V_3_SCALAR_000"],
+    allow_self_loops=True,
+).diagrams[0]
+assert len(cross_section.vertices) == 2
+assert all(not edge.is_dangling for edge in cross_section.external_edges)
+assert len(cross_section.external_edges) == 1
+cross_graph = cross_section.to_linnet()
+assert cross_graph.n_nodes == 2 and cross_graph.n_edges == 3
+for cut in cross_section.cuts:
+    assert cut.left.loop_count == cut.right.loop_count == 0
+    assert len(cut.particles) == len(cut.edges) == 2
+    assert all(particle.name == "scalar_0" for particle in cut.particles)
+    assert isinstance(cut.left.subgraph, linnet_py.Subgraph)
+    assert isinstance(cut.right.subgraph, linnet_py.Subgraph)
+    assert cross_section.numerator_expression(subgraph=cut.left.subgraph) != 1
+    assert len(cut.propagators()) == 2
+    assert len(cut.propagators(edge_powers={cut.edges[0].id: 2})) == 2
+for candidate in cross_section.topology_threshold_candidates:
+    assert isinstance(candidate.left, linnet_py.Subgraph)
+    assert isinstance(candidate.right, linnet_py.Subgraph)
+assert "is_cut:" in cross_section.to_linnest()
+assert (
+    fk.FeynmanDiagram.from_json(model, cross_section.to_json()).to_json()
+    == cross_section.to_json()
+)
+assert (
+    fk.FeynmanDiagram.from_dot(model, cross_section.to_dot()).to_json()
+    == cross_section.to_json()
+)
+
 # A mutable analysis payload may point back at its owner; that cycle is collectable.
 cycle_diagram = fk.FeynmanDiagram.from_json(model, diagram.to_json())
 cycle_graph = cycle_diagram.to_linnet()
+
+
 class Payload:
     pass
 

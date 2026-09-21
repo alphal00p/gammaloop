@@ -34,7 +34,7 @@ use crate::{
     error,
     graph_interop::LinnetCache,
     kinematics::{PyFourMomentum, PyThreeMomentum},
-    model::PyModel,
+    model::{PyModel, PyParticle},
     tensor::PyTensorReducer,
 };
 
@@ -252,7 +252,7 @@ impl PyDiagramEdge {
     ///
     /// Examples
     /// --------
-    /// >>> external_vertices = [edge for edge in diagram.vertices if edge.is_external]
+    /// >>> external_edges = [edge for edge in diagram.edges if edge.is_external]
     ///
     #[getter]
     fn is_external(&self) -> bool {
@@ -384,6 +384,11 @@ impl PyDiagramEdge {
 }
 
 /// One amplitude region of a physical cut, with generation metadata.
+///
+/// Examples
+/// --------
+/// >>> side = diagram.cuts[0].left
+/// >>> side_numerator = diagram.numerator_expression(subgraph=side.subgraph)
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "DiagramCutSide",
@@ -407,10 +412,12 @@ impl PyDiagramCutSide {
             .borrow(py)
             .half_edge_selection(py, &self.inner.half_edges)
     }
+    /// Return coupling powers of this amplitude side.
     #[getter]
     fn coupling_orders(&self) -> BTreeMap<String, usize> {
         self.inner.coupling_orders.clone()
     }
+    /// Return the number of loops in this amplitude side.
     #[getter]
     fn loop_count(&self) -> usize {
         self.inner.loop_count
@@ -422,6 +429,11 @@ impl PyDiagramCutSide {
 }
 
 /// A generated physical final-state cut; each side retains its physics metadata.
+///
+/// Examples
+/// --------
+/// >>> cut = diagram.cuts[0]
+/// >>> factors = cut.propagators()
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(name = "DiagramCut", module = "symbolica.community.feynkit", frozen)]
 pub struct PyDiagramCut {
@@ -433,6 +445,7 @@ pub struct PyDiagramCut {
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyDiagramCut {
+    /// Return the left amplitude and its generation metadata.
     #[getter]
     fn left(&self, py: Python<'_>) -> PyDiagramCutSide {
         PyDiagramCutSide {
@@ -440,6 +453,7 @@ impl PyDiagramCut {
             inner: self.inner.left.clone(),
         }
     }
+    /// Return the right amplitude and its generation metadata.
     #[getter]
     fn right(&self, py: Python<'_>) -> PyDiagramCutSide {
         PyDiagramCutSide {
@@ -465,6 +479,32 @@ impl PyDiagramCut {
             .map(|half| edges[half.edge.0].clone())
             .collect()
     }
+    /// Return physical particles crossing from the left amplitude to the right.
+    /// Sink-oriented lines become antiparticles, matching generation's final-state filter.
+    #[getter]
+    fn particles(&self, py: Python<'_>) -> PyResult<Vec<PyParticle>> {
+        let diagram = self.diagram.borrow(py);
+        let model = diagram.inner.model_arc();
+        self.inner
+            .cut
+            .iter()
+            .map(|half| {
+                let edge = &diagram.inner.underlying()
+                    [linnet::half_edge::involution::EdgeIndex(half.edge.0)];
+                let particle = match half.endpoint {
+                    DiagramEndpoint::Source => edge.particle,
+                    DiagramEndpoint::Target => {
+                        model
+                            .particle_by_id(edge.particle)
+                            .map_err(error::model)?
+                            .antiparticle
+                    }
+                };
+                Ok(PyParticle::new(particle, Arc::clone(&model)))
+            })
+            .collect()
+    }
+
     /// Orient crossing lines from the left side to the right side.
     #[getter]
     fn orientations(&self) -> BTreeMap<usize, i32> {
@@ -482,7 +522,8 @@ impl PyDiagramCut {
             })
             .collect()
     }
-    /// Return momenta in the diagram's currently selected routing.
+    /// Return stored edge momenta in the diagram's selected routing.
+    /// Multiply by :attr:`orientations` for momenta directed from left to right.
     #[getter]
     fn momentum_signatures(&self, py: Python<'_>) -> BTreeMap<usize, PyMomentumSignature> {
         let diagram = self.diagram.borrow(py);
@@ -501,6 +542,20 @@ impl PyDiagramCut {
     }
     /// Construct the oriented cut-propagator distributions, separately from
     /// the remaining numerator, uncut propagators, and global factors.
+    ///
+    /// Examples
+    /// --------
+    /// >>> factors = diagram.cuts[0].propagators(edge_powers={2: 2})
+    /// >>> distributions = [factor.to_expression() for factor in factors]
+    ///
+    /// Parameters
+    /// ----------
+    /// edge_powers : mapping[int, int] or None, optional
+    ///     Positive propagator powers by diagram edge ID; omitted edges have power one.
+    /// prescription : int, optional
+    ///     Sign of the imaginary prescription, either +1 or -1.
+    /// normalization : Expression or None, optional
+    ///     Explicit replacement normalization; defaults to -2*pi*i.
     #[pyo3(signature = (*, edge_powers=None, prescription=1, normalization=None))]
     fn propagators(
         &self,
@@ -542,6 +597,11 @@ impl PyDiagramCut {
 }
 
 /// A topology threshold partition, independent of the requested physical final state.
+///
+/// Examples
+/// --------
+/// >>> threshold = diagram.topology_threshold_candidates[0]
+/// >>> crossing_lines = threshold.edges
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "DiagramThresholdCandidate",
@@ -557,18 +617,23 @@ pub struct PyDiagramThresholdCandidate {
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyDiagramThresholdCandidate {
+    /// Return the left topology selection.
     #[getter]
+    #[gen_stub(override_return_type(type_repr="linnet_py.Subgraph", imports=("linnet_py")))]
     fn left(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.diagram
             .borrow(py)
             .half_edge_selection(py, &self.inner.left)
     }
+    /// Return the right topology selection.
     #[getter]
+    #[gen_stub(override_return_type(type_repr="linnet_py.Subgraph", imports=("linnet_py")))]
     fn right(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.diagram
             .borrow(py)
             .half_edge_selection(py, &self.inner.right)
     }
+    /// Return the oriented crossing half-edge selection.
     #[getter]
     #[gen_stub(override_return_type(type_repr="linnet_py.Subgraph", imports=("linnet_py")))]
     fn subgraph(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
@@ -576,6 +641,7 @@ impl PyDiagramThresholdCandidate {
             .borrow(py)
             .half_edge_selection(py, &self.inner.cut)
     }
+    /// Return threshold-crossing lines in their stored order.
     #[getter]
     fn edges(&self, py: Python<'_>) -> Vec<PyDiagramEdge> {
         let edges = self.diagram.borrow(py).edges();
@@ -850,6 +916,12 @@ impl PyLoopMomentumBasis {
 
     /// Return Symbolica Replacement objects using the same routing as numerical momenta.
     /// Tensor index arguments are retained on every routed vector.
+    ///
+    /// Examples
+    /// --------
+    /// >>> rules = diagram.loop_momentum_basis.momentum_replacements()
+    /// >>> routed = diagram.numerator_expression().replace_multiple(rules)
+    ///
     fn momentum_replacements(&self, py: Python<'_>) -> PyResult<Vec<Py<PyAny>>> {
         let constructor = py.import("symbolica.core")?.getattr("Replacement")?;
         self.inner
@@ -872,6 +944,15 @@ impl PyLoopMomentumBasis {
     }
 
     /// Express edge momenta in this basis while retaining any tensor index arguments.
+    ///
+    /// Examples
+    /// --------
+    /// >>> routed = diagram.loop_momentum_basis.route_expression(diagram.numerator_expression())
+    ///
+    /// Parameters
+    /// ----------
+    /// expression : Expression or TensorExpression
+    ///     Expression with canonical indexed edge momenta to route.
     fn route_expression(&self, expression: ConvertibleToExpression) -> PythonExpression {
         PythonExpression {
             expr: self
@@ -1215,6 +1296,12 @@ impl PyFeynmanDiagram {
     /// Node, edge, and half-edge identities are mapped explicitly. Structural
     /// edits affect this analysis graph only; the next export starts a fresh
     /// graph, and selections from the modified topology cannot be used here.
+    ///
+    /// Examples
+    /// --------
+    /// >>> graph = diagram.to_linnet()
+    /// >>> gluons = graph.filter(edge=lambda edge: edge.data.particle_name == "g")
+    ///
     #[gen_stub(override_return_type(type_repr="linnet_py.Graph", imports=("linnet_py")))]
     fn to_linnet(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.linnet.graph(py, self)
@@ -1231,6 +1318,20 @@ impl PyFeynmanDiagram {
     }
 
     /// Select graph elements using the canonical Linnet IDs.
+    ///
+    /// Examples
+    /// --------
+    /// >>> region = diagram.subgraph(edges=[0, 1])
+    /// >>> numerator = diagram.numerator_expression(subgraph=region)
+    ///
+    /// Parameters
+    /// ----------
+    /// nodes : list[int] or None, optional
+    ///     Canonical Linnet nodes IDs to include.
+    /// edges : list[int] or None, optional
+    ///     Canonical Linnet edges IDs to include.
+    /// half_edges : list[int] or None, optional
+    ///     Canonical Linnet half-edges IDs to include.
     #[pyo3(signature = (*, nodes=None, edges=None, half_edges=None))]
     #[gen_stub(override_return_type(type_repr="linnet_py.Subgraph", imports=("linnet_py")))]
     fn subgraph(
@@ -1258,6 +1359,19 @@ impl PyFeynmanDiagram {
     }
 
     /// Select by predicates on Linnet views; their ``data`` is a physics object.
+    ///
+    /// Examples
+    /// --------
+    /// >>> region = diagram.filter(edge=lambda edge: edge.data.particle_name == "g")
+    ///
+    /// Parameters
+    /// ----------
+    /// node : callable or None, optional
+    ///     Predicate on canonical Linnet node views.
+    /// edge : callable or None, optional
+    ///     Predicate on canonical Linnet edge views.
+    /// half_edge : callable or None, optional
+    ///     Predicate on canonical Linnet half-edge views.
     #[pyo3(signature = (*, node=None, edge=None, half_edge=None))]
     #[gen_stub(override_return_type(type_repr="linnet_py.Subgraph", imports=("linnet_py")))]
     fn filter(
@@ -1279,6 +1393,16 @@ impl PyFeynmanDiagram {
     }
 
     /// Return boundaries around the selected interaction region.
+    ///
+    /// Examples
+    /// --------
+    /// >>> region = diagram.subgraph(nodes=[0])
+    /// >>> boundary = diagram.boundary(region)
+    ///
+    /// Parameters
+    /// ----------
+    /// subgraph : linnet_py.Subgraph
+    ///     Region from this diagram's analysis graph.
     #[gen_stub(override_return_type(type_repr="linnet_py.Subgraph", imports=("linnet_py")))]
     fn boundary(
         &self,
@@ -1293,6 +1417,15 @@ impl PyFeynmanDiagram {
     }
 
     /// Return connected interaction regions as reusable selections.
+    ///
+    /// Examples
+    /// --------
+    /// >>> components = diagram.connected_components()
+    ///
+    /// Parameters
+    /// ----------
+    /// subgraph : linnet_py.Subgraph or None, optional
+    ///     Region from this diagram's analysis graph; None selects the complete graph.
     #[pyo3(signature = (subgraph=None))]
     #[gen_stub(override_return_type(type_repr="list[linnet_py.Subgraph]", imports=("linnet_py")))]
     fn connected_components(
@@ -1309,6 +1442,15 @@ impl PyFeynmanDiagram {
     }
 
     /// Test connectivity of an optional selection.
+    ///
+    /// Examples
+    /// --------
+    /// >>> connected = diagram.is_connected()
+    ///
+    /// Parameters
+    /// ----------
+    /// subgraph : linnet_py.Subgraph or None, optional
+    ///     Region from this diagram's analysis graph; None selects the complete graph.
     #[pyo3(signature = (subgraph=None))]
     fn is_connected(
         &self,
@@ -1323,6 +1465,15 @@ impl PyFeynmanDiagram {
     }
 
     /// Return lines whose removal disconnects the selection.
+    ///
+    /// Examples
+    /// --------
+    /// >>> bridges = diagram.bridges()
+    ///
+    /// Parameters
+    /// ----------
+    /// subgraph : linnet_py.Subgraph or None, optional
+    ///     Region from this diagram's analysis graph; None selects the complete graph.
     #[pyo3(signature = (subgraph=None))]
     #[gen_stub(override_return_type(type_repr="linnet_py.Subgraph", imports=("linnet_py")))]
     fn bridges(
@@ -1339,6 +1490,15 @@ impl PyFeynmanDiagram {
     }
 
     /// Return a cycle basis and its covered half-edges.
+    ///
+    /// Examples
+    /// --------
+    /// >>> cycles, covered = diagram.cycle_basis()
+    ///
+    /// Parameters
+    /// ----------
+    /// subgraph : linnet_py.Subgraph or None, optional
+    ///     Region from this diagram's analysis graph; None selects the complete graph.
     #[pyo3(signature = (subgraph=None))]
     #[gen_stub(override_return_type(type_repr="tuple[list[linnet_py.Cycle], linnet_py.Subgraph]", imports=("linnet_py")))]
     fn cycle_basis(
@@ -1355,6 +1515,15 @@ impl PyFeynmanDiagram {
     }
 
     /// Enumerate spanning forests within the selected topology.
+    ///
+    /// Examples
+    /// --------
+    /// >>> forests = diagram.all_spanning_forests()
+    ///
+    /// Parameters
+    /// ----------
+    /// subgraph : linnet_py.Subgraph or None, optional
+    ///     Region from this diagram's analysis graph; None selects the complete graph.
     #[pyo3(signature = (subgraph=None))]
     #[gen_stub(override_return_type(type_repr="list[linnet_py.Subgraph]", imports=("linnet_py")))]
     fn all_spanning_forests(
@@ -1371,6 +1540,19 @@ impl PyFeynmanDiagram {
     }
 
     /// Enumerate minimal cutsets, independently of physical final-state cuts.
+    ///
+    /// Examples
+    /// --------
+    /// >>> bonds = diagram.all_bonds(min_size=2, max_size=3)
+    ///
+    /// Parameters
+    /// ----------
+    /// subgraph : linnet_py.Subgraph or None, optional
+    ///     Region from this diagram's analysis graph; None selects the complete graph.
+    /// min_size : int or None, optional
+    ///     Minimum number of crossing edges.
+    /// max_size : int or None, optional
+    ///     Maximum number of crossing edges.
     #[pyo3(signature = (*, subgraph=None, min_size=None, max_size=None))]
     #[gen_stub(override_return_type(type_repr="list[linnet_py.Subgraph]", imports=("linnet_py")))]
     fn all_bonds(
@@ -1393,6 +1575,17 @@ impl PyFeynmanDiagram {
     }
 
     /// Enumerate separating partitions between disjoint interaction vertex groups.
+    ///
+    /// Examples
+    /// --------
+    /// >>> partitions = diagram.all_cuts([0], [1])
+    ///
+    /// Parameters
+    /// ----------
+    /// source : list[int]
+    ///     Canonical Linnet vertices required on the first side.
+    /// target : list[int]
+    ///     Canonical Linnet vertices required on the opposite side.
     #[gen_stub(override_return_type(type_repr="list[linnet_py.CutPartition]", imports=("linnet_py")))]
     fn all_cuts(
         &self,
@@ -1408,6 +1601,19 @@ impl PyFeynmanDiagram {
     }
 
     /// Traverse a selected interaction region in depth-first order.
+    ///
+    /// Examples
+    /// --------
+    /// >>> tree = diagram.depth_first_traverse(0)
+    ///
+    /// Parameters
+    /// ----------
+    /// root : int
+    ///     Canonical Linnet vertex ID at which traversal starts.
+    /// subgraph : linnet_py.Subgraph or None, optional
+    ///     Region from this diagram's analysis graph; None selects the complete graph.
+    /// include : int or None, optional
+    ///     Canonical Linnet half-edge ID to prioritize at the root.
     #[pyo3(signature = (root, *, subgraph=None, include=None))]
     #[gen_stub(override_return_type(type_repr="linnet_py.TraversalTree", imports=("linnet_py")))]
     fn depth_first_traverse(
@@ -1429,6 +1635,19 @@ impl PyFeynmanDiagram {
     }
 
     /// Traverse a selected interaction region in breadth-first order.
+    ///
+    /// Examples
+    /// --------
+    /// >>> tree = diagram.breadth_first_traverse(0)
+    ///
+    /// Parameters
+    /// ----------
+    /// root : int
+    ///     Canonical Linnet vertex ID at which traversal starts.
+    /// subgraph : linnet_py.Subgraph or None, optional
+    ///     Region from this diagram's analysis graph; None selects the complete graph.
+    /// include : int or None, optional
+    ///     Canonical Linnet half-edge ID to prioritize at the root.
     #[pyo3(signature = (root, *, subgraph=None, include=None))]
     #[gen_stub(override_return_type(type_repr="linnet_py.TraversalTree", imports=("linnet_py")))]
     fn breadth_first_traverse(
@@ -1534,6 +1753,19 @@ impl PyFeynmanDiagram {
         self.inner.overall_factor().to_plain_string()
     }
 
+    /// Return the diagram-wide multiplicative factor as a Symbolica expression.
+    ///
+    /// Examples
+    /// --------
+    /// >>> factor = diagram.overall_factor_expression()
+    /// >>> weighted_numerator = factor * diagram.numerator_expression()
+    /// >>> weighted_numerator
+    fn overall_factor_expression(&self) -> PythonExpression {
+        PythonExpression {
+            expr: self.inner.overall_factor().clone(),
+        }
+    }
+
     /// Return the diagram numerator annotation as source text.
     ///
     #[getter]
@@ -1556,6 +1788,14 @@ impl PyFeynmanDiagram {
     /// >>> denominator = diagram.denominator_expression()
     /// >>> integrand = diagram.numerator_expression() / denominator
     ///
+    /// Parameters
+    /// ----------
+    /// subgraph : linnet_py.Subgraph or None, optional
+    ///     Region from this diagram; None selects internal propagators only.
+    /// edge_powers : mapping[int, int] or None, optional
+    ///     Signed propagator powers by diagram edge ID; omitted edges have power one.
+    /// dimension : Expression or int or None, optional
+    ///     Lorentz dimension; defaults to the shared symbolic dimension.
     #[pyo3(signature = (*, subgraph=None, edge_powers=None, dimension=None))]
     fn denominator_expression(
         &self,
@@ -1597,6 +1837,12 @@ impl PyFeynmanDiagram {
     /// >>> integrand_numerator = diagram.overall_factor_expression() * numerator
     /// >>> integrand_numerator  # native Symbolica algebra and rich display
     ///
+    /// Parameters
+    /// ----------
+    /// subgraph : linnet_py.Subgraph or None, optional
+    ///     Region from this diagram's analysis graph; None selects the complete graph.
+    /// without : linnet_py.Subgraph or None, optional
+    ///     Ignored region, using GammaLoop boundary and local-factor selection semantics.
     #[pyo3(signature = (*, subgraph=None, without=None))]
     fn numerator_expression(
         &self,
@@ -1651,6 +1897,8 @@ impl PyFeynmanDiagram {
     /// Four-dimensional Lorentz slots are promoted to `D` before reduction.
     /// External momenta remain projector vectors, and the scalar numerator
     /// prefactor remains separate. Requires at least one internal edge.
+    /// A supplied expression replaces the numerator and projector, for example
+    /// after a UV expansion; it must use the diagram's edge momentum names.
     ///
     /// Examples
     /// --------
@@ -1661,18 +1909,33 @@ impl PyFeynmanDiagram {
     /// ----------
     /// dimension : Expression or int
     ///     Lorentz dimension used for the reduction and four-dimensional input slots.
-    #[pyo3(signature = (dimension, *, subgraph=None, projector=None))]
+    /// expression : Expression or TensorExpression, optional
+    ///     Complete prepared input to reduce instead of the numerator and projector.
+    ///     Cannot be combined with an explicit projector.
+    /// subgraph : linnet_py.Subgraph or None, optional
+    ///     Region from this diagram's analysis graph; None selects the complete graph.
+    /// projector : Expression or None, optional
+    ///     Explicit external tensor projector, required for partial regions unless expression is supplied.
+    #[pyo3(signature = (dimension, *, expression=None, subgraph=None, projector=None))]
     fn tensor_reduce(
         &self,
         py: Python<'_>,
         dimension: ConvertibleToExpression,
+        expression: Option<ConvertibleToExpression>,
         #[gen_stub(override_type(type_repr="linnet_py.Subgraph | None", imports=("linnet_py")))]
         subgraph: Option<&Bound<'_, PyAny>>,
         projector: Option<ConvertibleToExpression>,
     ) -> PyResult<Py<TensorExpression>> {
+        if expression.is_some() && projector.is_some() {
+            return Err(error::DiagramError::new_err(
+                "tensor reduction accepts either an expression or a projector, not both",
+            ));
+        }
         let selected = self.selection(py, subgraph)?;
+        let expression = expression.map(|expression| expression.to_expression().expr);
         let projector = match projector {
             Some(projector) => projector.to_expression().expr,
+            None if expression.is_some() => Atom::one(),
             None if selected == self.inner.underlying().full_filter() => {
                 self.inner.projector().clone()
             }
@@ -1684,7 +1947,12 @@ impl PyFeynmanDiagram {
         };
         let reduction = self
             .inner
-            .tensor_reduce_of(&selected, dimension.to_expression().expr, &projector)
+            .tensor_reduce_of(
+                &selected,
+                dimension.to_expression().expr,
+                &projector,
+                expression.as_ref(),
+            )
             .map_err(error::tensor)?;
         TensorExpression::from_atom_interface(py, reduction.into_expression(), None)
     }
@@ -1783,6 +2051,15 @@ impl PyFeynmanDiagram {
     }
 
     /// Return a diagram using the specified loop-edge coordinates, in the supplied order.
+    ///
+    /// Examples
+    /// --------
+    /// >>> rerouted = diagram.with_loop_momentum_edges(diagram.loop_momentum_basis.loop_edges)
+    ///
+    /// Parameters
+    /// ----------
+    /// edges : list[int]
+    ///     Diagram edge IDs specifying the requested routing coordinates.
     fn with_loop_momentum_edges(&self, edges: Vec<usize>) -> PyResult<Self> {
         self.inner
             .clone()
@@ -1797,6 +2074,15 @@ impl PyFeynmanDiagram {
     }
 
     /// Return a diagram whose momentum routing uses the specified spanning forest.
+    ///
+    /// Examples
+    /// --------
+    /// >>> rerouted = diagram.with_loop_momentum_tree_edges(diagram.loop_momentum_basis.tree_edges)
+    ///
+    /// Parameters
+    /// ----------
+    /// edges : list[int]
+    ///     Diagram edge IDs specifying the requested routing coordinates.
     fn with_loop_momentum_tree_edges(&self, edges: Vec<usize>) -> PyResult<Self> {
         self.inner
             .clone()
@@ -1811,6 +2097,16 @@ impl PyFeynmanDiagram {
     }
 
     /// Construct the canonical routing of the selected interaction region.
+    ///
+    /// Examples
+    /// --------
+    /// >>> basis = diagram.momentum_basis()
+    /// >>> routed = basis.route_expression(diagram.numerator_expression())
+    ///
+    /// Parameters
+    /// ----------
+    /// subgraph : linnet_py.Subgraph or None, optional
+    ///     Region from this diagram's analysis graph; None selects the complete graph.
     #[pyo3(signature = (*, subgraph=None))]
     fn momentum_basis(
         &self,
@@ -1825,6 +2121,17 @@ impl PyFeynmanDiagram {
     }
 
     /// Reuse a parent basis's loop coordinates wherever the selected topology permits it.
+    ///
+    /// Examples
+    /// --------
+    /// >>> basis = diagram.compatible_momentum_basis(diagram.loop_momentum_basis)
+    ///
+    /// Parameters
+    /// ----------
+    /// parent : LoopMomentumBasis
+    ///     Parent coordinates belonging to this same diagram instance.
+    /// subgraph : linnet_py.Subgraph or None, optional
+    ///     Region from this diagram's analysis graph; None selects the complete graph.
     #[pyo3(signature = (parent, *, subgraph=None))]
     fn compatible_momentum_basis(
         &self,
@@ -1845,6 +2152,18 @@ impl PyFeynmanDiagram {
     }
 
     /// Route the selected region after contracting complete internal edges.
+    ///
+    /// Examples
+    /// --------
+    /// >>> contracted = diagram.filter(edge=lambda edge: edge.data.is_dummy)
+    /// >>> basis = diagram.contracted_momentum_basis(contracted)
+    ///
+    /// Parameters
+    /// ----------
+    /// contracted : linnet_py.Subgraph
+    ///     Complete internal edges to contract, selected from this diagram.
+    /// subgraph : linnet_py.Subgraph or None, optional
+    ///     Region from this diagram's analysis graph; None selects the complete graph.
     #[pyo3(signature = (contracted, *, subgraph=None))]
     fn contracted_momentum_basis(
         &self,
@@ -1870,6 +2189,16 @@ impl PyFeynmanDiagram {
     }
 
     /// Count independent loops within a selected region.
+    ///
+    /// Examples
+    /// --------
+    /// >>> region = diagram.filter(edge=lambda edge: not edge.data.is_external)
+    /// >>> loops = diagram.loop_count_of(subgraph=region)
+    ///
+    /// Parameters
+    /// ----------
+    /// subgraph : linnet_py.Subgraph or None, optional
+    ///     Region from this diagram's analysis graph; None selects the complete graph.
     #[pyo3(signature = (*, subgraph=None))]
     fn loop_count_of(
         &self,
@@ -1922,6 +2251,8 @@ impl PyFeynmanDiagram {
     /// ----------
     /// dimension : int, optional
     ///     Spacetime dimension for each loop integration measure; defaults to four.
+    /// subgraph : linnet_py.Subgraph or None, optional
+    ///     Region from this diagram's analysis graph; None selects the complete graph.
     #[pyo3(signature = (*, dimension=4, subgraph=None))]
     fn superficial_degree_of_divergence(
         &self,
@@ -2038,6 +2369,8 @@ impl PyFeynmanDiagram {
     ///     Edge IDs to contract before constructing denominator surfaces.
     /// initial_state_edges : iterable[int], optional
     ///     Edge IDs to classify as incoming external lines.
+    /// subgraph : linnet_py.Subgraph or None, optional
+    ///     Region from this diagram's analysis graph; None selects the complete graph.
     #[pyo3(signature = (*, max_orientations=None, fixed_orientations=None, contracted_edges=None, initial_state_edges=None, subgraph=None))]
     fn build_cff(
         &self,
@@ -2186,6 +2519,8 @@ impl PyFeynmanDiagram {
     /// limit : int or None
     ///     Maximum number of bases to return. Pass ``None`` to enumerate every
     ///     valid basis.
+    /// subgraph : linnet_py.Subgraph or None, optional
+    ///     Region from this diagram's analysis graph; None selects the complete graph.
     #[pyo3(signature = (limit=None, *, subgraph=None))]
     fn loop_momentum_bases(
         &self,
@@ -2236,6 +2571,31 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
 #[cfg(test)]
 mod tests {
     use super::parse_symbolic_annotation;
+
+    #[test]
+    fn canonical_denominator_has_a_scalar_interface() {
+        use symbolica::atom::{Atom, FunctionBuilder};
+
+        let denominator = feynkit_graph::symbols::denominator();
+        assert!(denominator.is_scalar());
+        let momentum = FunctionBuilder::new(feynkit_graph::momentum_symbol())
+            .add_arg(0)
+            .finish();
+        let atom = FunctionBuilder::new(denominator)
+            .add_arg(0)
+            .add_arg(momentum)
+            .add_arg(0)
+            .add_arg(Atom::one())
+            .finish();
+        let symbolica::atom::AtomView::Fun(function) = atom.as_view() else {
+            unreachable!()
+        };
+        assert!(function.get_symbol().is_scalar());
+        pyo3::Python::initialize();
+        pyo3::Python::attach(|py| {
+            spynso3::expression::TensorExpression::from_atom_interface(py, atom, None).unwrap();
+        });
+    }
 
     #[test]
     fn symbolic_annotations_are_parsed_fallibly() {

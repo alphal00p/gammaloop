@@ -800,6 +800,9 @@ fn validate_placeholder_scope(value: AtomView<'_>, inside_factor: bool) -> Resul
         }
         AtomView::Fun(function) => {
             let symbol = function.get_symbol();
+            if symbol.is_scalar() {
+                return Ok(());
+            }
             if symbol == SPENSO_TAG.chain {
                 for (position, argument) in function.iter().enumerate() {
                     validate_placeholder_scope(argument, position >= 2)?;
@@ -853,9 +856,9 @@ fn infer_interface(atom: &Atom) -> PyResult<PartialStructure> {
     validate_placeholder_scope(atom.as_view(), false).map_err(PyValueError::new_err)?;
 
     let mut syntax_error = None;
-    let _ = atom.replace_map(|value, _, _| {
+    atom.visitor(&mut |value| {
         if syntax_error.is_some() {
-            return;
+            return false;
         }
 
         match value {
@@ -867,38 +870,43 @@ fn infer_interface(atom: &Atom) -> PyResult<PartialStructure> {
             }
             AtomView::Fun(function) => {
                 let symbol = function.get_symbol();
+                // Explicit scalar functions own their metadata, which may itself
+                // contain tensor syntax without exposing any tensor ports.
+                if symbol.is_scalar() {
+                    return false;
+                }
                 let arguments = function.iter().collect::<Vec<_>>();
                 if symbol == SPENSO_TAG.bracket && arguments.is_empty() {
                     syntax_error = Some("ordered tensor products require at least one operand".into());
-                    return;
+                    return false;
                 }
                 if symbol == SPENSO_TAG.dot && arguments.len() != 2 {
                     syntax_error = Some("dot requires exactly two operands".into());
-                    return;
+                    return false;
                 }
                 if symbol == SPENSO_TAG.chain && arguments.len() < 2 {
                     syntax_error = Some("chain requires explicit start and end ports".into());
-                    return;
+                    return false;
                 }
                 if symbol == SPENSO_TAG.trace {
                     let Some(representation) = arguments.first() else {
                         syntax_error = Some("trace requires a representation".into());
-                        return;
+                        return false;
                     };
                     if Representation::<LibraryRep>::try_from(*representation).is_err() {
                         syntax_error =
                             Some("trace metadata is not a Spenso representation".into());
-                        return;
+                        return false;
                     }
                 }
                 if symbol.has_tag(&SPENSO_TAG.broadcast) && arguments.len() != 1 {
                     syntax_error = Some(format!(
                         "broadcast function `{symbol}` requires exactly one argument"
                     ));
-                    return;
+                    return false;
                 }
                 if !symbol.has_tag(&SPENSO_TAG.tensor) {
-                    return;
+                    return true;
                 }
 
                 let compact_metric = symbol == ETS.metric
@@ -910,7 +918,7 @@ fn infer_interface(atom: &Atom) -> PyResult<PartialStructure> {
                     });
                 if let Err(error) = builtin_tensor_structure(symbol, &arguments) {
                     syntax_error = Some(error.to_string());
-                    return;
+                    return false;
                 }
 
                 let ports = arguments
@@ -944,6 +952,7 @@ fn infer_interface(atom: &Atom) -> PyResult<PartialStructure> {
             }
             _ => {}
         }
+        true
     });
     if let Some(error) = syntax_error {
         return Err(PyValueError::new_err(error));
@@ -1010,6 +1019,9 @@ fn lower_tensor_powers(value: AtomView<'_>) -> PyResult<Atom> {
             Ok(result.atom)
         }
         AtomView::Fun(function) => {
+            if function.get_symbol().is_scalar() {
+                return Ok(value.to_owned());
+            }
             let mut result = FunctionBuilder::new(function.get_symbol());
             for argument in function.iter() {
                 result = result.add_arg(lower_tensor_powers(argument)?);
@@ -4389,6 +4401,29 @@ mod tests {
             PartialIndex::Open(_)
         ));
         assert!(infer_interface(&invalid).is_err());
+    }
+
+    #[test]
+    fn explicit_scalar_functions_keep_tensor_metadata_opaque() {
+        let scalar = symbol!("opaque_tensor_metadata"; Scalar);
+        let vector = spenso::vector_symbol!("opaque_metadata_vector");
+        let representation = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(4));
+        let metadata = FunctionBuilder::new(vector).add_arg(Atom::num(3)).finish();
+        let coefficient = FunctionBuilder::new(scalar)
+            .add_arg(&metadata)
+            .add_arg(representation.to_symbolic([]))
+            .finish();
+        let tensor = FunctionBuilder::new(vector)
+            .add_arg(Atom::num(3))
+            .add_arg(representation.to_symbolic([]))
+            .finish();
+
+        assert!(!has_structured_syntax(coefficient.as_view()));
+        assert!(infer_interface(&metadata).is_err());
+        let product = tensor * coefficient.pow(Atom::num(-2));
+        let inferred = reinfer_structured(product.clone()).unwrap();
+        assert_eq!(inferred.interface.canonical().order(), 1);
+        assert_eq!(inferred.atom, product);
     }
 
     #[test]

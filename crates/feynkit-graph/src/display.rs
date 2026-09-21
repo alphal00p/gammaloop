@@ -132,9 +132,15 @@ impl FeynmanDiagram {
                 ", external-state: {:?}, external-index: {}, external-name: {}, external-connection: {}",
                 external.state.as_str(), external.index, typst_string(&external.name), external.connection,
             )).unwrap_or_default();
+            let cut_metadata = edge
+                .external
+                .as_ref()
+                .filter(|_| endpoints.source.is_some() && endpoints.target.is_some())
+                .map(|external| format!(", is_cut: {}", external.connection))
+                .unwrap_or_default();
             writeln!(
                 output,
-                "    edge({endpoint_spec}, id: {}, orientation: {orientation:?}, particle: {}, pdg: {}, directed: {}, numerator: {}, feynkit-source: {}, feynkit-target: {}{external_metadata})",
+                "    edge({endpoint_spec}, id: {}, orientation: {orientation:?}, particle: {}, pdg: {}, directed: {}, numerator: {}, feynkit-source: {}, feynkit-target: {}{external_metadata}{cut_metadata})",
                 id.0,
                 typst_string(&particle.name),
                 particle.pdg_code,
@@ -218,9 +224,19 @@ mod tests {
         let particle = model.particle_id("phi").unwrap();
         let mut builder = FeynmanDiagram::builder(model, "bubble");
         let mut incoming = DiagramEdge::new(particle, false);
-        incoming.external = Some(ExternalLeg { name: "p1".into(), index: 0, state: ExternalState::Incoming, connection: 0 });
+        incoming.external = Some(ExternalLeg {
+            name: "p1".into(),
+            index: 0,
+            state: ExternalState::Incoming,
+            connection: 0,
+        });
         let mut outgoing = DiagramEdge::new(particle, false);
-        outgoing.external = Some(ExternalLeg { name: "p2".into(), index: 1, state: ExternalState::Outgoing, connection: 1 });
+        outgoing.external = Some(ExternalLeg {
+            name: "p2".into(),
+            index: 1,
+            state: ExternalState::Outgoing,
+            connection: 1,
+        });
         let left = builder.add_vertex(DiagramVertex::interaction("left", rule));
         let right = builder.add_vertex(DiagramVertex::interaction("right", rule));
         let scalar = || DiagramEdge::new(particle, false);
@@ -261,13 +277,23 @@ mod tests {
         let particle = model.particle_id("phi").unwrap();
         let mut builder = FeynmanDiagram::builder(model, "one-to-two");
         let interaction = builder.add_vertex(DiagramVertex::interaction("v", rule));
-        for (name, index, state) in [("in",0,ExternalState::Incoming),("out-high",2,ExternalState::Outgoing),("out-low",1,ExternalState::Outgoing)] {
+        for (name, index, state) in [
+            ("in", 0, ExternalState::Incoming),
+            ("out-high", 2, ExternalState::Outgoing),
+            ("out-low", 1, ExternalState::Outgoing),
+        ] {
             let mut edge = DiagramEdge::new(particle, false);
-            edge.external = Some(ExternalLeg { name: name.into(), index, state, connection: index });
+            edge.external = Some(ExternalLeg {
+                name: name.into(),
+                index,
+                state,
+                connection: index,
+            });
             match state {
                 ExternalState::Incoming => builder.add_edge(None, interaction, edge),
                 ExternalState::Outgoing => builder.add_edge(interaction, None, edge),
-            }.unwrap();
+            }
+            .unwrap();
         }
         let source = builder.build().unwrap().to_linnest();
 
@@ -286,9 +312,15 @@ mod tests {
         let mut builder = FeynmanDiagram::builder(model, "quote \" and \\ slash");
         let interaction = builder.add_vertex(DiagramVertex::interaction("v", rule));
         let mut incoming = DiagramEdge::new(particle, true);
-        incoming.external = Some(ExternalLeg { name: "p\n1".into(), index: 0, state: ExternalState::Incoming, connection: 0 });
+        incoming.external = Some(ExternalLeg {
+            name: "p\n1".into(),
+            index: 0,
+            state: ExternalState::Incoming,
+            connection: 0,
+        });
         builder.add_edge(None, interaction, incoming).unwrap();
-        builder.edge_orientations = Some(vec![linnet::half_edge::involution::Orientation::Reversed]);
+        builder.edge_orientations =
+            Some(vec![linnet::half_edge::involution::Orientation::Reversed]);
         let source = builder.build().unwrap().to_linnest();
 
         assert!(source.contains("name: \"quote \\\" and \\\\ slash\""));

@@ -1428,6 +1428,21 @@ impl Generator {
             }
             let name = format!("{}{index:0width$}", options.graph_prefix);
             let identical = comparison == representative;
+            let internal_reversals = comparison
+                .graph
+                .edges()
+                .iter()
+                .enumerate()
+                .filter(|(_, edge)| {
+                    [edge.vertices.0, edge.vertices.1].iter().all(|vertex| {
+                        matches!(
+                            comparison.graph.nodes()[*vertex].data,
+                            ColoredNode::Interaction(_)
+                        )
+                    })
+                })
+                .map(|(edge, _)| reversed_edges.contains(&EdgeId(edge)))
+                .collect::<Vec<_>>();
             let comparison = self.to_diagram(
                 name.clone(),
                 process.generation_type(),
@@ -1448,6 +1463,15 @@ impl Generator {
                     options,
                 )?
             };
+            // Finalization orders external carriers before the internal edges.
+            // Transport the comparison-to-representative reversals into that
+            // finalized edge frame; process flow fixes all external carriers.
+            let reversed_edges = comparison
+                .edges()
+                .filter(|(_, _, edge)| edge.external.is_none())
+                .zip(internal_reversals)
+                .filter_map(|((edge, _, _), reversed)| reversed.then_some(edge))
+                .collect();
             diagram_pairs.push(DiagramPair {
                 comparison,
                 representative,
@@ -4758,6 +4782,7 @@ mod tests {
 
             let fermion_edges = diagram
                 .edges()
+                .filter(|(_, _, edge)| edge.external.is_none())
                 .filter_map(|(edge_id, endpoints, edge)| {
                     diagram
                         .model()
@@ -4776,7 +4801,34 @@ mod tests {
                 .iter()
                 .map(|(edge, _, _, _)| *edge)
                 .collect::<BTreeSet<_>>();
-            let mut saw_chain = false;
+            // Sewn initial-state carriers use the process momentum direction,
+            // which can be opposite the normalized internal particle flow.
+            for (node, _, _) in diagram.underlying().iter_nodes() {
+                let signed_pdgs = diagram
+                    .underlying()
+                    .iter_crown(node)
+                    .map(|hedge| {
+                        let edge = &diagram.underlying()[diagram.underlying()[&hedge]];
+                        let particle = diagram.model().particle_by_id(edge.particle).unwrap();
+                        let pdg = if edge.external.is_some() {
+                            -particle.pdg_code
+                        } else {
+                            particle.pdg_code
+                        };
+                        if !particle.is_fermion() {
+                            0
+                        } else if diagram.underlying().flow(hedge) == Flow::Source {
+                            pdg
+                        } else {
+                            -pdg
+                        }
+                    })
+                    .sum::<i64>();
+                assert_eq!(
+                    signed_pdgs, 0,
+                    "fermion flow must be conserved at each interaction"
+                );
+            }
             while let Some(start) = remaining.iter().next().copied() {
                 let (_, source, target, _) = fermion_edges
                     .iter()
@@ -4784,27 +4836,23 @@ mod tests {
                     .copied()
                     .unwrap();
                 let mut stack = vec![source, target];
-                let mut component_edges = 0;
                 let mut component_particles = BTreeSet::new();
                 while let Some(vertex) = stack.pop() {
                     for (edge, source, target, particle) in &fermion_edges {
                         if remaining.contains(edge) && (*source == vertex || *target == vertex) {
                             remaining.remove(edge);
-                            component_edges += 1;
                             component_particles.insert(*particle);
                             stack.push(*source);
                             stack.push(*target);
                         }
                     }
                 }
-                saw_chain |= component_edges > 1;
                 assert_eq!(
                     component_particles.len(),
                     1,
                     "every finalized fermion chain must use one particle species"
                 );
             }
-            assert!(saw_chain);
         }
     }
 
@@ -4920,7 +4968,7 @@ mod tests {
         let stable_id_default = builder.build().unwrap();
         assert_eq!(
             stable_id_default.loop_momentum_basis().loop_edges,
-            vec![EdgeId(2), EdgeId(4)],
+            vec![EdgeId(0), EdgeId(1)],
         );
 
         let canonical = generator
@@ -4928,7 +4976,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             canonical.loop_momentum_basis().tree_edges,
-            vec![EdgeId(3), EdgeId(2), EdgeId(0)],
+            vec![EdgeId(0), EdgeId(2), EdgeId(3)],
         );
         assert_eq!(
             canonical.loop_momentum_basis().loop_edges,
@@ -5709,7 +5757,11 @@ mod tests {
                 &GenerationOptions::default(),
             )
             .unwrap();
-        let actual = &diagram.edges().next().unwrap().2.numerator;
+        let (actual_edge, _, actual_data) = diagram
+            .edges()
+            .find(|(_, _, edge)| edge.external.is_none())
+            .unwrap();
+        let actual = &actual_data.numerator;
         let (antiparticle_propagator, antiparticle_fallback) = generator
             .propagator_numerator(model.particle_by_id(particle(&model, -1)).unwrap())
             .unwrap();
@@ -5733,9 +5785,60 @@ mod tests {
             .instantiate(propagator, NumeratorSector::Spin)
             .unwrap()
         };
-        let exact = instantiate(&antiparticle_propagator, [Flow::Source, Flow::Sink]);
-        let blanket_reversal = instantiate(&antiparticle_propagator, [Flow::Sink, Flow::Source]);
-        let particle_fallback = instantiate(&particle_propagator, [Flow::Source, Flow::Sink]);
+        let native = |expression: Atom| {
+            let source = diagram
+                .half_edge_id(DiagramHalfEdge {
+                    edge: actual_edge,
+                    endpoint: DiagramEndpoint::Source,
+                })
+                .unwrap();
+            let sink = diagram
+                .half_edge_id(DiagramHalfEdge {
+                    edge: actual_edge,
+                    endpoint: DiagramEndpoint::Target,
+                })
+                .unwrap();
+            expression.replace_map_bottom_up(|term, _, output| {
+                let AtomView::Fun(function) = term else {
+                    return;
+                };
+                let head = function.get_symbol();
+                let arguments = function.iter().collect::<Vec<_>>();
+                let owner = usize::try_from(arguments[0]).ok();
+                let index = if head == feynkit_graph::symbols::hedge_index() {
+                    match owner {
+                        Some(0) => Some(source.0),
+                        Some(1) => Some(sink.0),
+                        _ => None,
+                    }
+                } else if (head == feynkit_graph::symbols::edge_index()
+                    || head == momentum_symbol())
+                    && owner == Some(0)
+                {
+                    Some(actual_edge.0)
+                } else {
+                    None
+                };
+                if let Some(index) = index {
+                    **output = FunctionBuilder::new(head)
+                        .add_arg(index)
+                        .add_args(arguments[1..].iter().copied())
+                        .finish();
+                }
+            })
+        };
+        let exact = native(instantiate(
+            &antiparticle_propagator,
+            [Flow::Source, Flow::Sink],
+        ));
+        let blanket_reversal = native(instantiate(
+            &antiparticle_propagator,
+            [Flow::Sink, Flow::Source],
+        ));
+        let particle_fallback = native(instantiate(
+            &particle_propagator,
+            [Flow::Source, Flow::Sink],
+        ));
 
         assert_eq!(actual, &exact);
         assert_ne!(actual, &blanket_reversal);
@@ -6634,7 +6737,7 @@ mod tests {
             .unwrap();
         let internal_numerator = diagram
             .edges()
-            .find(|(id, _, _)| id.0 == 0)
+            .find(|(_, _, edge)| edge.external.is_none())
             .unwrap()
             .2
             .numerator
@@ -6652,7 +6755,7 @@ mod tests {
 
         let external_numerator = &diagram
             .edges()
-            .find(|(id, _, _)| id.0 == 1)
+            .find(|(_, _, edge)| edge.external.is_some())
             .unwrap()
             .2
             .numerator;

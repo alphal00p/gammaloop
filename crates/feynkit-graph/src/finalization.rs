@@ -403,7 +403,7 @@ impl FeynmanDiagramBuilder {
                 return Ok(atom.clone());
             }
             let mut failure = None;
-            let translated = atom.replace_map(|term, _, out| {
+            let translated = atom.replace_map_bottom_up(|term, _, out| {
                 let AtomView::Fun(function) = term else {
                     return;
                 };
@@ -460,9 +460,15 @@ impl FeynmanDiagramBuilder {
                     5 => (symbol, mapped),
                     _ => (momentum_symbol(), mapped),
                 };
+                let local_arguments = if kind <= 3 && arguments.len() == 2 && arguments[1].is_zero()
+                {
+                    &arguments[2..]
+                } else {
+                    &arguments[1..]
+                };
                 let value = FunctionBuilder::new(head)
                     .add_arg(index)
-                    .add_args(arguments[1..].iter().copied())
+                    .add_args(local_arguments.iter().copied())
                     .finish();
                 **out = if kind == 4 && signs[&EdgeId(owner)] < 0 {
                     -value
@@ -515,7 +521,28 @@ impl FeynmanDiagramBuilder {
             topology_threshold_candidates: self.topology_threshold_candidates.clone(),
         };
         if generated {
-            diagram.finalize_cut_indices(&half_edges)?;
+            let mut incoming = BTreeSet::new();
+            let mut outgoing = BTreeSet::new();
+            for (edge, (endpoints, _)) in self.edges.iter().enumerate() {
+                for (vertex, endpoint) in [
+                    (endpoints.source, DiagramEndpoint::Source),
+                    (endpoints.target, DiagramEndpoint::Target),
+                ] {
+                    if let Some(external) =
+                        vertex.and_then(|vertex| self.generation_externals.get(&vertex))
+                    {
+                        let half_edge = DiagramHalfEdge {
+                            edge: EdgeId(edge),
+                            endpoint,
+                        };
+                        match external.state {
+                            ExternalState::Incoming => incoming.insert(half_edge),
+                            ExternalState::Outgoing => outgoing.insert(half_edge),
+                        };
+                    }
+                }
+            }
+            diagram.finalize_cut_indices(&half_edges, &incoming, &outgoing)?;
         }
         diagram = if let Some(basis) = self.loop_momentum_basis {
             if generated {
@@ -598,17 +625,39 @@ impl FeynmanDiagram {
     fn finalize_cut_indices(
         &mut self,
         mapping: &BTreeMap<DiagramHalfEdge, Hedge>,
+        incoming: &BTreeSet<DiagramHalfEdge>,
+        outgoing: &BTreeSet<DiagramHalfEdge>,
     ) -> Result<(), DiagramError> {
-        let native = |half_edge: &DiagramHalfEdge| -> DiagramHalfEdge {
-            let hedge = mapping[half_edge];
-            DiagramHalfEdge {
+        // Decide the process side before sewing: the two provisional external
+        // edges become aliases, so their original membership is not recoverable
+        // from the sewn half-edge sets. GammaLoop retains the outgoing sink on
+        // the physical left side and the positive external momentum frame.
+        let requires_swap = |left: &[DiagramHalfEdge],
+                             right: &[DiagramHalfEdge]|
+         -> Result<bool, DiagramError> {
+            let left = left.iter().copied().collect::<BTreeSet<_>>();
+            let right = right.iter().copied().collect::<BTreeSet<_>>();
+            match (incoming.is_subset(&left) && outgoing.is_subset(&right), incoming.is_subset(&right) && outgoing.is_subset(&left)) {
+                (true, false) => Ok(true),
+                (false, true) => Ok(false),
+                _ => Err(DiagramError::Invariant { operation: "normalizing cut sides", message: "the provisional partition does not have an unambiguous incoming/outgoing side".into() }),
+            }
+        };
+        let native = |half_edge: &DiagramHalfEdge| -> Result<DiagramHalfEdge, DiagramError> {
+            let hedge = *mapping
+                .get(half_edge)
+                .ok_or_else(|| DiagramError::Invariant {
+                    operation: "finalizing cut endpoints",
+                    message: format!("unknown provisional endpoint {half_edge:?}"),
+                })?;
+            Ok(DiagramHalfEdge {
                 edge: EdgeId(self.graph[&hedge].0),
                 endpoint: if self.graph.flow(hedge) == Flow::Source {
                     DiagramEndpoint::Source
                 } else {
                     DiagramEndpoint::Target
                 },
-            }
+            })
         };
         let initial_left = self
             .graph
@@ -629,19 +678,19 @@ impl FeynmanDiagram {
             .collect::<BTreeSet<_>>();
         for cut in &mut self.cuts {
             // GammaLoop's physical left side contains the sewn outgoing endpoint.
+            let reversed = requires_swap(&cut.left.half_edges, &cut.right.half_edges)?;
             let mut left = cut
                 .left
                 .half_edges
                 .iter()
                 .map(native)
-                .collect::<BTreeSet<_>>();
+                .collect::<Result<BTreeSet<_>, _>>()?;
             let mut right = cut
                 .right
                 .half_edges
                 .iter()
                 .map(native)
-                .collect::<BTreeSet<_>>();
-            let reversed = !initial_left.is_subset(&left) && initial_left.is_subset(&right);
+                .collect::<Result<BTreeSet<_>, _>>()?;
             if reversed {
                 std::mem::swap(&mut left, &mut right);
                 std::mem::swap(
@@ -654,6 +703,8 @@ impl FeynmanDiagram {
                 .cut
                 .iter()
                 .map(native)
+                .collect::<Result<Vec<_>, _>>()?
+                .into_iter()
                 .map(|mut h| {
                     if reversed {
                         h.endpoint = match h.endpoint {
@@ -670,9 +721,17 @@ impl FeynmanDiagram {
             cut.cut.dedup();
         }
         for candidate in &mut self.topology_threshold_candidates {
-            let mut left = candidate.left.iter().map(native).collect::<BTreeSet<_>>();
-            let mut right = candidate.right.iter().map(native).collect::<BTreeSet<_>>();
-            let reversed = !initial_left.is_subset(&left) && initial_left.is_subset(&right);
+            let reversed = requires_swap(&candidate.left, &candidate.right)?;
+            let mut left = candidate
+                .left
+                .iter()
+                .map(native)
+                .collect::<Result<BTreeSet<_>, _>>()?;
+            let mut right = candidate
+                .right
+                .iter()
+                .map(native)
+                .collect::<Result<BTreeSet<_>, _>>()?;
             if reversed {
                 std::mem::swap(&mut left, &mut right);
             }
@@ -680,6 +739,8 @@ impl FeynmanDiagram {
                 .cut
                 .iter()
                 .map(native)
+                .collect::<Result<Vec<_>, _>>()?
+                .into_iter()
                 .map(|mut h| {
                     if reversed {
                         h.endpoint = match h.endpoint {

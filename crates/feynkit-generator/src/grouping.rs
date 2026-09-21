@@ -151,7 +151,7 @@ enum GroupingIndexError {
     NotNatural(String),
     #[error("unsupported FeynKit index {0}")]
     Unsupported(String),
-    #[error("{name} expects two non-negative integer arguments, got {actual}")]
+    #[error("{name} has an unsupported number of non-negative integer arguments: {actual}")]
     InvalidArity { name: &'static str, actual: usize },
 }
 
@@ -173,7 +173,7 @@ fn owned_index(
     name: &'static str,
     constructor: impl FnOnce(usize, usize) -> GroupingIndex,
 ) -> Result<GroupingIndex, GroupingIndexError> {
-    if function.get_nargs() != 2 {
+    if !(1..=2).contains(&function.get_nargs()) {
         return Err(GroupingIndexError::InvalidArity {
             name,
             actual: function.get_nargs(),
@@ -181,7 +181,11 @@ fn owned_index(
     }
     let mut arguments = function.iter();
     let owner = natural_index(arguments.next().expect("arity checked"))?;
-    let local = natural_index(arguments.next().expect("arity checked"))?;
+    let local = arguments
+        .next()
+        .map(natural_index)
+        .transpose()?
+        .unwrap_or(0);
     Ok(constructor(owner, local))
 }
 
@@ -1350,7 +1354,7 @@ fn topology_key_variant(
             // direction: exchanging different mass-degenerate external states
             // would change the process rather than merely its topology.
             (
-                edge.directed,
+                true,
                 TopologyEdge::External {
                     particle: edge.particle,
                     directed: edge.directed,
@@ -1391,7 +1395,7 @@ fn topology_key_variant(
             source.expect("completed endpoint"),
             target.expect("completed endpoint"),
         );
-        if left_right_partners.is_some() && external && directed {
+        if left_right_partners.is_some() && external {
             std::mem::swap(&mut source, &mut target);
         }
         graph
@@ -1411,8 +1415,8 @@ mod tests {
     use std::sync::Arc;
 
     use feynkit_graph::{
-        DiagramCut, DiagramCutSide, DiagramEdge, DiagramEndpoint, DiagramHalfEdge,
-        DiagramThresholdCandidate, DiagramVertex, ExternalState, VertexId,
+        DiagramCut, DiagramCutSide, DiagramEdge, DiagramEndpoint, DiagramHalfEdge, DiagramVertex,
+        ExternalState, VertexId,
     };
     use spenso::structure::representation::{Minkowski, RepName};
 
@@ -1551,8 +1555,9 @@ mod tests {
         let scalar = || DiagramEdge::new(particle(model, 25), false);
         let vector = || DiagramEdge::new(particle(model, 21), false);
         let add_internals = |builder: &mut feynkit_graph::FeynmanDiagramBuilder| {
-            builder.add_edge(left, right, scalar()).unwrap();
-            builder.add_edge(left, right, scalar()).unwrap()
+            let first = builder.add_edge(left, right, scalar()).unwrap();
+            let second = builder.add_edge(left, right, scalar()).unwrap();
+            if internal_edges_first { first } else { second }
         };
         let (incoming_edge, loop_edge) = if internal_edges_first {
             let loop_edge = add_internals(&mut builder);
@@ -1565,8 +1570,10 @@ mod tests {
             builder.add_edge(right, outgoing, vector()).unwrap();
             (incoming_edge, loop_edge)
         };
-        let endpoint =
-            feynkit_graph::symbols::hedge_index().call(((2 * incoming_edge.0 + 1) as i64, 1_i64));
+        let endpoint = feynkit_graph::symbols::hedge_index().call((
+            (2 * incoming_edge.0 + 1) as i64,
+            if internal_edges_first { 2_i64 } else { 1_i64 },
+        ));
         let index = Minkowski {}.new_rep(4).to_symbolic([endpoint]);
         let numerator = FunctionBuilder::new(crate::momentum_symbol())
             .add_arg(loop_edge.0 as i64)
@@ -1581,56 +1588,60 @@ mod tests {
             .projector(projector)
             .build()
             .unwrap();
+        let AtomView::Fun(momentum) = diagram.numerator().as_view() else {
+            panic!("the fixture numerator is one edge momentum");
+        };
+        let loop_edge = EdgeId(usize::try_from(momentum.iter().next().unwrap()).unwrap());
+        let diagram = diagram.with_loop_momentum_edges(&[loop_edge]).unwrap();
         assert_eq!(diagram.loop_momentum_basis().loop_edges, vec![loop_edge]);
         diagram
     }
 
     fn cut_diagram(model: &Arc<Model>, mirrored: bool) -> FeynmanDiagram {
         let mut builder = FeynmanDiagram::builder(Arc::clone(model), "cut-line");
-        let incoming = builder.add_generation_external("in", 0, ExternalState::Incoming, 0);
-        let interaction = builder.add_vertex(DiagramVertex::interaction(
-            "interaction",
-            model.vertex_rule_id("V").unwrap(),
-        ));
-        let outgoing = builder.add_generation_external("out", 1, ExternalState::Outgoing, 0);
-        let scalar = || DiagramEdge::new(particle(model, 25), false);
-        let incoming_edge = builder.add_edge(incoming, interaction, scalar()).unwrap();
-        let outgoing_edge = builder.add_edge(interaction, outgoing, scalar()).unwrap();
-        let incoming_source = DiagramHalfEdge {
-            edge: incoming_edge,
-            endpoint: DiagramEndpoint::Source,
-        };
-        let incoming_target = DiagramHalfEdge {
-            edge: incoming_edge,
-            endpoint: DiagramEndpoint::Target,
-        };
-        let outgoing_source = DiagramHalfEdge {
-            edge: outgoing_edge,
-            endpoint: DiagramEndpoint::Source,
-        };
-        let outgoing_target = DiagramHalfEdge {
-            edge: outgoing_edge,
-            endpoint: DiagramEndpoint::Target,
-        };
-        let side = |half_edges| DiagramCutSide {
-            half_edges,
-            coupling_orders: BTreeMap::new(),
-            loop_count: 0,
-        };
-        let mut cut = DiagramCut {
-            cut: vec![incoming_source],
-            left: side(vec![incoming_source]),
-            right: side(vec![incoming_target, outgoing_source, outgoing_target]),
-        };
-        if mirrored {
-            // The global transformation exchanges both physical sides at
-            // once. This is intentionally not just an independent relabeling
-            // of the cut nodes.
-            cut.cut = vec![outgoing_source];
-            cut.left = side(vec![incoming_source, incoming_target, outgoing_source]);
-            cut.right = side(vec![outgoing_target]);
+        let vertices = (0..3)
+            .map(|index| {
+                builder.add_vertex(DiagramVertex {
+                    name: format!("interaction{index}"),
+                    interaction: None,
+                    numerator: Atom::one(),
+                })
+            })
+            .collect::<Vec<_>>();
+        let mut external = DiagramEdge::new(particle(model, 25), false);
+        external.external = Some(ExternalLeg {
+            name: "incoming".into(),
+            index: 0,
+            state: ExternalState::Incoming,
+            connection: 0,
+        });
+        builder
+            .add_edge(vertices[0], vertices[2], external)
+            .unwrap();
+        for pair in vertices.windows(2) {
+            builder
+                .add_edge(
+                    pair[0],
+                    pair[1],
+                    DiagramEdge::new(particle(model, 25), false),
+                )
+                .unwrap();
         }
-        let diagram = builder.cuts(vec![cut]).build().unwrap();
+        let diagram = builder.build().unwrap();
+        // The global transformation exchanges both physical sides at once;
+        // the two distinct cuts cross the first or second internal propagator.
+        let selected = if mirrored {
+            &vertices[1..]
+        } else {
+            &vertices[2..]
+        };
+        let (left, right): (Vec<_>, Vec<_>) = diagram.half_edges().partition(|half_edge| {
+            let node = diagram
+                .underlying()
+                .node_id(diagram.half_edge_id(*half_edge).unwrap());
+            selected.contains(&VertexId(node.0))
+        });
+        let diagram = diagram.with_cut_partitions(vec![(left, right)]).unwrap();
         diagram.validate().unwrap();
         diagram
     }
@@ -1735,15 +1746,14 @@ mod tests {
             left: side(left_half_edges.clone()),
             right: side(right_half_edges.clone()),
         };
-        let candidate = DiagramThresholdCandidate {
-            cut: crossing,
-            left: left_half_edges,
-            right: right_half_edges,
-        };
-        let diagram = builder
-            .cuts(vec![cut])
-            .topology_threshold_candidates(vec![candidate])
-            .build()
+        let diagram = builder.cuts(vec![cut]).build().unwrap();
+        let partitions = diagram
+            .cuts()
+            .iter()
+            .map(|cut| (cut.left.half_edges.clone(), cut.right.half_edges.clone()))
+            .collect();
+        let diagram = diagram
+            .with_topology_threshold_partitions(partitions)
             .unwrap();
         diagram.validate().unwrap();
         diagram

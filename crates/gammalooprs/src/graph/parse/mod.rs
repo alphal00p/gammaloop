@@ -171,7 +171,7 @@ impl ParseGraph {
             },
             |_, edge_id, pair, data| {
                 let mut edge = ParseEdge::new(data.data.particle)
-                    .with_label(format!("edge_{}", edge_id.0))
+                    .with_label(format!("feynkit_edge_{}", edge_id.0))
                     .with_num(data.data.numerator.clone());
                 edge.is_dummy = data.data.is_dummy;
                 edge.lmb_id = diagram

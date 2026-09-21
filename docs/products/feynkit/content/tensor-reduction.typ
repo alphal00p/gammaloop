@@ -55,6 +55,11 @@ four-dimensional Lorentz slots in the numerator and projector to `D`, and return
 `TensorExpression`. External edge momenta remain projector vectors. The scalar numerator
 prefactor remains separate, and at least one internal edge is required.
 
+Use `diagram.tensor_reduce(D, expression=prepared)` after contractions or a UV expansion.
+The supplied expression replaces the stored numerator and projector and must use the graph's
+`gammalooprs::Q(edge_id, ...)` names. It cannot be combined with an explicit `projector`.
+Internal edge momenta are still selected from the diagram, including when reducing a subgraph.
+
 For standalone tensors, `TensorExpression(expression)` performs the same conversion as
 `as_tensor(expression)`. Algebraic rearrangements return tensor expressions with their ordered
 interfaces and data identities preserved: `expand`, `expand_num`, `factor`, `collect`,

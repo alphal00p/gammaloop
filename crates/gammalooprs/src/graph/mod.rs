@@ -550,26 +550,6 @@ impl Graph {
         None
     }
 
-    /// Return the shared loop-momentum-independent initial-state attachment tree.
-    ///
-    /// Threshold sides are normalized during FeynKit finalization; runtime
-    /// threshold queries reuse the same selection without changing those sides.
-    pub(crate) fn get_initial_state_tree(&self) -> (SuBitGraph, Vec<EdgeIndex>) {
-        use feynkit_graph::thresholds::InitialStateTreeExt;
-        self.underlying.initial_state_tree(
-            &self
-                .initial_state_cut
-                .left
-                .union(&self.initial_state_cut.right),
-            |edge| {
-                self.loop_momentum_basis.edge_signatures[edge]
-                    .internal
-                    .iter()
-                    .all(|sign| sign.is_zero())
-            },
-        )
-    }
-
     pub(crate) fn get_raised_edge_groups(&self) -> Vec<Vec<EdgeIndex>> {
         let mut result = Vec::<Vec<EdgeIndex>>::new();
 

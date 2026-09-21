@@ -117,7 +117,7 @@ identities make its spanning set redundant. The all-equal isotropic fast path
 does not require that inverse and remains well defined at positive physical
 dimensions.
 
-For a graph with external `FeynKit::Momentum` tensors, select the internal
+For a graph with external `gammalooprs::Q` tensors, select the internal
 compact momenta explicitly with `with_integrated_vector`; the `feynkit`
 constructor intentionally selects the whole momentum head and is intended for
 pure vacuum numerators.
