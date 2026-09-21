@@ -3,6 +3,7 @@ use std::ops::AddAssign;
 use linnet::half_edge::subgraph::subset::SubSet;
 use spenso::{
     algebra::ScalarMul,
+    bracket,
     contraction::{Contract, ContractionError, Trace},
     iterators::IteratableTensor,
     network::{
@@ -17,6 +18,7 @@ use spenso::{
             StructureInferenceMode, TensorFromExpression, TensorLibraryFor,
         },
         store::NetworkStore,
+        tags::SPENSO_TAG,
     },
     shadowing::{Concretize, symbolica_utils::SpensoPrintSettings},
     structure::{
@@ -323,7 +325,29 @@ impl<Aind: AbsInd> HasStructure for SymbolicTensor<Aind> {
 
     fn scalar(self) -> Option<Self::Scalar> {
         if self.is_scalar() {
-            Some(self.expression)
+            let mut indexed_product = false;
+            if matches!(
+                self.expression.as_view(),
+                AtomView::Mul(_) | AtomView::Pow(_)
+            ) {
+                self.expression.visitor(&mut |value| {
+                    if let AtomView::Fun(fun) = value {
+                        let symbol = fun.get_symbol();
+                        if symbol == SPENSO_TAG.bracket || symbol.is_scalar() {
+                            return false;
+                        }
+                        indexed_product |=
+                            symbol.has_attributes_of(SPENSO_TAG.rep_) && fun.get_nargs() == 2;
+                    }
+                    !indexed_product
+                });
+            }
+            // Keep implicit index sums atomic when scalar arithmetic takes powers.
+            Some(if indexed_product {
+                bracket!(self.expression)
+            } else {
+                self.expression
+            })
         } else {
             None
         }

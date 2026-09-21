@@ -2429,8 +2429,24 @@ impl PyFeynmanDiagram {
     /// --------
     /// >>> from pathlib import Path
     /// >>> Path("one_loop_diagram.typ").write_text(diagram.to_linnest())
-    fn to_linnest(&self) -> String {
-        self.inner.to_linnest()
+    ///
+    /// Parameters
+    /// ----------
+    /// highlight : linnet_py.Subgraph or None, optional
+    ///     Highlight a region from this diagram's analysis graph with Linnest's
+    ///     edge underlay. The complete diagram is retained; half-edge selections
+    ///     preserve their source/sink sides. Foreign or stale selections are rejected.
+    #[pyo3(signature = (*, highlight=None))]
+    fn to_linnest(
+        &self,
+        py: Python<'_>,
+        #[gen_stub(override_type(type_repr="linnet_py.Subgraph | None", imports=("linnet_py")))]
+        highlight: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<String> {
+        let selected = highlight
+            .map(|value| self.selection(py, Some(value)))
+            .transpose()?;
+        Ok(self.inner.to_linnest(selected.as_ref()))
     }
 
     /// Render the Linnest diagram as a self-contained SVG with ``typst-py``.
@@ -2439,8 +2455,23 @@ impl PyFeynmanDiagram {
     /// --------
     /// >>> import marimo as mo
     /// >>> mo.Html(diagram.to_svg())
-    fn to_svg(&self, py: Python<'_>) -> PyResult<String> {
-        render_diagram_svg(py, &self.inner)
+    ///
+    /// Parameters
+    /// ----------
+    /// highlight : linnet_py.Subgraph or None, optional
+    ///     Region from this diagram's analysis graph to highlight. Linnest draws
+    ///     an underlay behind the selected half-edges without changing the diagram.
+    #[pyo3(signature = (*, highlight=None))]
+    fn to_svg(
+        &self,
+        py: Python<'_>,
+        #[gen_stub(override_type(type_repr="linnet_py.Subgraph | None", imports=("linnet_py")))]
+        highlight: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<String> {
+        let selected = highlight
+            .map(|value| self.selection(py, Some(value)))
+            .transpose()?;
+        render_diagram_svg(py, &self.inner, selected.as_ref())
     }
 
     /// Render the Linnest diagram as a self-contained HTML figure.
@@ -2451,8 +2482,22 @@ impl PyFeynmanDiagram {
     ///
     /// >>> import marimo as mo
     /// >>> mo.Html(diagram.to_html())
-    fn to_html(&self, py: Python<'_>) -> PyResult<String> {
-        render_diagram_html(py, &self.inner)
+    ///
+    /// Parameters
+    /// ----------
+    /// highlight : linnet_py.Subgraph or None, optional
+    ///     Region from this diagram's analysis graph to highlight in the full figure.
+    #[pyo3(signature = (*, highlight=None))]
+    fn to_html(
+        &self,
+        py: Python<'_>,
+        #[gen_stub(override_type(type_repr="linnet_py.Subgraph | None", imports=("linnet_py")))]
+        highlight: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<String> {
+        let selected = highlight
+            .map(|value| self.selection(py, Some(value)))
+            .transpose()?;
+        render_diagram_html(py, &self.inner, selected.as_ref())
     }
 
     /// Render the diagram as HTML in Marimo, Jupyter, and IPython.
@@ -2461,7 +2506,7 @@ impl PyFeynmanDiagram {
     /// --------
     /// Leave `diagram` as the final expression in a notebook cell to render it.
     fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
-        render_diagram_html(py, &self.inner)
+        render_diagram_html(py, &self.inner, None)
     }
 
     /// Return the raw SVG representation used by rich notebook frontends.
@@ -2471,7 +2516,7 @@ impl PyFeynmanDiagram {
     /// >>> from IPython.display import SVG
     /// >>> SVG(diagram._repr_svg_())
     fn _repr_svg_(&self, py: Python<'_>) -> PyResult<String> {
-        render_diagram_svg(py, &self.inner)
+        render_diagram_svg(py, &self.inner, None)
     }
 
     /// Write a concise summary to an IPython pretty printer.

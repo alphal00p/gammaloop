@@ -1762,7 +1762,7 @@ impl PyGenerationResult {
             .iter()
             .take(PREVIEW_LIMIT)
             .map(|diagram| {
-                render_diagram_html(py, diagram).map(|html| {
+                render_diagram_html(py, diagram, None).map(|html| {
                     format!("<div style=\"min-width:0;overflow-x:auto\">{}</div>", html)
                 })
             })

@@ -867,6 +867,7 @@ where
             // println!("base state {:?}", base.state);
             if settings.precontract_scalars
                 && let NetworkState::PureScalar = base.state
+                && !matches!(base_expression, AtomView::Fun(fun) if fun.get_symbol() == SPENSO_TAG.bracket)
             {
                 // println!("Pure");
                 return Ok(Self::from_scalar(value.as_view().try_into()?));

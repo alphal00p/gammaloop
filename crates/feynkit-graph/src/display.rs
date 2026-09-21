@@ -6,7 +6,8 @@ use std::{
 use crate::FeynmanDiagram;
 use linnet::half_edge::{
     EdgeAccessors,
-    involution::{EdgeIndex, Orientation},
+    involution::{EdgeIndex, Flow, Orientation},
+    subgraph::{SuBitGraph, SubSetLike},
 };
 use symbolica::atom::AtomCore;
 
@@ -46,7 +47,11 @@ impl FeynmanDiagram {
     /// GammaLoop's shared physics layout owns particle styling, label measurement,
     /// force settings, and left/right amplitude placement. Finalized cross sections
     /// already contain paired initial-state edges with their sewing connection IDs.
-    pub fn to_linnest(&self) -> String {
+    ///
+    /// A native half-edge selection shades the corresponding structural halves
+    /// with Linnest's underlay while preserving the complete graph and layout.
+    /// An empty selection has the same rendering as `None`.
+    pub fn to_linnest(&self, highlight: Option<&SuBitGraph>) -> String {
         let internal_vertices: Vec<_> = self.vertices().collect();
         let internal_ids: BTreeMap<_, _> = internal_vertices
             .iter()
@@ -57,6 +62,7 @@ impl FeynmanDiagram {
             r##"#set page(width: auto, height: auto, margin: (x: 2mm, y: 2mm), fill: none)
 #set text(size: 9pt)
 #import "crates/linnest/typst/src/graph.typ" as graph
+#import "crates/linnest/typst/src/subgraph.typ" as subgraph
 #import "crates/linnest/typst/src/render/layout.typ" as renderer
 #import "assets/embedded/drawing/templates/layout-core.typ" as physics-layout
 #import "assets/embedded/drawing/templates/physics-edge-style.typ" as physics
@@ -162,6 +168,28 @@ impl FeynmanDiagram {
             self.loop_count(),
         )
         .expect("writing to a string cannot fail");
+        let highlight_options = if let Some(highlight) = highlight.filter(|s| !s.is_empty()) {
+            let mut source = String::new();
+            let mut sink = String::new();
+            for hedge in highlight.included_iter() {
+                let selected = match self.graph.flow(hedge) {
+                    Flow::Source => &mut source,
+                    Flow::Sink => &mut sink,
+                };
+                write!(selected, "{}, ", self.graph[&hedge].0)
+                    .expect("writing to a string cannot fail");
+            }
+            // Typst rebuilds the graph in edge order. Structural edge halves
+            // preserve selection identity even when native hedge IDs differ.
+            writeln!(
+                output,
+                "  let highlighted = subgraph.select(raw, source: ({source}), sink: ({sink}))"
+            )
+            .expect("writing to a string cannot fail");
+            "    diagram-options: (subgraph: highlighted),\n"
+        } else {
+            ""
+        };
         write!(
             output,
             r##"
@@ -176,7 +204,7 @@ impl FeynmanDiagram {
     cross-section-mode: {},
     style-options: (node-label: none),
     edge-style-options: (label-fill: palette.ink),
-  )
+{highlight_options}  )
 }}
 "##,
             self.cuts().is_empty(),
@@ -190,6 +218,11 @@ impl FeynmanDiagram {
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
+
+    use linnet::half_edge::{
+        involution::Hedge,
+        subgraph::{ModifySubSet, SuBitGraph},
+    };
 
     use crate::{DiagramEdge, DiagramVertex, ExternalLeg, ExternalState, FeynmanDiagram};
     use feynkit_model::Model;
@@ -250,9 +283,9 @@ mod tests {
     #[test]
     fn emits_deterministic_complete_linnest_source_for_a_loop() {
         let diagram = one_loop();
-        let source = diagram.to_linnest();
+        let source = diagram.to_linnest(None);
 
-        assert_eq!(source, diagram.to_linnest());
+        assert_eq!(source, diagram.to_linnest(None));
         assert!(source.starts_with("#set page(width: auto"));
         assert!(source.contains("#import \"crates/linnest/typst/src/graph.typ\" as graph"));
         assert_eq!(source.matches("    node(").count(), 2);
@@ -268,6 +301,29 @@ mod tests {
         assert!(!source.contains("pos: graph.pos"));
         assert!(source.contains("dash: dashed"));
         assert!(source.ends_with("}\n"));
+    }
+
+    #[test]
+    fn highlights_exact_native_halves_without_changing_graph_or_layout() {
+        let diagram = one_loop();
+        let baseline = diagram.to_linnest(None);
+        let empty = diagram.graph.empty_subgraph::<SuBitGraph>();
+        assert_eq!(diagram.to_linnest(Some(&empty)), baseline);
+
+        // Select the incoming and outgoing dangling legs, plus opposite halves
+        // of the two parallel internal edges. Their partners stay unselected.
+        let mut selected = empty;
+        for hedge in [Hedge(0), Hedge(1), Hedge(4), Hedge(5)] {
+            selected.add(hedge);
+        }
+        let source = diagram.to_linnest(Some(&selected));
+        let selection =
+            "  let highlighted = subgraph.select(raw, source: (1, 3, ), sink: (0, 2, ))\n";
+        let option = "    diagram-options: (subgraph: highlighted),\n";
+        assert!(source.contains(selection));
+        assert!(source.contains(option));
+        assert_eq!(source.replace(selection, "").replace(option, ""), baseline);
+        assert_eq!(diagram.to_linnest(None), baseline);
     }
 
     #[test]
@@ -295,7 +351,7 @@ mod tests {
             }
             .unwrap();
         }
-        let source = builder.build().unwrap().to_linnest();
+        let source = builder.build().unwrap().to_linnest(None);
 
         let low = source.find("external-name: \"out-low\"").unwrap();
         let high = source.find("external-name: \"out-high\"").unwrap();
@@ -321,7 +377,7 @@ mod tests {
         builder.add_edge(None, interaction, incoming).unwrap();
         builder.edge_orientations =
             Some(vec![linnet::half_edge::involution::Orientation::Reversed]);
-        let source = builder.build().unwrap().to_linnest();
+        let source = builder.build().unwrap().to_linnest(None);
 
         assert!(source.contains("name: \"quote \\\" and \\\\ slash\""));
         assert!(source.contains("feynkit-name: \"v\""));

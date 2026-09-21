@@ -5705,304 +5705,105 @@ where
                         graph.dot()
                     )));
                 }
-                let n = pow.abs();
+                let n = pow.unsigned_abs();
                 let child_id = operation.children()[0];
-                if let NetworkNode::Leaf(leaf) = &graph.graph[child_id] {
-                    let new_node = match leaf {
-                        NetworkLeaf::Scalar(si) => {
-                            if n == 0 {
-                                NetworkLeaf::Scalar(*si)
+                let NetworkNode::Leaf(leaf) = &graph.graph[child_id] else {
+                    return Err(TensorNetworkError::ChildlessNeg);
+                };
+                if let NetworkLeaf::Scalar(si) = leaf {
+                    let mut s = self.scalar_ref(*si).ref_one();
+                    for _ in 0..n {
+                        s *= self.scalar_ref(*si).refer();
+                    }
+                    if pow < 0 {
+                        s = s.ref_one() / s;
+                    }
+                    let pos = self.push_scalar(s);
+                    return Ok(NetworkLeaf::Scalar(pos.into()));
+                }
+
+                let (mut t, original) = match leaf {
+                    NetworkLeaf::LibraryKey { key, .. } => {
+                        let inds = graph.get_lib_data(lib, child_id)?;
+                        (
+                            Store::Tensor::from(inds),
+                            NetworkLeaf::library_key(key.clone()),
+                        )
+                    }
+                    NetworkLeaf::LocalTensor(ti) => {
+                        (self.tensor(*ti).clone(), NetworkLeaf::LocalTensor(*ti))
+                    }
+                    NetworkLeaf::TensorSum(indices) => {
+                        let materialized =
+                            materialize_tensor_sum::<K, Aind, Self>(self, indices, None);
+                        let NetworkLeaf::LocalTensor(ti) = materialized else {
+                            unreachable!("materialized tensor sum is a local tensor")
+                        };
+                        (self.tensor(ti).clone(), materialized)
+                    }
+                    NetworkLeaf::ScaledTensor(term) => {
+                        let materialized = materialize_scaled_tensors::<K, Aind, Self>(
+                            self,
+                            std::slice::from_ref(term),
+                            None,
+                        );
+                        let NetworkLeaf::LocalTensor(ti) = materialized else {
+                            unreachable!("materialized tensor term is a local tensor")
+                        };
+                        (self.tensor(ti).clone(), materialized)
+                    }
+                    NetworkLeaf::ScaledTensorSum(terms) => {
+                        let materialized =
+                            materialize_scaled_tensors::<K, Aind, Self>(self, terms, None);
+                        let NetworkLeaf::LocalTensor(ti) = materialized else {
+                            unreachable!("materialized tensor terms are a local tensor")
+                        };
+                        (self.tensor(ti).clone(), materialized)
+                    }
+                    NetworkLeaf::Scalar(_) => unreachable!("scalar power handled above"),
+                };
+                match pow {
+                    0 => {
+                        let one = self.scalar(0).ref_one();
+                        let pos = self.push_scalar(one);
+                        Ok(NetworkLeaf::Scalar(pos.into()))
+                    }
+                    1 => Ok(original),
+                    _ => {
+                        let (mut s, exponent) = if t.is_scalar() {
+                            // Preserve the scalar boundary before repeating a contraction.
+                            (Store::Scalar::from(t.scalar().unwrap()), n)
+                        } else {
+                            let squares = n / 2;
+                            let square = t.contract(&t)?;
+                            if n % 2 == 1 {
+                                for _ in 0..squares {
+                                    t = square.contract(&t)?;
+                                }
+                                if pow >= 0 {
+                                    let pos = self.push_tensor(t);
+                                    return Ok(NetworkLeaf::LocalTensor(pos));
+                                }
+                                if !t.is_scalar() {
+                                    return Err(TensorNetworkError::NegativeExponentNonScalar(
+                                        "".to_string(),
+                                    ));
+                                }
+                                (Store::Scalar::from(t.scalar().unwrap()), 1)
                             } else {
-                                let mut s = self.scalar_ref(*si).clone();
-
-                                for _ in 1..n {
-                                    s *= self.scalar_ref(*si).refer();
-                                }
-
-                                if pow < 0 {
-                                    s = s.ref_one() / s;
-                                }
-
-                                let pos = self.push_scalar(s);
-
-                                NetworkLeaf::Scalar(pos.into())
+                                (Store::Scalar::from(square.scalar().unwrap()), squares)
                             }
+                        };
+                        let base = s.clone();
+                        for _ in 1..exponent {
+                            s *= base.refer();
                         }
-                        NetworkLeaf::LibraryKey { key, .. } => {
-                            let inds = graph.get_lib_data(lib, child_id)?;
-                            let mut t = Store::Tensor::from(inds);
-
-                            match pow {
-                                0 => {
-                                    let one = self.scalar(0).ref_one();
-                                    let pos = self.push_scalar(one);
-                                    NetworkLeaf::Scalar(pos.into())
-                                }
-                                1 => NetworkLeaf::library_key(key.clone()),
-                                _ => {
-                                    let squares = n / 2;
-                                    let square = t.contract(&t)?;
-
-                                    if n % 2 == 1 {
-                                        for _ in 0..squares {
-                                            t = square.contract(&t)?;
-                                        }
-
-                                        if pow < 0 {
-                                            if !t.is_scalar() {
-                                                return Err(
-                                                    TensorNetworkError::NegativeExponentNonScalar(
-                                                        "".to_string(),
-                                                    ),
-                                                );
-                                            } else {
-                                                let mut s =
-                                                    Store::Scalar::from(t.scalar().unwrap());
-                                                s = s.ref_one() / s;
-                                                let pos = self.push_scalar(s);
-                                                NetworkLeaf::Scalar(pos.into())
-                                            }
-                                        } else {
-                                            let pos = self.push_tensor(t);
-                                            NetworkLeaf::LocalTensor(pos)
-                                        }
-                                    } else {
-                                        let mut s = Store::Scalar::from(square.scalar().unwrap());
-                                        let sc = s.clone();
-                                        for _ in 1..squares {
-                                            s *= sc.refer();
-                                        }
-                                        if pow < 0 {
-                                            s = s.ref_one() / s;
-                                        }
-                                        let pos = self.push_scalar(s);
-                                        NetworkLeaf::Scalar(pos.into())
-                                    }
-                                }
-                            }
+                        if pow < 0 {
+                            s = s.ref_one() / s;
                         }
-                        NetworkLeaf::LocalTensor(ti) => {
-                            let mut t = self.tensor(*ti).clone();
-                            match pow {
-                                0 => {
-                                    let one = self.scalar(0).ref_one();
-                                    let pos = self.push_scalar(one);
-                                    NetworkLeaf::Scalar(pos.into())
-                                }
-                                1 => NetworkLeaf::LocalTensor(*ti),
-                                _ => {
-                                    let squares = n / 2;
-                                    let square = t.contract(&t)?;
-
-                                    if n % 2 == 1 {
-                                        for _ in 0..squares {
-                                            t = square.contract(&t)?;
-                                        }
-                                        if pow < 0 {
-                                            if !t.is_scalar() {
-                                                return Err(
-                                                    TensorNetworkError::NegativeExponentNonScalar(
-                                                        "".to_string(),
-                                                    ),
-                                                );
-                                            } else {
-                                                let mut s =
-                                                    Store::Scalar::from(t.scalar().unwrap());
-                                                s = s.ref_one() / s;
-                                                let pos = self.push_scalar(s);
-                                                NetworkLeaf::Scalar(pos.into())
-                                            }
-                                        } else {
-                                            let pos = self.push_tensor(t);
-                                            NetworkLeaf::LocalTensor(pos)
-                                        }
-                                    } else {
-                                        let mut s = Store::Scalar::from(square.scalar().unwrap());
-                                        let sc = s.clone();
-                                        for _ in 1..squares {
-                                            s *= sc.refer();
-                                        }
-                                        if pow < 0 {
-                                            s = s.ref_one() / s;
-                                        }
-                                        let pos = self.push_scalar(s);
-                                        NetworkLeaf::Scalar(pos.into())
-                                    }
-                                }
-                            }
-                        }
-                        NetworkLeaf::TensorSum(indices) => {
-                            let materialized =
-                                materialize_tensor_sum::<K, Aind, Self>(self, indices, None);
-                            let NetworkLeaf::LocalTensor(ti) = materialized else {
-                                unreachable!("materialized tensor sum is a local tensor")
-                            };
-                            let mut t = self.tensor(ti).clone();
-                            match pow {
-                                0 => {
-                                    let one = self.scalar(0).ref_one();
-                                    let pos = self.push_scalar(one);
-                                    NetworkLeaf::Scalar(pos.into())
-                                }
-                                1 => NetworkLeaf::LocalTensor(ti),
-                                _ => {
-                                    let squares = n / 2;
-                                    let square = t.contract(&t)?;
-
-                                    if n % 2 == 1 {
-                                        for _ in 0..squares {
-                                            t = square.contract(&t)?;
-                                        }
-                                        if pow < 0 {
-                                            if !t.is_scalar() {
-                                                return Err(
-                                                    TensorNetworkError::NegativeExponentNonScalar(
-                                                        "".to_string(),
-                                                    ),
-                                                );
-                                            } else {
-                                                let mut s =
-                                                    Store::Scalar::from(t.scalar().unwrap());
-                                                s = s.ref_one() / s;
-                                                let pos = self.push_scalar(s);
-                                                NetworkLeaf::Scalar(pos.into())
-                                            }
-                                        } else {
-                                            let pos = self.push_tensor(t);
-                                            NetworkLeaf::LocalTensor(pos)
-                                        }
-                                    } else {
-                                        let mut s = Store::Scalar::from(square.scalar().unwrap());
-                                        let sc = s.clone();
-                                        for _ in 1..squares {
-                                            s *= sc.refer();
-                                        }
-                                        if pow < 0 {
-                                            s = s.ref_one() / s;
-                                        }
-                                        let pos = self.push_scalar(s);
-                                        NetworkLeaf::Scalar(pos.into())
-                                    }
-                                }
-                            }
-                        }
-                        NetworkLeaf::ScaledTensor(term) => {
-                            let materialized = materialize_scaled_tensors::<K, Aind, Self>(
-                                self,
-                                std::slice::from_ref(term),
-                                None,
-                            );
-                            let NetworkLeaf::LocalTensor(ti) = materialized else {
-                                unreachable!("materialized tensor term is a local tensor")
-                            };
-                            let mut t = self.tensor(ti).clone();
-                            match pow {
-                                0 => {
-                                    let one = self.scalar(0).ref_one();
-                                    let pos = self.push_scalar(one);
-                                    NetworkLeaf::Scalar(pos.into())
-                                }
-                                1 => NetworkLeaf::LocalTensor(ti),
-                                _ => {
-                                    let squares = n / 2;
-                                    let square = t.contract(&t)?;
-
-                                    if n % 2 == 1 {
-                                        for _ in 0..squares {
-                                            t = square.contract(&t)?;
-                                        }
-                                        if pow < 0 {
-                                            if !t.is_scalar() {
-                                                return Err(
-                                                    TensorNetworkError::NegativeExponentNonScalar(
-                                                        "".to_string(),
-                                                    ),
-                                                );
-                                            } else {
-                                                let mut s =
-                                                    Store::Scalar::from(t.scalar().unwrap());
-                                                s = s.ref_one() / s;
-                                                let pos = self.push_scalar(s);
-                                                NetworkLeaf::Scalar(pos.into())
-                                            }
-                                        } else {
-                                            let pos = self.push_tensor(t);
-                                            NetworkLeaf::LocalTensor(pos)
-                                        }
-                                    } else {
-                                        let mut s = Store::Scalar::from(square.scalar().unwrap());
-                                        let sc = s.clone();
-                                        for _ in 1..squares {
-                                            s *= sc.refer();
-                                        }
-                                        if pow < 0 {
-                                            s = s.ref_one() / s;
-                                        }
-                                        let pos = self.push_scalar(s);
-                                        NetworkLeaf::Scalar(pos.into())
-                                    }
-                                }
-                            }
-                        }
-                        NetworkLeaf::ScaledTensorSum(terms) => {
-                            let materialized =
-                                materialize_scaled_tensors::<K, Aind, Self>(self, terms, None);
-                            let NetworkLeaf::LocalTensor(ti) = materialized else {
-                                unreachable!("materialized tensor terms are a local tensor")
-                            };
-                            let mut t = self.tensor(ti).clone();
-                            match pow {
-                                0 => {
-                                    let one = self.scalar(0).ref_one();
-                                    let pos = self.push_scalar(one);
-                                    NetworkLeaf::Scalar(pos.into())
-                                }
-                                1 => NetworkLeaf::LocalTensor(ti),
-                                _ => {
-                                    let squares = n / 2;
-                                    let square = t.contract(&t)?;
-
-                                    if n % 2 == 1 {
-                                        for _ in 0..squares {
-                                            t = square.contract(&t)?;
-                                        }
-                                        if pow < 0 {
-                                            if !t.is_scalar() {
-                                                return Err(
-                                                    TensorNetworkError::NegativeExponentNonScalar(
-                                                        "".to_string(),
-                                                    ),
-                                                );
-                                            } else {
-                                                let mut s =
-                                                    Store::Scalar::from(t.scalar().unwrap());
-                                                s = s.ref_one() / s;
-                                                let pos = self.push_scalar(s);
-                                                NetworkLeaf::Scalar(pos.into())
-                                            }
-                                        } else {
-                                            let pos = self.push_tensor(t);
-                                            NetworkLeaf::LocalTensor(pos)
-                                        }
-                                    } else {
-                                        let mut s = Store::Scalar::from(square.scalar().unwrap());
-                                        let sc = s.clone();
-                                        for _ in 1..squares {
-                                            s *= sc.refer();
-                                        }
-                                        if pow < 0 {
-                                            s = s.ref_one() / s;
-                                        }
-                                        let pos = self.push_scalar(s);
-                                        NetworkLeaf::Scalar(pos.into())
-                                    }
-                                }
-                            }
-                        }
-                    };
-                    Ok(new_node)
-                } else {
-                    Err(TensorNetworkError::ChildlessNeg)
+                        let pos = self.push_scalar(s);
+                        Ok(NetworkLeaf::Scalar(pos.into()))
+                    }
                 }
             }
         }

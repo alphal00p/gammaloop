@@ -1978,7 +1978,7 @@ class FeynmanDiagram:
         >>> restored = FeynmanDiagram.from_dot(model, dot)
         >>> restored.validate()
         """
-    def to_linnest(self) -> builtins.str:
+    def to_linnest(self, *, highlight: linnet_py.Subgraph | None = None) -> builtins.str:
         r"""
         Emit a complete Typst document that draws the graph with Linnest.
 
@@ -1990,8 +1990,15 @@ class FeynmanDiagram:
         --------
         >>> from pathlib import Path
         >>> Path("one_loop_diagram.typ").write_text(diagram.to_linnest())
+
+        Parameters
+        ----------
+        highlight : linnet_py.Subgraph or None, optional
+            Highlight a region from this diagram's analysis graph with Linnest's
+            edge underlay. The complete diagram is retained; half-edge selections
+            preserve their source/sink sides. Foreign or stale selections are rejected.
         """
-    def to_svg(self) -> builtins.str:
+    def to_svg(self, *, highlight: linnet_py.Subgraph | None = None) -> builtins.str:
         r"""
         Render the Linnest diagram as a self-contained SVG with ``typst-py``.
 
@@ -1999,8 +2006,14 @@ class FeynmanDiagram:
         --------
         >>> import marimo as mo
         >>> mo.Html(diagram.to_svg())
+
+        Parameters
+        ----------
+        highlight : linnet_py.Subgraph or None, optional
+            Region from this diagram's analysis graph to highlight. Linnest draws
+            an underlay behind the selected half-edges without changing the diagram.
         """
-    def to_html(self) -> builtins.str:
+    def to_html(self, *, highlight: linnet_py.Subgraph | None = None) -> builtins.str:
         r"""
         Render the Linnest diagram as a self-contained HTML figure.
 
@@ -2010,6 +2023,11 @@ class FeynmanDiagram:
 
         >>> import marimo as mo
         >>> mo.Html(diagram.to_html())
+
+        Parameters
+        ----------
+        highlight : linnet_py.Subgraph or None, optional
+            Region from this diagram's analysis graph to highlight in the full figure.
         """
     def _repr_html_(self) -> builtins.str:
         r"""
