@@ -1,0 +1,44 @@
+{
+  "order": 8,
+  "samples_per_node": 100000,
+  "bath_nodes": 64,
+  "units": "MX=T=lambda=1; rates in MX^4",
+  "paper_equation": "0911.1120 (6.24)",
+  "paper_rate": 4.6098997578035136e-05,
+  "results": {
+    "vacuum": {
+      "rate": 4.612485786815675e-05,
+      "monte_carlo_error": 5.972330856840112e-08,
+      "analytic_same_quadrature": 4.610089026849904e-05,
+      "ratio_to_paper": 1.0005609729382474,
+      "worst_node_pull": 3.2739562597384344,
+      "nodes_with_unstable_samples": 0
+    },
+    "thermal": {
+      "rate": 8.261392344587031e-05,
+      "monte_carlo_error": 1.2760292490530815e-07,
+      "analytic_same_quadrature": 8.253482817731475e-05,
+      "ratio_to_paper": 1.7920980452128854,
+      "worst_node_pull": 3.273722690987346,
+      "nodes_with_unstable_samples": 0
+    }
+  },
+  "provenance": {
+    "checkout": "e5f4155eb4ff28199578e0ea25acdf24da8f4aed",
+    "binary": "target/dev-optim/gammaloop",
+    "version": "gammaLoop 0.1.0",
+    "date": "2026-09-21",
+    "model": "model.json",
+    "run_card": "bath_average_executed.toml",
+    "driver": "bath_average.py",
+    "workspace": "/tmp/gammaloop-freeze-in-bath-n8-independent",
+    "node_seed_formula": "1337 + 22 * node_index",
+    "native_samples_per_process": 6400000
+  },
+  "interpretation": "The vacuum cross section folded with Maxwell-Boltzmann incoming distributions reproduces the paper. The equilibrium thermal cross section folded with that same measure is a diagnostic, not the freeze-in production observable.",
+  "analytic_converged_equilibrium_diagnostic": 8.253627408351486e-05,
+  "quadrature_error_at_order_8": {
+    "vacuum": 1.892690463903312e-09,
+    "thermal": -1.4459062001089679e-09
+  }
+}

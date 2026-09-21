@@ -1,0 +1,71 @@
+# Section 6.3 of https://arxiv.org/pdf/0911.1120: L_int = lambda X B1 B2 B3.
+# Diagnostic fixed-incoming-momentum cross sections, NOT bath-averaged rates.
+# Units: MX = T = lambda = 1, sqrt(s) = 2; all B_i are massless.
+# Run from repository root:
+# ./gammaloop -s /tmp/gammaloop-freeze-in-state -n examples/cli/thermal_production/freeze_in_0911_1120/fixed_kinematics.toml run generate integrate
+commands = []
+
+[[command_blocks]]
+name = "generate"
+commands = [
+  "import model ./examples/cli/thermal_production/freeze_in_0911_1120/model.json",
+  "set global kv global.generation.medium.mode=vacuum",
+  "generate xs B1 B2 > B3 X FI^2==2 -p vacuum -i LO",
+  "set global kv global.generation.medium.mode=thermodynamic_equilibrium",
+  "generate xs B1 B2 > B3 X FI^2==2 -p thermal -i LO",
+]
+
+[[command_blocks]]
+name = "integrate"
+commands = [
+  "integrate -p vacuum -i LO -p thermal -i LO --n-cores 2 --workspace-path /tmp/gammaloop-freeze-in-fixed-integration --restart --renderer tabled --no-stream-iterations --no-stream-updates",
+]
+
+[cli_settings.global.generation.evaluator]
+compile = false
+store_atom = true
+iterative_orientation_optimization = false
+summed = false
+summed_function_map = true
+
+[cli_settings.global.generation.uv]
+subtract_uv = false
+generate_integrated = false
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = false
+
+[default_runtime_settings.general]
+inverse_temperature = 1.0
+integral_unit = "none"
+evaluator_method = "SummedFunctionMap"
+
+[default_runtime_settings.kinematics]
+e_cm = 2.0
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [[1.0, 0.0, 0.0, 1.0], [1.0, 0.0, 0.0, -1.0]]
+helicities = [0, 0]
+
+[default_runtime_settings.sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = false
+lmb_channels = "summed"
+coordinate_system = "spherical"
+mapping = "linear"
+b = 1.0
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = true
+
+[default_runtime_settings.integrator]
+n_start = 10000
+n_increase = 0
+n_max = 100000
+seed = 1337
+integrated_phase = "real"
+target_relative_accuracy = 0.001

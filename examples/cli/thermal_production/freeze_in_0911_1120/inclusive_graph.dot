@@ -1,0 +1,16 @@
+digraph GL0{
+    num = "1";
+    overall_factor = "(AutG(1))^(-1)*AntiFermionSpinSumSign(1)*ExternalFermionOrderingSign(1)";
+    overall_factor_evaluated = "1";
+    projector = "1";
+
+	0 [dod="0" dod_autogen="true" int_id="V_XB1B2B3" name_autogen="true" num="UFO::SCALAR_COUPLING" num_autogen="true"];
+	1 [dod="0" dod_autogen="true" int_id="V_XB1B2B3" name_autogen="true" num="UFO::SCALAR_COUPLING" num_autogen="true"];
+	exte0	 [style=invis];
+	exte0	-> 1:0	 [id=0 dir=none  dod="-2" dod_autogen="true" is_cut="7" lmb_rep="P(0,a___)" name="e0" name_autogen="true" num="1" num_autogen="true" particle="X" pos="x:@-left!,y:@edgee0!"];
+	0:1	-> 1:2	 [id=1 dir=none  dod="-2" dod_autogen="true" lmb_id="0" lmb_rep="K(0,a___)" name="e1" name_autogen="true" num="1𝑖" num_autogen="true" particle="B1"];
+	0:3	-> 1:4	 [id=2 dir=none  dod="-2" dod_autogen="true" lmb_id="1" lmb_rep="K(1,a___)" name="e2" name_autogen="true" num="1𝑖" num_autogen="true" particle="B2"];
+	0:5	-> 1:6	 [id=3 dir=none  dod="-2" dod_autogen="true" lmb_rep="-1*K(0,a___)+-1*K(1,a___)+-1*P(0,a___)" name="e3" name_autogen="true" num="1𝑖" num_autogen="true" particle="B3"];
+	exte4	 [style=invis];
+	0:7	-> exte4	 [id=4 dir=none  dod="-2" dod_autogen="true" is_cut="7" name="e0" name_autogen="true" num="1" num_autogen="true" particle="X" pos="x:@+right!,y:@edgee0!"];
+}

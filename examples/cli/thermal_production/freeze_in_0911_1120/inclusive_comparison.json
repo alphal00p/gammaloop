@@ -1,0 +1,503 @@
+{
+  "conclusion": "Native thermal xs integrates only the decay spectral cut; mixed-sign scattering cuts are generated in CFF but excluded by LU E-surface residue selection.",
+  "provenance": {
+    "checkout": "e5f4155eb4ff28199578e0ea25acdf24da8f4aed",
+    "binary": "target/dev-optim/gammaloop",
+    "version": "0.1.0",
+    "binary_build_date": "2026-09-19",
+    "run_date": "2026-09-21",
+    "card": "inclusive_x.toml",
+    "samples_per_process_per_momentum": 1000000,
+    "workers": 2
+  },
+  "normalization": {
+    "MX": 1,
+    "T": 1,
+    "coupling": 1,
+    "source": "df_X/dt at f_X=0",
+    "number_density": "n_X = integral d^3p/(2*pi)^3 f_X",
+    "native_flux": "1/(2*E_X), already included",
+    "kms": "gain = native_spectral_rate/expm1(E_X/T)",
+    "gamma_paper": 4.6098997578035136e-05
+  },
+  "rows": [
+    {
+      "momentum": 0,
+      "energy": 1.0,
+      "native_vacuum": {
+        "neval": 1000000,
+        "real_zero": 6219,
+        "im_zero": 1000000,
+        "result": {
+          "re": 6.288516696581646e-05,
+          "im": 0.0
+        },
+        "error": {
+          "re": 1.4892001807308706e-07,
+          "im": 0.0
+        },
+        "real_chisq": 106.16677921287919,
+        "im_chisq": 0.0
+      },
+      "native_thermal_spectral": {
+        "neval": 1000000,
+        "real_zero": 6219,
+        "im_zero": 1000000,
+        "result": {
+          "re": 0.0025448208843721724,
+          "im": 0.0
+        },
+        "error": {
+          "re": 2.439761642564678e-05,
+          "im": 0.0
+        },
+        "real_chisq": 127.13544569818441,
+        "im_chisq": 0.0
+      },
+      "native_gain": 0.0014810264778592037,
+      "native_gain_error": 1.41988444628589e-05,
+      "vacuum_reference": 6.299127818984276e-05,
+      "bose_inverse_decay_reference": 0.0014839167951204817,
+      "bose_decay_spectral_reference": 0.0025497872640007076,
+      "inverse_decay_pull": -0.20356003397589315,
+      "bose_scattering_reference": 0.0027451682565992983,
+      "bose_full_gain_reference": 0.00422908505171978,
+      "mb_scattering_reference": 0.0005561567092597012,
+      "mb_inverse_decay_reference": 2.317319621915422e-05,
+      "bose_scattering_quadrature": [
+        {
+          "order": 64,
+          "gain": 0.0027451682565992875
+        },
+        {
+          "order": 128,
+          "gain": 0.0027451682565992896
+        },
+        {
+          "order": 256,
+          "gain": 0.0027451682565992983
+        }
+      ],
+      "mb_scattering_dgamma_d3p": 2.242113407368022e-06
+    },
+    {
+      "momentum": 1,
+      "energy": 1.4142135623730951,
+      "native_vacuum": {
+        "neval": 1000000,
+        "real_zero": 14331,
+        "im_zero": 1000000,
+        "result": {
+          "re": 4.437511901191408e-05,
+          "im": 0.0
+        },
+        "error": {
+          "re": 2.007845445569646e-07,
+          "im": 0.0
+        },
+        "real_chisq": 122.54864557288147,
+        "im_chisq": 0.0
+      },
+      "native_thermal_spectral": {
+        "neval": 1000000,
+        "real_zero": 14331,
+        "im_zero": 1000000,
+        "result": {
+          "re": 0.0013298769029335639,
+          "im": 0.0
+        },
+        "error": {
+          "re": 1.4662435091015021e-05,
+          "im": 0.0
+        },
+        "real_chisq": 133.21121485590993,
+        "im_chisq": 0.0
+      },
+      "native_gain": 0.00042716670396855666,
+      "native_gain_error": 4.709687081688255e-06,
+      "vacuum_reference": 4.454155996364608e-05,
+      "bose_inverse_decay_reference": 0.0004358369839432626,
+      "bose_decay_spectral_reference": 0.0013568696553489712,
+      "inverse_decay_pull": -1.8409460807739975,
+      "bose_scattering_reference": 0.0010654035432308166,
+      "bose_full_gain_reference": 0.0015012405271740792,
+      "mb_scattering_reference": 0.0002598911665192169,
+      "mb_inverse_decay_reference": 1.0828798604967372e-05,
+      "bose_scattering_quadrature": [
+        {
+          "order": 64,
+          "gain": 0.0010654035432308112
+        },
+        {
+          "order": 128,
+          "gain": 0.0010654035432308125
+        },
+        {
+          "order": 256,
+          "gain": 0.0010654035432308166
+        }
+      ],
+      "mb_scattering_dgamma_d3p": 1.0477361132348636e-06
+    },
+    {
+      "momentum": 3,
+      "energy": 3.1622776601683795,
+      "native_vacuum": {
+        "neval": 1000000,
+        "real_zero": 50812,
+        "im_zero": 1000000,
+        "result": {
+          "re": 1.9662295143417043e-05,
+          "im": 0.0
+        },
+        "error": {
+          "re": 2.3824678613828924e-07,
+          "im": 0.0
+        },
+        "real_chisq": 111.33180409616762,
+        "im_chisq": 0.0
+      },
+      "native_thermal_spectral": {
+        "neval": 1000000,
+        "real_zero": 50811,
+        "im_zero": 1000000,
+        "result": {
+          "re": 0.0002610996247260718,
+          "im": 0.0
+        },
+        "error": {
+          "re": 1.2349809941291832e-05,
+          "im": 0.0
+        },
+        "real_chisq": 91.87907716094742,
+        "im_chisq": 0.0
+      },
+      "native_gain": 1.1540650069972729e-05,
+      "native_gain_error": 5.458638062488484e-07,
+      "vacuum_reference": 1.991959118051914e-05,
+      "bose_inverse_decay_reference": 1.2671830763709112e-05,
+      "bose_decay_spectral_reference": 0.0002866918446479297,
+      "inverse_decay_pull": -2.072276419112317,
+      "bose_scattering_reference": 5.722050659319827e-05,
+      "bose_full_gain_reference": 6.989233735690738e-05,
+      "mb_scattering_reference": 2.0236337997231644e-05,
+      "mb_inverse_decay_reference": 8.431807498846519e-07,
+      "bose_scattering_quadrature": [
+        {
+          "order": 64,
+          "gain": 5.7220506593197856e-05
+        },
+        {
+          "order": 128,
+          "gain": 5.722050659319806e-05
+        },
+        {
+          "order": 256,
+          "gain": 5.722050659319827e-05
+        }
+      ],
+      "mb_scattering_dgamma_d3p": 8.158161896494745e-08
+    }
+  ],
+  "inverse_decay_quadrature": [
+    {
+      "order": 16,
+      "momentum": 0,
+      "inverse_decay_gain": 0.0014839167951204817,
+      "decay_spectral_rate": 0.0025497872640007076
+    },
+    {
+      "order": 16,
+      "momentum": 1,
+      "inverse_decay_gain": 0.00043583698394298627,
+      "decay_spectral_rate": 0.001356869655348111
+    },
+    {
+      "order": 16,
+      "momentum": 3,
+      "inverse_decay_gain": 1.2671497466030059e-05,
+      "decay_spectral_rate": 0.00028668430400694375
+    },
+    {
+      "order": 32,
+      "momentum": 0,
+      "inverse_decay_gain": 0.0014839167951204823,
+      "decay_spectral_rate": 0.002549787264000709
+    },
+    {
+      "order": 32,
+      "momentum": 1,
+      "inverse_decay_gain": 0.00043583698394326334,
+      "decay_spectral_rate": 0.0013568696553489736
+    },
+    {
+      "order": 32,
+      "momentum": 3,
+      "inverse_decay_gain": 1.2671830754136965e-05,
+      "decay_spectral_rate": 0.0002866918444313662
+    },
+    {
+      "order": 64,
+      "momentum": 0,
+      "inverse_decay_gain": 0.0014839167951204817,
+      "decay_spectral_rate": 0.0025497872640007076
+    },
+    {
+      "order": 64,
+      "momentum": 1,
+      "inverse_decay_gain": 0.0004358369839432626,
+      "decay_spectral_rate": 0.0013568696553489712
+    },
+    {
+      "order": 64,
+      "momentum": 3,
+      "inverse_decay_gain": 1.2671830763709112e-05,
+      "decay_spectral_rate": 0.0002866918446479297
+    }
+  ],
+  "inverse_decay_quadrature_method": "Gauss-Legendre orders 16,32,64 on the Dalitz region where E1 is smallest, multiplied by 3; split E1 ranges [0,1/4] and [1/4,1/3]. E2 in [max(1/2-E1,E1),min(1/2,1-2E1)]. Average over cos(theta) with same order and phi with 2*order midpoint nodes; boost energies to the bath frame. Integrand product n_B(Ei)/(64*pi^3*E_X).",
+  "scattering_quadrature_method": "For each bath channel integrate incoming bath momentum k=u/(1-u), u in [0,1], cos(theta) in [-1,1], with Gauss-Legendre quadrature. Outgoing two-body phase space and its Bose factors are integrated analytically, as documented in inclusive_x.md.",
+  "cff_surfaces": [
+    {
+      "kind": "Esurface",
+      "expression": {
+        "internal_terms": [
+          [
+            1,
+            "1"
+          ],
+          [
+            2,
+            "1"
+          ],
+          [
+            3,
+            "1"
+          ]
+        ],
+        "external_terms": [
+          [
+            0,
+            "1"
+          ]
+        ],
+        "uniform_scale_coeff": "0",
+        "constant": "0"
+      },
+      "origin": "Physical",
+      "numerator_only": false
+    },
+    {
+      "kind": "Hsurface",
+      "expression": {
+        "internal_terms": [
+          [
+            1,
+            "-1"
+          ],
+          [
+            2,
+            "1"
+          ],
+          [
+            3,
+            "1"
+          ]
+        ],
+        "external_terms": [
+          [
+            0,
+            "1"
+          ]
+        ],
+        "uniform_scale_coeff": "0",
+        "constant": "0"
+      },
+      "origin": "Physical",
+      "numerator_only": false
+    },
+    {
+      "kind": "Hsurface",
+      "expression": {
+        "internal_terms": [
+          [
+            1,
+            "1"
+          ],
+          [
+            2,
+            "-1"
+          ],
+          [
+            3,
+            "1"
+          ]
+        ],
+        "external_terms": [
+          [
+            0,
+            "1"
+          ]
+        ],
+        "uniform_scale_coeff": "0",
+        "constant": "0"
+      },
+      "origin": "Physical",
+      "numerator_only": false
+    },
+    {
+      "kind": "Hsurface",
+      "expression": {
+        "internal_terms": [
+          [
+            1,
+            "1"
+          ],
+          [
+            2,
+            "1"
+          ],
+          [
+            3,
+            "-1"
+          ]
+        ],
+        "external_terms": [
+          [
+            0,
+            "-1"
+          ]
+        ],
+        "uniform_scale_coeff": "0",
+        "constant": "0"
+      },
+      "origin": "Physical",
+      "numerator_only": false
+    },
+    {
+      "kind": "Hsurface",
+      "expression": {
+        "internal_terms": [
+          [
+            1,
+            "1"
+          ],
+          [
+            2,
+            "1"
+          ],
+          [
+            3,
+            "-1"
+          ]
+        ],
+        "external_terms": [
+          [
+            0,
+            "1"
+          ]
+        ],
+        "uniform_scale_coeff": "0",
+        "constant": "0"
+      },
+      "origin": "Physical",
+      "numerator_only": false
+    },
+    {
+      "kind": "Hsurface",
+      "expression": {
+        "internal_terms": [
+          [
+            1,
+            "1"
+          ],
+          [
+            2,
+            "-1"
+          ],
+          [
+            3,
+            "1"
+          ]
+        ],
+        "external_terms": [
+          [
+            0,
+            "-1"
+          ]
+        ],
+        "uniform_scale_coeff": "0",
+        "constant": "0"
+      },
+      "origin": "Physical",
+      "numerator_only": false
+    },
+    {
+      "kind": "Hsurface",
+      "expression": {
+        "internal_terms": [
+          [
+            1,
+            "-1"
+          ],
+          [
+            2,
+            "1"
+          ],
+          [
+            3,
+            "1"
+          ]
+        ],
+        "external_terms": [
+          [
+            0,
+            "-1"
+          ]
+        ],
+        "uniform_scale_coeff": "0",
+        "constant": "0"
+      },
+      "origin": "Physical",
+      "numerator_only": false
+    },
+    {
+      "kind": "Esurface",
+      "expression": {
+        "internal_terms": [
+          [
+            1,
+            "1"
+          ],
+          [
+            2,
+            "1"
+          ],
+          [
+            3,
+            "1"
+          ]
+        ],
+        "external_terms": [
+          [
+            0,
+            "-1"
+          ]
+        ],
+        "uniform_scale_coeff": "0",
+        "constant": "0"
+      },
+      "origin": "Physical",
+      "numerator_only": false
+    }
+  ],
+  "nonzero_native_orientation_ids": [
+    7
+  ],
+  "physically_allowed_scattering_orientation_ids": [
+    3,
+    5,
+    6
+  ],
+  "selected_native_expression": "if(-7+gammalooprs::residue_map_id,0,-1/256*gammalooprs::t\u20f0^6*gammalooprs::h_lu_cut*UFO::SCALAR_COUPLING^2*(gammalooprs::N(1,0,1,1)*gammalooprs::N(2,0,1,1)*gammalooprs::N(3,0,1,1)-gammalooprs::N(1,0,1,-1)*gammalooprs::N(2,0,1,-1)*gammalooprs::N(3,0,1,-1))*gammalooprs::tree_denoms(1)/(\ud835\udf0b^5*gammalooprs::OSE(1)*gammalooprs::OSE(2)*gammalooprs::OSE(3)))"
+}

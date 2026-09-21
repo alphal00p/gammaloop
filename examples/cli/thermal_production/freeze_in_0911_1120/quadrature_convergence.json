@@ -1,0 +1,44 @@
+[
+  {
+    "order": 8,
+    "vacuum": 4.610089026849903e-05,
+    "equilibrium_cut": 8.253482817731471e-05,
+    "B3_occupation_contribution": 2.9726989178079765e-05,
+    "X_occupation_contribution": 6.706948730735911e-06
+  },
+  {
+    "order": 16,
+    "vacuum": 4.609901736950414e-05,
+    "equilibrium_cut": 8.253624554146282e-05,
+    "B3_occupation_contribution": 2.9730764882646364e-05,
+    "X_occupation_contribution": 6.706463289312308e-06
+  },
+  {
+    "order": 24,
+    "vacuum": 4.609899815235213e-05,
+    "equilibrium_cut": 8.253627738920985e-05,
+    "B3_occupation_contribution": 2.973081678092419e-05,
+    "X_occupation_contribution": 6.706462455933527e-06
+  },
+  {
+    "order": 32,
+    "vacuum": 4.6098997606688194e-05,
+    "equilibrium_cut": 8.253627489220824e-05,
+    "B3_occupation_contribution": 2.9730814767661442e-05,
+    "X_occupation_contribution": 6.706462517858608e-06
+  },
+  {
+    "order": 64,
+    "vacuum": 4.609899757802606e-05,
+    "equilibrium_cut": 8.253627408008272e-05,
+    "B3_occupation_contribution": 2.9730813982192554e-05,
+    "X_occupation_contribution": 6.706462519864089e-06
+  },
+  {
+    "order": 96,
+    "vacuum": 4.609899757802682e-05,
+    "equilibrium_cut": 8.253627408351486e-05,
+    "B3_occupation_contribution": 2.9730813985623427e-05,
+    "X_occupation_contribution": 6.7064625198646175e-06
+  }
+]

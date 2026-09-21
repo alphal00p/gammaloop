@@ -1,0 +1,1436 @@
+{
+  "backend": "gammaloop-3Drep",
+  "family": "cff",
+  "medium_mode": "thermodynamic_equilibrium",
+  "process_id": 1,
+  "integrand_name": "LO",
+  "graph_id": 0,
+  "graph_name": "GL0",
+  "graph": {
+    "loop_names": [
+      "e1",
+      "e2"
+    ],
+    "ext_names": [
+      "e0"
+    ],
+    "n_internal_edges": 4,
+    "n_external_edges": 0,
+    "repeated_groups": []
+  },
+  "validation": {
+    "ok": true,
+    "n_internal_edges": 4,
+    "n_external_edges": 0,
+    "n_loops_from_labels": 2,
+    "n_external_symbols": 1,
+    "vertex_balance_violations": {},
+    "vertex_external_balance_info": {},
+    "parallel_duplicate_violations": [],
+    "pow_attribute_violations": [],
+    "repeated_groups": []
+  },
+  "energy_degree_bounds": [],
+  "numerator_sampling_scale_mode": "None",
+  "expression": {
+    "orientations": [
+      {
+        "data": {
+          "orientation": [
+            "Default",
+            "Default",
+            "Default",
+            "Default"
+          ],
+          "label": "++++|N0",
+          "numerator_map_index": 0
+        },
+        "loop_energy_map": [
+          {
+            "internal_terms": [
+              [
+                1,
+                "1"
+              ]
+            ],
+            "external_terms": [],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          },
+          {
+            "internal_terms": [
+              [
+                2,
+                "1"
+              ]
+            ],
+            "external_terms": [],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          }
+        ],
+        "edge_energy_map": [
+          {
+            "internal_terms": [],
+            "external_terms": [
+              [
+                0,
+                "1"
+              ]
+            ],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          },
+          {
+            "internal_terms": [
+              [
+                1,
+                "1"
+              ]
+            ],
+            "external_terms": [],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          },
+          {
+            "internal_terms": [
+              [
+                2,
+                "1"
+              ]
+            ],
+            "external_terms": [],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          },
+          {
+            "internal_terms": [
+              [
+                3,
+                "1"
+              ]
+            ],
+            "external_terms": [],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          }
+        ],
+        "variants": [
+          {
+            "origin": "pure_cff",
+            "prefactor": "-1",
+            "thermal_weight": {
+              "medium_mode": "thermodynamic_equilibrium",
+              "numerators": [
+                {
+                  "positive_energies": [
+                    1,
+                    2,
+                    3
+                  ],
+                  "negative_energies": []
+                }
+              ],
+              "distributions": []
+            },
+            "half_edges": [
+              1,
+              2,
+              3
+            ],
+            "denominator_edges": [
+              1,
+              2,
+              3
+            ],
+            "denominator_surface_signs": {},
+            "denominator_edge_support_signs": {},
+            "uniform_scale_power": 0,
+            "numerator_surfaces": [],
+            "denominator": {
+              "nodes": [
+                {
+                  "data": "Unit",
+                  "node_id": 0,
+                  "children": [
+                    1
+                  ],
+                  "parent": null
+                },
+                {
+                  "data": {
+                    "Linear": 0
+                  },
+                  "node_id": 1,
+                  "children": [
+                    2
+                  ],
+                  "parent": 0
+                },
+                {
+                  "data": "Unit",
+                  "node_id": 2,
+                  "children": [],
+                  "parent": 1
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "data": {
+          "orientation": [
+            "Default",
+            "Reversed",
+            "Default",
+            "Default"
+          ],
+          "label": "+-++|N0",
+          "numerator_map_index": 0
+        },
+        "loop_energy_map": [
+          {
+            "internal_terms": [
+              [
+                1,
+                "-1"
+              ]
+            ],
+            "external_terms": [],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          },
+          {
+            "internal_terms": [
+              [
+                2,
+                "1"
+              ]
+            ],
+            "external_terms": [],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          }
+        ],
+        "edge_energy_map": [
+          {
+            "internal_terms": [],
+            "external_terms": [
+              [
+                0,
+                "1"
+              ]
+            ],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          },
+          {
+            "internal_terms": [
+              [
+                1,
+                "-1"
+              ]
+            ],
+            "external_terms": [],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          },
+          {
+            "internal_terms": [
+              [
+                2,
+                "1"
+              ]
+            ],
+            "external_terms": [],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          },
+          {
+            "internal_terms": [
+              [
+                3,
+                "1"
+              ]
+            ],
+            "external_terms": [],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          }
+        ],
+        "variants": [
+          {
+            "origin": "pure_cff",
+            "prefactor": "-1",
+            "thermal_weight": {
+              "medium_mode": "thermodynamic_equilibrium",
+              "numerators": [
+                {
+                  "positive_energies": [
+                    2,
+                    3
+                  ],
+                  "negative_energies": [
+                    1
+                  ]
+                }
+              ],
+              "distributions": []
+            },
+            "half_edges": [
+              1,
+              2,
+              3
+            ],
+            "denominator_edges": [
+              1,
+              2,
+              3
+            ],
+            "denominator_surface_signs": {},
+            "denominator_edge_support_signs": {},
+            "uniform_scale_power": 0,
+            "numerator_surfaces": [],
+            "denominator": {
+              "nodes": [
+                {
+                  "data": "Unit",
+                  "node_id": 0,
+                  "children": [
+                    1
+                  ],
+                  "parent": null
+                },
+                {
+                  "data": {
+                    "Linear": 1
+                  },
+                  "node_id": 1,
+                  "children": [
+                    2
+                  ],
+                  "parent": 0
+                },
+                {
+                  "data": "Unit",
+                  "node_id": 2,
+                  "children": [],
+                  "parent": 1
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "data": {
+          "orientation": [
+            "Default",
+            "Default",
+            "Reversed",
+            "Default"
+          ],
+          "label": "++-+|N0",
+          "numerator_map_index": 0
+        },
+        "loop_energy_map": [
+          {
+            "internal_terms": [
+              [
+                1,
+                "1"
+              ]
+            ],
+            "external_terms": [],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          },
+          {
+            "internal_terms": [
+              [
+                2,
+                "-1"
+              ]
+            ],
+            "external_terms": [],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          }
+        ],
+        "edge_energy_map": [
+          {
+            "internal_terms": [],
+            "external_terms": [
+              [
+                0,
+                "1"
+              ]
+            ],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          },
+          {
+            "internal_terms": [
+              [
+                1,
+                "1"
+              ]
+            ],
+            "external_terms": [],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          },
+          {
+            "internal_terms": [
+              [
+                2,
+                "-1"
+              ]
+            ],
+            "external_terms": [],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          },
+          {
+            "internal_terms": [
+              [
+                3,
+                "1"
+              ]
+            ],
+            "external_terms": [],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          }
+        ],
+        "variants": [
+          {
+            "origin": "pure_cff",
+            "prefactor": "-1",
+            "thermal_weight": {
+              "medium_mode": "thermodynamic_equilibrium",
+              "numerators": [
+                {
+                  "positive_energies": [
+                    1,
+                    3
+                  ],
+                  "negative_energies": [
+                    2
+                  ]
+                }
+              ],
+              "distributions": []
+            },
+            "half_edges": [
+              1,
+              2,
+              3
+            ],
+            "denominator_edges": [
+              1,
+              2,
+              3
+            ],
+            "denominator_surface_signs": {},
+            "denominator_edge_support_signs": {},
+            "uniform_scale_power": 0,
+            "numerator_surfaces": [],
+            "denominator": {
+              "nodes": [
+                {
+                  "data": "Unit",
+                  "node_id": 0,
+                  "children": [
+                    1
+                  ],
+                  "parent": null
+                },
+                {
+                  "data": {
+                    "Linear": 2
+                  },
+                  "node_id": 1,
+                  "children": [
+                    2
+                  ],
+                  "parent": 0
+                },
+                {
+                  "data": "Unit",
+                  "node_id": 2,
+                  "children": [],
+                  "parent": 1
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "data": {
+          "orientation": [
+            "Default",
+            "Reversed",
+            "Reversed",
+            "Default"
+          ],
+          "label": "+--+|N0",
+          "numerator_map_index": 0
+        },
+        "loop_energy_map": [
+          {
+            "internal_terms": [
+              [
+                1,
+                "-1"
+              ]
+            ],
+            "external_terms": [],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          },
+          {
+            "internal_terms": [
+              [
+                2,
+                "-1"
+              ]
+            ],
+            "external_terms": [],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          }
+        ],
+        "edge_energy_map": [
+          {
+            "internal_terms": [],
+            "external_terms": [
+              [
+                0,
+                "1"
+              ]
+            ],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          },
+          {
+            "internal_terms": [
+              [
+                1,
+                "-1"
+              ]
+            ],
+            "external_terms": [],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          },
+          {
+            "internal_terms": [
+              [
+                2,
+                "-1"
+              ]
+            ],
+            "external_terms": [],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          },
+          {
+            "internal_terms": [
+              [
+                3,
+                "1"
+              ]
+            ],
+            "external_terms": [],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          }
+        ],
+        "variants": [
+          {
+            "origin": "pure_cff",
+            "prefactor": "-1",
+            "thermal_weight": {
+              "medium_mode": "thermodynamic_equilibrium",
+              "numerators": [
+                {
+                  "positive_energies": [
+                    1,
+                    2
+                  ],
+                  "negative_energies": [
+                    3
+                  ]
+                }
+              ],
+              "distributions": []
+            },
+            "half_edges": [
+              1,
+              2,
+              3
+            ],
+            "denominator_edges": [
+              1,
+              2,
+              3
+            ],
+            "denominator_surface_signs": {},
+            "denominator_edge_support_signs": {},
+            "uniform_scale_power": 0,
+            "numerator_surfaces": [],
+            "denominator": {
+              "nodes": [
+                {
+                  "data": "Unit",
+                  "node_id": 0,
+                  "children": [
+                    1
+                  ],
+                  "parent": null
+                },
+                {
+                  "data": {
+                    "Linear": 3
+                  },
+                  "node_id": 1,
+                  "children": [
+                    2
+                  ],
+                  "parent": 0
+                },
+                {
+                  "data": "Unit",
+                  "node_id": 2,
+                  "children": [],
+                  "parent": 1
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "data": {
+          "orientation": [
+            "Default",
+            "Default",
+            "Default",
+            "Reversed"
+          ],
+          "label": "+++-|N0",
+          "numerator_map_index": 0
+        },
+        "loop_energy_map": [
+          {
+            "internal_terms": [
+              [
+                1,
+                "1"
+              ]
+            ],
+            "external_terms": [],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          },
+          {
+            "internal_terms": [
+              [
+                2,
+                "1"
+              ]
+            ],
+            "external_terms": [],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          }
+        ],
+        "edge_energy_map": [
+          {
+            "internal_terms": [],
+            "external_terms": [
+              [
+                0,
+                "1"
+              ]
+            ],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          },
+          {
+            "internal_terms": [
+              [
+                1,
+                "1"
+              ]
+            ],
+            "external_terms": [],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          },
+          {
+            "internal_terms": [
+              [
+                2,
+                "1"
+              ]
+            ],
+            "external_terms": [],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          },
+          {
+            "internal_terms": [
+              [
+                3,
+                "-1"
+              ]
+            ],
+            "external_terms": [],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          }
+        ],
+        "variants": [
+          {
+            "origin": "pure_cff",
+            "prefactor": "-1",
+            "thermal_weight": {
+              "medium_mode": "thermodynamic_equilibrium",
+              "numerators": [
+                {
+                  "positive_energies": [
+                    1,
+                    2
+                  ],
+                  "negative_energies": [
+                    3
+                  ]
+                }
+              ],
+              "distributions": []
+            },
+            "half_edges": [
+              1,
+              2,
+              3
+            ],
+            "denominator_edges": [
+              1,
+              2,
+              3
+            ],
+            "denominator_surface_signs": {},
+            "denominator_edge_support_signs": {},
+            "uniform_scale_power": 0,
+            "numerator_surfaces": [],
+            "denominator": {
+              "nodes": [
+                {
+                  "data": "Unit",
+                  "node_id": 0,
+                  "children": [
+                    1
+                  ],
+                  "parent": null
+                },
+                {
+                  "data": {
+                    "Linear": 4
+                  },
+                  "node_id": 1,
+                  "children": [
+                    2
+                  ],
+                  "parent": 0
+                },
+                {
+                  "data": "Unit",
+                  "node_id": 2,
+                  "children": [],
+                  "parent": 1
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "data": {
+          "orientation": [
+            "Default",
+            "Reversed",
+            "Default",
+            "Reversed"
+          ],
+          "label": "+-+-|N0",
+          "numerator_map_index": 0
+        },
+        "loop_energy_map": [
+          {
+            "internal_terms": [
+              [
+                1,
+                "-1"
+              ]
+            ],
+            "external_terms": [],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          },
+          {
+            "internal_terms": [
+              [
+                2,
+                "1"
+              ]
+            ],
+            "external_terms": [],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          }
+        ],
+        "edge_energy_map": [
+          {
+            "internal_terms": [],
+            "external_terms": [
+              [
+                0,
+                "1"
+              ]
+            ],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          },
+          {
+            "internal_terms": [
+              [
+                1,
+                "-1"
+              ]
+            ],
+            "external_terms": [],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          },
+          {
+            "internal_terms": [
+              [
+                2,
+                "1"
+              ]
+            ],
+            "external_terms": [],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          },
+          {
+            "internal_terms": [
+              [
+                3,
+                "-1"
+              ]
+            ],
+            "external_terms": [],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          }
+        ],
+        "variants": [
+          {
+            "origin": "pure_cff",
+            "prefactor": "-1",
+            "thermal_weight": {
+              "medium_mode": "thermodynamic_equilibrium",
+              "numerators": [
+                {
+                  "positive_energies": [
+                    1,
+                    3
+                  ],
+                  "negative_energies": [
+                    2
+                  ]
+                }
+              ],
+              "distributions": []
+            },
+            "half_edges": [
+              1,
+              2,
+              3
+            ],
+            "denominator_edges": [
+              1,
+              2,
+              3
+            ],
+            "denominator_surface_signs": {},
+            "denominator_edge_support_signs": {},
+            "uniform_scale_power": 0,
+            "numerator_surfaces": [],
+            "denominator": {
+              "nodes": [
+                {
+                  "data": "Unit",
+                  "node_id": 0,
+                  "children": [
+                    1
+                  ],
+                  "parent": null
+                },
+                {
+                  "data": {
+                    "Linear": 5
+                  },
+                  "node_id": 1,
+                  "children": [
+                    2
+                  ],
+                  "parent": 0
+                },
+                {
+                  "data": "Unit",
+                  "node_id": 2,
+                  "children": [],
+                  "parent": 1
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "data": {
+          "orientation": [
+            "Default",
+            "Default",
+            "Reversed",
+            "Reversed"
+          ],
+          "label": "++--|N0",
+          "numerator_map_index": 0
+        },
+        "loop_energy_map": [
+          {
+            "internal_terms": [
+              [
+                1,
+                "1"
+              ]
+            ],
+            "external_terms": [],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          },
+          {
+            "internal_terms": [
+              [
+                2,
+                "-1"
+              ]
+            ],
+            "external_terms": [],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          }
+        ],
+        "edge_energy_map": [
+          {
+            "internal_terms": [],
+            "external_terms": [
+              [
+                0,
+                "1"
+              ]
+            ],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          },
+          {
+            "internal_terms": [
+              [
+                1,
+                "1"
+              ]
+            ],
+            "external_terms": [],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          },
+          {
+            "internal_terms": [
+              [
+                2,
+                "-1"
+              ]
+            ],
+            "external_terms": [],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          },
+          {
+            "internal_terms": [
+              [
+                3,
+                "-1"
+              ]
+            ],
+            "external_terms": [],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          }
+        ],
+        "variants": [
+          {
+            "origin": "pure_cff",
+            "prefactor": "-1",
+            "thermal_weight": {
+              "medium_mode": "thermodynamic_equilibrium",
+              "numerators": [
+                {
+                  "positive_energies": [
+                    2,
+                    3
+                  ],
+                  "negative_energies": [
+                    1
+                  ]
+                }
+              ],
+              "distributions": []
+            },
+            "half_edges": [
+              1,
+              2,
+              3
+            ],
+            "denominator_edges": [
+              1,
+              2,
+              3
+            ],
+            "denominator_surface_signs": {},
+            "denominator_edge_support_signs": {},
+            "uniform_scale_power": 0,
+            "numerator_surfaces": [],
+            "denominator": {
+              "nodes": [
+                {
+                  "data": "Unit",
+                  "node_id": 0,
+                  "children": [
+                    1
+                  ],
+                  "parent": null
+                },
+                {
+                  "data": {
+                    "Linear": 6
+                  },
+                  "node_id": 1,
+                  "children": [
+                    2
+                  ],
+                  "parent": 0
+                },
+                {
+                  "data": "Unit",
+                  "node_id": 2,
+                  "children": [],
+                  "parent": 1
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "data": {
+          "orientation": [
+            "Default",
+            "Reversed",
+            "Reversed",
+            "Reversed"
+          ],
+          "label": "+---|N0",
+          "numerator_map_index": 0
+        },
+        "loop_energy_map": [
+          {
+            "internal_terms": [
+              [
+                1,
+                "-1"
+              ]
+            ],
+            "external_terms": [],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          },
+          {
+            "internal_terms": [
+              [
+                2,
+                "-1"
+              ]
+            ],
+            "external_terms": [],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          }
+        ],
+        "edge_energy_map": [
+          {
+            "internal_terms": [],
+            "external_terms": [
+              [
+                0,
+                "1"
+              ]
+            ],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          },
+          {
+            "internal_terms": [
+              [
+                1,
+                "-1"
+              ]
+            ],
+            "external_terms": [],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          },
+          {
+            "internal_terms": [
+              [
+                2,
+                "-1"
+              ]
+            ],
+            "external_terms": [],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          },
+          {
+            "internal_terms": [
+              [
+                3,
+                "-1"
+              ]
+            ],
+            "external_terms": [],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          }
+        ],
+        "variants": [
+          {
+            "origin": "pure_cff",
+            "prefactor": "-1",
+            "thermal_weight": {
+              "medium_mode": "thermodynamic_equilibrium",
+              "numerators": [
+                {
+                  "positive_energies": [
+                    1,
+                    2,
+                    3
+                  ],
+                  "negative_energies": []
+                }
+              ],
+              "distributions": []
+            },
+            "half_edges": [
+              1,
+              2,
+              3
+            ],
+            "denominator_edges": [
+              1,
+              2,
+              3
+            ],
+            "denominator_surface_signs": {},
+            "denominator_edge_support_signs": {},
+            "uniform_scale_power": 0,
+            "numerator_surfaces": [],
+            "denominator": {
+              "nodes": [
+                {
+                  "data": "Unit",
+                  "node_id": 0,
+                  "children": [
+                    1
+                  ],
+                  "parent": null
+                },
+                {
+                  "data": {
+                    "Linear": 7
+                  },
+                  "node_id": 1,
+                  "children": [
+                    2
+                  ],
+                  "parent": 0
+                },
+                {
+                  "data": "Unit",
+                  "node_id": 2,
+                  "children": [],
+                  "parent": 1
+                }
+              ]
+            }
+          }
+        ]
+      }
+    ],
+    "surfaces": {
+      "esurface_cache": [],
+      "hsurface_cache": [],
+      "linear_surface_cache": [
+        {
+          "kind": "Esurface",
+          "expression": {
+            "internal_terms": [
+              [
+                1,
+                "1"
+              ],
+              [
+                2,
+                "1"
+              ],
+              [
+                3,
+                "1"
+              ]
+            ],
+            "external_terms": [
+              [
+                0,
+                "1"
+              ]
+            ],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          },
+          "origin": "Physical",
+          "numerator_only": false
+        },
+        {
+          "kind": "Hsurface",
+          "expression": {
+            "internal_terms": [
+              [
+                1,
+                "-1"
+              ],
+              [
+                2,
+                "1"
+              ],
+              [
+                3,
+                "1"
+              ]
+            ],
+            "external_terms": [
+              [
+                0,
+                "1"
+              ]
+            ],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          },
+          "origin": "Physical",
+          "numerator_only": false
+        },
+        {
+          "kind": "Hsurface",
+          "expression": {
+            "internal_terms": [
+              [
+                1,
+                "1"
+              ],
+              [
+                2,
+                "-1"
+              ],
+              [
+                3,
+                "1"
+              ]
+            ],
+            "external_terms": [
+              [
+                0,
+                "1"
+              ]
+            ],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          },
+          "origin": "Physical",
+          "numerator_only": false
+        },
+        {
+          "kind": "Hsurface",
+          "expression": {
+            "internal_terms": [
+              [
+                1,
+                "1"
+              ],
+              [
+                2,
+                "1"
+              ],
+              [
+                3,
+                "-1"
+              ]
+            ],
+            "external_terms": [
+              [
+                0,
+                "-1"
+              ]
+            ],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          },
+          "origin": "Physical",
+          "numerator_only": false
+        },
+        {
+          "kind": "Hsurface",
+          "expression": {
+            "internal_terms": [
+              [
+                1,
+                "1"
+              ],
+              [
+                2,
+                "1"
+              ],
+              [
+                3,
+                "-1"
+              ]
+            ],
+            "external_terms": [
+              [
+                0,
+                "1"
+              ]
+            ],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          },
+          "origin": "Physical",
+          "numerator_only": false
+        },
+        {
+          "kind": "Hsurface",
+          "expression": {
+            "internal_terms": [
+              [
+                1,
+                "1"
+              ],
+              [
+                2,
+                "-1"
+              ],
+              [
+                3,
+                "1"
+              ]
+            ],
+            "external_terms": [
+              [
+                0,
+                "-1"
+              ]
+            ],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          },
+          "origin": "Physical",
+          "numerator_only": false
+        },
+        {
+          "kind": "Hsurface",
+          "expression": {
+            "internal_terms": [
+              [
+                1,
+                "-1"
+              ],
+              [
+                2,
+                "1"
+              ],
+              [
+                3,
+                "1"
+              ]
+            ],
+            "external_terms": [
+              [
+                0,
+                "-1"
+              ]
+            ],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          },
+          "origin": "Physical",
+          "numerator_only": false
+        },
+        {
+          "kind": "Esurface",
+          "expression": {
+            "internal_terms": [
+              [
+                1,
+                "1"
+              ],
+              [
+                2,
+                "1"
+              ],
+              [
+                3,
+                "1"
+              ]
+            ],
+            "external_terms": [
+              [
+                0,
+                "-1"
+              ]
+            ],
+            "uniform_scale_coeff": "0",
+            "constant": "0"
+          },
+          "origin": "Physical",
+          "numerator_only": false
+        }
+      ]
+    },
+    "residual_denominators": []
+  }
+}

@@ -1,0 +1,195 @@
+{
+  "name": "freeze_in_0911_1120",
+  "restriction": null,
+  "orders": [
+    {
+      "name": "FI",
+      "expansion_order": 99,
+      "hierarchy": 1
+    }
+  ],
+  "parameters": [
+    {
+      "expression": null,
+      "lhablock": "SCALARS",
+      "lhacode": [
+        1337
+      ],
+      "name": "lam",
+      "nature": "external",
+      "parameter_type": "real",
+      "value": [
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "expression": null,
+      "lhablock": "SCALARS",
+      "lhacode": [
+        2002
+      ],
+      "name": "MX",
+      "nature": "external",
+      "parameter_type": "real",
+      "value": [
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "expression": null,
+      "lhablock": null,
+      "lhacode": null,
+      "name": "ZERO",
+      "nature": "internal",
+      "parameter_type": "real",
+      "value": [
+        0.0,
+        0.0
+      ]
+    }
+  ],
+  "particles": [
+    {
+      "antiname": "X",
+      "antitexname": "X",
+      "charge": 0.0,
+      "chemical_potential": null,
+      "color": 1,
+      "ghost_number": 0,
+      "lepton_number": 0,
+      "mass": "MX",
+      "name": "X",
+      "pdg_code": 9000001,
+      "spin": 1,
+      "texname": "X",
+      "width": "ZERO",
+      "y_charge": 0
+    },
+    {
+      "antiname": "B1",
+      "antitexname": "B1",
+      "charge": 0.0,
+      "chemical_potential": null,
+      "color": 1,
+      "ghost_number": 0,
+      "lepton_number": 0,
+      "mass": "ZERO",
+      "name": "B1",
+      "pdg_code": 9000002,
+      "spin": 1,
+      "texname": "B1",
+      "width": "ZERO",
+      "y_charge": 0
+    },
+    {
+      "antiname": "B2",
+      "antitexname": "B2",
+      "charge": 0.0,
+      "chemical_potential": null,
+      "color": 1,
+      "ghost_number": 0,
+      "lepton_number": 0,
+      "mass": "ZERO",
+      "name": "B2",
+      "pdg_code": 9000003,
+      "spin": 1,
+      "texname": "B2",
+      "width": "ZERO",
+      "y_charge": 0
+    },
+    {
+      "antiname": "B3",
+      "antitexname": "B3",
+      "charge": 0.0,
+      "chemical_potential": null,
+      "color": 1,
+      "ghost_number": 0,
+      "lepton_number": 0,
+      "mass": "ZERO",
+      "name": "B3",
+      "pdg_code": 9000004,
+      "spin": 1,
+      "texname": "B3",
+      "width": "ZERO",
+      "y_charge": 0
+    }
+  ],
+  "propagators": [
+    {
+      "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MX^2",
+      "name": "X_propFeynman",
+      "numerator": "1𝑖",
+      "particle": "X"
+    },
+    {
+      "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",
+      "name": "B1_propFeynman",
+      "numerator": "1𝑖",
+      "particle": "B1"
+    },
+    {
+      "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",
+      "name": "B2_propFeynman",
+      "numerator": "1𝑖",
+      "particle": "B2"
+    },
+    {
+      "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",
+      "name": "B3_propFeynman",
+      "numerator": "1𝑖",
+      "particle": "B3"
+    }
+  ],
+  "couplings": [
+    {
+      "expression": "-1𝑖*UFO::{}::lam",
+      "name": "SCALAR_COUPLING",
+      "orders": [
+        [
+          "FI",
+          1
+        ]
+      ],
+      "value": [
+        0.0,
+        -1.0
+      ]
+    }
+  ],
+  "lorentz_structures": [
+    {
+      "name": "SCALAR_4_LORENTZ_STRUCTURE",
+      "spins": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "structure": "1"
+    }
+  ],
+  "vertex_rules": [
+    {
+      "name": "V_XB1B2B3",
+      "particles": [
+        "X",
+        "B1",
+        "B2",
+        "B3"
+      ],
+      "color_structures": [
+        "1"
+      ],
+      "lorentz_structures": [
+        "SCALAR_4_LORENTZ_STRUCTURE"
+      ],
+      "couplings": [
+        [
+          "SCALAR_COUPLING"
+        ]
+      ]
+    }
+  ]
+}

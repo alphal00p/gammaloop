@@ -1,0 +1,157 @@
+# Section 6.3 of https://arxiv.org/pdf/0911.1120: L_int = lambda X B1 B2 B3.
+# Native cross sections at bath quadrature nodes; bath_average.py performs the outer average.
+# Units: MX = T = lambda = 1; sqrt(s) and the bath-frame boost vary by node.
+# All B_i are massless.
+# Run: python3 examples/cli/thermal_production/freeze_in_0911_1120/bath_average.py
+commands = []
+
+[[command_blocks]]
+name = "generate"
+commands = [
+  "import model ./examples/cli/thermal_production/freeze_in_0911_1120/model.json",
+  "set global kv global.generation.medium.mode=vacuum",
+  "generate xs B1 B2 > B3 X FI^2==2 --loop-momentum-bases GL0=3 -p vacuum -i LO",
+  "set global kv global.generation.medium.mode=thermodynamic_equilibrium",
+  "generate xs B1 B2 > B3 X FI^2==2 --loop-momentum-bases GL0=3 -p thermal -i LO",
+]
+
+# Use the massless B3 edge e3 as the loop momentum: the origin is then inside
+# the two-body cut surface for every timelike bath-frame total momentum.
+# bath_average.py supplies the bath-frame kinematics and workspace for each node.
+[[command_blocks]]
+name = "sample"
+commands = [
+  """set process string '
+[kinematics]
+e_cm = $(ECM)
+[kinematics.externals]
+type = "constant"
+[kinematics.externals.data]
+momenta = [[$(E1), 0.0, 0.0, $(E1)], [$(E2), 0.0, 0.0, $(PZ2)]]
+helicities = [0, 0]
+[integrator]
+seed = $(SEED)
+n_start = 5000
+n_increase = 0
+n_max = $(SAMPLES)
+'""",
+  "integrate -p vacuum -i LO -p thermal -i LO --n-cores 2 --workspace-path $(WORKSPACE) --restart --renderer tabled --no-stream-iterations --no-stream-updates",
+]
+
+[cli_settings.global.generation.evaluator]
+compile = false
+store_atom = true
+iterative_orientation_optimization = false
+summed = false
+summed_function_map = true
+
+[cli_settings.global.generation.uv]
+subtract_uv = false
+generate_integrated = false
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = false
+
+[default_runtime_settings.general]
+inverse_temperature = 1.0
+integral_unit = "none"
+evaluator_method = "SummedFunctionMap"
+
+[default_runtime_settings.kinematics]
+e_cm = 2.0
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [[1.0, 0.0, 0.0, 1.0], [1.0, 0.0, 0.0, -1.0]]
+helicities = [0, 0]
+
+[default_runtime_settings.sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = false
+lmb_channels = "summed"
+coordinate_system = "spherical"
+mapping = "linear"
+b = 1.0
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = true
+
+[default_runtime_settings.integrator]
+n_start = 10000
+n_increase = 0
+n_max = 100000
+seed = 1337
+integrated_phase = "real"
+target_relative_accuracy = 0.001
+
+[[command_blocks]]
+name = "bath_nodes"
+commands = [
+  "run sample -D ECM=1.1702796323051008 -D E1=1.156980327897597 -D E2=0.29593295252410284 -D PZ2=-0.29593295252410284 -D SEED=1337 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0000",
+  "run sample -D ECM=1.1702796323051008 -D E1=2.1509751141594604 -D E2=0.15917831972725366 -D PZ2=-0.15917831972725366 -D SEED=1359 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0001",
+  "run sample -D ECM=1.1702796323051008 -D E1=3.6787320251754849 -D E2=0.093072450535645557 -D PZ2=-0.093072450535645557 -D SEED=1381 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0002",
+  "run sample -D ECM=1.1702796323051008 -D E1=5.8357230157145343 -D E2=0.058671154118358708 -D PZ2=-0.058671154118358708 -D SEED=1403 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0003",
+  "run sample -D ECM=1.1702796323051008 -D E1=8.7363446429095042 -D E2=0.039191288627209338 -D PZ2=-0.039191288627209338 -D SEED=1425 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0004",
+  "run sample -D ECM=1.1702796323051008 -D E1=12.560201907857381 -D E2=0.027259800993553285 -D PZ2=-0.027259800993553285 -D SEED=1447 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0005",
+  "run sample -D ECM=1.1702796323051008 -D E1=17.650291963059423 -D E2=0.019398466901489848 -D PZ2=-0.019398466901489848 -D SEED=1469 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0006",
+  "run sample -D ECM=1.1702796323051008 -D E1=24.886525636889683 -D E2=0.013757991350126937 -D PZ2=-0.013757991350126937 -D SEED=1491 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0007",
+  "run sample -D ECM=1.9037017767993798 -D E1=1.6307507607522544 -D E2=0.5555846641637241 -D PZ2=-0.5555846641637241 -D SEED=1513 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0008",
+  "run sample -D ECM=1.9037017767993798 -D E1=2.7091453434183794 -D E2=0.33443023496261348 -D PZ2=-0.33443023496261348 -D SEED=1535 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0009",
+  "run sample -D ECM=1.9037017767993798 -D E1=4.2942417315116019 -D E2=0.21098488869380758 -D PZ2=-0.21098488869380758 -D SEED=1557 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0010",
+  "run sample -D ECM=1.9037017767993798 -D E1=6.4881745543596487 -D E2=0.13964175996752273 -D PZ2=-0.13964175996752273 -D SEED=1579 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0011",
+  "run sample -D ECM=1.9037017767993798 -D E1=9.4127030353326582 -D E2=0.096255040698334196 -D PZ2=-0.096255040698334196 -D SEED=1601 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0012",
+  "run sample -D ECM=1.9037017767993798 -D E1=13.252517968772775 -D E2=0.068365884572437918 -D PZ2=-0.068365884572437918 -D SEED=1623 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0013",
+  "run sample -D ECM=1.9037017767993798 -D E1=18.353748264741533 -D E2=0.049364309713661528 -D PZ2=-0.049364309713661528 -D SEED=1645 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0014",
+  "run sample -D ECM=1.9037017767993798 -D E1=25.598312028304946 -D E2=0.035393744429142858 -D PZ2=-0.035393744429142858 -D SEED=1667 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0015",
+  "run sample -D ECM=3.2510866298661307 -D E1=2.4592499728516013 -D E2=1.0744703051311282 -D PZ2=-1.0744703051311282 -D SEED=1689 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0016",
+  "run sample -D ECM=3.2510866298661307 -D E1=3.6711977730197658 -D E2=0.71976265842797793 -D PZ2=-0.71976265842797793 -D SEED=1711 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0017",
+  "run sample -D ECM=3.2510866298661307 -D E1=5.3595903882018714 -D E2=0.49302108507028913 -D PZ2=-0.49302108507028913 -D SEED=1733 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0018",
+  "run sample -D ECM=3.2510866298661307 -D E1=7.6288321536986237 -D E2=0.34636901369529938 -D PZ2=-0.34636901369529938 -D SEED=1755 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0019",
+  "run sample -D ECM=3.2510866298661307 -D E1=10.607230682188604 -D E2=0.24911224690914055 -D PZ2=-0.24911224690914055 -D SEED=1777 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0020",
+  "run sample -D ECM=3.2510866298661307 -D E1=14.485856917885945 -D E2=0.18241178852601889 -D PZ2=-0.18241178852601889 -D SEED=1799 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0021",
+  "run sample -D ECM=3.2510866298661307 -D E1=19.615790079101714 -D E2=0.13470734842022658 -D PZ2=-0.13470734842022658 -D SEED=1821 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0022",
+  "run sample -D ECM=3.2510866298661307 -D E1=26.88279761677731 -D E2=0.09829300902352836 -D PZ2=-0.09829300902352836 -D SEED=1843 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0023",
+  "run sample -D ECM=5.2667001702876588 -D E1=3.6488772878263371 -D E2=1.9004565305779206 -D PZ2=-1.9004565305779206 -D SEED=1865 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0024",
+  "run sample -D ECM=5.2667001702876588 -D E1=5.0271605679932145 -D E2=1.3794134038760573 -D PZ2=-1.3794134038760573 -D SEED=1887 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0025",
+  "run sample -D ECM=5.2667001702876588 -D E1=6.8569037319605624 -D E2=1.0113212817331263 -D PZ2=-1.0113212817331263 -D SEED=1909 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0026",
+  "run sample -D ECM=5.2667001702876588 -D E1=9.2403528141637672 -D E2=0.75046189365168459 -D PZ2=-0.75046189365168459 -D SEED=1931 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0027",
+  "run sample -D ECM=5.2667001702876588 -D E1=12.308565668538101 -D E2=0.56339080098117023 -D PZ2=-0.56339080098117023 -D SEED=1953 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0028",
+  "run sample -D ECM=5.2667001702876588 -D E1=16.257334293413066 -D E2=0.42654795342042368 -D PZ2=-0.42654795342042368 -D SEED=1975 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0029",
+  "run sample -D ECM=5.2667001702876588 -D E1=21.442712864601106 -D E2=0.32339810334236901 -D PZ2=-0.32339810334236901 -D SEED=1997 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0030",
+  "run sample -D ECM=5.2667001702876588 -D E1=28.755549579636487 -D E2=0.24115458658588004 -D PZ2=-0.24115458658588004 -D SEED=2019 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0031",
+  "run sample -D ECM=8.0459054023934655 -D E1=5.239905264202787 -D E2=3.0886337863072773 -D PZ2=-3.0886337863072773 -D SEED=2041 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0032",
+  "run sample -D ECM=8.0459054023934655 -D E1=6.8088513480425501 -D E2=2.3769278559325291 -D PZ2=-2.3769278559325291 -D SEED=2063 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0033",
+  "run sample -D ECM=8.0459054023934655 -D E1=8.8105179956938748 -D E2=1.8369122501056194 -D PZ2=-1.8369122501056194 -D SEED=2085 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0034",
+  "run sample -D ECM=8.0459054023934655 -D E1=11.343256018759593 -D E2=1.4267639211616645 -D PZ2=-1.4267639211616645 -D SEED=2107 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0035",
+  "run sample -D ECM=8.0459054023934655 -D E1=14.537925241302185 -D E2=1.1132364603228933 -D PZ2=-1.1132364603228933 -D SEED=2129 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0036",
+  "run sample -D ECM=8.0459054023934655 -D E1=18.592626919146099 -D E2=0.87046055979320303 -D PZ2=-0.87046055979320303 -D SEED=2151 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0037",
+  "run sample -D ECM=8.0459054023934655 -D E1=23.867225293500827 -D E2=0.67809090654845072 -D PZ2=-0.67809090654845072 -D SEED=2173 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0038",
+  "run sample -D ECM=8.0459054023934655 -D E1=31.258151707876245 -D E2=0.5177576904519311 -D PZ2=-0.5177576904519311 -D SEED=2195 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0039",
+  "run sample -D ECM=11.758516010180996 -D E1=7.3173579964359767 -D E2=4.7237916618616174 -D PZ2=-4.7237916618616174 -D SEED=2217 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0040",
+  "run sample -D ECM=11.758516010180996 -D E1=9.0999382438196772 -D E2=3.7984515679429314 -D PZ2=-3.7984515679429314 -D SEED=2239 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0041",
+  "run sample -D ECM=11.758516010180996 -D E1=11.301551530491675 -D E2=3.0584893230953498 -D PZ2=-3.0584893230953498 -D SEED=2261 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0042",
+  "run sample -D ECM=11.758516010180996 -D E1=14.016573082181658 -D E2=2.4660574655271303 -D PZ2=-2.4660574655271303 -D SEED=2283 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0043",
+  "run sample -D ECM=11.758516010180996 -D E1=17.374300913562781 -D E2=1.9894713958498287 -D PZ2=-1.9894713958498287 -D SEED=2305 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0044",
+  "run sample -D ECM=11.758516010180996 -D E1=21.573467239617351 -D E2=1.6022308471094788 -D PZ2=-1.6022308471094788 -D SEED=2327 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0045",
+  "run sample -D ECM=11.758516010180996 -D E1=26.976606463205382 -D E2=1.281320344631427 -D PZ2=-1.281320344631427 -D SEED=2349 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0046",
+  "run sample -D ECM=11.758516010180996 -D E1=34.486215933166434 -D E2=1.0023040729492692 -D PZ2=-1.0023040729492692 -D SEED=2371 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0047",
+  "run sample -D ECM=16.740678641278002 -D E1=10.05623051420106 -D E2=6.9670817751935408 -D PZ2=-6.9670817751935408 -D SEED=2393 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0048",
+  "run sample -D ECM=16.740678641278002 -D E1=12.08128856983404 -D E2=5.7992638730255752 -D PZ2=-5.7992638730255752 -D SEED=2415 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0049",
+  "run sample -D ECM=16.740678641278002 -D E1=14.515441590876119 -D E2=4.8267618938079133 -D PZ2=-4.8267618938079133 -D SEED=2437 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0050",
+  "run sample -D ECM=16.740678641278002 -D E1=17.44966956357862 -D E2=4.0151236152271741 -D PZ2=-4.0151236152271741 -D SEED=2459 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0051",
+  "run sample -D ECM=16.740678641278002 -D E1=21.011437738872921 -D E2=3.3344972016366934 -D PZ2=-3.3344972016366934 -D SEED=2481 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0052",
+  "run sample -D ECM=16.740678641278002 -D E1=25.399429451639953 -D E2=2.7584312661838815 -D PZ2=-2.7584312661838815 -D SEED=2503 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0053",
+  "run sample -D ECM=16.740678641278002 -D E1=30.978432725592263 -D E2=2.2616567133415519 -D PZ2=-2.2616567133415519 -D SEED=2525 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0054",
+  "run sample -D ECM=16.740678641278002 -D E1=38.658328533981127 -D E2=1.8123541032315853 -D PZ2=-1.8123541032315853 -D SEED=2547 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0055",
+  "run sample -D ECM=23.863131736889265 -D E1=13.914684102509973 -D E2=10.231081282495891 -D PZ2=-10.231081282495891 -D SEED=2569 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0056",
+  "run sample -D ECM=23.863131736889265 -D E1=16.233165591111025 -D E2=8.7698399473598556 -D PZ2=-8.7698399473598556 -D SEED=2591 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0057",
+  "run sample -D ECM=23.863131736889265 -D E1=18.953538643316708 -D E2=7.5111179369785868 -D PZ2=-7.5111179369785868 -D SEED=2613 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0058",
+  "run sample -D ECM=23.863131736889265 -D E1=22.16416303708262 -D E2=6.4230832373344375 -D PZ2=-6.4230832373344375 -D SEED=2635 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0059",
+  "run sample -D ECM=23.863131736889265 -D E1=25.991025757195871 -D E2=5.4773622789250069 -D PZ2=-5.4773622789250069 -D SEED=2657 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0060",
+  "run sample -D ECM=23.863131736889265 -D E1=30.632957667930736 -D E2=4.6473561455043635 -D PZ2=-4.6473561455043635 -D SEED=2679 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0061",
+  "run sample -D ECM=23.863131736889265 -D E1=36.457678914238357 -D E2=3.9048636203067244 -D PZ2=-3.9048636203067244 -D SEED=2701 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0062",
+  "run sample -D ECM=23.863131736889265 -D E1=44.385748961048037 -D E2=3.2073867717759348 -D PZ2=-3.2073867717759348 -D SEED=2723 -D SAMPLES=100000 -D WORKSPACE=/private/tmp/gammaloop-freeze-in-bath-n8-independent/node_0063"
+]

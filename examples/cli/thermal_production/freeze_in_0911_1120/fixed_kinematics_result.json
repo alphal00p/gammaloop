@@ -1,0 +1,148 @@
+{
+  "slots": [
+    {
+      "key": "vacuum@LO",
+      "process": "vacuum",
+      "integrand": "LO",
+      "target": null,
+      "integral": {
+        "neval": 100000,
+        "real_zero": 1359,
+        "im_zero": 100000,
+        "result": {
+          "re": 0.003723220689665643,
+          "im": 0.0
+        },
+        "error": {
+          "re": 7.880613582541976e-6,
+          "im": 0.0
+        },
+        "real_chisq": 2.1978268455932266,
+        "im_chisq": 0.0
+      },
+      "table_results": [
+        {
+          "component": "re",
+          "value": 0.003723220689665643,
+          "error": 7.880613582541976e-6,
+          "relative_error_percent": 0.21166119978909118,
+          "chi_sq_per_dof": 0.21978268455932265,
+          "target_delta_sigma": null,
+          "target_delta_percent": null,
+          "max_weight_impact": 0.00007736985833640478
+        },
+        {
+          "component": "im",
+          "value": 0.0,
+          "error": 0.0,
+          "relative_error_percent": null,
+          "chi_sq_per_dof": 0.0,
+          "target_delta_sigma": null,
+          "target_delta_percent": null,
+          "max_weight_impact": 0.0
+        }
+      ],
+      "integration_statistics": {
+        "num_evals": 200000,
+        "average_total_time_seconds": 0.000012497,
+        "average_parameterization_time_seconds": 2.34e-7,
+        "average_integrand_time_seconds": 4.761e-6,
+        "average_evaluator_time_seconds": 2.902e-6,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 2.21e-7,
+        "f64_percentage": 100.0,
+        "f128_percentage": 0.0,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "max_weight_info": [
+        {
+          "component": "re",
+          "sign": "+",
+          "max_eval": 0.02880650573146021,
+          "coordinates": "graph: 0, xs: [ 4.3308857641177007e-01 7.4498645284411769e-01 3.2787537545827711e-01 ]"
+        }
+      ],
+      "grid_breakdown": {
+        "re": null,
+        "im": null
+      }
+    },
+    {
+      "key": "thermal@LO",
+      "process": "thermal",
+      "integrand": "LO",
+      "target": null,
+      "integral": {
+        "neval": 100000,
+        "real_zero": 1359,
+        "im_zero": 100000,
+        "result": {
+          "re": 0.008551516560933411,
+          "im": 0.0
+        },
+        "error": {
+          "re": 0.0000181002425530345,
+          "im": 0.0
+        },
+        "real_chisq": 2.1978268455932266,
+        "im_chisq": 0.0
+      },
+      "table_results": [
+        {
+          "component": "re",
+          "value": 0.008551516560933411,
+          "error": 0.0000181002425530345,
+          "relative_error_percent": 0.21166119978909137,
+          "chi_sq_per_dof": 0.21978268455932265,
+          "target_delta_sigma": null,
+          "target_delta_percent": null,
+          "max_weight_impact": 0.00007736985833640476
+        },
+        {
+          "component": "im",
+          "value": 0.0,
+          "error": 0.0,
+          "relative_error_percent": null,
+          "chi_sq_per_dof": 0.0,
+          "target_delta_sigma": null,
+          "target_delta_percent": null,
+          "max_weight_impact": 0.0
+        }
+      ],
+      "integration_statistics": {
+        "num_evals": 200000,
+        "average_total_time_seconds": 0.000012497,
+        "average_parameterization_time_seconds": 2.34e-7,
+        "average_integrand_time_seconds": 4.761e-6,
+        "average_evaluator_time_seconds": 2.902e-6,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 2.21e-7,
+        "f64_percentage": 100.0,
+        "f128_percentage": 0.0,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "max_weight_info": [
+        {
+          "component": "re",
+          "sign": "+",
+          "max_eval": 0.06616296248808372,
+          "coordinates": "graph: 0, xs: [ 4.3308857641177007e-01 7.4498645284411769e-01 3.2787537545827711e-01 ]"
+        }
+      ],
+      "grid_breakdown": {
+        "re": null,
+        "im": null
+      }
+    }
+  ]
+}
