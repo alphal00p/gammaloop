@@ -1,8 +1,9 @@
 use feynkit_cff::{CffError, CffOptions, CffResult, HedgeGraphCffExt, SurfaceCache};
+use feynkit_graph::expressions::evaluate_overall_factor;
 use gammaloop_tracing_filter::LogFormat;
 use gammalooprs::{
     cff::{expression::CffExpressionExt, generation::GammaLoopSurfaceCacheExt},
-    graph::{self, global::evaluate_overall_factor, FeynmanGraph, Graph, LMBext},
+    graph::{self, FeynmanGraph, Graph, LMBext},
     integrands::evaluation::{
         BatchSampleEvaluationResult, SampleEvaluationResult, SingleSampleEvaluationResult,
     },
@@ -14,7 +15,7 @@ use gammalooprs::{
     settings::{global::OrientationPattern, RuntimeSettings},
     utils::tracing::LogLevel,
 };
-use idenso::shorthands::{metric::to_dots_impl, schoonschip::Schoonschip};
+use idenso::shorthands::schoonschip::Schoonschip;
 use linnet::half_edge::{
     involution::{EdgeIndex, Orientation},
     subgraph::{ModifySubSet, SuBitGraph},
@@ -165,11 +166,7 @@ pub(crate) fn atom_to_canonical_string(atom_str: &str) -> Result<String> {
 #[pyfunction]
 #[pyo3(name = "to_dots")]
 pub(crate) fn atom_to_dots(atom_str: &str) -> Result<String> {
-    let dotted = to_dots_impl(
-        parse!(atom_str, default_namespace = "python")
-            .to_dots()
-            .as_view(),
-    );
+    let dotted = parse!(atom_str, default_namespace = "python").to_dots();
     Ok(format!(
         "{}",
         dotted.as_view().printer(PrintOptions {

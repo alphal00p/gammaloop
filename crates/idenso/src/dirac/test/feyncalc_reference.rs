@@ -1,6 +1,6 @@
 use super::*;
 use insta::assert_snapshot;
-use spenso::{g, p, q, trace};
+use spenso::{g, network::tags::SPENSO_TAG as T, p, q, trace};
 
 #[test]
 fn dirac_simplify_id1_repeated_d_dim_gamma_is_dimension() {
@@ -237,4 +237,85 @@ fn dirac_simplify_id46_d_dim_repeated_gamma_slash_sum() {
             * gamma!(slot!(r.bis_d, a), slot!(r.bis_d, j), slot!(r.mink_d, mu));
 
     assert_snapshot!(expr.simplify_gamma().expand().to_bare_ordered_string(), @"-1*chain(bis(d,i),bis(d,j),gamma(in,out,p(mink(d))))*d+-1*chain(bis(d,i),bis(d,j),gamma(in,out,q(mink(d))))*d+2*chain(bis(d,i),bis(d,j),gamma(in,out,p(mink(d))))+2*chain(bis(d,i),bis(d,j),gamma(in,out,q(mink(d))))+d*g(bis(d,i),bis(d,j))*m");
+}
+
+#[test]
+fn chiral_projector_traces() {
+    let r = test_initialize();
+    let rep = r.bis4.to_symbolic([]);
+    let mu = slot!(r.mink4, mu);
+    let nu = slot!(r.mink4, nu);
+    let rho = slot!(r.mink4, rho);
+    let sigma = slot!(r.mink4, sigma);
+    for (symbol, sign) in [(AGS.projp, 1), (AGS.projm, -1)] {
+        let projector = function!(symbol, T.chain_in, T.chain_out);
+        assert_eq!(
+            trace!(rep.clone(), projector.clone()).simplify_gamma(),
+            Atom::num(2)
+        );
+        let expr = trace!(rep.clone(), projector.clone(), gamma!(mu), gamma!(nu));
+        assert_eq!(expr.simplify_gamma(), 2 * g!(mu, nu));
+
+        let ordinary = trace!(
+            rep.clone(),
+            gamma!(mu),
+            gamma!(nu),
+            gamma!(rho),
+            gamma!(sigma)
+        );
+        let axial = trace!(
+            rep.clone(),
+            gamma5!(),
+            gamma!(mu),
+            gamma!(nu),
+            gamma!(rho),
+            gamma!(sigma)
+        );
+        let expr = trace!(
+            rep.clone(),
+            projector.clone(),
+            gamma!(mu),
+            gamma!(nu),
+            gamma!(rho),
+            gamma!(sigma)
+        );
+        let reduced = expr.simplify_gamma();
+        assert_eq!(
+            (reduced.clone()
+                - (ordinary.simplify_gamma() + Atom::num(sign) * axial.simplify_gamma()) / 2)
+                .expand(),
+            Atom::Zero
+        );
+        assert_eq!(reduced.simplify_gamma(), reduced);
+        assert_eq!(
+            expr.simplify_gamma_with(GammaSimplifySettings::default().without_trace_evaluation()),
+            expr
+        );
+
+        // A gamma flips chirality, so equal projectors separated by one gamma vanish.
+        let expr = trace!(
+            rep.clone(),
+            projector.clone(),
+            gamma!(mu),
+            projector.clone(),
+            gamma!(nu)
+        );
+        assert_eq!(expr.simplify_gamma(), Atom::Zero);
+        let expr = trace!(rep.clone(), projector.clone(), projector.clone());
+        assert_eq!(expr.simplify_gamma(), Atom::num(2));
+        let mixed = trace!(rep.clone(), projector.clone(), gamma!(slot!(r.mink_d, mu)));
+        assert_eq!(mixed.simplify_gamma(), mixed);
+        let dimensional = trace!(r.bis_d.to_symbolic([]), projector);
+        assert_eq!(dimensional.simplify_gamma(), dimensional);
+    }
+    let plus = function!(AGS.projp, T.chain_in, T.chain_out);
+    let minus = function!(AGS.projm, T.chain_in, T.chain_out);
+    assert_eq!(
+        trace!(rep.clone(), plus.clone(), minus.clone()).simplify_gamma(),
+        Atom::Zero
+    );
+    assert_eq!(
+        trace!(rep, plus, gamma!(mu), minus, gamma!(nu)).simplify_gamma(),
+        2 * g!(mu, nu)
+    );
 }

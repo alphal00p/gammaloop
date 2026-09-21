@@ -1,3 +1,4 @@
+use feynkit_graph::expressions::evaluate_overall_factor;
 use std::{
     collections::{BTreeMap, BTreeSet},
     ops::Index,
@@ -26,7 +27,6 @@ use typed_index_collections::TiVec;
 
 use crate::{
     define_index,
-    graph::global::evaluate_overall_factor,
     integrands::process::{ChannelIndex, LmbMultiChannelingSetup, ParamBuilder},
     model::Model,
     momentum::{Dep, ExternalMomenta, PolDef, sample::ExternalIndex},

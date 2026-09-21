@@ -1,4 +1,9 @@
-//! Symmetry-aware tensor reduction for vacuum integrals.
+//! Symmetry-aware covariant tensor reduction for loop integrals.
+//!
+//! A configured external basis separates longitudinal loop components from
+//! their orthogonal complement. Symbolica inverts the external Gram matrix;
+//! the same vacuum projector then reduces the transverse tensors in `D-n`
+//! dimensions. Scalar products remain explicit for later integral reduction.
 //!
 //! The universal coefficient engine uses orthogonal Weingarten functions.
 //! Their value depends only on the coset type of two metric pairings, so a
