@@ -1726,6 +1726,19 @@ class FeynmanDiagram:
             Basis from this diagram instance. Supplying it enables routing and
             takes precedence over ``in_lmb``, including for a selected region.
         """
+    def uv_expansion(self, uv_mass: Expression | int, *, subgraph: linnet_py.Subgraph | None = None, dimension: builtins.int = 4, numerator: Expression | int | None = None) -> TensorExpression:
+        """Return the massive local UV expansion through logarithmic divergence.
+
+        Only selected loops scale. Numerator overrides use edge momenta;
+        projectors and diagram-wide factors remain separate. The result retains
+        tagged denom propagators. This is a single unintegrated UV limit.
+        """
+        ...
+
+    def uv_counterterm(self, uv_mass: Expression | int, *, subgraph: linnet_py.Subgraph | None = None, dimension: builtins.int = 4, numerator: Expression | int | None = None) -> TensorExpression:
+        """Return the negative of uv_expansion, with identical arguments."""
+        ...
+
     def numerator_prefactor_expression(self) -> Expression:
         r"""
         Return the request-wide numerator multiplier as a Symbolica expression.

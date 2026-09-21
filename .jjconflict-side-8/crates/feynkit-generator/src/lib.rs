@@ -6,6 +6,9 @@ mod generation;
 mod grouping;
 mod options;
 mod process;
+mod spin;
+
+pub use spin::{AxialReference, SpinSum, SpinSumError};
 
 use feynkit_graph::momentum_symbol;
 

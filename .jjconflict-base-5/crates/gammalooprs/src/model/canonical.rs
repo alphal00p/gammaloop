@@ -1,3 +1,4 @@
+use feynkit_generator::{AxialReference, SpinSum};
 use feynkit_graph::DOD;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
@@ -17,7 +18,6 @@ use linnet::half_edge::involution::{EdgeIndex, Flow};
 use rand::{Rng, SeedableRng, rngs::SmallRng};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use spenso::algebra::complex::Complex;
-use spenso::network::library::symbolic::ETS;
 use spenso::structure::{
     Canonicalized, IndexLess, OrderedStructure, TensorDataLayout,
     representation::{Euclidean, LibraryRep, Minkowski, RepName},
@@ -914,59 +914,29 @@ impl ParticleGammaLoopExt for Particle {
         average: bool,
         gauge: VectorPolarizationSumGauge,
     ) -> Result<Option<Replacement>, Report> {
-        let average_factor = if average {
-            match self.spin {
-                1 => Atom::one(),
-                2 => Atom::num(1) / Atom::num(2),
-                3 => {
-                    let states = if self.is_massless(model) { 2 } else { 3 };
-                    Atom::num(1) / Atom::num(states)
-                }
-                4 => Atom::num(1) / Atom::num(4),
-                5 => {
-                    let states = if self.is_massless(model) { 4 } else { 5 };
-                    Atom::num(1) / Atom::num(states)
-                }
-                spin => {
-                    return Err(eyre!(
-                        "Polarization averaging for particle '{}' (PDG {}, spin {}) is not supported yet.",
-                        self.name,
-                        self.pdg_code,
-                        spin
-                    ));
-                }
-            }
-        } else {
-            Atom::one()
-        };
+        let sum = SpinSum::new(self, model)?
+            .averaged(average)
+            .covariant(gauge == VectorPolarizationSumGauge::Feynman);
 
         Ok(match self.spin {
             1 => None,
             2 => {
                 let mu: Slot<Minkowski, Aind> = Minkowski {}.new_rep(4).slot(Aind::new_dummy());
-                let mass_sign = if self.is_antiparticle() { -1 } else { 1 };
-                let rhs = GS.emr_mom(edge, mu.to_atom())
-                    * function!(AGS.gamma, W_.a_, W_.b_, mu.to_atom())
-                    + Atom::num(mass_sign)
-                        * self.symbolic_mass(model)
-                        * function!(ETS.metric, W_.a_, W_.b_);
+                let slash = GS.emr_mom(edge, mu.to_atom())
+                    * function!(AGS.gamma, W_.a_, W_.b_, mu.to_atom());
+                let rhs = sum.fermion(slash, &W_.a_.into(), &W_.b_.into())?;
                 Some(if !self.is_antiparticle() {
                     (function!(GS.u, edge.0, W_.a_) * function!(GS.ubar, edge.0, W_.b_))
-                        .replace_with(rhs * average_factor)
+                        .replace_with(rhs)
                 } else {
                     (function!(GS.v, edge.0, W_.a_) * function!(GS.vbar, edge.0, W_.b_))
-                        .replace_with(rhs * average_factor)
+                        .replace_with(rhs)
                 })
             }
             3 => {
-                let minus_metric = -function!(ETS.metric, W_.a_, W_.b_);
-                let rhs = match gauge {
-                    VectorPolarizationSumGauge::Feynman => minus_metric,
-                    VectorPolarizationSumGauge::LightLikeAxial if !self.is_massless(model) => {
-                        minus_metric
-                            + GS.emr_mom(edge, W_.a_) * GS.emr_mom(edge, W_.b_)
-                                / self.symbolic_mass(model).pow(2)
-                    }
+                let reference = match gauge {
+                    VectorPolarizationSumGauge::Feynman => None,
+                    VectorPolarizationSumGauge::LightLikeAxial if !self.is_massless(model) => None,
                     VectorPolarizationSumGauge::LightLikeAxial => {
                         let temporal_component = GS.emr_mom(edge, GS.cind(0));
                         let n_a = temporal_component.clone() * GS.energy_delta(W_.a_)
@@ -977,15 +947,24 @@ impl ParticleGammaLoopExt for Particle {
                             + Euclidean {}
                                 .new_rep(4)
                                 .inner_product(GS.emr_vec(edge), GS.emr_vec(edge));
-                        minus_metric
-                            + (GS.emr_mom(edge, W_.a_) * n_b + n_a * GS.emr_mom(edge, W_.b_))
-                                / q_dot_n
+                        Some(AxialReference {
+                            left: n_a,
+                            right: n_b,
+                            momentum_dot_reference: q_dot_n,
+                            norm_squared: Atom::Zero,
+                        })
                     }
                 };
+                let rhs = sum.vector(
+                    [&GS.emr_mom(edge, W_.a_), &GS.emr_mom(edge, W_.b_)],
+                    &W_.a_.into(),
+                    &W_.b_.into(),
+                    reference.as_ref(),
+                )?;
                 Some(
                     (function!(GS.epsilon, edge.0, W_.a_)
                         * function!(GS.epsilonbar, edge.0, W_.b_))
-                    .replace_with(rhs * average_factor),
+                    .replace_with(rhs),
                 )
             }
             spin => {

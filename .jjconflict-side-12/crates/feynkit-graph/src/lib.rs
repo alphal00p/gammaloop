@@ -2952,6 +2952,146 @@ mod tests {
     }
 
     #[test]
+    fn uv_expansion_retains_logarithmic_bubble_and_quadratic_mass_correction() {
+        let bubble = one_loop();
+        let mass = Atom::var(symbolica::symbol!("feynkit_graph::test_mUV"));
+        let selected = bubble.internal_subgraph();
+        let loop_edge = bubble.momentum_basis_of(&selected).unwrap().loop_edges[0];
+        let q = symbols::momentum().call(loop_edge.0);
+        let q2 = Minkowski {}
+            .new_rep(symbols::dimension())
+            .inner_product(&q, &q);
+        let a = symbolica::symbol!("feynkit_graph::uv_a_");
+        let b = symbolica::symbol!("feynkit_graph::uv_b_");
+        let c = symbolica::symbol!("feynkit_graph::uv_c_");
+        let d = symbolica::symbol!("feynkit_graph::uv_d_");
+        let explicit = |atom: Atom| {
+            atom.replace(symbolica::function!(symbols::denominator(), a, b, c, d))
+                .with(d)
+        };
+        let expansion = bubble.uv_expansion_of(&selected, &mass, 4, None).unwrap();
+        assert_eq!(
+            (explicit(expansion) - (&q2 - mass.pow(2)).pow(-2))
+                .expand()
+                .cancel(),
+            Atom::Zero
+        );
+        assert_eq!(
+            bubble.uv_expansion_of(&selected, &mass, 2, None).unwrap(),
+            Atom::Zero
+        );
+        assert_eq!(
+            bubble
+                .uv_expansion_of(&selected, &mass, 4, Some(&Atom::Zero))
+                .unwrap(),
+            Atom::Zero
+        );
+
+        // With all soft momenta set to zero, the six-dimensional bubble keeps
+        // the quadratic leading term and the logarithmic physical-mass term.
+        let expansion = bubble.uv_expansion_of(&selected, &mass, 6, None).unwrap();
+        let basis = bubble.momentum_basis_of(&selected).unwrap();
+        // Before setting external momenta to zero, the subtraction must remove
+        // every divergent coefficient of the original, undeformed integrand.
+        let bare = Atom::one() / bubble.denominator_of(&selected, &BTreeMap::new()).unwrap();
+        let scale = symbolica::symbol!("feynkit_graph::uv_test_scale");
+        let args = symbolica::symbol!("feynkit_graph::uv_test_args___");
+        let loop_momentum = symbolica::function!(symbols::loop_momentum(), args);
+        let remainder = basis
+            .route_expression(&explicit(bare - &expansion))
+            .replace(&loop_momentum)
+            .with(&loop_momentum / scale)
+            * Atom::var(scale).pow(-6);
+        assert_eq!(
+            remainder
+                .series(scale, Atom::Zero, 0)
+                .unwrap()
+                .to_atom()
+                .expand()
+                .cancel(),
+            Atom::Zero
+        );
+        let mut expansion = explicit(expansion);
+        for edge in basis.external_edges {
+            expansion = expansion
+                .replace(symbolica::function!(symbols::momentum(), edge.0, args))
+                .with(Atom::Zero);
+        }
+        let vacuum = &q2 - mass.pow(2);
+        let expected = vacuum.pow(-2)
+            + 2 * (Atom::var(symbolica::symbol!("UFO::M")).pow(2) - mass.pow(2)) * vacuum.pow(-3);
+        assert_eq!((expansion - expected).expand().cancel(), Atom::Zero);
+    }
+
+    #[test]
+    fn uv_expansion_uses_only_selected_loops_and_preserves_tensor_numerators() {
+        use linnet::half_edge::subgraph::ModifySubSet;
+        let model = scalar_model();
+        let particle = model.particle_id("phi").unwrap();
+        let rule = model.vertex_rule_id("V_1").unwrap();
+        let mut builder = FeynmanDiagram::builder(model, "two-tadpoles");
+        let left = builder.add_vertex(DiagramVertex::interaction("left", rule));
+        let right = builder.add_vertex(DiagramVertex::interaction("right", rule));
+        builder
+            .add_edge(left, left, DiagramEdge::new(particle, false))
+            .unwrap();
+        builder
+            .add_edge(left, right, DiagramEdge::new(particle, false))
+            .unwrap();
+        builder
+            .add_edge(right, right, DiagramEdge::new(particle, false))
+            .unwrap();
+        let diagram = builder.build().unwrap();
+        let loop_edge = diagram
+            .edges()
+            .find(|(_, ends, _)| ends.source == ends.target)
+            .unwrap()
+            .0;
+        let mut selected = diagram.graph.empty_subgraph::<SuBitGraph>();
+        selected.add(diagram.graph[&EdgeIndex(loop_edge.0)].1);
+        assert_eq!(
+            diagram
+                .momentum_basis_of(&selected)
+                .unwrap()
+                .loop_edges
+                .len(),
+            1
+        );
+        let mass = Atom::var(symbolica::symbol!("feynkit_graph::test_mUV"));
+        let mass2 = mass.pow(2);
+        let vacuum = expressions::PropagatorSymbols {
+            momentum: symbols::momentum(),
+            denominator: symbols::denominator(),
+        }
+        .denominator(EdgeIndex(loop_edge.0), &mass2, symbols::dimension());
+        let expected = vacuum.pow(-1)
+            + (Atom::var(symbolica::symbol!("UFO::M")).pow(2) - mass2) * vacuum.pow(-2);
+        assert_eq!(
+            (diagram.uv_expansion_of(&selected, &mass, 4, None).unwrap() - expected).expand(),
+            Atom::Zero
+        );
+        let index = symbolica::symbol!("feynkit_graph::uv_test_mu");
+        let tensor = symbolica::function!(
+            symbols::momentum(),
+            loop_edge.0,
+            symbolica::function!(symbolica::symbol!("spenso::mink"), 4, index)
+        );
+        assert_eq!(
+            diagram
+                .uv_expansion_of(&selected, &mass, 2, Some(&tensor))
+                .unwrap(),
+            &tensor / &vacuum
+        );
+        assert_eq!(
+            diagram
+                .uv_expansion_of(&diagram.graph.empty_subgraph(), &mass, 4, None)
+                .unwrap(),
+            Atom::Zero
+        );
+        assert!(diagram.uv_expansion_of(&selected, &mass, 0, None).is_err());
+    }
+
+    #[test]
     fn superficial_uv_degree_counts_local_numerators_and_internal_edges() {
         let bubble = one_loop();
         assert_eq!(bubble.superficial_degree_of_divergence(4).unwrap(), 0);
