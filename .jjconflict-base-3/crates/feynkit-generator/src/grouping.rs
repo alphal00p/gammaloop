@@ -50,7 +50,9 @@ use symbolica::{
 };
 use thiserror::Error;
 
-use crate::{DiagramGroup, GraphGroupingOptions, GroupMember, NumeratorGrouping};
+use crate::{
+    DiagramGroup, GenerationOptions, GraphGroupingOptions, GroupMember, NumeratorGrouping,
+};
 
 #[derive(Debug, Error)]
 pub enum GroupingError {
@@ -331,6 +333,7 @@ pub(crate) fn group_diagrams(
     model: &Model,
     grouping: &NumeratorGrouping,
     symmetrize_left_right: bool,
+    generation_options: &GenerationOptions,
 ) -> Result<GroupingOutcome, GroupingError> {
     if matches!(grouping, NumeratorGrouping::None) {
         let groups = singleton_groups(&diagrams, &(0..diagrams.len()).collect::<Vec<_>>());
@@ -341,6 +344,8 @@ pub(crate) fn group_diagrams(
         });
     }
 
+    let total = diagrams.len();
+    generation_options.report_progress("grouping_preparation", 0, Some(total));
     let scalar_names = scalar_names(model);
     let compares_numerators = matches!(
         grouping,
@@ -381,6 +386,11 @@ pub(crate) fn group_diagrams(
             .fold(Atom::Zero, |sum, (color, lorentz)| sum + color * lorentz);
         if zero_check.expand().is_zero() {
             zero_numerator_count += 1;
+            generation_options.report_progress(
+                "grouping_preparation",
+                source_diagram + 1,
+                Some(total),
+            );
             continue;
         }
         let sample_source = if compares_numerators {
@@ -417,6 +427,7 @@ pub(crate) fn group_diagrams(
             sample_source,
             samples: Vec::new(),
         });
+        generation_options.report_progress("grouping_preparation", source_diagram + 1, Some(total));
     }
 
     let (options, mode) = match grouping {
@@ -431,19 +442,19 @@ pub(crate) fn group_diagrams(
             });
         }
     };
-    if matches!(mode, ComparisonMode::UpToScalar) {
-        for numerator in &mut prepared {
-            numerator.exact = numerator.exact.collect_factors();
-        }
-    }
-
+    let total = retained.len();
+    generation_options.report_progress("grouping_samples", 0, Some(total));
     let mut buckets = BTreeMap::<TopologyKey, Vec<usize>>::new();
     let mut canonical_frames = Vec::with_capacity(retained.len());
     for (index, (diagram, numerator)) in retained.iter().zip(&mut prepared).enumerate() {
+        if matches!(mode, ComparisonMode::UpToScalar) {
+            numerator.exact = numerator.exact.collect_factors();
+        }
         let canonical = canonical_topology(diagram, model, options, symmetrize_left_right)?;
         let key = canonical.key.clone();
         canonical_frames.push(canonical);
         numerator.samples = numerical_tensor_samples(&numerator.sample_source, diagram, options)?;
+        generation_options.report_progress("grouping_samples", index + 1, Some(total));
         if !numerator.samples.is_empty()
             && numerator
                 .samples
@@ -455,6 +466,9 @@ pub(crate) fn group_diagrams(
         }
         buckets.entry(key).or_default().push(index);
     }
+    let total = buckets.values().map(Vec::len).sum();
+    let mut completed = 0;
+    generation_options.report_progress("grouping_comparison", completed, Some(total));
     let mut groups = Vec::new();
     for indices in buckets.into_values() {
         let mut bucket_groups: Vec<DiagramGroup> = Vec::new();
@@ -495,11 +509,14 @@ pub(crate) fn group_diagrams(
                     }],
                 });
             }
+            completed += 1;
+            generation_options.report_progress("grouping_comparison", completed, Some(total));
         }
         groups.extend(bucket_groups);
     }
     groups.sort_by_key(|group| group.master);
 
+    generation_options.report_progress("grouping", 0, None);
     let (diagrams, groups) = collapse_groups(retained, &canonical_frames, groups)?;
     Ok(GroupingOutcome {
         diagrams,
@@ -1810,6 +1827,48 @@ mod tests {
     }
 
     #[test]
+    fn grouping_progress_counts_zero_and_retained_inputs() {
+        let model = Arc::new(model());
+        let updates = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let captured = updates.clone();
+        let options = GenerationOptions::default().progress(move |snapshot| {
+            captured.lock().unwrap().push(snapshot);
+            crate::GenerationControl::Continue
+        });
+        let grouped = group_diagrams(
+            vec![
+                diagram(&model, "g0", "x+y", 25, 25),
+                diagram(&model, "g1", "y+x", 25, 25),
+                diagram(&model, "g2", "0", 25, 25),
+            ],
+            &model,
+            &NumeratorGrouping::Identical(exact_options()),
+            false,
+            &options,
+        )
+        .unwrap();
+        assert_eq!(grouped.groups.len(), 1);
+        assert_eq!(grouped.zero_numerator_count, 1);
+        let updates = updates.lock().unwrap();
+        for (stage, total) in [
+            ("grouping_preparation", 3),
+            ("grouping_samples", 2),
+            ("grouping_comparison", 2),
+        ] {
+            let counts = updates
+                .iter()
+                .filter(|snapshot| snapshot.stage == stage)
+                .map(|snapshot| (snapshot.completed, snapshot.total))
+                .collect::<Vec<_>>();
+            assert_eq!(
+                counts,
+                (0..=total).map(|n| (n, Some(total))).collect::<Vec<_>>()
+            );
+        }
+        assert_eq!(updates.last().unwrap().stage, "grouping");
+    }
+
+    #[test]
     fn groups_identical_numerators() {
         let model = Arc::new(model());
         let grouped = group_diagrams(
@@ -1820,6 +1879,7 @@ mod tests {
             &model,
             &NumeratorGrouping::Identical(exact_options()),
             false,
+            &GenerationOptions::default(),
         )
         .unwrap();
         assert_eq!(grouped.groups.len(), 1);
@@ -1854,6 +1914,7 @@ mod tests {
                 ..GraphGroupingOptions::default()
             }),
             false,
+            &GenerationOptions::default(),
         )
         .unwrap();
 
@@ -1872,6 +1933,7 @@ mod tests {
             &model,
             &NumeratorGrouping::UpToSign(exact_options()),
             false,
+            &GenerationOptions::default(),
         )
         .unwrap();
         assert_eq!(grouped.groups.len(), 1);
@@ -1889,6 +1951,7 @@ mod tests {
             &model,
             &NumeratorGrouping::UpToScalar(exact_options()),
             false,
+            &GenerationOptions::default(),
         )
         .unwrap();
         assert_eq!(grouped.groups.len(), 1);
@@ -1942,6 +2005,7 @@ mod tests {
             &model,
             &NumeratorGrouping::Identical(exact_options()),
             false,
+            &GenerationOptions::default(),
         )
         .unwrap();
         assert_eq!(
@@ -1968,6 +2032,7 @@ mod tests {
             &model,
             &NumeratorGrouping::Identical(exact_species),
             false,
+            &GenerationOptions::default(),
         )
         .unwrap();
         assert_eq!(grouped.groups.len(), 4);
@@ -1986,6 +2051,7 @@ mod tests {
             &model,
             &NumeratorGrouping::Identical(exact_options()),
             false,
+            &GenerationOptions::default(),
         )
         .unwrap();
 
@@ -2022,6 +2088,7 @@ mod tests {
             &model,
             &NumeratorGrouping::Identical(exact_options()),
             false,
+            &GenerationOptions::default(),
         )
         .unwrap();
 
@@ -2048,6 +2115,7 @@ mod tests {
             &model,
             &NumeratorGrouping::Identical(exact_options()),
             true,
+            &GenerationOptions::default(),
         )
         .unwrap();
 
@@ -2074,6 +2142,7 @@ mod tests {
             &model,
             &NumeratorGrouping::Identical(exact_options()),
             true,
+            &GenerationOptions::default(),
         )
         .unwrap();
         assert_eq!(grouped.groups.len(), 1);
@@ -2084,6 +2153,7 @@ mod tests {
             &model,
             &NumeratorGrouping::Identical(exact_options()),
             true,
+            &GenerationOptions::default(),
         )
         .unwrap();
         assert_eq!(grouped.groups.len(), 2);
@@ -2100,6 +2170,7 @@ mod tests {
             &model,
             &NumeratorGrouping::OnlyDetectZeroes,
             false,
+            &GenerationOptions::default(),
         )
         .unwrap();
         assert_eq!(grouped.zero_numerator_count, 1);
@@ -2117,6 +2188,7 @@ mod tests {
             &model,
             &NumeratorGrouping::OnlyDetectZeroes,
             false,
+            &GenerationOptions::default(),
         )
         .unwrap();
 
@@ -2133,6 +2205,7 @@ mod tests {
             &model,
             &NumeratorGrouping::OnlyDetectZeroes,
             false,
+            &GenerationOptions::default(),
         )
         .unwrap();
 

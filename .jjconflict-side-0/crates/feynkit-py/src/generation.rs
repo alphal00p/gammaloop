@@ -1350,7 +1350,8 @@ pub struct PyGenerationProgress {
 #[pymethods]
 impl PyGenerationProgress {
     /// Pipeline stage: topologies, topology_filters, interactions,
-    /// interaction_filters, numerators, selection, grouping, complete or cancelled.
+    /// interaction_filters, numerators, selection, grouping_preparation,
+    /// grouping_samples, grouping_comparison, grouping, complete or cancelled.
     #[getter]
     fn stage(&self) -> &'static str {
         self.inner.stage
@@ -1952,9 +1953,10 @@ impl PyGenerator {
     ///     Omission groups up to scalar rescaling, matching the GammaLoop CLI.
     ///     Explicit None disables comparison, but diagrams still contain numerators.
     /// progress : {"auto"}, Callable[[GenerationProgress], None] or None, optional
-    ///     Defaults to "auto": show a spinner when marimo.running_in_notebook()
+    ///     Defaults to "auto": show progress when marimo.running_in_notebook()
     ///     is true, with stage, counts, and elapsed time. None disables progress.
-    ///     The spinner closes on completion, cancellation, or error.
+    ///     Known totals use a progress bar; unknown totals use a spinner.
+    ///     The display closes on completion, cancellation, or error.
     ///     Observe stage changes and coalesced counts on the calling Python thread.
     ///     Callback exceptions propagate and stop generation.
     /// filter : Callable[[symbolica.core.Graph, int], bool] or None, optional
@@ -2089,27 +2091,38 @@ pub(crate) fn generate_diagrams(
     // optional notebook dependency (and its side effects) in ordinary scripts.
     let marimo = py.import("sys")?.getattr("modules")?;
     let marimo = marimo.cast::<PyDict>()?.get_item("marimo")?;
-    let spinner = if automatic
+    let marimo_progress = if automatic
         && let Some(marimo) = marimo.filter(|module| !module.is_none())
         && marimo.call_method0("running_in_notebook")?.is_truthy()?
     {
-        let context = marimo
-            .getattr("status")?
-            .call_method1("spinner", ("Generating diagrams", "Starting generation"))?;
+        let flush = marimo
+            .getattr("output")?
+            .getattr("_output")?
+            .getattr("flush")?
+            .unbind();
+        let status = marimo.getattr("status")?;
+        let context =
+            status.call_method1("spinner", ("Generating diagrams", "Starting generation"))?;
         let indicator = context.call_method0("__enter__")?.unbind();
-        Some((context, indicator))
+        let state = Arc::new(Mutex::new((
+            context.unbind(),
+            indicator,
+            None::<usize>,
+            0_usize,
+        )));
+        Some((status.unbind(), state, flush))
     } else {
         None
     };
-    let indicator = spinner
+    let display = marimo_progress
         .as_ref()
-        .map(|(_, indicator)| indicator.clone_ref(py));
+        .map(|(status, state, flush)| (status.clone_ref(py), state.clone(), flush.clone_ref(py)));
     let started = Instant::now();
     let interruption = Arc::new(Mutex::new(None));
     let snapshots = Arc::new(Mutex::new(VecDeque::<GenerationProgress>::new()));
     let delivery = Mutex::new((Instant::now(), None));
     let pending = snapshots.clone();
-    let has_progress = progress.is_some() || indicator.is_some();
+    let has_progress = progress.is_some() || display.is_some();
     let deliver_progress = Arc::new(move |force: bool| -> PyResult<()> {
         let mut pending = pending.lock().unwrap();
         let mut delivery = delivery.lock().unwrap();
@@ -2132,7 +2145,7 @@ pub(crate) fn generate_diagrams(
         if has_progress {
             Python::attach(|py| -> PyResult<()> {
                 for inner in updates {
-                    if let Some(indicator) = &indicator {
+                    if let Some((status, state, flush)) = &display {
                         let title = match inner.stage {
                             "topologies" => "Enumerating topologies",
                             "topology_filters" => "Filtering topologies",
@@ -2140,7 +2153,10 @@ pub(crate) fn generate_diagrams(
                             "interaction_filters" => "Filtering interactions",
                             "numerators" => "Constructing numerators",
                             "selection" => "Selecting diagrams",
-                            "grouping" => "Grouping diagrams",
+                            "grouping_preparation" => "Preparing numerators for grouping",
+                            "grouping_samples" => "Sampling numerators for grouping",
+                            "grouping_comparison" => "Comparing numerators",
+                            "grouping" => "Finalizing diagram groups",
                             "complete" => "Diagram generation complete",
                             "cancelled" => "Diagram generation cancelled",
                             stage => stage,
@@ -2154,7 +2170,44 @@ pub(crate) fn generate_diagrams(
                         };
                         let subtitle =
                             format!("{counts} · {:.1}s elapsed", started.elapsed().as_secs_f64());
-                        indicator.call_method1(py, "update", (title, subtitle))?;
+                        let mut state = state.lock().unwrap();
+                        let (context, indicator, total, completed) = &mut *state;
+                        // Unknown or empty work uses a spinner. Reuse a bar when
+                        // totals agree; a new stage can reset its count to zero.
+                        let next_total = inner.total.filter(|total| *total > 0);
+                        if next_total != *total {
+                            context.call_method1(
+                                py,
+                                "__exit__",
+                                (py.None(), py.None(), py.None()),
+                            )?;
+                            let kwargs = PyDict::new(py);
+                            kwargs.set_item("title", title)?;
+                            kwargs.set_item("subtitle", &subtitle)?;
+                            kwargs.set_item("remove_on_exit", true)?;
+                            let widget = if let Some(total) = next_total {
+                                kwargs.set_item("total", total)?;
+                                kwargs.set_item("show_rate", false)?;
+                                kwargs.set_item("show_eta", false)?;
+                                "progress_bar"
+                            } else {
+                                "spinner"
+                            };
+                            *context = status.call_method(py, widget, (), Some(&kwargs))?;
+                            *indicator = context.call_method0(py, "__enter__")?;
+                            *total = next_total;
+                            *completed = 0;
+                        }
+                        if total.is_some() {
+                            let increment = inner.completed as i128 - *completed as i128;
+                            indicator.call_method1(py, "update", (increment, title, subtitle))?;
+                        } else {
+                            indicator.call_method1(py, "update", (title, subtitle))?;
+                        }
+                        *completed = inner.completed;
+                        // Delivery is already coalesced above. Marimo's own
+                        // throttle can otherwise drop a stage's only update.
+                        flush.call0(py)?;
                     }
                     if let Some(callback) = &progress {
                         callback.call1(py, (PyGenerationProgress { inner },))?;
@@ -2324,18 +2377,23 @@ pub(crate) fn generate_diagrams(
             .map(|inner| PyGenerationResult { inner })
             .map_err(error::generation)
     })();
-    if let Some((context, indicator)) = spinner {
+    if let Some((_, state, _)) = marimo_progress {
+        let state = state.lock().unwrap();
+        let (context, indicator, total, _) = &*state;
         // Always close the context, including when a callback or Python signal
         // interrupted generation. Cleanup must not replace the original error.
         let cleanup = match &result {
-            Ok(_) => context.call_method1("__exit__", (py.None(), py.None(), py.None())),
+            Ok(_) => context.call_method1(py, "__exit__", (py.None(), py.None(), py.None())),
             Err(error) => {
-                let _ = indicator.call_method1(
-                    py,
-                    "update",
-                    ("Diagram generation stopped", error.to_string()),
-                );
+                let title = "Diagram generation stopped";
+                let subtitle = error.to_string();
+                let _ = if total.is_some() {
+                    indicator.call_method1(py, "update", (0, title, subtitle))
+                } else {
+                    indicator.call_method1(py, "update", (title, subtitle))
+                };
                 context.call_method1(
+                    py,
                     "__exit__",
                     (error.get_type(py), error.value(py), error.traceback(py)),
                 )
@@ -2403,7 +2461,11 @@ context = MagicMock()
 indicator = context.__enter__.return_value
 marimo = SimpleNamespace(
     running_in_notebook=MagicMock(return_value=True),
-    status=SimpleNamespace(spinner=MagicMock(return_value=context)),
+    status=SimpleNamespace(
+        spinner=MagicMock(return_value=context),
+        progress_bar=MagicMock(return_value=context),
+    ),
+    output=SimpleNamespace(_output=SimpleNamespace(flush=MagicMock())),
 )
 
 for via_model in (True, False):
@@ -2419,41 +2481,60 @@ for via_model in (True, False):
     with patch.dict(sys.modules, {"marimo": marimo}):
         context.reset_mock()
         marimo.status.spinner.reset_mock()
+        marimo.status.progress_bar.reset_mock()
         marimo.running_in_notebook.return_value = False
         assert len(generate()) == len(baseline)
         marimo.status.spinner.assert_not_called()
+        marimo.status.progress_bar.assert_not_called()
         marimo.running_in_notebook.return_value = True
         assert len(generate(progress=None)) == len(baseline)
         updates = []
         generate(progress=updates.append)
         assert updates[-1].stage == "complete"
         marimo.status.spinner.assert_not_called()
+        marimo.status.progress_bar.assert_not_called()
 
+        visible = []
+        marimo.output._output.flush.side_effect = lambda: visible.append(indicator.update.call_args.args[-2])
         result = generate()
-        marimo.status.spinner.assert_called_once()
-        context.__enter__.assert_called_once()
-        context.__exit__.assert_called_once_with(None, None, None)
-        titles = list(dict.fromkeys(call.args[0] for call in indicator.update.call_args_list))
+        marimo.status.spinner.assert_called()
+        marimo.status.progress_bar.assert_called()
+        for call in marimo.status.progress_bar.call_args_list:
+            assert call.kwargs["total"] > 0
+            assert call.kwargs["remove_on_exit"] is True
+            assert call.kwargs["show_eta"] is False
+            assert call.kwargs["show_rate"] is False
+        context.__enter__.assert_called()
+        context.__exit__.assert_called_with(None, None, None)
+        assert context.__exit__.call_count == context.__enter__.call_count
+        titles = list(dict.fromkeys(call.args[-2] for call in indicator.update.call_args_list))
         assert titles == ["Enumerating topologies", "Filtering topologies",
             "Assigning interactions", "Filtering interactions", "Constructing numerators",
-            "Selecting diagrams", "Grouping diagrams", "Diagram generation complete"]
-        assert indicator.update.call_args.args[1].startswith(f"{len(result)} diagrams retained")
-        assert all("elapsed" in call.args[1] for call in indicator.update.call_args_list)
-        assert any(" / " in call.args[1] for call in indicator.update.call_args_list)
+            "Selecting diagrams", "Preparing numerators for grouping",
+            "Sampling numerators for grouping", "Comparing numerators",
+            "Finalizing diagram groups", "Diagram generation complete"]
+        # Every update must be flushed, even rapid transitions that Marimo's
+        # own 150 ms throttle would suppress until another update arrives.
+        assert visible == [call.args[-2] for call in indicator.update.call_args_list]
+        assert indicator.update.call_args.args[-1].startswith(f"{len(result)} diagrams retained")
+        assert all("elapsed" in call.args[-1] for call in indicator.update.call_args_list)
+        assert any(" / " in call.args[-1] for call in indicator.update.call_args_list)
 
         context.reset_mock()
         empty = generate(progress="auto", filter=lambda graph, n: False)
         assert len(empty) == 0
-        assert indicator.update.call_args.args[1].startswith("0 diagrams retained")
-        context.__exit__.assert_called_once_with(None, None, None)
+        assert indicator.update.call_args.args[-1].startswith("0 diagrams retained")
+        context.__exit__.assert_called_with(None, None, None)
+        assert context.__exit__.call_count == context.__enter__.call_count
 
         context.reset_mock()
         token = fk.CancellationToken()
         token.cancel()
         result = generate(cancellation_token=token)
         assert not result.report.completed
-        assert indicator.update.call_args.args[0] == "Diagram generation cancelled"
-        context.__exit__.assert_called_once_with(None, None, None)
+        assert indicator.update.call_args.args[-2] == "Diagram generation cancelled"
+        context.__exit__.assert_called_with(None, None, None)
+        assert context.__exit__.call_count == context.__enter__.call_count
 
         for exception in (RuntimeError("filter failed"), KeyboardInterrupt()):
             context.reset_mock()
@@ -2465,9 +2546,9 @@ for via_model in (True, False):
                 assert caught is exception
             else:
                 raise AssertionError("generation exception was lost")
-            context.__exit__.assert_called_once()
+            assert context.__exit__.call_count == context.__enter__.call_count
             assert context.__exit__.call_args.args[:2] == (type(exception), exception)
-            assert indicator.update.call_args.args[0] == "Diagram generation stopped"
+            assert indicator.update.call_args.args[-2] == "Diagram generation stopped"
 
         context.reset_mock()
         exception = RuntimeError("spinner failed")
@@ -2478,7 +2559,7 @@ for via_model in (True, False):
             assert caught is exception
         else:
             raise AssertionError("spinner exception was lost")
-        context.__exit__.assert_called_once()
+        assert context.__exit__.call_count == context.__enter__.call_count
         indicator.update.side_effect = None
 
         for invalid in ("invalid", True, 1):
@@ -2616,7 +2697,7 @@ for via_model in (True, False):
     assert updates[0].stage == "topologies"
     assert updates[-1].stage == "complete"
     assert updates[-1].completed == len(result)
-    stages = ["topologies", "topology_filters", "interactions", "interaction_filters", "numerators", "selection", "grouping", "complete"]
+    stages = ["topologies", "topology_filters", "interactions", "interaction_filters", "numerators", "selection", "grouping_preparation", "grouping_samples", "grouping_comparison", "grouping", "complete"]
     assert list(dict.fromkeys(p.stage for p in updates)) == stages
     for before, after in zip(updates, updates[1:]):
         if before.stage == after.stage:

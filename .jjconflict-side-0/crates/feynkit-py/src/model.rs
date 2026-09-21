@@ -1612,9 +1612,10 @@ impl PyModel {
     ///     Omission groups up to scalar rescaling, matching the GammaLoop CLI.
     ///     Explicit None disables comparison, but diagrams still contain numerators.
     /// progress : {"auto"}, Callable[[GenerationProgress], None] or None, optional
-    ///     Defaults to "auto": show a spinner when marimo.running_in_notebook()
+    ///     Defaults to "auto": show progress when marimo.running_in_notebook()
     ///     is true, with stage, counts, and elapsed time. None disables progress.
-    ///     The spinner closes on completion, cancellation, or error.
+    ///     Known totals use a progress bar; unknown totals use a spinner.
+    ///     The display closes on completion, cancellation, or error.
     ///     Observe stage changes and coalesced counts on the calling Python thread.
     ///     Callback exceptions propagate and stop generation.
     /// filter : Callable[[symbolica.core.Graph, int], bool] or None, optional

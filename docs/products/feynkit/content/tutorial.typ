@@ -95,8 +95,9 @@ an incomplete result, preserving that API's existing partial-result behavior.
 == Observe progress and prune partial topologies
 
 Both generation methods default to `progress="auto"`. In Marimo, they check
-`marimo.running_in_notebook()` and maintain one spinner showing the current stage,
-processed counts (including a total when known), and elapsed time. The spinner closes
+`marimo.running_in_notebook()` and maintain one status display showing the current stage,
+processed counts, and elapsed time. Known totals use a progress bar; unknown or empty
+totals use a spinner. Counts reset for each stage. The display closes
 on completion, cancellation, or error. Outside a running notebook, automatic progress
 stays quiet and does not import Marimo. Pass `progress=None` to disable it.
 
@@ -107,12 +108,17 @@ percentage. Topology enumeration counts discovered unique graphs, not every expl
 Later stages count processed inputs, which may be rejected. `complete` reports the final
 retained count; `cancelled` marks a partial result. The stages are `topologies`,
 `topology_filters`, `interactions`, `interaction_filters`, `numerators`, `selection`,
-`grouping`, and the terminal stage.
+`grouping_preparation`, `grouping_samples`, `grouping_comparison`, `grouping`, and
+the terminal stage. The first three grouping phases count input diagrams while
+preparing symbolic numerators, evaluating numerical samples, and comparing them.
+The final grouping phase merges and finalizes the retained diagram groups.
 
 Native workers publish snapshots; Python callbacks run on the thread that called generation,
 so Marimo keeps its cell context. Updates within a stage are coalesced to about 150 ms;
-stage transitions and completion are delivered promptly. Browser kernels invoke callbacks on
-their calling thread. Callback delivery itself does not force a browser paint or UI refresh.
+stage transitions and completion are delivered promptly. The automatic display explicitly
+flushes these updates so Marimo's own refresh throttle cannot hide a stage transition.
+Browser kernels invoke callbacks on their calling thread; flushing output alone does not
+yield execution to the browser for painting.
 
 // docs-example: compile
 ```python
