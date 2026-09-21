@@ -11,7 +11,12 @@ use pyo3::{
     types::{PyAny, PyModule},
 };
 use spynso3::expression::TensorExpression;
-use symbolica::{api::python::PythonExpression, atom::Atom, parser::ParseSettings, wrap_input};
+use symbolica::{
+    api::python::{ConvertibleToExpression, PythonExpression},
+    atom::Atom,
+    parser::ParseSettings,
+    wrap_input,
+};
 
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::{
@@ -1081,6 +1086,33 @@ impl PyFeynmanDiagram {
         PythonExpression {
             expr: self.inner.projector().clone(),
         }
+    }
+
+    /// Reduce the numerator and projector using the diagram's internal edge momenta.
+    ///
+    /// Four-dimensional Lorentz slots are promoted to `D` before reduction.
+    /// External momenta remain projector vectors, and the scalar numerator
+    /// prefactor remains separate. Requires at least one internal edge.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import E
+    /// >>> reduced = diagram.tensor_reduce(E("D"))
+    ///
+    /// Parameters
+    /// ----------
+    /// dimension : Expression or int
+    ///     Lorentz dimension used for the reduction and four-dimensional input slots.
+    fn tensor_reduce(
+        &self,
+        py: Python<'_>,
+        dimension: ConvertibleToExpression,
+    ) -> PyResult<Py<TensorExpression>> {
+        let reduction = self
+            .inner
+            .tensor_reduce(dimension.to_expression().expr)
+            .map_err(error::tensor)?;
+        TensorExpression::from_atom_interface(py, reduction.into_expression(), None)
     }
 
     /// Reduce the finalized numerator and projector with a tensor reducer.

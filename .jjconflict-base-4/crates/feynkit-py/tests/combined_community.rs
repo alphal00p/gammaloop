@@ -240,6 +240,9 @@ assert diagram_tensor_reduced == tensor_expected
 assert len(scalar_graphs) == 1
 assert scalar_graphs[0].numerator_expression() == tensor_expected
 assert isinstance(scalar_graphs[0].numerator_expression(), spenso.TensorExpression)
+auto_reduced = scalar_graphs[0].tensor_reduce(tensor_dimension)
+assert isinstance(auto_reduced, spenso.TensorExpression)
+assert auto_reduced == scalar_graphs[0].numerator_expression()
 # Converting back to an ordinary expression keeps Symbolica's namespace and
 # nested bracket colors, just as if mink had no custom Spenso printer.
 ordinary_numerator = scalar_graphs[0].numerator_expression().to_expression()

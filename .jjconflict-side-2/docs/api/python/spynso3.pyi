@@ -969,6 +969,10 @@ class TensorExpression(Expression):
         r"""
         The optional identity used when this expression describes stored data.
         """
+    def __new__(cls, expression: typing.Any) -> TensorExpression:
+        r"""
+        Construct a tensor expression, preserving existing tensor metadata or inferring it.
+        """
     @staticmethod
     def g(rep: Representation) -> TensorExpression:
         r"""
@@ -1058,6 +1062,21 @@ class TensorExpression(Expression):
     def expand(self, var: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None, via_poly: typing.Optional[builtins.bool] = None) -> TensorExpression:
         r"""
         Expand scalar algebra while preserving and validating the tensor interface.
+        """
+    def factor(self, complex: builtins.bool = False, extension: typing.Optional[typing.Sequence[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]]] = None) -> TensorExpression:
+        r"""
+        Factor scalar algebra while preserving and validating the tensor interface.
+        """
+    def collect(self, *x: typing.Any, key_map: typing.Optional[typing.Any] = None, coeff_map: typing.Optional[typing.Any] = None) -> TensorExpression:
+        r"""
+        Collect terms while preserving the tensor interface. Callback results are validated.
+        """
+    def with_lorentz_dimension(self, dimension: builtins.int | Expression | str) -> TensorExpression:
+        r"""
+        Replace four-dimensional Lorentz slots and compact representations by dimension `D`.
+
+        Spinor and color dimensions, scalar coefficients, and other Lorentz dimensions
+        are unchanged. Apply this before contracting four-dimensional Lorentz indices.
         """
     def simplify_gamma(self, settings: typing.Optional[GammaSimplifySettings] = None) -> TensorExpression:
         r"""

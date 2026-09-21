@@ -50,6 +50,18 @@ a Taylor-expanded expression whose slots carry symbolic `D` requires that same `
 
 == Reduce a diagram or a standalone expression
 
+`diagram.tensor_reduce(D)` selects the graph's internal edge momenta automatically, promotes
+four-dimensional Lorentz slots in the numerator and projector to `D`, and returns a
+`TensorExpression`. External edge momenta remain projector vectors. The scalar numerator
+prefactor remains separate, and at least one internal edge is required.
+
+For standalone tensors, `TensorExpression(expression)` performs the same conversion as
+`as_tensor(expression)`. The `factor()` and `collect(...)` methods return tensor expressions
+with their ordered interfaces preserved; transformations that change the interface are rejected.
+Use `tensor.with_lorentz_dimension(D)` before contracting indices to promote four-dimensional
+Lorentz slots, including compact representations. Spinor/color dimensions, scalar coefficients,
+and Lorentz slots already in other dimensions remain unchanged.
+
 `reducer.reduce(expression)` transforms a numerator without a graph.
 `diagram.reduce_tensor_numerator(reducer)` multiplies the stored numerator by its external-state
 projector before reducing. It returns a Symbolica expression, including residual metrics.

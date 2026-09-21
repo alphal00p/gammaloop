@@ -7,7 +7,10 @@
 //! 4. optionally validate by expanding shorthand and comparing the graph's dangling slots.
 
 use symbolica::{
-    atom::{Atom, AtomView, MulView, PowView, Symbol, representation::FunView},
+    atom::{
+        Atom, AtomCore, AtomView, FunctionBuilder, MulView, PowView, Symbol,
+        representation::FunView,
+    },
     domains::rational::Rational,
 };
 use thiserror::Error;
@@ -18,7 +21,7 @@ use crate::structure::{
     Canonicalized, HasName, NamedStructure, OrderedStructure, StructureContract, StructureError,
     TensorStructure,
     abstract_index::AIND_SYMBOLS,
-    representation::LibraryRep,
+    representation::{BaseRepName, LibraryRep, Minkowski},
     slot::{AbsInd, DummyAind, ParseableAind, Slot, SlotError},
 };
 use crate::{network::tags::SPENSO_TAG, shadowing};
@@ -62,6 +65,10 @@ pub trait StructureFromAtom: Sized {
 }
 
 pub trait AtomStructureExt {
+    /// Replace four-dimensional Minkowski representations and slots by `dimension`.
+    /// This must precede Lorentz contractions; scalar factors and other spaces are unchanged.
+    fn with_lorentz_dimension(&self, dimension: AtomView<'_>) -> Atom;
+
     /// Convenience wrapper for `StructureFromAtom::structure_from_atom`.
     fn infer_structure<S: StructureFromAtom>(
         &self,
@@ -83,6 +90,10 @@ pub trait AtomStructureExt {
 }
 
 impl AtomStructureExt for Atom {
+    fn with_lorentz_dimension(&self, dimension: AtomView<'_>) -> Atom {
+        self.as_view().with_lorentz_dimension(dimension)
+    }
+
     fn infer_structure<S: StructureFromAtom>(
         &self,
         mode: StructureInferenceMode,
@@ -100,6 +111,25 @@ impl AtomStructureExt for Atom {
 }
 
 impl AtomStructureExt for AtomView<'_> {
+    fn with_lorentz_dimension(&self, dimension: AtomView<'_>) -> Atom {
+        self.replace_map(|value, _, output| {
+            if let AtomView::Fun(fun) = value
+                && fun.get_symbol() == Minkowski::selfless_symbol()
+                && matches!(fun.get_nargs(), 1 | 2)
+                && fun.iter().next() == Some(Atom::num(4).as_view())
+            {
+                **output = fun
+                    .iter()
+                    .skip(1)
+                    .fold(
+                        FunctionBuilder::new(fun.get_symbol()).add_arg(dimension),
+                        |builder, arg| builder.add_arg(arg),
+                    )
+                    .finish();
+            }
+        })
+    }
+
     fn infer_structure<S: StructureFromAtom>(
         &self,
         mode: StructureInferenceMode,
@@ -648,6 +678,20 @@ mod tests {
         atom::{Atom, AtomCore, FunctionBuilder, Symbol},
         function, symbol,
     };
+
+    #[test]
+    fn lorentz_dimension_changes_only_four_dimensional_minkowski_metadata() {
+        let input = symbolica::parse!(
+            "4*F(spenso::mink(4,mu),spenso::mink(4),spenso::mink(3,nu),spenso::bis(4,i),spenso::euc(4,j))"
+        );
+        let d = symbolica::parse!("D");
+        let expected = symbolica::parse!(
+            "4*F(spenso::mink(D,mu),spenso::mink(D),spenso::mink(3,nu),spenso::bis(4,i),spenso::euc(4,j))"
+        );
+        let result = input.with_lorentz_dimension(d.as_view());
+        assert_eq!(result, expected);
+        assert_eq!(result.with_lorentz_dimension(d.as_view()), expected);
+    }
 
     fn mink4() -> crate::structure::representation::Representation<Minkowski> {
         Minkowski {}.new_rep(4)

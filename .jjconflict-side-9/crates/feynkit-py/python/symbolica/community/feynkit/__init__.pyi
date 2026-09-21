@@ -3,12 +3,14 @@
 
 import builtins
 import collections.abc
+import decimal
 import enum
 import os
 import pathlib
 import symbolica.core
 import types
 import typing
+from symbolica import ComplexFloat, Float
 from symbolica.community.spenso import TensorExpression
 from symbolica.core import Expression
 
@@ -1196,6 +1198,24 @@ class FeynmanDiagram:
         >>> projector = diagram.projector_expression()
         >>> projected_numerator = projector * diagram.numerator_expression()
         >>> projected_numerator
+        """
+    def tensor_reduce(self, dimension: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]) -> TensorExpression:
+        r"""
+        Reduce the numerator and projector using the diagram's internal edge momenta.
+
+        Four-dimensional Lorentz slots are promoted to `D` before reduction.
+        External momenta remain projector vectors, and the scalar numerator
+        prefactor remains separate. Requires at least one internal edge.
+
+        Examples
+        --------
+        >>> from symbolica import E
+        >>> reduced = diagram.tensor_reduce(E("D"))
+
+        Parameters
+        ----------
+        dimension : Expression or int
+            Lorentz dimension used for the reduction and four-dimensional input slots.
         """
     def reduce_tensor_numerator(self, reducer: TensorReducer) -> Expression:
         r"""

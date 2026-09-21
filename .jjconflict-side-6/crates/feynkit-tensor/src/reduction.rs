@@ -35,7 +35,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use feynkit_graph::FeynmanDiagram;
 use idenso::shorthands::metric::MetricSimplifier;
-use spenso::network::{library::symbolic::ETS, tags::SPENSO_TAG};
+use spenso::network::{library::symbolic::ETS, parsing::AtomStructureExt, tags::SPENSO_TAG};
 use spenso::structure::representation::{BaseRepName, Minkowski};
 use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol};
 use thiserror::Error;
@@ -958,6 +958,12 @@ impl TensorReducer {
 /// }
 /// ```
 pub trait FeynmanDiagramTensorExt {
+    /// Reduce the numerator and projector, selecting exactly the graph's internal edge momenta.
+    /// Four-dimensional Lorentz slots are promoted to `dimension` before reduction.
+    /// External momenta remain projector vectors; the scalar numerator prefactor is separate.
+    /// As with `TensorReducer`, reduction requires at least one integrated vector.
+    fn tensor_reduce(&self, dimension: Atom) -> Result<TensorReduction, TensorReductionError>;
+
     /// Reduce the finalized diagram numerator and external-state projector.
     ///
     /// The request-wide numerator prefactor is scalar by construction and is
@@ -986,6 +992,24 @@ pub trait FeynmanDiagramTensorExt {
 }
 
 impl FeynmanDiagramTensorExt for FeynmanDiagram {
+    fn tensor_reduce(&self, dimension: Atom) -> Result<TensorReduction, TensorReductionError> {
+        let representation = FunctionBuilder::new(Minkowski::selfless_symbol())
+            .add_arg(&dimension)
+            .finish();
+        let mut reducer = TensorReducer::new(dimension.clone());
+        let basis = self.loop_momentum_basis();
+        for edge in basis.tree_edges.iter().chain(&basis.loop_edges) {
+            let vector = FunctionBuilder::new(feynkit_graph::momentum_symbol())
+                .add_arg(edge.0)
+                .add_arg(&representation)
+                .finish();
+            reducer = reducer.with_integrated_vector(vector);
+        }
+        let numerator =
+            (self.numerator() * self.projector()).with_lorentz_dimension(dimension.as_view());
+        reducer.reduce(numerator.as_view())
+    }
+
     fn reduce_tensor_numerator(
         &self,
         reducer: &TensorReducer,
@@ -1878,6 +1902,62 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn graph_tensor_reduce_selects_internal_edges_and_promotes_lorentz_slots() {
+        let model = Model::from_json(include_str!(
+            "../../feynkit-model/tests/fixtures/scalars_2p_3p.json"
+        ))
+        .unwrap();
+        let rule = model.vertex_rule_id("V_3_SCALAR_000").unwrap();
+        let particle = model.particle_id("scalar_0").unwrap();
+        let mut builder = FeynmanDiagram::builder(model, "internal-selection");
+        let left = builder.add_vertex(DiagramVertex::interaction("left", rule));
+        let right = builder.add_vertex(DiagramVertex::interaction("right", rule));
+        let external = builder.add_vertex(DiagramVertex::external(
+            "in",
+            0,
+            feynkit_graph::ExternalState::Incoming,
+        ));
+        let internal = builder
+            .add_edge(left, right, DiagramEdge::new(particle, false))
+            .unwrap();
+        builder
+            .add_edge(left, right, DiagramEdge::new(particle, false))
+            .unwrap();
+        let outside = builder
+            .add_edge(external, left, DiagramEdge::new(particle, false))
+            .unwrap();
+        let outgoing = builder.add_vertex(DiagramVertex::external(
+            "out",
+            1,
+            feynkit_graph::ExternalState::Outgoing,
+        ));
+        builder
+            .add_edge(right, outgoing, DiagramEdge::new(particle, false))
+            .unwrap();
+        let momentum = feynkit_graph::momentum_symbol();
+        let d = Atom::var(symbol!("graph_reduce_D"));
+        let mu = Atom::var(symbol!("graph_reduce_mu"));
+        let nu = Atom::var(symbol!("graph_reduce_nu"));
+        let four = Atom::num(4);
+        let numerator = indexed(momentum, internal.0 as i64, &four, &mu)
+            * indexed(momentum, internal.0 as i64, &four, &nu);
+        let projector = indexed(momentum, outside.0 as i64, &four, &mu)
+            * indexed(momentum, outside.0 as i64, &four, &nu);
+        let diagram = builder
+            .numerator(numerator)
+            .projector(projector)
+            .numerator_prefactor(Atom::num(7))
+            .build()
+            .unwrap();
+        let result = diagram.tensor_reduce(d.clone()).unwrap().into_expression();
+        let k = compact(momentum, internal.0 as i64, &d);
+        let p = compact(momentum, outside.0 as i64, &d);
+        let expected = dot(&k, &k) * dot(&p, &p) / d;
+        assert!((result - expected).expand().is_zero());
+        assert_eq!(diagram.numerator_prefactor(), &Atom::num(7));
     }
 
     #[test]
