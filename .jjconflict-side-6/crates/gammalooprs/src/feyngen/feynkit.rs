@@ -223,12 +223,12 @@ mod tests {
         let particle = model.particle_id("phi").unwrap();
         let interaction = model.vertex_rule_id("V").unwrap();
         let left_numerator = if vertex_dummy {
-            atom("FeynKit::VertexDummy(1,0)")
+            atom("gammalooprs::vertex(1,0)")
         } else {
             atom("kept_vertex_fragment")
         };
         let numerator = if vertex_dummy {
-            atom("FeynKit::VertexDummy(1,0)*kept_vertex_fragment*kept_edge_fragment^2")
+            atom("gammalooprs::vertex(1,0)*kept_vertex_fragment*kept_edge_fragment^2")
         } else {
             atom("kept_vertex_fragment^2*kept_edge_fragment^2")
         };
@@ -238,14 +238,7 @@ mod tests {
             .numerator(numerator)
             .numerator_prefactor(atom("kept_prefactor"))
             .projector(atom("kept_projector"));
-        if let Some(basis) = basis {
-            builder = builder.loop_momentum_basis(basis);
-        }
-        let incoming = builder.add_vertex(DiagramVertex::external(
-            "incoming",
-            0,
-            ExternalState::Incoming,
-        ));
+        let incoming = builder.add_generation_external("incoming", 0, ExternalState::Incoming, 0);
         let left = builder.add_vertex(DiagramVertex {
             numerator: left_numerator,
             ..DiagramVertex::interaction("left", interaction)
@@ -254,11 +247,7 @@ mod tests {
             numerator: atom("kept_vertex_fragment"),
             ..DiagramVertex::interaction("right", interaction)
         });
-        let outgoing = builder.add_vertex(DiagramVertex::external(
-            "outgoing",
-            1,
-            ExternalState::Outgoing,
-        ));
+        let outgoing = builder.add_generation_external("outgoing", 1, ExternalState::Outgoing, 1);
         builder
             .add_edge(incoming, left, DiagramEdge::new(particle, false))
             .unwrap();
@@ -270,7 +259,12 @@ mod tests {
         builder
             .add_edge(right, outgoing, DiagramEdge::new(particle, false))
             .unwrap();
-        builder.build().unwrap()
+        let diagram = builder.build().unwrap();
+        if let Some(basis) = basis {
+            diagram.with_loop_momentum_edges(&basis.loop_edges).unwrap()
+        } else {
+            diagram
+        }
     }
 
     fn legacy_order_bubble(model: &Arc<Model>, basis: Option<LoopMomentumBasis>) -> FeynmanDiagram {
@@ -278,15 +272,7 @@ mod tests {
         let interaction = model.vertex_rule_id("V").unwrap();
         let mut builder = FeynmanDiagram::builder(Arc::clone(model), "legacy_order_bubble")
             .numerator(atom("kept_vertex_fragment^4"));
-        if let Some(basis) = basis {
-            builder = builder.loop_momentum_basis(basis);
-        }
-        let incoming = builder.add_vertex(DiagramVertex::external_in_connection(
-            "incoming",
-            0,
-            ExternalState::Incoming,
-            0,
-        ));
+        let incoming = builder.add_generation_external("incoming", 0, ExternalState::Incoming, 0);
         let interaction_vertex = |name| DiagramVertex {
             numerator: atom("kept_vertex_fragment"),
             ..DiagramVertex::interaction(name, interaction)
@@ -295,12 +281,7 @@ mod tests {
         let second = builder.add_vertex(interaction_vertex("second"));
         let third = builder.add_vertex(interaction_vertex("third"));
         let fourth = builder.add_vertex(interaction_vertex("fourth"));
-        let outgoing = builder.add_vertex(DiagramVertex::external_in_connection(
-            "outgoing",
-            1,
-            ExternalState::Outgoing,
-            0,
-        ));
+        let outgoing = builder.add_generation_external("outgoing", 1, ExternalState::Outgoing, 0);
 
         for (expected, source, target) in [
             (0, incoming, first),
@@ -319,17 +300,21 @@ mod tests {
             );
         }
         let diagram = builder.build().unwrap();
+        let diagram = if let Some(basis) = basis {
+            diagram.with_loop_momentum_edges(&basis.loop_edges).unwrap()
+        } else {
+            diagram
+        };
         let half_edge = |edge, endpoint| DiagramHalfEdge {
             edge: EdgeId(edge),
             endpoint,
         };
         let left = vec![
             half_edge(0, DiagramEndpoint::Source),
-            half_edge(0, DiagramEndpoint::Target),
             half_edge(1, DiagramEndpoint::Source),
             half_edge(5, DiagramEndpoint::Source),
         ];
-        let right = (0..=6)
+        let right = (0..6)
             .flat_map(|edge| {
                 [
                     half_edge(edge, DiagramEndpoint::Source),
@@ -349,30 +334,14 @@ mod tests {
         let particle = model.particle_id("phi").unwrap();
         let interaction = model.vertex_rule_id("V").unwrap();
         let mut builder = FeynmanDiagram::builder(Arc::clone(model), "two_connections");
-        let incoming_0 = builder.add_vertex(DiagramVertex::external_in_connection(
-            "incoming_0",
-            0,
-            ExternalState::Incoming,
-            0,
-        ));
-        let incoming_1 = builder.add_vertex(DiagramVertex::external_in_connection(
-            "incoming_1",
-            1,
-            ExternalState::Incoming,
-            1,
-        ));
-        let outgoing_0 = builder.add_vertex(DiagramVertex::external_in_connection(
-            "outgoing_0",
-            2,
-            ExternalState::Outgoing,
-            0,
-        ));
-        let outgoing_1 = builder.add_vertex(DiagramVertex::external_in_connection(
-            "outgoing_1",
-            3,
-            ExternalState::Outgoing,
-            1,
-        ));
+        let incoming_0 =
+            builder.add_generation_external("incoming_0", 0, ExternalState::Incoming, 0);
+        let incoming_1 =
+            builder.add_generation_external("incoming_1", 1, ExternalState::Incoming, 1);
+        let outgoing_0 =
+            builder.add_generation_external("outgoing_0", 2, ExternalState::Outgoing, 0);
+        let outgoing_1 =
+            builder.add_generation_external("outgoing_1", 3, ExternalState::Outgoing, 1);
         let internal = (0..4)
             .map(|index| {
                 builder.add_vertex(DiagramVertex::interaction(format!("v{index}"), interaction))
@@ -755,8 +724,8 @@ mod tests {
             );
 
             let connections = diagram
-                .vertices()
-                .filter_map(|(_, vertex)| vertex.external.as_ref())
+                .edges()
+                .filter_map(|(_, _, edge)| edge.external.as_ref())
                 .map(|external| external.connection)
                 .collect::<std::collections::BTreeSet<_>>();
             assert_eq!(

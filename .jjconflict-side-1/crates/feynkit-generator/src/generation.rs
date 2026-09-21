@@ -13,7 +13,7 @@ use feynkit_graph::{
 use feynkit_model::{Model, ModelError, Particle, ParticleId, VertexRule, VertexRuleId};
 use idenso::{
     color::CS,
-    dirac::{AGS, PS},
+    dirac::AGS,
     epsilon::EPSILON_SYMBOL,
     representations::{Bispinor, ColorAdjoint, ColorFundamental, ColorSextet},
 };
@@ -632,7 +632,7 @@ impl NumeratorInstantiation<'_> {
             return Err(error);
         }
 
-        // P(mu, leg) has already become FeynKit::Momentum(edge, mu).
+        // P(mu, leg) has already become gammalooprs::Q(edge, mu).
         // Attach the Minkowski representation after all UFO indices have been
         // localized. PSlash momenta already carry the freshly allocated slot.
         atom = atom.replace_map(|term, _, out| {
@@ -885,8 +885,8 @@ impl NumeratorInstantiation<'_> {
                 return;
             };
             let expected = match self.owner {
-                NumeratorOwner::Vertex(_) => symbol!("FeynKit::VertexDummy"),
-                NumeratorOwner::Edge(_) => symbol!("FeynKit::EdgeDummy"),
+                NumeratorOwner::Vertex(_) => feynkit_graph::symbols::vertex_index(),
+                NumeratorOwner::Edge(_) => feynkit_graph::symbols::edge_index(),
             };
             if function.get_symbol() != expected || function.get_nargs() != 2 {
                 return;
@@ -1142,17 +1142,19 @@ impl NumeratorInstantiation<'_> {
     fn index(&self, leg: NumeratorHalfEdge, shift: i64) -> Result<Atom, GenerationError> {
         let edge = i64::try_from(leg.edge)
             .map_err(|_| GenerationError::ArithmeticOverflow("a symbolic edge identifier"))?;
-        let symbol = match leg.flow {
-            Flow::Source => symbol!("FeynKit::SourceIndex"),
-            Flow::Sink => symbol!("FeynKit::SinkIndex"),
-        };
-        Ok(symbol.call((edge, shift)))
+        let hedge = edge
+            .checked_mul(2)
+            .and_then(|index| index.checked_add(i64::from(leg.flow == Flow::Sink)))
+            .ok_or(GenerationError::ArithmeticOverflow(
+                "a symbolic half-edge identifier",
+            ))?;
+        Ok(feynkit_graph::symbols::hedge_index().call((hedge, shift)))
     }
 
     fn dummy(&self, local: usize) -> Result<Atom, GenerationError> {
         let (symbol, owner) = match self.owner {
-            NumeratorOwner::Vertex(vertex) => (symbol!("FeynKit::VertexDummy"), vertex),
-            NumeratorOwner::Edge(edge) => (symbol!("FeynKit::EdgeDummy"), edge),
+            NumeratorOwner::Vertex(vertex) => (feynkit_graph::symbols::vertex_index(), vertex),
+            NumeratorOwner::Edge(edge) => (feynkit_graph::symbols::edge_index(), edge),
         };
         let owner = i64::try_from(owner)
             .map_err(|_| GenerationError::ArithmeticOverflow("a symbolic numerator owner"))?;
@@ -2634,12 +2636,13 @@ impl Generator {
                                 index: external.index,
                             })?,
                     };
-                    DiagramVertex::external_in_connection(
+                    builder.add_generation_external(
                         format!("ext{}", external.index),
                         external.index,
                         external.state,
                         connection,
-                    )
+                    );
+                    continue;
                 }
                 ColoredNode::Interaction(rule_id) => {
                     let rule = self.model.vertex_rule_by_id(*rule_id)?;
@@ -2732,7 +2735,7 @@ impl Generator {
             .into_iter()
             .fold(Atom::one(), |product, factor| product * factor);
         let diagram = builder.numerator(numerator).build()?;
-        let diagram = self.with_legacy_loop_momentum_basis(diagram)?;
+        let diagram = self.with_canonical_loop_momentum_basis(diagram)?;
         diagram.validate()?;
         Ok(diagram)
     }
@@ -2743,34 +2746,18 @@ impl Generator {
     /// Stable FeynKit edge IDs remain the momentum labels. Only the ordering
     /// used to choose the default tree is changed, so the generator owns the
     /// coordinate convention before the runtime bridge transports it.
-    fn with_legacy_loop_momentum_basis(
+    fn with_canonical_loop_momentum_basis(
         &self,
         diagram: FeynmanDiagram,
     ) -> Result<FeynmanDiagram, GenerationError> {
         let mut ordered_internal_edges = diagram
             .edges()
-            .filter(|(_, endpoints, _)| {
-                diagram
-                    .vertex(endpoints.source)
-                    .is_some_and(|vertex| !vertex.is_external())
-                    && diagram
-                        .vertex(endpoints.target)
-                        .is_some_and(|vertex| !vertex.is_external())
-            })
+            .filter(|(_, _, edge)| edge.external.is_none() && !edge.is_dummy)
             .map(|(edge_id, endpoints, edge)| {
-                let (source, target, particle) = if endpoints.source <= endpoints.target {
-                    (endpoints.source, endpoints.target, edge.particle)
-                } else {
-                    (
-                        endpoints.target,
-                        endpoints.source,
-                        self.model.particle_by_id(edge.particle)?.antiparticle,
-                    )
-                };
-                let signed_pdg = self.model.particle_by_id(particle)?.pdg_code;
-                Ok(((source, target, signed_pdg, edge_id), edge_id))
+                edge.canonical_order_key(&self.model, edge_id, endpoints)
+                    .map(|key| (key, edge_id))
             })
-            .collect::<Result<Vec<_>, ModelError>>()?;
+            .collect::<Result<Vec<_>, DiagramError>>()?;
         ordered_internal_edges.sort_by_key(|(key, _)| *key);
         let ordered_internal_edges = ordered_internal_edges
             .into_iter()
@@ -2798,35 +2785,35 @@ impl Generator {
             } else {
                 Flow::Source
             };
-            let index_symbol = match flow {
-                Flow::Source => symbol!("FeynKit::SourceIndex"),
-                Flow::Sink => symbol!("FeynKit::SinkIndex"),
-            };
-            let edge_index = i64::try_from(edge_id)
-                .map_err(|_| GenerationError::ArithmeticOverflow("an external edge identifier"))?;
-            let index = index_symbol.call((edge_index, 1_i64));
+            let hedge = edge_id
+                .checked_mul(2)
+                .and_then(|index| index.checked_add(usize::from(flow == Flow::Sink)))
+                .ok_or(GenerationError::ArithmeticOverflow(
+                    "an external half-edge identifier",
+                ))?;
+            let index = feynkit_graph::symbols::hedge_index().call((hedge, 1_i64));
             let particle = self.model.particle_by_id(external.particle)?;
             let (head, index) = match particle.spin {
                 2 => {
                     let head = match (external.state, particle.is_antiparticle()) {
-                        (ExternalState::Incoming, false) => PS.u,
-                        (ExternalState::Incoming, true) => PS.vbar,
-                        (ExternalState::Outgoing, false) => PS.ubar,
-                        (ExternalState::Outgoing, true) => PS.v,
+                        (ExternalState::Incoming, false) => feynkit_graph::symbols::u(),
+                        (ExternalState::Incoming, true) => feynkit_graph::symbols::vbar(),
+                        (ExternalState::Outgoing, false) => feynkit_graph::symbols::ubar(),
+                        (ExternalState::Outgoing, true) => feynkit_graph::symbols::v(),
                     };
                     (head, Bispinor {}.new_rep(4).to_symbolic([index]))
                 }
                 3 => {
                     let head = match external.state {
-                        ExternalState::Incoming => PS.eps,
-                        ExternalState::Outgoing => PS.ebar,
+                        ExternalState::Incoming => feynkit_graph::symbols::epsilon(),
+                        ExternalState::Outgoing => feynkit_graph::symbols::epsilonbar(),
                     };
                     (head, Minkowski {}.new_rep(4).to_symbolic([index]))
                 }
                 _ => continue,
             };
             projector *= FunctionBuilder::new(head)
-                .add_arg(edge_index)
+                .add_arg(edge_id)
                 .add_arg(index)
                 .finish();
         }
@@ -4712,12 +4699,16 @@ mod tests {
         let generated = generator.generate(&process, &options).unwrap();
         assert!(!generated.diagrams.is_empty());
         for diagram in &generated.diagrams {
-            for wavefunction in [PS.u, PS.ubar, PS.v, PS.vbar] {
+            for wavefunction in [
+                feynkit_graph::symbols::u(),
+                feynkit_graph::symbols::ubar(),
+                feynkit_graph::symbols::v(),
+                feynkit_graph::symbols::vbar(),
+            ] {
                 assert_eq!(function_count(diagram.projector(), wavefunction), 1);
             }
             assert_eq!(
-                function_count(diagram.projector(), symbol!("FeynKit::SourceIndex"))
-                    + function_count(diagram.projector(), symbol!("FeynKit::SinkIndex")),
+                function_count(diagram.projector(), feynkit_graph::symbols::hedge_index()),
                 4
             );
         }
@@ -4753,15 +4744,7 @@ mod tests {
 
             let external_edges = diagram
                 .edges()
-                .filter_map(|(edge, endpoints, _)| {
-                    (diagram
-                        .vertex(endpoints.source)
-                        .is_some_and(|vertex| vertex.is_external())
-                        || diagram
-                            .vertex(endpoints.target)
-                            .is_some_and(|vertex| vertex.is_external()))
-                    .then_some(edge)
-                })
+                .filter_map(|(edge, _, data)| data.external.is_some().then_some(edge))
                 .collect::<BTreeSet<_>>();
             for candidate in diagram.topology_threshold_candidates() {
                 assert!(
@@ -4783,8 +4766,8 @@ mod tests {
                         .is_fermion()
                         .then_some((
                             edge_id,
-                            endpoints.source.0,
-                            endpoints.target.0,
+                            endpoints.source.expect("sewn source").0,
+                            endpoints.target.expect("sewn target").0,
                             edge.particle,
                         ))
                 })
@@ -4941,7 +4924,7 @@ mod tests {
         );
 
         let canonical = generator
-            .with_legacy_loop_momentum_basis(stable_id_default)
+            .with_canonical_loop_momentum_basis(stable_id_default)
             .unwrap();
         assert_eq!(
             canonical.loop_momentum_basis().tree_edges,
@@ -4959,24 +4942,14 @@ mod tests {
         let generator = Generator::new(Arc::clone(&model));
         let particle = model.particle_id("phi").unwrap();
         let mut builder = FeynmanDiagram::builder(model, "gl-like-routing");
-        let outgoing_0 = builder.add_vertex(DiagramVertex::external_in_connection(
-            "out0",
-            0,
-            ExternalState::Outgoing,
-            0,
-        ));
-        let outgoing_1 = builder.add_vertex(DiagramVertex::external_in_connection(
-            "out1",
-            1,
-            ExternalState::Outgoing,
-            1,
-        ));
+        let outgoing_0 = builder.add_generation_external("out0", 0, ExternalState::Outgoing, 0);
+        let outgoing_1 = builder.add_generation_external("out1", 1, ExternalState::Outgoing, 1);
         let vertices = (0..8)
             .map(|vertex| {
                 builder.add_vertex(DiagramVertex {
                     name: format!("v{vertex}"),
                     interaction: None,
-                    external: None,
+
                     numerator: Atom::one(),
                 })
             })
@@ -5018,7 +4991,7 @@ mod tests {
         }
 
         let routed = generator
-            .with_legacy_loop_momentum_basis(builder.build().unwrap())
+            .with_canonical_loop_momentum_basis(builder.build().unwrap())
             .unwrap();
 
         assert_eq!(
@@ -5050,15 +5023,17 @@ mod tests {
             .add_edge(right, outgoing, false, edge(&generator.model, 22))
             .unwrap();
         let vector_projector = generator.external_state_projector(&vector_graph).unwrap();
-        assert_eq!(function_count(&vector_projector, PS.eps), 1);
-        assert_eq!(function_count(&vector_projector, PS.ebar), 1);
         assert_eq!(
-            function_count(&vector_projector, symbol!("FeynKit::SinkIndex")),
+            function_count(&vector_projector, feynkit_graph::symbols::epsilon()),
             1
         );
         assert_eq!(
-            function_count(&vector_projector, symbol!("FeynKit::SourceIndex")),
+            function_count(&vector_projector, feynkit_graph::symbols::epsilonbar()),
             1
+        );
+        assert_eq!(
+            function_count(&vector_projector, feynkit_graph::symbols::hedge_index()),
+            2
         );
 
         let mut scalar_graph = Graph::new();
@@ -5556,7 +5531,7 @@ mod tests {
         }
         .instantiate(&propagator, NumeratorSector::Spin)
         .unwrap();
-        assert_eq!(function_count(&localized, symbol!("FeynKit::Momentum")), 1);
+        assert_eq!(function_count(&localized, symbol!("gammalooprs::Q")), 1);
     }
 
     #[test]
@@ -5847,7 +5822,7 @@ mod tests {
         assert_eq!(
             gamma,
             test_atom(
-                "spenso::gamma(spenso::bis(4,FeynKit::SinkIndex(20,1)),spenso::bis(4,FeynKit::SourceIndex(10,1)),spenso::mink(4,FeynKit::SourceIndex(30,1)))"
+                "spenso::gamma(spenso::bis(4,gammalooprs::hedge(41,1)),spenso::bis(4,gammalooprs::hedge(20,1)),spenso::mink(4,gammalooprs::hedge(60,1)))"
             )
         );
 
@@ -5857,7 +5832,7 @@ mod tests {
         assert_eq!(
             metric,
             test_atom(
-                "spenso::g(spenso::mink(4,FeynKit::SourceIndex(30,1)),spenso::mink(4,FeynKit::SinkIndex(40,1)))"
+                "spenso::g(spenso::mink(4,gammalooprs::hedge(60,1)),spenso::mink(4,gammalooprs::hedge(81,1)))"
             )
         );
 
@@ -5867,7 +5842,7 @@ mod tests {
         assert_eq!(
             identity,
             test_atom(
-                "spenso::g(spenso::bis(4,FeynKit::SourceIndex(10,1)),spenso::bis(4,FeynKit::SinkIndex(20,1)))"
+                "spenso::g(spenso::bis(4,gammalooprs::hedge(20,1)),spenso::bis(4,gammalooprs::hedge(41,1)))"
             )
         );
     }
@@ -5886,7 +5861,7 @@ mod tests {
             )
             .unwrap();
         let expected = test_atom(
-            "spenso::g(spenso::dind(spenso::cof(3,FeynKit::SourceIndex(10,1))),spenso::cof(3,FeynKit::SinkIndex(20,1)))*spenso::t(spenso::coad(8,FeynKit::SourceIndex(30,1)),spenso::cof(3,FeynKit::SinkIndex(20,1)),spenso::dind(spenso::cof(3,FeynKit::SourceIndex(10,1))))*spenso::f(spenso::coad(8,FeynKit::SourceIndex(30,1)),spenso::coad(8,FeynKit::VertexDummy(7,1)),spenso::coad(8,FeynKit::VertexDummy(7,2)))",
+            "spenso::g(spenso::dind(spenso::cof(3,gammalooprs::hedge(20,1))),spenso::cof(3,gammalooprs::hedge(41,1)))*spenso::t(spenso::coad(8,gammalooprs::hedge(60,1)),spenso::cof(3,gammalooprs::hedge(41,1)),spenso::dind(spenso::cof(3,gammalooprs::hedge(20,1))))*spenso::f(spenso::coad(8,gammalooprs::hedge(60,1)),spenso::coad(8,gammalooprs::vertex(7,1)),spenso::coad(8,gammalooprs::vertex(7,2)))",
         );
         assert_eq!(tensors, expected);
     }
@@ -5920,7 +5895,7 @@ mod tests {
         assert_eq!(
             slash,
             test_atom(
-                "spenso::gamma(spenso::bis(4,FeynKit::SinkIndex(5,1)),spenso::bis(4,FeynKit::SourceIndex(5,1)),spenso::mink(4,FeynKit::EdgeDummy(5,5)))*FeynKit::Momentum(5,spenso::mink(4,FeynKit::EdgeDummy(5,5)))*spenso::g(spenso::mink(4,FeynKit::EdgeDummy(5,4)),spenso::mink(4,FeynKit::EdgeDummy(5,4)))"
+                "spenso::gamma(spenso::bis(4,gammalooprs::hedge(11,1)),spenso::bis(4,gammalooprs::hedge(10,1)),spenso::mink(4,gammalooprs::edge(5,5)))*gammalooprs::Q(5,spenso::mink(4,gammalooprs::edge(5,5)))*spenso::g(spenso::mink(4,gammalooprs::edge(5,4)),spenso::mink(4,gammalooprs::edge(5,4)))"
             )
         );
     }
@@ -6664,14 +6639,14 @@ mod tests {
             .2
             .numerator
             .to_plain_string();
-        assert!(internal_numerator.contains("FeynKit::Momentum"));
-        assert!(internal_numerator.contains("FeynKit::SourceIndex"));
-        assert!(internal_numerator.contains("FeynKit::SinkIndex"));
-        assert!(internal_numerator.contains("FeynKit::EdgeDummy"));
+        assert!(internal_numerator.contains("gammalooprs::Q"));
+        assert!(internal_numerator.contains("gammalooprs::hedge"));
+        assert!(internal_numerator.contains("gammalooprs::hedge"));
+        assert!(internal_numerator.contains("gammalooprs::edge"));
         assert!(!internal_numerator.contains("idx("));
         assert!(!internal_numerator.contains("Slash(P)"));
 
-        let momentum = symbol!("FeynKit::Momentum");
+        let momentum = symbol!("gammalooprs::Q");
         assert!(momentum.has_tag("spenso::tensor"));
         assert!(momentum.has_tag("spenso::rank1"));
 
@@ -6688,7 +6663,7 @@ mod tests {
             .unwrap()
             .numerator
             .to_plain_string();
-        assert!(vertex_numerator.contains("FeynKit::SourceIndex"));
-        assert!(vertex_numerator.contains("FeynKit::SinkIndex"));
+        assert!(vertex_numerator.contains("gammalooprs::hedge"));
+        assert!(vertex_numerator.contains("gammalooprs::hedge"));
     }
 }

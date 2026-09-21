@@ -41,7 +41,7 @@
     dangling-centroid: 50,
   ),
   constraints: (side-strength: 10),
-  labels: (steps: 100, distance: 0.9, spring: 12, repulsion: 8),
+  labels: (steps: 100, internal-distance: 0.9, external-distance: 0.9, spring: 12, repulsion: 8),
   solver: (
     steps: 50,
     epochs: 50,

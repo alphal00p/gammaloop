@@ -10,7 +10,7 @@ The reducer's dimension must match every input slot exactly.
 
 == Select what is integrated
 
-`TensorReducer.feynkit(dimension)` selects every `FeynKit::Momentum` tensor. Use it only for a
+`TensorReducer.feynkit(dimension)` selects every `gammalooprs::Q` tensor. Use it only for a
 pure vacuum numerator whose momenta are all integrated. A generated scattering diagram still
 contains external momenta; calling it a vacuum diagram does not change that. Construct
 `TensorReducer(dimension)` and add exact compact vectors with `with_integrated_vector(...)`
@@ -43,7 +43,7 @@ assert scalar == expected
 ```
 
 For native generated momenta, select the corresponding exact
-`FeynKit::Momentum(edge_id,spenso::mink(D))` vectors from your vacuum/routing construction.
+`gammalooprs::Q(edge_id,spenso::mink(D))` vectors from your vacuum/routing construction.
 Selecting an entire head with `with_integrated_head(...)` is appropriate only when every vector
 under that qualified name is integrated. Ordinary generated FeynKit rules carry dimension `4`;
 a Taylor-expanded expression whose slots carry symbolic `D` requires that same `D` instead.

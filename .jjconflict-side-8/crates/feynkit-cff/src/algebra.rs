@@ -1,7 +1,7 @@
 //! Symbolic lowering and generalized residues shared by FeynKit and GammaLoop.
 
 use symbolica::{
-    atom::{Atom, AtomCore, Symbol},
+    atom::{Atom, AtomCore, AtomView, Symbol},
     function,
     id::Replacement,
     symbol,
@@ -142,14 +142,31 @@ impl SurfacePole {
                 "a Laurent power must lie between minus the positive pole order and -1".into(),
             ));
         }
-        if root.contains(variable) {
+        if root.contains_symbol(variable) {
             return Err(CffError::Invariant(
                 "a residue root must not depend on its integration variable".into(),
             ));
         }
         let order = i64::try_from(self.order)
             .map_err(|_| CffError::Invariant("pole order exceeds i64".into()))?;
-        let root_value = self.surface.replace(variable).with(root);
+        let root_value = self.surface.replace(variable).with(root.to_pattern());
+        if matches!(root_value.as_view(), AtomView::Num(_)) && root_value != Atom::Zero {
+            return Err(CffError::Invariant(
+                "the supplied residue root is not a zero of the surface".into(),
+            ));
+        }
+        if self
+            .surface
+            .derivative(variable)
+            .replace(variable)
+            .with(root.to_pattern())
+            .expand()
+            == Atom::Zero
+        {
+            return Err(CffError::Invariant(
+                "the supplied residue root must be simple".into(),
+            ));
+        }
         let expansion = self
             .surface
             .series(variable, root.clone(), (order, 1))
@@ -173,7 +190,7 @@ impl SurfacePole {
         for factor in 2..=derivative_order {
             result /= Atom::num(factor as i64);
         }
-        Ok(result.replace(variable).with(root))
+        Ok(result.replace(variable).with(root.to_pattern()))
     }
 
     pub fn residue(
@@ -208,6 +225,11 @@ impl CutPropagator {
         if self.power == 0 || self.power > i64::MAX as usize {
             return Err(CffError::Invariant(
                 "cut propagator power must be a positive integer representable as i64".into(),
+            ));
+        }
+        if self.on_shell_energy == Atom::Zero {
+            return Err(CffError::Invariant(
+                "cut on-shell energy must be nonzero so the energy roots are distinct".into(),
             ));
         }
         if ![-1, 1].contains(&self.orientation) || ![-1, 1].contains(&self.prescription) {
@@ -247,7 +269,7 @@ impl CutPropagator {
     /// route to that coordinate before applying sequential cut distributions.
     pub fn apply(&self, coefficient: &Atom, variable: Symbol) -> Result<Atom, CffError> {
         self.validate()?;
-        if self.energy != Atom::var(variable) || self.on_shell_energy.contains(variable) {
+        if self.energy != Atom::var(variable) || self.on_shell_energy.contains_symbol(variable) {
             return Err(CffError::Invariant("cut action requires an independent energy variable and an on-shell energy independent of it".into()));
         }
         let root = Atom::num(self.orientation as i64) * &self.on_shell_energy;
@@ -257,7 +279,7 @@ impl CutPropagator {
         }
         Ok(&self.normalization
             * Atom::num((self.prescription * self.orientation) as i64)
-            * regular.replace(variable).with(root))
+            * regular.replace(variable).with(root.to_pattern()))
     }
 }
 
@@ -265,6 +287,47 @@ impl CutPropagator {
 mod tests {
     use super::*;
     use symbolica::parse;
+
+    #[test]
+    fn residue_rejects_invalid_orders_and_non_simple_roots() {
+        let x = symbol!("cut_test::invalid_x");
+        let pole = SurfacePole {
+            surface: Atom::var(x).pow(2),
+            order: 1,
+        };
+        assert!(pole.residue(&Atom::num(1), x, &Atom::Zero).is_err());
+        assert!(pole.residue(&Atom::num(1), x, &Atom::num(1)).is_err());
+        assert!(
+            pole.laurent_coefficient(&Atom::num(1), x, &Atom::Zero, 0)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn energy_lowering_and_normalization_preserve_runtime_signs() {
+        let h = HSurface {
+            positive_energies: vec![EdgeId::new(0)],
+            negative_energies: vec![EdgeId::new(1)],
+            external_shift: vec![(EdgeId::new(2), -1)].into(),
+            vertex_set: crate::VertexSet::default(),
+        };
+        let e = |edge: EdgeId| function!(symbol!("cut_test::E"), edge.index() as i64);
+        let p = |edge: EdgeId| function!(symbol!("cut_test::P"), edge.index() as i64);
+        assert_eq!(
+            h.to_atom_with(e, p),
+            e(EdgeId::new(0)) - e(EdgeId::new(1)) - p(EdgeId::new(2))
+        );
+        assert_eq!(
+            CffExpression::inverse_energy_product([Atom::num(2), Atom::num(3)]),
+            Atom::num(1) / 24
+        );
+        assert_eq!(CffExpression::inverse_energy_product([]), Atom::num(1));
+        assert_eq!(CffExpression::measure_normalization(0), Atom::num(1));
+        assert_eq!(
+            CffExpression::measure_normalization(1),
+            -Atom::i() / (Atom::num(2) * Atom::var(Symbol::PI)).pow(3)
+        );
+    }
 
     #[test]
     fn raised_cut_action_equals_energy_residue_for_both_orientations() {
@@ -331,10 +394,15 @@ mod tests {
             surface: surface.clone(),
             order: 2,
         };
-        let derivative = surface.derivative(x).replace(x).with(&root);
-        let expected = coefficient.derivative(x).replace(x).with(&root) / derivative.pow(2)
-            - coefficient.replace(x).with(&root)
-                * surface.derivative(x).derivative(x).replace(x).with(&root)
+        let derivative = surface.derivative(x).replace(x).with(root.to_pattern());
+        let expected = coefficient.derivative(x).replace(x).with(root.to_pattern())
+            / derivative.pow(2)
+            - coefficient.replace(x).with(root.to_pattern())
+                * surface
+                    .derivative(x)
+                    .derivative(x)
+                    .replace(x)
+                    .with(root.to_pattern())
                 / derivative.pow(3);
         assert_eq!(
             (pole.residue(&coefficient, x, &root).unwrap() - expected)

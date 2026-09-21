@@ -1,0 +1,10 @@
+digraph G{
+                ext    [style=invis]
+                ext -> A   [particle=a]
+                C -> A    [particle="b"]
+                A -> D    [particle="b"]
+                D -> B    [particle="b"]
+                B -> C    [particle="b"]
+                C -> D    [particle="g"]
+                B -> ext   [particle=a]
+            }

@@ -239,70 +239,37 @@ impl TryFrom<&FeynmanDiagram> for CffGraph {
         diagram
             .validate()
             .map_err(|error| CffError::Invariant(error.to_string()))?;
-        let internal_vertices = diagram
+        let vertex_ids = diagram
             .vertices()
-            .filter(|(_, vertex)| !vertex.is_external())
             .enumerate()
-            .map(|(dense_index, (diagram_id, _))| (diagram_id, VertexId::new(dense_index)))
+            .map(|(dense, (id, _))| (id, VertexId::new(dense)))
             .collect::<BTreeMap<_, _>>();
-
         let mut edges = Vec::new();
-        let mut external_connections =
-            BTreeMap::<usize, Vec<(EdgeId, VertexId, ExternalState)>>::new();
-        for (diagram_edge, endpoints, _) in diagram.edges() {
-            let edge = EdgeId::new(diagram_edge.0);
-            match (
-                internal_vertices.get(&endpoints.source),
-                internal_vertices.get(&endpoints.target),
-            ) {
-                (Some(source), Some(sink)) => {
-                    edges.push(CffEdge::internal(edge, *source, *sink));
-                }
-                (Some(vertex), None) => {
-                    let external = diagram
-                        .vertex(endpoints.target)
-                        .and_then(|vertex| vertex.external.as_ref())
-                        .ok_or(CffError::MissingExternalMetadata(edge))?;
-                    external_connections
-                        .entry(external.connection)
-                        .or_default()
-                        .push((edge, *vertex, external.state));
-                }
-                (None, Some(vertex)) => {
-                    let external = diagram
-                        .vertex(endpoints.source)
-                        .and_then(|vertex| vertex.external.as_ref())
-                        .ok_or(CffError::MissingExternalMetadata(edge))?;
-                    external_connections
-                        .entry(external.connection)
-                        .or_default()
-                        .push((edge, *vertex, external.state));
-                }
-                (None, None) => return Err(CffError::ExternalToExternalEdge(edge)),
+        for (id, endpoints, data) in diagram.edges() {
+            if data.is_dummy {
+                continue;
             }
-        }
-        for connection in external_connections.into_values() {
-            match connection.as_slice() {
-                [(edge, vertex, state)] => {
-                    edges.push(CffEdge::external(*edge, *vertex, EdgeFlow::from(*state)));
+            let edge = EdgeId::new(id.0);
+            let source = endpoints.source.and_then(|id| vertex_ids.get(&id)).copied();
+            let sink = endpoints.target.and_then(|id| vertex_ids.get(&id)).copied();
+            edges.push(match (source, sink, &data.external) {
+                (Some(source), Some(sink), Some(_)) => CffEdge::initial_state(edge, source, sink),
+                (Some(source), Some(sink), None) => CffEdge::internal(edge, source, sink),
+                (Some(vertex), None, Some(external)) | (None, Some(vertex), Some(external)) => {
+                    CffEdge::external(edge, vertex, EdgeFlow::from(external.state))
                 }
-                [left, right] => {
-                    let incoming = [left, right]
-                        .into_iter()
-                        .find(|(_, _, state)| *state == ExternalState::Incoming)
-                        .expect("FeynmanDiagram validation requires opposite connection states");
-                    let outgoing = [left, right]
-                        .into_iter()
-                        .find(|(_, _, state)| *state == ExternalState::Outgoing)
-                        .expect("FeynmanDiagram validation requires opposite connection states");
-                    edges.push(CffEdge::initial_state(incoming.0, outgoing.1, incoming.1));
+                (Some(_), None, None) | (None, Some(_), None) => {
+                    return Err(CffError::MissingExternalMetadata(edge));
                 }
-                _ => unreachable!("FeynmanDiagram validation constrains connection cardinality"),
-            }
+                (None, None, _) => return Err(CffError::ExternalToExternalEdge(edge)),
+            });
         }
-        edges.sort_by_key(|edge| edge.id);
-
-        Self::new(internal_vertices.len(), edges)
+        Self::with_vertex_sets(
+            vertex_ids
+                .keys()
+                .map(|id| VertexSet::singleton(VertexId::new(id.0))),
+            edges,
+        )
     }
 }
 
@@ -320,7 +287,7 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
-    use feynkit_graph::{DiagramEdge, DiagramError, DiagramVertex};
+    use feynkit_graph::{DiagramEdge, DiagramError, DiagramVertex, ExternalLeg};
     use feynkit_model::Model;
 
     #[test]
@@ -383,24 +350,39 @@ mod tests {
         DiagramEdge::new(model.particle_id("scalar_0").unwrap(), false)
     }
 
+    fn external_scalar(model: &Model, index: usize, state: ExternalState) -> DiagramEdge {
+        let mut edge = scalar_edge(model);
+        edge.external = Some(ExternalLeg {
+            name: format!("p{index}"),
+            index,
+            state,
+            connection: index,
+        });
+        edge
+    }
+
     fn bubble_diagram() -> FeynmanDiagram {
         let model = scalar_model();
         let mut builder = FeynmanDiagram::builder(Arc::clone(&model), "bubble");
-        let incoming =
-            builder.add_vertex(DiagramVertex::external("p1", 0, ExternalState::Incoming));
-        let outgoing =
-            builder.add_vertex(DiagramVertex::external("p2", 1, ExternalState::Outgoing));
         let rule = model.vertex_rule_id("V_3_SCALAR_000").unwrap();
         let left = builder.add_vertex(DiagramVertex::interaction("left", rule));
         let right = builder.add_vertex(DiagramVertex::interaction("right", rule));
         builder
-            .add_edge(incoming, left, scalar_edge(&model))
+            .add_edge(
+                None,
+                left,
+                external_scalar(&model, 0, ExternalState::Incoming),
+            )
             .unwrap();
-        builder.add_edge(left, right, scalar_edge(&model)).unwrap();
-        builder.add_edge(left, right, scalar_edge(&model)).unwrap();
         builder
-            .add_edge(right, outgoing, scalar_edge(&model))
+            .add_edge(
+                right,
+                None,
+                external_scalar(&model, 1, ExternalState::Outgoing),
+            )
             .unwrap();
+        builder.add_edge(left, right, scalar_edge(&model)).unwrap();
+        builder.add_edge(left, right, scalar_edge(&model)).unwrap();
         builder.build().unwrap()
     }
 
@@ -413,35 +395,41 @@ mod tests {
             graph.edges(),
             &[
                 CffEdge::external(EdgeId::new(0), VertexId::new(0), EdgeFlow::Incoming),
-                CffEdge::internal(EdgeId::new(1), VertexId::new(0), VertexId::new(1)),
+                CffEdge::external(EdgeId::new(1), VertexId::new(1), EdgeFlow::Outgoing),
                 CffEdge::internal(EdgeId::new(2), VertexId::new(0), VertexId::new(1)),
-                CffEdge::external(EdgeId::new(3), VertexId::new(1), EdgeFlow::Outgoing),
+                CffEdge::internal(EdgeId::new(3), VertexId::new(0), VertexId::new(1)),
             ]
         );
     }
 
     #[test]
-    fn external_state_determines_flow_independently_of_endpoint_order() {
+    fn native_external_flow_and_metadata_agree() {
         let model = scalar_model();
         let mut builder = FeynmanDiagram::builder(Arc::clone(&model), "external-flow");
         let internal = builder.add_vertex(DiagramVertex::interaction(
             "v",
             model.vertex_rule_id("V_3_SCALAR_000").unwrap(),
         ));
-        let incoming =
-            builder.add_vertex(DiagramVertex::external("p1", 0, ExternalState::Incoming));
-        let outgoing_1 =
-            builder.add_vertex(DiagramVertex::external("p2", 1, ExternalState::Outgoing));
-        let outgoing_2 =
-            builder.add_vertex(DiagramVertex::external("p3", 2, ExternalState::Outgoing));
         builder
-            .add_edge(internal, incoming, scalar_edge(&model))
+            .add_edge(
+                None,
+                internal,
+                external_scalar(&model, 0, ExternalState::Incoming),
+            )
             .unwrap();
         builder
-            .add_edge(internal, outgoing_1, scalar_edge(&model))
+            .add_edge(
+                internal,
+                None,
+                external_scalar(&model, 1, ExternalState::Outgoing),
+            )
             .unwrap();
         builder
-            .add_edge(internal, outgoing_2, scalar_edge(&model))
+            .add_edge(
+                internal,
+                None,
+                external_scalar(&model, 2, ExternalState::Outgoing),
+            )
             .unwrap();
         let diagram = builder.build().unwrap();
 
@@ -457,19 +445,17 @@ mod tests {
     }
 
     #[test]
-    fn diagram_builder_rejects_edges_between_external_vertices() {
+    fn diagram_builder_rejects_an_edge_without_any_attached_endpoint() {
         let model = scalar_model();
         let mut builder = FeynmanDiagram::builder(Arc::clone(&model), "external-only");
-        let incoming =
-            builder.add_vertex(DiagramVertex::external("p1", 0, ExternalState::Incoming));
-        let outgoing =
-            builder.add_vertex(DiagramVertex::external("p2", 1, ExternalState::Outgoing));
-        builder
-            .add_edge(incoming, outgoing, scalar_edge(&model))
-            .unwrap();
         assert!(matches!(
-            builder.build().unwrap_err(),
-            DiagramError::ExternalToExternalEdge { edge: 0 }
+            builder
+                .add_edge(None, None, scalar_edge(&model))
+                .unwrap_err(),
+            DiagramError::Invariant {
+                operation: "adding an edge",
+                ..
+            }
         ));
     }
 }

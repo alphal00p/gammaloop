@@ -1140,7 +1140,7 @@ fn measured_label_collision_pass_preserves_repulsion() {
                 ("viewport-h", "1"),
                 ("length-scale", "1"),
                 ("label-layout", "normal"),
-                ("label-length-scale", "1"),
+                ("internal-label-length-scale", "1"),
                 ("label-spring", "0"),
                 ("label-charge", charge),
                 ("label-steps", "1"),
@@ -1239,43 +1239,54 @@ fn dangling_tangent_label_layout_keeps_paired_labels_normal() {
     }))
     .unwrap();
 
-    let laid_out = layout_parsed_graph_bytes(
-        &graph,
-        &encode_cbor(&BTreeMap::from([
-            ("layout-algo".to_string(), "tree".to_string()),
-            ("layout-nodes".to_string(), "fixed".to_string()),
-            ("label-layout".to_string(), "dangling-tangent".to_string()),
-            ("label-charge".to_string(), "0".to_string()),
-            ("label-steps".to_string(), "1".to_string()),
-        ])),
-    )
-    .unwrap();
-    let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&laid_out).unwrap());
-    let expected_offset = crate::default_label_length_scale()
-        * crate::default_length_scale()
-        * (crate::default_viewport_w() * crate::default_viewport_h() / 2.0).sqrt();
+    for (internal, external) in [(0.6_f64, 0.6_f64), (0.9, 0.6), (0.6, 1.2)] {
+        let laid_out = layout_parsed_graph_bytes(
+            &graph,
+            &encode_cbor(&BTreeMap::from([
+                ("layout-algo".to_string(), "tree".to_string()),
+                ("layout-nodes".to_string(), "fixed".to_string()),
+                ("label-layout".to_string(), "dangling-tangent".to_string()),
+                ("label-charge".to_string(), "0".to_string()),
+                (
+                    "internal-label-length-scale".to_string(),
+                    internal.to_string(),
+                ),
+                (
+                    "external-label-length-scale".to_string(),
+                    external.to_string(),
+                ),
+                ("label-steps".to_string(), "1".to_string()),
+            ])),
+        )
+        .unwrap();
+        let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&laid_out).unwrap());
+        let spring_length = crate::default_length_scale()
+            * (crate::default_viewport_w() * crate::default_viewport_h() / 2.0).sqrt();
 
-    let dangling = &edges[0];
-    let dangling_pos = dangling.pos.as_ref().unwrap();
-    let dangling_label = dangling.label_pos.as_ref().unwrap();
-    let dangling_dx = dangling_label.x - dangling_pos.x;
-    let dangling_dy = dangling_label.y - dangling_pos.y;
-    assert!(
-        (dangling_dx - expected_offset).abs() < 1e-9,
-        "{dangling_dx} != {expected_offset}"
-    );
-    assert!(dangling_dy.abs() < 1e-9, "{dangling_dy} != 0");
+        let expected_offset = external * spring_length;
+        let dangling = &edges[0];
+        let dangling_pos = dangling.pos.as_ref().unwrap();
+        let dangling_label = dangling.label_pos.as_ref().unwrap();
+        let dangling_dx = dangling_label.x - dangling_pos.x;
+        let dangling_dy = dangling_label.y - dangling_pos.y;
+        assert!(
+            (dangling_dx - expected_offset).abs() < 1e-9,
+            "{dangling_dx} != {expected_offset}"
+        );
+        assert!(dangling_dy.abs() < 1e-9, "{dangling_dy} != 0");
 
-    let paired = &edges[1];
-    let paired_pos = paired.pos.as_ref().unwrap();
-    let paired_label = paired.label_pos.as_ref().unwrap();
-    let paired_dx = paired_label.x - paired_pos.x;
-    let paired_dy = paired_label.y - paired_pos.y;
-    assert!(paired_dx.abs() < 1e-9, "{paired_dx} != 0");
-    assert!(
-        (paired_dy - expected_offset).abs() < 1e-9,
-        "{paired_dy} != {expected_offset}"
-    );
+        let expected_offset = internal * spring_length;
+        let paired = &edges[1];
+        let paired_pos = paired.pos.as_ref().unwrap();
+        let paired_label = paired.label_pos.as_ref().unwrap();
+        let paired_dx = paired_label.x - paired_pos.x;
+        let paired_dy = paired_label.y - paired_pos.y;
+        assert!(paired_dx.abs() < 1e-9, "{paired_dx} != 0");
+        assert!(
+            (paired_dy - expected_offset).abs() < 1e-9,
+            "{paired_dy} != {expected_offset}"
+        );
+    }
 }
 
 #[test]

@@ -1,9 +1,6 @@
 use std::sync::atomic::AtomicUsize;
 
-use linnet::half_edge::subgraph::subset::SubSet;
-use linnet::half_edge::subgraph::{ModifySubSet, SubGraphLike, SubSetLike, SubSetOps};
-use linnet::half_edge::{NodeIndex, involution::HedgePair};
-use symbolica::atom::Atom;
+use linnet::half_edge::subgraph::{ModifySubSet, SubGraphLike, SubSetOps};
 use symbolica_utils::AtomPrintExt;
 use tracing::debug;
 use tracing::instrument;
@@ -22,11 +19,7 @@ impl Numerator<UnInit> {
         graph: &Graph,
         subgraph: &S,
     ) -> Numerator<AppliedFeynmanRule> {
-        let mut num = Atom::one();
-
-        let mut seen: SubSet<NodeIndex> = SubSet::empty(graph.n_nodes());
-
-        for (p, eid, e) in graph.underlying.iter_edges_of(subgraph) {
+        for (_, eid, _) in graph.underlying.iter_edges_of(subgraph) {
             let i = MAXEDGECOUNTER.fetch_max(eid.0, std::sync::atomic::Ordering::Relaxed);
             if i == eid.0 {
                 // TENSORLIB.write().unwrap().insert_explicit(
@@ -42,33 +35,18 @@ impl Numerator<UnInit> {
                 //     }),
                 // );
             }
-            if let HedgePair::Paired { source, sink } = p {
-                let source_n = graph.node_id(source);
-                if !seen[source_n] {
-                    seen.add(source_n);
-                    num *= graph[source_n].get_num();
-                }
-                let sink_n = graph.node_id(sink);
-                if !seen[sink_n] {
-                    seen.add(sink_n);
-                    num *= graph[sink_n].get_num();
-                }
-
-                num *= &e.data.num.value //.kill_color();
-            }
         }
-
-        let notseen = !seen;
-
-        // From all the nodes not yet covered by paired edges, include those included in the subgraph, ignoring dummies
-        for node_id in notseen.included_iter() {
-            if graph
-                .iter_crown(node_id)
-                .all(|h| subgraph.includes(&h) || graph[graph[&h]].is_dummy)
-            {
-                num *= graph[node_id].get_num()
-            }
-        }
+        let mut selected: linnet::half_edge::subgraph::SuBitGraph =
+            graph.underlying.empty_subgraph();
+        selected.union_with_iter(subgraph.included_iter());
+        let num = feynkit_graph::expressions::GraphExpressions::numerator_of(
+            &graph.underlying,
+            &selected,
+            &graph.underlying.empty_subgraph(),
+            |vertex| vertex.get_num(),
+            |edge| edge.num.value.clone(), //.kill_color();
+            |edge| edge.is_dummy,
+        );
 
         debug!( numerator = %num.to_bare_ordered_string(),"Numerator constructed",);
 
@@ -87,43 +65,14 @@ impl Numerator<UnInit> {
         subgraph: &S,
         ignore: &S,
     ) -> Numerator<AppliedFeynmanRule> {
-        let mut num = Atom::one();
-
-        let mut seen: SubSet<NodeIndex> = SubSet::empty(graph.n_nodes());
-
-        for (nid, _, _) in graph.underlying.iter_nodes_of(ignore) {
-            seen.add(nid);
-        }
-        let not_ignored = subgraph.subtract(ignore);
-
-        for (p, _eid, e) in graph.underlying.iter_edges_of(&not_ignored) {
-            if let HedgePair::Paired { source, sink } = p {
-                let source_n = graph.node_id(source);
-                if !seen[source_n] {
-                    seen.add(source_n);
-                    num *= graph[source_n].get_num();
-                }
-                let sink_n = graph.node_id(sink);
-                if !seen[sink_n] {
-                    seen.add(sink_n);
-                    num *= graph[sink_n].get_num();
-                }
-
-                num *= &e.data.num.value //.kill_color();
-            }
-        }
-
-        let notseen = !seen;
-
-        // From all the nodes not yet covered by paired edges, include those included in the subgraph, ignoring dummies
-        for node_id in notseen.included_iter() {
-            if graph
-                .iter_crown(node_id)
-                .all(|h| subgraph.includes(&h) || graph[graph[&h]].is_dummy)
-            {
-                num *= graph[node_id].get_num()
-            }
-        }
+        let num = feynkit_graph::expressions::GraphExpressions::numerator_of(
+            &graph.underlying,
+            subgraph,
+            ignore,
+            |vertex| vertex.get_num(),
+            |edge| edge.num.value.clone(),
+            |edge| edge.is_dummy,
+        );
 
         debug!( numerator = %num.to_bare_ordered_string(),"Numerator constructed",);
 

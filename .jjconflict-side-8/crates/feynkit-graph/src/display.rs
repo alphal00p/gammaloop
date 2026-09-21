@@ -4,7 +4,10 @@ use std::{
 };
 
 use crate::FeynmanDiagram;
-use linnet::half_edge::involution::{EdgeIndex, Orientation};
+use linnet::half_edge::{
+    EdgeAccessors,
+    involution::{EdgeIndex, Orientation},
+};
 use symbolica::atom::AtomCore;
 
 fn typst_string(value: &str) -> String {
@@ -112,13 +115,15 @@ impl FeynmanDiagram {
                 .expect("validated diagram particle IDs resolve in the owned model");
             let source_internal = endpoints.source.map(|vertex| internal_ids[&vertex]);
             let target_internal = endpoints.target.map(|vertex| internal_ids[&vertex]);
-            let orientation = match self.underlying()[&EdgeIndex(id.0)].0.orientation {
+            let orientation = match self.underlying().orientation(EdgeIndex(id.0)) {
                 Orientation::Default => "default",
                 Orientation::Reversed => "reversed",
                 Orientation::Undirected => "undirected",
             };
             let endpoint_spec = match (source_internal, target_internal) {
-                (Some(source), Some(target)) => format!("source(<v{source}>), <e{}>, sink(<v{target}>)", id.0),
+                (Some(source), Some(target)) => {
+                    format!("source(<v{source}>), <e{}>, sink(<v{target}>)", id.0)
+                }
                 (Some(source), None) => format!("source(<v{source}>), <e{}>", id.0),
                 (None, Some(target)) => format!("<e{}>, sink(<v{target}>)", id.0),
                 (None, None) => unreachable!("every native edge has an incident interaction"),
@@ -180,7 +185,7 @@ impl FeynmanDiagram {
 mod tests {
     use std::sync::Arc;
 
-    use crate::{DiagramEdge, DiagramVertex, ExternalState, FeynmanDiagram};
+    use crate::{DiagramEdge, DiagramVertex, ExternalLeg, ExternalState, FeynmanDiagram};
     use feynkit_model::Model;
 
     fn display_model() -> Arc<Model> {
@@ -212,17 +217,17 @@ mod tests {
         let rule = model.vertex_rule_id("V_1").unwrap();
         let particle = model.particle_id("phi").unwrap();
         let mut builder = FeynmanDiagram::builder(model, "bubble");
-        let incoming =
-            builder.add_vertex(DiagramVertex::external("p1", 0, ExternalState::Incoming));
-        let outgoing =
-            builder.add_vertex(DiagramVertex::external("p2", 1, ExternalState::Outgoing));
+        let mut incoming = DiagramEdge::new(particle, false);
+        incoming.external = Some(ExternalLeg { name: "p1".into(), index: 0, state: ExternalState::Incoming, connection: 0 });
+        let mut outgoing = DiagramEdge::new(particle, false);
+        outgoing.external = Some(ExternalLeg { name: "p2".into(), index: 1, state: ExternalState::Outgoing, connection: 1 });
         let left = builder.add_vertex(DiagramVertex::interaction("left", rule));
         let right = builder.add_vertex(DiagramVertex::interaction("right", rule));
         let scalar = || DiagramEdge::new(particle, false);
-        builder.add_edge(incoming, left, scalar()).unwrap();
+        builder.add_edge(None, left, incoming).unwrap();
         builder.add_edge(left, right, scalar()).unwrap();
         builder.add_edge(left, right, scalar()).unwrap();
-        builder.add_edge(right, outgoing, scalar()).unwrap();
+        builder.add_edge(right, None, outgoing).unwrap();
         builder.build().unwrap()
     }
 
@@ -255,27 +260,15 @@ mod tests {
         let rule = model.vertex_rule_id("V_3").unwrap();
         let particle = model.particle_id("phi").unwrap();
         let mut builder = FeynmanDiagram::builder(model, "one-to-two");
-        let incoming =
-            builder.add_vertex(DiagramVertex::external("in", 0, ExternalState::Incoming));
-        let outgoing_high = builder.add_vertex(DiagramVertex::external(
-            "out-high",
-            2,
-            ExternalState::Outgoing,
-        ));
-        let outgoing_low = builder.add_vertex(DiagramVertex::external(
-            "out-low",
-            1,
-            ExternalState::Outgoing,
-        ));
         let interaction = builder.add_vertex(DiagramVertex::interaction("v", rule));
-        let scalar = || DiagramEdge::new(particle, false);
-        builder.add_edge(incoming, interaction, scalar()).unwrap();
-        builder
-            .add_edge(interaction, outgoing_high, scalar())
-            .unwrap();
-        builder
-            .add_edge(interaction, outgoing_low, scalar())
-            .unwrap();
+        for (name, index, state) in [("in",0,ExternalState::Incoming),("out-high",2,ExternalState::Outgoing),("out-low",1,ExternalState::Outgoing)] {
+            let mut edge = DiagramEdge::new(particle, false);
+            edge.external = Some(ExternalLeg { name: name.into(), index, state, connection: index });
+            match state {
+                ExternalState::Incoming => builder.add_edge(None, interaction, edge),
+                ExternalState::Outgoing => builder.add_edge(interaction, None, edge),
+            }.unwrap();
+        }
         let source = builder.build().unwrap().to_linnest();
 
         let low = source.find("external-name: \"out-low\"").unwrap();
@@ -291,12 +284,11 @@ mod tests {
         let rule = model.vertex_rule_id("V\"1").unwrap();
         let particle = model.particle_id("phi").unwrap();
         let mut builder = FeynmanDiagram::builder(model, "quote \" and \\ slash");
-        let incoming =
-            builder.add_vertex(DiagramVertex::external("p\n1", 0, ExternalState::Incoming));
         let interaction = builder.add_vertex(DiagramVertex::interaction("v", rule));
-        builder
-            .add_edge(interaction, incoming, DiagramEdge::new(particle, true))
-            .unwrap();
+        let mut incoming = DiagramEdge::new(particle, true);
+        incoming.external = Some(ExternalLeg { name: "p\n1".into(), index: 0, state: ExternalState::Incoming, connection: 0 });
+        builder.add_edge(None, interaction, incoming).unwrap();
+        builder.edge_orientations = Some(vec![linnet::half_edge::involution::Orientation::Reversed]);
         let source = builder.build().unwrap().to_linnest();
 
         assert!(source.contains("name: \"quote \\\" and \\\\ slash\""));

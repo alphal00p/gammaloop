@@ -2,6 +2,7 @@
 # requires-python = ">=3.11"
 # dependencies = [
 #     "marimo==0.24.0",
+#     "linnet-py==0.1.0",
 #     "symbolica==3.0.0",
 #     "typst==0.15.0",
 # ]
@@ -242,6 +243,51 @@ def _(fk, generated, mo, model, table):
         column_widths={"diagram": 440},
     )
     return (from_json,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Select interaction regions with Linnet
+
+    External states live on dangling edges in an amplitude. Every vertex is
+    an interaction. The canonical `linnet_py.Graph` keeps the diagram's typed
+    physics objects in its element payloads, so ordinary graph predicates can
+    select the region for a numerator, denominator, routing, or CFF calculation.
+    """)
+    return
+
+
+@app.cell
+def _(from_json, mo, table):
+    analysis_graph = from_json.to_linnet()
+    selected_region = analysis_graph.filter(edge=lambda edge: not edge.data.is_external)
+    _basis = from_json.momentum_basis(subgraph=selected_region)
+    _numerator = from_json.numerator_expression(subgraph=selected_region)
+    mo.vstack(
+        [
+            table(
+                [
+                    {
+                        "interaction vertices": analysis_graph.n_nodes,
+                        "external momentum carriers": len(from_json.external_edges),
+                        "selected components": len(
+                            from_json.connected_components(selected_region)
+                        ),
+                        "selected loops": from_json.loop_count_of(
+                            subgraph=selected_region
+                        ),
+                        "selected bridge half-edges": len(
+                            from_json.bridges(selected_region)
+                        ),
+                    }
+                ]
+            ),
+            mo.md("**Selected numerator in loop and external momenta**"),
+            _basis.route_expression(_numerator),
+        ]
+    )
+    return analysis_graph, selected_region
 
 
 @app.cell(hide_code=True)

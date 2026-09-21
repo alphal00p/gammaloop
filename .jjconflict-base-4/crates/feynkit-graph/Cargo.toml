@@ -10,6 +10,8 @@ categories = ["science"]
 
 [dependencies]
 itertools = { workspace = true }
+nu-ansi-term = { workspace = true }
+symbolica-utils = { workspace = true }
 feynkit-kinematics = { version = "0.1.0", path = "../feynkit-kinematics" }
 feynkit-model = { version = "0.1.0", path = "../feynkit-model" }
 linnet = { version = "0.17.0", path = "../linnet", default-features = false, features = ["serde"] }
