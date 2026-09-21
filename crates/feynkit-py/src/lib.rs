@@ -86,7 +86,8 @@ pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
             )
         })?;
     // Type overrides preserve Rust default expressions verbatim in stubgen.
-    // Render the automatic policy sentinel as its Python Ellipsis spelling.
+    // Render the automatic policy sentinel as its Python Ellipsis spelling,
+    // and automatic notebook progress as a Python string literal.
     for class in module.class.values_mut() {
         for method in class.methods.values_mut().flatten() {
             if matches!(method.name, "generate" | "generate_diagrams") {
@@ -94,6 +95,9 @@ pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
                     if parameter.type_info.name.contains("types.EllipsisType") {
                         parameter.default =
                             pyo3_stub_gen::generate::ParameterDefault::Expr("...".to_owned());
+                    } else if parameter.name == "progress" {
+                        parameter.default =
+                            pyo3_stub_gen::generate::ParameterDefault::Expr("'auto'".to_owned());
                     }
                 }
             }

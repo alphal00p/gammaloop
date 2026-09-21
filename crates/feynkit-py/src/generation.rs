@@ -17,7 +17,7 @@ use pyo3::{
     FromPyObject, IntoPyObjectExt,
     exceptions::{PyIndexError, PyTypeError, PyValueError},
     prelude::*,
-    types::{PyAny, PyBool, PyEllipsis, PyList, PyModule},
+    types::{PyAny, PyBool, PyDict, PyEllipsis, PyList, PyModule, PyString},
 };
 
 #[cfg(feature = "python_stubgen")]
@@ -1951,7 +1951,10 @@ impl PyGenerator {
     /// numerator_grouping : NumeratorGrouping or None, optional
     ///     Omission groups up to scalar rescaling, matching the GammaLoop CLI.
     ///     Explicit None disables comparison, but diagrams still contain numerators.
-    /// progress : Callable[[GenerationProgress], None] or None, optional
+    /// progress : {"auto"}, Callable[[GenerationProgress], None] or None, optional
+    ///     Defaults to "auto": show a spinner when marimo.running_in_notebook()
+    ///     is true, with stage, counts, and elapsed time. None disables progress.
+    ///     The spinner closes on completion, cancellation, or error.
     ///     Observe stage changes and coalesced counts on the calling Python thread.
     ///     Callback exceptions propagate and stop generation.
     /// filter : Callable[[symbolica.core.Graph, int], bool] or None, optional
@@ -1965,7 +1968,10 @@ impl PyGenerator {
     ///     Shared token for cancelling a running generation task. Token cancellation
     ///     returns an incomplete result; Python signal-handler exceptions, including
     ///     KeyboardInterrupt, stop generation and propagate to the caller.
-    #[pyo3(signature = (process, *, threads=None, max_vertices=None, allow_self_loops=true, allow_zero_flow_edges=false, graph_prefix=None, particle_veto=None, vertex_allow=None, vertex_veto=None, maximum_bridges=0, self_energy=Some(Python::attach(|py| py.Ellipsis())), tadpoles=Some(Python::attach(|py| py.Ellipsis())), zero_snails=Some(Python::attach(|py| py.Ellipsis())), coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=Some(Python::attach(|py| py.Ellipsis())), blob_range=Some(Python::attach(|py| py.Ellipsis())), spectator_range=Some(Python::attach(|py| py.Ellipsis())), perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=Some(Python::attach(|py| py.Ellipsis())), cancellation_token=None, progress=None, filter=None))]
+    #[pyo3(signature = (process, *, threads=None, max_vertices=None, allow_self_loops=true, allow_zero_flow_edges=false, graph_prefix=None, particle_veto=None, vertex_allow=None, vertex_veto=None, maximum_bridges=0, self_energy=Some(Python::attach(|py| py.Ellipsis())), tadpoles=Some(Python::attach(|py| py.Ellipsis())), zero_snails=Some(Python::attach(|py| py.Ellipsis())), coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=Some(Python::attach(|py| py.Ellipsis())), blob_range=Some(Python::attach(|py| py.Ellipsis())), spectator_range=Some(Python::attach(|py| py.Ellipsis())), perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=Some(Python::attach(|py| py.Ellipsis())), cancellation_token=None, progress=Some(Python::attach(|py| PyString::new(py, "auto").into_any().unbind())), filter=None))]
+    #[pyo3(
+        text_signature = "($self, process, *, threads=None, max_vertices=None, allow_self_loops=True, allow_zero_flow_edges=False, graph_prefix=None, particle_veto=None, vertex_allow=None, vertex_veto=None, maximum_bridges=0, self_energy=..., tadpoles=..., zero_snails=..., coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=..., blob_range=..., spectator_range=..., perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=..., cancellation_token=None, progress='auto', filter=None)"
+    )]
     #[allow(clippy::too_many_arguments)]
     fn generate(
         &self,
@@ -2006,7 +2012,7 @@ impl PyGenerator {
         #[gen_stub(override_type(type_repr = "NumeratorGrouping | types.EllipsisType | None", imports = ("types")))]
         numerator_grouping: Option<Py<PyAny>>,
         cancellation_token: Option<PyCancellationToken>,
-        #[gen_stub(override_type(type_repr = "collections.abc.Callable[[GenerationProgress], None] | None", imports = ("collections.abc")))]
+        #[gen_stub(override_type(type_repr = "typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None", imports = ("collections.abc", "typing")))]
         progress: Option<Py<PyAny>>,
         #[gen_stub(override_type(type_repr = "collections.abc.Callable[[symbolica.core.Graph, int], bool] | None", imports = ("collections.abc", "symbolica.core")))]
         filter: Option<Py<PyAny>>,
@@ -2060,19 +2066,50 @@ pub(crate) fn generate_diagrams(
     filter: Option<Py<PyAny>>,
 ) -> PyResult<PyGenerationResult> {
     py.check_signals()?;
+    let automatic = progress.as_ref().is_some_and(|value| {
+        value
+            .bind(py)
+            .extract::<String>()
+            .is_ok_and(|s| s == "auto")
+    });
+    let progress = if automatic { None } else { progress };
     for (name, callback) in [("progress", &progress), ("filter", &filter)] {
         if callback
             .as_ref()
             .is_some_and(|callback| !callback.bind(py).is_callable())
         {
-            return Err(PyTypeError::new_err(format!("{name} must be callable")));
+            return Err(PyTypeError::new_err(if name == "progress" {
+                "progress must be 'auto', callable, or None".to_owned()
+            } else {
+                "filter must be callable".to_owned()
+            }));
         }
     }
+    // A running Marimo notebook has already imported marimo. Avoid importing an
+    // optional notebook dependency (and its side effects) in ordinary scripts.
+    let marimo = py.import("sys")?.getattr("modules")?;
+    let marimo = marimo.cast::<PyDict>()?.get_item("marimo")?;
+    let spinner = if automatic
+        && let Some(marimo) = marimo.filter(|module| !module.is_none())
+        && marimo.call_method0("running_in_notebook")?.is_truthy()?
+    {
+        let context = marimo
+            .getattr("status")?
+            .call_method1("spinner", ("Generating diagrams", "Starting generation"))?;
+        let indicator = context.call_method0("__enter__")?.unbind();
+        Some((context, indicator))
+    } else {
+        None
+    };
+    let indicator = spinner
+        .as_ref()
+        .map(|(_, indicator)| indicator.clone_ref(py));
+    let started = Instant::now();
     let interruption = Arc::new(Mutex::new(None));
     let snapshots = Arc::new(Mutex::new(VecDeque::<GenerationProgress>::new()));
     let delivery = Mutex::new((Instant::now(), None));
     let pending = snapshots.clone();
-    let has_progress = progress.is_some();
+    let has_progress = progress.is_some() || indicator.is_some();
     let deliver_progress = Arc::new(move |force: bool| -> PyResult<()> {
         let mut pending = pending.lock().unwrap();
         let mut delivery = delivery.lock().unwrap();
@@ -2092,10 +2129,36 @@ pub(crate) fn generate_diagrams(
         }
         drop(pending);
         drop(delivery);
-        if let Some(callback) = &progress {
+        if has_progress {
             Python::attach(|py| -> PyResult<()> {
                 for inner in updates {
-                    callback.call1(py, (PyGenerationProgress { inner },))?;
+                    if let Some(indicator) = &indicator {
+                        let title = match inner.stage {
+                            "topologies" => "Enumerating topologies",
+                            "topology_filters" => "Filtering topologies",
+                            "interactions" => "Assigning interactions",
+                            "interaction_filters" => "Filtering interactions",
+                            "numerators" => "Constructing numerators",
+                            "selection" => "Selecting diagrams",
+                            "grouping" => "Grouping diagrams",
+                            "complete" => "Diagram generation complete",
+                            "cancelled" => "Diagram generation cancelled",
+                            stage => stage,
+                        };
+                        let counts = match (inner.stage, inner.total) {
+                            ("complete" | "cancelled", _) => {
+                                format!("{} diagrams retained", inner.completed)
+                            }
+                            (_, Some(total)) => format!("{} / {total} processed", inner.completed),
+                            (_, None) => format!("{} processed", inner.completed),
+                        };
+                        let subtitle =
+                            format!("{counts} · {:.1}s elapsed", started.elapsed().as_secs_f64());
+                        indicator.call_method1(py, "update", (title, subtitle))?;
+                    }
+                    if let Some(callback) = &progress {
+                        callback.call1(py, (PyGenerationProgress { inner },))?;
+                    }
                 }
                 Ok(())
             })?;
@@ -2251,14 +2314,38 @@ pub(crate) fn generate_diagrams(
         }
         py.detach(|| generator.generate(&process, &options))
     };
-    if let Some(error) = interruption.lock().unwrap().take() {
-        return Err(error);
+    let result = (|| {
+        if let Some(error) = interruption.lock().unwrap().take() {
+            return Err(error);
+        }
+        deliver_progress(true)?;
+        py.check_signals()?;
+        result
+            .map(|inner| PyGenerationResult { inner })
+            .map_err(error::generation)
+    })();
+    if let Some((context, indicator)) = spinner {
+        // Always close the context, including when a callback or Python signal
+        // interrupted generation. Cleanup must not replace the original error.
+        let cleanup = match &result {
+            Ok(_) => context.call_method1("__exit__", (py.None(), py.None(), py.None())),
+            Err(error) => {
+                let _ = indicator.call_method1(
+                    py,
+                    "update",
+                    ("Diagram generation stopped", error.to_string()),
+                );
+                context.call_method1(
+                    "__exit__",
+                    (error.get_type(py), error.value(py), error.traceback(py)),
+                )
+            }
+        };
+        if result.is_ok() {
+            cleanup?;
+        }
     }
-    deliver_progress(true)?;
-    py.check_signals()?;
     result
-        .map(|inner| PyGenerationResult { inner })
-        .map_err(error::generation)
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -2286,6 +2373,129 @@ mod tests {
     use pyo3::types::PyDict;
 
     use super::*;
+
+    #[test]
+    fn automatic_progress_tracks_marimo_lifecycle() {
+        Python::initialize();
+        Python::attach(|py| {
+            let module = PyModule::new(py, "symbolica.community.feynkit").unwrap();
+            crate::initialize_feynkit(&module).unwrap();
+            let locals = PyDict::new(py);
+            locals.set_item("fk", &module).unwrap();
+            locals
+                .set_item(
+                    "MODEL_JSON",
+                    include_str!("../tests/fixtures/scalars_2p_3p.json"),
+                )
+                .unwrap();
+            let code = CString::new(
+                r#"
+import inspect
+import sys
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
+
+model = fk.Model.from_json(MODEL_JSON)
+generator = fk.Generator(model)
+process = fk.Process.amplitude([1000], [1000, 1000]).with_loop_count(1, 1)
+settings = dict(max_vertices=3, threads=2, vertex_allow=["V_3_SCALAR_000"])
+context = MagicMock()
+indicator = context.__enter__.return_value
+marimo = SimpleNamespace(
+    running_in_notebook=MagicMock(return_value=True),
+    status=SimpleNamespace(spinner=MagicMock(return_value=context)),
+)
+
+for via_model in (True, False):
+    def generate(**kwargs):
+        if via_model:
+            return model.generate_diagrams([1000], [1000, 1000], loops=1, **settings, **kwargs)
+        return generator.generate(process, **settings, **kwargs)
+
+    method = model.generate_diagrams if via_model else generator.generate
+    assert inspect.signature(method).parameters["progress"].default == "auto"
+    with patch.dict(sys.modules, {"marimo": None}):
+        baseline = generate()
+    with patch.dict(sys.modules, {"marimo": marimo}):
+        context.reset_mock()
+        marimo.status.spinner.reset_mock()
+        marimo.running_in_notebook.return_value = False
+        assert len(generate()) == len(baseline)
+        marimo.status.spinner.assert_not_called()
+        marimo.running_in_notebook.return_value = True
+        assert len(generate(progress=None)) == len(baseline)
+        updates = []
+        generate(progress=updates.append)
+        assert updates[-1].stage == "complete"
+        marimo.status.spinner.assert_not_called()
+
+        result = generate()
+        marimo.status.spinner.assert_called_once()
+        context.__enter__.assert_called_once()
+        context.__exit__.assert_called_once_with(None, None, None)
+        titles = list(dict.fromkeys(call.args[0] for call in indicator.update.call_args_list))
+        assert titles == ["Enumerating topologies", "Filtering topologies",
+            "Assigning interactions", "Filtering interactions", "Constructing numerators",
+            "Selecting diagrams", "Grouping diagrams", "Diagram generation complete"]
+        assert indicator.update.call_args.args[1].startswith(f"{len(result)} diagrams retained")
+        assert all("elapsed" in call.args[1] for call in indicator.update.call_args_list)
+        assert any(" / " in call.args[1] for call in indicator.update.call_args_list)
+
+        context.reset_mock()
+        empty = generate(progress="auto", filter=lambda graph, n: False)
+        assert len(empty) == 0
+        assert indicator.update.call_args.args[1].startswith("0 diagrams retained")
+        context.__exit__.assert_called_once_with(None, None, None)
+
+        context.reset_mock()
+        token = fk.CancellationToken()
+        token.cancel()
+        result = generate(cancellation_token=token)
+        assert not result.report.completed
+        assert indicator.update.call_args.args[0] == "Diagram generation cancelled"
+        context.__exit__.assert_called_once_with(None, None, None)
+
+        for exception in (RuntimeError("filter failed"), KeyboardInterrupt()):
+            context.reset_mock()
+            def fail(*args):
+                raise exception
+            try:
+                generate(filter=fail)
+            except BaseException as caught:
+                assert caught is exception
+            else:
+                raise AssertionError("generation exception was lost")
+            context.__exit__.assert_called_once()
+            assert context.__exit__.call_args.args[:2] == (type(exception), exception)
+            assert indicator.update.call_args.args[0] == "Diagram generation stopped"
+
+        context.reset_mock()
+        exception = RuntimeError("spinner failed")
+        indicator.update.side_effect = exception
+        try:
+            generate()
+        except RuntimeError as caught:
+            assert caught is exception
+        else:
+            raise AssertionError("spinner exception was lost")
+        context.__exit__.assert_called_once()
+        indicator.update.side_effect = None
+
+        for invalid in ("invalid", True, 1):
+            context.reset_mock()
+            try:
+                generate(progress=invalid)
+            except TypeError:
+                pass
+            else:
+                raise AssertionError("invalid progress was accepted")
+            context.__enter__.assert_not_called()
+"#,
+            )
+            .unwrap();
+            py.run(&code, Some(&locals), Some(&locals)).unwrap();
+        });
+    }
 
     #[test]
     fn generation_defaults_match_the_ported_cli_policy() {
