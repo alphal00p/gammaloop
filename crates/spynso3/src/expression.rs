@@ -384,6 +384,18 @@ fn builtin_tensor_structure(
                     .map(|slot| Some(slot.rep()))
                     .or_else(|_| Representation::<LibraryRep>::try_from(*argument).map(Some))
                     .map_err(|_| ())
+                    .or_else(|_| {
+                        // A compact vector consumes this port, while its representation
+                        // still participates in the predefined tensor's signature.
+                        let interface = infer_interface(&argument.to_owned()).map_err(|_| ())?;
+                        let slots = interface.logical_slots();
+                        match slots.as_slice() {
+                            [slot] if matches!(slot.aind, PartialIndex::Open(_)) => {
+                                Ok(Some(slot.rep()))
+                            }
+                            _ => Err(()),
+                        }
+                    })
             }
         })
         .collect::<Result<Vec<_>, _>>();
@@ -916,10 +928,13 @@ fn infer_interface(atom: &Atom) -> PyResult<PartialStructure> {
                             && Representation::<LibraryRep>::try_from(*argument).is_err()
                             && has_structured_syntax(*argument)
                     });
-                if let Err(error) = builtin_tensor_structure(symbol, &arguments) {
-                    syntax_error = Some(error.to_string());
-                    return false;
-                }
+                let builtin = match builtin_tensor_structure(symbol, &arguments) {
+                    Ok(builtin) => builtin,
+                    Err(error) => {
+                        syntax_error = Some(error.to_string());
+                        return false;
+                    }
+                };
 
                 let ports = arguments
                     .iter()
@@ -940,7 +955,7 @@ fn infer_interface(atom: &Atom) -> PyResult<PartialStructure> {
                     .iter()
                     .copied()
                     .eq(arguments.len().saturating_sub(ports.len())..arguments.len());
-                if !ports_are_final && !compact_metric {
+                if !ports_are_final && !compact_metric && builtin.is_none() {
                     syntax_error = Some(format!(
                         "tensor function `{symbol}` requires scalar arguments before structural ports"
                     ));
@@ -1265,12 +1280,16 @@ fn infer_validated_interface(atom: &Atom) -> PyResult<PartialStructure> {
                             .map(|representation| representation.slot(PartialIndex::open(position)))
                     }
                 })
-                .collect::<Option<Vec<_>>>();
-            if let Some(canonical_ports) = canonical_ports {
-                return Ok(PartialStructure::from_logical_slots(
-                    structure.layout().canonical_to_logical(&canonical_ports),
-                ));
-            }
+                .collect::<Vec<_>>();
+            // Compact arguments are contracted vectors, and chain placeholders
+            // are wiring labels. Neither exposes an external tensor port.
+            return Ok(PartialStructure::from_logical_slots(
+                structure
+                    .layout()
+                    .canonical_to_logical(&canonical_ports)
+                    .into_iter()
+                    .flatten(),
+            ));
         }
 
         if symbol == SPENSO_TAG.chain {
@@ -3360,6 +3379,96 @@ mod tests {
         let interface = infer_interface(&projected)
             .expect("projecting a valid gamma trace must retain a valid tensor expression");
         assert!(interface.canonical().is_scalar());
+    }
+
+    #[test]
+    fn compact_gamma_collection_preserves_tensor_ports_and_traces() {
+        idenso::representations::initialize();
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let bis = Bispinor {}.new_rep(4);
+            let [a, b, c] = [101, 102, 103].map(|index| {
+                bis.slot::<AbstractIndex, _>(AbstractIndex::Normal(index)).to_atom()
+            });
+            let momentum = spenso::vector_symbol!("compact_gamma_momentum");
+            for dimension in [Dimension::Concrete(4), Dimension::from(symbol!("compact_gamma_D"))] {
+                let mink = Minkowski {}.new_rep(dimension);
+                let mu = mink.slot::<AbstractIndex, _>(AbstractIndex::Normal(104)).to_atom();
+                let nu = mink.slot::<AbstractIndex, _>(AbstractIndex::Normal(105)).to_atom();
+                let vector = FunctionBuilder::new(momentum).add_arg(&mu).finish();
+                for endpoint in [&a, &c] {
+                    let original = idenso::gamma!(&a, &b, &mu)
+                        * vector.clone()
+                        * idenso::gamma!(&b, endpoint, &nu);
+                    let tensor = TensorExpression::from_atom_interface(py, original.clone(), None)?;
+                    let compact = TensorExpression::schoonschip(tensor.borrow(py), py, None)?;
+                    let collected = TensorExpression::collect_gamma_chains(compact.borrow(py), py)?;
+                    let collected = collected.borrow(py);
+                    let expected = infer_interface(&original)?;
+                    assert_eq!(collected.interface.canonical(), expected.canonical());
+                    let atom = &collected.as_super().expr;
+                    let head = if endpoint == &a { SPENSO_TAG.trace } else { SPENSO_TAG.chain };
+                    assert!(matches!(atom.as_view(), AtomView::Fun(function) if function.get_symbol() == head));
+                    let slash = idenso::gamma!(
+                        FunctionBuilder::new(momentum).add_arg(mink.to_symbolic([])).finish()
+                    );
+                    let mut contains_slash = false;
+                    atom.visitor(&mut |value| {
+                        contains_slash |= value == slash.as_view();
+                        true
+                    });
+                    assert!(contains_slash);
+                }
+            }
+            Ok(())
+        }).unwrap();
+    }
+
+    #[test]
+    fn compact_gamma_arguments_retain_signature_validation() {
+        idenso::representations::initialize();
+        Python::initialize();
+        let bis = Bispinor {}.new_rep(4);
+        let wrong_bis = Bispinor {}.new_rep(2);
+        let mink = Minkowski {}.new_rep(4);
+        let wrong_rep = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(4));
+        let momentum = spenso::vector_symbol!("compact_gamma_validation_p");
+        let compact = FunctionBuilder::new(momentum)
+            .add_arg(mink.to_symbolic([]))
+            .finish();
+        let invalid = [
+            idenso::gamma!(wrong_bis.to_symbolic([]), bis.to_symbolic([]), &compact),
+            idenso::gamma!(
+                bis.to_symbolic([]),
+                bis.to_symbolic([]),
+                FunctionBuilder::new(momentum)
+                    .add_arg(wrong_rep.to_symbolic([]))
+                    .finish()
+            ),
+            idenso::gamma!(
+                bis.to_symbolic([]),
+                bis.to_symbolic([]),
+                FunctionBuilder::new(momentum)
+                    .add_arg(
+                        mink.slot::<AbstractIndex, _>(AbstractIndex::Normal(106))
+                            .to_atom()
+                    )
+                    .finish()
+            ),
+            idenso::gamma!(
+                bis.to_symbolic([]),
+                bis.to_symbolic([]),
+                ETS.metric(mink.to_symbolic([]), mink.to_symbolic([]))
+            ),
+            idenso::gamma!(bis.to_symbolic([]), bis.to_symbolic([]), Atom::num(1)),
+            SPENSO_TAG.trace(wrong_bis.to_symbolic([]), [idenso::gamma!(&compact)]),
+        ];
+        for atom in invalid {
+            assert!(
+                infer_interface(&atom).is_err(),
+                "invalid compact gamma accepted: {atom}"
+            );
+        }
     }
 
     #[test]
