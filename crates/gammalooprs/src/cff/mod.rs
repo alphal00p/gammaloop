@@ -12,7 +12,6 @@ use crate::{
     cff::orientations::GraphOrientation,
     graph::{FeynmanGraph, Graph, cuts::CutSet, get_cff_inverse_energy_product_impl},
     settings::global::OrientationPattern,
-    utils::GS,
     uv::Integrands,
 };
 use color_eyre::Result;
