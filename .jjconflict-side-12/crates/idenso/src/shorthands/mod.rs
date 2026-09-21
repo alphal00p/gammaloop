@@ -219,7 +219,7 @@ mod tests {
                 let expression = product.clone().pow(Atom::num(exponent));
                 let expanded = expression.undo_dots::<AbstractIndex>().unwrap();
 
-                assert!(expanded.contains(SPENSO_TAG.bracket));
+                assert!(expanded.contains_symbol(SPENSO_TAG.bracket));
                 assert_eq!(expanded.undo_dots::<AbstractIndex>().unwrap(), expanded);
                 assert_eq!(
                     expanded
