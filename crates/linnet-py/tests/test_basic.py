@@ -2740,6 +2740,8 @@ class TestTypedTypstSurface(unittest.TestCase):
             crossing_penalty=20,
             dangling_repulsion=2,
             dangling_centroid_repulsion=1.25,
+            external_centroid_bias=1.0,
+            external_centroid_distance=3.0,
             edge_edge_repulsion=0.2,
             directional_force=4.5,
             internal_label_length_scale=1.1,
@@ -3012,12 +3014,18 @@ class TestTypedTypstSurface(unittest.TestCase):
     def test_dangling_centroid_repulsion_is_typed_and_serialized(self):
         graph, _, _, _ = sample_graph(
             render_config=lp.RenderConfig(
-                layouts=lp.LayoutOptions(dangling_centroid_repulsion=1.25)
+                layouts=lp.LayoutOptions(
+                    dangling_centroid_repulsion=1.25, external_centroid_bias=1.0
+                )
             )
         )
 
         self.assertIn(
             '("gamma-dangling-centroid"): 1.25',
+            graph.prepare_render().typst_source,
+        )
+        self.assertIn(
+            '("external-centroid-bias"): 1.0',
             graph.prepare_render().typst_source,
         )
 

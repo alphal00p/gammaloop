@@ -21,7 +21,17 @@ FeynKit, the physics showcase, and `just draw` use the same physics layout templ
 left and outgoing X coordinates on the right, and start Y coordinates in half-edge order.
 Amplitudes keep Y independent; finalized cross-section diagrams share movable Y groups by
 external connection ID (`is_cut`). Dangling-centroid repulsion spreads external endpoints,
-with default strength `gamma-dangling-centroid=1.25`. Neither mode automatically pins X or Y;
+with default strength `gamma-dangling-centroid=1.25`. A horizontal spring also biases
+incoming endpoints left and outgoing endpoints right of the current node centroid,
+with `external-centroid-bias=1.0` relative to the edge spring strength. Its target
+distance is `external-centroid-distance=3.0` times the external edge's natural
+spring length; Y stays free. The reaction
+is shared over the nodes so this force does not translate the whole graph.
+Use `just draw --input external-centroid-bias=0` to disable it, or increase that
+value for a stronger bias. Generic Linnest layouts default to zero and expose the
+same option through Python's `LayoutOptions(external_centroid_bias=...)` and
+Typst's `constraints: (external-centroid-bias: ...)`.
+Neither mode automatically pins X or Y;
 explicit positions still take precedence.
 The shared template owns label placement, force presets, and particle styles.
 Internal and external label distances are independent: ordinary particle labels

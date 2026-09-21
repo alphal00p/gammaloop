@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     half_edge::{
-        involution::{EdgeIndex, EdgeVec, HedgePair},
+        involution::{EdgeIndex, EdgeVec, Flow, HedgePair},
         layout::simulatedanneale::{Energy, Neighbor},
         nodestore::NodeStorageOps,
         subgraph::{subset::SubSet, Inclusion, ModifySubSet, SuBitGraph, SubSetLike},
@@ -769,16 +769,18 @@ where
 
 #[derive(Clone, Copy)]
 pub struct SpringChargeEnergy {
-    pub spring_length: f64,            // L
-    pub k_spring: f64,                 // 1.0
-    pub c_vv: f64,                     // vertex-vertex charge (≈ 0.14*L^3)
-    pub dangling_charge: f64,          // dangling edge charge (≈ 0.14*L^3)
-    pub dangling_centroid_charge: f64, // dangling edge vs node-centroid charge
-    pub c_ev: f64,                     // edge-vertex (≈ 0.028*L^3)
-    pub c_ee_local: f64,               // edge-edge local (≈ 0.014*L^3)
-    pub c_center: f64,                 // central pull (dimensionless relative strength)
-    pub crossing_penalty: f64,         // crossing energy penalty (≈ penalty*L^2)
-    pub eps: f64,                      // softened distance (≈ eps*L)
+    pub spring_length: f64,              // L
+    pub k_spring: f64,                   // 1.0
+    pub c_vv: f64,                       // vertex-vertex charge (≈ 0.14*L^3)
+    pub dangling_charge: f64,            // dangling edge charge (≈ 0.14*L^3)
+    pub dangling_centroid_charge: f64,   // dangling edge vs node-centroid charge
+    pub external_centroid_strength: f64, // horizontal spring about the node centroid
+    pub external_centroid_distance: f64, // target offset in external spring lengths
+    pub c_ev: f64,                       // edge-vertex (≈ 0.028*L^3)
+    pub c_ee_local: f64,                 // edge-edge local (≈ 0.014*L^3)
+    pub c_center: f64,                   // central pull (dimensionless relative strength)
+    pub crossing_penalty: f64,           // crossing energy penalty (≈ penalty*L^2)
+    pub eps: f64,                        // softened distance (≈ eps*L)
 }
 
 impl<'a, E, V, H, N: NodeStorageOps<NodeData = V> + Clone> Energy<LayoutState<'a, E, V, H, N>>
@@ -815,16 +817,18 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V> + Clone> Energy<LayoutState<'a
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct ParamTuning {
-    pub length_scale: f64,            // scales L: default 1.0
-    pub k_spring: f64,                // spring stiffness: default 1.0
-    pub beta: f64,                    // vertex–vertex strength
-    pub gamma_dangling: f64,          // dangling edge vs vertex–vertex
-    pub gamma_dangling_centroid: f64, // dangling edge vs node centroid
-    pub gamma_ev: f64,                // edge–vertex vs vertex–vertex
-    pub gamma_ee: f64,                // local edge–edge vs vertex–vertex
-    pub g_center: f64,                // central vs vertex–vertex
-    pub crossing_penalty: f64,        // fixed penalty per crossing
-    pub eps: f64,                     // softening epsilon
+    pub length_scale: f64,               // scales L: default 1.0
+    pub k_spring: f64,                   // spring stiffness: default 1.0
+    pub beta: f64,                       // vertex–vertex strength
+    pub gamma_dangling: f64,             // dangling edge vs vertex–vertex
+    pub gamma_dangling_centroid: f64,    // dangling edge vs node centroid
+    pub external_centroid_bias: f64,     // horizontal centroid spring relative to k_spring
+    pub external_centroid_distance: f64, // target offset in external spring lengths
+    pub gamma_ev: f64,                   // edge–vertex vs vertex–vertex
+    pub gamma_ee: f64,                   // local edge–edge vs vertex–vertex
+    pub g_center: f64,                   // central vs vertex–vertex
+    pub crossing_penalty: f64,           // fixed penalty per crossing
+    pub eps: f64,                        // softening epsilon
 }
 
 impl ParamTuning {
@@ -849,6 +853,14 @@ impl ParamTuning {
         global_data.statements.insert(
             "gamma_dangling_centroid".to_string(),
             self.gamma_dangling_centroid.to_string(),
+        );
+        global_data.statements.insert(
+            "external_centroid_bias".to_string(),
+            self.external_centroid_bias.to_string(),
+        );
+        global_data.statements.insert(
+            "external_centroid_distance".to_string(),
+            self.external_centroid_distance.to_string(),
         );
         global_data
             .statements
@@ -882,6 +894,16 @@ impl ParamTuning {
                 "gamma_dangling_centroid" => {
                     if let Ok(v) = value.parse::<f64>() {
                         tune.gamma_dangling_centroid = v;
+                    }
+                }
+                "external_centroid_bias" => {
+                    if let Ok(v) = value.parse::<f64>() {
+                        tune.external_centroid_bias = v;
+                    }
+                }
+                "external_centroid_distance" => {
+                    if let Ok(v) = value.parse::<f64>() {
+                        tune.external_centroid_distance = v;
                     }
                 }
                 "k_spring" => {
@@ -934,6 +956,8 @@ impl Default for ParamTuning {
             beta: 0.14,
             gamma_dangling: 0.14,
             gamma_dangling_centroid: 0.0,
+            external_centroid_bias: 0.0,
+            external_centroid_distance: 1.0,
             gamma_ev: 0.20,
             gamma_ee: 0.10,
             g_center: 0.05,
@@ -1085,7 +1109,9 @@ impl SpringChargeEnergy {
         N: NodeStorageOps<NodeData = V> + Clone,
     {
         let n = state.vertex_points.len().0;
-        if self.dangling_centroid_charge == 0.0 || n == 0 {
+        if (self.dangling_centroid_charge == 0.0 && self.external_centroid_strength == 0.0)
+            || n == 0
+        {
             return 0.0;
         }
 
@@ -1101,7 +1127,21 @@ impl SpringChargeEnergy {
             .included_iter()
             .map(|hedge| {
                 let edge = state.graph[&hedge];
-                self.dangling_centroid_term(state.edge_points[edge].distance(centroid))
+                let point = state.edge_points[edge];
+                let repulsion = if self.dangling_centroid_charge == 0.0 {
+                    0.0
+                } else {
+                    self.dangling_centroid_term(point.distance(centroid))
+                };
+                let side = match state.graph.flow(hedge) {
+                    Flow::Source => 1.0,
+                    Flow::Sink => -1.0,
+                };
+                let target = centroid.x
+                    + side
+                        * self.external_centroid_distance
+                        * Self::edge_spring_length(state, edge, self.spring_length);
+                repulsion + 0.5 * self.external_centroid_strength * (point.x - target).powi(2)
             })
             .sum()
     }
@@ -1477,7 +1517,7 @@ impl SpringChargeEnergy {
                     - self.dangling_term(prev_pi.distance(prev_pj));
             }
         }
-        if self.dangling_centroid_charge != 0.0
+        if (self.dangling_centroid_charge != 0.0 || self.external_centroid_strength != 0.0)
             && (!node_changes.is_empty()
                 || next
                     .ext
@@ -1535,6 +1575,8 @@ impl SpringChargeEnergy {
             c_center: tune.beta * tune.g_center,
             dangling_charge: tune.gamma_dangling * tune.beta * repulsion_scale,
             dangling_centroid_charge: tune.gamma_dangling_centroid * tune.beta * repulsion_scale,
+            external_centroid_strength: tune.external_centroid_bias * tune.k_spring,
+            external_centroid_distance: tune.external_centroid_distance,
             crossing_penalty: tune.crossing_penalty * spring_length_sq,
             eps: tune.eps * spring_length,
         }
@@ -1587,6 +1629,8 @@ mod tests {
             c_vv: 0.0,
             dangling_charge: 0.0,
             dangling_centroid_charge: 0.0,
+            external_centroid_strength: 0.0,
+            external_centroid_distance: 1.0,
             c_ev: 0.0,
             c_ee_local: 0.0,
             c_center,
@@ -1691,7 +1735,10 @@ mod tests {
             true,
         );
         state.edge_spring_length_scales = vec![0.5, 2.0, 1.5, 0.75].into();
-        let energy = test_energy(0.2);
+        let energy = SpringChargeEnergy {
+            external_centroid_strength: 2.0,
+            ..test_energy(0.2)
+        };
         let mut rng = SmallRng::seed_from_u64(17);
         let mut cached = energy.energy(None, &state);
         for iteration in 0..100 {
@@ -1725,6 +1772,8 @@ mod tests {
             beta: 3.0,
             gamma_dangling: 0.7,
             gamma_dangling_centroid: 1.3,
+            external_centroid_bias: 2.0,
+            external_centroid_distance: 1.0,
             gamma_ev: 0.2,
             gamma_ee: 0.4,
             g_center: 0.05,
@@ -1732,6 +1781,7 @@ mod tests {
             eps: 1e-4,
         };
         let small = SpringChargeEnergy::from_graph(4, 4.0, 4.0, tune);
+        assert_eq!(small.external_centroid_strength, 22.0);
         let large = SpringChargeEnergy::from_graph(
             4,
             4.0,

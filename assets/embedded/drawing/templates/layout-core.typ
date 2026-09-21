@@ -190,6 +190,8 @@
     } else { (:) }
     if mode.amplitude or mode.cross-section {
       defaults.insert("gamma-dangling-centroid", 1.25)
+      defaults.insert("external-centroid-bias", 1.0)
+      defaults.insert("external-centroid-distance", 3.0)
     }
     (renderer.layout-graph)(
       (

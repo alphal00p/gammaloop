@@ -16,6 +16,8 @@
   ),
   constraints: (
     "side-strength": "number",
+    "external-centroid-bias": "number",
+    "external-centroid-distance": "number",
     "node-movement": ("fixed", "layout"),
     direction: ("down", "right", "left-to-right", "left-right", "lr"),
     "rank-alignment": (
@@ -366,6 +368,15 @@
   /// relative to `beta`. The equal-and-opposite reaction is shared over the
   /// nodes, avoiding translational drift. Applies to both modes. -> float
   gamma-dangling-centroid: 0.0,
+  /// Horizontal spring relative to `k-spring`, pulling incoming endpoints left
+  /// and outgoing endpoints right of the current node centroid. The target
+  /// distance is controlled by `external-centroid-distance`. Leaves Y free
+  /// and respects pins. Both modes.
+  /// Zero disables this bias. -> float
+  external-centroid-bias: 0.0,
+  /// Horizontal target offset from the centroid in external spring lengths,
+  /// including each edge's `spring-length` multiplier. -> float
+  external-centroid-distance: 1.0,
   /// Local edge-edge repulsion, relative to `beta`. Applies to both
   /// modes. -> float
   gamma-ee: 0.1,
@@ -518,6 +529,14 @@
     gamma-dangling-centroid: str(
       repulsion.at("dangling-centroid", default: gamma-dangling-centroid),
     ),
+    external-centroid-bias: str(constraints.at(
+      "external-centroid-bias",
+      default: external-centroid-bias,
+    )),
+    external-centroid-distance: str(constraints.at(
+      "external-centroid-distance",
+      default: external-centroid-distance,
+    )),
     gamma-ee: str(repulsion.at("edge-edge", default: gamma-ee)),
     directional-force: str(constraints.at(
       "side-strength",

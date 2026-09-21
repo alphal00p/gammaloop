@@ -1605,6 +1605,8 @@ impl LayoutConfig {
                 | "g-center"
                 | "gamma-dangling"
                 | "gamma-dangling-centroid"
+                | "external-centroid-bias"
+                | "external-centroid-distance"
                 | "gamma-ee"
                 | "gamma-ev"
                 | "incremental-energy"
@@ -1753,7 +1755,7 @@ fn default_crossing_penalty() -> f64 {
     Debug, Clone, Serialize, Deserialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
 )]
 #[archive(check_bytes)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", default)]
 struct SpringConfig {
     #[serde(default = "default_length_scale", deserialize_with = "deserialize_f64")]
     length_scale: f64,
@@ -1771,6 +1773,10 @@ struct SpringConfig {
         deserialize_with = "deserialize_f64"
     )]
     gamma_dangling_centroid: f64,
+    #[serde(default, deserialize_with = "deserialize_f64")]
+    external_centroid_bias: f64,
+    #[serde(deserialize_with = "deserialize_f64")]
+    external_centroid_distance: f64,
     #[serde(default = "default_gamma_ev", deserialize_with = "deserialize_f64")]
     gamma_ev: f64,
     #[serde(default = "default_gamma_ee", deserialize_with = "deserialize_f64")]
@@ -1794,6 +1800,8 @@ impl Default for SpringConfig {
             beta: default_beta(),
             gamma_dangling: default_gamma_dangling(),
             gamma_dangling_centroid: default_gamma_dangling_centroid(),
+            external_centroid_bias: 0.0,
+            external_centroid_distance: 1.0,
             gamma_ev: default_gamma_ev(),
             gamma_ee: default_gamma_ee(),
             g_center: default_g_center(),
@@ -1811,6 +1819,8 @@ impl From<&SpringConfig> for ParamTuning {
             beta: cfg.beta,
             gamma_dangling: cfg.gamma_dangling,
             gamma_dangling_centroid: cfg.gamma_dangling_centroid,
+            external_centroid_bias: cfg.external_centroid_bias,
+            external_centroid_distance: cfg.external_centroid_distance,
             gamma_ev: cfg.gamma_ev,
             gamma_ee: cfg.gamma_ee,
             g_center: cfg.g_center,

@@ -153,6 +153,8 @@
       layout-graph: (config, g) => {
         let edges = graph.edges(g)
         assert(config.layout-defaults.at("gamma-dangling-centroid") == 1.25)
+        assert(config.layout-defaults.at("external-centroid-bias") == 1.0)
+        assert(config.layout-defaults.at("external-centroid-distance") == 3.0)
         for (i, y) in (5, -5, 5, -5).enumerate() {
           assert(edges.at(i).pos.y == y)
           let pins = edges.at(i).statements.at("pin")

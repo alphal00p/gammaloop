@@ -938,6 +938,17 @@
   `gamma-dangling-centroid` for $gamma_("dangling-centroid")$. The spring
   stiffness $k$ is `k-spring`, and the softening constant $epsilon$ is `eps`.
 
+  `external-centroid-bias` (also `constraints.external-centroid-bias`) adds a
+  horizontal spring of strength `k-spring * external-centroid-bias` to each
+  dangling endpoint. `external-centroid-distance` sets the target offset from
+  the current node centroid in external spring lengths: incoming endpoints
+  target the left, and outgoing endpoints target the right. Its default is one. Per-edge `spring-length` multipliers also scale this distance. The
+  energy is $1/2 k_("bias") (x_e - x_("target"))^2$, with the opposite reaction
+  shared over all nodes. This leaves Y free, respects pins, and works in both
+  force and anneal modes. The generic default is zero (disabled); the shared
+  physics template enables it at one with a target distance of three external
+  spring lengths.
+
   In `layout-algo: "anneal"`, linnest minimizes an energy:
 
   $ E =
