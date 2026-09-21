@@ -56,7 +56,7 @@ impl FeynmanDiagram {
             .collect();
 
         let mut output = String::from(
-            r##"#set page(width: auto, height: auto, margin: (x: 2mm, y: 2mm))
+            r##"#set page(width: auto, height: auto, margin: (x: 2mm, y: 2mm), fill: none)
 #set text(size: 9pt)
 #import "crates/linnest/typst/src/graph.typ" as graph
 #import "crates/linnest/typst/src/render/layout.typ" as renderer
