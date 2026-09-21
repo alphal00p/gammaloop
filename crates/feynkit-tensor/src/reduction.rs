@@ -1813,6 +1813,8 @@ mod tests {
     use crate::CosetType;
     use feynkit_graph::{DiagramEdge, DiagramVertex};
     use feynkit_model::Model;
+    use idenso::shorthands::UndoShorthands;
+    use spenso::structure::abstract_index::AbstractIndex;
     use spenso::vector_symbol;
     use symbolica::symbol;
 
@@ -2150,6 +2152,26 @@ mod tests {
             / dimension;
         assert_eq!(result.expression().expand(), expected.expand());
         assert!(result.is_fully_contracted());
+    }
+
+    #[test]
+    fn squared_dot_expansion_preserves_rank_two_angular_average() {
+        let (k, _, p, _) = vectors();
+        let dimension = Atom::var(symbol!("feynkit_tensor_test::D_squared_dot"));
+        let loop_vector = compact(k, 1, &dimension);
+        let external_vector = compact(p, 1, &dimension);
+        let input = dot(&loop_vector, &external_vector)
+            .pow(Atom::num(2))
+            .undo_dots::<AbstractIndex>()
+            .unwrap();
+        let result = TensorReducer::new(dimension.clone())
+            .with_integrated_head(k)
+            .reduce(input.as_view())
+            .unwrap();
+        // Independent contractions in (k.p)^2 give <k_mu k_nu> = k^2 g_mu_nu / D.
+        let expected =
+            dot(&loop_vector, &loop_vector) * dot(&external_vector, &external_vector) / dimension;
+        assert_eq!(result.expression().expand(), expected.expand());
     }
 
     #[test]

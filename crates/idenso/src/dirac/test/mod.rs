@@ -374,6 +374,25 @@ fn gamma_trace_evaluation_can_be_disabled() {
     assert_snapshot!(expr.simplify_gamma_with(GammaSimplifySettings::repeated_pairs().without_trace_evaluation()).to_bare_ordered_string(), @"trace(bis(4),cyclic(gamma(in,out,mink(4,nu)),gamma(in,out,mink(4,mu))))");
 }
 
+#[test]
+fn gamma_simplification_reaches_fixed_point_after_metric_contraction() {
+    let r = test_initialize();
+    // An identity propagator closes this loop when its bispinor metric contracts.
+    let expr = g!(slot!(r.bis4, a), slot!(r.bis4, b))
+        * gamma!(b, c, slot!(r.mink_d, mu))
+        * gamma!(c, a, slot!(r.mink_d, nu));
+
+    let once = expr.simplify_gamma();
+    let twice = once.simplify_gamma();
+    let expected = Atom::num(4) * g!(slot!(r.mink_d, mu), slot!(r.mink_d, nu));
+
+    assert_eq!(twice, expected);
+    assert_eq!(
+        once, twice,
+        "gamma simplification must reach its fixed point"
+    );
+}
+
 mod form_reference;
 
 mod feyncalc_reference;
