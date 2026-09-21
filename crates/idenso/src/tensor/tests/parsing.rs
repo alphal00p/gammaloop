@@ -234,7 +234,7 @@ fn parse_div() {
     let net = expr
         .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
         .unwrap();
-    assert_snapshot!(net.simple_execute::<()>().unwrap().to_bare_ordered_string(), @"(parse_div_b(mink(4,1)))^(-6)*(parse_div_d(mink(4,1)))^(-6)*a*c");
+    assert_snapshot!(net.simple_execute::<()>().unwrap().to_bare_ordered_string(), @"(bracket(parse_div_b(mink(4,1))*parse_div_d(mink(4,1))))^(-6)*a*c");
 
     let expr = parse_lit!(st(Q(1, mink(4, 1)) * Q(2, mink(4, 1))) ^ -1);
     let net = expr
@@ -259,6 +259,21 @@ fn inverse_bracket_preserves_the_contracted_denominator() {
             .unwrap();
         assert_eq!(expanded, expression);
     }
+}
+
+#[test]
+fn inverse_bracket_preserves_a_sum_that_collapses_to_a_product() {
+    test_initialize();
+    let product = vector!(inverse_sum_p, mink!(4, 1)) * vector!(inverse_sum_q, mink!(4, 1));
+    let expression = spenso::bracket!(spenso::bracket!(product.clone()) + product.clone()).pow(-1);
+    let expected = spenso::bracket!(Atom::num(2) * product).pow(-1);
+    let result = expression
+        .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+        .unwrap()
+        .simple_execute::<()>()
+        .unwrap();
+
+    assert_eq!(result, expected);
 }
 
 #[test]

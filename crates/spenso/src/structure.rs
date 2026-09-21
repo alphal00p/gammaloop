@@ -82,6 +82,14 @@ pub trait HasStructure {
     fn structure(&self) -> &Self::Structure;
     fn mut_structure(&mut self) -> &mut Self::Structure;
     fn scalar(self) -> Option<Self::Scalar>;
+
+    /// Extract a scalar while preserving contraction boundaries under powers.
+    fn scalar_power_base(self) -> Option<Self::Scalar>
+    where
+        Self: Sized,
+    {
+        self.scalar()
+    }
     fn scalar_ref(&self) -> Option<Self::ScalarRef<'_>>;
     fn map_same_structure(self, f: impl FnOnce(Self::Structure) -> Self::Structure) -> Self;
 

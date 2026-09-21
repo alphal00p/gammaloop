@@ -636,8 +636,8 @@ where
             ));
         }
 
-        if symbol.has_tag(&SPENSO_TAG.broadcast) {
-            return Self::parse_broadcast_function::<S, Lib, FunLib>(
+        if symbol == SPENSO_TAG.bracket || symbol.has_tag(&SPENSO_TAG.broadcast) {
+            return Self::parse_expanded_function::<S, Lib, FunLib>(
                 value,
                 state,
                 library,
