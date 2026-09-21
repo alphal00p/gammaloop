@@ -3148,8 +3148,8 @@ impl SiteBuilder {
         if checked_in.is_file() {
             return Some(checked_in);
         }
-        if component.package == "linnet-py" {
-            let path = self.root.join("crates/linnet-py/linnet_py.pyi");
+        if component.package == "linnet" {
+            let path = self.root.join("crates/linnet-py/linnet.pyi");
             if path.is_file() {
                 return Some(path);
             }

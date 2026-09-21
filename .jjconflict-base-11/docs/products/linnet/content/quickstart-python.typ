@@ -3,13 +3,12 @@
 #let quickstart-python = [
 = Using Linnet from Python
 
-The `linnet_py` extension provides native Linnet graphs to Python 3.10 and newer. It is a real
+The `linnet` extension provides native Linnet graphs to Python 3.10 and newer. It is a real
 binding with runtime tests, but it is not currently published to PyPI.
 
 #callout("Developer preview: build from source", [
-  There is no supported `pip install linnet-py` release yet. The similarly named `linnet` project
-  on PyPI is unrelated. Use this page from a GammaLoop checkout until official `linnet-py` wheels
-  are published.
+  This `linnet` distribution must be built from a GammaLoop checkout. The `linnet` project
+  on PyPI is unrelated; `pip install linnet` does not install these bindings.
 ])
 
 == Build the extension
@@ -37,7 +36,7 @@ Save this as `linnet_quickstart.py`:
 
 // docs-example: compile linnet-python-quickstart
 ```python
-import linnet_py as lp
+import linnet as lp
 
 codec = lp.DotCodec.topology()
 graph = lp.Graph.from_dot(

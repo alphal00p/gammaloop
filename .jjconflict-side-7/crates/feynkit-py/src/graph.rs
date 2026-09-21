@@ -1913,6 +1913,67 @@ impl PyFeynmanDiagram {
         TensorExpression::from_atom_interface(py, numerator, None)
     }
 
+    /// Expand the local integrand through its UV degree of divergence.
+    ///
+    /// The selected region's loop momenta are scaled together. Propagators are
+    /// expanded about the auxiliary mass ``uv_mass``, retaining every power
+    /// through logarithmic divergence in ``dimension`` spacetime dimensions.
+    /// The result uses edge momenta and the same tagged ``denom`` convention as
+    /// :meth:`denominator_expression`; the diagram is unchanged.
+    ///
+    /// ``numerator`` optionally replaces the local numerator (in edge momenta),
+    /// for example after contracting a projector. Overall factors, numerator
+    /// prefactors and projectors remain separate unless supplied in it.
+    /// Empty, tree and UV-convergent regions return zero. This performs one UV
+    /// limit; it does not enumerate forests or integrate the counterterm.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> mass = S("mUV", is_scalar=True)
+    /// >>> expansion = diagram.uv_expansion(mass)
+    /// >>> region = diagram.filter(edge=lambda e: e.data.id in selected_edge_ids)
+    /// >>> local_ct = diagram.uv_counterterm(mass, subgraph=region)
+    #[pyo3(signature = (uv_mass, *, subgraph=None, dimension=4, numerator=None))]
+    fn uv_expansion(
+        &self,
+        py: Python<'_>,
+        uv_mass: ConvertibleToExpression,
+        #[gen_stub(override_type(type_repr="linnet.Subgraph | None", imports=("linnet")))]
+        subgraph: Option<&Bound<'_, PyAny>>,
+        dimension: i32,
+        numerator: Option<ConvertibleToExpression>,
+    ) -> PyResult<Py<TensorExpression>> {
+        let selected = self.selection(py, subgraph)?;
+        let numerator = numerator.map(|value| value.to_expression().expr);
+        let expanded = self.inner.uv_expansion_of(
+            &selected,
+            &uv_mass.to_expression().expr,
+            dimension,
+            numerator.as_ref(),
+        ).map_err(error::diagram)?;
+        TensorExpression::from_atom_interface(py, expanded, None)
+    }
+
+    /// Return the additive local UV counterterm, the negative of ``uv_expansion``.
+    ///
+    /// Arguments and selection semantics are those of :meth:`uv_expansion`.
+    /// Add this unintegrated expression to the selected integrand to subtract
+    /// its simultaneous UV limit. Subdivergences require separate forest terms.
+    #[pyo3(signature = (uv_mass, *, subgraph=None, dimension=4, numerator=None))]
+    fn uv_counterterm(
+        &self,
+        py: Python<'_>,
+        uv_mass: ConvertibleToExpression,
+        #[gen_stub(override_type(type_repr="linnet.Subgraph | None", imports=("linnet")))]
+        subgraph: Option<&Bound<'_, PyAny>>,
+        dimension: i32,
+        numerator: Option<ConvertibleToExpression>,
+    ) -> PyResult<Py<TensorExpression>> {
+        let expanded = self.uv_expansion(py, uv_mass, subgraph, dimension, numerator)?;
+        expanded.bind(py).call_method0("__neg__")?.extract()
+    }
+
     /// Return the request-wide numerator multiplier as a Symbolica expression.
     ///
     /// Examples

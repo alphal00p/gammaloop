@@ -17,7 +17,7 @@ on:
       - 'gammaloop-api-v*'
       - 'gammaloop-python-v*'
       - 'linnet-v*'
-      - 'linnet-py-v*'
+      - 'linnet-python-v*'
       - 'spenso-v*'
       - 'spenso-macros-v*'
       - 'spenso-hep-lib-v*'

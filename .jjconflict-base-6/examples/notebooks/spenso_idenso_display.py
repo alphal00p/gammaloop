@@ -4,7 +4,7 @@
 #     "symbolica==3.0.0",
 #     "marimo==0.24.0",
 #     "typst==0.15.0",
-#     "linnet-py==0.1.0",
+#     "linnet==0.1.0",
 # ]
 # ///
 
@@ -39,7 +39,7 @@ def _(mo):
 
 @app.cell
 def _():
-    import linnet_py as lp
+    import linnet as lp
     import symbolica as sy
     from symbolica.community import idenso, spenso
     from symbolica.community.spenso import (

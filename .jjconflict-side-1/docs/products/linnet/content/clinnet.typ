@@ -6,7 +6,7 @@
 Clinnet is Linnet's command-line companion for documentation and diagram workflows. The Cargo
 package is named `clinnet`, while the installed executable is named `linnet`. It recursively
 finds DOT files, renders one PDF per graph through Typst, and assembles those PDFs into a grid.
-Use the Rust library for graph algorithms, the `linnet-py` `Graph` API for typed programmatic
+Use the Rust library for graph algorithms, the Python `linnet.Graph` API for typed programmatic
 drawing, and Clinnet when the input is already DOT and the desired result is a browsable set of
 figures.
 

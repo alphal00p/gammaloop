@@ -125,7 +125,7 @@ let
         (workspaceRoot + "/pyproject.toml")
         (workspaceRoot + "/crates/linnet-py/pyproject.toml")
         (workspaceRoot + "/crates/linnet-py/uv.lock")
-        (workspaceRoot + "/crates/linnet-py/linnet_py.pyi")
+        (workspaceRoot + "/crates/linnet-py/linnet.pyi")
         (workspaceRoot + "/crates/feynkit-py/python/symbolica/community/feynkit/__init__.pyi")
         (workspaceRoot + "/crates/feynkit-py/python/symbolica/community/feynkit/__init__.py")
         (workspaceRoot + "/crates/feynkit-py/examples/ufo_generation.py")
@@ -323,7 +323,7 @@ let
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-catalogs --features ${lib.escapeShellArg documentationCatalogFeatures} --bin alphal00p-docs-vakint-reference -- --check
     cargo test --locked --profile ${docsCargoProfile} -p alphal00p-docs-examples
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features gammaloop -- gammaloop-python docs/api/python/gammaloop-python.pyi --check
-    cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features linnet -- linnet-py docs/api/python/linnet-py.pyi --check
+    cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features linnet -- linnet-python docs/api/python/linnet-python.pyi --check
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features spenso -- spynso3 docs/api/python/spynso3.pyi --check
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features idenso -- idenso-community docs/api/python/idenso-community.pyi --check
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features vakint -- vakint-community docs/api/python/vakint-community.pyi --check
@@ -345,7 +345,7 @@ let
     # Python imports the pinned Typst from Nix; uv does not discover those
     # inherited packages when resolving dependencies.
     uv pip install --offline --no-deps --python "$linnet_python/bin/python" \
-      "$linnet_wheels"/linnet_py-*.whl
+      "$linnet_wheels"/linnet-*.whl
     "$linnet_python/bin/python" -m unittest \
       crates/linnet-py/tests/test_basic.py \
       crates/linnet-py/tests/test_wasm.py \

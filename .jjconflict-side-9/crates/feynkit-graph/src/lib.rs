@@ -14,6 +14,7 @@ mod power_counting;
 pub mod routing;
 pub mod symbols;
 pub mod thresholds;
+mod uv;
 
 pub use power_counting::DOD;
 
@@ -416,6 +417,8 @@ impl LoopMomentumBasis {
 /// Errors produced while constructing or transforming diagrams.
 #[derive(Debug, Error)]
 pub enum DiagramError {
+    #[error("cannot expand UV counterterm: {0}")]
+    UvExpansion(String),
     #[error("cannot determine superficial UV degree: {0}")]
     UvPowerCounting(String),
     #[error(transparent)]

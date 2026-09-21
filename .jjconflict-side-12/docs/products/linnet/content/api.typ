@@ -43,7 +43,7 @@ its required feature and your `Cargo.toml` before using it.
 #boundary("Rendering runs through Typst", [
   Linnet can compute layout coordinates, but the supported renderer is not a native Rust drawing
   backend. Clinnet invokes an external Typst 0.15 executable for command-line figure batches;
-  `linnet-py` uses the `typst` Python package to compile the same Linnest render contract
+  `linnet` uses the `typst` Python package to compile the same Linnest render contract
   in-process from its own native graph-spec preparation.
   Use #link("guides/clinnet/")[Clinnet] for batch rendering, or use
   #link("guides/linnest/")[Linnest] when a Typst document owns the final drawing.
@@ -52,7 +52,7 @@ its required feature and your `Cargo.toml` before using it.
 == Standalone Python distribution
 
 #boundary("Distribution and import have different names", [
-  Install the Python distribution `linnet-py`, then import `linnet_py`. It requires Python 3.10
+  Install the Python distribution `linnet`, then import `linnet`. It requires Python 3.10
   or newer. It is a standalone extension and is not a `symbolica.community` module.
   Its package version is independent of the Rust `linnet` version. Record both versions when
   diagnosing compatibility between Rust and Python code.
@@ -73,7 +73,7 @@ Linnet types:
 ```python
 from dataclasses import dataclass
 
-from linnet_py import build, edge, node, sink, source
+from linnet import build, edge, node, sink, source
 
 
 @dataclass
@@ -136,7 +136,7 @@ index, or live-node key. Incremental endpoints resolve a current live `Node`, na
 named `NodeSpec`:
 
 ```python
-from linnet_py import Compass, Graph, edge, node, sink, source
+from linnet import Compass, Graph, edge, node, sink, source
 
 graph = Graph()
 graph.add_node(node("in", data=UserNodeData(object()), label="incoming"))
@@ -177,7 +177,7 @@ or indexed nodes and edges, exact half-edge indices, or live-view predicates, th
 object with Linnet's topology algorithms and owning transformations:
 
 ```python
-from linnet_py import DirectionBasis
+from linnet import DirectionBasis
 
 # Explicit selections are unioned. Selecting a node includes its incident crown.
 selected = graph.subgraph(nodes=["in"], edges=["propagator"])
@@ -281,7 +281,7 @@ surfaces. `DrawingSelectors` maps arbitrary Python data to detached typed drawin
 time. Layout passes retain their order:
 
 ```python
-from linnet_py import (
+from linnet import (
     Color,
     DrawingSelectors,
     EdgeDrawing,
@@ -381,7 +381,7 @@ payload; custom particle styling works the same way and is not a special Linnet 
 ```python
 from dataclasses import dataclass
 
-from linnet_py import (
+from linnet import (
     Color,
     DrawingSelectors,
     EdgeDrawing,
@@ -414,7 +414,7 @@ particle_style_example = RenderConfig(
 
 This is ordinary userland settings composition: Linnet neither defines `ParticleStyle` nor
 inspects it. GammaLoop's richer particle decorations, momentum annotations, and diagram modes
-belong to GammaLoop's own template rather than to a `PhysicsOptions` type in `linnet_py`.
+belong to GammaLoop's own template rather than to a `PhysicsOptions` type in `linnet`.
 The #source-link(
   "crates/linnet-py/examples/physics_render_settings.py",
   label: "editable DOT physics notebook",
@@ -429,7 +429,7 @@ once, then updates coordinates from `LayoutStream.from_dot(...)` frames. It also
 in an exported Marimo WebAssembly notebook with the bundled Emscripten wheel.
 
 ```python
-from linnet_py import LayoutStream
+from linnet import LayoutStream
 
 stream = LayoutStream.from_dot("digraph { a -> b; b -> c; c -> a; }", every=4)
 node_names, endpoints = stream.node_names, stream.endpoints
@@ -451,7 +451,7 @@ existing Python `Graph` or its payloads.
 Typst callbacks that require measured geometry use an explicit module function reference:
 
 ```python
-from linnet_py import TypstModule
+from linnet import TypstModule
 
 styles = TypstModule.file("styles.typ")
 graph.node("in").drawing.label = styles.content("incoming_label")
@@ -500,7 +500,7 @@ unique DOT representation. Supply a `DotCodec` to `Graph.from_dot`, `Graph.from_
 ```python
 from dataclasses import dataclass
 
-from linnet_py import (
+from linnet import (
     DotCodec,
     DotEdgeData,
     DotHalfEdgeData,

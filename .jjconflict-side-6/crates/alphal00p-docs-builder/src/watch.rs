@@ -634,7 +634,7 @@ impl SiteBuilder {
                 "gammaloop-python",
                 &["gammaloop-api", "gammalooprs"][..],
             ),
-            ("linnet", "linnet", "linnet-py", LINNET_PYTHON_CRATES),
+            ("linnet", "linnet", "linnet-python", LINNET_PYTHON_CRATES),
             ("spenso", "spenso", "spynso3", SPENSO_PYTHON_CRATES),
             ("idenso", "idenso", "idenso-community", &["idenso"][..]),
             ("vakint", "vakint", "vakint-community", &["vakint"][..]),
