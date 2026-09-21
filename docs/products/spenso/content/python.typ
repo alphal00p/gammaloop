@@ -258,6 +258,22 @@ custom-spacing settings require Tydenso's Typst notation layer; use HTML, SVG, o
 display for those settings. Source-only methods reject unsupported settings rather than
 silently ignoring them.
 
+
+Contract a momentum with a gamma matrix, then collect its bispinor channel to display
+slash notation. Chain collection keeps the ordered factors and leaves Dirac traces
+unevaluated. The result remains a `TensorExpression` with its two bispinor ports.
+
+// docs-example: compile
+```python
+from symbolica.community.spenso import Representation, TensorExpression, TensorName
+
+mink = Representation.mink(4)
+p = TensorName.vector("p")
+indexed = TensorExpression.gamma(4)("a", "b", "mu") * p(mink("mu"))
+pslash = indexed.schoonschip_net().collect_gamma_chains()
+pslash.formatted()
+```
+
 Install the optional compiler to render HTML and SVG:
 
 // docs-example: syntax
