@@ -64,6 +64,7 @@ impl FeynmanDiagram {
 #import "assets/embedded/drawing/templates/physics-edge-style.typ" as physics
 #import physics: mi, palette, massive, massless, dashed, dotted, source-stroke, sink-stroke, fermion-flow, wave, coil, zigzag
 #import graph: build, edge, node, sink, source
+#set text(fill: palette.ink)
 
 #let particle-map = (
 "##,
@@ -211,6 +212,7 @@ impl FeynmanDiagram {
     amplitude-mode: {},
     cross-section-mode: {},
     style-options: (node-label: none),
+    edge-style-options: (label-fill: palette.ink),
   )
 }}
 "##,

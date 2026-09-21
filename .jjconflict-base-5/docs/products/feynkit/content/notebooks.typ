@@ -11,8 +11,8 @@ Use a diagram produced by the #link("quickstart/python/")[Python quickstart]. It
 Rendering uses Linnet’s Python preparation and compilation pipeline.
 SVG figures have a transparent background. Their palette follows the browser's
 light/dark preference when opened separately; inline figures also follow explicit
-Marimo and Jupyter notebook themes. Dark mode brightens the ink while preserving
-particle colours and the source/sink contrast. Printing uses the light palette.
+Marimo and Jupyter notebook themes. Both modes use the website diagram palette,
+including its neutral and charged-particle colours and lightened sink strokes.
 The native module embeds the compatible Linnest/Kurvst source, Wasm files, and shared
 physics styles. Particle metadata selects dashed scalar lines, fermion arrows,
 photon waves, gluon coils, and mathematical labels from the model's TeX names.

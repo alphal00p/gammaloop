@@ -45,28 +45,37 @@ pub(crate) fn render_diagram_svg(py: Python<'_>, diagram: &FeynmanDiagram) -> Py
         .collect(),
     )?
     .svg(py)?;
-    // Keep the particle palette and source/sink contrast while adapting all ink,
-    // including Typst's outlined text. The page itself has no background fill.
-    // Explicit notebook themes override the OS preference used by standalone SVGs.
+    // Use the website SVG palette from docs/assets/typst/theme.typ, including
+    // the 45% lightened sink strokes from the shared physics style. Keep SVG
+    // paint attributes as light-mode fallbacks for viewers without CSS support.
+    let mut styles = String::from("<style>");
+    let mut light = String::new();
+    let mut dark = String::new();
+    for (name, light_color, dark_color) in [
+        ("ink", "#3d2645", "#f8effa"),
+        ("accent", "#6f4d85", "#d8b9e3"),
+        ("ink-sink", "#948899", "#fbf6fc"),
+        ("accent-sink", "#b09dbc", "#ead9f0"),
+    ] {
+        light.push_str(&format!("--feynkit-{name}:{light_color};"));
+        dark.push_str(&format!("--feynkit-{name}:{dark_color};"));
+        for paint in ["fill", "stroke"] {
+            styles.push_str(&format!(
+                ".feynkit-diagram-svg [{paint}=\"{light_color}\"]{{{paint}:var(--feynkit-{name},{light_color});}}"
+            ));
+        }
+    }
+    // Explicit notebook themes override the browser preference for saved SVGs.
+    styles.push_str(&format!(
+        r#".feynkit-diagram-svg{{{light}}}
+@media(prefers-color-scheme:dark){{.feynkit-diagram-svg{{{dark}}}}}
+:is(.dark,[data-theme="dark"],[data-jp-theme-light="false"]) .feynkit-diagram-svg{{{dark}}}
+:is(.light,[data-theme="light"],[data-jp-theme-light="true"]) .feynkit-diagram-svg{{{light}}}
+</style>"#
+    ));
     Ok(svg
         .replacen("<svg ", "<svg class=\"feynkit-diagram-svg\" ", 1)
-        .replacen(
-            '>',
-            r#"><style>
-.feynkit-diagram-svg { filter: none; }
-@media (prefers-color-scheme: dark) {
-  .feynkit-diagram-svg { filter: invert(1) hue-rotate(180deg); }
-}
-:is(.dark, [data-theme="dark"], [data-jp-theme-light="false"]) .feynkit-diagram-svg {
-  filter: invert(1) hue-rotate(180deg);
-}
-:is(.light, [data-theme="light"], [data-jp-theme-light="true"]) .feynkit-diagram-svg {
-  filter: none;
-}
-@media print { .feynkit-diagram-svg { filter: none !important; } }
-</style>"#,
-            1,
-        ))
+        .replacen('>', &format!(">{styles}"), 1))
 }
 
 pub(crate) fn render_diagram_html(py: Python<'_>, diagram: &FeynmanDiagram) -> PyResult<String> {

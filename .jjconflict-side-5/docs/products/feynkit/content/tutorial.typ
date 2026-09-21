@@ -94,7 +94,13 @@ an incomplete result, preserving that API's existing partial-result behavior.
 
 == Observe progress and prune partial topologies
 
-Both generation methods accept `progress=callback`. The callback receives an immutable
+Both generation methods default to `progress="auto"`. In Marimo, they check
+`marimo.running_in_notebook()` and maintain one spinner showing the current stage,
+processed counts (including a total when known), and elapsed time. The spinner closes
+on completion, cancellation, or error. Outside a running notebook, automatic progress
+stays quiet and does not import Marimo. Pass `progress=None` to disable it.
+
+For custom reporting, pass `progress=callback`. The callback receives an immutable
 `GenerationProgress` with `stage`, `completed`, and `total`. Counts restart at each stage;
 `total is None` means the amount of work is unknown, so show a spinner instead of a
 percentage. Topology enumeration counts discovered unique graphs, not every explored branch.
@@ -110,18 +116,9 @@ their calling thread. Callback delivery itself does not force a browser paint or
 
 // docs-example: compile
 ```python
-import marimo as mo
-
-with mo.status.spinner(title="Generating diagrams") as status:
-    def report(progress):
-        status.update(
-            title=progress.stage.replace("_", " ").title(),
-            subtitle=f"{progress.completed:,} processed",
-        )
-
-    result = model.generate_diagrams(
-        ["e-", "e+"], ["mu-", "mu+"], loops=1, maximum_bridges=None, progress=report
-    )
+result = model.generate_diagrams(
+    ["e-", "e+"], ["mu-", "mu+"], loops=1, maximum_bridges=None
+)
 ```
 
 Use `filter=callback` for live pruning during enumeration. It receives a Symbolica `Graph`
