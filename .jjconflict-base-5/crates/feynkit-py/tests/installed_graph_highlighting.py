@@ -75,4 +75,23 @@ for render in (diagram.to_linnest, diagram.to_svg, diagram.to_html):
         raise AssertionError("stale highlight selections must be rejected")
 assert diagram.to_json() == snapshot
 assert diagram.to_linnest() == source
+cross_section = model.generate_diagrams(
+    ["scalar_0"],
+    ["scalar_0", "scalar_0"],
+    kind="cross_section",
+    loops=1,
+    max_vertices=2,
+    vertex_allow=["V_3_SCALAR_000"],
+    allow_self_loops=True,
+).diagrams[0]
+snapshot = cross_section.to_json()
+for selected in (
+    cross_section.to_linnet().full_subgraph(),
+    cross_section.cuts[0].left.subgraph,
+):
+    root = ET.fromstring(cross_section.to_svg(highlight=selected))
+    assert any(
+        element.get("stroke", "").lower() == "#ffd166" for element in root.iter()
+    )
+assert cross_section.to_json() == snapshot
 print("installed graph highlighting checks passed")

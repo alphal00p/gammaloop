@@ -914,7 +914,12 @@ fn figure_render_config(plan: &FigurePlan, inputs: &[(String, String)]) -> Resul
         }
     }
 
-    for key in ["internal-label-length-scale", "external-label-length-scale"] {
+    for key in [
+        "internal-label-length-scale",
+        "external-label-length-scale",
+        "external-centroid-bias",
+        "external-centroid-distance",
+    ] {
         if let Some(value) = inputs.get(key) {
             let value = typst_native_value(value);
             if !matches!(value, TypstValue::Float(_) | TypstValue::Integer(_)) {
@@ -934,6 +939,8 @@ fn figure_render_config(plan: &FigurePlan, inputs: &[(String, String)]) -> Resul
                     | "seed"
                     | "internal-label-length-scale"
                     | "external-label-length-scale"
+                    | "external-centroid-bias"
+                    | "external-centroid-distance"
             )
         })
         .map(|(key, value)| (*key, typst_native_value(value)));

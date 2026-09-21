@@ -4945,13 +4945,20 @@ fn dangling_centroid_incremental_delta_matches_total_delta() {
         b -> c
         c -> a
     }"#;
-    let settings = BTreeMap::from([("gamma-dangling-centroid".to_string(), "1.25".to_string())]);
+    let settings = BTreeMap::from([
+        ("gamma-dangling-centroid".to_string(), "1.25".to_string()),
+        ("external-centroid-bias".to_string(), "2.0".to_string()),
+        ("external-centroid-distance".to_string(), "3.0".to_string()),
+    ]);
     let figment = Figment::from(Serialized::from(settings, Profile::Default));
     let mut graph = TypstGraph::parse(input).unwrap();
     graph.layout_config = crate::LayoutConfig::from_figment(&figment);
     let (mut state, energy) = graph.layout_energy_state();
     let mut baseline_energy = energy;
     baseline_energy.dangling_centroid_charge = 0.0;
+    assert_eq!(energy.external_centroid_strength, 2.0 * energy.k_spring);
+    assert_eq!(energy.external_centroid_distance, 3.0);
+    baseline_energy.external_centroid_strength = 0.0;
     let mut rng = SmallRng::seed_from_u64(17);
     let mut cached = energy.energy(None, &state);
     let mut baseline_cached = baseline_energy.energy(None, &state);

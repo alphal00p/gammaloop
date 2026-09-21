@@ -1,7 +1,7 @@
 use cgmath::{EuclideanSpace, InnerSpace, Point2, Point3, Vector2, Vector3, Zero};
 
 use crate::half_edge::{
-    involution::{EdgeIndex, EdgeVec},
+    involution::{EdgeIndex, EdgeVec, Flow, HedgePair},
     layout::spring::{
         apply_edge_shift_with_groups, apply_vertex_shift_with_groups, directional_force_shift,
         Constraint, HasPointConstraint, LayoutPointIndex, LayoutState, PointConstraint,
@@ -575,11 +575,14 @@ where
         }
     }
 
-    // Repel each dangling endpoint from the current node centroid. Sharing the
+    // Repel each dangling endpoint from the current node centroid, and bias
+    // incoming endpoints left and outgoing endpoints right with an X-only spring.
+    // Its target distance scales the external edge's natural spring length. Sharing the
     // opposite reaction over all nodes prevents this internal force from
     // introducing translational drift. This term is intentionally planar, so
     // auxiliary depth cannot reduce its pressure on the visible endpoints.
-    if energy.dangling_centroid_charge != 0.0 && n > 0 {
+    if (energy.dangling_centroid_charge != 0.0 || energy.external_centroid_strength != 0.0) && n > 0
+    {
         let centroid = state
             .vertex_points
             .iter()
@@ -589,10 +592,21 @@ where
         for &ei in &workset.dangling_edges {
             let d = state.edge_points[ei].to_vec() - centroid;
             let dist = d.magnitude();
-            if dist <= 1e-9 {
-                continue;
+            let mut force = if dist > 1e-9 && energy.dangling_centroid_charge != 0.0 {
+                d / dist * (energy.dangling_centroid_charge / (dist + energy.eps).powi(2))
+            } else {
+                Vector2::zero()
+            };
+            if let HedgePair::Unpaired { flow, .. } = state.graph[&ei].1 {
+                let side = match flow {
+                    Flow::Source => 1.0,
+                    Flow::Sink => -1.0,
+                };
+                let target = side
+                    * energy.external_centroid_distance
+                    * SpringChargeEnergy::edge_spring_length(state, ei, energy.spring_length);
+                force.x -= energy.external_centroid_strength * (d.x - target);
             }
-            let force = d / dist * (energy.dangling_centroid_charge / (dist + energy.eps).powi(2));
             if workset.force_edge[ei] {
                 forces_e[ei] += Vector3::new(force.x, force.y, 0.0);
             }
@@ -751,6 +765,133 @@ mod tests {
     };
 
     #[test]
+    fn external_centroid_bias_is_horizontal_balanced_and_matches_energy() {
+        let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
+        let a = builder.add_node(PointConstraint::default());
+        let b = builder.add_node(PointConstraint::default());
+        builder.add_external_edge(a, PointConstraint::default(), false, Flow::Source);
+        builder.add_external_edge(b, PointConstraint::default(), false, Flow::Sink);
+        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let energy = SpringChargeEnergy {
+            k_spring: 0.0,
+            ..SpringChargeEnergy::from_graph(
+                2,
+                2.0,
+                4.0,
+                ParamTuning {
+                    beta: 0.0,
+                    external_centroid_bias: 3.0,
+                    ..ParamTuning::default()
+                },
+            )
+        };
+        for translation in [-137.0, 0.0, 213.0] {
+            let state = graph.new_layout_state(
+                vec![
+                    Point2::new(99.0 + translation, -2.0),
+                    Point2::new(101.0 + translation, 2.0),
+                ]
+                .into(),
+                vec![
+                    Point2::new(100.0 + translation, 0.0),
+                    Point2::new(104.0 + translation, 7.0),
+                ]
+                .into(),
+                1.0,
+                0.0,
+                false,
+            );
+            assert!((energy.energy(None, &state) - 120.0).abs() < 1e-10);
+            let workset = ForceWorkSet::new(&state);
+            for scale in [0.0, 1.0] {
+                let (forces_v, forces_e) = compute_forces(
+                    &state,
+                    &energy,
+                    &vec![100.0, -20.0].into(),
+                    &vec![-50.0, 70.0].into(),
+                    scale,
+                    &workset,
+                );
+                // One endpoint starts at the centroid; the incoming one starts on the wrong side.
+                assert_eq!(forces_e[EdgeIndex(0)], Vector3::new(12.0, 0.0, 0.0));
+                assert_eq!(forces_e[EdgeIndex(1)], Vector3::new(-24.0, 0.0, 0.0));
+                for (_, force) in &forces_v {
+                    assert_eq!(*force, Vector3::new(6.0, 0.0, 0.0));
+                }
+                for i in 0..4 {
+                    let mut plus = state.clone();
+                    let mut minus = state.clone();
+                    let h = 1e-4;
+                    let force = if i < 2 {
+                        plus.vertex_points[NodeIndex(i)].x += h;
+                        minus.vertex_points[NodeIndex(i)].x -= h;
+                        forces_v[NodeIndex(i)].x
+                    } else {
+                        plus.edge_points[EdgeIndex(i - 2)].x += h;
+                        minus.edge_points[EdgeIndex(i - 2)].x -= h;
+                        forces_e[EdgeIndex(i - 2)].x
+                    };
+                    let gradient =
+                        (energy.energy(None, &plus) - energy.energy(None, &minus)) / (2.0 * h);
+                    assert!((force + gradient).abs() < 1e-7);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn external_centroid_bias_respects_pins_and_preserves_free_y() {
+        let fixed = PointConstraint {
+            x: Constraint::Fixed,
+            y: Constraint::Fixed,
+        };
+        let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
+        let node = builder.add_node(fixed);
+        builder.add_external_edge(node, fixed, false, Flow::Sink);
+        builder.add_external_edge(node, PointConstraint::default(), false, Flow::Source);
+        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let mut state = graph.new_layout_state(
+            vec![Point2::new(20.0, 30.0)].into(),
+            vec![Point2::new(25.0, 35.0), Point2::new(15.0, 32.0)].into(),
+            1.0,
+            0.0,
+            false,
+        );
+        let energy = SpringChargeEnergy {
+            k_spring: 0.0,
+            ..SpringChargeEnergy::from_graph(
+                1,
+                1.0,
+                1.0,
+                ParamTuning {
+                    beta: 0.0,
+                    external_centroid_bias: 3.0,
+                    ..ParamTuning::default()
+                },
+            )
+        };
+        force_directed_layout(
+            &mut state,
+            &energy,
+            ForceLayoutConfig {
+                steps: 100,
+                epochs: 1,
+                step: 0.1,
+                cool: 1.0,
+                max_delta: 0.5,
+                early_tol: 0.0,
+                seed: 42,
+                depth_scale: 0.0,
+                flattening_end: 0.0,
+            },
+        );
+        assert_eq!(state.vertex_points[NodeIndex(0)], Point2::new(20.0, 30.0));
+        assert_eq!(state.edge_points[EdgeIndex(0)], Point2::new(25.0, 35.0));
+        assert!((state.edge_points[EdgeIndex(1)].x - 22.0).abs() < 1e-6);
+        assert_eq!(state.edge_points[EdgeIndex(1)].y, 32.0);
+    }
+
+    #[test]
     fn edge_spring_length_scales_change_forces_consistently_with_energy() {
         let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
         let a = builder.add_node(PointConstraint::default());
@@ -777,6 +918,8 @@ mod tests {
             c_vv: 0.0,
             dangling_charge: 0.0,
             dangling_centroid_charge: 0.0,
+            external_centroid_strength: 0.0,
+            external_centroid_distance: 1.0,
             c_ev: 0.0,
             c_ee_local: 0.0,
             c_center: 0.0,
@@ -938,6 +1081,8 @@ mod tests {
             c_vv: 0.0,
             dangling_charge: 0.0,
             dangling_centroid_charge: 0.0,
+            external_centroid_strength: 0.0,
+            external_centroid_distance: 1.0,
             c_ev: 0.0,
             c_ee_local: 0.0,
             c_center: 0.0,
@@ -987,6 +1132,8 @@ mod tests {
             c_vv: 0.0,
             dangling_charge: 0.0,
             dangling_centroid_charge: 0.0,
+            external_centroid_strength: 0.0,
+            external_centroid_distance: 1.0,
             c_ev: 1e8,
             c_ee_local: 0.0,
             c_center: 0.0,
@@ -1044,6 +1191,8 @@ mod tests {
             c_vv: 0.0,
             dangling_charge: 0.0,
             dangling_centroid_charge: 0.0,
+            external_centroid_strength: 0.0,
+            external_centroid_distance: 1.0,
             c_ev: 0.0,
             c_ee_local: 0.0,
             c_center: 0.5,
@@ -1080,6 +1229,8 @@ mod tests {
             k_spring: 0.0,
             c_center: 0.0,
             dangling_centroid_charge: 125.0,
+            external_centroid_strength: 0.0,
+            external_centroid_distance: 1.0,
             eps: 0.0,
             ..energy
         };
@@ -1103,6 +1254,8 @@ mod tests {
             c_vv: 0.0,
             dangling_charge: 0.0,
             dangling_centroid_charge: 0.0,
+            external_centroid_strength: 0.0,
+            external_centroid_distance: 1.0,
             c_ev: 0.0,
             c_ee_local: 0.0,
             c_center: 1.0,
