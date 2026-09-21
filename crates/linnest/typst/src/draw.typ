@@ -393,6 +393,31 @@
   /// points through that same Hobby path.
   /// `route: "straight-through"` draws the two straight force springs from
   /// source to edge position and from edge position to sink.
+  /// `pattern-natural-endpoints` defaults to `false`. For built-in coil strings
+  /// (`"coil"`, `"helix"`, `"spring"`) on complete continuous paths with both
+  /// endpoints anchored, `true` constructs a fitted `kurvst.coil` dictionary in
+  /// Typst and applies it once via ordinary `kurvst.pattern`: full-amplitude
+  /// inward endpoint phases and half-integer coil periods, with exact endpoints
+  /// and no taper, straight stubs, or connectors. This overrides `pattern-phase`,
+  /// bypasses `pattern-fit` integer fitting, and ignores `pattern-endpoint-slope`
+  /// (`endpoint-ramp: false`). Fitted dictionaries also work directly as
+  /// `pattern` without this flag; see the Kurvst manual's Path Patterns section
+  /// for the fitting formula and one-pass application settings.
+  /// The gluon preset in `examples/map-style.typ` enables this option. Setting
+  /// it to `false` restores the 75%-wavelength endpoint taper (capped at half
+  /// the path length), with a squared longitudinal envelope.
+  /// Without automatic fitting, `pattern-fit: true` adjusts the wavelength to the
+  /// nearest whole number of periods on a complete, unbroken edge.
+  /// `pattern-phase` is in radians; `calc.pi / 2` gives coils matching,
+  /// gently tapered endpoint phases without straight end sections.
+  /// `pattern-endpoint-slope` sets the taper's initial slope, from 0 to 3.
+  /// Zero (default) keeps tangential ends; positive values allow angled ends
+  /// without detaching them. The angle also depends on phase, amplitude, and
+  /// wavelength.
+  /// Partially anchored paths, including split-style halves and crossing-gap
+  /// fragments, keep the requested wavelength, taper only anchored endpoints,
+  /// and preserve phase continuity across hidden spans. Neither automatic coil
+  /// construction nor integer fitting applies.
   /// A finite layer can set `shift` to move along the logical edge, with
   /// positive values moving toward its end. `label` attaches content near the
   /// layer midpoint; `label-shift` (default `0`) moves its reference point by

@@ -134,6 +134,22 @@ fn public_linnest_layout_and_drawing_behavior_is_observable() {
     let renderer = TypstRenderer::new(base.path()).typst_executable(typst);
     renderer.check_version().unwrap();
     renderer.stage_default_assets().unwrap();
+    let pattern_fixture = base
+        .path()
+        .join(".clinnet/templates/pattern-endpoints-behavior.typ");
+    fs::write(
+        &pattern_fixture,
+        include_str!("resources/pattern-endpoints-behavior.typ"),
+    )
+    .unwrap();
+    renderer
+        .compile_template(
+            &pattern_fixture,
+            base.path().join("pattern-endpoints.pdf"),
+            &[],
+        )
+        .unwrap();
+
     fs::write(
         base.path().join(".clinnet/templates/map-style.typ"),
         include_str!("../../linnest/typst/examples/map-style.typ"),

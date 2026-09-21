@@ -40,6 +40,9 @@
   pattern: "coil",
   pattern-amplitude: 0.15,
   pattern-wavelength: 0.45,
+  pattern-fit: true,
+  pattern-phase: calc.pi / 2,
+  pattern-natural-endpoints: true,
   pattern-coil-longitudinal-scale:1.4,
 )
 #let scalar = (

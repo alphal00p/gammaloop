@@ -1,6 +1,6 @@
 #import "xbox-common.typ": *
 
-#set page(height: auto, width: auto, margin: 2mm)
+#set page(height: auto, width: auto, margin: 0mm)
 #set text(size: diagram-style.font-size)
 #show math.equation: set text(size: math-font-size)
 
@@ -103,6 +103,9 @@
   )
   let g = graph.map(g, edge: (
     "D4": (pos: pos(x: center.x+2 , y: center.y - 2)),
+    "D2": (show-momentum: true, momentum: [$p_1$]) + mom(side: "right", offset: .4, label: (gap: .2)),
+    "bottom": (show-momentum: true, momentum: [$p_2$]) + mom(side: "left", offset: .4, length: .8, shift: .6, label: (gap: .05)),
+    "D6": (show-momentum: true) + mom(side: "left", offset: .4, label: (gap: .2)),
   ))
   // Hidden momentum labels should not enlarge the final canvas.
   let g = graph.style(g, ..(graph-style + (edge-label: none)))
@@ -125,9 +128,9 @@
       cetz.draw.circle((x, y), radius: radius, fill: none, stroke: stroke)
       cetz.draw.line((x - diagonal, y - diagonal), (x + diagonal, y + diagonal), stroke: stroke)
       cetz.draw.line((x - diagonal, y + diagonal), (x + diagonal, y - diagonal), stroke: stroke)
-      
 
-      
+
+
     },
   )
 }

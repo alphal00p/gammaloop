@@ -765,6 +765,41 @@
   Set `offset-side: "label"` on an offset layer to choose the sign of `offset`
   so the layer is drawn on the same side of the curve as the edge label.
 
+  Pattern layers are generated over each continuous path, so internal curve
+  segments do not restart the phase or shorten the endpoint taper.
+
+  `pattern-natural-endpoints` defaults to `false`. For built-in coil strings
+  (`"coil"`, `"helix"`, or `"spring"`) on complete continuous paths with both
+  endpoints anchored, `true` constructs a fitted `kurvst.coil` dictionary in
+  Typst from the path length and layer's pattern settings, then applies it once
+  through ordinary `kurvst.pattern`. Its half-integer coil periods retain full
+  amplitude, inward endpoint phases, and exact endpoints, without taper, stubs,
+  or connectors. This overrides `pattern-phase`, bypasses `pattern-fit` integer
+  fitting, and ignores `pattern-endpoint-slope` (`endpoint-ramp: false`).
+
+  Only automatic construction requires a built-in coil string. A fitted
+  dictionary can be passed directly as `pattern` without this flag, with matching
+  `pattern-*` settings; see the Kurvst manual's Path Patterns section for fitting
+  and one-pass application. On curved carriers, fitted coils use local
+  tangent/normal offsets, not evaluation at a corrected arc distance.
+
+  The gluon preset in `examples/map-style.typ` enables this option. Set
+  `pattern-natural-endpoints: false` to restore its earlier 75%-wavelength
+  endpoint taper (capped at half the path length), with a squared longitudinal
+  envelope and no straight end sections. Without automatic fitting, `pattern-fit: true`
+  adjusts `pattern-wavelength` to the nearest whole number of periods on a
+  complete edge; `pattern-phase` is in radians, with `calc.pi / 2` giving coils
+  matching endpoint phases. Set `pattern-endpoint-slope: 1` on a layer to
+  allow an angled endpoint instead of a tangential one; the default is `0` and
+  the valid range is `0` to `3`. This controls the taper envelope, not an angle,
+  so the final direction also depends on phase, amplitude, and wavelength.
+  Endpoints remain attached.
+
+  Partially anchored paths, including split-style halves and crossing-gap
+  fragments, keep the requested wavelength, taper only anchored endpoints,
+  and preserve phase continuity across hidden spans. Neither automatic coil
+  construction nor integer fitting applies.
+
   Paired edges are Kurvst paths split at their edge layout point. Set
   `edge-split-gap` on `draw` to open a centered arc-length gap there, or set
   `split-gap` on an individual source/sink style layer to override the global

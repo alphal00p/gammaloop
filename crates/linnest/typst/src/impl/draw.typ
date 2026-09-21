@@ -108,9 +108,12 @@
   pattern: none,
   pattern-amplitude: 0.1,
   pattern-wavelength: 1.0,
+  pattern-fit: false,
   pattern-phase: 0,
   pattern-samples-per-period: 16,
   pattern-coil-longitudinal-scale: 1.25,
+  pattern-endpoint-slope: 0,
+  pattern-natural-endpoints: false,
   pattern-accuracy: 0.001,
 )
 
@@ -517,6 +520,11 @@
   )
   same = (
     same
+      and _style-value(source-style, "pattern-fit")
+        == _style-value(sink-style, "pattern-fit")
+  )
+  same = (
+    same
       and _style-value(source-style, "pattern-phase")
         == _style-value(sink-style, "pattern-phase")
   )
@@ -529,6 +537,16 @@
     same
       and _style-value(source-style, "pattern-coil-longitudinal-scale")
         == _style-value(sink-style, "pattern-coil-longitudinal-scale")
+  )
+  same = (
+    same
+      and _style-value(source-style, "pattern-endpoint-slope")
+        == _style-value(sink-style, "pattern-endpoint-slope")
+  )
+  same = (
+    same
+      and _style-value(source-style, "pattern-natural-endpoints")
+        == _style-value(sink-style, "pattern-natural-endpoints")
   )
   same = (
     same
@@ -1274,21 +1292,6 @@
   )
 }
 
-#let _pattern(segment, style, phase, anchor-start, anchor-end) = {
-  let pattern-style = _pattern-style(style)
-  curve-api.pattern(
-    curve-api.from-cubic(segment),
-    pattern: pattern-style.pattern,
-    amplitude: pattern-style.pattern-amplitude,
-    wavelength: pattern-style.pattern-wavelength,
-    phase: if phase == auto { pattern-style.pattern-phase } else { phase },
-    samples-per-period: pattern-style.pattern-samples-per-period,
-    coil-longitudinal-scale: pattern-style.pattern-coil-longitudinal-scale,
-    anchor-start: anchor-start,
-    anchor-end: anchor-end,
-    accuracy: pattern-style.pattern-accuracy,
-  )
-}
 
 #let _bezier-element(segment, style) = {
   if _has-mark(style) {
@@ -1307,6 +1310,10 @@
   )
 }
 
+#let _segments-path(segments) = {
+  curve-api.path(..segments.map(curve-api.from-cubic))
+}
+
 #let _segments-elements(segments, style, phase, anchor-start, anchor-end) = {
   if _style-value(style, "label-only") { return (elements: (), length: 0) }
   if _has-mark(style) {
@@ -1321,26 +1328,48 @@
   let elements = ()
   let length = 0
   if _has-pattern(style) {
-    let current-phase = if phase == auto {
-      _style-value(style, "pattern-phase")
-    } else { phase }
-    let wavelength = _style-value(style, "pattern-wavelength")
-    for (index, segment) in segments.enumerate() {
-      let piece = _pattern(
-        segment,
-        style,
-        current-phase,
-        anchor-start and index == 0,
-        anchor-end and index == segments.len() - 1,
+    let pattern-style = _pattern-style(style)
+    let path = _segments-path(segments)
+    length = curve-api.length(path, accuracy: pattern-style.pattern-accuracy)
+    let pattern = pattern-style.pattern
+    let wavelength = pattern-style.pattern-wavelength
+    let samples = pattern-style.pattern-samples-per-period
+    let phase = if phase == auto { pattern-style.pattern-phase } else { phase }
+    assert(wavelength > 0, message: "pattern-wavelength must be positive")
+    // Fit only complete edges; split styles and crossing gaps retain phase continuity.
+    let natural = pattern-style.pattern-natural-endpoints and anchor-start and anchor-end
+    if natural and length > 0 {
+      assert(
+        type(pattern) == str and pattern.trim() in ("coil", "helix", "spring"),
+        message: "pattern-natural-endpoints requires a built-in coil",
       )
-      elements.push(curve-api.to-cetz(piece, .._draw-style(style)))
-      let piece-length = _segment-length(segment, _style-value(
-        style,
-        "pattern-accuracy",
-      ))
-      length = length + piece-length
-      current-phase = current-phase + 2 * calc.pi * piece-length / wavelength
+      pattern = curve-api.coil(
+        fit-length: length,
+        amplitude: pattern-style.pattern-amplitude,
+        wavelength: wavelength,
+        samples-per-period: samples,
+        longitudinal-scale: pattern-style.pattern-coil-longitudinal-scale,
+      )
+      wavelength = length
+      samples = pattern.points.len() - 1
+      phase = 0
+    } else if pattern-style.pattern-fit and anchor-start and anchor-end and length > 0 {
+      wavelength = length / calc.max(1, calc.round(length / wavelength))
     }
+    let patterned = curve-api.pattern(
+      path,
+      pattern: pattern,
+      amplitude: pattern-style.pattern-amplitude,
+      wavelength: wavelength,
+      phase: phase,
+      samples-per-period: samples,
+      coil-longitudinal-scale: pattern-style.pattern-coil-longitudinal-scale,
+      anchor-start: anchor-start,
+      anchor-end: anchor-end,
+      endpoint-slope: pattern-style.pattern-endpoint-slope,
+      accuracy: pattern-style.pattern-accuracy,
+    )
+    elements.push(curve-api.to-cetz(patterned, .._draw-style(style)))
   } else {
     for segment in segments {
       elements.push(curve-api.to-cetz(
@@ -1352,9 +1381,6 @@
   (elements: elements, length: length)
 }
 
-#let _segments-path(segments) = {
-  curve-api.path(..segments.map(curve-api.from-cubic))
-}
 
 #let _mark-carrier-elements(path, style, paint: false) = {
   if style == none or not _has-mark(style) { return () }
