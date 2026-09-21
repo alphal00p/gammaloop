@@ -310,36 +310,66 @@ impl EnergySurfaceExt for EnergySurface {
         })
     }
 
-    fn external_shift_is_strictly_negative_for_positive_energies(
+    pub(crate) fn external_shift_is_strictly_negative_for_positive_energies(
         &self,
-        lmb: &LoopMomentumBasis,
         incoming_edges: &[EdgeIndex],
         outgoing_edges: &[EdgeIndex],
     ) -> bool {
-        let mut coefficients = BTreeMap::new();
-        for (shift_edge, shift_coefficient) in self.external_shift.iter() {
-            for (external_index, sign) in
-                lmb.edge_signatures[*shift_edge].external.iter_enumerated()
-            {
-                let signed_coefficient = match sign {
-                    SignOrZero::Zero => 0,
-                    SignOrZero::Plus => i128::from(*shift_coefficient),
-                    SignOrZero::Minus => -i128::from(*shift_coefficient),
-                };
-                if signed_coefficient != 0 {
-                    *coefficients
-                        .entry(lmb.ext_edges[external_index])
-                        .or_default() += signed_coefficient;
-                }
-            }
+        if incoming_edges.is_empty()
+            || outgoing_edges.is_empty()
+            || incoming_edges
+                .iter()
+                .any(|edge| outgoing_edges.contains(edge))
+            || self
+                .external_shift
+                .iter()
+                .any(|(edge, _)| !incoming_edges.contains(edge) && !outgoing_edges.contains(edge))
+        {
+            return false;
         }
-        coefficients.retain(|_, coefficient| *coefficient != 0);
 
-        external_coefficients_are_strictly_negative_for_positive_energies(
-            &coefficients,
-            incoming_edges,
-            outgoing_edges,
-        )
+        let coefficient = |edge: &EdgeIndex| {
+            self.external_shift
+                .iter()
+                .filter(|(shift_edge, _)| shift_edge == edge)
+                .map(|(_, coefficient)| i128::from(*coefficient))
+                .sum::<i128>()
+        };
+
+        // Energy conservation makes external-energy coefficient vectors `c` and
+        // `c + lambda * sigma` equivalent, where sigma is +1 for incoming and -1
+        // for outgoing momenta. The shift is strictly negative for all positive
+        // external energies if one representative is component-wise non-positive
+        // and not identically zero.
+        let lambda_lower_bound = outgoing_edges
+            .iter()
+            .map(&coefficient)
+            .max()
+            .expect("outgoing external edges were checked to be non-empty");
+        let lambda_upper_bound = incoming_edges
+            .iter()
+            .map(|edge| -coefficient(edge))
+            .min()
+            .expect("incoming external edges were checked to be non-empty");
+
+        if lambda_lower_bound > lambda_upper_bound {
+            return false;
+        }
+
+        let lambda = lambda_lower_bound;
+        let adjusted_coefficients = incoming_edges
+            .iter()
+            .map(|edge| coefficient(edge) + lambda)
+            .chain(outgoing_edges.iter().map(|edge| coefficient(edge) - lambda));
+        let mut has_strictly_negative_coefficient = false;
+        for adjusted_coefficient in adjusted_coefficients {
+            if adjusted_coefficient > 0 {
+                return false;
+            }
+            has_strictly_negative_coefficient |= adjusted_coefficient < 0;
+        }
+
+        has_strictly_negative_coefficient
     }
 
     pub(crate) fn to_atom(&self, cut_edges: &[EdgeIndex]) -> Atom {
@@ -371,7 +401,7 @@ impl EnergySurfaceExt for EnergySurface {
     }
 
     #[inline]
-    fn compute_from_dual_momenta<T: FloatLike>(
+    pub(crate) fn compute_from_dual_momenta<T: FloatLike>(
         &self,
         lmb: &LoopMomentumBasis,
         real_mass_vector: &EdgeVec<F<T>>,

@@ -3583,58 +3583,17 @@ pub(crate) fn build_derivative_structure_atom(
     singularity_order: u8,
     laurent_coefficient: i8,
 ) -> Atom {
-    assert!(
-        laurent_coefficient <= -1,
-        "only laurent coefficients up to -1 are supported"
-    );
-
-    assert!(
-        singularity_order >= 1,
-        "eta order must be at least 1, got {singularity_order}"
-    );
-    assert!(
-        singularity_order >= -laurent_coefficient as u8,
-        "eta order must be at least the negative of the laurent coefficient, got {singularity_order} for laurent coefficient {laurent_coefficient}"
-    );
-
-    let order = singularity_order as i32;
-    let laurent_coefficient = laurent_coefficient as i32;
-    let f = symbol!("f");
-
-    let expansion = function!(GS.eta, GS.rescale)
-        .series(GS.rescale, Atom::var(GS.rescale_star), (order, 1))
-        .unwrap()
-        .to_atom()
-        .replace(function!(GS.eta, GS.rescale_star))
-        .min_level(0)
-        .max_level(Some(0))
-        .with(0);
-
-    let mut expression_to_derive = function!(f, GS.rescale)
-        * expansion.pow(-order)
-        * (GS.rescale - GS.rescale_star).pow(order);
-
-    for _ in 1..=(order + laurent_coefficient) {
-        expression_to_derive = expression_to_derive.derivative(GS.rescale);
+    feynkit_cff::SurfacePole {
+        surface: function!(GS.eta, GS.rescale),
+        order: singularity_order.into(),
     }
-
-    expression_to_derive = expression_to_derive
-        .replace(GS.rescale - GS.rescale_star)
-        .with(parse!("delta_t"));
-
-    let polynomial_in_delta_t = expression_to_derive
-        .series(symbol!("delta_t"), Atom::num(0), (0, 1))
-        .unwrap();
-
-    let factorial_prefactor = (2..=(order + laurent_coefficient)).product::<i32>();
-    debug!("factorial prefactor: {}", factorial_prefactor);
-    let mut expression_to_derive = polynomial_in_delta_t.to_atom() / Atom::num(factorial_prefactor);
-
-    expression_to_derive = expression_to_derive
-        .replace(GS.rescale)
-        .with(GS.rescale_star);
-
-    expression_to_derive
+    .laurent_coefficient(
+        &function!(symbol!("f"), GS.rescale),
+        GS.rescale,
+        &Atom::var(GS.rescale_star),
+        laurent_coefficient.into(),
+    )
+    .expect("valid GammaLoop Laurent coefficient")
 }
 
 pub(crate) fn build_derivative_structure(

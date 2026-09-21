@@ -9,6 +9,8 @@
 
 mod display;
 mod power_counting;
+pub mod routing;
+pub mod symbols;
 
 pub use power_counting::DOD;
 
@@ -153,6 +155,7 @@ impl ExternalState {
 /// Metadata carried by an external vertex.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct ExternalLeg {
+    pub name: String,
     /// Unique momentum label of this external leg.
     pub index: usize,
     pub state: ExternalState,
@@ -190,10 +193,12 @@ impl DiagramVertex {
         state: ExternalState,
         connection: usize,
     ) -> Self {
+        let name = name.into();
         Self {
-            name: name.into(),
+            name: name.clone(),
             interaction: None,
             external: Some(ExternalLeg {
+                name,
                 index,
                 state,
                 connection,
@@ -210,6 +215,8 @@ impl DiagramVertex {
 /// Structural and symbolic information associated with an edge.
 #[derive(Debug, Clone)]
 pub struct DiagramEdge {
+    pub external: Option<ExternalLeg>,
+    pub is_dummy: bool,
     pub particle: ParticleId,
     pub directed: bool,
     pub numerator: Atom,
@@ -220,6 +227,8 @@ pub struct DiagramEdge {
 impl DiagramEdge {
     pub fn new(particle: ParticleId, directed: bool) -> Self {
         Self {
+            external: None,
+            is_dummy: false,
             particle,
             directed,
             numerator: Atom::one(),
@@ -246,8 +255,8 @@ impl DiagramEdge {
 /// Source and target in the canonical orientation of an edge.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct EdgeEndpoints {
-    pub source: VertexId,
-    pub target: VertexId,
+    pub source: Option<VertexId>,
+    pub target: Option<VertexId>,
 }
 
 /// One stable half-edge endpoint in a finalized diagram.

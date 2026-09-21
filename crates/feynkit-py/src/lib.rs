@@ -5,6 +5,7 @@ mod display;
 mod error;
 mod generation;
 mod graph;
+mod graph_interop;
 mod kinematics;
 mod model;
 mod tensor;
