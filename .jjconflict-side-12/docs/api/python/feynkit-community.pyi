@@ -1669,7 +1669,7 @@ class FeynmanDiagram:
         >>> weighted_numerator = factor * diagram.numerator_expression()
         >>> weighted_numerator
         """
-    def denominator_expression(self, *, subgraph: linnet_py.Subgraph | None = None, edge_powers: typing.Optional[typing.Mapping[builtins.int, builtins.int]] = None, dimension: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None) -> TensorExpression:
+    def denominator_expression(self, *, subgraph: linnet_py.Subgraph | None = None, edge_powers: typing.Optional[typing.Mapping[builtins.int, builtins.int]] = None, dimension: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None, in_lmb: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None) -> TensorExpression:
         r"""
         Return the product of internal propagator denominators as a scalar TensorExpression.
 
@@ -1683,8 +1683,10 @@ class FeynmanDiagram:
 
         Examples
         --------
-        >>> denominator = diagram.denominator_expression()
-        >>> integrand = diagram.numerator_expression() / denominator
+        >>> denominator = diagram.denominator_expression(in_lmb=True)
+        >>> integrand = diagram.numerator_expression(in_lmb=True) / denominator
+        >>> basis = diagram.loop_momentum_bases()[0]
+        >>> denominator = diagram.denominator_expression(lmb=basis)
 
         Parameters
         ----------
@@ -1694,14 +1696,21 @@ class FeynmanDiagram:
             Signed propagator powers by diagram edge ID; omitted edges have power one.
         dimension : Expression or int or None, optional
             Lorentz dimension; defaults to the shared symbolic dimension.
+        in_lmb : bool, optional
+            Express edge momenta in the diagram's stored loop-momentum basis.
+        lmb : LoopMomentumBasis or None, optional
+            Basis from this diagram instance. Supplying it enables routing and
+            takes precedence over ``in_lmb``, including for a selected region.
         """
-    def numerator_expression(self, *, subgraph: linnet_py.Subgraph | None = None, without: linnet_py.Subgraph | None = None) -> TensorExpression:
+    def numerator_expression(self, *, subgraph: linnet_py.Subgraph | None = None, without: linnet_py.Subgraph | None = None, in_lmb: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None) -> TensorExpression:
         r"""
         Return the diagram numerator as a Spenso TensorExpression.
 
         Examples
         --------
-        >>> numerator = diagram.numerator_expression()
+        >>> numerator = diagram.numerator_expression(in_lmb=True)
+        >>> basis = diagram.loop_momentum_bases()[0]
+        >>> numerator = diagram.numerator_expression(lmb=basis)
         >>> integrand_numerator = diagram.overall_factor_expression() * numerator
         >>> integrand_numerator  # native Symbolica algebra and rich display
 
@@ -1711,6 +1720,11 @@ class FeynmanDiagram:
             Region from this diagram's analysis graph; None selects the complete graph.
         without : linnet_py.Subgraph or None, optional
             Ignored region, using GammaLoop boundary and local-factor selection semantics.
+        in_lmb : bool, optional
+            Express edge momenta in the diagram's stored loop-momentum basis.
+        lmb : LoopMomentumBasis or None, optional
+            Basis from this diagram instance. Supplying it enables routing and
+            takes precedence over ``in_lmb``, including for a selected region.
         """
     def numerator_prefactor_expression(self) -> Expression:
         r"""

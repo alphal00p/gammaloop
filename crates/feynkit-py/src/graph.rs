@@ -1785,8 +1785,10 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
-    /// >>> denominator = diagram.denominator_expression()
-    /// >>> integrand = diagram.numerator_expression() / denominator
+    /// >>> denominator = diagram.denominator_expression(in_lmb=True)
+    /// >>> integrand = diagram.numerator_expression(in_lmb=True) / denominator
+    /// >>> basis = diagram.loop_momentum_bases()[0]
+    /// >>> denominator = diagram.denominator_expression(lmb=basis)
     ///
     /// Parameters
     /// ----------
@@ -1796,7 +1798,12 @@ impl PyFeynmanDiagram {
     ///     Signed propagator powers by diagram edge ID; omitted edges have power one.
     /// dimension : Expression or int or None, optional
     ///     Lorentz dimension; defaults to the shared symbolic dimension.
-    #[pyo3(signature = (*, subgraph=None, edge_powers=None, dimension=None))]
+    /// in_lmb : bool, optional
+    ///     Express edge momenta in the diagram's stored loop-momentum basis.
+    /// lmb : LoopMomentumBasis or None, optional
+    ///     Basis from this diagram instance. Supplying it enables routing and
+    ///     takes precedence over ``in_lmb``, including for a selected region.
+    #[pyo3(signature = (*, subgraph=None, edge_powers=None, dimension=None, in_lmb=false, lmb=None))]
     fn denominator_expression(
         &self,
         py: Python<'_>,
@@ -1804,6 +1811,8 @@ impl PyFeynmanDiagram {
         subgraph: Option<&Bound<'_, PyAny>>,
         edge_powers: Option<BTreeMap<usize, isize>>,
         dimension: Option<ConvertibleToExpression>,
+        in_lmb: bool,
+        lmb: Option<&PyLoopMomentumBasis>,
     ) -> PyResult<Py<TensorExpression>> {
         let selected = match subgraph {
             Some(subgraph) => self.selection(py, Some(subgraph))?,
@@ -1826,6 +1835,21 @@ impl PyFeynmanDiagram {
             None => self.inner.denominator_of(&selected, &powers),
         }
         .map_err(error::diagram)?;
+        let denominator = match lmb {
+            Some(basis) => {
+                if !Arc::ptr_eq(&basis.owner, &self.owner) {
+                    return Err(error::DiagramError::new_err(
+                        "momentum basis belongs to a different diagram",
+                    ));
+                }
+                basis.inner.route_expression(&denominator)
+            }
+            None if in_lmb => self
+                .inner
+                .loop_momentum_basis()
+                .route_expression(&denominator),
+            None => denominator,
+        };
         TensorExpression::from_atom_interface(py, denominator, None)
     }
 
@@ -1833,7 +1857,9 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
-    /// >>> numerator = diagram.numerator_expression()
+    /// >>> numerator = diagram.numerator_expression(in_lmb=True)
+    /// >>> basis = diagram.loop_momentum_bases()[0]
+    /// >>> numerator = diagram.numerator_expression(lmb=basis)
     /// >>> integrand_numerator = diagram.overall_factor_expression() * numerator
     /// >>> integrand_numerator  # native Symbolica algebra and rich display
     ///
@@ -1843,7 +1869,12 @@ impl PyFeynmanDiagram {
     ///     Region from this diagram's analysis graph; None selects the complete graph.
     /// without : linnet_py.Subgraph or None, optional
     ///     Ignored region, using GammaLoop boundary and local-factor selection semantics.
-    #[pyo3(signature = (*, subgraph=None, without=None))]
+    /// in_lmb : bool, optional
+    ///     Express edge momenta in the diagram's stored loop-momentum basis.
+    /// lmb : LoopMomentumBasis or None, optional
+    ///     Basis from this diagram instance. Supplying it enables routing and
+    ///     takes precedence over ``in_lmb``, including for a selected region.
+    #[pyo3(signature = (*, subgraph=None, without=None, in_lmb=false, lmb=None))]
     fn numerator_expression(
         &self,
         py: Python<'_>,
@@ -1851,17 +1882,31 @@ impl PyFeynmanDiagram {
         subgraph: Option<&Bound<'_, PyAny>>,
         #[gen_stub(override_type(type_repr="linnet_py.Subgraph | None", imports=("linnet_py")))]
         without: Option<&Bound<'_, PyAny>>,
+        in_lmb: bool,
+        lmb: Option<&PyLoopMomentumBasis>,
     ) -> PyResult<Py<TensorExpression>> {
         let selected = self.selection(py, subgraph)?;
         let without = match without {
             Some(without) => self.selection(py, Some(without))?,
             None => SuBitGraph::empty(self.inner.underlying().n_hedges()),
         };
-        TensorExpression::from_atom_interface(
-            py,
-            self.inner.numerator_of(&selected, &without),
-            None,
-        )
+        let numerator = self.inner.numerator_of(&selected, &without);
+        let numerator = match lmb {
+            Some(basis) => {
+                if !Arc::ptr_eq(&basis.owner, &self.owner) {
+                    return Err(error::DiagramError::new_err(
+                        "momentum basis belongs to a different diagram",
+                    ));
+                }
+                basis.inner.route_expression(&numerator)
+            }
+            None if in_lmb => self
+                .inner
+                .loop_momentum_basis()
+                .route_expression(&numerator),
+            None => numerator,
+        };
+        TensorExpression::from_atom_interface(py, numerator, None)
     }
 
     /// Return the request-wide numerator multiplier as a Symbolica expression.
