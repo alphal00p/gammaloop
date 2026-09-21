@@ -300,7 +300,8 @@ pub struct GenerationProgress {
     pub stage: &'static str,
     /// Work items processed in this stage, not the number retained.
     pub completed: usize,
-    /// Unknown while enumerating topologies or grouping numerators.
+    /// Unknown while enumerating topologies or merging diagram groups;
+    /// numerator preparation, sampling, and comparison count input diagrams.
     pub total: Option<usize>,
 }
 

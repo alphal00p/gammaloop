@@ -1582,7 +1582,6 @@ impl Generator {
             comparison_diagrams.push(pair.comparison);
             representatives.push((pair.representative, pair.reversed_edges));
         }
-        options.report_progress("grouping", 0, None);
         let grouped = if options.cancellation_requested() {
             completed = false;
             grouping::group_diagrams(
@@ -1590,6 +1589,7 @@ impl Generator {
                 &self.model,
                 &NumeratorGrouping::None,
                 process.symmetrizes_left_right(),
+                options,
             )?
         } else {
             grouping::group_diagrams(
@@ -1597,6 +1597,7 @@ impl Generator {
                 &self.model,
                 &options.numerator_grouping,
                 process.symmetrizes_left_right(),
+                options,
             )?
         };
         if options.cancellation_requested() {
@@ -1612,6 +1613,8 @@ impl Generator {
         // grouping factor and routing choice.
         let zero_numerator_count = grouped.zero_numerator_count;
         let mut groups = grouped.groups;
+        let total = groups.len();
+        options.report_progress("grouping", 0, Some(total));
         let mut diagrams = Vec::with_capacity(grouped.diagrams.len());
         for (output_index, (comparison_master, group)) in grouped
             .diagrams
@@ -1683,6 +1686,7 @@ impl Generator {
                 member.source_id = source.id();
                 member.source_name = source.name().to_owned();
             }
+            options.report_progress("grouping", output_index + 1, Some(total));
         }
 
         let result = GenerationResult {
