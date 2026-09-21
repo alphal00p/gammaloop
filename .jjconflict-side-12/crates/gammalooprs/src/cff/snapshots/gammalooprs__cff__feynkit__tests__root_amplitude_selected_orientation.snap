@@ -1,0 +1,91 @@
+---
+source: crates/gammalooprs/src/cff/feynkit.rs
+expression: "serde_json::json!({\n    \"expression\": expression, \"surface_cache\": graph.surface_cache,\n})"
+---
+{
+  "expression": {
+    "expression": {
+      "orientations": [
+        {
+          "data": {
+            "orientation": [
+              "Default",
+              "Default",
+              "Undirected",
+              "Undirected"
+            ]
+          },
+          "expression": {
+            "nodes": [
+              {
+                "children": [],
+                "data": {
+                  "Energy": 0
+                },
+                "id": 0,
+                "parent": null
+              }
+            ]
+          },
+          "id": 0
+        }
+      ]
+    },
+    "report": {
+      "acyclic_orientations": 1,
+      "candidate_orientations": 4,
+      "interned_surfaces": 2,
+      "unfolded_terms": 1
+    },
+    "surfaces": {
+      "energy_surfaces": [
+        {
+          "energies": [
+            0,
+            1
+          ],
+          "external_shift": {
+            "3": -1
+          },
+          "vertex_set": 1
+        },
+        {
+          "energies": [
+            0,
+            1
+          ],
+          "external_shift": {
+            "3": 1
+          },
+          "vertex_set": 1
+        }
+      ],
+      "h_surfaces": []
+    }
+  },
+  "surface_cache": {
+    "energy_surfaces": [
+      {
+        "energies": [
+          0,
+          1
+        ],
+        "external_shift": {
+          "3": -1
+        },
+        "vertex_set": 1
+      },
+      {
+        "energies": [
+          0,
+          1
+        ],
+        "external_shift": {
+          "3": 1
+        },
+        "vertex_set": 1
+      }
+    ],
+    "h_surfaces": []
+  }
+}

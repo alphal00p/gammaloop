@@ -1,0 +1,1227 @@
+use ahash::HashSet;
+use linnet::half_edge::involution::Flow;
+use linnet::half_edge::involution::HedgePair;
+use linnet::half_edge::involution::Orientation;
+use rayon::ThreadPool;
+use std::{
+    collections::BTreeMap,
+    fs::{self, File},
+    io::Write,
+    path::{Path, PathBuf},
+};
+use tracing::warn;
+// use bincode::{Decode, Encode};
+use bincode_trait_derive::{Decode, Encode};
+use color_eyre::{Help, Result};
+use itertools::Itertools;
+use serde::{Deserialize, Serialize};
+use std::fmt;
+use tracing::debug;
+
+use crate::graph::edge::PossibleParticle;
+use crate::processes::DotExportSettings;
+
+use crate::processes::StandaloneExportSettings;
+use crate::{
+    GammaLoopContext, GammaLoopContextContainer,
+    integrands::process::ProcessIntegrand,
+    settings::{GlobalSettings, RuntimeSettings, runtime::LockedRuntimeSettings},
+    uv::export::{UVForestExportSettings, sanitize_file_component},
+};
+use eyre::{Context, eyre};
+use feynkit_generator::{
+    FilterScope, GenerationOptions, GenerationType, Process as GenerationProcess,
+};
+
+use crate::{graph::Graph, model::Model, settings::global::GenerationSettings};
+
+use super::{
+    Amplitude, CrossSection, GeneratedGraphReport, GenerationProcessKind, GenerationProgressPhase,
+    NamedGraphGenerationReport, generation_progress,
+};
+
+pub struct ResolvedIntegrandRef<'a> {
+    pub canonical_name: String,
+    pub integrand: Option<&'a ProcessIntegrand>,
+}
+
+impl<'a> ResolvedIntegrandRef<'a> {
+    pub fn get_settings(&self) -> Option<&'a RuntimeSettings> {
+        self.integrand.map(ProcessIntegrand::get_settings)
+    }
+
+    pub fn require_generated(&self) -> Result<&'a ProcessIntegrand> {
+        self.integrand.ok_or_else(|| {
+            eyre!(
+                "Integrand {} has not yet been generated, but exists",
+                self.canonical_name
+            )
+        })
+    }
+}
+
+fn create_overwriting_file(path: &Path, file_kind: &str) -> Result<File> {
+    if path.exists() {
+        if path.is_dir() {
+            fs::remove_dir_all(path).with_context(|| {
+                format!(
+                    "Trying to remove existing directory before exporting {file_kind} {}",
+                    path.display()
+                )
+            })?;
+        } else {
+            fs::remove_file(path).with_context(|| {
+                format!(
+                    "Trying to remove existing file before exporting {file_kind} {}",
+                    path.display()
+                )
+            })?;
+        }
+    }
+
+    File::create(path).with_context(|| {
+        format!(
+            "Trying to create file to export {file_kind} {}",
+            path.display()
+        )
+    })
+}
+
+fn saved_child_dirs(root: &Path, expected_binary: &str, kind: &str) -> Result<Vec<PathBuf>> {
+    let mut saved_dirs = Vec::new();
+
+    for entry in fs::read_dir(root).with_context(|| format!("Error reading {}", root.display()))? {
+        let Ok(entry) = entry else {
+            debug!("Error reading entry");
+            continue;
+        };
+        if !entry.file_type()?.is_dir() {
+            continue;
+        }
+
+        let path = entry.path();
+        if !path.join(expected_binary).is_file() {
+            debug!(
+                "Skipping helper directory {} while loading {}s because '{}' is missing",
+                path.display(),
+                kind,
+                expected_binary
+            );
+            continue;
+        }
+
+        saved_dirs.push(path);
+    }
+
+    saved_dirs.sort();
+    Ok(saved_dirs)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
+pub struct ProcessDefinition {
+    pub process: GenerationProcess,
+    pub generation_options: GenerationOptions,
+    pub folder_name: String,
+    pub process_id: usize,
+}
+
+impl fmt::Display for ProcessDefinition {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Process #{}: '{}'\nGeneration type: {}{}{}\nInitial PDGs: {:?}{}\nFinal PDGs: {}{}\nLoop count: {}\nAmplitude filters:{}{}\nCross-section filters:{}{}",
+            self.process_id,
+            self.folder_name,
+            self.process.generation_type(),
+            if self.process.symmetrizes_left_right() {
+                " (left-right symmetrized)"
+            } else {
+                ""
+            },
+            if self.process.symmetrizes_external_fermions()
+                && self.process.generation_type() == GenerationType::Amplitude
+                && (self.process.symmetrizes_initial()
+                    || self.process.symmetrizes_final()
+                    || self.process.symmetrizes_left_right())
+            {
+                " (allowing fermion symmetrization)"
+            } else {
+                ""
+            },
+            self.process.incoming(),
+            if self.process.symmetrizes_initial() {
+                " (symmetrized)"
+            } else {
+                ""
+            },
+            if self.process.outgoing_alternatives().len() == 1 {
+                format!("{:?}", self.process.outgoing_alternatives()[0])
+            } else {
+                format!(
+                    "[ {} ]",
+                    self.process
+                        .outgoing_alternatives()
+                        .iter()
+                        .map(|pdgs| format!("{:?}", pdgs))
+                        .join(" | ")
+                )
+            },
+            if self.process.symmetrizes_final() {
+                " (symmetrized)"
+            } else {
+                ""
+            },
+            if self.process.loop_count().start() == self.process.loop_count().end() {
+                format!("{}", self.process.loop_count().start())
+            } else {
+                format!("{:?}", self.process.loop_count())
+            },
+            if self
+                .generation_options
+                .filters(FilterScope::CutAmplitude)
+                .is_empty()
+            {
+                " None"
+            } else {
+                "\n"
+            },
+            if self
+                .generation_options
+                .filters(FilterScope::CutAmplitude)
+                .is_empty()
+            {
+                "".into()
+            } else {
+                self.generation_options
+                    .filters(FilterScope::CutAmplitude)
+                    .iter()
+                    .map(|f| format!(" > {}", f))
+                    .collect::<Vec<String>>()
+                    .join("\n")
+            },
+            if self
+                .generation_options
+                .filters(FilterScope::Graph)
+                .is_empty()
+            {
+                " None"
+            } else {
+                "\n"
+            },
+            if self
+                .generation_options
+                .filters(FilterScope::Graph)
+                .is_empty()
+            {
+                "".into()
+            } else {
+                self.generation_options
+                    .filters(FilterScope::Graph)
+                    .iter()
+                    .map(|f| format!(" > {}", f))
+                    .collect::<Vec<String>>()
+                    .join("\n")
+            }
+        )
+    }
+}
+
+impl Default for ProcessDefinition {
+    fn default() -> Self {
+        Self {
+            process: GenerationProcess::amplitude(Vec::<i64>::new(), Vec::<i64>::new())
+                .with_loop_count(1, 1)
+                .expect("the default loop range is valid"),
+            generation_options: GenerationOptions::default().graph_prefix("GL"),
+            folder_name: "undefined_process".to_string(),
+            process_id: 0,
+        }
+    }
+}
+
+impl ProcessDefinition {
+    // Best attempt at creating what process definition matches the given graphs
+    pub fn from_graph_list(
+        graphs: &[Graph],
+        generation_type: GenerationType,
+        model: &Model,
+    ) -> Result<Self> {
+        let mut initial_pdgs = HashSet::default();
+
+        for g in graphs {
+            let mut initial_pdgs_of_graph = vec![];
+            match generation_type {
+                GenerationType::Amplitude => {
+                    for (pair, _, edge) in g.iter_edges() {
+                        if matches!(
+                            pair,
+                            HedgePair::Unpaired {
+                                hedge: _,
+                                flow: Flow::Sink
+                            }
+                        ) {
+                            if let PossibleParticle::Particle(particle) = &edge.data.particle {
+                                initial_pdgs_of_graph
+                                    .push(model.particle_by_id(*particle)?.pdg_code);
+                            } else {
+                                debug!("Edge without particle data in initial state");
+                            }
+                        }
+                    }
+                }
+                GenerationType::CrossSection => {
+                    for (_, _, edge) in g.iter_edges_of(&g.initial_state_cut) {
+                        if let PossibleParticle::Particle(particle) = &edge.data.particle {
+                            initial_pdgs_of_graph.push(model.particle_by_id(*particle)?.pdg_code);
+                        } else {
+                            debug!("Edge without particle data in initial state");
+                        }
+                    }
+                }
+            }
+
+            initial_pdgs_of_graph.sort();
+            initial_pdgs.insert(initial_pdgs_of_graph);
+        }
+
+        let initial_pdgs = if initial_pdgs.len() == 1 {
+            initial_pdgs.into_iter().next().unwrap()
+        } else {
+            warn!("Multiple initial states found in graphs, setting initial state to empty");
+            vec![]
+        };
+
+        let mut final_states = HashSet::default();
+        match generation_type {
+            GenerationType::Amplitude => {
+                for g in graphs {
+                    let mut final_pdgs_of_graph = vec![];
+                    for (pair, _, edge) in g.iter_edges() {
+                        if matches!(
+                            pair,
+                            HedgePair::Unpaired {
+                                hedge: _,
+                                flow: Flow::Source
+                            }
+                        ) {
+                            if let PossibleParticle::Particle(particle) = &edge.data.particle {
+                                final_pdgs_of_graph.push(model.particle_by_id(*particle)?.pdg_code);
+                            } else {
+                                debug!("Edge without particle data in final state");
+                            }
+                        }
+                    }
+                    final_pdgs_of_graph.sort();
+                    final_states.insert(final_pdgs_of_graph);
+                }
+            }
+            GenerationType::CrossSection => {
+                for g in graphs {
+                    for finalized in &g.finalized_cuts {
+                        let mut final_pdgs_of_cut = vec![];
+                        for (orientaion, edge) in finalized.cut.iter_edges(&g.underlying) {
+                            if let PossibleParticle::Particle(particle) = &edge.data.particle {
+                                if orientaion == Orientation::Reversed {
+                                    final_pdgs_of_cut.push(
+                                        model
+                                            .particle_by_id(
+                                                model.particle_by_id(*particle)?.antiparticle,
+                                            )?
+                                            .pdg_code,
+                                    );
+                                } else {
+                                    final_pdgs_of_cut
+                                        .push(model.particle_by_id(*particle)?.pdg_code);
+                                }
+                            } else {
+                                debug!("Edge without particle data in final state");
+                            }
+                        }
+                        final_pdgs_of_cut.sort();
+                        final_states.insert(final_pdgs_of_cut);
+                    }
+                }
+            }
+        }
+
+        let final_pdgs_lists = final_states.into_iter().sorted().collect_vec();
+        let mut min_loop_count = usize::MAX;
+        let mut max_loop_count = 0usize;
+
+        for g in graphs {
+            // don't know how the looop count is really intended, for now it doesn't matter I think
+            let lc = g.underlying.cyclotomatic_number(&g.full_filter());
+            if lc < min_loop_count {
+                min_loop_count = lc;
+            }
+            if lc > max_loop_count {
+                max_loop_count = lc;
+            }
+        }
+
+        let first_final = final_pdgs_lists.first().cloned().unwrap_or_default();
+        let process = match generation_type {
+            GenerationType::Amplitude => GenerationProcess::amplitude(initial_pdgs, first_final),
+            GenerationType::CrossSection => {
+                GenerationProcess::cross_section(initial_pdgs, first_final)
+                    .with_final_state_alternatives(final_pdgs_lists)
+                    .map_err(|error| eyre!(error))?
+            }
+        }
+        .with_loop_count(min_loop_count, max_loop_count)
+        .map_err(|error| eyre!(error))?;
+
+        Ok(Self {
+            process,
+            ..Self::default()
+        })
+    }
+}
+
+#[derive(Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
+pub struct Process {
+    pub definition: ProcessDefinition,
+    pub settings_history: Option<GlobalSettings>,
+    pub collection: ProcessCollection,
+}
+
+impl Process {
+    pub fn warm_up(&mut self, model: &Model) -> Result<()> {
+        self.collection.warm_up(model)
+    }
+    pub fn preprocess(
+        &mut self,
+        model: &Model,
+        settings: &GlobalSettings,
+        locked_runtime_settings: &LockedRuntimeSettings,
+        thread_pool: &ThreadPool,
+    ) -> Result<Vec<GeneratedGraphReport>> {
+        let reports = self.collection.preprocess(
+            model,
+            &self.definition,
+            &settings.generation,
+            locked_runtime_settings,
+            thread_pool,
+        )?;
+        self.settings_history = Some(settings.clone());
+        Ok(self.attach_process_id(reports))
+    }
+
+    fn attach_process_id(
+        &self,
+        reports: Vec<NamedGraphGenerationReport>,
+    ) -> Vec<GeneratedGraphReport> {
+        reports
+            .into_iter()
+            .map(|report| GeneratedGraphReport {
+                process_id: self.definition.process_id,
+                integrand_name: report.integrand_name,
+                graph_name: report.graph_name,
+                stats: report.stats,
+            })
+            .collect()
+    }
+}
+
+impl Process {
+    pub(crate) fn load_amplitude(
+        path: impl AsRef<Path>,
+        context: GammaLoopContextContainer,
+    ) -> Result<Self> {
+        let binary = fs::read(path.as_ref().join("def.bin")).context(format!(
+            "Error reading def.bin in {}",
+            path.as_ref().display()
+        ))?;
+
+        let (definition, _) =
+            bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)
+                .context("Error decoding process definition")?;
+
+        let mut collection = ProcessCollection::new_amplitude();
+        for path in saved_child_dirs(path.as_ref(), "amp.bin", "amplitude")? {
+            debug!("loading amplitude at {}", path.display());
+            let amp = Amplitude::load(path, context).context("Error loading amplitude")?;
+
+            collection.add_amplitude(amp);
+        }
+
+        Ok(Self {
+            definition,
+            collection,
+            settings_history: None,
+        })
+    }
+
+    pub(crate) fn load_cross_section(
+        path: impl AsRef<Path>,
+        context: GammaLoopContextContainer,
+    ) -> Result<Self> {
+        let binary = fs::read(path.as_ref().join("def.bin"))?;
+        let (definition, _) =
+            bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)?;
+
+        let mut collection = ProcessCollection::new_cross_section();
+        for path in saved_child_dirs(path.as_ref(), "cs.bin", "cross section")? {
+            debug!("loading cross section at {}", path.display());
+            let cs = CrossSection::load(path, context).context("Error loading cross section")?;
+
+            collection.add_cross_section(cs);
+        }
+
+        Ok(Self {
+            definition,
+            collection,
+            settings_history: None,
+        })
+    }
+
+    pub fn save(&mut self, path: impl AsRef<Path>, override_existing: bool) -> Result<()> {
+        match &mut self.collection {
+            ProcessCollection::Amplitudes(a) => {
+                let p = path.as_ref().join("amplitudes");
+                fs::create_dir_all(&p)?;
+                let p = p.join(PathBuf::from(self.definition.folder_name.clone()));
+
+                let r = fs::create_dir_all(&p).with_context(|| {
+                    format!(
+                        "Trying to create directory to export amplitude dot {}",
+                        p.display()
+                    )
+                });
+                if override_existing {
+                    r?;
+                }
+
+                let binary = bincode::encode_to_vec(&self.definition, bincode::config::standard())?;
+                fs::write(p.join("def.bin"), binary)?;
+
+                for amp in a.values_mut() {
+                    amp.save(&p, override_existing)?;
+                }
+            }
+            ProcessCollection::CrossSections(cs) => {
+                let p = path.as_ref().join("cross_sections");
+                fs::create_dir_all(&p)?;
+                let p = p.join(PathBuf::from(self.definition.folder_name.clone()));
+
+                let r = fs::create_dir_all(&p).with_context(|| {
+                    format!(
+                        "Trying to create directory to save cross section dot {}",
+                        p.display()
+                    )
+                });
+
+                if override_existing {
+                    r?;
+                }
+
+                let binary = bincode::encode_to_vec(&self.definition, bincode::config::standard())?;
+                fs::write(p.join("def.bin"), binary)?;
+
+                for cs in cs.values_mut() {
+                    cs.save(&p, override_existing)?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn compile(
+        &mut self,
+        path: impl AsRef<Path>,
+        override_existing: bool,
+        integrand_name: Option<String>,
+        thread_pool: &ThreadPool,
+    ) -> Result<Vec<GeneratedGraphReport>> {
+        match &mut self.collection {
+            ProcessCollection::Amplitudes(a) => {
+                let p = path.as_ref().join("amplitudes");
+                fs::create_dir_all(&p)?;
+                let p = p.join(PathBuf::from(self.definition.folder_name.clone()));
+
+                let r = fs::create_dir_all(&p).with_context(|| {
+                    format!(
+                        "Trying to create directory to export amplitude dot {}",
+                        p.display()
+                    )
+                });
+                if override_existing {
+                    r?;
+                }
+
+                let mut reports = Vec::new();
+                for amp in a.values_mut() {
+                    if let Some(int_name) = integrand_name.clone()
+                        && amp.name != int_name
+                    {
+                        continue;
+                    }
+
+                    reports.extend(amp.compile(&p, override_existing, thread_pool)?);
+                }
+                Ok(self.attach_process_id(reports))
+            }
+            ProcessCollection::CrossSections(cs) => {
+                let p = path.as_ref().join("cross_sections");
+                fs::create_dir_all(&p)?;
+                let p = p.join(PathBuf::from(self.definition.folder_name.clone()));
+
+                let r = fs::create_dir_all(&p).with_context(|| {
+                    format!(
+                        "Trying to create directory to export cross section dot {}",
+                        p.display()
+                    )
+                });
+                if override_existing {
+                    r?;
+                }
+
+                let mut reports = Vec::new();
+                for cs in cs.values_mut() {
+                    if let Some(int_name) = integrand_name.clone()
+                        && cs.name != int_name
+                    {
+                        continue;
+                    }
+
+                    reports.extend(cs.compile(&p, override_existing, thread_pool)?);
+                }
+                Ok(self.attach_process_id(reports))
+            }
+        }
+    }
+
+    pub fn activate_loaded_integrand_backends(
+        &mut self,
+        allow_symjit_fallback: bool,
+    ) -> Result<()> {
+        match &mut self.collection {
+            ProcessCollection::Amplitudes(amplitudes) => {
+                for (integrand_name, amplitude) in amplitudes.iter_mut() {
+                    if let Some(integrand) = amplitude.integrand.as_mut()
+                        && let Some(reason) =
+                            integrand.activate_runtime_backends_after_load(allow_symjit_fallback)?
+                    {
+                        warn!(
+                            "Falling back to symjit for integrand '{}' in process #{} ({}) after external compiled evaluator loading failed: {}",
+                            integrand_name,
+                            self.definition.process_id,
+                            self.definition.folder_name,
+                            reason
+                        );
+                    }
+                }
+            }
+            ProcessCollection::CrossSections(cross_sections) => {
+                for (integrand_name, cross_section) in cross_sections.iter_mut() {
+                    if let Some(integrand) = cross_section.integrand.as_mut()
+                        && let Some(reason) =
+                            integrand.activate_runtime_backends_after_load(allow_symjit_fallback)?
+                    {
+                        warn!(
+                            "Falling back to symjit for integrand '{}' in process #{} ({}) after external compiled evaluator loading failed: {}",
+                            integrand_name,
+                            self.definition.process_id,
+                            self.definition.folder_name,
+                            reason
+                        );
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn get_integrand(
+        &self,
+        integrand_name: impl AsRef<str>,
+    ) -> Result<ResolvedIntegrandRef<'_>> {
+        self.collection.get_integrand(integrand_name)
+    }
+
+    pub fn get_integrand_names(&self) -> Vec<&str> {
+        self.collection.get_integrand_names()
+    }
+
+    pub fn get_integrand_mut(
+        &mut self,
+        integrand_name: impl AsRef<str>,
+    ) -> Result<&mut ProcessIntegrand> {
+        self.collection.get_integrand_mut(integrand_name)
+    }
+
+    pub(crate) fn export_standalone(
+        &self,
+        path: impl AsRef<Path>,
+        settings: &StandaloneExportSettings,
+    ) -> Result<()> {
+        match &self.collection {
+            ProcessCollection::Amplitudes(a) => {
+                let p = path.as_ref().join("amplitudes");
+                let path = p.join(PathBuf::from(self.definition.folder_name.clone()));
+                fs::create_dir_all(&path)?;
+                for amp in a.values() {
+                    // Create a folder for each amplitude
+                    let amp_path = path.join(&amp.name);
+                    fs::create_dir_all(&amp_path).with_context(|| {
+                        format!(
+                            "Trying to create directory for amplitude {}",
+                            amp_path.display()
+                        )
+                    })?;
+
+                    amp.export_standalone(&amp_path, settings)?;
+                }
+            }
+            ProcessCollection::CrossSections(cs) => {
+                let p = path.as_ref().join("cross_sections");
+                let path = p.join(PathBuf::from(self.definition.folder_name.clone()));
+                fs::create_dir_all(&path)?;
+                for cs in cs.values() {
+                    // Create a folder for each cross section
+                    let cs_path = path.join(&cs.name);
+                    fs::create_dir_all(&cs_path).with_context(|| {
+                        format!(
+                            "Trying to create directory for cross section {}",
+                            cs_path.display()
+                        )
+                    })?;
+
+                    cs.export_standalone(&cs_path, settings)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub(crate) fn export_dot(
+        &self,
+        path: impl AsRef<Path>,
+        settings: &DotExportSettings,
+    ) -> Result<()> {
+        match &self.collection {
+            ProcessCollection::Amplitudes(a) => {
+                let p = path.as_ref().join("amplitudes");
+                let path = p.join(PathBuf::from(self.definition.folder_name.clone()));
+                fs::create_dir_all(&path)?;
+                for (amp_name, amp) in a {
+                    // Create a folder for each amplitude
+                    let amp_path = path.join(&amp.name);
+                    fs::create_dir_all(&amp_path).with_context(|| {
+                        format!(
+                            "Trying to create directory for amplitude {}",
+                            amp_path.display()
+                        )
+                    })?;
+
+                    if settings.combine_diagrams {
+                        // Save all graphs combined in one file
+                        let output_path = amp_path.join(format!("{}_graphs.dot", amp_name.clone()));
+                        let mut dot = create_overwriting_file(&output_path, "amplitude graph")?;
+                        for graph in amp.graphs.iter() {
+                            graph.graph.dot_serialize_io(&mut dot, settings)?;
+                        }
+                    } else {
+                        // Save each graph in its own file
+                        for graph in amp.graphs.iter() {
+                            let output_path = amp_path.join(format!("{}.dot", graph.graph.name));
+                            let mut dot = create_overwriting_file(&output_path, "amplitude graph")?;
+                            graph.graph.dot_serialize_io(&mut dot, settings)?;
+                        }
+                    }
+                }
+            }
+            ProcessCollection::CrossSections(cs) => {
+                let p = path.as_ref().join("cross_sections");
+                let path = p.join(PathBuf::from(self.definition.folder_name.clone()));
+                fs::create_dir_all(&path)?;
+                for (xs_name, cs) in cs {
+                    // Create a folder for each cross section
+                    let cs_path = path.join(&cs.name);
+                    fs::create_dir_all(&cs_path).with_context(|| {
+                        format!(
+                            "Trying to create directory for cross section {}",
+                            cs_path.display()
+                        )
+                    })?;
+
+                    if settings.combine_diagrams {
+                        // Save all graphs combined in one file
+                        let output_path = cs_path.join(format!("{}_graphs.dot", xs_name.clone()));
+                        let mut dot = create_overwriting_file(&output_path, "cross section graph")?;
+                        for graph in cs.supergraphs.iter() {
+                            graph.graph.dot_serialize_io(&mut dot, settings)?;
+                        }
+                    } else {
+                        // Save each supergraph in its own file
+                        for graph in cs.supergraphs.iter() {
+                            let output_path = cs_path.join(format!("{}.dot", graph.graph.name));
+                            let mut dot =
+                                create_overwriting_file(&output_path, "cross section graph")?;
+                            graph.graph.dot_serialize_io(&mut dot, settings)?;
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub(crate) fn export_uv_forests(
+        &self,
+        model: &Model,
+        path: impl AsRef<Path>,
+        integrand_name: &str,
+        graph_ids: &[usize],
+        settings: &UVForestExportSettings,
+    ) -> Result<()> {
+        let generation_settings = &self
+            .settings_history
+            .as_ref()
+            .ok_or_else(|| {
+                eyre!(
+                    "Cannot export UV forests for process {} without generation settings history",
+                    self.definition.folder_name
+                )
+            })?
+            .generation;
+        let resolved = self.get_integrand(integrand_name)?;
+        let integrand = resolved.require_generated()?;
+        let integrand_path = match &self.collection {
+            ProcessCollection::Amplitudes(_) => path
+                .as_ref()
+                .join("amplitudes")
+                .join(PathBuf::from(self.definition.folder_name.clone()))
+                .join(&resolved.canonical_name),
+            ProcessCollection::CrossSections(_) => path
+                .as_ref()
+                .join("cross_sections")
+                .join(PathBuf::from(self.definition.folder_name.clone()))
+                .join(&resolved.canonical_name),
+        };
+        fs::create_dir_all(&integrand_path).with_context(|| {
+            format!(
+                "Trying to create directory for UV forest export {}",
+                integrand_path.display()
+            )
+        })?;
+
+        for &graph_id in graph_ids {
+            let export =
+                integrand.export_uv_forest_graph(model, graph_id, generation_settings, settings)?;
+            let graph_name = sanitize_file_component(&export.graph_name);
+            let forest_path = integrand_path.join(format!("{graph_name}.forest.dot"));
+            let mut forest_file = create_overwriting_file(&forest_path, "UV forest")?;
+            forest_file.write_all(export.forest_dot.as_bytes())?;
+
+            for term in export.node_terms {
+                let node_dir = integrand_path
+                    .join(format!("{graph_name}_nodes"))
+                    .join(format!("forest_{:03}", term.forest_index));
+                fs::create_dir_all(&node_dir).with_context(|| {
+                    format!(
+                        "Trying to create directory for UV forest node graph {}",
+                        node_dir.display()
+                    )
+                })?;
+                let mut dot = create_overwriting_file(
+                    &node_dir.join(term.file_name()),
+                    "UV forest node graph",
+                )?;
+                dot.write_all(term.dot.as_bytes())?;
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn from_graph_list(
+        process_name: String,
+        integrand_name: String,
+        graphs: Vec<Graph>,
+        generation_type: GenerationType,
+        definition: Option<ProcessDefinition>,
+        sub_classes: Option<Vec<Vec<String>>>,
+        model: &Model,
+    ) -> Result<Self> {
+        let mut proc_definition = definition.unwrap_or_default();
+        proc_definition.folder_name = process_name;
+        match generation_type {
+            GenerationType::Amplitude => {
+                let mut collection: ProcessCollection = ProcessCollection::new_amplitude();
+
+                if let Some(_sub_classes) = sub_classes {
+                    todo!("implement seperation of processes into user defined sub classes");
+                } else {
+                    collection.add_amplitude(Amplitude::from_graph_list(integrand_name, graphs)?);
+
+                    // TODO: construct a better default definition from graph (i.e. at least the external IDs)
+                    Ok(Self {
+                        settings_history: None,
+                        definition: proc_definition,
+                        collection,
+                    })
+                }
+            }
+            GenerationType::CrossSection => {
+                let mut collection: ProcessCollection = ProcessCollection::new_cross_section();
+
+                if let Some(_sub_classes) = sub_classes {
+                    todo!("implement seperation of processes into user defined sub classes");
+                } else {
+                    collection.add_cross_section(CrossSection::from_graph_list(
+                        integrand_name,
+                        graphs,
+                        model,
+                    )?);
+                    // TODO: construct a better default definition from graph (i.e. at least the external IDs)
+                    Ok(Self {
+                        settings_history: None,
+                        definition: proc_definition,
+                        collection,
+                    })
+                }
+            }
+        }
+    }
+
+    pub fn generate_integrands(
+        &mut self,
+        model: &Model,
+        global_settings: &GlobalSettings,
+        runtime_default: LockedRuntimeSettings,
+        thread_pool: &ThreadPool,
+    ) -> Result<Vec<GeneratedGraphReport>> {
+        let reports = self.collection.generate_integrands(
+            model,
+            &self.definition.folder_name,
+            global_settings,
+            runtime_default,
+            thread_pool,
+        )?;
+        Ok(self.attach_process_id(reports))
+    }
+}
+
+#[derive(Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
+pub enum ProcessCollection {
+    Amplitudes(BTreeMap<String, Amplitude>),
+    CrossSections(BTreeMap<String, CrossSection>),
+}
+
+impl ProcessCollection {
+    fn new_amplitude() -> Self {
+        Self::Amplitudes(BTreeMap::new())
+    }
+
+    pub fn get_integrand_names(&self) -> Vec<&str> {
+        match self {
+            Self::Amplitudes(amplitudes) => amplitudes.keys().map(|a| a.as_str()).collect(),
+            Self::CrossSections(cross_sections) => {
+                cross_sections.keys().map(|a| a.as_str()).collect()
+            }
+        }
+    }
+
+    fn get_integrand(&self, name: impl AsRef<str>) -> Result<ResolvedIntegrandRef<'_>> {
+        let canonical_name = self.find_integrand(Some(name.as_ref().to_string()))?;
+        let integrand = match self {
+            Self::Amplitudes(amplitudes) => amplitudes
+                .get(&canonical_name)
+                .expect("resolved amplitude name must exist")
+                .integrand
+                .as_ref(),
+            Self::CrossSections(cross_sections) => cross_sections
+                .get(&canonical_name)
+                .expect("resolved cross section name must exist")
+                .integrand
+                .as_ref(),
+        };
+
+        Ok(ResolvedIntegrandRef {
+            canonical_name,
+            integrand,
+        })
+    }
+
+    pub fn find_integrand(&self, name: Option<String>) -> Result<String> {
+        let all_integrand_names = self.get_integrand_names();
+
+        let integrand_name = if let Some(name) = name {
+            if !all_integrand_names.contains(&name.as_str()) {
+                return Err(color_eyre::eyre::eyre!(
+                    "No integrand named '{}' in process, Available integrands: {:?}",
+                    name,
+                    all_integrand_names
+                ));
+            }
+            name
+        } else {
+            if all_integrand_names.len() != 1 {
+                return Err(color_eyre::eyre::eyre!(
+                    "Multiple integrands in process,Please specify one of: {:?}",
+                    all_integrand_names
+                ));
+            }
+            all_integrand_names[0].to_string()
+        };
+
+        Ok(integrand_name)
+    }
+
+    fn get_integrand_mut(&mut self, name: impl AsRef<str>) -> Result<&mut ProcessIntegrand> {
+        let res = match self {
+            Self::Amplitudes(amplitudes) => {
+                if amplitudes.contains_key(name.as_ref()) {
+                    Ok(amplitudes
+                        .get_mut(name.as_ref())
+                        .unwrap()
+                        .integrand
+                        .as_mut())
+                } else {
+                    let names = amplitudes.keys().map(|a| a.as_str()).collect::<Vec<_>>();
+
+                    Err(eyre!("Integrand {} does not exist", name.as_ref()))
+                        .suggestion(format!("Available amplitude names: {}", names.join(", ")))
+                }
+            }
+            Self::CrossSections(cross_sections) => {
+                if cross_sections.contains_key(name.as_ref()) {
+                    Ok(cross_sections
+                        .get_mut(name.as_ref())
+                        .unwrap()
+                        .integrand
+                        .as_mut())
+                } else {
+                    let names = cross_sections
+                        .keys()
+                        .map(|a| a.as_str())
+                        .collect::<Vec<_>>();
+
+                    Err(eyre!("Integrand {} does not exist", name.as_ref())).suggestion(format!(
+                        "Available cross section names: {}",
+                        names.join(", ")
+                    ))
+                }
+            }
+        }?;
+
+        match res {
+            Some(integrand) => Ok(integrand),
+            None => Err(eyre!(
+                "Integrand {} has not yet been generated, but exists",
+                name.as_ref()
+            )),
+        }
+    }
+
+    fn new_cross_section() -> Self {
+        Self::CrossSections(BTreeMap::new())
+    }
+    pub fn remove_integrand(&mut self, integrand_name: &str) -> Result<()> {
+        match self {
+            Self::Amplitudes(amplitudes) => {
+                amplitudes
+                    .remove(integrand_name)
+                    .ok_or(eyre!("No amplitude named {}", integrand_name))?;
+            }
+            Self::CrossSections(cross_sections) => {
+                cross_sections
+                    .remove(integrand_name)
+                    .ok_or(eyre!("No cross section named {}", integrand_name))?;
+            }
+        }
+        Ok(())
+    }
+
+    pub fn add_amplitude(&mut self, amplitude: Amplitude) {
+        match self {
+            Self::Amplitudes(amplitudes) => amplitudes.insert(amplitude.name.clone(), amplitude),
+            _ => panic!("Cannot add amplitude to a cross section collection"),
+        };
+    }
+
+    pub fn add_cross_section(&mut self, cross_section: CrossSection) {
+        match self {
+            Self::CrossSections(cross_sections) => {
+                cross_sections.insert(cross_section.name.clone(), cross_section);
+            }
+            _ => panic!("Cannot add cross section to an amplitude collection"),
+        }
+    }
+
+    fn preprocess(
+        &mut self,
+        model: &Model,
+        process_definition: &ProcessDefinition,
+        settings: &GenerationSettings,
+        locked_runtime_settings: &LockedRuntimeSettings,
+        thread_pool: &ThreadPool,
+    ) -> Result<Vec<NamedGraphGenerationReport>> {
+        match self {
+            Self::Amplitudes(amplitudes) => {
+                let mut reports = Vec::new();
+                for amplitude in amplitudes.values_mut() {
+                    generation_progress::begin_phase(
+                        GenerationProgressPhase::GraphPreprocessing,
+                        GenerationProcessKind::Amplitude,
+                        &process_definition.folder_name,
+                        &amplitude.name,
+                        amplitude.graphs.len(),
+                        None,
+                    );
+                    reports.extend(amplitude.preprocess(
+                        model,
+                        settings,
+                        locked_runtime_settings,
+                        thread_pool,
+                    )?);
+                }
+                Ok(reports)
+            }
+            Self::CrossSections(cross_sections) => {
+                let mut reports = Vec::new();
+                for cross_section in cross_sections.values_mut() {
+                    reports.extend(cross_section.preprocess(
+                        model,
+                        process_definition,
+                        settings,
+                        *locked_runtime_settings,
+                        thread_pool,
+                    )?);
+                }
+                Ok(reports)
+            }
+        }
+    }
+
+    pub fn warm_up(&mut self, model: &Model) -> Result<()> {
+        match self {
+            Self::Amplitudes(amplitudes) => {
+                for amplitude in amplitudes.values_mut() {
+                    amplitude.warm_up(model)?;
+                }
+            }
+            Self::CrossSections(cross_sections) => {
+                for cross_section in cross_sections.values_mut() {
+                    cross_section.warm_up(model)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn generate_integrands(
+        &mut self,
+        model: &Model,
+        process_name: &str,
+        global_settings: &GlobalSettings,
+        runtime_default: LockedRuntimeSettings,
+        thread_pool: &ThreadPool,
+    ) -> Result<Vec<NamedGraphGenerationReport>> {
+        match self {
+            Self::Amplitudes(amplitudes) => {
+                let mut reports = Vec::new();
+                for amplitude in amplitudes.values_mut() {
+                    reports.extend(amplitude.build_integrand(
+                        model,
+                        process_name,
+                        global_settings,
+                        runtime_default,
+                        thread_pool,
+                    )?);
+                }
+                Ok(reports)
+            }
+            Self::CrossSections(cross_sections) => {
+                let mut reports = Vec::new();
+                for cross_section in cross_sections.values_mut() {
+                    reports.extend(cross_section.build_integrand(
+                        model,
+                        process_name,
+                        global_settings,
+                        runtime_default,
+                        thread_pool,
+                    )?);
+                }
+                Ok(reports)
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        fs,
+        path::PathBuf,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    use crate::{GammaLoopContextContainer, utils::load_generic_model};
+
+    fn fresh_temp_dir(name: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "gammalooprs-{name}-{}-{unique}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&path).unwrap();
+        path
+    }
+
+    #[test]
+    fn saved_child_dirs_skip_cross_section_compile_artifact_folders() {
+        let temp = fresh_temp_dir("saved-child-dirs");
+        let saved_dir = temp.join("NLO");
+        let compiled_dir = temp.join("cs_NLO");
+
+        fs::create_dir_all(&saved_dir).unwrap();
+        fs::write(saved_dir.join("cs.bin"), []).unwrap();
+        fs::create_dir_all(compiled_dir.join("integrand").join("GL08")).unwrap();
+
+        let dirs = super::saved_child_dirs(&temp, "cs.bin", "cross section").unwrap();
+
+        assert_eq!(dirs, vec![saved_dir]);
+        fs::remove_dir_all(temp).unwrap();
+    }
+
+    mod failing {
+        use super::*;
+
+        #[test]
+        fn test_proc_definition_encode() {
+            let def = crate::processes::ProcessDefinition::default();
+            let encoded = bincode::encode_to_vec(&def, bincode::config::standard()).unwrap();
+            let model_sm = load_generic_model("sm");
+
+            let temp = fresh_temp_dir("process-definition-state-map");
+            let mut state_file = std::fs::File::create(temp.join("state_map.bin")).unwrap();
+            symbolica::state::State::export(&mut state_file).unwrap();
+            let state_map = symbolica::state::State::import(&mut state_file, None).unwrap();
+
+            let context = GammaLoopContextContainer {
+                model: &model_sm,
+                state_map: &state_map,
+            };
+
+            let (decoded, _): (crate::processes::ProcessDefinition, _) =
+                bincode::decode_from_slice_with_context(
+                    &encoded,
+                    bincode::config::standard(),
+                    context,
+                )
+                .unwrap();
+            assert_eq!(def, decoded);
+            drop(state_file);
+            fs::remove_dir_all(temp).unwrap();
+        }
+    }
+}

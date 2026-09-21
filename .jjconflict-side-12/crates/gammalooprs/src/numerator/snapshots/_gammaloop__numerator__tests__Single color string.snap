@@ -1,0 +1,5 @@
+---
+source: src/numerator/tests.rs
+expression: "Numerator::default().from_global(Atom::parse(\"f(coad(8,1),coad(8,11),coad(8,21))*f(coad(8,21),coad(8,2),coad(8,12))*f(coad(8,3),coad(8,12),coad(8,22))*f(coad(8,22),coad(8,4),coad(8,13))*f(coad(8,5),coad(8,13),coad(8,23))*f(coad(8,23),coad(8,6),coad(8,14))*f(coad(8,7),coad(8,14),coad(8,24))*f(coad(8,24),coad(8,8),coad(8,11))*f(coad(8,1),coad(8,2),coad(8,3))*f(coad(8,4),coad(8,5),coad(8,6))*id(coad(8,7),coad(8,8))\").unwrap(),\n&GlobalPrefactor::default()).color_simplify().export()"
+---
+(-1+Nc)*(1+Nc)*-8*Nc^5*TR^5

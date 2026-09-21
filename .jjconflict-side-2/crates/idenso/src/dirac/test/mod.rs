@@ -393,6 +393,29 @@ fn gamma_simplification_reaches_fixed_point_after_metric_contraction() {
     );
 }
 
+#[test]
+fn gamma_metric_contraction_preserves_unevaluated_trace() {
+    let r = test_initialize();
+    let expr = g!(slot!(r.bis4, a), slot!(r.bis4, b))
+        * gamma!(b, c, slot!(r.mink_d, mu))
+        * gamma!(c, a, slot!(r.mink_d, nu));
+    let expected = trace!(
+        r.bis4.to_symbolic([]),
+        gamma!(slot!(r.mink_d, mu)),
+        gamma!(slot!(r.mink_d, nu)),
+    );
+
+    for settings in [
+        GammaSimplifySettings::repeated_pairs(),
+        GammaSimplifySettings::canonical(),
+    ] {
+        let settings = settings.without_trace_evaluation();
+        let simplified = expr.simplify_gamma_with(settings);
+        assert_eq!(simplified, expected);
+        assert_eq!(simplified.simplify_gamma_with(settings), simplified);
+    }
+}
+
 mod form_reference;
 
 mod feyncalc_reference;

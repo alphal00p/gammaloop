@@ -1376,10 +1376,11 @@ impl Generator {
             }
             topology.graph =
                 ResolvedProcess::repair_cp_interaction_rules(topology.graph, &self.model)?;
-            let fermion_loop_count = self.closed_fermion_loop_count(&topology.graph)?;
+            let fermion_loop_count = self.closed_fermion_loop_count(&topology.graph, false)?;
             if !self.passes_interaction_filters(&topology.graph, fermion_loop_count, options)? {
                 continue;
             }
+            let grassmann_loop_count = self.closed_fermion_loop_count(&topology.graph, true)?;
             // Canonicalization fixes the stable vertex/edge-ID frame used by
             // cuts and routing.  The physical representative must still have
             // each fermion chain oriented consistently before its numerator
@@ -1403,7 +1404,7 @@ impl Generator {
             diagram_inputs.push((
                 topology,
                 representative,
-                fermion_loop_count,
+                grassmann_loop_count,
                 normalized.signs,
                 normalized.reversed_edges,
             ));
@@ -1419,7 +1420,7 @@ impl Generator {
         options.report_progress("numerators", 0, Some(total));
         let width = diagram_inputs.len().saturating_sub(1).to_string().len();
         let mut diagram_pairs = Vec::with_capacity(diagram_inputs.len());
-        for (index, (comparison, representative, fermion_loop_count, signs, reversed_edges)) in
+        for (index, (comparison, representative, grassmann_loop_count, signs, reversed_edges)) in
             diagram_inputs.into_iter().enumerate()
         {
             if options.cancellation_requested() {
@@ -1447,7 +1448,7 @@ impl Generator {
                 name.clone(),
                 process.generation_type(),
                 comparison,
-                fermion_loop_count,
+                grassmann_loop_count,
                 signs,
                 options,
             )?;
@@ -1458,7 +1459,7 @@ impl Generator {
                     name,
                     process.generation_type(),
                     representative,
-                    fermion_loop_count,
+                    grassmann_loop_count,
                     signs,
                     options,
                 )?
@@ -2517,18 +2518,21 @@ impl Generator {
         Ok(result)
     }
 
-    // Count closed, non-branching fermion components. Branching components are
-    // rejected explicitly below.
+    // Count closed, non-branching fermion components, optionally including ghosts
+    // for the Grassmann sign. The fermion-loop filter excludes ghosts. Branching
+    // components are rejected explicitly below.
     fn closed_fermion_loop_count(
         &self,
         graph: &Graph<ColoredNode, EdgeColor>,
+        include_ghosts: bool,
     ) -> Result<usize, GenerationError> {
         let mut adjacency = vec![Vec::new(); graph.nodes().len()];
         let mut degrees = vec![0; graph.nodes().len()];
-        // Build adjacency using only fermion edges. A self-loop contributes
-        // degree two.
+        // Build adjacency using only the selected Grassmann edges. A self-loop
+        // contributes degree two.
         for edge in graph.edges() {
-            if !self.model.particle_by_id(edge.data.particle)?.is_fermion() {
+            let particle = self.model.particle_by_id(edge.data.particle)?;
+            if !(particle.is_fermion() || include_ghosts && particle.is_ghost()) {
                 continue;
             }
             let (left, right) = edge.vertices;
@@ -2580,7 +2584,7 @@ impl Generator {
         name: String,
         generation_type: GenerationType,
         topology: ColoredTopology,
-        fermion_loop_count: usize,
+        grassmann_loop_count: usize,
         fermion_signs: FermionSigns,
         options: &GenerationOptions,
     ) -> Result<FeynmanDiagram, GenerationError> {
@@ -2594,7 +2598,7 @@ impl Generator {
                 topology.multiplicity, topology.symmetry
             )
         };
-        if fermion_loop_count % 2 == 1 {
+        if grassmann_loop_count % 2 == 1 {
             overall_factor = format!("InternalFermionLoopSign(-1)*{overall_factor}");
         }
         if fermion_signs.include_external_ordering {
@@ -6167,7 +6171,7 @@ mod tests {
             )
             .unwrap();
 
-        let loop_count = generator.closed_fermion_loop_count(&graph).unwrap();
+        let loop_count = generator.closed_fermion_loop_count(&graph, false).unwrap();
         assert_eq!(loop_count, 1);
         let diagram = generator
             .to_diagram(
@@ -6231,6 +6235,75 @@ mod tests {
     }
 
     #[test]
+    fn ghost_loop_count_excludes_open_chains_and_counts_each_closed_component() {
+        let generator = Generator::new(standard_model());
+        let mut graph = Graph::new();
+        let incoming = graph.add_node(ColoredNode::External(ExternalNode {
+            index: 0,
+            state: ExternalState::Incoming,
+            particle: particle(&generator.model, 9000005),
+        }));
+        let outgoing = graph.add_node(ColoredNode::External(ExternalNode {
+            index: 1,
+            state: ExternalState::Outgoing,
+            particle: particle(&generator.model, 9000005),
+        }));
+        graph
+            .add_edge(incoming, outgoing, true, edge(&generator.model, 9000005))
+            .unwrap();
+        assert_eq!(
+            generator.closed_fermion_loop_count(&graph, true).unwrap(),
+            0
+        );
+
+        for loop_count in 1..=2 {
+            let interaction =
+                graph.add_node(ColoredNode::Interaction(vertex(&generator.model, "V_35")));
+            graph
+                .add_edge(
+                    interaction,
+                    interaction,
+                    true,
+                    edge(&generator.model, 9000005),
+                )
+                .unwrap();
+            assert_eq!(
+                generator.closed_fermion_loop_count(&graph, true).unwrap(),
+                loop_count,
+            );
+            assert_eq!(
+                generator.closed_fermion_loop_count(&graph, false).unwrap(),
+                0
+            );
+        }
+    }
+
+    #[test]
+    fn fermion_loop_filter_excludes_ghost_loops() {
+        let generator = Generator::new(standard_model());
+        for (fermion_loops, expected_diagrams) in [(0, 1), (1, 0)] {
+            let generated = generator
+                .generate(
+                    &Process::amplitude(["g"], ["g"])
+                        .with_loop_count(1, 1)
+                        .unwrap(),
+                    &GenerationOptions::default()
+                        .threads(1)
+                        .max_vertices(2)
+                        .with_graph_filter(GenerationFilter::VertexAllow(vec![
+                            VertexSelector::Name("V_35".to_owned()),
+                        ]))
+                        .with_graph_filter(GenerationFilter::FermionLoopCountRange((
+                            fermion_loops,
+                            fermion_loops,
+                        ))),
+                )
+                .unwrap();
+            assert_eq!(generated.diagrams.len(), expected_diagrams);
+        }
+    }
+
+    #[test]
     fn positive_external_fermion_signs_keep_symbolic_provenance() {
         let generator = Generator::new(fermion_model());
         let diagram = generator
@@ -6281,7 +6354,7 @@ mod tests {
         }
 
         assert!(matches!(
-            generator.closed_fermion_loop_count(&graph),
+            generator.closed_fermion_loop_count(&graph, false),
             Err(GenerationError::UnsupportedFermionBranching {
                 vertex,
                 degree: 3
