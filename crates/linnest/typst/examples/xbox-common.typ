@@ -14,7 +14,7 @@
   endpoint-box: (
     padding: (x: 0.5, y: 0.4),
     radius: 0.25,
-    fills: (p1: blue.lighten(85%), p2: orange.lighten(85%)),
+    fills: (p1: blue.transparentize(85%), p2: orange.transparentize(85%)),
   ),
   padding: 0.3,
 )
@@ -121,7 +121,9 @@
         for (momentum, fill) in endpoint-fills {
           for side in ("left", "right") {
             let points = endpoints
-              .filter(b => b.side == side and b.group == momentum)
+              .filter(b => b.side == side and (
+                if type(b.group) == array { momentum in b.group } else { b.group == momentum }
+              ))
               .map(b => b.pos)
             if points.len() > 0 {
               let xs = points.map(p => p.x)
