@@ -1646,14 +1646,14 @@ impl LibraryRep {
                         };
                         let palette = RepresentationMetadata::from_symbol(f.get_symbol())
                             .map(|metadata| metadata.index_palette);
-                        if let Some(display) =
-                            palette_index
-                                .and_then(|index| palette.as_ref()?.resolve(index))
-                                .or_else(|| match ind {
-                                    AtomView::Var(variable) =>
-                                        IndexDisplay::from_symbol(variable.get_symbol()),
-                                    _ => None,
-                                })
+                        if let Some(display) = palette_index
+                            .and_then(|index| palette.as_ref()?.resolve(index))
+                            .or_else(|| match ind {
+                                AtomView::Var(variable) => {
+                                    IndexDisplay::from_symbol(variable.get_symbol())
+                                }
+                                _ => None,
+                            })
                         {
                             out.push_str(&display.to_native_string());
                         } else {
