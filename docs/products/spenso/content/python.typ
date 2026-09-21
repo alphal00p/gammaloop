@@ -218,9 +218,20 @@ and #link("reference/python/spynso3/ExecutionMode/")[`ExecutionMode`].
 commas, symbol scripts, and index/factor spacing. Positional calls such as `to_typst(True)`
 and `formatted(True)` still request dimensions. Rich Typst output collects inverse factors
 at the same product level into a single fraction, including rational coefficients.
-Graph endpoint labels use subscripts, with the ordinary first slot implicit (`s_7`);
-additional slots remain distinct (`s_(7.2)`). Dummy labels retain both identifiers.
-These display conventions preserve the underlying expressions and exact notebook payloads.
+Compound graph indices use each representation's alphabet by default: Lorentz indices
+render as $mu, nu, rho, sigma$, fundamental color as $i, j, k, l$, and bispinor or adjoint
+color as $a, b, c, d$. The alphabet repeats with subscripts when needed. Repeated indices
+share a label throughout an expression, and existing numeric or manually named labels are
+reserved to prevent collisions.
+
+Choose `DisplaySettings(index_style="graph")` to retain graph identifiers, for example
+$mu_(upright("h4"))$ for `hedge(4,1)`, $mu_(upright("e4"))$ for `edge(4,1)`, or $mu_(upright("v4"))$ for `vertex(4,1)`.
+The second index is implicit when it equals one; other values remain visible, as in
+$mu_(upright("h4.2"))$ for `hedge(4,2)`.
+Use `index_style="alphabet"` for the compact default or `index_style="raw"` for the original
+symbolic index notation. Graph-index styles preserve the underlying expressions, tensor
+interfaces, and exact notebook payloads. In raw mode, endpoint labels retain their existing
+subscript notation, including distinct higher-spin and dummy slots.
 After `to_expression()`, ordinary Symbolica printing owns namespace elision and nested
 bracket highlighting. Use `format(show_namespaces=True)` to display qualified names.
 
@@ -233,6 +244,13 @@ trace = TensorExpression.gamma5(4).trace()
 source = trace.to_typst(
     settings=DisplaySettings(show_dimensions=True, parentheses=False)
 )
+```
+
+// docs-example: compile
+```python
+compact_indices = numerator.formatted(settings=DisplaySettings(index_style="alphabet"))
+graph_indices = numerator.formatted(settings=DisplaySettings(index_style="graph"))
+raw_indices = numerator.formatted(settings=DisplaySettings(index_style="raw"))
 ```
 
 `to_typst` and `format_tensor` emit source using the ports layout. Schoonschip, call, and

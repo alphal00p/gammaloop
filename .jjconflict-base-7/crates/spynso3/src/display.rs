@@ -1,4 +1,8 @@
-use std::{cmp::Reverse, collections::BinaryHeap, fmt::Write};
+use std::{
+    cmp::Reverse,
+    collections::{BTreeMap, BinaryHeap, HashMap, HashSet},
+    fmt::Write,
+};
 
 use pyo3::{
     exceptions::{PyImportError, PyRuntimeError, PyValueError},
@@ -9,11 +13,16 @@ use pyo3::{
 use spenso::{
     algebra::complex::RealOrComplexRef,
     iterators::IteratableTensor,
+    network::tags::SPENSO_TAG,
+    portable_payload::register_math_display_symbol,
     shadowing::symbolica_utils::SpensoPrintSettings,
     structure::{
         TensorDataLayout,
         partial::PartialStructureExt,
-        representation::{IndexRow, RepName, RepresentationClass},
+        representation::{
+            IndexDisplay, IndexPalette, IndexRow, RepName, RepresentationClass,
+            RepresentationMetadata,
+        },
         slot::IsAbstractSlot,
     },
     tensors::{
@@ -25,7 +34,7 @@ use spenso::{
 use std::path::Path;
 use symbolica::{
     api::python::{PythonExpression, PythonFormattedOutput},
-    atom::Atom,
+    atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol},
     domains::SelfRing,
     printer::{AnsiHtmlFormatter, PrintOptions, PrintState},
 };
@@ -48,6 +57,11 @@ const NOTATION_TYP: &str = include_str!("../typst/notation.typ");
 static NOTEBOOK_STYLE: PyOnceLock<String> = PyOnceLock::new();
 
 /// Presentation settings shared by Typst source, HTML, and SVG rendering.
+///
+/// ``index_style="alphabet"`` assigns representation-specific letters to graph
+/// indices within each displayed expression. ``"graph"`` keeps graph identities
+/// in their subscripts; ``"raw"`` preserves the original index notation. All
+/// styles leave the underlying expression and tensor interface unchanged.
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     frozen,
@@ -59,6 +73,8 @@ static NOTEBOOK_STYLE: PyOnceLock<String> = PyOnceLock::new();
 pub struct DisplaySettings {
     #[pyo3(get)]
     tensor_layout: String,
+    #[pyo3(get)]
+    index_style: String,
     #[pyo3(get)]
     show_dimensions: bool,
     #[pyo3(get)]
@@ -77,6 +93,7 @@ impl Default for DisplaySettings {
     fn default() -> Self {
         Self {
             tensor_layout: "ports".to_owned(),
+            index_style: "alphabet".to_owned(),
             show_dimensions: false,
             parentheses: true,
             commas: None,
@@ -115,7 +132,9 @@ impl DisplaySettings {
         symbol_scripts = true,
         index_gap = "0.08em",
         factor_gap = "0.12em",
+        index_style = "alphabet",
     ))]
+    #[allow(clippy::too_many_arguments)] // Each Python display setting is independently optional.
     fn new(
         tensor_layout: &str,
         show_dimensions: bool,
@@ -124,16 +143,23 @@ impl DisplaySettings {
         symbol_scripts: bool,
         index_gap: &str,
         factor_gap: &str,
+        index_style: &str,
     ) -> PyResult<Self> {
         if !matches!(tensor_layout, "ports" | "schoonschip" | "call") {
             return Err(PyValueError::new_err(
                 "tensor_layout must be 'ports', 'schoonschip', or 'call'",
             ));
         }
+        if !matches!(index_style, "alphabet" | "graph" | "raw") {
+            return Err(PyValueError::new_err(
+                "index_style must be 'alphabet', 'graph', or 'raw'",
+            ));
+        }
         validate_typst_length(index_gap, "index_gap")?;
         validate_typst_length(factor_gap, "factor_gap")?;
         Ok(Self {
             tensor_layout: tensor_layout.to_owned(),
+            index_style: index_style.to_owned(),
             show_dimensions,
             parentheses,
             commas,
@@ -167,8 +193,8 @@ impl DisplaySettings {
 
     fn __repr__(&self) -> String {
         format!(
-            "DisplaySettings(tensor_layout={:?}, show_dimensions={})",
-            self.tensor_layout, self.show_dimensions
+            "DisplaySettings(tensor_layout={:?}, show_dimensions={}, index_style={:?})",
+            self.tensor_layout, self.show_dimensions, self.index_style
         )
     }
 }
@@ -281,19 +307,276 @@ fn display_options_with_settings(
     options
 }
 
+/// Aliases belong to one display, never to the algebraic index namespace.
+/// Rich renderers receive these as notation records over the original Atom tree.
+#[derive(Default)]
+struct IndexAliases {
+    entries: HashMap<(Symbol, Atom), (usize, IndexDisplay)>,
+}
+
+impl IndexAliases {
+    fn for_descriptor(descriptor: &StructuredAtom, style: &str) -> Self {
+        let mut bundle = FunctionBuilder::new(spenso::structure::abstract_index::AIND_SYMBOLS.aind)
+            .add_arg(&descriptor.atom);
+        for slot in descriptor.interface.logical_slots() {
+            bundle = bundle.add_arg(composition::port_atom(slot));
+        }
+        Self::for_atom(&bundle.finish(), style)
+    }
+
+    fn for_atom(atom: &Atom, style: &str) -> Self {
+        if style == "raw" {
+            return Self::default();
+        }
+        let mut slots = Vec::new();
+        let _ = atom.replace_map(|value, _, output| {
+            let AtomView::Fun(function) = value else {
+                return;
+            };
+            if function.get_symbol().is_scalar() {
+                **output = value.to_owned();
+            } else if function.get_symbol().has_tag(&SPENSO_TAG.representation)
+                && function.get_nargs() == 2
+            {
+                slots.push((
+                    function.get_symbol(),
+                    function.iter().nth(1).unwrap().to_owned(),
+                ));
+                **output = value.to_owned();
+            }
+        });
+        let mut occupied: HashMap<Symbol, HashSet<String>> = HashMap::new();
+        let mut pending = BTreeMap::new();
+        for (representation, index) in slots {
+            let Some(metadata) = RepresentationMetadata::from_symbol(representation) else {
+                continue;
+            };
+            let IndexPalette::Cyclic { .. } = metadata.index_palette else {
+                continue;
+            };
+            if Self::compound(index.as_view()).is_some() {
+                pending.insert(
+                    (
+                        representation.get_name().to_owned(),
+                        index.to_canonical_string(),
+                    ),
+                    (representation, index, metadata.index_palette),
+                );
+            } else {
+                let label = usize::try_from(index.as_view())
+                    .ok()
+                    .and_then(|position| metadata.index_palette.resolve(position))
+                    .or_else(|| match index.as_view() {
+                        AtomView::Var(variable) => IndexDisplay::from_symbol(variable.get_symbol())
+                            .or_else(|| {
+                                IndexDisplay::symbol(variable.get_symbol().get_stripped_name()).ok()
+                            }),
+                        _ => None,
+                    });
+                if let Some(label) = label {
+                    occupied
+                        .entry(representation)
+                        .or_default()
+                        .insert(Self::label_key(&label));
+                }
+            }
+        }
+        let mut aliases = Self::default();
+        for (_, (representation, index, palette)) in pending {
+            let IndexPalette::Cyclic { start, .. } = &palette else {
+                unreachable!()
+            };
+            let mut position = *start;
+            let display = if style == "graph" {
+                let (head, arguments) = Self::compound(index.as_view()).unwrap();
+                let name = match head.get_name() {
+                    "gammalooprs::hedge" => "h",
+                    "gammalooprs::edge" => "e",
+                    "gammalooprs::vertex" => "v",
+                    name => name,
+                };
+                let suffix = match (name, arguments.as_slice()) {
+                    ("h" | "e" | "v", [owner, 1]) => format!("{name}{owner}"),
+                    ("h" | "e" | "v", [owner, local]) => format!("{name}{owner}.{local}"),
+                    (_, arguments) => format!(
+                        "{name}({})",
+                        arguments
+                            .iter()
+                            .map(usize::to_string)
+                            .collect::<Vec<_>>()
+                            .join(",")
+                    ),
+                };
+                let Some(base) = palette.resolve(*start) else {
+                    continue;
+                };
+                let Ok(suffix) = IndexDisplay::text(suffix) else {
+                    continue;
+                };
+                Some(base.with_bottom(suffix))
+            } else {
+                let used = occupied.entry(representation).or_default();
+                loop {
+                    let Some(display) = palette.resolve(position) else {
+                        break None;
+                    };
+                    if used.insert(Self::label_key(&display)) {
+                        break Some(display);
+                    }
+                    let Some(next) = position
+                        .checked_add(1)
+                        .filter(|next| *next <= i64::MAX as usize)
+                    else {
+                        break None;
+                    };
+                    position = next;
+                }
+            };
+            // Exhaustion is possible for a custom palette starting at i64::MAX.
+            let Some(display) = display else { continue };
+            aliases
+                .entries
+                .insert((representation, index), (position, display));
+        }
+        aliases
+    }
+
+    fn compound(index: AtomView<'_>) -> Option<(Symbol, Vec<usize>)> {
+        let AtomView::Fun(function) = index else {
+            return None;
+        };
+        if !function.get_symbol().has_tag(&SPENSO_TAG.index)
+            || !(1..=2).contains(&function.get_nargs())
+        {
+            return None;
+        }
+        let arguments = function
+            .iter()
+            .map(usize::try_from)
+            .collect::<Result<Vec<_>, _>>()
+            .ok()?;
+        Some((function.get_symbol(), arguments))
+    }
+
+    fn label_key(display: &IndexDisplay) -> String {
+        // Unicode spellings and Typst's named Greek symbols have the same glyph.
+        let mut key = display.to_typst_source();
+        for (glyph, name) in [
+            ('α', "alpha"),
+            ('β', "beta"),
+            ('γ', "gamma"),
+            ('δ', "delta"),
+            ('ε', "epsilon"),
+            ('ζ', "zeta"),
+            ('η', "eta"),
+            ('θ', "theta"),
+            ('ι', "iota"),
+            ('κ', "kappa"),
+            ('λ', "lambda"),
+            ('μ', "mu"),
+            ('ν', "nu"),
+            ('ξ', "xi"),
+            ('ο', "omicron"),
+            ('π', "pi"),
+            ('ρ', "rho"),
+            ('σ', "sigma"),
+            ('τ', "tau"),
+            ('υ', "upsilon"),
+            ('φ', "phi"),
+            ('χ', "chi"),
+            ('ψ', "psi"),
+            ('ω', "omega"),
+        ] {
+            key = key.replace(glyph, name);
+        }
+        key
+    }
+
+    fn presentation_atom(&self, atom: &Atom, style: &str) -> Atom {
+        if self.entries.is_empty() {
+            return atom.clone();
+        }
+        atom.replace_map(|value, _, output| {
+            let AtomView::Fun(function) = value else {
+                return;
+            };
+            if function.get_symbol().is_scalar() {
+                **output = value.to_owned();
+                return;
+            }
+            if !function.get_symbol().has_tag(&SPENSO_TAG.representation)
+                || function.get_nargs() != 2
+            {
+                return;
+            }
+            let mut arguments = function.iter();
+            let dimension = arguments.next().unwrap();
+            let index = arguments.next().unwrap();
+            let Some((position, display)) =
+                self.entries.get(&(function.get_symbol(), index.to_owned()))
+            else {
+                return;
+            };
+            let replacement = if style == "graph" {
+                let Ok(symbol) = register_math_display_symbol(display, "spenso::display") else {
+                    return;
+                };
+                Atom::var(symbol)
+            } else {
+                Atom::num(*position as i64)
+            };
+            **output = FunctionBuilder::new(function.get_symbol())
+                .add_arg(dimension)
+                .add_arg(replacement)
+                .finish();
+        })
+    }
+
+    fn typst_source(&self, style: &str) -> String {
+        let mut records = self
+            .entries
+            .iter()
+            .map(|((representation, index), (position, display))| {
+                let (head, arguments) = Self::compound(index.as_view()).unwrap();
+                let arguments = arguments
+                    .iter()
+                    .map(|argument| format!("{argument},"))
+                    .collect::<String>();
+                let label = if style == "graph" {
+                    format!("${}$", display.to_typst_source())
+                } else {
+                    position.to_string()
+                };
+                format!(
+                    "({:?},{:?},({arguments}),{label}),",
+                    representation.get_name(),
+                    head.get_name()
+                )
+            })
+            .collect::<Vec<_>>();
+        records.sort();
+        format!("({})", records.join(""))
+    }
+}
+
 fn format_atom_with_settings(
     atom: &Atom,
     mode: TensorDisplayMode,
     settings: &DisplaySettings,
 ) -> String {
-    atom.format_string(
+    let aliases = IndexAliases::for_atom(atom, &settings.index_style);
+    let presentation = aliases.presentation_atom(atom, &settings.index_style);
+    presentation.format_string(
         &display_options_with_settings(mode, settings),
         PrintState::new(),
     )
 }
 
 fn format_atom_with_mode(atom: &Atom, mode: TensorDisplayMode, show_dimensions: bool) -> String {
-    atom.format_string(&display_options(mode, show_dimensions), PrintState::new())
+    let aliases = IndexAliases::for_atom(atom, "alphabet");
+    aliases
+        .presentation_atom(atom, "alphabet")
+        .format_string(&display_options(mode, show_dimensions), PrintState::new())
 }
 
 fn format_structured_with_mode(
@@ -371,7 +654,7 @@ fn portable_attachments(atom: &Atom) -> Result<AttachmentSet, String> {
     spenso::portable_payload::attachments_for_atom(atom).map_err(|error| error.to_string())
 }
 
-fn typst_settings_source(settings: &DisplaySettings) -> String {
+fn typst_settings_source(settings: &DisplaySettings, atom: &Atom) -> String {
     let commas = match settings.commas {
         Some(value) => value.to_string(),
         None => "none".to_owned(),
@@ -386,6 +669,7 @@ fn typst_settings_source(settings: &DisplaySettings) -> String {
             "  symbol-scripts: {},\n",
             "  index-gap: {},\n",
             "  factor-gap: {},\n",
+            "  index-aliases: {},\n",
             ")"
         ),
         settings.tensor_layout,
@@ -395,10 +679,11 @@ fn typst_settings_source(settings: &DisplaySettings) -> String {
         settings.symbol_scripts,
         settings.index_gap,
         settings.factor_gap,
+        IndexAliases::for_atom(atom, &settings.index_style).typst_source(&settings.index_style),
     )
 }
 
-fn typst_main_source(settings: &DisplaySettings) -> String {
+fn typst_main_source(settings: &DisplaySettings, atom: &Atom) -> String {
     format!(
         concat!(
             "#import \"notation.typ\" as tensor-notation\n",
@@ -411,7 +696,7 @@ fn typst_main_source(settings: &DisplaySettings) -> String {
             ")\n",
             "$ #visual $\n"
         ),
-        typst_settings_source(settings),
+        typst_settings_source(settings, atom),
     )
 }
 
@@ -506,7 +791,7 @@ pub(crate) fn atom_to_html(
     notation_source: Option<&str>,
 ) -> PyResult<String> {
     let tree = render_atom_tree(atom)?;
-    let source = typst_main_source(settings);
+    let source = typst_main_source(settings, atom);
     let html = compile_typst(py, &source, "html", notation_source, Some(&tree))?;
     let html = String::from_utf8(html).map_err(|error| {
         PyRuntimeError::new_err(format!("Typst returned invalid UTF-8: {error}"))
@@ -539,7 +824,7 @@ pub(crate) fn atom_to_svg(
     notation_source: Option<&str>,
 ) -> PyResult<String> {
     let tree = render_atom_tree(atom)?;
-    let source = typst_main_source(settings);
+    let source = typst_main_source(settings, atom);
     let svg = compile_typst(py, &source, "svg", notation_source, Some(&tree))?;
     String::from_utf8(svg)
         .map_err(|error| PyRuntimeError::new_err(format!("Typst returned invalid UTF-8: {error}")))
@@ -582,13 +867,20 @@ fn format_tensor_interface(
     mode: TensorDisplayMode,
     settings: &DisplaySettings,
 ) -> String {
+    let aliases = IndexAliases::for_descriptor(&tensor.descriptor, &settings.index_style);
     tensor
         .descriptor
         .interface
         .logical_slots()
         .into_iter()
         .map(composition::port_atom)
-        .map(|port| format_atom_with_settings(&port, mode, settings))
+        .map(|port| aliases.presentation_atom(&port, &settings.index_style))
+        .map(|port| {
+            port.format_string(
+                &display_options_with_settings(mode, settings),
+                PrintState::new(),
+            )
+        })
         .collect::<Vec<_>>()
         .join(" ")
 }
@@ -1121,6 +1413,7 @@ fn format_tensor_interface_rows(
 ) -> (Vec<String>, Vec<String>) {
     let mut top = Vec::new();
     let mut bottom = Vec::new();
+    let aliases = IndexAliases::for_descriptor(&tensor.descriptor, &settings.index_style);
     for slot in tensor.descriptor.interface.logical_slots() {
         let representation = slot.rep_name();
         let row = representation
@@ -1134,7 +1427,11 @@ fn format_tensor_interface_rows(
             })
             .unwrap_or(IndexRow::Top);
         let port = composition::port_atom(slot);
-        let source = format_atom_with_settings(&port, TensorDisplayMode::Typst, settings);
+        let port = aliases.presentation_atom(&port, &settings.index_style);
+        let source = port.format_string(
+            &display_options_with_settings(TensorDisplayMode::Typst, settings),
+            PrintState::new(),
+        );
         match row {
             IndexRow::Top => top.push(source),
             IndexRow::Bottom => bottom.push(source),
@@ -1375,7 +1672,7 @@ fn concrete_render_project(
             ")\n",
             "$ #descriptor = {} $\n"
         ),
-        typst_settings_source(settings),
+        typst_settings_source(settings, &descriptor),
         body,
     );
     Ok((source, tree))
@@ -1632,6 +1929,215 @@ mod tests {
         )
     }
 
+    fn graph_index(name: &str, arguments: &[usize]) -> Atom {
+        use symbolica::atom::{NamespacedSymbol, SymbolBuilder};
+        let name = NamespacedSymbol::parse(name);
+        let head = Symbol::get_symbol(name.clone()).unwrap_or_else(|| {
+            SymbolBuilder::new(name)
+                .with_tags([SPENSO_TAG.index.clone()])
+                .build()
+                .unwrap()
+        });
+        let mut index = FunctionBuilder::new(head);
+        for argument in arguments {
+            index = index.add_arg(Atom::num(*argument as i64));
+        }
+        index.finish()
+    }
+
+    fn indexed_test_tensor(indices: impl IntoIterator<Item = Atom>) -> Atom {
+        let mut tensor = FunctionBuilder::new(spenso::tensor_symbol!("display_index_tests::T"));
+        let mink = LibraryRep::from(spenso::structure::representation::Minkowski {});
+        for index in indices {
+            tensor = tensor.add_arg(mink.to_symbolic([Atom::num(4), index]));
+        }
+        tensor.finish()
+    }
+
+    #[test]
+    fn index_styles_are_validated_and_reported_in_settings() {
+        for style in ["alphabet", "graph", "raw"] {
+            let settings =
+                DisplaySettings::new("ports", false, true, None, true, "0.08em", "0.12em", style)
+                    .unwrap();
+            assert_eq!(settings.index_style, style);
+            assert!(settings.__repr__().contains(style));
+        }
+        assert!(
+            DisplaySettings::new(
+                "ports", false, true, None, true, "0.08em", "0.12em", "invalid"
+            )
+            .is_err()
+        );
+        assert_eq!(DisplaySettings::default().index_style, "alphabet");
+    }
+
+    #[test]
+    fn compound_index_aliases_share_contractions_without_changing_exact_atoms() {
+        let first = graph_index("display_index_tests::hedge", &[0, 1]);
+        let second = graph_index("display_index_tests::hedge", &[1, 1]);
+        let tensor = indexed_test_tensor([first.clone(), second.clone()]);
+        let atom = tensor.clone()
+            * indexed_test_tensor([first.clone()])
+            * indexed_test_tensor([second.clone()]);
+        let original = atom.to_canonical_string();
+        let exact_tree = render_atom_tree(&atom).unwrap();
+        let aliases = IndexAliases::for_atom(&atom, "alphabet");
+        assert_eq!(aliases.entries.len(), 2);
+        let presentation = aliases.presentation_atom(&atom, "alphabet");
+        let expected = indexed_test_tensor([Atom::num(1), Atom::num(2)])
+            * indexed_test_tensor([Atom::num(1)])
+            * indexed_test_tensor([Atom::num(2)]);
+        assert_eq!(presentation, expected);
+        for mode in [
+            TensorDisplayMode::Plain,
+            TensorDisplayMode::Latex,
+            TensorDisplayMode::Typst,
+        ] {
+            assert!(!format_atom_with_mode(&atom, mode, false).contains("hedge"));
+        }
+        let source = typst_main_source(&DisplaySettings::default(), &atom);
+        assert!(source.contains("index-aliases:"));
+        assert!(source.contains("display_index_tests::hedge"));
+        assert_eq!(atom.to_canonical_string(), original);
+        assert_eq!(render_atom_tree(&atom).unwrap(), exact_tree);
+        assert_ne!(render_atom_tree(&presentation).unwrap(), exact_tree);
+    }
+
+    #[test]
+    fn compound_index_alphabet_reserves_numeric_manual_and_wrapped_labels() {
+        let manual = register_math_display_symbol(
+            &IndexDisplay::symbol("rho").unwrap(),
+            "display_index_tests",
+        )
+        .unwrap();
+        let mut indices = vec![
+            Atom::num(1),
+            Atom::var(symbol!("nu")),
+            Atom::var(manual),
+            Atom::num(5),
+        ];
+        indices.extend((0..5).map(|i| graph_index("display_index_tests::hedge", &[i, 1])));
+        let atom = indexed_test_tensor(indices);
+        let aliases = IndexAliases::for_atom(&atom, "alphabet");
+        let mut positions = aliases
+            .entries
+            .values()
+            .map(|(position, _)| *position)
+            .collect::<Vec<_>>();
+        positions.sort();
+        assert_eq!(positions, [4, 6, 7, 8, 9]);
+        let raw = DisplaySettings {
+            index_style: "raw".to_owned(),
+            ..DisplaySettings::default()
+        };
+        assert!(format_atom_with_settings(&atom, TensorDisplayMode::Typst, &raw).contains("hedge"));
+    }
+
+    #[test]
+    fn compound_index_aliases_preserve_heads_arity_and_whole_sum_identity() {
+        let indices = [
+            graph_index("display_index_tests::edge", &[0, 1]),
+            graph_index("display_index_tests::hedge", &[0, 1]),
+            graph_index("display_index_tests::vertex", &[0, 1]),
+            graph_index("display_index_tests::hedge", &[0]),
+            graph_index("display_index_tests::hedge", &[0, 0]),
+        ];
+        let atom = indices
+            .into_iter()
+            .map(|index| indexed_test_tensor([index]))
+            .fold(Atom::Zero, |left, right| left + right);
+        let aliases = IndexAliases::for_atom(&atom, "alphabet");
+        assert_eq!(aliases.entries.len(), 5);
+        let presentation = aliases.presentation_atom(&atom, "alphabet");
+        let AtomView::Add(sum) = presentation.as_view() else {
+            panic!("distinct terms combined while formatting")
+        };
+        assert_eq!(sum.get_nargs(), 5);
+    }
+
+    #[test]
+    fn compound_index_graph_labels_are_unambiguous_and_use_each_representations_palette() {
+        let atom = indexed_test_tensor([
+            graph_index("gammalooprs::hedge", &[4, 1]),
+            graph_index("gammalooprs::edge", &[4, 1]),
+            graph_index("gammalooprs::vertex", &[4, 1]),
+            graph_index("gammalooprs::hedge", &[4]),
+            graph_index("gammalooprs::hedge", &[4, 0]),
+            graph_index("gammalooprs::hedge", &[4, 2]),
+        ]);
+        let settings = DisplaySettings {
+            index_style: "graph".to_owned(),
+            ..DisplaySettings::default()
+        };
+        let aliases = IndexAliases::for_atom(&atom, "graph");
+        let labels = aliases
+            .entries
+            .values()
+            .map(|(_, display)| display.to_native_string())
+            .collect::<HashSet<_>>();
+        assert_eq!(labels.len(), 6);
+        for expected in [
+            "mu_(h4)",
+            "mu_(e4)",
+            "mu_(v4)",
+            "mu_(h(4))",
+            "mu_(h4.0)",
+            "mu_(h4.2)",
+        ] {
+            assert!(labels.contains(expected), "missing {expected}: {labels:?}");
+        }
+        for mode in [
+            TensorDisplayMode::Plain,
+            TensorDisplayMode::Latex,
+            TensorDisplayMode::Typst,
+        ] {
+            let rendered = format_atom_with_settings(&atom, mode, &settings);
+            assert!(
+                !rendered.contains("spenso_index_"),
+                "display symbol escaped into output: {rendered}"
+            );
+            assert!(
+                rendered.contains("h4") && !rendered.contains("h4.1"),
+                "graph identity absent: {rendered}"
+            );
+        }
+        assert!(typst_settings_source(&settings, &atom).contains("$attach(mu,b:upright(\"h4\"))$"));
+    }
+
+    #[test]
+    fn compound_index_aliases_share_dual_palettes_and_leave_scalar_metadata_opaque() {
+        let rep = LibraryRep::new_dual_with_index_palette(
+            "display_index_tests::custom",
+            IndexPalette::cyclic(1, [IndexDisplay::symbol("zeta").unwrap()]).unwrap(),
+        )
+        .unwrap();
+        let index = graph_index("display_index_tests::hedge", &[0, 1]);
+        let slot = rep.to_symbolic([Atom::num(4), index.clone()]);
+        let dual = rep.dual().to_symbolic([Atom::num(4), index.clone()]);
+        let hidden = indexed_test_tensor([graph_index("display_index_tests::hedge", &[9, 1])]);
+        let scalar = function!(symbol!("display_index_tests::scalar"; Scalar), hidden);
+        let tensor = function!(
+            spenso::tensor_symbol!("display_index_tests::Dual"),
+            slot,
+            dual
+        ) * scalar.clone();
+        let aliases = IndexAliases::for_atom(&tensor, "alphabet");
+        assert_eq!(aliases.entries.len(), 1);
+        assert_eq!(
+            aliases.entries.values().next().unwrap().1,
+            IndexDisplay::symbol("zeta").unwrap()
+        );
+        let presentation = aliases.presentation_atom(&tensor, "alphabet");
+        assert!(
+            presentation
+                .to_canonical_string()
+                .contains(&scalar.to_canonical_string())
+        );
+        let formatted = format_atom_with_mode(&tensor, TensorDisplayMode::Typst, false);
+        assert!(formatted.matches("zeta").count() >= 2);
+    }
+
     #[test]
     fn dimensions_are_opt_in_and_formatting_does_not_change_the_atom() {
         let atom = vector();
@@ -1863,9 +2369,10 @@ mod tests {
                 false,
                 "0.04em",
                 "0.1em",
+                "alphabet",
             )
             .unwrap();
-            let source = typst_settings_source(&settings);
+            let source = typst_settings_source(&settings, &Atom::Zero);
             assert!(source.contains(&format!("tensor-layout: {layout:?}")));
             assert!(source.contains("with-dim: true"));
             assert!(source.contains("parens: false"));
@@ -1897,7 +2404,7 @@ mod tests {
 
     #[test]
     fn generated_project_reads_the_portable_render_tree_as_binary() {
-        let source = typst_main_source(&DisplaySettings::default());
+        let source = typst_main_source(&DisplaySettings::default(), &Atom::Zero);
         assert!(source.contains("cbor(read(\"tree.cbor\", encoding: none))"));
         assert!(source.contains("tensor-notation.render"));
     }
