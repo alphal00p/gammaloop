@@ -5,14 +5,10 @@ use feynkit_cff::{CffResult, ShiftRewrite, SurfaceCache};
 use linnet::half_edge::involution::EdgeIndex;
 use symbolica::{
     atom::{Atom, AtomCore},
-    id::{Pattern, Replacement},
+    id::Replacement,
 };
 
-use crate::{
-    cff::{esurface::EnergySurfaceExt, hsurface::HSurfaceExt},
-    graph::LoopMomentumBasis,
-    settings::global::OrientationPattern,
-};
+use crate::{graph::LoopMomentumBasis, settings::global::OrientationPattern};
 
 /// GammaLoop entry points layered on the canonical FeynKit CFF generator.
 pub(crate) trait GammaLoopGraphCffExt {
@@ -42,7 +38,13 @@ impl GammaLoopSurfaceCacheExt for SurfaceCache {
 
     fn get_all_replacements(&self, cut_edges: &[EdgeIndex]) -> Vec<Replacement> {
         self.replacements_with(
-            |edge| if cut_edges.contains(&edge) { crate::utils::cut_energy(edge) } else { crate::utils::ose_atom_from_index(edge) },
+            |edge| {
+                if cut_edges.contains(&edge) {
+                    crate::utils::cut_energy(edge)
+                } else {
+                    crate::utils::ose_atom_from_index(edge)
+                }
+            },
             crate::utils::external_energy_atom_from_index,
         )
     }
@@ -52,26 +54,29 @@ impl GammaLoopSurfaceCacheExt for SurfaceCache {
         cut_edges: &[EdgeIndex],
         lmb: &LoopMomentumBasis,
     ) -> Vec<Replacement> {
-        let energy = self
-            .energy_surfaces()
-            .iter()
-            .enumerate()
-            .map(|(index, surface)| {
-                Replacement::new(
-                    Pattern::from(Atom::from(feynkit_cff::EnergySurfaceId::from(index))),
-                    Pattern::from(surface.to_atom_in_lmb(cut_edges, lmb)),
+        self.replacements_with(
+            |edge| {
+                if cut_edges.contains(&edge) {
+                    crate::utils::cut_energy(edge)
+                } else {
+                    crate::utils::ose_atom_from_index(edge)
+                }
+            },
+            |edge| {
+                lmb.edge_signatures[edge].external.iter_enumerated().fold(
+                    Atom::Zero,
+                    |sum, (external_index, sign)| {
+                        let energy = crate::utils::external_energy_atom_from_index(
+                            lmb.ext_edges[external_index],
+                        );
+                        match sign {
+                            crate::momentum::SignOrZero::Zero => sum,
+                            crate::momentum::SignOrZero::Plus => sum + energy,
+                            crate::momentum::SignOrZero::Minus => sum - energy,
+                        }
+                    },
                 )
-            });
-        let h = self
-            .h_surfaces()
-            .iter()
-            .enumerate()
-            .map(|(index, surface)| {
-                Replacement::new(
-                    Pattern::from(Atom::from(feynkit_cff::HSurfaceId::from(index))),
-                    Pattern::from(surface.to_atom_in_lmb(cut_edges, lmb)),
-                )
-            });
-        energy.chain(h).collect()
+            },
+        )
     }
 }

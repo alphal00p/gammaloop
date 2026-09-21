@@ -45,7 +45,13 @@ impl HSurfaceExt for HSurface {
         external_shift_atom: impl Fn(EdgeIndex) -> Atom,
     ) -> Atom {
         self.to_atom_with(
-            |edge| if cut_edges.contains(&edge) { cut_energy(edge) } else { ose_atom_from_index(edge) },
+            |edge| {
+                if cut_edges.contains(&edge) {
+                    cut_energy(edge)
+                } else {
+                    ose_atom_from_index(edge)
+                }
+            },
             external_shift_atom,
         )
     }

@@ -5,7 +5,7 @@ use linnet::half_edge::{
 };
 use typed_index_collections::ti_vec;
 
-use super::{Graph, feynkit_legacy_internal_order_key};
+use super::Graph;
 use crate::{
     finalized_runtime_dot,
     graph::{
@@ -55,26 +55,26 @@ fn legacy_internal_order_key_recovers_pre_normalized_fermion_flow() {
     let forward = DiagramEdge::new(model.particle_id("u").unwrap(), true);
     let reversed = DiagramEdge::new(model.particle_id("u~").unwrap(), true);
 
-    let forward_key = feynkit_legacy_internal_order_key(
-        &model,
-        EdgeId(7),
-        EdgeEndpoints {
-            source: VertexId(2),
-            target: VertexId(5),
-        },
-        &forward,
-    )
-    .unwrap();
-    let reversed_key = feynkit_legacy_internal_order_key(
-        &model,
-        EdgeId(7),
-        EdgeEndpoints {
-            source: VertexId(5),
-            target: VertexId(2),
-        },
-        &reversed,
-    )
-    .unwrap();
+    let forward_key = forward
+        .canonical_order_key(
+            &model,
+            EdgeId(7),
+            EdgeEndpoints {
+                source: Some(VertexId(2)),
+                target: Some(VertexId(5)),
+            },
+        )
+        .unwrap();
+    let reversed_key = reversed
+        .canonical_order_key(
+            &model,
+            EdgeId(7),
+            EdgeEndpoints {
+                source: Some(VertexId(5)),
+                target: Some(VertexId(2)),
+            },
+        )
+        .unwrap();
 
     assert_eq!(reversed_key, forward_key);
     assert_eq!(forward_key.2, 2);
@@ -438,4 +438,217 @@ fn explicit_hedge_payload_round_trips_in_dot_export() {
     assert!(serialized.contains("ufo_order"));
     assert!(serialized.contains("dod"));
     assert!(serialized.contains("source=") || serialized.contains("sink="));
+}
+
+fn assert_native_runtime_parity(diagram: &feynkit_graph::FeynmanDiagram) {
+    use crate::uv::UltravioletGraph;
+    use linnet::half_edge::{
+        EdgeAccessors,
+        involution::{Flow, Hedge},
+    };
+    use symbolica::atom::AtomCore;
+
+    let runtime = Graph::from_feynkit(diagram, None, true).unwrap();
+    let source = diagram.underlying();
+    assert_eq!(runtime.underlying.n_nodes(), source.n_nodes());
+    assert_eq!(runtime.underlying.n_edges(), source.n_edges());
+    assert_eq!(runtime.underlying.n_hedges(), source.n_hedges());
+    for (pair, edge, data) in source.iter_edges() {
+        let (runtime_data, runtime_pair) = &runtime.underlying[&edge];
+        assert_eq!(*runtime_pair, pair);
+        assert_eq!(runtime.underlying.orientation(edge), data.orientation);
+        assert_eq!(runtime_data.num.value, data.data.numerator);
+        assert_eq!(runtime_data.is_dummy, data.data.is_dummy);
+    }
+    for index in 0..source.n_hedges() {
+        let hedge = Hedge(index);
+        assert_eq!(runtime.underlying.node_id(hedge), source.node_id(hedge));
+        assert_eq!(runtime.underlying.flow(hedge), source.flow(hedge));
+        assert_eq!(runtime.underlying[&hedge], source[&hedge]);
+    }
+    assert_eq!(runtime.overall_factor, *diagram.overall_factor());
+    assert_eq!(runtime.global_prefactor.num, *diagram.numerator_prefactor());
+    assert_eq!(runtime.global_prefactor.projector, *diagram.projector());
+    let transported: feynkit_graph::routing::MomentumBasis = (&runtime.loop_momentum_basis).into();
+    assert_eq!(
+        transported,
+        diagram.loop_momentum_basis().to_routing(source)
+    );
+    let full = source.full_filter();
+    let empty = source.empty_subgraph();
+    assert_eq!(
+        runtime
+            .numerator(&full, &empty)
+            .get_single_atom()
+            .unwrap()
+            .expand(),
+        diagram.numerator().expand()
+    );
+    for (_, edge, _) in source.iter_edges() {
+        let mut selected: linnet::half_edge::subgraph::SuBitGraph = source.empty_subgraph();
+        use linnet::half_edge::subgraph::ModifySubSet;
+        selected.add(source[&edge].1);
+        assert_eq!(
+            runtime
+                .numerator(&selected, &empty)
+                .get_single_atom()
+                .unwrap(),
+            diagram.numerator_of(&selected, &empty)
+        );
+        assert_eq!(
+            runtime.denominator(&selected, diagram.model(), |_| -2),
+            diagram
+                .denominator_of(
+                    &selected,
+                    &std::collections::BTreeMap::from([(EdgeId(edge.0), -2)])
+                )
+                .unwrap()
+        );
+    }
+    let half_edges = |filter: &linnet::half_edge::subgraph::SuBitGraph| {
+        filter
+            .included_iter()
+            .map(|hedge| feynkit_graph::DiagramHalfEdge {
+                edge: EdgeId(source[&hedge].0),
+                endpoint: if source.flow(hedge) == Flow::Source {
+                    feynkit_graph::DiagramEndpoint::Source
+                } else {
+                    feynkit_graph::DiagramEndpoint::Target
+                },
+            })
+            .collect::<std::collections::BTreeSet<_>>()
+    };
+    assert_eq!(runtime.finalized_cuts.len(), diagram.cuts().len());
+    for (runtime, source) in runtime.finalized_cuts.iter().zip(diagram.cuts()) {
+        assert_eq!(
+            half_edges(&runtime.left),
+            source.left.half_edges.iter().copied().collect()
+        );
+        assert_eq!(
+            half_edges(&runtime.right),
+            source.right.half_edges.iter().copied().collect()
+        );
+        assert_eq!(
+            half_edges(&runtime.cut.left),
+            source.cut.iter().copied().collect()
+        );
+    }
+    assert_eq!(
+        runtime.finalized_topology_threshold_candidates.len(),
+        diagram.topology_threshold_candidates().len()
+    );
+    for (runtime, source) in runtime
+        .finalized_topology_threshold_candidates
+        .iter()
+        .zip(diagram.topology_threshold_candidates())
+    {
+        assert_eq!(
+            half_edges(&runtime.left),
+            source.left.iter().copied().collect()
+        );
+        assert_eq!(
+            half_edges(&runtime.right),
+            source.right.iter().copied().collect()
+        );
+        assert_eq!(
+            half_edges(&runtime.cut.left),
+            source.cut.iter().copied().collect()
+        );
+    }
+}
+
+#[test]
+fn native_amplitude_runtime_enrichment_preserves_every_graph_coordinate() {
+    use feynkit_generator::{GenerationOptions, Generator, Process};
+    test_initialise().unwrap();
+    let model = std::sync::Arc::new(crate::utils::load_generic_model("scalars"));
+    let generated = Generator::new(model)
+        .generate(
+            &Process::amplitude(["scalar_1"], ["scalar_1"])
+                .with_loop_count(1, 1)
+                .unwrap(),
+            &GenerationOptions::default().threads(1).max_vertices(2),
+        )
+        .unwrap();
+    assert!(!generated.diagrams.is_empty());
+    for diagram in generated.diagrams {
+        assert_native_runtime_parity(&diagram);
+    }
+}
+
+#[test]
+fn native_cross_section_runtime_enrichment_preserves_cuts_and_positive_external_flow() {
+    use feynkit_generator::{GenerationOptions, Generator, Process};
+    test_initialise().unwrap();
+    let model = std::sync::Arc::new(crate::utils::load_generic_model("scalars"));
+    let generated = Generator::new(model)
+        .generate(
+            &Process::cross_section(["scalar_1"], ["scalar_1", "scalar_1"])
+                .with_loop_count(1, 1)
+                .unwrap(),
+            &GenerationOptions::default().threads(1).max_vertices(2),
+        )
+        .unwrap();
+    assert!(!generated.diagrams.is_empty());
+    for diagram in generated.diagrams {
+        assert!(!diagram.cuts().is_empty());
+        for (slot, edge) in diagram
+            .loop_momentum_basis()
+            .external_edges
+            .iter()
+            .enumerate()
+        {
+            assert_eq!(
+                diagram.loop_momentum_basis().edge_signatures[edge]
+                    .external
+                    .get(slot),
+                Some(feynkit_kinematics::SignOrZero::Plus)
+            );
+        }
+        assert_native_runtime_parity(&diagram);
+    }
+}
+
+#[test]
+fn native_runtime_enrichment_preserves_explicit_loop_order() {
+    use feynkit_graph::{DiagramVertex, ExternalState, FeynmanDiagram};
+    use symbolica::atom::Atom;
+    test_initialise().unwrap();
+    let model = std::sync::Arc::new(crate::utils::load_generic_model("scalars"));
+    let particle = model.particle_id("scalar_1").unwrap();
+    let mut builder = FeynmanDiagram::builder(model, "ordered_self_loops");
+    let node = builder.add_vertex(DiagramVertex {
+        name: "vertex".into(),
+        interaction: None,
+        numerator: Atom::one(),
+    });
+    let mut incoming = DiagramEdge::new(particle, false);
+    incoming.external = Some(feynkit_graph::ExternalLeg {
+        name: "incoming".into(),
+        index: 0,
+        state: ExternalState::Incoming,
+        connection: 0,
+    });
+    let mut outgoing = DiagramEdge::new(particle, false);
+    outgoing.external = Some(feynkit_graph::ExternalLeg {
+        name: "outgoing".into(),
+        index: 1,
+        state: ExternalState::Outgoing,
+        connection: 1,
+    });
+    builder.add_edge(None, Some(node), incoming).unwrap();
+    builder.add_edge(Some(node), None, outgoing).unwrap();
+    builder
+        .add_edge(node, node, DiagramEdge::new(particle, false))
+        .unwrap();
+    builder
+        .add_edge(node, node, DiagramEdge::new(particle, false))
+        .unwrap();
+    let diagram = builder.build().unwrap();
+    let mut selected = diagram.loop_momentum_basis().loop_edges.clone();
+    assert_eq!(selected.len(), 2);
+    selected.reverse();
+    let diagram = diagram.with_loop_momentum_edges(&selected).unwrap();
+    assert_eq!(diagram.loop_momentum_basis().loop_edges, selected);
+    assert_native_runtime_parity(&diagram);
 }

@@ -186,8 +186,7 @@ impl Graph {
         let cff_loop_number = self
             .get_loop_number()
             .saturating_sub(self.cyclotomatic_number(contract_subgraph));
-        let cff_phase = (-Atom::i()).pow(cff_loop_number as i64);
-        let cff_normalization = cff_phase / (Atom::var(GS.pi) * 2).pow(3 * cff_loop_number as i64);
+        let cff_normalization = feynkit_cff::CffExpression::measure_normalization(cff_loop_number);
         crate::debug_tags!(#cff, #trace;
             stage = "graph_cff_normalization",
             graph = %self.name,

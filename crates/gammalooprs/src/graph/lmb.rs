@@ -5,10 +5,10 @@ use derive_more::{From, Into};
 use itertools::Itertools;
 use linnet::half_edge::{
     HedgeGraph, NoData,
-    involution::{EdgeData, EdgeIndex, EdgeVec, Flow, Hedge, HedgePair, Orientation},
+    involution::{EdgeData, EdgeIndex, EdgeVec, Hedge, HedgePair, Orientation},
     subgraph::{
-        Inclusion, InternalSubGraph, ModifySubSet, SuBitGraph, SubGraphLike, SubGraphOps,
-        SubSetLike, SubSetOps,
+        InternalSubGraph, ModifySubSet, SuBitGraph, SubGraphLike, SubGraphOps, SubSetLike,
+        SubSetOps,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -26,9 +26,8 @@ use typed_index_collections::TiVec;
 use crate::{
     integrands::process::{amplitude::AmplitudeGraphTerm, cross_section::CrossSectionGraphTerm},
     momentum::{
-        SignOrZero,
         sample::{ExternalIndex, LoopIndex},
-        signature::{LoopExtSignature, SignatureLike},
+        signature::LoopExtSignature,
     },
     utils::{GS, W_},
 };
@@ -106,49 +105,15 @@ impl LoopMomentumBasis {
     }
 
     pub(crate) fn put_loop_to_ext(&mut self, i: LoopIndex) {
-        let a = self.loop_edges.remove(i);
-        // let ext_id = ExternalIndex::from(self.ext_edges.len());
-        self.ext_edges.push(a);
-        self.edge_signatures
-            .iter_mut()
-            .for_each(|(_, s)| s.put_loop_to_ext(i));
+        // The external coordinate is the same selected loop-edge momentum.
+        let mut shared: feynkit_graph::routing::MomentumBasis = (&*self).into();
+        shared.put_loop_to_ext(i.0);
+        *self = shared.into();
     }
     pub(crate) fn canonicalize_external_order(&mut self, external_edge_order: &[EdgeIndex]) {
-        if external_edge_order.is_empty() {
-            return;
-        }
-
-        let current_ext_edges = self.ext_edges.clone();
-        let mut ordered_ext_edges = external_edge_order.to_vec();
-        ordered_ext_edges.extend(
-            current_ext_edges
-                .iter()
-                .copied()
-                .filter(|edge| !external_edge_order.contains(edge))
-                .sorted(),
-        );
-
-        if ordered_ext_edges == current_ext_edges.raw {
-            return;
-        }
-
-        for (_, signature) in self.edge_signatures.iter_mut() {
-            let mut expanded_external = vec![SignOrZero::Zero; ordered_ext_edges.len()];
-
-            for (old_slot, edge) in current_ext_edges.iter_enumerated() {
-                let Some(new_slot) = ordered_ext_edges
-                    .iter()
-                    .position(|ordered_edge| ordered_edge == edge)
-                else {
-                    continue;
-                };
-                expanded_external[new_slot] = signature.external[old_slot];
-            }
-
-            signature.external = SignatureLike::from_iter(expanded_external);
-        }
-
-        self.ext_edges = ordered_ext_edges.into();
+        let mut shared: feynkit_graph::routing::MomentumBasis = (&*self).into();
+        shared.canonicalize_external_order(external_edge_order);
+        *self = shared.into();
     }
 }
 
@@ -482,16 +447,22 @@ pub(crate) fn no_filter(_pair: &HedgePair) -> bool {
     true
 }
 
-
 impl From<feynkit_graph::routing::MomentumBasis> for LoopMomentumBasis {
     fn from(basis: feynkit_graph::routing::MomentumBasis) -> Self {
         Self {
             tree: basis.tree,
             loop_edges: basis.loop_edges.into(),
             ext_edges: basis.ext_edges.into(),
-            edge_signatures: basis.edge_signatures.iter().map(|(edge, signature)| {
-                (edge, LoopExtSignature::from(signature.integer_coefficients()))
-            }).collect(),
+            edge_signatures: basis
+                .edge_signatures
+                .iter()
+                .map(|(edge, signature)| {
+                    (
+                        edge,
+                        LoopExtSignature::from(signature.integer_coefficients()),
+                    )
+                })
+                .collect(),
         }
     }
 }
@@ -502,12 +473,19 @@ impl From<&LoopMomentumBasis> for feynkit_graph::routing::MomentumBasis {
             tree: basis.tree.clone(),
             loop_edges: basis.loop_edges.raw.clone(),
             ext_edges: basis.ext_edges.raw.clone(),
-            edge_signatures: basis.edge_signatures.iter().map(|(edge, signature)| {
-                (edge, feynkit_kinematics::MomentumSignature::new(
-                    feynkit_kinematics::Signature::new(signature.internal.iter().copied()),
-                    feynkit_kinematics::Signature::new(signature.external.iter().copied()),
-                ))
-            }).collect(),
+            edge_signatures: basis
+                .edge_signatures
+                .iter()
+                .map(|(edge, signature)| {
+                    (
+                        edge,
+                        feynkit_kinematics::MomentumSignature::new(
+                            feynkit_kinematics::Signature::new(signature.internal.iter().copied()),
+                            feynkit_kinematics::Signature::new(signature.external.iter().copied()),
+                        ),
+                    )
+                })
+                .collect(),
         }
     }
 }
@@ -526,7 +504,8 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
         shrunken: &InternalSubGraph,
         externals: SuBitGraph,
     ) -> LmbResult<LoopMomentumBasis> {
-        feynkit_graph::routing::MomentumRouting::shrunken_sub_lmb(self, outer, shrunken, externals).map(Into::into)
+        feynkit_graph::routing::MomentumRouting::shrunken_sub_lmb(self, outer, shrunken, externals)
+            .map(Into::into)
     }
 
     fn shrunken_lmb_of(
@@ -579,7 +558,13 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
             + ModifySubSet<HedgePair>
             + ModifySubSet<Hedge>,
     {
-        feynkit_graph::routing::MomentumRouting::compatible_sub_lmb(self, subgraph, externals, &lmb.into()).into()
+        feynkit_graph::routing::MomentumRouting::compatible_sub_lmb(
+            self,
+            subgraph,
+            externals,
+            &lmb.into(),
+        )
+        .into()
     }
 
     fn try_compatible_sub_lmb<S: SubGraphLike>(
@@ -595,7 +580,13 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
             + ModifySubSet<HedgePair>
             + ModifySubSet<Hedge>,
     {
-        feynkit_graph::routing::MomentumRouting::try_compatible_sub_lmb(self, subgraph, externals, &lmb.into()).map(Into::into)
+        feynkit_graph::routing::MomentumRouting::try_compatible_sub_lmb(
+            self,
+            subgraph,
+            externals,
+            &lmb.into(),
+        )
+        .map(Into::into)
     }
 
     /// The true externals (that will flow through the graph (i.e. not dummy)) are those that are both in the subgraph and in the externals
@@ -603,12 +594,13 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
         &self,
         subgraph: &S,
         forest_guide: &S, //guide for the forest (can be the full subgraph if no guide necessary), however it must cover the same nodes as subgraph
-        externals: S, //externals to consider for the flow, cannot contain non-subgraph nodes
+        externals: S,     //externals to consider for the flow, cannot contain non-subgraph nodes
     ) -> LmbResult<LoopMomentumBasis>
     where
         S::Base: ModifySubSet<Hedge> + SubGraphLike,
     {
-        feynkit_graph::routing::MomentumRouting::lmb_impl(self, subgraph, forest_guide, externals).map(Into::into)
+        feynkit_graph::routing::MomentumRouting::lmb_impl(self, subgraph, forest_guide, externals)
+            .map(Into::into)
     }
 
     fn generate_loop_momentum_bases_of<S: SubGraphLike>(
@@ -622,11 +614,17 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
             + ModifySubSet<HedgePair>
             + ModifySubSet<Hedge>,
     {
-        feynkit_graph::routing::MomentumRouting::generate_loop_momentum_bases_of(self, subgraph).into_iter().map(Into::into).collect()
+        feynkit_graph::routing::MomentumRouting::generate_loop_momentum_bases_of(self, subgraph)
+            .into_iter()
+            .map(Into::into)
+            .collect()
     }
 
     fn generate_loop_momentum_bases(&self) -> TiVec<LmbIndex, LoopMomentumBasis> {
-        feynkit_graph::routing::MomentumRouting::generate_loop_momentum_bases(self).into_iter().map(Into::into).collect()
+        feynkit_graph::routing::MomentumRouting::generate_loop_momentum_bases(self)
+            .into_iter()
+            .map(Into::into)
+            .collect()
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -646,8 +644,16 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
         &'a I: Into<AtomOrView<'a>>,
     {
         feynkit_graph::routing::MomentumRouting::replacement_impl(
-            self, rep, subgraph, &lmb.into(), loop_symbol, ext_symbol,
-            loop_args, ext_args, filter_pair, emr_id,
+            self,
+            rep,
+            subgraph,
+            &lmb.into(),
+            loop_symbol,
+            ext_symbol,
+            loop_args,
+            ext_args,
+            filter_pair,
+            emr_id,
         )
     }
 }

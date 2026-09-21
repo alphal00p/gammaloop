@@ -2,7 +2,7 @@
 
 use feynkit_cff::Surface;
 use linnet::half_edge::involution::EdgeIndex;
-use symbolica::{atom::Atom, parse};
+use symbolica::atom::Atom;
 
 use crate::{
     cff::{esurface::EnergySurfaceExt, hsurface::HSurfaceExt},
@@ -20,7 +20,7 @@ impl SurfaceExt for Surface {
             Self::Energy(surface) => surface.to_atom(cut_edges),
             Self::H(surface) => surface.to_atom(cut_edges),
             Self::Unit => Atom::num(1),
-            Self::Infinite => parse!("η_inf"),
+            Self::Infinite => feynkit_cff::SurfaceId::Infinite.into(),
         }
     }
 
@@ -29,7 +29,7 @@ impl SurfaceExt for Surface {
             Self::Energy(surface) => surface.to_atom_in_lmb(cut_edges, lmb),
             Self::H(surface) => surface.to_atom_in_lmb(cut_edges, lmb),
             Self::Unit => Atom::num(1),
-            Self::Infinite => parse!("η_inf"),
+            Self::Infinite => feynkit_cff::SurfaceId::Infinite.into(),
         }
     }
 }
