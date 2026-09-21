@@ -1934,6 +1934,17 @@ impl PyFeynmanDiagram {
     /// >>> expansion = diagram.uv_expansion(mass)
     /// >>> region = diagram.filter(edge=lambda e: e.data.id in selected_edge_ids)
     /// >>> local_ct = diagram.uv_counterterm(mass, subgraph=region)
+    ///
+    /// Parameters
+    /// ----------
+    /// uv_mass : Expression or int
+    ///     Auxiliary mass used for the propagator expansion.
+    /// subgraph : linnet.Subgraph or None, optional
+    ///     Region from this diagram's analysis graph; None selects the complete graph.
+    /// dimension : int, optional
+    ///     Positive spacetime dimension for UV power counting; defaults to four.
+    /// numerator : Expression or TensorExpression or None, optional
+    ///     Prepared numerator in edge momenta; None uses the selected local numerator.
     #[pyo3(signature = (uv_mass, *, subgraph=None, dimension=4, numerator=None))]
     fn uv_expansion(
         &self,
@@ -1963,6 +1974,23 @@ impl PyFeynmanDiagram {
     /// Arguments and selection semantics are those of :meth:`uv_expansion`.
     /// Add this unintegrated expression to the selected integrand to subtract
     /// its simultaneous UV limit. Subdivergences require separate forest terms.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> mass = S("mUV", is_scalar=True)
+    /// >>> counterterm = diagram.uv_counterterm(mass)
+    ///
+    /// Parameters
+    /// ----------
+    /// uv_mass : Expression or int
+    ///     Auxiliary mass used for the propagator expansion.
+    /// subgraph : linnet.Subgraph or None, optional
+    ///     Region from this diagram's analysis graph; None selects the complete graph.
+    /// dimension : int, optional
+    ///     Positive spacetime dimension for UV power counting; defaults to four.
+    /// numerator : Expression or TensorExpression or None, optional
+    ///     Prepared numerator in edge momenta; None uses the selected local numerator.
     #[pyo3(signature = (uv_mass, *, subgraph=None, dimension=4, numerator=None))]
     fn uv_counterterm(
         &self,

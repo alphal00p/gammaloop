@@ -39,9 +39,10 @@ tree = bubble.filter(edge=lambda e: e.data.id == bubble.internal_edges[0].id)
 assert bubble.uv_expansion(mass, subgraph=tree) == 0
 
 # An external-only numerator must stay soft even when its polynomial degree is high.
-external = bubble.momentum_basis(subgraph=region).external_edges[0]
+basis = bubble.momentum_basis(subgraph=region)
+external = next(e for e in basis.external_edges if e not in basis.dependent_externals)
 soft = E(f"gammalooprs::Q({external},spenso::mink(4,uv_test::mu))")
-tensor = bubble.uv_expansion(mass, numerator=soft)
+tensor = bubble.uv_expansion(mass, numerator=soft * bubble.numerator_expression())
 assert isinstance(tensor, TensorExpression)
 assert tensor.rank == 1
 assert tensor == soft * expanded
@@ -78,3 +79,25 @@ triangle = next(
 )
 assert triangle.uv_counterterm(mass) == 0
 assert triangle.uv_counterterm(mass, dimension=6) != 0
+
+# The HEP example's gluon, ghost and massive-quark bubbles retain their open
+# Lorentz/color interface; callers can contract a projector after expansion.
+sm = fk.Model(Path(__file__).parents[3] / "assets/models/json/sm/sm.json")
+diagrams = sm.generate_diagrams(
+    ["g"],
+    ["g"],
+    loops=1,
+    max_vertices=2,
+    coupling_orders={"QCD": 2, "QED": 0},
+    particle_veto=["c", "t", "s", "u", "d"],
+    allow_self_loops=False,
+).diagrams
+assert len(diagrams) >= 3
+for diagram in diagrams:
+    counterterm = diagram.uv_counterterm(mass)
+    assert isinstance(counterterm, TensorExpression)
+    assert counterterm != 0
+    assert counterterm.rank == 4
+    assert set(counterterm.list_dangling()) == set(
+        diagram.numerator_expression().list_dangling()
+    )
