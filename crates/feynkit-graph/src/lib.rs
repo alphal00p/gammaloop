@@ -19,11 +19,12 @@ mod uv;
 pub use power_counting::DOD;
 
 // Symbolica does not permit adding tags after a bare symbol with the same name
-// has been registered. Claim momentum and index heads during global state
+// has been registered. Claim momentum, index and Lorentz heads during global state
 // initialization so parsing and generation always agree on their tensor types.
 // Use Spenso's canonical tag names and shared printer so FeynKit interoperates
 // with the Spenso instance embedded by the host.
 symbolica::initialize!(|| spenso::symbolica_init::in_symbolica_initializer(|| {
+    let _ = Minkowski {}.to_symbolic([Atom::Zero]);
     symbols::momentum();
     symbols::loop_momentum();
     symbols::external_momentum();
@@ -65,7 +66,6 @@ use linnet::{
     parser::{DotGraph, set::DotGraphSet},
 };
 use serde::{Deserialize, Serialize};
-#[cfg(test)]
 use spenso::structure::representation::{Minkowski, RepName};
 use symbolica::{
     atom::{Atom, AtomCore, UserData},
@@ -2952,6 +2952,56 @@ mod tests {
     }
 
     #[test]
+    fn uv_expansion_preserves_boundary_momenta() {
+        let bubble = one_loop();
+        let full = bubble
+            .momentum_basis_of(&bubble.graph.full_filter())
+            .unwrap();
+        let selected = bubble
+            .momentum_basis_of(&bubble.internal_subgraph())
+            .unwrap();
+        assert_eq!(selected.external_edges, full.external_edges);
+        assert_eq!(selected.dependent_externals, full.dependent_externals);
+        for edge in selected.external_edges {
+            assert_eq!(selected.edge_signatures[&edge], full.edge_signatures[&edge]);
+        }
+    }
+
+    #[test]
+    fn uv_expansion_treats_an_omitted_chord_as_soft() {
+        use linnet::half_edge::subgraph::ModifySubSet;
+        let model = scalar_model();
+        let particle = model.particle_id("phi").unwrap();
+        let rule = model.vertex_rule_id("V_1").unwrap();
+        let mut builder = FeynmanDiagram::builder(model, "sunset");
+        let left = builder.add_vertex(DiagramVertex::interaction("left", rule));
+        let right = builder.add_vertex(DiagramVertex::interaction("right", rule));
+        for _ in 0..3 {
+            builder
+                .add_edge(left, right, DiagramEdge::new(particle, false))
+                .unwrap();
+        }
+        let diagram = builder.build().unwrap();
+        let mut selected = diagram.internal_subgraph();
+        selected.sub(diagram.graph[&EdgeIndex(2)].1);
+        let basis = diagram.momentum_basis_of(&selected).unwrap();
+        assert_eq!(basis.loop_edges.len(), 1);
+        assert_eq!(basis.external_edges, vec![EdgeId(2)]);
+        assert!(basis.dependent_externals.is_empty());
+        let mass = Atom::var(symbolica::symbol!("feynkit_graph::test_mUV"));
+        let soft = symbolica::function!(symbols::momentum(), 2, 0);
+        let scalar = diagram.uv_expansion_of(&selected, &mass, 4, None).unwrap();
+        let tensor = diagram
+            .uv_expansion_of(&selected, &mass, 4, Some(&soft))
+            .unwrap();
+        assert_eq!(tensor, &soft * scalar);
+        let momenta = (0..3)
+            .map(|edge| basis.route_expression(&symbols::momentum().call(edge)))
+            .fold(Atom::Zero, |a, b| a + b);
+        assert_eq!(momenta.expand(), Atom::Zero);
+    }
+
+    #[test]
     fn uv_expansion_retains_logarithmic_bubble_and_quadratic_mass_correction() {
         let bubble = one_loop();
         let mass = Atom::var(symbolica::symbol!("feynkit_graph::test_mUV"));
@@ -2994,12 +3044,12 @@ mod tests {
         // Before setting external momenta to zero, the subtraction must remove
         // every divergent coefficient of the original, undeformed integrand.
         let bare = Atom::one() / bubble.denominator_of(&selected, &BTreeMap::new()).unwrap();
-        let scale = symbolica::symbol!("feynkit_graph::uv_test_scale");
+        let scale = symbolica::symbol!("feynkit_graph::uv_test_scale"; Scalar);
         let args = symbolica::symbol!("feynkit_graph::uv_test_args___");
         let loop_momentum = symbolica::function!(symbols::loop_momentum(), args);
         let remainder = basis
             .route_expression(&explicit(bare - &expansion))
-            .replace(&loop_momentum)
+            .replace(loop_momentum.to_pattern())
             .with(&loop_momentum / scale)
             * Atom::var(scale).pow(-6);
         assert_eq!(
@@ -3019,7 +3069,9 @@ mod tests {
         }
         let vacuum = &q2 - mass.pow(2);
         let expected = vacuum.pow(-2)
-            + 2 * (Atom::var(symbolica::symbol!("UFO::M")).pow(2) - mass.pow(2)) * vacuum.pow(-3);
+            + Atom::num(2)
+                * (Atom::var(symbolica::symbol!("UFO::M")).pow(2) - mass.pow(2))
+                * vacuum.pow(-3);
         assert_eq!((expansion - expected).expand().cancel(), Atom::Zero);
     }
 

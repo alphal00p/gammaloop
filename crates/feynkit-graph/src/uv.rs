@@ -47,7 +47,7 @@ impl FeynmanDiagram {
         if basis.loop_edges.is_empty() {
             return Ok(Atom::Zero);
         }
-        let scale = symbol!("feynkit_graph::uv_expansion_scale");
+        let scale = symbol!("feynkit_graph::uv_expansion_scale"; Scalar);
         let args = symbol!("feynkit_graph::uv_expansion_args___");
         let loop_pattern = function!(symbols::loop_momentum(), args);
         let rescale = |expression: &Atom| {
