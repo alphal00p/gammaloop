@@ -84,7 +84,7 @@ or semantics, and do not satisfy the completion standard above.
   columns: (1.2fr, 1fr, 2.2fr),
   table.header([*Package*], [*Surface snapshot*], [*Immediate interpretation*]),
   [`gammaloop-python`], [40 exports; 262 members], [65 member descriptions are blank, chiefly around public integration-result records; core examples depend on an unspecified state and point.],
-  [`linnet-py`], [21 exports; 178 members], [54 member descriptions are blank and the generated reference contains no runnable examples.],
+  [`linnet`], [21 exports; 178 members], [54 member descriptions are blank and the generated reference contains no runnable examples.],
   [`spynso3`], [14 exports; 119 members], [34 member descriptions are blank; numerous examples are fragments or violate the documented registration workflow.],
   [`idenso-community`], [16 functions], [All exports have prose, but only nine have examples and none is runtime-verified.],
   [`vakint-community`], [4 classes; 20 members], [Member prose exists, but examples are non-standalone and exception contracts are absent.],
@@ -415,7 +415,7 @@ correlated entries in one bin.
 
 === APIDOC-203 · Linnet Python algorithms and proxies
 
-*Priority:* P1 · *Status:* Open · *Surface:* `linnet-py`
+*Priority:* P1 · *Status:* Open · *Surface:* `linnet`
 
 The reference has no examples. It does not explain the spanning-forest result from
 `cycle_basis`, the left/cut/right parts of `all_cuts`, traversal flags, callback

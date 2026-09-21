@@ -74,8 +74,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("../feynkit-py/python/symbolica/community/feynkit/__init__.pyi"),
         ),
-        "linnet-py" => outputs
-            .push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../linnet-py/linnet_py.pyi")),
+        "linnet-python" => {
+            outputs.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../linnet-py/linnet.pyi"))
+        }
         _ => {}
     }
     outputs.sort();
@@ -84,7 +85,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         if check {
             let checked_in = fs::read_to_string(&output)?;
             if checked_in != normalized {
-                let hint = if matches!(component.as_str(), "feynkit-community" | "linnet-py") {
+                let hint = if matches!(component.as_str(), "feynkit-community" | "linnet-python") {
                     "regenerate the shared package/docs surface"
                 } else {
                     "regenerate the checked-in snapshot"
@@ -140,7 +141,7 @@ fn render(
     match component {
         "feynkit-community" => Ok(module.to_string().trim_end().to_owned()),
         #[cfg(feature = "linnet")]
-        "linnet-py" => Ok(linnet_py::canonical_stub()?),
+        "linnet-python" => Ok(linnet_py::canonical_stub()?),
         _ => Ok(module.to_string()),
     }
 }
@@ -269,7 +270,7 @@ fn gather(component: &str) -> Result<(&'static str, pyo3_stub_gen::StubInfo), Bo
         #[cfg(feature = "gammaloop")]
         "gammaloop-python" => Ok(("gammaloop._gammaloop", gammaloop_api::python::stub_info()?)),
         #[cfg(feature = "linnet")]
-        "linnet-py" => Ok(("linnet_py", linnet_py::stub_info()?)),
+        "linnet-python" => Ok(("linnet", linnet_py::stub_info()?)),
         #[cfg(feature = "spenso")]
         "spynso3" => Ok(("symbolica.community.spenso", spynso3::stub_info()?)),
         #[cfg(feature = "idenso")]
@@ -490,10 +491,10 @@ def validate(runtime_module, stub_source):
     #[test]
     fn linnet_package_and_docs_share_the_typed_stub_info_surface() {
         let canonical = linnet_py::canonical_stub().unwrap();
-        assert_eq!(canonical, include_str!("../../linnet-py/linnet_py.pyi"));
+        assert_eq!(canonical, include_str!("../../linnet-py/linnet.pyi"));
         assert_eq!(
             canonical,
-            include_str!("../../../docs/api/python/linnet-py.pyi")
+            include_str!("../../../docs/api/python/linnet-python.pyi")
         );
         for declaration in [
             "_NativeValue: typing.TypeAlias = (",

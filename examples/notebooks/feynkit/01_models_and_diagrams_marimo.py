@@ -2,7 +2,7 @@
 # requires-python = ">=3.11"
 # dependencies = [
 #     "marimo==0.24.0",
-#     "linnet-py==0.1.0",
+#     "linnet==0.1.0",
 #     "symbolica==3.0.0",
 #     "typst==0.15.0",
 # ]
@@ -251,7 +251,7 @@ def _(mo):
     ## Select interaction regions with Linnet
 
     External states live on dangling edges in an amplitude. Every vertex is
-    an interaction. The canonical `linnet_py.Graph` keeps the diagram's typed
+    an interaction. The canonical `linnet.Graph` keeps the diagram's typed
     physics objects in its element payloads, so ordinary graph predicates can
     select the region for a numerator, denominator, routing, or CFF calculation.
     """)

@@ -164,7 +164,7 @@ states are sewn paired edges; their `is_external` metadata still identifies exte
 momentum carriers. Every item in `diagram.vertices` is an interaction. A missing edge
 endpoint is `None`, and external names, indices, and states belong to the edge.
 
-Install the matching `linnet-py` extension to use the graph analysis interface.
+Install the matching `linnet` extension to use the graph analysis interface.
 `to_linnet()` returns that module's canonical `Graph`, with `DiagramVertex` and
 `DiagramEdge` payloads. Its selection algebra and graph algorithms therefore work directly:
 
