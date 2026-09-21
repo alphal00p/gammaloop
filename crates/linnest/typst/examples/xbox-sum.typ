@@ -264,6 +264,7 @@ let g = graph.build(default-edge-data: edge-data, master)
     graph.map(g, node: nodes, edge: edges)
   }
 
+  let diagram = diagram.with(cut-height: 6)
   let sum-layouts = (0.21, 0.20, 0.19, 0.15).map(length => layouts.options(
     base: base-layout,
     spring: (length: length),

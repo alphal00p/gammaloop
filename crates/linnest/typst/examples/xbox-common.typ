@@ -88,6 +88,7 @@
   cut-x: auto,
   cut-y: auto,
   initial-cut: none,
+  cut-height: auto,
   endpoint-fills: diagram-style.endpoint-box.fills,
   draw-after: none,
 ) = {
@@ -168,8 +169,12 @@
         width: bounds.width + 2 * box-style.padding.x,
         height: bounds.height + 2 * y,
       )
+      let ys = endpoints.map(b => b.pos.y)
+      let center-y = if ys.len() == 0 { (bounds.top + bounds.bottom) / 2 } else { (calc.min(..ys) + calc.max(..ys)) / 2 }
+      let top = if cut-height == auto { bounds.top } else { center-y + cut-height / 2 }
+      let bottom = if cut-height == auto { bounds.bottom } else { center-y - cut-height / 2 }
       if cut-x != none {
-        cetz.draw.line((x, bounds.top), (x, bounds.bottom), stroke: (
+        cetz.draw.line((x, top), (x, bottom), stroke: (
           paint: red.transparentize(50%),
           thickness: diagram-style.cut-line-width,
           cap: "round",
@@ -177,13 +182,14 @@
         ))
       }
       if initial-cut != none and draw-initials {
+
         for side in ("left", "right") {
           let side-xs = endpoints.filter(b => b.side == side).map(b => b.pos.x)
           if side-xs.len() > 0 {
             let x = side-xs.first()
             cetz.draw.line(
-              (x, bounds.top),
-              (x, bounds.bottom),
+              (x, top),
+              (x, bottom),
               stroke: initial-cut-styles.at(initial-cut),
             )
           }
