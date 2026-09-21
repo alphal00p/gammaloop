@@ -588,6 +588,7 @@ impl PyCffResult {
     /// replacements : list[tuple[Expression, Expression]], optional
     ///     Route all energy dependence to the integration variable before differentiating.
     #[pyo3(signature = (group, *, variable, root, surface, coefficient, normalized=false, replacements=None))]
+    #[allow(clippy::too_many_arguments)] // Keep Python's residue coordinates explicit keyword arguments.
     fn residue(
         &self,
         group: &PyCffSurfaceGroup,

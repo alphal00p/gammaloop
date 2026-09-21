@@ -14,7 +14,7 @@ use std::{
 };
 
 use feynkit_generator::{GenerationFilter, GenerationOptions, Generator, Process, VertexSelector};
-use feynkit_graph::{EdgeId, ExternalState, FeynmanDiagram, VertexId};
+use feynkit_graph::{EdgeId, ExternalState, FeynmanDiagram};
 use feynkit_model::{Model, ParameterCard};
 use gammalooprs::{
     model::{InputParamCard, ModelGammaLoopExt},
@@ -68,6 +68,7 @@ struct CandidateEdge {
     source: usize,
     target: usize,
     particle: String,
+    antiparticle: String,
     directed: bool,
 }
 
@@ -277,42 +278,57 @@ fn epemttbar_target() -> Target {
 }
 
 fn candidate_data(diagram: &FeynmanDiagram, model: &Model) -> Result<Candidate, DynError> {
-    let vertices = diagram.vertices().collect::<Vec<_>>();
-    let positions = vertices
-        .iter()
-        .enumerate()
-        .map(|(position, (id, _))| (*id, position))
-        .collect::<BTreeMap<VertexId, usize>>();
-    let candidate_vertices = vertices
-        .iter()
+    let mut vertices = diagram
+        .vertices()
         .map(|(_, vertex)| {
-            if let Some(interaction) = vertex.interaction {
-                Ok(CandidateVertex::Interaction(
-                    model.vertex_rule_by_id(interaction)?.name.clone(),
-                ))
-            } else if let Some(external) = &vertex.external {
-                Ok(CandidateVertex::External(external.state))
-            } else {
-                Err("diagram vertex has neither an interaction nor an external state".into())
+            let rule = vertex
+                .interaction
+                .ok_or("fixture interaction has no rule")?;
+            Ok(CandidateVertex::Interaction(
+                model.vertex_rule_by_id(rule)?.name.clone(),
+            ))
+        })
+        .collect::<Result<Vec<_>, DynError>>()?;
+    let mut edges = Vec::new();
+    for (id, endpoints, edge) in diagram.edges() {
+        let particle = model.particle_by_id(edge.particle)?;
+        // Target patterns describe pre-sewing topology. Expand external legs
+        // only in this private matcher; both aliases keep the native edge ID
+        // used when the selected loop coordinates are installed on the diagram.
+        let attachments = if let Some(external) = &edge.external {
+            match (endpoints.source, endpoints.target) {
+                (Some(source), Some(target)) => vec![
+                    (None, Some(source), Some(ExternalState::Incoming)),
+                    (Some(target), None, Some(ExternalState::Outgoing)),
+                ],
+                (source, target) => vec![(source, target, Some(external.state))],
             }
-        })
-        .collect::<Result<Vec<_>, DynError>>()?;
-    let edges = diagram
-        .edges()
-        .map(|(id, endpoints, edge)| {
-            Ok(CandidateEdge {
+        } else {
+            vec![(endpoints.source, endpoints.target, None)]
+        };
+        for (source, target, state) in attachments {
+            let external = state.map(|state| {
+                let id = vertices.len();
+                vertices.push(CandidateVertex::External(state));
+                id
+            });
+            edges.push(CandidateEdge {
                 id,
-                source: positions[&endpoints.source],
-                target: positions[&endpoints.target],
-                particle: model.particle_by_id(edge.particle)?.name.clone(),
+                source: source
+                    .map(|vertex| vertex.0)
+                    .or(external)
+                    .ok_or("missing source")?,
+                target: target
+                    .map(|vertex| vertex.0)
+                    .or(external)
+                    .ok_or("missing target")?,
+                particle: particle.name.clone(),
+                antiparticle: model.particle_by_id(particle.antiparticle)?.name.clone(),
                 directed: edge.directed,
-            })
-        })
-        .collect::<Result<Vec<_>, DynError>>()?;
-    Ok(Candidate {
-        vertices: candidate_vertices,
-        edges,
-    })
+            });
+        }
+    }
+    Ok(Candidate { vertices, edges })
 }
 
 fn vertex_matches(target: TargetVertex, candidate: &CandidateVertex) -> bool {
@@ -328,13 +344,19 @@ fn vertex_matches(target: TargetVertex, candidate: &CandidateVertex) -> bool {
 }
 
 fn edge_matches(target: &TargetEdge, candidate: &CandidateEdge, vertex_mapping: &[usize]) -> bool {
-    if target.particle != candidate.particle || target.directed != candidate.directed {
+    if target.directed != candidate.directed {
         return false;
     }
     let source = vertex_mapping[target.source];
-    let target_vertex = vertex_mapping[target.target];
-    (candidate.source == source && candidate.target == target_vertex)
-        || (!target.directed && candidate.source == target_vertex && candidate.target == source)
+    let sink = vertex_mapping[target.target];
+    candidate.particle == target.particle && candidate.source == source && candidate.target == sink
+        || candidate.source == sink
+            && candidate.target == source
+            && if target.directed {
+                candidate.antiparticle == target.particle
+            } else {
+                candidate.particle == target.particle
+            }
 }
 
 fn match_edges(
@@ -345,13 +367,14 @@ fn match_edges(
     let mut used = BTreeSet::new();
     let mut mapping = BTreeMap::new();
     for target_edge in &target.edges {
-        let edge = candidate
+        let (position, edge) = candidate
             .edges
             .iter()
-            .filter(|edge| !used.contains(&edge.id))
-            .filter(|edge| edge_matches(target_edge, edge, vertex_mapping))
-            .min_by_key(|edge| edge.id)?;
-        used.insert(edge.id);
+            .enumerate()
+            .filter(|(position, _)| !used.contains(position))
+            .filter(|(_, edge)| edge_matches(target_edge, edge, vertex_mapping))
+            .min_by_key(|(position, edge)| (edge.id, *position))?;
+        used.insert(position);
         mapping.insert(target_edge.id, edge.id);
     }
     (used.len() == candidate.edges.len()).then_some(mapping)

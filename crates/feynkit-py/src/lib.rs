@@ -15,7 +15,10 @@ mod ufo;
 use pyo3::{prelude::*, types::PyModule};
 use symbolica::api::python::SymbolicaCommunityModule;
 
-pub use cff::{PyCffGenerator, PyCffOrientation, PyCffReport, PyCffResult, PyCffSurface};
+pub use cff::{
+    PyCffGenerator, PyCffOrientation, PyCffReport, PyCffResult, PyCffSurface, PyCffSurfaceGroup,
+    PyCutPropagator,
+};
 pub use generation::{
     PyCancellationToken, PyDiagramGroup, PyGenerationProgress, PyGenerationReport,
     PyGenerationResult, PyGenerationType, PyGenerator, PyGroupMember, PyNumeratorGrouping,
@@ -23,7 +26,8 @@ pub use generation::{
     PyTadpoleFilterOptions,
 };
 pub use graph::{
-    PyDiagramEdge, PyDiagramVertex, PyFeynmanDiagram, PyLoopMomentumBasis, PyMomentumSignature,
+    PyDiagramCut, PyDiagramCutSide, PyDiagramEdge, PyDiagramThresholdCandidate, PyDiagramVertex,
+    PyFeynmanDiagram, PyLoopMomentumBasis, PyMomentumSignature,
 };
 pub use kinematics::{
     PyAxis, PyBoost, PyClusteringResult, PyFourMomentum, PyHelicity, PyJet, PyJetAlgorithm,

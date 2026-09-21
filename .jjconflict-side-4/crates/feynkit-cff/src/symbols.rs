@@ -2,7 +2,9 @@
 
 use std::sync::LazyLock;
 
-use spenso::{structure::abstract_index::AIND_SYMBOLS, utils::to_subscript};
+use spenso::{
+    structure::abstract_index::AIND_SYMBOLS, symbolica_init::SymbolicaInitLazy, utils::to_subscript,
+};
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, Symbol},
     function,
@@ -77,10 +79,10 @@ static ENERGY: LazyLock<Symbol> = LazyLock::new(|| {
 });
 
 pub fn on_shell() -> Symbol {
-    *ON_SHELL
+    *SymbolicaInitLazy::new(&ON_SHELL)
 }
 pub fn energy() -> Symbol {
-    *ENERGY
+    *SymbolicaInitLazy::new(&ENERGY)
 }
 pub fn on_shell_atom(edge: EdgeId) -> Atom {
     function!(on_shell(), edge.index() as i64)
@@ -97,7 +99,7 @@ pub fn external_energy_atom(edge: EdgeId) -> Atom {
 }
 
 // Register attributes before an expression parser can create bare energy heads.
-symbolica::initialize!(|| {
+symbolica::initialize!(|| spenso::symbolica_init::in_symbolica_initializer(|| {
     on_shell();
     energy();
-});
+}));

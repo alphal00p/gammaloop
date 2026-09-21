@@ -180,6 +180,9 @@ impl TensorialSyntax {
             }
             AtomView::Fun(function) => {
                 let symbol = function.get_symbol();
+                if symbol.is_scalar() {
+                    return Ok(());
+                }
                 let chain_like = symbol == SPENSO_TAG.chain || symbol == SPENSO_TAG.trace;
                 if chain_like && let Some(outer) = owner {
                     return Err(ChainNestingError {
@@ -200,7 +203,7 @@ impl TensorialSyntax {
     pub(crate) fn function_is_tensorial(fun: FunView<'_>, filter: StrictTensorFilter) -> bool {
         let symbol = fun.get_symbol();
 
-        if symbol == SPENSO_TAG.pure_scalar || symbol == SPENSO_TAG.scalar {
+        if symbol.is_scalar() || symbol == SPENSO_TAG.pure_scalar || symbol == SPENSO_TAG.scalar {
             return false;
         }
 
@@ -247,8 +250,9 @@ impl TensorialSyntax {
     fn contains_representation_syntax(value: AtomView<'_>) -> bool {
         match value {
             AtomView::Fun(fun) => {
-                fun.get_symbol().has_attributes_of(SPENSO_TAG.rep_)
-                    || fun.iter().any(Self::contains_representation_syntax)
+                !fun.get_symbol().is_scalar()
+                    && (fun.get_symbol().has_attributes_of(SPENSO_TAG.rep_)
+                        || fun.iter().any(Self::contains_representation_syntax))
             }
             AtomView::Var(var) => var.get_symbol().has_attributes_of(SPENSO_TAG.rep_),
             AtomView::Add(add) => add.iter().any(Self::contains_representation_syntax),
@@ -385,6 +389,9 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
     /// Chain projectors without direct structural arguments expose the combined
     /// slots of their factor sequence.
     fn from_function_atom(fun: FunView<'_>) -> Result<Self, StructureError> {
+        if fun.get_symbol().is_scalar() {
+            return Ok(OrderedStructure::empty());
+        }
         if fun.get_symbol() == AIND_SYMBOLS.aind {
             let mut slots = Vec::new();
             for arg in fun.iter() {

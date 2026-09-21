@@ -122,6 +122,86 @@ impl PropagatorSymbols {
     }
 }
 
+impl crate::FeynmanDiagram {
+    /// Construct the selected local numerator using the same boundary and
+    /// exclusion rules as GammaLoop. Diagram-wide factors remain separate.
+    pub fn numerator_of<S: SubGraphLike + SubSetOps>(&self, subgraph: &S, without: &S) -> Atom {
+        self.graph.numerator_of(
+            subgraph,
+            without,
+            |vertex| vertex.numerator.clone(),
+            |edge| edge.numerator.clone(),
+            |edge| edge.is_dummy,
+        )
+    }
+
+    pub fn denominator_of<S: SubGraphLike>(
+        &self,
+        subgraph: &S,
+        edge_powers: &std::collections::BTreeMap<crate::EdgeId, isize>,
+    ) -> Result<Atom, crate::DiagramError> {
+        self.denominator_of_in_dimension(subgraph, edge_powers, crate::symbols::dimension().into())
+    }
+
+    /// Symbolic dimension and signed propagator powers follow the runtime UV
+    /// representation, retaining its four-argument `denom` wrapper.
+    pub fn denominator_of_in_dimension<S: SubGraphLike>(
+        &self,
+        subgraph: &S,
+        edge_powers: &std::collections::BTreeMap<crate::EdgeId, isize>,
+        dimension: Dimension,
+    ) -> Result<Atom, crate::DiagramError> {
+        let symbols = PropagatorSymbols {
+            momentum: crate::symbols::momentum(),
+            denominator: crate::symbols::denominator(),
+        };
+        self.graph.denominator_of(
+            subgraph,
+            |edge_id, edge| {
+                let particle = self.model.particle_by_id(edge.particle)?;
+                let mass = particle
+                    .symbolic_mass(&self.model)
+                    .replace(symbolica::symbol!("UFO::ZERO"))
+                    .with(Atom::Zero);
+                Ok(symbols.denominator(edge_id, &mass.pow(2), dimension))
+            },
+            |edge_id, _| {
+                edge_powers
+                    .get(&crate::EdgeId(edge_id.0))
+                    .copied()
+                    .unwrap_or(1)
+            },
+        )
+    }
+
+    /// Local superficial degree for a half-edge selection, including its
+    /// boundary vertices and excluding physical external momentum carriers.
+    pub fn superficial_degree_of_divergence_of(
+        &self,
+        subgraph: &linnet::half_edge::subgraph::SuBitGraph,
+        dimension: i32,
+    ) -> Result<i32, crate::DiagramError> {
+        use crate::DOD;
+        let loops = self.momentum_basis_of(subgraph)?.loop_edges.len();
+        let mut degree = i64::from(dimension) * loops as i64;
+        for (_, _, vertex) in self.graph.iter_nodes_of(subgraph) {
+            degree += i64::from(vertex.numerator.all_dod(crate::symbols::momentum())?);
+        }
+        for (pair, edge_id, edge) in self.graph.iter_edges_of(subgraph) {
+            if pair.is_paired() && edge.data.external.is_none() && !edge.data.is_dummy {
+                degree += i64::from(
+                    edge.data
+                        .numerator
+                        .edge_dod(crate::symbols::momentum(), edge_id.0)?,
+                ) - 2;
+            }
+        }
+        i32::try_from(degree).map_err(|_| {
+            crate::DiagramError::UvPowerCounting("degree exceeds the integer range".into())
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -206,85 +286,5 @@ mod tests {
             graph.denominator_of(&graph.full_filter(), |_, _| Err::<Atom, _>(()), |_, _| 0),
             Ok(Atom::one())
         );
-    }
-}
-
-impl crate::FeynmanDiagram {
-    /// Construct the selected local numerator using the same boundary and
-    /// exclusion rules as GammaLoop. Diagram-wide factors remain separate.
-    pub fn numerator_of<S: SubGraphLike + SubSetOps>(&self, subgraph: &S, without: &S) -> Atom {
-        self.graph.numerator_of(
-            subgraph,
-            without,
-            |vertex| vertex.numerator.clone(),
-            |edge| edge.numerator.clone(),
-            |edge| edge.is_dummy,
-        )
-    }
-
-    pub fn denominator_of<S: SubGraphLike>(
-        &self,
-        subgraph: &S,
-        edge_powers: &std::collections::BTreeMap<crate::EdgeId, isize>,
-    ) -> Result<Atom, crate::DiagramError> {
-        self.denominator_of_in_dimension(subgraph, edge_powers, crate::symbols::dimension().into())
-    }
-
-    /// Symbolic dimension and signed propagator powers follow the runtime UV
-    /// representation, retaining its four-argument `denom` wrapper.
-    pub fn denominator_of_in_dimension<S: SubGraphLike>(
-        &self,
-        subgraph: &S,
-        edge_powers: &std::collections::BTreeMap<crate::EdgeId, isize>,
-        dimension: Dimension,
-    ) -> Result<Atom, crate::DiagramError> {
-        let symbols = PropagatorSymbols {
-            momentum: crate::symbols::momentum(),
-            denominator: crate::symbols::denominator(),
-        };
-        self.graph.denominator_of(
-            subgraph,
-            |edge_id, edge| {
-                let particle = self.model.particle_by_id(edge.particle)?;
-                let mass = particle
-                    .symbolic_mass(&self.model)
-                    .replace(symbolica::symbol!("UFO::ZERO"))
-                    .with(Atom::Zero);
-                Ok(symbols.denominator(edge_id, &mass.pow(2), dimension))
-            },
-            |edge_id, _| {
-                edge_powers
-                    .get(&crate::EdgeId(edge_id.0))
-                    .copied()
-                    .unwrap_or(1)
-            },
-        )
-    }
-
-    /// Local superficial degree for a half-edge selection, including its
-    /// boundary vertices and excluding physical external momentum carriers.
-    pub fn superficial_degree_of_divergence_of(
-        &self,
-        subgraph: &linnet::half_edge::subgraph::SuBitGraph,
-        dimension: i32,
-    ) -> Result<i32, crate::DiagramError> {
-        use crate::DOD;
-        let loops = self.momentum_basis_of(subgraph)?.loop_edges.len();
-        let mut degree = i64::from(dimension) * loops as i64;
-        for (_, _, vertex) in self.graph.iter_nodes_of(subgraph) {
-            degree += i64::from(vertex.numerator.all_dod(crate::symbols::momentum())?);
-        }
-        for (pair, edge_id, edge) in self.graph.iter_edges_of(subgraph) {
-            if pair.is_paired() && edge.data.external.is_none() && !edge.data.is_dummy {
-                degree += i64::from(
-                    edge.data
-                        .numerator
-                        .edge_dod(crate::symbols::momentum(), edge_id.0)?,
-                ) - 2;
-            }
-        }
-        i32::try_from(degree).map_err(|_| {
-            crate::DiagramError::UvPowerCounting("degree exceeds the integer range".into())
-        })
     }
 }

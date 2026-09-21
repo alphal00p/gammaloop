@@ -243,6 +243,29 @@ assert isinstance(scalar_graphs[0].numerator_expression(), spenso.TensorExpressi
 auto_reduced = scalar_graphs[0].tensor_reduce(tensor_dimension)
 assert isinstance(auto_reduced, spenso.TensorExpression)
 assert auto_reduced == scalar_graphs[0].numerator_expression()
+graph_momentum = core.S("gammalooprs::Q")
+graph_loop_edge = diagram.loop_momentum_basis.loop_edges[0]
+expanded_input = spenso.as_tensor(
+    3 + 2
+    * graph_momentum(graph_loop_edge, mink(4, tensor_mu))
+    * graph_momentum(graph_loop_edge, mink(4, tensor_nu))
+    * projector_momentum(mink(4, tensor_mu))
+    * projector_momentum(mink(4, tensor_nu))
+)
+expanded_reduced = diagram.tensor_reduce(tensor_dimension, expression=expanded_input)
+graph_loop_vector = graph_momentum(graph_loop_edge, mink(tensor_dimension))
+expanded_expected = 3 + 2 * dot(graph_loop_vector, graph_loop_vector) * dot(
+    projector_momentum(mink(tensor_dimension)),
+    projector_momentum(mink(tensor_dimension)),
+) / tensor_dimension
+assert isinstance(expanded_reduced, spenso.TensorExpression)
+assert (expanded_reduced - expanded_expected).expand() == 0, str((expanded_reduced - expanded_expected).expand())
+try:
+    diagram.tensor_reduce(tensor_dimension, expression=expanded_input, projector=1)
+except feynkit.DiagramError:
+    pass
+else:
+    raise AssertionError("tensor reduction accepted both an expression and a projector")
 # Converting back to an ordinary expression keeps Symbolica's namespace and
 # nested bracket colors, just as if mink had no custom Spenso printer.
 ordinary_numerator = scalar_graphs[0].numerator_expression().to_expression()

@@ -19,6 +19,15 @@ pub(crate) fn escape_html(value: &str) -> String {
 
 /// Compile a diagram's Linnest source with typst-py and return its SVG page.
 pub(crate) fn render_diagram_svg(py: Python<'_>, diagram: &FeynmanDiagram) -> PyResult<String> {
+    py.import("typst").map_err(|error| {
+        if error.is_instance_of::<pyo3::exceptions::PyImportError>(py) {
+            pyo3::exceptions::PyImportError::new_err(format!(
+                "diagram rendering requires typst-py: {error}"
+            ))
+        } else {
+            error
+        }
+    })?;
     let svg = PreparedRender::from_sources(
         [
             ("main.typ", diagram.to_linnest()),

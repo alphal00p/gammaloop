@@ -652,3 +652,84 @@ fn native_runtime_enrichment_preserves_explicit_loop_order() {
     assert_eq!(diagram.loop_momentum_basis().loop_edges, selected);
     assert_native_runtime_parity(&diagram);
 }
+
+#[test]
+fn native_subgraph_routing_matches_runtime_for_empty_and_disconnected_selections() {
+    use crate::graph::LMBext;
+    use feynkit_graph::{DiagramVertex, FeynmanDiagram};
+    use linnet::half_edge::subgraph::{ModifySubSet, SuBitGraph};
+    use symbolica::atom::Atom;
+    test_initialise().unwrap();
+    let model = std::sync::Arc::new(crate::utils::load_generic_model("scalars"));
+    let particle = model.particle_id("scalar_1").unwrap();
+    let mut builder = FeynmanDiagram::builder(model, "disconnected_selections");
+    let nodes = (0..4)
+        .map(|index| {
+            builder.add_vertex(DiagramVertex {
+                name: format!("v{index}"),
+                interaction: None,
+                numerator: Atom::one(),
+            })
+        })
+        .collect::<Vec<_>>();
+    for (index, state, source, target) in [
+        (
+            0,
+            feynkit_graph::ExternalState::Incoming,
+            None,
+            Some(nodes[0]),
+        ),
+        (
+            1,
+            feynkit_graph::ExternalState::Outgoing,
+            Some(nodes[3]),
+            None,
+        ),
+    ] {
+        let mut edge = DiagramEdge::new(particle, false);
+        edge.external = Some(feynkit_graph::ExternalLeg {
+            name: format!("external{index}"),
+            index,
+            state,
+            connection: index,
+        });
+        builder.add_edge(source, target, edge).unwrap();
+    }
+    for (source, target) in [(0, 1), (0, 1), (1, 2), (2, 3), (2, 3)] {
+        builder
+            .add_edge(
+                nodes[source],
+                nodes[target],
+                DiagramEdge::new(particle, false),
+            )
+            .unwrap();
+    }
+    let diagram = builder.build().unwrap();
+    let runtime = Graph::from_feynkit(&diagram, None, true).unwrap();
+    let empty: SuBitGraph = diagram.underlying().empty_subgraph();
+    let mut disconnected = empty.clone();
+    for edge in [2, 3, 5, 6] {
+        disconnected.add(diagram.underlying()[&EdgeIndex(edge)].1);
+    }
+    let mut partial = empty.clone();
+    for edge in [2, 3] {
+        partial.add(diagram.underlying()[&EdgeIndex(edge)].1);
+    }
+    for selected in [empty, partial, disconnected] {
+        let native = diagram
+            .momentum_basis_of(&selected)
+            .unwrap()
+            .to_routing(diagram.underlying());
+        let reference: feynkit_graph::routing::MomentumBasis = (&runtime.lmb_of(&selected)).into();
+        assert_eq!(
+            native.tree.included_iter().collect::<Vec<_>>(),
+            reference.tree.included_iter().collect::<Vec<_>>()
+        );
+        assert_eq!(native.loop_edges, reference.loop_edges);
+        assert_eq!(native.ext_edges, reference.ext_edges);
+        assert_eq!(native.edge_signatures, reference.edge_signatures);
+    }
+}
+
+#[path = "finalized_reference.rs"]
+mod finalized_reference;

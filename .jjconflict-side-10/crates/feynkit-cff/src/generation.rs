@@ -1669,6 +1669,68 @@ mod tests {
     }
 
     #[test]
+    fn selected_sewn_boundary_retains_positive_external_energy() {
+        let graph: DotGraph = DotGraph::from_string(
+            r#"digraph sewn {
+                ext_in [style=invis]
+                A [id=0]
+                B [id=1]
+                C [id=2]
+                A -> B [id=0]
+                A -> B [id=1]
+                B -> C [id=2]
+                ext_in -> A [id=3]
+            }"#,
+        )
+        .unwrap();
+        let mut selected: SuBitGraph = graph.empty_subgraph();
+        for (_, neighbours, vertex) in graph.iter_nodes() {
+            if matches!(vertex.name(), Some("A" | "B")) {
+                neighbours.for_each(|hedge| selected.add(hedge));
+            }
+        }
+        let actual = graph
+            .build_cff_from_subgraph_with_edge_roles(
+                &selected,
+                CffOptions::default(),
+                &[],
+                |id| match id.index() {
+                    2 => HedgeEdgeRole::InitialState,
+                    3 => HedgeEdgeRole::UnorientedExternal,
+                    _ => HedgeEdgeRole::Standard,
+                },
+                &mut SurfaceCache::default(),
+            )
+            .unwrap();
+        let expected = CffGenerator::default()
+            .generate(
+                &CffGraph::new(
+                    2,
+                    [
+                        CffEdge::internal(edge(0), vertex(0), vertex(1)),
+                        CffEdge::internal(edge(1), vertex(0), vertex(1)),
+                        CffEdge::external(edge(2), vertex(1), EdgeFlow::Outgoing),
+                        CffEdge::external(edge(3), vertex(0), EdgeFlow::Incoming),
+                    ],
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        assert_eq!(actual.surfaces, expected.surfaces);
+        assert_eq!(actual.expression.to_atom(), expected.expression.to_atom());
+        assert!(actual.orientations().iter().all(|orientation| {
+            orientation.data.orientation[edge(2)] == Orientation::Undirected
+        }));
+        assert!(
+            actual
+                .surfaces
+                .energy_surfaces()
+                .iter()
+                .all(|surface| { !surface.energies.contains(&edge(2)) })
+        );
+    }
+
+    #[test]
     fn linnet_edge_roles_cover_runtime_bookkeeping_without_an_adapter_graph() {
         let graph: DotGraph = DotGraph::from_string(
             r#"

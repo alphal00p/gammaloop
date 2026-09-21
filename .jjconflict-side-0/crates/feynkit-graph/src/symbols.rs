@@ -1,10 +1,10 @@
 //! Canonical graph symbols shared with GammaLoop.
-use spenso::spenso_print_scripted_indexed;
 use spenso::{
     network::tags::SPENSO_TAG,
     shadowing::symbolica_utils::SpensoPrintSettings,
     utils::{to_subscript, to_superscript},
 };
+use spenso::{spenso_print_scripted_indexed, symbolica_init::SymbolicaInitLazy};
 use std::sync::LazyLock;
 use symbolica::{
     atom::{Atom, AtomView, Symbol},
@@ -24,7 +24,7 @@ pub fn momentum() -> Symbol {
             ]
         )
     });
-    *SYMBOL
+    *SymbolicaInitLazy::new(&SYMBOL)
 }
 
 pub fn edge_index() -> Symbol {
@@ -35,7 +35,7 @@ pub fn edge_index() -> Symbol {
             tags = [SPENSO_TAG.index.clone(), "spenso::index-label:e".to_owned()]
         )
     });
-    *SYMBOL
+    *SymbolicaInitLazy::new(&SYMBOL)
 }
 
 pub fn vertex_index() -> Symbol {
@@ -46,7 +46,7 @@ pub fn vertex_index() -> Symbol {
             tags = [SPENSO_TAG.index.clone(), "spenso::index-label:v".to_owned()]
         )
     });
-    *SYMBOL
+    *SymbolicaInitLazy::new(&SYMBOL)
 }
 
 pub fn hedge_index() -> Symbol {
@@ -88,13 +88,13 @@ pub fn hedge_index() -> Symbol {
             tags = [SPENSO_TAG.index.clone()]
         )
     });
-    *SYMBOL
+    *SymbolicaInitLazy::new(&SYMBOL)
 }
 
 pub fn denominator() -> Symbol {
     static SYMBOL: LazyLock<Symbol> = LazyLock::new(|| {
         symbol!(
-            "gammalooprs::denom",
+            "gammalooprs::denom"; Scalar;
             der = |_, arg, out| {
                 if arg != 3 {
                     **out = Atom::Zero;
@@ -104,12 +104,12 @@ pub fn denominator() -> Symbol {
             }
         )
     });
-    *SYMBOL
+    *SymbolicaInitLazy::new(&SYMBOL)
 }
 
 pub fn dimension() -> Symbol {
     static SYMBOL: LazyLock<Symbol> = LazyLock::new(|| symbol!("gammalooprs::dim"));
-    *SYMBOL
+    *SymbolicaInitLazy::new(&SYMBOL)
 }
 
 pub fn loop_momentum() -> Symbol {
@@ -120,7 +120,7 @@ pub fn loop_momentum() -> Symbol {
             tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
         )
     });
-    *SYMBOL
+    *SymbolicaInitLazy::new(&SYMBOL)
 }
 
 pub fn external_momentum() -> Symbol {
@@ -131,7 +131,7 @@ pub fn external_momentum() -> Symbol {
             tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
         )
     });
-    *SYMBOL
+    *SymbolicaInitLazy::new(&SYMBOL)
 }
 
 pub fn u() -> Symbol {
@@ -142,7 +142,7 @@ pub fn u() -> Symbol {
             tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
         )
     });
-    *SYMBOL
+    *SymbolicaInitLazy::new(&SYMBOL)
 }
 
 pub fn ubar() -> Symbol {
@@ -154,7 +154,7 @@ pub fn ubar() -> Symbol {
             tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
         )
     });
-    *SYMBOL
+    *SymbolicaInitLazy::new(&SYMBOL)
 }
 
 pub fn v() -> Symbol {
@@ -165,7 +165,7 @@ pub fn v() -> Symbol {
             tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
         )
     });
-    *SYMBOL
+    *SymbolicaInitLazy::new(&SYMBOL)
 }
 
 pub fn vbar() -> Symbol {
@@ -177,7 +177,7 @@ pub fn vbar() -> Symbol {
             tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
         )
     });
-    *SYMBOL
+    *SymbolicaInitLazy::new(&SYMBOL)
 }
 
 pub fn epsilon() -> Symbol {
@@ -188,7 +188,7 @@ pub fn epsilon() -> Symbol {
             tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
         )
     });
-    *SYMBOL
+    *SymbolicaInitLazy::new(&SYMBOL)
 }
 
 pub fn epsilonbar() -> Symbol {
@@ -201,5 +201,5 @@ pub fn epsilonbar() -> Symbol {
             tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
         )
     });
-    *SYMBOL
+    *SymbolicaInitLazy::new(&SYMBOL)
 }

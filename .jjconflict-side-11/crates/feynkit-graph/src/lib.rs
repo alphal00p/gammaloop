@@ -22,7 +22,7 @@ pub use power_counting::DOD;
 // initialization so parsing and generation always agree on their tensor types.
 // Use Spenso's canonical tag names and shared printer so FeynKit interoperates
 // with the Spenso instance embedded by the host.
-symbolica::initialize!(|| {
+symbolica::initialize!(|| spenso::symbolica_init::in_symbolica_initializer(|| {
     symbols::momentum();
     symbols::loop_momentum();
     symbols::external_momentum();
@@ -37,7 +37,7 @@ symbolica::initialize!(|| {
     symbols::vbar();
     symbols::epsilon();
     symbols::epsilonbar();
-});
+}));
 
 pub fn momentum_symbol() -> symbolica::atom::Symbol {
     symbols::momentum()
@@ -1155,16 +1155,23 @@ impl FeynmanDiagram {
         partitions: Vec<(Vec<DiagramHalfEdge>, Vec<DiagramHalfEdge>)>,
     ) -> Result<Self, DiagramError> {
         let vertex_half_edges = self.vertex_half_edges();
+        let ignored = self.initial_state_tree().0;
+        let retained = |half_edge: &DiagramHalfEdge| {
+            self.half_edge_id(*half_edge)
+                .is_none_or(|hedge| !ignored.includes(&hedge))
+        };
         let candidates = partitions
             .into_iter()
             .enumerate()
-            .map(|(candidate, (left, right))| {
+            .map(|(candidate, (mut left, mut right))| {
+                left.retain(retained);
+                right.retain(retained);
                 self.cut_from_partitions(
                     candidate,
                     &left,
                     &right,
                     &vertex_half_edges,
-                    Some(&self.initial_state_tree().0),
+                    Some(&ignored),
                 )
                 .map(|cut| DiagramThresholdCandidate {
                     cut: cut.cut,
@@ -1325,8 +1332,16 @@ impl FeynmanDiagram {
         {
             return Err(DiagramError::InvalidCut {
                 cut,
-                message: "left and right half-edge partitions are not disjoint and complementary"
-                    .to_owned(),
+                message: format!(
+                    "left and right half-edge partitions are not disjoint and complementary (missing {:?}, overlap {:?}, outside {:?})",
+                    universe
+                        .difference(&left.union(&right).copied().collect())
+                        .collect::<Vec<_>>(),
+                    left.intersection(&right).collect::<Vec<_>>(),
+                    left.union(&right)
+                        .filter(|half| !universe.contains(half))
+                        .collect::<Vec<_>>()
+                ),
             });
         }
 
@@ -1343,10 +1358,22 @@ impl FeynmanDiagram {
                 edge,
                 endpoint: DiagramEndpoint::Target,
             };
-            match (
-                left.contains(&source) && right.contains(&target),
-                left.contains(&target) && right.contains(&source),
-            ) {
+            // Initial-state normalization may remove one complete attachment
+            // crown. A loop-carrying crossing retains its oriented boundary;
+            // the loop-independent attachment tree itself contributes no cut.
+            let crosses_ignored = self.loop_momentum_basis.edge_signatures[&edge]
+                .loops
+                .iter()
+                .any(|sign| !sign.is_zero());
+            let source_to_target = left.contains(&source) && right.contains(&target)
+                || crosses_ignored
+                    && (left.contains(&source) && is_ignored(&target)
+                        || is_ignored(&source) && right.contains(&target));
+            let target_to_source = left.contains(&target) && right.contains(&source)
+                || crosses_ignored
+                    && (left.contains(&target) && is_ignored(&source)
+                        || is_ignored(&target) && right.contains(&source));
+            match (source_to_target, target_to_source) {
                 (true, false) => {
                     oriented.insert(source);
                 }
@@ -1539,6 +1566,15 @@ impl FeynmanDiagram {
                     return Err(DiagramError::ExternalEdgeNumerator { edge: edge_id.0 });
                 }
                 if endpoints.source.is_some() && endpoints.target.is_some() {
+                    if external.state != ExternalState::Incoming {
+                        return Err(DiagramError::Invariant {
+                            operation: "validating sewn external flow",
+                            message: format!(
+                                "edge {} must carry the incoming external momentum convention",
+                                edge_id.0
+                            ),
+                        });
+                    }
                     paired_external_edges.insert(edge_id);
                 } else if (external.state == ExternalState::Incoming) != endpoints.source.is_none()
                 {
@@ -1547,6 +1583,11 @@ impl FeynmanDiagram {
                         message: format!("edge {} disagrees with its process state", edge_id.0),
                     });
                 }
+            } else if !edge.is_dummy && (endpoints.source.is_none() || endpoints.target.is_none()) {
+                return Err(DiagramError::Invariant {
+                    operation: "validating dangling external metadata",
+                    message: format!("edge {} has no external-leg metadata", edge_id.0),
+                });
             }
             for (vertex, slot) in [
                 (endpoints.source, edge.source_slot),
@@ -2856,6 +2897,58 @@ mod tests {
     }
 
     #[test]
+    fn finalization_remaps_indices_inside_momentum_arguments() {
+        let model = scalar_model();
+        let particle = model.particle_id("phi").unwrap();
+        let rule = model.vertex_rule_id("V_1").unwrap();
+        let mut builder = FeynmanDiagram::builder(model, "nested-momentum-indices");
+        let external = builder.add_generation_external("in", 0, ExternalState::Incoming, 0);
+        let vertex = builder.add_vertex(DiagramVertex::interaction("vertex", rule));
+        builder
+            .add_edge(vertex, vertex, DiagramEdge::new(particle, false))
+            .unwrap();
+        builder
+            .add_edge(external, vertex, DiagramEdge::new(particle, false))
+            .unwrap();
+        let numerator = Atom::parse(
+            "gammalooprs::Q(0,spenso::mink(4,gammalooprs::edge(0,1)))\
+             *spenso::g(spenso::mink(4,gammalooprs::edge(0,1)),\
+             spenso::mink(4,gammalooprs::hedge(0,1)))\
+             +gammalooprs::Q(0,spenso::mink(4,gammalooprs::hedge(0,1)))",
+            "feynkit_graph",
+            ParseSettings::default(),
+        )
+        .unwrap();
+        let diagram = builder.numerator(numerator).build().unwrap();
+        let (edge, _, _) = diagram
+            .edges()
+            .find(|(_, _, edge)| edge.external.is_none())
+            .unwrap();
+        let hedge = diagram
+            .half_edge_id(DiagramHalfEdge {
+                edge,
+                endpoint: DiagramEndpoint::Source,
+            })
+            .unwrap();
+        assert_ne!(edge.0, 0);
+        assert_ne!(hedge.0, 0);
+        let expected = Atom::parse(
+            format!(
+                "gammalooprs::Q({e},spenso::mink(4,gammalooprs::edge({e},1)))\
+                 *spenso::g(spenso::mink(4,gammalooprs::edge({e},1)),\
+                 spenso::mink(4,gammalooprs::hedge({h},1)))\
+                 +gammalooprs::Q({e},spenso::mink(4,gammalooprs::hedge({h},1)))",
+                e = edge.0,
+                h = hedge.0,
+            ),
+            "feynkit_graph",
+            ParseSettings::default(),
+        )
+        .unwrap();
+        assert_eq!(diagram.numerator(), &expected);
+    }
+
+    #[test]
     fn superficial_uv_degree_counts_local_numerators_and_internal_edges() {
         let bubble = one_loop();
         assert_eq!(bubble.superficial_degree_of_divergence(4).unwrap(), 0);
@@ -2903,9 +2996,20 @@ mod tests {
         let q1 = symbolica::function!(momentum_symbol(), 1);
         let q2 = symbolica::function!(momentum_symbol(), 2);
         let mass2 = Atom::var(symbolica::symbol!("UFO::M")).pow(2);
-        let metric = Minkowski {}.new_rep(4);
-        let expected =
-            (metric.inner_product(&q1, &q1) - &mass2) * (metric.inner_product(&q2, &q2) - &mass2);
+        let metric = Minkowski {}.new_rep(symbols::dimension());
+        let expected = symbolica::function!(
+            symbols::denominator(),
+            1,
+            &q1,
+            &mass2,
+            metric.inner_product(&q1, &q1) - &mass2
+        ) * symbolica::function!(
+            symbols::denominator(),
+            2,
+            &q2,
+            &mass2,
+            metric.inner_product(&q2, &q2) - &mass2
+        );
         assert_eq!(
             bubble
                 .underlying()
@@ -2931,7 +3035,7 @@ mod tests {
         let from_json =
             FeynmanDiagram::from_json(diagram.model_arc(), &diagram.to_json().unwrap()).unwrap();
         assert_eq!(from_json.loop_count(), 1);
-        assert_eq!(from_json.vertices().count(), 4);
+        assert_eq!(from_json.vertices().count(), 2);
 
         let dot = diagram.to_dot().unwrap();
         assert!(
@@ -3229,6 +3333,47 @@ mod tests {
                 &serde_json::to_string(&external_edge).unwrap()
             ),
             Err(error) if error.to_string().contains("attached half-edge")
+        ));
+    }
+
+    #[test]
+    fn native_external_metadata_matches_dangling_and_sewn_roles() {
+        let amplitude = one_loop()
+            .map_data(
+                |_, vertex| vertex.clone(),
+                |_, _, edge| {
+                    let mut edge = edge.clone();
+                    edge.external = None;
+                    edge
+                },
+            )
+            .unwrap();
+        assert!(matches!(
+            amplitude.validate(),
+            Err(DiagramError::Invariant {
+                operation: "validating dangling external metadata",
+                ..
+            })
+        ));
+
+        let sewn = cut_scalar_line()
+            .map_data(
+                |_, vertex| vertex.clone(),
+                |_, _, edge| {
+                    let mut edge = edge.clone();
+                    if let Some(external) = &mut edge.external {
+                        external.state = ExternalState::Outgoing;
+                    }
+                    edge
+                },
+            )
+            .unwrap();
+        assert!(matches!(
+            sewn.validate(),
+            Err(DiagramError::Invariant {
+                operation: "validating sewn external flow",
+                ..
+            })
         ));
     }
 

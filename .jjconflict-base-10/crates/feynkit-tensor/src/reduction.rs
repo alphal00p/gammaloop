@@ -967,11 +967,14 @@ pub trait FeynmanDiagramTensorExt {
 
     /// Reduce a selected region using an explicitly supplied projector and its
     /// paired internal momenta; boundary and external-state momenta stay fixed.
+    /// A supplied expression replaces the selected numerator and projector,
+    /// allowing reduction after tensor contractions or a UV expansion.
     fn tensor_reduce_of(
         &self,
         subgraph: &SuBitGraph,
         dimension: Atom,
         projector: &Atom,
+        expression: Option<&Atom>,
     ) -> Result<TensorReduction, TensorReductionError>;
 
     /// Reduce the finalized diagram numerator and external-state projector.
@@ -1007,6 +1010,7 @@ impl FeynmanDiagramTensorExt for FeynmanDiagram {
             &self.underlying().full_filter(),
             dimension,
             self.projector(),
+            None,
         )
     }
 
@@ -1015,6 +1019,7 @@ impl FeynmanDiagramTensorExt for FeynmanDiagram {
         subgraph: &SuBitGraph,
         dimension: Atom,
         projector: &Atom,
+        expression: Option<&Atom>,
     ) -> Result<TensorReduction, TensorReductionError> {
         let representation = FunctionBuilder::new(Minkowski::selfless_symbol())
             .add_arg(&dimension)
@@ -1029,12 +1034,17 @@ impl FeynmanDiagramTensorExt for FeynmanDiagram {
                 reducer = reducer.with_integrated_vector(vector);
             }
         }
-        let numerator = if *subgraph == self.underlying().full_filter() {
-            self.numerator().clone()
+        let projected = if let Some(expression) = expression {
+            expression.clone()
         } else {
-            self.numerator_of(subgraph, &SuBitGraph::empty(self.underlying().n_hedges()))
+            let numerator = if *subgraph == self.underlying().full_filter() {
+                self.numerator().clone()
+            } else {
+                self.numerator_of(subgraph, &SuBitGraph::empty(self.underlying().n_hedges()))
+            };
+            numerator * projector
         };
-        let projected = (numerator * projector).with_lorentz_dimension(dimension.as_view());
+        let projected = projected.with_lorentz_dimension(dimension.as_view());
         reducer.reduce(projected.as_view())
     }
 
@@ -1992,20 +2002,35 @@ mod tests {
             subgraph::ModifySubSet,
         };
         let pair = diagram.underlying()[&EdgeIndex(internal.0)].1;
-        let mut selected = diagram.underlying().empty_subgraph();
+        let mut selected: SuBitGraph = diagram.underlying().empty_subgraph();
         selected.add(pair);
         let partial = diagram
-            .tensor_reduce_of(&selected, d.clone(), diagram.projector())
+            .tensor_reduce_of(
+                &selected,
+                d.clone(),
+                diagram.projector(),
+                Some(&(diagram.numerator() * diagram.projector())),
+            )
             .unwrap()
             .into_expression();
-        assert!((partial - expected).expand().is_zero());
+        assert!((partial - &expected).expand().is_zero());
+        let expanded = Atom::num(3) + Atom::num(2) * diagram.numerator() * diagram.projector();
+        let reduced_expansion = diagram
+            .tensor_reduce_of(&selected, d.clone(), diagram.projector(), Some(&expanded))
+            .unwrap()
+            .into_expression();
+        assert!(
+            (reduced_expansion - Atom::num(3) - Atom::num(2) * &expected)
+                .expand()
+                .is_zero()
+        );
         let HedgePair::Paired { source, .. } = pair else {
             panic!("internal propagator")
         };
-        let mut boundary = diagram.underlying().empty_subgraph();
+        let mut boundary: SuBitGraph = diagram.underlying().empty_subgraph();
         boundary.add(source);
         assert!(matches!(
-            diagram.tensor_reduce_of(&boundary, d, diagram.projector()),
+            diagram.tensor_reduce_of(&boundary, d, diagram.projector(), None),
             Err(TensorReductionError::NoIntegratedVectorsSelected)
         ));
     }

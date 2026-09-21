@@ -12,6 +12,8 @@ use crate::{EdgeId, FeynmanDiagram};
 /// Shared topology cleanup for threshold partitions after initial-state sewing.
 pub trait InitialStateTreeExt {
     /// Select the vertex crowns adjacent to loop-independent paired edges.
+    /// Threshold sides are normalized during FeynKit finalization; runtime
+    /// threshold queries reuse the same selection without changing those sides.
     ///
     /// Prefer the edge's source crown when it touches the initial cut; otherwise
     /// use its sink crown. This is GammaLoop's existing threshold normalization,
