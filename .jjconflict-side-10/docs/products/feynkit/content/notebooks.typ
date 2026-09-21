@@ -35,12 +35,12 @@ Neither mode automatically pins X or Y;
 explicit positions still take precedence.
 The shared template owns label placement, force presets, and particle styles.
 Internal and external label distances are independent: ordinary particle labels
-use offsets of 0.60 and 0.30 times the graph spring length, respectively; with
-momentum labels these become 0.75 and 0.45. These defaults also apply to `just draw`.
+use offsets of 0.60 and 0.45 times the graph spring length, respectively; with
+momentum labels these become 0.75 and 0.60. These defaults also apply to `just draw`.
 Linnest exposes `internal-label-length-scale` and `external-label-length-scale`
 (or `labels: (internal-distance: ..., external-distance: ...)` in Typst).
 For example, `just draw --input internal-label-length-scale=0.8` increases only
-internal spacing; `--input external-label-length-scale=0.4` controls external labels.
+internal spacing; `--input external-label-length-scale=0.6` controls external labels.
 
 // docs-example: syntax
 ```sh
