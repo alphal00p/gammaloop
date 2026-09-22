@@ -446,6 +446,32 @@ traces. No separate FeynKit or GammaLoop conjugation implementation is introduce
 `hep/qcd_gluons.py` presents the generated diagrams and both gauge-reference
 checks in a separate notebook on the same Marimo server.
 
+== Generated symmetric color vertices
+
+The shared generator accepts the UFO color tensor `d(1,2,3)`. It uses the same
+adjoint-slot validation as `f` and lowers to four times Idenso's normalized
+symmetric fundamental generator trace. This implements the
+#link("https://feyncalc.github.io/FeynCalcBook/SUND.html")[standard symmetric SU(N) tensor]
+with $T_R=1/2$, without adding another color algebra implementation.
+The #link("https://link.springer.com/article/10.1140/epjc/s10052-023-11780-9")[UFO format]
+assigns positive indices to vertex legs and negative indices to summed slots;
+the existing shared index localization applies to `d` as well.
+
+The generator regression verifies permutation symmetry, reality, the SU(3)
+contractions $d^(a b c) d^(a b c)=40/3$ and
+$d^(a b c) d^(a b e)=5/3 delta^(c e)$, a vanishing repeated-index contraction,
+and rejection of an incompatible fundamental external slot.
+`installed_ufo_symmetric_color.py` generates a cubic adjoint-scalar test vertex
+through the public API and checks the three-port interface and exact norm.
+`hep/symmetric_color_vertex.py` presents it in a separate live notebook.
+The scalar records are reused from the stored model to define a toy adjoint
+interaction; this is a color-factor validation.
+
+Color epsilon and sextet interaction tensors remain unsupported by generation.
+Their color-space completeness tensors do not establish interaction-tensor
+coverage. The older GammaLoop reindexer also leaves those tensor heads
+unlowered and rejects them.
+
 == Covariant gluon sums and ghost subtraction
 
 `installed_feyncalc_qcd_ghosts.py` validates
