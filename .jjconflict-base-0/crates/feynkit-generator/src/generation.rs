@@ -783,19 +783,38 @@ impl NumeratorInstantiation<'_> {
                 "Identity" => self.exact_arguments(term, &arguments, 2).map(|args| {
                     let left = representations[&Self::index_key(args[0].as_view())];
                     let right = representations[&Self::index_key(args[1].as_view())];
-                    ETS.metric(left.index(args[0].clone()), right.index(args[1].clone()))
+                    ETS.metric(
+                        left.representation().to_symbolic([args[0].clone()]),
+                        right.representation().to_symbolic([args[1].clone()]),
+                    )
                 }),
                 "T" => self.exact_arguments(term, &arguments, 3).map(|args| {
                     FunctionBuilder::new(CS.t)
-                        .add_arg(ColorRepresentation::Adjoint.index(args[0].clone()))
-                        .add_arg(ColorRepresentation::Fundamental.index(args[1].clone()))
-                        .add_arg(ColorRepresentation::AntiFundamental.index(args[2].clone()))
+                        .add_arg(
+                            ColorRepresentation::Adjoint
+                                .representation()
+                                .to_symbolic([args[0].clone()]),
+                        )
+                        .add_arg(
+                            ColorRepresentation::Fundamental
+                                .representation()
+                                .to_symbolic([args[1].clone()]),
+                        )
+                        .add_arg(
+                            ColorRepresentation::AntiFundamental
+                                .representation()
+                                .to_symbolic([args[2].clone()]),
+                        )
                         .finish()
                 }),
                 "f" => self.exact_arguments(term, &arguments, 3).map(|args| {
                     args.iter()
                         .fold(FunctionBuilder::new(CS.f), |builder, argument| {
-                            builder.add_arg(ColorRepresentation::Adjoint.index(argument.clone()))
+                            builder.add_arg(
+                                ColorRepresentation::Adjoint
+                                    .representation()
+                                    .to_symbolic([argument.clone()]),
+                            )
                         })
                         .finish()
                 }),
@@ -834,8 +853,13 @@ impl NumeratorInstantiation<'_> {
                 owner: self.owner.to_string(),
             })?;
         let identity = ETS.metric(
-            source_representation.index(self.index(source, 1)?),
-            source_representation.dual().index(self.index(sink, 1)?),
+            source_representation
+                .representation()
+                .to_symbolic([self.index(source, 1)?]),
+            source_representation
+                .dual()
+                .representation()
+                .to_symbolic([self.index(sink, 1)?]),
         );
         Ok(Some(identity))
     }
