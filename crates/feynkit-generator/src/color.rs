@@ -2,12 +2,16 @@
 
 use feynkit_model::Particle;
 use idenso::representations::{ColorAdjoint, ColorFundamental, ColorSextet};
-use spenso::{network::library::symbolic::ETS, structure::representation::RepName};
+use spenso::{
+    network::library::symbolic::ETS,
+    structure::representation::{LibraryRep, RepName, Representation},
+};
 use symbolica::atom::Atom;
 use thiserror::Error;
 
+/// Non-singlet UFO color spaces shared by generation, completeness and runtime indices.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ColorRepresentation {
+pub enum ColorRepresentation {
     Fundamental,
     AntiFundamental,
     Sextet,
@@ -16,7 +20,10 @@ pub(crate) enum ColorRepresentation {
 }
 
 impl ColorRepresentation {
-    pub(crate) fn from_ufo(color: i64) -> Option<ColorRepresentation> {
+    /// Resolve a supported signed UFO color code.
+    /// Singlets and unsupported codes return `None`; [`ColorSum::new`] validates
+    /// the distinction when constructing a completeness tensor.
+    pub fn from_ufo(color: i64) -> Option<Self> {
         match color {
             3 => Some(ColorRepresentation::Fundamental),
             -3 => Some(ColorRepresentation::AntiFundamental),
@@ -27,7 +34,8 @@ impl ColorRepresentation {
         }
     }
 
-    pub(crate) fn dual(self) -> Self {
+    /// Exchange a color space with its conjugate space.
+    pub fn dual(self) -> Self {
         match self {
             Self::Fundamental => Self::AntiFundamental,
             Self::AntiFundamental => Self::Fundamental,
@@ -37,13 +45,14 @@ impl ColorRepresentation {
         }
     }
 
-    pub(crate) fn index(self, index: Atom) -> Atom {
+    /// Return the typed Spenso representation, with its UFO dimension.
+    pub fn representation(self) -> Representation<LibraryRep> {
         match self {
-            Self::Fundamental => ColorFundamental {}.new_rep(3).to_symbolic([index]),
-            Self::AntiFundamental => ColorFundamental {}.dual().new_rep(3).to_symbolic([index]),
-            Self::Sextet => ColorSextet {}.new_rep(6).to_symbolic([index]),
-            Self::AntiSextet => ColorSextet {}.dual().new_rep(6).to_symbolic([index]),
-            Self::Adjoint => ColorAdjoint {}.new_rep(8).to_symbolic([index]),
+            Self::Fundamental => ColorFundamental {}.new_rep(3).cast(),
+            Self::AntiFundamental => ColorFundamental {}.dual().new_rep(3).cast(),
+            Self::Sextet => ColorSextet {}.new_rep(6).cast(),
+            Self::AntiSextet => ColorSextet {}.dual().new_rep(6).cast(),
+            Self::Adjoint => ColorAdjoint {}.new_rep(8).cast(),
         }
     }
 }
@@ -90,8 +99,8 @@ impl ColorSum {
         };
         let [left, right] = indices;
         let identity = ETS.metric(
-            representation.index(left),
-            representation.dual().index(right),
+            representation.representation().to_symbolic([left]),
+            representation.dual().representation().to_symbolic([right]),
         );
         if self.average {
             identity / Atom::num(self.dimension)

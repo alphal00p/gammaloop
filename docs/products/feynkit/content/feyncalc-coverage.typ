@@ -379,7 +379,12 @@ reverse the dual orientation. Singlets contribute one; averaging divides by
 1, 3, 6 or 8 according to the UFO representation. Closing existing color slots
 requires the dual slots. This operation uses the same representation mapping
 as generated vertices and returns a standard Symbolica expression for Spenso
-and Idenso to simplify.
+and Idenso to simplify. GammaLoop runtime color ports also use this table,
+through `ColorRepresentation::from_ufo(...).representation()`. The shared
+conversion returns a typed Spenso representation; source/sink flow selects
+whether to dualize it. A runtime regression compares both flows with the
+shared completeness tensors and checks their traces for every supported color
+code, including singlets and conjugate sextets.
 
 `installed_feyncalc_qcd_annihilation.py` generates
 $b bar(b) -> t bar(t)$ through gluon exchange with both masses retained.
