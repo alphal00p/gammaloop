@@ -3401,9 +3401,10 @@ mod tests {
             FeynmanDiagram::from_dot(diagram.model_arc(), &diagram.to_dot().unwrap()).unwrap();
         assert_eq!(from_dot.cuts(), diagram.cuts());
 
-        let source = diagram.to_linnest(None, &Default::default());
-        assert!(source.contains("amplitude-mode: false"));
-        assert!(source.contains("cross-section-mode: true"));
+        let source = diagram
+            .to_linnest(None, &Default::default(), None, "(:)")
+            .unwrap();
+        assert!(source.contains("mode: \"cross-section\""));
         assert_eq!(source.matches("is_cut: 0").count(), 1);
 
         let mut invalid_cut = diagram.cuts()[0].clone();

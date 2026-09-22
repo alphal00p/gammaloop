@@ -1,9 +1,11 @@
 (() => {
-  // Scope state to the SVG: identical graph IDs can occur in several outputs.
+  /* Scope state to the SVG: identical graph IDs can occur in several outputs.
+     Use block comments because notebook iframe wrappers may flatten newlines. */
   for (const svg of document.querySelectorAll('svg[data-linnet-interactive]')) {
     if (svg.linnetSelection !== undefined) continue;
     const targets = [...svg.querySelectorAll('[data-linnet-kind]')];
     const selected = { node: new Set(), edge: new Set() };
+    const edgeHighlights = new Map();
     const selection = () => ({
       nodes: [...selected.node].sort((a, b) => a - b),
       edges: [...selected.edge].sort((a, b) => a - b),
@@ -15,11 +17,12 @@
     let panel;
     let inspected;
     let resize;
+    let resizeFrame = () => {};
     const frames = [];
 
     const theme = () => {
-      // Marimo executes scripted HTML in an iframe. Read its notebook theme
-      // when accessible; standalone SVGs retain the system color preference.
+      /* Marimo executes scripted HTML in an iframe. Read its notebook theme
+         when accessible; standalone SVGs retain the system color preference. */
       let element = svg.parentElement;
       while (element) {
         const explicit = element.getAttribute('data-theme');
@@ -69,12 +72,21 @@
     try {
       const frame = window.frameElement;
       if (frame && document.body) {
-        resize = new ResizeObserver(() => {
+        /* Measure content rather than the viewport: Marimo's own iframe
+           observer grows outputs but deliberately does not shrink them. */
+        document.documentElement.style.overflow = 'hidden';
+        resizeFrame = () => {
           if (!svg.isConnected) { resize.disconnect(); return; }
           const style = getComputedStyle(document.body);
-          frame.style.height = Math.ceil(document.body.getBoundingClientRect().height + parseFloat(style.marginTop) + parseFloat(style.marginBottom)) + 'px';
-        });
+          const contents = document.createRange();
+          contents.selectNodeContents(document.body);
+          const bottom = contents.getBoundingClientRect().bottom + window.scrollY;
+          const height = Math.ceil(bottom + parseFloat(style.paddingBottom) + parseFloat(style.marginBottom) + 6);
+          frame.style.height = height + 'px';
+        };
+        resize = new ResizeObserver(resizeFrame);
         resize.observe(document.body);
+        resize.observe(svg);
       }
     } catch (_) { /* The embedding controls sizing across origins. */ }
 
@@ -85,6 +97,7 @@
         if (value === null) svg.removeAttribute(key);
         else svg.setAttribute(key, value);
       }
+      requestAnimationFrame(resizeFrame);
     };
     const html = (tag, text) => {
       const element = document.createElementNS('http://www.w3.org/1999/xhtml', tag);
@@ -98,7 +111,7 @@
       const id = Number(target.dataset.linnetId);
       const detail = JSON.parse(target.dataset.linnetDetail);
       const width = Math.max(box.width, 310);
-      const height = 116;
+      const height = 1;
       panel = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject');
       panel.setAttribute('x', box.x);
       panel.setAttribute('y', box.y + box.height + 8);
@@ -110,16 +123,56 @@
       const dismiss = html('button', '×');
       dismiss.setAttribute('aria-label', 'Close graph details');
       dismiss.addEventListener('click', close);
-      content.append(dismiss, html('strong', `${kind === 'node' ? 'Node' : 'Edge'} ${id}`));
-      content.append(html('div', Object.entries(detail).map(([key, value]) => `${key}: ${typeof value === 'object' ? JSON.stringify(value) : value}`).join(' · ')));
+      const header = html('div');
+      header.className = 'linnet-inspector-header';
+      const title = `${kind === 'node' ? 'Node' : 'Edge'} ${id}${detail.name ? ` · ${detail.name}` : ''}`;
+      header.append(html('strong', title), dismiss);
+      content.append(header);
+      const details = html('div');
+      details.className = 'linnet-inspector-details';
+      if (kind === 'edge') {
+        if (detail.particle !== undefined) {
+          const particle = html('span');
+          particle.append(html('span', 'Particle: '), html('strong', String(detail.particle)));
+          if (detail.pdg !== undefined) particle.append(` (${detail.pdg})`);
+          details.append(particle);
+        }
+        if ('source' in detail || 'sink' in detail) {
+          const source = detail.source == null ? 'External' : `Node ${detail.source}`;
+          const sink = detail.sink == null ? 'External' : detail.source == null ? `Node ${detail.sink}` : String(detail.sink);
+          details.append(html('span', `${source} → ${sink}`));
+        }
+        if (detail['external-state']) {
+          const state = String(detail['external-state']);
+          details.append(html('span', state.charAt(0).toUpperCase() + state.slice(1)));
+        }
+        if (detail.orientation && detail.orientation !== 'default') {
+          details.append(html('span', `Orientation: ${detail.orientation}`));
+        }
+      } else {
+        if (detail.edges) details.append(html('span', `Edges: ${detail.edges.join(', ') || 'none'}`));
+      }
+      content.append(details);
       const current = selection();
-      content.append(html('code', `subgraph(nodes=[${current.nodes.join(', ')}], edges=[${current.edges.join(', ')}])`));
-      content.append(html('div', 'Shift/Ctrl/⌘-click to toggle selection. Esc to close.'));
+      const construction = html('div');
+      construction.className = 'linnet-inspector-construction';
+      construction.append(html('span', 'Subgraph construction:'), html('code', `graph.subgraph(nodes=[${current.nodes.join(', ')}], edges=[${current.edges.join(', ')}])`));
+      content.append(construction);
+      const shortcuts = html('div', 'Click or Enter/Space: details · Shift/Ctrl/⌘-click: toggle selection');
+      shortcuts.className = 'linnet-inspector-shortcuts';
+      content.append(shortcuts);
       panel.append(content);
       svg.append(panel);
       svg.setAttribute('viewBox', `${box.x} ${box.y} ${width} ${box.height + height + 8}`);
       svg.setAttribute('width', width + 'pt');
       svg.setAttribute('height', (box.height + height + 8) + 'pt');
+      /* Fit the complete panel after layout, including wrapped construction
+         expressions. Neither long selections nor narrow displays need a scrollbar. */
+      const fittedHeight = content.offsetHeight;
+      panel.setAttribute('height', fittedHeight);
+      svg.setAttribute('viewBox', `${box.x} ${box.y} ${width} ${box.height + fittedHeight + 8}`);
+      svg.setAttribute('height', (box.height + fittedHeight + 8) + 'pt');
+      requestAnimationFrame(resizeFrame);
       svg.dispatchEvent(new CustomEvent('linnet-inspect', { bubbles: true, detail: { kind, id, data: detail } }));
     };
     const activate = (target, event) => {
@@ -135,19 +188,50 @@
       show(target);
     };
     const targetOf = event => event.target.closest && event.target.closest('[data-linnet-kind]');
+    const highlightEdge = (target, active) => {
+      if (target.dataset.linnetKind !== 'edge') return;
+      const id = Number(target.dataset.linnetId);
+      let group = edgeHighlights.get(id);
+      if (!group) {
+        /* Composite the overlapping hit regions once, so selection adds a
+           smooth translucent halo instead of darkening each sampled box. */
+        group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        group.classList.add('linnet-edge-highlight');
+        const inverse = svg.getCTM().inverse();
+        for (const item of targets) {
+          if (item.dataset.linnetKind !== 'edge' || Number(item.dataset.linnetId) !== id) continue;
+          for (const rect of item.querySelectorAll('rect')) {
+            const copy = rect.cloneNode(false);
+            const transform = inverse.multiply(rect.getCTM());
+            copy.setAttribute('transform', `matrix(${transform.a} ${transform.b} ${transform.c} ${transform.d} ${transform.e} ${transform.f})`);
+            copy.removeAttribute('fill');
+            copy.setAttribute('rx', Math.min(rect.width.baseVal.value, rect.height.baseVal.value) / 2);
+            group.append(copy);
+          }
+        }
+        svg.append(group);
+        edgeHighlights.set(id, group);
+      }
+      group.toggleAttribute('data-selected', selected.edge.has(id));
+      group.style.display = active || selected.edge.has(id) ? '' : 'none';
+    };
     svg.addEventListener('click', event => {
       const target = targetOf(event);
-      if (target) activate(target, event);
+      if (target) { activate(target, event); highlightEdge(target, false); }
     });
     svg.addEventListener('keydown', event => {
       if (event.key === 'Escape') { close(); if (inspected) inspected.focus(); }
       const target = targetOf(event);
-      if (target && (event.key === 'Enter' || event.key === ' ')) activate(target, event);
+      if (target && (event.key === 'Enter' || event.key === ' ')) {
+        activate(target, event);
+        highlightEdge(target, false);
+      }
     });
-    for (const [name, active] of [['pointerover', true], ['pointerout', false]]) {
+    for (const [name, active] of [['pointerover', true], ['pointerout', false], ['focusin', true], ['focusout', false]]) {
       svg.addEventListener(name, event => {
         const target = targetOf(event);
         if (!target) return;
+        highlightEdge(target, active);
         for (const item of targets) {
           if (item.dataset.linnetKind === target.dataset.linnetKind && item.dataset.linnetId === target.dataset.linnetId) {
             item.toggleAttribute('data-linnet-active', active);

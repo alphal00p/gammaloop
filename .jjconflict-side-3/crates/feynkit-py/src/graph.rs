@@ -18,7 +18,7 @@ use pyo3::{
     PyTraverseError, PyVisit,
     exceptions::{PyTypeError, PyValueError},
     prelude::*,
-    types::{PyAny, PyDict, PyModule, PyTuple},
+    types::{PyAny, PyBytes, PyDict, PyModule, PyTuple},
 };
 use spynso3::expression::TensorExpression;
 use symbolica::{
@@ -2717,100 +2717,116 @@ impl PyFeynmanDiagram {
         self.inner.to_dot().map_err(error::diagram)
     }
 
-    /// Emit a complete Typst document that draws the graph with Linnest.
+    /// Emit the exact Typst source used by ``render`` without compiling it.
     ///
-    /// The source uses the same amplitude-layout settings as GammaLoop's
-    /// Linnest templates. It can be saved for reproducible figure generation
-    /// or compiled directly with ``typst-py``.
+    /// Uses the same ``config``, ``momenta``, ``lmb`` and ``highlight`` settings
+    /// as ``render``. The shared Linnest/Kurvst and physics assets must be available
+    /// beneath the Typst project root when compiling this source separately.
     ///
     /// Examples
     /// --------
     /// >>> from pathlib import Path
-    /// >>> Path("one_loop_diagram.typ").write_text(diagram.to_linnest())
+    /// >>> Path("diagram.typ").write_text(diagram.to_linnest(momenta=True))
     ///
     /// Parameters
     /// ----------
+    /// config : linnet.RenderConfig or None, optional
+    ///     Layout, drawing, style and physics settings, as in ``render``.
+    /// momenta : bool, optional
+    ///     Draw momentum arrows and labels in the stored basis.
+    /// lmb : LoopMomentumBasis or None, optional
+    ///     Routing from this diagram; also enables momentum display.
     /// highlight : Subgraph or linnet.Subgraph or None, optional
-    ///     Highlight a region from this diagram's analysis graph with Linnest's
-    ///     selection styling. The complete original diagram remains as muted, dotted
-    ///     context; source/sink halves stay distinct. Foreign selections are rejected.
-    #[pyo3(signature = (*, highlight=None))]
+    ///     Region to highlight in the complete diagram.
+    #[pyo3(signature = (*, config=None, momenta=false, lmb=None, highlight=None))]
     fn to_linnest(
         &self,
         py: Python<'_>,
+        #[gen_stub(override_type(type_repr="linnet.RenderConfig | None", imports=("linnet")))]
+        config: Option<&Bound<'_, PyAny>>,
+        momenta: bool,
+        lmb: Option<&PyLoopMomentumBasis>,
         #[gen_stub(override_type(type_repr="Subgraph | linnet.Subgraph | None", imports=("linnet")))]
         highlight: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<String> {
-        let selected = highlight
-            .map(|value| self.region_argument(py, value))
-            .transpose()?
-            .or_else(|| self.selected_region.clone());
-        let isolated = selected
-            .as_ref()
-            .map_or_else(BTreeSet::new, |region| region.isolated.clone());
-        let selected = selected.as_ref().map(|region| &region.hedges);
-        Ok(self.inner.to_linnest(selected, &isolated))
+        self.prepare_render(py, config, momenta, lmb, highlight)?
+            .getattr("typst_source")?
+            .extract()
     }
 
-    /// Render the Linnest diagram as a self-contained SVG with ``typst-py``.
+    /// Render an interactive, transparent SVG using the shared physics renderer.
     ///
     /// Examples
     /// --------
-    /// >>> import marimo as mo
-    /// >>> mo.Html(diagram.to_svg())
+    /// >>> import linnet as ln
+    /// >>> svg = diagram.render(momenta=True, config=ln.RenderConfig(
+    /// ...     layouts=ln.LayoutOptions(external_label_length_scale=0.7),
+    /// ...     template_options={"show-particle": False},
+    /// ... ))
+    /// >>> svg = diagram.render(lmb=next(iter(diagram.loop_momentum_bases())))
     ///
     /// Parameters
     /// ----------
+    /// config : linnet.RenderConfig or None, optional
+    ///     Typed ``layouts``, ``drawing`` and ``style`` groups. Physics controls
+    ///     use ``template_options`` with the same names as ``just draw --input``:
+    ///     ``show-particle``, ``show-edge-index``, ``show-node-index``, ``debug``,
+    ///     ``momentum-arrows`` and the ``momentum-arrow-*``/``momentum-label-*`` options.
+    /// momenta : bool, optional
+    ///     Show momentum arrows and labels routed in the diagram's stored basis.
+    ///     Explicit physics settings in ``config`` override these display defaults.
+    /// lmb : LoopMomentumBasis or None, optional
+    ///     Explicit routing from this diagram; also enables momentum display.
+    ///     Rendering never changes the diagram's stored loop-momentum basis.
     /// highlight : Subgraph or linnet.Subgraph or None, optional
-    ///     Region from this diagram to highlight with muted, dotted context.
-    ///     A Subgraph highlights itself by default without changing its original.
-    #[pyo3(signature = (*, highlight=None))]
-    fn to_svg(
+    ///     Highlight a region while preserving the full diagram as muted context.
+    ///     A Subgraph highlights its own region by default.
+    ///
+    #[pyo3(signature = (*, config=None, momenta=false, lmb=None, highlight=None))]
+    fn render(
         &self,
         py: Python<'_>,
+        #[gen_stub(override_type(type_repr="linnet.RenderConfig | None", imports=("linnet")))]
+        config: Option<&Bound<'_, PyAny>>,
+        momenta: bool,
+        lmb: Option<&PyLoopMomentumBasis>,
         #[gen_stub(override_type(type_repr="Subgraph | linnet.Subgraph | None", imports=("linnet")))]
         highlight: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<String> {
-        let selected = highlight
-            .map(|value| self.region_argument(py, value))
-            .transpose()?
-            .or_else(|| self.selected_region.clone());
-        let isolated = selected
-            .as_ref()
-            .map_or_else(BTreeSet::new, |region| region.isolated.clone());
-        let selected = selected.as_ref().map(|region| &region.hedges);
-        render_diagram_svg(py, &self.inner, selected, &isolated)
+        let prepared = self.prepare_render(py, config, momenta, lmb, highlight)?;
+        render_diagram_svg(py, &prepared)
     }
 
-    /// Render the Linnest diagram as a self-contained HTML figure.
+    /// Render an HTML figure with the same options and hover information as ``render``.
     ///
     /// Examples
     /// --------
-    /// Embed the returned markup in a web page or notebook component:
-    ///
     /// >>> import marimo as mo
-    /// >>> mo.Html(diagram.to_html())
+    /// >>> mo.iframe(diagram.to_html(momenta=True))
     ///
     /// Parameters
     /// ----------
+    /// config : linnet.RenderConfig or None, optional
+    ///     Layout, drawing, style and physics settings, as in ``render``.
+    /// momenta : bool, optional
+    ///     Draw momentum arrows and labels in the stored basis.
+    /// lmb : LoopMomentumBasis or None, optional
+    ///     Routing from this diagram; also enables momentum display.
     /// highlight : Subgraph or linnet.Subgraph or None, optional
-    ///     Region from this diagram's analysis graph to highlight in the full figure.
-    #[pyo3(signature = (*, highlight=None))]
+    ///     Region to highlight in the complete diagram.
+    #[pyo3(signature = (*, config=None, momenta=false, lmb=None, highlight=None))]
     fn to_html(
         &self,
         py: Python<'_>,
+        #[gen_stub(override_type(type_repr="linnet.RenderConfig | None", imports=("linnet")))]
+        config: Option<&Bound<'_, PyAny>>,
+        momenta: bool,
+        lmb: Option<&PyLoopMomentumBasis>,
         #[gen_stub(override_type(type_repr="Subgraph | linnet.Subgraph | None", imports=("linnet")))]
         highlight: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<String> {
-        let selected = highlight
-            .map(|value| self.region_argument(py, value))
-            .transpose()?
-            .or_else(|| self.selected_region.clone());
-        let isolated = selected
-            .as_ref()
-            .map_or_else(BTreeSet::new, |region| region.isolated.clone());
-        let selected = selected.as_ref().map(|region| &region.hedges);
-        render_diagram_html(py, &self.inner, selected, &isolated)
+        let svg = self.render(py, config, momenta, lmb, highlight)?;
+        Ok(render_diagram_html(&self.inner, &svg))
     }
 
     /// Render the diagram as HTML in Marimo, Jupyter, and IPython.
@@ -2818,8 +2834,8 @@ impl PyFeynmanDiagram {
     /// Examples
     /// --------
     /// Leave `diagram` as the final expression in a notebook cell to render it.
-    fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
-        self.to_html(py, None)
+    pub(crate) fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
+        self.to_html(py, None, false, None, None)
     }
 
     /// Return the raw SVG representation used by rich notebook frontends.
@@ -2829,7 +2845,7 @@ impl PyFeynmanDiagram {
     /// >>> from IPython.display import SVG
     /// >>> SVG(diagram._repr_svg_())
     fn _repr_svg_(&self, py: Python<'_>) -> PyResult<String> {
-        self.to_svg(py, None)
+        self.render(py, None, false, None, None)
     }
 
     /// Write a concise summary to an IPython pretty printer.
@@ -3186,6 +3202,90 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyDiagramCutSide>()?;
     module.add_class::<PyDiagramThresholdCandidate>()?;
     Ok(())
+}
+
+impl PyFeynmanDiagram {
+    fn prepare_render<'py>(
+        &self,
+        py: Python<'py>,
+        config: Option<&Bound<'_, PyAny>>,
+        momenta: bool,
+        lmb: Option<&PyLoopMomentumBasis>,
+        highlight: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        if let Some(basis) = lmb
+            && !Arc::ptr_eq(&basis.owner, &self.owner)
+        {
+            return Err(error::DiagramError::new_err(
+                "momentum basis belongs to a different diagram",
+            ));
+        }
+        let selected = highlight
+            .map(|value| self.region_argument(py, value))
+            .transpose()?
+            .or_else(|| self.selected_region.clone());
+        let isolated = selected
+            .as_ref()
+            .map_or_else(BTreeSet::new, |region| region.isolated.clone());
+        let selected = selected.as_ref().map(|region| &region.hedges);
+        let source = self
+            .inner
+            .to_linnest(
+                selected,
+                &isolated,
+                lmb.map(|basis| &basis.inner),
+                "_linnet_config",
+            )
+            .map_err(error::diagram)?;
+        let linnet = py.import("linnet").map_err(|error| {
+            if error.is_instance_of::<pyo3::exceptions::PyImportError>(py) {
+                pyo3::exceptions::PyImportError::new_err(format!(
+                    "diagram rendering requires linnet and typst-py: {error}"
+                ))
+            } else {
+                error
+            }
+        })?;
+        let options = PyDict::new(py);
+        if momenta || lmb.is_some() {
+            options.set_item("momentum-arrows", true)?;
+            options.set_item("show-momentum", true)?;
+        }
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("template_options", options)?;
+        let mut effective = linnet.getattr("RenderConfig")?.call((), Some(&kwargs))?;
+        if let Some(config) = config {
+            effective = effective.call_method1("overlay", (config,))?;
+        }
+        let sources = PyDict::new(py);
+        sources.set_item("main.typ", PyBytes::new(py, source.as_bytes()))?;
+        for (path, source) in [
+            (
+                "assets/embedded/drawing/templates/layout-core.typ",
+                include_bytes!("../../../assets/embedded/drawing/templates/layout-core.typ")
+                    .as_slice(),
+            ),
+            (
+                "assets/embedded/drawing/templates/physics-edge-style.typ",
+                include_bytes!("../../../assets/embedded/drawing/templates/physics-edge-style.typ")
+                    .as_slice(),
+            ),
+            (
+                "assets/embedded/drawing/templates/impl/physics-edge-style.typ",
+                include_bytes!(
+                    "../../../assets/embedded/drawing/templates/impl/physics-edge-style.typ"
+                )
+                .as_slice(),
+            ),
+        ] {
+            sources.set_item(path, PyBytes::new(py, source))?;
+        }
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("config", effective)?;
+        linnet
+            .getattr("PreparedRender")?
+            .call_method("from_sources", (sources,), Some(&kwargs))
+    }
 }
 
 #[cfg(test)]

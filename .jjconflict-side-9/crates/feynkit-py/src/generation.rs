@@ -27,7 +27,6 @@ use pyo3_stub_gen::{
 };
 
 use crate::{
-    display::render_diagram_html,
     error,
     graph::PyFeynmanDiagram,
     model::{PyModel, PyParticle, PyVertexRule},
@@ -1762,9 +1761,11 @@ impl PyGenerationResult {
             .iter()
             .take(PREVIEW_LIMIT)
             .map(|diagram| {
-                render_diagram_html(py, diagram, None, &Default::default()).map(|html| {
-                    format!("<div style=\"min-width:0;overflow-x:auto\">{}</div>", html)
-                })
+                PyFeynmanDiagram::from(diagram.clone())
+                    ._repr_html_(py)
+                    .map(|html| {
+                        format!("<div style=\"min-width:0;overflow-x:auto\">{}</div>", html)
+                    })
             })
             .collect::<PyResult<String>>()?;
         let gallery = if diagrams.is_empty() {

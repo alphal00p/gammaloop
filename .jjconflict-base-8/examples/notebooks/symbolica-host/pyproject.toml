@@ -6,7 +6,7 @@ build-backend = "maturin"
 name = "symbolica"
 version = "3.0.0"
 requires-python = ">=3.10"
-dependencies = ["typst==0.15.0"]
+dependencies = ["linnet==0.1.0", "typst==0.15.0"]
 
 [tool.maturin]
 module-name = "symbolica.core"

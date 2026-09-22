@@ -30,29 +30,54 @@ svg[data-linnet-interactive] [data-linnet-kind] rect {
   pointer-events: all;
   fill: transparent;
 }
-svg[data-linnet-interactive] [data-linnet-kind][data-linnet-active] rect,
-svg[data-linnet-interactive] [data-linnet-kind]:focus-visible rect {
+svg[data-linnet-interactive] [data-linnet-kind="node"][data-linnet-active] rect,
+svg[data-linnet-interactive] [data-linnet-kind="node"]:focus-visible rect {
   fill: var(--linnet-selection);
   fill-opacity: .15;
 }
-svg[data-linnet-interactive] [data-linnet-kind][aria-pressed="true"] rect {
+svg[data-linnet-interactive] [data-linnet-kind="node"][aria-pressed="true"] rect {
   fill: var(--linnet-selection);
   fill-opacity: .3;
 }
 svg[data-linnet-interactive] [data-linnet-kind="node"] rect { rx: 50%; }
+svg[data-linnet-interactive] .linnet-edge-highlight {
+  fill: var(--linnet-selection);
+  opacity: .2;
+  pointer-events: none;
+}
+svg[data-linnet-interactive] .linnet-edge-highlight[data-selected] { opacity: .3; }
 svg[data-linnet-interactive] .linnet-inspector {
   box-sizing: border-box;
-  height: 100%;
   padding: 10px 12px;
-  border: 1px solid var(--linnet-selection);
-  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--linnet-selection) 65%, transparent);
+  border-radius: 8px;
   background: var(--linnet-panel-bg);
   color: var(--linnet-panel-ink);
-  font: 12px/1.45 system-ui, sans-serif;
-  overflow: auto;
+  font: 12px/1.4 system-ui, sans-serif;
+  box-shadow: 0 2px 8px #00000014;
+  overflow: visible;
+}
+svg[data-linnet-interactive] .linnet-inspector-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+  font-size: 13px;
+}
+svg[data-linnet-interactive] .linnet-inspector-header strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+svg[data-linnet-interactive] .linnet-inspector-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+}
+svg[data-linnet-interactive] .linnet-inspector-details > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 svg[data-linnet-interactive] .linnet-inspector button {
-  float: right;
   border: 0;
   padding: 0 4px;
   background: transparent;
@@ -60,9 +85,26 @@ svg[data-linnet-interactive] .linnet-inspector button {
   cursor: pointer;
   font: inherit;
 }
+svg[data-linnet-interactive] .linnet-inspector-construction {
+  margin-top: 7px;
+}
+svg[data-linnet-interactive] .linnet-inspector-construction > span {
+  font-size: 10px;
+  font-weight: 600;
+  opacity: .7;
+}
 svg[data-linnet-interactive] .linnet-inspector code {
   display: block;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  margin-top: 5px;
+  margin-top: 3px;
+  padding: 5px 7px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--linnet-panel-ink) 6%, transparent);
+  font-size: 11px;
+}
+svg[data-linnet-interactive] .linnet-inspector-shortcuts {
+  margin-top: 6px;
+  font-size: 10px;
+  opacity: .65;
 }

@@ -3,6 +3,7 @@
 # dependencies = [
 #     "marimo==0.24.0",
 #     "symbolica==3.0.0",
+#     "linnet==0.1.0",
 #     "typst==0.15.0",
 #     "ufo-model-loader @ git+https://github.com/alphal00p/ufo_model_loader.git@70ddee6b416f8c8b340e0d087646d77095c5d24b",
 # ]

@@ -10,6 +10,12 @@ implementation belongs to `feynkit-graph`; Python exposes the same implementatio
 through `symbolica.community.feynkit`. Symbolica supplies the rank calculation
 and exact linear solve.
 
+Leave a family as the final expression in a notebook cell to see its ordered
+inverse propagators, loop and external momenta, dimension, rank, completeness,
+and independence. Expressions use Symbolica's native printer. `repr(family)`
+gives a compact summary; IPython's plain-text display also lists the inverse
+propagators in the same order.
+
 == Conventions
 
 Supply distinct unindexed loop and external momentum names. The external list

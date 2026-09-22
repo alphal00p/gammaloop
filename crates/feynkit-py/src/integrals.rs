@@ -146,6 +146,117 @@ impl PyIntegralFamily {
         self.inner.is_independent()
     }
 
+    /// Return a compact summary of the family and its scalar-product rank.
+    ///
+    /// Examples
+    /// --------
+    /// >>> print(family)
+    fn __repr__(&self) -> String {
+        format!(
+            "IntegralFamily(loops={}, external_momenta={}, denominators={}, rank={}/{}, complete={}, independent={})",
+            self.inner.loop_momenta().len(),
+            self.inner.external_momenta().len(),
+            self.inner.denominators().len(),
+            self.inner.rank(),
+            self.inner.scalar_products().len(),
+            self.inner.is_complete(),
+            self.inner.is_independent(),
+        )
+    }
+
+    /// Display ordered inverse propagators and family metadata in a notebook.
+    ///
+    /// Expressions use Symbolica's native HTML printer.
+    ///
+    /// Examples
+    /// --------
+    /// Leave ``family`` as the final expression in a notebook cell.
+    fn _repr_html_(&self) -> PyResult<String> {
+        let dimension = self.inner.kinematics().dimension().to_symbolic();
+        let mut metadata = String::new();
+        for (label, expressions) in [
+            ("Loop momenta", self.inner.loop_momenta()),
+            ("External momenta", self.inner.external_momenta()),
+            ("Dimension", std::slice::from_ref(&dimension)),
+        ] {
+            let values = expressions
+                .iter()
+                .map(|expr| PythonExpression::from(expr.clone())._repr_html_())
+                .collect::<PyResult<Vec<_>>>()?
+                .join(", ");
+            metadata.push_str(&format!(
+                "<div><strong>{label}:</strong> {}</div>",
+                if values.is_empty() {
+                    "<em>none</em>"
+                } else {
+                    &values
+                },
+            ));
+        }
+        let mut rows = String::new();
+        for (index, denominator) in self.inner.denominators().iter().enumerate() {
+            let expression = PythonExpression::from(denominator.clone())._repr_html_()?;
+            rows.push_str(&format!(
+                "<tr><th scope=\"row\" style=\"padding:.3rem .65rem;text-align:right\">\
+                 D<sub>{}</sub></th><td style=\"padding:.3rem .65rem;text-align:left\">\
+                 {expression}</td></tr>",
+                index + 1,
+            ));
+        }
+        if rows.is_empty() {
+            rows.push_str("<tr><td colspan=\"2\"><em>No inverse propagators</em></td></tr>");
+        }
+        Ok(format!(
+            "<section class=\"feynkit-integral-family\" style=\"max-width:100%;overflow-x:auto\">\
+             <strong>Integral family</strong>{metadata}\
+             <div>Rank: {} / {} &middot; {} &middot; {}</div>\
+             <table style=\"border-collapse:collapse;margin-top:.4rem\">\
+             <caption style=\"text-align:left\">Ordered inverse propagators ({})</caption>\
+             <tbody>{rows}</tbody></table></section>",
+            self.inner.rank(),
+            self.inner.scalar_products().len(),
+            if self.inner.is_complete() {
+                "complete"
+            } else {
+                "incomplete"
+            },
+            if self.inner.is_independent() {
+                "independent"
+            } else {
+                "dependent"
+            },
+            self.inner.denominators().len(),
+        ))
+    }
+
+    /// Write the summary and ordered denominators using Symbolica's text printer.
+    ///
+    /// Examples
+    /// --------
+    /// IPython uses this representation when rich HTML output is unavailable.
+    ///
+    /// Parameters
+    /// ----------
+    /// pretty : object
+    ///     IPython's pretty printer, providing a ``text`` method.
+    /// cycle : bool
+    ///     Whether this family is part of a recursive formatting cycle.
+    fn _repr_pretty_(&self, pretty: &Bound<'_, PyAny>, cycle: bool) -> PyResult<()> {
+        let mut text = if cycle {
+            "IntegralFamily(...)".to_owned()
+        } else {
+            self.__repr__()
+        };
+        if !cycle {
+            for (index, denominator) in self.inner.denominators().iter().enumerate() {
+                let expression = PythonExpression::from(denominator.clone()).__str__()?;
+                text.push_str(&format!("\n  D{} = {expression}", index + 1));
+            }
+        }
+        pretty.call_method1("text", (text,))?;
+        Ok(())
+    }
+
     /// Append irreducible scalar products to obtain a complete family.
     ///
     /// Original propagators retain their positions. Dependent families must

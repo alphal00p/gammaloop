@@ -2024,56 +2024,79 @@ class FeynmanDiagram:
         >>> restored = FeynmanDiagram.from_dot(model, dot)
         >>> restored.validate()
         """
-    def to_linnest(self, *, highlight: Subgraph | linnet.Subgraph | None = None) -> builtins.str:
+    def to_linnest(self, *, config: linnet.RenderConfig | None = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | linnet.Subgraph | None = None) -> builtins.str:
         r"""
-        Emit a complete Typst document that draws the graph with Linnest.
+        Emit the exact Typst source used by ``render`` without compiling it.
 
-        The source uses the same amplitude-layout settings as GammaLoop's
-        Linnest templates. It can be saved for reproducible figure generation
-        or compiled directly with ``typst-py``.
+        Uses the same ``config``, ``momenta``, ``lmb`` and ``highlight`` settings
+        as ``render``. The shared Linnest/Kurvst and physics assets must be available
+        beneath the Typst project root when compiling this source separately.
 
         Examples
         --------
         >>> from pathlib import Path
-        >>> Path("one_loop_diagram.typ").write_text(diagram.to_linnest())
+        >>> Path("diagram.typ").write_text(diagram.to_linnest(momenta=True))
 
         Parameters
         ----------
+        config : linnet.RenderConfig or None, optional
+            Layout, drawing, style and physics settings, as in ``render``.
+        momenta : bool, optional
+            Draw momentum arrows and labels in the stored basis.
+        lmb : LoopMomentumBasis or None, optional
+            Routing from this diagram; also enables momentum display.
         highlight : Subgraph or linnet.Subgraph or None, optional
-            Highlight a region from this diagram's analysis graph with Linnest's
-            selection styling. The complete original diagram remains as muted, dotted
-            context; source/sink halves stay distinct. Foreign selections are rejected.
+            Region to highlight in the complete diagram.
         """
-    def to_svg(self, *, highlight: Subgraph | linnet.Subgraph | None = None) -> builtins.str:
+    def render(self, *, config: linnet.RenderConfig | None = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | linnet.Subgraph | None = None) -> builtins.str:
         r"""
-        Render the Linnest diagram as a self-contained SVG with ``typst-py``.
+        Render an interactive, transparent SVG using the shared physics renderer.
+
+        Examples
+        --------
+        >>> import linnet as ln
+        >>> svg = diagram.render(momenta=True, config=ln.RenderConfig(
+        ...     layouts=ln.LayoutOptions(external_label_length_scale=0.7),
+        ...     template_options={"show-particle": False},
+        ... ))
+        >>> svg = diagram.render(lmb=next(iter(diagram.loop_momentum_bases())))
+
+        Parameters
+        ----------
+        config : linnet.RenderConfig or None, optional
+            Typed ``layouts``, ``drawing`` and ``style`` groups. Physics controls
+            use ``template_options`` with the same names as ``just draw --input``:
+            ``show-particle``, ``show-edge-index``, ``show-node-index``, ``debug``,
+            ``momentum-arrows`` and the ``momentum-arrow-*``/``momentum-label-*`` options.
+        momenta : bool, optional
+            Show momentum arrows and labels routed in the diagram's stored basis.
+            Explicit physics settings in ``config`` override these display defaults.
+        lmb : LoopMomentumBasis or None, optional
+            Explicit routing from this diagram; also enables momentum display.
+            Rendering never changes the diagram's stored loop-momentum basis.
+        highlight : Subgraph or linnet.Subgraph or None, optional
+            Highlight a region while preserving the full diagram as muted context.
+            A Subgraph highlights its own region by default.
+        """
+    def to_html(self, *, config: linnet.RenderConfig | None = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | linnet.Subgraph | None = None) -> builtins.str:
+        r"""
+        Render an HTML figure with the same options and hover information as ``render``.
 
         Examples
         --------
         >>> import marimo as mo
-        >>> mo.Html(diagram.to_svg())
+        >>> mo.iframe(diagram.to_html(momenta=True))
 
         Parameters
         ----------
+        config : linnet.RenderConfig or None, optional
+            Layout, drawing, style and physics settings, as in ``render``.
+        momenta : bool, optional
+            Draw momentum arrows and labels in the stored basis.
+        lmb : LoopMomentumBasis or None, optional
+            Routing from this diagram; also enables momentum display.
         highlight : Subgraph or linnet.Subgraph or None, optional
-            Region from this diagram to highlight with muted, dotted context.
-            A Subgraph highlights itself by default without changing its original.
-        """
-    def to_html(self, *, highlight: Subgraph | linnet.Subgraph | None = None) -> builtins.str:
-        r"""
-        Render the Linnest diagram as a self-contained HTML figure.
-
-        Examples
-        --------
-        Embed the returned markup in a web page or notebook component:
-
-        >>> import marimo as mo
-        >>> mo.Html(diagram.to_html())
-
-        Parameters
-        ----------
-        highlight : Subgraph or linnet.Subgraph or None, optional
-            Region from this diagram's analysis graph to highlight in the full figure.
+            Region to highlight in the complete diagram.
         """
     def _repr_html_(self) -> builtins.str:
         r"""
@@ -3088,6 +3111,39 @@ class IntegralFamily:
             Ordered inverse propagators, not their reciprocals.
         kinematics : Kinematics | None
             External assumptions and dimension; defaults to unconstrained 4D.
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Return a compact summary of the family and its scalar-product rank.
+
+        Examples
+        --------
+        >>> print(family)
+        """
+    def _repr_html_(self) -> builtins.str:
+        r"""
+        Display ordered inverse propagators and family metadata in a notebook.
+
+        Expressions use Symbolica's native HTML printer.
+
+        Examples
+        --------
+        Leave ``family`` as the final expression in a notebook cell.
+        """
+    def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
+        r"""
+        Write the summary and ordered denominators using Symbolica's text printer.
+
+        Examples
+        --------
+        IPython uses this representation when rich HTML output is unavailable.
+
+        Parameters
+        ----------
+        pretty : object
+            IPython's pretty printer, providing a ``text`` method.
+        cycle : bool
+            Whether this family is part of a recursive formatting cycle.
         """
     def complete(self) -> IntegralFamily:
         r"""

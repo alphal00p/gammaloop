@@ -172,10 +172,32 @@ projected currents. Symbolic-dimensional traces remain inert; this does not
 choose a dimensional-regularization gamma-five scheme. Chirality specifies
 helicity only in the massless limit.
 
+== Generated Compton amplitudes
+
+The #link("https://feyncalc.github.io/FeynCalcExamples/QED/Tree/ElGa-ElGa")[massive Compton reference]
+is reproduced by generating the two ordinary tree amplitudes, summing them,
+and contracting the operator with its `TensorExpression.dirac_adjoint` and
+physical `Particle.spin_sum` tensors. The installed-host regression is
+`crates/feynkit-py/tests/installed_feyncalc_compton.py`. It retains interference
+between the two diagrams and averages only the incoming spin states. Electron
+and positron amplitudes both give the same massive and massless result, with
+both covariant photon sums and axial sums using the incoming fermion momentum
+as a reference. The nonzero reference norm is retained. At $e = m_e = 1$,
+$s = 3$ and $u = 0$, all four calculations give $3$.
+
+External ports are aligned by matching generated wavefunctions with Symbolica;
+the calculation does not assume internal half-edge numbers. Idenso retains
+conjugation of scalar quantities explicitly, so the example declares its
+physical momenta, charge, mass and invariants real before contracting the
+adjoint. `wrap_indices` and `CookSettings.indices()` keep the adjoint's summed
+indices separate. Dirac adjunction exchanges the input/output matrix roles;
+fermion completeness tensors connect ket and Dirac-adjoint indices accordingly.
+The physical completeness relation remains the one shared with GammaLoop.
+
 == Massive Compton scattering: unresolved sewn-state convention
 
-The #link("https://feyncalc.github.io/FeynCalcExamples/QED/Tree/ElGa-ElGa")[Compton reference]
-is not yet reproduced for a massive electron. Generation supplies four sewn
+The ordinary-amplitude result does not validate conversion from a sewn forward
+graph into a squared amplitude. Generation supplies four sewn
 contributions for `e gamma -> e gamma`: both diagonal terms and both
 interferences. Select the electron cut edge with
 `with_loop_momentum_edges`, obtain its physical charge and momentum sign from
@@ -198,8 +220,8 @@ the physical completeness relation. The missing boundary is between a physical
 spin density and the sewn initial-state momentum convention. The unsquared
 Compton amplitude routes its fermion propagator with the expected physical
 momentum. Resolve the sewing boundary in shared code before treating this
-example as validated; do not compensate by changing a reference formula or
-inserting a process-specific mass replacement into an example.
+sewn calculation as validated; do not compensate by changing a reference formula
+or inserting a process-specific mass replacement into an example.
 
 GammaLoop already owns the relevant workflow:
 `CrossSectionGraph.apply_spin_sum` calls `ParticleTrait.polarization_sum`, which

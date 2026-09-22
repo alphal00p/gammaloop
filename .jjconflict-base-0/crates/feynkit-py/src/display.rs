@@ -1,8 +1,4 @@
-use std::collections::BTreeSet;
-
 use feynkit_graph::FeynmanDiagram;
-use linnet::half_edge::subgraph::SuBitGraph;
-use linnet_py::PreparedRender;
 use pyo3::prelude::*;
 
 pub(crate) fn escape_html(value: &str) -> String {
@@ -21,12 +17,7 @@ pub(crate) fn escape_html(value: &str) -> String {
 }
 
 /// Compile a diagram's Linnest source with typst-py and return its SVG page.
-pub(crate) fn render_diagram_svg(
-    py: Python<'_>,
-    diagram: &FeynmanDiagram,
-    highlight: Option<&SuBitGraph>,
-    isolated: &BTreeSet<usize>,
-) -> PyResult<String> {
+pub(crate) fn render_diagram_svg(py: Python<'_>, prepared: &Bound<'_, PyAny>) -> PyResult<String> {
     py.import("typst").map_err(|error| {
         if error.is_instance_of::<pyo3::exceptions::PyImportError>(py) {
             pyo3::exceptions::PyImportError::new_err(format!(
@@ -36,32 +27,7 @@ pub(crate) fn render_diagram_svg(
             error
         }
     })?;
-    let svg = PreparedRender::from_sources(
-        [
-            ("main.typ", diagram.to_linnest(highlight, isolated)),
-            (
-                "assets/embedded/drawing/templates/layout-core.typ",
-                include_str!("../../../assets/embedded/drawing/templates/layout-core.typ")
-                    .to_owned(),
-            ),
-            (
-                "assets/embedded/drawing/templates/physics-edge-style.typ",
-                include_str!("../../../assets/embedded/drawing/templates/physics-edge-style.typ")
-                    .to_owned(),
-            ),
-            (
-                "assets/embedded/drawing/templates/impl/physics-edge-style.typ",
-                include_str!(
-                    "../../../assets/embedded/drawing/templates/impl/physics-edge-style.typ"
-                )
-                .to_owned(),
-            ),
-        ]
-        .into_iter()
-        .map(|(path, source)| (path.to_owned(), source.into_bytes()))
-        .collect(),
-    )?
-    .svg(py)?;
+    let svg: String = prepared.call_method0("to_svg")?.extract()?;
     // Use the website SVG palette from docs/assets/typst/theme.typ, including
     // the 45% lightened sink strokes from the shared physics style. Keep SVG
     // paint attributes as light-mode fallbacks for viewers without CSS support.
@@ -100,14 +66,8 @@ pub(crate) fn render_diagram_svg(
         .replacen('>', &format!(">{styles}"), 1))
 }
 
-pub(crate) fn render_diagram_html(
-    py: Python<'_>,
-    diagram: &FeynmanDiagram,
-    highlight: Option<&SuBitGraph>,
-    isolated: &BTreeSet<usize>,
-) -> PyResult<String> {
-    let svg = render_diagram_svg(py, diagram, highlight, isolated)?;
-    Ok(format!(
+pub(crate) fn render_diagram_html(diagram: &FeynmanDiagram, svg: &str) -> String {
+    format!(
         "<figure class=\"feynkit-diagram\" style=\"max-width:100%;margin:.5rem 0\">\
          <div style=\"max-width:100%;overflow-x:auto\">{svg}</div>\
          <figcaption style=\"font-size:.85em;opacity:.75;text-align:center\">Feynman diagram {} \
@@ -115,7 +75,7 @@ pub(crate) fn render_diagram_html(
         escape_html(diagram.name()),
         diagram.loop_count(),
         if diagram.loop_count() == 1 { "" } else { "s" },
-    ))
+    )
 }
 
 #[cfg(test)]

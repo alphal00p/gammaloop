@@ -20,8 +20,8 @@ use crate::graph::{PyEdge, PyGraph, PyHalfEdge, PyNode};
 use crate::native_graph::PyHedgeGraph;
 use crate::topology::PySubgraph;
 use crate::typst::{
-    evaluate_selector, render_config_transport, typst_string, RenderConfigTransport,
-    SelectorCallbacks, TypstModuleSource,
+    default_render_config, evaluate_selector, render_config_transport, typst_string,
+    RenderConfigTransport, SelectorCallbacks, TypstModuleSource,
 };
 
 const LINNEST_PACKAGE_DIR: &str = "crates/linnest/typst";
@@ -352,43 +352,11 @@ fn prepare(
 ) -> PyResult<PreparedRender> {
     let mut prepared = PreparedRender::from_sources(BTreeMap::new())?;
     let build_root = &prepared.root;
-    let files = &mut prepared.files;
     write_project_asset(build_root, TOPOLOGY, &topology)?;
 
-    let mut source_paths = transport.template.iter().cloned().collect::<Vec<_>>();
-    source_paths.extend(transport.imports.iter().filter_map(|import| {
-        if let TypstModuleSource::File(path) = &import.source {
-            Some(path.clone())
-        } else {
-            None
-        }
-    }));
-    let mut staged_sources = collect_user_sources(
-        files,
-        build_root,
-        &source_paths,
-        transport.source_root.as_deref(),
-    )?
-    .into_iter();
-    let template = if transport.template.is_some() {
-        staged_sources
-            .next()
-            .ok_or_else(|| PyRuntimeError::new_err("failed to collect Typst template"))?
-    } else {
-        DEFAULT_TEMPLATE.to_owned()
-    };
-    let module_files = transport
-        .imports
-        .iter()
-        .map(|import| match import.source {
-            TypstModuleSource::File(_) => staged_sources
-                .next()
-                .map(Some)
-                .ok_or_else(|| PyRuntimeError::new_err("failed to collect Typst module")),
-            TypstModuleSource::Package(_) => Ok(None),
-        })
-        .collect::<PyResult<Vec<_>>>()?;
-    let mut source = entrypoint_source(&transport, &template, &module_files, TOPOLOGY)?;
+    let mut source =
+        prepared.configuration_source(&transport, Some(DEFAULT_TEMPLATE), Some(TOPOLOGY))?;
+    let files = &mut prepared.files;
     if let Some((hedges, nodes)) = selection {
         files.insert(
             SUBGRAPH_STYLE.to_owned(),
@@ -645,13 +613,13 @@ fn typst_project_path(path: &str) -> String {
 
 fn entrypoint_source(
     transport: &RenderConfigTransport,
-    template: &str,
+    template: Option<&str>,
     module_files: &[Option<String>],
-    topology_path: &str,
+    topology_path: Option<&str>,
 ) -> PyResult<String> {
-    let template = typst_project_path(template);
-    let topology_path = typst_project_path(topology_path);
-    let mut source = format!("#import {template} as _linnet_template\n");
+    let mut source = template.map_or_else(String::new, |path| {
+        format!("#import {} as _linnet_template\n", typst_project_path(path))
+    });
     for (module, file) in transport.imports.iter().zip(module_files) {
         let module_source = match (&module.source, file) {
             (TypstModuleSource::File(_), Some(path)) => typst_project_path(path),
@@ -666,11 +634,14 @@ fn entrypoint_source(
     }
     source.push_str("\n#let _linnet_config = {\n  let value = (");
     source.push_str(&transport.config_source);
-    source.push_str(
-        ")\n  if type(value) != dictionary {\n    panic(\"Linnet render config must be a dictionary\")\n  }\n  value + (graph-spec-path: ",
-    );
-    source.push_str(&topology_path);
-    source.push_str(",)\n}\n");
+    source.push_str(")\n  if type(value) != dictionary {\n    panic(\"Linnet render config must be a dictionary\")\n  }\n  value");
+    if let Some(path) = topology_path {
+        source.push_str(&format!(
+            " + (graph-spec-path: {},)",
+            typst_project_path(path)
+        ));
+    }
+    source.push_str("\n}\n");
     Ok(source)
 }
 
@@ -730,6 +701,52 @@ impl PreparedRender {
             root: build_root,
             package_store,
         })
+    }
+
+    fn configuration_source(
+        &mut self,
+        transport: &RenderConfigTransport,
+        default_template: Option<&str>,
+        topology_path: Option<&str>,
+    ) -> PyResult<String> {
+        let files = &mut self.files;
+        let build_root = &self.root;
+        let mut source_paths = transport.template.iter().cloned().collect::<Vec<_>>();
+        source_paths.extend(transport.imports.iter().filter_map(|import| {
+            if let TypstModuleSource::File(path) = &import.source {
+                Some(path.clone())
+            } else {
+                None
+            }
+        }));
+        let mut staged_sources = collect_user_sources(
+            files,
+            build_root,
+            &source_paths,
+            transport.source_root.as_deref(),
+        )?
+        .into_iter();
+        let template = if transport.template.is_some() {
+            Some(
+                staged_sources
+                    .next()
+                    .ok_or_else(|| PyRuntimeError::new_err("failed to collect Typst template"))?,
+            )
+        } else {
+            default_template.map(str::to_owned)
+        };
+        let module_files = transport
+            .imports
+            .iter()
+            .map(|import| match import.source {
+                TypstModuleSource::File(_) => staged_sources
+                    .next()
+                    .map(Some)
+                    .ok_or_else(|| PyRuntimeError::new_err("failed to collect Typst module")),
+                TypstModuleSource::Package(_) => Ok(None),
+            })
+            .collect::<PyResult<Vec<_>>>()?;
+        entrypoint_source(transport, template.as_deref(), &module_files, topology_path)
     }
 
     fn typst_source_value(&self) -> PyResult<String> {
@@ -797,6 +814,46 @@ impl PreparedRender {
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PreparedRender {
+    /// Prepare an authored main.typ document with the shared renderer assets.
+    ///
+    /// The document can read ``_linnet_config`` for the typed layout, drawing,
+    /// style and template options. Referenced Typst modules are snapshotted.
+    /// A template or selectors require Graph.prepare_render instead.
+    #[staticmethod]
+    #[pyo3(name = "from_sources", signature = (sources, *, config=None))]
+    fn from_source_files(
+        py: Python<'_>,
+        #[gen_stub(override_type(type_repr = "builtins.dict[builtins.str, builtins.bytes]", imports=("builtins")))]
+        sources: BTreeMap<String, Vec<u8>>,
+        #[gen_stub(override_type(type_repr = "RenderConfig | None"))] config: Option<
+            &Bound<'_, PyAny>,
+        >,
+    ) -> PyResult<Self> {
+        let base = default_render_config(py)?;
+        let transport = render_config_transport(py, &base, config, &PyDict::new(py))?;
+        if transport.template.is_some()
+            || transport.selectors.node.is_some()
+            || transport.selectors.edge.is_some()
+            || transport.selectors.source.is_some()
+            || transport.selectors.sink.is_some()
+        {
+            return Err(PyValueError::new_err(
+                "authored rendering accepts layout, drawing, style and template options; use Graph.prepare_render for templates or selectors",
+            ));
+        }
+        let mut prepared = Self::from_sources(sources)?;
+        let main = prepared
+            .files
+            .remove(ENTRYPOINT)
+            .ok_or_else(|| PyValueError::new_err("render sources must include main.typ"))?;
+        let mut source = prepared
+            .configuration_source(&transport, None, None)?
+            .into_bytes();
+        source.extend(main);
+        prepared.files.insert(ENTRYPOINT.to_owned(), source);
+        Ok(prepared)
+    }
+
     /// Return the exact generated Typst entrypoint for this preparation.
     #[getter]
     fn typst_source(&self) -> PyResult<String> {
