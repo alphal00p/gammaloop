@@ -18,7 +18,9 @@
 /// changes a complete exact function call. `tags` and `classes` are fallback
 /// maps. Each renderer receives one context dictionary containing the
 /// structured `node`, `symbol`, `arguments`, document `attachments`, and
-/// rendering helpers. In a whole-call renderer, prefer `visual-arguments` and
+/// rendering helpers. `power-base` marks calls used as the base of a power,
+/// so renderers that display them as products can preserve grouping.
+/// In a whole-call renderer, prefer `visual-arguments` and
 /// `render-visual`; the framework then adds one exact annotation around the
 /// finished visual. Use `(ctx.render)(node)` explicitly when a custom layout
 /// should retain nested exact metadata. Typst calls functions stored in
@@ -327,7 +329,7 @@
     ()
   }
 
-  let render-node(node, exact: true) = {
+  let render-node(node, exact: true, power-base: false) = {
     if type(node) != dictionary { panic("an Atom render-tree node must be a dictionary") }
     let kind = _kind(node)
 
@@ -368,6 +370,7 @@
       head: none,
     ) = (
       kind: semantic-kind,
+      power-base: power-base,
       node: node,
       symbol: _symbol(node),
       identity: _identity(node),
@@ -459,7 +462,7 @@
         denominator.insert("exponent", positive)
         return math.frac(_source-content("1"), render-node(denominator, exact: exact))
       }
-      let base = render-node(base-node, exact: exact)
+      let base = render-node(base-node, exact: exact, power-base: _source(exponent-node) != "1")
       if _source(exponent-node) == "1" { return base }
       if _kind(base-node) in ("sum", "product") { base = _parenthesize(base) }
       return math.attach(base, t: render-node(exponent-node, exact: exact))
