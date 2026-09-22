@@ -8,7 +8,6 @@ from symbolica.community.spenso import (
     ColorSimplifySettings,
     Representation,
     TensorExpression,
-    TensorName,
 )
 
 for colors in (2, 3, 5):
@@ -22,11 +21,7 @@ for colors in (2, 3, 5):
     mixed = TensorExpression(
         generator("a", "i", "j").to_expression() * trace.to_expression()
     )
-    identity = TensorExpression(
-        TensorName.g().to_expression()(
-            fundamental("i").to_expression(), fundamental.dual()("j").to_expression()
-        )
-    )
+    identity = TensorExpression.g(fundamental, fundamental.dual())("i", "j")
     expected = TensorExpression(
         (generator("c", "i", "k") * generator("b", "k", "j")).to_expression() / 2
         - identity.to_expression() * adjoint.g("b", "c").to_expression() / (4 * colors)

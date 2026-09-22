@@ -1428,6 +1428,7 @@ enum LabelLayout {
     DanglingTangent,
     FixedLength,
     Normal,
+    FixedGap,
 }
 
 fn default_label_layout() -> LabelLayout {
@@ -2802,13 +2803,23 @@ impl TypstGraph {
             return;
         }
 
-        let label_lengths = self.new_edgevec(|_, _, pair| {
+        let axes: EdgeVec<Vector2<f64>> =
+            self.new_edgevec(|_e, idx, pair| self.edge_label_axis(idx, pair));
+        let label_lengths = self.new_edgevec(|_, idx, pair| {
             let scale = if matches!(pair, HedgePair::Unpaired { .. }) {
                 cfg.external_label_length_scale
             } else {
                 cfg.internal_label_length_scale
             };
-            scale * spring_length
+            let clearance = if matches!(cfg.label_layout, LabelLayout::FixedGap)
+                && !matches!(pair, HedgePair::Unpaired { .. })
+            {
+                let (half_width, half_height) = self.edge_label_route_half_extents(idx, 0.0);
+                half_width * axes[idx].x.abs() + half_height * axes[idx].y.abs()
+            } else {
+                0.0
+            };
+            scale * spring_length + clearance
         });
         let label_charge = cfg.label_charge * spring_length.powi(2);
         let label_spring = cfg.label_spring;
@@ -2816,8 +2827,6 @@ impl TypstGraph {
         let max_delta = cfg.label_max_delta_scale * spring_length;
         let eps = 1e-4;
 
-        let axes: EdgeVec<Vector2<f64>> =
-            self.new_edgevec(|_e, idx, pair| self.edge_label_axis(idx, pair));
         let label_radii = self.edge_label_radii();
         let node_radii = self.node_layout_radii();
 
@@ -2831,9 +2840,16 @@ impl TypstGraph {
 
             for i in 0..labels.len().0 {
                 let idx = EdgeIndex(i);
+                // Keep internal text boxes at their requested clearance. The
+                // measured-box pass below moves them only for actual collisions.
+                if matches!(cfg.label_layout, LabelLayout::FixedGap)
+                    && !matches!(self.graph[&idx].1, HedgePair::Unpaired { .. })
+                {
+                    continue;
+                }
                 let edge_pos = self.graph[idx].pos;
                 let mut force = match cfg.label_layout {
-                    LabelLayout::DanglingTangent | LabelLayout::Normal => {
+                    LabelLayout::DanglingTangent | LabelLayout::Normal | LabelLayout::FixedGap => {
                         let target = edge_pos + axes[idx] * label_lengths[idx];
                         if label_spring != 0.0 {
                             (target - labels[idx]) * label_spring
@@ -2890,7 +2906,9 @@ impl TypstGraph {
                 }
 
                 let mut move_vec = match cfg.label_layout {
-                    LabelLayout::DanglingTangent | LabelLayout::Normal => force * step,
+                    LabelLayout::DanglingTangent | LabelLayout::Normal | LabelLayout::FixedGap => {
+                        force * step
+                    }
                     LabelLayout::FixedLength => {
                         let offset = labels[idx] - edge_pos;
                         let radial = if offset.magnitude2() > 1e-12 {
@@ -2909,7 +2927,7 @@ impl TypstGraph {
                 labels[idx] += move_vec;
                 let offset = labels[idx] - edge_pos;
                 match cfg.label_layout {
-                    LabelLayout::DanglingTangent | LabelLayout::Normal => {
+                    LabelLayout::DanglingTangent | LabelLayout::Normal | LabelLayout::FixedGap => {
                         if offset.dot(axes[idx]) < 0.0 {
                             let dist = offset.magnitude();
                             labels[idx] = edge_pos + axes[idx] * dist;
@@ -3144,7 +3162,7 @@ impl TypstGraph {
     fn edge_label_axis(&self, edge: EdgeIndex, pair: &HedgePair) -> Vector2<f64> {
         if matches!(
             self.layout_config.label_layout,
-            LabelLayout::DanglingTangent
+            LabelLayout::DanglingTangent | LabelLayout::FixedGap
         ) && matches!(pair, HedgePair::Unpaired { .. })
         {
             self.edge_label_tangent(edge, pair)

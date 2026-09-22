@@ -880,6 +880,7 @@ typst_string_enum! {
         Normal => "normal",
         DanglingTangent => "dangling-tangent",
         FixedLength => "fixed-length",
+        FixedGap => "fixed-gap",
     }
 }
 

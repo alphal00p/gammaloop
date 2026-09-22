@@ -93,6 +93,13 @@ Path("alternative-routing.svg").write_text(
 )
 ```
 
+Internal particle labels use a uniform gap to the measured text box by default;
+extra displacement is reserved for actual label/node collisions. Adjust
+`LayoutOptions(internal_label_length_scale=...)` to change that gap. External
+labels keep their independent spacing. `LabelLayout.FixedGap` exposes the same
+mode on generic Linnet layouts; `LabelLayout.DanglingTangent` retains the freely
+relaxed internal labels.
+
 `momenta=True` draws the graph's stored routing. Passing `lmb=basis` also enables
 momentum display, using that basis without changing the diagram. Loop and external
 components use the same zero-based `k_i` and `p_i` conventions as
