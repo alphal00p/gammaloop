@@ -4,7 +4,7 @@ This records the local SM conventions used by GammaLoop after the phase-conventi
 
 The full amplitude and LU marking/contour contract is in #link("phase-conventions.typ");. The supported setting is a Hermitian theory with real propagator masses. The local audit does not establish a complex-mass prescription or complete electroweak LU correctness.
 
-=== Momentum, spin and color conventions
+== Momentum, spin and color conventions
 <momentum-spin-and-color-conventions>
 We use metric `(+,-,-,-)`, fields Fourier transformed with `exp(-ip.x)`, and a vertex equal to `i` times the interaction action. Numbered UFO `P(mu,leg)` is the incoming momentum of that vertex leg. GammaLoop assigns the underlying source-to-sink momentum `q` with `+q` at a sink and `-q` at a source. This conversion is owned by #link("../../crates/gammalooprs/src/numerator/ufo.rs")[UFO reindexing];, after vertex legs, tensor slots and momenta have received the same permutation in #link("../../crates/gammalooprs/src/graph/parse/mod.rs")[graph parsing];.
 
@@ -24,7 +24,7 @@ This Goldstone phase follows from the actual nonderivative bosonic vertices. Dif
 
 The QCD spin and fundamental-color index orders must be distinguished. With the canonical `Gamma(3,1,2)` and `T(3,2,1)`, the physical quark color matrix is transposed relative to its spin matrix. Equivalently `R^a=-T^{aT}` satisfies `[R^a,R^b]=i f^{abc}R^c`, with a matching `D=partial+igR` and `F=dA-gfAA` convention. A sign comparison that reverses only one color or momentum ordering is not comparing the same rule.
 
-=== Complete derivative inventory
+== Complete derivative inventory
 <complete-derivative-inventory>
 Write `S=P_2-P_3` for `VSS1`, `U=p_antighost` for the corrected `UUV1`, and
 
@@ -73,7 +73,7 @@ The correction changes `UUV1` from `−P(3,2)` to `+P(3,2)` in both #link("../..
 
 The three-gluon sign is consequently valid #strong[with the conventions above];. An independent cubic Yang--Mills differentiation checked all 64 Lorentz components for each ordered color basis of V\_36, V\_43 and V\_54. A separate exact `q qbar -> gg` Ward calculation used the SU(2) subgroup of SU(3), `f123=+1`, fixed rational on-shell momenta, one transverse spectator polarization, four independent external-spin choices and all entries of each resulting color matrix. It vanishes for the actual transposed quark color and current three-gluon sign; changing either independently gives four nonzero entries. This is a discriminating relative-sign certificate, not a claim to have sampled every SU(3) color assignment or every kinematic point. Changing both conventions together is an equivalent representation. No three-gluon correction is needed.
 
-=== Scalar/pseudoscalar and vector/axial basis
+== Scalar/pseudoscalar and vector/axial basis
 <scalarpseudoscalar-and-vectoraxial-basis>
 Let `I` be the spin identity, `G5=gamma5`, `V^mu=gamma^mu` and `A^mu=gamma^mu gamma5`, in that order. The final canonical Lorentz definitions are:
 
@@ -114,7 +114,7 @@ The sum `PL+PR=I` is gamma5-free; the difference `PR-PL=G5` is a genuine pseudos
 
 The model regression `sm_lorentz_structures_use_the_scalar_and_vector_axial_basis` in #link("../../crates/gammalooprs/src/model/mod.rs")[model/mod.rs] checks the exact basis coefficients, scalar sum/difference and absence of chiral-projector symbols. The audit-time independent UFO/JSON comparison checked all 22 Lorentz structures, 768 explicit matrix entries and all 26 Goldstone action identities.
 
-=== Generated local certificates and RHS sewing
+== Generated local certificates and RHS sewing
 <generated-local-certificates-and-rhs-sewing>
 #link("../../crates/gammalooprs/src/processes/cross_section/sewing_tests.rs")[sewing\_tests.rs] uses actual `Graph::from_string` vertex assignment and tensor contraction, with independent explicit matrices/spinors as the oracle.
 
@@ -134,13 +134,13 @@ The same test checks the all-incoming charged ghost vertex with `e=1` and `pbar^
 
 The neutral `f fbar -> ZH/G0H` audit also evaluated all four tree diagrams with exact rational components: consistent field phases satisfy the Ward identity, whereas the previous scalar-current/Goldstone-Yukawa pair does not. That calculation uses common Feynman-gauge propagators. The later generated virtual-current regressions check the actual canonical propagators together with their Goldstone diagrams.
 
-=== Input-parameter reality
+== Input-parameter reality
 <input-parameter-reality>
 The vendored UFO and canonical JSON agree on the names, nature and type of all 72 SM parameters. All 26 external inputs are declared `real` and have zero imaginary defaults: three SMINPUTS, four Wolfenstein inputs, six YUKAWA inputs, eight MASS inputs and five DECAY inputs. Derived CKM entries retain their complex declarations, allowing their physical phases when the real Wolfenstein inputs are nonzero. No parameter-declaration correction was needed.
 
 The loader preserves these declarations as `ParameterType` at the model input boundary. It does not automatically attach a Symbolica reality attribute to the underlying symbol. The marking prescription uses the model's inverse-process vertices and does not depend on such an attribute to undo a second numerator adjoint. Graph generation preserves the original forward sides by default. The optional CP-based left/right optimization remains available with a warning; the user is responsible for its validity at the selected coupling point.
 
-=== Fermion flow and Grassmann statistics
+== Fermion flow and Grassmann statistics
 <fermion-flow-and-grassmann-statistics>
 For an underlying source-to-sink momentum `q`, the actual propagator ledger is:
 
@@ -160,7 +160,7 @@ Joint reversal changes the endpoints, momentum and PDG together, preserving the 
 
 The generic `Particle::is_anticommutating` predicate and corresponding loop/external-ordering logic have been restored from the previously implemented upstream change. Ghosts as well as fermions receive one minus per closed Grassmann loop. This correction is independent of UUV1: a two-vertex ghost loop contains two UUV1 factors, so reversing that vertex cannot supply its missing loop minus. The public `--number-of-fermion-loops` filter counts only fermion loops, using `Particle::is_fermion` and explicitly excluding `Particle::is_ghost`; ghost loops retain their statistics minus sign but do not contribute to this selection count. #link("../../crates/gammalooprs/src/feyngen/test.rs")[Feyngen tests] cover closed topologies, identical external ghost exchange and an actual generated ghost loop (`closed_anticommutating_loop_counts`, `open_ghost_chain_exchange_has_grassmann_sign`, `generated_ghost_loop_has_one_statistics_minus`).
 
-=== Electroweak virtual and cut-state gauge contract
+== Electroweak virtual and cut-state gauge contract
 <electroweak-virtual-and-cut-state-gauge-contract>
 The previous canonical JSON stored
 

@@ -1,6 +1,6 @@
 = Exact powered-denominator lifting and factorized EMR assignment
 <exact-powered-denominator-lifting-and-factorized-emr-assignment>
-=== Status and scope
+== Status and scope
 <status-and-scope>
 This document describes the production design used when a completed local 4D term is projected to a causal-flow representation (CFF) after UV Taylor operations have raised one or more propagators. It expands two tightly coupled requirements:
 
@@ -15,7 +15,7 @@ The two requirements cannot be solved independently. A denominator power first c
 
 This is GammaLoop production machinery. It is not a requirement that the diagnostic `3Drep` CLI prepare its inputs or expressions in the same way. It is also deliberately independent of LTD; no LMB variable is ever used as an energy-identity or energy-capacity index here.
 
-=== Equality is defined for the complete fixed-cut functional
+== Equality is defined for the complete fixed-cut functional
 <equality-is-defined-for-the-complete-fixed-cut-functional>
 The direct local-3D and projected local-4D constructions need not agree on an individual generalized residue-map entry or an individual raised-order slot. Their authoritative equality is
 
@@ -35,13 +35,13 @@ $ f_2 mapsto f_2 + eta h \, #h(2em) f_1 mapsto f_1 - h $
 
 This does not weaken orientation-local UV subtraction in the direct-3D route. Each direct residue-key selector must still give its required local UV behavior. It only means that projected local-4D, which is defined after an explicit residue sum, has no canonical one-to-one key or raised-order pairing with that selector-local decomposition.
 
-==== Factorized staged map composition
+=== Factorized staged map composition
 <factorized-staged-map-composition>
 Projection integrates disconnected or nested Taylor components in stages. A state is retained as a CFF carrier times a still-factorized numerator, rather than as one expanded polynomial. At component $a$, its exact source map acts only on the numerator factors owned by $a$; the resulting carrier/numerator pair is passed unchanged to component $a + 1$. After all UV components have been integrated, the outer CFF map acts once on the still-unmapped soft and cograph factors. Symbolically, the implementation realizes products of mapped factors and sums of CFF carriers without expanding the full numerator.
 
 Genuinely independent unsummed component residue states form the mathematical Cartesian product of their sums. A child coefficient which has already summed its source-local residues is stored once, together with its frozen localizing factor. Different Taylor topologies may have child maps of different lengths; those maps are consumed inside their own sums and are never paired with outer maps. Each actual outer CFF branch maps the completed coefficient times the remaining numerator once, then multiplies the frozen factor and contributes to the checked cut-indexed sum. No artificial child production hosts or selector copies are constructed. This distinction preserves both the complete fixed-cut functional and the factorized numerator representation.
 
-=== Executive summary
+== Executive summary
 <executive-summary>
 For a term
 
@@ -64,7 +64,7 @@ the production projection performs the following operations:
 
 The resulting graph is therefore a source-backed occurrence representation of the rewritten rational function. Provenance is not discarded: it supplies the source-minor scaffold and all maps back to the physical graph. It is also not an extra argument of the rational function. Once algebraically identical occurrences have been lifted, changing only their compatible owner labels must not change their residue, loop rank, or owner-free CFF cache identity.
 
-=== Terminology and identity layers
+== Terminology and identity layers
 <terminology-and-identity-layers>
 Several IDs coexist in this path. Conflating signature equivalence with physical incidence, or occurrence-local capacity with physical EMR ownership, produces incorrect topology or numerator sampling.
 
@@ -87,7 +87,7 @@ Several IDs coexist in this path. Conflating signature equivalence with physical
 
 An occurrence-local exact energy is not a new physical momentum. If a double propagator is represented by exact energies `E_a` and `E_b`, both can be certified representations of the same physical energy `E_5`. They remain distinct variables only because a generalized residue calculation needs one energy slot per denominator occurrence.
 
-=== Why UV processing creates this problem
+== Why UV processing creates this problem
 <why-uv-processing-creates-this-problem>
 The unexpanded graph normally has one denominator wrapper per propagator. UV Taylor operations differentiate and expand rational factors. Even if the input topology contains only simple propagators, a completed local 4D term can contain
 
@@ -110,7 +110,7 @@ $ frac(\( Q^0 + c \)^2, D \( Q \)^2) quad upright("or") quad frac(\( Q^0 + c_1 \
 
 After creating two occurrence energies, the numerator can be evaluated through either occurrence. Choosing just the first is algebraically possible on the physical diagonal, but it supplies unnecessarily high generalized-CFF bounds and can make CFF generation much more expensive. Worse, advertising balanced bounds while evaluating all factors through the first occurrence would be incorrect. This is why structural lifting and numerator assignment are one coupled operation.
 
-=== Production data flow
+== Production data flow
 <production-data-flow>
 ```text
 raw local 4D sectors, retaining physical owners for Taylor recursion
@@ -162,7 +162,7 @@ Each candidate plan is immutable before its generalized CFF request. Selection r
 
 Projection prepares each canonical exact source with its initial immutable plans; selection derives the final placement challenger from the best native score. It reuses an expression only when canonical topology, occurrence-local capacity and generation options match, and maps each term with its selected plan. Equal physical energies do not allow the cache to redistribute their individual bounds. Independent requests never combine into a larger Cartesian capacity, so no preliminary registration pass is needed.
 
-=== Non-negotiable common-LMB commutative reconstruction invariant
+== Non-negotiable common-LMB commutative reconstruction invariant
 <non-negotiable-common-lmb-commutative-reconstruction-invariant>
 The projected local-4D route is not required to preserve an individual CFF orientation. It is therefore free to choose any convenient EMR spelling of a completed Taylor numerator on the reconstructed factorized UV graph. That freedom does #strong[not] make the rewrite heuristic. Every chosen spelling must pass the following exact commutative check before its generalized-CFF image is trusted.
 
@@ -207,7 +207,7 @@ The denominator side has a parallel certificate: after substituting the same com
 
 This commutative identity is the first diagnostic boundary for every projected local-4D mismatch. If it fails, the defect is in provenance preservation, owner-backed skeleton construction, occurrence assignment, or signed EMR rewriting. If it passes but the residue-summed result differs from direct local-3D UV, the defect is downstream---in CFF input normalization, prefactor or component composition, or residue aggregation. Rank-envelope optimization must never be used to repair a failed identity.
 
-==== Worked diagnostic: GL04 temporal-square `T0` sector
+=== Worked diagnostic: GL04 temporal-square `T0` sector
 <worked-diagnostic-gl04-temporal-square-t0-sector>
 The minimal GL04 acceptance probe localizes the original numerator on edge 5,
 
@@ -255,7 +255,7 @@ An independent diagnostic using the production generalized-CFF engine then compa
 
 This worked sector therefore passes the pre-CFF common-LMB certificate, the generalized-CFF component-product diagnostic, and a static trace of the GammaLoop host/prefactor/outer-factor coefficient. It is not the first unequal boundary in the enclosing forest. The isolated `1zs/T2` comparison below locates the remaining discrepancy. Changing this fixed numerator assignment would violate the exact certificate and cannot be a valid repair.
 
-==== Worked live reproducer: GL04 temporal-square `1zs/T2`
+=== Worked live reproducer: GL04 temporal-square `1zs/T2`
 <worked-live-reproducer-gl04-temporal-square-1zst2>
 The full-graph generation LMB used by the minimal reproducer contains
 
@@ -337,7 +337,7 @@ exactly. This is the real post-plan certificate: it includes every selected occu
 
 The executable regression `gl00_gl04_planned_lifts_match_post_t_numerators_in_common_loop_coordinates` runs both reconstruction proofs on the production source. It builds the actual owner-5/owner-6 denominator records, asks the production `EnergyPowerAnalyzer` for an immutable plan, and applies it with `ExactSourceEnergyMapper`. Distinct occurrence witnesses first check that original factors stay on their base owner and derivative-created factors stay within that owner's copies; the test does not prescribe the particular allocation shown in this recorded trace. It then imposes the common chart and proves the complete factorized numerator identity. The denominator certificate compares the retained source multiset `D(+q)^2 D(-q)^3` with the reconstructed occurrence product, including mass and UV-domain ownership. The GL04 case certifies the full `T0+T1+T2` truncation; isolated coefficient extraction and the complete three-route comparison require the additional checks below.
 
-==== Isolated coefficient and complete-source certificate
+=== Isolated coefficient and complete-source certificate
 <isolated-coefficient-and-complete-source-certificate>
 Writing $D = q^2 - M^2$ and stripping the common numerator coupling, the actual second Taylor coefficient of the child is
 
@@ -367,7 +367,7 @@ $ - 1.8354223786936939047533107951846543304391732719501496 times 10^(- 6) thin i
 
 Before the scalar-base correction, the complete one-call exact CFF agreed with projected local-4D at approximately 300 digits, giving $- 2.79328040709378476003397681050696066768826159163 times 10^(- 6) i$. The independent analytic contour agreed with direct local-3D. Thus the reconstruction and factorized child/outer composition passed before the shared generalized scalar contact was changed. In that recorded post-correction diagnostic, direct, projected, and one-call results agree with the analytic value: one-call minus direct is numerically zero at 1024-bit precision, and projected minus direct is about $- 1.25 times 10^(- 306) i$. The unchanged production GL04 `q5_temporal_square` acceptance also passed with the complete Taylor truncation, integrated UV counterterms, and thresholds enabled.
 
-==== GL00 odd-numerator child certificate
+=== GL00 odd-numerator child certificate
 <gl00-odd-numerator-child-certificate>
 The same regression includes the complete post-Taylor child source for the physical GL00 edge-5 temporal probe used by `scalar_3l_cross_section_gl00_q5_temporal_component_inspects_match`. Its one-loop UV child has physical owners 4 and 5, with $Q_4 = q$, $Q_3 = p$ and $Q_5 = - q - p$. The original $Q_5^0$ stays on owner 5; $p$ is soft boundary data. Both child vertices contribute the retained factor $g^2$, where `g = UFO::SCALAR_COUPLING`.
 
@@ -381,7 +381,7 @@ Before normalization, production stores distinct mass fields: the full propagato
 
 This is a complete child-sector reconstruction certificate. It does not certify the full cut sum or every GL00 forest. The GL00 numerical regression complements it with complete physical-route evaluations including local and integrated UV and threshold counterterms.
 
-==== One source convention across recursive scalar bases
+=== One source convention across recursive scalar bases
 <one-source-convention-across-recursive-scalar-bases>
 Reconstruction correctness ends before CFF normalization. Let $G_c$ denote a raw independently generated component, including positive local $1 \/ \( 2 E_j \)$ factors. Its target source-frame coefficient is
 
@@ -405,7 +405,7 @@ Deleting edge 3 changes the denominator-count parity while leaving the nontermin
 
 The permanent regressions `gl04_outer_unequal_mass_quadratic_obeys_complete_cut_identity`, `mixed_carrier_contact_matches_independent_convergent_contour`, and `attached_tadpole_repeated_bubble_matches_independent_convergent_contour` compare against literal pole residues in both generation contexts. Their scalar, lowered, and terminal controls distinguish a source-frame error from an incorrect contour oracle. Complete physical-cut sums are the comparison boundary; branch counts and individual generalized keys are not route invariants. The recorded initial-cut repeated-spectator contour check also passed unchanged, checking the inherited-closure sign needed by the original root contact.
 
-=== Stage 1: retain denominator multiplicity without expanding the numerator
+== Stage 1: retain denominator multiplicity without expanding the numerator
 <stage-1-retain-denominator-multiplicity-without-expanding-the-numerator>
 The local-4D term projector traverses the Symbolica expression structurally. For a negative integer power of a denominator wrapper, it repeats the `FourDDenominator` record `abs(power)` times. Non-denominator powers remain in the numerator. The first argument of every typed `GS.den` wrapper is the original `EdgeIndex`; the UV Taylor operator differentiates and rewrites the other arguments while carrying that owner unchanged. Consequently, the completed Taylor coefficient still has a direct lookup into the original graph and never has to recover an edge from the rewritten momentum.
 
@@ -438,7 +438,7 @@ survives term projection exactly as a factorized atom.
 
 This step supports arbitrary negative integer powers. It does not contain a special case for a double pole or for a self-energy graph.
 
-=== Stage 2: recover the source skeleton and classify algebraic channels
+== Stage 2: recover the source skeleton and classify algebraic channels
 <stage-2-recover-the-source-skeleton-and-classify-algebraic-channels>
 Two keys are retained here for different purposes. The physical `source_edge` locates an occurrence in the already known cograph or UV source minor. It tells GammaLoop which original component, attachment, and topology domain produced the factor, so no graph has to be inferred from a matrix of rewritten momentum signatures. Separately, GammaLoop computes an exact momentum signature in the temporary source coordinates and canonicalizes it up to an overall sign. The algebraic-channel key is
 
@@ -462,7 +462,7 @@ A compatible relabeling changes only the `source_edge` provenance among occurren
 
 If one source edge appears with incompatible normalized signatures or masses in one additive 4D term, generation fails instead of choosing an incidence by heuristic. UV-vacuum and cograph denominators are constructed in disjoint source minor domains even when their algebraic data happen to look alike.
 
-==== Provenance is retained, not discarded
+=== Provenance is retained, not discarded
 <provenance-is-retained-not-discarded>
 Owner provenance remains on every `FourDDenominator`. Across construction and the later projection back from the owner-free `ParsedGraph`, it is used to:
 
@@ -481,7 +481,7 @@ The rule is therefore:
 Use the original source graph and retained owners to recover the known skeleton and all physical maps. Add only derivative-created serial copies of those same lines unless a further serial-path or pure-cycle contraction is certified. Normalized denominator algebra classifies channels on that scaffold; it never supplies incidence. Completed hard numerator ownership transfers only at the exact canonical-class certificate boundary.
 ]
 
-=== Stage 3: instantiate the source-minor scaffold and lift powers
+== Stage 3: instantiate the source-minor scaffold and lift powers
 <stage-3-instantiate-the-source-minor-scaffold-and-lift-powers>
 The original graph is never reconstructed. Instead, each occurrence first receives a deterministic attachment in the appropriate source minor.
 
@@ -511,13 +511,13 @@ Exactly one sign must pass. This rank calculation is a routing-coordinate valida
 
 Serial subdivision is the graph-theoretic representation of a dotted line: the new two-valent vertices do not introduce independent momentum constraints. Raw occurrence signs and physical owners are retained separately by the exact numerator/provenance maps rather than encoded as alternating segment directions.
 
-==== Non-vacuum boundaries use explicit source-crown hedges
+=== Non-vacuum boundaries use explicit source-crown hedges
 <non-vacuum-boundaries-use-explicit-source-crown-hedges>
 After internal incidence is fixed, a non-vacuum exact signature can leave an external-momentum imbalance at a source-backed node. GammaLoop represents that boundary explicitly with source-crown hedges carrying the corresponding external coefficients. This completes the already known source topology; it does not use external or loop signatures to infer internal endpoints. Contracted components containing no exact denominator or cut carrier are multiplicative identities and do not manufacture causal surfaces.
 
 The implemented non-vacuum path currently wires pure-external source crowns: the relevant parent crown hedge has no parent-loop coordinate and carries its known external coefficients into the exact source. This is already sufficient for ordinary non-vacuum amplitude boundaries. A future on-shell UV scheme may instead leave a two-point exact topology with a fixed insertion such as `(m,0,0,0)`. That extension should add the fixed four-vector as an explicit boundary payload and wire it to the same source-derived endpoints. It does not change the internal disjoint-set construction and does not require an incidence or Kirchhoff reconstruction.
 
-==== Determinism
+=== Determinism
 <determinism>
 Occurrence input is first put in a stable order so raised-wrapper subdivisions are reproducible. After all source attachments, auxiliary power vertices, cut carriers, and crown hedges exist, Graphica canonically relabels the edge-coloured graph. Internal propagator incidences are undirected during this relabeling because `D(Q)=D(-Q)`; external crown incidences remain directed. In the canonical node namespace, exact occurrences are grouped only for routing by connected component and the key
 
@@ -529,7 +529,7 @@ For each such component, GammaLoop compares the sorted multiset of directed `(ta
 
 Exact edges are then sorted in the canonical node namespace and the occurrence-to-original-factor map is reordered with them. Source-node and power-node names survive as aliases of the canonical nodes; cache keys deliberately clear those names and edge labels. Reversing the order of Symbolica factors therefore does not change the parsed exact graph or its CFF cache entry. Crucially, this pass only relabels and orients an already source-constructed graph: it never derives an endpoint from a momentum signature.
 
-==== Rational incidence and physical support cross the boundary separately
+=== Rational incidence and physical support cross the boundary separately
 <rational-incidence-and-physical-support-cross-the-boundary-separately>
 The owner-free exact CFF and the maps back to the physical graph deliberately cross separate interfaces:
 
@@ -539,7 +539,7 @@ The owner-free exact CFF and the maps back to the physical graph deliberately cr
 
 The channel used for this neutral cut-support union includes the topology domain, mass, and exact signature canonicalized up to sign. Consequently `D(Q)` and `D(-Q)` share support, but equal-looking UV and cograph factors, or factors of different mass, do not. None of these support operations modifies the rational incidence, exact energy map, or numerator routing sign.
 
-=== Stage 4: analyze the factorized numerator before occurrence substitution
+== Stage 4: analyze the factorized numerator before occurrence substitution
 <stage-4-analyze-the-factorized-numerator-before-occurrence-substitution>
 The numerator is analyzed in physical `Q(edge, index)` variables and, for completed hard UV factors, certified `Q(uv_class(id), index)` variables. These references remain distinct from the exact occurrence IDs allocated later.
 
@@ -573,7 +573,7 @@ retains a repeated factorized base. Allocation reuses repeated assignment cycles
 
 Opaque nonlinear functions of EMR energies and negative energy-dependent powers are rejected. Production does not guess a bound for an expression it cannot certify.
 
-=== Stage 5: certify equivalent exact occurrence energies
+== Stage 5: certify equivalent exact occurrence energies
 <stage-5-certify-equivalent-exact-occurrence-energies>
 For a physical EMR input which has nonzero numerator degree, the exact source mapper finds denominator occurrences whose rewritten momentum is literally
 
@@ -587,11 +587,11 @@ The literal `+/-Q_e` restriction is important for sign safety. It supplies both 
 
 Completed canonical UV input uses typed classes instead: the mapper certifies every retained occurrence against the class's exact signed component-frame binding and denominator polynomial. This permits a class to span several physical owners while preserving the incidence witness. It does not equate channels using additional momentum-conservation identities. A reconstructible hard factor without a surviving pole is a fixed affine carrier, whose temporal dependence still requires valid source-coordinate bounds and sampled mapping; it is not an empty class or an invented occurrence.
 
-=== Stage 6: propose certified assignments and select by actual map count
+== Stage 6: propose certified assignments and select by actual map count
 <stage-6-propose-certified-assignments-and-select-by-actual-map-count>
 For raw physical input, original factors retain one owner occurrence and newly derived hard factors use that owner's certified copies. Completed canonical UV input permits every eligible hard factor to use its class's certified pool. The factorized expression supplies structural degree bounds: sums take componentwise maxima, while products and multilinear slots add loads. The baseline allocates freely assignable class-owned unit factors by cyclic occurrence offsets. Product and multilinear children advance the offset; sum branches share their starting offset. Fixed physical factors retain their occurrence, while other indivisible factors use deterministic least-loaded placement within their certified pool. A raw original quartic stays fixed; a class-owned quartic may use a factorized lift under its exact certificate. The former Cartesian/Pareto hard frontier is not enumerated. Actual native map count selects among the bounded proposals; the descending degree envelope and stable proposal order break count ties.
 
-==== Cyclic and greedy hard proposals
+=== Cyclic and greedy hard proposals
 <cyclic-and-greedy-hard-proposals>
 For the special case of `d` freely assignable unit factors and `n` equivalent occurrences with no fixed load, any valid assignment has nonnegative loads
 
@@ -652,7 +652,7 @@ the internal planned representation repeats the unexpanded base and maps it as
 
 The original expanded polynomial is never constructed. Raw physical owner restrictions remain in force; cross-owner reuse requires the completed hard factor's certified canonical class.
 
-==== Native map-row selection
+=== Native map-row selection
 <native-map-row-selection>
 An affine baseline needs one proposal. For nonlinear input, the planner chooses one eligible occurrence pool deterministically by its largest baseline load, then its degree beyond the pool size, then stable family order. A UV-class pool can supply a second proposal which packs unavoidable excess after its initial pass. After scoring the initial proposals, selection asks the current winner for a reversed placement in that same pool; a one-step rotation replaces a duplicate. Ordered capacity duplicates are skipped, leaving at most three certified proposals. No Cartesian product across pools is constructed. Equal sorted envelopes at different occurrence positions remain distinct capacities.
 
@@ -662,7 +662,7 @@ The smaller count wins; an equal count prefers the smaller descending degree env
 
 The small sunset regression checks the complete contour instead of fixing this cost model's row count. Its source has channels `k0`, `k1-k0` and five serial occurrences of `k1`, with energies `(2,3,7)` and numerator `k0*k1^p`; `D0`, `D1`, `D2` denote the three corresponding quadratic denominators. With both measures `dk/(2*pi*i)` closed below, integrating `k0/(D0*D1)` gives `-k1/[2*E1*(k1^2-(E0+E1)^2)]`. Multiplying by `k1^p/D2^5` and taking the negative sum of the remaining simple and fifth-order pole residues gives `1213/16387080192` for `p=5` and `-365/47775744` for `p=7`. The test covers all 126 degree-five load distributions and the bounded allocator's degree-five/seven proposals. These independent values certify signs and complete sampling; they establish neither a preferred allocation layout nor a globally minimal native map.
 
-==== Soft Taylor energies at the outer CFF boundary
+=== Soft Taylor energies at the outer CFF boundary
 <soft-taylor-energies-at-the-outer-cff-boundary>
 Denominator differentiation also creates soft factors `S^0`. Their `DenominatorDerivedSoft` provenance records the actual crown carrier and literal payload. A later enclosing Taylor operator consumes a newly hard part on that carrier, while any remaining soft part keeps its provenance. This is separate from assigning new hard factors among serial copies of a UV denominator.
 
@@ -674,7 +674,7 @@ Only the incumbent and one challenger are retained at a time. The loser is dropp
 
 Child contour maps are already consumed and play no role in this routing. A loop-dependent carrier outside the active span is an error, not a constant in the rank analysis. The search is best-of-three within the existing certified basis/Pareto proposal class, not a global count optimum. Basis enumeration and frontier construction can still grow combinatorially; the three-candidate generation budget does not bound that preparation work. Neither preparation nor scoring expands the numerator or searches for cancellation by expansion. The direct-3D and LTD paths retain their existing behavior.
 
-=== Stage 7: use one immutable plan for generation and evaluation
+== Stage 7: use one immutable plan for generation and evaluation
 <stage-7-use-one-immutable-plan-for-generation-and-evaluation>
 The assignment plan contains both:
 
@@ -687,7 +687,7 @@ This prevents a subtle but serious inconsistency. It would be wrong to balance t
 
 Sampled directions also survive lower-sector pinching. If a contact sector assigns a zero sample to the occurrence which owns a factor, that exact zero map remains authoritative even if an equivalent dotted occurrence survives. The numerator is not silently reassigned to the surviving occurrence after the pinch.
 
-=== Stage 8: cache exact topology and per-request capacity
+== Stage 8: cache exact topology and per-request capacity
 <stage-8-cache-exact-topology-and-per-request-capacity>
 One nonserialized `Local4dProjectionContext` owns reuse for one graph's complete UV computation in either forest backend. Canonical sectors, owned source analysis and immutable numerator templates share a 48 MiB/4,096-entry retention budget. Winning CFF payloads and count-only contenders use 64 MiB/4,096 keys; component-local mapped subtrees use 16 MiB/16,384 entries. The accounting includes owned keys, containers and symbolic payloads; oversized entries bypass retention. These are retained-payload limits, not limits on whole-process RSS. A context must not cross the graph boundary: both orchestrators keep the parent graph fixed throughout the context lifetime, and keys describe requests within it.
 
@@ -709,7 +709,7 @@ The production-shaped regression `dod_one_triangle_keeps_separate_denominator_to
 
 The base and singly dotted terms are separate exact sources. No common denominator is imposed across them, so denominator clearing does not manufacture positive typed factors in their numerators. The parser preserves each original factorized numerator and can group terms only when their typed denominators already agree. Genuine positive typed denominator factors remain supported; their CFF pinches are distinct from artificial factors introduced by regrouping. The fixed cograph component is part of each canonical key, so cache reuse does not conflate different surrounding graphs or future non-vacuum boundaries.
 
-=== Why `D(Q)=D(-Q)` cannot introduce numerator sign mistakes
+== Why `D(Q)=D(-Q)` cannot introduce numerator sign mistakes
 <why-dqd-q-cannot-introduce-numerator-sign-mistakes>
 This deserves a separate proof because the denominator and numerator have different parity properties.
 
@@ -746,7 +746,7 @@ There are thus two separate routing layers:
 
 The first layer is even denominator algebra on a source-backed skeleton; the second is signed physical-numerator mapping. Denominator evenness affects only signature equivalence and never silently turns an odd numerator into an even one. Likewise, unioning `+Q` and `-Q` cut support is a neutral provenance operation and never rewrites a numerator factor.
 
-==== A focused sign oracle
+=== A focused sign oracle
 <a-focused-sign-oracle>
 The test `exact_energy_bounds_keep_original_on_canonical_occurrence_across_routing_signs` uses three equivalent occurrences with sign patterns `(+,-,-)` and `(+,+,-)`. An original degree-two numerator stays on its retained base occurrence and maps to `E^2`; changing the other routing signs cannot authorize dispatch to a serial copy.
 
@@ -764,7 +764,7 @@ The end-to-end exact-CFF identity test also retains an explicitly odd factor `Q^
 
 matches both the lower exact source and the ordinary CFF source. This protects the odd numerator mapping independently of a purely even `Q^2` probe.
 
-=== Complete example 1: a same-owner cubic powered line
+== Complete example 1: a same-owner cubic powered line
 <complete-example-1-a-same-owner-cubic-powered-line>
 The unit fixture `exact_source_preserves_the_complete_cubic_propagator_contour` starts from the physical graph
 
@@ -787,7 +787,7 @@ This is the simplest complete realization of
 
 as a graph accepted by the shared CFF recursion.
 
-=== Complete example 2: owner relabeling preserves the rational CFF
+== Complete example 2: owner relabeling preserves the rational CFF
 <complete-example-2-owner-relabeling-preserves-the-rational-cff>
 The regression `exact_source_owner_relabeling_preserves_residue_rank_and_cut_provenance` uses a physical graph with two parallel edges:
 
@@ -811,7 +811,7 @@ What changes is only the physical projection. The distinct spelling retains ener
 
 This fixture protects the precise boundary: source IDs recover the known skeleton and survive as provenance, but owner identity cannot control the exact rational incidence, loop rank, or contour residue. It also demonstrates why cut support must be unioned after canonicalization: choosing one canonical occurrence must not hide the other physical owner.
 
-=== Complete example 3: opposite routing within one powered line
+== Complete example 3: opposite routing within one powered line
 <complete-example-3-opposite-routing-within-one-powered-line>
 The fixture `exact_source_normalizes_opposite_spelling_inside_one_power_chain` uses two occurrences of one rational denominator with momenta `+Q(0)` and `-Q(0)`, plus a balancing denominator of a different mass.
 
@@ -825,7 +825,7 @@ A separate end-to-end test, `exact_cff_keeps_opposite_source_routing_without_a_s
 
 in GammaLoop's physical production normalization, including the typed source-frame bridge. No signature-derived incidence bridge is needed: source routing and numerator sign restoration are handled at their proper layers.
 
-=== Complete example 4: the production-shaped cubic UV rewrite
+== Complete example 4: the production-shaped cubic UV rewrite
 <complete-example-4-the-production-shaped-cubic-uv-rewrite>
 The most representative scalar fixture is #link("../../tests/resources/graphs/uv_tests/scalar_cubic_exact_uv_rewrite.dot")[`scalar_cubic_exact_uv_rewrite.dot`];. Its full graph is
 
@@ -890,7 +890,7 @@ The first two routes are parity comparators and do not use the lifting described
 
 They are compared at several small and large momentum points. The strongest comparison evaluates the explicit-local-3D and projected-local-4D routes directly as 1000-bit Arb values and compares the Arb numbers without conversion through `f64`. This makes the fixture sensitive both to structural errors and to precision loss in the precision-escalation path. Because the two real graph numerator factors are odd affine functions of `Q(4)^0` and `Q(5)^0`, while the original and mirrored UV cycles contain `Q/Q/-Q` and `Q/-Q/-Q` respectively, their passing three-route comparison is also an end-to-end sign oracle---not only a denominator-evenness test.
 
-=== Complete example 5: UV and cograph topology remain separate
+== Complete example 5: UV and cograph topology remain separate
 <complete-example-5-uv-and-cograph-topology-remain-separate>
 The fixture `exact_cff_separates_uv_topology_from_the_cograph` uses two parallel bubbles joined by a bridge:
 
@@ -905,7 +905,7 @@ The exact source therefore preserves both factors rather than accidentally joini
 
 This is important for nested and disconnected UV structures: source-minor attachment keeps the domains structurally separate. Any later signature equivalence is repeated-channel algebra on the completed graph and cannot merge UV with cograph topology merely because their momenta look alike.
 
-=== Complete example 6: numerator/denominator cancellation, including LU
+== Complete example 6: numerator/denominator cancellation, including LU
 <complete-example-6-numeratordenominator-cancellation-including-lu>
 The exact-CFF test `exact_cff_uncancelled_powered_denominator_matches_lower_source` constructs
 
@@ -938,7 +938,7 @@ The test `raised_cut_numerator_cancels_one_propagator_in_both_orientation_modes`
 
 This is the direct LU analogue of the self-energy mechanism in which a factorized `p_slash` from the integrated UV result combines with a neighboring propagator numerator to form `p^2` and cancel a denominator.
 
-=== Complete example 7: the `epem_a_ddx` GL0 self-energy source
+== Complete example 7: the `epem_a_ddx` GL0 self-energy source
 <complete-example-7-the-epem_a_ddx-gl0-self-energy-source>
 The scalar fixtures isolate the mechanism, but the motivating production case is the NLO `epem_a_ddx` self-energy graph GL0.
 
@@ -967,7 +967,7 @@ GL2 supplies a useful contrast. Both of its contracted integrated-UV sources rem
 
 `State::generation_summary(...)` exposes contracted-source diagnostics in each graph report's `stats.cff_energy_degree_bound_reports` field. The DDx acceptance reads those reports and distinguishes the physical parent bounds from exact-source assigned bounds. They are generation diagnostics, separate from the ordinary graph retained by `ProcessIntegrand`; acceptance checks should use this summary rather than infer transient bounds from the final evaluator.
 
-=== Complete example 8: multi-loop and rank-deficient exact sources
+== Complete example 8: multi-loop and rank-deficient exact sources
 <complete-example-8-multi-loop-and-rank-deficient-exact-sources>
 The approach is not restricted to one-loop bubbles.
 
@@ -979,7 +979,7 @@ The companion initial-cut fixture verifies that a cut carrier remains a literal 
 
 These tests show why LMB data and EMR ownership have distinct responsibilities: LMB coordinates express and reduce the exact signature space, but physical EMR provenance determines numerator identity and bounds.
 
-=== Generalized-CFF behavior after the lift
+== Generalized-CFF behavior after the lift
 <generalized-cff-behavior-after-the-lift>
 Once the exact parsed graph and occurrence bounds have been produced, the shared `three-dimensional-reps` crate handles generalized residues. Its focused fixtures cover:
 
@@ -1004,49 +1004,49 @@ Higher-degree reconstruction interpolates one occurrence at a time and divides e
 
 When a bound exceeds the direct interpolation range, generalized CFF may sample an EMR energy as a signed integer multiple `a*M` of the common auxiliary scale. This remains an occurrence-local EMR substitution. It is never an LMB rewrite, and the final physical expression is required to be independent of the nonzero value chosen for `M`.
 
-=== Why the construction is generic
+== Why the construction is generic
 <why-the-construction-is-generic>
 The confidence claim is deliberately scoped: the construction is generic for the factorized polynomial EMR numerators and rational denominator powers produced by GammaLoop's local UV machinery. It is not a claim that every arbitrary symbolic function can be projected without certification.
 
 Within that production class, genericity follows from the following properties.
 
-==== 1. Denominator multiplicity is arbitrary
+=== 1. Denominator multiplicity is arbitrary
 <denominator-multiplicity-is-arbitrary>
 Any representable negative integer power becomes the corresponding number of occurrences of its rewritten denominator. The serial-chain constructor accepts an arbitrary raised-wrapper multiplicity and adds exactly one fewer auxiliary vertices. Algebraically coincident occurrences retain separate bounds and samples regardless of how many distinct owners supplied them. No power-two or GL0 branch exists in the implementation.
 
-==== 2. Skeleton recovery is source-backed and rational identity is owner-free
+=== 2. Skeleton recovery is source-backed and rational identity is owner-free
 <skeleton-recovery-is-source-backed-and-rational-identity-is-owner-free>
 The source edge and its cograph/UV minor provide the original skeleton, component domain, and attachment for every process and UV-spinney shape. This sidesteps the generic inverse problem of deriving graph incidence from momentum signatures. Within one raised source wrapper, domain, exact momentum signature up to sign, and mass must agree. Across owners, the same normalized signature and mass identify the same rational channel. Relabeling compatible owners can change physical provenance, but not the channel's residue or loop rank.
 
-==== 3. Canonicalization is topology-preserving
+=== 3. Canonicalization is topology-preserving
 <canonicalization-is-topology-preserving>
 Cograph and UV graph minors are constructed directly from the physical source, including contraction of absent edges. Explicit crown hedges retain non-vacuum external boundaries. Only after this scaffold exists does the owner-blind occurrence lift and Graphica relabeling establish deterministic rational equality and caching. No signature matroid, Kirchhoff system, or incidence search is part of exact-source topology construction.
 
 The rank solve at source-topology validation is the two-candidate quotient-space test for the routing sign of an already attached owner: `exact_row -/+ source_row` must lie in the span of the opposite source domain. It returns one unique `+1` or `-1`, or fails. It cannot propose endpoints, connect components, or synthesize an edge to repair vertex balance.
 
-==== 4. Numerator degree composition is structural
+=== 4. Numerator degree composition is structural
 <numerator-degree-composition-is-structural>
 The analyzer implements polynomial composition rules over sums, products, powers, dot products, and multilinear functions. It does not recognize a particular numerator string or expand it into process-specific monomials.
 
-==== 5. Actual native map rows select among certified bounded proposals
+=== 5. Actual native map rows select among certified bounded proposals
 <actual-native-map-rows-select-among-certified-bounded-proposals>
 The hard allocator preserves fixed owner loads and factorized sum/product rules using cyclic unit-factor assignment, compressed repetitions and greedy indivisible-block placement. Its nonlinear alternatives pack excess and reverse the best scored placement in one eligible pool. Production compares actual native source-map rows among K\<=3 certified proposals, with descending degree envelopes and deterministic order breaking count ties. Quotient/remainder balancing is rank-optimal for freely assignable unit factors without fixed loads; this does not imply globally minimal map count. The separate soft-routing boundary retains its exact-basis/Pareto proposal construction.
 
-==== 6. Bound and evaluation cannot diverge
+=== 6. Bound and evaluation cannot diverge
 <bound-and-evaluation-cannot-diverge>
 One assignment object drives both generalized-CFF bounds and later numerator substitutions. Generic future terms cannot accidentally take a different mapping path after their bounds have been certified.
 
 Batching does not weaken this statement. Reuse requires equal canonical topology and identical per-occurrence capacity, while each term still evaluates through its own factor-local plan. Canonical topology identity includes external edges and affine boundary data, so reuse remains valid for disconnected and non-vacuum exact sources as well as vacuum UV factors.
 
-==== 7. Routing signs are first-class data
+=== 7. Routing signs are first-class data
 <routing-signs-are-first-class-data>
 Canonicalization up to sign normalizes the denominator signature stored in the parsed graph. A rational-routing component then receives one coherent canonical direction, which can reverse that intermediate spelling. The numerator mapper composes the separate literal occurrence sign with the final parsed-routing sign and restores the physical numerator convention. This works for odd, even, scalar, and tensor numerator factors.
 
-==== 8. Provenance projection is channel-complete
+=== 8. Provenance projection is channel-complete
 <provenance-projection-is-channel-complete>
 Owner relabeling does not erase physical information. Occurrence-energy maps retain the particular source owner, while neutral cut support is the set union of all distinct owners in the algebraic channel. The union automatically deduplicates repeated copies of one owner and extends to any channel multiplicity. Adding raised-group representatives preserves compatibility with physical cut selection without replacing that owner set. None of these rules depends on a bubble, triangle, GL0, or a particular number of raised edges.
 
-==== 9. Unsupported cases fail closed
+=== 9. Unsupported cases fail closed
 <unsupported-cases-fail-closed>
 The implementation returns contextual errors for:
 
@@ -1060,7 +1060,7 @@ The implementation returns contextual errors for:
 
 Failing instead of selecting a convenient owner or LMB coordinate is part of the genericity guarantee: adding a more complicated nested self-energy cannot silently fall through to a test-specific approximation.
 
-=== Minimality and runtime consequences
+== Minimality and runtime consequences
 <minimality-and-runtime-consequences>
 The design minimizes work at three levels.
 
@@ -1072,7 +1072,7 @@ Third, retaining natural Taylor denominator topologies avoids artificially raise
 
 For genuine numerator factors, upstream algebraic cancellation such as `D(Q)/D(Q)^2 -> 1/D(Q)` is deliberately not performed. Supplying the proper occurrence bounds lets generalized CFF perform the required pinches and lower-sector reconstruction internally. Preserving natural Taylor topologies does not require such cancellation: it avoids creating the compensating factors in the first place, without making source incidence depend on process-specific numerator simplification.
 
-=== Maintained invariants
+== Maintained invariants
 <maintained-invariants>
 Future changes to this path should preserve all of the following:
 
@@ -1102,7 +1102,7 @@ Future changes to this path should preserve all of the following:
 + Unsupported mappings fail explicitly rather than choosing a convenient edge.
 + Public initial-state cut slots carry the canonical `Default` direction; their signed fixed energies remain in the exact energy maps. This label normalization occurs after fusion and preserves unfiltered residue IDs and their order; it cannot supply missing denominator rank or re-sign a numerator factor.
 
-=== Code map
+== Code map
 <code-map>
 Local Taylor construction preserves spinor products, chains and traces after metric simplification. Their registered multilinearity supplies structural energy degrees without evaluating a trace or expanding its numerator. The integrated-CT owner performs analytic Dirac simplification on its own copy before Vakint; the local numerical route leaves finite tensor contraction to evaluator preprocessing after residue mapping. These placements preserve the same Taylor coefficients while avoiding repeated scalar trace expressions in the local residue sum.
 
@@ -1147,7 +1147,7 @@ The principal implementation sites are:
 - `crates/three-dimensional-reps/src/generation.rs`
   - generalized residue, finite-pole, and lower-sector CFF generation from the supplied exact occurrence bounds.
 
-=== Validation map
+== Validation map
 <validation-map>
 The most relevant focused tests are:
 
@@ -1193,7 +1193,7 @@ The most relevant focused tests are:
 
 Together these tests cover parsing, source-backed graph construction, canonical relabeling, sign handling, factorized rank planning, generalized-CFF contact sectors, exact analytic residues, local-3D/local-4D equivalence, and LU raised cuts. No single numerical process test is being used as a substitute for the structural invariants. The table identifies test contracts, not a claim that every selection has passed on the reconstructed stack.
 
-=== Design conclusion
+== Design conclusion
 <design-conclusion>
 The essential distinction is:
 

@@ -42,7 +42,7 @@ const BENCH_OTHER_ABSOLUTE_THRESHOLD_SECONDS: f64 = 1.0e-9;
 
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq, Default)]
 pub struct Bench {
-    /// Process reference: #<id>, name:<name>, or <id>/<name>
+    /// Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`
     #[arg(
         short = 'p',
         long = "process",
