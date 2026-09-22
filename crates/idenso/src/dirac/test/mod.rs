@@ -1173,9 +1173,85 @@ fn special_matrices_have_the_physical_dirac_adjoints() {
                 bis!(4, special_matrix_j)
             );
         let actual = matrix
-            .dirac_adjoint::<AbstractIndex>()
+            .dirac_adjoint::<AbstractIndex>(false)
             .unwrap()
             .simplify_gamma();
         assert_eq!(actual, expected.simplify_gamma());
+    }
+}
+
+#[test]
+fn transposed_gamma_words_are_preserved_without_clifford_reduction() {
+    test_initialize();
+    let tags = &*spenso::network::tags::SPENSO_TAG;
+    let left = bis!(4, transposed_i);
+    let right = bis!(4, transposed_j);
+    let spin = Bispinor {}.to_symbolic([Atom::num(4)]);
+    let mu = Minkowski {}.new_rep(4).pattern(symbol!("transposed_mu"));
+    let nu = Minkowski {}.new_rep(4).pattern(symbol!("transposed_nu"));
+    let forward = function!(AGS.gamma, tags.chain_in, tags.chain_out, &mu);
+    let transposed = function!(AGS.gamma, tags.chain_out, tags.chain_in, &mu);
+    let other = function!(AGS.gamma, tags.chain_in, tags.chain_out, &nu);
+
+    for settings in [
+        GammaSimplifySettings::repeated_pairs(),
+        GammaSimplifySettings::canonical(),
+        GammaSimplifySettings::canonical().with_gamma5_epsilon_expansion(),
+    ] {
+        // In the registered Weyl basis, sum_mu gamma(mu)^T gamma_mu is zero,
+        // whereas treating the first factor as an ordinary gamma gives 4 I.
+        // Idenso must leave the mixed word for explicit tensor evaluation.
+        for factors in [
+            vec![transposed.clone(), forward.clone()],
+            vec![forward.clone(), transposed.clone()],
+            vec![transposed.clone(), transposed.clone()],
+            vec![transposed.clone(), other.clone()],
+            vec![other.clone(), transposed.clone()],
+            vec![other.clone(), transposed.clone(), other.clone()],
+        ] {
+            for expression in [
+                chain!(&left, &right; factors.clone()),
+                trace!(&spin; factors),
+            ] {
+                let simplified = expression.simplify_gamma_with(settings);
+                assert_eq!(simplified, expression);
+                assert_eq!(simplified.simplify_gamma_with(settings), simplified);
+            }
+        }
+        let ordinary = chain!(&left, &right, &forward, &forward);
+        assert_eq!(
+            ordinary.simplify_gamma_with(settings),
+            Atom::num(4) * id_atom(left.clone(), right.clone())
+        );
+    }
+}
+
+#[test]
+fn transposed_special_dirac_factors_remain_opaque() {
+    test_initialize();
+    let tags = &*spenso::network::tags::SPENSO_TAG;
+    let left = bis!(4, transposed_special_i);
+    let right = bis!(4, transposed_special_j);
+    let mu = Minkowski {}
+        .new_rep(4)
+        .pattern(symbol!("transposed_special_mu"));
+    let gamma = function!(AGS.gamma, tags.chain_in, tags.chain_out, &mu);
+    let transposed_gamma = function!(AGS.gamma, tags.chain_out, tags.chain_in, &mu);
+    for matrix in [AGS.gamma5, AGS.projm, AGS.projp] {
+        let forward = function!(matrix, tags.chain_in, tags.chain_out);
+        let transposed = function!(matrix, tags.chain_out, tags.chain_in);
+        for factors in [
+            vec![transposed.clone(), gamma.clone()],
+            vec![forward.clone(), transposed_gamma.clone()],
+            vec![transposed, forward],
+        ] {
+            let expression = chain!(&left, &right; factors);
+            for settings in [
+                GammaSimplifySettings::repeated_pairs(),
+                GammaSimplifySettings::canonical(),
+            ] {
+                assert_eq!(expression.simplify_gamma_with(settings), expression);
+            }
+        }
     }
 }

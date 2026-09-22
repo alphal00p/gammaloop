@@ -198,8 +198,10 @@ impl<'a> DiracFactor<'a> {
     /// Classifies a factor inside a `chain(...)` or `trace(...)` without
     /// materializing owned atoms.
     ///
-    /// Ordinary gammas are recognized as `gamma(in,out,mu)` or
-    /// `gamma(out,in,mu)` and keep `mu` by view. Their dimension is inferred
+    /// Ordinary gammas are recognized as `gamma(in,out,mu)` and keep `mu`
+    /// by view. Reversed matrix endpoints remain opaque: the Clifford and
+    /// special-matrix rules do not track transposition and cannot safely act
+    /// on mixed ordinary/transposed words. Their dimension is inferred
     /// from `mu` when it is a Minkowski slot, or from the first visible
     /// Minkowski representation inside slash-like tensorial indices such as
     /// `P(1,mink(D))`.
@@ -215,7 +217,7 @@ impl<'a> DiracFactor<'a> {
             else {
                 return Self::Other(factor);
             };
-            if has_chain_endpoints(left, right) {
+            if has_forward_chain_endpoints(left, right) {
                 let dimension = mink_slot_dimension(mink_index);
                 return Self::Gamma {
                     factor,
@@ -230,7 +232,7 @@ impl<'a> DiracFactor<'a> {
             let (Some(left), Some(right)) = (args.next(), args.next()) else {
                 return Self::Other(factor);
             };
-            if has_chain_endpoints(left, right) {
+            if has_forward_chain_endpoints(left, right) {
                 return match f.get_symbol() {
                     symbol if symbol == AGS.gamma5 => Self::Gamma5(factor),
                     symbol if symbol == AGS.gamma0 => Self::Gamma0(factor),
@@ -1089,9 +1091,8 @@ fn epsilon_dummy_minkowski_slot() -> Atom {
     Minkowski {}.to_symbolic([Atom::num(4), Atom::var(*EPSILON_DUMMY_SYMBOL)])
 }
 
-fn has_chain_endpoints(left: AtomView, right: AtomView) -> bool {
+fn has_forward_chain_endpoints(left: AtomView, right: AtomView) -> bool {
     is_chain_endpoint(left, T.chain_in) && is_chain_endpoint(right, T.chain_out)
-        || is_chain_endpoint(left, T.chain_out) && is_chain_endpoint(right, T.chain_in)
 }
 
 fn is_chain_endpoint(arg: AtomView, expected: Symbol) -> bool {
