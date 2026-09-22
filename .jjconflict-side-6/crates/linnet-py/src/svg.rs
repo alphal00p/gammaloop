@@ -27,13 +27,18 @@ impl PreparedRender {
             let Some((kind, id)) = identity.split_once('-') else {
                 continue;
             };
-            if !matches!(kind, "node" | "edge")
+            if !matches!(kind, "node" | "edge" | "halfedge")
                 || id.is_empty()
                 || !id.bytes().all(|byte| byte.is_ascii_digit())
             {
                 continue;
             }
-            let title = format!("{} {id}", if kind == "node" { "Node" } else { "Edge" });
+            let label = match kind {
+                "node" => "Node",
+                "halfedge" => "Half-edge",
+                _ => "Edge",
+            };
+            let title = format!("{label} {id}");
             let detail = serde_json::from_str::<serde_json::Value>(detail)
                 .ok()
                 .filter(serde_json::Value::is_object)

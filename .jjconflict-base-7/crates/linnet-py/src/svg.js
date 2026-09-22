@@ -4,11 +4,12 @@
   for (const svg of document.querySelectorAll('svg[data-linnet-interactive]')) {
     if (svg.linnetSelection !== undefined) continue;
     const targets = [...svg.querySelectorAll('[data-linnet-kind]')];
-    const selected = { node: new Set(), edge: new Set() };
+    const selected = { node: new Set(), edge: new Set(), halfedge: new Set() };
     const edgeHighlights = new Map();
     const selection = () => ({
       nodes: [...selected.node].sort((a, b) => a - b),
       edges: [...selected.edge].sort((a, b) => a - b),
+      half_edges: [...selected.halfedge].sort((a, b) => a - b),
     });
     Object.defineProperty(svg, 'linnetSelection', { get: selection });
     const original = Object.fromEntries(['viewBox', 'width', 'height'].map(key => [key, svg.getAttribute(key)]));
@@ -125,12 +126,16 @@
       dismiss.addEventListener('click', close);
       const header = html('div');
       header.className = 'linnet-inspector-header';
-      const title = `${kind === 'node' ? 'Node' : 'Edge'} ${id}${detail.name ? ` · ${detail.name}` : ''}`;
+      const title = `${kind === 'node' ? 'Node' : kind === 'halfedge' ? 'Half-edge' : 'Edge'} ${id}${detail.name ? ` · ${detail.name}` : ''}`;
       header.append(html('strong', title), dismiss);
       content.append(header);
       const details = html('div');
       details.className = 'linnet-inspector-details';
-      if (kind === 'edge') {
+      if (kind !== 'node') {
+        if (kind === 'halfedge') {
+          details.append(html('span', `Edge ${detail.edge} · Node ${detail.node} · ${detail.flow}`));
+          if (detail.pair !== null) details.append(html('span', `Paired half-edge: ${detail.pair}`));
+        }
         if (detail.particle !== undefined) {
           const particle = html('span');
           particle.append(html('span', 'Particle: '), html('strong', String(detail.particle)));
@@ -155,7 +160,7 @@
         const current = selection();
         const construction = html('div');
         construction.className = 'linnet-inspector-construction';
-        construction.append(html('span', 'Subgraph construction:'), html('code', `graph.subgraph(nodes=[${current.nodes.join(', ')}], edges=[${current.edges.join(', ')}])`));
+        construction.append(html('span', 'Subgraph construction:'), html('code', `graph.subgraph(nodes=[${current.nodes.join(', ')}], edges=[${current.edges.join(', ')}], half_edges=[${current.half_edges.join(', ')}])`));
         content.append(construction);
       }
       const shortcuts = html('div', 'Click or Enter/Space: details · Shift/Ctrl/⌘-click: toggle selection');
@@ -189,9 +194,11 @@
     };
     const targetOf = event => event.target.closest && event.target.closest('[data-linnet-kind]');
     const highlightEdge = (target, active) => {
-      if (target.dataset.linnetKind !== 'edge') return;
+      const kind = target.dataset.linnetKind;
+      if (kind === 'node') return;
       const id = Number(target.dataset.linnetId);
-      let group = edgeHighlights.get(id);
+      const key = `${kind}:${id}`;
+      let group = edgeHighlights.get(key);
       if (!group) {
         /* Composite the overlapping hit regions once, so selection adds a
            smooth translucent halo instead of darkening each sampled box. */
@@ -199,7 +206,9 @@
         group.classList.add('linnet-edge-highlight');
         const inverse = svg.getCTM().inverse();
         for (const item of targets) {
-          if (item.dataset.linnetKind !== 'edge' || Number(item.dataset.linnetId) !== id) continue;
+          if (item.dataset.linnetKind === 'node') continue;
+          const detail = JSON.parse(item.dataset.linnetDetail);
+          if ((kind === 'edge' ? detail.edge : detail['half-edge']) !== id) continue;
           for (const rect of item.querySelectorAll('rect')) {
             const copy = rect.cloneNode(false);
             const transform = inverse.multiply(rect.getCTM());
@@ -210,10 +219,10 @@
           }
         }
         svg.append(group);
-        edgeHighlights.set(id, group);
+        edgeHighlights.set(key, group);
       }
-      group.toggleAttribute('data-selected', selected.edge.has(id));
-      group.style.display = active || selected.edge.has(id) ? '' : 'none';
+      group.toggleAttribute('data-selected', selected[kind].has(id));
+      group.style.display = active || selected[kind].has(id) ? '' : 'none';
     };
     svg.addEventListener('click', event => {
       const target = targetOf(event);

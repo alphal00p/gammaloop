@@ -2,11 +2,14 @@
 
 #![forbid(unsafe_code)]
 
+mod color;
 mod generation;
 mod grouping;
 mod options;
 mod process;
 mod spin;
+
+pub use color::{ColorSum, ColorSumError};
 
 pub use spin::{AxialReference, SpinSum, SpinSumError};
 

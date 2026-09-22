@@ -319,14 +319,18 @@ svg = graph.to_svg()
 graph  # the final expression in a notebook renders inline
 ```
 
-SVG output preserves the native drawing and adds vertex/edge inspection. Hover to see an
-element's identity; click to pin its details without changing the selection. Shift-, Ctrl-, or
+SVG output preserves the native drawing and adds vertex, edge, and half-edge inspection.
+Hover to see an element's identity; click to pin its details without changing the selection. Shift-, Ctrl-, or
 Meta-click toggles the element in that displayed selection. Enter and Space perform the same
 actions on a focused element; Escape dismisses the details while retaining the selection.
-Copy the panel's node and edge IDs into `graph.subgraph(nodes=[...], edges=[...])` to create
-a Python selection. Figure selections are browser state and do not mutate the Python graph.
+The first and last quarters of arc length pick the source and sink half-edges; the middle
+half picks the whole edge. Both end quarters of a dangling edge pick its sole half-edge,
+which selects the same subgraph as the whole edge. Half-edge highlighting covers its half
+of a paired edge, or the entire dangling edge. Copy the panel's construction into
+`graph.subgraph(nodes=[...], edges=[...], half_edges=[...])` to create a Python selection.
+Figure selections are browser state and do not mutate the Python graph.
 Embedding applications can read the SVG element's `linnetSelection` property or listen for
-`linnet-selection-change`; its event detail contains sorted `nodes` and `edges` arrays.
+`linnet-selection-change`; its event detail contains sorted `nodes`, `edges`, and `half_edges` arrays.
 Use the Python selection API explicitly when applying graph algorithms to those IDs.
 
 A `Subgraph` also renders directly as the final expression of a notebook cell:
