@@ -92,12 +92,17 @@
     side in ("auto", "left", "right"),
     message: "momentum-arrow-side must be auto, left, or right",
   )
+  let label-side = options.momentum-label-side
+  let label-side = if label-side == auto { "auto" } else { str(label-side).trim("\"") }
+  let label-side = if label-side == "auto" { side } else { label-side }
+  assert(label-side in ("auto", "left", "right"), message: "momentum-label-side must be auto, left, or right")
   let stroke = options.momentum-arrow-stroke
   if stroke == none { stroke = options.api.momentum-arrow-defaults.stroke }
   let offset = options.momentum-arrow-offset
   if side == "auto" {
-    // Use the edge's bend relative to its chord, independently of label content
-    // or relaxation. Straight, dangling and closed edges use the signed offset.
+    // The edge's bend relative to its chord sets the preferred annotation side.
+    // Automatic placement may switch it; fixed external arrows retain it.
+    // Straight, dangling and closed edges use the signed offset.
     let direction = if offset < 0 { -1 } else { 1 }
     let source = edge.at("source-node", default: none)
     let sink = edge.at("sink-node", default: none)
@@ -131,37 +136,38 @@
   let shift = options.momentum-arrow-shift
   let label-shift = options.momentum-label-shift
   // Auto clears the complete label box; explicit anchors use only the gap.
-  // Labels follow the full invisible path, so endpoint clamps never depend on
-  // arrow length. Linnest resolves label:auto and owns all generic overlays.
+  // The full base carrier keeps label clamps independent of arrow length.
+  // Linnest evaluates the offset arrow and label together for each candidate.
+  let arrow = geometry + (
+    length: options.momentum-arrow-length,
+    ratio: options.momentum-arrow-ratio,
+    resolve-length: if options.momentum-arrow-ratio == none { "length" } else { "min" },
+    shift: shift,
+    stroke: stroke,
+    pattern: none,
+    mark: if options.show-mark {
+      _single-end-mark(options.momentum-arrow-mark, stroke)
+    } else { none },
+    // A numeric end position uses Linnest's continuous paired-edge carrier,
+    // keeping one arrowhead when a shift crosses the source/sink split.
+    mark-position: 1,
+    mark-orientation: "path",
+  )
   (
-    geometry
-      + (
-        length: options.momentum-arrow-length,
-        ratio: options.momentum-arrow-ratio,
-        resolve-length: if options.momentum-arrow-ratio == none {
-          "length"
-        } else { "min" },
-        shift: shift,
-        stroke: stroke,
-        pattern: none,
-        mark: if options.show-mark {
-          _single-end-mark(options.momentum-arrow-mark, stroke)
-        } else { none },
-        // A numeric end position uses Linnest's continuous paired-edge carrier,
-        // keeping one arrowhead when a shift crosses the source/sink split.
-        mark-position: 1,
-        mark-orientation: "path",
-      ),
-    geometry
-      + (
-        length: none,
-        ratio: none,
-        resolve-length: "none",
-        shift: 0,
-        label-only: true,
-        label: auto,
-        label-shift: if label-shift == auto { shift } else { label-shift },
-      ),
+    arrow,
+    geometry + (
+      offset: 0,
+      length: none,
+      ratio: none,
+      resolve-length: "none",
+      shift: 0,
+      label-only: true,
+      label: auto,
+      label-shift: if label-shift == auto { shift } else { label-shift },
+      label-slide: options.momentum-label-slide,
+      label-side: if label-side == "auto" { auto } else { label-side },
+      label-path: arrow,
+    ),
   )
 }
 
@@ -185,6 +191,8 @@
     "momentum-arrow-shift",
     "momentum-label-gap",
     "momentum-label-shift",
+    "momentum-label-slide",
+    "momentum-label-side",
     "momentum-label-anchor",
   ) {
     let value = _half-data-field(edge, half, key, _edge-data-field(
@@ -209,6 +217,11 @@
         auto
       } else { float(value-text) }
     }
+    if key == "momentum-label-slide" and type(value) == str {
+      let value-text = value.trim("\"")
+      assert(value-text in ("true", "false"), message: "momentum-label-slide must be true or false")
+      value = value-text == "true"
+    }
     options.insert(key, value)
   }
   let arrow-half = if edge.at("sink-half-edge", default: none) != none {
@@ -228,8 +241,11 @@
       and options.momentum-arrow-shift == 0
       and options.momentum-label-shift == auto
       and options.momentum-label-anchor == auto
+      and options.momentum-label-side in (auto, "auto", "\"auto\"")
   ) {
     layers = layers.slice(0, 1)
+  } else {
+    layers = layers.slice(1)
   }
   (style, ..layers)
 }

@@ -569,9 +569,10 @@
       (momentum-label-shift: label-shift)
     }
     let layers = feynman.edge-style((momentum: [], fields: fields))
-    assert(layers.len() == 3)
-    let arrow = layers.at(1)
+    assert(layers.len() == 2)
     let label = layers.last()
+    let arrow = label.label-path
+    assert(label.label-only and label.label-slide)
     assert(arrow.shift == arrow-shift and arrow.at("label", default: none) == none)
     assert.eq(
       (label.length, label.ratio, label.resolve-length), (none, none, "none"),
@@ -589,15 +590,17 @@
         fields: fields + (momentum-arrow-length: length),
       ))
       assert(customized == layers.enumerate().map(((index, layer)) => {
-        if index == 1 { layer + (length: length) } else { layer }
+        if index == 1 {
+          layer + (label-path: layer.label-path + (length: length))
+        } else { layer }
       }))
     }
     let automatic = side in (auto, "auto")
     assert(arrow.offset-side == if automatic { "label" } else { none })
     assert(arrow.label-side == if automatic { auto } else { side })
     assert(arrow.offset == if side == "right" { -0.62 } else { 0.62 })
-    assert(label.offset == arrow.offset and label.label-side == arrow.label-side)
-    assert(label.offset-side == arrow.offset-side)
+    assert(label.offset == 0 and label.label-side == arrow.label-side)
+    assert(label.offset-side == none)
     assert(arrow.label-gap == 0.45 and label.label-gap == 0.45)
     assert(arrow.label-style.anchor == auto and label.label-style.anchor == auto)
     // Anchor overrides reach both arrow and label layers without changing
@@ -612,9 +615,8 @@
       ))
       assert(customized == layers.enumerate().map(((index, layer)) => {
         if index == 0 { layer } else {
-          layer + (label-style: (
-            anchor: if anchor == auto { auto } else { anchor.trim("\"") },
-          ))
+          let style = (anchor: if anchor == auto { auto } else { anchor.trim("\"") })
+          layer + (label-style: style, label-path: layer.label-path + (label-style: style))
         }
       }))
     }
@@ -625,7 +627,9 @@
         fields: fields + (momentum-label-gap: gap),
       ))
       assert(customized == layers.enumerate().map(((index, layer)) => {
-        if index == 0 { layer } else { layer + (label-gap: float(gap)) }
+        if index == 0 { layer } else {
+          layer + (label-gap: float(gap), label-path: layer.label-path + (label-gap: float(gap)))
+        }
       }))
     }
   }
@@ -676,6 +680,35 @@
 } else {
   (:)
 }
+
+// Parallel edges share endpoints and edge.pos but keep their local endpoint
+// distances independent. Empty endpoint styles inherit the shared edge style.
+#let anchor-distance-graph = graph.build({
+  node(<anchor-distance-source>, pos: pos(x: 0, y: 0, mode: "pin"))
+  node(<anchor-distance-sink>, pos: pos(x: 10, y: 0, mode: "pin"))
+  for (color, shared, source-style, sink-style) in (
+    ("#1234a1", auto, (anchor-control-distance: 4), (anchor-control-distance: 1.5)),
+    ("#1234a2", auto, (anchor-control-distance: 1.5), (anchor-control-distance: 4)),
+    ("#1234a3", 2, (:), (:)),
+    ("#1234a4", 2, (anchor-control-distance: 4), (:)),
+    ("#1234a5", auto, (anchor-control-distance: 4), (:)),
+    ("#1234a6", auto, (:), (anchor-control-distance: 1.5)),
+    ("#1234a7", auto, (anchor-control-distance: 2), (anchor-control-distance: 2)),
+    ("#1234a8", auto, (:), (:)),
+  ) {
+    edge(
+      source(<anchor-distance-source>), sink(<anchor-distance-sink>),
+      pos: pos(x: 4, y: 3, mode: "pin"),
+      edge-style: (
+        source-anchor: "east", sink-anchor: "west",
+        anchor-control-distance: shared,
+        stroke: rgb(color) + 0.8pt,
+      ),
+      source-style: source-style,
+      sink-style: sink-style,
+    )
+  }
+})
 
 #let bare-draw = (
   unit: 10pt,
@@ -818,7 +851,7 @@
   draw(momentum-graph, edge-style: edge => {
     let layers = feynman.edge-style(edge)
     layers.at(0).stroke = rgb("#78716c") + 0.3pt
-    layers.at(1).stroke = if edge.fields.momentum-arrow-side == "left" {
+    layers.at(1).label-path.stroke = if edge.fields.momentum-arrow-side == "left" {
       rgb("#86198f") + 0.8pt
     } else { rgb("#075985") + 0.8pt }
     layers
@@ -832,4 +865,5 @@
   ),
   after-static,
   after-callback,
+  draw(anchor-distance-graph, ..bare-draw),
 )
