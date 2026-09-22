@@ -43,7 +43,9 @@ not treat the presence of a primitive as an end-to-end validation.
    transverse components. Integral-family reduction remains a separate step.],
   [UV expansion], [`feynkit-graph` and Vakint],
   [Graph and subgraph expansion and vacuum-integral infrastructure exist.
-   The gallery's complete renormalization constants are not yet validated.],
+   Generated two-loop massless QED in Feynman gauge and scalar self-energy
+   examples validate bare UV poles. Their analytic vacuum values and counterterm
+   sums are explicit reference inputs; automatic forest generation stays separate.],
   [Integral families and mappings], [`feynkit-graph::IntegralFamily`],
   [Generated diagrams expose families through their shared denominator builder
    and momentum routing. Affine propagator rank, partial fractions, scalar-product completion and
@@ -69,16 +71,18 @@ not treat the presence of a primitive as an end-to-end validation.
    `hep.IBPFamily` consumes the existing FeynKit family and exposes symbolic
    identities, bounded Laporta elimination and parametric recurrences. Residual
    integrals at a finite search depth are not certified masters. Two-loop
-   scalar self-energy and unequal-mass bubble regressions pass in the installed
-   host, and both notebooks run on the existing Marimo instance. Of the gallery pages,
+   scalar and Feynman-gauge massless electron self-energies, the electron Pauli
+   form factor and unequal-mass bubble regressions pass in the installed host.
+   Separate notebooks run on the existing Marimo instance. Of the gallery pages,
    22 call Kira and four call FIRE through FeynHelpers; those external
    interfaces are not FeynCalc-owned solvers.],
   [Analytic loop evaluation], [Shared OneLOop integration in the HEP host],
   [The HEP namespace exposes A0, B0, dB0, C0 and D0, including evaluable
    Symbolica Laurent coefficients. A generated massive photon self-energy
    validates the transverse form factor, UV pole and finite part through A0/B0.
-   General reduction to these masters, higher epsilon orders and separate UV/IR
-   bookkeeping remain outstanding.],
+   The generated electron vertex also reproduces the Pauli form factor after
+   native IBP reduction. General reduction to these masters, higher epsilon orders
+   and separate UV/IR bookkeeping remain outstanding.],
   [Cross sections and decay rates], [FeynKit kinematics and process APIs],
   [Shared symbolic/numerical initial-state flux and four-dimensional two-body
    phase space. The generated QED and QCD annihilation benchmarks include their
@@ -595,6 +599,69 @@ integrals and four kinematic presets. Headless exports pass for both IBP
 notebooks and the Bhabha/Møller notebook. These checks validate the stated
 reductions and observables, not a general master-basis certification or the
 remaining gallery's IBP coverage.
+
+== Generated electron anomalous magnetic moment
+
+`hep/gminus2.py` and `installed_feyncalc_gminus2.py` generate the tree and
+one-loop electron-photon vertices from the same model. They reproduce the
+#link("https://feyncalc.github.io/FeynCalcExamples/QED/OneLoop/El-GaEl")[gallery's one-loop anomalous magnetic moment]
+and retain a generic spacelike photon momentum. External electrons satisfy
+$p^2=p'^2=m^2$ and $t=(p-p')^2<0$. Shared particle spin sums close the two
+projector traces, and Symbolica solves their two-by-two Gram system for the
+coefficients of $gamma^mu$ and $(p+p')^mu/(2m)$. Normalizing against the generated
+tree vertex retains every graph weight and fixes the external-fermion phase.
+
+The diagram's integral family rewrites the projected numerator. Native Laporta
+reduction resolves nine targets to two shifted tadpoles and an equal-mass
+bubble. The tadpole identification uses their shift equivalence; residuals at
+this bounded search depth are not a general master-basis certification.
+With the common $e^2/(16 pi^2)$ removed, the coefficient of the second basis
+vector is
+$ b(D) = frac(2(D-5)(-(D-2)A_0+2m^2(D-3)B_0), (D-3)(t-4m^2)). $
+Expanding at $D=4-2 epsilon$ cancels its UV pole and retains the finite term
+$ b = frac(4(A_0^"fin"+m^2-m^2 B_0^"fin"), t-4m^2). $
+The Gordon decomposition gives $F_2=-alpha b/(4 pi)$, so taking the limit only
+after integration yields $F_2(0)=alpha/(2 pi)$ exactly, independently of the
+mass and renormalization scale. Taking $t=0$ before solving the Gram system
+would make those projectors degenerate.
+
+Five spacelike points, including unequal mass and scale, agree with independent
+96-node Feynman-parameter quadrature and OneLOop's bubble derivative to better
+than $2 times 10^(-12)$. The live notebook varies $-t/m^2$ over five decades;
+its default and five slider states execute without cell errors. This covers
+the Pauli form factor, not the complete renormalized Dirac form factor or
+analytic continuation through timelike thresholds.
+
+== Generated two-loop massless electron self-energy
+
+`hep/electron_two_loop.py` and `installed_feyncalc_electron_two_loop.py` generate
+all three one-particle-irreducible two-loop QED electron diagrams. They validate
+the Feynman-gauge specialization $xi=1$ of the
+#link("https://feyncalc.github.io/FeynCalcExamples/QED/TwoLoops/Renormalization-LeAle-Massless")[massless electron self-energy reference].
+The graph's shared auxiliary-mass UV expansion, Idenso traces and vacuum tensor
+reduction produce 22 distinct powers in a common massive vacuum family.
+Verified momentum maps identify denominator orderings; native Laporta reduction
+leaves the equal-mass sunset and three equivalent products of tadpoles.
+
+The amputated two-point kernel removes only the generator's named external
+Wick-order sign. Internal fermion-loop signs and every other graph weight remain
+intact. The installed regression independently checks this kernel convention
+with a one-loop projector. The single closed fermion loop receives a symbolic
+flavor multiplicity $N_f$.
+
+Writing $a_4=e^2/(16 pi^2)$ and $M=m_"UV"^2$, the coefficient of
+$i a_4^2 slash(p)$ in the bare UV poles is
+$ frac(1,2 epsilon^2)
+  + frac(log(4 pi)-log(M)-17/12-7N_f/3,epsilon). $
+Analytic vacuum Laurent coefficients and the summed one-loop counterterm
+insertions are explicitly supplied reference inputs, including the auxiliary
+photon-mass counterterm. They yield
+$ Z_psi = 1-frac(a_4,epsilon)
+  + a_4^2 (frac(1,2 epsilon^2)+frac(4N_f+3,4 epsilon)), $
+with the auxiliary mass and loop-measure logarithms cancelling exactly.
+The notebook and installed-host regression pass; automatic subtraction forests,
+arbitrary gauge parameter and the finite off-shell self-energy remain separate
+work. The displayed reference counterterms are not inferred by the IBP solver.
 
 == Generated QCD annihilation
 
