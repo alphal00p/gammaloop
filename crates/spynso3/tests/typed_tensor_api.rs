@@ -237,3 +237,77 @@ fn unresolved_factory_ports_survive_composition() {
     })
     .unwrap();
 }
+
+#[test]
+fn metric_factory_accepts_dual_ports_and_preserves_logical_order() {
+    Python::initialize();
+    Python::attach(|py| -> PyResult<()> {
+        let module = spenso_module(py)?;
+        let factory = module.getattr("TensorExpression")?;
+        let fundamental = module
+            .getattr("Representation")?
+            .call_method1("cof", (3,))?;
+        let dual = fundamental.call_method0("dual")?;
+        for (left, right) in [(&fundamental, &dual), (&dual, &fundamental)] {
+            let metric = factory.call_method1("g", (left, right))?;
+            let expected = vec![
+                left.extract::<SpensoRepresentation>()?.representation,
+                right.extract::<SpensoRepresentation>()?.representation,
+            ];
+            assert_eq!(logical_representations(&metric)?, expected);
+            assert_eq!(
+                logical_slot_representations(&metric.call1(("i", "j"))?)?,
+                expected
+            );
+            let trace = metric
+                .call1(("i", "i"))?
+                .call_method0("simplify_metrics")?
+                .call_method0("to_expression")?
+                .extract::<PythonExpression>()?;
+            assert_eq!(trace.expr, Atom::num(3));
+        }
+        Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
+fn metric_factory_rejects_different_concrete_and_symbolic_spaces() {
+    Python::initialize();
+    Python::attach(|py| -> PyResult<()> {
+        let module = spenso_module(py)?;
+        let factory = module.getattr("TensorExpression")?;
+        let representation = module.getattr("Representation")?;
+        let concrete = representation.call_method1("cof", (3,))?;
+        let n = representation.call_method1(
+            "cof",
+            (PythonExpression::from(Atom::var(symbol!(
+                "metric_dimension_n"
+            ))),),
+        )?;
+        let m = representation.call_method1(
+            "cof",
+            (PythonExpression::from(Atom::var(symbol!(
+                "metric_dimension_m"
+            ))),),
+        )?;
+        for (left, right) in [
+            (concrete.clone(), representation.call_method1("cof", (4,))?),
+            (concrete.clone(), representation.call_method1("coad", (3,))?),
+            (n.clone(), m.call_method0("dual")?),
+            (n.clone(), concrete.call_method0("dual")?),
+        ] {
+            let error = factory
+                .call_method1("g", (&left, &right))
+                .expect_err("metric dimensions and representation spaces must match exactly");
+            assert!(error.is_instance_of::<PyValueError>(py));
+        }
+        assert!(
+            factory
+                .call_method1("g", (&n, n.call_method0("dual")?))
+                .is_ok()
+        );
+        Ok(())
+    })
+    .unwrap();
+}

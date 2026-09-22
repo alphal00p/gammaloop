@@ -179,7 +179,7 @@
         external-label-length-scale: external-label-length-scale,
         label-steps: 100,
         directional-force: 4.5,
-        label-layout: "dangling-tangent",
+        label-layout: "fixed-gap",
       )
     } else if mode.cross-section {
       (
@@ -187,7 +187,7 @@
         internal-label-length-scale: internal-label-length-scale,
         external-label-length-scale: external-label-length-scale,
         label-steps: 100,
-        label-layout: "dangling-tangent",
+        label-layout: "fixed-gap",
       )
     } else { (:) }
     if mode.amplitude or mode.cross-section {
