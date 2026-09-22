@@ -1968,3 +1968,41 @@ mod failing {
         assert_ne!(tgt, simplified_amp_squared.factor());
     }
 }
+
+#[test]
+fn color_trace_metric_closures_reduce_before_terminal_invariants() {
+    test_initialize();
+    let expr = parse!(
+        "trace(cof(Nc),t(coad(Na,aa),in,out),t(coad(Na,bb),in,out),t(coad(Na,cc),in,out),t(coad(Na,dd),in,out))*g(coad(Na,aa),coad(Na,cc))*g(coad(Na,bb),coad(Na,dd))",
+        default_namespace = "spenso"
+    );
+    let result = expr
+        .simplify_color()
+        .to_cof_dimension_invariants()
+        .replace(parse!("Na", default_namespace = "spenso"))
+        .with(parse!("Nc^2-1", default_namespace = "spenso"))
+        .to_cof_dimension_invariants();
+    let expected = parse!("-(Nc^2-1)/(4*Nc)", default_namespace = "spenso");
+    assert_eq!((result - expected).expand(), Atom::Zero);
+}
+
+#[test]
+fn symmetric_color_trace_with_contracted_pair_reuses_casimir_rules() {
+    test_initialize();
+    let expr = parse!(
+        "trace(cof(Nc),sym(t(coad(Na,aa),in,out),t(coad(Na,bb),in,out),t(coad(Na,cc),in,out),t(coad(Na,dd),in,out)))*g(coad(Na,aa),coad(Na,cc))*g(coad(Na,bb),coad(Na,dd))",
+        default_namespace = "spenso"
+    );
+    let result = expr
+        .simplify_color()
+        .to_cof_dimension_invariants()
+        .replace(parse!("Na", default_namespace = "spenso"))
+        .with(parse!("Nc^2-1", default_namespace = "spenso"))
+        .to_cof_dimension_invariants();
+    let expected = parse!("(Nc^2-1)*(2*Nc^2-3)/(12*Nc)", default_namespace = "spenso");
+    assert_eq!((result - expected).expand(), Atom::Zero);
+    assert_eq!(
+        expr.simplify_color().simplify_color(),
+        expr.simplify_color()
+    );
+}
