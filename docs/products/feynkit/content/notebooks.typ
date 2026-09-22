@@ -111,13 +111,13 @@ padding does not push labels along that edge. Self-loops retain collision checks
 because another part of the loop can approach the label.
 The orange rectangles sample the visible edge carriers,
 including the width of waves and coils. Base padding is split equally across each
-pair of boxes. `DrawOptions(label_collision_padding=0.15)` adds another 0.15
+pair of boxes. `DrawOptions(label_collision_padding=0.6)` adds another 0.6
 canvas units on every side of each label box by default. Increase it to encourage
 more clearance from labels, nodes, and edges; use zero for the original base
 sizes. The notebook's *Extra label collision padding* slider controls this value.
 It changes collision avoidance while preserving the fixed normal label gap.
 The debug overlay itself preserves layout, canvas size, and SVG interaction.
-In Typst, pass `label-collision-padding: 0.15` and
+In Typst, pass `label-collision-padding: 0.6` and
 `debug-label-collisions: true` to `draw`.
 
 `momenta=True` draws the graph's stored routing. Passing `lmb=basis` also enables
