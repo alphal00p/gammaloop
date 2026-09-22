@@ -16,6 +16,7 @@ source = json.loads(
     (Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json").read_text()
 )
 source["name"] = "triplet_scalar_epsilon_example"
+pdg_base = max(abs(p["pdg_code"]) for p in source["particles"]) + 10
 scalar = next(p for p in source["particles"] if p["pdg_code"] == 251)
 for flavor in range(1, 4):
     for sign in (1, -1):
@@ -28,7 +29,7 @@ for flavor in range(1, 4):
                 antiname=antiname,
                 texname=name,
                 antitexname=antiname,
-                pdg_code=sign * (9000000 + flavor),
+                pdg_code=sign * (pdg_base + flavor),
                 color=sign * 3,
                 charge=0.0,
             )
@@ -47,7 +48,7 @@ model = fk.Model.from_json(json.dumps(source))
 for sign in (1, -1):
     generated = fk.Generator(model).generate(
         fk.Process.amplitude(
-            [sign * 9000001], [-sign * 9000002, -sign * 9000003]
+            [sign * (pdg_base + 1)], [-sign * (pdg_base + 2), -sign * (pdg_base + 3)]
         ).with_loop_count(0, 0),
         max_vertices=1,
         maximum_bridges=None,
@@ -71,7 +72,9 @@ for sign in (1, -1):
     assert norm.to_expression() == E("6")
     # One incoming triplet is averaged; the two distinct outgoing species are summed.
     average = TensorExpression(
-        model.particle_by_pdg(sign * 9000001).color_sum(S("i"), S("i"), average=True)
+        model.particle_by_pdg(sign * (pdg_base + 1)).color_sum(
+            S("i"), S("i"), average=True
+        )
     ).simplify_metrics()
     assert average.to_expression() == E("1")
     print(

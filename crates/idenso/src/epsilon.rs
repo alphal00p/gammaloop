@@ -1,9 +1,11 @@
 use spenso::{
     g,
+    network::parsing::{AtomStructureExt, StrictTensorFilter},
     structure::{
         abstract_index::AbstractIndex,
         dimension::Dimension,
         representation::{LibraryRep, RepName, Representation},
+        slot::Slot,
     },
     tensor_symbol,
 };
@@ -12,7 +14,7 @@ use symbolica::{
     coefficient::CoefficientView,
 };
 
-use crate::shorthands::{UndoShorthands, schoonschip::Schoonschip};
+use crate::shorthands::schoonschip::Schoonschip;
 
 spenso::symbolica_init_lazy_static! {
     /// Symbolica-level Levi-Civita symbol. The `Antisymmetric` attribute lets
@@ -101,12 +103,7 @@ impl EpsilonSimplifierPass {
         let mut current = expr.schoonschip();
 
         loop {
-            // Expose the typed slots of compact vector arguments before
-            // checking which epsilon spaces can participate in a determinant.
-            let explicit = current
-                .undo_schoonschip::<AbstractIndex>()
-                .unwrap_or_else(|_| current.clone());
-            let next = explicit
+            let next = current
                 .replace_map(|term, _context, out| {
                     if let Some(rewritten) = Self::simplify_power(term.schoonschip().as_view())
                         .or_else(|| Self::simplify_pair_product(term))
@@ -260,7 +257,35 @@ impl EpsilonSimplifierPass {
         let mut representation = None;
         let mut args = Vec::with_capacity(f.get_nargs());
         for arg in f.iter() {
-            let rep = Representation::<LibraryRep>::try_from(arg).ok()?;
+            let rep = Representation::<LibraryRep>::try_from(arg)
+                .ok()
+                .or_else(|| {
+                    // Compact vectors can have ordinary Symbolica heads and
+                    // scalar labels, but expose exactly one bare representation.
+                    let AtomView::Fun(vector) = arg else {
+                        return None;
+                    };
+                    if vector.get_symbol().is_scalar() {
+                        return None;
+                    }
+                    let mut reps = vector.iter().filter_map(|argument| {
+                        Representation::<LibraryRep>::try_from(argument)
+                            .ok()
+                            .map(|rep| (argument, rep))
+                    });
+                    let (rep_arg, rep) = reps.next()?;
+                    if reps.next().is_some()
+                        || Slot::<LibraryRep, AbstractIndex>::try_from(rep_arg).is_ok()
+                        || vector.iter().any(|argument| {
+                            argument != rep_arg
+                                && (argument.is_tensorial(StrictTensorFilter::Tagged)
+                                    || argument.is_tensorial(StrictTensorFilter::ContainsReps))
+                        })
+                    {
+                        return None;
+                    }
+                    Some(rep)
+                })?;
             if representation.is_some_and(|previous| previous != rep) {
                 return None;
             }
@@ -297,7 +322,7 @@ impl EpsilonSimplifierPass {
 #[cfg(test)]
 mod test {
     use insta::assert_snapshot;
-    use spenso::{g, mink, p};
+    use spenso::{g, mink, p, q};
     use symbolica::{atom::AtomCore, parse};
     use symbolica_utils::AtomPrintExt;
 
@@ -344,6 +369,8 @@ mod test {
             "epsilon(cof(3,i),cof(3,j),cof(3,k))*epsilon(dind(cof(4,l)),dind(cof(4,m)),dind(cof(4,n)))",
             "epsilon(cof(4,i),cof(4,j),cof(4,k))*epsilon(dind(cof(4,l)),dind(cof(4,m)),dind(cof(4,n)))",
             "epsilon(mink(4,i),cof(3,j))*epsilon(mink(4,l),dind(cof(3,m)))",
+            "epsilon(mink(4,i),A(mink(4,j),mink(4,k)))*epsilon(mink(4,l),B(mink(4,m),mink(4,n)))",
+            "epsilon(mink(4,i),A(mink(4),mink(4)))*epsilon(mink(4,l),B(mink(4),mink(4)))",
         ] {
             let expression = parse!(source, default_namespace = "spenso");
             assert_eq!(expression.simplify_epsilon(), expression, "{source}");
@@ -353,12 +380,27 @@ mod test {
     #[test]
     fn epsilon_pair_with_contracted_vectors_retains_lorentz_identity() {
         test_initialize();
-        let expression = parse!(
-            "epsilon(mink(4,i),p(mink(4)))*epsilon(mink(4,i),q(mink(4)))",
-            default_namespace = "spenso"
-        );
-        let expected = parse!("3*g(p(mink(4)),q(mink(4)))", default_namespace = "spenso");
+        let p = p!(mink!(4));
+        let q = q!(mink!(4));
+        let expression = eps!(mink!(4, i), &p) * eps!(mink!(4, i), &q);
+        let expected = 3 * g!(p, q);
         assert_eq!(expression.simplify_epsilon(), expected);
+        for (source, expected) in [
+            (
+                "epsilon(mink(4,i),plain_p(mink(4)))*epsilon(mink(4,i),plain_q(mink(4)))",
+                "3*g(plain_p(mink(4)),plain_q(mink(4)))",
+            ),
+            (
+                "epsilon(mink(4,i),P(label,mink(4)))*epsilon(mink(4,i),Q(other_label,mink(4)))",
+                "3*g(P(label,mink(4)),Q(other_label,mink(4)))",
+            ),
+        ] {
+            let expression = parse!(source, default_namespace = "spenso");
+            assert_eq!(
+                expression.simplify_epsilon(),
+                parse!(expected, default_namespace = "spenso")
+            );
+        }
     }
 
     #[test]

@@ -77,7 +77,8 @@ not treat the presence of a primitive as an end-to-end validation.
   [Cross sections and decay rates], [FeynKit kinematics and process APIs],
   [Shared symbolic/numerical initial-state flux and four-dimensional two-body
    phase space. The generated QED and QCD annihilation benchmarks include their
-   angular distributions and total unpolarized cross sections. General phase space, identical-particle
+   angular distributions and total unpolarized cross sections. Chiral Z decays
+   validate massive two-body widths for all four fermion classes. General phase space, identical-particle
    bookkeeping and the remaining gallery observables need further coverage.],
 )
 
@@ -175,6 +176,13 @@ positive-energy outgoing momentum. Apply that sign when assigning physical
 Mandelstam labels. These conventions leave native graph momentum routing intact;
 changing which cut edge carries the loop coordinate must not interchange the
 physical angular invariants.
+
+The older `installed_feyncalc_polarized_qed.py` fixture still imports the former
+`community.feynkit` namespace and assumes a positive cut orientation for either
+loop coordinate. It does not pass unchanged in the current host. A scratch
+correction using `community.hep` and the physical momentum sign passes both
+massive and massless reference assertions for both coordinates; the repository
+fixture update remains subject to maintainer approval.
 
 Idenso now evaluates four-dimensional traces containing Spenso's `projp` and
 `projm` by reducing them through its existing gamma-five trace identities. Use
@@ -357,6 +365,32 @@ the reference. This gauge dependence cannot be repaired by an
 identical-particle normalization factor and supplies another regression target
 for the pending shared sewing correction. Existing graph weights must not be
 multiplied by a second inverse automorphism factor.
+
+== Generated chiral Z decays
+
+`installed_feyncalc_z_decay.py` reproduces all four classes in the
+#link("https://feyncalc.github.io/FeynCalcExamples/EW/Tree/Z-FFbar")[FeynCalc Z-decay example]:
+neutrinos, charged leptons, up-type quarks and down-type quarks. It generates
+ordinary amplitudes, retains the massive chiral interference, averages the
+three initial Z polarizations with the full Proca projector, and sums final
+spins and colors through the shared particle APIs.
+
+The calculation exposed missing special-matrix conjugation in Idenso.
+The existing conjugation operation now handles four-dimensional gamma-five
+and chiral projectors with its gamma-zero machinery. The physical adjoints
+are $overline(gamma^5)=-gamma^5$ and $overline(P_L)=P_R$.
+Exact Rust identities and 64 numerical matrix components check the adjoints.
+Dimension-generic gamma-five conventions remain unspecified.
+
+The shared two-body measure and rest-frame decay flux give
+$ Gamma = frac(N_c G_F M^3 beta, 6 pi sqrt(2))
+  (c_V^2 (1+2r) + c_A^2 (1-4r)), $
+where $r=m_f^2/M^2$, $beta=sqrt(1-4r)$,
+$c_V=T_3-2Q_f sin^2(theta_W)$ and $c_A=T_3$.
+The fermion and antifermion are distinct. Tests check the positive
+above-threshold phase-space branch, massless limits, and vector versus axial
+threshold powers. `hep/z_decay.py` offers all four channels in a separate
+notebook on the same server.
 
 == Reduce tensors with external momentum dependence
 
