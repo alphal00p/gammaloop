@@ -25,7 +25,7 @@
   let external = graph
     .edges(g)
     .filter(edge => edge.source == none or edge.sink == none)
-  let cut = external.any(edge => _field(edge, "is_cut") != none)
+  let cut = graph.edges(g).any(edge => _field(edge, "is_cut") != none)
   (amplitude: external.len() > 0 and not cut, cross-section: cut)
 }
 
@@ -242,6 +242,7 @@
     "mode",
     "amplitude-mode",
     "cross-section-mode",
+    "split-initial-state",
     "show-node-index",
     "debug",
     "columns",

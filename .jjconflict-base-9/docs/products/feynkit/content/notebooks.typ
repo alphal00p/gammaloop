@@ -104,6 +104,12 @@ Explicit physics settings override the display defaults enabled by `momenta` or
 and `show-momentum: false` hides momentum labels. Edge hover information still
 contains the routing. `to_html()` and `to_linnest()` accept the same options.
 
+Cross sections open their initial-state connections into matched incoming and outgoing
+legs by default, retaining the physical final-state cut edges. Use
+`RenderConfig(template_options={"split-initial-state": False})` for the sewn view.
+Both views retain the original diagram's edge and half-edge IDs for hover, selection,
+and highlighting; the physics graph and its loop-momentum basis are unchanged.
+
 Configurations are per-call snapshots: neither the diagram nor the supplied
 `RenderConfig` is changed. The embedded physics renderer accepts typed layout,
 drawing, style and template options; custom templates and Python drawing selectors

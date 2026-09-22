@@ -43,7 +43,9 @@ The amplitude retains the photon/top/gluon example and its explicit external hal
 The cross-section describes electron–positron annihilation into muons. Matching `is_cut` tags
 pair its initial-state legs, while `graph [final_state="mu-,mu+"]` requests physical cuts with
 those final-state particles. FeynKit sews the initial-state legs, finds matching separating
-cuts, and routes momenta through the resulting diagram. Its compact importer supports `num`,
+cuts, and routes momenta through the resulting diagram. The preview opens initial-state
+connections into matching left/right legs by default. Turn off *Split initial state* to
+draw the sewn graph; the parsed diagram and physical final-state cut remain unchanged. Its compact importer supports `num`,
 `overall_factor`, `projector`, and `lmb_id`; it does not generate numerator tensors from Feynman
 rules or implement GammaLoop-specific evaluator overrides and local numerator shorthand.
 

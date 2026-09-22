@@ -590,6 +590,37 @@ def browser_smoke(
                         raise RuntimeError(
                             "FeynKit preview did not initialize SVG interaction"
                         )
+                    for split in (True, False, True):
+                        toggle = page.get_by_role(
+                            "checkbox", name="Split initial state", exact=True
+                        )
+                        if toggle.is_checked() != split:
+                            previous = page.locator(
+                                notebook.ready_selector
+                            ).inner_html()
+                            toggle.set_checked(split)
+                            page.wait_for_function(
+                                """([selector, previous]) => {
+                                    const preview = document.querySelector(selector);
+                                    return preview && preview.innerHTML !== previous;
+                                }""",
+                                arg=[notebook.ready_selector, previous],
+                                timeout=timeout,
+                            )
+                        fragments = svg.evaluate("""svg => {
+                            const edges = new Map();
+                            for (const target of svg.querySelectorAll('[data-linnet-kind="edge"]')) {
+                                const detail = JSON.parse(target.dataset.linnetDetail);
+                                if (!edges.has(detail.edge)) edges.set(detail.edge, new Set());
+                                edges.get(detail.edge).add(detail.name);
+                            }
+                            return [...edges.values()].map(names => names.size).sort();
+                        }""")
+                        expected = [1, 1, 1, 1, 2, 2] if split else [1] * 6
+                        if fragments != expected:
+                            raise RuntimeError(
+                                f"Cross-section split mode {split}: {fragments}"
+                            )
                     for theme in ("dark", "light"):
                         page.locator("html").evaluate(
                             "(root, theme) => { root.dataset.theme = theme; }", theme
