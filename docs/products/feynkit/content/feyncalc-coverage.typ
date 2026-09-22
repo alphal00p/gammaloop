@@ -97,8 +97,10 @@ The antiparticle record selects the negative mass term in the Dirac
 completeness relation.
 
 Massive vector sums use the Proca projector. A massless vector without a
-reference uses the covariant projector, appropriate for a gauge-invariant
-amplitude. Supplying `reference=n` selects the axial projector, including
+reference uses the covariant projector. It reproduces physical polarizations
+when unphysical states decouple; summing several external gluons covariantly
+can require ghost subtraction, as demonstrated below. Supplying `reference=n`
+selects the axial projector, including
 the term proportional to the reference's squared norm. Its scalar product
 with the external momentum must be nonzero. `covariant=True` explicitly
 selects the Feynman-gauge numerator for a massive vector as well.
@@ -426,9 +428,28 @@ remain unchanged under conjugation. Higher-degree symmetric invariants remain
 symbolic.
 
 `hep/qcd_gluons.py` presents the generated diagrams and both gauge-reference
-checks in a separate notebook on the same Marimo server. The ghost-subtraction
-variant of this gallery example is still pending; covariant polarization sums
-alone are not a replacement for physical gluon sums.
+checks in a separate notebook on the same Marimo server.
+
+== Covariant gluon sums and ghost subtraction
+
+`installed_feyncalc_qcd_ghosts.py` validates
+#link("https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/QQbar-GlGl-2")[the ghost-subtraction variant]
+using the same shared generation, color, spin and tensor APIs. Both ghost
+orderings are generated independently, each with one diagram. Their external
+color ports are aligned through Linnet half-edge metadata, since ghost legs
+have no polarization wavefunctions.
+
+With initial spin and color averages, each ghost contribution is
+$ cal(G) = frac((N_c^2-1) g_s^4 (u-m^2)(t-m^2), 4 N_c s^2). $
+The physical result is the covariant two-gluon square minus the two ghost
+contributions. The exact massive SU(N) comparison, massless SU(3) limit and
+Bose exchange all pass. The ghost correction is explicitly checked to be
+nonzero: covariant gluon sums alone would give the wrong result for this
+process. No extra ghost spin multiplicity or final-state symmetry factor is
+inserted.
+
+`hep/qcd_ghosts.py` displays the generated gluon and ghost diagrams, both ghost
+contributions and the subtraction in its own notebook on the same server.
 
 == Validation standard
 
