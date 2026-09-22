@@ -655,8 +655,8 @@
       }
 
       // Fixed xbox-opened2 sink geometry: label shifts are absolute on the full
-      // offset path. Equal and independent shifts must not move the arrow, and
-      // arrow length must not change label placement or its endpoint clamps.
+      // offset path. Before annealing, equal and independent shifts must not move
+      // the arrow, and its length must not change the label or endpoint clamps.
       let endpoints = (
         (3.7141557137182426, -3.510279312439297),
         (1.5082746017729896, -2.213011602860704),
@@ -683,7 +683,7 @@
           momentum-arrow-length: 0.7,
           momentum-arrow-shift: shift,
         )
-        let reference = feynman.edge-style((momentum: [], fields: fields)).at(1)
+        let reference = feynman.edge-style((momentum: [], fields: fields)).at(1).label-path
         let reference-path = drawing._path-layer(path, reference, 0, 0, none, auto)
         let reference-paint = cetz
           .process
@@ -745,9 +745,9 @@
               (momentum-label-shift: requested)
             }
             let layers = feynman.edge-style((momentum: momentum, fields: fields))
-            let arrow = layers.at(1)
             let carrier = layers.last()
-            assert.eq(layers.len(), 3, message: case + ": carrier count")
+            let arrow = carrier.label-path
+            assert.eq(layers.len(), 2, message: case + ": one paired momentum annotation")
             assert.eq(
               (carrier.length, carrier.ratio, carrier.resolve-length, carrier.shift),
               (none, none, "none", 0),
@@ -765,7 +765,9 @@
               message: case + ": no label attached to arrow",
             )
             let arrow-path = drawing._path-layer(path, arrow, 0, 0, none, auto)
-            let label-path = drawing._path-layer(path, carrier, 0, 0, none, auto)
+            let label-path = drawing._path-layer(path, arrow + (
+              length: none, ratio: none, resolve-length: "none", shift: 0,
+            ), 0, 0, none, auto)
             assert.eq(
               arrow-path,
               reference-path,
@@ -796,7 +798,7 @@
               .many(
                 native,
                 drawing
-                  ._layer-label-element(native, label-path, carrier, none, (:))
+                  ._layer-label-element(native, path, carrier, none, (:))
                   .flatten(),
                 compute-bounds: false,
               )
@@ -804,7 +806,7 @@
             let labels = rendered.filter(d => d.type == "content")
             assert.eq(labels.len(), 1, message: case + ": one momentum label")
             centers.push(labels.first().pos)
-            label-checks.push((case, label-path, carrier, paired))
+            label-checks.push((case, label-path, carrier + (label-path: none), paired))
             for length in (0.2, 0.8 * full-length, 2 * full-length) {
               let case = case + " length " + repr(length)
               let layers = feynman.edge-style((
@@ -812,11 +814,13 @@
                 fields: fields + (momentum-arrow-length: length),
               ))
               assert.eq(
-                layers.at(1), arrow + (length: length),
+                layers.at(1).label-path, arrow + (length: length),
                 message: case + ": only arrow length changes",
               )
               let carrier = layers.last()
-              let label-path = drawing._path-layer(path, carrier, 0, 0, none, auto)
+              let label-path = drawing._path-layer(path, carrier.label-path + (
+                length: none, ratio: none, resolve-length: "none", shift: 0,
+              ), 0, 0, none, auto)
               assert.eq(
                 label-path, full-path,
                 message: case + ": length-independent path",
@@ -837,7 +841,7 @@
                 cetz.process.many(
                   native,
                   drawing
-                    ._layer-label-element(native, label-path, carrier, none, (:))
+                    ._layer-label-element(native, path, carrier, none, (:))
                     .flatten(),
                   compute-bounds: false,
                 ).drawables,
@@ -958,6 +962,79 @@
               calc.abs(nearest - gap) < epsilon,
               message: case + ": rendered clearance " + repr((nearest, gap)),
             )
+          }
+        }
+      }
+
+      // Momentum arrows and labels use one collision choice, retaining their
+      // independent manual shifts as a fixed relative arc-length displacement.
+      for carrier in (curve.line((0, 0), (8, 0)), path) {
+        for side in ("left", "right", auto) {
+          let annotation = feynman.edge-style((
+            momentum: text(size: 6pt, [$k-p_2$]),
+            fields: feynman.momentum(
+              side: side, offset: 0.4, length: 1.2, shift: 0.35,
+              label: (shift: -0.25, gap: 0.2),
+            ),
+          )).last()
+          let placement = drawing._layer-label-element(
+            native, carrier, annotation, none, (eid: 7), placement: true,
+          )
+          assert.eq(placement.edge, 7, message: "momentum pair owns its physical edge")
+          assert.eq(placement.paths.len(), if side == auto { 2 } else { 1 }, message: "only automatic momentum sides can flip")
+          let chosen = drawing._relax-label-placements((placement, placement), ())
+          assert.eq(chosen, drawing._relax-label-placements((placement, placement), ()), message: "deterministic momentum pair annealing")
+          assert(chosen.any(candidate => (
+            candidate.path-index != placement.candidates.first().path-index
+              or candidate.path-shift != placement.candidates.first().path-shift
+          )), message: "collisions move the momentum arrow together with its label")
+          let (a, b) = chosen.map(candidate => candidate.bounds)
+          assert(a.right <= b.left or b.right <= a.left or a.top <= b.bottom or b.top <= a.bottom, message: "momentum pairs separate crowded labels")
+          for candidate in placement.candidates {
+            let full = placement.paths.at(candidate.path-index)
+            let accuracy = drawing._style-value(annotation, "accuracy")
+            let total = curve.length(full, accuracy: accuracy)
+            let arrow-center = total / 2 + candidate.path-shift
+            assert(calc.abs(arrow-center - candidate.at - 0.6) < epsilon, message: "arrow and label retain independent relative shifts")
+            assert(arrow-center >= 0.6 - 8 * accuracy and arrow-center <= total - 0.6 + 8 * accuracy, message: "annealed arrow remains inside the full offset carrier")
+            let arrow-style = placement.path-style + (
+              offset: 0, offset-side: none, shift: candidate.path-shift,
+            )
+            let arrow-path = drawing._path-layer(full, arrow-style, 0, 0, none, auto)
+            assert(calc.abs(curve.length(arrow-path, accuracy: accuracy) - 1.2) < 8 * accuracy, message: "sliding does not shorten the momentum arrow")
+            let arrow-paint = cetz.process.many(
+              native,
+              drawing._derived-path-elements(arrow-path, arrow-style, auto, true, true).elements.flatten(),
+              compute-bounds: false,
+            ).drawables
+            assert(arrow-paint.any(item => cetz.drawable.TAG.mark in item.tags), message: "every momentum placement retains its arrowhead")
+            let frame = drawing._path-mid-frame(full, accuracy, shift: candidate.at - total / 2)
+            let tangent = cetz.vector.norm(frame.tangent)
+            let normal = cetz.vector.scale((-tangent.at(1), tangent.at(0)), candidate.side)
+            let origin = cetz.matrix.mul4x4-vec3(native.transform, (..frame.point, 0))
+            let outward = cetz.vector.sub(
+              cetz.matrix.mul4x4-vec3(native.transform, (..cetz.vector.add(frame.point, normal), 0)),
+              origin,
+            )
+            let label = cetz.draw.content(candidate.position, placement.label, padding: 0, ..placement.style).first()(native)
+            let nearest = calc.min(..("north-west", "north-east", "south-west", "south-east").map(anchor => (
+              cetz.vector.dot(cetz.vector.sub((label.anchors)(anchor), origin), outward) / cetz.vector.dot(outward, outward)
+            )))
+            assert(calc.abs(nearest - 0.2) < epsilon, message: "momentum sliding keeps fixed rendered label clearance")
+          }
+          if side == auto {
+            let preferred = placement.candidates.first().side
+            let obstacles = placement.candidates.filter(candidate => candidate.side == preferred).map(candidate => candidate.bounds)
+            let flipped = drawing._relax-label-placements((placement,), obstacles).first()
+            assert.eq(flipped.side, -preferred, message: "blocked momentum pair flips its arrow and label together")
+            assert.eq(flipped, drawing._relax-label-placements((placement,), obstacles).first(), message: "deterministic momentum side choice")
+          }
+          for pinned-style in ((label-slide: false), (label-style: (anchor: "east"))) {
+            let pinned = drawing._layer-label-element(
+              native, carrier, annotation + pinned-style, none, (:), placement: true,
+            )
+            assert.eq(pinned.candidates.len(), 1, message: "manual momentum placement stays pinned")
+            assert(calc.abs(pinned.candidates.first().path-shift - 0.35) < epsilon, message: "pinned momentum preserves its arrow shift")
           }
         }
       }

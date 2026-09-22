@@ -130,6 +130,8 @@ pub struct PatternPathSpec {
     pub anchor_start: bool,
     #[serde(default = "default_anchor_endpoint")]
     pub anchor_end: bool,
+    #[serde(default, deserialize_with = "deserialize_f64")]
+    pub endpoint_slope: f64,
     #[serde(
         default = "default_arclen_accuracy",
         deserialize_with = "deserialize_f64"
@@ -864,6 +866,10 @@ fn pattern_path(spec: PatternPathSpec) -> Result<PatternPathOutput, String> {
     let wavelength = validate_positive(spec.wavelength, "pattern wavelength")?;
     let phase = validate_finite(spec.phase, "pattern phase")?;
     validate_finite(spec.coil_longitudinal_scale, "coil longitudinal scale")?;
+    let endpoint_slope = validate_finite(spec.endpoint_slope, "pattern endpoint-slope")?;
+    if !(0.0..=3.0).contains(&endpoint_slope) {
+        return Err("pattern endpoint-slope must be between 0 and 3".to_string());
+    }
     let accuracy = validate_positive_accuracy(spec.accuracy)?;
     if spec.samples_per_period == 0 {
         return Err("pattern samples-per-period must be positive".to_string());
@@ -897,17 +903,18 @@ fn pattern_path(spec: PatternPathSpec) -> Result<PatternPathOutput, String> {
         );
         let normal = Vec2::new(-tangent.y, tangent.x);
         let pattern_point = pattern.evaluate(distance / wavelength + phase / std::f64::consts::TAU);
-        let tapered_amplitude = amplitude
-            * pattern_endpoint_envelope(
-                &pattern,
-                distance,
-                length,
-                wavelength,
-                spec.anchor_start,
-                spec.anchor_end,
-            );
-        let longitudinal = tapered_amplitude * pattern_point.x;
-        let lateral = tapered_amplitude * pattern_point.y;
+        let envelope = pattern_endpoint_envelope(
+            &pattern,
+            distance,
+            length,
+            wavelength,
+            spec.anchor_start,
+            spec.anchor_end,
+            endpoint_slope,
+        );
+        // Delay the doubling-back motion until the coil has opened sideways.
+        let longitudinal = amplitude * envelope * envelope * pattern_point.x;
+        let lateral = amplitude * envelope * pattern_point.y;
         points.push((base + tangent * longitudinal + normal * lateral).into());
     }
     if !pattern.endpoint_ramp && spec.anchor_start {
@@ -1161,22 +1168,26 @@ fn pattern_endpoint_envelope(
     wavelength: f64,
     anchor_start: bool,
     anchor_end: bool,
+    endpoint_slope: f64,
 ) -> f64 {
     if !pattern.endpoint_ramp {
         return 1.0;
     }
 
-    let ramp = (wavelength * 0.5).min(length * 0.5);
+    // Ease in over three quarters of a turn; the longitudinal offset ramps more slowly.
+    let ramp = (wavelength * 0.75).min(length * 0.5);
     if ramp <= f64::EPSILON {
         return 1.0;
     }
 
     let mut envelope: f64 = 1.0;
     if anchor_start {
-        envelope = envelope.min(smoothstep((distance / ramp).clamp(0.0, 1.0)));
+        let t = (distance / ramp).clamp(0.0, 1.0);
+        envelope = envelope.min(smoothstep(t) + endpoint_slope * t * (1.0 - t).powi(2));
     }
     if anchor_end {
-        envelope = envelope.min(smoothstep(((length - distance) / ramp).clamp(0.0, 1.0)));
+        let t = ((length - distance) / ramp).clamp(0.0, 1.0);
+        envelope = envelope.min(smoothstep(t) + endpoint_slope * t * (1.0 - t).powi(2));
     }
     envelope
 }
@@ -1195,16 +1206,16 @@ fn sampled_distances(length: f64, wavelength: f64, samples_per_period: usize) ->
     let step = wavelength / samples_per_period as f64;
     let count = (length / step).ceil().max(1.0) as usize;
     let mut distances = Vec::with_capacity(count + 1);
-    for i in 0..=count {
-        distances.push((i as f64 * step).min(length));
+    // Coalesce terminal roundoff at the path's scale, keeping the exact endpoint below.
+    let end_tolerance = 4.0 * f64::EPSILON * length;
+    for i in 0..count {
+        let distance = i as f64 * step;
+        if length - distance <= end_tolerance {
+            break;
+        }
+        distances.push(distance);
     }
-    if distances
-        .last()
-        .is_none_or(|last| (length - last).abs() > f64::EPSILON)
-    {
-        distances.push(length);
-    }
-    distances.dedup_by(|a, b| (*a - *b).abs() <= f64::EPSILON);
+    distances.push(length);
     distances
 }
 
@@ -2042,6 +2053,7 @@ mod tests {
             coil_longitudinal_scale: default_coil_longitudinal_scale(),
             anchor_start: default_anchor_endpoint(),
             anchor_end: default_anchor_endpoint(),
+            endpoint_slope: 0.0,
             accuracy: 1e-6,
         })
         .unwrap();
@@ -2074,6 +2086,7 @@ mod tests {
             coil_longitudinal_scale: default_coil_longitudinal_scale(),
             anchor_start: default_anchor_endpoint(),
             anchor_end: default_anchor_endpoint(),
+            endpoint_slope: 0.0,
             accuracy: 1e-6,
         })
         .unwrap();
@@ -2125,6 +2138,7 @@ mod tests {
             coil_longitudinal_scale: default_coil_longitudinal_scale(),
             anchor_start: true,
             anchor_end: true,
+            endpoint_slope: 0.0,
             accuracy: 1e-6,
         })
         .unwrap();
@@ -2152,6 +2166,7 @@ mod tests {
             coil_longitudinal_scale: 0.5,
             anchor_start: false,
             anchor_end: false,
+            endpoint_slope: 0.0,
             accuracy: 1e-6,
         })
         .unwrap();
@@ -2177,12 +2192,66 @@ mod tests {
             coil_longitudinal_scale: default_coil_longitudinal_scale(),
             anchor_start: default_anchor_endpoint(),
             anchor_end: default_anchor_endpoint(),
+            endpoint_slope: 0.0,
             accuracy: 1e-6,
         })
         .unwrap();
         let points = path_points(&output.path);
 
         assert!(points.windows(2).any(|window| window[1].x < window[0].x));
+    }
+
+    #[test]
+    fn coil_endpoint_taper_spans_three_quarters_of_a_turn() {
+        let pattern = PointPattern::from_input(coil_pattern(16, 1.4)).unwrap();
+        for distance in [0.0, 0.0625, 0.125, 0.25, 0.375, 0.5, 1.0] {
+            let expected = smoothstep((distance / 0.375_f64).min(1.0));
+            assert_eq!(
+                pattern_endpoint_envelope(&pattern, distance, 2.0, 0.5, true, true, 0.0),
+                expected,
+            );
+            assert_eq!(
+                pattern_endpoint_envelope(&pattern, 2.0 - distance, 2.0, 0.5, true, true, 0.0),
+                expected,
+            );
+        }
+        assert_eq!(
+            pattern_endpoint_envelope(&pattern, 0.0, 2.0, 0.5, false, true, 0.0),
+            1.0,
+        );
+        assert_eq!(
+            pattern_endpoint_envelope(&pattern, 2.0, 2.0, 0.5, true, false, 0.0),
+            1.0,
+        );
+        assert_eq!(
+            pattern_endpoint_envelope(&pattern, 0.125, 0.25, 0.5, true, true, 0.0),
+            1.0,
+        );
+    }
+
+    #[test]
+    fn coil_endpoint_taper_delays_longitudinal_motion() {
+        let output = pattern_path(PatternPathSpec {
+            path: straight_path(2.0),
+            pattern: coil_pattern(16, 1.4),
+            amplitude: 0.15,
+            wavelength: 0.5,
+            phase: 0.0,
+            samples_per_period: 16,
+            coil_longitudinal_scale: 1.4,
+            anchor_start: true,
+            anchor_end: true,
+            endpoint_slope: 0.0,
+            accuracy: 1e-6,
+        })
+        .unwrap();
+        let points = path_points(&output.path);
+        let offset = 0.15 * 1.4 * smoothstep(1.0 / 6.0).powi(2) * std::f64::consts::FRAC_1_SQRT_2;
+        for (index, distance) in [(2, 0.0625), (62, 1.9375)] {
+            assert!((points[index].x - (distance + offset)).abs() < 1e-6);
+        }
+        assert!((points[4].y - 0.15 * smoothstep(1.0 / 3.0)).abs() < 1e-6);
+        assert!((points[32].x - (1.0 + 0.15 * 1.4)).abs() < 1e-6);
     }
 
     #[test]
@@ -2198,6 +2267,7 @@ mod tests {
             coil_longitudinal_scale: default_coil_longitudinal_scale(),
             anchor_start: true,
             anchor_end: true,
+            endpoint_slope: 0.0,
             accuracy: 1e-6,
         })
         .unwrap();
@@ -2206,6 +2276,370 @@ mod tests {
         assert_eq!(points[0], curve.start);
         assert_eq!(*points.last().unwrap(), curve.end);
         assert!(points[1].y.abs() < 0.08);
+    }
+
+    #[test]
+    fn sampled_distances_coalesce_terminal_roundoff_but_keep_partial_steps() {
+        for grid_end in [0.5_f64, 2.0, 2048.0] {
+            let step = grid_end / 4.0;
+            for length in [grid_end.next_down(), grid_end, grid_end.next_up()] {
+                assert_eq!(
+                    sampled_distances(length, grid_end, 4),
+                    vec![0.0, step, 2.0 * step, 3.0 * step, length],
+                );
+            }
+            let length = grid_end + step * 0.25;
+            assert_eq!(
+                sampled_distances(length, grid_end, 4),
+                vec![0.0, step, 2.0 * step, 3.0 * step, grid_end, length],
+            );
+        }
+    }
+
+    #[test]
+    fn pattern_endpoint_slopes_preserve_anchors_and_flatten_into_the_interior() {
+        let pattern = PointPattern::from_input(coil_pattern(16, 1.4)).unwrap();
+        for slope in [0.0, 1.0, 2.0, 3.0] {
+            for length in [2.0, 0.25] {
+                let ramp = 0.375_f64.min(length * 0.5);
+                for t in [-0.25_f64, 0.0, 0.25, 0.5, 1.0, 1.25] {
+                    let distance = t * ramp;
+                    let t = t.clamp(0.0, 1.0);
+                    let expected = smoothstep(t) + slope * t * (1.0 - t).powi(2);
+                    for (distance, start) in [(distance, true), (length - distance, false)] {
+                        let envelope = pattern_endpoint_envelope(
+                            &pattern, distance, length, 0.5, start, !start, slope,
+                        );
+                        assert_close(envelope, expected);
+                    }
+                }
+                let step = ramp * 1e-6;
+                for distance in [step, length - step] {
+                    let envelope = pattern_endpoint_envelope(
+                        &pattern, distance, length, 0.5, true, true, slope,
+                    );
+                    assert_close(envelope / 1e-6, slope);
+                }
+                for distance in [ramp - step, length - ramp + step] {
+                    let envelope = pattern_endpoint_envelope(
+                        &pattern, distance, length, 0.5, true, true, slope,
+                    );
+                    assert_close((1.0 - envelope) / 1e-6, 0.0);
+                }
+            }
+            assert_eq!(
+                pattern_endpoint_envelope(&pattern, 0.0, 0.0, 0.5, true, true, slope),
+                1.0,
+            );
+        }
+    }
+
+    #[test]
+    fn coil_endpoint_slopes_allow_nonzero_transverse_approach() {
+        for endpoint_slope in [0.0, 1.0, 2.0, 3.0] {
+            let output = pattern_path(PatternPathSpec {
+                path: straight_path(2.0),
+                pattern: coil_pattern(16, 1.4),
+                amplitude: 0.15,
+                wavelength: 0.5,
+                phase: std::f64::consts::FRAC_PI_2,
+                samples_per_period: 4096,
+                coil_longitudinal_scale: 1.4,
+                anchor_start: true,
+                anchor_end: true,
+                endpoint_slope,
+                accuracy: 1e-6,
+            })
+            .unwrap();
+            let curves = path_cubics(&output.path);
+            let first = curves.first().unwrap();
+            let last = curves.last().unwrap();
+            assert_eq!(first.start, point(0.0, 0.0));
+            assert_eq!(last.end, point(2.0, 0.0));
+            let outgoing = Point::from(first.control_start) - Point::from(first.start);
+            let incoming = Point::from(last.end) - Point::from(last.control_end);
+            let expected = 0.15 * endpoint_slope / 0.375;
+            // Endpoint spline tangents use sampled chords, so allow discretization error.
+            assert!((outgoing.y / outgoing.x - expected).abs() < 1e-3);
+            assert!((incoming.y / incoming.x + expected).abs() < 1e-3);
+        }
+    }
+
+    #[test]
+    fn endpoint_slope_leaves_unanchored_and_unramped_paths_unchanged() {
+        for (endpoint_ramp, anchor_start, anchor_end) in [
+            (true, false, false),
+            (false, false, false),
+            (false, true, false),
+            (false, false, true),
+            (false, true, true),
+        ] {
+            let mut spec = PatternPathSpec {
+                path: straight_path(2.0),
+                pattern: sampled_pattern(
+                    "coil",
+                    16,
+                    |theta| (1.4 * theta.cos(), theta.sin()),
+                    endpoint_ramp,
+                ),
+                amplitude: 0.15,
+                wavelength: 0.5,
+                phase: std::f64::consts::FRAC_PI_2,
+                samples_per_period: 16,
+                coil_longitudinal_scale: 1.4,
+                anchor_start,
+                anchor_end,
+                endpoint_slope: 0.0,
+                accuracy: 1e-6,
+            };
+            let expected = pattern_path(spec.clone()).unwrap();
+            for endpoint_slope in [1.0, 2.0, 3.0] {
+                spec.endpoint_slope = endpoint_slope;
+                assert_eq!(pattern_path(spec.clone()).unwrap(), expected);
+            }
+        }
+    }
+
+    #[test]
+    fn pattern_path_rejects_invalid_endpoint_slopes() {
+        for endpoint_slope in [-1.0, 3.01, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let error = pattern_path(PatternPathSpec {
+                path: straight_path(2.0),
+                pattern: coil_pattern(16, 1.4),
+                amplitude: 0.15,
+                wavelength: 0.5,
+                phase: 0.0,
+                samples_per_period: 16,
+                coil_longitudinal_scale: 1.4,
+                anchor_start: true,
+                anchor_end: true,
+                endpoint_slope,
+                accuracy: 1e-6,
+            })
+            .unwrap_err();
+            assert!(
+                error.contains("endpoint-slope"),
+                "{endpoint_slope}: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn pattern_endpoint_slope_deserializes_default_and_kebab_case_numbers() {
+        let bytes = encode_cbor(&CurvePathOutput {
+            path: straight_path(2.0),
+        })
+        .unwrap();
+        let default: PatternPathSpec = ciborium::de::from_reader(&bytes[..]).unwrap();
+        assert_eq!(default.endpoint_slope, 0.0);
+        let mut input: std::collections::BTreeMap<String, ciborium::Value> =
+            ciborium::de::from_reader(&bytes[..]).unwrap();
+        for (value, endpoint_slope) in [
+            (ciborium::Value::Float(1.5), 1.5),
+            (ciborium::Value::Integer(2.into()), 2.0),
+        ] {
+            input.insert("endpoint-slope".to_string(), value);
+            let bytes = encode_cbor(&input).unwrap();
+            let spec: PatternPathSpec = ciborium::de::from_reader(&bytes[..]).unwrap();
+            assert_eq!(
+                spec,
+                PatternPathSpec {
+                    endpoint_slope,
+                    ..default.clone()
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn fitted_point_pattern_matches_straight_formula_and_endpoints() {
+        for (length, wavelength) in [(2.0_f64, 0.4), (2.0, 0.43), (0.1, 1.0)] {
+            let periods = (length / wavelength).round().max(1.0) - 0.5;
+            let samples_per_period = (periods * 16.0) as usize;
+            for amplitude in [-0.15_f64, 0.0, 0.15] {
+                let pattern = sampled_pattern(
+                    "fitted",
+                    samples_per_period,
+                    |position| {
+                        let u = position / std::f64::consts::TAU;
+                        let theta = std::f64::consts::PI + periods * position;
+                        if u == 0.0 || u == 1.0 {
+                            (0.0, 0.0)
+                        } else {
+                            (
+                                amplitude.signum() * 1.4 * length
+                                    / (length + 2.0 * amplitude.abs() * 1.4)
+                                    * (1.0 + theta.cos() - 2.0 * u),
+                                theta.sin(),
+                            )
+                        }
+                    },
+                    false,
+                );
+                let output = pattern_path(PatternPathSpec {
+                    path: straight_path(length),
+                    pattern,
+                    amplitude,
+                    wavelength: length,
+                    phase: 0.0,
+                    samples_per_period,
+                    coil_longitudinal_scale: default_coil_longitudinal_scale(),
+                    anchor_start: true,
+                    anchor_end: true,
+                    endpoint_slope: 3.0,
+                    accuracy: 1e-9,
+                })
+                .unwrap();
+                let points = path_points(&output.path);
+                assert_eq!(output.pattern, "fitted");
+                assert_eq!(points.len(), samples_per_period + 1);
+                assert_eq!(points[0], point(0.0, 0.0));
+                assert_eq!(*points.last().unwrap(), point(length, 0.0));
+                for (index, actual) in points.iter().enumerate() {
+                    let distance = length * index as f64 / samples_per_period as f64;
+                    let theta = std::f64::consts::PI + std::f64::consts::TAU * index as f64 / 16.0;
+                    let x = (distance + amplitude.abs() * 1.4 * (theta.cos() + 1.0)) * length
+                        / (length + 2.0 * amplitude.abs() * 1.4);
+                    assert_point_close(*actual, point(x, amplitude * theta.sin()));
+                }
+                let curves = path_cubics(&output.path);
+                let first = curves.first().unwrap().control_start;
+                let last = curves.last().unwrap().control_end;
+                assert!(first.x > 0.0 && last.x < length);
+                if amplitude != 0.0 {
+                    assert!(amplitude * first.y < 0.0 && amplitude * last.y < 0.0);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn fitted_point_pattern_uses_local_tangents_and_normals_on_curves() {
+        let curve = CubicBez::new((0.0, 0.0), (0.0, 2.0), (2.0, 2.0), (2.0, 0.0));
+        let length = curve.arclen(1e-9);
+        for amplitude in [-0.12_f64, 0.0, 0.12] {
+            let scale =
+                amplitude.signum() * 1.25 * length / (length + 2.0 * amplitude.abs() * 1.25);
+            let spec = PatternPathSpec {
+                path: segment_path(curve),
+                pattern: sampled_pattern(
+                    "fitted",
+                    144,
+                    |position| {
+                        let u = position / std::f64::consts::TAU;
+                        let theta = std::f64::consts::PI + 4.5 * position;
+                        if u == 0.0 || u == 1.0 {
+                            (0.0, 0.0)
+                        } else {
+                            (scale * (1.0 + theta.cos() - 2.0 * u), theta.sin())
+                        }
+                    },
+                    false,
+                ),
+                amplitude,
+                wavelength: length,
+                phase: 0.0,
+                samples_per_period: 144,
+                coil_longitudinal_scale: default_coil_longitudinal_scale(),
+                anchor_start: true,
+                anchor_end: true,
+                endpoint_slope: 3.0,
+                accuracy: 1e-9,
+            };
+            for (anchor_start, anchor_end) in
+                [(true, true), (false, false), (false, true), (true, false)]
+            {
+                let output = pattern_path(PatternPathSpec {
+                    anchor_start,
+                    anchor_end,
+                    ..spec.clone()
+                })
+                .unwrap();
+                let points = path_points(&output.path);
+                assert_eq!(output.pattern, "fitted");
+                assert_eq!(points.len(), 145);
+                assert_eq!(points[0], point(0.0, 0.0));
+                assert_eq!(*points.last().unwrap(), point(2.0, 0.0));
+                for (index, actual) in points.iter().enumerate() {
+                    let u = index as f64 / 144.0;
+                    let theta = std::f64::consts::PI + std::f64::consts::TAU * index as f64 / 32.0;
+                    let t = curve.inv_arclen(length * u, 1e-9);
+                    let tangent = curve.deriv().eval(t).to_vec2().normalize();
+                    let expected = curve.eval(t)
+                        + tangent * (amplitude * scale * (1.0 + theta.cos() - 2.0 * u))
+                        + Vec2::new(-tangent.y, tangent.x) * (amplitude * theta.sin());
+                    assert_point_close(*actual, expected.into());
+                }
+                let segments = output.path.segments().collect::<Vec<_>>();
+                for segment in &segments {
+                    let midpoint = segment.eval(0.5);
+                    assert!(midpoint.x.is_finite() && midpoint.y.is_finite());
+                }
+                for pair in segments.windows(2) {
+                    assert_eq!(pair[0].end(), pair[1].start());
+                    assert!(
+                        (path_seg_tangent(&pair[0], 1.0) - path_seg_tangent(&pair[1], 0.0)).hypot()
+                            < 1e-8
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn point_patterns_handle_short_and_degenerate_paths() {
+        let mut move_only = BezPath::new();
+        move_only.move_to((3.0, 4.0));
+        for path in [
+            BezPath::new(),
+            move_only,
+            straight_path(0.0),
+            segment_path(Line::new((1.0, 2.0), (1.0, 2.0))),
+            straight_path(f64::EPSILON * 0.5),
+            straight_path(1e-8),
+        ] {
+            let length = path_length_value(&path, 1e-9);
+            for amplitude in [-0.12, 0.0, 0.12] {
+                let output = pattern_path(PatternPathSpec {
+                    path: path.clone(),
+                    pattern: sampled_pattern(
+                        "custom",
+                        16,
+                        |theta| (theta.cos(), theta.sin()),
+                        false,
+                    ),
+                    amplitude,
+                    wavelength: length.max(f64::EPSILON),
+                    phase: 0.37,
+                    samples_per_period: 16,
+                    coil_longitudinal_scale: default_coil_longitudinal_scale(),
+                    anchor_start: true,
+                    anchor_end: true,
+                    endpoint_slope: 3.0,
+                    accuracy: 1e-9,
+                })
+                .unwrap();
+                assert_eq!(output.pattern, "custom");
+                if length <= f64::EPSILON {
+                    assert_eq!(output.path, path);
+                } else {
+                    let points = path_points(&output.path);
+                    assert_eq!(points.len(), 17);
+                    assert_eq!(points[0], point(0.0, 0.0));
+                    assert_eq!(*points.last().unwrap(), point(length, 0.0));
+                }
+                for curve in path_cubics(&output.path) {
+                    for point in [
+                        curve.start,
+                        curve.control_start,
+                        curve.control_end,
+                        curve.end,
+                    ] {
+                        assert!(point.x.is_finite() && point.y.is_finite());
+                    }
+                }
+            }
+        }
     }
 
     #[test]

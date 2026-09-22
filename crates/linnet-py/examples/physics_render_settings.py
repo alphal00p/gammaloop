@@ -57,8 +57,11 @@ def _(mo):
     matching pairs share movable rows. Disable **Split initial state** to draw
     the sewn graph. Internal labels keep a uniform gap to their text bounds,
     sliding along their curves or switching sides to avoid overlaps.
-    Momentum labels use the diagram's
-    stored loop momentum basis. **Debug IDs** adds node and half-edge IDs.
+    Momentum labels use the diagram's stored loop momentum basis. Arrows and
+    their labels slide together at a fixed offset; automatic sides can flip
+    to avoid collisions. **Momentum settings** controls their offset, length,
+    label gap, and preferred position. Disable **Automatic momentum placement**
+    to pin the pair. **Debug IDs** adds node and half-edge IDs.
     **Collision boxes** shows padded label boxes: dashed purple for label–label
     clearance, cyan for label–edge/node clearance, and orange for edge/node
     obstacles. Only matching purple–purple or cyan–orange overlaps are penalized.
@@ -314,6 +317,53 @@ def _(lp, mo):
     )
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    auto_momentum_placement = mo.ui.checkbox(
+        value=True, label="Automatic momentum placement"
+    )
+    momentum_side = mo.ui.dropdown(
+        options={"Automatic": "auto", "Left": "left", "Right": "right"},
+        value="Automatic",
+        label="Momentum side",
+    )
+    momentum_offset = mo.ui.slider(
+        0, 1, 0.05, 0.35, debounce=True, show_value=True, label="Arrow offset"
+    )
+    momentum_length = mo.ui.slider(
+        0.2, 2, 0.1, 1, debounce=True, show_value=True, label="Arrow length"
+    )
+    momentum_gap = mo.ui.slider(
+        0, 0.8, 0.05, 0.2, debounce=True, show_value=True, label="Momentum label gap"
+    )
+    momentum_shift = mo.ui.slider(
+        -2, 2, 0.1, 0, debounce=True, show_value=True, label="Preferred momentum shift"
+    )
+    mo.accordion(
+        {
+            "Momentum settings": mo.vstack(
+                [
+                    auto_momentum_placement,
+                    momentum_side,
+                    momentum_offset,
+                    momentum_length,
+                    momentum_gap,
+                    momentum_shift,
+                ],
+                gap=0.75,
+            )
+        }
+    )
+    return (
+        auto_momentum_placement,
+        momentum_side,
+        momentum_offset,
+        momentum_length,
+        momentum_gap,
+        momentum_shift,
+    )
+
+
 @app.cell
 def _(dot_source, fk, model):
     try:
@@ -327,6 +377,12 @@ def _(dot_source, fk, model):
 
 @app.cell
 def _(
+    auto_momentum_placement,
+    momentum_side,
+    momentum_offset,
+    momentum_length,
+    momentum_gap,
+    momentum_shift,
     beta,
     custom_forces,
     dangling_centroid_repulsion,
@@ -376,6 +432,12 @@ def _(
             "split-initial-state": split_initial_state.value,
             "momentum-arrows": show_momenta.value,
             "show-momentum": show_momentum_labels.value,
+            "momentum-label-slide": auto_momentum_placement.value,
+            "momentum-arrow-side": momentum_side.value,
+            "momentum-arrow-offset": momentum_offset.value,
+            "momentum-arrow-length": momentum_length.value,
+            "momentum-label-gap": momentum_gap.value,
+            "momentum-arrow-shift": momentum_shift.value,
             "debug": show_half_edge_ids.value,
         },
     )

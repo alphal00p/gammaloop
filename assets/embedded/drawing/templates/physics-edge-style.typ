@@ -371,6 +371,8 @@
 /// `momentum-arrows: true` adds a short parallel arrow and a full-path label
 /// carrier while the main edge retains its normal particle style. Side, shift,
 /// and label geometry can be set globally or through edge `momentum-*` fields.
+/// `momentum-label-slide` enables collision avoidance along the carrier; set it
+/// to `false` to retain the requested label shift.
 /// -> dictionary | array
 #let source-style(
   edge,
@@ -389,6 +391,8 @@
   momentum-arrow-shift: 0,
   momentum-label-gap: 0.20,
   momentum-label-shift: auto,
+  momentum-label-slide: true,
+  momentum-label-side: auto,
   momentum-label-anchor: auto,
 ) = _impl.source-style(edge, (
   map: map,
@@ -406,6 +410,8 @@
   momentum-arrow-shift: momentum-arrow-shift,
   momentum-label-gap: momentum-label-gap,
   momentum-label-shift: momentum-label-shift,
+  momentum-label-slide: momentum-label-slide,
+  momentum-label-side: momentum-label-side,
   momentum-label-anchor: momentum-label-anchor,
   api: _api(),
 ))
@@ -433,6 +439,8 @@
   momentum-arrow-shift: 0,
   momentum-label-gap: 0.20,
   momentum-label-shift: auto,
+  momentum-label-slide: true,
+  momentum-label-side: auto,
   momentum-label-anchor: auto,
 ) = _impl.sink-style(edge, (
   map: map,
@@ -450,6 +458,8 @@
   momentum-arrow-shift: momentum-arrow-shift,
   momentum-label-gap: momentum-label-gap,
   momentum-label-shift: momentum-label-shift,
+  momentum-label-slide: momentum-label-slide,
+  momentum-label-side: momentum-label-side,
   momentum-label-anchor: momentum-label-anchor,
   api: _api(),
 ))
@@ -536,6 +546,11 @@
 /// unless `show-momentum` is explicitly set. Arrow length never clamps labels.
 /// Prepared external labels retain their outward endpoint position by default;
 /// explicit momentum shifts or `momentum-label-anchor` select path-relative placement.
+/// Momentum arrows and their labels move together in Linnest's collision optimizer
+/// while retaining their normal offsets. `momentum-label-shift` selects a preferred
+/// arc-length position; `momentum-label-slide: false` pins the annotation there.
+/// `momentum-label-side: auto` inherits the arrow side, leaving automatic arrows
+/// free to switch sides. Explicit anchors are pinned.
 ///
 /// ````example
 /// #let g = build({
@@ -617,6 +632,8 @@
   momentum-arrow-shift: 0,
   momentum-label-gap: auto,
   momentum-label-shift: auto,
+  momentum-label-slide: true,
+  momentum-label-side: auto,
   momentum-label-anchor: auto,
   show-momentum: auto,
   show-edge-index: false,
@@ -651,6 +668,8 @@
       momentum-label-gap
     } else if show-momentum == false { 0.10 } else { 0.20 },
     momentum-label-shift: momentum-label-shift,
+    momentum-label-slide: momentum-label-slide,
+    momentum-label-side: momentum-label-side,
     momentum-label-anchor: momentum-label-anchor,
   ),
   sink-style: edge => sink-style(
@@ -672,6 +691,8 @@
       momentum-label-gap
     } else if show-momentum == false { 0.10 } else { 0.20 },
     momentum-label-shift: momentum-label-shift,
+    momentum-label-slide: momentum-label-slide,
+    momentum-label-side: momentum-label-side,
     momentum-label-anchor: momentum-label-anchor,
   ),
   edge-label: edge => edge-label(
