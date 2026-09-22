@@ -64,6 +64,10 @@ impl SpensoBroadcastFunction {
         is_positive: Option<bool>,
         tags: Option<Vec<String>>,
         aliases: Option<Vec<String>>,
+        #[gen_stub(override_type(
+            type_repr = "typing.Optional[symbolica.core.Transformer | typing.Callable[[symbolica.core.Expression], symbolica.core.Expression]]",
+            imports = ("typing", "symbolica.core")
+        ))]
         normalization: Option<PythonNormalization>,
         print: Option<Py<PyAny>>,
         derivative: Option<Py<PyAny>>,

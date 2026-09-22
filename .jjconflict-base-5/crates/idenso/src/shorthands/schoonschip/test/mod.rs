@@ -405,9 +405,20 @@ fn mixed_registered_and_ordinary_momentum_dot() {
     let expected = spenso::dot!(p!(0, &rep), &vector);
     assert_eq!(compact.to_dots(), expected);
     assert_eq!(expected.to_dots(), expected);
-    let expanded = p!(0, slot!(mink, mu)) * function!(ordinary, slot!(mink, mu));
+    let expanded = p!(0, slot!(mink, mu)) * function!(ordinary, slot!(mink, mu).to_atom());
     assert_eq!(expanded.to_dots(), expected);
     // A scalar function of a vector is not itself a rank-one tensor.
     let scalar = function!(symbol!("mixed_dot_scalar"), vector);
     assert_eq!(scalar.normalize_dots(), scalar);
+}
+
+#[test]
+fn explicit_metric_vectors_are_not_scalar_labels() {
+    test_initialize();
+    let mink = Minkowski {}.new_rep(4);
+    let rep = mink.to_symbolic([]);
+    let p = function!(symbol!("metric_dot_p"), &rep);
+    let q = function!(symbol!("metric_dot_q"), &rep);
+    let expr = g!(slot!(mink, mu), &p) * g!(slot!(mink, mu), &q);
+    assert_eq!(expr.to_dots(), spenso::dot!(p, q));
 }

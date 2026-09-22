@@ -310,6 +310,14 @@ pub(crate) fn to_dots_impl(expr: AtomView) -> Atom {
         }
     }
 
+    // A metric carrying a vector as one argument is a contraction, not a
+    // rank-one function with that vector as a scalar label.
+    let [vector_f, vector_g] = [RS.f_, RS.g_].map(|head| {
+        head.restrict(WildcardRestriction::filter(
+            |matched| !matches!(matched, Match::FunctionName(symbol) if *symbol == ETS.metric),
+        ))
+    });
+
     expr.replace(
         function!(
             RS.f_,
@@ -323,7 +331,7 @@ pub(crate) fn to_dots_impl(expr: AtomView) -> Atom {
     )
     .min_level(0)
     .max_level(Some(0))
-    .when(not_slot(RS.a___) & not_slot(RS.b___))
+    .when(not_slot(RS.a___) & not_slot(RS.b___) & vector_f.clone() & vector_g.clone())
     .repeat()
     .with_map(move |m| {
         let rep = SPENSO_TAG
@@ -345,7 +353,7 @@ pub(crate) fn to_dots_impl(expr: AtomView) -> Atom {
     )
     .min_level(0)
     .max_level(Some(0))
-    .when(not_slot(RS.a___))
+    .when(not_slot(RS.a___) & vector_f.clone())
     .repeat()
     .with_map(move |m| {
         let rep = SPENSO_TAG
@@ -369,7 +377,7 @@ pub(crate) fn to_dots_impl(expr: AtomView) -> Atom {
     )
     .min_level(0)
     .max_level(Some(0))
-    .when(not_slot(RS.a___) & not_slot(RS.b___))
+    .when(not_slot(RS.a___) & not_slot(RS.b___) & vector_f.clone() & vector_g.clone())
     .repeat()
     .with_map(move |m| {
         let rep = SPENSO_TAG

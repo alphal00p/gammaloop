@@ -1,8 +1,6 @@
 //! Python bindings for Linnet's typed graph, DOT, and Typst drawing APIs.
 
 use pyo3::prelude::*;
-#[cfg(feature = "python_stubgen")]
-use pyo3_stub_gen::define_stub_info_gatherer;
 
 mod dot;
 mod drawing;
@@ -28,7 +26,14 @@ fn linnet_py(module: &Bound<'_, PyModule>) -> PyResult<()> {
 }
 
 #[cfg(feature = "python_stubgen")]
-define_stub_info_gatherer!(stub_info);
+pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
+    // Dependency classes without an explicit module belong to Symbolica;
+    // Linnet declarations explicitly name their own module.
+    pyo3_stub_gen::StubInfo::from_project_root(
+        "symbolica".to_owned(),
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")),
+    )
+}
 
 // Rust's `PyAny` boundary is intentionally wider than the Python API: values
 // are recursively checked before they can cross into Typst.  Keep the aliases
@@ -208,20 +213,31 @@ pub fn canonical_stub() -> pyo3_stub_gen::Result<String> {
     exports.sort_unstable();
     exports.dedup();
 
-    let generated = module.to_string();
+    // Rust collection constructors are valid PyO3 defaults but are not Python
+    // syntax. Keep the generated stub's conventional unspecified default.
+    let generated = module.to_string().replace(" = Vec :: new()", " = ...");
+    Python::initialize();
+    let import_end_line = Python::attach(|py| -> PyResult<usize> {
+        let ast = py.import("ast")?;
+        let imports = (ast.getattr("Import")?, ast.getattr("ImportFrom")?).into_pyobject(py)?;
+        let mut import_end = 0;
+        for node in ast
+            .call_method1("parse", (&generated,))?
+            .getattr("body")?
+            .try_iter()?
+        {
+            let node = node?;
+            if node.is_instance(&imports)? {
+                import_end = node.getattr("end_lineno")?.extract()?;
+            }
+        }
+        Ok(import_end)
+    })?;
     let import_end = generated
         .split_inclusive('\n')
-        .scan(0, |offset, line| {
-            *offset += line.len();
-            Some((line, *offset))
-        })
-        .filter(|(line, _)| {
-            let line = line.trim_start();
-            line.starts_with("import ") || line.starts_with("from ")
-        })
-        .map(|(_, offset)| offset)
-        .last()
-        .expect("linnet stub must import its referenced Python types");
+        .take(import_end_line)
+        .map(str::len)
+        .sum::<usize>();
     let declarations = generated[import_end..].trim_matches('\n');
     let exports = exports
         .into_iter()
@@ -276,9 +292,6 @@ pub fn canonical_stub() -> pyo3_stub_gen::Result<String> {
     ] {
         stub = stub.replace(rust, python);
     }
-    // Rust collection constructors are valid PyO3 defaults but are not Python
-    // syntax. Keep the generated stub's conventional unspecified default.
-    stub = stub.replace(" = Vec :: new()", " = ...");
     // Stub generation runs without signature inference, so non-builtin Rust
     // values collapse to `...`. These closed enums have one API-wide default.
     for (type_name, default) in [

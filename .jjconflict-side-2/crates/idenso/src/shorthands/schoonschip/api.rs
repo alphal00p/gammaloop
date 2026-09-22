@@ -311,7 +311,10 @@ impl Schoonschip for AtomView<'_> {
     }
 
     fn to_dots(&self) -> Atom {
-        let simplified = self
+        // Resolve explicit vector pairs before tensor collection can absorb a
+        // registered momentum into an ordinary, untagged vector head.
+        let explicit = crate::shorthands::metric::to_dots_impl(*self);
+        let simplified = explicit
             .schoonschip_with_settings(&SchoonschipSettings::default().with_rank1_tensors())
             .metric_shorthand_to_dot();
         // Explicit representation slots also identify vectors whose heads

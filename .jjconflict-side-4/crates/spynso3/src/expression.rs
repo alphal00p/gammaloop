@@ -2411,6 +2411,7 @@ impl TensorExpression {
         )
     }
 
+    #[gen_stub(skip)]
     fn __add__(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
@@ -2453,6 +2454,7 @@ impl TensorExpression {
             .map(TensorDispatch::Expression)
     }
 
+    #[gen_stub(skip)]
     fn __radd__(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
@@ -2467,6 +2469,7 @@ impl TensorExpression {
         Self::__add__(self_, py, lhs)
     }
 
+    #[gen_stub(skip)]
     fn __sub__(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
@@ -2509,6 +2512,7 @@ impl TensorExpression {
             .map(TensorDispatch::Expression)
     }
 
+    #[gen_stub(skip)]
     fn __rsub__(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
@@ -2544,6 +2548,7 @@ impl TensorExpression {
             .map(TensorDispatch::Expression)
     }
 
+    #[gen_stub(skip)]
     fn __mul__(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
@@ -2568,6 +2573,7 @@ impl TensorExpression {
         }
     }
 
+    #[gen_stub(skip)]
     fn __rmul__(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
@@ -2592,6 +2598,7 @@ impl TensorExpression {
         }
     }
 
+    #[gen_stub(skip)]
     fn __truediv__(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
@@ -2617,6 +2624,7 @@ impl TensorExpression {
             .map(TensorDispatch::Expression)
     }
 
+    #[gen_stub(skip)]
     fn __rtruediv__(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
@@ -2648,6 +2656,7 @@ impl TensorExpression {
     }
 
     /// Form an outer product without contracting compatible ports.
+    #[gen_stub(skip)]
     fn outer(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
@@ -2682,6 +2691,7 @@ impl TensorExpression {
 
     /// Contract one selected pair of ordered interface positions.
     #[pyo3(signature = (rhs, *, left, right))]
+    #[gen_stub(skip)]
     fn contract(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
@@ -2707,6 +2717,7 @@ impl TensorExpression {
 
     /// Compose two selected `(input, output)` matrix channels.
     #[pyo3(signature = (rhs, *, left, right))]
+    #[gen_stub(skip)]
     fn compose(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
@@ -2924,7 +2935,21 @@ fn structured_operand(value: &Bound<'_, PyAny>, operation: &str) -> PyResult<Str
 /// Contract two rank-one tensors into the canonical dot form.
 #[cfg_attr(
     feature = "python_stubgen",
-    pyo3_stub_gen::derive::gen_stub_pyfunction(module = "symbolica.community.spenso")
+    pyo3_stub_gen::derive::gen_stub_pyfunction(
+        module = "symbolica.community.spenso",
+        no_default_overload = true,
+        python_overload = r#"
+        import typing
+
+        @overload
+        def dot(left: typing.Union[Tensor, TensorNetwork], right: pyo3_stub_gen.RustType["ConvertibleToSpensoNet"]) -> pyo3_stub_gen.RustType["SpensoNet"]:
+            """Contract two rank-one tensors into the canonical dot form."""
+        @overload
+        def dot(left: pyo3_stub_gen.RustType["ConvertibleToSpensoNet"], right: typing.Union[Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
+        @overload
+        def dot(left: pyo3_stub_gen.RustType["PythonExpression"], right: pyo3_stub_gen.RustType["PythonExpression"]) -> pyo3_stub_gen.RustType["TensorExpression"]: ...
+        "#,
+    )
 )]
 #[pyfunction]
 fn dot(
@@ -2955,10 +2980,29 @@ fn dot(
         .map(TensorDispatch::Expression)
 }
 
+// Python typing permits only one unbounded tuple unpack. A concrete first or last
+// factor guarantees a network; an arbitrary mixed sequence needs the union fallback
+// because it may be empty or contain only symbolic factors at runtime.
 /// Build an explicitly-ended ordered tensor chain.
 #[cfg_attr(
     feature = "python_stubgen",
-    pyo3_stub_gen::derive::gen_stub_pyfunction(module = "symbolica.community.spenso")
+    pyo3_stub_gen::derive::gen_stub_pyfunction(
+        module = "symbolica.community.spenso",
+        no_default_overload = true,
+        python_overload = r#"
+        import typing
+
+        @overload
+        def chain(start_slot: pyo3_stub_gen.RustType["SpensoSlot"], end_slot: pyo3_stub_gen.RustType["SpensoSlot"], *factors: pyo3_stub_gen.RustType["PythonExpression"]) -> pyo3_stub_gen.RustType["TensorExpression"]:
+            """Build an explicitly-ended ordered tensor chain."""
+        @overload
+        def chain(start_slot: pyo3_stub_gen.RustType["SpensoSlot"], end_slot: pyo3_stub_gen.RustType["SpensoSlot"], *factors: typing.Unpack[tuple[typing.Union[Tensor, TensorNetwork], typing.Unpack[tuple[typing.Union[Expression, int, Float, ComplexFloat, Tensor, TensorNetwork], ...]]]]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
+        @overload
+        def chain(start_slot: pyo3_stub_gen.RustType["SpensoSlot"], end_slot: pyo3_stub_gen.RustType["SpensoSlot"], *factors: typing.Unpack[tuple[typing.Unpack[tuple[typing.Union[Expression, int, Float, ComplexFloat, Tensor, TensorNetwork], ...]], typing.Union[Tensor, TensorNetwork]]]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
+        @overload
+        def chain(start_slot: pyo3_stub_gen.RustType["SpensoSlot"], end_slot: pyo3_stub_gen.RustType["SpensoSlot"], *factors: typing.Union[Expression, int, Float, ComplexFloat, Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["TensorDispatch"]: ...
+        "#,
+    )
 )]
 #[pyfunction]
 #[pyo3(signature = (start_slot, end_slot, *factors))]
@@ -3140,7 +3184,23 @@ fn chain(
 /// Close an ordered factor sequence into a canonical cyclic trace.
 #[cfg_attr(
     feature = "python_stubgen",
-    pyo3_stub_gen::derive::gen_stub_pyfunction(module = "symbolica.community.spenso")
+    pyo3_stub_gen::derive::gen_stub_pyfunction(
+        module = "symbolica.community.spenso",
+        no_default_overload = true,
+        python_overload = r#"
+        import typing
+
+        @overload
+        def trace(representation: pyo3_stub_gen.RustType["SpensoRepresentation"], *factors: pyo3_stub_gen.RustType["PythonExpression"]) -> pyo3_stub_gen.RustType["TensorExpression"]:
+            """Close an ordered factor sequence into a canonical cyclic trace."""
+        @overload
+        def trace(representation: pyo3_stub_gen.RustType["SpensoRepresentation"], *factors: typing.Unpack[tuple[typing.Union[Tensor, TensorNetwork], typing.Unpack[tuple[typing.Union[Expression, int, Float, ComplexFloat, Tensor, TensorNetwork], ...]]]]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
+        @overload
+        def trace(representation: pyo3_stub_gen.RustType["SpensoRepresentation"], *factors: typing.Unpack[tuple[typing.Unpack[tuple[typing.Union[Expression, int, Float, ComplexFloat, Tensor, TensorNetwork], ...]], typing.Union[Tensor, TensorNetwork]]]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
+        @overload
+        def trace(representation: pyo3_stub_gen.RustType["SpensoRepresentation"], *factors: typing.Union[Expression, int, Float, ComplexFloat, Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["TensorDispatch"]: ...
+        "#,
+    )
 )]
 #[pyfunction]
 #[pyo3(signature = (representation, *factors))]
@@ -3223,6 +3283,68 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     Ok(())
 }
 
+// The stub generator's Python parser requires typing.Union instead of `|`.
+#[cfg(feature = "python_stubgen")]
+submit! {
+    pyo3_stub_gen::derive::gen_methods_from_python! {
+        r#"
+        import typing
+
+        class TensorExpression:
+            @overload
+            def __add__(self, rhs: typing.Union[Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
+            @overload
+            def __add__(self, rhs: pyo3_stub_gen.RustType["ConvertibleToExpression"]) -> pyo3_stub_gen.RustType["TensorExpression"]: ...
+            @overload
+            def __radd__(self, lhs: typing.Union[Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
+            @overload
+            def __radd__(self, lhs: pyo3_stub_gen.RustType["ConvertibleToExpression"]) -> pyo3_stub_gen.RustType["TensorExpression"]: ...
+            @overload
+            def __sub__(self, rhs: typing.Union[Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
+            @overload
+            def __sub__(self, rhs: pyo3_stub_gen.RustType["ConvertibleToExpression"]) -> pyo3_stub_gen.RustType["TensorExpression"]: ...
+            @overload
+            def __rsub__(self, lhs: typing.Union[Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
+            @overload
+            def __rsub__(self, lhs: pyo3_stub_gen.RustType["ConvertibleToExpression"]) -> pyo3_stub_gen.RustType["TensorExpression"]: ...
+            @overload
+            def __mul__(self, rhs: typing.Union[Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
+            @overload
+            def __mul__(self, rhs: pyo3_stub_gen.RustType["ConvertibleToExpression"]) -> pyo3_stub_gen.RustType["TensorExpression"]: ...
+            @overload
+            def __rmul__(self, lhs: typing.Union[Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
+            @overload
+            def __rmul__(self, lhs: pyo3_stub_gen.RustType["ConvertibleToExpression"]) -> pyo3_stub_gen.RustType["TensorExpression"]: ...
+            @overload
+            def __truediv__(self, rhs: typing.Union[Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
+            @overload
+            def __truediv__(self, rhs: pyo3_stub_gen.RustType["ConvertibleToExpression"]) -> pyo3_stub_gen.RustType["TensorExpression"]: ...
+            @overload
+            def __rtruediv__(self, lhs: typing.Union[Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
+            @overload
+            def __rtruediv__(self, lhs: pyo3_stub_gen.RustType["ConvertibleToExpression"]) -> pyo3_stub_gen.RustType["TensorExpression"]: ...
+            @overload
+            def outer(self, rhs: typing.Union[Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["SpensoNet"]:
+                """Form an outer product without contracting compatible ports."""
+            @overload
+            def outer(self, rhs: pyo3_stub_gen.RustType["PythonExpression"]) -> pyo3_stub_gen.RustType["TensorExpression"]:
+                """Form an outer product without contracting compatible ports."""
+            @overload
+            def contract(self, rhs: typing.Union[Tensor, TensorNetwork], *, left: int, right: int) -> pyo3_stub_gen.RustType["SpensoNet"]:
+                """Contract one selected pair of ordered interface positions."""
+            @overload
+            def contract(self, rhs: pyo3_stub_gen.RustType["PythonExpression"], *, left: int, right: int) -> pyo3_stub_gen.RustType["TensorExpression"]:
+                """Contract one selected pair of ordered interface positions."""
+            @overload
+            def compose(self, rhs: typing.Union[Tensor, TensorNetwork], *, left: tuple[int, int], right: tuple[int, int]) -> pyo3_stub_gen.RustType["SpensoNet"]:
+                """Compose two selected `(input, output)` matrix channels."""
+            @overload
+            def compose(self, rhs: pyo3_stub_gen.RustType["PythonExpression"], *, left: tuple[int, int], right: tuple[int, int]) -> pyo3_stub_gen.RustType["TensorExpression"]:
+                """Compose two selected `(input, output)` matrix channels."""
+        "#
+    }
+}
+
 #[cfg(feature = "python_stubgen")]
 submit! {
     PyMethodsInfo {
@@ -3298,6 +3420,85 @@ mod tests {
         index: AbstractIndex,
     ) -> PartialStructure {
         PartialStructure::from_logical_slots([representation.slot(PartialIndex::Explicit(index))])
+    }
+
+    #[cfg(feature = "python_stubgen")]
+    #[test]
+    fn dispatch_stubs_preserve_symbolic_results_and_concrete_promotion() {
+        let methods = pyo3_stub_gen::inventory::iter::<PyMethodsInfo>
+            .into_iter()
+            .filter(|info| (info.struct_id)() == std::any::TypeId::of::<TensorExpression>())
+            .flat_map(|info| info.methods);
+        for name in [
+            "__add__",
+            "__radd__",
+            "__sub__",
+            "__rsub__",
+            "__mul__",
+            "__rmul__",
+            "__truediv__",
+            "__rtruediv__",
+            "outer",
+            "contract",
+            "compose",
+        ] {
+            let overloads = methods
+                .clone()
+                .filter(|method| method.name == name)
+                .collect::<Vec<_>>();
+            assert_eq!(
+                overloads.len(),
+                2,
+                "{name} must not retain the Any overload"
+            );
+            assert!(overloads.iter().all(|method| method.is_overload));
+            let symbolic = if name.starts_with("__") {
+                ConvertibleToExpression::type_input()
+            } else {
+                PythonExpression::type_input()
+            };
+            assert!(overloads.iter().any(|method| {
+                (method.parameters[0].type_info)() == symbolic
+                    && (method.r#return)() == TensorExpression::type_output()
+            }));
+            assert!(overloads.iter().any(|method| {
+                (method.parameters[0].type_info)().to_string()
+                    == "typing.Union[Tensor, TensorNetwork]"
+                    && (method.r#return)() == SpensoNet::type_output()
+            }));
+            for method in overloads {
+                assert!(
+                    method.parameters[1..]
+                        .iter()
+                        .all(|parameter| { matches!(parameter.kind, ParameterKind::KeywordOnly) })
+                );
+            }
+        }
+
+        let functions = pyo3_stub_gen::inventory::iter::<pyo3_stub_gen::type_info::PyFunctionInfo>
+            .into_iter()
+            .filter(|info| info.module == Some("symbolica.community.spenso"));
+        for name in ["chain", "trace"] {
+            let overloads = functions
+                .clone()
+                .filter(|function| function.name == name)
+                .collect::<Vec<_>>();
+            assert_eq!(overloads.len(), 4);
+            assert!(overloads.iter().all(|function| function.is_overload));
+            assert!(overloads.iter().any(|function| {
+                let factors = function.parameters.last().unwrap();
+                matches!(factors.kind, ParameterKind::VarPositional)
+                    && (factors.type_info)() == PythonExpression::type_input()
+                    && (function.r#return)() == TensorExpression::type_output()
+            }));
+            // A possibly empty, mixed sequence cannot promise concrete promotion.
+            assert!(overloads.iter().any(|function| {
+                (function.r#return)() == TensorDispatch::type_output()
+                    && !(function.parameters.last().unwrap().type_info)()
+                        .to_string()
+                        .contains("Any")
+            }));
+        }
     }
 
     #[test]
