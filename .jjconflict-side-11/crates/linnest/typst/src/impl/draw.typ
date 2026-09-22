@@ -1921,6 +1921,10 @@
   }
 }
 
+// Pair padding is shared between the two boxes; draw the same half-padding
+// around each box in the collision overlay.
+#let _label-collision-padding = (labels: 0.35, obstacles: 0.08)
+
 // Optimize arc length and automatic side choices: every candidate has the same
 // measured normal clearance. Annealing can leave a local minimum, then
 // deterministic coordinate sweeps settle the best arrangement found.
@@ -1928,7 +1932,7 @@
   if placements.all(label => label.candidates.len() == 1) {
     return placements.map(label => label.candidates.first())
   }
-  let overlap = (left, right, padding: 0.08) => (
+  let overlap = (left, right, padding: _label-collision-padding.obstacles) => (
     calc.max(0, calc.min(left.right, right.right) - calc.max(left.left, right.left) + padding)
       * calc.max(0, calc.min(left.top, right.top) - calc.max(left.bottom, right.bottom) + padding)
   )
@@ -1972,7 +1976,7 @@
             let other = placements.at(j).candidates.at(choices.at(j)).bounds
             let other-area = (other.right - other.left) * (other.top - other.bottom)
             // Repel nearby labels before their text boxes touch.
-            cost += 4 * overlap(box, other, padding: 0.35) / calc.max(1e-9, calc.min(area, other-area))
+            cost += 4 * overlap(box, other, padding: _label-collision-padding.labels) / calc.max(1e-9, calc.min(area, other-area))
           }
           scores.push(cost)
         }
@@ -3721,6 +3725,28 @@
 
         for element in node-elements {
           elements.push(element)
+        }
+
+        if options.debug-label-collisions {
+          // Bounds are already in canvas coordinates. Reset the transform only
+          // inside this floating overlay, so it cannot change graph bounds.
+          elements.push(cetz.draw.floating(cetz.draw.scope({
+            cetz.draw.set-transform(none)
+            for (boxes, padding, color, dashed) in (
+              (label-obstacles, _label-collision-padding.obstacles / 2, rgb("#f59e0b"), false),
+              (relaxed.map(candidate => candidate.bounds), _label-collision-padding.labels / 2, rgb("#a855f7"), true),
+              (relaxed.map(candidate => candidate.bounds), _label-collision-padding.obstacles / 2, rgb("#06b6d4"), false),
+            ) {
+              for box in boxes {
+                cetz.draw.rect(
+                  (box.left - padding, box.bottom - padding),
+                  (box.right + padding, box.top + padding),
+                  fill: color.transparentize(94%),
+                  stroke: (paint: color, thickness: 0.4pt, dash: if dashed { "dashed" } else { "solid" }),
+                )
+              }
+            }
+          })))
         }
 
         // Measure the graph before overlays and reuse its processed drawables,
