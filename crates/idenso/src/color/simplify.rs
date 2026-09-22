@@ -562,13 +562,13 @@ impl ColorAlgebraSimplifier {
             .or_else(|| self.simplify_two_f_loop_product(&product))
             .or_else(|| self.simplify_three_f_loop_product(&product))
             .or_else(|| Self::simplify_symmetric_invariant_product(&product))
-            .or_else(|| self.simplify_embedded_color_node(&product))
             .or_else(|| {
                 self.settings
                     .expand_cross_chain_fierz
                     .then(|| Self::simplify_cross_chain_fierz_product(&product))
                     .flatten()
             })
+            .or_else(|| self.simplify_embedded_color_node(&product))
     }
 
     fn join_color_chain_product(product: &ProductView) -> Option<Atom> {
@@ -630,83 +630,141 @@ impl ColorAlgebraSimplifier {
     }
 
     fn simplify_cross_chain_fierz_product(product: &ProductView) -> Option<Atom> {
-        for (left_index, left_factor) in product.factors.iter().enumerate() {
-            let Some(left_chain) = &left_factor.chain else {
-                continue;
-            };
-            let Some(left_dimension) =
-                fundamental_chain_dimension_view(left_chain.start, left_chain.end)
-            else {
-                continue;
-            };
+        let lines = product
+            .factors
+            .iter()
+            .enumerate()
+            .filter_map(|(index, factor)| {
+                let (dimension, factors) = if let Some(chain) = &factor.chain {
+                    (
+                        fundamental_chain_dimension_view(chain.start, chain.end)?,
+                        &chain.factors,
+                    )
+                } else if let Some(trace) = &factor.trace {
+                    let AtomView::Fun(rep) = trace.rep else {
+                        return None;
+                    };
+                    if rep.get_symbol() != CS.fundamental_rep || rep.get_nargs() != 1 {
+                        return None;
+                    }
+                    (rep.iter().next()?.to_owned(), &trace.factors)
+                } else {
+                    return None;
+                };
+                Some((index, factor, dimension, factors))
+            })
+            .collect::<Vec<_>>();
 
-            for (right_index, right_factor) in
-                product.factors.iter().enumerate().skip(left_index + 1)
-            {
-                let Some(right_chain) = &right_factor.chain else {
-                    continue;
-                };
-                let Some(right_dimension) =
-                    fundamental_chain_dimension_view(right_chain.start, right_chain.end)
-                else {
-                    continue;
-                };
+        for (position, (left_index, left, left_dimension, left_factors)) in lines.iter().enumerate()
+        {
+            for (right_index, right, right_dimension, right_factors) in &lines[position + 1..] {
                 if left_dimension != right_dimension {
                     continue;
                 }
-
-                for (left_generator_index, left_generator) in left_chain.factors.iter().enumerate()
-                {
+                for (left_position, left_generator) in left_factors.iter().enumerate() {
                     let Some(left_adjoint) = color_generator_adjoint(*left_generator) else {
                         continue;
                     };
-                    for (right_generator_index, right_generator) in
-                        right_chain.factors.iter().enumerate()
-                    {
-                        let Some(right_adjoint) = color_generator_adjoint(*right_generator) else {
-                            continue;
-                        };
-                        if left_adjoint != right_adjoint {
+                    for (right_position, right_generator) in right_factors.iter().enumerate() {
+                        if color_generator_adjoint(*right_generator).as_ref() != Some(&left_adjoint)
+                        {
                             continue;
                         }
-
-                        let left_before = &left_chain.factors[..left_generator_index];
-                        let left_after = &left_chain.factors[left_generator_index + 1..];
-                        let right_before = &right_chain.factors[..right_generator_index];
-                        let right_after = &right_chain.factors[right_generator_index + 1..];
-
-                        let crossed_left = chain_with_factor_view_slices(
-                            left_chain.start,
-                            right_chain.end,
-                            &[left_before, right_after],
-                        );
-                        let crossed_right = chain_with_factor_view_slices(
-                            right_chain.start,
-                            left_chain.end,
-                            &[right_before, left_after],
-                        );
-                        let uncrossed_left = chain_with_factor_view_slices(
-                            left_chain.start,
-                            left_chain.end,
-                            &[left_before, left_after],
-                        );
-                        let uncrossed_right = chain_with_factor_view_slices(
-                            right_chain.start,
-                            right_chain.end,
-                            &[right_before, right_after],
-                        );
-
+                        let left_before = &left_factors[..left_position];
+                        let left_after = &left_factors[left_position + 1..];
+                        let right_before = &right_factors[..right_position];
+                        let right_after = &right_factors[right_position + 1..];
                         let dimension = left_dimension.to_owned();
+                        let rep = fundamental_rep(dimension.clone());
+                        let left_trace = trace_with_factors(
+                            rep.clone(),
+                            left_after
+                                .iter()
+                                .chain(left_before)
+                                .map(|factor| (*factor).to_owned())
+                                .collect(),
+                        );
+                        let right_trace = trace_with_factors(
+                            rep.clone(),
+                            right_after
+                                .iter()
+                                .chain(right_before)
+                                .map(|factor| (*factor).to_owned())
+                                .collect(),
+                        );
+                        // Cutting a trace at the contracted generator leaves its
+                        // remaining word in cyclic order: after, then before.
+                        let (crossed, uncrossed) = match (&left.chain, &right.chain) {
+                            (Some(left), Some(right)) => (
+                                chain_with_factor_view_slices(
+                                    left.start,
+                                    right.end,
+                                    &[left_before, right_after],
+                                ) * chain_with_factor_view_slices(
+                                    right.start,
+                                    left.end,
+                                    &[right_before, left_after],
+                                ),
+                                chain_with_factor_view_slices(
+                                    left.start,
+                                    left.end,
+                                    &[left_before, left_after],
+                                ) * chain_with_factor_view_slices(
+                                    right.start,
+                                    right.end,
+                                    &[right_before, right_after],
+                                ),
+                            ),
+                            (Some(left), None) => (
+                                chain_with_factor_view_slices(
+                                    left.start,
+                                    left.end,
+                                    &[left_before, right_after, right_before, left_after],
+                                ),
+                                chain_with_factor_view_slices(
+                                    left.start,
+                                    left.end,
+                                    &[left_before, left_after],
+                                ) * right_trace,
+                            ),
+                            (None, Some(right)) => (
+                                chain_with_factor_view_slices(
+                                    right.start,
+                                    right.end,
+                                    &[right_before, left_after, left_before, right_after],
+                                ),
+                                left_trace
+                                    * chain_with_factor_view_slices(
+                                        right.start,
+                                        right.end,
+                                        &[right_before, right_after],
+                                    ),
+                            ),
+                            (None, None) => (
+                                trace_with_factors(
+                                    rep,
+                                    left_after
+                                        .iter()
+                                        .chain(left_before)
+                                        .chain(right_after)
+                                        .chain(right_before)
+                                        .map(|factor| (*factor).to_owned())
+                                        .collect(),
+                                ),
+                                left_trace * right_trace,
+                            ),
+                        };
                         let replacement = fundamental_index(dimension.clone())
-                            * (crossed_left * crossed_right
-                                - uncrossed_left * uncrossed_right / dimension);
-
-                        return Some(product.replacing_pair(left_index, right_index, replacement));
+                            * (crossed - uncrossed / dimension);
+                        return Some(product.replacing_pair(
+                            *left_index,
+                            *right_index,
+                            replacement,
+                        ));
                     }
                 }
             }
         }
-
         None
     }
 
