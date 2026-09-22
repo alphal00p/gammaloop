@@ -7,7 +7,7 @@ use spenso::network::library::symbolic::ETS;
 use spenso::structure::{
     abstract_index::AbstractIndex,
     representation::{Minkowski, RepName},
-    slot::DummyAind,
+    slot::{DummyAind, ParseableAind},
 };
 use symbolica::{
     atom::{Atom, AtomCore},
@@ -300,6 +300,111 @@ mod tests {
     use super::*;
     use idenso::{dirac::GammaSimplifier, shorthands::schoonschip::Schoonschip};
     use symbolica::{parse, symbol};
+
+    #[test]
+    fn polarized_density_has_one_state_and_shared_wavefunction_replacement() {
+        let model =
+            Model::from_json(include_str!("../../feynkit-model/tests/fixtures/sm.json")).unwrap();
+        let p = parse!("polarized::p");
+        let spin = parse!("polarized::s");
+        let opposite = parse!("polarized::opposite");
+        let a = parse!("polarized::a");
+        let b = parse!("polarized::b");
+        let rep = Bispinor {}.new_rep(4);
+        let lorentz = Minkowski {}.new_rep(4);
+        for (pdg, ket, bra, sign) in [
+            (15, symbols::u(), symbols::ubar(), 1),
+            (-15, symbols::v(), symbols::vbar(), -1),
+        ] {
+            let particle = model
+                .particle_by_id(model.particle_id_by_pdg(pdg).unwrap())
+                .unwrap();
+            let sum = SpinSum::new(particle, &model).unwrap();
+            let plus = sum
+                .expression(&p, [a.clone(), b.clone()], None, Some(&spin))
+                .unwrap();
+            let minus = sum
+                .expression(&p, [a.clone(), b.clone()], None, Some(&opposite))
+                .unwrap()
+                .replace(lorentz.vector(opposite.as_view(), []).to_pattern())
+                .with(-lorentz.vector(spin.as_view(), []));
+            let ordinary = sum
+                .expression(&p, [a.clone(), b.clone()], None, None)
+                .unwrap();
+            assert!(
+                (plus.clone() + minus - ordinary)
+                    .expand()
+                    .simplify_gamma()
+                    .expand()
+                    .is_zero()
+            );
+            let trace = sum
+                .expression(&p, [a.clone(), a.clone()], None, Some(&spin))
+                .unwrap();
+            assert_eq!(
+                trace.expand().simplify_gamma().expand(),
+                Atom::num(2 * sign) * particle.symbolic_mass(&model)
+            );
+            let pair = function!(ket, 7, rep.pattern(&a)) * function!(bra, 7, rep.pattern(&b));
+            let unpaired = function!(ket, 7, rep.pattern(&a));
+            let spectator = function!(ket, 8, rep.pattern(parse!("polarized::spectator")));
+            let expression = &pair * &spectator + &unpaired;
+            let replaced = sum.apply(&expression, &p, 7, None, Some(&spin)).unwrap();
+            assert!(
+                (replaced.clone() - plus * spectator - unpaired)
+                    .expand()
+                    .simplify_gamma()
+                    .expand()
+                    .is_zero()
+            );
+            assert_eq!(
+                sum.apply(&replaced, &p, 7, None, Some(&spin)).unwrap(),
+                replaced
+            );
+        }
+    }
+
+    #[test]
+    fn spin_vector_rejects_incompatible_states_and_averaging() {
+        let model =
+            Model::from_json(include_str!("../../feynkit-model/tests/fixtures/sm.json")).unwrap();
+        let p = parse!("p");
+        let spin = parse!("s");
+        let indices = [parse!("i"), parse!("j")];
+        for pdg in [12, 13, 22, 23, 25] {
+            let particle = model
+                .particle_by_id(model.particle_id_by_pdg(pdg).unwrap())
+                .unwrap();
+            assert!(matches!(
+                SpinSum::new(particle, &model).unwrap().expression(
+                    &p,
+                    indices.clone(),
+                    None,
+                    Some(&spin)
+                ),
+                Err(SpinSumError::SpinVectorRequiresMassiveFermion)
+            ));
+        }
+        let particle = model
+            .particle_by_id(model.particle_id_by_pdg(15).unwrap())
+            .unwrap();
+        assert!(matches!(
+            SpinSum::new(particle, &model)
+                .unwrap()
+                .averaged(true)
+                .expression(&p, indices.clone(), None, Some(&spin)),
+            Err(SpinSumError::PolarizedAverage)
+        ));
+        assert!(matches!(
+            SpinSum::new(particle, &model).unwrap().expression(
+                &p,
+                indices,
+                None,
+                Some(&Atom::num(0))
+            ),
+            Err(SpinSumError::InvalidMomentum)
+        ));
+    }
 
     #[test]
     fn wavefunction_pairs_preserve_species_edges_and_unpaired_states() {

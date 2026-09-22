@@ -24,8 +24,9 @@ not treat the presence of a primitive as an end-to-end validation.
   [External spin sums], [`feynkit-generator::SpinSum`],
   [Scalar, Dirac and vector completeness tensors and external wavefunction-pair
    replacements. GammaLoop delegates both formulas and replacement construction
-   here. Higher-spin states and polarized projectors
-   are still missing.],
+   here. Massive Dirac density matrices select a physical spin vector through
+   the same owner. Higher-spin states and massless helicity projectors remain
+   outstanding.],
   [External color sums], [`feynkit-generator::ColorSum`],
   [Singlet, fundamental, sextet and adjoint completeness tensors reuse the
    generator's representation mapping and Spenso metrics. The Python particle
@@ -78,7 +79,8 @@ not treat the presence of a primitive as an end-to-end validation.
   [Shared symbolic/numerical initial-state flux and four-dimensional two-body
    phase space. The generated QED and QCD annihilation benchmarks include their
    angular distributions and total unpolarized cross sections. Chiral Z decays
-   validate massive two-body widths for all four fermion classes. General phase space, identical-particle
+   validate massive two-body widths for all four fermion classes; Higgs decays
+   cover charged leptons, quarks, WW and ZZ. General phase space, identical-particle
    bookkeeping and the remaining gallery observables need further coverage.],
 )
 
@@ -96,6 +98,28 @@ fermion result uses Spenso bispinor slots; the vector result uses Minkowski
 slots. `average=True` divides by the physical four-dimensional spin count.
 The antiparticle record selects the negative mass term in the Dirac
 completeness relation.
+
+For a massive Dirac fermion, `spin_vector=s` selects one physical spin state
+in either `spin_sum` or `sum_spins`:
+$ rho_u = frac(1,2) (slash(p)+m)(1+gamma^5 slash(s)), quad
+  rho_v = frac(1,2) (slash(p)-m)(1+gamma^5 slash(s)). $
+Here $s$ is the dimensionless boosted rest-frame spin direction, with
+$p dot s=0$ and $s^2=-1$; the caller supplies these on-shell constraints to
+`Kinematics`. Particle and antiparticle use the same physical spin direction,
+as in the #link("https://sites.ualberta.ca/~gingrich/courses/phys512/node61.html")[covariant spin-projector convention].
+A selected state cannot also be spin averaged. The model must declare a
+nonzero mass: a zero-valued mass parameter is treated as massless even when
+its symbolic parameter name exists. This does not implement massless helicity
+projectors or dimension-generic gamma-five schemes.
+
+`installed_polarized_spin_density.py` checks both charges, opposite-spin
+completeness, traces, rank-one purity, left and right Dirac equations, and
+edge-specific wavefunction replacement. A GammaLoop regression compares all
+128 complex density-matrix entries across two momentum directions, both
+helicities and both charges with its existing numerical spinors. It uses the
+shared HEP tensor library and adds no second spinor implementation.
+`hep/polarized_spin.py` displays the density matrix and constructs the spin
+vector with the existing shared `Boost` and `FourMomentum` APIs.
 
 Massive vector sums use the Proca projector. A massless vector without a
 reference uses the covariant projector. It reproduces physical polarizations
@@ -391,6 +415,27 @@ The fermion and antifermion are distinct. Tests check the positive
 above-threshold phase-space branch, massless limits, and vector versus axial
 threshold powers. `hep/z_decay.py` offers all four channels in a separate
 notebook on the same server.
+
+== Generated massive Higgs decays
+
+`installed_feyncalc_higgs_decay.py` reproduces the gallery's
+#link("https://feyncalc.github.io/FeynCalcExamples/EW/Tree/H-FFbar")[fermion],
+#link("https://feyncalc.github.io/FeynCalcExamples/EW/Tree/H-WW")[WW] and
+#link("https://feyncalc.github.io/FeynCalcExamples/EW/Tree/H-ZZ")[ZZ] decays.
+All five representative channels use generated amplitudes, model parameter
+expressions, Idenso adjoints, shared particle spin/color sums, and the shared
+two-body phase space and decay flux. No extra amplitude evaluator is introduced.
+
+The fermion calculation explicitly identifies each UFO Yukawa mass with its
+pole mass for this tree-level comparison. The vector channels retain all
+three physical Proca polarizations. Only the identical ZZ final state receives
+an explicit phase-space factor of $1/2!$; it is not part of the labeled
+amplitude or spin sum. The tests compare the fully massive squared amplitudes
+and widths. `hep/higgs_decay.py` exposes all five channels in a separate
+notebook on the existing server.
+
+These are above-threshold, on-shell two-body decays. The WW and ZZ formulas
+do not cover off-shell vector decays at the physical 125 GeV Higgs mass.
 
 == Reduce tensors with external momentum dependence
 
