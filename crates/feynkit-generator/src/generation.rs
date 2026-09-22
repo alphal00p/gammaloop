@@ -1044,7 +1044,7 @@ impl NumeratorInstantiation<'_> {
             AtomView::Fun(function)
                 if function.get_symbol().get_namespace() == "spenso"
                     && function.get_symbol().get_stripped_name() == name
-                    && function.get_nargs() == 2
+                    && matches!(function.get_nargs(), 1 | 2)
         )
     }
 
@@ -6090,6 +6090,52 @@ mod tests {
             test_atom(
                 "spenso::g(spenso::bis(4,gammalooprs::hedge(20,1)),spenso::bis(4,gammalooprs::hedge(41,1)))"
             )
+        );
+    }
+
+    #[test]
+    fn lowers_covariant_propagator_with_compact_momentum_slots() {
+        use idenso::{
+            IndexTooling,
+            shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip},
+        };
+        use spenso::structure::abstract_index::AbstractIndex;
+
+        let legs = tensor_test_legs();
+        let instantiation = NumeratorInstantiation {
+            owner: NumeratorOwner::Edge(30),
+            legs: &legs[2..],
+        };
+        let numerator = instantiation
+            .instantiate(
+                &test_atom(
+                    "-1i*(Metric(idx(1,1),idx(1,2))-(1-xi)*P(idx(1,1))*P(idx(1,2))/spenso::dot(P(spenso::mink(4)),P(spenso::mink(4))))",
+                ),
+                NumeratorSector::Spin,
+            )
+            .unwrap();
+        assert_eq!(
+            numerator,
+            test_atom(
+                "-1i*(spenso::g(spenso::mink(4,gammalooprs::hedge(60,1)),spenso::mink(4,gammalooprs::hedge(81,1)))-(1-xi)*gammalooprs::Q(30,spenso::mink(4,gammalooprs::hedge(60,1)))*gammalooprs::Q(30,spenso::mink(4,gammalooprs::hedge(81,1)))/spenso::dot(gammalooprs::Q(30,spenso::mink(4)),gammalooprs::Q(30,spenso::mink(4))))"
+            )
+        );
+        assert_eq!(
+            instantiation.lower_spin(numerator.clone()).unwrap(),
+            numerator
+        );
+        assert_eq!(numerator.list_dangling::<AbstractIndex>().unwrap().len(), 2);
+        let metric = instantiation
+            .instantiate(&test_atom("Metric(1,2)"), NumeratorSector::Spin)
+            .unwrap();
+        assert_eq!(
+            (numerator * metric)
+                .expand()
+                .simplify_metrics()
+                .to_dots()
+                .expand()
+                .cancel(),
+            test_atom("-1i*(3+xi)").expand()
         );
     }
 
