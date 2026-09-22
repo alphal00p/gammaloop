@@ -538,10 +538,32 @@ through the public API and checks the three-port interface and exact norm.
 The scalar records are reused from the stored model to define a toy adjoint
 interaction; this is a color-factor validation.
 
-Color epsilon and sextet interaction tensors remain unsupported by generation.
-Their color-space completeness tensors do not establish interaction-tensor
-coverage. The older GammaLoop reindexer also leaves those tensor heads
-unlowered and rejects them.
+== Generated antisymmetric color vertices
+
+The shared UFO lowering accepts `Epsilon(i,j,k)` for three triplet slots and
+`EpsilonBar(i,j,k)` for three antitriplet slots. Both use Idenso's existing
+antisymmetric epsilon symbol and determinant expansion. Color conjugation
+exchanges the two representations without reversing their index order; the
+Lorentz epsilon convention is unchanged. Pair reduction requires dual spaces
+with matching dimensions. Two same-orientation color epsilons, mismatched
+spaces and rank-three tensors in a different fundamental dimension do not
+acquire a determinant identity.
+
+Summed fundamental indices may join dual slots while external slots retain the
+orientation fixed by their particle records. Color identity chains transmit
+this orientation before lowering; this also permits contracted generator
+products such as `T(a,-1,-2)*T(b,-2,-1)`.
+
+`installed_ufo_color_epsilon.py` generates a conjugate pair of cubic interactions
+between three distinct complex scalar species. They are a toy color model, not
+a Standard Model interaction. The regression checks the three open color ports,
+conjugation twice and the positive norm $epsilon_(i j k) epsilon^(i j k)=6$.
+Shared Rust tests also verify $epsilon_(i j k) epsilon^(i j l)=2 delta_k^l$,
+permutation signs, incompatible representations and dummy-index contractions.
+`hep/color_epsilon.py` shows the generated diagrams, both tensors and the
+incoming-triplet color average $6/3=2$ in the same Marimo instance.
+This establishes symbolic epsilon interaction support; numerical tensor-library
+components and sextet interaction tensors remain outstanding.
 
 == Covariant gluon sums and ghost subtraction
 

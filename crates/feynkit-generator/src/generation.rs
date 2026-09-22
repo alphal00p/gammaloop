@@ -624,7 +624,70 @@ impl NumeratorInstantiation<'_> {
     }
 
     fn lower_color(&self, mut atom: Atom) -> Result<Atom, GenerationError> {
-        let _ = (CS.t, CS.f, ETS.metric);
+        let _ = (CS.t, CS.f, ETS.metric, *EPSILON_SYMBOL);
+        atom = atom.expand();
+        if let AtomView::Add(terms) = atom.as_view() {
+            return terms.iter().try_fold(Atom::Zero, |sum, term| {
+                Ok(sum + self.lower_color(term.to_owned())?)
+            });
+        }
+        let dummy_symbol = match self.owner {
+            NumeratorOwner::Vertex(_) => feynkit_graph::symbols::vertex_index(),
+            NumeratorOwner::Edge(_) => feynkit_graph::symbols::edge_index(),
+        };
+        // Contract identities touching a local dummy before assigning oriented
+        // slots. Each step removes one identity, including chains of identities;
+        // the remaining tensors or external legs determine its representation.
+        loop {
+            let factors = match atom.as_view() {
+                AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
+                factor => vec![factor],
+            };
+            let mut contraction = None;
+            for term in factors {
+                let AtomView::Fun(function) = term else {
+                    continue;
+                };
+                if !Self::is_model_symbol(function.get_symbol(), "Identity")
+                    || function.get_nargs() != 2
+                {
+                    continue;
+                }
+                let args = function.iter().collect::<Vec<_>>();
+                if args[0] == args[1] {
+                    continue;
+                }
+                for (left, right) in [(args[0], args[1]), (args[1], args[0])] {
+                    if !matches!(left, AtomView::Fun(index) if index.get_symbol() == dummy_symbol) {
+                        continue;
+                    }
+                    let mut occurrences = 0;
+                    let mut powered = false;
+                    atom.visitor(&mut |index| {
+                        if let AtomView::Pow(_) = index {
+                            index.visitor(&mut |nested| {
+                                powered |= nested == left;
+                                true
+                            });
+                            return false;
+                        }
+                        occurrences += usize::from(index == left);
+                        true
+                    });
+                    if occurrences == 2 && !powered {
+                        contraction = Some((term.to_owned(), left.to_owned(), right.to_owned()));
+                        break;
+                    }
+                }
+                if contraction.is_some() {
+                    break;
+                }
+            }
+            let Some((identity, dummy, other)) = contraction else {
+                break;
+            };
+            atom = (atom / identity).replace(dummy.to_pattern()).with(other);
+        }
         let mut representations = HashMap::<String, ColorRepresentation>::new();
         for leg in self.legs {
             if let Some(representation) = ColorRepresentation::from_ufo(leg.color) {
@@ -686,9 +749,24 @@ impl NumeratorInstantiation<'_> {
                     }
                     Ok(())
                 }),
-                "Epsilon" | "EpsilonBar" | "T6" | "K6" | "K6Bar" => {
-                    Err(self.unsupported_tensor(term))
+                "Epsilon" | "EpsilonBar" => {
+                    self.exact_arguments(term, &arguments, 3).and_then(|args| {
+                        let representation = if name == "Epsilon" {
+                            ColorRepresentation::Fundamental
+                        } else {
+                            ColorRepresentation::AntiFundamental
+                        };
+                        for argument in args {
+                            self.assign_color_representation(
+                                &mut representations,
+                                argument.as_view(),
+                                representation,
+                            )?;
+                        }
+                        Ok(())
+                    })
                 }
+                "T6" | "K6" | "K6Bar" => Err(self.unsupported_tensor(term)),
                 "IdentityL" | "Gamma" | "Gamma5" | "ProjM" | "ProjP" | "Sigma" | "C" | "Metric"
                 | "PSlash" => {
                     Err(self.invalid_tensor(term, "a Lorentz tensor appeared in a color structure"))
@@ -831,6 +909,18 @@ impl NumeratorInstantiation<'_> {
                             .finish()
                     }
                 }),
+                "Epsilon" | "EpsilonBar" => self.exact_arguments(term, &arguments, 3).map(|args| {
+                    let representation = if name == "Epsilon" {
+                        ColorRepresentation::Fundamental
+                    } else {
+                        ColorRepresentation::AntiFundamental
+                    };
+                    idenso::epsilon::epsilon(args.iter().map(|argument| {
+                        representation
+                            .representation()
+                            .to_symbolic([argument.clone()])
+                    }))
+                }),
                 _ => return,
             };
             match lowered {
@@ -959,8 +1049,14 @@ impl NumeratorInstantiation<'_> {
         representation: ColorRepresentation,
     ) -> Result<(), GenerationError> {
         let key = Self::index_key(index);
+        let local_dummy = matches!(index, AtomView::Fun(function)
+            if [feynkit_graph::symbols::vertex_index(), feynkit_graph::symbols::edge_index()]
+                .contains(&function.get_symbol()));
         match representations.insert(key, representation) {
-            Some(previous) if previous != representation => Err(self.invalid_tensor(
+            // A contracted fundamental index joins dual slots. External ports
+            // retain the exact orientation fixed by their particle record.
+            Some(previous) if previous != representation
+                && !(local_dummy && previous == representation.dual()) => Err(self.invalid_tensor(
                 index,
                 &format!(
                     "index is used as both {previous:?} and {representation:?} color representations"
@@ -6107,6 +6203,121 @@ mod tests {
             incompatible
                 .instantiate(&test_atom("d(1,2,3)"), NumeratorSector::Color)
                 .is_err()
+        );
+    }
+
+    #[test]
+    fn lowers_ufo_color_epsilon_and_dual_contractions() {
+        use idenso::{IndexTooling, epsilon::EpsilonSimplifier};
+
+        for (color, name, conjugate_name) in
+            [(3, "Epsilon", "EpsilonBar"), (-3, "EpsilonBar", "Epsilon")]
+        {
+            let legs = [0, 1, 2].map(|edge| NumeratorHalfEdge {
+                edge,
+                flow: Flow::Source,
+                spin: 1,
+                color,
+            });
+            let instantiation = NumeratorInstantiation {
+                owner: NumeratorOwner::Vertex(0),
+                legs: &legs,
+            };
+            let tensor = instantiation
+                .instantiate(
+                    &test_atom(&format!("{name}(1,2,3)")),
+                    NumeratorSector::Color,
+                )
+                .unwrap();
+            let exchanged = instantiation
+                .instantiate(
+                    &test_atom(&format!("{name}(2,1,3)")),
+                    NumeratorSector::Color,
+                )
+                .unwrap();
+            assert_eq!(tensor, -exchanged);
+            assert_eq!(tensor.spenso_conj().spenso_conj(), tensor);
+            assert_eq!(
+                (tensor.clone() * tensor.spenso_conj()).simplify_epsilon(),
+                Atom::num(6)
+            );
+            assert!(
+                instantiation
+                    .instantiate(
+                        &test_atom(&format!("{conjugate_name}(1,2,3)")),
+                        NumeratorSector::Color
+                    )
+                    .is_err()
+            );
+            assert!(
+                instantiation
+                    .instantiate(&test_atom(&format!("{name}(1,2)")), NumeratorSector::Color)
+                    .is_err()
+            );
+            // Identity chains must transmit orientation to the external port,
+            // without treating the two ends of a summed index as the same slot.
+            let relayed = instantiation
+                .instantiate(
+                    &test_atom(&format!("Identity(1,-1)*Identity(-1,-2)*{name}(-2,2,3)")),
+                    NumeratorSector::Color,
+                )
+                .unwrap();
+            assert_eq!(relayed, tensor);
+            let sum = instantiation
+                .instantiate(
+                    &test_atom(&format!("{name}(1,2,3)+{name}(1,2,-1)*Identity(-1,3)")),
+                    NumeratorSector::Color,
+                )
+                .unwrap();
+            assert_eq!(sum, Atom::num(2) * tensor);
+        }
+        let closed = NumeratorInstantiation {
+            owner: NumeratorOwner::Vertex(3),
+            legs: &[],
+        };
+        assert_eq!(
+            closed
+                .instantiate(
+                    &test_atom("Epsilon(-1,-2,-3)*EpsilonBar(-1,-2,-3)"),
+                    NumeratorSector::Color,
+                )
+                .unwrap()
+                .simplify_epsilon(),
+            Atom::num(6)
+        );
+        assert!(
+            closed
+                .instantiate(
+                    &test_atom("Epsilon(-1,-2,-3)*f(-1,-2,-3)"),
+                    NumeratorSector::Color
+                )
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn lowers_summed_fundamental_color_indices() {
+        use idenso::color::ColorSimplifier;
+
+        let legs = [0, 1].map(|edge| NumeratorHalfEdge {
+            edge,
+            flow: Flow::Source,
+            spin: 1,
+            color: 8,
+        });
+        let instantiation = NumeratorInstantiation {
+            owner: NumeratorOwner::Vertex(2),
+            legs: &legs,
+        };
+        let trace = instantiation
+            .instantiate(&test_atom("T(1,-1,-2)*T(2,-2,-1)"), NumeratorSector::Color)
+            .unwrap();
+        let expected = instantiation
+            .instantiate(&test_atom("Identity(1,2)/2"), NumeratorSector::Color)
+            .unwrap();
+        assert_eq!(
+            trace.simplify_color().to_cof_dimension_invariants(),
+            expected
         );
     }
 

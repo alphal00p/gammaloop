@@ -1,10 +1,18 @@
-use spenso::{g, tensor_symbol};
+use spenso::{
+    g,
+    structure::{
+        abstract_index::AbstractIndex,
+        dimension::Dimension,
+        representation::{LibraryRep, RepName, Representation},
+    },
+    tensor_symbol,
+};
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
     coefficient::CoefficientView,
 };
 
-use crate::shorthands::schoonschip::Schoonschip;
+use crate::shorthands::{UndoShorthands, schoonschip::Schoonschip};
 
 spenso::symbolica_init_lazy_static! {
     /// Symbolica-level Levi-Civita symbol. The `Antisymmetric` attribute lets
@@ -93,7 +101,12 @@ impl EpsilonSimplifierPass {
         let mut current = expr.schoonschip();
 
         loop {
-            let next = current
+            // Expose the typed slots of compact vector arguments before
+            // checking which epsilon spaces can participate in a determinant.
+            let explicit = current
+                .undo_schoonschip::<AbstractIndex>()
+                .unwrap_or_else(|_| current.clone());
+            let next = explicit
                 .replace_map(|term, _context, out| {
                     if let Some(rewritten) = Self::simplify_power(term.schoonschip().as_view())
                         .or_else(|| Self::simplify_pair_product(term))
@@ -133,9 +146,9 @@ impl EpsilonSimplifierPass {
             return None;
         };
         let (base, exponent) = pow.get_base_exp();
-        let epsilon_args = Self::epsilon_args(base)?;
+        let (epsilon_args, representation) = Self::epsilon_args(base)?;
         let exponent = Self::positive_integer(exponent)?;
-        if exponent < 2 {
+        if exponent < 2 || !representation.rep.is_self_dual() {
             return None;
         }
 
@@ -156,15 +169,17 @@ impl EpsilonSimplifierPass {
         }
 
         for (left_index, left) in factors.iter().enumerate() {
-            let Some(left_args) = Self::epsilon_args(*left) else {
+            let Some((left_args, left_rep)) = Self::epsilon_args(*left) else {
                 continue;
             };
 
             for (right_index, right) in factors.iter().enumerate().skip(left_index + 1) {
-                let Some(right_args) = Self::epsilon_args(*right) else {
+                let Some((right_args, right_rep)) = Self::epsilon_args(*right) else {
                     continue;
                 };
-                if left_args.len() != right_args.len() || left_args.is_empty() {
+                // A determinant pairs a representation with its dual. In
+                // particular, two SU(3) triplet epsilons cannot contract.
+                if left_args.len() != right_args.len() || left_rep.dual() != right_rep {
                     continue;
                 }
 
@@ -234,7 +249,7 @@ impl EpsilonSimplifierPass {
         }
     }
 
-    fn epsilon_args(epsilon: AtomView<'_>) -> Option<Vec<Atom>> {
+    fn epsilon_args(epsilon: AtomView<'_>) -> Option<(Vec<Atom>, Representation<LibraryRep>)> {
         let AtomView::Fun(f) = epsilon else {
             return None;
         };
@@ -242,7 +257,23 @@ impl EpsilonSimplifierPass {
             return None;
         }
 
-        Some(f.iter().map(|arg| arg.to_owned()).collect())
+        let mut representation = None;
+        let mut args = Vec::with_capacity(f.get_nargs());
+        for arg in f.iter() {
+            let rep = Representation::<LibraryRep>::try_from(arg).ok()?;
+            if representation.is_some_and(|previous| previous != rep) {
+                return None;
+            }
+            representation = Some(rep);
+            args.push(arg.to_owned());
+        }
+        let representation = representation?;
+        if !representation.rep.is_self_dual()
+            && representation.dim != Dimension::Concrete(args.len())
+        {
+            return None;
+        }
+        Some((args, representation))
     }
 
     fn multiplicative_factors<'a>(expr: AtomView<'a>) -> Vec<AtomView<'a>> {
@@ -267,11 +298,68 @@ impl EpsilonSimplifierPass {
 mod test {
     use insta::assert_snapshot;
     use spenso::{g, mink, p};
+    use symbolica::{atom::AtomCore, parse};
     use symbolica_utils::AtomPrintExt;
 
     use crate::{epsilon as eps, test_support::test_initialize};
 
     use super::{EpsilonSimplifier, epsilon4};
+
+    #[test]
+    fn color_epsilon_dual_pair_contracts_to_positive_norm() {
+        test_initialize();
+        let epsilon = parse!(
+            "epsilon(cof(3,i),cof(3,j),cof(3,k))",
+            default_namespace = "spenso"
+        );
+        for (barred, expected) in [
+            ("epsilon(dind(cof(3,i)),dind(cof(3,j)),dind(cof(3,k)))", "6"),
+            (
+                "epsilon(dind(cof(3,i)),dind(cof(3,j)),dind(cof(3,l)))",
+                "2*g(cof(3,k),dind(cof(3,l)))",
+            ),
+            (
+                "epsilon(dind(cof(3,i)),dind(cof(3,l)),dind(cof(3,m)))",
+                "g(cof(3,j),dind(cof(3,l)))*g(cof(3,k),dind(cof(3,m)))-g(cof(3,j),dind(cof(3,m)))*g(cof(3,k),dind(cof(3,l)))",
+            ),
+        ] {
+            let product = &epsilon * parse!(barred, default_namespace = "spenso");
+            assert_eq!(
+                product.simplify_epsilon().expand(),
+                parse!(expected, default_namespace = "spenso").expand()
+            );
+        }
+    }
+
+    #[test]
+    fn epsilon_pairs_require_dual_homogeneous_spaces() {
+        test_initialize();
+        for source in [
+            "epsilon(cof(3,i),cof(3,j),cof(3,k))^2",
+            "epsilon(dind(cof(3,i)),dind(cof(3,j)),dind(cof(3,k)))^2",
+            "epsilon(cof(3,i),cof(3,j),cof(3,k))*epsilon(cof(3,l),cof(3,m),cof(3,n))",
+            "epsilon(cof(3,i),cof(3,j),cof(3,k))*epsilon(mink(3,l),mink(3,m),mink(3,n))",
+            "epsilon(mink(3,i),mink(3,j))*epsilon(mink(4,l),mink(4,m))",
+            "epsilon(mink(D,i),mink(D,j))*epsilon(mink(E,l),mink(E,m))",
+            "epsilon(cof(3,i),cof(3,j),cof(3,k))*epsilon(dind(cof(4,l)),dind(cof(4,m)),dind(cof(4,n)))",
+            "epsilon(cof(4,i),cof(4,j),cof(4,k))*epsilon(dind(cof(4,l)),dind(cof(4,m)),dind(cof(4,n)))",
+            "epsilon(mink(4,i),cof(3,j))*epsilon(mink(4,l),dind(cof(3,m)))",
+        ] {
+            let expression = parse!(source, default_namespace = "spenso");
+            assert_eq!(expression.simplify_epsilon(), expression, "{source}");
+        }
+    }
+
+    #[test]
+    fn epsilon_pair_with_contracted_vectors_retains_lorentz_identity() {
+        test_initialize();
+        let expression = parse!(
+            "epsilon(mink(4,i),p(mink(4)))*epsilon(mink(4,i),q(mink(4)))",
+            default_namespace = "spenso"
+        );
+        let expected = parse!("3*g(p(mink(4)),q(mink(4)))", default_namespace = "spenso");
+        assert_eq!(expression.simplify_epsilon(), expected);
+    }
 
     #[test]
     fn epsilon_symbol_is_antisymmetric() {
