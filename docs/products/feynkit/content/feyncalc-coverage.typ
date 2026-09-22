@@ -446,6 +446,25 @@ traces. No separate FeynKit or GammaLoop conjugation implementation is introduce
 `hep/qcd_gluons.py` presents the generated diagrams and both gauge-reference
 checks in a separate notebook on the same Marimo server.
 
+== Fierz contractions with closed color traces
+
+The existing shared Idenso Fierz implementation contracts generators between
+open fundamental chains, between a chain and a trace, and between two traces.
+A trace is cut at the contracted generator, preserving the cyclic order of its
+remaining factors. This reduction runs before terminal trace decomposition so
+that short traces do not hide a reducible contraction in symmetric invariants.
+Only matching fundamental representations use this identity.
+
+The #link("https://feyncalc.github.io/FeynCalcBook/SUNSimplify.html")[FeynCalc mixed trace example]
+is covered by exact Rust and public Python regressions. They check both trace
+evaluation settings, repeated simplification, and the option to keep separate
+color lines. `installed_color_fierz.py` checks SU(2), SU(3), and SU(5), including
+$ sum_(a,b,c) abs(op("Tr")(T^a T^b T^c))^2
+  = frac((N^2-1)(N^2-2), 8N). $
+An independent contraction with Spenso's numerical SU(3) matrices gives $7/3$.
+`hep/color_fierz.py` presents the mixed identity and closed norm on the existing
+Marimo server. No separate FeynKit or GammaLoop Fierz formulas are introduced.
+
 == Generated symmetric color vertices
 
 The shared generator accepts the UFO color tensor `d(1,2,3)`. It uses the same

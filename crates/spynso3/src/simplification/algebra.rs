@@ -208,7 +208,7 @@ impl PyColorSimplifySettings {
         self.inner.evaluate_traces
     }
 
-    /// Whether generators on different open chains are expanded with the Fierz identity.
+    /// Whether generators on different open chains or traces are expanded with the Fierz identity.
     #[getter]
     pub(crate) fn expand_cross_chain_fierz(&self) -> bool {
         self.inner.expand_cross_chain_fierz
