@@ -11,7 +11,7 @@ not include the identical-final-state phase-space factor.
 
 from pathlib import Path
 
-from symbolica import E, Expression, Replacement, S
+from symbolica import E, Expression, S
 from symbolica.community import hep as fk
 from symbolica.community.spenso import CookSettings, TensorExpression
 
@@ -35,7 +35,6 @@ a, b, c, inverse, wave, rep, index = S(
     "a_", "b_", "c_", "inverse_", "wave_", "rep_", "index_"
 )
 conjugate, wrapped = S("spenso::conj", "identical_leptons::adjoint_index")
-gamma, bis, mink = S("spenso::gamma", "spenso::bis", "spenso::mink")
 pi = Expression.PI
 s_cm = S("identical_leptons::s_cm", is_positive=True)
 beta = S("identical_leptons::beta", is_positive=True)
@@ -70,7 +69,7 @@ for label, pdgs in (
         progress=None,
     )
     assert len(generated.diagrams) == 2
-    operators, adjoints, denominators, factors = [], [], [], []
+    operators, denominators, factors = [], [], []
     for diagram in generated.diagrams:
         numerator = model.expand_couplings(
             diagram.numerator_expression(in_lmb=True).to_expression()
@@ -101,25 +100,26 @@ for label, pdgs in (
                 / denominator
             ).expand()
         )
-        adjoint = operator.dirac_adjoint().to_expression()
-        # Dirac adjunction exchanges each open chain's endpoint labels. Restore
-        # physical external leg labels before sewing different channel terms.
-        # Each tree diagram has two one-gamma currents with different pairings.
-        swaps = []
-        pairs = list(numerator.match(gamma(bis(4, a), bis(4, b), mink(4, c))))
-        assert len(pairs) == 2
-        for match in pairs:
-            match = dict(match)
-            swaps.extend(
-                (Replacement(match[a], match[b]), Replacement(match[b], match[a]))
-            )
-        adjoint = adjoint.replace_multiple(swaps)
-        for real in (s, t, u, mass, charge):
-            adjoint = adjoint.replace(conjugate(real), real)
         operators.append(operator.to_expression())
-        adjoints.append(TensorExpression(adjoint).wrap_indices(wrapped))
     assert set(denominators) == ({s, t} if label == "Bhabha" else {t, u})
     assert set(factors) == {E("1"), E("-1")}
+
+    amplitude = sum(operators, E("0"))
+    adjoints = []
+    # Each tree diagram has two one-gamma currents with different pairings.
+    # Preserve physical leg labels when adjoining the complete channel sum,
+    # so common spin projectors close its direct and interference terms alike.
+    for expression in [*operators, amplitude]:
+        adjoint = (
+            TensorExpression(expression)
+            .dirac_adjoint(preserve_indices=True)
+            .to_expression()
+        )
+        for real in (s, t, u, mass, charge):
+            adjoint = adjoint.replace(conjugate(real), real)
+        adjoints.append(TensorExpression(adjoint).wrap_indices(wrapped))
+    combined_adjoint = adjoints.pop()
+    assert (combined_adjoint - sum(adjoints, E("0"))).expand() == E("0")
 
     spins = E("1")
     for position, pdg in enumerate(pdgs):
@@ -136,7 +136,7 @@ for label, pdgs in (
         )
     evaluated = []
     for raw in (
-        sum(operators, E("0")) * sum(adjoints, E("0")),
+        amplitude * combined_adjoint,
         sum((x * y for x, y in zip(operators, adjoints, strict=True)), E("0")),
     ):
         scalar = (

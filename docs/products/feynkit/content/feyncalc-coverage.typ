@@ -64,11 +64,15 @@ not treat the presence of a primitive as an end-to-end validation.
    reuse the Symanzik polynomials and Symbolica linear solves. Automatic sector
    discovery, degenerate quadratic forms, UV/IR splitting and generator filter
    integration remain outstanding.],
-  [IBP reduction], [Integration deferred],
-  [22 available examples call Kira and four call FIRE. These are external
-   dependencies used through FeynHelpers; they are not FeynCalc's own solvers.
-   Integration is on hold at the maintainer's request pending upcoming IBP
-   software; no Kira or FIRE adapter is being added.],
+  [IBP reduction], [RustRed's native HEP bridge],
+  [`rustred-feynkit` is now integrated into the Symbolica Community host.
+   `hep.IBPFamily` consumes the existing FeynKit family and exposes symbolic
+   identities, bounded Laporta elimination and parametric recurrences. Residual
+   integrals at a finite search depth are not certified masters. Two-loop
+   scalar self-energy and unequal-mass bubble regressions pass in the installed
+   host, and both notebooks run on the existing Marimo instance. Of the gallery pages,
+   22 call Kira and four call FIRE through FeynHelpers; those external
+   interfaces are not FeynCalc-owned solvers.],
   [Analytic loop evaluation], [Shared OneLOop integration in the HEP host],
   [The HEP namespace exposes A0, B0, dB0, C0 and D0, including evaluable
    Symbolica Laurent coefficients. A generated massive photon self-energy
@@ -236,6 +240,44 @@ adjoint. `wrap_indices` and `CookSettings.indices()` keep the adjoint's summed
 indices separate. Dirac adjunction exchanges the input/output matrix roles;
 fermion completeness tensors connect ket and Dirac-adjoint indices accordingly.
 The physical completeness relation remains the one shared with GammaLoop.
+
+== Generated Bhabha and Møller amplitudes
+
+The #link("https://feyncalc.github.io/FeynCalcExamples/QED/Tree/ElAel-ElAel")[Bhabha]
+and #link("https://feyncalc.github.io/FeynCalcExamples/QED/Tree/ElEl-ElEl")[Møller]
+workflows generate both ordinary tree amplitudes, retain their graph signs and
+propagators, average incoming spins and sum outgoing spins. The massive square
+includes interference between the two channels, with $s+t+u=4m_e^2$.
+`installed_feyncalc_identical_leptons.py` compares the massive reference
+expressions, their massless limits, separate interference terms, and Møller's
+final-electron exchange symmetry.
+
+`TensorExpression.dirac_adjoint(preserve_indices=True)` keeps labels attached
+to the same physical external legs. Unlike a matrix-adjoint endpoint convention,
+it distributes over sums whose diagrams pair the external fermions differently.
+The complete amplitude can therefore be conjugated in one call before applying
+shared particle spin sums. Conjugation, gamma-zero boundary factors and index
+handling remain in Idenso; the example needs no channel-specific endpoint swaps.
+The default `preserve_indices=False` retains the existing matrix convention and
+factored output. Shared Rust regressions verify conjugated complex coefficients,
+additivity, involution and the default behavior. The installed-host regression
+passes both complete massive references, the interference checks, massless
+limits and angular-cut cross sections through this shared adjoint path.
+
+For equal external masses, the shared two-body measure divided by the flux is
+$1/(64 pi^2 s)$. The massless event densities, in units of $alpha^2/s$ and with
+$x=cos theta$, are $(3+x^2)^2/(4(1-x)^2)$ for Bhabha scattering and
+$(3+x^2)^2/(2(1-x^2)^2)$ for Møller scattering. The latter includes $1/2!$ on
+the full sphere; using the labeled density on one hemisphere gives the same
+event count. This factor does not remove either exchange amplitude.
+The regression integrates a symmetric angular cut with Symbolica and compares
+the two Møller counting conventions. `hep/identical_leptons.py` displays both
+diagrams, the massive square, interference and angular densities, with reaction,
+CM-speed and scattering-angle controls. It retains the ordinary labeled
+amplitudes; external-fermion representative symmetrization transfers permutation
+sign handling to the caller and is not used in this calculation. Five live
+control configurations pass for both reactions, including equal Møller results
+at opposite scattering cosines with a nonzero electron mass.
 
 == Massive Compton scattering: unresolved sewn-state convention
 
@@ -485,6 +527,75 @@ assumes positive squared mass and scale and nonzero $s$; it does not establish
 the degenerate Gram limit or reproduce the lepton self-energy, vertex and
 counterterm parts of the full renormalization example.
 
+== Native IBP reduction through RustRed
+
+The Symbolica Community host now registers `rustred-feynkit` alongside FeynKit
+and OneLOop in `symbolica.community.hep`. `hep.IBPFamily(family)` reads the
+existing `IntegralFamily` boundary: denominator order and signs, masses,
+dimension and external Gram products are retained. The bridge passes native
+Symbolica expressions into RustRed in the same extension and kernel. Family
+construction, momentum mappings and tensor projection stay with their existing
+FeynKit owners; elimination and recurrence discovery stay with RustRed.
+
+Use `ibp_identities()` to inspect the ordinary integration-by-parts equations,
+`reduce_laporta(targets, max_depth=...)` for a bounded target search, and
+`solve_parametric(sector, ...)` for recurrence rules. The returned `residuals`
+are integrals unresolved at that search depth, not a proof of a minimal master
+basis. Parametric rules retain nonzero conditions and exceptional index loci.
+Neither reduction method supplies the analytic values of the residual integrals.
+
+Pass `integral=I` to the existing solution or rule method to obtain a native
+Symbolica sum of coefficients times `I(*powers)`. Omitting it retains the
+`(powers, coefficient)` list. For the two-denominator bubble family below:
+
+// docs-example: compile
+```python
+from symbolica import S
+
+I = S("I")
+laporta = bubble_ibp.reduce_laporta([[2, 1]], max_depth=2)
+reduced_expression = laporta.reduce([2, 1], integral=I)
+recurrence = bubble_ibp.solve_parametric([True, True], fixed=[None, 1], max_depth=1)
+one_step = recurrence.rules[0].apply([2, 1], integral=I)
+```
+
+This option changes the return form without bypassing sector, power or
+exception checks. Conditions still symbolic in kinematic parameters must remain
+nonzero when evaluated. Laporta rules already include back-substitution through
+solved targets; a parametric solution or rule performs one recurrence step per
+call. Returning an expression does not recursively reduce the remaining
+integrals or certify them as masters.
+
+`hep/ibp_phi4.py` and `installed_feyncalc_ibp_phi4.py` construct the two scalar
+integrands from the #link("https://feyncalc.github.io/FeynCalcExamples/Phi4/TwoLoops/Renormalization-SS")[two-loop scalar self-energy reference].
+A Taylor expansion through the external momentum squared uses the shared vacuum
+tensor reducer. The example computes Laporta reductions of the resulting
+massive vacuum family, identifies equivalent residuals through six verified
+loop-momentum mappings, and obtains a doubled-tadpole recurrence parametrically.
+Analytic tadpole and equal-mass vacuum Laurent coefficients are supplied as
+reference inputs. Together with the stated loop measure and counterterms,
+the notebook checks the UV poles and renormalization constants; the IBP solver
+does not evaluate those analytic integrals itself.
+
+`hep/ibp_bubble.py` constructs a bubble with unequal nonzero masses and nonzero
+external momentum. The targets $I_(2 1)$, $I_(1 2)$ and $I_(2 2)$ reduce to the
+two tadpoles and the scalar bubble $B_(1 1)$. Expanding the dimension-dependent
+coefficients before removing dimensional regularization retains finite terms
+from the individual residual integrals' UV poles. OneLOop supplies their scalar
+values; independent Feynman-parameter quadrature below threshold checks the
+finite raised-power results. Generic kinematics avoid exceptional coefficient
+denominators; this example does not establish threshold continuation or
+exceptional-mass and Gram limits.
+
+`installed_feyncalc_ibp_phi4.py` and `installed_feyncalc_ibp_bubble.py` pass in
+the rebuilt, installed native host. All 36 bridge tests and 76 generator tests
+also pass. Both IBP notebooks execute without cell errors in the existing
+Marimo instance; the bubble checks all twelve combinations of its three raised
+integrals and four kinematic presets. Headless exports pass for both IBP
+notebooks and the Bhabha/Møller notebook. These checks validate the stated
+reductions and observables, not a general master-basis certification or the
+remaining gallery's IBP coverage.
+
 == Generated QCD annihilation
 
 `Particle.color_sum(left, right, average=False)` constructs the identity in
@@ -670,7 +781,8 @@ contributions and the subtraction in its own notebook on the same server.
 The #link("guides/integral-families/")[integral-family guide] describes the shared
 rank and completion APIs. Rust and installed-host tests cover a massive bubble,
 a two-loop incomplete family, eikonal forms, dependent propagators and invalid
-momentum declarations. These are algebraic checks before external IBP reduction.
+momentum declarations. These validate the algebraic family boundary separately
+from the RustRed reduction workflows described above.
 `installed_diagram_integral_families.py` generates a massless scalar bubble,
 extracts families in each routing, compares the Symanzik polynomials and checks
 the on-shell scaleless limit. A Rust regression covers a massive bubble.
@@ -700,6 +812,7 @@ An example counts as reproduced only after exercising the relevant shared
 components and comparing its final observable or symbolic identity with the
 published result. Remaining work includes tree-level QED/QCD/EW observables,
 polarized amplitudes, anomaly conventions, loop-renormalization examples,
-external reduction jobs, and the two-loop topology-minimization example.
+broader IBP reductions and analytic master evaluation, and the two-loop
+topology-minimization example.
 Full FeynCalc gallery parity is not yet achieved.
 ]
