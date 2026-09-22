@@ -1,0 +1,84 @@
+# Exact threshold reproducer, same massive double-triangle graph and couplings.
+# Defaults: external (0.95,0,0,0), mH=0.6, mL=0.25, T=0.5.
+# Override command variables with run -D mass=... -D mode=... (see README).
+commands = []
+
+[[command_blocks]]
+name = "generate"
+commands = [
+  "import model ./examples/cli/thermal_production/massive_double_triangle/model.json",
+  "set model MX=$(mass:0.95)",
+  "set global kv global.generation.medium.mode=$(mode:thermodynamic_equilibrium)",
+  "import graphs ./examples/cli/thermal_production/massive_double_triangle/double_triangle.dot --process-spec 'X > $(cuts:{ H H, L L, H H L }) [{{2}}]' -p thermal -i NLO -o",
+  "generate existing -p thermal -i NLO",
+  "set process -p thermal -i NLO kv kinematics.e_cm=$(mass:0.95) kinematics.externals.data.momenta=[[$(mass:0.95),0,0,0]]",
+]
+
+[[command_blocks]]
+name = "inspect"
+commands = [
+  "set process -p thermal -i NLO kv general.generate_events=true general.store_additional_weights_in_event=false",
+  "inspect -p thermal -i NLO $(precision:) -m --graph-id 0 -x 0.4 0.2 0.1 -0.3 0.5 0.2 --json-output $(output:/tmp/gammaloop-thermal-threshold)-inspect.json",
+]
+
+[[command_blocks]]
+name = "integrate"
+commands = [
+  "set process -p thermal -i NLO kv general.generate_events=false integrator.n_start=$(n_start:1000) integrator.n_max=$(n_max:1000)",
+  "integrate -p thermal -i NLO --n-cores 2 --workspace-path $(output:/tmp/gammaloop-thermal-threshold)-integration --restart --renderer tabled --no-stream-iterations --no-stream-updates",
+]
+
+[[command_blocks]]
+name = "export"
+commands = [
+  "save standalone $(output:/tmp/gammaloop-thermal-threshold)-standalone --json",
+]
+
+[cli_settings.global.generation.evaluator]
+compile = false
+store_atom = true
+iterative_orientation_optimization = false
+summed = false
+summed_function_map = true
+
+[cli_settings.global.generation.uv]
+subtract_uv = false
+generate_integrated = false
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = false
+
+[default_runtime_settings.general]
+inverse_temperature = 2.0
+integral_unit = "none"
+evaluator_method = "SummedFunctionMap"
+
+[default_runtime_settings.kinematics]
+e_cm = 0.95
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [[0.95, 0.0, 0.0, 0.0]]
+helicities = [0]
+
+[default_runtime_settings.sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = false
+lmb_channels = "summed"
+coordinate_system = "spherical"
+mapping = "linear"
+b = 1.0
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = true
+
+[default_runtime_settings.integrator]
+n_start = 1000
+n_increase = 0
+n_max = 1000
+seed = 271828
+integrated_phase = "real"
+target_relative_accuracy = 0.005

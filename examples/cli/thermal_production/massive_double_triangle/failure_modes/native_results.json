@@ -1,0 +1,1413 @@
+{
+  "source_commit": "21896a0b99f08c94caeb84290aebb4c92919c6e1",
+  "parameters": {
+    "H": 0.6,
+    "L": 0.25,
+    "T": 0.5,
+    "graph_factor": 0.5,
+    "cubic_couplings": 1
+  },
+  "point": [
+    0.4,
+    0.2,
+    0.1,
+    -0.3,
+    0.5,
+    0.2
+  ],
+  "interpretation": "Pointwise integrands are not integrated rates. Every row was rerun from the saved run.toml. Failures occur during root finding before cut evaluation.",
+  "inspections": [
+    {
+      "mass": 0.5,
+      "mode": "thermodynamic_equilibrium",
+      "cuts": "all",
+      "label": "ll_exact",
+      "forced_arbitrary_precision": false,
+      "exit_code": 1,
+      "command": [
+        "./gammaloop",
+        "--read-only-state",
+        "-s",
+        "/tmp/gammaloop-threshold-saved-ll_exact.state",
+        "-n",
+        "-L",
+        "off",
+        "examples/cli/thermal_production/massive_double_triangle/failure_modes/run.toml",
+        "run",
+        "generate",
+        "inspect",
+        "-D",
+        "mass=0.5",
+        "-D",
+        "mode=thermodynamic_equilibrium",
+        "-D",
+        "output=/tmp/gammaloop-threshold-saved-ll_exact"
+      ],
+      "error": "Error: \n   0: Non-simple radial root at 0\n\nLocation:\n   crates/gammalooprs/src/utils/newton_solver.rs:723"
+    },
+    {
+      "mass": 1.199,
+      "mode": "thermodynamic_equilibrium",
+      "cuts": "all",
+      "label": "hh_below",
+      "forced_arbitrary_precision": false,
+      "exit_code": 0,
+      "command": [
+        "./gammaloop",
+        "--read-only-state",
+        "-s",
+        "/tmp/gammaloop-threshold-saved-hh_below.state",
+        "-n",
+        "-L",
+        "off",
+        "examples/cli/thermal_production/massive_double_triangle/failure_modes/run.toml",
+        "run",
+        "generate",
+        "inspect",
+        "-D",
+        "mass=1.199",
+        "-D",
+        "mode=thermodynamic_equilibrium",
+        "-D",
+        "output=/tmp/gammaloop-threshold-saved-hh_below"
+      ],
+      "integrand": {
+        "re": 3.991545419325611e-05,
+        "im": 0.0
+      },
+      "events": 7,
+      "metadata": {
+        "total_timing": {
+          "secs": 0,
+          "nanos": 368209
+        },
+        "integrand_evaluation_time": {
+          "secs": 0,
+          "nanos": 222625
+        },
+        "evaluator_evaluation_time": {
+          "secs": 0,
+          "nanos": 161997
+        },
+        "parameterization_time": {
+          "secs": 0,
+          "nanos": 0
+        },
+        "event_processing_time": {
+          "secs": 0,
+          "nanos": 14123
+        },
+        "generated_event_count": 7,
+        "accepted_event_count": 7,
+        "relative_instability_error": {
+          "re": 0.0,
+          "im": 0.0
+        },
+        "is_nan": false,
+        "loop_momenta_escalation": null,
+        "stability_results": [
+          {
+            "precision": "Double",
+            "estimated_relative_accuracy": 0.0,
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "secs": 0,
+              "nanos": 360000
+            }
+          }
+        ]
+      }
+    },
+    {
+      "mass": 1.2,
+      "mode": "thermodynamic_equilibrium",
+      "cuts": "all",
+      "label": "hh_exact",
+      "forced_arbitrary_precision": false,
+      "exit_code": 1,
+      "command": [
+        "./gammaloop",
+        "--read-only-state",
+        "-s",
+        "/tmp/gammaloop-threshold-saved-hh_exact.state",
+        "-n",
+        "-L",
+        "off",
+        "examples/cli/thermal_production/massive_double_triangle/failure_modes/run.toml",
+        "run",
+        "generate",
+        "inspect",
+        "-D",
+        "mass=1.2",
+        "-D",
+        "mode=thermodynamic_equilibrium",
+        "-D",
+        "output=/tmp/gammaloop-threshold-saved-hh_exact"
+      ],
+      "error": "Error: \n   0: Non-simple radial root at 0\n\nLocation:\n   crates/gammalooprs/src/utils/newton_solver.rs:723"
+    },
+    {
+      "mass": 1.201,
+      "mode": "thermodynamic_equilibrium",
+      "cuts": "all",
+      "label": "hh_above",
+      "forced_arbitrary_precision": false,
+      "exit_code": 0,
+      "command": [
+        "./gammaloop",
+        "--read-only-state",
+        "-s",
+        "/tmp/gammaloop-threshold-saved-hh_above.state",
+        "-n",
+        "-L",
+        "off",
+        "examples/cli/thermal_production/massive_double_triangle/failure_modes/run.toml",
+        "run",
+        "generate",
+        "inspect",
+        "-D",
+        "mass=1.201",
+        "-D",
+        "mode=thermodynamic_equilibrium",
+        "-D",
+        "output=/tmp/gammaloop-threshold-saved-hh_above"
+      ],
+      "integrand": {
+        "re": 3.9678634426092704e-05,
+        "im": 0.0
+      },
+      "events": 8,
+      "metadata": {
+        "total_timing": {
+          "secs": 0,
+          "nanos": 387792
+        },
+        "integrand_evaluation_time": {
+          "secs": 0,
+          "nanos": 233750
+        },
+        "evaluator_evaluation_time": {
+          "secs": 0,
+          "nanos": 167915
+        },
+        "parameterization_time": {
+          "secs": 0,
+          "nanos": 0
+        },
+        "event_processing_time": {
+          "secs": 0,
+          "nanos": 14874
+        },
+        "generated_event_count": 8,
+        "accepted_event_count": 8,
+        "relative_instability_error": {
+          "re": 0.0,
+          "im": 0.0
+        },
+        "is_nan": false,
+        "loop_momenta_escalation": null,
+        "stability_results": [
+          {
+            "precision": "Double",
+            "estimated_relative_accuracy": 0.0,
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "secs": 0,
+              "nanos": 376792
+            }
+          }
+        ]
+      }
+    },
+    {
+      "mass": 1.449,
+      "mode": "thermodynamic_equilibrium",
+      "cuts": "all",
+      "label": "hhl_below",
+      "forced_arbitrary_precision": false,
+      "exit_code": 0,
+      "command": [
+        "./gammaloop",
+        "--read-only-state",
+        "-s",
+        "/tmp/gammaloop-threshold-saved-hhl_below.state",
+        "-n",
+        "-L",
+        "off",
+        "examples/cli/thermal_production/massive_double_triangle/failure_modes/run.toml",
+        "run",
+        "generate",
+        "inspect",
+        "-D",
+        "mass=1.449",
+        "-D",
+        "mode=thermodynamic_equilibrium",
+        "-D",
+        "output=/tmp/gammaloop-threshold-saved-hhl_below"
+      ],
+      "integrand": {
+        "re": 9.938925027745485e-06,
+        "im": 0.0
+      },
+      "events": 8,
+      "metadata": {
+        "total_timing": {
+          "secs": 0,
+          "nanos": 277375
+        },
+        "integrand_evaluation_time": {
+          "secs": 0,
+          "nanos": 173833
+        },
+        "evaluator_evaluation_time": {
+          "secs": 0,
+          "nanos": 123749
+        },
+        "parameterization_time": {
+          "secs": 0,
+          "nanos": 0
+        },
+        "event_processing_time": {
+          "secs": 0,
+          "nanos": 10334
+        },
+        "generated_event_count": 8,
+        "accepted_event_count": 8,
+        "relative_instability_error": {
+          "re": 0.0,
+          "im": 0.0
+        },
+        "is_nan": false,
+        "loop_momenta_escalation": null,
+        "stability_results": [
+          {
+            "precision": "Double",
+            "estimated_relative_accuracy": 1.0226855860846809e-15,
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "secs": 0,
+              "nanos": 271500
+            }
+          }
+        ]
+      }
+    },
+    {
+      "mass": 1.45,
+      "mode": "thermodynamic_equilibrium",
+      "cuts": "all",
+      "label": "hhl_exact",
+      "forced_arbitrary_precision": false,
+      "exit_code": 1,
+      "command": [
+        "./gammaloop",
+        "--read-only-state",
+        "-s",
+        "/tmp/gammaloop-threshold-saved-hhl_exact.state",
+        "-n",
+        "-L",
+        "off",
+        "examples/cli/thermal_production/massive_double_triangle/failure_modes/run.toml",
+        "run",
+        "generate",
+        "inspect",
+        "-D",
+        "mass=1.45",
+        "-D",
+        "mode=thermodynamic_equilibrium",
+        "-D",
+        "output=/tmp/gammaloop-threshold-saved-hhl_exact"
+      ],
+      "error": "Error: \n   0: Non-simple radial root at 0\n\nLocation:\n   crates/gammalooprs/src/utils/newton_solver.rs:723"
+    },
+    {
+      "mass": 1.451,
+      "mode": "thermodynamic_equilibrium",
+      "cuts": "all",
+      "label": "hhl_above",
+      "forced_arbitrary_precision": false,
+      "exit_code": 0,
+      "command": [
+        "./gammaloop",
+        "--read-only-state",
+        "-s",
+        "/tmp/gammaloop-threshold-saved-hhl_above.state",
+        "-n",
+        "-L",
+        "off",
+        "examples/cli/thermal_production/massive_double_triangle/failure_modes/run.toml",
+        "run",
+        "generate",
+        "inspect",
+        "-D",
+        "mass=1.451",
+        "-D",
+        "mode=thermodynamic_equilibrium",
+        "-D",
+        "output=/tmp/gammaloop-threshold-saved-hhl_above"
+      ],
+      "integrand": {
+        "re": 9.63910697661728e-06,
+        "im": 0.0
+      },
+      "events": 10,
+      "metadata": {
+        "total_timing": {
+          "secs": 0,
+          "nanos": 429042
+        },
+        "integrand_evaluation_time": {
+          "secs": 0,
+          "nanos": 248625
+        },
+        "evaluator_evaluation_time": {
+          "secs": 0,
+          "nanos": 187625
+        },
+        "parameterization_time": {
+          "secs": 0,
+          "nanos": 0
+        },
+        "event_processing_time": {
+          "secs": 0,
+          "nanos": 14707
+        },
+        "generated_event_count": 10,
+        "accepted_event_count": 10,
+        "relative_instability_error": {
+          "re": 0.0,
+          "im": 0.0
+        },
+        "is_nan": false,
+        "loop_momenta_escalation": null,
+        "stability_results": [
+          {
+            "precision": "Double",
+            "estimated_relative_accuracy": 1.757492575420209e-16,
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "secs": 0,
+              "nanos": 418375
+            }
+          }
+        ]
+      }
+    },
+    {
+      "mass": 1.2,
+      "mode": "thermodynamic_equilibrium",
+      "cuts": "all",
+      "label": "hh_arb",
+      "forced_arbitrary_precision": true,
+      "exit_code": 1,
+      "command": [
+        "./gammaloop",
+        "--read-only-state",
+        "-s",
+        "/tmp/gammaloop-threshold-saved-hh_arb.state",
+        "-n",
+        "-L",
+        "off",
+        "examples/cli/thermal_production/massive_double_triangle/failure_modes/run.toml",
+        "run",
+        "generate",
+        "inspect",
+        "-D",
+        "mass=1.2",
+        "-D",
+        "mode=thermodynamic_equilibrium",
+        "-D",
+        "output=/tmp/gammaloop-threshold-saved-hh_arb",
+        "-D",
+        "precision=-f"
+      ],
+      "error": "Error: \n   0: Non-simple radial root at 0\n\nLocation:\n   crates/gammalooprs/src/utils/newton_solver.rs:723"
+    },
+    {
+      "mass": 1.45,
+      "mode": "thermodynamic_equilibrium",
+      "cuts": "all",
+      "label": "hhl_arb",
+      "forced_arbitrary_precision": true,
+      "exit_code": 1,
+      "command": [
+        "./gammaloop",
+        "--read-only-state",
+        "-s",
+        "/tmp/gammaloop-threshold-saved-hhl_arb.state",
+        "-n",
+        "-L",
+        "off",
+        "examples/cli/thermal_production/massive_double_triangle/failure_modes/run.toml",
+        "run",
+        "generate",
+        "inspect",
+        "-D",
+        "mass=1.45",
+        "-D",
+        "mode=thermodynamic_equilibrium",
+        "-D",
+        "output=/tmp/gammaloop-threshold-saved-hhl_arb",
+        "-D",
+        "precision=-f"
+      ],
+      "error": "Error: \n   0: Non-simple radial root at 0\n\nLocation:\n   crates/gammalooprs/src/utils/newton_solver.rs:723"
+    },
+    {
+      "mass": 1.2,
+      "mode": "vacuum",
+      "cuts": "all",
+      "label": "hh_vacuum",
+      "forced_arbitrary_precision": false,
+      "exit_code": 1,
+      "command": [
+        "./gammaloop",
+        "--read-only-state",
+        "-s",
+        "/tmp/gammaloop-threshold-saved-hh_vacuum.state",
+        "-n",
+        "-L",
+        "off",
+        "examples/cli/thermal_production/massive_double_triangle/failure_modes/run.toml",
+        "run",
+        "generate",
+        "inspect",
+        "-D",
+        "mass=1.2",
+        "-D",
+        "mode=vacuum",
+        "-D",
+        "output=/tmp/gammaloop-threshold-saved-hh_vacuum"
+      ],
+      "error": "Error: \n   0: Non-simple radial root at 0\n\nLocation:\n   crates/gammalooprs/src/utils/newton_solver.rs:723"
+    },
+    {
+      "mass": 1.2,
+      "mode": "zero_temperature_equilibrium",
+      "cuts": "all",
+      "label": "hh_zeroT",
+      "forced_arbitrary_precision": false,
+      "exit_code": 1,
+      "command": [
+        "./gammaloop",
+        "--read-only-state",
+        "-s",
+        "/tmp/gammaloop-threshold-saved-hh_zeroT.state",
+        "-n",
+        "-L",
+        "off",
+        "examples/cli/thermal_production/massive_double_triangle/failure_modes/run.toml",
+        "run",
+        "generate",
+        "inspect",
+        "-D",
+        "mass=1.2",
+        "-D",
+        "mode=zero_temperature_equilibrium",
+        "-D",
+        "output=/tmp/gammaloop-threshold-saved-hh_zeroT"
+      ],
+      "error": "Error: \n   0: Non-simple radial root at 0\n\nLocation:\n   crates/gammalooprs/src/utils/newton_solver.rs:723"
+    },
+    {
+      "mass": 1.2,
+      "mode": "thermodynamic_equilibrium",
+      "cuts": "without_hh",
+      "label": "hh_without_hh",
+      "forced_arbitrary_precision": false,
+      "exit_code": 0,
+      "command": [
+        "./gammaloop",
+        "--read-only-state",
+        "-s",
+        "/tmp/gammaloop-threshold-saved-hh_without_hh.state",
+        "-n",
+        "-L",
+        "off",
+        "examples/cli/thermal_production/massive_double_triangle/failure_modes/run.toml",
+        "run",
+        "generate",
+        "inspect",
+        "-D",
+        "mass=1.2",
+        "-D",
+        "mode=thermodynamic_equilibrium",
+        "-D",
+        "output=/tmp/gammaloop-threshold-saved-hh_without_hh",
+        "-D",
+        "cuts={ L L, H H L }"
+      ],
+      "integrand": {
+        "re": 3.979698983119018e-05,
+        "im": 0.0
+      },
+      "events": 7,
+      "metadata": {
+        "total_timing": {
+          "secs": 0,
+          "nanos": 207875
+        },
+        "integrand_evaluation_time": {
+          "secs": 0,
+          "nanos": 119417
+        },
+        "evaluator_evaluation_time": {
+          "secs": 0,
+          "nanos": 81082
+        },
+        "parameterization_time": {
+          "secs": 0,
+          "nanos": 0
+        },
+        "event_processing_time": {
+          "secs": 0,
+          "nanos": 9082
+        },
+        "generated_event_count": 7,
+        "accepted_event_count": 7,
+        "relative_instability_error": {
+          "re": 0.0,
+          "im": 0.0
+        },
+        "is_nan": false,
+        "loop_momenta_escalation": null,
+        "stability_results": [
+          {
+            "precision": "Double",
+            "estimated_relative_accuracy": 5.108122704841082e-16,
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "secs": 0,
+              "nanos": 201958
+            }
+          }
+        ]
+      }
+    },
+    {
+      "mass": 1.45,
+      "mode": "thermodynamic_equilibrium",
+      "cuts": "virtual",
+      "label": "hhl_virtual",
+      "forced_arbitrary_precision": false,
+      "exit_code": 0,
+      "command": [
+        "./gammaloop",
+        "--read-only-state",
+        "-s",
+        "/tmp/gammaloop-threshold-saved-hhl_virtual.state",
+        "-n",
+        "-L",
+        "off",
+        "examples/cli/thermal_production/massive_double_triangle/failure_modes/run.toml",
+        "run",
+        "generate",
+        "inspect",
+        "-D",
+        "mass=1.45",
+        "-D",
+        "mode=thermodynamic_equilibrium",
+        "-D",
+        "output=/tmp/gammaloop-threshold-saved-hhl_virtual",
+        "-D",
+        "cuts={ H H, L L }"
+      ],
+      "integrand": {
+        "re": 1.589351892892664e-05,
+        "im": 0.0
+      },
+      "events": 2,
+      "metadata": {
+        "total_timing": {
+          "secs": 0,
+          "nanos": 145791
+        },
+        "integrand_evaluation_time": {
+          "secs": 0,
+          "nanos": 91375
+        },
+        "evaluator_evaluation_time": {
+          "secs": 0,
+          "nanos": 65418
+        },
+        "parameterization_time": {
+          "secs": 0,
+          "nanos": 0
+        },
+        "event_processing_time": {
+          "secs": 0,
+          "nanos": 6041
+        },
+        "generated_event_count": 2,
+        "accepted_event_count": 2,
+        "relative_instability_error": {
+          "re": 0.0,
+          "im": 0.0
+        },
+        "is_nan": false,
+        "loop_momenta_escalation": null,
+        "stability_results": [
+          {
+            "precision": "Double",
+            "estimated_relative_accuracy": 4.2635388728807065e-16,
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "secs": 0,
+              "nanos": 137667
+            }
+          }
+        ]
+      }
+    },
+    {
+      "mass": 0.949,
+      "mode": "thermodynamic_equilibrium",
+      "cuts": "all",
+      "label": "absorption_below",
+      "forced_arbitrary_precision": false,
+      "exit_code": 0,
+      "command": [
+        "./gammaloop",
+        "--read-only-state",
+        "-s",
+        "/tmp/gammaloop-threshold-saved-absorption_below.state",
+        "-n",
+        "-L",
+        "off",
+        "examples/cli/thermal_production/massive_double_triangle/failure_modes/run.toml",
+        "run",
+        "generate",
+        "inspect",
+        "-D",
+        "mass=0.949",
+        "-D",
+        "mode=thermodynamic_equilibrium",
+        "-D",
+        "output=/tmp/gammaloop-threshold-saved-absorption_below"
+      ],
+      "integrand": {
+        "re": 4.51742003806241e-05,
+        "im": 0.0
+      },
+      "events": 5,
+      "metadata": {
+        "total_timing": {
+          "secs": 0,
+          "nanos": 295916
+        },
+        "integrand_evaluation_time": {
+          "secs": 0,
+          "nanos": 173166
+        },
+        "evaluator_evaluation_time": {
+          "secs": 0,
+          "nanos": 117416
+        },
+        "parameterization_time": {
+          "secs": 0,
+          "nanos": 0
+        },
+        "event_processing_time": {
+          "secs": 0,
+          "nanos": 12166
+        },
+        "generated_event_count": 5,
+        "accepted_event_count": 5,
+        "relative_instability_error": {
+          "re": 0.0,
+          "im": 0.0
+        },
+        "is_nan": false,
+        "loop_momenta_escalation": null,
+        "stability_results": [
+          {
+            "precision": "Double",
+            "estimated_relative_accuracy": 0.0,
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "secs": 0,
+              "nanos": 288875
+            }
+          }
+        ]
+      }
+    },
+    {
+      "mass": 0.95,
+      "mode": "thermodynamic_equilibrium",
+      "cuts": "all",
+      "label": "absorption_exact",
+      "forced_arbitrary_precision": false,
+      "exit_code": 1,
+      "command": [
+        "./gammaloop",
+        "--read-only-state",
+        "-s",
+        "/tmp/gammaloop-threshold-saved-absorption_exact.state",
+        "-n",
+        "-L",
+        "off",
+        "examples/cli/thermal_production/massive_double_triangle/failure_modes/run.toml",
+        "run",
+        "generate",
+        "inspect",
+        "-D",
+        "mass=0.95",
+        "-D",
+        "mode=thermodynamic_equilibrium",
+        "-D",
+        "output=/tmp/gammaloop-threshold-saved-absorption_exact"
+      ],
+      "error": "Error: \n   0: Non-simple radial root at 0\n\nLocation:\n   crates/gammalooprs/src/utils/newton_solver.rs:723"
+    },
+    {
+      "mass": 0.951,
+      "mode": "thermodynamic_equilibrium",
+      "cuts": "all",
+      "label": "absorption_above",
+      "forced_arbitrary_precision": false,
+      "exit_code": 0,
+      "command": [
+        "./gammaloop",
+        "--read-only-state",
+        "-s",
+        "/tmp/gammaloop-threshold-saved-absorption_above.state",
+        "-n",
+        "-L",
+        "off",
+        "examples/cli/thermal_production/massive_double_triangle/failure_modes/run.toml",
+        "run",
+        "generate",
+        "inspect",
+        "-D",
+        "mass=0.951",
+        "-D",
+        "mode=thermodynamic_equilibrium",
+        "-D",
+        "output=/tmp/gammaloop-threshold-saved-absorption_above"
+      ],
+      "integrand": {
+        "re": 4.5491911127287253e-05,
+        "im": 0.0
+      },
+      "events": 7,
+      "metadata": {
+        "total_timing": {
+          "secs": 0,
+          "nanos": 341083
+        },
+        "integrand_evaluation_time": {
+          "secs": 0,
+          "nanos": 209584
+        },
+        "evaluator_evaluation_time": {
+          "secs": 0,
+          "nanos": 146334
+        },
+        "parameterization_time": {
+          "secs": 0,
+          "nanos": 0
+        },
+        "event_processing_time": {
+          "secs": 0,
+          "nanos": 13542
+        },
+        "generated_event_count": 7,
+        "accepted_event_count": 7,
+        "relative_instability_error": {
+          "re": 0.0,
+          "im": 0.0
+        },
+        "is_nan": false,
+        "loop_momenta_escalation": null,
+        "stability_results": [
+          {
+            "precision": "Double",
+            "estimated_relative_accuracy": 1.4895535074519697e-16,
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "secs": 0,
+              "nanos": 333583
+            }
+          }
+        ]
+      }
+    },
+    {
+      "mass": 0.95,
+      "mode": "thermodynamic_equilibrium",
+      "cuts": "all",
+      "label": "absorption_arb",
+      "forced_arbitrary_precision": true,
+      "exit_code": 1,
+      "command": [
+        "./gammaloop",
+        "--read-only-state",
+        "-s",
+        "/tmp/gammaloop-threshold-saved-absorption_arb.state",
+        "-n",
+        "-L",
+        "off",
+        "examples/cli/thermal_production/massive_double_triangle/failure_modes/run.toml",
+        "run",
+        "generate",
+        "inspect",
+        "-D",
+        "mass=0.95",
+        "-D",
+        "mode=thermodynamic_equilibrium",
+        "-D",
+        "output=/tmp/gammaloop-threshold-saved-absorption_arb",
+        "-D",
+        "precision=-f"
+      ],
+      "error": "Error: \n   0: Cannot isolate simple radial roots in [1.97725342903224338769086767949961264749383781010955089962227614363552311647410092045432272690229047110083684307272085301740569390117379744669813732458459905981866666554729904719066753386843608370995866694123964643695023837880494447204486921848604894875147961621700525660904621658614610004664759091195440e-301, 1.97725342903224338769086767949961264749383781010955089962227614363552311647410092045432272690229047110083684307272085301740569390117379744669813732458459905981866666554729904719066753386843608370995866694123964643695023837880494447204486921848604894875147961621700525660904621658614610004664759091195474e-301]; increase precision\n\nLocation:\n   crates/gammalooprs/src/utils/newton_solver.rs:773"
+    },
+    {
+      "mass": 0.95,
+      "mode": "vacuum",
+      "cuts": "all",
+      "label": "absorption_vacuum",
+      "forced_arbitrary_precision": false,
+      "exit_code": 0,
+      "command": [
+        "./gammaloop",
+        "--read-only-state",
+        "-s",
+        "/tmp/gammaloop-threshold-saved-absorption_vacuum.state",
+        "-n",
+        "-L",
+        "off",
+        "examples/cli/thermal_production/massive_double_triangle/failure_modes/run.toml",
+        "run",
+        "generate",
+        "inspect",
+        "-D",
+        "mass=0.95",
+        "-D",
+        "mode=vacuum",
+        "-D",
+        "output=/tmp/gammaloop-threshold-saved-absorption_vacuum"
+      ],
+      "integrand": {
+        "re": 1.4015660209534107e-05,
+        "im": 0.0
+      },
+      "events": 1,
+      "metadata": {
+        "total_timing": {
+          "secs": 0,
+          "nanos": 72167
+        },
+        "integrand_evaluation_time": {
+          "secs": 0,
+          "nanos": 36084
+        },
+        "evaluator_evaluation_time": {
+          "secs": 0,
+          "nanos": 4167
+        },
+        "parameterization_time": {
+          "secs": 0,
+          "nanos": 0
+        },
+        "event_processing_time": {
+          "secs": 0,
+          "nanos": 6792
+        },
+        "generated_event_count": 1,
+        "accepted_event_count": 1,
+        "relative_instability_error": {
+          "re": 0.0,
+          "im": 0.0
+        },
+        "is_nan": false,
+        "loop_momenta_escalation": null,
+        "stability_results": [
+          {
+            "precision": "Double",
+            "estimated_relative_accuracy": 1.208695037680935e-16,
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "secs": 0,
+              "nanos": 65958
+            }
+          }
+        ]
+      }
+    },
+    {
+      "mass": 0.95,
+      "mode": "zero_temperature_equilibrium",
+      "cuts": "all",
+      "label": "absorption_zeroT",
+      "forced_arbitrary_precision": false,
+      "exit_code": 1,
+      "command": [
+        "./gammaloop",
+        "--read-only-state",
+        "-s",
+        "/tmp/gammaloop-threshold-saved-absorption_zeroT.state",
+        "-n",
+        "-L",
+        "off",
+        "examples/cli/thermal_production/massive_double_triangle/failure_modes/run.toml",
+        "run",
+        "generate",
+        "inspect",
+        "-D",
+        "mass=0.95",
+        "-D",
+        "mode=zero_temperature_equilibrium",
+        "-D",
+        "output=/tmp/gammaloop-threshold-saved-absorption_zeroT"
+      ],
+      "error": "Error: \n   0: Non-simple radial root at 0\n\nLocation:\n   crates/gammalooprs/src/utils/newton_solver.rs:723"
+    },
+    {
+      "mass": 0.25,
+      "mode": "thermodynamic_equilibrium",
+      "cuts": "all",
+      "label": "absorption_low",
+      "forced_arbitrary_precision": false,
+      "exit_code": 1,
+      "command": [
+        "./gammaloop",
+        "--read-only-state",
+        "-s",
+        "/tmp/gammaloop-threshold-saved-absorption_low.state",
+        "-n",
+        "-L",
+        "off",
+        "examples/cli/thermal_production/massive_double_triangle/failure_modes/run.toml",
+        "run",
+        "generate",
+        "inspect",
+        "-D",
+        "mass=0.25",
+        "-D",
+        "mode=thermodynamic_equilibrium",
+        "-D",
+        "output=/tmp/gammaloop-threshold-saved-absorption_low"
+      ],
+      "error": "Error: \n   0: Non-simple radial root at 0\n\nLocation:\n   crates/gammalooprs/src/utils/newton_solver.rs:723"
+    },
+    {
+      "mass": 0.249,
+      "mode": "thermodynamic_equilibrium",
+      "cuts": "all",
+      "label": "low_below",
+      "forced_arbitrary_precision": false,
+      "exit_code": 0,
+      "command": [
+        "./gammaloop",
+        "--read-only-state",
+        "-s",
+        "/tmp/gammaloop-threshold-saved-low_below.state",
+        "-n",
+        "-L",
+        "off",
+        "examples/cli/thermal_production/massive_double_triangle/failure_modes/run.toml",
+        "run",
+        "generate",
+        "inspect",
+        "-D",
+        "mass=0.249",
+        "-D",
+        "mode=thermodynamic_equilibrium",
+        "-D",
+        "output=/tmp/gammaloop-threshold-saved-low_below"
+      ],
+      "integrand": {
+        "re": 0.0,
+        "im": 0.0
+      },
+      "events": 0,
+      "metadata": {
+        "total_timing": {
+          "secs": 0,
+          "nanos": 51250
+        },
+        "integrand_evaluation_time": {
+          "secs": 0,
+          "nanos": 18791
+        },
+        "evaluator_evaluation_time": {
+          "secs": 0,
+          "nanos": 0
+        },
+        "parameterization_time": {
+          "secs": 0,
+          "nanos": 0
+        },
+        "event_processing_time": {
+          "secs": 0,
+          "nanos": 0
+        },
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "relative_instability_error": {
+          "re": 0.0,
+          "im": 0.0
+        },
+        "is_nan": false,
+        "loop_momenta_escalation": null,
+        "stability_results": [
+          {
+            "precision": "Double",
+            "estimated_relative_accuracy": 0.0,
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "secs": 0,
+              "nanos": 47208
+            }
+          }
+        ]
+      }
+    },
+    {
+      "mass": 0.251,
+      "mode": "thermodynamic_equilibrium",
+      "cuts": "all",
+      "label": "low_above",
+      "forced_arbitrary_precision": false,
+      "exit_code": 0,
+      "command": [
+        "./gammaloop",
+        "--read-only-state",
+        "-s",
+        "/tmp/gammaloop-threshold-saved-low_above.state",
+        "-n",
+        "-L",
+        "off",
+        "examples/cli/thermal_production/massive_double_triangle/failure_modes/run.toml",
+        "run",
+        "generate",
+        "inspect",
+        "-D",
+        "mass=0.251",
+        "-D",
+        "mode=thermodynamic_equilibrium",
+        "-D",
+        "output=/tmp/gammaloop-threshold-saved-low_above"
+      ],
+      "integrand": {
+        "re": 2.1293105157401378e-113,
+        "im": 0.0
+      },
+      "events": 4,
+      "metadata": {
+        "total_timing": {
+          "secs": 0,
+          "nanos": 261625
+        },
+        "integrand_evaluation_time": {
+          "secs": 0,
+          "nanos": 162708
+        },
+        "evaluator_evaluation_time": {
+          "secs": 0,
+          "nanos": 100374
+        },
+        "parameterization_time": {
+          "secs": 0,
+          "nanos": 0
+        },
+        "event_processing_time": {
+          "secs": 0,
+          "nanos": 16542
+        },
+        "generated_event_count": 4,
+        "accepted_event_count": 4,
+        "relative_instability_error": {
+          "re": 0.0,
+          "im": 0.0
+        },
+        "is_nan": false,
+        "loop_momenta_escalation": null,
+        "stability_results": [
+          {
+            "precision": "Double",
+            "estimated_relative_accuracy": 1.35504229971603e-16,
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "secs": 0,
+              "nanos": 254458
+            }
+          }
+        ]
+      }
+    },
+    {
+      "mass": 0.499,
+      "mode": "thermodynamic_equilibrium",
+      "cuts": "all",
+      "label": "ll_below",
+      "forced_arbitrary_precision": false,
+      "exit_code": 0,
+      "command": [
+        "./gammaloop",
+        "--read-only-state",
+        "-s",
+        "/tmp/gammaloop-threshold-saved-ll_below.state",
+        "-n",
+        "-L",
+        "off",
+        "examples/cli/thermal_production/massive_double_triangle/failure_modes/run.toml",
+        "run",
+        "generate",
+        "inspect",
+        "-D",
+        "mass=0.499",
+        "-D",
+        "mode=thermodynamic_equilibrium",
+        "-D",
+        "output=/tmp/gammaloop-threshold-saved-ll_below"
+      ],
+      "integrand": {
+        "re": 5.4408888002477436e-05,
+        "im": 0.0
+      },
+      "events": 4,
+      "metadata": {
+        "total_timing": {
+          "secs": 0,
+          "nanos": 248917
+        },
+        "integrand_evaluation_time": {
+          "secs": 0,
+          "nanos": 154125
+        },
+        "evaluator_evaluation_time": {
+          "secs": 0,
+          "nanos": 104917
+        },
+        "parameterization_time": {
+          "secs": 0,
+          "nanos": 0
+        },
+        "event_processing_time": {
+          "secs": 0,
+          "nanos": 10625
+        },
+        "generated_event_count": 4,
+        "accepted_event_count": 4,
+        "relative_instability_error": {
+          "re": 0.0,
+          "im": 0.0
+        },
+        "is_nan": false,
+        "loop_momenta_escalation": null,
+        "stability_results": [
+          {
+            "precision": "Double",
+            "estimated_relative_accuracy": 1.1208898847470036e-15,
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "secs": 0,
+              "nanos": 240916
+            }
+          }
+        ]
+      }
+    },
+    {
+      "mass": 0.501,
+      "mode": "thermodynamic_equilibrium",
+      "cuts": "all",
+      "label": "ll_above",
+      "forced_arbitrary_precision": false,
+      "exit_code": 0,
+      "command": [
+        "./gammaloop",
+        "--read-only-state",
+        "-s",
+        "/tmp/gammaloop-threshold-saved-ll_above.state",
+        "-n",
+        "-L",
+        "off",
+        "examples/cli/thermal_production/massive_double_triangle/failure_modes/run.toml",
+        "run",
+        "generate",
+        "inspect",
+        "-D",
+        "mass=0.501",
+        "-D",
+        "mode=thermodynamic_equilibrium",
+        "-D",
+        "output=/tmp/gammaloop-threshold-saved-ll_above"
+      ],
+      "integrand": {
+        "re": 5.17221039608572e-05,
+        "im": 0.0
+      },
+      "events": 5,
+      "metadata": {
+        "total_timing": {
+          "secs": 0,
+          "nanos": 282416
+        },
+        "integrand_evaluation_time": {
+          "secs": 0,
+          "nanos": 170334
+        },
+        "evaluator_evaluation_time": {
+          "secs": 0,
+          "nanos": 118042
+        },
+        "parameterization_time": {
+          "secs": 0,
+          "nanos": 0
+        },
+        "event_processing_time": {
+          "secs": 0,
+          "nanos": 11875
+        },
+        "generated_event_count": 5,
+        "accepted_event_count": 5,
+        "relative_instability_error": {
+          "re": 0.0,
+          "im": 0.0
+        },
+        "is_nan": false,
+        "loop_momenta_escalation": null,
+        "stability_results": [
+          {
+            "precision": "Double",
+            "estimated_relative_accuracy": 2.6202582876994393e-16,
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "secs": 0,
+              "nanos": 274833
+            }
+          }
+        ]
+      }
+    },
+    {
+      "mass": 0.95,
+      "mode": "thermodynamic_equilibrium",
+      "cuts": "virtual",
+      "label": "absorption_virtual",
+      "forced_arbitrary_precision": false,
+      "exit_code": 0,
+      "command": [
+        "./gammaloop",
+        "--read-only-state",
+        "-s",
+        "/tmp/gammaloop-threshold-saved-absorption_virtual.state",
+        "-n",
+        "-L",
+        "off",
+        "examples/cli/thermal_production/massive_double_triangle/failure_modes/run.toml",
+        "run",
+        "generate",
+        "inspect",
+        "-D",
+        "mass=0.95",
+        "-D",
+        "mode=thermodynamic_equilibrium",
+        "-D",
+        "output=/tmp/gammaloop-threshold-saved-absorption_virtual",
+        "-D",
+        "cuts={ H H, L L }"
+      ],
+      "integrand": {
+        "re": 5.148477858490076e-05,
+        "im": 0.0
+      },
+      "events": 1,
+      "metadata": {
+        "total_timing": {
+          "secs": 0,
+          "nanos": 104042
+        },
+        "integrand_evaluation_time": {
+          "secs": 0,
+          "nanos": 60166
+        },
+        "evaluator_evaluation_time": {
+          "secs": 0,
+          "nanos": 36334
+        },
+        "parameterization_time": {
+          "secs": 0,
+          "nanos": 0
+        },
+        "event_processing_time": {
+          "secs": 0,
+          "nanos": 5208
+        },
+        "generated_event_count": 1,
+        "accepted_event_count": 1,
+        "relative_instability_error": {
+          "re": 0.0,
+          "im": 0.0
+        },
+        "is_nan": false,
+        "loop_momenta_escalation": null,
+        "stability_results": [
+          {
+            "precision": "Double",
+            "estimated_relative_accuracy": 1.3161683441757515e-16,
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "secs": 0,
+              "nanos": 99375
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "structural_exports": [
+    {
+      "mass": 0.95,
+      "path": "/tmp/gammaloop-threshold-saved-exact-0.95-standalone/processes/cross_sections/thermal/NLO/standalone_cross_section.json",
+      "graph": "massive_double_triangle",
+      "orientations": 32,
+      "cut_groups": 20,
+      "counterterms": 0,
+      "parameter_slots": 44,
+      "function_map_entries": 72
+    },
+    {
+      "mass": 1.2,
+      "path": "/tmp/gammaloop-threshold-saved-exact-1.2-standalone/processes/cross_sections/thermal/NLO/standalone_cross_section.json",
+      "graph": "massive_double_triangle",
+      "orientations": 32,
+      "cut_groups": 20,
+      "counterterms": 0,
+      "parameter_slots": 44,
+      "function_map_entries": 72
+    }
+  ]
+}

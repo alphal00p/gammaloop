@@ -1,0 +1,401 @@
+{
+  "normalization": "Gamma_rho = -Im(Pi_R)/M, labelled graph with factor 1/2; T=0.5, H=0.6, L=0.25.",
+  "controls": [
+    {
+      "mass": 0.949,
+      "reference": 0.0003168642960308555,
+      "difference_in_mc_errors": 0.006781404061394457,
+      "native": {
+        "slots": [
+          {
+            "key": "thermal@NLO",
+            "process": "thermal",
+            "integrand": "NLO",
+            "target": null,
+            "integral": {
+              "neval": 200000,
+              "real_zero": 2484,
+              "im_zero": 200000,
+              "result": {
+                "re": 0.0003168765953022939,
+                "im": 0.0
+              },
+              "error": {
+                "re": 1.8136762427126833e-06,
+                "im": 0.0
+              },
+              "real_chisq": 11.542298052093656,
+              "im_chisq": 0.0
+            },
+            "table_results": [
+              {
+                "component": "re",
+                "value": 0.0003168765953022939,
+                "error": 1.8136762427126833e-06,
+                "relative_error_percent": 0.572360429769978,
+                "chi_sq_per_dof": 1.442787256511707,
+                "target_delta_sigma": null,
+                "target_delta_percent": null,
+                "max_weight_impact": 0.0019529237791719451
+              },
+              {
+                "component": "im",
+                "value": 0.0,
+                "error": 0.0,
+                "relative_error_percent": null,
+                "chi_sq_per_dof": 0.0,
+                "target_delta_sigma": null,
+                "target_delta_percent": null,
+                "max_weight_impact": 0.0
+              }
+            ],
+            "integration_statistics": {
+              "num_evals": 200000,
+              "average_total_time_seconds": 0.000163554,
+              "average_parameterization_time_seconds": 2.31e-07,
+              "average_integrand_time_seconds": 8.0597e-05,
+              "average_evaluator_time_seconds": 6.7456e-05,
+              "average_observable_time_seconds": 0.0,
+              "average_integrator_time_seconds": 4.5e-07,
+              "f64_percentage": 99.9315,
+              "f128_percentage": 0.06849999999999999,
+              "arb_percentage": 0.0,
+              "nan_percentage": 0.0,
+              "nan_or_unstable_percentage": 0.0,
+              "generated_event_count": 0,
+              "accepted_event_count": 0,
+              "selection_efficiency_percentage": null
+            },
+            "max_weight_info": [
+              {
+                "component": "re",
+                "sign": "+",
+                "max_eval": 0.013705218160409203,
+                "coordinates": "graph: 0, xs: [\n2.8897181433988794e-01 9.8298962442528670e-01 3.7172362300450001e-01\n3.2614340529220698e-01 4.6211315881053139e-01 6.1740035084150890e-01 ]"
+              },
+              {
+                "component": "re",
+                "sign": "-",
+                "max_eval": -0.12376716760577897,
+                "coordinates": "graph: 0, xs: [\n8.4803257308129001e-02 5.5418236402349985e-01 9.3292011049242407e-01\n6.2328534991254028e-02 4.2462683178795452e-01 3.8114460616461127e-01 ]"
+              }
+            ],
+            "grid_breakdown": {
+              "re": null,
+              "im": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "mass": 0.951,
+      "reference": 0.00031618751041692357,
+      "difference_in_mc_errors": 0.5973606730478184,
+      "native": {
+        "slots": [
+          {
+            "key": "thermal@NLO",
+            "process": "thermal",
+            "integrand": "NLO",
+            "target": null,
+            "integral": {
+              "neval": 200000,
+              "real_zero": 1939,
+              "im_zero": 200000,
+              "result": {
+                "re": 0.00031706598165561324,
+                "im": 0.0
+              },
+              "error": {
+                "re": 1.4705876672590248e-06,
+                "im": 0.0
+              },
+              "real_chisq": 10.091984065498309,
+              "im_chisq": 0.0
+            },
+            "table_results": [
+              {
+                "component": "re",
+                "value": 0.00031706598165561324,
+                "error": 1.4705876672590248e-06,
+                "relative_error_percent": 0.46381124193144413,
+                "chi_sq_per_dof": 1.2614980081872886,
+                "target_delta_sigma": null,
+                "target_delta_percent": null,
+                "max_weight_impact": 0.0007560526117189905
+              },
+              {
+                "component": "im",
+                "value": 0.0,
+                "error": 0.0,
+                "relative_error_percent": null,
+                "chi_sq_per_dof": 0.0,
+                "target_delta_sigma": null,
+                "target_delta_percent": null,
+                "max_weight_impact": 0.0
+              }
+            ],
+            "integration_statistics": {
+              "num_evals": 200000,
+              "average_total_time_seconds": 0.000178587,
+              "average_parameterization_time_seconds": 2.49e-07,
+              "average_integrand_time_seconds": 8.7619e-05,
+              "average_evaluator_time_seconds": 7.347e-05,
+              "average_observable_time_seconds": 0.0,
+              "average_integrator_time_seconds": 4.58e-07,
+              "f64_percentage": 99.7425,
+              "f128_percentage": 0.2575,
+              "arb_percentage": 0.0,
+              "nan_percentage": 0.0,
+              "nan_or_unstable_percentage": 0.0,
+              "generated_event_count": 0,
+              "accepted_event_count": 0,
+              "selection_efficiency_percentage": null
+            },
+            "max_weight_info": [
+              {
+                "component": "re",
+                "sign": "+",
+                "max_eval": 0.013741281114339341,
+                "coordinates": "graph: 0, xs: [\n2.8897181433988794e-01 9.8298962442528670e-01 3.7172362300450001e-01\n3.2614340529220698e-01 4.6211315881053139e-01 6.1740035084150890e-01 ]"
+              },
+              {
+                "component": "re",
+                "sign": "-",
+                "max_eval": -0.047943712703594384,
+                "coordinates": "graph: 0, xs: [\n7.1462290970013698e-01 9.5298778582137922e-01 8.7636479170968473e-01\n6.8209008185074738e-01 4.2708574721611103e-01 1.5669695165803682e-01 ]"
+              }
+            ],
+            "grid_breakdown": {
+              "re": null,
+              "im": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "mass": 1.199,
+      "reference": 0.0004450724101435121,
+      "difference_in_mc_errors": -0.7046307746577684,
+      "native": {
+        "slots": [
+          {
+            "key": "thermal@NLO",
+            "process": "thermal",
+            "integrand": "NLO",
+            "target": null,
+            "integral": {
+              "neval": 125000,
+              "real_zero": 1343,
+              "im_zero": 125000,
+              "result": {
+                "re": 0.0004435575255227772,
+                "im": 0.0
+              },
+              "error": {
+                "re": 2.1498984648672257e-06,
+                "im": 0.0
+              },
+              "real_chisq": 2.1670232080522283,
+              "im_chisq": 0.0
+            },
+            "table_results": [
+              {
+                "component": "re",
+                "value": 0.0004435575255227772,
+                "error": 2.1498984648672257e-06,
+                "relative_error_percent": 0.4846943950129927,
+                "chi_sq_per_dof": 0.4334046416104457,
+                "target_delta_sigma": null,
+                "target_delta_percent": null,
+                "max_weight_impact": 0.00026410150909068496
+              },
+              {
+                "component": "im",
+                "value": 0.0,
+                "error": 0.0,
+                "relative_error_percent": null,
+                "chi_sq_per_dof": 0.0,
+                "target_delta_sigma": null,
+                "target_delta_percent": null,
+                "max_weight_impact": 0.0
+              }
+            ],
+            "integration_statistics": {
+              "num_evals": 125000,
+              "average_total_time_seconds": 0.000181176,
+              "average_parameterization_time_seconds": 3.67e-07,
+              "average_integrand_time_seconds": 8.5486e-05,
+              "average_evaluator_time_seconds": 7.1417e-05,
+              "average_observable_time_seconds": 0.0,
+              "average_integrator_time_seconds": 4.51e-07,
+              "f64_percentage": 98.68,
+              "f128_percentage": 1.32,
+              "arb_percentage": 0.0,
+              "nan_percentage": 0.0,
+              "nan_or_unstable_percentage": 0.0,
+              "generated_event_count": 0,
+              "accepted_event_count": 0,
+              "selection_efficiency_percentage": null
+            },
+            "max_weight_info": [
+              {
+                "component": "re",
+                "sign": "+",
+                "max_eval": 0.01464302648238693,
+                "coordinates": "graph: 0, xs: [\n3.1301090425974176e-01 2.5275993816512687e-02 3.7181153560515057e-01\n3.0622240836951198e-01 5.3136136009422941e-01 5.6236288715751137e-01 ]"
+              },
+              {
+                "component": "re",
+                "sign": "-",
+                "max_eval": -0.007907684608447232,
+                "coordinates": "graph: 0, xs: [\n6.9342160180873558e-01 1.5491847757249136e-01 5.6941125570526185e-01\n6.2006122609899827e-01 6.4198260733555368e-01 5.1635197321281567e-01 ]"
+              }
+            ],
+            "grid_breakdown": {
+              "re": null,
+              "im": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "mass": 1.201,
+      "reference": 0.0004632185912971412,
+      "difference_in_mc_errors": -0.18749076647701923,
+      "native": {
+        "slots": [
+          {
+            "key": "thermal@NLO",
+            "process": "thermal",
+            "integrand": "NLO",
+            "target": null,
+            "integral": {
+              "neval": 150000,
+              "real_zero": 605,
+              "im_zero": 150000,
+              "result": {
+                "re": 0.000462833251635977,
+                "im": 0.0
+              },
+              "error": {
+                "re": 2.055246071072165e-06,
+                "im": 0.0
+              },
+              "real_chisq": 4.09879397028061,
+              "im_chisq": 0.0
+            },
+            "table_results": [
+              {
+                "component": "re",
+                "value": 0.000462833251635977,
+                "error": 2.055246071072165e-06,
+                "relative_error_percent": 0.4440575658312114,
+                "chi_sq_per_dof": 0.6831323283801017,
+                "target_delta_sigma": null,
+                "target_delta_percent": null,
+                "max_weight_impact": 0.00021118608852634265
+              },
+              {
+                "component": "im",
+                "value": 0.0,
+                "error": 0.0,
+                "relative_error_percent": null,
+                "chi_sq_per_dof": 0.0,
+                "target_delta_sigma": null,
+                "target_delta_percent": null,
+                "max_weight_impact": 0.0
+              }
+            ],
+            "integration_statistics": {
+              "num_evals": 150000,
+              "average_total_time_seconds": 0.000224485,
+              "average_parameterization_time_seconds": 5.04e-07,
+              "average_integrand_time_seconds": 0.000103028,
+              "average_evaluator_time_seconds": 8.6995e-05,
+              "average_observable_time_seconds": 0.0,
+              "average_integrator_time_seconds": 4.76e-07,
+              "f64_percentage": 97.882,
+              "f128_percentage": 2.118,
+              "arb_percentage": 0.0,
+              "nan_percentage": 0.0,
+              "nan_or_unstable_percentage": 0.0,
+              "generated_event_count": 0,
+              "accepted_event_count": 0,
+              "selection_efficiency_percentage": null
+            },
+            "max_weight_info": [
+              {
+                "component": "re",
+                "sign": "+",
+                "max_eval": 0.01466159160793957,
+                "coordinates": "graph: 0, xs: [\n3.1301090425974176e-01 2.5275993816512687e-02 3.7181153560515057e-01\n3.0622240836951198e-01 5.3136136009422941e-01 5.6236288715751137e-01 ]"
+              },
+              {
+                "component": "re",
+                "sign": "-",
+                "max_eval": -0.009740146394044457,
+                "coordinates": "graph: 0, xs: [\n7.6541217594215871e-01 9.5720673978702642e-01 2.0907881324064892e-01\n7.7850793620083780e-01 4.4731769865501214e-01 8.5002089650679480e-01 ]"
+              }
+            ],
+            "grid_breakdown": {
+              "re": null,
+              "im": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "mass": 0.95,
+      "reference": 0.00031652079064784313,
+      "command": [
+        "./gammaloop",
+        "--read-only-state",
+        "-s",
+        "/tmp/gammaloop-threshold-saved-exact-0.95.state",
+        "-n",
+        "-L",
+        "off",
+        "examples/cli/thermal_production/massive_double_triangle/failure_modes/run.toml",
+        "run",
+        "generate",
+        "export",
+        "integrate",
+        "-D",
+        "mass=0.95",
+        "-D",
+        "output=/tmp/gammaloop-threshold-saved-exact-0.95"
+      ],
+      "exit_code": 1,
+      "error": "Error: \n   0: Non-simple radial root at 0\n\nLocation:\n   crates/gammalooprs/src/utils/newton_solver.rs:723"
+    },
+    {
+      "mass": 1.2,
+      "reference": 0.0004750839459173127,
+      "command": [
+        "./gammaloop",
+        "--read-only-state",
+        "-s",
+        "/tmp/gammaloop-threshold-saved-exact-1.2.state",
+        "-n",
+        "-L",
+        "off",
+        "examples/cli/thermal_production/massive_double_triangle/failure_modes/run.toml",
+        "run",
+        "generate",
+        "export",
+        "integrate",
+        "-D",
+        "mass=1.2",
+        "-D",
+        "output=/tmp/gammaloop-threshold-saved-exact-1.2"
+      ],
+      "exit_code": 1,
+      "error": "Error: \n   0: Non-simple radial root at 0\n\nLocation:\n   crates/gammalooprs/src/utils/newton_solver.rs:723"
+    }
+  ]
+}

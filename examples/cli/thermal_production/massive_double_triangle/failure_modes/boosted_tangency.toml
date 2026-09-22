@@ -1,0 +1,103 @@
+# Stable boosted LL radial-tangency stress test. Run each block separately.
+# ./gammaloop --read-only-state -s /tmp/gammaloop-boosted-failure-state -n -L off examples/cli/thermal_production/massive_double_triangle/failure_modes/boosted_tangency.toml run generate tangent_thermal
+commands = []
+
+[[command_blocks]]
+name = "generate"
+commands = [
+  "import model ./examples/cli/thermal_production/massive_double_triangle/model.json",
+  "set model MX=1.0 MH=0.6 ML=0.25",
+  "set global kv global.generation.medium.mode=thermodynamic_equilibrium",
+  "import graphs ./examples/cli/thermal_production/massive_double_triangle/double_triangle.dot --process-spec 'X > { H H, L L, H H L } [{{2}}]' -p thermal -i NLO -o",
+  "generate existing -p thermal -i NLO",
+  "set process -p thermal -i NLO kv general.generate_events=true",
+  "set global kv global.generation.medium.mode=vacuum",
+  "import graphs ./examples/cli/thermal_production/massive_double_triangle/double_triangle.dot --process-spec 'X > { H H, L L, H H L } [{{2}}]' -p vacuum -i NLO -o",
+  "generate existing -p vacuum -i NLO",
+  "set process -p vacuum -i NLO kv general.generate_events=true"
+]
+
+[[command_blocks]]
+name = "inside"
+commands = [
+  "inspect -p thermal -i NLO -m --graph-id 0 -x 0.4330122688795174 0.0 0.9013880268784429 0.3 0.5 -0.2 --json-output /tmp/gammaloop-breakdown-boost/verified_inside.json"
+]
+
+[[command_blocks]]
+name = "outside"
+commands = [
+  "inspect -p thermal -i NLO -m --graph-id 0 -x 0.43301313490492116 0.0 0.9013876108532958 0.3 0.5 -0.2 --json-output /tmp/gammaloop-breakdown-boost/verified_outside.json"
+]
+
+[[command_blocks]]
+name = "tangent_thermal"
+commands = [
+  "inspect -p thermal -i NLO -m --graph-id 0 -x 0.4330127018922193 0.0 0.9013878188659973 0.3 0.5 -0.2 --json-output /tmp/gammaloop-breakdown-boost/verified_tangent_thermal.json"
+]
+
+[[command_blocks]]
+name = "tangent_thermal_arb"
+commands = [
+  "inspect -f -p thermal -i NLO -m --graph-id 0 -x 0.4330127018922193 0.0 0.9013878188659973 0.3 0.5 -0.2 --json-output /tmp/gammaloop-breakdown-boost/verified_tangent_thermal_arb.json"
+]
+
+[[command_blocks]]
+name = "tangent_vacuum"
+commands = [
+  "inspect -p vacuum -i NLO -m --graph-id 0 -x 0.4330127018922193 0.0 0.9013878188659973 0.3 0.5 -0.2 --json-output /tmp/gammaloop-breakdown-boost/verified_tangent_vacuum.json"
+]
+
+[[command_blocks]]
+name = "tangent_vacuum_arb"
+commands = [
+  "inspect -f -p vacuum -i NLO -m --graph-id 0 -x 0.4330127018922193 0.0 0.9013878188659973 0.3 0.5 -0.2 --json-output /tmp/gammaloop-breakdown-boost/verified_tangent_vacuum_arb.json"
+]
+
+[cli_settings.global.generation.evaluator]
+compile = false
+store_atom = true
+iterative_orientation_optimization = false
+summed = false
+summed_function_map = true
+
+[cli_settings.global.generation.uv]
+subtract_uv = false
+generate_integrated = false
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = false
+
+[default_runtime_settings.general]
+inverse_temperature = 2.0
+integral_unit = "none"
+evaluator_method = "SummedFunctionMap"
+
+[default_runtime_settings.kinematics]
+e_cm = 1.0
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [[4.1231056256176606, 0.0, 0.0, 4.0]]
+helicities = [0]
+
+[default_runtime_settings.sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = false
+lmb_channels = "summed"
+coordinate_system = "spherical"
+mapping = "linear"
+b = 1.0
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = true
+
+[default_runtime_settings.integrator]
+n_start = 100
+n_increase = 0
+n_max = 1000
+seed = 271828
+integrated_phase = "real"
+target_relative_accuracy = 0.002
