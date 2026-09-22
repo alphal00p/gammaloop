@@ -47,7 +47,7 @@ use crate::{
             DualOrNot, extract_t_derivatives, extract_t_derivatives_complex, new_constant,
             shape_from_cut_cff_index, simple_n_deriv_shape,
         },
-        newton_solver::{NewtonIterationResult, newton_iteration_and_derivative},
+        newton_solver::NewtonIterationResult,
         serde_utils::SmartSerde,
     },
 };
@@ -1574,39 +1574,14 @@ impl GraphTerm for CrossSectionGraphTerm {
                 }
             }
 
-            let solutions = if cut_group.negative_energies.is_empty() {
-                let (guess, _) = representative_esurface.get_radius_guess(
-                    momentum_sample.loop_moms(),
-                    momentum_sample.external_moms(),
-                    &self.graph.loop_momentum_basis,
-                );
-                vec![newton_iteration_and_derivative(
-                    &guess,
-                    |t| {
-                        representative_esurface.compute_self_and_r_derivative(
-                            t,
-                            momentum_sample.loop_moms(),
-                            &center,
-                            momentum_sample.external_moms(),
-                            &masses,
-                            &self.graph.loop_momentum_basis,
-                            &[],
-                        )
-                    },
-                    &momentum_sample.one(),
-                    2000,
-                    &F::from_f64(context.settings.kinematics.e_cm),
-                )]
-            } else {
-                representative_esurface.positive_radius_roots(
-                    momentum_sample.loop_moms(),
-                    &center,
-                    momentum_sample.external_moms(),
-                    &masses,
-                    &self.graph.loop_momentum_basis,
-                    &cut_group.negative_energies,
-                )?
-            };
+            let solutions = representative_esurface.positive_radius_roots(
+                momentum_sample.loop_moms(),
+                &center,
+                momentum_sample.external_moms(),
+                &masses,
+                &self.graph.loop_momentum_basis,
+                &cut_group.negative_energies,
+            )?;
             crate::debug_tags!(#integration, #cut, #solver;
                 "solutions: {:?}", solutions
             );

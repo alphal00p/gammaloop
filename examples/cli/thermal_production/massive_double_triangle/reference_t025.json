@@ -1,0 +1,152 @@
+{
+  "source": "https://arxiv.org/pdf/hep-ph/0406109, Eqs. (4), (58), (59)",
+  "method": "Independent cut quadrature of the published arbitrary-mass integral representation; these benchmark values are not a published numerical table.",
+  "conventions": {
+    "Pi_R": "-symmetry * I_R",
+    "Gamma_rho": "symmetry * Im(I_R) / M",
+    "production_source": "n_B(M) * Gamma_rho = df_X/dt at f_X=0",
+    "real_U_signs": [
+      [
+        1,
+        1,
+        1
+      ],
+      [
+        1,
+        -1,
+        -1
+      ],
+      [
+        -1,
+        -1,
+        1
+      ]
+    ],
+    "real_U_sign_order": [
+      "s2",
+      "s3",
+      "s5"
+    ],
+    "real_U_absorbed_line": [
+      3,
+      5,
+      2
+    ]
+  },
+  "parameters": {
+    "M": 1.0,
+    "H": 0.6,
+    "L": 0.25,
+    "T": 0.25,
+    "symmetry": 0.5,
+    "cubic_couplings": 1.0,
+    "chemical_potentials": 0.0
+  },
+  "convergence": [
+    {
+      "order": 32,
+      "triangle_vacuum": 0.012747019233442517,
+      "triangle_vacuum_energy": 0.01274701923344249,
+      "triangle_thermal": 0.0008181907164231914,
+      "virtual_ImI_vacuum": 0.0002196187510591938,
+      "virtual_ImI_thermal": 0.0003068765430765462,
+      "real_U_parts_ImI": [
+        -3.931163414279264e-06,
+        9.597247847755389e-06,
+        -1.2627503882159704e-05
+      ],
+      "real_ImI_thermal": -1.3922838897367157e-05,
+      "inclusive_ImI_thermal": 0.0002929537041791791,
+      "Gamma_vacuum": 0.0001098093755295969,
+      "Gamma_virtual_thermal": 0.0001534382715382731,
+      "Gamma_real_thermal": -6.961419448683579e-06,
+      "Gamma_inclusive_thermal": 0.00014647685208958955,
+      "production_source_thermal": 2.732871414386702e-06,
+      "real_virtual_cancellation_fraction": 0.0453695116537281
+    },
+    {
+      "order": 64,
+      "triangle_vacuum": 0.01274701923344252,
+      "triangle_vacuum_energy": 0.01274701923344252,
+      "triangle_thermal": 0.0008181907164228483,
+      "virtual_ImI_vacuum": 0.00021961875105919388,
+      "virtual_ImI_thermal": 0.0003068765430765386,
+      "real_U_parts_ImI": [
+        -3.931163408209278e-06,
+        9.597247838358424e-06,
+        -1.2627503765195611e-05
+      ],
+      "real_ImI_thermal": -1.392283867009293e-05,
+      "inclusive_ImI_thermal": 0.00029295370440644565,
+      "Gamma_vacuum": 0.00010980937552959694,
+      "Gamma_virtual_thermal": 0.0001534382715382693,
+      "Gamma_real_thermal": -6.961419335046465e-06,
+      "Gamma_inclusive_thermal": 0.00014647685220322282,
+      "production_source_thermal": 2.732871416506799e-06,
+      "real_virtual_cancellation_fraction": 0.045369510913124474
+    },
+    {
+      "order": 128,
+      "triangle_vacuum": 0.01274701923344249,
+      "triangle_vacuum_energy": 0.012747019233442404,
+      "triangle_thermal": 0.000818190716422826,
+      "virtual_ImI_vacuum": 0.00021961875105919334,
+      "virtual_ImI_thermal": 0.00030687654307653733,
+      "real_U_parts_ImI": [
+        -3.931163408209161e-06,
+        9.597247838358275e-06,
+        -1.2627503765195508e-05
+      ],
+      "real_ImI_thermal": -1.3922838670092788e-05,
+      "inclusive_ImI_thermal": 0.00029295370440644456,
+      "Gamma_vacuum": 0.00010980937552959667,
+      "Gamma_virtual_thermal": 0.00015343827153826867,
+      "Gamma_real_thermal": -6.961419335046394e-06,
+      "Gamma_inclusive_thermal": 0.00014647685220322228,
+      "production_source_thermal": 2.732871416506789e-06,
+      "real_virtual_cancellation_fraction": 0.045369510913124196
+    },
+    {
+      "order": 256,
+      "triangle_vacuum": 0.012747019233442515,
+      "triangle_vacuum_energy": 0.012747019233442498,
+      "triangle_thermal": 0.0008181907164228425,
+      "virtual_ImI_vacuum": 0.00021961875105919377,
+      "virtual_ImI_thermal": 0.0003068765430765383,
+      "real_U_parts_ImI": [
+        -3.931163408209207e-06,
+        9.597247838358375e-06,
+        -1.2627503765195597e-05
+      ],
+      "real_ImI_thermal": -1.392283867009286e-05,
+      "inclusive_ImI_thermal": 0.00029295370440644543,
+      "Gamma_vacuum": 0.00010980937552959689,
+      "Gamma_virtual_thermal": 0.00015343827153826915,
+      "Gamma_real_thermal": -6.96141933504643e-06,
+      "Gamma_inclusive_thermal": 0.00014647685220322272,
+      "production_source_thermal": 2.732871416506797e-06,
+      "real_virtual_cancellation_fraction": 0.045369510913124286
+    },
+    {
+      "order": 512,
+      "triangle_vacuum": 0.012747019233442522,
+      "triangle_vacuum_energy": 0.01274701923344253,
+      "triangle_thermal": 0.0008181907164228469,
+      "virtual_ImI_vacuum": 0.0002196187510591939,
+      "virtual_ImI_thermal": 0.0003068765430765386,
+      "real_U_parts_ImI": [
+        -3.931163408209222e-06,
+        9.597247838358407e-06,
+        -1.2627503765195626e-05
+      ],
+      "real_ImI_thermal": -1.3922838670092883e-05,
+      "inclusive_ImI_thermal": 0.0002929537044064457,
+      "Gamma_vacuum": 0.00010980937552959695,
+      "Gamma_virtual_thermal": 0.0001534382715382693,
+      "Gamma_real_thermal": -6.9614193350464414e-06,
+      "Gamma_inclusive_thermal": 0.00014647685220322285,
+      "production_source_thermal": 2.7328714165067995e-06,
+      "real_virtual_cancellation_fraction": 0.04536951091312432
+    }
+  ]
+}

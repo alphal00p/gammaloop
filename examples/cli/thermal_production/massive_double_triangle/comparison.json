@@ -1,0 +1,160 @@
+{
+  "parameters": {
+    "MX": 1.0,
+    "MH": 0.6,
+    "ML": 0.25,
+    "lam": 1.0,
+    "graph_factor": 0.5,
+    "external_momentum": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "source": "https://arxiv.org/pdf/hep-ph/0406109, Fig. 5 and Eqs. (58)-(59)",
+  "reference_method": "Independent quadrature of published integral representation, not a published numerical table",
+  "runs": [
+    {
+      "temperature": 0.5,
+      "native_result": "native_result.json",
+      "reference_result": "reference.json",
+      "comparison": [
+        {
+          "process": "vacuum",
+          "samples": 1000000,
+          "value": 0.00010978005001949265,
+          "mc_error": 9.268017272439749e-08,
+          "reference": 0.00010980937552959695,
+          "pull": -0.31641622196265
+        },
+        {
+          "process": "thermal",
+          "samples": 1000000,
+          "value": 0.00030579300528646317,
+          "mc_error": 6.797057015651193e-07,
+          "reference": 0.0003057651940618655,
+          "pull": 0.040916568058276315
+        },
+        {
+          "process": "virtual",
+          "samples": 1000000,
+          "value": 0.00032659254532390816,
+          "mc_error": 2.857052351113027e-07,
+          "reference": 0.0003266901870244345,
+          "pull": -0.3417567777093462
+        },
+        {
+          "process": "real",
+          "samples": 1000000,
+          "value": -2.0799540037444246e-05,
+          "mc_error": 6.323051691195236e-07,
+          "reference": -2.0924992962569012e-05,
+          "pull": 0.1984056611453262
+        },
+        {
+          "process": "zero_temperature",
+          "samples": 1000000,
+          "value": 0.00010978005001949265,
+          "mc_error": 9.268017272439749e-08,
+          "reference": 0.00010980937552959695,
+          "pull": -0.31641622196265
+        }
+      ],
+      "global_statistics": {
+        "num_evals": 5000000,
+        "average_total_time_seconds": 7.8822e-05,
+        "average_parameterization_time_seconds": 2.31e-07,
+        "average_integrand_time_seconds": 3.7936e-05,
+        "average_evaluator_time_seconds": 2.9135e-05,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 3.22e-07,
+        "f64_percentage": 99.7927,
+        "f128_percentage": 0.2073,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "production_source": {
+        "value": 4.786200035677326e-05,
+        "mc_error": 1.0638593417248019e-07,
+        "reference": 4.785764740945725e-05
+      },
+      "differential_production_rate_d3p": {
+        "value": 1.9295286906853491e-07,
+        "mc_error": 4.288887023964799e-10,
+        "reference": 1.9293532041475386e-07
+      },
+      "inclusive_minus_virtual_minus_real": -7.487771253728015e-19,
+      "native_cancellation_fraction": 0.06368651194048433,
+      "reference_cancellation_fraction": 0.06405148912845658
+    },
+    {
+      "temperature": 0.25,
+      "native_result": "native_result_t025.json",
+      "reference_result": "reference_t025.json",
+      "comparison": [
+        {
+          "process": "thermal",
+          "samples": 1000000,
+          "value": 0.0001463104600541218,
+          "mc_error": 1.4735865215878651e-07,
+          "reference": 0.00014647685220322285,
+          "pull": -1.1291644342793596
+        },
+        {
+          "process": "virtual",
+          "samples": 1000000,
+          "value": 0.0001533661725153935,
+          "mc_error": 1.3357747707376526e-07,
+          "reference": 0.0001534382715382693,
+          "pull": -0.5397543392436024
+        },
+        {
+          "process": "real",
+          "samples": 1000000,
+          "value": -7.055712461271426e-06,
+          "mc_error": 6.514885481092394e-08,
+          "reference": -6.9614193350464414e-06,
+          "pull": -1.447348944177816
+        }
+      ],
+      "global_statistics": {
+        "num_evals": 3000000,
+        "average_total_time_seconds": 0.000116972,
+        "average_parameterization_time_seconds": 2.29e-07,
+        "average_integrand_time_seconds": 5.658e-05,
+        "average_evaluator_time_seconds": 4.777e-05,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 3.23e-07,
+        "f64_percentage": 99.5852,
+        "f128_percentage": 0.4148,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "production_source": {
+        "value": 2.729766978219319e-06,
+        "mc_error": 2.749323476046511e-09,
+        "reference": 2.7328714165067995e-06
+      },
+      "differential_production_rate_d3p": {
+        "value": 1.1004896711581412e-08,
+        "mc_error": 1.1083737594464722e-11,
+        "reference": 1.1017412073871964e-08
+      },
+      "inclusive_minus_virtual_minus_real": -2.812149384884277e-19,
+      "native_cancellation_fraction": 0.046005663084297405,
+      "reference_cancellation_fraction": 0.04536951091312432
+    }
+  ],
+  "total_evaluations": 8000000,
+  "nan_count": 0,
+  "unresolved_stability_count": 0
+}

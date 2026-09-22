@@ -142,10 +142,12 @@ surface selector; thermal weights remain attached to each selected variant.
 Signed cut energies identify absorbed bath particles, which become incoming
 event legs. Runtime isolates all positive radial crossings using derivative
 bounds after compactifying the radial half-line, and sums their contributions
-with absolute phase-space Jacobians. Canonical surface signs still enter the
-raised-residue derivatives. This enables inclusive equilibrium rates without
-adding thermal threshold or IR subtraction. Persisted states predating these
-signed cut groups must be regenerated (state manifest version 7).
+with absolute phase-space Jacobians. Unsigned E-cuts use the same root isolation,
+so kinematically closed cuts contribute zero and produce no events. Canonical
+surface signs still enter the raised-residue derivatives. This enables inclusive
+equilibrium rates without adding thermal threshold or IR subtraction. Persisted
+states predating these signed cut groups must be regenerated (state manifest
+version 7).
 
 The bounded and known-factor numerator builders share occurrence sampling and
 polynomial reduction across all medium modes. Every resulting scalar sector,

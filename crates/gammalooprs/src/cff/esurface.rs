@@ -1411,6 +1411,48 @@ mod tests {
     }
 
     #[test]
+    fn unsigned_lu_massive_cut_returns_no_roots_below_threshold() {
+        use crate::momentum::ThreeMomentum;
+
+        let graph = dummy_hedge_graph(3);
+        let lmb = LoopMomentumBasis {
+            tree: SuBitGraph::empty(0),
+            loop_edges: vec![EdgeIndex(1)].into(),
+            ext_edges: vec![EdgeIndex(0)].into(),
+            edge_signatures: graph
+                .new_edgevec_from_iter([
+                    LoopExtSignature::from((vec![0], vec![1])),
+                    LoopExtSignature::from((vec![1], vec![0])),
+                    LoopExtSignature::from((vec![-1], vec![-1])),
+                ])
+                .unwrap(),
+        };
+        let surface = Esurface {
+            energies: vec![EdgeIndex(1), EdgeIndex(2)],
+            external_shift: vec![(EdgeIndex(0), -1)],
+            vertex_set: VertexSet::dummy(),
+        };
+        let loops = [ThreeMomentum::new(F(1.0), F(0.0), F(0.0))]
+            .into_iter()
+            .collect();
+        let center = [ThreeMomentum::new(F(0.0), F(0.0), F(0.0))]
+            .into_iter()
+            .collect();
+        let masses = graph.new_edgevec_from_iter([F(1.0); 3]).unwrap();
+        // An invariant mass of one cannot produce two unit-mass particles,
+        // either at rest or after a boost; a failed Newton iterate is no event.
+        for (energy, pz) in [(1.0, 0.0), (2.0_f64.sqrt(), 1.0)] {
+            let external = [FourMomentum::from_args(F(energy), F(0.0), F(0.0), F(pz))]
+                .into_iter()
+                .collect();
+            let roots = surface
+                .positive_radius_roots(&loops, &center, &external, &masses, &lmb, &[])
+                .unwrap();
+            assert!(roots.is_empty());
+        }
+    }
+
+    #[test]
     fn signed_lu_sunset_retains_both_positive_radial_crossings() {
         use crate::momentum::ThreeMomentum;
         let graph = dummy_hedge_graph(4);

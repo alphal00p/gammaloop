@@ -1,0 +1,232 @@
+{
+  "slots": [
+    {
+      "key": "thermal@NLO",
+      "process": "thermal",
+      "integrand": "NLO",
+      "target": null,
+      "integral": {
+        "neval": 1000000,
+        "real_zero": 4092,
+        "im_zero": 1000000,
+        "result": {
+          "re": 0.0001463104600541218,
+          "im": 0.0
+        },
+        "error": {
+          "re": 1.4735865215878651e-7,
+          "im": 0.0
+        },
+        "real_chisq": 17.130367690804633,
+        "im_chisq": 0.0
+      },
+      "table_results": [
+        {
+          "component": "re",
+          "value": 0.0001463104600541218,
+          "error": 1.4735865215878651e-7,
+          "relative_error_percent": 0.10071641638217593,
+          "chi_sq_per_dof": 0.8565183845402317,
+          "target_delta_sigma": null,
+          "target_delta_percent": null,
+          "max_weight_impact": 0.000032772442482899934
+        },
+        {
+          "component": "im",
+          "value": 0.0,
+          "error": 0.0,
+          "relative_error_percent": null,
+          "chi_sq_per_dof": 0.0,
+          "target_delta_sigma": null,
+          "target_delta_percent": null,
+          "max_weight_impact": 0.0
+        }
+      ],
+      "integration_statistics": {
+        "num_evals": 3000000,
+        "average_total_time_seconds": 0.000116972,
+        "average_parameterization_time_seconds": 2.29e-7,
+        "average_integrand_time_seconds": 0.00005658,
+        "average_evaluator_time_seconds": 0.00004777,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 3.23e-7,
+        "f64_percentage": 99.5852,
+        "f128_percentage": 0.4148,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "max_weight_info": [
+        {
+          "component": "re",
+          "sign": "+",
+          "max_eval": 0.004794951136770336,
+          "coordinates": "graph: 0, xs: [\n2.8897181433988794e-01 9.8298962442528670e-01 3.7172362300450001e-01\n3.2614340529220698e-01 4.6211315881053139e-01 6.1740035084150890e-01 ]"
+        },
+        {
+          "component": "re",
+          "sign": "-",
+          "max_eval": -0.003686908284292329,
+          "coordinates": "graph: 0, xs: [\n5.9813499386799296e-01 1.0016276875467577e-01 1.9378947083888984e-01\n6.1887891811448348e-01 5.7219709209469316e-01 9.3794542844422857e-01 ]"
+        }
+      ],
+      "grid_breakdown": {
+        "re": null,
+        "im": null
+      }
+    },
+    {
+      "key": "virtual@NLO",
+      "process": "virtual",
+      "integrand": "NLO",
+      "target": null,
+      "integral": {
+        "neval": 1000000,
+        "real_zero": 11259,
+        "im_zero": 1000000,
+        "result": {
+          "re": 0.0001533661725153935,
+          "im": 0.0
+        },
+        "error": {
+          "re": 1.3357747707376526e-7,
+          "im": 0.0
+        },
+        "real_chisq": 15.39649499209554,
+        "im_chisq": 0.0
+      },
+      "table_results": [
+        {
+          "component": "re",
+          "value": 0.0001533661725153935,
+          "error": 1.3357747707376526e-7,
+          "relative_error_percent": 0.0870970924571766,
+          "chi_sq_per_dof": 0.769824749604777,
+          "target_delta_sigma": null,
+          "target_delta_percent": null,
+          "max_weight_impact": 0.000025183119552294492
+        },
+        {
+          "component": "im",
+          "value": 0.0,
+          "error": 0.0,
+          "relative_error_percent": null,
+          "chi_sq_per_dof": 0.0,
+          "target_delta_sigma": null,
+          "target_delta_percent": null,
+          "max_weight_impact": 0.0
+        }
+      ],
+      "integration_statistics": {
+        "num_evals": 3000000,
+        "average_total_time_seconds": 0.000116972,
+        "average_parameterization_time_seconds": 2.29e-7,
+        "average_integrand_time_seconds": 0.00005658,
+        "average_evaluator_time_seconds": 0.00004777,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 3.23e-7,
+        "f64_percentage": 99.5852,
+        "f128_percentage": 0.4148,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "max_weight_info": [
+        {
+          "component": "re",
+          "sign": "+",
+          "max_eval": 0.0038622386577329766,
+          "coordinates": "graph: 0, xs: [\n2.5493449314034622e-01 6.7006213426928374e-01 7.3788958725977261e-01\n2.9128044605950487e-01 1.8974681240630287e-01 2.0004800114257670e-01 ]"
+        }
+      ],
+      "grid_breakdown": {
+        "re": null,
+        "im": null
+      }
+    },
+    {
+      "key": "real@NLO",
+      "process": "real",
+      "integrand": "NLO",
+      "target": null,
+      "integral": {
+        "neval": 1000000,
+        "real_zero": 25248,
+        "im_zero": 1000000,
+        "result": {
+          "re": -7.055712461271426e-6,
+          "im": 0.0
+        },
+        "error": {
+          "re": 6.514885481092394e-8,
+          "im": 0.0
+        },
+        "real_chisq": 23.250315063166795,
+        "im_chisq": 0.0
+      },
+      "table_results": [
+        {
+          "component": "re",
+          "value": -7.055712461271426e-6,
+          "error": 6.514885481092394e-8,
+          "relative_error_percent": 0.9233490617499489,
+          "chi_sq_per_dof": 1.1625157531583397,
+          "target_delta_sigma": null,
+          "target_delta_percent": null,
+          "max_weight_impact": 0.0005227166039785472
+        },
+        {
+          "component": "im",
+          "value": 0.0,
+          "error": 0.0,
+          "relative_error_percent": null,
+          "chi_sq_per_dof": 0.0,
+          "target_delta_sigma": null,
+          "target_delta_percent": null,
+          "max_weight_impact": 0.0
+        }
+      ],
+      "integration_statistics": {
+        "num_evals": 3000000,
+        "average_total_time_seconds": 0.000116972,
+        "average_parameterization_time_seconds": 2.29e-7,
+        "average_integrand_time_seconds": 0.00005658,
+        "average_evaluator_time_seconds": 0.00004777,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 3.23e-7,
+        "f64_percentage": 99.5852,
+        "f128_percentage": 0.4148,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "max_weight_info": [
+        {
+          "component": "re",
+          "sign": "+",
+          "max_eval": 0.0024624496206085127,
+          "coordinates": "graph: 0, xs: [\n5.5352733616333505e-01 3.7548483786100184e-01 3.6752929202117632e-02\n5.6445900269740001e-01 9.6546437908261817e-01 9.9284131392132813e-01 ]"
+        },
+        {
+          "component": "re",
+          "sign": "-",
+          "max_eval": -0.003688138056404917,
+          "coordinates": "graph: 0, xs: [\n5.9813499386799296e-01 1.0016276875467577e-01 1.9378947083888984e-01\n6.1887891811448348e-01 5.7219709209469316e-01 9.3794542844422857e-01 ]"
+        }
+      ],
+      "grid_breakdown": {
+        "re": null,
+        "im": null
+      }
+    }
+  ]
+}

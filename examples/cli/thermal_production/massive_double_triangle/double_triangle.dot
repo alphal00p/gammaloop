@@ -1,0 +1,16 @@
+digraph massive_double_triangle {
+  overall_factor="1/2";
+  edge [particle=L];
+  ext0 [style=invis is_cut=0];
+  a [int_id="V_XHH"];
+  b [int_id="V_HHL"];
+  c [int_id="V_HHL"];
+  d [int_id="V_XLL"];
+  ext0 -> a [particle=X];
+  d -> ext0 [particle=X];
+  a -> b [id=0 particle=H lmb_id=1];
+  a -> c [id=1 particle=H];
+  b -> c [id=2 particle=H];
+  b -> d [id=3 lmb_id=0];
+  c -> d [id=4];
+}

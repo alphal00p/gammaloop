@@ -1,0 +1,494 @@
+{
+  "point": [
+    0.4,
+    0.2,
+    0.1,
+    -0.3,
+    0.5,
+    0.2
+  ],
+  "momentum_space": true,
+  "masses": {
+    "X": 1.0,
+    "H": 0.6,
+    "L": 0.25
+  },
+  "temperature": 0.5,
+  "processes": {
+    "inclusive": {
+      "result": {
+        "re": 5.137413496697824e-05,
+        "im": 0.0
+      },
+      "events": [
+        {
+          "cut_id": 0,
+          "pdgs": [
+            [
+              9000001
+            ],
+            [
+              9000002,
+              9000002
+            ]
+          ],
+          "weight": {
+            "re": 5.558131236202565e-05,
+            "im": 0.0
+          },
+          "momentum_residual": [
+            -4.196643033083092e-14,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "cut_id": 3,
+          "pdgs": [
+            [
+              9000001,
+              9000002
+            ],
+            [
+              9000003,
+              9000003
+            ]
+          ],
+          "weight": {
+            "re": -2.412462729361858e-09,
+            "im": 0.0
+          },
+          "momentum_residual": [
+            1.1102230246251565e-16,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "cut_id": 3,
+          "pdgs": [
+            [
+              9000001,
+              9000003
+            ],
+            [
+              9000003,
+              9000002
+            ]
+          ],
+          "weight": {
+            "re": 6.405809876742111e-10,
+            "im": 0.0
+          },
+          "momentum_residual": [
+            -2.220446049250313e-16,
+            -2.220446049250313e-16,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "cut_id": 3,
+          "pdgs": [
+            [
+              9000001,
+              9000003
+            ],
+            [
+              9000003,
+              9000002
+            ]
+          ],
+          "weight": {
+            "re": -2.1018168157820194e-06,
+            "im": 0.0
+          },
+          "momentum_residual": [
+            -2.220446049250313e-16,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "cut_id": 1,
+          "pdgs": [
+            [
+              9000001,
+              9000003
+            ],
+            [
+              9000003,
+              9000002
+            ]
+          ],
+          "weight": {
+            "re": -2.1018168157820203e-06,
+            "im": 0.0
+          },
+          "momentum_residual": [
+            4.440892098500626e-16,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "cut_id": 1,
+          "pdgs": [
+            [
+              9000001,
+              9000002
+            ],
+            [
+              9000003,
+              9000003
+            ]
+          ],
+          "weight": {
+            "re": -2.4124627293618634e-09,
+            "im": 0.0
+          },
+          "momentum_residual": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "cut_id": 1,
+          "pdgs": [
+            [
+              9000001,
+              9000003
+            ],
+            [
+              9000002,
+              9000003
+            ]
+          ],
+          "weight": {
+            "re": 6.405809876742111e-10,
+            "im": 0.0
+          },
+          "momentum_residual": [
+            -4.440892098500626e-16,
+            1.1102230246251565e-16,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "metadata": {
+        "total_timing": {
+          "secs": 0,
+          "nanos": 389458
+        },
+        "integrand_evaluation_time": {
+          "secs": 0,
+          "nanos": 235584
+        },
+        "evaluator_evaluation_time": {
+          "secs": 0,
+          "nanos": 118794
+        },
+        "parameterization_time": {
+          "secs": 0,
+          "nanos": 0
+        },
+        "event_processing_time": {
+          "secs": 0,
+          "nanos": 34210
+        },
+        "generated_event_count": 7,
+        "accepted_event_count": 7,
+        "relative_instability_error": {
+          "re": 0.0,
+          "im": 0.0
+        },
+        "is_nan": false,
+        "loop_momenta_escalation": null,
+        "stability_results": [
+          {
+            "precision": "Double",
+            "estimated_relative_accuracy": 1.187102658594834e-15,
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "secs": 0,
+              "nanos": 365917
+            }
+          }
+        ]
+      }
+    },
+    "virtual": {
+      "result": {
+        "re": 5.558131236202565e-05,
+        "im": 0.0
+      },
+      "events": [
+        {
+          "cut_id": 0,
+          "pdgs": [
+            [
+              9000001
+            ],
+            [
+              9000002,
+              9000002
+            ]
+          ],
+          "weight": {
+            "re": 5.558131236202565e-05,
+            "im": 0.0
+          },
+          "momentum_residual": [
+            -4.196643033083092e-14,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "metadata": {
+        "total_timing": {
+          "secs": 0,
+          "nanos": 40334
+        },
+        "integrand_evaluation_time": {
+          "secs": 0,
+          "nanos": 19417
+        },
+        "evaluator_evaluation_time": {
+          "secs": 0,
+          "nanos": 14917
+        },
+        "parameterization_time": {
+          "secs": 0,
+          "nanos": 0
+        },
+        "event_processing_time": {
+          "secs": 0,
+          "nanos": 958
+        },
+        "generated_event_count": 1,
+        "accepted_event_count": 1,
+        "relative_instability_error": {
+          "re": 0.0,
+          "im": 0.0
+        },
+        "is_nan": false,
+        "loop_momenta_escalation": null,
+        "stability_results": [
+          {
+            "precision": "Double",
+            "estimated_relative_accuracy": 9.753297703944246e-16,
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "secs": 0,
+              "nanos": 39417
+            }
+          }
+        ]
+      }
+    },
+    "real": {
+      "result": {
+        "re": -4.207177395047416e-06,
+        "im": 0.0
+      },
+      "events": [
+        {
+          "cut_id": 1,
+          "pdgs": [
+            [
+              9000001,
+              9000002
+            ],
+            [
+              9000003,
+              9000003
+            ]
+          ],
+          "weight": {
+            "re": -2.412462729361858e-09,
+            "im": 0.0
+          },
+          "momentum_residual": [
+            1.1102230246251565e-16,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "cut_id": 1,
+          "pdgs": [
+            [
+              9000001,
+              9000003
+            ],
+            [
+              9000003,
+              9000002
+            ]
+          ],
+          "weight": {
+            "re": 6.405809876742111e-10,
+            "im": 0.0
+          },
+          "momentum_residual": [
+            -2.220446049250313e-16,
+            -2.220446049250313e-16,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "cut_id": 1,
+          "pdgs": [
+            [
+              9000001,
+              9000003
+            ],
+            [
+              9000003,
+              9000002
+            ]
+          ],
+          "weight": {
+            "re": -2.1018168157820194e-06,
+            "im": 0.0
+          },
+          "momentum_residual": [
+            -2.220446049250313e-16,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "cut_id": 0,
+          "pdgs": [
+            [
+              9000001,
+              9000003
+            ],
+            [
+              9000003,
+              9000002
+            ]
+          ],
+          "weight": {
+            "re": -2.1018168157820203e-06,
+            "im": 0.0
+          },
+          "momentum_residual": [
+            4.440892098500626e-16,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "cut_id": 0,
+          "pdgs": [
+            [
+              9000001,
+              9000002
+            ],
+            [
+              9000003,
+              9000003
+            ]
+          ],
+          "weight": {
+            "re": -2.4124627293618634e-09,
+            "im": 0.0
+          },
+          "momentum_residual": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "cut_id": 0,
+          "pdgs": [
+            [
+              9000001,
+              9000003
+            ],
+            [
+              9000002,
+              9000003
+            ]
+          ],
+          "weight": {
+            "re": 6.405809876742111e-10,
+            "im": 0.0
+          },
+          "momentum_residual": [
+            -4.440892098500626e-16,
+            1.1102230246251565e-16,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "metadata": {
+        "total_timing": {
+          "secs": 0,
+          "nanos": 133500
+        },
+        "integrand_evaluation_time": {
+          "secs": 0,
+          "nanos": 73666
+        },
+        "evaluator_evaluation_time": {
+          "secs": 0,
+          "nanos": 58084
+        },
+        "parameterization_time": {
+          "secs": 0,
+          "nanos": 0
+        },
+        "event_processing_time": {
+          "secs": 0,
+          "nanos": 3500
+        },
+        "generated_event_count": 6,
+        "accepted_event_count": 6,
+        "relative_instability_error": {
+          "re": 0.0,
+          "im": 0.0
+        },
+        "is_nan": false,
+        "loop_momenta_escalation": null,
+        "stability_results": [
+          {
+            "precision": "Double",
+            "estimated_relative_accuracy": 2.0133045691189648e-15,
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "secs": 0,
+              "nanos": 132125
+            }
+          }
+        ]
+      }
+    }
+  },
+  "inclusive_minus_virtual_minus_real": 4.235164736271502e-21,
+  "max_momentum_residual": 4.196643033083092e-14
+}
