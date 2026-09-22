@@ -633,113 +633,118 @@
 <a href=#632 id=632 data-nosnippet>632</a><span class="kw">pub mod </span>contract;
 <a href=#633 id=633 data-nosnippet>633</a>
 <a href=#634 id=634 data-nosnippet>634</a><span class="kw">impl</span>&lt;Aind: AbsInd + ParseableAind&gt; Concretize&lt;SymbolicTensor&lt;Aind&gt;&gt; <span class="kw">for </span>ShadowedStructure&lt;Aind&gt; {
-<a href=#635 id=635 data-nosnippet>635</a>    <span class="kw">fn </span>concretize(<span class="self">self</span>) -&gt; SymbolicTensor&lt;Aind&gt; {
-<a href=#636 id=636 data-nosnippet>636</a>        <span class="kw">let </span>is_metric = <span class="self">self</span>.name().unwrap() == ETS.metric;
-<a href=#637 id=637 data-nosnippet>637</a>        SymbolicTensor {
-<a href=#638 id=638 data-nosnippet>638</a>            expression: <span class="self">self</span>.to_symbolic(<span class="prelude-val">None</span>).unwrap(),
-<a href=#639 id=639 data-nosnippet>639</a>            is_composite: <span class="bool-val">false</span>,
-<a href=#640 id=640 data-nosnippet>640</a>            is_metric,
-<a href=#641 id=641 data-nosnippet>641</a>            structure: <span class="self">self</span>.structure,
-<a href=#642 id=642 data-nosnippet>642</a>        }
-<a href=#643 id=643 data-nosnippet>643</a>    }
-<a href=#644 id=644 data-nosnippet>644</a>
-<a href=#645 id=645 data-nosnippet>645</a>    <span class="kw">fn </span>concretize_logical(<span class="self">self</span>, layout: <span class="kw-2">&amp;</span>CanonicalLayout) -&gt; SymbolicTensor&lt;Aind&gt; {
-<a href=#646 id=646 data-nosnippet>646</a>        <span class="kw">let </span>is_metric = <span class="self">self</span>.name().unwrap() == ETS.metric;
-<a href=#647 id=647 data-nosnippet>647</a>        <span class="kw">let </span>logical_slots = layout.canonical_to_logical(<span class="kw-2">&amp;</span><span class="self">self</span>.external_structure());
-<a href=#648 id=648 data-nosnippet>648</a>        <span class="kw">let </span>expression = FunctionBuilder::new(<span class="self">self</span>.name().unwrap())
-<a href=#649 id=649 data-nosnippet>649</a>            .add_args(<span class="self">self</span>.args().unwrap_or_default())
-<a href=#650 id=650 data-nosnippet>650</a>            .add_args(logical_slots.into_iter().map(|slot| slot.to_atom()))
-<a href=#651 id=651 data-nosnippet>651</a>            .finish();
-<a href=#652 id=652 data-nosnippet>652</a>        SymbolicTensor {
-<a href=#653 id=653 data-nosnippet>653</a>            expression,
-<a href=#654 id=654 data-nosnippet>654</a>            is_composite: <span class="bool-val">false</span>,
-<a href=#655 id=655 data-nosnippet>655</a>            is_metric,
-<a href=#656 id=656 data-nosnippet>656</a>            structure: <span class="self">self</span>.structure,
-<a href=#657 id=657 data-nosnippet>657</a>        }
-<a href=#658 id=658 data-nosnippet>658</a>    }
-<a href=#659 id=659 data-nosnippet>659</a>}
-<a href=#660 id=660 data-nosnippet>660</a>
-<a href=#661 id=661 data-nosnippet>661</a><span class="kw">impl</span>&lt;Aind: AbsInd + ParseableAind&gt; Concretize&lt;SymbolicTensor&lt;Aind&gt;&gt;
-<a href=#662 id=662 data-nosnippet>662</a>    <span class="kw">for </span>TensorShell&lt;ShadowedStructure&lt;Aind&gt;&gt;
-<a href=#663 id=663 data-nosnippet>663</a>{
-<a href=#664 id=664 data-nosnippet>664</a>    <span class="kw">fn </span>concretize(<span class="self">self</span>) -&gt; SymbolicTensor&lt;Aind&gt; {
-<a href=#665 id=665 data-nosnippet>665</a>        <span class="self">self</span>.structure.concretize()
-<a href=#666 id=666 data-nosnippet>666</a>    }
-<a href=#667 id=667 data-nosnippet>667</a>
-<a href=#668 id=668 data-nosnippet>668</a>    <span class="kw">fn </span>concretize_logical(<span class="self">self</span>, layout: <span class="kw-2">&amp;</span>CanonicalLayout) -&gt; SymbolicTensor&lt;Aind&gt; {
-<a href=#669 id=669 data-nosnippet>669</a>        <span class="self">self</span>.structure.concretize_logical(layout)
-<a href=#670 id=670 data-nosnippet>670</a>    }
-<a href=#671 id=671 data-nosnippet>671</a>}
+<a href=#635 id=635 data-nosnippet>635</a>    <span class="kw">fn </span>concretize(<span class="self">self</span>) -&gt; eyre::Result&lt;SymbolicTensor&lt;Aind&gt;&gt; {
+<a href=#636 id=636 data-nosnippet>636</a>        <span class="kw">let </span>is_metric = <span class="self">self</span>.name() == <span class="prelude-val">Some</span>(ETS.metric);
+<a href=#637 id=637 data-nosnippet>637</a>        <span class="prelude-val">Ok</span>(SymbolicTensor {
+<a href=#638 id=638 data-nosnippet>638</a>            expression: <span class="self">self
+<a href=#639 id=639 data-nosnippet>639</a>                </span>.to_symbolic(<span class="prelude-val">None</span>)
+<a href=#640 id=640 data-nosnippet>640</a>                .ok_or_else(|| <span class="macro">eyre::eyre!</span>(<span class="string">"symbolic tensor requires a name"</span>))<span class="question-mark">?</span>,
+<a href=#641 id=641 data-nosnippet>641</a>            is_composite: <span class="bool-val">false</span>,
+<a href=#642 id=642 data-nosnippet>642</a>            is_metric,
+<a href=#643 id=643 data-nosnippet>643</a>            structure: <span class="self">self</span>.structure,
+<a href=#644 id=644 data-nosnippet>644</a>        })
+<a href=#645 id=645 data-nosnippet>645</a>    }
+<a href=#646 id=646 data-nosnippet>646</a>
+<a href=#647 id=647 data-nosnippet>647</a>    <span class="kw">fn </span>concretize_logical(<span class="self">self</span>, layout: <span class="kw-2">&amp;</span>CanonicalLayout) -&gt; eyre::Result&lt;SymbolicTensor&lt;Aind&gt;&gt; {
+<a href=#648 id=648 data-nosnippet>648</a>        <span class="kw">let </span>is_metric = <span class="self">self</span>.name() == <span class="prelude-val">Some</span>(ETS.metric);
+<a href=#649 id=649 data-nosnippet>649</a>        <span class="kw">let </span>logical_slots = layout.canonical_to_logical(<span class="kw-2">&amp;</span><span class="self">self</span>.external_structure());
+<a href=#650 id=650 data-nosnippet>650</a>        <span class="kw">let </span>expression = FunctionBuilder::new(
+<a href=#651 id=651 data-nosnippet>651</a>            <span class="self">self</span>.name()
+<a href=#652 id=652 data-nosnippet>652</a>                .ok_or_else(|| <span class="macro">eyre::eyre!</span>(<span class="string">"symbolic tensor requires a name"</span>))<span class="question-mark">?</span>,
+<a href=#653 id=653 data-nosnippet>653</a>        )
+<a href=#654 id=654 data-nosnippet>654</a>        .add_args(<span class="self">self</span>.args().unwrap_or_default())
+<a href=#655 id=655 data-nosnippet>655</a>        .add_args(logical_slots.into_iter().map(|slot| slot.to_atom()))
+<a href=#656 id=656 data-nosnippet>656</a>        .finish();
+<a href=#657 id=657 data-nosnippet>657</a>        <span class="prelude-val">Ok</span>(SymbolicTensor {
+<a href=#658 id=658 data-nosnippet>658</a>            expression,
+<a href=#659 id=659 data-nosnippet>659</a>            is_composite: <span class="bool-val">false</span>,
+<a href=#660 id=660 data-nosnippet>660</a>            is_metric,
+<a href=#661 id=661 data-nosnippet>661</a>            structure: <span class="self">self</span>.structure,
+<a href=#662 id=662 data-nosnippet>662</a>        })
+<a href=#663 id=663 data-nosnippet>663</a>    }
+<a href=#664 id=664 data-nosnippet>664</a>}
+<a href=#665 id=665 data-nosnippet>665</a>
+<a href=#666 id=666 data-nosnippet>666</a><span class="kw">impl</span>&lt;Aind: AbsInd + ParseableAind&gt; Concretize&lt;SymbolicTensor&lt;Aind&gt;&gt;
+<a href=#667 id=667 data-nosnippet>667</a>    <span class="kw">for </span>TensorShell&lt;ShadowedStructure&lt;Aind&gt;&gt;
+<a href=#668 id=668 data-nosnippet>668</a>{
+<a href=#669 id=669 data-nosnippet>669</a>    <span class="kw">fn </span>concretize(<span class="self">self</span>) -&gt; eyre::Result&lt;SymbolicTensor&lt;Aind&gt;&gt; {
+<a href=#670 id=670 data-nosnippet>670</a>        <span class="self">self</span>.structure.concretize()
+<a href=#671 id=671 data-nosnippet>671</a>    }
 <a href=#672 id=672 data-nosnippet>672</a>
-<a href=#673 id=673 data-nosnippet>673</a><span class="kw">impl</span>&lt;Aind: AbsInd + ParseableAind&gt; Concretize&lt;SymbolicTensor&lt;Aind&gt;&gt;
-<a href=#674 id=674 data-nosnippet>674</a>    <span class="kw">for </span>TensorShell&lt;SymbolicTensor&lt;Aind&gt;&gt;
-<a href=#675 id=675 data-nosnippet>675</a>{
-<a href=#676 id=676 data-nosnippet>676</a>    <span class="kw">fn </span>concretize(<span class="self">self</span>) -&gt; SymbolicTensor&lt;Aind&gt; {
-<a href=#677 id=677 data-nosnippet>677</a>        <span class="self">self</span>.structure
-<a href=#678 id=678 data-nosnippet>678</a>    }
-<a href=#679 id=679 data-nosnippet>679</a>
-<a href=#680 id=680 data-nosnippet>680</a>    <span class="kw">fn </span>concretize_logical(<span class="self">self</span>, layout: <span class="kw-2">&amp;</span>CanonicalLayout) -&gt; SymbolicTensor&lt;Aind&gt; {
-<a href=#681 id=681 data-nosnippet>681</a>        <span class="kw">let </span>positions = (<span class="number">0</span>..<span class="self">self</span>.structure.order()).collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;();
-<a href=#682 id=682 data-nosnippet>682</a>        <span class="kw">if </span>layout.logical_to_canonical(<span class="kw-2">&amp;</span>positions) != positions {
-<a href=#683 id=683 data-nosnippet>683</a>            <span class="macro">panic!</span>(<span class="string">"cannot apply a logical layout to an already concrete symbolic tensor"</span>)
-<a href=#684 id=684 data-nosnippet>684</a>        }
-<a href=#685 id=685 data-nosnippet>685</a>        <span class="self">self</span>.structure
-<a href=#686 id=686 data-nosnippet>686</a>    }
-<a href=#687 id=687 data-nosnippet>687</a>}
-<a href=#688 id=688 data-nosnippet>688</a>
-<a href=#689 id=689 data-nosnippet>689</a><span class="kw">impl</span>&lt;Aind: AbsInd&gt; std::ops::Neg <span class="kw">for </span>SymbolicTensor&lt;Aind&gt; {
-<a href=#690 id=690 data-nosnippet>690</a>    <span class="kw">type </span>Output = SymbolicTensor&lt;Aind&gt;;
-<a href=#691 id=691 data-nosnippet>691</a>
-<a href=#692 id=692 data-nosnippet>692</a>    <span class="kw">fn </span>neg(<span class="self">self</span>) -&gt; <span class="self">Self</span>::Output {
-<a href=#693 id=693 data-nosnippet>693</a>        <span class="self">Self </span>{
-<a href=#694 id=694 data-nosnippet>694</a>            expression: -<span class="self">self</span>.expression,
-<a href=#695 id=695 data-nosnippet>695</a>            is_composite: <span class="bool-val">true</span>,
-<a href=#696 id=696 data-nosnippet>696</a>            is_metric: <span class="self">self</span>.is_metric,
-<a href=#697 id=697 data-nosnippet>697</a>            structure: <span class="self">self</span>.structure,
-<a href=#698 id=698 data-nosnippet>698</a>        }
-<a href=#699 id=699 data-nosnippet>699</a>    }
-<a href=#700 id=700 data-nosnippet>700</a>}
-<a href=#701 id=701 data-nosnippet>701</a>
-<a href=#702 id=702 data-nosnippet>702</a><span class="kw">impl</span>&lt;Aind: AbsInd&gt; AddAssign&lt;SymbolicTensor&lt;Aind&gt;&gt; <span class="kw">for </span>SymbolicTensor&lt;Aind&gt; {
-<a href=#703 id=703 data-nosnippet>703</a>    <span class="kw">fn </span>add_assign(<span class="kw-2">&amp;mut </span><span class="self">self</span>, rhs: SymbolicTensor&lt;Aind&gt;) {
-<a href=#704 id=704 data-nosnippet>704</a>        <span class="macro">debug_assert_eq!</span>(<span class="self">self</span>.structure, rhs.structure);
-<a href=#705 id=705 data-nosnippet>705</a>        <span class="self">self</span>.expression += rhs.expression;
-<a href=#706 id=706 data-nosnippet>706</a>        <span class="self">self</span>.is_composite = <span class="bool-val">true</span>;
-<a href=#707 id=707 data-nosnippet>707</a>        <span class="self">self</span>.is_metric = <span class="bool-val">false</span>;
-<a href=#708 id=708 data-nosnippet>708</a>    }
-<a href=#709 id=709 data-nosnippet>709</a>}
-<a href=#710 id=710 data-nosnippet>710</a>
-<a href=#711 id=711 data-nosnippet>711</a><span class="kw">impl</span>&lt;Aind: AbsInd&gt; AddAssign&lt;<span class="kw-2">&amp;</span>SymbolicTensor&lt;Aind&gt;&gt; <span class="kw">for </span>SymbolicTensor&lt;Aind&gt; {
-<a href=#712 id=712 data-nosnippet>712</a>    <span class="kw">fn </span>add_assign(<span class="kw-2">&amp;mut </span><span class="self">self</span>, rhs: <span class="kw-2">&amp;</span>SymbolicTensor&lt;Aind&gt;) {
-<a href=#713 id=713 data-nosnippet>713</a>        <span class="macro">debug_assert_eq!</span>(<span class="self">self</span>.structure, rhs.structure);
-<a href=#714 id=714 data-nosnippet>714</a>        <span class="self">self</span>.expression += <span class="kw-2">&amp;</span>rhs.expression;
-<a href=#715 id=715 data-nosnippet>715</a>        <span class="self">self</span>.is_composite = <span class="bool-val">true</span>;
-<a href=#716 id=716 data-nosnippet>716</a>        <span class="self">self</span>.is_metric = <span class="bool-val">false</span>;
-<a href=#717 id=717 data-nosnippet>717</a>    }
-<a href=#718 id=718 data-nosnippet>718</a>}
-<a href=#719 id=719 data-nosnippet>719</a>
-<a href=#720 id=720 data-nosnippet>720</a><span class="kw">impl</span>&lt;Aind: AbsInd&gt; ScalarMul&lt;Atom&gt; <span class="kw">for </span>SymbolicTensor&lt;Aind&gt; {
-<a href=#721 id=721 data-nosnippet>721</a>    <span class="kw">type </span>Output = SymbolicTensor&lt;Aind&gt;;
-<a href=#722 id=722 data-nosnippet>722</a>
-<a href=#723 id=723 data-nosnippet>723</a>    <span class="kw">fn </span>scalar_mul(<span class="kw-2">&amp;</span><span class="self">self</span>, rhs: <span class="kw-2">&amp;</span>Atom) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>::Output&gt; {
-<a href=#724 id=724 data-nosnippet>724</a>        <span class="prelude-val">Some</span>(<span class="self">Self </span>{
-<a href=#725 id=725 data-nosnippet>725</a>            expression: rhs * <span class="kw-2">&amp;</span><span class="self">self</span>.expression,
-<a href=#726 id=726 data-nosnippet>726</a>            is_composite: <span class="bool-val">true</span>,
-<a href=#727 id=727 data-nosnippet>727</a>            is_metric: <span class="bool-val">false</span>,
-<a href=#728 id=728 data-nosnippet>728</a>            structure: <span class="self">self</span>.structure.clone(),
-<a href=#729 id=729 data-nosnippet>729</a>        })
-<a href=#730 id=730 data-nosnippet>730</a>    }
-<a href=#731 id=731 data-nosnippet>731</a>}
-<a href=#732 id=732 data-nosnippet>732</a>
-<a href=#733 id=733 data-nosnippet>733</a><span class="kw">impl</span>&lt;Aind: AbsInd&gt; std::fmt::Display <span class="kw">for </span>SymbolicTensor&lt;Aind&gt; {
-<a href=#734 id=734 data-nosnippet>734</a>    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>std::fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; std::fmt::Result {
-<a href=#735 id=735 data-nosnippet>735</a>        <span class="macro">write!</span>(
-<a href=#736 id=736 data-nosnippet>736</a>            f,
-<a href=#737 id=737 data-nosnippet>737</a>            <span class="string">"{},{}"</span>,
-<a href=#738 id=738 data-nosnippet>738</a>            <span class="self">self</span>.structure,
-<a href=#739 id=739 data-nosnippet>739</a>            <span class="self">self</span>.expression
-<a href=#740 id=740 data-nosnippet>740</a>                .printer(SpensoPrintSettings::compact().nice_symbolica())
-<a href=#741 id=741 data-nosnippet>741</a>        )
-<a href=#742 id=742 data-nosnippet>742</a>    }
-<a href=#743 id=743 data-nosnippet>743</a>}
+<a href=#673 id=673 data-nosnippet>673</a>    <span class="kw">fn </span>concretize_logical(<span class="self">self</span>, layout: <span class="kw-2">&amp;</span>CanonicalLayout) -&gt; eyre::Result&lt;SymbolicTensor&lt;Aind&gt;&gt; {
+<a href=#674 id=674 data-nosnippet>674</a>        <span class="self">self</span>.structure.concretize_logical(layout)
+<a href=#675 id=675 data-nosnippet>675</a>    }
+<a href=#676 id=676 data-nosnippet>676</a>}
+<a href=#677 id=677 data-nosnippet>677</a>
+<a href=#678 id=678 data-nosnippet>678</a><span class="kw">impl</span>&lt;Aind: AbsInd + ParseableAind&gt; Concretize&lt;SymbolicTensor&lt;Aind&gt;&gt;
+<a href=#679 id=679 data-nosnippet>679</a>    <span class="kw">for </span>TensorShell&lt;SymbolicTensor&lt;Aind&gt;&gt;
+<a href=#680 id=680 data-nosnippet>680</a>{
+<a href=#681 id=681 data-nosnippet>681</a>    <span class="kw">fn </span>concretize(<span class="self">self</span>) -&gt; eyre::Result&lt;SymbolicTensor&lt;Aind&gt;&gt; {
+<a href=#682 id=682 data-nosnippet>682</a>        <span class="prelude-val">Ok</span>(<span class="self">self</span>.structure)
+<a href=#683 id=683 data-nosnippet>683</a>    }
+<a href=#684 id=684 data-nosnippet>684</a>
+<a href=#685 id=685 data-nosnippet>685</a>    <span class="kw">fn </span>concretize_logical(<span class="self">self</span>, layout: <span class="kw-2">&amp;</span>CanonicalLayout) -&gt; eyre::Result&lt;SymbolicTensor&lt;Aind&gt;&gt; {
+<a href=#686 id=686 data-nosnippet>686</a>        <span class="kw">let </span>positions = (<span class="number">0</span>..<span class="self">self</span>.structure.order()).collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;();
+<a href=#687 id=687 data-nosnippet>687</a>        <span class="kw">if </span>layout.logical_to_canonical(<span class="kw-2">&amp;</span>positions) != positions {
+<a href=#688 id=688 data-nosnippet>688</a>            <span class="macro">eyre::bail!</span>(<span class="string">"cannot apply a logical layout to an already concrete symbolic tensor"</span>);
+<a href=#689 id=689 data-nosnippet>689</a>        }
+<a href=#690 id=690 data-nosnippet>690</a>        <span class="prelude-val">Ok</span>(<span class="self">self</span>.structure)
+<a href=#691 id=691 data-nosnippet>691</a>    }
+<a href=#692 id=692 data-nosnippet>692</a>}
+<a href=#693 id=693 data-nosnippet>693</a>
+<a href=#694 id=694 data-nosnippet>694</a><span class="kw">impl</span>&lt;Aind: AbsInd&gt; std::ops::Neg <span class="kw">for </span>SymbolicTensor&lt;Aind&gt; {
+<a href=#695 id=695 data-nosnippet>695</a>    <span class="kw">type </span>Output = SymbolicTensor&lt;Aind&gt;;
+<a href=#696 id=696 data-nosnippet>696</a>
+<a href=#697 id=697 data-nosnippet>697</a>    <span class="kw">fn </span>neg(<span class="self">self</span>) -&gt; <span class="self">Self</span>::Output {
+<a href=#698 id=698 data-nosnippet>698</a>        <span class="self">Self </span>{
+<a href=#699 id=699 data-nosnippet>699</a>            expression: -<span class="self">self</span>.expression,
+<a href=#700 id=700 data-nosnippet>700</a>            is_composite: <span class="bool-val">true</span>,
+<a href=#701 id=701 data-nosnippet>701</a>            is_metric: <span class="self">self</span>.is_metric,
+<a href=#702 id=702 data-nosnippet>702</a>            structure: <span class="self">self</span>.structure,
+<a href=#703 id=703 data-nosnippet>703</a>        }
+<a href=#704 id=704 data-nosnippet>704</a>    }
+<a href=#705 id=705 data-nosnippet>705</a>}
+<a href=#706 id=706 data-nosnippet>706</a>
+<a href=#707 id=707 data-nosnippet>707</a><span class="kw">impl</span>&lt;Aind: AbsInd&gt; AddAssign&lt;SymbolicTensor&lt;Aind&gt;&gt; <span class="kw">for </span>SymbolicTensor&lt;Aind&gt; {
+<a href=#708 id=708 data-nosnippet>708</a>    <span class="kw">fn </span>add_assign(<span class="kw-2">&amp;mut </span><span class="self">self</span>, rhs: SymbolicTensor&lt;Aind&gt;) {
+<a href=#709 id=709 data-nosnippet>709</a>        <span class="macro">debug_assert_eq!</span>(<span class="self">self</span>.structure, rhs.structure);
+<a href=#710 id=710 data-nosnippet>710</a>        <span class="self">self</span>.expression += rhs.expression;
+<a href=#711 id=711 data-nosnippet>711</a>        <span class="self">self</span>.is_composite = <span class="bool-val">true</span>;
+<a href=#712 id=712 data-nosnippet>712</a>        <span class="self">self</span>.is_metric = <span class="bool-val">false</span>;
+<a href=#713 id=713 data-nosnippet>713</a>    }
+<a href=#714 id=714 data-nosnippet>714</a>}
+<a href=#715 id=715 data-nosnippet>715</a>
+<a href=#716 id=716 data-nosnippet>716</a><span class="kw">impl</span>&lt;Aind: AbsInd&gt; AddAssign&lt;<span class="kw-2">&amp;</span>SymbolicTensor&lt;Aind&gt;&gt; <span class="kw">for </span>SymbolicTensor&lt;Aind&gt; {
+<a href=#717 id=717 data-nosnippet>717</a>    <span class="kw">fn </span>add_assign(<span class="kw-2">&amp;mut </span><span class="self">self</span>, rhs: <span class="kw-2">&amp;</span>SymbolicTensor&lt;Aind&gt;) {
+<a href=#718 id=718 data-nosnippet>718</a>        <span class="macro">debug_assert_eq!</span>(<span class="self">self</span>.structure, rhs.structure);
+<a href=#719 id=719 data-nosnippet>719</a>        <span class="self">self</span>.expression += <span class="kw-2">&amp;</span>rhs.expression;
+<a href=#720 id=720 data-nosnippet>720</a>        <span class="self">self</span>.is_composite = <span class="bool-val">true</span>;
+<a href=#721 id=721 data-nosnippet>721</a>        <span class="self">self</span>.is_metric = <span class="bool-val">false</span>;
+<a href=#722 id=722 data-nosnippet>722</a>    }
+<a href=#723 id=723 data-nosnippet>723</a>}
+<a href=#724 id=724 data-nosnippet>724</a>
+<a href=#725 id=725 data-nosnippet>725</a><span class="kw">impl</span>&lt;Aind: AbsInd&gt; ScalarMul&lt;Atom&gt; <span class="kw">for </span>SymbolicTensor&lt;Aind&gt; {
+<a href=#726 id=726 data-nosnippet>726</a>    <span class="kw">type </span>Output = SymbolicTensor&lt;Aind&gt;;
+<a href=#727 id=727 data-nosnippet>727</a>
+<a href=#728 id=728 data-nosnippet>728</a>    <span class="kw">fn </span>scalar_mul(<span class="kw-2">&amp;</span><span class="self">self</span>, rhs: <span class="kw-2">&amp;</span>Atom) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>::Output&gt; {
+<a href=#729 id=729 data-nosnippet>729</a>        <span class="prelude-val">Some</span>(<span class="self">Self </span>{
+<a href=#730 id=730 data-nosnippet>730</a>            expression: rhs * <span class="kw-2">&amp;</span><span class="self">self</span>.expression,
+<a href=#731 id=731 data-nosnippet>731</a>            is_composite: <span class="bool-val">true</span>,
+<a href=#732 id=732 data-nosnippet>732</a>            is_metric: <span class="bool-val">false</span>,
+<a href=#733 id=733 data-nosnippet>733</a>            structure: <span class="self">self</span>.structure.clone(),
+<a href=#734 id=734 data-nosnippet>734</a>        })
+<a href=#735 id=735 data-nosnippet>735</a>    }
+<a href=#736 id=736 data-nosnippet>736</a>}
+<a href=#737 id=737 data-nosnippet>737</a>
+<a href=#738 id=738 data-nosnippet>738</a><span class="kw">impl</span>&lt;Aind: AbsInd&gt; std::fmt::Display <span class="kw">for </span>SymbolicTensor&lt;Aind&gt; {
+<a href=#739 id=739 data-nosnippet>739</a>    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>std::fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; std::fmt::Result {
+<a href=#740 id=740 data-nosnippet>740</a>        <span class="macro">write!</span>(
+<a href=#741 id=741 data-nosnippet>741</a>            f,
+<a href=#742 id=742 data-nosnippet>742</a>            <span class="string">"{},{}"</span>,
+<a href=#743 id=743 data-nosnippet>743</a>            <span class="self">self</span>.structure,
+<a href=#744 id=744 data-nosnippet>744</a>            <span class="self">self</span>.expression
+<a href=#745 id=745 data-nosnippet>745</a>                .printer(SpensoPrintSettings::compact().nice_symbolica())
+<a href=#746 id=746 data-nosnippet>746</a>        )
+<a href=#747 id=747 data-nosnippet>747</a>    }
+<a href=#748 id=748 data-nosnippet>748</a>}
 </code></pre></div></section></main></body></html>

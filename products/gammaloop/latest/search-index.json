@@ -1924,7 +1924,7 @@
     "summary": "Stores a typed command with its optional original spelling for replay and serialization.",
     "href": "reference/rust/gammaloop_api/state/struct.CommandHistory.html",
     "kind": "rust-api",
-    "text": "Stores a typed command with its optional original spelling for replay and serialization. Represents a command with optional raw string representation\n\nThis struct stores both the parsed command and optionally the original\nstring that was used to create it. This allows for preserving the exact\nuser input while still having access to the structured command data. pub struct CommandHistory {}"
+    "text": "Stores a typed command with its optional original spelling for replay and serialization. Represents a command with optional raw string representation\n\nThis struct stores a parsed command or a template awaiting scoped variables,\nplus the original string when available. This preserves the exact user input\nwhile keeping structured command data accessible. Templates carry their own\nrequired text in the command variant. pub struct CommandHistory {}"
   },
   {
     "title": "gammaloop-api · Parse command text",
@@ -2134,6 +2134,13 @@
     "href": "reference/python/gammaloop-python/BatchEvaluationResult/#exports-batchevaluationresult-observables-getter",
     "kind": "python-api",
     "text": "Observable snapshots accumulated across the complete sample batch. def observables(self) -> dict:"
+  },
+  {
+    "title": "gammaloop.BatchEvaluationResult.numerical_stability",
+    "summary": "def numerical_stability(self) -> Optional[dict]:",
+    "href": "reference/python/gammaloop-python/BatchEvaluationResult/#exports-batchevaluationresult-numerical-stability-getter",
+    "kind": "python-api",
+    "text": "def numerical_stability(self) -> Optional[dict]:"
   },
   {
     "title": "gammaloop.BatchEvaluationResult.__str__",
@@ -2500,11 +2507,39 @@
     "text": "Load, inspect, and evaluate one mutable GammaLoop session. Load, inspect, and evaluate one mutable GammaLoop session.\n\nOne instance owns a GammaLoop state, run history, CLI settings, default runtime\nsettings, and session state. Calls to ``run`` and the evaluation methods all act\non that same in-memory session.\n\nNotes\n-----\n``read_only_state=True`` prevents writes inside the active state directory; it\ndoes not make this Python object immutable. Commands may still change in-memory\nsettings, processes, or run history. Create separate instances when independent\nsessions are required. class GammaLoopAPI:"
   },
   {
+    "title": "gammaloop.GammaLoopAPI.read_only_state",
+    "summary": "def read_only_state(self) -> bool:",
+    "href": "reference/python/gammaloop-python/GammaLoopAPI/#exports-gammaloopapi-read-only-state-getter",
+    "kind": "python-api",
+    "text": "def read_only_state(self) -> bool:"
+  },
+  {
+    "title": "gammaloop.GammaLoopAPI.active_state_folder",
+    "summary": "def active_state_folder(self) -> str:",
+    "href": "reference/python/gammaloop-python/GammaLoopAPI/#exports-gammaloopapi-active-state-folder-getter",
+    "kind": "python-api",
+    "text": "def active_state_folder(self) -> str:"
+  },
+  {
     "title": "gammaloop.GammaLoopAPI constructor",
     "summary": "Load or create a GammaLoop state and initialize its CLI session.",
     "href": "reference/python/gammaloop-python/GammaLoopAPI/#exports-gammaloopapi-new-associatedfunction",
     "kind": "python-api",
     "text": "Load or create a GammaLoop state and initialize its CLI session.\n\nParameters\n----------\nstate_folder : path-like, optional\n    State directory to load or create. The default is ``./gammaloop_state``.\nboot_commands_path : path-like, optional\n    TOML run card whose commands are applied during startup.\nmodel_file : path-like, optional\n    Model file override used while loading or initializing the state.\ntrace_logs_filename : str, optional\n    File receiving native trace records for this session.\nlevel : LogLevel, optional\n    Terminal log-level override for this session.\nlogfile_level : LogLevel, optional\n    File log-level override for this session.\nlogging_prefix : object, optional\n    Native logging-prefix configuration.\nread_only_state : bool, default=False\n    Prevent writes whose target lies inside the active state directory and\n    disable file logging there. In-memory session changes remain possible.\nsettings_global_path : path-like, optional\n    TOML file overriding the global settings loaded at startup.\nsettings_runtime_defaults_path : path-like, optional\n    TOML file overriding the default runtime settings loaded at startup.\nclean_state : bool, default=False\n    Remove the resolved state path before startup. This is destructive and\n    cannot be combined with ``read_only_state=True``.\n\nReturns\n-------\nGammaLoopAPI\n    A stateful API instance sharing one state, history, and settings session.\n\nRaises\n------\nException\n    If startup options conflict, the state or settings cannot be loaded, a\n    boot command fails, or a boot card requests process exit.\n\nExamples\n--------\nOpen an existing generated state without permitting writes to it:\n\n```python\napi = GammaLoopAPI(state_folder=\"./state\", read_only_state=True)\n``` def __new__(cls, state_folder: Optional[str | os.PathLike | pathlib.Path] = None, boot_commands_path: Optional[str | os.PathLike | pathlib.Path] = None, model_file: Optional[str | os.PathLike | pathlib.Path] = None, trace_logs_filename: Optional[str] = None, level: Optional[LogLevel] = None, logfile_level: Optional[LogLevel] = None, logging_prefix: object | None = None, read_only_state: bool = False, settings_global_path: Optional[str | os.PathLike | pathlib.Path] = None, settings_runtime_defaults_path: Optional[str | os.PathLike | pathlib.Path] = None, clean_state: bool = False) -> GammaLoopAPI:"
+  },
+  {
+    "title": "gammaloop.GammaLoopAPI.is_read_only_state",
+    "summary": "def is_read_only_state(self) -> bool:",
+    "href": "reference/python/gammaloop-python/GammaLoopAPI/#exports-gammaloopapi-is-read-only-state-method",
+    "kind": "python-api",
+    "text": "def is_read_only_state(self) -> bool:"
+  },
+  {
+    "title": "gammaloop.GammaLoopAPI.state_access_mode",
+    "summary": "def state_access_mode(self) -> str:",
+    "href": "reference/python/gammaloop-python/GammaLoopAPI/#exports-gammaloopapi-state-access-mode-method",
+    "kind": "python-api",
+    "text": "def state_access_mode(self) -> str:"
   },
   {
     "title": "gammaloop.GammaLoopAPI.evaluate_sample",
@@ -2624,20 +2659,6 @@
     "href": "reference/python/gammaloop-python/GammaLoopAPI/#exports-gammaloopapi-run-method",
     "kind": "python-api",
     "text": "Parse and execute a CLI command in this API instance's session.\n\nParameters\n----------\ncommand : str\n    GammaLoop CLI command text.\n\nReturns\n-------\nNone\n    The command's normal output is emitted through the configured CLI/logging\n    sinks; inspect structured state through the corresponding getter methods.\n\nRaises\n------\nException\n    If the command cannot be parsed or execution fails.\n\nNotes\n-----\nCommands share and may mutate the instance's in-memory state, settings, and run\nhistory. ``read_only_state=True`` only blocks writes inside the active state\ndirectory. The API does not automatically persist the session after this call;\npersistence depends on the executed command's explicit output behavior.\n\nExamples\n--------\nDisplay the processes loaded in the current state:\n\n```python\napi.run(\"display processes\")\n``` def run(self, command: str) -> None:"
-  },
-  {
-    "title": "gammaloop.GammaLoopAPI.generate_cff",
-    "summary": "Build a causal-flow expression from an inline DOT graph or one of its subgraphs.",
-    "href": "reference/python/gammaloop-python/GammaLoopAPI/#exports-gammaloopapi-generate-cff-method",
-    "kind": "python-api",
-    "text": "Build a causal-flow expression from an inline DOT graph or one of its subgraphs.\n\nParameters\n----------\ndot_string : str\n    Inline DOT graph using particles from the active model.\nsubgraph_nodes : Sequence[str]\n    Vertex names retained in the subgraph; an empty sequence selects all nodes.\nreverse_dangling : Sequence[int]\n    Dangling edge ids whose orientation is reversed.\norientation_pattern : str, optional\n    Pattern restricting returned causal-flow orientations.\n\nReturns\n-------\nlist[tuple[dict[int, int], str]]\n    Edge-direction maps paired with their energy-denominator expressions. def generate_cff(self, dot_string: str, subgraph_nodes: Sequence[str], reverse_dangling: Sequence[int], orientation_pattern: Optional[str] = None) -> list[tuple[dict[int, int], str]]:"
-  },
-  {
-    "title": "gammaloop.GammaLoopAPI.generate_cff_as_json_string",
-    "summary": "Serialize a causal-flow expression and its surfaces as JSON.",
-    "href": "reference/python/gammaloop-python/GammaLoopAPI/#exports-gammaloopapi-generate-cff-as-json-string-method",
-    "kind": "python-api",
-    "text": "Serialize a causal-flow expression and its surfaces as JSON.\n\nThis accepts the same graph, subgraph, and dangling-edge inputs as\n``generate_cff``. The current JSON representation is intended for GammaLoop\ntooling and may contain internal structural details.\n\nParameters\n----------\ndot_string : str\n    Inline DOT graph using particles from the active model.\nsubgraph_nodes : Sequence[str]\n    Vertex names retained in the subgraph; an empty sequence selects all nodes.\nreverse_dangling : Sequence[int]\n    Dangling edge ids whose orientation is reversed.\norientation_pattern : str, optional\n    Pattern restricting returned causal-flow orientations.\n\nReturns\n-------\nstr\n    JSON representation of the causal-flow expression and E-surfaces. def generate_cff_as_json_string(self, dot_string: str, subgraph_nodes: Sequence[str], reverse_dangling: Sequence[int], orientation_pattern: Optional[str] = None) -> str:"
   },
   {
     "title": "gammaloop.HistogramAccumulator",
@@ -3536,6 +3557,13 @@
     "text": "Estimated relative accuracy, or ``None`` when it could not be estimated. def estimated_relative_accuracy(self) -> Optional[float]:"
   },
   {
+    "title": "gammaloop.StabilityResult.estimated_decimal_digits",
+    "summary": "def estimated_decimal_digits(self) -> Optional[float]:",
+    "href": "reference/python/gammaloop-python/StabilityResult/#exports-stabilityresult-estimated-decimal-digits-getter",
+    "kind": "python-api",
+    "text": "def estimated_decimal_digits(self) -> Optional[float]:"
+  },
+  {
     "title": "gammaloop.StabilityResult.status",
     "summary": "Human-readable stability outcome and number of rotated samples.",
     "href": "reference/python/gammaloop-python/StabilityResult/#exports-stabilityresult-status-getter",
@@ -3932,7 +3960,7 @@
     "summary": "Load serialized graph data into a new or existing process",
     "href": "reference/cli/commands/gammaloop/import/graphs/",
     "kind": "command",
-    "text": "Load serialized graph data into a new or existing process path   Graph file to load, resolved against the active state root and current directory process --process -p Process reference: `#<id>`, `name:<name>`, or `<id>/<name>` integrand_name  -i Name assigned to the imported integrand overwrite  -o Replace an existing process or integrand with the same target name append  -a Append imported graphs to the selected target instead of replacing it help --help -h Print help Usage: gammaLoop import graphs [OPTIONS] <PATH>"
+    "text": "Load serialized graph data into a new or existing process source   Graph file to load, resolved against the active state root and current directory inline_dot --inline-dot  Inline DOT graph content to import instead of reading from a file path process_spec --process-spec  Process definition used to select physical Cutkosky cuts for imported graphs process --process -p Process reference: `#<id>`, `name:<name>`, or `<id>/<name>` integrand_name  -i Name assigned to the imported integrand overwrite  -o Replace an existing process or integrand with the same target name append  -a Append imported graphs to the selected target instead of replacing it help --help -h Print help Usage: gammaLoop import graphs [OPTIONS] [PATH]"
   },
   {
     "title": "gammaLoop save",
@@ -3981,7 +4009,7 @@
     "summary": "Execute a stored command block or an inline command list",
     "href": "reference/cli/commands/gammaloop/run/",
     "kind": "command",
-    "text": "Execute a stored command block or an inline command list block_names   Command block names to execute (in order) commands --commands -c Semicolon-separated inline commands executed after the named blocks help --help -h Print help Usage: gammaLoop run [OPTIONS] [BLOCK_NAME]..."
+    "text": "Execute a stored command block or an inline command list block_names   Command block names to execute (in order) defines --define -D Define a string variable available to selected command blocks; repeat as needed commands --commands -c Semicolon-separated inline commands executed after the named blocks help --help -h Print help Usage: gammaLoop run [OPTIONS] [BLOCK_NAME]..."
   },
   {
     "title": "gammaLoop start_commands_block",
@@ -4030,14 +4058,14 @@
     "summary": "Generate a cross-section integrand through the forward-scattering construction",
     "href": "reference/cli/commands/gammaloop/generate/xs/",
     "kind": "command",
-    "text": "Generate a cross-section integrand through the forward-scattering construction tokens   Quote-free spec.\n\nGrammar (unquoted): `INITIAL to FINAL [process_options] [generation_options]` Also accepts: `INITIAL > FINAL [ ... ]`\n\nExamples: e+ e- to d d~ g veto u d xs QED^2==2 QCD^2<=4 pert loops=1 fsloops=2 QCD=2 e+ e- > { z z, a a } [ {1} {{2}} QCD=2 QED=1 ] / u d | g ghG QED==2 QCD>=2 QCD<=4\n\nNotes: - `veto` and `only` are synonyms for `/` and `|`. - The `[ ... ]` block holds perturbative spec: `{n}`, `{{n}}`, and orders `QCD=n` with shorthand `QCD`≡1. append  -a Append the generated process instead of replacing the current process selection clear_existing_processes --clear-existing-processes -c Clear pre-existing processes process_name --process-name -p Optional human-readable process name integrand_name --integrand-name -i Name assigned to the generated integrand; defaults to the generated process name only_diagrams --only-diagrams -o Stop after diagram generation without constructing an evaluable integrand filter_selfenergies --filter-selfenergies  Include or exclude self-energy topologies; omission uses the generation-mode default filter_snails --filter-snails  Include or exclude snail topologies; omission uses the generation-mode default filter_tadpoles --filter-tadpoles  Include or exclude tadpole topologies; omission uses the generation-mode default veto_vertex_interactions --veto-vertex-interactions  Exclude graphs containing any listed vertex-interaction name allowed_vertex_interactions --allowed-vertex-interactions  Restrict generation to an allow-list of vertex interactions filter_cross_section_tadpoles --filter-cross-section-tadpoles  Filter tadpoles formed while sewing amplitudes into a cross-section graph veto_tadpoles_attached_to_massive_lines --veto-tadpoles-attached-to-massive-lines  Veto tadpoles attached to massive propagators veto_tadpoles_attached_to_massless_lines --veto-tadpoles-attached-to-massless-lines  Veto tadpoles attached to massless propagators veto_only_scaleless_tadpoles --veto-only-scaleless-tadpoles  Veto only tadpoles that are scaleless veto_snails_attached_to_massive_lines --veto-snails-attached-to-massive-lines  Veto snail insertions attached to massive propagators veto_snails_attached_to_massless_lines --veto-snails-attached-to-massless-lines  Veto snail insertions attached to massless propagators veto_only_scaleless_snails --veto-only-scaleless-snails  Veto only snail insertions that are scaleless veto_self_energy_of_massive_lines --veto-self-energy-of-massive-lines  Veto self-energy insertions on massive propagators veto_self_energy_of_massless_lines --veto-self-energy-of-massless-lines  Veto self-energy insertions on massless propagators veto_only_scaleless_self_energy --veto-only-scaleless-self-energy  Veto only self-energy insertions that are scaleless max_n_bridges --max-n-bridges -b Maximum number of bridges allowed in a generated graph; negative values disable the bound number_of_factorized_loop_subtopologies --number-of-factorized-loop-subtopologies -f Inclusive minimum and maximum number of factorized loop subtopologies number_of_fermion_loops --number-of-fermion-loops -L Number of closed fermion loops; negative disables n_cut_blobs --n-cut-blobs -B Inclusive minimum and maximum number of cut blobs on either side of a cross-section cut n_cut_spectators --n-cut-spectators -S Inclusive minimum and maximum number of spectators crossing a cross-section cut allow_symmetrization_of_external_fermions_in_amplitudes --allow-symmetrization-of-external-fermions-in-amplitudes  Permit external fermion permutations when identifying equivalent amplitudes symmetrize_initial_states --symmetrize-initial-states  Identify graphs related by permutations of identical initial-state particles symmetrize_final_states --symmetrize-final-states  Identify graphs related by permutations of identical final-state particles symmetrize_left_right_states --symmetrize-left-right-states  Identify cross-section graphs related by exchanging the left and right amplitudes numerator_aware_isomorphism_grouping --numerator-grouping -G Numerator-aware grouping choice numerical_samples_seed --numerical-samples-seed  Deterministic random seed used for numerical numerator comparisons number_of_samples_for_numerator_comparisons --number-of-samples-for-numerator-comparisons  Number of phase-space samples used to decide whether two numerators are equivalent consider_internal_masses_only_in_numerator_isomorphisms --consider-internal-masses-only-in-numerator-isomorphisms  Distinguish mass parameters while ignoring other model-parameter labels during grouping fully_numerical_substitution_when_comparing_numerators --fully-numerical-substitution-when-comparing-numerators  Numerically substitute every parameter when comparing candidate numerator isomorphisms compare_canonized_numerator --compare-canonized-numerator  Compare canonicalized numerators in addition to graph topology when grouping symmetric_left_right_polarizations --symmetric-left-right-polarizations  Treat left- and right-side polarization factors symmetrically during numerator grouping loop_momentum_bases --loop-momentum-bases  Graph processing toggles\n\nFormat: --loop-momentum-bases \"GL_12=7,10 GL_77=4,2\" --select-graphs \"GL_12 GL_13\" --veto-graphs \"GL_11 GL_15\" select_graphs --select-graphs  Generate only graphs whose names appear in this allow-list veto_graphs --veto-graphs  Exclude graphs whose names appear in this deny-list graph_prefix --graph-prefix -g Prefix assigned to generated graph names; defaults to `GL` global_prefactor_projector --global-prefactor-projector  Global prefactor projector (Symbolica atom string) global_prefactor_num --global-prefactor-num  Global prefactor numerator (Symbolica atom string) max_multiplicity_for_fast_cut_filter --max-multiplicity-for-fast-cut-filter -M Fast cut filter switch multiplicity filter_self_loop --filter-self-loop  Filter graph-theoretic self-loops explicitly; omission keeps them filter_zero_flow_edges --filter-zero-flow-edges  Filter edges that carry zero momentum flow in the selected routing keep_sources --keep-sources  Keep generated C++ source files after external compilation help --help -h Print help (see a summary with '-h') Usage: gammaLoop generate xs [OPTIONS] [TOKENS]..."
+    "text": "Generate a cross-section integrand through the forward-scattering construction tokens   Quote-free spec.\n\nGrammar (unquoted): `INITIAL to FINAL [process_options] [generation_options]` Also accepts: `INITIAL > FINAL [ ... ]`\n\nExamples: e+ e- to d d~ g veto u d xs QED^2==2 QCD^2<=4 pert loops=1 fsloops=2 QCD=2 e+ e- > { z z, a a } [ {1} {{2}} QCD=2 QED=1 ] / u d | g ghG QED==2 QCD>=2 QCD<=4\n\nNotes: - `veto` and `only` are synonyms for `/` and `|`. - The `[ ... ]` block holds perturbative spec: `{n}`, `{{n}}`, and orders `QCD=n` with shorthand `QCD`≡1. append  -a Append the generated process instead of replacing the current process selection clear_existing_processes --clear-existing-processes -c Clear pre-existing processes process_name --process-name -p Optional human-readable process name integrand_name --integrand-name -i Name assigned to the generated integrand; defaults to the generated process name only_diagrams --only-diagrams -o Stop after diagram generation without constructing an evaluable integrand filter_selfenergies --filter-selfenergies  Include or exclude self-energy topologies; omission uses the generation-mode default filter_snails --filter-snails  Include or exclude snail topologies; omission uses the generation-mode default filter_tadpoles --filter-tadpoles  Include or exclude tadpole topologies; omission uses the generation-mode default veto_vertex_interactions --veto-vertex-interactions  Exclude graphs containing any listed vertex-interaction name allowed_vertex_interactions --allowed-vertex-interactions  Restrict generation to an allow-list of vertex interactions filter_cross_section_tadpoles --filter-cross-section-tadpoles  Filter tadpoles formed while sewing amplitudes into a cross-section graph veto_tadpoles_attached_to_massive_lines --veto-tadpoles-attached-to-massive-lines  Veto tadpoles attached to massive propagators veto_tadpoles_attached_to_massless_lines --veto-tadpoles-attached-to-massless-lines  Veto tadpoles attached to massless propagators veto_only_scaleless_tadpoles --veto-only-scaleless-tadpoles  Veto only tadpoles that are scaleless veto_snails_attached_to_massive_lines --veto-snails-attached-to-massive-lines  Veto snail insertions attached to massive propagators veto_snails_attached_to_massless_lines --veto-snails-attached-to-massless-lines  Veto snail insertions attached to massless propagators veto_only_scaleless_snails --veto-only-scaleless-snails  Veto only snail insertions that are scaleless veto_self_energy_of_massive_lines --veto-self-energy-of-massive-lines  Veto self-energy insertions on massive propagators veto_self_energy_of_massless_lines --veto-self-energy-of-massless-lines  Veto self-energy insertions on massless propagators veto_only_scaleless_self_energy --veto-only-scaleless-self-energy  Veto only self-energy insertions that are scaleless max_n_bridges --max-n-bridges -b Maximum number of bridges allowed in a generated graph; negative values disable the bound number_of_factorized_loop_subtopologies --number-of-factorized-loop-subtopologies -f Inclusive minimum and maximum number of factorized loop subtopologies number_of_fermion_loops --number-of-fermion-loops -L Number of closed fermion loops, excluding ghosts; negative disables n_cut_blobs --n-cut-blobs -B Inclusive minimum and maximum number of cut blobs on either side of a cross-section cut n_cut_spectators --n-cut-spectators -S Inclusive minimum and maximum number of spectators crossing a cross-section cut allow_symmetrization_of_external_fermions_in_amplitudes --allow-symmetrization-of-external-fermions-in-amplitudes  Permit external fermion permutations when identifying equivalent amplitudes symmetrize_initial_states --symmetrize-initial-states  Identify graphs related by permutations of identical initial-state particles symmetrize_final_states --symmetrize-final-states  Identify graphs related by permutations of identical final-state particles symmetrize_left_right_states --symmetrize-left-right-states  Identify cross-section graphs under CP-based left/right exchange; requires CP symmetry numerator_aware_isomorphism_grouping --numerator-grouping -G Numerator-aware grouping choice numerical_samples_seed --numerical-samples-seed  Deterministic random seed used for numerical numerator comparisons number_of_samples_for_numerator_comparisons --number-of-samples-for-numerator-comparisons  Number of phase-space samples used to decide whether two numerators are equivalent consider_internal_masses_only_in_numerator_isomorphisms --consider-internal-masses-only-in-numerator-isomorphisms  Distinguish mass parameters while ignoring other model-parameter labels during grouping fully_numerical_substitution_when_comparing_numerators --fully-numerical-substitution-when-comparing-numerators  Numerically substitute every parameter when comparing candidate numerator isomorphisms compare_canonized_numerator --compare-canonized-numerator  Compare canonicalized numerators in addition to graph topology when grouping symmetric_left_right_polarizations --symmetric-left-right-polarizations  Treat left- and right-side polarization factors symmetrically during numerator grouping loop_momentum_bases --loop-momentum-bases  Graph processing toggles\n\nFormat: --loop-momentum-bases \"GL_12=7,10 GL_77=4,2\" --select-graphs \"GL_12 GL_13\" --veto-graphs \"GL_11 GL_15\" select_graphs --select-graphs  Generate only graphs whose names appear in this allow-list veto_graphs --veto-graphs  Exclude graphs whose names appear in this deny-list graph_prefix --graph-prefix -g Prefix assigned to generated graph names; defaults to `GL` global_prefactor_projector --global-prefactor-projector  Global prefactor projector (Symbolica atom string) global_prefactor_num --global-prefactor-num  Global prefactor numerator (Symbolica atom string) max_multiplicity_for_fast_cut_filter --max-multiplicity-for-fast-cut-filter -M Fast cut filter switch multiplicity filter_self_loop --filter-self-loop  Filter graph-theoretic self-loops explicitly; omission keeps them filter_zero_flow_edges --filter-zero-flow-edges  Filter edges that carry zero momentum flow in the selected routing keep_sources --keep-sources  Keep generated C++ source files after external compilation help --help -h Print help (see a summary with '-h') Usage: gammaLoop generate xs [OPTIONS] [TOKENS]..."
   },
   {
     "title": "gammaLoop generate amp",
     "summary": "Generate an amplitude integrand for the supplied process specification",
     "href": "reference/cli/commands/gammaloop/generate/amp/",
     "kind": "command",
-    "text": "Generate an amplitude integrand for the supplied process specification tokens   Quote-free spec.\n\nGrammar (unquoted): `INITIAL to FINAL [process_options] [generation_options]` Also accepts: `INITIAL > FINAL [ ... ]`\n\nExamples: e+ e- to d d~ g veto u d xs QED^2==2 QCD^2<=4 pert loops=1 fsloops=2 QCD=2 e+ e- > { z z, a a } [ {1} {{2}} QCD=2 QED=1 ] / u d | g ghG QED==2 QCD>=2 QCD<=4\n\nNotes: - `veto` and `only` are synonyms for `/` and `|`. - The `[ ... ]` block holds perturbative spec: `{n}`, `{{n}}`, and orders `QCD=n` with shorthand `QCD`≡1. append  -a Append the generated process instead of replacing the current process selection clear_existing_processes --clear-existing-processes -c Clear pre-existing processes process_name --process-name -p Optional human-readable process name integrand_name --integrand-name -i Name assigned to the generated integrand; defaults to the generated process name only_diagrams --only-diagrams -o Stop after diagram generation without constructing an evaluable integrand filter_selfenergies --filter-selfenergies  Include or exclude self-energy topologies; omission uses the generation-mode default filter_snails --filter-snails  Include or exclude snail topologies; omission uses the generation-mode default filter_tadpoles --filter-tadpoles  Include or exclude tadpole topologies; omission uses the generation-mode default veto_vertex_interactions --veto-vertex-interactions  Exclude graphs containing any listed vertex-interaction name allowed_vertex_interactions --allowed-vertex-interactions  Restrict generation to an allow-list of vertex interactions filter_cross_section_tadpoles --filter-cross-section-tadpoles  Filter tadpoles formed while sewing amplitudes into a cross-section graph veto_tadpoles_attached_to_massive_lines --veto-tadpoles-attached-to-massive-lines  Veto tadpoles attached to massive propagators veto_tadpoles_attached_to_massless_lines --veto-tadpoles-attached-to-massless-lines  Veto tadpoles attached to massless propagators veto_only_scaleless_tadpoles --veto-only-scaleless-tadpoles  Veto only tadpoles that are scaleless veto_snails_attached_to_massive_lines --veto-snails-attached-to-massive-lines  Veto snail insertions attached to massive propagators veto_snails_attached_to_massless_lines --veto-snails-attached-to-massless-lines  Veto snail insertions attached to massless propagators veto_only_scaleless_snails --veto-only-scaleless-snails  Veto only snail insertions that are scaleless veto_self_energy_of_massive_lines --veto-self-energy-of-massive-lines  Veto self-energy insertions on massive propagators veto_self_energy_of_massless_lines --veto-self-energy-of-massless-lines  Veto self-energy insertions on massless propagators veto_only_scaleless_self_energy --veto-only-scaleless-self-energy  Veto only self-energy insertions that are scaleless max_n_bridges --max-n-bridges -b Maximum number of bridges allowed in a generated graph; negative values disable the bound number_of_factorized_loop_subtopologies --number-of-factorized-loop-subtopologies -f Inclusive minimum and maximum number of factorized loop subtopologies number_of_fermion_loops --number-of-fermion-loops -L Number of closed fermion loops; negative disables n_cut_blobs --n-cut-blobs -B Inclusive minimum and maximum number of cut blobs on either side of a cross-section cut n_cut_spectators --n-cut-spectators -S Inclusive minimum and maximum number of spectators crossing a cross-section cut allow_symmetrization_of_external_fermions_in_amplitudes --allow-symmetrization-of-external-fermions-in-amplitudes  Permit external fermion permutations when identifying equivalent amplitudes symmetrize_initial_states --symmetrize-initial-states  Identify graphs related by permutations of identical initial-state particles symmetrize_final_states --symmetrize-final-states  Identify graphs related by permutations of identical final-state particles symmetrize_left_right_states --symmetrize-left-right-states  Identify cross-section graphs related by exchanging the left and right amplitudes numerator_aware_isomorphism_grouping --numerator-grouping -G Numerator-aware grouping choice numerical_samples_seed --numerical-samples-seed  Deterministic random seed used for numerical numerator comparisons number_of_samples_for_numerator_comparisons --number-of-samples-for-numerator-comparisons  Number of phase-space samples used to decide whether two numerators are equivalent consider_internal_masses_only_in_numerator_isomorphisms --consider-internal-masses-only-in-numerator-isomorphisms  Distinguish mass parameters while ignoring other model-parameter labels during grouping fully_numerical_substitution_when_comparing_numerators --fully-numerical-substitution-when-comparing-numerators  Numerically substitute every parameter when comparing candidate numerator isomorphisms compare_canonized_numerator --compare-canonized-numerator  Compare canonicalized numerators in addition to graph topology when grouping symmetric_left_right_polarizations --symmetric-left-right-polarizations  Treat left- and right-side polarization factors symmetrically during numerator grouping loop_momentum_bases --loop-momentum-bases  Graph processing toggles\n\nFormat: --loop-momentum-bases \"GL_12=7,10 GL_77=4,2\" --select-graphs \"GL_12 GL_13\" --veto-graphs \"GL_11 GL_15\" select_graphs --select-graphs  Generate only graphs whose names appear in this allow-list veto_graphs --veto-graphs  Exclude graphs whose names appear in this deny-list graph_prefix --graph-prefix -g Prefix assigned to generated graph names; defaults to `GL` global_prefactor_projector --global-prefactor-projector  Global prefactor projector (Symbolica atom string) global_prefactor_num --global-prefactor-num  Global prefactor numerator (Symbolica atom string) max_multiplicity_for_fast_cut_filter --max-multiplicity-for-fast-cut-filter -M Fast cut filter switch multiplicity filter_self_loop --filter-self-loop  Filter graph-theoretic self-loops explicitly; omission keeps them filter_zero_flow_edges --filter-zero-flow-edges  Filter edges that carry zero momentum flow in the selected routing keep_sources --keep-sources  Keep generated C++ source files after external compilation help --help -h Print help (see a summary with '-h') amplitude Usage: gammaLoop generate amp [OPTIONS] [TOKENS]..."
+    "text": "Generate an amplitude integrand for the supplied process specification tokens   Quote-free spec.\n\nGrammar (unquoted): `INITIAL to FINAL [process_options] [generation_options]` Also accepts: `INITIAL > FINAL [ ... ]`\n\nExamples: e+ e- to d d~ g veto u d xs QED^2==2 QCD^2<=4 pert loops=1 fsloops=2 QCD=2 e+ e- > { z z, a a } [ {1} {{2}} QCD=2 QED=1 ] / u d | g ghG QED==2 QCD>=2 QCD<=4\n\nNotes: - `veto` and `only` are synonyms for `/` and `|`. - The `[ ... ]` block holds perturbative spec: `{n}`, `{{n}}`, and orders `QCD=n` with shorthand `QCD`≡1. append  -a Append the generated process instead of replacing the current process selection clear_existing_processes --clear-existing-processes -c Clear pre-existing processes process_name --process-name -p Optional human-readable process name integrand_name --integrand-name -i Name assigned to the generated integrand; defaults to the generated process name only_diagrams --only-diagrams -o Stop after diagram generation without constructing an evaluable integrand filter_selfenergies --filter-selfenergies  Include or exclude self-energy topologies; omission uses the generation-mode default filter_snails --filter-snails  Include or exclude snail topologies; omission uses the generation-mode default filter_tadpoles --filter-tadpoles  Include or exclude tadpole topologies; omission uses the generation-mode default veto_vertex_interactions --veto-vertex-interactions  Exclude graphs containing any listed vertex-interaction name allowed_vertex_interactions --allowed-vertex-interactions  Restrict generation to an allow-list of vertex interactions filter_cross_section_tadpoles --filter-cross-section-tadpoles  Filter tadpoles formed while sewing amplitudes into a cross-section graph veto_tadpoles_attached_to_massive_lines --veto-tadpoles-attached-to-massive-lines  Veto tadpoles attached to massive propagators veto_tadpoles_attached_to_massless_lines --veto-tadpoles-attached-to-massless-lines  Veto tadpoles attached to massless propagators veto_only_scaleless_tadpoles --veto-only-scaleless-tadpoles  Veto only tadpoles that are scaleless veto_snails_attached_to_massive_lines --veto-snails-attached-to-massive-lines  Veto snail insertions attached to massive propagators veto_snails_attached_to_massless_lines --veto-snails-attached-to-massless-lines  Veto snail insertions attached to massless propagators veto_only_scaleless_snails --veto-only-scaleless-snails  Veto only snail insertions that are scaleless veto_self_energy_of_massive_lines --veto-self-energy-of-massive-lines  Veto self-energy insertions on massive propagators veto_self_energy_of_massless_lines --veto-self-energy-of-massless-lines  Veto self-energy insertions on massless propagators veto_only_scaleless_self_energy --veto-only-scaleless-self-energy  Veto only self-energy insertions that are scaleless max_n_bridges --max-n-bridges -b Maximum number of bridges allowed in a generated graph; negative values disable the bound number_of_factorized_loop_subtopologies --number-of-factorized-loop-subtopologies -f Inclusive minimum and maximum number of factorized loop subtopologies number_of_fermion_loops --number-of-fermion-loops -L Number of closed fermion loops, excluding ghosts; negative disables n_cut_blobs --n-cut-blobs -B Inclusive minimum and maximum number of cut blobs on either side of a cross-section cut n_cut_spectators --n-cut-spectators -S Inclusive minimum and maximum number of spectators crossing a cross-section cut allow_symmetrization_of_external_fermions_in_amplitudes --allow-symmetrization-of-external-fermions-in-amplitudes  Permit external fermion permutations when identifying equivalent amplitudes symmetrize_initial_states --symmetrize-initial-states  Identify graphs related by permutations of identical initial-state particles symmetrize_final_states --symmetrize-final-states  Identify graphs related by permutations of identical final-state particles symmetrize_left_right_states --symmetrize-left-right-states  Identify cross-section graphs under CP-based left/right exchange; requires CP symmetry numerator_aware_isomorphism_grouping --numerator-grouping -G Numerator-aware grouping choice numerical_samples_seed --numerical-samples-seed  Deterministic random seed used for numerical numerator comparisons number_of_samples_for_numerator_comparisons --number-of-samples-for-numerator-comparisons  Number of phase-space samples used to decide whether two numerators are equivalent consider_internal_masses_only_in_numerator_isomorphisms --consider-internal-masses-only-in-numerator-isomorphisms  Distinguish mass parameters while ignoring other model-parameter labels during grouping fully_numerical_substitution_when_comparing_numerators --fully-numerical-substitution-when-comparing-numerators  Numerically substitute every parameter when comparing candidate numerator isomorphisms compare_canonized_numerator --compare-canonized-numerator  Compare canonicalized numerators in addition to graph topology when grouping symmetric_left_right_polarizations --symmetric-left-right-polarizations  Treat left- and right-side polarization factors symmetrically during numerator grouping loop_momentum_bases --loop-momentum-bases  Graph processing toggles\n\nFormat: --loop-momentum-bases \"GL_12=7,10 GL_77=4,2\" --select-graphs \"GL_12 GL_13\" --veto-graphs \"GL_11 GL_15\" select_graphs --select-graphs  Generate only graphs whose names appear in this allow-list veto_graphs --veto-graphs  Exclude graphs whose names appear in this deny-list graph_prefix --graph-prefix -g Prefix assigned to generated graph names; defaults to `GL` global_prefactor_projector --global-prefactor-projector  Global prefactor projector (Symbolica atom string) global_prefactor_num --global-prefactor-num  Global prefactor numerator (Symbolica atom string) max_multiplicity_for_fast_cut_filter --max-multiplicity-for-fast-cut-filter -M Fast cut filter switch multiplicity filter_self_loop --filter-self-loop  Filter graph-theoretic self-loops explicitly; omission keeps them filter_zero_flow_edges --filter-zero-flow-edges  Filter edges that carry zero momentum flow in the selected routing keep_sources --keep-sources  Keep generated C++ source files after external compilation help --help -h Print help (see a summary with '-h') amplitude Usage: gammaLoop generate amp [OPTIONS] [TOKENS]..."
   },
   {
     "title": "gammaLoop generate existing",
@@ -4065,7 +4093,7 @@
     "summary": "Inspect integrand contributions at one phase-space point or momentum configuration",
     "href": "reference/cli/commands/gammaloop/inspect/",
     "kind": "command",
-    "text": "Inspect integrand contributions at one phase-space point or momentum configuration process --process -p Process reference: `#<id>`, `name:<name>`, or `<id>/<name>` integrand_name --integrand-name -i The integrand name to inspect point --point -x Integration coordinates, or flattened loop momenta `(px, py, pz) ...` with `--momentum-space` use_arb_prec --use_arb_prec -f Force arbitrary-precision (Arb) internal evaluation; output remains f64 momentum_space --momentum-space -m Interpret `--point` as spatial loop-momentum triplets; energy components are not accepted discrete_dim --discrete-dim -d The discrete dimensions of the sample graph_id --graph-id  Select a specific graph in momentum-space inspect orientation_id --orientation-id  Select a specific orientation of the selected graph in momentum-space inspect help --help -h Print help Usage: gammaLoop inspect [OPTIONS]"
+    "text": "Inspect integrand contributions at one phase-space point or momentum configuration process --process -p Process reference: `#<id>`, `name:<name>`, or `<id>/<name>` integrand_name --integrand-name -i The integrand name to inspect point --point -x Integration coordinates, or flattened loop momenta `(px, py, pz) ...` with `--momentum-space` use_arb_prec --use_arb_prec -f Force arbitrary-precision (Arb) internal evaluation; output remains f64 momentum_space --momentum-space -m Interpret `--point` as spatial loop-momentum triplets; energy components are not accepted discrete_dim --discrete-dim -d The discrete dimensions of the sample graph_id --graph-id  Select a specific graph in momentum-space inspect orientation_id --orientation-id  Select a specific orientation of the selected graph in momentum-space inspect json_output --json-output  Write the inspection result as pretty JSON to this path help --help -h Print help Usage: gammaLoop inspect [OPTIONS]"
   },
   {
     "title": "gammaLoop approach",
@@ -4090,10 +4118,10 @@
   },
   {
     "title": "gammaLoop bench",
-    "summary": "Measure raw integrand evaluation throughput over random samples and selected worker counts",
+    "summary": "Measure evaluation throughput at a fixed point over a target duration",
     "href": "reference/cli/commands/gammaloop/bench/",
     "kind": "command",
-    "text": "Measure raw integrand evaluation throughput over random samples and selected worker counts samples --samples -s Number of random samples to evaluate process --process -p Process reference: `#<id>`, `name:<name>`, or `<id>/<name>` integrand_name --integrand-name -i The integrand name to benchmark n_cores --n-cores -c Number of cores to parallelize over help --help -h Print help Usage: gammaLoop bench --samples <SAMPLES> --process <PROCESS> --integrand-name <NAME> --n-cores <N_CORES>"
+    "text": "Measure evaluation throughput at a fixed point over a target duration process --process -p Process reference: `#<id>`, `name:<name>`, or `<id>/<name>` integrand_name --integrand-name -i The integrand name to benchmark point --point -x Fixed x-space or momentum-space point to benchmark duration --duration  Target benchmark duration use_arb_prec --use-arb-prec -f Evaluate in arbitrary precision momentum_space --momentum-space -m Interpret the point as momentum-space coordinates discrete_dim --discrete-dim -d Discrete dimensions of the fixed sample graph_id --graph-id  Select a specific graph in momentum-space evaluation orientation_id --orientation-id  Select a specific orientation of the selected graph n_batches --n-batches  Number of batches used to estimate uncertainty minimal_integrand --minimal-integrand  Temporarily benchmark only the raw integrand path by disabling stability rotations, caches, generated events, additional event weights, selectors, and observables json_output --json-output  Write the benchmark result as pretty JSON to this path help --help -h Print help Usage: gammaLoop bench [OPTIONS] --point <POINT> <POINT>... --duration <DURATION>"
   },
   {
     "title": "gammaLoop profile",
@@ -4107,7 +4135,7 @@
     "summary": "Sample ultraviolet scaling rays and report the fitted large-momentum behavior",
     "href": "reference/cli/commands/gammaloop/profile/ultra-violet/",
     "kind": "command",
-    "text": "Sample ultraviolet scaling rays and report the fitted large-momentum behavior process --process -p Process reference: `#<id>`, `name:<name>`, or `<id>/<name>` integrand_name --integrand-name -i The integrand name to inspect n_points --n-points  Number of scaling points to sample min_scale_exponent --min-scaling  Starting exponent of the sampled ultraviolet scaling range max_scale_exponent --max-scaling  Ending exponent of the sampled ultraviolet scaling range use_f128 --use_f128  Use f128 precision for evaluation analyse_analytically --analyse_analytically  Fit the symbolic ultraviolet scaling expression in addition to sampled numerical values per_orientation --per-orientation  Profile each visible orientation separately and include per-orientation results seed --seed  Random seed for momentum sampling uv_ray_directions --uv-ray-directions  Fixed UV ray directions as flattened 3-vectors, repeated for all rays if one direction is supplied uv_ray_norms --uv-ray-norms  Fixed UV ray starting norms, repeated for all rays if one norm is supplied output_file --output -o Output file for results (optional) help --help -h Print help Usage: gammaLoop profile ultra-violet [OPTIONS]"
+    "text": "Sample ultraviolet scaling rays and report the fitted large-momentum behavior process --process -p Process reference: `#<id>`, `name:<name>`, or `<id>/<name>` integrand_name --integrand-name -i The integrand name to inspect graph --graph -g Restrict profiling to this graph cutkosky_cut --cutkosky-cut  Restrict a cross section to the Cutkosky cut with these edge IDs selected_limits --selected-limits  UV limits to profile fail_fast --fail-fast  Stop after the first failing numerical UV limit, including precision retries n_points --n-points  Number of scaling points to sample min_scale_exponent --min-scaling  Starting base-10 exponent of the sampled ultraviolet scaling range max_scale_exponent --max-scaling  Ending base-10 exponent of the sampled ultraviolet scaling range use_f128 --use_f128  Use f128 precision for evaluation analyse_analytically --analyse_analytically  Derive the analytic ultraviolet series in addition to sampled numerical values (amplitudes only) per_orientation --per-orientation  Profile each visible orientation separately and include per-orientation results seed --seed  Random seed for momentum sampling uv_ray_directions --uv-ray-directions  Fixed UV ray directions as flattened 3-vectors, repeated for all rays if one direction is supplied uv_ray_norms --uv-ray-norms  Fixed UV ray starting norms, repeated for all rays if one norm is supplied output_file --output -o Output directory for uv_profile.json (optional) help --help -h Print help (see a summary with '-h') Usage: gammaLoop profile ultra-violet [OPTIONS]"
   },
   {
     "title": "gammaLoop profile bulk",
@@ -4115,6 +4143,27 @@
     "href": "reference/cli/commands/gammaloop/profile/bulk/",
     "kind": "command",
     "text": "Probe multiple infrared scaling limits and report their fitted behavior in one run process --process -p Process reference: `#<id>`, `name:<name>`, or `<id>/<name>` integrand_name --integrand-name -i The cross-section name to inspect n_points --n-points  Number of scaling points to sample min_scale_exponent --min-scaling  Starting exponent of the sampled bulk scaling range max_scale_exponent --max-scaling  Ending exponent of the sampled bulk scaling range seed --seed  Random seed for momentum sampling output_file --output -o Output file for results (optional) select --select -s restrict test to particular graphs or limits per_orientation --per-orientation  Profile each visible orientation separately and report one row per orientation show_per_cut_info --show-per-cut-info  Retain generated event data so per-cut IR fits can be computed and displayed help --help -h Print help Usage: gammaLoop profile bulk [OPTIONS]"
+  },
+  {
+    "title": "gammaLoop 3Drep",
+    "summary": "Validate a graph or build its diagnostic three-dimensional energy representation",
+    "href": "reference/cli/commands/gammaloop/3drep/",
+    "kind": "command",
+    "text": "Validate a graph or build its diagnostic three-dimensional energy representation help --help -h Print help Usage: gammaLoop 3Drep <COMMAND>"
+  },
+  {
+    "title": "gammaLoop 3Drep validate",
+    "summary": "Check the selected graph for supported energy-representation kinematics",
+    "href": "reference/cli/commands/gammaloop/3drep/validate/",
+    "kind": "command",
+    "text": "Check the selected graph for supported energy-representation kinematics process --process -p Process reference: `#<id>`, `name:<name>`, or `<id>/<name>` integrand_name --integrand-name -i Integrand name inside the selected process graph --graph -g Graph id, graph name, or inspect label such as \"#3 : graph_name\" json_out --json-out  Write the validation result as JSON instead of printing it help --help -h Print help Usage: gammaLoop 3Drep validate [OPTIONS] --graph <GRAPH>"
+  },
+  {
+    "title": "gammaLoop 3Drep build",
+    "summary": "Construct and export the selected graph's oriented CFF expression",
+    "href": "reference/cli/commands/gammaloop/3drep/build/",
+    "kind": "command",
+    "text": "Construct and export the selected graph's oriented CFF expression process --process -p Process reference: `#<id>`, `name:<name>`, or `<id>/<name>` integrand_name --integrand-name -i Integrand name inside the selected process graph --graph -g Graph id, graph name, or inspect label such as \"#3 : graph_name\" representation --representation  Three-dimensional representation to build. LTD is reserved but not implemented yet numerator_samples_normalization --numerator-samples-normalization  Override the global numerator sampling normalization for this build no_save_json --no-save-json  Skip saving the oriented expression and workspace pointer no_pretty --no-pretty  Suppress the formatted expression summary unless orientation details are requested no_color --no-color  Disable ANSI colors in the formatted output show_details_for_orientation --show-details-for-orientation  Show detailed terms for the selected orientation workspace_path --workspace-path  Directory for generated expression artifacts and the latest-expression pointer json_out --json-out  Override the output JSON path for the oriented expression help --help -h Print help Usage: gammaLoop 3Drep build [OPTIONS] --graph <GRAPH>"
   },
   {
     "title": "gammaLoop batch",
@@ -4296,7 +4345,7 @@
     "summary": "Heuristic used to order tensor-network contractions.",
     "href": "reference/cli/settings/cli/global/generation/evaluator/#setting-cli-global-generation-evaluator-tensor-network-contraction-order-8a344173cdaa430d",
     "kind": "setting",
-    "text": "Heuristic used to order tensor-network contractions. TensorNetworkContractionOrder atom_aware entry_aware result_rank_only sparse_atom_aware \"sparse_atom_aware\""
+    "text": "Heuristic used to order tensor-network contractions. TensorNetworkContractionOrder atom_aware entry_aware intermediate_cost result_rank_only sparse_atom_aware \"intermediate_cost\""
   },
   {
     "title": "cli.global.generation.evaluator.verbose",
@@ -4304,6 +4353,13 @@
     "href": "reference/cli/settings/cli/global/generation/evaluator/#setting-cli-global-generation-evaluator-verbose-da4c329164e30445",
     "kind": "setting",
     "text": "Emit detailed evaluator-construction diagnostics. boolean  false"
+  },
+  {
+    "title": "cli.global.generation.explicit_orientation_sum_only",
+    "summary": "Sum all generated residue branches explicitly, removing runtime orientation selectors.",
+    "href": "reference/cli/settings/cli/global/generation/#setting-cli-global-generation-explicit-orientation-sum-only-93070b38df2d24c4",
+    "kind": "setting",
+    "text": "Sum all generated residue branches explicitly, removing runtime orientation selectors. boolean  false"
   },
   {
     "title": "cli.global.generation.feyngen.gamma_simplification_closure_check",
@@ -4397,6 +4453,13 @@
     "text": "Target superficial degree used when classifying tropical subgraphs. number  1.0"
   },
   {
+    "title": "cli.global.generation.uniform_numerator_sampling_scale",
+    "summary": "Choose which numerator-energy reconstructions use the shared runtime sampling scale.",
+    "href": "reference/cli/settings/cli/global/generation/#setting-cli-global-generation-uniform-numerator-sampling-scale-8d0273f79bdbac55",
+    "kind": "setting",
+    "text": "Choose which numerator-energy reconstructions use the shared runtime sampling scale. UniformNumeratorSamplingScale all beyond_quadratic none \"none\""
+  },
+  {
     "title": "cli.global.generation.uv.add_marker",
     "summary": "Insert explicit marker functions around generated ultraviolet counterterms.",
     "href": "reference/cli/settings/cli/global/generation/uv/#setting-cli-global-generation-uv-add-marker-2413481a39bbd755",
@@ -4432,11 +4495,25 @@
     "text": "Preserve ultraviolet marker functions after counterterm orchestration. boolean  true"
   },
   {
+    "title": "cli.global.generation.uv.local_uv_cts_from_expanded_4d_integrands",
+    "summary": "Construct local counterterms by Taylor-expanding 4D integrands before CFF projection.",
+    "href": "reference/cli/settings/cli/global/generation/uv/#setting-cli-global-generation-uv-local-uv-cts-from-expanded-4d-integrands-7def650172e108c5",
+    "kind": "setting",
+    "text": "Construct local counterterms by Taylor-expanding 4D integrands before CFF projection.\nRequires an explicit sum over all generated orientations. boolean  false"
+  },
+  {
     "title": "cli.global.generation.uv.orchestrator",
     "summary": "Algorithm used to enumerate and combine nested ultraviolet counterterms.",
     "href": "reference/cli/settings/cli/global/generation/uv/#setting-cli-global-generation-uv-orchestrator-649be4335e149b0f",
     "kind": "setting",
     "text": "Algorithm used to enumerate and combine nested ultraviolet counterterms. UVOrchestrator compare hedge_poset legacy_dag_forest \"hedge_poset\""
+  },
+  {
+    "title": "cli.global.generation.uv.project_integrated_uv_cts_onto_tensor_integrals",
+    "summary": "Reduce universal tensor kernels; false sends each complete numerator to Vakint.",
+    "href": "reference/cli/settings/cli/global/generation/uv/#setting-cli-global-generation-uv-project-integrated-uv-cts-onto-tensor-integrals-10734bd3b0cb9a38",
+    "kind": "setting",
+    "text": "Reduce universal tensor kernels; false sends each complete numerator to Vakint. boolean  true"
   },
   {
     "title": "cli.global.generation.uv.renormalization_prescription.log_divergent",
@@ -4506,7 +4583,7 @@
     "summary": "Extra symbolic normalization factor multiplied into every Vakint result.",
     "href": "reference/cli/settings/cli/global/generation/uv/vakint/#setting-cli-global-generation-uv-vakint-additional-normalization-a2c5c545af57aeb1",
     "kind": "setting",
-    "text": "Extra symbolic normalization factor multiplied into every Vakint result. string  \"-1\""
+    "text": "Extra symbolic normalization factor multiplied into every Vakint result. string  \"1\""
   },
   {
     "title": "cli.global.generation.uv.vakint.alphaloop.susbstitute_masters",
@@ -4808,6 +4885,13 @@
     "href": "reference/cli/settings/runtime/general/#setting-runtime-general-mu-r-59cbfa96744b45f2",
     "kind": "setting",
     "text": "Renormalization scale used by running parameters and scale-dependent terms. number  1000.0"
+  },
+  {
+    "title": "runtime.general.numerator_sampling_scale",
+    "summary": "Shared energy scale for numerator reconstruction when enabled during generation.",
+    "href": "reference/cli/settings/runtime/general/#setting-runtime-general-numerator-sampling-scale-43b0c6f1b43e2809",
+    "kind": "setting",
+    "text": "Shared energy scale for numerator reconstruction when enabled during generation. number  1.0"
   },
   {
     "title": "runtime.general.orientation_pat.pat",

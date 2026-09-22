@@ -60,6 +60,18 @@
     "kind": "developer current implemented heading"
   },
   {
+    "title": "3.2 CFF production and numerator-energy ownership",
+    "summary": "GammaLoop architecture",
+    "href": "architecture/gammaloop-architecture/#3-2-cff-production-and-numerator-energy-ownership",
+    "kind": "developer current implemented heading"
+  },
+  {
+    "title": "3.3 Tensor-network contraction order",
+    "summary": "GammaLoop architecture",
+    "href": "architecture/gammaloop-architecture/#3-3-tensor-network-contraction-order",
+    "kind": "developer current implemented heading"
+  },
+  {
     "title": "Lifecycle and Data Flow",
     "summary": "GammaLoop architecture",
     "href": "architecture/gammaloop-architecture/#lifecycle-and-data-flow",
@@ -180,6 +192,12 @@
     "kind": "developer current implemented heading"
   },
   {
+    "title": "Raised-energy integration updates",
+    "summary": "Integration dashboard architecture",
+    "href": "architecture/integration-dashboard/#raised-energy-integration-updates",
+    "kind": "developer current implemented heading"
+  },
+  {
     "title": "UV renormalization architecture",
     "summary": "Orchestrator ownership, sign conventions, projections, disconnected composition, and current boundaries.",
     "href": "architecture/uv-renormalization/",
@@ -189,6 +207,18 @@
     "title": "Scope",
     "summary": "UV renormalization architecture",
     "href": "architecture/uv-renormalization/#scope",
+    "kind": "developer current implemented heading"
+  },
+  {
+    "title": "Physical loop measure",
+    "summary": "UV renormalization architecture",
+    "href": "architecture/uv-renormalization/#physical-loop-measure",
+    "kind": "developer current implemented heading"
+  },
+  {
+    "title": "Dimensional numerator algebra",
+    "summary": "UV renormalization architecture",
+    "href": "architecture/uv-renormalization/#dimensional-numerator-algebra",
     "kind": "developer current implemented heading"
   },
   {
@@ -228,15 +258,33 @@
     "kind": "developer current implemented heading"
   },
   {
-    "title": "Three-dimensional local terms",
+    "title": "Direct three-dimensional local terms",
     "summary": "UV renormalization architecture",
-    "href": "architecture/uv-renormalization/#three-dimensional-local-terms",
+    "href": "architecture/uv-renormalization/#direct-three-dimensional-local-terms",
     "kind": "developer current implemented heading"
   },
   {
     "title": "Marker Representation",
     "summary": "UV renormalization architecture",
     "href": "architecture/uv-renormalization/#marker-representation",
+    "kind": "developer current implemented heading"
+  },
+  {
+    "title": "UV profiling from the CLI",
+    "summary": "UV renormalization architecture",
+    "href": "architecture/uv-renormalization/#uv-profiling-from-the-cli",
+    "kind": "developer current implemented heading"
+  },
+  {
+    "title": "Physical cuts and LU residue groups",
+    "summary": "UV renormalization architecture",
+    "href": "architecture/uv-renormalization/#physical-cuts-and-lu-residue-groups",
+    "kind": "developer current implemented heading"
+  },
+  {
+    "title": "Result and failure summaries",
+    "summary": "UV renormalization architecture",
+    "href": "architecture/uv-renormalization/#result-and-failure-summaries",
     "kind": "developer current implemented heading"
   },
   {
@@ -363,6 +411,12 @@
     "title": "Short Algorithm",
     "summary": "Spenso parsing flow",
     "href": "architecture/spenso-parsing-flow/#short-algorithm",
+    "kind": "developer current implemented heading"
+  },
+  {
+    "title": "Factorized scalar and symbolic-dimension boundaries",
+    "summary": "Spenso parsing flow",
+    "href": "architecture/spenso-parsing-flow/#factorized-scalar-and-symbolic-dimension-boundaries",
     "kind": "developer current implemented heading"
   },
   {
@@ -600,70 +654,82 @@
     "kind": "developer current implemented reference · reviewed 2026-09-14 heading"
   },
   {
+    "title": "Factorization during index canonicalization",
+    "summary": "Spenso Symbolica Syntax And Rewrite Idioms",
+    "href": "architecture/spenso-symbolica-syntax-and-rewrites/#factorization-during-index-canonicalization",
+    "kind": "developer current implemented reference · reviewed 2026-09-14 heading"
+  },
+  {
     "title": "Spenso implementation architecture",
     "summary": "Tensor structures and payloads, direct contraction, network graph/store execution, Symbolica parsing, serialization and ownership boundaries, invariants, and tests.",
     "href": "architecture/spenso-architecture/",
-    "kind": "developer current implemented · reviewed 2026-09-14"
+    "kind": "developer current implemented · reviewed 2026-09-21"
   },
   {
     "title": "Boundaries",
     "summary": "Spenso implementation architecture",
     "href": "architecture/spenso-architecture/#boundaries",
-    "kind": "developer current implemented · reviewed 2026-09-14 heading"
+    "kind": "developer current implemented · reviewed 2026-09-21 heading"
   },
   {
     "title": "Core representation",
     "summary": "Spenso implementation architecture",
     "href": "architecture/spenso-architecture/#core-representation",
-    "kind": "developer current implemented · reviewed 2026-09-14 heading"
+    "kind": "developer current implemented · reviewed 2026-09-21 heading"
   },
   {
     "title": "Direct contraction flow",
     "summary": "Spenso implementation architecture",
     "href": "architecture/spenso-architecture/#direct-contraction-flow",
-    "kind": "developer current implemented · reviewed 2026-09-14 heading"
+    "kind": "developer current implemented · reviewed 2026-09-21 heading"
   },
   {
     "title": "Network representation and execution",
     "summary": "Spenso implementation architecture",
     "href": "architecture/spenso-architecture/#network-representation-and-execution",
-    "kind": "developer current implemented · reviewed 2026-09-14 heading"
+    "kind": "developer current implemented · reviewed 2026-09-21 heading"
   },
   {
     "title": "Symbolic parallelism and optimized sums",
     "summary": "Spenso implementation architecture",
     "href": "architecture/spenso-architecture/#symbolic-parallelism-and-optimized-sums",
-    "kind": "developer current implemented · reviewed 2026-09-14 heading"
+    "kind": "developer current implemented · reviewed 2026-09-21 heading"
   },
   {
     "title": "Symbolica parsing boundary",
     "summary": "Spenso implementation architecture",
     "href": "architecture/spenso-architecture/#symbolica-parsing-boundary",
-    "kind": "developer current implemented · reviewed 2026-09-14 heading"
+    "kind": "developer current implemented · reviewed 2026-09-21 heading"
   },
   {
     "title": "Features and serialization",
     "summary": "Spenso implementation architecture",
     "href": "architecture/spenso-architecture/#features-and-serialization",
-    "kind": "developer current implemented · reviewed 2026-09-14 heading"
+    "kind": "developer current implemented · reviewed 2026-09-21 heading"
   },
   {
     "title": "Ownership and error boundaries",
     "summary": "Spenso implementation architecture",
     "href": "architecture/spenso-architecture/#ownership-and-error-boundaries",
-    "kind": "developer current implemented · reviewed 2026-09-14 heading"
+    "kind": "developer current implemented · reviewed 2026-09-21 heading"
   },
   {
     "title": "Maintained invariants",
     "summary": "Spenso implementation architecture",
     "href": "architecture/spenso-architecture/#maintained-invariants",
-    "kind": "developer current implemented · reviewed 2026-09-14 heading"
+    "kind": "developer current implemented · reviewed 2026-09-21 heading"
   },
   {
     "title": "Verification and related documentation",
     "summary": "Spenso implementation architecture",
     "href": "architecture/spenso-architecture/#verification-and-related-documentation",
-    "kind": "developer current implemented · reviewed 2026-09-14 heading"
+    "kind": "developer current implemented · reviewed 2026-09-21 heading"
+  },
+  {
+    "title": "Factor preservation at materialization",
+    "summary": "Spenso implementation architecture",
+    "href": "architecture/spenso-architecture/#factor-preservation-at-materialization",
+    "kind": "developer current implemented · reviewed 2026-09-21 heading"
   },
   {
     "title": "Idenso implementation architecture",
@@ -729,6 +795,12 @@
     "title": "Verification and related documentation",
     "summary": "Idenso implementation architecture",
     "href": "architecture/idenso-architecture/#verification-and-related-documentation",
+    "kind": "developer current implemented · reviewed 2026-09-14 heading"
+  },
+  {
+    "title": "Factorized canonicalization and symbolic targets",
+    "summary": "Idenso implementation architecture",
+    "href": "architecture/idenso-architecture/#factorized-canonicalization-and-symbolic-targets",
     "kind": "developer current implemented · reviewed 2026-09-14 heading"
   },
   {
@@ -1032,6 +1104,12 @@
     "kind": "developer current implemented · reviewed 2026-08-18 heading"
   },
   {
+    "title": "Dense edge joins used by tensor contraction",
+    "summary": "Linnet implementation architecture",
+    "href": "architecture/linnet-architecture/#dense-edge-joins-used-by-tensor-contraction",
+    "kind": "developer current implemented · reviewed 2026-08-18 heading"
+  },
+  {
     "title": "Vakint implementation architecture",
     "summary": "Topology construction, canonicalization and tensor-reduction flow, backend selection, external-process ownership, persistence boundaries, invariants, and tests.",
     "href": "architecture/vakint-architecture/",
@@ -1077,6 +1155,12 @@
     "title": "Verification and related documentation",
     "summary": "Vakint implementation architecture",
     "href": "architecture/vakint-architecture/#verification-and-related-documentation",
+    "kind": "developer current implemented · reviewed 2026-08-18 heading"
+  },
+  {
+    "title": "Factorized tensor projection and epsilon coefficients",
+    "summary": "Vakint implementation architecture",
+    "href": "architecture/vakint-architecture/#factorized-tensor-projection-and-epsilon-coefficients",
     "kind": "developer current implemented · reviewed 2026-08-18 heading"
   },
   {
@@ -1254,9 +1338,9 @@
     "kind": "developer archived · non-reproducible heading"
   },
   {
-    "title": "Inspect benchmark timings",
+    "title": "Fixed-point benchmark timings",
     "summary": "BNL Benchmark Investigation",
-    "href": "architecture/bnl-benchmark-investigation/#inspect-benchmark-timings",
+    "href": "architecture/bnl-benchmark-investigation/#fixed-point-benchmark-timings",
     "kind": "developer archived · non-reproducible heading"
   },
   {
@@ -2094,6 +2178,42 @@
     "kind": "developer archived record heading"
   },
   {
+    "title": "Factorized numerator restoration validation",
+    "summary": "Symbolica 3 validation of shared parametric numerators, eligible main comparisons, and the established 3D and 4D derivative-UV generation workloads.",
+    "href": "architecture/raised-energy-cff-restoration-validation/",
+    "kind": "developer investigation validated on symbolica 3"
+  },
+  {
+    "title": "Representation",
+    "summary": "Factorized numerator restoration validation",
+    "href": "architecture/raised-energy-cff-restoration-validation/#representation",
+    "kind": "developer investigation validated on symbolica 3 heading"
+  },
+  {
+    "title": "Comparison protocol",
+    "summary": "Factorized numerator restoration validation",
+    "href": "architecture/raised-energy-cff-restoration-validation/#comparison-protocol",
+    "kind": "developer investigation validated on symbolica 3 heading"
+  },
+  {
+    "title": "GL1 generation",
+    "summary": "Factorized numerator restoration validation",
+    "href": "architecture/raised-energy-cff-restoration-validation/#gl1-generation",
+    "kind": "developer investigation validated on symbolica 3 heading"
+  },
+  {
+    "title": "Numerical controls",
+    "summary": "Factorized numerator restoration validation",
+    "href": "architecture/raised-energy-cff-restoration-validation/#numerical-controls",
+    "kind": "developer investigation validated on symbolica 3 heading"
+  },
+  {
+    "title": "Projected local-4D and validation status",
+    "summary": "Factorized numerator restoration validation",
+    "href": "architecture/raised-energy-cff-restoration-validation/#projected-local-4d-and-validation-status",
+    "kind": "developer investigation validated on symbolica 3 heading"
+  },
+  {
     "title": "CI maintenance and measurements",
     "summary": "The maintained local-check/upload workflow, per-crate cache boundaries, validated measurements, branch migration and CI log reporting.",
     "href": "architecture/ci/",
@@ -2854,5 +2974,425 @@
     "summary": "API documentation debt register",
     "href": "architecture/api-documentation-debt-register/#apidoc-303-semantic-completeness-gate",
     "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "Exact powered-denominator lifting and factorized EMR assignment",
+    "summary": "Raised-energy feature-stack record; numerical evidence applies to the revisions recorded in the note.",
+    "href": "architecture/exact-powered-denominator-cff-lifting/",
+    "kind": "developer investigation preserved during main integration"
+  },
+  {
+    "title": "Status and scope",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#status-and-scope",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Equality is defined for the complete fixed-cut functional",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#equality-is-defined-for-the-complete-fixed-cut-functional",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Factorized staged map composition",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#factorized-staged-map-composition",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Executive summary",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#executive-summary",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Terminology and identity layers",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#terminology-and-identity-layers",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Why UV processing creates this problem",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#why-uv-processing-creates-this-problem",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Production data flow",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#production-data-flow",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Non-negotiable common-LMB commutative reconstruction invariant",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#non-negotiable-common-lmb-commutative-reconstruction-invariant",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Worked diagnostic: GL04 temporal-square T0 sector",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#worked-diagnostic-gl04-temporal-square-t0-sector",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Worked live reproducer: GL04 temporal-square 1zs/T2",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#worked-live-reproducer-gl04-temporal-square-1zs-t2",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Isolated coefficient and complete-source certificate",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#isolated-coefficient-and-complete-source-certificate",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "GL00 odd-numerator child certificate",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#gl00-odd-numerator-child-certificate",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "One source convention across recursive scalar bases",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#one-source-convention-across-recursive-scalar-bases",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Stage 1: retain denominator multiplicity without expanding the numerator",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#stage-1-retain-denominator-multiplicity-without-expanding-the-numerator",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Stage 2: recover the source skeleton and classify algebraic channels",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#stage-2-recover-the-source-skeleton-and-classify-algebraic-channels",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Provenance is retained, not discarded",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#provenance-is-retained-not-discarded",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Stage 3: instantiate the source-minor scaffold and lift powers",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#stage-3-instantiate-the-source-minor-scaffold-and-lift-powers",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Non-vacuum boundaries use explicit source-crown hedges",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#non-vacuum-boundaries-use-explicit-source-crown-hedges",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Determinism",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#determinism",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Rational incidence and physical support cross the boundary separately",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#rational-incidence-and-physical-support-cross-the-boundary-separately",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Stage 4: analyze the factorized numerator before occurrence substitution",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#stage-4-analyze-the-factorized-numerator-before-occurrence-substitution",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Stage 5: certify equivalent exact occurrence energies",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#stage-5-certify-equivalent-exact-occurrence-energies",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Stage 6: propose certified assignments and select by actual map count",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#stage-6-propose-certified-assignments-and-select-by-actual-map-count",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Cyclic and greedy hard proposals",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#cyclic-and-greedy-hard-proposals",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Native map-row selection",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#native-map-row-selection",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Soft Taylor energies at the outer CFF boundary",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#soft-taylor-energies-at-the-outer-cff-boundary",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Stage 7: use one immutable plan for generation and evaluation",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#stage-7-use-one-immutable-plan-for-generation-and-evaluation",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Stage 8: cache exact topology and per-request capacity",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#stage-8-cache-exact-topology-and-per-request-capacity",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Why D(Q)=D(-Q) cannot introduce numerator sign mistakes",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#why-d-q-d-q-cannot-introduce-numerator-sign-mistakes",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "A focused sign oracle",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#a-focused-sign-oracle",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Complete example 1: a same-owner cubic powered line",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#complete-example-1-a-same-owner-cubic-powered-line",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Complete example 2: owner relabeling preserves the rational CFF",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#complete-example-2-owner-relabeling-preserves-the-rational-cff",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Complete example 3: opposite routing within one powered line",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#complete-example-3-opposite-routing-within-one-powered-line",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Complete example 4: the production-shaped cubic UV rewrite",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#complete-example-4-the-production-shaped-cubic-uv-rewrite",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Complete example 5: UV and cograph topology remain separate",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#complete-example-5-uv-and-cograph-topology-remain-separate",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Complete example 6: numerator/denominator cancellation, including LU",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#complete-example-6-numerator-denominator-cancellation-including-lu",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Complete example 7: the epem_a_ddx GL0 self-energy source",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#complete-example-7-the-epem-a-ddx-gl0-self-energy-source",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Complete example 8: multi-loop and rank-deficient exact sources",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#complete-example-8-multi-loop-and-rank-deficient-exact-sources",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Generalized-CFF behavior after the lift",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#generalized-cff-behavior-after-the-lift",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Why the construction is generic",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#why-the-construction-is-generic",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "1. Denominator multiplicity is arbitrary",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#1-denominator-multiplicity-is-arbitrary",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "2. Skeleton recovery is source-backed and rational identity is owner-free",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#2-skeleton-recovery-is-source-backed-and-rational-identity-is-owner-free",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "3. Canonicalization is topology-preserving",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#3-canonicalization-is-topology-preserving",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "4. Numerator degree composition is structural",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#4-numerator-degree-composition-is-structural",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "5. Actual native map rows select among certified bounded proposals",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#5-actual-native-map-rows-select-among-certified-bounded-proposals",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "6. Bound and evaluation cannot diverge",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#6-bound-and-evaluation-cannot-diverge",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "7. Routing signs are first-class data",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#7-routing-signs-are-first-class-data",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "8. Provenance projection is channel-complete",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#8-provenance-projection-is-channel-complete",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "9. Unsupported cases fail closed",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#9-unsupported-cases-fail-closed",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Minimality and runtime consequences",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#minimality-and-runtime-consequences",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Maintained invariants",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#maintained-invariants",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Code map",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#code-map",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Validation map",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#validation-map",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Design conclusion",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "architecture/exact-powered-denominator-cff-lifting/#design-conclusion",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Phase conventions and forward-cut conjugation",
+    "summary": "Raised-energy feature-stack record; numerical evidence applies to the revisions recorded in the note.",
+    "href": "architecture/phase-conventions/",
+    "kind": "developer investigation preserved during main integration"
+  },
+  {
+    "title": "Amplitudes",
+    "summary": "Phase conventions and forward-cut conjugation",
+    "href": "architecture/phase-conventions/#amplitudes",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "The right side is an inverse-process graph",
+    "summary": "Phase conventions and forward-cut conjugation",
+    "href": "architecture/phase-conventions/#the-right-side-is-an-inverse-process-graph",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Marking, contours and cut lines",
+    "summary": "Phase conventions and forward-cut conjugation",
+    "href": "architecture/phase-conventions/#marking-contours-and-cut-lines",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Complex couplings and the complex-mass scheme",
+    "summary": "Phase conventions and forward-cut conjugation",
+    "href": "architecture/phase-conventions/#complex-couplings-and-the-complex-mass-scheme",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Acceptance and user-supplied numerators",
+    "summary": "Phase conventions and forward-cut conjugation",
+    "href": "architecture/phase-conventions/#acceptance-and-user-supplied-numerators",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Generation options and generated states",
+    "summary": "Phase conventions and forward-cut conjugation",
+    "href": "architecture/phase-conventions/#generation-options-and-generated-states",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Standard Model conventions audit",
+    "summary": "Raised-energy feature-stack record; numerical evidence applies to the revisions recorded in the note.",
+    "href": "architecture/sm-conventions-audit/",
+    "kind": "developer investigation preserved during main integration"
+  },
+  {
+    "title": "Momentum, spin and color conventions",
+    "summary": "Standard Model conventions audit",
+    "href": "architecture/sm-conventions-audit/#momentum-spin-and-color-conventions",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Complete derivative inventory",
+    "summary": "Standard Model conventions audit",
+    "href": "architecture/sm-conventions-audit/#complete-derivative-inventory",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Scalar/pseudoscalar and vector/axial basis",
+    "summary": "Standard Model conventions audit",
+    "href": "architecture/sm-conventions-audit/#scalar-pseudoscalar-and-vector-axial-basis",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Generated local certificates and RHS sewing",
+    "summary": "Standard Model conventions audit",
+    "href": "architecture/sm-conventions-audit/#generated-local-certificates-and-rhs-sewing",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Input-parameter reality",
+    "summary": "Standard Model conventions audit",
+    "href": "architecture/sm-conventions-audit/#input-parameter-reality",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Fermion flow and Grassmann statistics",
+    "summary": "Standard Model conventions audit",
+    "href": "architecture/sm-conventions-audit/#fermion-flow-and-grassmann-statistics",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Electroweak virtual and cut-state gauge contract",
+    "summary": "Standard Model conventions audit",
+    "href": "architecture/sm-conventions-audit/#electroweak-virtual-and-cut-state-gauge-contract",
+    "kind": "developer investigation preserved during main integration heading"
   }
 ]

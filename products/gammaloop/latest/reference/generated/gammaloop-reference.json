@@ -5802,7 +5802,7 @@
     {
       "path": "gammaLoop import graphs",
       "name": "graphs",
-      "usage": "Usage: gammaLoop import graphs [OPTIONS] <PATH>",
+      "usage": "Usage: gammaLoop import graphs [OPTIONS] [PATH]",
       "about": "Load serialized graph data into a new or existing process",
       "hidden": false,
       "generated_help": false,
@@ -5811,7 +5811,7 @@
       "aliases": [],
       "arguments": [
         {
-          "id": "path",
+          "id": "source",
           "long": null,
           "short": null,
           "aliases": [],
@@ -5826,9 +5826,69 @@
             "PATH"
           ],
           "help": "Graph file to load, resolved against the active state root and current directory",
-          "required": true,
+          "required": false,
           "positional": true,
           "index": 1,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [],
+          "possible_values": []
+        },
+        {
+          "id": "inline_dot",
+          "long": "inline-dot",
+          "short": null,
+          "aliases": [],
+          "action": "set",
+          "arity": {
+            "min": 1,
+            "max": 1
+          },
+          "takes_values": true,
+          "value_required": true,
+          "value_names": [
+            "DOT"
+          ],
+          "help": "Inline DOT graph content to import instead of reading from a file path",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [],
+          "possible_values": []
+        },
+        {
+          "id": "process_spec",
+          "long": "process-spec",
+          "short": null,
+          "aliases": [],
+          "action": "set",
+          "arity": {
+            "min": 1,
+            "max": 1
+          },
+          "takes_values": true,
+          "value_required": true,
+          "value_names": [
+            "SPEC"
+          ],
+          "help": "Process definition used to select physical Cutkosky cuts for imported graphs",
+          "required": false,
+          "positional": false,
+          "index": null,
           "hidden": false,
           "global": false,
           "inherited": false,
@@ -7218,6 +7278,36 @@
           "required": false,
           "positional": true,
           "index": 1,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [],
+          "possible_values": []
+        },
+        {
+          "id": "defines",
+          "long": "define",
+          "short": "D",
+          "aliases": [],
+          "action": "append",
+          "arity": {
+            "min": 1,
+            "max": 1
+          },
+          "takes_values": true,
+          "value_required": true,
+          "value_names": [
+            "KEY=VALUE"
+          ],
+          "help": "Define a string variable available to selected command blocks; repeat as needed",
+          "required": false,
+          "positional": false,
+          "index": null,
           "hidden": false,
           "global": false,
           "inherited": false,
@@ -9172,7 +9262,7 @@
           "value_names": [
             "NUMBER_OF_FERMION_LOOPS"
           ],
-          "help": "Number of closed fermion loops; negative disables",
+          "help": "Number of closed fermion loops, excluding ghosts; negative disables",
           "required": false,
           "positional": false,
           "index": null,
@@ -9367,7 +9457,7 @@
           "value_names": [
             "SYMMETRIZE_LEFT_RIGHT_STATES"
           ],
-          "help": "Identify cross-section graphs related by exchanging the left and right amplitudes",
+          "help": "Identify cross-section graphs under CP-based left/right exchange; requires CP symmetry",
           "required": false,
           "positional": false,
           "index": null,
@@ -10723,7 +10813,7 @@
           "value_names": [
             "NUMBER_OF_FERMION_LOOPS"
           ],
-          "help": "Number of closed fermion loops; negative disables",
+          "help": "Number of closed fermion loops, excluding ghosts; negative disables",
           "required": false,
           "positional": false,
           "index": null,
@@ -10918,7 +11008,7 @@
           "value_names": [
             "SYMMETRIZE_LEFT_RIGHT_STATES"
           ],
-          "help": "Identify cross-section graphs related by exchanging the left and right amplitudes",
+          "help": "Identify cross-section graphs under CP-based left/right exchange; requires CP symmetry",
           "required": false,
           "positional": false,
           "index": null,
@@ -13020,6 +13110,36 @@
           "possible_values": []
         },
         {
+          "id": "json_output",
+          "long": "json-output",
+          "short": null,
+          "aliases": [],
+          "action": "set",
+          "arity": {
+            "min": 1,
+            "max": 1
+          },
+          "takes_values": true,
+          "value_required": true,
+          "value_names": [
+            "PATH"
+          ],
+          "help": "Write the inspection result as pretty JSON to this path",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [],
+          "possible_values": []
+        },
+        {
           "id": "help",
           "long": "help",
           "short": "h",
@@ -13941,44 +14061,14 @@
     {
       "path": "gammaLoop bench",
       "name": "bench",
-      "usage": "Usage: gammaLoop bench --samples <SAMPLES> --process <PROCESS> --integrand-name <NAME> --n-cores <N_CORES>",
-      "about": "Measure raw integrand evaluation throughput over random samples and selected worker counts",
+      "usage": "Usage: gammaLoop bench [OPTIONS] --point <POINT> <POINT>... --duration <DURATION>",
+      "about": "Measure evaluation throughput at a fixed point over a target duration",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
       "long_flag": null,
       "aliases": [],
       "arguments": [
-        {
-          "id": "samples",
-          "long": "samples",
-          "short": "s",
-          "aliases": [],
-          "action": "set",
-          "arity": {
-            "min": 1,
-            "max": 1
-          },
-          "takes_values": true,
-          "value_required": true,
-          "value_names": [
-            "SAMPLES"
-          ],
-          "help": "Number of random samples to evaluate",
-          "required": true,
-          "positional": false,
-          "index": null,
-          "hidden": false,
-          "global": false,
-          "inherited": false,
-          "exclusive": false,
-          "require_equals": false,
-          "value_delimiter": null,
-          "value_terminator": null,
-          "conflicts_with": [],
-          "defaults": [],
-          "possible_values": []
-        },
         {
           "id": "process",
           "long": "process",
@@ -13995,7 +14085,7 @@
             "PROCESS"
           ],
           "help": "Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`",
-          "required": true,
+          "required": false,
           "positional": false,
           "index": null,
           "hidden": false,
@@ -14025,6 +14115,66 @@
             "NAME"
           ],
           "help": "The integrand name to benchmark",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [],
+          "possible_values": []
+        },
+        {
+          "id": "point",
+          "long": "point",
+          "short": "x",
+          "aliases": [],
+          "action": "append",
+          "arity": {
+            "min": 2,
+            "max": null
+          },
+          "takes_values": true,
+          "value_required": true,
+          "value_names": [
+            "POINT"
+          ],
+          "help": "Fixed x-space or momentum-space point to benchmark",
+          "required": true,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": ",",
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [],
+          "possible_values": []
+        },
+        {
+          "id": "duration",
+          "long": "duration",
+          "short": null,
+          "aliases": [],
+          "action": "set",
+          "arity": {
+            "min": 1,
+            "max": 1
+          },
+          "takes_values": true,
+          "value_required": true,
+          "value_names": [
+            "DURATION"
+          ],
+          "help": "Target benchmark duration",
           "required": true,
           "positional": false,
           "index": null,
@@ -14040,9 +14190,102 @@
           "possible_values": []
         },
         {
-          "id": "n_cores",
-          "long": "n-cores",
-          "short": "c",
+          "id": "use_arb_prec",
+          "long": "use-arb-prec",
+          "short": "f",
+          "aliases": [],
+          "action": "set_true",
+          "arity": {
+            "min": 0,
+            "max": 0
+          },
+          "takes_values": false,
+          "value_required": false,
+          "value_names": [],
+          "help": "Evaluate in arbitrary precision",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [
+            "false"
+          ],
+          "possible_values": []
+        },
+        {
+          "id": "momentum_space",
+          "long": "momentum-space",
+          "short": "m",
+          "aliases": [],
+          "action": "set_true",
+          "arity": {
+            "min": 0,
+            "max": 0
+          },
+          "takes_values": false,
+          "value_required": false,
+          "value_names": [],
+          "help": "Interpret the point as momentum-space coordinates",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [
+            "false"
+          ],
+          "possible_values": []
+        },
+        {
+          "id": "discrete_dim",
+          "long": "discrete-dim",
+          "short": "d",
+          "aliases": [],
+          "action": "append",
+          "arity": {
+            "min": 1,
+            "max": null
+          },
+          "takes_values": true,
+          "value_required": true,
+          "value_names": [
+            "DIMS"
+          ],
+          "help": "Discrete dimensions of the fixed sample",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": ",",
+          "value_terminator": null,
+          "conflicts_with": [
+            "graph_id",
+            "orientation_id"
+          ],
+          "defaults": [],
+          "possible_values": []
+        },
+        {
+          "id": "graph_id",
+          "long": "graph-id",
+          "short": null,
           "aliases": [],
           "action": "set",
           "arity": {
@@ -14052,10 +14295,134 @@
           "takes_values": true,
           "value_required": true,
           "value_names": [
-            "N_CORES"
+            "GRAPH_ID"
           ],
-          "help": "Number of cores to parallelize over",
-          "required": true,
+          "help": "Select a specific graph in momentum-space evaluation",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [
+            "discrete_dim"
+          ],
+          "defaults": [],
+          "possible_values": []
+        },
+        {
+          "id": "orientation_id",
+          "long": "orientation-id",
+          "short": null,
+          "aliases": [],
+          "action": "set",
+          "arity": {
+            "min": 1,
+            "max": 1
+          },
+          "takes_values": true,
+          "value_required": true,
+          "value_names": [
+            "ORIENTATION_ID"
+          ],
+          "help": "Select a specific orientation of the selected graph",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [
+            "discrete_dim"
+          ],
+          "defaults": [],
+          "possible_values": []
+        },
+        {
+          "id": "n_batches",
+          "long": "n-batches",
+          "short": null,
+          "aliases": [],
+          "action": "set",
+          "arity": {
+            "min": 1,
+            "max": 1
+          },
+          "takes_values": true,
+          "value_required": true,
+          "value_names": [
+            "N"
+          ],
+          "help": "Number of batches used to estimate uncertainty",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [],
+          "possible_values": []
+        },
+        {
+          "id": "minimal_integrand",
+          "long": "minimal-integrand",
+          "short": null,
+          "aliases": [],
+          "action": "set_true",
+          "arity": {
+            "min": 0,
+            "max": 0
+          },
+          "takes_values": false,
+          "value_required": false,
+          "value_names": [],
+          "help": "Temporarily benchmark only the raw integrand path by disabling stability rotations, caches, generated events, additional event weights, selectors, and observables",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [
+            "false"
+          ],
+          "possible_values": []
+        },
+        {
+          "id": "json_output",
+          "long": "json-output",
+          "short": null,
+          "aliases": [],
+          "action": "set",
+          "arity": {
+            "min": 1,
+            "max": 1
+          },
+          "takes_values": true,
+          "value_required": true,
+          "value_names": [
+            "PATH"
+          ],
+          "help": "Write the benchmark result as pretty JSON to this path",
+          "required": false,
           "positional": false,
           "index": null,
           "hidden": false,
@@ -14212,6 +14579,137 @@
           "possible_values": []
         },
         {
+          "id": "graph",
+          "long": "graph",
+          "short": "g",
+          "aliases": [],
+          "action": "set",
+          "arity": {
+            "min": 1,
+            "max": 1
+          },
+          "takes_values": true,
+          "value_required": true,
+          "value_names": [
+            "GRAPH"
+          ],
+          "help": "Restrict profiling to this graph",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [],
+          "possible_values": []
+        },
+        {
+          "id": "cutkosky_cut",
+          "long": "cutkosky-cut",
+          "short": null,
+          "aliases": [
+            {
+              "name": "cut-edges",
+              "kind": "long_flag",
+              "visible": true
+            }
+          ],
+          "action": "append",
+          "arity": {
+            "min": 1,
+            "max": null
+          },
+          "takes_values": true,
+          "value_required": true,
+          "value_names": [
+            "EDGE"
+          ],
+          "help": "Restrict a cross section to the Cutkosky cut with these edge IDs",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": ",",
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [],
+          "possible_values": []
+        },
+        {
+          "id": "selected_limits",
+          "long": "selected-limits",
+          "short": null,
+          "aliases": [],
+          "action": "set",
+          "arity": {
+            "min": 1,
+            "max": 1
+          },
+          "takes_values": true,
+          "value_required": true,
+          "value_names": [
+            "SELECTED_LIMITS"
+          ],
+          "help": "UV limits to profile",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [
+            "only-divergent"
+          ],
+          "possible_values": [
+            "only-divergent",
+            "all"
+          ]
+        },
+        {
+          "id": "fail_fast",
+          "long": "fail-fast",
+          "short": null,
+          "aliases": [],
+          "action": "set_true",
+          "arity": {
+            "min": 0,
+            "max": 0
+          },
+          "takes_values": false,
+          "value_required": false,
+          "value_names": [],
+          "help": "Stop after the first failing numerical UV limit, including precision retries",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [
+            "false"
+          ],
+          "possible_values": []
+        },
+        {
           "id": "n_points",
           "long": "n-points",
           "short": null,
@@ -14258,7 +14756,7 @@
           "value_names": [
             "MIN_SCALE_EXPONENT"
           ],
-          "help": "Starting exponent of the sampled ultraviolet scaling range",
+          "help": "Starting base-10 exponent of the sampled ultraviolet scaling range",
           "required": false,
           "positional": false,
           "index": null,
@@ -14290,7 +14788,7 @@
           "value_names": [
             "MAX_SCALE_EXPONENT"
           ],
-          "help": "Ending exponent of the sampled ultraviolet scaling range",
+          "help": "Ending base-10 exponent of the sampled ultraviolet scaling range",
           "required": false,
           "positional": false,
           "index": null,
@@ -14350,7 +14848,7 @@
           "takes_values": false,
           "value_required": false,
           "value_names": [],
-          "help": "Fit the symbolic ultraviolet scaling expression in addition to sampled numerical values",
+          "help": "Derive the analytic ultraviolet series in addition to sampled numerical values (amplitudes only)",
           "required": false,
           "positional": false,
           "index": null,
@@ -14505,7 +15003,7 @@
           "value_names": [
             "OUTPUT_FILE"
           ],
-          "help": "Output file for results (optional)",
+          "help": "Output directory for uv_profile.json (optional)",
           "required": false,
           "positional": false,
           "index": null,
@@ -14533,7 +15031,7 @@
           "takes_values": false,
           "value_required": false,
           "value_names": [],
-          "help": "Print help",
+          "help": "Print help (see a summary with '-h')",
           "required": false,
           "positional": false,
           "index": null,
@@ -14937,6 +15435,653 @@
       "path": "gammaLoop profile help help",
       "name": "help",
       "usage": "Usage: gammaLoop profile help help",
+      "about": "Print this message or the help of the given subcommand(s)",
+      "hidden": false,
+      "generated_help": true,
+      "short_flag": null,
+      "long_flag": null,
+      "aliases": [],
+      "arguments": []
+    },
+    {
+      "path": "gammaLoop 3Drep",
+      "name": "3Drep",
+      "usage": "Usage: gammaLoop 3Drep <COMMAND>",
+      "about": "Validate a graph or build its diagnostic three-dimensional energy representation",
+      "hidden": false,
+      "generated_help": false,
+      "short_flag": null,
+      "long_flag": null,
+      "aliases": [],
+      "arguments": [
+        {
+          "id": "help",
+          "long": "help",
+          "short": "h",
+          "aliases": [],
+          "action": "help",
+          "arity": {
+            "min": 0,
+            "max": 0
+          },
+          "takes_values": false,
+          "value_required": false,
+          "value_names": [],
+          "help": "Print help",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [],
+          "possible_values": []
+        }
+      ]
+    },
+    {
+      "path": "gammaLoop 3Drep validate",
+      "name": "validate",
+      "usage": "Usage: gammaLoop 3Drep validate [OPTIONS] --graph <GRAPH>",
+      "about": "Check the selected graph for supported energy-representation kinematics",
+      "hidden": false,
+      "generated_help": false,
+      "short_flag": null,
+      "long_flag": null,
+      "aliases": [],
+      "arguments": [
+        {
+          "id": "process",
+          "long": "process",
+          "short": "p",
+          "aliases": [],
+          "action": "set",
+          "arity": {
+            "min": 1,
+            "max": 1
+          },
+          "takes_values": true,
+          "value_required": true,
+          "value_names": [
+            "PROCESS"
+          ],
+          "help": "Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [],
+          "possible_values": []
+        },
+        {
+          "id": "integrand_name",
+          "long": "integrand-name",
+          "short": "i",
+          "aliases": [],
+          "action": "set",
+          "arity": {
+            "min": 1,
+            "max": 1
+          },
+          "takes_values": true,
+          "value_required": true,
+          "value_names": [
+            "NAME"
+          ],
+          "help": "Integrand name inside the selected process",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [],
+          "possible_values": []
+        },
+        {
+          "id": "graph",
+          "long": "graph",
+          "short": "g",
+          "aliases": [],
+          "action": "set",
+          "arity": {
+            "min": 1,
+            "max": 1
+          },
+          "takes_values": true,
+          "value_required": true,
+          "value_names": [
+            "GRAPH"
+          ],
+          "help": "Graph id, graph name, or inspect label such as \"#3 : graph_name\"",
+          "required": true,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [],
+          "possible_values": []
+        },
+        {
+          "id": "json_out",
+          "long": "json-out",
+          "short": null,
+          "aliases": [],
+          "action": "set",
+          "arity": {
+            "min": 1,
+            "max": 1
+          },
+          "takes_values": true,
+          "value_required": true,
+          "value_names": [
+            "JSON_OUT"
+          ],
+          "help": "Write the validation result as JSON instead of printing it",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [],
+          "possible_values": []
+        },
+        {
+          "id": "help",
+          "long": "help",
+          "short": "h",
+          "aliases": [],
+          "action": "help",
+          "arity": {
+            "min": 0,
+            "max": 0
+          },
+          "takes_values": false,
+          "value_required": false,
+          "value_names": [],
+          "help": "Print help",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [],
+          "possible_values": []
+        }
+      ]
+    },
+    {
+      "path": "gammaLoop 3Drep build",
+      "name": "build",
+      "usage": "Usage: gammaLoop 3Drep build [OPTIONS] --graph <GRAPH>",
+      "about": "Construct and export the selected graph's oriented CFF expression",
+      "hidden": false,
+      "generated_help": false,
+      "short_flag": null,
+      "long_flag": null,
+      "aliases": [],
+      "arguments": [
+        {
+          "id": "process",
+          "long": "process",
+          "short": "p",
+          "aliases": [],
+          "action": "set",
+          "arity": {
+            "min": 1,
+            "max": 1
+          },
+          "takes_values": true,
+          "value_required": true,
+          "value_names": [
+            "PROCESS"
+          ],
+          "help": "Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [],
+          "possible_values": []
+        },
+        {
+          "id": "integrand_name",
+          "long": "integrand-name",
+          "short": "i",
+          "aliases": [],
+          "action": "set",
+          "arity": {
+            "min": 1,
+            "max": 1
+          },
+          "takes_values": true,
+          "value_required": true,
+          "value_names": [
+            "NAME"
+          ],
+          "help": "Integrand name inside the selected process",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [],
+          "possible_values": []
+        },
+        {
+          "id": "graph",
+          "long": "graph",
+          "short": "g",
+          "aliases": [],
+          "action": "set",
+          "arity": {
+            "min": 1,
+            "max": 1
+          },
+          "takes_values": true,
+          "value_required": true,
+          "value_names": [
+            "GRAPH"
+          ],
+          "help": "Graph id, graph name, or inspect label such as \"#3 : graph_name\"",
+          "required": true,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [],
+          "possible_values": []
+        },
+        {
+          "id": "representation",
+          "long": "representation",
+          "short": null,
+          "aliases": [
+            {
+              "name": "family",
+              "kind": "long_flag",
+              "visible": false
+            }
+          ],
+          "action": "set",
+          "arity": {
+            "min": 1,
+            "max": 1
+          },
+          "takes_values": true,
+          "value_required": true,
+          "value_names": [
+            "REPRESENTATION"
+          ],
+          "help": "Three-dimensional representation to build. LTD is reserved but not implemented yet",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [
+            "cff"
+          ],
+          "possible_values": [
+            "cff",
+            "ltd"
+          ]
+        },
+        {
+          "id": "numerator_samples_normalization",
+          "long": "numerator-samples-normalization",
+          "short": null,
+          "aliases": [
+            {
+              "name": "numerator-sampling-scale-mode",
+              "kind": "long_flag",
+              "visible": false
+            },
+            {
+              "name": "uniform-numerator-sampling-scale",
+              "kind": "long_flag",
+              "visible": false
+            }
+          ],
+          "action": "set",
+          "arity": {
+            "min": 1,
+            "max": 1
+          },
+          "takes_values": true,
+          "value_required": true,
+          "value_names": [
+            "NUMERATOR_SAMPLES_NORMALIZATION"
+          ],
+          "help": "Override the global numerator sampling normalization for this build",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [],
+          "possible_values": [
+            "never_M",
+            "M_for_all",
+            "M_for_beyond_quadratic_only"
+          ]
+        },
+        {
+          "id": "no_save_json",
+          "long": "no-save-json",
+          "short": null,
+          "aliases": [],
+          "action": "set_true",
+          "arity": {
+            "min": 0,
+            "max": 0
+          },
+          "takes_values": false,
+          "value_required": false,
+          "value_names": [],
+          "help": "Skip saving the oriented expression and workspace pointer",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [
+            "false"
+          ],
+          "possible_values": []
+        },
+        {
+          "id": "no_pretty",
+          "long": "no-pretty",
+          "short": null,
+          "aliases": [],
+          "action": "set_true",
+          "arity": {
+            "min": 0,
+            "max": 0
+          },
+          "takes_values": false,
+          "value_required": false,
+          "value_names": [],
+          "help": "Suppress the formatted expression summary unless orientation details are requested",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [
+            "false"
+          ],
+          "possible_values": []
+        },
+        {
+          "id": "no_color",
+          "long": "no-color",
+          "short": null,
+          "aliases": [],
+          "action": "set_true",
+          "arity": {
+            "min": 0,
+            "max": 0
+          },
+          "takes_values": false,
+          "value_required": false,
+          "value_names": [],
+          "help": "Disable ANSI colors in the formatted output",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [
+            "false"
+          ],
+          "possible_values": []
+        },
+        {
+          "id": "show_details_for_orientation",
+          "long": "show-details-for-orientation",
+          "short": null,
+          "aliases": [],
+          "action": "set",
+          "arity": {
+            "min": 1,
+            "max": 1
+          },
+          "takes_values": true,
+          "value_required": true,
+          "value_names": [
+            "SHOW_DETAILS_FOR_ORIENTATION"
+          ],
+          "help": "Show detailed terms for the selected orientation",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [],
+          "possible_values": []
+        },
+        {
+          "id": "workspace_path",
+          "long": "workspace-path",
+          "short": null,
+          "aliases": [],
+          "action": "set",
+          "arity": {
+            "min": 1,
+            "max": 1
+          },
+          "takes_values": true,
+          "value_required": true,
+          "value_names": [
+            "WORKSPACE_PATH"
+          ],
+          "help": "Directory for generated expression artifacts and the latest-expression pointer",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [],
+          "possible_values": []
+        },
+        {
+          "id": "json_out",
+          "long": "json-out",
+          "short": null,
+          "aliases": [],
+          "action": "set",
+          "arity": {
+            "min": 1,
+            "max": 1
+          },
+          "takes_values": true,
+          "value_required": true,
+          "value_names": [
+            "JSON_OUT"
+          ],
+          "help": "Override the output JSON path for the oriented expression",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [],
+          "possible_values": []
+        },
+        {
+          "id": "help",
+          "long": "help",
+          "short": "h",
+          "aliases": [],
+          "action": "help",
+          "arity": {
+            "min": 0,
+            "max": 0
+          },
+          "takes_values": false,
+          "value_required": false,
+          "value_names": [],
+          "help": "Print help",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [],
+          "possible_values": []
+        }
+      ]
+    },
+    {
+      "path": "gammaLoop 3Drep help",
+      "name": "help",
+      "usage": "Usage: gammaLoop 3Drep help [COMMAND]",
+      "about": "Print this message or the help of the given subcommand(s)",
+      "hidden": false,
+      "generated_help": true,
+      "short_flag": null,
+      "long_flag": null,
+      "aliases": [],
+      "arguments": []
+    },
+    {
+      "path": "gammaLoop 3Drep help validate",
+      "name": "validate",
+      "usage": "Usage: gammaLoop 3Drep help validate",
+      "about": "Check the selected graph for supported energy-representation kinematics",
+      "hidden": false,
+      "generated_help": true,
+      "short_flag": null,
+      "long_flag": null,
+      "aliases": [],
+      "arguments": []
+    },
+    {
+      "path": "gammaLoop 3Drep help build",
+      "name": "build",
+      "usage": "Usage: gammaLoop 3Drep help build",
+      "about": "Construct and export the selected graph's oriented CFF expression",
+      "hidden": false,
+      "generated_help": true,
+      "short_flag": null,
+      "long_flag": null,
+      "aliases": [],
+      "arguments": []
+    },
+    {
+      "path": "gammaLoop 3Drep help help",
+      "name": "help",
+      "usage": "Usage: gammaLoop 3Drep help help",
       "about": "Print this message or the help of the given subcommand(s)",
       "hidden": false,
       "generated_help": true,
@@ -16057,7 +17202,7 @@
       "path": "gammaLoop help bench",
       "name": "bench",
       "usage": "Usage: gammaLoop help bench",
-      "about": "Measure raw integrand evaluation throughput over random samples and selected worker counts",
+      "about": "Measure evaluation throughput at a fixed point over a target duration",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -16094,6 +17239,42 @@
       "name": "bulk",
       "usage": "Usage: gammaLoop help profile bulk",
       "about": "Probe multiple infrared scaling limits and report their fitted behavior in one run",
+      "hidden": false,
+      "generated_help": true,
+      "short_flag": null,
+      "long_flag": null,
+      "aliases": [],
+      "arguments": []
+    },
+    {
+      "path": "gammaLoop help 3Drep",
+      "name": "3Drep",
+      "usage": "Usage: gammaLoop help 3Drep [COMMAND]",
+      "about": "Validate a graph or build its diagnostic three-dimensional energy representation",
+      "hidden": false,
+      "generated_help": true,
+      "short_flag": null,
+      "long_flag": null,
+      "aliases": [],
+      "arguments": []
+    },
+    {
+      "path": "gammaLoop help 3Drep validate",
+      "name": "validate",
+      "usage": "Usage: gammaLoop help 3Drep validate",
+      "about": "Check the selected graph for supported energy-representation kinematics",
+      "hidden": false,
+      "generated_help": true,
+      "short_flag": null,
+      "long_flag": null,
+      "aliases": [],
+      "arguments": []
+    },
+    {
+      "path": "gammaLoop help 3Drep build",
+      "name": "build",
+      "usage": "Usage: gammaLoop help 3Drep build",
+      "about": "Construct and export the selected graph's oriented CFF expression",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -16347,10 +17528,11 @@
       "value_type": "TensorNetworkContractionOrder",
       "description": "Heuristic used to order tensor-network contractions.",
       "required": false,
-      "default": "sparse_atom_aware",
+      "default": "intermediate_cost",
       "possible_values": [
         "atom_aware",
         "entry_aware",
+        "intermediate_cost",
         "result_rank_only",
         "sparse_atom_aware"
       ]
@@ -16359,6 +17541,14 @@
       "path": "cli.global.generation.evaluator.verbose",
       "value_type": "boolean",
       "description": "Emit detailed evaluator-construction diagnostics.",
+      "required": false,
+      "default": false,
+      "possible_values": []
+    },
+    {
+      "path": "cli.global.generation.explicit_orientation_sum_only",
+      "value_type": "boolean",
+      "description": "Sum all generated residue branches explicitly, removing runtime orientation selectors.",
       "required": false,
       "default": false,
       "possible_values": []
@@ -16468,6 +17658,18 @@
       "possible_values": []
     },
     {
+      "path": "cli.global.generation.uniform_numerator_sampling_scale",
+      "value_type": "UniformNumeratorSamplingScale",
+      "description": "Choose which numerator-energy reconstructions use the shared runtime sampling scale.",
+      "required": false,
+      "default": "none",
+      "possible_values": [
+        "all",
+        "beyond_quadratic",
+        "none"
+      ]
+    },
+    {
       "path": "cli.global.generation.uv.add_marker",
       "value_type": "boolean",
       "description": "Insert explicit marker functions around generated ultraviolet counterterms.",
@@ -16511,6 +17713,14 @@
       "possible_values": []
     },
     {
+      "path": "cli.global.generation.uv.local_uv_cts_from_expanded_4d_integrands",
+      "value_type": "boolean",
+      "description": "Construct local counterterms by Taylor-expanding 4D integrands before CFF projection.\nRequires an explicit sum over all generated orientations.",
+      "required": false,
+      "default": false,
+      "possible_values": []
+    },
+    {
       "path": "cli.global.generation.uv.orchestrator",
       "value_type": "UVOrchestrator",
       "description": "Algorithm used to enumerate and combine nested ultraviolet counterterms.",
@@ -16521,6 +17731,14 @@
         "hedge_poset",
         "legacy_dag_forest"
       ]
+    },
+    {
+      "path": "cli.global.generation.uv.project_integrated_uv_cts_onto_tensor_integrals",
+      "value_type": "boolean",
+      "description": "Reduce universal tensor kernels; false sends each complete numerator to Vakint.",
+      "required": false,
+      "default": true,
+      "possible_values": []
     },
     {
       "path": "cli.global.generation.uv.renormalization_prescription.log_divergent",
@@ -16627,7 +17845,7 @@
       "value_type": "string",
       "description": "Extra symbolic normalization factor multiplied into every Vakint result.",
       "required": false,
-      "default": "-1",
+      "default": "1",
       "possible_values": []
     },
     {
@@ -16997,6 +18215,14 @@
       "description": "Renormalization scale used by running parameters and scale-dependent terms.",
       "required": false,
       "default": 1000.0,
+      "possible_values": []
+    },
+    {
+      "path": "runtime.general.numerator_sampling_scale",
+      "value_type": "number",
+      "description": "Shared energy scale for numerator reconstruction when enabled during generation.",
+      "required": false,
+      "default": 1.0,
       "possible_values": []
     },
     {

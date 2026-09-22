@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "https://inspirehep.net",
-  "updated": "2026-09-21",
+  "updated": "2026-09-22",
   "api_url": "https://inspirehep.net/api/literature?sort=mostrecent&q=%28a+V.Hirschi.1+or+a+M.Fraaije.1+or+a+L.Huber.1+or+a+B.Ruijl.1+or+a+Kaapo.Seppanen.1+or+a+Zeno.Capatti.1%29",
   "authors": [
     {
@@ -2573,7 +2573,7 @@
       "venue": "Comput.Phys.Commun. 253 (2020) 107198",
       "doi": "10.1016/j.cpc.2020.107198",
       "arxiv": "1704.06650",
-      "citations": 156,
+      "citations": 157,
       "types": [
         "article"
       ],
@@ -3746,7 +3746,7 @@
       "venue": "JHEP 07 (2014) 079",
       "doi": "10.1007/JHEP07(2014)079",
       "arxiv": "1405.0301",
-      "citations": 10812,
+      "citations": 10818,
       "types": [
         "article"
       ],

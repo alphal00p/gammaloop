@@ -190,7 +190,7 @@
 <a href=#189 id=189 data-nosnippet>189</a>    <span class="kw">const </span>BINARY_PRECISION: usize = T::BINARY_PRECISION;
 <a href=#190 id=190 data-nosnippet>190</a>}
 <a href=#191 id=191 data-nosnippet>191</a>
-<a href=#192 id=192 data-nosnippet>192</a><span class="kw">impl</span>&lt;T: EvaluationDomain + FloatLike&gt; EvaluationDomain <span class="kw">for </span>Complex&lt;T&gt; {
+<a href=#192 id=192 data-nosnippet>192</a><span class="kw">impl</span>&lt;T: EvaluationDomain&gt; EvaluationDomain <span class="kw">for </span>Complex&lt;T&gt; {
 <a href=#193 id=193 data-nosnippet>193</a>    <span class="kw">const </span>FIXED_PRECISION: <span class="prelude-ty">Option</span>&lt;u32&gt; = T::FIXED_PRECISION;
 <a href=#194 id=194 data-nosnippet>194</a>
 <a href=#195 id=195 data-nosnippet>195</a>    <span class="kw">fn </span>try_from_complex_float(f: SymComplex&lt;Float&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, String&gt; {

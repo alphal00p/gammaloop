@@ -747,7 +747,7 @@
             "source": {
               "identifier": "spenso::network::Network",
               "file": "crates/spenso/src/network/mod.rs",
-              "line": 1748,
+              "line": 1759,
               "column": 1
             }
           },
@@ -813,7 +813,7 @@
             "source": {
               "identifier": "spenso::network::contract::ContractionStrategy",
               "file": "crates/spenso/src/network/contract.rs",
-              "line": 390,
+              "line": 435,
               "column": 1
             }
           },
@@ -857,7 +857,7 @@
             "source": {
               "identifier": "spenso::network::ExecutionStrategy",
               "file": "crates/spenso/src/network/mod.rs",
-              "line": 3148,
+              "line": 3207,
               "column": 1
             }
           },
@@ -934,7 +934,7 @@
             "source": {
               "identifier": "spenso::network::ExecutionMode",
               "file": "crates/spenso/src/network/mod.rs",
-              "line": 3982,
+              "line": 4077,
               "column": 1
             }
           },
@@ -1009,7 +1009,7 @@
             "source": {
               "identifier": "spenso::network::ExecutionResult",
               "file": "crates/spenso/src/network/mod.rs",
-              "line": 2665,
+              "line": 2701,
               "column": 1
             }
           },
@@ -1634,7 +1634,7 @@
             "source": {
               "identifier": "spenso::network::TensorNetworkError",
               "file": "crates/spenso/src/network/mod.rs",
-              "line": 2518,
+              "line": 2554,
               "column": 1
             }
           },
@@ -1746,7 +1746,7 @@
             "source": {
               "identifier": "spenso::network::parsing::ParseSettings",
               "file": "crates/spenso/src/network/parsing/mod.rs",
-              "line": 193,
+              "line": 199,
               "column": 1
             }
           },
@@ -1792,7 +1792,7 @@
             "source": {
               "identifier": "spenso::network::parsing::NetworkParse",
               "file": "crates/spenso/src/network/parsing/mod.rs",
-              "line": 1012,
+              "line": 1062,
               "column": 1
             }
           },

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["CFFExpression","OrientationData","OrientationExpression","OrientationID"]};
+window.SIDEBAR_ITEMS = {"struct":["AllOrientations","CFFVariant","OrientationData","OrientationExpression","OrientationID","RaisedEsurfaceData","RaisedEsurfaceGroup","RaisedEsurfaceId"],"trait":["GammaLoopCFFVariant","GammaLoopOrientationExpression","OrientationSelector","RaisedEsurfaceDataView","RaisedEsurfaceGroupView"],"type":["CFFExpression","ThreeDExpression"]};

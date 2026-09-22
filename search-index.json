@@ -1924,7 +1924,7 @@
     "summary": "Stores a typed command with its optional original spelling for replay and serialization.",
     "href": "products/gammaloop/latest/reference/rust/gammaloop_api/state/struct.CommandHistory.html",
     "kind": "GammaLoop · rust-api",
-    "text": "Stores a typed command with its optional original spelling for replay and serialization. Represents a command with optional raw string representation\n\nThis struct stores both the parsed command and optionally the original\nstring that was used to create it. This allows for preserving the exact\nuser input while still having access to the structured command data. pub struct CommandHistory {}"
+    "text": "Stores a typed command with its optional original spelling for replay and serialization. Represents a command with optional raw string representation\n\nThis struct stores a parsed command or a template awaiting scoped variables,\nplus the original string when available. This preserves the exact user input\nwhile keeping structured command data accessible. Templates carry their own\nrequired text in the command variant. pub struct CommandHistory {}"
   },
   {
     "title": "gammaloop-api · Parse command text",
@@ -2134,6 +2134,13 @@
     "href": "products/gammaloop/latest/reference/python/gammaloop-python/BatchEvaluationResult/#exports-batchevaluationresult-observables-getter",
     "kind": "GammaLoop · python-api",
     "text": "Observable snapshots accumulated across the complete sample batch. def observables(self) -> dict:"
+  },
+  {
+    "title": "gammaloop.BatchEvaluationResult.numerical_stability",
+    "summary": "def numerical_stability(self) -> Optional[dict]:",
+    "href": "products/gammaloop/latest/reference/python/gammaloop-python/BatchEvaluationResult/#exports-batchevaluationresult-numerical-stability-getter",
+    "kind": "GammaLoop · python-api",
+    "text": "def numerical_stability(self) -> Optional[dict]:"
   },
   {
     "title": "gammaloop.BatchEvaluationResult.__str__",
@@ -2500,11 +2507,39 @@
     "text": "Load, inspect, and evaluate one mutable GammaLoop session. Load, inspect, and evaluate one mutable GammaLoop session.\n\nOne instance owns a GammaLoop state, run history, CLI settings, default runtime\nsettings, and session state. Calls to ``run`` and the evaluation methods all act\non that same in-memory session.\n\nNotes\n-----\n``read_only_state=True`` prevents writes inside the active state directory; it\ndoes not make this Python object immutable. Commands may still change in-memory\nsettings, processes, or run history. Create separate instances when independent\nsessions are required. class GammaLoopAPI:"
   },
   {
+    "title": "gammaloop.GammaLoopAPI.read_only_state",
+    "summary": "def read_only_state(self) -> bool:",
+    "href": "products/gammaloop/latest/reference/python/gammaloop-python/GammaLoopAPI/#exports-gammaloopapi-read-only-state-getter",
+    "kind": "GammaLoop · python-api",
+    "text": "def read_only_state(self) -> bool:"
+  },
+  {
+    "title": "gammaloop.GammaLoopAPI.active_state_folder",
+    "summary": "def active_state_folder(self) -> str:",
+    "href": "products/gammaloop/latest/reference/python/gammaloop-python/GammaLoopAPI/#exports-gammaloopapi-active-state-folder-getter",
+    "kind": "GammaLoop · python-api",
+    "text": "def active_state_folder(self) -> str:"
+  },
+  {
     "title": "gammaloop.GammaLoopAPI constructor",
     "summary": "Load or create a GammaLoop state and initialize its CLI session.",
     "href": "products/gammaloop/latest/reference/python/gammaloop-python/GammaLoopAPI/#exports-gammaloopapi-new-associatedfunction",
     "kind": "GammaLoop · python-api",
     "text": "Load or create a GammaLoop state and initialize its CLI session.\n\nParameters\n----------\nstate_folder : path-like, optional\n    State directory to load or create. The default is ``./gammaloop_state``.\nboot_commands_path : path-like, optional\n    TOML run card whose commands are applied during startup.\nmodel_file : path-like, optional\n    Model file override used while loading or initializing the state.\ntrace_logs_filename : str, optional\n    File receiving native trace records for this session.\nlevel : LogLevel, optional\n    Terminal log-level override for this session.\nlogfile_level : LogLevel, optional\n    File log-level override for this session.\nlogging_prefix : object, optional\n    Native logging-prefix configuration.\nread_only_state : bool, default=False\n    Prevent writes whose target lies inside the active state directory and\n    disable file logging there. In-memory session changes remain possible.\nsettings_global_path : path-like, optional\n    TOML file overriding the global settings loaded at startup.\nsettings_runtime_defaults_path : path-like, optional\n    TOML file overriding the default runtime settings loaded at startup.\nclean_state : bool, default=False\n    Remove the resolved state path before startup. This is destructive and\n    cannot be combined with ``read_only_state=True``.\n\nReturns\n-------\nGammaLoopAPI\n    A stateful API instance sharing one state, history, and settings session.\n\nRaises\n------\nException\n    If startup options conflict, the state or settings cannot be loaded, a\n    boot command fails, or a boot card requests process exit.\n\nExamples\n--------\nOpen an existing generated state without permitting writes to it:\n\n```python\napi = GammaLoopAPI(state_folder=\"./state\", read_only_state=True)\n``` def __new__(cls, state_folder: Optional[str | os.PathLike | pathlib.Path] = None, boot_commands_path: Optional[str | os.PathLike | pathlib.Path] = None, model_file: Optional[str | os.PathLike | pathlib.Path] = None, trace_logs_filename: Optional[str] = None, level: Optional[LogLevel] = None, logfile_level: Optional[LogLevel] = None, logging_prefix: object | None = None, read_only_state: bool = False, settings_global_path: Optional[str | os.PathLike | pathlib.Path] = None, settings_runtime_defaults_path: Optional[str | os.PathLike | pathlib.Path] = None, clean_state: bool = False) -> GammaLoopAPI:"
+  },
+  {
+    "title": "gammaloop.GammaLoopAPI.is_read_only_state",
+    "summary": "def is_read_only_state(self) -> bool:",
+    "href": "products/gammaloop/latest/reference/python/gammaloop-python/GammaLoopAPI/#exports-gammaloopapi-is-read-only-state-method",
+    "kind": "GammaLoop · python-api",
+    "text": "def is_read_only_state(self) -> bool:"
+  },
+  {
+    "title": "gammaloop.GammaLoopAPI.state_access_mode",
+    "summary": "def state_access_mode(self) -> str:",
+    "href": "products/gammaloop/latest/reference/python/gammaloop-python/GammaLoopAPI/#exports-gammaloopapi-state-access-mode-method",
+    "kind": "GammaLoop · python-api",
+    "text": "def state_access_mode(self) -> str:"
   },
   {
     "title": "gammaloop.GammaLoopAPI.evaluate_sample",
@@ -2624,20 +2659,6 @@
     "href": "products/gammaloop/latest/reference/python/gammaloop-python/GammaLoopAPI/#exports-gammaloopapi-run-method",
     "kind": "GammaLoop · python-api",
     "text": "Parse and execute a CLI command in this API instance's session.\n\nParameters\n----------\ncommand : str\n    GammaLoop CLI command text.\n\nReturns\n-------\nNone\n    The command's normal output is emitted through the configured CLI/logging\n    sinks; inspect structured state through the corresponding getter methods.\n\nRaises\n------\nException\n    If the command cannot be parsed or execution fails.\n\nNotes\n-----\nCommands share and may mutate the instance's in-memory state, settings, and run\nhistory. ``read_only_state=True`` only blocks writes inside the active state\ndirectory. The API does not automatically persist the session after this call;\npersistence depends on the executed command's explicit output behavior.\n\nExamples\n--------\nDisplay the processes loaded in the current state:\n\n```python\napi.run(\"display processes\")\n``` def run(self, command: str) -> None:"
-  },
-  {
-    "title": "gammaloop.GammaLoopAPI.generate_cff",
-    "summary": "Build a causal-flow expression from an inline DOT graph or one of its subgraphs.",
-    "href": "products/gammaloop/latest/reference/python/gammaloop-python/GammaLoopAPI/#exports-gammaloopapi-generate-cff-method",
-    "kind": "GammaLoop · python-api",
-    "text": "Build a causal-flow expression from an inline DOT graph or one of its subgraphs.\n\nParameters\n----------\ndot_string : str\n    Inline DOT graph using particles from the active model.\nsubgraph_nodes : Sequence[str]\n    Vertex names retained in the subgraph; an empty sequence selects all nodes.\nreverse_dangling : Sequence[int]\n    Dangling edge ids whose orientation is reversed.\norientation_pattern : str, optional\n    Pattern restricting returned causal-flow orientations.\n\nReturns\n-------\nlist[tuple[dict[int, int], str]]\n    Edge-direction maps paired with their energy-denominator expressions. def generate_cff(self, dot_string: str, subgraph_nodes: Sequence[str], reverse_dangling: Sequence[int], orientation_pattern: Optional[str] = None) -> list[tuple[dict[int, int], str]]:"
-  },
-  {
-    "title": "gammaloop.GammaLoopAPI.generate_cff_as_json_string",
-    "summary": "Serialize a causal-flow expression and its surfaces as JSON.",
-    "href": "products/gammaloop/latest/reference/python/gammaloop-python/GammaLoopAPI/#exports-gammaloopapi-generate-cff-as-json-string-method",
-    "kind": "GammaLoop · python-api",
-    "text": "Serialize a causal-flow expression and its surfaces as JSON.\n\nThis accepts the same graph, subgraph, and dangling-edge inputs as\n``generate_cff``. The current JSON representation is intended for GammaLoop\ntooling and may contain internal structural details.\n\nParameters\n----------\ndot_string : str\n    Inline DOT graph using particles from the active model.\nsubgraph_nodes : Sequence[str]\n    Vertex names retained in the subgraph; an empty sequence selects all nodes.\nreverse_dangling : Sequence[int]\n    Dangling edge ids whose orientation is reversed.\norientation_pattern : str, optional\n    Pattern restricting returned causal-flow orientations.\n\nReturns\n-------\nstr\n    JSON representation of the causal-flow expression and E-surfaces. def generate_cff_as_json_string(self, dot_string: str, subgraph_nodes: Sequence[str], reverse_dangling: Sequence[int], orientation_pattern: Optional[str] = None) -> str:"
   },
   {
     "title": "gammaloop.HistogramAccumulator",
@@ -3536,6 +3557,13 @@
     "text": "Estimated relative accuracy, or ``None`` when it could not be estimated. def estimated_relative_accuracy(self) -> Optional[float]:"
   },
   {
+    "title": "gammaloop.StabilityResult.estimated_decimal_digits",
+    "summary": "def estimated_decimal_digits(self) -> Optional[float]:",
+    "href": "products/gammaloop/latest/reference/python/gammaloop-python/StabilityResult/#exports-stabilityresult-estimated-decimal-digits-getter",
+    "kind": "GammaLoop · python-api",
+    "text": "def estimated_decimal_digits(self) -> Optional[float]:"
+  },
+  {
     "title": "gammaloop.StabilityResult.status",
     "summary": "Human-readable stability outcome and number of rotated samples.",
     "href": "products/gammaloop/latest/reference/python/gammaloop-python/StabilityResult/#exports-stabilityresult-status-getter",
@@ -3932,7 +3960,7 @@
     "summary": "Load serialized graph data into a new or existing process",
     "href": "products/gammaloop/latest/reference/cli/commands/gammaloop/import/graphs/",
     "kind": "GammaLoop · command",
-    "text": "Load serialized graph data into a new or existing process path   Graph file to load, resolved against the active state root and current directory process --process -p Process reference: `#<id>`, `name:<name>`, or `<id>/<name>` integrand_name  -i Name assigned to the imported integrand overwrite  -o Replace an existing process or integrand with the same target name append  -a Append imported graphs to the selected target instead of replacing it help --help -h Print help Usage: gammaLoop import graphs [OPTIONS] <PATH>"
+    "text": "Load serialized graph data into a new or existing process source   Graph file to load, resolved against the active state root and current directory inline_dot --inline-dot  Inline DOT graph content to import instead of reading from a file path process_spec --process-spec  Process definition used to select physical Cutkosky cuts for imported graphs process --process -p Process reference: `#<id>`, `name:<name>`, or `<id>/<name>` integrand_name  -i Name assigned to the imported integrand overwrite  -o Replace an existing process or integrand with the same target name append  -a Append imported graphs to the selected target instead of replacing it help --help -h Print help Usage: gammaLoop import graphs [OPTIONS] [PATH]"
   },
   {
     "title": "gammaLoop save",
@@ -3981,7 +4009,7 @@
     "summary": "Execute a stored command block or an inline command list",
     "href": "products/gammaloop/latest/reference/cli/commands/gammaloop/run/",
     "kind": "GammaLoop · command",
-    "text": "Execute a stored command block or an inline command list block_names   Command block names to execute (in order) commands --commands -c Semicolon-separated inline commands executed after the named blocks help --help -h Print help Usage: gammaLoop run [OPTIONS] [BLOCK_NAME]..."
+    "text": "Execute a stored command block or an inline command list block_names   Command block names to execute (in order) defines --define -D Define a string variable available to selected command blocks; repeat as needed commands --commands -c Semicolon-separated inline commands executed after the named blocks help --help -h Print help Usage: gammaLoop run [OPTIONS] [BLOCK_NAME]..."
   },
   {
     "title": "gammaLoop start_commands_block",
@@ -4030,14 +4058,14 @@
     "summary": "Generate a cross-section integrand through the forward-scattering construction",
     "href": "products/gammaloop/latest/reference/cli/commands/gammaloop/generate/xs/",
     "kind": "GammaLoop · command",
-    "text": "Generate a cross-section integrand through the forward-scattering construction tokens   Quote-free spec.\n\nGrammar (unquoted): `INITIAL to FINAL [process_options] [generation_options]` Also accepts: `INITIAL > FINAL [ ... ]`\n\nExamples: e+ e- to d d~ g veto u d xs QED^2==2 QCD^2<=4 pert loops=1 fsloops=2 QCD=2 e+ e- > { z z, a a } [ {1} {{2}} QCD=2 QED=1 ] / u d | g ghG QED==2 QCD>=2 QCD<=4\n\nNotes: - `veto` and `only` are synonyms for `/` and `|`. - The `[ ... ]` block holds perturbative spec: `{n}`, `{{n}}`, and orders `QCD=n` with shorthand `QCD`≡1. append  -a Append the generated process instead of replacing the current process selection clear_existing_processes --clear-existing-processes -c Clear pre-existing processes process_name --process-name -p Optional human-readable process name integrand_name --integrand-name -i Name assigned to the generated integrand; defaults to the generated process name only_diagrams --only-diagrams -o Stop after diagram generation without constructing an evaluable integrand filter_selfenergies --filter-selfenergies  Include or exclude self-energy topologies; omission uses the generation-mode default filter_snails --filter-snails  Include or exclude snail topologies; omission uses the generation-mode default filter_tadpoles --filter-tadpoles  Include or exclude tadpole topologies; omission uses the generation-mode default veto_vertex_interactions --veto-vertex-interactions  Exclude graphs containing any listed vertex-interaction name allowed_vertex_interactions --allowed-vertex-interactions  Restrict generation to an allow-list of vertex interactions filter_cross_section_tadpoles --filter-cross-section-tadpoles  Filter tadpoles formed while sewing amplitudes into a cross-section graph veto_tadpoles_attached_to_massive_lines --veto-tadpoles-attached-to-massive-lines  Veto tadpoles attached to massive propagators veto_tadpoles_attached_to_massless_lines --veto-tadpoles-attached-to-massless-lines  Veto tadpoles attached to massless propagators veto_only_scaleless_tadpoles --veto-only-scaleless-tadpoles  Veto only tadpoles that are scaleless veto_snails_attached_to_massive_lines --veto-snails-attached-to-massive-lines  Veto snail insertions attached to massive propagators veto_snails_attached_to_massless_lines --veto-snails-attached-to-massless-lines  Veto snail insertions attached to massless propagators veto_only_scaleless_snails --veto-only-scaleless-snails  Veto only snail insertions that are scaleless veto_self_energy_of_massive_lines --veto-self-energy-of-massive-lines  Veto self-energy insertions on massive propagators veto_self_energy_of_massless_lines --veto-self-energy-of-massless-lines  Veto self-energy insertions on massless propagators veto_only_scaleless_self_energy --veto-only-scaleless-self-energy  Veto only self-energy insertions that are scaleless max_n_bridges --max-n-bridges -b Maximum number of bridges allowed in a generated graph; negative values disable the bound number_of_factorized_loop_subtopologies --number-of-factorized-loop-subtopologies -f Inclusive minimum and maximum number of factorized loop subtopologies number_of_fermion_loops --number-of-fermion-loops -L Number of closed fermion loops; negative disables n_cut_blobs --n-cut-blobs -B Inclusive minimum and maximum number of cut blobs on either side of a cross-section cut n_cut_spectators --n-cut-spectators -S Inclusive minimum and maximum number of spectators crossing a cross-section cut allow_symmetrization_of_external_fermions_in_amplitudes --allow-symmetrization-of-external-fermions-in-amplitudes  Permit external fermion permutations when identifying equivalent amplitudes symmetrize_initial_states --symmetrize-initial-states  Identify graphs related by permutations of identical initial-state particles symmetrize_final_states --symmetrize-final-states  Identify graphs related by permutations of identical final-state particles symmetrize_left_right_states --symmetrize-left-right-states  Identify cross-section graphs related by exchanging the left and right amplitudes numerator_aware_isomorphism_grouping --numerator-grouping -G Numerator-aware grouping choice numerical_samples_seed --numerical-samples-seed  Deterministic random seed used for numerical numerator comparisons number_of_samples_for_numerator_comparisons --number-of-samples-for-numerator-comparisons  Number of phase-space samples used to decide whether two numerators are equivalent consider_internal_masses_only_in_numerator_isomorphisms --consider-internal-masses-only-in-numerator-isomorphisms  Distinguish mass parameters while ignoring other model-parameter labels during grouping fully_numerical_substitution_when_comparing_numerators --fully-numerical-substitution-when-comparing-numerators  Numerically substitute every parameter when comparing candidate numerator isomorphisms compare_canonized_numerator --compare-canonized-numerator  Compare canonicalized numerators in addition to graph topology when grouping symmetric_left_right_polarizations --symmetric-left-right-polarizations  Treat left- and right-side polarization factors symmetrically during numerator grouping loop_momentum_bases --loop-momentum-bases  Graph processing toggles\n\nFormat: --loop-momentum-bases \"GL_12=7,10 GL_77=4,2\" --select-graphs \"GL_12 GL_13\" --veto-graphs \"GL_11 GL_15\" select_graphs --select-graphs  Generate only graphs whose names appear in this allow-list veto_graphs --veto-graphs  Exclude graphs whose names appear in this deny-list graph_prefix --graph-prefix -g Prefix assigned to generated graph names; defaults to `GL` global_prefactor_projector --global-prefactor-projector  Global prefactor projector (Symbolica atom string) global_prefactor_num --global-prefactor-num  Global prefactor numerator (Symbolica atom string) max_multiplicity_for_fast_cut_filter --max-multiplicity-for-fast-cut-filter -M Fast cut filter switch multiplicity filter_self_loop --filter-self-loop  Filter graph-theoretic self-loops explicitly; omission keeps them filter_zero_flow_edges --filter-zero-flow-edges  Filter edges that carry zero momentum flow in the selected routing keep_sources --keep-sources  Keep generated C++ source files after external compilation help --help -h Print help (see a summary with '-h') Usage: gammaLoop generate xs [OPTIONS] [TOKENS]..."
+    "text": "Generate a cross-section integrand through the forward-scattering construction tokens   Quote-free spec.\n\nGrammar (unquoted): `INITIAL to FINAL [process_options] [generation_options]` Also accepts: `INITIAL > FINAL [ ... ]`\n\nExamples: e+ e- to d d~ g veto u d xs QED^2==2 QCD^2<=4 pert loops=1 fsloops=2 QCD=2 e+ e- > { z z, a a } [ {1} {{2}} QCD=2 QED=1 ] / u d | g ghG QED==2 QCD>=2 QCD<=4\n\nNotes: - `veto` and `only` are synonyms for `/` and `|`. - The `[ ... ]` block holds perturbative spec: `{n}`, `{{n}}`, and orders `QCD=n` with shorthand `QCD`≡1. append  -a Append the generated process instead of replacing the current process selection clear_existing_processes --clear-existing-processes -c Clear pre-existing processes process_name --process-name -p Optional human-readable process name integrand_name --integrand-name -i Name assigned to the generated integrand; defaults to the generated process name only_diagrams --only-diagrams -o Stop after diagram generation without constructing an evaluable integrand filter_selfenergies --filter-selfenergies  Include or exclude self-energy topologies; omission uses the generation-mode default filter_snails --filter-snails  Include or exclude snail topologies; omission uses the generation-mode default filter_tadpoles --filter-tadpoles  Include or exclude tadpole topologies; omission uses the generation-mode default veto_vertex_interactions --veto-vertex-interactions  Exclude graphs containing any listed vertex-interaction name allowed_vertex_interactions --allowed-vertex-interactions  Restrict generation to an allow-list of vertex interactions filter_cross_section_tadpoles --filter-cross-section-tadpoles  Filter tadpoles formed while sewing amplitudes into a cross-section graph veto_tadpoles_attached_to_massive_lines --veto-tadpoles-attached-to-massive-lines  Veto tadpoles attached to massive propagators veto_tadpoles_attached_to_massless_lines --veto-tadpoles-attached-to-massless-lines  Veto tadpoles attached to massless propagators veto_only_scaleless_tadpoles --veto-only-scaleless-tadpoles  Veto only tadpoles that are scaleless veto_snails_attached_to_massive_lines --veto-snails-attached-to-massive-lines  Veto snail insertions attached to massive propagators veto_snails_attached_to_massless_lines --veto-snails-attached-to-massless-lines  Veto snail insertions attached to massless propagators veto_only_scaleless_snails --veto-only-scaleless-snails  Veto only snail insertions that are scaleless veto_self_energy_of_massive_lines --veto-self-energy-of-massive-lines  Veto self-energy insertions on massive propagators veto_self_energy_of_massless_lines --veto-self-energy-of-massless-lines  Veto self-energy insertions on massless propagators veto_only_scaleless_self_energy --veto-only-scaleless-self-energy  Veto only self-energy insertions that are scaleless max_n_bridges --max-n-bridges -b Maximum number of bridges allowed in a generated graph; negative values disable the bound number_of_factorized_loop_subtopologies --number-of-factorized-loop-subtopologies -f Inclusive minimum and maximum number of factorized loop subtopologies number_of_fermion_loops --number-of-fermion-loops -L Number of closed fermion loops, excluding ghosts; negative disables n_cut_blobs --n-cut-blobs -B Inclusive minimum and maximum number of cut blobs on either side of a cross-section cut n_cut_spectators --n-cut-spectators -S Inclusive minimum and maximum number of spectators crossing a cross-section cut allow_symmetrization_of_external_fermions_in_amplitudes --allow-symmetrization-of-external-fermions-in-amplitudes  Permit external fermion permutations when identifying equivalent amplitudes symmetrize_initial_states --symmetrize-initial-states  Identify graphs related by permutations of identical initial-state particles symmetrize_final_states --symmetrize-final-states  Identify graphs related by permutations of identical final-state particles symmetrize_left_right_states --symmetrize-left-right-states  Identify cross-section graphs under CP-based left/right exchange; requires CP symmetry numerator_aware_isomorphism_grouping --numerator-grouping -G Numerator-aware grouping choice numerical_samples_seed --numerical-samples-seed  Deterministic random seed used for numerical numerator comparisons number_of_samples_for_numerator_comparisons --number-of-samples-for-numerator-comparisons  Number of phase-space samples used to decide whether two numerators are equivalent consider_internal_masses_only_in_numerator_isomorphisms --consider-internal-masses-only-in-numerator-isomorphisms  Distinguish mass parameters while ignoring other model-parameter labels during grouping fully_numerical_substitution_when_comparing_numerators --fully-numerical-substitution-when-comparing-numerators  Numerically substitute every parameter when comparing candidate numerator isomorphisms compare_canonized_numerator --compare-canonized-numerator  Compare canonicalized numerators in addition to graph topology when grouping symmetric_left_right_polarizations --symmetric-left-right-polarizations  Treat left- and right-side polarization factors symmetrically during numerator grouping loop_momentum_bases --loop-momentum-bases  Graph processing toggles\n\nFormat: --loop-momentum-bases \"GL_12=7,10 GL_77=4,2\" --select-graphs \"GL_12 GL_13\" --veto-graphs \"GL_11 GL_15\" select_graphs --select-graphs  Generate only graphs whose names appear in this allow-list veto_graphs --veto-graphs  Exclude graphs whose names appear in this deny-list graph_prefix --graph-prefix -g Prefix assigned to generated graph names; defaults to `GL` global_prefactor_projector --global-prefactor-projector  Global prefactor projector (Symbolica atom string) global_prefactor_num --global-prefactor-num  Global prefactor numerator (Symbolica atom string) max_multiplicity_for_fast_cut_filter --max-multiplicity-for-fast-cut-filter -M Fast cut filter switch multiplicity filter_self_loop --filter-self-loop  Filter graph-theoretic self-loops explicitly; omission keeps them filter_zero_flow_edges --filter-zero-flow-edges  Filter edges that carry zero momentum flow in the selected routing keep_sources --keep-sources  Keep generated C++ source files after external compilation help --help -h Print help (see a summary with '-h') Usage: gammaLoop generate xs [OPTIONS] [TOKENS]..."
   },
   {
     "title": "gammaLoop generate amp",
     "summary": "Generate an amplitude integrand for the supplied process specification",
     "href": "products/gammaloop/latest/reference/cli/commands/gammaloop/generate/amp/",
     "kind": "GammaLoop · command",
-    "text": "Generate an amplitude integrand for the supplied process specification tokens   Quote-free spec.\n\nGrammar (unquoted): `INITIAL to FINAL [process_options] [generation_options]` Also accepts: `INITIAL > FINAL [ ... ]`\n\nExamples: e+ e- to d d~ g veto u d xs QED^2==2 QCD^2<=4 pert loops=1 fsloops=2 QCD=2 e+ e- > { z z, a a } [ {1} {{2}} QCD=2 QED=1 ] / u d | g ghG QED==2 QCD>=2 QCD<=4\n\nNotes: - `veto` and `only` are synonyms for `/` and `|`. - The `[ ... ]` block holds perturbative spec: `{n}`, `{{n}}`, and orders `QCD=n` with shorthand `QCD`≡1. append  -a Append the generated process instead of replacing the current process selection clear_existing_processes --clear-existing-processes -c Clear pre-existing processes process_name --process-name -p Optional human-readable process name integrand_name --integrand-name -i Name assigned to the generated integrand; defaults to the generated process name only_diagrams --only-diagrams -o Stop after diagram generation without constructing an evaluable integrand filter_selfenergies --filter-selfenergies  Include or exclude self-energy topologies; omission uses the generation-mode default filter_snails --filter-snails  Include or exclude snail topologies; omission uses the generation-mode default filter_tadpoles --filter-tadpoles  Include or exclude tadpole topologies; omission uses the generation-mode default veto_vertex_interactions --veto-vertex-interactions  Exclude graphs containing any listed vertex-interaction name allowed_vertex_interactions --allowed-vertex-interactions  Restrict generation to an allow-list of vertex interactions filter_cross_section_tadpoles --filter-cross-section-tadpoles  Filter tadpoles formed while sewing amplitudes into a cross-section graph veto_tadpoles_attached_to_massive_lines --veto-tadpoles-attached-to-massive-lines  Veto tadpoles attached to massive propagators veto_tadpoles_attached_to_massless_lines --veto-tadpoles-attached-to-massless-lines  Veto tadpoles attached to massless propagators veto_only_scaleless_tadpoles --veto-only-scaleless-tadpoles  Veto only tadpoles that are scaleless veto_snails_attached_to_massive_lines --veto-snails-attached-to-massive-lines  Veto snail insertions attached to massive propagators veto_snails_attached_to_massless_lines --veto-snails-attached-to-massless-lines  Veto snail insertions attached to massless propagators veto_only_scaleless_snails --veto-only-scaleless-snails  Veto only snail insertions that are scaleless veto_self_energy_of_massive_lines --veto-self-energy-of-massive-lines  Veto self-energy insertions on massive propagators veto_self_energy_of_massless_lines --veto-self-energy-of-massless-lines  Veto self-energy insertions on massless propagators veto_only_scaleless_self_energy --veto-only-scaleless-self-energy  Veto only self-energy insertions that are scaleless max_n_bridges --max-n-bridges -b Maximum number of bridges allowed in a generated graph; negative values disable the bound number_of_factorized_loop_subtopologies --number-of-factorized-loop-subtopologies -f Inclusive minimum and maximum number of factorized loop subtopologies number_of_fermion_loops --number-of-fermion-loops -L Number of closed fermion loops; negative disables n_cut_blobs --n-cut-blobs -B Inclusive minimum and maximum number of cut blobs on either side of a cross-section cut n_cut_spectators --n-cut-spectators -S Inclusive minimum and maximum number of spectators crossing a cross-section cut allow_symmetrization_of_external_fermions_in_amplitudes --allow-symmetrization-of-external-fermions-in-amplitudes  Permit external fermion permutations when identifying equivalent amplitudes symmetrize_initial_states --symmetrize-initial-states  Identify graphs related by permutations of identical initial-state particles symmetrize_final_states --symmetrize-final-states  Identify graphs related by permutations of identical final-state particles symmetrize_left_right_states --symmetrize-left-right-states  Identify cross-section graphs related by exchanging the left and right amplitudes numerator_aware_isomorphism_grouping --numerator-grouping -G Numerator-aware grouping choice numerical_samples_seed --numerical-samples-seed  Deterministic random seed used for numerical numerator comparisons number_of_samples_for_numerator_comparisons --number-of-samples-for-numerator-comparisons  Number of phase-space samples used to decide whether two numerators are equivalent consider_internal_masses_only_in_numerator_isomorphisms --consider-internal-masses-only-in-numerator-isomorphisms  Distinguish mass parameters while ignoring other model-parameter labels during grouping fully_numerical_substitution_when_comparing_numerators --fully-numerical-substitution-when-comparing-numerators  Numerically substitute every parameter when comparing candidate numerator isomorphisms compare_canonized_numerator --compare-canonized-numerator  Compare canonicalized numerators in addition to graph topology when grouping symmetric_left_right_polarizations --symmetric-left-right-polarizations  Treat left- and right-side polarization factors symmetrically during numerator grouping loop_momentum_bases --loop-momentum-bases  Graph processing toggles\n\nFormat: --loop-momentum-bases \"GL_12=7,10 GL_77=4,2\" --select-graphs \"GL_12 GL_13\" --veto-graphs \"GL_11 GL_15\" select_graphs --select-graphs  Generate only graphs whose names appear in this allow-list veto_graphs --veto-graphs  Exclude graphs whose names appear in this deny-list graph_prefix --graph-prefix -g Prefix assigned to generated graph names; defaults to `GL` global_prefactor_projector --global-prefactor-projector  Global prefactor projector (Symbolica atom string) global_prefactor_num --global-prefactor-num  Global prefactor numerator (Symbolica atom string) max_multiplicity_for_fast_cut_filter --max-multiplicity-for-fast-cut-filter -M Fast cut filter switch multiplicity filter_self_loop --filter-self-loop  Filter graph-theoretic self-loops explicitly; omission keeps them filter_zero_flow_edges --filter-zero-flow-edges  Filter edges that carry zero momentum flow in the selected routing keep_sources --keep-sources  Keep generated C++ source files after external compilation help --help -h Print help (see a summary with '-h') amplitude Usage: gammaLoop generate amp [OPTIONS] [TOKENS]..."
+    "text": "Generate an amplitude integrand for the supplied process specification tokens   Quote-free spec.\n\nGrammar (unquoted): `INITIAL to FINAL [process_options] [generation_options]` Also accepts: `INITIAL > FINAL [ ... ]`\n\nExamples: e+ e- to d d~ g veto u d xs QED^2==2 QCD^2<=4 pert loops=1 fsloops=2 QCD=2 e+ e- > { z z, a a } [ {1} {{2}} QCD=2 QED=1 ] / u d | g ghG QED==2 QCD>=2 QCD<=4\n\nNotes: - `veto` and `only` are synonyms for `/` and `|`. - The `[ ... ]` block holds perturbative spec: `{n}`, `{{n}}`, and orders `QCD=n` with shorthand `QCD`≡1. append  -a Append the generated process instead of replacing the current process selection clear_existing_processes --clear-existing-processes -c Clear pre-existing processes process_name --process-name -p Optional human-readable process name integrand_name --integrand-name -i Name assigned to the generated integrand; defaults to the generated process name only_diagrams --only-diagrams -o Stop after diagram generation without constructing an evaluable integrand filter_selfenergies --filter-selfenergies  Include or exclude self-energy topologies; omission uses the generation-mode default filter_snails --filter-snails  Include or exclude snail topologies; omission uses the generation-mode default filter_tadpoles --filter-tadpoles  Include or exclude tadpole topologies; omission uses the generation-mode default veto_vertex_interactions --veto-vertex-interactions  Exclude graphs containing any listed vertex-interaction name allowed_vertex_interactions --allowed-vertex-interactions  Restrict generation to an allow-list of vertex interactions filter_cross_section_tadpoles --filter-cross-section-tadpoles  Filter tadpoles formed while sewing amplitudes into a cross-section graph veto_tadpoles_attached_to_massive_lines --veto-tadpoles-attached-to-massive-lines  Veto tadpoles attached to massive propagators veto_tadpoles_attached_to_massless_lines --veto-tadpoles-attached-to-massless-lines  Veto tadpoles attached to massless propagators veto_only_scaleless_tadpoles --veto-only-scaleless-tadpoles  Veto only tadpoles that are scaleless veto_snails_attached_to_massive_lines --veto-snails-attached-to-massive-lines  Veto snail insertions attached to massive propagators veto_snails_attached_to_massless_lines --veto-snails-attached-to-massless-lines  Veto snail insertions attached to massless propagators veto_only_scaleless_snails --veto-only-scaleless-snails  Veto only snail insertions that are scaleless veto_self_energy_of_massive_lines --veto-self-energy-of-massive-lines  Veto self-energy insertions on massive propagators veto_self_energy_of_massless_lines --veto-self-energy-of-massless-lines  Veto self-energy insertions on massless propagators veto_only_scaleless_self_energy --veto-only-scaleless-self-energy  Veto only self-energy insertions that are scaleless max_n_bridges --max-n-bridges -b Maximum number of bridges allowed in a generated graph; negative values disable the bound number_of_factorized_loop_subtopologies --number-of-factorized-loop-subtopologies -f Inclusive minimum and maximum number of factorized loop subtopologies number_of_fermion_loops --number-of-fermion-loops -L Number of closed fermion loops, excluding ghosts; negative disables n_cut_blobs --n-cut-blobs -B Inclusive minimum and maximum number of cut blobs on either side of a cross-section cut n_cut_spectators --n-cut-spectators -S Inclusive minimum and maximum number of spectators crossing a cross-section cut allow_symmetrization_of_external_fermions_in_amplitudes --allow-symmetrization-of-external-fermions-in-amplitudes  Permit external fermion permutations when identifying equivalent amplitudes symmetrize_initial_states --symmetrize-initial-states  Identify graphs related by permutations of identical initial-state particles symmetrize_final_states --symmetrize-final-states  Identify graphs related by permutations of identical final-state particles symmetrize_left_right_states --symmetrize-left-right-states  Identify cross-section graphs under CP-based left/right exchange; requires CP symmetry numerator_aware_isomorphism_grouping --numerator-grouping -G Numerator-aware grouping choice numerical_samples_seed --numerical-samples-seed  Deterministic random seed used for numerical numerator comparisons number_of_samples_for_numerator_comparisons --number-of-samples-for-numerator-comparisons  Number of phase-space samples used to decide whether two numerators are equivalent consider_internal_masses_only_in_numerator_isomorphisms --consider-internal-masses-only-in-numerator-isomorphisms  Distinguish mass parameters while ignoring other model-parameter labels during grouping fully_numerical_substitution_when_comparing_numerators --fully-numerical-substitution-when-comparing-numerators  Numerically substitute every parameter when comparing candidate numerator isomorphisms compare_canonized_numerator --compare-canonized-numerator  Compare canonicalized numerators in addition to graph topology when grouping symmetric_left_right_polarizations --symmetric-left-right-polarizations  Treat left- and right-side polarization factors symmetrically during numerator grouping loop_momentum_bases --loop-momentum-bases  Graph processing toggles\n\nFormat: --loop-momentum-bases \"GL_12=7,10 GL_77=4,2\" --select-graphs \"GL_12 GL_13\" --veto-graphs \"GL_11 GL_15\" select_graphs --select-graphs  Generate only graphs whose names appear in this allow-list veto_graphs --veto-graphs  Exclude graphs whose names appear in this deny-list graph_prefix --graph-prefix -g Prefix assigned to generated graph names; defaults to `GL` global_prefactor_projector --global-prefactor-projector  Global prefactor projector (Symbolica atom string) global_prefactor_num --global-prefactor-num  Global prefactor numerator (Symbolica atom string) max_multiplicity_for_fast_cut_filter --max-multiplicity-for-fast-cut-filter -M Fast cut filter switch multiplicity filter_self_loop --filter-self-loop  Filter graph-theoretic self-loops explicitly; omission keeps them filter_zero_flow_edges --filter-zero-flow-edges  Filter edges that carry zero momentum flow in the selected routing keep_sources --keep-sources  Keep generated C++ source files after external compilation help --help -h Print help (see a summary with '-h') amplitude Usage: gammaLoop generate amp [OPTIONS] [TOKENS]..."
   },
   {
     "title": "gammaLoop generate existing",
@@ -4065,7 +4093,7 @@
     "summary": "Inspect integrand contributions at one phase-space point or momentum configuration",
     "href": "products/gammaloop/latest/reference/cli/commands/gammaloop/inspect/",
     "kind": "GammaLoop · command",
-    "text": "Inspect integrand contributions at one phase-space point or momentum configuration process --process -p Process reference: `#<id>`, `name:<name>`, or `<id>/<name>` integrand_name --integrand-name -i The integrand name to inspect point --point -x Integration coordinates, or flattened loop momenta `(px, py, pz) ...` with `--momentum-space` use_arb_prec --use_arb_prec -f Force arbitrary-precision (Arb) internal evaluation; output remains f64 momentum_space --momentum-space -m Interpret `--point` as spatial loop-momentum triplets; energy components are not accepted discrete_dim --discrete-dim -d The discrete dimensions of the sample graph_id --graph-id  Select a specific graph in momentum-space inspect orientation_id --orientation-id  Select a specific orientation of the selected graph in momentum-space inspect help --help -h Print help Usage: gammaLoop inspect [OPTIONS]"
+    "text": "Inspect integrand contributions at one phase-space point or momentum configuration process --process -p Process reference: `#<id>`, `name:<name>`, or `<id>/<name>` integrand_name --integrand-name -i The integrand name to inspect point --point -x Integration coordinates, or flattened loop momenta `(px, py, pz) ...` with `--momentum-space` use_arb_prec --use_arb_prec -f Force arbitrary-precision (Arb) internal evaluation; output remains f64 momentum_space --momentum-space -m Interpret `--point` as spatial loop-momentum triplets; energy components are not accepted discrete_dim --discrete-dim -d The discrete dimensions of the sample graph_id --graph-id  Select a specific graph in momentum-space inspect orientation_id --orientation-id  Select a specific orientation of the selected graph in momentum-space inspect json_output --json-output  Write the inspection result as pretty JSON to this path help --help -h Print help Usage: gammaLoop inspect [OPTIONS]"
   },
   {
     "title": "gammaLoop approach",
@@ -4090,10 +4118,10 @@
   },
   {
     "title": "gammaLoop bench",
-    "summary": "Measure raw integrand evaluation throughput over random samples and selected worker counts",
+    "summary": "Measure evaluation throughput at a fixed point over a target duration",
     "href": "products/gammaloop/latest/reference/cli/commands/gammaloop/bench/",
     "kind": "GammaLoop · command",
-    "text": "Measure raw integrand evaluation throughput over random samples and selected worker counts samples --samples -s Number of random samples to evaluate process --process -p Process reference: `#<id>`, `name:<name>`, or `<id>/<name>` integrand_name --integrand-name -i The integrand name to benchmark n_cores --n-cores -c Number of cores to parallelize over help --help -h Print help Usage: gammaLoop bench --samples <SAMPLES> --process <PROCESS> --integrand-name <NAME> --n-cores <N_CORES>"
+    "text": "Measure evaluation throughput at a fixed point over a target duration process --process -p Process reference: `#<id>`, `name:<name>`, or `<id>/<name>` integrand_name --integrand-name -i The integrand name to benchmark point --point -x Fixed x-space or momentum-space point to benchmark duration --duration  Target benchmark duration use_arb_prec --use-arb-prec -f Evaluate in arbitrary precision momentum_space --momentum-space -m Interpret the point as momentum-space coordinates discrete_dim --discrete-dim -d Discrete dimensions of the fixed sample graph_id --graph-id  Select a specific graph in momentum-space evaluation orientation_id --orientation-id  Select a specific orientation of the selected graph n_batches --n-batches  Number of batches used to estimate uncertainty minimal_integrand --minimal-integrand  Temporarily benchmark only the raw integrand path by disabling stability rotations, caches, generated events, additional event weights, selectors, and observables json_output --json-output  Write the benchmark result as pretty JSON to this path help --help -h Print help Usage: gammaLoop bench [OPTIONS] --point <POINT> <POINT>... --duration <DURATION>"
   },
   {
     "title": "gammaLoop profile",
@@ -4107,7 +4135,7 @@
     "summary": "Sample ultraviolet scaling rays and report the fitted large-momentum behavior",
     "href": "products/gammaloop/latest/reference/cli/commands/gammaloop/profile/ultra-violet/",
     "kind": "GammaLoop · command",
-    "text": "Sample ultraviolet scaling rays and report the fitted large-momentum behavior process --process -p Process reference: `#<id>`, `name:<name>`, or `<id>/<name>` integrand_name --integrand-name -i The integrand name to inspect n_points --n-points  Number of scaling points to sample min_scale_exponent --min-scaling  Starting exponent of the sampled ultraviolet scaling range max_scale_exponent --max-scaling  Ending exponent of the sampled ultraviolet scaling range use_f128 --use_f128  Use f128 precision for evaluation analyse_analytically --analyse_analytically  Fit the symbolic ultraviolet scaling expression in addition to sampled numerical values per_orientation --per-orientation  Profile each visible orientation separately and include per-orientation results seed --seed  Random seed for momentum sampling uv_ray_directions --uv-ray-directions  Fixed UV ray directions as flattened 3-vectors, repeated for all rays if one direction is supplied uv_ray_norms --uv-ray-norms  Fixed UV ray starting norms, repeated for all rays if one norm is supplied output_file --output -o Output file for results (optional) help --help -h Print help Usage: gammaLoop profile ultra-violet [OPTIONS]"
+    "text": "Sample ultraviolet scaling rays and report the fitted large-momentum behavior process --process -p Process reference: `#<id>`, `name:<name>`, or `<id>/<name>` integrand_name --integrand-name -i The integrand name to inspect graph --graph -g Restrict profiling to this graph cutkosky_cut --cutkosky-cut  Restrict a cross section to the Cutkosky cut with these edge IDs selected_limits --selected-limits  UV limits to profile fail_fast --fail-fast  Stop after the first failing numerical UV limit, including precision retries n_points --n-points  Number of scaling points to sample min_scale_exponent --min-scaling  Starting base-10 exponent of the sampled ultraviolet scaling range max_scale_exponent --max-scaling  Ending base-10 exponent of the sampled ultraviolet scaling range use_f128 --use_f128  Use f128 precision for evaluation analyse_analytically --analyse_analytically  Derive the analytic ultraviolet series in addition to sampled numerical values (amplitudes only) per_orientation --per-orientation  Profile each visible orientation separately and include per-orientation results seed --seed  Random seed for momentum sampling uv_ray_directions --uv-ray-directions  Fixed UV ray directions as flattened 3-vectors, repeated for all rays if one direction is supplied uv_ray_norms --uv-ray-norms  Fixed UV ray starting norms, repeated for all rays if one norm is supplied output_file --output -o Output directory for uv_profile.json (optional) help --help -h Print help (see a summary with '-h') Usage: gammaLoop profile ultra-violet [OPTIONS]"
   },
   {
     "title": "gammaLoop profile bulk",
@@ -4115,6 +4143,27 @@
     "href": "products/gammaloop/latest/reference/cli/commands/gammaloop/profile/bulk/",
     "kind": "GammaLoop · command",
     "text": "Probe multiple infrared scaling limits and report their fitted behavior in one run process --process -p Process reference: `#<id>`, `name:<name>`, or `<id>/<name>` integrand_name --integrand-name -i The cross-section name to inspect n_points --n-points  Number of scaling points to sample min_scale_exponent --min-scaling  Starting exponent of the sampled bulk scaling range max_scale_exponent --max-scaling  Ending exponent of the sampled bulk scaling range seed --seed  Random seed for momentum sampling output_file --output -o Output file for results (optional) select --select -s restrict test to particular graphs or limits per_orientation --per-orientation  Profile each visible orientation separately and report one row per orientation show_per_cut_info --show-per-cut-info  Retain generated event data so per-cut IR fits can be computed and displayed help --help -h Print help Usage: gammaLoop profile bulk [OPTIONS]"
+  },
+  {
+    "title": "gammaLoop 3Drep",
+    "summary": "Validate a graph or build its diagnostic three-dimensional energy representation",
+    "href": "products/gammaloop/latest/reference/cli/commands/gammaloop/3drep/",
+    "kind": "GammaLoop · command",
+    "text": "Validate a graph or build its diagnostic three-dimensional energy representation help --help -h Print help Usage: gammaLoop 3Drep <COMMAND>"
+  },
+  {
+    "title": "gammaLoop 3Drep validate",
+    "summary": "Check the selected graph for supported energy-representation kinematics",
+    "href": "products/gammaloop/latest/reference/cli/commands/gammaloop/3drep/validate/",
+    "kind": "GammaLoop · command",
+    "text": "Check the selected graph for supported energy-representation kinematics process --process -p Process reference: `#<id>`, `name:<name>`, or `<id>/<name>` integrand_name --integrand-name -i Integrand name inside the selected process graph --graph -g Graph id, graph name, or inspect label such as \"#3 : graph_name\" json_out --json-out  Write the validation result as JSON instead of printing it help --help -h Print help Usage: gammaLoop 3Drep validate [OPTIONS] --graph <GRAPH>"
+  },
+  {
+    "title": "gammaLoop 3Drep build",
+    "summary": "Construct and export the selected graph's oriented CFF expression",
+    "href": "products/gammaloop/latest/reference/cli/commands/gammaloop/3drep/build/",
+    "kind": "GammaLoop · command",
+    "text": "Construct and export the selected graph's oriented CFF expression process --process -p Process reference: `#<id>`, `name:<name>`, or `<id>/<name>` integrand_name --integrand-name -i Integrand name inside the selected process graph --graph -g Graph id, graph name, or inspect label such as \"#3 : graph_name\" representation --representation  Three-dimensional representation to build. LTD is reserved but not implemented yet numerator_samples_normalization --numerator-samples-normalization  Override the global numerator sampling normalization for this build no_save_json --no-save-json  Skip saving the oriented expression and workspace pointer no_pretty --no-pretty  Suppress the formatted expression summary unless orientation details are requested no_color --no-color  Disable ANSI colors in the formatted output show_details_for_orientation --show-details-for-orientation  Show detailed terms for the selected orientation workspace_path --workspace-path  Directory for generated expression artifacts and the latest-expression pointer json_out --json-out  Override the output JSON path for the oriented expression help --help -h Print help Usage: gammaLoop 3Drep build [OPTIONS] --graph <GRAPH>"
   },
   {
     "title": "gammaLoop batch",
@@ -4296,7 +4345,7 @@
     "summary": "Heuristic used to order tensor-network contractions.",
     "href": "products/gammaloop/latest/reference/cli/settings/cli/global/generation/evaluator/#setting-cli-global-generation-evaluator-tensor-network-contraction-order-8a344173cdaa430d",
     "kind": "GammaLoop · setting",
-    "text": "Heuristic used to order tensor-network contractions. TensorNetworkContractionOrder atom_aware entry_aware result_rank_only sparse_atom_aware \"sparse_atom_aware\""
+    "text": "Heuristic used to order tensor-network contractions. TensorNetworkContractionOrder atom_aware entry_aware intermediate_cost result_rank_only sparse_atom_aware \"intermediate_cost\""
   },
   {
     "title": "cli.global.generation.evaluator.verbose",
@@ -4304,6 +4353,13 @@
     "href": "products/gammaloop/latest/reference/cli/settings/cli/global/generation/evaluator/#setting-cli-global-generation-evaluator-verbose-da4c329164e30445",
     "kind": "GammaLoop · setting",
     "text": "Emit detailed evaluator-construction diagnostics. boolean  false"
+  },
+  {
+    "title": "cli.global.generation.explicit_orientation_sum_only",
+    "summary": "Sum all generated residue branches explicitly, removing runtime orientation selectors.",
+    "href": "products/gammaloop/latest/reference/cli/settings/cli/global/generation/#setting-cli-global-generation-explicit-orientation-sum-only-93070b38df2d24c4",
+    "kind": "GammaLoop · setting",
+    "text": "Sum all generated residue branches explicitly, removing runtime orientation selectors. boolean  false"
   },
   {
     "title": "cli.global.generation.feyngen.gamma_simplification_closure_check",
@@ -4397,6 +4453,13 @@
     "text": "Target superficial degree used when classifying tropical subgraphs. number  1.0"
   },
   {
+    "title": "cli.global.generation.uniform_numerator_sampling_scale",
+    "summary": "Choose which numerator-energy reconstructions use the shared runtime sampling scale.",
+    "href": "products/gammaloop/latest/reference/cli/settings/cli/global/generation/#setting-cli-global-generation-uniform-numerator-sampling-scale-8d0273f79bdbac55",
+    "kind": "GammaLoop · setting",
+    "text": "Choose which numerator-energy reconstructions use the shared runtime sampling scale. UniformNumeratorSamplingScale all beyond_quadratic none \"none\""
+  },
+  {
     "title": "cli.global.generation.uv.add_marker",
     "summary": "Insert explicit marker functions around generated ultraviolet counterterms.",
     "href": "products/gammaloop/latest/reference/cli/settings/cli/global/generation/uv/#setting-cli-global-generation-uv-add-marker-2413481a39bbd755",
@@ -4432,11 +4495,25 @@
     "text": "Preserve ultraviolet marker functions after counterterm orchestration. boolean  true"
   },
   {
+    "title": "cli.global.generation.uv.local_uv_cts_from_expanded_4d_integrands",
+    "summary": "Construct local counterterms by Taylor-expanding 4D integrands before CFF projection.",
+    "href": "products/gammaloop/latest/reference/cli/settings/cli/global/generation/uv/#setting-cli-global-generation-uv-local-uv-cts-from-expanded-4d-integrands-7def650172e108c5",
+    "kind": "GammaLoop · setting",
+    "text": "Construct local counterterms by Taylor-expanding 4D integrands before CFF projection.\nRequires an explicit sum over all generated orientations. boolean  false"
+  },
+  {
     "title": "cli.global.generation.uv.orchestrator",
     "summary": "Algorithm used to enumerate and combine nested ultraviolet counterterms.",
     "href": "products/gammaloop/latest/reference/cli/settings/cli/global/generation/uv/#setting-cli-global-generation-uv-orchestrator-649be4335e149b0f",
     "kind": "GammaLoop · setting",
     "text": "Algorithm used to enumerate and combine nested ultraviolet counterterms. UVOrchestrator compare hedge_poset legacy_dag_forest \"hedge_poset\""
+  },
+  {
+    "title": "cli.global.generation.uv.project_integrated_uv_cts_onto_tensor_integrals",
+    "summary": "Reduce universal tensor kernels; false sends each complete numerator to Vakint.",
+    "href": "products/gammaloop/latest/reference/cli/settings/cli/global/generation/uv/#setting-cli-global-generation-uv-project-integrated-uv-cts-onto-tensor-integrals-10734bd3b0cb9a38",
+    "kind": "GammaLoop · setting",
+    "text": "Reduce universal tensor kernels; false sends each complete numerator to Vakint. boolean  true"
   },
   {
     "title": "cli.global.generation.uv.renormalization_prescription.log_divergent",
@@ -4506,7 +4583,7 @@
     "summary": "Extra symbolic normalization factor multiplied into every Vakint result.",
     "href": "products/gammaloop/latest/reference/cli/settings/cli/global/generation/uv/vakint/#setting-cli-global-generation-uv-vakint-additional-normalization-a2c5c545af57aeb1",
     "kind": "GammaLoop · setting",
-    "text": "Extra symbolic normalization factor multiplied into every Vakint result. string  \"-1\""
+    "text": "Extra symbolic normalization factor multiplied into every Vakint result. string  \"1\""
   },
   {
     "title": "cli.global.generation.uv.vakint.alphaloop.susbstitute_masters",
@@ -4808,6 +4885,13 @@
     "href": "products/gammaloop/latest/reference/cli/settings/runtime/general/#setting-runtime-general-mu-r-59cbfa96744b45f2",
     "kind": "GammaLoop · setting",
     "text": "Renormalization scale used by running parameters and scale-dependent terms. number  1000.0"
+  },
+  {
+    "title": "runtime.general.numerator_sampling_scale",
+    "summary": "Shared energy scale for numerator reconstruction when enabled during generation.",
+    "href": "products/gammaloop/latest/reference/cli/settings/runtime/general/#setting-runtime-general-numerator-sampling-scale-43b0c6f1b43e2809",
+    "kind": "GammaLoop · setting",
+    "text": "Shared energy scale for numerator reconstruction when enabled during generation. number  1.0"
   },
   {
     "title": "runtime.general.orientation_pat.pat",
@@ -14786,7 +14870,7 @@
     "summary": "Parsing, topology matching, normalization, tensor reduction, and backend selection.",
     "href": "products/vakint/latest/guides/evaluation/",
     "kind": "Vakint · guides",
-    "text": "Topology matching, reduction, and evaluation Vakint recognizes an integral only after its propagators, masses, powers, and momentum routing can be mapped to a supported topology pattern. The topology reference lists the patterns available in the selected version. Parsing and topology matching A VakintExpression is a sum of numerator/topology pairs. Parsing checks the Vakint namespace; matching then searches allowed substitutions and momentum shifts. Unknown-topology handling is a setting: preserving an unknown term is useful for partial simplification, but does not make that term evaluable. Canonical long form is explicit and suitable for auditing. Canonical short form is convenient for display and library lookup. Both represent the same matched topology only after canonicalization has succeeded. Normalization and canonicalization Normalization conventions cover loop-measure factors, mass scales, epsilon powers, and the requested expansion depth. Set them before comparing results from different backends. Momentum canonicalization may rename loop variables and reorder propagators; compare canonical expressions rather than input spelling when testing equivalence. Matching does not require an evaluation backend Parsing, matching, normalization, and canonical routing work without FORM or pySecDec when the evaluation order is empty. Use this configuration when you only need a canonical topology. Tensor reduction Tensor numerators are reduced to scalar integrals before analytic evaluation where required. Reduction depends on the topology, Lorentz rank, dimension convention, and scalar-product normalization. Tensor reduction requires FORM. When diagnosing a mismatch, keep the FORM input and Vakint temporary directory so that the failing reduction can be inspected. Evaluation order and backends The evaluation order is an ordered selection policy, not a request to combine backend results. Vakint skips methods whose capability declaration does not match the canonical topology, then uses the first matching method. An error from that selected backend is returned immediately; it does not trigger fallback to the next method. AlphaLoop, MATAD, and FMFT are analytic FORM-backed paths. pySecDec is numerical and additionally needs numeric parameters and external momenta where the topology requires them. For reproducible comparisons record: the canonical topology and normalization convention; epsilon expansion depth and decimal precision; the ordered backend list and backend-specific settings; FORM, pySecDec, MATAD, and FMFT versions where applicable; parameter substitutions and any retained temporary-output directory. Configure one analytic tensor reduction This program makes normalization, precision, and backend order explicit before reducing a rank-two one-loop numerator. It compiles without running external tools in the documentation harness; running it requires a supported FORM installation for the AlphaLoop path. The result invariant is an MS-bar Laurent series in the dimensional regulator: the reduced expression no longer contains the original loop-momentum numerator, and only the first successful method in alphaloop_only() contributes. Inspect the exact VakintSettings , tensor reduction , and evaluation Rustdoc before changing normalization or backend order. Numerical substitution and result interpretation Backend evaluation returns a symbolic Laurent series. Numerical substitution is a separate boundary: supply every remaining real/complex parameter and, when the numerator contains external scalar products, the external four-momenta. params_from_f64 and externals_from_f64 convert ordinary inputs to the configured decimal precision before the series is evaluated. NumericalEvaluationResult stores sorted (epsilon power, complex coefficient) pairs. Negative powers are poles, power zero is the finite term, and positive powers are higher orders. The optional second result carries a backend-reported uncertainty series when the evaluated expression contains one. Compare corresponding powers; do not collapse the series to one complex number or silently discard the uncertainty. Use partial_numerical_evaluation when you intentionally want to substitute known constants and retain unresolved symbolic factors for inspection. Use numerical_evaluation for the final boundary: it reports an error when tensor structure or a required symbol remains. This distinction prevents a partially substituted expression from being mistaken for a fully numerical result. Interpret failures at the owning stage An engine-construction error means the topology library could not be initialized. A canonicalization error means the propagators did not match a supported topology. A reduction error points to the numerator, Lorentz rank, or FORM translation; retain the temporary directory in that case. An evaluation error after successful reduction means settings validation, the selected backend’s capabilities, or the backend invocation failed. Python is an embedded community module symbolica.community.vakint is registered into a Symbolica installation; it is not a standalone PyPI package. Constructing its Vakint class validates the configured backends. Pass an empty evaluation order for pure matching work on machines without FORM/pySecDec. See the supported-topology and external-dependency reference for the patterns and minimum tool versions available here. Their Rust definitions begin in Vakint's topology module . Methods and software to cite Vakint combines distinct methods rather than treating every backend as interchangeable. Cite the software version and the method actually selected for the reported result: FORM for the symbolic reduction engine; MATAD when its massive tadpole tables are used; FMFT for the four-loop fully massive tadpole path; and pySecDec for numerical sector decomposition. Vakint also uses Symbolica for expression manipulation. Record the Vakint revision, normalization, epsilon depth, precision, selected backend and dependency versions with the result; a generic citation to the package does not encode those choices."
+    "text": "Topology matching, reduction, and evaluation Vakint recognizes an integral only after its propagators, masses, powers, and momentum routing can be mapped to a supported topology pattern. The topology reference lists the patterns available in the selected version. Parsing and topology matching A VakintExpression is a sum of numerator/topology pairs. Parsing checks the Vakint namespace; matching then searches allowed substitutions and momentum shifts. Unknown-topology handling is a setting: preserving an unknown term is useful for partial simplification, but does not make that term evaluable. Canonical long form is explicit and suitable for auditing. Canonical short form is convenient for display and library lookup. Both represent the same matched topology only after canonicalization has succeeded. Normalization and canonicalization Normalization conventions cover loop-measure factors, mass scales, epsilon powers, and the requested expansion depth. Set them before comparing results from different backends. Momentum canonicalization may rename loop variables and reorder propagators; compare canonical expressions rather than input spelling when testing equivalence. Matching does not require an evaluation backend Parsing, matching, normalization, and canonical routing work without FORM or pySecDec when the evaluation order is empty. Use this configuration when you only need a canonical topology. Tensor reduction Tensor numerators are reduced to scalar integrals before analytic evaluation where required. Reduction depends on the topology, Lorentz rank, dimension convention, and scalar-product normalization. Tensor reduction requires FORM. When diagnosing a mismatch, keep the FORM input and Vakint temporary directory so that the failing reduction can be inspected. Tensor reduction validates Lorentz index domains before vacuum projection. It passes universal loop-momentum tensor kernels to FORM while retaining graph coefficients as factorized expressions. Analytic integration uses temporary coefficient symbols and restores their values afterward; numerical integration combines the scalar sectors into one estimator. Numerator and loop-normalization poles in epsilon increase the required integral order. Positive epsilon prefactors never reduce the conservative requested depth. Rational dependence and scalar log/exp/sin/cos series are supported; retained Laurent coefficients must be epsilon-independent. Opaque epsilon-dependent functions produce an error. Callers with additional spin tensors declare their Lorentz slots using vakint::tensor(body, slot, ...) . The loop-independent body stays opaque; metrics rename complete slots without modifying spin or color indices. Projection can introduce vakint::tensor_index(family, loop, ordinal) dummy slots, which callers translate to their own index representation before unwrapping tensor bodies. GammaLoop performs both conversions automatically and completes any new d-dimensional Dirac contractions before scalar backend evaluation truncates epsilon. Vakint does not evaluate opaque spin algebra. VakintSettings.project_onto_tensor_integrals defaults to true . Setting it to false sends each complete numerator through FORM tensor reduction and the scalar backend, instead of using universal tensor kernels and coefficient aliases. Distinct denominator topologies remain separate in both modes. GammaLoop exposes this choice as global.generation.uv.project_integrated_uv_cts_onto_tensor_integrals ; both choices share its d-dimensional algebra and gamma5 checks. PySecDecOptions.numerical_parameters stores mass and numerator parameters as complex values. Real external momentum components retain their signs. This adapter requires real pole masses and real external momenta; complex numerator coefficients are supported. Physical PySecDec integration tests are manual only: they are ignored and excluded from automatic local/CI test selection. Missing opt-in or missing PySecDec causes an explicit manual invocation to fail instead of reporting an unevaluated test as passed. Pure Rust adapter tests remain in the normal suite because they do not launch PySecDec. Run the four fast one-loop numerical checks explicitly when changing that backend: Evaluation order and backends The evaluation order is an ordered selection policy, not a request to combine backend results. Vakint skips methods whose capability declaration does not match the canonical topology, then uses the first matching method. An error from that selected backend is returned immediately; it does not trigger fallback to the next method. AlphaLoop, MATAD, and FMFT are analytic FORM-backed paths. pySecDec is numerical and additionally needs numeric parameters and external momenta where the topology requires them. For reproducible comparisons record: the canonical topology and normalization convention; epsilon expansion depth and decimal precision; the ordered backend list and backend-specific settings; FORM, pySecDec, MATAD, and FMFT versions where applicable; parameter substitutions and any retained temporary-output directory. Configure one analytic tensor reduction This program makes normalization, precision, and backend order explicit before reducing a rank-two one-loop numerator. It compiles without running external tools in the documentation harness; running it requires a supported FORM installation for the AlphaLoop path. The result invariant is an MS-bar Laurent series in the dimensional regulator: the reduced expression no longer contains the original loop-momentum numerator, and only the first successful method in alphaloop_only() contributes. Inspect the exact VakintSettings , tensor reduction , and evaluation Rustdoc before changing normalization or backend order. Numerical substitution and result interpretation Backend evaluation returns a symbolic Laurent series. Numerical substitution is a separate boundary: supply every remaining real/complex parameter and, when the numerator contains external scalar products, the external four-momenta. params_from_f64 and externals_from_f64 convert ordinary inputs to the configured decimal precision before the series is evaluated. NumericalEvaluationResult stores sorted (epsilon power, complex coefficient) pairs. Negative powers are poles, power zero is the finite term, and positive powers are higher orders. The optional second result carries a backend-reported uncertainty series when the evaluated expression contains one. Compare corresponding powers; do not collapse the series to one complex number or silently discard the uncertainty. Use partial_numerical_evaluation when you intentionally want to substitute known constants and retain unresolved symbolic factors for inspection. Use numerical_evaluation for the final boundary: it reports an error when tensor structure or a required symbol remains. This distinction prevents a partially substituted expression from being mistaken for a fully numerical result. Interpret failures at the owning stage An engine-construction error means the topology library could not be initialized. A canonicalization error means the propagators did not match a supported topology. A reduction error points to the numerator, Lorentz rank, or FORM translation; retain the temporary directory in that case. An evaluation error after successful reduction means settings validation, the selected backend’s capabilities, or the backend invocation failed. Python is an embedded community module symbolica.community.vakint is registered into a Symbolica installation; it is not a standalone PyPI package. Constructing its Vakint class validates the configured backends. Pass an empty evaluation order for pure matching work on machines without FORM/pySecDec. See the supported-topology and external-dependency reference for the patterns and minimum tool versions available here. Their Rust definitions begin in Vakint's topology module . Methods and software to cite Vakint combines distinct methods rather than treating every backend as interchangeable. Cite the software version and the method actually selected for the reported result: FORM for the symbolic reduction engine; MATAD when its massive tadpole tables are used; FMFT for the four-loop fully massive tadpole path; and pySecDec for numerical sector decomposition. Vakint also uses Symbolica for expression manipulation. Record the Vakint revision, normalization, epsilon depth, precision, selected backend and dependency versions with the result; a generic citation to the package does not encode those choices."
   },
   {
     "title": "Parsing and topology matching",
@@ -15059,7 +15143,7 @@
     "summary": "Create a new VakintEvaluationMethod instance representing the numerical pySecDec method.",
     "href": "products/vakint/latest/reference/python/vakint-community/VakintEvaluationMethod/#exports-vakintevaluationmethod-new-pysecdec-method-associatedfunction",
     "kind": "Vakint · python-api",
-    "text": "Create a new VakintEvaluationMethod instance representing the numerical pySecDec method.\n\n## Examples\n```python\n>>> from symbolica.community.vakint import VakintEvaluationMethod\n>>> pysecdec_method = VakintEvaluationMethod.new_pysecdec_method(\n...     quiet=True,\n...     relative_precision=1e-7,\n...     min_n_evals=10_000,\n...     max_n_evals=1_000_000_000_000,\n...     reuse_existing_output=None,\n...     numerical_masses={\"muvsq\": 1.0},\n...     numerical_external_momenta={\n...         1: (1.0, 0.0, 0.0, 0.0),\n...         2: (0.0, 1.0, 0.0, 0.0),\n...     },\n... )\n>>> \"PySecDec\" in str(pysecdec_method)\nTrue\n```\n\npySecDec performs numerical evaluation, so every required mass and external momentum\nmust have a numerical value. Constructing this method does not run pySecDec; evaluation\nrequires a working Python/pySecDec installation.\n\nParameters\n----------\n\nquiet : Optional[bool]\n   Whether to suppress output from pySecDec. Default is True.\nrelative_precision : Optional[float]\n   The relative precision to be achieved in the numerical integration. Default is 1e-7.\nmin_n_evals : Optional[int]\n   The minimum number of evaluations to be performed in the numerical integration. Default is 10,000.\nmax_n_evals : Optional[int]\n   The maximum number of evaluations to be performed in the numerical integration. Default is 1,000,000,000,000.\nreuse_existing_output : Optional[str]\n   Path to existing pySecDec output to reuse. Default is None.\nnumerical_masses : Optional[Dict[str, float]]\n   A dictionary mapping mass parameter names to their numerical values. Default is an empty dictionary.\nnumerical_external_momenta : Optional[Dict[int, Tuple[float, float, float, float]]]\n   A dictionary mapping external momentum indices to their numerical 4-vector values. Default is an empty dictionary. def new_pysecdec_method(cls, quiet: Optional[bool] = None, relative_precision: Optional[float] = None, min_n_evals: Optional[int] = None, max_n_evals: Optional[int] = None, reuse_existing_output: Optional[str] = None, numerical_masses: Optional[Mapping[str, float]] = None, numerical_external_momenta: Optional[Mapping[int, tuple[float, float, float, float]]] = None) -> VakintEvaluationMethod:"
+    "text": "Create a new VakintEvaluationMethod instance representing the numerical pySecDec method.\n\n## Examples\n```python\n>>> from symbolica.community.vakint import VakintEvaluationMethod\n>>> pysecdec_method = VakintEvaluationMethod.new_pysecdec_method(\n...     quiet=True,\n...     relative_precision=1e-7,\n...     min_n_evals=10_000,\n...     max_n_evals=1_000_000_000_000,\n...     reuse_existing_output=None,\n...     numerical_parameters={\"muvsq\": (1.0, 0.0), \"coupling\": (1.0, 2.0)},\n...     numerical_external_momenta={\n...         1: (1.0, 0.0, 0.0, 0.0),\n...         2: (0.0, 1.0, 0.0, 0.0),\n...     },\n... )\n>>> \"PySecDec\" in str(pysecdec_method)\nTrue\n```\n\npySecDec performs numerical evaluation, so every required mass, numerator parameter and external momentum\nmust have a numerical value. Constructing this method does not run pySecDec; evaluation\nrequires a working Python/pySecDec installation.\n\nParameters\n----------\n\nquiet : Optional[bool]\n   Whether to suppress output from pySecDec. Default is True.\nrelative_precision : Optional[float]\n   The relative precision to be achieved in the numerical integration. Default is 1e-7.\nmin_n_evals : Optional[int]\n   The minimum number of evaluations to be performed in the numerical integration. Default is 10,000.\nmax_n_evals : Optional[int]\n   The maximum number of evaluations to be performed in the numerical integration. Default is 1,000,000,000,000.\nreuse_existing_output : Optional[str]\n   Path to existing pySecDec output to reuse. Default is None.\nnumerical_parameters : Optional[Dict[str, Tuple[float, float]]]\n   Mass and numerator parameter values as (real, imaginary) pairs. Pole masses must be real. Default is an empty dictionary.\nnumerical_external_momenta : Optional[Dict[int, Tuple[float, float, float, float]]]\n   A dictionary mapping external momentum indices to their numerical 4-vector values. Default is an empty dictionary. def new_pysecdec_method(cls, quiet: Optional[bool] = None, relative_precision: Optional[float] = None, min_n_evals: Optional[int] = None, max_n_evals: Optional[int] = None, reuse_existing_output: Optional[str] = None, numerical_parameters: Optional[Mapping[str, tuple[float, float]]] = None, numerical_external_momenta: Optional[Mapping[int, tuple[float, float, float, float]]] = None) -> VakintEvaluationMethod:"
   },
   {
     "title": "symbolica.community.vakint.VakintExpression",
@@ -15359,6 +15443,18 @@
     "kind": "Developers · developer current implemented heading"
   },
   {
+    "title": "3.2 CFF production and numerator-energy ownership",
+    "summary": "GammaLoop architecture",
+    "href": "developers/architecture/gammaloop-architecture/#3-2-cff-production-and-numerator-energy-ownership",
+    "kind": "Developers · developer current implemented heading"
+  },
+  {
+    "title": "3.3 Tensor-network contraction order",
+    "summary": "GammaLoop architecture",
+    "href": "developers/architecture/gammaloop-architecture/#3-3-tensor-network-contraction-order",
+    "kind": "Developers · developer current implemented heading"
+  },
+  {
     "title": "Lifecycle and Data Flow",
     "summary": "GammaLoop architecture",
     "href": "developers/architecture/gammaloop-architecture/#lifecycle-and-data-flow",
@@ -15479,6 +15575,12 @@
     "kind": "Developers · developer current implemented heading"
   },
   {
+    "title": "Raised-energy integration updates",
+    "summary": "Integration dashboard architecture",
+    "href": "developers/architecture/integration-dashboard/#raised-energy-integration-updates",
+    "kind": "Developers · developer current implemented heading"
+  },
+  {
     "title": "UV renormalization architecture",
     "summary": "Orchestrator ownership, sign conventions, projections, disconnected composition, and current boundaries.",
     "href": "developers/architecture/uv-renormalization/",
@@ -15488,6 +15590,18 @@
     "title": "Scope",
     "summary": "UV renormalization architecture",
     "href": "developers/architecture/uv-renormalization/#scope",
+    "kind": "Developers · developer current implemented heading"
+  },
+  {
+    "title": "Physical loop measure",
+    "summary": "UV renormalization architecture",
+    "href": "developers/architecture/uv-renormalization/#physical-loop-measure",
+    "kind": "Developers · developer current implemented heading"
+  },
+  {
+    "title": "Dimensional numerator algebra",
+    "summary": "UV renormalization architecture",
+    "href": "developers/architecture/uv-renormalization/#dimensional-numerator-algebra",
     "kind": "Developers · developer current implemented heading"
   },
   {
@@ -15527,15 +15641,33 @@
     "kind": "Developers · developer current implemented heading"
   },
   {
-    "title": "Three-dimensional local terms",
+    "title": "Direct three-dimensional local terms",
     "summary": "UV renormalization architecture",
-    "href": "developers/architecture/uv-renormalization/#three-dimensional-local-terms",
+    "href": "developers/architecture/uv-renormalization/#direct-three-dimensional-local-terms",
     "kind": "Developers · developer current implemented heading"
   },
   {
     "title": "Marker Representation",
     "summary": "UV renormalization architecture",
     "href": "developers/architecture/uv-renormalization/#marker-representation",
+    "kind": "Developers · developer current implemented heading"
+  },
+  {
+    "title": "UV profiling from the CLI",
+    "summary": "UV renormalization architecture",
+    "href": "developers/architecture/uv-renormalization/#uv-profiling-from-the-cli",
+    "kind": "Developers · developer current implemented heading"
+  },
+  {
+    "title": "Physical cuts and LU residue groups",
+    "summary": "UV renormalization architecture",
+    "href": "developers/architecture/uv-renormalization/#physical-cuts-and-lu-residue-groups",
+    "kind": "Developers · developer current implemented heading"
+  },
+  {
+    "title": "Result and failure summaries",
+    "summary": "UV renormalization architecture",
+    "href": "developers/architecture/uv-renormalization/#result-and-failure-summaries",
     "kind": "Developers · developer current implemented heading"
   },
   {
@@ -15662,6 +15794,12 @@
     "title": "Short Algorithm",
     "summary": "Spenso parsing flow",
     "href": "developers/architecture/spenso-parsing-flow/#short-algorithm",
+    "kind": "Developers · developer current implemented heading"
+  },
+  {
+    "title": "Factorized scalar and symbolic-dimension boundaries",
+    "summary": "Spenso parsing flow",
+    "href": "developers/architecture/spenso-parsing-flow/#factorized-scalar-and-symbolic-dimension-boundaries",
     "kind": "Developers · developer current implemented heading"
   },
   {
@@ -15899,70 +16037,82 @@
     "kind": "Developers · developer current implemented reference · reviewed 2026-09-14 heading"
   },
   {
+    "title": "Factorization during index canonicalization",
+    "summary": "Spenso Symbolica Syntax And Rewrite Idioms",
+    "href": "developers/architecture/spenso-symbolica-syntax-and-rewrites/#factorization-during-index-canonicalization",
+    "kind": "Developers · developer current implemented reference · reviewed 2026-09-14 heading"
+  },
+  {
     "title": "Spenso implementation architecture",
     "summary": "Tensor structures and payloads, direct contraction, network graph/store execution, Symbolica parsing, serialization and ownership boundaries, invariants, and tests.",
     "href": "developers/architecture/spenso-architecture/",
-    "kind": "Developers · developer current implemented · reviewed 2026-09-14"
+    "kind": "Developers · developer current implemented · reviewed 2026-09-21"
   },
   {
     "title": "Boundaries",
     "summary": "Spenso implementation architecture",
     "href": "developers/architecture/spenso-architecture/#boundaries",
-    "kind": "Developers · developer current implemented · reviewed 2026-09-14 heading"
+    "kind": "Developers · developer current implemented · reviewed 2026-09-21 heading"
   },
   {
     "title": "Core representation",
     "summary": "Spenso implementation architecture",
     "href": "developers/architecture/spenso-architecture/#core-representation",
-    "kind": "Developers · developer current implemented · reviewed 2026-09-14 heading"
+    "kind": "Developers · developer current implemented · reviewed 2026-09-21 heading"
   },
   {
     "title": "Direct contraction flow",
     "summary": "Spenso implementation architecture",
     "href": "developers/architecture/spenso-architecture/#direct-contraction-flow",
-    "kind": "Developers · developer current implemented · reviewed 2026-09-14 heading"
+    "kind": "Developers · developer current implemented · reviewed 2026-09-21 heading"
   },
   {
     "title": "Network representation and execution",
     "summary": "Spenso implementation architecture",
     "href": "developers/architecture/spenso-architecture/#network-representation-and-execution",
-    "kind": "Developers · developer current implemented · reviewed 2026-09-14 heading"
+    "kind": "Developers · developer current implemented · reviewed 2026-09-21 heading"
   },
   {
     "title": "Symbolic parallelism and optimized sums",
     "summary": "Spenso implementation architecture",
     "href": "developers/architecture/spenso-architecture/#symbolic-parallelism-and-optimized-sums",
-    "kind": "Developers · developer current implemented · reviewed 2026-09-14 heading"
+    "kind": "Developers · developer current implemented · reviewed 2026-09-21 heading"
   },
   {
     "title": "Symbolica parsing boundary",
     "summary": "Spenso implementation architecture",
     "href": "developers/architecture/spenso-architecture/#symbolica-parsing-boundary",
-    "kind": "Developers · developer current implemented · reviewed 2026-09-14 heading"
+    "kind": "Developers · developer current implemented · reviewed 2026-09-21 heading"
   },
   {
     "title": "Features and serialization",
     "summary": "Spenso implementation architecture",
     "href": "developers/architecture/spenso-architecture/#features-and-serialization",
-    "kind": "Developers · developer current implemented · reviewed 2026-09-14 heading"
+    "kind": "Developers · developer current implemented · reviewed 2026-09-21 heading"
   },
   {
     "title": "Ownership and error boundaries",
     "summary": "Spenso implementation architecture",
     "href": "developers/architecture/spenso-architecture/#ownership-and-error-boundaries",
-    "kind": "Developers · developer current implemented · reviewed 2026-09-14 heading"
+    "kind": "Developers · developer current implemented · reviewed 2026-09-21 heading"
   },
   {
     "title": "Maintained invariants",
     "summary": "Spenso implementation architecture",
     "href": "developers/architecture/spenso-architecture/#maintained-invariants",
-    "kind": "Developers · developer current implemented · reviewed 2026-09-14 heading"
+    "kind": "Developers · developer current implemented · reviewed 2026-09-21 heading"
   },
   {
     "title": "Verification and related documentation",
     "summary": "Spenso implementation architecture",
     "href": "developers/architecture/spenso-architecture/#verification-and-related-documentation",
-    "kind": "Developers · developer current implemented · reviewed 2026-09-14 heading"
+    "kind": "Developers · developer current implemented · reviewed 2026-09-21 heading"
+  },
+  {
+    "title": "Factor preservation at materialization",
+    "summary": "Spenso implementation architecture",
+    "href": "developers/architecture/spenso-architecture/#factor-preservation-at-materialization",
+    "kind": "Developers · developer current implemented · reviewed 2026-09-21 heading"
   },
   {
     "title": "Idenso implementation architecture",
@@ -16028,6 +16178,12 @@
     "title": "Verification and related documentation",
     "summary": "Idenso implementation architecture",
     "href": "developers/architecture/idenso-architecture/#verification-and-related-documentation",
+    "kind": "Developers · developer current implemented · reviewed 2026-09-14 heading"
+  },
+  {
+    "title": "Factorized canonicalization and symbolic targets",
+    "summary": "Idenso implementation architecture",
+    "href": "developers/architecture/idenso-architecture/#factorized-canonicalization-and-symbolic-targets",
     "kind": "Developers · developer current implemented · reviewed 2026-09-14 heading"
   },
   {
@@ -16331,6 +16487,12 @@
     "kind": "Developers · developer current implemented · reviewed 2026-08-18 heading"
   },
   {
+    "title": "Dense edge joins used by tensor contraction",
+    "summary": "Linnet implementation architecture",
+    "href": "developers/architecture/linnet-architecture/#dense-edge-joins-used-by-tensor-contraction",
+    "kind": "Developers · developer current implemented · reviewed 2026-08-18 heading"
+  },
+  {
     "title": "Vakint implementation architecture",
     "summary": "Topology construction, canonicalization and tensor-reduction flow, backend selection, external-process ownership, persistence boundaries, invariants, and tests.",
     "href": "developers/architecture/vakint-architecture/",
@@ -16376,6 +16538,12 @@
     "title": "Verification and related documentation",
     "summary": "Vakint implementation architecture",
     "href": "developers/architecture/vakint-architecture/#verification-and-related-documentation",
+    "kind": "Developers · developer current implemented · reviewed 2026-08-18 heading"
+  },
+  {
+    "title": "Factorized tensor projection and epsilon coefficients",
+    "summary": "Vakint implementation architecture",
+    "href": "developers/architecture/vakint-architecture/#factorized-tensor-projection-and-epsilon-coefficients",
     "kind": "Developers · developer current implemented · reviewed 2026-08-18 heading"
   },
   {
@@ -16553,9 +16721,9 @@
     "kind": "Developers · developer archived · non-reproducible heading"
   },
   {
-    "title": "Inspect benchmark timings",
+    "title": "Fixed-point benchmark timings",
     "summary": "BNL Benchmark Investigation",
-    "href": "developers/architecture/bnl-benchmark-investigation/#inspect-benchmark-timings",
+    "href": "developers/architecture/bnl-benchmark-investigation/#fixed-point-benchmark-timings",
     "kind": "Developers · developer archived · non-reproducible heading"
   },
   {
@@ -17393,6 +17561,42 @@
     "kind": "Developers · developer archived record heading"
   },
   {
+    "title": "Factorized numerator restoration validation",
+    "summary": "Symbolica 3 validation of shared parametric numerators, eligible main comparisons, and the established 3D and 4D derivative-UV generation workloads.",
+    "href": "developers/architecture/raised-energy-cff-restoration-validation/",
+    "kind": "Developers · developer investigation validated on symbolica 3"
+  },
+  {
+    "title": "Representation",
+    "summary": "Factorized numerator restoration validation",
+    "href": "developers/architecture/raised-energy-cff-restoration-validation/#representation",
+    "kind": "Developers · developer investigation validated on symbolica 3 heading"
+  },
+  {
+    "title": "Comparison protocol",
+    "summary": "Factorized numerator restoration validation",
+    "href": "developers/architecture/raised-energy-cff-restoration-validation/#comparison-protocol",
+    "kind": "Developers · developer investigation validated on symbolica 3 heading"
+  },
+  {
+    "title": "GL1 generation",
+    "summary": "Factorized numerator restoration validation",
+    "href": "developers/architecture/raised-energy-cff-restoration-validation/#gl1-generation",
+    "kind": "Developers · developer investigation validated on symbolica 3 heading"
+  },
+  {
+    "title": "Numerical controls",
+    "summary": "Factorized numerator restoration validation",
+    "href": "developers/architecture/raised-energy-cff-restoration-validation/#numerical-controls",
+    "kind": "Developers · developer investigation validated on symbolica 3 heading"
+  },
+  {
+    "title": "Projected local-4D and validation status",
+    "summary": "Factorized numerator restoration validation",
+    "href": "developers/architecture/raised-energy-cff-restoration-validation/#projected-local-4d-and-validation-status",
+    "kind": "Developers · developer investigation validated on symbolica 3 heading"
+  },
+  {
     "title": "CI maintenance and measurements",
     "summary": "The maintained local-check/upload workflow, per-crate cache boundaries, validated measurements, branch migration and CI log reporting.",
     "href": "developers/architecture/ci/",
@@ -18153,6 +18357,426 @@
     "summary": "API documentation debt register",
     "href": "developers/architecture/api-documentation-debt-register/#apidoc-303-semantic-completeness-gate",
     "kind": "Developers · developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "Exact powered-denominator lifting and factorized EMR assignment",
+    "summary": "Raised-energy feature-stack record; numerical evidence applies to the revisions recorded in the note.",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/",
+    "kind": "Developers · developer investigation preserved during main integration"
+  },
+  {
+    "title": "Status and scope",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#status-and-scope",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Equality is defined for the complete fixed-cut functional",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#equality-is-defined-for-the-complete-fixed-cut-functional",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Factorized staged map composition",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#factorized-staged-map-composition",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Executive summary",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#executive-summary",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Terminology and identity layers",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#terminology-and-identity-layers",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Why UV processing creates this problem",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#why-uv-processing-creates-this-problem",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Production data flow",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#production-data-flow",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Non-negotiable common-LMB commutative reconstruction invariant",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#non-negotiable-common-lmb-commutative-reconstruction-invariant",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Worked diagnostic: GL04 temporal-square T0 sector",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#worked-diagnostic-gl04-temporal-square-t0-sector",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Worked live reproducer: GL04 temporal-square 1zs/T2",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#worked-live-reproducer-gl04-temporal-square-1zs-t2",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Isolated coefficient and complete-source certificate",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#isolated-coefficient-and-complete-source-certificate",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "GL00 odd-numerator child certificate",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#gl00-odd-numerator-child-certificate",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "One source convention across recursive scalar bases",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#one-source-convention-across-recursive-scalar-bases",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Stage 1: retain denominator multiplicity without expanding the numerator",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#stage-1-retain-denominator-multiplicity-without-expanding-the-numerator",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Stage 2: recover the source skeleton and classify algebraic channels",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#stage-2-recover-the-source-skeleton-and-classify-algebraic-channels",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Provenance is retained, not discarded",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#provenance-is-retained-not-discarded",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Stage 3: instantiate the source-minor scaffold and lift powers",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#stage-3-instantiate-the-source-minor-scaffold-and-lift-powers",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Non-vacuum boundaries use explicit source-crown hedges",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#non-vacuum-boundaries-use-explicit-source-crown-hedges",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Determinism",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#determinism",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Rational incidence and physical support cross the boundary separately",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#rational-incidence-and-physical-support-cross-the-boundary-separately",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Stage 4: analyze the factorized numerator before occurrence substitution",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#stage-4-analyze-the-factorized-numerator-before-occurrence-substitution",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Stage 5: certify equivalent exact occurrence energies",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#stage-5-certify-equivalent-exact-occurrence-energies",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Stage 6: propose certified assignments and select by actual map count",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#stage-6-propose-certified-assignments-and-select-by-actual-map-count",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Cyclic and greedy hard proposals",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#cyclic-and-greedy-hard-proposals",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Native map-row selection",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#native-map-row-selection",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Soft Taylor energies at the outer CFF boundary",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#soft-taylor-energies-at-the-outer-cff-boundary",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Stage 7: use one immutable plan for generation and evaluation",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#stage-7-use-one-immutable-plan-for-generation-and-evaluation",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Stage 8: cache exact topology and per-request capacity",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#stage-8-cache-exact-topology-and-per-request-capacity",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Why D(Q)=D(-Q) cannot introduce numerator sign mistakes",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#why-d-q-d-q-cannot-introduce-numerator-sign-mistakes",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "A focused sign oracle",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#a-focused-sign-oracle",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Complete example 1: a same-owner cubic powered line",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#complete-example-1-a-same-owner-cubic-powered-line",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Complete example 2: owner relabeling preserves the rational CFF",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#complete-example-2-owner-relabeling-preserves-the-rational-cff",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Complete example 3: opposite routing within one powered line",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#complete-example-3-opposite-routing-within-one-powered-line",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Complete example 4: the production-shaped cubic UV rewrite",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#complete-example-4-the-production-shaped-cubic-uv-rewrite",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Complete example 5: UV and cograph topology remain separate",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#complete-example-5-uv-and-cograph-topology-remain-separate",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Complete example 6: numerator/denominator cancellation, including LU",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#complete-example-6-numerator-denominator-cancellation-including-lu",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Complete example 7: the epem_a_ddx GL0 self-energy source",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#complete-example-7-the-epem-a-ddx-gl0-self-energy-source",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Complete example 8: multi-loop and rank-deficient exact sources",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#complete-example-8-multi-loop-and-rank-deficient-exact-sources",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Generalized-CFF behavior after the lift",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#generalized-cff-behavior-after-the-lift",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Why the construction is generic",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#why-the-construction-is-generic",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "1. Denominator multiplicity is arbitrary",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#1-denominator-multiplicity-is-arbitrary",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "2. Skeleton recovery is source-backed and rational identity is owner-free",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#2-skeleton-recovery-is-source-backed-and-rational-identity-is-owner-free",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "3. Canonicalization is topology-preserving",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#3-canonicalization-is-topology-preserving",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "4. Numerator degree composition is structural",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#4-numerator-degree-composition-is-structural",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "5. Actual native map rows select among certified bounded proposals",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#5-actual-native-map-rows-select-among-certified-bounded-proposals",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "6. Bound and evaluation cannot diverge",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#6-bound-and-evaluation-cannot-diverge",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "7. Routing signs are first-class data",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#7-routing-signs-are-first-class-data",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "8. Provenance projection is channel-complete",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#8-provenance-projection-is-channel-complete",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "9. Unsupported cases fail closed",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#9-unsupported-cases-fail-closed",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Minimality and runtime consequences",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#minimality-and-runtime-consequences",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Maintained invariants",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#maintained-invariants",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Code map",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#code-map",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Validation map",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#validation-map",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Design conclusion",
+    "summary": "Exact powered-denominator lifting and factorized EMR assignment",
+    "href": "developers/architecture/exact-powered-denominator-cff-lifting/#design-conclusion",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Phase conventions and forward-cut conjugation",
+    "summary": "Raised-energy feature-stack record; numerical evidence applies to the revisions recorded in the note.",
+    "href": "developers/architecture/phase-conventions/",
+    "kind": "Developers · developer investigation preserved during main integration"
+  },
+  {
+    "title": "Amplitudes",
+    "summary": "Phase conventions and forward-cut conjugation",
+    "href": "developers/architecture/phase-conventions/#amplitudes",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "The right side is an inverse-process graph",
+    "summary": "Phase conventions and forward-cut conjugation",
+    "href": "developers/architecture/phase-conventions/#the-right-side-is-an-inverse-process-graph",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Marking, contours and cut lines",
+    "summary": "Phase conventions and forward-cut conjugation",
+    "href": "developers/architecture/phase-conventions/#marking-contours-and-cut-lines",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Complex couplings and the complex-mass scheme",
+    "summary": "Phase conventions and forward-cut conjugation",
+    "href": "developers/architecture/phase-conventions/#complex-couplings-and-the-complex-mass-scheme",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Acceptance and user-supplied numerators",
+    "summary": "Phase conventions and forward-cut conjugation",
+    "href": "developers/architecture/phase-conventions/#acceptance-and-user-supplied-numerators",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Generation options and generated states",
+    "summary": "Phase conventions and forward-cut conjugation",
+    "href": "developers/architecture/phase-conventions/#generation-options-and-generated-states",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Standard Model conventions audit",
+    "summary": "Raised-energy feature-stack record; numerical evidence applies to the revisions recorded in the note.",
+    "href": "developers/architecture/sm-conventions-audit/",
+    "kind": "Developers · developer investigation preserved during main integration"
+  },
+  {
+    "title": "Momentum, spin and color conventions",
+    "summary": "Standard Model conventions audit",
+    "href": "developers/architecture/sm-conventions-audit/#momentum-spin-and-color-conventions",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Complete derivative inventory",
+    "summary": "Standard Model conventions audit",
+    "href": "developers/architecture/sm-conventions-audit/#complete-derivative-inventory",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Scalar/pseudoscalar and vector/axial basis",
+    "summary": "Standard Model conventions audit",
+    "href": "developers/architecture/sm-conventions-audit/#scalar-pseudoscalar-and-vector-axial-basis",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Generated local certificates and RHS sewing",
+    "summary": "Standard Model conventions audit",
+    "href": "developers/architecture/sm-conventions-audit/#generated-local-certificates-and-rhs-sewing",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Input-parameter reality",
+    "summary": "Standard Model conventions audit",
+    "href": "developers/architecture/sm-conventions-audit/#input-parameter-reality",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Fermion flow and Grassmann statistics",
+    "summary": "Standard Model conventions audit",
+    "href": "developers/architecture/sm-conventions-audit/#fermion-flow-and-grassmann-statistics",
+    "kind": "Developers · developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Electroweak virtual and cut-state gauge contract",
+    "summary": "Standard Model conventions audit",
+    "href": "developers/architecture/sm-conventions-audit/#electroweak-virtual-and-cut-state-gauge-contract",
+    "kind": "Developers · developer investigation preserved during main integration heading"
   },
   {
     "title": "About the αLoop collaboration",

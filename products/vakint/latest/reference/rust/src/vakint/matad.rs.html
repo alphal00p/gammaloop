@@ -320,7 +320,7 @@
 <a href=#319 id=319 data-nosnippet>319</a>}
 <a href=#320 id=320 data-nosnippet>320</a>
 <a href=#321 id=321 data-nosnippet>321</a><span class="kw">impl </span>Vakint {
-<a href=#322 id=322 data-nosnippet>322</a>    <span class="kw">pub fn </span>matad_evaluate(
+<a href=#322 id=322 data-nosnippet>322</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>matad_evaluate(
 <a href=#323 id=323 data-nosnippet>323</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
 <a href=#324 id=324 data-nosnippet>324</a>        settings: <span class="kw-2">&amp;</span>VakintSettings,
 <a href=#325 id=325 data-nosnippet>325</a>        input_numerator: AtomView,
@@ -384,7 +384,7 @@
 <a href=#383 id=383 data-nosnippet>383</a>            }
 <a href=#384 id=384 data-nosnippet>384</a>        };
 <a href=#385 id=385 data-nosnippet>385</a>
-<a href=#386 id=386 data-nosnippet>386</a>        <span class="kw">let </span><span class="kw-2">mut </span>numerator = Vakint::convert_to_dot_notation(input_numerator);
+<a href=#386 id=386 data-nosnippet>386</a>        <span class="kw">let </span><span class="kw-2">mut </span>numerator = Vakint::convert_to_dot_notation(settings, input_numerator)<span class="question-mark">?</span>;
 <a href=#387 id=387 data-nosnippet>387</a>
 <a href=#388 id=388 data-nosnippet>388</a>        <span class="comment">// println!("Numerator before processing: {}", numerator);
 <a href=#389 id=389 data-nosnippet>389</a>        </span>numerator = numerator.replace_multiple(<span class="kw-2">&amp;</span>[
@@ -628,9 +628,9 @@
 <a href=#627 id=627 data-nosnippet>627</a>        <span class="kw">let </span><span class="kw-2">mut </span>matad_normalization_correction = <span class="macro">vk_parse!</span>(
 <a href=#628 id=628 data-nosnippet>628</a>            <span class="macro">format!</span>(
 <a href=#629 id=629 data-nosnippet>629</a>                <span class="string">"(
-<a href=#630 id=630 data-nosnippet>630</a>                    (𝑖*(𝜋^((4-2*{eps})/2)))\
-<a href=#631 id=631 data-nosnippet>631</a>                  * (exp(-EulerGamma))^({eps})\
-<a href=#632 id=632 data-nosnippet>632</a>                  * (exp(-logmUVmu-log_mu_sq))^({eps})\
+<a href=#630 id=630 data-nosnippet>630</a>                    (1𝑖*(𝜋^((4-2*{eps})/2)))\
+<a href=#631 id=631 data-nosnippet>631</a>                  * exp(-({eps})*EulerGamma)\
+<a href=#632 id=632 data-nosnippet>632</a>                  * exp(-({eps})*(logmUVmu+log_mu_sq))\
 <a href=#633 id=633 data-nosnippet>633</a>                 )^{n_loops}"</span>,
 <a href=#634 id=634 data-nosnippet>634</a>                eps = settings.epsilon_symbol,
 <a href=#635 id=635 data-nosnippet>635</a>                n_loops = integral.n_loops

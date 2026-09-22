@@ -143,7 +143,7 @@
             "source": {
               "identifier": "vakint::Vakint",
               "file": "crates/vakint/src/lib.rs",
-              "line": 2210,
+              "line": 2314,
               "column": 1
             }
           },
@@ -316,6 +316,17 @@
                 "members": []
               },
               {
+                "name": "project_onto_tensor_integrals",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Project coefficient-one tensor integrals, keeping scalar coefficients\noutside the backends. False sends each complete numerator through FORM."
+                },
+                "signature": "bool",
+                "default": null,
+                "members": []
+              },
+              {
                 "name": "temporary_directory",
                 "kind": "field",
                 "docs": {
@@ -330,7 +341,7 @@
             "source": {
               "identifier": "vakint::VakintSettings",
               "file": "crates/vakint/src/lib.rs",
-              "line": 1941,
+              "line": 2039,
               "column": 1
             }
           },
@@ -374,7 +385,7 @@
             "source": {
               "identifier": "vakint::VakintExpression",
               "file": "crates/vakint/src/lib.rs",
-              "line": 2600,
+              "line": 2912,
               "column": 1
             }
           },
@@ -418,7 +429,7 @@
             "source": {
               "identifier": "vakint::EvaluationOrder",
               "file": "crates/vakint/src/lib.rs",
-              "line": 1825,
+              "line": 1922,
               "column": 1
             }
           },
@@ -482,7 +493,7 @@
             "source": {
               "identifier": "vakint::VakintExpression::canonicalize",
               "file": "crates/vakint/src/lib.rs",
-              "line": 2651,
+              "line": 2963,
               "column": 1
             }
           },
@@ -539,7 +550,7 @@
             "source": {
               "identifier": "vakint::VakintExpression::tensor_reduce",
               "file": "crates/vakint/src/lib.rs",
-              "line": 2673,
+              "line": 2985,
               "column": 1
             }
           },
@@ -596,7 +607,7 @@
             "source": {
               "identifier": "vakint::VakintExpression::evaluate_integral",
               "file": "crates/vakint/src/lib.rs",
-              "line": 2684,
+              "line": 3002,
               "column": 1
             }
           },
@@ -640,7 +651,7 @@
             "source": {
               "identifier": "vakint::NumericalEvaluationResult",
               "file": "crates/vakint/src/lib.rs",
-              "line": 2768,
+              "line": 3086,
               "column": 1
             }
           }

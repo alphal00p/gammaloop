@@ -137,6 +137,14 @@
                 "members": []
               },
               {
+                "name": "numerical_stability",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def numerical_stability(self) -> Optional[dict]:",
+                "default": null,
+                "members": []
+              },
+              {
                 "name": "__str__",
                 "kind": "method",
                 "docs": {
@@ -209,7 +217,7 @@
             "source": {
               "identifier": "gammaloop-python::ComponentDiscreteBreakdown",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 53,
+              "line": 55,
               "column": 1
             }
           },
@@ -328,7 +336,7 @@
             "source": {
               "identifier": "gammaloop-python::CutInfo",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 63,
+              "line": 65,
               "column": 1
             }
           },
@@ -383,7 +391,7 @@
             "source": {
               "identifier": "gammaloop-python::DiscreteBreakdown",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 109,
+              "line": 111,
               "column": 1
             }
           },
@@ -470,7 +478,7 @@
             "source": {
               "identifier": "gammaloop-python::DiscreteBreakdownEntry",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 121,
+              "line": 123,
               "column": 1
             }
           },
@@ -525,7 +533,7 @@
             "source": {
               "identifier": "gammaloop-python::DiscreteCoordinate",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 141,
+              "line": 143,
               "column": 1
             }
           },
@@ -784,7 +792,7 @@
             "source": {
               "identifier": "gammaloop-python::DotExportSettings",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 153,
+              "line": 155,
               "column": 1
             }
           },
@@ -958,7 +966,7 @@
             "source": {
               "identifier": "gammaloop-python::EvaluationResult",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 233,
+              "line": 235,
               "column": 1
             }
           },
@@ -1066,7 +1074,7 @@
             "source": {
               "identifier": "gammaloop-python::Event",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 302,
+              "line": 304,
               "column": 1
             }
           },
@@ -1130,7 +1138,7 @@
             "source": {
               "identifier": "gammaloop-python::EventGroup",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 341,
+              "line": 343,
               "column": 1
             }
           },
@@ -1205,7 +1213,7 @@
             "source": {
               "identifier": "gammaloop-python::FourMomentum",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 360,
+              "line": 362,
               "column": 1
             }
           },
@@ -1232,6 +1240,22 @@
             "returns": null,
             "examples": [],
             "members": [
+              {
+                "name": "read_only_state",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def read_only_state(self) -> bool:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "active_state_folder",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def active_state_folder(self) -> str:",
+                "default": null,
+                "members": []
+              },
               {
                 "name": "__new__",
                 "kind": "associated-function",
@@ -1364,6 +1388,22 @@
                     "members": []
                   }
                 ]
+              },
+              {
+                "name": "is_read_only_state",
+                "kind": "method",
+                "docs": null,
+                "signature": "def is_read_only_state(self) -> bool:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "state_access_mode",
+                "kind": "method",
+                "docs": null,
+                "signature": "def state_access_mode(self) -> str:",
+                "default": null,
+                "members": []
               },
               {
                 "name": "evaluate_sample",
@@ -2101,124 +2141,12 @@
                     "members": []
                   }
                 ]
-              },
-              {
-                "name": "generate_cff",
-                "kind": "method",
-                "docs": {
-                  "format": "python-docstring",
-                  "body": "Build a causal-flow expression from an inline DOT graph or one of its subgraphs.\n\nParameters\n----------\ndot_string : str\n    Inline DOT graph using particles from the active model.\nsubgraph_nodes : Sequence[str]\n    Vertex names retained in the subgraph; an empty sequence selects all nodes.\nreverse_dangling : Sequence[int]\n    Dangling edge ids whose orientation is reversed.\norientation_pattern : str, optional\n    Pattern restricting returned causal-flow orientations.\n\nReturns\n-------\nlist[tuple[dict[int, int], str]]\n    Edge-direction maps paired with their energy-denominator expressions."
-                },
-                "signature": "def generate_cff(self, dot_string: str, subgraph_nodes: Sequence[str], reverse_dangling: Sequence[int], orientation_pattern: Optional[str] = None) -> list[tuple[dict[int, int], str]]:",
-                "default": null,
-                "members": [
-                  {
-                    "name": "dot_string",
-                    "kind": "parameter",
-                    "docs": {
-                      "format": "python-docstring",
-                      "body": "Inline DOT graph using particles from the active model."
-                    },
-                    "signature": "str",
-                    "default": null,
-                    "members": []
-                  },
-                  {
-                    "name": "subgraph_nodes",
-                    "kind": "parameter",
-                    "docs": {
-                      "format": "python-docstring",
-                      "body": "Vertex names retained in the subgraph; an empty sequence selects all nodes."
-                    },
-                    "signature": "Sequence[str]",
-                    "default": null,
-                    "members": []
-                  },
-                  {
-                    "name": "reverse_dangling",
-                    "kind": "parameter",
-                    "docs": {
-                      "format": "python-docstring",
-                      "body": "Dangling edge ids whose orientation is reversed."
-                    },
-                    "signature": "Sequence[int]",
-                    "default": null,
-                    "members": []
-                  },
-                  {
-                    "name": "orientation_pattern",
-                    "kind": "parameter",
-                    "docs": {
-                      "format": "python-docstring",
-                      "body": "Pattern restricting returned causal-flow orientations."
-                    },
-                    "signature": "Optional[str]",
-                    "default": "None",
-                    "members": []
-                  }
-                ]
-              },
-              {
-                "name": "generate_cff_as_json_string",
-                "kind": "method",
-                "docs": {
-                  "format": "python-docstring",
-                  "body": "Serialize a causal-flow expression and its surfaces as JSON.\n\nThis accepts the same graph, subgraph, and dangling-edge inputs as\n``generate_cff``. The current JSON representation is intended for GammaLoop\ntooling and may contain internal structural details.\n\nParameters\n----------\ndot_string : str\n    Inline DOT graph using particles from the active model.\nsubgraph_nodes : Sequence[str]\n    Vertex names retained in the subgraph; an empty sequence selects all nodes.\nreverse_dangling : Sequence[int]\n    Dangling edge ids whose orientation is reversed.\norientation_pattern : str, optional\n    Pattern restricting returned causal-flow orientations.\n\nReturns\n-------\nstr\n    JSON representation of the causal-flow expression and E-surfaces."
-                },
-                "signature": "def generate_cff_as_json_string(self, dot_string: str, subgraph_nodes: Sequence[str], reverse_dangling: Sequence[int], orientation_pattern: Optional[str] = None) -> str:",
-                "default": null,
-                "members": [
-                  {
-                    "name": "dot_string",
-                    "kind": "parameter",
-                    "docs": {
-                      "format": "python-docstring",
-                      "body": "Inline DOT graph using particles from the active model."
-                    },
-                    "signature": "str",
-                    "default": null,
-                    "members": []
-                  },
-                  {
-                    "name": "subgraph_nodes",
-                    "kind": "parameter",
-                    "docs": {
-                      "format": "python-docstring",
-                      "body": "Vertex names retained in the subgraph; an empty sequence selects all nodes."
-                    },
-                    "signature": "Sequence[str]",
-                    "default": null,
-                    "members": []
-                  },
-                  {
-                    "name": "reverse_dangling",
-                    "kind": "parameter",
-                    "docs": {
-                      "format": "python-docstring",
-                      "body": "Dangling edge ids whose orientation is reversed."
-                    },
-                    "signature": "Sequence[int]",
-                    "default": null,
-                    "members": []
-                  },
-                  {
-                    "name": "orientation_pattern",
-                    "kind": "parameter",
-                    "docs": {
-                      "format": "python-docstring",
-                      "body": "Pattern restricting returned causal-flow orientations."
-                    },
-                    "signature": "Optional[str]",
-                    "default": "None",
-                    "members": []
-                  }
-                ]
               }
             ],
             "source": {
               "identifier": "gammaloop-python::GammaLoopAPI",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 386,
+              "line": 388,
               "column": 1
             }
           },
@@ -2620,7 +2548,7 @@
             "source": {
               "identifier": "gammaloop-python::HistogramAccumulator",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1015,
+              "line": 979,
               "column": 1
             }
           },
@@ -2785,7 +2713,7 @@
             "source": {
               "identifier": "gammaloop-python::HistogramBin",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1192,
+              "line": 1156,
               "column": 1
             }
           },
@@ -3003,7 +2931,7 @@
             "source": {
               "identifier": "gammaloop-python::HistogramSnapshot",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1266,
+              "line": 1230,
               "column": 1
             }
           },
@@ -3067,7 +2995,7 @@
             "source": {
               "identifier": "gammaloop-python::HistogramStats",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1357,
+              "line": 1321,
               "column": 1
             }
           },
@@ -3154,7 +3082,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegralEstimate",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1378,
+              "line": 1342,
               "column": 1
             }
           },
@@ -3207,7 +3135,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandActiveThresholdCut",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1398,
+              "line": 1362,
               "column": 1
             }
           },
@@ -3293,7 +3221,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandCut",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1414,
+              "line": 1378,
               "column": 1
             }
           },
@@ -3379,7 +3307,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandCutThreshold",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1445,
+              "line": 1409,
               "column": 1
             }
           },
@@ -3443,7 +3371,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandGraph",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1476,
+              "line": 1440,
               "column": 1
             }
           },
@@ -3562,7 +3490,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandGraphGroup",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1497,
+              "line": 1461,
               "column": 1
             }
           },
@@ -3714,7 +3642,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandInfo",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1543,
+              "line": 1507,
               "column": 1
             }
           },
@@ -3789,7 +3717,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandLoopMomentumBasis",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1604,
+              "line": 1568,
               "column": 1
             }
           },
@@ -3842,7 +3770,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandOrientation",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1630,
+              "line": 1594,
               "column": 1
             }
           },
@@ -3928,7 +3856,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandThresholdEsurface",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1646,
+              "line": 1610,
               "column": 1
             }
           },
@@ -3991,7 +3919,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrationOutput",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1677,
+              "line": 1641,
               "column": 1
             }
           },
@@ -4055,7 +3983,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrationResult",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1690,
+              "line": 1654,
               "column": 1
             }
           },
@@ -4206,7 +4134,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrationStatisticsSnapshot",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1700,
+              "line": 1664,
               "column": 1
             }
           },
@@ -4301,7 +4229,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrationTableComponentResult",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1736,
+              "line": 1700,
               "column": 1
             }
           },
@@ -4364,7 +4292,7 @@
             "source": {
               "identifier": "gammaloop-python::MaxWeightInfoEntry",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1758,
+              "line": 1722,
               "column": 1
             }
           },
@@ -4516,7 +4444,7 @@
             "source": {
               "identifier": "gammaloop-python::SampleEvaluationResult",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1772,
+              "line": 1736,
               "column": 1
             }
           },
@@ -4737,7 +4665,7 @@
             "source": {
               "identifier": "gammaloop-python::SettingsValue",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1831,
+              "line": 1795,
               "column": 1
             }
           },
@@ -4840,7 +4768,7 @@
             "source": {
               "identifier": "gammaloop-python::SlotIntegrationResult",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1923,
+              "line": 1887,
               "column": 1
             }
           },
@@ -4890,6 +4818,14 @@
                 "members": []
               },
               {
+                "name": "estimated_decimal_digits",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def estimated_decimal_digits(self) -> Optional[float]:",
+                "default": null,
+                "members": []
+              },
+              {
                 "name": "status",
                 "kind": "getter",
                 "docs": {
@@ -4926,7 +4862,7 @@
             "source": {
               "identifier": "gammaloop-python::StabilityResult",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1947,
+              "line": 1911,
               "column": 1
             }
           },
@@ -5023,7 +4959,7 @@
             "source": {
               "identifier": "gammaloop-python::LogLevel",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1978,
+              "line": 1944,
               "column": 1
             }
           },
@@ -5053,7 +4989,7 @@
             "source": {
               "identifier": "gammaloop-python::atom_to_canonical_string",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 2004,
+              "line": 1970,
               "column": 1
             }
           },
@@ -5083,7 +5019,7 @@
             "source": {
               "identifier": "gammaloop-python::evaluate_graph_overall_factor",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 2032,
+              "line": 1998,
               "column": 1
             }
           },
@@ -5113,7 +5049,7 @@
             "source": {
               "identifier": "gammaloop-python::to_dots",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 2062,
+              "line": 2028,
               "column": 1
             }
           }

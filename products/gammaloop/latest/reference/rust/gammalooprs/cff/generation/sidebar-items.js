@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["generate_cff_expression_from_subgraph","generate_uv_cff"],"struct":["ConstraintData","EsurfaceRewritingInstructions","PostProcessingSetup","ShiftRewrite","SurfaceCache","UvCffTopology"]};
+window.SIDEBAR_ITEMS = {"struct":["ShiftRewrite"]};

@@ -1070,7 +1070,7 @@
 <a href=#1069 id=1069 data-nosnippet>1069</a>        {
 <a href=#1070 id=1070 data-nosnippet>1070</a>            <span class="comment">// println!("YaY:{a}");
 <a href=#1071 id=1071 data-nosnippet>1071</a>            </span><span class="macro">println!</span>(<span class="string">"{tensor}"</span>);
-<a href=#1072 id=1072 data-nosnippet>1072</a>            <span class="macro">assert_eq!</span>(tensor, <span class="kw-2">&amp;</span>indexed.to_shell().concretize());
+<a href=#1072 id=1072 data-nosnippet>1072</a>            <span class="macro">assert_eq!</span>(tensor, <span class="kw-2">&amp;</span>indexed.to_shell().concretize().unwrap());
 <a href=#1073 id=1073 data-nosnippet>1073</a>        } <span class="kw">else </span>{
 <a href=#1074 id=1074 data-nosnippet>1074</a>            <span class="macro">panic!</span>(<span class="string">"Not Key"</span>)
 <a href=#1075 id=1075 data-nosnippet>1075</a>        }

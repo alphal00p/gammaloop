@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["CutSet","ResidueSelector"]};
+window.SIDEBAR_ITEMS = {"struct":["CutSet","LuCutSelection","ResidueSelector"]};

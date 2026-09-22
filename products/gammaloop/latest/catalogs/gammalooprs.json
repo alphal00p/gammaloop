@@ -697,7 +697,7 @@
             "source": {
               "identifier": "gammalooprs::integrands::evaluation::SingleSampleEvaluationResult",
               "file": "crates/gammalooprs/src/integrands/evaluation.rs",
-              "line": 385,
+              "line": 394,
               "column": 1
             }
           },
@@ -747,12 +747,23 @@
                 "signature": "ObservableSnapshotBundle",
                 "default": null,
                 "members": []
+              },
+              {
+                "name": "numerical_stability",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Numerical-stability histograms for this batch, when collected."
+                },
+                "signature": "Option < NumericalStabilityHistograms >",
+                "default": null,
+                "members": []
               }
             ],
             "source": {
               "identifier": "gammalooprs::integrands::evaluation::BatchSampleEvaluationResult",
               "file": "crates/gammalooprs/src/integrands/evaluation.rs",
-              "line": 395,
+              "line": 620,
               "column": 1
             }
           },
@@ -807,7 +818,7 @@
             "source": {
               "identifier": "gammalooprs::integrands::evaluation::PreciseSingleSampleEvaluationResult",
               "file": "crates/gammalooprs/src/integrands/evaluation.rs",
-              "line": 411,
+              "line": 638,
               "column": 1
             }
           },
@@ -862,7 +873,7 @@
             "source": {
               "identifier": "gammalooprs::integrands::evaluation::PreciseBatchSampleEvaluationResult",
               "file": "crates/gammalooprs/src/integrands/evaluation.rs",
-              "line": 419,
+              "line": 646,
               "column": 1
             }
           },
@@ -1132,7 +1143,7 @@
             "source": {
               "identifier": "gammalooprs::observables::HistogramSnapshot::merge",
               "file": "crates/gammalooprs/src/observables/mod.rs",
-              "line": 2073,
+              "line": 2080,
               "column": 1
             }
           },
@@ -1182,7 +1193,7 @@
             "source": {
               "identifier": "gammalooprs::observables::HistogramSnapshot::rebin",
               "file": "crates/gammalooprs/src/observables/mod.rs",
-              "line": 2171,
+              "line": 2209,
               "column": 1
             }
           },
@@ -1413,7 +1424,7 @@
             "source": {
               "identifier": "gammalooprs::observables::HistogramAccumulatorState",
               "file": "crates/gammalooprs/src/observables/mod.rs",
-              "line": 2231,
+              "line": 2269,
               "column": 1
             }
           },
@@ -1456,7 +1467,7 @@
             "source": {
               "identifier": "gammalooprs::observables::HistogramAccumulatorState::snapshot",
               "file": "crates/gammalooprs/src/observables/mod.rs",
-              "line": 2469,
+              "line": 2507,
               "column": 1
             }
           },

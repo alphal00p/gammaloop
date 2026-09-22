@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["approx","export","forest","hedge_poset","poset","profile","renormalization","settings","spinney","uv_graph","wood"],"struct":["IntegrandExpr","Integrands"]};
+window.SIDEBAR_ITEMS = {"mod":["approx","export","forest","hedge_poset","poset","profile","renormalization","settings","spinney","uv_graph","wood"],"struct":["Integrands"]};

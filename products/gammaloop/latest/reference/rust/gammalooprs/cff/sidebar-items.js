@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["cff_graph","esurface","expression","generation","hsurface","orientations","surface","tree"],"struct":["CFFTerm","CutCFF","CutCFFIndex"]};
+window.SIDEBAR_ITEMS = {"enum":["CffEnergyBoundSourceKind"],"mod":["esurface","expression","generation","hsurface","orientations","surface","tree"],"struct":["CFFTerm","CffEnergyDegreeBoundReport","CutCFF","CutCFFIndex"]};
