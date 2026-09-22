@@ -9,7 +9,7 @@ mod options;
 mod process;
 mod spin;
 
-pub use color::{ColorSum, ColorSumError};
+pub use color::{ColorRepresentation, ColorSum, ColorSumError};
 
 pub use spin::{AxialReference, SpinSum, SpinSumError};
 
