@@ -1118,3 +1118,55 @@ fn val_test() {
         .to_dots();
     assert_eq!(res, simplified, "fount{}", simplified);
 }
+
+#[test]
+fn special_dirac_matrix_conjugation_uses_hermitian_transposes() {
+    test_initialize();
+    for matrix in [AGS.gamma0, AGS.gamma5, AGS.projm, AGS.projp] {
+        let tensor = function!(matrix, bis!(4, special_matrix_i), bis!(4, special_matrix_j));
+        let transpose = function!(matrix, bis!(4, special_matrix_j), bis!(4, special_matrix_i));
+        let conjugate = tensor
+            .spenso_conj()
+            .simplify_gamma_conj::<AbstractIndex>()
+            .unwrap();
+        assert_eq!(conjugate.simplify_gamma(), transpose.simplify_gamma());
+
+        // A dimension-generic gamma-five convention must remain unspecified.
+        let generic = function!(
+            matrix,
+            bis!(special_matrix_D, special_matrix_i),
+            bis!(special_matrix_D, special_matrix_j)
+        );
+        assert_eq!(
+            generic
+                .spenso_conj()
+                .simplify_gamma_conj::<AbstractIndex>()
+                .unwrap(),
+            generic.spenso_conj()
+        );
+    }
+}
+
+#[test]
+fn special_matrices_have_the_physical_dirac_adjoints() {
+    test_initialize();
+    for (matrix, expected, sign) in [
+        (AGS.gamma0, AGS.gamma0, 1),
+        (AGS.gamma5, AGS.gamma5, -1),
+        (AGS.projm, AGS.projp, 1),
+        (AGS.projp, AGS.projm, 1),
+    ] {
+        let matrix = function!(matrix, bis!(4, special_matrix_i), bis!(4, special_matrix_j));
+        let expected = Atom::num(sign)
+            * function!(
+                expected,
+                bis!(4, special_matrix_i),
+                bis!(4, special_matrix_j)
+            );
+        let actual = matrix
+            .dirac_adjoint::<AbstractIndex>()
+            .unwrap()
+            .simplify_gamma();
+        assert_eq!(actual, expected.simplify_gamma());
+    }
+}

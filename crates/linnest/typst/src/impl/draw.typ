@@ -1916,9 +1916,9 @@
   if placements.all(label => label.candidates.len() == 1) {
     return placements.map(label => label.candidates.first())
   }
-  let overlap = (left, right) => (
-    calc.max(0, calc.min(left.right, right.right) - calc.max(left.left, right.left) + 0.08)
-      * calc.max(0, calc.min(left.top, right.top) - calc.max(left.bottom, right.bottom) + 0.08)
+  let overlap = (left, right, padding: 0.08) => (
+    calc.max(0, calc.min(left.right, right.right) - calc.max(left.left, right.left) + padding)
+      * calc.max(0, calc.min(left.top, right.top) - calc.max(left.bottom, right.bottom) + padding)
   )
   let choices = placements.map(_ => 0)
   for i in range(placements.len()) {
@@ -1958,7 +1958,8 @@
             if i == j { continue }
             let other = placements.at(j).candidates.at(choices.at(j)).bounds
             let other-area = (other.right - other.left) * (other.top - other.bottom)
-            cost += overlap(box, other) / calc.max(1e-9, calc.min(area, other-area))
+            // Repel nearby labels before their text boxes touch.
+            cost += 4 * overlap(box, other, padding: 0.35) / calc.max(1e-9, calc.min(area, other-area))
           }
           scores.push(cost)
         }

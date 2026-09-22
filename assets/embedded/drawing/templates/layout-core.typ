@@ -136,8 +136,8 @@
   let (internal-label-length-scale, external-label-length-scale) = if (
     show-momentum in (true, "true", "\"true\"")
   ) {
-    (0.75, 0.60)
-  } else { (0.60, 0.45) }
+    (0.45, 0.60)
+  } else { (0.36, 0.45) }
   let styles = (
     (
       scope: scope,

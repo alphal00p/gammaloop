@@ -7,14 +7,21 @@ use spenso::{
         tags::SPENSO_TAG as T,
     },
     shadowing,
-    structure::representation::RepName,
+    structure::{
+        abstract_index::AbstractIndex,
+        representation::{LibraryRep, RepName},
+        slot::{IsAbstractSlot, Slot},
+    },
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder},
     id::Replacement,
 };
 
-use crate::{IndexTooling, color_t, rep_symbols::RS, representations::ColorFundamental};
+use crate::{
+    IndexTooling, color_t, epsilon::EPSILON_SYMBOL, rep_symbols::RS,
+    representations::ColorFundamental,
+};
 
 use super::{
     CS,
@@ -143,10 +150,29 @@ pub fn color_conj_impl(expression: AtomView<'_>) -> Atom {
             let AtomView::Fun(conjugate) = arg else {
                 return;
             };
-            if conjugate.get_symbol() == INBUILTS.conj
-                && conjugate.get_nargs() == 1
-                && let Some(AtomView::Fun(word)) = conjugate.iter().next()
-                && [T.chain, T.trace].contains(&word.get_symbol())
+            if conjugate.get_symbol() != INBUILTS.conj || conjugate.get_nargs() != 1 {
+                return;
+            }
+            let Some(AtomView::Fun(word)) = conjugate.iter().next() else {
+                return;
+            };
+            if word.get_symbol() == *EPSILON_SYMBOL && word.get_nargs() == 3 {
+                let triplet = ColorFundamental {}.new_rep(3).cast::<LibraryRep>();
+                let reps = word
+                    .iter()
+                    .map(|arg| {
+                        Slot::<LibraryRep, AbstractIndex>::try_from(arg).map(|slot| slot.rep())
+                    })
+                    .collect::<Result<Vec<_>, _>>();
+                if let Ok(reps) = reps
+                    && (reps.iter().all(|rep| *rep == triplet)
+                        || reps.iter().all(|rep| *rep == triplet.dual()))
+                {
+                    // UFO color epsilon has real components. Only its color
+                    // slots dualize below; Lorentz epsilon keeps its convention.
+                    **out = AtomView::Fun(word).to_owned();
+                }
+            } else if [T.chain, T.trace].contains(&word.get_symbol())
                 && let Some(result) = ColorConjugator::run(AtomView::Fun(word))
             {
                 **out = result;
@@ -162,11 +188,47 @@ mod tests {
     use crate::{
         IndexTooling,
         color::ColorSimplifier,
+        epsilon::EpsilonSimplifier,
         shorthands::{UndoShorthands, metric::MetricSimplifier},
         test_support::test_initialize,
     };
     use spenso::{shadowing::ProjectorExpander, structure::abstract_index::AbstractIndex};
     use symbolica::parse;
+
+    #[test]
+    fn color_epsilon_conjugation_dualizes_without_reversing_indices() {
+        test_initialize();
+        let _ = *EPSILON_SYMBOL;
+        let epsilon = parse!(
+            "epsilon(cof(3,i),cof(3,j),cof(3,k))",
+            default_namespace = "spenso"
+        );
+        let barred = parse!(
+            "epsilon(dind(cof(3,i)),dind(cof(3,j)),dind(cof(3,k)))",
+            default_namespace = "spenso"
+        );
+        assert_eq!(epsilon.spenso_conj(), barred);
+        assert_eq!(barred.spenso_conj(), epsilon);
+        assert_eq!((Atom::i() * &epsilon).spenso_conj(), -Atom::i() * &barred);
+        assert_eq!((&epsilon * &barred).simplify_epsilon(), Atom::num(6));
+    }
+
+    #[test]
+    fn color_epsilon_conjugation_preserves_other_conventions() {
+        test_initialize();
+        let _ = *EPSILON_SYMBOL;
+        for source in [
+            "epsilon(mink(4,i),mink(4,j),mink(4,k),mink(4,l))",
+            "epsilon(cof(4,i),cof(4,j),cof(4,k))",
+            "epsilon(cof(3,i),cof(3,j))",
+            "epsilon(cof(3,i),cof(3,j),dind(cof(3,k)))",
+        ] {
+            let expression = parse!(source, default_namespace = "spenso");
+            let conjugate = expression.spenso_conj();
+            assert!(conjugate.contains_symbol(INBUILTS.conj));
+            assert_eq!(conjugate.spenso_conj(), expression);
+        }
+    }
 
     #[test]
     fn adjoint_color_generator_has_positive_su3_norm() {
