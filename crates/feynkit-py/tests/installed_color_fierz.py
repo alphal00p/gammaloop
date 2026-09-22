@@ -57,6 +57,13 @@ for colors in (2, 3, 5):
         8 * colors
     )
     if colors == 3:
+        # Check every free-index component of the mixed identity directly.
+        # The dual fundamental metric must retain both tensor ports in the sum.
+        difference = (mixed - expected).undo_trace().undo_chain().to_network()
+        difference.execute()
+        components = difference.result_tensor()[:]
+        assert len(components) == colors**2 * (colors**2 - 1) ** 2
+        assert all(abs(complex(value)) < 1e-12 for value in components)
         # Independently contract explicit SU(3) matrices, without applying
         # symbolic color simplification to the original trace product.
         network = closed.undo_trace().undo_chain().to_network()

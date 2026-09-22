@@ -948,3 +948,51 @@ fn parse_chain_materializes_schoonschip_factor_argument() {
     assert_eq!(parsed.graph.dangling_indices().len(), 2);
     assert_eq!(parsed.store.tensors.len(), 2);
 }
+
+#[test]
+fn dual_slot_metrics_remain_tensors_in_products_and_sums() {
+    let rep = Lorentz {}.new_rep(4);
+    let self_dual = mink4();
+    let identity = ETS.metric(slot!(rep, i).to_atom(), slot!(rep.dual(), j).to_atom());
+    let product = &identity
+        * ETS.metric(
+            slot!(self_dual, mu).to_atom(),
+            slot!(self_dual, nu).to_atom(),
+        );
+    let other = function!(
+        tensor_symbol!(dual_metric_sum_term),
+        slot!(rep, i).to_atom(),
+        slot!(rep.dual(), j).to_atom(),
+        slot!(self_dual, mu).to_atom(),
+        slot!(self_dual, nu).to_atom()
+    );
+    for filter in [
+        StrictTensorFilter::Tagged,
+        StrictTensorFilter::TaggedChecked,
+        StrictTensorFilter::ContainsReps,
+    ] {
+        for mut settings in [
+            ParseSettings::default(),
+            opaque_fast_settings(),
+            opaque_expanded_settings(),
+        ] {
+            settings.strict_tensor_filter = filter;
+            for precontract in [false, true] {
+                settings.precontract_scalars = precontract;
+                for (expression, rank) in [(&identity, 2), (&product, 4), (&(&product + &other), 4)]
+                {
+                    let parsed = expression
+                        .parse_to_atom_net::<AbstractIndex>(&settings)
+                        .unwrap();
+                    assert_eq!(parsed.state, NetworkState::Tensor, "{expression}");
+                    assert_eq!(parsed.graph.dangling_indices().len(), rank);
+                }
+                assert!(
+                    (&identity + Atom::one())
+                        .parse_to_atom_net::<AbstractIndex>(&settings)
+                        .is_err()
+                );
+            }
+        }
+    }
+}
