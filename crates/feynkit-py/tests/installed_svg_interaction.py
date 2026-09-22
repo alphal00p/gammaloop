@@ -36,9 +36,11 @@ snapshot = diagram.to_json()
 namespace = "{http://www.w3.org/2000/svg}"
 xlink = "{http://www.w3.org/1999/xlink}"
 edges = {edge.id: edge for edge in diagram.edges}
-expected = {("node", vertex.id) for vertex in diagram.vertices} | {
-    ("edge", edge_id) for edge_id in edges
-}
+expected = (
+    {("node", vertex.id) for vertex in diagram.vertices}
+    | {("edge", edge_id) for edge_id in edges}
+    | {("halfedge", half.index) for half in diagram.to_linnet().half_edges()}
+)
 canonical = ET.fromstring(diagram.to_linnet()._repr_html_())
 shared_script = canonical.find(namespace + "script").text
 
