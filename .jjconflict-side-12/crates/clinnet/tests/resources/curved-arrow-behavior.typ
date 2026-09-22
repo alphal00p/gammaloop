@@ -962,8 +962,8 @@
         }
       }
 
-      // Crowded labels may move along a straight or curved carrier, never away
-      // from it. Check the rendered text bounds at the chosen arc-length point.
+      // Crowded labels may slide or switch sides on a straight or curved carrier
+      // at fixed clearance. Check the rendered text bounds after either move.
       for carrier in (curve.line((0, 0), (8, 0)), path) {
         for side in ("left", "right") {
           let style = (label: [AB], label-gap: 0.3, label-side: side)
@@ -975,11 +975,25 @@
           let (a, b) = chosen.map(candidate => candidate.bounds)
           assert(a.right <= b.left or b.right <= a.left or a.top <= b.bottom or b.top <= a.bottom, message: "sliding separates overlapping labels")
           assert.eq(drawing._relax-label-placements((label,), ()).first().position, label.candidates.first().position, message: "uncrowded labels keep their preferred position")
-          for candidate in chosen {
+          let sign = if side == "left" { 1 } else { -1 }
+          assert(label.candidates.all(candidate => candidate.side == sign), message: "explicit label sides stay fixed")
+          let frame = drawing._path-mid-frame(carrier, 0.001)
+          let tangent = cetz.vector.norm(frame.tangent)
+          let preferred = cetz.vector.add(frame.point, cetz.vector.scale((-tangent.at(1), tangent.at(0)), sign))
+          let automatic = drawing._layer-label-element(
+            native, carrier, style + (label-side: auto), preferred,
+            (edge: (pos: frame.point)), placement: true,
+          )
+          assert.eq(drawing._relax-label-placements((automatic,), ()).first().side, sign, message: "uncrowded labels keep their preferred side")
+          let obstacles = automatic.candidates.filter(candidate => candidate.side == sign).map(candidate => candidate.bounds)
+          let flipped = drawing._relax-label-placements((automatic,), obstacles).first()
+          assert.eq(flipped.side, -sign, message: "labels flip when the preferred side is blocked")
+          assert.eq(flipped, drawing._relax-label-placements((automatic,), obstacles).first(), message: "deterministic side flipping")
+          for candidate in (..chosen, flipped) {
             assert(candidate.at >= 0 and candidate.at <= total, message: "labels stay on the carrier")
             let frame = drawing._path-mid-frame(carrier, 0.001, shift: candidate.at - total / 2)
             let tangent = cetz.vector.norm(frame.tangent)
-            let normal = cetz.vector.scale((-tangent.at(1), tangent.at(0)), if side == "left" { 1 } else { -1 })
+            let normal = cetz.vector.scale((-tangent.at(1), tangent.at(0)), candidate.side)
             let origin = cetz.matrix.mul4x4-vec3(native.transform, (..frame.point, 0))
             let outward = cetz.vector.sub(cetz.matrix.mul4x4-vec3(native.transform, (..cetz.vector.add(frame.point, normal), 0)), origin)
             let element = cetz.draw.content(candidate.position, label.label, padding: 0, ..label.style)
@@ -991,13 +1005,20 @@
           }
           let blocked = drawing._relax-label-placements((label,), (label.candidates.first().bounds,))
           assert.ne(blocked.first().position, label.candidates.first().position, message: "labels slide away from node obstacles")
-          for pinned-style in ((label-slide: false), (label-style: (anchor: "center"))) {
+          for pinned-style in ((label-slide: false, label-side: auto), (label-style: (anchor: "center"), label-side: auto)) {
             let pinned = drawing._layer-label-element(native, carrier, style + pinned-style + (label-shift: 1000), none, (:), placement: true)
             assert.eq(pinned.candidates.len(), 1, message: "explicit placements stay fixed")
             assert.eq(pinned.candidates.first().at, total, message: "explicit shifts clamp to the carrier endpoint")
           }
         }
       }
+
+      let offset-label = drawing._layer-label-element(
+        native, curve.line((0, 0), (8, 0)),
+        (label: [AB], offset: -0.2), (4, 0), (edge: (pos: (4, 0))), placement: true,
+      )
+      assert.eq(offset-label.candidates.first().side, -1, message: "signed offsets choose the preferred automatic side")
+      assert(offset-label.candidates.any(candidate => candidate.side == 1), message: "inferred sides remain free to flip")
 
       // Compare drawable structure and points in CeTZ's resolved 3D coordinates.
       for (case, actual, expected) in comparisons {
