@@ -65,6 +65,12 @@ operations are `TensorExpression` methods, so symbolic pipelines can chain
 `expression.simplify_gamma().simplify_color().simplify_metrics()` while retaining the
 tensor interface.
 
+Tensor multiplication contracts matching explicit indices together, including several
+pairs in one product. Unresolved ports are contracted when their representations and
+remaining labels determine a unique maximum pairing; competing pairings require an
+explicit `contract` call. Matrix channels retain ordered chain composition. Symbolic
+contractions remain compact dots, chains, or brackets until their evaluation is requested.
+
 ```python
 from symbolica.community.spenso import (
     Representation,

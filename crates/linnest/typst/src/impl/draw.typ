@@ -1913,6 +1913,9 @@
 // measured normal clearance. Annealing can leave a local minimum, then
 // deterministic coordinate sweeps settle the best arrangement found.
 #let _relax-label-placements(placements, obstacles) = {
+  if placements.all(label => label.candidates.len() == 1) {
+    return placements.map(label => label.candidates.first())
+  }
   let overlap = (left, right) => (
     calc.max(0, calc.min(left.right, right.right) - calc.max(left.left, right.left) + 0.08)
       * calc.max(0, calc.min(left.top, right.top) - calc.max(left.bottom, right.bottom) + 0.08)
@@ -3596,16 +3599,31 @@
             }
           }
 
-          // Sample the visible carriers as small obstacles, including the label's
-          // own curve: a remote bend can approach its text box from another side.
-          for segment in source-label-segments + sink-label-segments {
-            for step in range(13) {
-              let point = curve-api.cubic-point(segment, step / 12)
-              let point = cetz.matrix.mul4x4-vec3(ctx.transform, (.._point(point), 0))
-              label-obstacles.push((
-                left: point.at(0) - 0.06, right: point.at(0) + 0.06,
-                bottom: point.at(1) - 0.06, top: point.at(1) + 0.06,
-              ))
+          // Cover the visible carriers with short segment boxes, including the
+          // label's own curve: a remote bend can approach from another side.
+          // Waves and coils occupy a band around the carrier, not just a line.
+          let radius = 0.06 + calc.max(0, ..(source-style-layers + sink-style-layers).map(style => (
+            if _style-value(style, "pattern") == none { 0 } else {
+              calc.abs(_style-value(style, "pattern-amplitude"))
+            }
+          )))
+          let pad-x = radius * (calc.abs(ctx.transform.at(0).at(0)) + calc.abs(ctx.transform.at(0).at(1)))
+          let pad-y = radius * (calc.abs(ctx.transform.at(1).at(0)) + calc.abs(ctx.transform.at(1).at(1)))
+          for segments in (source-label-segments, sink-label-segments) {
+            if segments == none { continue }
+            for segment in segments {
+              let points = range(13).map(step => {
+                let point = curve-api.cubic-point(segment, step / 12)
+                cetz.matrix.mul4x4-vec3(ctx.transform, (.._point(point), 0))
+              })
+              for (start, end) in points.slice(0, 12).zip(points.slice(1)) {
+                label-obstacles.push((
+                  left: calc.min(start.at(0), end.at(0)) - pad-x,
+                  right: calc.max(start.at(0), end.at(0)) + pad-x,
+                  bottom: calc.min(start.at(1), end.at(1)) - pad-y,
+                  top: calc.max(start.at(1), end.at(1)) + pad-y,
+                ))
+              }
             }
           }
 

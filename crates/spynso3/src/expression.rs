@@ -3467,7 +3467,7 @@ impl TensorExpression {
         let TensorOperand::Structured(rhs) = TensorOperand::extract(rhs)? else {
             return Err(PyTypeError::new_err("contract() requires a tensor operand"));
         };
-        composition::contract(&value, &rhs, composition::PortPair { left, right })
+        composition::contract(&value, &rhs, &[composition::PortPair { left, right }])
             .map_err(|error| PyValueError::new_err(error.to_string()))
             .and_then(|value| Self::from_structured(py, value))
             .map(TensorDispatch::Expression)
@@ -3732,10 +3732,14 @@ fn dot(
             right.rank()
         )));
     }
-    composition::contract(&left, &right, composition::PortPair { left: 0, right: 0 })
-        .map_err(|error| PyValueError::new_err(error.to_string()))
-        .and_then(|value| TensorExpression::from_structured(py, value))
-        .map(TensorDispatch::Expression)
+    composition::contract(
+        &left,
+        &right,
+        &[composition::PortPair { left: 0, right: 0 }],
+    )
+    .map_err(|error| PyValueError::new_err(error.to_string()))
+    .and_then(|value| TensorExpression::from_structured(py, value))
+    .map(TensorDispatch::Expression)
 }
 
 // Python typing permits only one unbounded tuple unpack. A concrete first or last
@@ -4355,7 +4359,7 @@ mod tests {
         let contracted = composition::contract(
             &numerator,
             &projector,
-            composition::PortPair { left: 0, right: 0 },
+            &[composition::PortPair { left: 0, right: 0 }],
         )
         .unwrap();
         assert!(contracted.is_scalar());
