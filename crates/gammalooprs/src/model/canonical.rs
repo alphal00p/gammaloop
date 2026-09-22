@@ -1,4 +1,4 @@
-use feynkit_generator::{AxialReference, SpinSum};
+use feynkit_generator::{AxialReference, ColorRepresentation, SpinSum};
 use feynkit_graph::DOD;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
@@ -9,10 +9,7 @@ use std::{
 
 use color_eyre::Report;
 use eyre::eyre;
-use idenso::{
-    dirac::AGS,
-    representations::{Bispinor, ColorAdjoint, ColorFundamental, ColorSextet},
-};
+use idenso::{dirac::AGS, representations::Bispinor};
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, Flow};
 use rand::{Rng, SeedableRng, rngs::SmallRng};
@@ -887,22 +884,13 @@ impl ParticleGammaLoopExt for Particle {
     }
 
     fn color_reps(&self, flow: Flow) -> IndexLess {
-        let reps = match (flow, self.color) {
-            (Flow::Source, 3) | (Flow::Sink, -3) => {
-                vec![ColorFundamental {}.new_rep(3).cast()]
+        let reps = ColorRepresentation::from_ufo(self.color).map(|representation| {
+            match flow {
+                Flow::Source => representation,
+                Flow::Sink => representation.dual(),
             }
-            (Flow::Source, -3) | (Flow::Sink, 3) => {
-                vec![ColorFundamental {}.dual().new_rep(3).cast()]
-            }
-            (Flow::Source, 6) | (Flow::Sink, -6) => {
-                vec![ColorSextet {}.new_rep(6).cast()]
-            }
-            (Flow::Source, -6) | (Flow::Sink, 6) => {
-                vec![ColorSextet {}.dual().new_rep(6).cast()]
-            }
-            (_, 8) => vec![ColorAdjoint {}.new_rep(8).cast()],
-            _ => vec![],
-        };
+            .representation()
+        });
         Canonicalized::<IndexLess>::from_iter(reps).into_canonical()
     }
 
@@ -1077,5 +1065,60 @@ impl PropagatorGammaLoopExt for Propagator {
         (self.numerator_atom() / self.denominator_atom())
             .all_dod(GS.emr_mom)
             .expect("model momentum power counting failed")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use feynkit_generator::ColorSum;
+    use idenso::shorthands::metric::MetricSimplifier;
+    use spenso::{network::library::symbolic::ETS, structure::TensorStructure};
+
+    #[test]
+    fn runtime_color_ports_match_shared_completeness_for_both_flows() {
+        let model = Model::from_json(include_str!(
+            "../../../feynkit-model/tests/fixtures/sm.json"
+        ))
+        .unwrap();
+        let mut particle = model
+            .particle_by_id(model.particle_id_by_pdg(5).unwrap())
+            .unwrap()
+            .clone();
+        let left = parse!("color_left");
+        let right = parse!("color_right");
+        for color in [1, 3, -3, 6, -6, 8] {
+            particle.color = color;
+            let source = particle.color_reps(Flow::Source);
+            let sink = particle.color_reps(Flow::Sink);
+            let source_reps = source.external_reps_iter().collect::<Vec<_>>();
+            let sink_reps = sink.external_reps_iter().collect::<Vec<_>>();
+            assert_eq!(source_reps.len(), sink_reps.len());
+            let completeness = source_reps.into_iter().zip(sink_reps).fold(
+                Atom::one(),
+                |product, (source, sink)| {
+                    product
+                        * ETS.metric(
+                            source.to_symbolic([left.clone()]),
+                            sink.to_symbolic([right.clone()]),
+                        )
+                },
+            );
+            assert_eq!(
+                completeness,
+                ColorSum::new(&particle)
+                    .unwrap()
+                    .expression([left.clone(), right.clone()]),
+                "runtime ports for UFO color {color}"
+            );
+            assert_eq!(
+                completeness
+                    .replace(right.to_pattern())
+                    .with(left.to_pattern())
+                    .simplify_metrics(),
+                Atom::num(color.unsigned_abs()),
+                "completeness trace for UFO color {color}"
+            );
+        }
     }
 }
