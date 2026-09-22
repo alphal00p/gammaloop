@@ -63,8 +63,7 @@ shift = family.sector([0, 1]).mapping_to(family.sector([1, 0]), [K(0) + P(0)])
 assert shift is not None
 vacuum = fk.TensorReducer(D).with_integrated_vector(K(0, mink(D)))
 for moment in (shift.apply(family.denominators[0]), family.denominators[1]):
-    explicit = TensorExpression(moment).undo_dots().to_expression()
-    averaged = kinematics.apply(vacuum.reduce(explicit))
+    averaged = kinematics.apply(vacuum.reduce(moment))
     assert (averaged - family.denominators[0] - s).expand() == 0
 weights = {
     E("1"): E("0"),  # Scaleless polynomial moment in dimensional regularization.

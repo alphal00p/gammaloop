@@ -428,7 +428,13 @@ impl TensorReducer {
     /// Explicit Spenso metric contractions are normalized first with Idenso.
     /// This contracts chains such as `g(mu,nu) K(mu) K(nu)` while preserving
     /// any residual free index in its full `spenso::mink(D,index)` slot.  Each
-    /// summand is then treated independently.  Odd-rank vacuum tensors vanish;
+    /// summand is then treated independently. Compact Spenso dots between an
+    /// integrated vector and a spectator are projected directly, including
+    /// nonnegative integer powers, without allocating dummy indices. Dots
+    /// between integrated vectors or with declared external basis vectors stay
+    /// scalar invariants. Negative or noninteger powers of spectator contractions
+    /// are not polynomial tensor numerators and are rejected.
+    /// Odd-rank vacuum tensors vanish;
     /// already-contracted integrated pairs become Spenso dots before the
     /// projector is built. A single index occurrence inside an otherwise
     /// opaque tensor is retained as an external projector leg; expressions
@@ -532,8 +538,58 @@ impl TensorReducer {
         let mut indexed_vectors = Vec::new();
         let mut opaque_factors = Vec::new();
         let mut integrated_rank = 0_usize;
+        let mut integrated = Vec::new();
+        let mut outside = Vec::new();
 
         for factor in factors {
+            let (base, exponent) = match factor {
+                AtomView::Pow(power) => (power.get_base(), power.get_exp().to_owned()),
+                base => (base, Atom::one()),
+            };
+            if let AtomView::Fun(function) = base
+                && function.get_symbol() == SPENSO_TAG.dot
+                && function.get_nargs() == 2
+            {
+                // Reuse the indexed-vector parser solely to validate compact
+                // slots and classify the two endpoints. No dummy index enters
+                // the numerator: the contraction is already explicit in dot.
+                let vectors = function
+                    .iter()
+                    .map(|argument| {
+                        let compact = argument.to_owned();
+                        let indexed = indexed_vector(&compact, &Atom::Zero);
+                        self.indexed_vector(indexed.as_view())
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                if let [Some(left), Some(right)] = vectors.as_slice() {
+                    let pair = match (self.is_integrated(left), self.is_integrated(right)) {
+                        (true, false) => Some((left, right)),
+                        (false, true) => Some((right, left)),
+                        _ => None,
+                    };
+                    if let Some((internal, external)) = pair
+                        && !self.external_vectors.contains(&external.compact)
+                    {
+                        let count = i64::try_from(exponent.as_view())
+                            .ok()
+                            .and_then(|count| usize::try_from(count).ok())
+                            .ok_or(TensorReductionError::InvalidVectorPower(exponent))?;
+                        integrated_rank = integrated_rank.saturating_add(count);
+                        if integrated_rank > OrthogonalWeingarten::MAX_RANK {
+                            return Err(TensorReductionError::UnsupportedRank {
+                                rank: integrated_rank,
+                                maximum: OrthogonalWeingarten::MAX_RANK,
+                            });
+                        }
+                        integrated.extend(std::iter::repeat_n(internal.compact.clone(), count));
+                        outside.extend(std::iter::repeat_n(
+                            Outside::Vector(external.compact.clone()),
+                            count,
+                        ));
+                        continue;
+                    }
+                }
+            }
             if let AtomView::Pow(power) = factor
                 && let Some(vector) = self.indexed_vector(power.get_base())?
             {
@@ -596,8 +652,6 @@ impl TensorReducer {
             }
         }
 
-        let mut integrated = Vec::new();
-        let mut outside = Vec::new();
         for (index, occupants) in by_index {
             let opaque_occurrences =
                 opaque_factors
@@ -2204,6 +2258,108 @@ mod tests {
         let expected =
             dot(&loop_vector, &loop_vector) * dot(&external_vector, &external_vector) / dimension;
         assert_eq!(result.expression().expand(), expected.expand());
+    }
+
+    #[test]
+    fn compact_spectator_dots_match_explicit_projection_through_rank_eight() {
+        let (k, _, p, _) = vectors();
+        let dimension = Atom::var(symbol!("feynkit_tensor_test::D_compact"));
+        let kc = compact(k, 1, &dimension);
+        let pc = compact(p, 1, &dimension);
+        let reducer = TensorReducer::new(dimension.clone()).with_integrated_head(k);
+        let mut even_expected = Atom::one();
+        for rank in 1..=8 {
+            let input = dot(&kc, &pc).pow(Atom::num(rank));
+            let compact_result = reducer.reduce(input.as_view()).unwrap();
+            let explicit = input.undo_dots::<AbstractIndex>().unwrap();
+            let explicit_result = reducer.reduce(explicit.as_view()).unwrap();
+            assert_eq!(compact_result.expression(), explicit_result.expression());
+            let expected = if rank % 2 == 0 {
+                even_expected *= Atom::num(rank - 1) * dot(&kc, &kc) * dot(&pc, &pc)
+                    / (&dimension + Atom::num(rank - 2));
+                even_expected.clone()
+            } else {
+                Atom::Zero
+            };
+            assert!(
+                (compact_result.expression() - expected)
+                    .together()
+                    .is_zero()
+            );
+            assert_eq!(compact_result.max_rank(), rank as usize);
+        }
+    }
+
+    #[test]
+    fn compact_dots_mix_with_free_indices_and_preserve_scalar_weights() {
+        let (k, _, p, _) = vectors();
+        let dimension = Atom::var(symbol!("feynkit_tensor_test::D_compact_free"));
+        let mu = Atom::var(symbol!("feynkit_tensor_test::mu_compact_free"));
+        let kc = compact(k, 1, &dimension);
+        let pc = compact(p, 1, &dimension);
+        let reducer = TensorReducer::new(dimension.clone()).with_integrated_head(k);
+        let weight = (Atom::one() + dot(&kc, &kc)).pow(Atom::num(-2));
+        let input = &weight * dot(&kc, &pc) * indexed(k, 1, &dimension, &mu);
+        let expected = weight * dot(&kc, &kc) * indexed(p, 1, &dimension, &mu) / dimension;
+        let result = reducer.reduce(input.as_view()).unwrap();
+        assert!((result.expression() - expected).together().is_zero());
+        assert!(!result.is_fully_contracted());
+    }
+
+    #[test]
+    fn compact_dot_external_projection_is_idempotent() {
+        let (k, q, p, r) = vectors();
+        let dimension = Atom::var(symbol!("feynkit_tensor_test::D_compact_external"));
+        let kc = compact(k, 1, &dimension);
+        let qc = compact(q, 1, &dimension);
+        let pc = compact(p, 1, &dimension);
+        let rc = compact(r, 1, &dimension);
+        let reducer = TensorReducer::new(dimension.clone())
+            .with_integrated_head(k)
+            .with_integrated_head(q)
+            .with_external_vector(pc.clone());
+        let input = dot(&kc, &rc) * dot(&qc, &rc);
+        let parallel = dot(&kc, &pc) * dot(&qc, &pc) * dot(&rc, &pc).pow(Atom::num(2))
+            / dot(&pc, &pc).pow(Atom::num(2));
+        let transverse = (dot(&kc, &qc) - dot(&kc, &pc) * dot(&qc, &pc) / dot(&pc, &pc))
+            * (dot(&rc, &rc) - dot(&rc, &pc).pow(Atom::num(2)) / dot(&pc, &pc))
+            / (dimension - Atom::one());
+        let result = reducer.reduce(input.as_view()).unwrap().expression();
+        assert!((&result - parallel - transverse).together().is_zero());
+        let repeated = reducer.reduce(result.as_view()).unwrap().expression();
+        assert!((result - repeated).together().is_zero());
+        // Rational longitudinal weights are invariants of the transverse average.
+        let invariant = dot(&kc, &pc).pow(Atom::num(-1)) * dot(&kc, &qc);
+        assert_eq!(
+            reducer.reduce(invariant.as_view()).unwrap().expression(),
+            invariant
+        );
+    }
+
+    #[test]
+    fn compact_spectator_dots_enforce_power_rank_and_dimension_limits() {
+        let (k, _, p, _) = vectors();
+        let dimension = Atom::var(symbol!("feynkit_tensor_test::D_compact_limits"));
+        let kc = compact(k, 1, &dimension);
+        let pc = compact(p, 1, &dimension);
+        let reducer = TensorReducer::new(dimension).with_integrated_head(k);
+        for exponent in [Atom::num(-1), Atom::num(1) / Atom::num(2)] {
+            let input = dot(&kc, &pc).pow(exponent);
+            assert!(matches!(
+                reducer.reduce(input.as_view()),
+                Err(TensorReductionError::InvalidVectorPower(_))
+            ));
+        }
+        let input = dot(&kc, &pc).pow(Atom::num(OrthogonalWeingarten::MAX_RANK + 1));
+        assert!(matches!(
+            reducer.reduce(input.as_view()),
+            Err(TensorReductionError::UnsupportedRank { .. })
+        ));
+        let wrong_dimension = dot(&kc, &compact(p, 1, &Atom::num(3)));
+        assert!(matches!(
+            reducer.reduce(wrong_dimension.as_view()),
+            Err(TensorReductionError::DimensionMismatch { .. })
+        ));
     }
 
     #[test]

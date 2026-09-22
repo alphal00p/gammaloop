@@ -140,24 +140,24 @@
         if ('source' in detail || 'sink' in detail) {
           const source = detail.source == null ? 'External' : `Node ${detail.source}`;
           const sink = detail.sink == null ? 'External' : detail.source == null ? `Node ${detail.sink}` : String(detail.sink);
-          details.append(html('span', `${source} → ${sink}`));
+          const connector = detail.orientation === 'undirected' ? '—' : detail.orientation === 'reversed' ? '←' : '→';
+          details.append(html('span', `${source} ${connector} ${sink}`));
         }
         if (detail['external-state']) {
           const state = String(detail['external-state']);
           details.append(html('span', state.charAt(0).toUpperCase() + state.slice(1)));
         }
-        if (detail.orientation && detail.orientation !== 'default') {
-          details.append(html('span', `Orientation: ${detail.orientation}`));
-        }
       } else {
         if (detail.edges) details.append(html('span', `Edges: ${detail.edges.join(', ') || 'none'}`));
       }
       content.append(details);
-      const current = selection();
-      const construction = html('div');
-      construction.className = 'linnet-inspector-construction';
-      construction.append(html('span', 'Subgraph construction:'), html('code', `graph.subgraph(nodes=[${current.nodes.join(', ')}], edges=[${current.edges.join(', ')}])`));
-      content.append(construction);
+      if (selected[kind].has(id)) {
+        const current = selection();
+        const construction = html('div');
+        construction.className = 'linnet-inspector-construction';
+        construction.append(html('span', 'Subgraph construction:'), html('code', `graph.subgraph(nodes=[${current.nodes.join(', ')}], edges=[${current.edges.join(', ')}])`));
+        content.append(construction);
+      }
       const shortcuts = html('div', 'Click or Enter/Space: details · Shift/Ctrl/⌘-click: toggle selection');
       shortcuts.className = 'linnet-inspector-shortcuts';
       content.append(shortcuts);

@@ -325,8 +325,11 @@ See the #link("guides/tensor-reduction/")[tensor-reduction guide] for a complete
 example and the treatment of null external directions.
 
 The installed-host test `crates/feynkit-py/tests/installed_feyncalc_tensor.py`
-checks covariant moments through rank four, scalar prefactor preservation and
-an auxiliary null basis. Rust tests also cover two-direction Gram inversion,
+checks covariant moments through rank four in both explicit-index and compact-dot
+notation, scalar prefactor preservation and an auxiliary null basis. Compact dots
+between loop vectors and spectators are projected in the shared reducer without
+a separate index-expansion step; loop invariants and declared external-basis
+products stay scalar weights. Rust tests also cover two-direction Gram inversion,
 mixed loop momenta, and a basis spanning the full Lorentz space. These tests
 validate the projection identities, not the gallery's completed loop integrals.
 
