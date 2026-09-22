@@ -189,6 +189,50 @@ place scalar `args` before structural `ports`; `PortPattern.exact`, `.any`, `.se
 strings ending in one underscore; dimensions, indices, and scalar arguments are numbers or
 Symbolica expressions. Patterns can be passed directly to Symbolica replacement operations.
 
+== Dirac adjoints and external-leg labels
+
+`TensorExpression.dirac_adjoint()` uses Idenso's conjugation rules and the
+registered gamma-zero factors at open bispinor ports. Its default matrix
+convention exchanges the two endpoint labels of each open chain. When squaring
+an amplitude whose diagrams pair external fermions differently, use
+`dirac_adjoint(preserve_indices=True)` to keep every label attached to the same
+physical leg. This convention distributes over the whole amplitude, so callers
+do not need to find and exchange endpoints separately in each channel.
+
+// docs-example: compile
+```python
+from symbolica import E
+from symbolica.community.spenso import TensorExpression
+
+gamma = TensorExpression.gamma(4)
+direct = gamma("i", "j", "mu").to_expression() * gamma("k", "l", "mu").to_expression()
+crossed = gamma("i", "l", "nu").to_expression() * gamma("k", "j", "nu").to_expression()
+amplitude = TensorExpression((1 + 2 * E("1𝑖")) * direct + (3 - E("1𝑖")) * crossed)
+adjoint = amplitude.dirac_adjoint(preserve_indices=True)
+restored = adjoint.dirac_adjoint(preserve_indices=True).to_expression()
+assert (restored - amplitude.to_expression()).expand() == E("0")
+```
+
+Both conventions conjugate scalar coefficients and retain the required boundary
+factors. The physical-leg convention distributes those factors across sums
+before canceling them. The default keeps its existing factored output. To form
+a squared amplitude, distinguish the adjoint's indices with `wrap_indices` and
+supply the appropriate shared completeness tensors. Keeping labels attached to
+legs does not itself perform a spin sum. The new keyword requires a community
+assembly built with this Spynso version; changing a stub file does not update
+the native extension.
+
+Gamma simplification also respects matrix orientation. In a compact chain,
+`gamma(in,out,...)` is an ordinary matrix and `gamma(out,in,...)` is transposed.
+Reversed gamma, gamma-zero, gamma-five and chiral-projector factors remain
+explicit instead of entering forward-matrix Clifford or projector rules.
+Ordinary subwords can still simplify, but mixed ordinary/transposed words are
+not treated as if all their factors had the same orientation. Canonical chain
+ordering does not supply a general transpose algebra. Numerical evaluation with
+the shared HEP matrix data remains a separate way to check such expressions.
+An installed-host comparison validates all sixteen matrix components of a mixed
+ordinary/transposed product against that data.
+
 == Register data and execute a network
 
 A symbolic network resolves named tensors through a library. Register the data first, construct
