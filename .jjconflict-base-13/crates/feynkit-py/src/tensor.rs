@@ -233,7 +233,11 @@ impl PyTensorReducer {
     /// Fully contracted projectors are returned as scalar ``spenso::dot``
     /// invariants. Residual free projector pairs remain explicit
     /// ``spenso::g`` tensors; this method intentionally does not reject
-    /// tensor-valued output. Odd-rank vacuum tensors vanish.
+    /// tensor-valued output. Compact dots between an integrated vector and a
+    /// spectator are reduced directly, including nonnegative integer powers.
+    /// Dots between integrated vectors or with declared external basis vectors
+    /// remain scalar invariants. Negative or noninteger powers of spectator
+    /// contractions are rejected. Odd-rank vacuum tensors vanish.
     ///
     /// Examples
     /// --------

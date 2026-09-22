@@ -43,6 +43,16 @@ expected = dot(k_compact, k_compact) * dot(p_compact, p_compact) / D
 assert scalar == expected
 ```
 
+Compact contractions can be passed directly: the same reducer gives zero for
+`dot(k_compact, p_compact)` and gives `expected` for
+`dot(k_compact, p_compact)**2`. A product mixing compact dots and free-index
+vectors is handled in the same projection, without an `undo_dots()` step.
+Dots between two integrated vectors remain scalar weights, as do products with
+declared external basis vectors. Nonnegative integer powers of spectator
+contractions are polynomial tensor numerators; negative or noninteger powers
+require a different integral treatment and are rejected. The existing rank
+limit applies before repeated contraction legs are allocated.
+
 For native generated momenta, select the corresponding exact
 `gammalooprs::Q(edge_id,spenso::mink(D))` vectors from your vacuum/routing construction.
 Selecting an entire head with `with_integrated_head(...)` is appropriate only when every vector

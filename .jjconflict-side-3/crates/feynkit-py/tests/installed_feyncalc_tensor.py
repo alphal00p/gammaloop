@@ -34,6 +34,22 @@ for index, result in zip([mu, nu, rho, sigma], expected):
     numerator *= k(mink(D, index)) * r(mink(D, index))
     assert (reducer.reduce(numerator) - result).together() == E("0")
 
+# Spenso compact contractions and explicit Einstein products are equivalent.
+# The external basis p remains fixed; the spectator r is projected.
+for rank, result in enumerate(expected, 1):
+    compact_result = reducer.reduce(dot(kc, rc) ** rank)
+    assert (compact_result - result).together() == E("0")
+    assert (reducer.reduce(compact_result) - compact_result).together() == E("0")
+
+vacuum = fk.TensorReducer(D).with_integrated_vector(kc)
+assert vacuum.reduce(dot(kc, rc)) == E("0")
+assert (
+    vacuum.reduce(dot(kc, rc) ** 2) - dot(kc, kc) * dot(rc, rc) / D
+).together() == E("0")
+assert (
+    vacuum.reduce(dot(kc, rc) * k(mink(D, mu))) - dot(kc, kc) * r(mink(D, mu)) / D
+).together() == E("0")
+
 # Scalar loop invariants multiply the projector; they must not themselves be
 # replaced by transverse norms during projection.
 weighted = dot(kc, kc) * k(mink(D, mu))
