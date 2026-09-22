@@ -1,0 +1,1924 @@
+use std::{
+    collections::{BTreeMap, HashMap},
+    fmt,
+    fs::{self, File},
+    io::Write,
+    iter,
+    path::Path,
+};
+
+use ahash::AHashSet;
+// use bincode::{Decode, Encode};
+use bincode_trait_derive::{Decode, Encode};
+use color_eyre::Result;
+use momtrop::SampleGenerator;
+
+use feynkit_cff::{CffResult, EnergySurfaceId, RaisedEnergySurfaceData, RaisedEnergySurfaceId};
+use idenso::dirac::GammaSimplifier;
+use rayon::{
+    ThreadPool,
+    iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator},
+};
+use spenso::algebra::complex::Complex;
+use tracing::{info_span, instrument};
+use tracing_indicatif::{span_ext::IndicatifSpanExt, style::ProgressStyle};
+use vakint::{EvaluationMethod, NumericalEvaluationResult, Vakint, vakint_symbol};
+
+use crate::{
+    GammaLoopContext, GammaLoopContextContainer,
+    cff::{
+        esurface::{EnergySurfaceExt, GroupEsurfaceId},
+        generation::GammaLoopGraphCffExt,
+    },
+    graph::{
+        GraphGroup, GraphGroupPosition, GroupId, LMBext, LmbIndex, LoopMomentumBasis,
+        cuts::{CutSet, ResidueSelector},
+    },
+    integrands::process::{
+        GenericEvaluator, LmbMultiChannelingSetup,
+        amplitude::{AmplitudeGraphTerm, AmplitudeIntegrand, AmplitudeIntegrandData},
+        graph_to_group_id_for_group_structure,
+    },
+    model::ParticleId,
+    momentum::{sample::ExternalIndex, signature::SignatureLike},
+    processes::{
+        DotExportSettings, EvaluatorSettings, GraphGenerationStats, GraphGroupSelectionPlan,
+        GraphGroupSelectionSpec, NamedGraphGenerationReport, StandaloneExportSettings,
+        build_derivative_structure_atom, params_for_derivative_order,
+    },
+    settings::{
+        GlobalSettings, RuntimeSettings, global::OrientationPattern, runtime::LockedRuntimeSettings,
+    },
+    subtraction::amplitude_counterterm::AmplitudeCountertermAtom,
+    utils::{F, GS, Length, W_},
+    uv::{
+        RenormalizationPart, UVgenerationSettings, UltravioletGraph,
+        approx::{CutStructure, OrientationProjection, integrated::to_vakint_integrand},
+        settings::VakintSettings,
+    },
+};
+use eyre::{Context, eyre};
+use itertools::Itertools;
+use linnet::{
+    half_edge::{
+        involution::{EdgeVec, Flow, HedgePair},
+        subgraph::{ModifySubSet, SuBitGraph, SubGraphLike, SubSetOps},
+    },
+    parser::DotGraph,
+};
+use spenso::shadowing::symbolica_utils::LogPrint;
+use symbolica::{atom::Var, prelude::*};
+use tracing::{debug, info};
+use typed_index_collections::{TiVec, ti_vec};
+
+use super::generation_progress::{self, GenerationProcessKind, GenerationProgressPhase};
+
+use crate::{
+    graph::{FeynmanGraph, Graph},
+    integrands::process::ProcessIntegrand,
+    model::{Model, ParticleIdGammaLoopExt},
+    settings::global::GenerationSettings,
+};
+
+use crate::graph::parse::complete_group_parsing;
+
+#[derive(Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
+pub struct Amplitude {
+    pub name: String,
+    pub integrand: Option<ProcessIntegrand>,
+    pub graphs: Vec<AmplitudeGraph>,
+    pub graph_group_structure: TiVec<GroupId, GraphGroup>,
+    pub external_particles: Vec<ParticleId>,
+    pub external_signature: SignatureLike<ExternalIndex>,
+    pub group_derived_data: TiVec<GroupId, GroupDerivedData>,
+}
+
+#[derive(Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
+pub struct GroupDerivedData {
+    pub esurface_map:
+        TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<RaisedEnergySurfaceId>>>,
+    pub esurface_atoms: TiVec<GroupEsurfaceId, Atom>,
+}
+
+impl Amplitude {
+    pub fn plan_graph_group_selection(
+        &self,
+        spec: &GraphGroupSelectionSpec,
+        model: &Model,
+    ) -> Result<GraphGroupSelectionPlan> {
+        spec.plan(model, &self.graph_group_structure, |graph_id| {
+            self.graphs.get(graph_id).map(|graph| &graph.graph)
+        })
+    }
+
+    pub fn validate_graph_group_selection_plan(
+        &self,
+        plan: &GraphGroupSelectionPlan,
+    ) -> Result<()> {
+        if !self.group_derived_data.is_empty()
+            && self.group_derived_data.len() != self.graph_group_structure.len()
+        {
+            return Err(eyre!(
+                "Amplitude '{}' has {} group-derived-data entries for {} graph groups.",
+                self.name,
+                self.group_derived_data.len(),
+                self.graph_group_structure.len()
+            ));
+        }
+
+        for &old_group_id in plan.retained_group_ids() {
+            plan.new_group_id_for_old(old_group_id).ok_or_else(|| {
+                eyre!(
+                    "Selection plan is missing compact group id for old group {}.",
+                    old_group_id.0
+                )
+            })?;
+            if old_group_id.0 >= self.graph_group_structure.len() {
+                return Err(eyre!(
+                    "Selection plan refers to missing graph group {}.",
+                    old_group_id.0
+                ));
+            }
+            let group = &self.graph_group_structure[old_group_id];
+            for old_graph_id in group {
+                if old_graph_id >= self.graphs.len() {
+                    return Err(eyre!(
+                        "Graph group {} refers to missing graph id {}.",
+                        old_group_id.0,
+                        old_graph_id
+                    ));
+                }
+            }
+            let master = group.master();
+            if master >= self.graphs.len() {
+                return Err(eyre!(
+                    "Graph group {} refers to missing master graph id {}.",
+                    old_group_id.0,
+                    master
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn apply_graph_group_selection(&mut self, plan: &GraphGroupSelectionPlan) -> Result<()> {
+        self.validate_graph_group_selection_plan(plan)?;
+
+        let mut old_graph_to_new_group = vec![None; self.graphs.len()];
+        let mut old_graph_is_master = vec![false; self.graphs.len()];
+        for &old_group_id in plan.retained_group_ids() {
+            let new_group_id = plan.new_group_id_for_old(old_group_id).ok_or_else(|| {
+                eyre!(
+                    "Selection plan is missing compact group id for old group {}.",
+                    old_group_id.0
+                )
+            })?;
+            let group = &self.graph_group_structure[old_group_id];
+            for old_graph_id in group {
+                old_graph_to_new_group[old_graph_id] = Some(new_group_id);
+            }
+            old_graph_is_master[group.master()] = true;
+        }
+
+        let mut new_graphs = self
+            .graphs
+            .iter()
+            .cloned()
+            .enumerate()
+            .filter_map(|(old_graph_id, mut graph)| {
+                let new_group_id = old_graph_to_new_group[old_graph_id]?;
+                graph.graph.group_id = Some(new_group_id);
+                graph.graph.is_group_master = old_graph_is_master[old_graph_id];
+                if let Some(multi_channeling_setup) = &mut graph.derived_data.multi_channeling_setup
+                {
+                    multi_channeling_setup.graph.group_id = Some(new_group_id);
+                    multi_channeling_setup.graph.is_group_master =
+                        old_graph_is_master[old_graph_id];
+                }
+                Some(graph)
+            })
+            .collect::<Vec<_>>();
+
+        let mut parsed_graphs = new_graphs
+            .iter()
+            .map(|graph| graph.graph.clone())
+            .collect::<Vec<_>>();
+        let new_graph_group_structure = complete_group_parsing(&mut parsed_graphs)?;
+        for (graph, parsed_graph) in new_graphs.iter_mut().zip(parsed_graphs) {
+            graph.graph.group_id = parsed_graph.group_id;
+            graph.graph.is_group_master = parsed_graph.is_group_master;
+            if let Some(multi_channeling_setup) = &mut graph.derived_data.multi_channeling_setup {
+                multi_channeling_setup.graph.group_id = graph.graph.group_id;
+                multi_channeling_setup.graph.is_group_master = graph.graph.is_group_master;
+            }
+        }
+
+        let new_group_derived_data = if self.group_derived_data.is_empty() {
+            TiVec::new()
+        } else {
+            plan.retained_group_ids()
+                .iter()
+                .map(|&old_group_id| self.group_derived_data[old_group_id].clone())
+                .collect::<TiVec<GroupId, _>>()
+        };
+
+        self.graphs = new_graphs;
+        self.graph_group_structure = new_graph_group_structure;
+        self.group_derived_data = new_group_derived_data;
+        self.integrand = None;
+        Ok(())
+    }
+
+    pub fn export_standalone(
+        &self,
+        path: impl AsRef<Path>,
+        settings: &StandaloneExportSettings,
+    ) -> Result<()> {
+        if let Some(integrand) = &self.integrand {
+            integrand.export_standalone(path, settings)?
+        } else {
+            return Err(eyre!(
+                "Cannot warm up amplitude {} without integrand",
+                self.name
+            ));
+        }
+
+        Ok(())
+    }
+
+    #[instrument(
+          skip_all,
+          fields(
+              amplitude.name = %self.name,
+          )
+    )]
+    pub(crate) fn warm_up(&mut self, model: &Model) -> Result<()> {
+        if let Some(integrand) = &mut self.integrand {
+            integrand.warm_up(model)
+        } else {
+            Err(eyre!(
+                "Cannot warm up amplitude {} without integrand",
+                self.name
+            ))
+        }
+    }
+
+    #[instrument(
+          skip_all,
+          fields(
+              path = %path.as_ref().display(),
+          )
+    )]
+    pub(crate) fn load(path: impl AsRef<Path>, context: GammaLoopContextContainer) -> Result<Self> {
+        let binary = fs::read(path.as_ref().join("amp.bin"))?;
+        let (mut amp, _): (Self, _) =
+            bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)?;
+
+        if path.as_ref().join("integrand").exists() {
+            let integrand = AmplitudeIntegrand::load(path.as_ref().join("integrand"), context)?;
+            amp.integrand = Some(ProcessIntegrand::Amplitude(integrand));
+        }
+
+        Ok(amp)
+    }
+
+    #[instrument(
+          skip_all,
+          fields(
+              amplitude.name = %self.name,
+          )
+    )]
+    pub fn compile(
+        &mut self,
+        path: impl AsRef<Path>,
+        override_existing: bool,
+        thread_pool: &ThreadPool,
+    ) -> Result<Vec<NamedGraphGenerationReport>> {
+        info!("Compiling amplitude {}", self.name);
+        let p = path.as_ref().join(&self.name);
+
+        let r = fs::create_dir_all(&p).with_context(|| {
+            format!(
+                "Trying to create directory to save amplitude {}",
+                p.display()
+            )
+        });
+        if override_existing {
+            r?;
+        }
+        if let Some(integrand) = &mut self.integrand {
+            let compile_times = integrand.compile(&p, override_existing, thread_pool)?;
+            return Ok(compile_times
+                .into_iter()
+                .map(|(graph_name, duration)| NamedGraphGenerationReport {
+                    integrand_name: self.name.clone(),
+                    graph_name,
+                    stats: GraphGenerationStats {
+                        total_time: duration,
+                        evaluator_compile_time: duration,
+                        ..GraphGenerationStats::default()
+                    },
+                })
+                .collect());
+        };
+        Ok(Vec::new())
+    }
+
+    #[instrument(
+          skip_all,
+          fields(
+              amplitude.name = %self.name,
+              path = %path.as_ref().display(),
+          )
+    )]
+    pub fn save(&mut self, path: impl AsRef<Path>, override_existing: bool) -> Result<()> {
+        let p = path.as_ref().join(&self.name);
+
+        let r = fs::create_dir_all(&p).with_context(|| {
+            format!(
+                "Trying to create directory to save amplitude {}",
+                p.display()
+            )
+        });
+        if override_existing {
+            r?;
+        }
+
+        let integrand = self.integrand.take();
+        if let Some(integrand) = &integrand {
+            integrand.save(&p, override_existing)?;
+        };
+
+        let binary = bincode::encode_to_vec(&(*self), bincode::config::standard())?;
+        if override_existing {
+            fs::write(p.join("amp.bin"), binary)?;
+        } else {
+            let mut file = File::create_new(p.join("amp.bin"))?;
+            file.write_all(&binary)?;
+        }
+
+        self.integrand = integrand;
+        Ok(())
+    }
+
+    #[instrument(
+        skip_all,
+        fields(
+             amplitude.name = %self.name,
+        )
+    )]
+    pub fn preprocess(
+        &mut self,
+        model: &Model,
+        settings: &GenerationSettings,
+        locked_runtime_settings: &LockedRuntimeSettings,
+        thread_pool: &ThreadPool,
+    ) -> Result<Vec<NamedGraphGenerationReport>> {
+        // preprocess each graph individually
+        let integrand_name = self.name.clone();
+
+        let preprocess_span = if generation_progress::detailed_progress_enabled() {
+            let span = info_span!("Preprocessing graphs", indicatif.pb_show = true);
+            span.pb_set_style(&ProgressStyle::with_template(
+                "{wide_bar} {pos}/{len} {msg}",
+            )?);
+            span.pb_set_length(self.graphs.len() as u64);
+            span.pb_set_message("Preprocessing graphs");
+            Some(span)
+        } else {
+            None
+        };
+        let preprocess_span_enter = preprocess_span.as_ref().map(|span| span.enter());
+
+        let preprocess_reports = thread_pool.install(|| {
+            let parent = preprocess_span.clone();
+            self.graphs
+                .par_iter_mut()
+                .map(|amplitude_graph| {
+                    if crate::is_interrupted() {
+                        return Err(eyre!("Generation interrupted by user"));
+                    }
+                    let graph_name = amplitude_graph.graph.name.clone();
+                    generation_progress::graph_started(
+                        GenerationProcessKind::Amplitude,
+                        &integrand_name,
+                        &graph_name,
+                        None,
+                    );
+                    let _guard = parent.as_ref().map(|span| span.enter());
+                    let stats =
+                        amplitude_graph.preprocess(model, settings, locked_runtime_settings);
+                    if let Some(span) = &parent {
+                        span.pb_inc(1);
+                    }
+
+                    let stats = stats?;
+                    if crate::is_interrupted() {
+                        return Err(eyre!("Generation interrupted by user"));
+                    }
+                    generation_progress::graph_finished(
+                        GenerationProcessKind::Amplitude,
+                        &integrand_name,
+                        &graph_name,
+                        &stats,
+                        None,
+                    );
+
+                    Ok(NamedGraphGenerationReport {
+                        integrand_name: integrand_name.clone(),
+                        graph_name,
+                        stats,
+                    })
+                })
+                .collect::<Result<Vec<_>>>()
+        })?;
+
+        drop(preprocess_span_enter);
+        drop(preprocess_span);
+
+        self.generate_grouped_derived_data(model)?;
+
+        Ok(preprocess_reports)
+    }
+
+    #[instrument(
+        skip_all,
+          fields(
+              amplitude.name = %self.name,
+          )
+      )]
+    pub fn build_integrand(
+        &mut self,
+        model: &Model,
+        process_name: &str,
+        global_settings: &GlobalSettings,
+        runtime_default: LockedRuntimeSettings,
+        thread_pool: &ThreadPool,
+    ) -> Result<Vec<NamedGraphGenerationReport>> {
+        let started = std::time::Instant::now();
+        crate::debug_tags!(#generation, #profile, #graph, #summary;
+            stage = "amplitude_build_integrand_start",
+            integrand = %self.name,
+            graph_count = self.graphs.len(),
+            "Generation timing milestone"
+        );
+        if crate::is_interrupted() {
+            return Err(eyre!("Generation interrupted by user"));
+        }
+        let integrand_name = self.name.clone();
+        generation_progress::begin_phase(
+            GenerationProgressPhase::GraphGeneration,
+            GenerationProcessKind::Amplitude,
+            process_name,
+            &integrand_name,
+            self.graphs.len(),
+            None,
+        );
+        let mut graph_reports = Vec::new();
+        let terms: Vec<_> = thread_pool.install(|| {
+            self.graphs
+                .par_iter_mut()
+                .enumerate()
+                .map(|(graph_id, graph)| {
+                    if crate::is_interrupted() {
+                        return Err(eyre!("Generation interrupted by user"));
+                    }
+                    let graph_started = std::time::Instant::now();
+                    let group_id = graph.graph.group_id.unwrap(); // should always be set
+                    let esurface_map = &self.group_derived_data[group_id].esurface_map;
+                    let group_pos = self.graph_group_structure[group_id]
+                        .find_position(graph_id)
+                        .unwrap();
+
+                    crate::debug_tags!(#generation, #profile, #graph, #summary;
+                        stage = "amplitude_generate_term_for_graph_start",
+                        integrand = %integrand_name,
+                        graph = %graph.graph.name,
+                        graph_id,
+                        group_id = %group_id.0,
+                        "Generation timing milestone"
+                    );
+                    generation_progress::graph_started(
+                        GenerationProcessKind::Amplitude,
+                        &integrand_name,
+                        &graph.graph.name,
+                        None,
+                    );
+                    let _progress_context_guard =
+                        generation_progress::enter_progress_context(graph.graph.name.clone());
+                    let (term, mut stats) = graph.generate_term_for_graph(
+                        model,
+                        group_pos,
+                        esurface_map.clone(),
+                        global_settings,
+                    )?;
+                    if crate::is_interrupted() {
+                        return Err(eyre!("Generation interrupted by user"));
+                    }
+                    stats.evaluator_count = term.generic_evaluator_count();
+                    stats.total_time += graph_started.elapsed();
+                    crate::debug_tags!(#generation, #profile, #graph, #summary;
+                        stage = "amplitude_generate_term_for_graph_done",
+                        integrand = %integrand_name,
+                        graph = %graph.graph.name,
+                        graph_id,
+                        group_id = %group_id.0,
+                        elapsed_ms = graph_started.elapsed().as_secs_f64() * 1000.0,
+                        "Generation timing milestone"
+                    );
+                    generation_progress::graph_finished(
+                        GenerationProcessKind::Amplitude,
+                        &integrand_name,
+                        &graph.graph.name,
+                        &stats,
+                        None,
+                    );
+                    Ok((
+                        term,
+                        NamedGraphGenerationReport {
+                            integrand_name: integrand_name.clone(),
+                            graph_name: graph.graph.name.clone(),
+                            stats,
+                        },
+                    ))
+                })
+                .collect::<Result<Vec<_>>>()
+        })?;
+        if crate::is_interrupted() {
+            return Err(eyre!("Generation interrupted by user"));
+        }
+        for (_, report) in &terms {
+            graph_reports.push(report.clone());
+        }
+        let mut terms = terms.into_iter().map(|(term, _)| term).collect::<Vec<_>>();
+
+        for group in self.graph_group_structure.iter() {
+            let master_graph_id = group.master();
+            let mc_of_master = self.graphs[master_graph_id]
+                .derived_data
+                .multi_channeling_setup
+                .as_ref()
+                .unwrap();
+            let master_graph = &self.graphs[master_graph_id].graph;
+            let master_external_signature = master_graph.get_external_signature();
+            let master_external_pdgs = master_graph
+                .get_external_partcles()
+                .into_iter()
+                .map(|particle| {
+                    particle
+                        .resolve(model)
+                        .pdg_code
+                        .try_into()
+                        .expect("PDG code must fit in an isize")
+                })
+                .collect_vec();
+
+            for graph_id in group.into_iter() {
+                terms[graph_id].multi_channeling_setup = mc_of_master.clone();
+                terms[graph_id].master_external_signature = master_external_signature.clone();
+                terms[graph_id].master_external_pdgs = master_external_pdgs.clone();
+            }
+        }
+
+        let backend_started = std::time::Instant::now();
+        let graph_count = terms.len();
+        crate::debug_tags!(#generation, #profile, #compile, #graph, #summary;
+            stage = "amplitude_prepare_runtime_backends_start",
+            integrand = %self.name,
+            graph_count,
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
+        generation_progress::backend_started(
+            GenerationProcessKind::Amplitude,
+            &self.name,
+            graph_count,
+        );
+        let mut amplitude_integrand = AmplitudeIntegrand {
+            settings: runtime_default.into_with_modified_kinematics(
+                &self.external_signature,
+                &self.graphs[0].graph.get_external_masses(model),
+            )?,
+            data: AmplitudeIntegrandData {
+                name: self.name.clone(),
+                compilation: global_settings
+                    .generation
+                    .compile
+                    .frozen_mode(&global_settings.generation.evaluator),
+                rotations: None,
+                loop_cache_id: 0,
+                external_cache_id: 0,
+                base_external_cache_id: 0,
+                graph_terms: terms,
+                external_signature: self.external_signature.clone(),
+                graph_group_structure: self.graph_group_structure.clone(),
+                graph_to_group_id: graph_to_group_id_for_group_structure(
+                    &self.graph_group_structure,
+                ),
+                group_derived_data: self.group_derived_data.clone(),
+            },
+            event_processing_runtime: Default::default(),
+            active_f64_backend: Default::default(),
+        };
+        let compile_times =
+            amplitude_integrand.prepare_runtime_backends_after_generation_with_compile_times()?;
+        crate::debug_tags!(#generation, #profile, #compile, #graph, #summary;
+            stage = "amplitude_prepare_runtime_backends_done",
+            integrand = %self.name,
+            graph_count,
+            elapsed_ms = backend_started.elapsed().as_secs_f64() * 1000.0,
+            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
+        generation_progress::backend_finished(
+            GenerationProcessKind::Amplitude,
+            &self.name,
+            backend_started.elapsed(),
+        );
+        for (report, compile_time) in graph_reports.iter_mut().zip(compile_times) {
+            report.stats.evaluator_compile_time += compile_time;
+            report.stats.total_time += compile_time;
+        }
+        self.integrand = Some(ProcessIntegrand::Amplitude(amplitude_integrand));
+        crate::debug_tags!(#generation, #profile, #graph, #summary;
+            stage = "amplitude_build_integrand_done",
+            integrand = %self.name,
+            graph_count = self.graphs.len(),
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
+        Ok(graph_reports)
+    }
+
+    #[instrument(
+        skip_all,
+          fields(
+              amplitude.name = %self.name,
+          )
+      )]
+    #[allow(dead_code)]
+    pub(crate) fn write_dot<W: std::io::Write>(
+        &self,
+        writer: &mut W,
+        settings: &DotExportSettings,
+    ) -> Result<(), std::io::Error> {
+        for graph in &self.graphs {
+            graph.write_dot(writer, settings)?;
+            writeln!(writer)?;
+        }
+        Ok(())
+    }
+
+    #[instrument(
+        skip_all,
+          fields(
+              amplitude.name = %self.name,
+          )
+      )]
+    pub fn write_dot_fmt<W: fmt::Write>(
+        &self,
+        writer: &mut W,
+        settings: &DotExportSettings,
+    ) -> Result<(), std::fmt::Error> {
+        for graph in &self.graphs {
+            graph.write_dot_fmt(writer, settings)?;
+            writeln!(writer)?;
+        }
+        Ok(())
+    }
+
+    pub fn generate_grouped_derived_data(&mut self, model: &Model) -> Result<()> {
+        // for each group we must collect all inequivalent esurfaces.
+
+        let group_derived_data = self
+            .graph_group_structure
+            .iter()
+            .map(|group| {
+                let mut group_esurface_structure = BTreeMap::<
+                    Atom,
+                    TiVec<GraphGroupPosition, Option<RaisedEnergySurfaceId>>,
+                >::default();
+
+                for (graph_group_position, graph_id) in group.iter_enumerated() {
+                    let amplitude_graph = &self.graphs[graph_id];
+                    let lmb_reps = amplitude_graph.graph.integrand_replacement(
+                        &amplitude_graph.graph.full_filter(),
+                        &amplitude_graph.graph.loop_momentum_basis,
+                        &[W_.x___],
+                    );
+
+                    let esurfaces = &amplitude_graph.graph.surface_cache.energy_surfaces();
+
+                    for (raised_esurface_id, raised_group) in amplitude_graph
+                        .derived_data
+                        .raised_data
+                        .groups
+                        .iter_enumerated()
+                    {
+                        let esurface = &esurfaces[raised_group.surface_ids[0]];
+                        let esurface_atom =
+                            esurface.lmb_atom(&amplitude_graph.graph, model, &lmb_reps);
+
+                        group_esurface_structure
+                            .entry(esurface_atom)
+                            .or_insert(ti_vec![None; group.len()])[graph_group_position] =
+                            Some(raised_esurface_id);
+                    }
+                }
+
+                let (surface_atoms, esurface_map) = group_esurface_structure.into_iter().unzip();
+
+                GroupDerivedData {
+                    esurface_map,
+                    esurface_atoms: surface_atoms,
+                }
+            })
+            .collect::<TiVec<GroupId, _>>();
+
+        let _: () = self.group_derived_data = group_derived_data;
+        Ok(())
+    }
+}
+
+#[derive(Clone, Encode, Decode)]
+#[trait_decode(trait= GammaLoopContext)]
+pub struct AmplitudeGraph {
+    pub graph: Graph,
+    pub derived_data: AmplitudeDerivedData,
+}
+
+pub struct AnalyticalEvaluationConfig<'a> {
+    pub model: &'a Model,
+    pub refresh_model_values: bool,
+    pub evaluate_numerically: bool,
+    pub vakint: &'a Vakint,
+    pub true_settings: &'a vakint::VakintSettings,
+    pub settings: &'a VakintSettings,
+    pub run_time_settings: &'a RuntimeSettings,
+    pub include_global_numerator: bool,
+}
+
+impl AmplitudeGraph {
+    pub(crate) fn new(graph: Graph) -> Self {
+        AmplitudeGraph {
+            graph,
+            derived_data: AmplitudeDerivedData {
+                all_mighty_integrand: Atom::Zero,
+                cff_expression: None,
+
+                lmbs: None,
+                tropical_sampler: None,
+                multi_channeling_setup: None,
+                threshold_counterterms: TiVec::new(),
+                raised_data: RaisedEnergySurfaceData::default(),
+                raised_surface_evaluators: None,
+                raised_esurface_ids: TiVec::new(),
+            },
+        }
+    }
+}
+
+impl AmplitudeGraph {
+    pub fn renormalization_part(
+        &mut self,
+        model: &Model,
+        settings: &UVgenerationSettings,
+    ) -> Result<RenormalizationPart> {
+        if self.derived_data.cff_expression.is_none() {
+            self.generate_cff(&OrientationPattern::default())?;
+        }
+        let valid_orientations: Vec<_> = self
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .expect("cff_expression should have been created")
+            .orientations
+            .iter()
+            .map(|orientation| orientation.data.orientation.clone())
+            .collect();
+
+        settings.orchestrator.renormalization_part(
+            &mut self.graph,
+            model,
+            OrientationProjection::new(&valid_orientations, &OrientationPattern::default()),
+            settings,
+        )
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn write_dot<W: std::io::Write>(
+        &self,
+        writer: &mut W,
+        settings: &DotExportSettings,
+    ) -> Result<(), std::io::Error> {
+        self.graph.dot_serialize_io(writer, settings)
+    }
+
+    pub(crate) fn write_dot_fmt<W: fmt::Write>(
+        &self,
+        writer: &mut W,
+        settings: &DotExportSettings,
+    ) -> Result<(), std::fmt::Error> {
+        self.graph.dot_serialize_fmt(writer, settings)
+    }
+
+    #[instrument(skip_all, err)]
+    pub(crate) fn generate_cff(&mut self, orientation_pattern: &OrientationPattern) -> Result<()> {
+        let _progress_guard = generation_progress::enter_detailed_progress_span("Generating CFF");
+        let shift_rewrite = self
+            .graph
+            .get_esurface_canonization(&self.graph.loop_momentum_basis);
+
+        let contract_edges = self
+            .graph
+            .iter_edges_of(
+                &self
+                    .graph
+                    .tree_edges
+                    .subtract(&self.graph.initial_state_cut)
+                    .subtract(&self.graph.external_filter::<SuBitGraph>()),
+            )
+            .map(|x| x.1)
+            .collect_vec();
+
+        let cff_expression =
+            self.graph
+                .generate_cff(&contract_edges, &shift_rewrite, orientation_pattern)?;
+
+        self.derived_data.cff_expression = Some(cff_expression);
+
+        Ok(())
+    }
+
+    #[instrument(skip_all, err)]
+    pub(crate) fn preprocess(
+        &mut self,
+        model: &Model,
+        settings: &GenerationSettings,
+        locked_runtime_settings: &LockedRuntimeSettings,
+    ) -> Result<GraphGenerationStats> {
+        let _progress_guard = generation_progress::enter_detailed_progress_span("preprocessing");
+        let preprocess_started = std::time::Instant::now();
+        let vk = crate::utils::vakint()?;
+
+        self.generate_cff(&settings.orientation_pattern)?;
+
+        // UV orchestration can extend the graph surface cache, while raised IDs
+        // belong to the CFF expression generated above.
+        let raised_data = settings.threshold_subtraction.enable_thresholds.then(|| {
+            self.graph.determine_raised_esurfaces_from_expression(
+                self.derived_data
+                    .cff_expression
+                    .as_ref()
+                    .expect("cff_expression should have been created"),
+            )
+        });
+
+        self.build_integrands(model, settings, vk)?;
+
+        if self.graph.is_group_master {
+            self.build_tropical_sampler(model, settings)?;
+        }
+
+        self.build_lmbs();
+
+        if self.graph.is_group_master {
+            self.build_multi_channeling_channels(settings.override_lmb_heuristics);
+        }
+
+        if let Some(raised_data) = raised_data {
+            let max_order = raised_data
+                .groups
+                .iter()
+                .map(|raised_group| raised_group.max_occurrence)
+                .max()
+                .unwrap_or(0);
+            if max_order > 1 {
+                self.graph.param_builder.initialize_duals(max_order);
+            }
+            self.derived_data.raised_surface_evaluators = Some(
+                (1..=max_order)
+                    .map(|order| {
+                        threshold_counterterm_helper(
+                            order as u8,
+                            self.graph.get_loop_number(),
+                            &settings.evaluator,
+                        )
+                    })
+                    .collect(),
+            );
+            self.derived_data.raised_data = raised_data;
+
+            let (threshold_counterterms, raised_esurface_ids) = self
+                .build_threshold_counterterm_parametric_integrand(
+                    settings,
+                    vk,
+                    locked_runtime_settings,
+                    model,
+                )?;
+            self.derived_data.threshold_counterterms = threshold_counterterms;
+            self.derived_data.raised_esurface_ids = raised_esurface_ids;
+        }
+
+        Ok(GraphGenerationStats {
+            total_time: preprocess_started.elapsed(),
+            ..GraphGenerationStats::default()
+        })
+    }
+
+    #[instrument(skip_all)]
+    fn build_multi_channeling_channels(&mut self, override_lmb_heuristics: bool) {
+        let _progress_guard =
+            generation_progress::enter_detailed_progress_span("Building Multi-Channeling Channels");
+        let channels = self.graph.build_multi_channeling_channels(
+            self.derived_data.lmbs.as_ref().unwrap(),
+            override_lmb_heuristics,
+        );
+
+        self.derived_data.multi_channeling_setup = Some(channels)
+    }
+
+    //  pub fn ct_params(&self, model: &Model) -> ParamBuilder<f64> {
+    //      let mut param_builder = self.param_builder_core(model);
+    //      param_builder.uv_damp_atom(vec![
+    //          Atom::var(GS.uv_damp_plus),
+    //          Atom::var(GS.uv_damp_minus),
+    //      ]);
+    //      param_builder.derivative_at_tstar_atom(Atom::var(GS.deta));
+    //      param_builder.radius_atom(Atom::var(GS.radius));
+    //      param_builder.radius_star_atom(Atom::var(GS.radius_star));
+    //      param_builder.h_function_atom(Atom::var(GS.hfunction));
+    //      param_builder
+    //  }
+
+    //  pub(crate) fn param_builder_core(&self, model: &Model) -> ParamBuilder<f64> {
+    //      // the float type does not matter here
+    //      let mut param_builder = ParamBuilder::<f64>::new_empty();
+
+    //      // this is wrong if we allow for vacuum graphs
+    //      param_builder.external_energies_atom(&self.graph);
+    //      param_builder.orientation_params(&self.graph);
+
+    //      // param_builder.polarizations(&self.graph);
+    //      // param_builder.polar
+
+    //      // spatial components of external momenta
+    //      param_builder.external_spatial_atom(&self.graph);
+    //      param_builder.polarization_params(&self.graph);
+    //      // spatial EMR
+    //      param_builder.emr_spatial_atom(&self.graph);
+
+    //      param_builder.model_parameters_atom(model);
+
+    //      param_builder.m_uv_atom(Atom::var(GS.m_uv_vacuum));
+
+    //      param_builder.mu_r_sq_atom(Atom::var(GS.mu_r_sq));
+
+    //      self.add_function_map(&mut param_builder);
+
+    //      param_builder
+    //  }
+
+    // pub fn fill_in_params(
+    //     &self,
+    //     param_builder: &mut ParamBuilder,
+    //     model: &Model,
+    //     settings: &Settings,
+    // ) {
+    //     param_builder.external_energies_value(momentum_sample);
+    // }
+
+    // fn get_eager_const_map(&self)->HashM
+
+    pub fn to_numerical(
+        numerical_result: AtomView,
+        true_settings: &vakint::VakintSettings,
+    ) -> Result<NumericalEvaluationResult> {
+        Ok(NumericalEvaluationResult::from_atom(
+            numerical_result,
+            vakint_symbol!(&true_settings.epsilon_symbol),
+            true_settings,
+        )?)
+    }
+
+    pub fn analytical_evaluation<S: SubGraphLike<Base = SuBitGraph> + SubSetOps>(
+        &self,
+        component: &S,
+        config: AnalyticalEvaluationConfig<'_>,
+    ) -> Result<Atom> {
+        let mut true_settings = config.true_settings.clone();
+        true_settings.number_of_terms_in_epsilon_expansion =
+            self.graph.n_loops(&self.graph.no_dummy()) as i64 + 1;
+        let pysec_dec_enabled_in_vakint = true_settings.evaluation_order.0.iter().find_map(|o| {
+            if let EvaluationMethod::PySecDec(opts) = o {
+                Some(opts)
+            } else {
+                None
+            }
+        });
+
+        let complex_params_vakint =
+            if config.evaluate_numerically || pysec_dec_enabled_in_vakint.is_some() {
+                let mut param_builder = self.graph.param_builder.clone(); //ParamBuilder::<f64>::new(&self.graph, model);
+                if config.refresh_model_values {
+                    param_builder.update_model_values(config.model);
+                }
+                param_builder.m_uv_value(Complex::new_re(F(config.run_time_settings.general.m_uv)));
+                param_builder.renormalization_localization_scale_value(Complex::new_re(F(config
+                    .run_time_settings
+                    .general
+                    .renormalization_localization_scale)));
+                param_builder.mu_r_sq_value(Complex::new_re(F(config
+                    .run_time_settings
+                    .general
+                    .mu_r_sq())));
+
+                // println!("\nParamBuilder parameters:\n{}", param_builder);
+
+                let mut complex_params: HashMap<String, symbolica::domains::float::Complex<f64>> =
+                    HashMap::default();
+                for params in param_builder.pairs.into_iter() {
+                    let ps: crate::integrands::process::ParamValuePairs = params;
+                    for (p_name, p_value) in
+                        ps.params
+                            .iter()
+                            .zip(ps.value_range)
+                            .map(|(a, value_index)| {
+                                (
+                                    a.to_canonical_string(),
+                                    param_builder.values[0][value_index],
+                                )
+                            })
+                    {
+                        complex_params.insert(
+                            p_name,
+                            symbolica::domains::float::Complex::new(
+                                p_value.re.into(),
+                                p_value.im.into(),
+                            ),
+                        );
+                    }
+                }
+                // Make sure to remove entries already supported by vakint, as they may not match required precision
+                for atom in &[
+                    Atom::Var(Var::new(Symbol::PI)),
+                    Atom::Var(Var::new(vakint_symbol!("EulerGamma"))),
+                    function!(Symbol::LOG, Atom::num(2)),
+                ] {
+                    _ = complex_params.remove(&atom.to_string());
+                }
+
+                // Make sure to properly do the upcasting to required precision in vakint settings
+                config
+                    .vakint
+                    .params_from_complex_f64(&true_settings, &complex_params)
+            } else {
+                HashMap::default()
+            };
+
+        if let Some(pysec_dec_opts) = pysec_dec_enabled_in_vakint {
+            true_settings.evaluation_order.adjust(
+                None,
+                pysec_dec_opts.relative_precision,
+                &HashMap::default(),
+                &complex_params_vakint,
+                &HashMap::default(),
+            );
+        }
+
+        let mut num = self
+            .graph
+            .numerator(component, &self.graph.empty_subgraph());
+        if config.include_global_numerator {
+            num.state.expr *= &self.graph.global_prefactor.num;
+        }
+
+        let before_gamma = num.to_d_dim(GS.dim).get_single_atom().unwrap();
+        let before_gamma_plain = before_gamma.to_plain_string();
+        let four_dimensional_numerator = before_gamma.simplify_gamma();
+        let after_gamma_plain = four_dimensional_numerator.to_plain_string();
+        crate::debug_tags!(#uv, #integrated, #vakint, #profile, #trace;
+            stage = "amplitude_to_vakint_after_simplify_gamma",
+            changed = before_gamma_plain != after_gamma_plain,
+            before_gamma_count = %before_gamma_plain.matches("spenso::gamma").count(),
+            after_gamma_count = %after_gamma_plain.matches("spenso::gamma").count(),
+            before_chain_count = %before_gamma_plain.matches("spenso::chain").count(),
+            after_chain_count = %after_gamma_plain.matches("spenso::chain").count(),
+            log.before_gamma = before_gamma,
+            log.after_gamma = four_dimensional_numerator,
+            "Gamma simplification before Vakint"
+        );
+
+        let mut four_dimensional_integrand = four_dimensional_numerator
+            / self
+                .graph
+                .denominator(component, config.model, |e: &crate::graph::Edge| {
+                    e.extra_data.vakint_edge_power.unwrap_or(1)
+                });
+
+        // println!("Four-dimensional integrand: {}", four_dimensional_integrand);
+
+        let component_lmb = self.graph.lmb_of(component);
+        let mom_reps = self.graph.uv_wrapped_replacement(
+            &self.graph.full_filter(),
+            &component_lmb,
+            &[W_.x___],
+        );
+
+        // println!("Reps:");
+        // for r in &mom_reps {
+        //     println!("{r}");
+        // }
+
+        // rewrite the inner_t as well
+        four_dimensional_integrand = four_dimensional_integrand.replace_multiple(&mom_reps);
+
+        // println!("LMB: {}", lmb);
+        // let vk_mom = vakint_symbol!("k");
+        // for (i, l) in lmb.loop_edges.iter().enumerate() {
+        //     four_dimensional_integrand = four_dimensional_integrand
+        //         .replace(function!(GS.emr_mom, usize::from(*l) as i64))
+        //         .with(function!(vk_mom, i as i64 + 1))
+        //         .replace(function!(
+        //             GS.emr_mom,
+        //             function!(vk_mom, i as i64 + 1),
+        //             W_.x___
+        //         ))
+        //         .with(function!(vk_mom, i as i64 + 1, W_.x___));
+        // }
+
+        let mut vakint_integrand = to_vakint_integrand(
+            &four_dimensional_integrand,
+            &self.graph,
+            &self.graph.full_filter(),
+            &self.graph.empty_subgraph::<SuBitGraph>(),
+            config.settings,
+            false,
+        )?;
+
+        vakint_integrand.canonicalize(&true_settings, &config.vakint.topologies, false)?;
+        // println!("Canonized: {}", vakint_integrand);
+        vakint_integrand.tensor_reduce(config.vakint, &true_settings)?;
+        // println!("Tensor Reduced {}", vakint_integrand);
+        vakint_integrand.evaluate_integral(config.vakint, &true_settings)?;
+        // println!("Evaluated {}", vakint_integrand);
+        let analytical_evaluation: Atom = vakint_integrand.into();
+        // println!(
+        //     "\nVakint analytical evaluation:\n{:#}",
+        //     analytical_evaluation
+        // );
+        if !config.evaluate_numerically {
+            Ok(analytical_evaluation)
+        } else {
+            let (numerical_evaluation, _error) = config
+                .vakint
+                .numerical_evaluation(
+                    &true_settings,
+                    analytical_evaluation.as_view(),
+                    &HashMap::default(),
+                    &complex_params_vakint,
+                    None,
+                )
+                .unwrap();
+
+            // println!("\nVakint numerical evaluation:\n{:#}", numerical_evaluation);
+
+            let numerical_evaluation_atom =
+                numerical_evaluation.to_atom(vakint_symbol!(true_settings.epsilon_symbol.clone()));
+
+            Ok(numerical_evaluation_atom)
+        }
+    }
+
+    #[instrument(skip_all, err)]
+    pub(crate) fn build_integrands(
+        &mut self,
+        model: &Model,
+        settings: &GenerationSettings,
+        vakint: &Vakint,
+    ) -> Result<()> {
+        let _progress_guard =
+            generation_progress::enter_detailed_progress_span("Building Parametric Integrand");
+        let started = std::time::Instant::now();
+        crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
+            stage = "amplitude_graph_build_integrands_start",
+            graph = %self.graph.name,
+            subtract_uv = settings.uv.subtract_uv,
+            generate_integrated = settings.uv.generate_integrated,
+            only = %settings.uv.final_integrand,
+            "Generation timing milestone"
+        );
+        let valid_orientations: Vec<_> = self
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .expect("cff_expression should have been created")
+            .orientations
+            .iter()
+            .map(|orientation| orientation.data.orientation.clone())
+            .collect();
+        crate::debug_tags!(#generation, #profile, #graph, #orientation, #summary;
+            stage = "amplitude_graph_valid_orientations_done",
+            graph = %self.graph.name,
+            orientation_count = valid_orientations.len(),
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
+        let cutstructure = CutStructure::empty(&self.graph);
+        let orchestration_started = std::time::Instant::now();
+        let parametric_exprs = settings.uv.orchestrator.parametric_integrands(
+            &mut self.graph,
+            model,
+            cutstructure,
+            vakint,
+            OrientationProjection::new(&valid_orientations, &settings.orientation_pattern),
+            &settings.uv,
+        )?;
+        crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
+            stage = "amplitude_graph_parametric_orchestration_done",
+            graph = %self.graph.name,
+            parametric_integrand_count = parametric_exprs.len(),
+            elapsed_ms = orchestration_started.elapsed().as_secs_f64() * 1000.0,
+            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
+
+        let normalization_started = std::time::Instant::now();
+        let exprs: Vec<_> = parametric_exprs.into_iter().collect();
+        crate::debug_tags!(#generation, #profile, #graph, #summary;
+            stage = "amplitude_graph_cff_normalization_done",
+            graph = %self.graph.name,
+            expr_count = exprs.len(),
+            elapsed_ms = normalization_started.elapsed().as_secs_f64() * 1000.0,
+            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
+
+        let assign_started = std::time::Instant::now();
+        let integrands = exprs.into_iter().next().unwrap().integrands;
+        self.derived_data.all_mighty_integrand = integrands.iter().next().unwrap().1.clone(); // should be exactly one expression
+        crate::debug_tags!(#generation, #profile, #graph, #summary;
+            stage = "amplitude_graph_build_integrands_done",
+            graph = %self.graph.name,
+            assign_elapsed_ms = assign_started.elapsed().as_secs_f64() * 1000.0,
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
+
+        Ok(())
+    }
+
+    #[instrument(skip_all, err)]
+    fn build_threshold_counterterm_parametric_integrand(
+        &mut self,
+        settings: &GenerationSettings,
+        vakint: &Vakint,
+        locked_runtime_settings: &LockedRuntimeSettings,
+        model: &Model,
+    ) -> Result<(
+        TiVec<RaisedEnergySurfaceId, AmplitudeCountertermAtom>,
+        TiVec<EnergySurfaceId, RaisedEnergySurfaceId>,
+    )> {
+        let _progress_guard =
+            generation_progress::enter_detailed_progress_span("Building Threshold Counterterms");
+        let valid_orientations: Vec<_> = self
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .expect("cff_expression should have been created")
+            .orientations
+            .iter()
+            .map(|orientation| orientation.data.orientation.clone())
+            .collect();
+
+        let global_cff = self
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .expect("cff_expression should have been created");
+        let esurface_raising = &self.derived_data.raised_data;
+        let mut counterterms: TiVec<RaisedEnergySurfaceId, AmplitudeCountertermAtom> = ti_vec![
+            AmplitudeCountertermAtom::new();
+            esurface_raising.groups.len()
+        ];
+        let mut raised_esurface_ids: TiVec<EnergySurfaceId, Option<RaisedEnergySurfaceId>> =
+            ti_vec![None; global_cff.surfaces.energy_surfaces().len()];
+
+        for (raised_esurface_id, raised_group) in esurface_raising.groups.iter_enumerated() {
+            for &esurface_id in &raised_group.surface_ids {
+                raised_esurface_ids[esurface_id] = Some(raised_esurface_id);
+            }
+        }
+        let raised_esurface_ids: TiVec<EnergySurfaceId, RaisedEnergySurfaceId> =
+            raised_esurface_ids
+                .into_iter()
+                .map(|raised_esurface_id| {
+                    raised_esurface_id
+                        .expect("every esurface should belong to exactly one raised-esurface group")
+                })
+                .collect();
+
+        let mut cuts = vec![];
+
+        let external_filter: SuBitGraph = self.graph.external_filter();
+        let mut incoming_externals = vec![];
+        let mut outgoing_externals = vec![];
+
+        for (edge, edge_id, _) in self.graph.iter_edges_of(&external_filter) {
+            match edge {
+                HedgePair::Unpaired {
+                    flow: Flow::Sink, ..
+                } => incoming_externals.push(edge_id),
+                HedgePair::Unpaired {
+                    flow: Flow::Source, ..
+                } => outgoing_externals.push(edge_id),
+                _ => unreachable!("the external filter must contain only unpaired edges"),
+            }
+        }
+
+        for raised_data in esurface_raising.groups.iter().cloned() {
+            let esurface_id = raised_data.surface_ids[0];
+            let esurface = &global_cff.surfaces.energy_surfaces()[esurface_id];
+
+            if esurface.external_shift.is_empty() {
+                continue;
+            }
+
+            let is_known_existing_at_generation =
+                settings.threshold_subtraction.check_esurface_at_generation;
+            if is_known_existing_at_generation {
+                let masses: EdgeVec<F<f64>> = self.graph.get_real_mass_vector(model);
+                let lmb = &self.graph.loop_momentum_basis;
+                if !locked_runtime_settings.existence_check(
+                    esurface,
+                    &masses,
+                    &self.graph.get_external_signature(),
+                    lmb,
+                    settings.threshold_subtraction.esurface_existence_threshold,
+                ) {
+                    continue;
+                }
+            }
+
+            if settings
+                .threshold_subtraction
+                .assume_positive_external_energies
+                && !is_known_existing_at_generation
+                && !esurface.external_shift_is_strictly_negative_for_positive_energies(
+                    &self.graph.loop_momentum_basis,
+                    &incoming_externals,
+                    &outgoing_externals,
+                )
+            {
+                continue;
+            }
+
+            let mut cut_union: SuBitGraph = self.graph.empty_subgraph();
+
+            for energy in esurface.energies.iter() {
+                let (_, hedge_pair) = self.graph[energy];
+                match hedge_pair {
+                    HedgePair::Paired { source, sink } => {
+                        cut_union.add(source);
+                        cut_union.add(sink);
+                    }
+                    _ => unreachable!(),
+                }
+            }
+
+            let cutset = CutSet {
+                residue_selector: ResidueSelector {
+                    lu_cut: None,
+                    left_th_cut: Some(raised_data.clone()),
+                    right_th_cut: None,
+                },
+                union: cut_union,
+                canonicalize_external_shifts: false,
+            };
+
+            cuts.push(cutset);
+        }
+
+        let cut_structure = CutStructure { cuts };
+
+        let exprs: Vec<_> = settings.uv.orchestrator.parametric_integrands(
+            &mut self.graph,
+            model,
+            cut_structure,
+            vakint,
+            OrientationProjection::new(&valid_orientations, &settings.orientation_pattern),
+            &settings.uv,
+        )?;
+
+        for expr in exprs.into_iter() {
+            let loop_number = self.graph.n_loops(&self.graph.underlying.full_filter());
+            let jacobian_factor = Atom::var(GS.radius_star_left).pow(loop_number as i32 * 3 - 1);
+
+            let expr = expr.map(|integrand| integrand * &jacobian_factor);
+            let counterterm_atom = AmplitudeCountertermAtom {
+                parametric: expr.integrands,
+            };
+            let raised_group = expr.cuts.residue_selector.left_th_cut.unwrap();
+            let raised_esurface_id = raised_esurface_ids[raised_group.surface_ids[0]];
+            debug!("raised_esurface_id: {}", raised_esurface_id.0);
+
+            for (_, integrand) in counterterm_atom.parametric.iter() {
+                debug!("counterterm integrand: {}", integrand.log_print(Some(100)));
+            }
+
+            counterterms[raised_esurface_id] = counterterm_atom;
+        }
+
+        Ok((counterterms, raised_esurface_ids))
+    }
+
+    #[instrument(skip_all)]
+    fn build_lmbs(&mut self) {
+        let _progress_guard =
+            generation_progress::enter_detailed_progress_span("Building Loop Momentum Bases");
+        let lmbs = self
+            .graph
+            .generate_loop_momentum_bases_of(&self.graph.no_dummy());
+
+        self.derived_data.lmbs = Some(lmbs)
+    }
+
+    #[instrument(skip_all, err)]
+    fn build_tropical_sampler(
+        &mut self,
+        model: &Model,
+        process_settings: &GenerationSettings,
+    ) -> Result<()> {
+        let _progress_guard =
+            generation_progress::enter_detailed_progress_span("Building Tropical Sampler");
+        if process_settings
+            .tropical_subgraph_table
+            .disable_tropical_generation
+        {
+            debug!("Tropical subgraph table generation is disabled.");
+            return Ok(());
+        }
+        let num_virtual_loop_edges = self.graph.iter_loop_edges().count();
+
+        if num_virtual_loop_edges == 0 {
+            debug!("Graph has no loop edges, skipping tropical sampler generation.");
+            return Ok(());
+        }
+
+        let num_loops = self.graph.loop_momentum_basis.loop_edges.len();
+        let target_omega = process_settings.tropical_subgraph_table.target_omega;
+
+        let weight = (target_omega + (3 * num_loops) as f64 / 2.) / num_virtual_loop_edges as f64;
+
+        debug!(
+            "Building tropical subgraph table with all edge weights set to: {}",
+            weight
+        );
+
+        let tropical_edges = self
+            .graph
+            .iter_loop_edges()
+            .map(|(pair, _edge_id, edge)| {
+                let is_massive = edge.data.particle.is_massive(model);
+
+                let vertices = match pair {
+                    HedgePair::Paired { source, sink } => (
+                        self.graph.underlying.node_id(source).0 as u8,
+                        self.graph.underlying.node_id(sink).0 as u8,
+                    ),
+                    _ => unreachable!(),
+                };
+
+                momtrop::Edge {
+                    is_massive,
+                    weight,
+                    vertices,
+                }
+            })
+            .collect_vec();
+
+        let mut external_vertices_pool = AHashSet::new();
+
+        for (pair, _, _) in self.graph.iter_non_loop_edges() {
+            match pair {
+                HedgePair::Paired { source, sink } => {
+                    let source_id = self.graph.underlying.node_id(source).0 as u8;
+                    let sink_id = self.graph.underlying.node_id(sink).0 as u8;
+
+                    external_vertices_pool.insert(source_id);
+                    external_vertices_pool.insert(sink_id);
+                }
+                HedgePair::Unpaired { hedge, .. } => {
+                    let id = self.graph.underlying.node_id(hedge).0 as u8;
+                    external_vertices_pool.insert(id);
+                }
+                _ => unreachable!(),
+            }
+        }
+
+        let mut external_vertices = vec![];
+
+        for tropical_edge in &tropical_edges {
+            if external_vertices_pool.contains(&tropical_edge.vertices.0) {
+                external_vertices.push(tropical_edge.vertices.0);
+            }
+
+            if external_vertices_pool.contains(&tropical_edge.vertices.1) {
+                external_vertices.push(tropical_edge.vertices.1);
+            }
+        }
+
+        let tropical_graph = momtrop::Graph {
+            edges: tropical_edges,
+            externals: external_vertices,
+        };
+
+        let loop_part = self
+            .graph
+            .iter_loop_edges()
+            .map(|(_, edge_id, _edge)| {
+                self.graph.loop_momentum_basis.edge_signatures[edge_id]
+                    .internal
+                    .clone()
+                    .to_momtrop_format()
+            })
+            .collect_vec();
+
+        let sampler = tropical_graph
+            .build_sampler(loop_part)
+            .map_err(|e| eyre!(e))?;
+
+        let _: () = self.derived_data.tropical_sampler = Some(sampler);
+        Ok(())
+    }
+
+    // Expects cff_expression, esurface_data,
+    #[instrument(
+          name = "generate_term_for_graph",
+          level = "info",
+          skip(self, model, global_settings),
+          fields(
+              graph.name = %self.graph.name
+
+          ),
+          err
+      )]
+    fn generate_term_for_graph(
+        &self,
+        model: &Model,
+        own_group_position: GraphGroupPosition,
+        esurface_map: TiVec<
+            GroupEsurfaceId,
+            TiVec<GraphGroupPosition, Option<RaisedEnergySurfaceId>>,
+        >,
+        global_settings: &GlobalSettings,
+    ) -> Result<(AmplitudeGraphTerm, GraphGenerationStats)> {
+        let _progress_guard = generation_progress::enter_detailed_progress_span(&format!(
+            "Generating Evaluators for {}",
+            self.graph.name
+        ));
+        AmplitudeGraphTerm::from_amplitude_graph(
+            self,
+            own_group_position,
+            esurface_map,
+            model,
+            global_settings,
+        )
+    }
+}
+
+#[derive(Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
+pub struct AmplitudeDerivedData {
+    pub all_mighty_integrand: Atom,
+    pub threshold_counterterms: TiVec<RaisedEnergySurfaceId, AmplitudeCountertermAtom>,
+    pub raised_data: RaisedEnergySurfaceData,
+    /// Numerical evaluators derived from `raised_data`, keyed by residue order.
+    pub raised_surface_evaluators: Option<Vec<GenericEvaluator>>,
+    pub raised_esurface_ids: TiVec<EnergySurfaceId, RaisedEnergySurfaceId>,
+    pub multi_channeling_setup: Option<LmbMultiChannelingSetup>,
+    pub lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
+    pub tropical_sampler: Option<SampleGenerator<3>>,
+    pub cff_expression: Option<CffResult>,
+}
+
+pub trait AmplitudeState:
+    Clone + std::fmt::Debug + bincode::Encode + for<'a> bincode::Decode<GammaLoopContextContainer<'a>>
+{
+}
+impl AmplitudeState for () {}
+
+#[derive(Clone, Encode, Decode, Debug)]
+pub struct Processed {}
+impl AmplitudeState for Processed {}
+
+// #[derive(Clone, Encode, Decode, Debug)]
+// pub struct ReadyForTerm {}
+// impl AmplitudeState for ReadyForTerm {}
+
+impl Amplitude {
+    pub fn from_finalized_runtime_dot_string<Str: AsRef<str>>(
+        s: Str,
+        name: String,
+        model: &Model,
+    ) -> Result<Self> {
+        let graphs = Graph::from_finalized_runtime_string(s, model)?;
+
+        let mut amp = Amplitude::new(name);
+        for g in graphs {
+            amp.add_graph(g)?;
+        }
+        Ok(amp)
+    }
+
+    pub fn from_finalized_runtime_dot_file<P>(p: P, name: String, model: &Model) -> Result<Self>
+    where
+        P: AsRef<Path>,
+    {
+        let graphs = Graph::from_finalized_runtime_file(p, model)?;
+
+        let mut amp = Amplitude::new(name);
+        for g in graphs {
+            amp.add_graph(g)?;
+        }
+        Ok(amp)
+    }
+
+    pub fn from_graph_list(name: impl ToString, mut graphs: Vec<Graph>) -> Result<Self> {
+        let mut amplitude: Amplitude = Amplitude::new(name);
+        amplitude.graph_group_structure = complete_group_parsing(&mut graphs)?;
+
+        for amplitude_graph in graphs {
+            amplitude.add_graph(amplitude_graph)?;
+        }
+        Ok(amplitude)
+    }
+
+    pub(crate) fn new(name: impl ToString) -> Self {
+        Self {
+            integrand: None,
+            name: name.to_string(),
+            graphs: vec![],
+            graph_group_structure: TiVec::new(),
+            external_particles: vec![],
+            external_signature: SignatureLike::from_iter(iter::empty::<i8>()),
+            group_derived_data: TiVec::new(),
+        }
+    }
+
+    fn add_graph(&mut self, graph: Graph) -> Result<()> {
+        let new_external_particels = graph.get_external_partcles();
+        let new_external_signature = graph.get_external_signature();
+
+        if !self.graphs.is_empty() {
+            if self.external_particles != new_external_particels {
+                return Err(eyre!("amplitude graph has different externals")).with_context(|| {
+                    format!(
+                        "Found {} externals, expected {} for the graph {}",
+                        new_external_particels.len(),
+                        self.external_particles.len(),
+                        DotGraph::from(&graph).debug_dot()
+                    )
+                });
+            }
+
+            if self.external_signature != new_external_signature {
+                return Err(eyre!("wrong external signature"));
+            }
+        } else {
+            self.external_particles = new_external_particels;
+            self.external_signature = new_external_signature;
+        }
+
+        self.graphs.push(AmplitudeGraph::new(graph));
+
+        //  TODO: validate that the graph is compatible
+        Ok(())
+    }
+}
+
+pub(crate) fn threshold_counterterm_helper_atom(order: u8, loop_number: usize) -> Atom {
+    let loop_3 = loop_number as i64 * 3;
+
+    let laurent_coeff_indices = (1..=order).map(|i| -(i as i8));
+
+    let mut laurent_coeffs = laurent_coeff_indices.map(|laurent_coeff_index| {
+        build_derivative_structure_atom(order, laurent_coeff_index)
+            .replace(GS.rescale_star)
+            .with(GS.radius_star_left)
+    });
+
+    let i = Atom::i();
+
+    let radius = Atom::var(GS.radius_left);
+    let radius_star = Atom::var(GS.radius_star_left);
+    let uv_damp_plus = Atom::var(GS.uv_damp_plus_left);
+    let uv_damp_minus = Atom::var(GS.uv_damp_minus_left);
+    let hfunction = Atom::var(GS.hfunction_left_th);
+
+    let delta_r_plus = &radius - &radius_star;
+    let delta_r_minus = -&radius - &radius_star;
+
+    let jacobian_ratio = (Atom::one() / &radius).pow(loop_3 - 1);
+
+    let local_prefactor =
+        &jacobian_ratio * (uv_damp_plus / &delta_r_plus + uv_damp_minus / &delta_r_minus);
+
+    let integrated_prefactor = -i * Atom::var(GS.pi) * &jacobian_ratio * hfunction;
+
+    let mut result = (local_prefactor + integrated_prefactor) * laurent_coeffs.next().unwrap();
+
+    for pow in 2..=order {
+        result += laurent_coeffs.next().unwrap()
+            * &jacobian_ratio
+            * (Atom::one() / delta_r_plus.pow(pow as i64)
+                + Atom::one() / delta_r_minus.pow(pow as i64));
+    }
+
+    debug!(
+        "Threshold counterterm helper atom for order {} and loop number {}: {}",
+        order, loop_number, result
+    );
+    result
+}
+
+pub(crate) fn threshold_counterterm_helper(
+    order: u8,
+    loop_number: usize,
+    evaluator_settings: &EvaluatorSettings,
+) -> GenericEvaluator {
+    let atom = threshold_counterterm_helper_atom(order, loop_number);
+    let mut fn_map = FunctionMap::default();
+    fn_map
+        .add_aliases([(
+            GS.pi.into(),
+            Atom::num(Rational::try_from(std::f64::consts::PI).unwrap()),
+        )])
+        .unwrap();
+
+    let mut params = params_for_derivative_order(order)
+        .into_iter()
+        .map(|param| param.replace(GS.rescale_star).with(GS.radius_star_left))
+        .collect_vec();
+
+    let radius = Atom::var(GS.radius_left);
+    let radius_star = Atom::var(GS.radius_star_left);
+    let uv_damp_plus = Atom::var(GS.uv_damp_plus_left);
+    let uv_damp_minus = Atom::var(GS.uv_damp_minus_left);
+    let hfunction = Atom::var(GS.hfunction_left_th);
+
+    params.push(radius);
+    params.push(radius_star);
+    params.push(uv_damp_plus);
+    params.push(uv_damp_minus);
+    params.push(hfunction);
+
+    GenericEvaluator::new_from_raw_params(
+        [atom],
+        &params,
+        &fn_map,
+        vec![],
+        evaluator_settings.optimization_settings(),
+        None,
+        evaluator_settings,
+    )
+    .unwrap()
+    .into_eager_only()
+}
+
+#[cfg(test)]
+pub mod test {
+
+    use crate::{
+        finalized_runtime_dot,
+        graph::{GraphGroupPosition, parse::IntoFinalizedRuntimeGraph},
+        initialisation::test_initialise,
+        integrands::process::amplitude::AmplitudeGraphTerm,
+        processes::AmplitudeGraph,
+        settings::{
+            GlobalSettings,
+            global::{GenerationSettings, OrientationPattern, ThresholdSubtractionSettings},
+        },
+        utils::load_generic_model,
+    };
+    use feynkit_cff::OrientationId;
+    use symbolica::atom::Atom;
+    use typed_index_collections::TiVec;
+
+    #[test]
+    fn amplitude_tree() {
+        test_initialise().unwrap();
+        let mut graph: AmplitudeGraph = finalized_runtime_dot!(digraph qqx_aaa_tree_1 {
+                    num=1
+                    projector=1
+                    node [num=1]
+                    edge [num=1]
+                    ext    [style=invis]
+                    ext -> v1:1 [particle="d" id=1 sink="{ufo_order:0}"];
+                    ext -> v3:2 [particle="d~" id=2 sink="{ufo_order:0}"];
+                    v1:3 -> ext [particle="a" id=3 source="{ufo_order:1}"];
+                    v2:4 -> ext [particle="a" id=4 source="{ufo_order:1}"];
+                    v3:0 -> ext [particle="a" id=0 source="{ufo_order:2}"];
+                    v1 -> v2 [particle="d" id=5 source="{ufo_order:2}" sink="{ufo_order:0}"];
+                    v2 -> v3 [particle="d" id=6 source="{ufo_order:2}" sink="{ufo_order:1}"];
+        })
+        .unwrap();
+
+        let _model = load_generic_model("sm");
+
+        graph.generate_cff(&OrientationPattern::default()).unwrap();
+        // graph.build_parametric_integrand(&GenerationSettings::default());
+
+        let param_builder = &graph.graph.param_builder;
+        println!("{param_builder}");
+
+        // GenericEvaluator::new_from_builder(
+        //     [GS.orientation_delta(&EdgeVec::from_iter(vec![Orientation::Default; 7]))],
+        //     param_builder,
+        //     None,
+        //     OptimizationSettings::default(),
+        //     true,
+        // )
+        // .unwrap();
+        // println!(" {}", a);
+    }
+
+    #[test]
+    fn generation_orientation_pattern_filters_evaluator_orientations() {
+        test_initialise().unwrap();
+        let mut graph: AmplitudeGraph = finalized_runtime_dot!(
+            digraph bub {
+                projector=1
+                edge [particle=scalar_1 num=1]
+                node [num=1]
+                e [style=invis]
+                e -> A:0 [id=3 sink="{ufo_order:0}"]
+                B:1 -> e [id=2 source="{ufo_order:0}"]
+                A -> B [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"]
+                A -> B [id=0 source="{ufo_order:2}" sink="{ufo_order:2}"]
+            },
+            "scalars"
+        )
+        .unwrap();
+
+        let model = load_generic_model("scalars");
+        graph.generate_cff(&OrientationPattern::default()).unwrap();
+        graph.derived_data.all_mighty_integrand = Atom::one();
+        graph.build_lmbs();
+
+        assert!(
+            graph
+                .derived_data
+                .cff_expression
+                .as_ref()
+                .unwrap()
+                .orientations
+                .len()
+                > 1
+        );
+
+        let global_settings = GlobalSettings {
+            generation: GenerationSettings {
+                orientation_pattern: OrientationPattern::from_orientation(
+                    &graph
+                        .derived_data
+                        .cff_expression
+                        .as_ref()
+                        .unwrap()
+                        .orientations[OrientationId(0)],
+                ),
+                threshold_subtraction: ThresholdSubtractionSettings {
+                    enable_thresholds: false,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let (term, _stats) = AmplitudeGraphTerm::from_amplitude_graph(
+            &graph,
+            GraphGroupPosition(0),
+            TiVec::new(),
+            &model,
+            &global_settings,
+        )
+        .unwrap();
+
+        assert_eq!(term.orientations.len(), 1);
+        assert_eq!(
+            term.orientations[OrientationId(0)],
+            graph
+                .derived_data
+                .cff_expression
+                .as_ref()
+                .unwrap()
+                .orientations[OrientationId(0)]
+            .data
+            .orientation
+        );
+    }
+}

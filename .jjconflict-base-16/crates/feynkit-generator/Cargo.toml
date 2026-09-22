@@ -1,0 +1,31 @@
+[package]
+name = "feynkit-generator"
+version = "0.1.0"
+edition.workspace = true
+description = "Standalone model-driven Feynman-diagram generation"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/alphal00p/gammaloop"
+keywords = ["feynman", "generator", "physics"]
+categories = ["science"]
+
+[dependencies]
+bincode-trait-derive = { workspace = true }
+bincode = { workspace = true, features = ["serde"] }
+feynkit-graph = { version = "0.1.0", path = "../feynkit-graph", default-features = false }
+feynkit-model = { version = "0.1.0", path = "../feynkit-model" }
+idenso = { workspace = true }
+linnet = { workspace = true, features = ["symbolica"] }
+rayon = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+spenso = { workspace = true, features = ["shadowing"] }
+spenso-hep-lib = { workspace = true }
+symbolica = { workspace = true, default-features = false }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[features]
+default = ["native"]
+native = ["feynkit-graph/native", "spenso-hep-lib/native"]
+wasm = ["feynkit-graph/wasm", "spenso-hep-lib/wasm"]

@@ -1,0 +1,5496 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RunHistory",
+  "type": "object",
+  "properties": {
+    "cli_settings": {
+      "$ref": "#/$defs/CLISettings"
+    },
+    "command_blocks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/CommandsBlock"
+      }
+    },
+    "commands": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/CommandHistory"
+      }
+    },
+    "default_runtime_settings": {
+      "$ref": "#/$defs/RuntimeSettings"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "AlphaLoopSettings": {
+      "type": "object",
+      "properties": {
+        "susbstitute_masters": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Approach": {
+      "type": "object",
+      "properties": {
+        "approach_axes": {
+          "description": "Direction vector for one approach axis, as comma-separated components",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "discrete_dim": {
+          "description": "The discrete dimensions of the sample",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          }
+        },
+        "graph_id": {
+          "description": "Select a specific graph in momentum-space approach",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
+        "integrand_name": {
+          "description": "The integrand name to approach",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "linear": {
+          "description": "Use linear spacing in t",
+          "type": "boolean"
+        },
+        "logarithmic": {
+          "description": "Use logarithmic spacing in |t|",
+          "type": "boolean"
+        },
+        "min_abs_t": {
+          "description": "Smallest non-zero |t| for logarithmic spacing",
+          "type": "number",
+          "format": "double"
+        },
+        "momentum_space": {
+          "description": "Interpret point as momentum-space coordinates",
+          "type": "boolean"
+        },
+        "n_cores": {
+          "description": "Number of worker threads for approach evaluations",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
+        "n_points": {
+          "description": "Number of points on each side of the midpoint",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "orientation_id": {
+          "description": "Select a specific orientation of the selected graph in momentum-space approach",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
+        "output_results": {
+          "description": "Path to the JSON output file",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "point": {
+          "description": "The midpoint to inspect (x y) or (p0 px ...)",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "process": {
+          "description": "Process reference: #<id>, name:<name>, or <id>/<name>",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProcessRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "use_arb_prec": {
+          "description": "Evaluate in f128 precision",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "point",
+        "approach_axes",
+        "n_points",
+        "linear",
+        "logarithmic",
+        "min_abs_t",
+        "use_arb_prec",
+        "momentum_space",
+        "discrete_dim"
+      ]
+    },
+    "ApproximationType": {
+      "type": "string",
+      "enum": [
+        "MUV",
+        "PolePart",
+        "OS",
+        "IR",
+        "Unsubtracted",
+        "VaccuumLimit"
+      ]
+    },
+    "CLISettings": {
+      "type": "object",
+      "properties": {
+        "global": {
+          "$ref": "#/$defs/GlobalSettings"
+        },
+        "override_state": {
+          "type": "boolean"
+        },
+        "state": {
+          "$ref": "#/$defs/StateSettings"
+        },
+        "try_strings": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "CTIdentifier": {
+      "type": "object",
+      "properties": {
+        "external_pdg_set": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int"
+          },
+          "uniqueItems": true
+        },
+        "internal_pdg_set": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "integer",
+            "format": "int"
+          },
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "CTRenormalizationRule": {
+      "type": "object",
+      "properties": {
+        "ct_identifier": {
+          "$ref": "#/$defs/CTIdentifier"
+        },
+        "prescription": {
+          "$ref": "#/$defs/ApproximationType"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "ct_identifier",
+        "prescription"
+      ]
+    },
+    "CommandHistory": {
+      "description": "Represents a command with optional raw string representation\n\nThis struct stores both the parsed command and optionally the original\nstring that was used to create it. This allows for preserving the exact\nuser input while still having access to the structured command data.",
+      "type": "object",
+      "properties": {
+        "command": {
+          "description": "The parsed command",
+          "$ref": "#/$defs/Commands"
+        },
+        "raw_string": {
+          "description": "The original string representation of the command, if available",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "command"
+      ]
+    },
+    "Commands": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "FinishCommandsBlock"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Display": {
+              "$ref": "#/$defs/Display"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Display"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Duplicate": {
+              "$ref": "#/$defs/Duplicate"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Duplicate"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Set": {
+              "$ref": "#/$defs/Set"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Set"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Import": {
+              "$ref": "#/$defs/Import"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Import"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Save": {
+              "$ref": "#/$defs/Save"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Save"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Run": {
+              "$ref": "#/$defs/Run"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Run"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "StartCommandsBlock": {
+              "$ref": "#/$defs/StartCommandsBlock"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "StartCommandsBlock"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Remove": {
+              "$ref": "#/$defs/Remove"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Remove"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Integrate": {
+              "$ref": "#/$defs/Integrate"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Integrate"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Generate": {
+              "$ref": "#/$defs/Generate"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Generate"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Select": {
+              "$ref": "#/$defs/Select"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Select"
+          ]
+        },
+        {
+          "description": "Quit gammaloop",
+          "type": "object",
+          "properties": {
+            "Quit": {
+              "$ref": "#/$defs/SaveState"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Quit"
+          ]
+        },
+        {
+          "description": "Inspect a single phase‑space point / momentum configuration",
+          "type": "object",
+          "properties": {
+            "Inspect": {
+              "$ref": "#/$defs/Inspect"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Inspect"
+          ]
+        },
+        {
+          "description": "Approach a phase-space point along one or more axes",
+          "type": "object",
+          "properties": {
+            "Approach": {
+              "$ref": "#/$defs/Approach"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Approach"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Evaluate": {
+              "$ref": "#/$defs/Evaluate"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Evaluate"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Renormalize": {
+              "$ref": "#/$defs/Renormalize"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Renormalize"
+          ]
+        },
+        {
+          "description": "Benchmark raw integrand evaluation speed",
+          "type": "object",
+          "properties": {
+            "Bench": {
+              "type": "object",
+              "properties": {
+                "integrand_name": {
+                  "description": "The integrand name to benchmark",
+                  "type": "string"
+                },
+                "n_cores": {
+                  "description": "Number of cores to parallelize over",
+                  "type": "integer",
+                  "format": "uint",
+                  "minimum": 0
+                },
+                "process": {
+                  "description": "Process reference: #<id>, name:<name>, or <id>/<name>",
+                  "$ref": "#/$defs/ProcessRef"
+                },
+                "samples": {
+                  "description": "Number of random samples to evaluate",
+                  "type": "integer",
+                  "format": "uint",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "samples",
+                "process",
+                "integrand_name",
+                "n_cores"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Bench"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Profile": {
+              "$ref": "#/$defs/Profile"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Profile"
+          ]
+        },
+        {
+          "description": "HPC batch evaluation branch",
+          "type": "object",
+          "properties": {
+            "Batch": {
+              "type": "object",
+              "properties": {
+                "batch_input_file": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "output_name": {
+                  "type": "string"
+                },
+                "process_file": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "process_file",
+                "batch_input_file",
+                "name",
+                "output_name"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Batch"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Shell": {
+              "$ref": "#/$defs/Shell"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Shell"
+          ]
+        }
+      ]
+    },
+    "CommandsBlock": {
+      "type": "object",
+      "properties": {
+        "commands": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/CommandHistory"
+          }
+        },
+        "name": {
+          "type": "string",
+          "default": ""
+        }
+      },
+      "additionalProperties": false
+    },
+    "CompilationMode": {
+      "type": "string",
+      "enum": [
+        "c++",
+        "assembly",
+        "symjit"
+      ]
+    },
+    "CompilationOptimizationLevel": {
+      "type": "string",
+      "enum": [
+        "O0",
+        "O1",
+        "O2",
+        "O3"
+      ]
+    },
+    "ContractionMode": {
+      "type": "string",
+      "enum": [
+        "SmallestDegree",
+        "MinResultRank"
+      ]
+    },
+    "ContributionSortOption": {
+      "type": "string",
+      "enum": [
+        "Index",
+        "Integral",
+        "Error"
+      ]
+    },
+    "CoordinateSystem": {
+      "type": "string",
+      "enum": [
+        "cartesian",
+        "spherical",
+        "hyperspherical",
+        "hyperspherical_flat",
+        "momentum_space",
+        "tropical",
+        "relative_spherical",
+        "spherical_common_radial",
+        "spherical_product_common_radial"
+      ]
+    },
+    "CountRangeSelectorSerdeTag": {
+      "type": "string",
+      "enum": [
+        "count_range"
+      ]
+    },
+    "CountRangeSelectorSettingsSerde": {
+      "type": "object",
+      "properties": {
+        "active": {
+          "type": "boolean"
+        },
+        "entry_index": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "entry_selection": {
+          "$ref": "#/$defs/EntrySelection"
+        },
+        "max_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
+        "min_count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "quantity": {
+          "type": "string"
+        },
+        "selector": {
+          "$ref": "#/$defs/CountRangeSelectorSerdeTag"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "quantity",
+        "selector",
+        "min_count"
+      ]
+    },
+    "Dep": {
+      "type": "string",
+      "enum": [
+        "dependent"
+      ]
+    },
+    "DiscreteBinDomainSettings": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "max": {
+              "type": "integer",
+              "format": "int"
+            },
+            "min": {
+              "type": "integer",
+              "format": "int"
+            },
+            "type": {
+              "type": "string",
+              "const": "explicit_range"
+            }
+          },
+          "required": [
+            "type",
+            "min",
+            "max"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "single_bin"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "graph_ids"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "graph_group_ids"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "orientation_ids"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "lmb_channel_ids"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        }
+      ]
+    },
+    "DiscreteBinLabelsSettings": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "labels": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "custom"
+            }
+          },
+          "required": [
+            "type",
+            "labels"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "bin_id"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "graph_name"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "graph_group_master_name"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "orientation"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "lmb_channel_edge_ids"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        }
+      ]
+    },
+    "DiscreteBinOrdering": {
+      "type": "string",
+      "enum": [
+        "ascending_bin_id",
+        "value_descending",
+        "abs_value_descending"
+      ]
+    },
+    "DiscreteRangeSelectorSerdeTag": {
+      "type": "string",
+      "enum": [
+        "discrete_range"
+      ]
+    },
+    "DiscreteRangeSelectorSettingsSerde": {
+      "type": "object",
+      "properties": {
+        "active": {
+          "type": "boolean"
+        },
+        "entry_index": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "entry_selection": {
+          "$ref": "#/$defs/EntrySelection"
+        },
+        "max": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int"
+        },
+        "min": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int"
+        },
+        "quantity": {
+          "type": "string"
+        },
+        "selector": {
+          "$ref": "#/$defs/DiscreteRangeSelectorSerdeTag"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "quantity",
+        "selector"
+      ]
+    },
+    "Display": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "Processes"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Model": {
+              "type": "object",
+              "properties": {
+                "integrand_name": {
+                  "description": "Integrand name inside the selected process",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "process": {
+                  "description": "Process reference: #<id>, name:<name>, or <id>/<name>",
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/ProcessRef"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "show_all": {
+                  "type": "boolean"
+                },
+                "show_couplings": {
+                  "type": "boolean"
+                },
+                "show_parameters": {
+                  "type": "boolean"
+                },
+                "show_particles": {
+                  "type": "boolean"
+                },
+                "show_vertices": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "show_couplings",
+                "show_vertices",
+                "show_parameters",
+                "show_particles",
+                "show_all"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Model"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Integrands": {
+              "type": "object",
+              "properties": {
+                "categories": {
+                  "description": "Restrict the detailed view to the selected category tables",
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/IntegrandDisplayCategory"
+                  }
+                },
+                "graphs": {
+                  "description": "Restrict the detailed view to the selected master graph names",
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "hide_non_existing_thresholds": {
+                  "description": "Hide generated threshold CTs that cannot exist for the active model and kinematics",
+                  "type": "boolean"
+                },
+                "integrand_name": {
+                  "description": "Integrand name inside the selected process",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "process": {
+                  "description": "Process reference: #<id>, name:<name>, or <id>/<name>",
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/ProcessRef"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "graphs",
+                "categories",
+                "hide_non_existing_thresholds"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Integrands"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Quantities": {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "$ref": "#/$defs/DisplayProcessNamedSettingsArgs"
+                }
+              },
+              "required": [
+                "target"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Quantities"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Observables": {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "$ref": "#/$defs/DisplayProcessNamedSettingsArgs"
+                }
+              },
+              "required": [
+                "target"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Observables"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Selectors": {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "$ref": "#/$defs/DisplayProcessNamedSettingsArgs"
+                }
+              },
+              "required": [
+                "target"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Selectors"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "CommandBlock": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "CommandBlock"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Settings": {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "$ref": "#/$defs/DisplaySettingsTarget"
+                }
+              },
+              "required": [
+                "target"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Settings"
+          ]
+        }
+      ]
+    },
+    "DisplayProcessNamedSettingsArgs": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "process": {
+          "$ref": "#/$defs/ProcessArgs"
+        }
+      },
+      "required": [
+        "process"
+      ]
+    },
+    "DisplaySettingsTarget": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "Global": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "description": "Optional dotted path to a specific setting",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Global"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "DefaultRuntime": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "description": "Optional dotted path to a specific setting",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "DefaultRuntime"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Process": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "description": "Optional dotted path to a specific setting",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "process": {
+                  "$ref": "#/$defs/ProcessArgs"
+                }
+              },
+              "required": [
+                "process"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Process"
+          ]
+        }
+      ]
+    },
+    "Duplicate": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "Integrand": {
+              "$ref": "#/$defs/DuplicateIntegrand"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Integrand"
+          ]
+        }
+      ]
+    },
+    "DuplicateIntegrand": {
+      "type": "object",
+      "properties": {
+        "integrand_name": {
+          "description": "Source integrand name",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "output_integrand_name": {
+          "description": "Destination integrand name",
+          "type": "string"
+        },
+        "output_process_name": {
+          "description": "Destination process name",
+          "type": "string"
+        },
+        "process": {
+          "description": "Source process reference: #<id>, name:<name>, or <id>/<name>",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProcessRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "output_process_name",
+        "output_integrand_name"
+      ]
+    },
+    "EntrySelection": {
+      "type": "string",
+      "enum": [
+        "all",
+        "leading_only",
+        "nth_only"
+      ]
+    },
+    "Evaluate": {
+      "type": "object",
+      "properties": {
+        "graphs_group_name": {
+          "description": "The integrand name to evaluate",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "number_of_terms_in_epsilon_expansion": {
+          "description": "The number of terms in the epsilon expansion to compute\nDefaults is automatically inferred from input graph to get to the order O(epsilon^0)",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
+        "numerical": {
+          "description": "Whether to evaluate numerically or not the resulting analytical expression",
+          "type": "boolean"
+        },
+        "process": {
+          "description": "Process reference: #<id>, name:<name>, or <id>/<name>",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProcessRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "result_path": {
+          "description": "The path to store results in",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "numerical"
+      ]
+    },
+    "EvaluatorMethod": {
+      "type": "string",
+      "enum": [
+        "SingleParametric",
+        "Iterative",
+        "SummedFunctionMap",
+        "Summed"
+      ]
+    },
+    "EvaluatorSettings": {
+      "type": "object",
+      "properties": {
+        "abort_level": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "compile": {
+          "type": "boolean"
+        },
+        "cpe_iterations": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
+        "direct_translation": {
+          "type": "boolean"
+        },
+        "do_algebra": {
+          "type": "boolean"
+        },
+        "do_fn_map_replacements": {
+          "type": "boolean"
+        },
+        "horner_iterations": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "iterative_orientation_optimization": {
+          "type": "boolean"
+        },
+        "max_common_pair_cache_entries": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "max_common_pair_distance": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "max_horner_scheme_variables": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "n_cores": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "spenso_execution_mode": {
+          "type": "array",
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "$ref": "#/$defs/ExecutionMode"
+            },
+            {
+              "$ref": "#/$defs/ContractionMode"
+            }
+          ]
+        },
+        "store_atom": {
+          "type": "boolean"
+        },
+        "summed": {
+          "type": "boolean"
+        },
+        "summed_function_map": {
+          "type": "boolean"
+        },
+        "tensor_network_contraction_order": {
+          "$ref": "#/$defs/TensorNetworkContractionOrder"
+        },
+        "verbose": {
+          "type": "boolean"
+        }
+      }
+    },
+    "ExecutionMode": {
+      "type": "string",
+      "enum": [
+        "Sequential",
+        "Parallel",
+        "SequentialRef",
+        "SequentialExtract"
+      ]
+    },
+    "ExternalMomenta": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Dep"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/F"
+          },
+          "maxItems": 4,
+          "minItems": 4
+        }
+      ]
+    },
+    "Externals": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "helicities": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/Helicity"
+                  }
+                },
+                "improvement_settings": {
+                  "$ref": "#/$defs/PhaseSpaceImprovementSettings"
+                },
+                "momenta": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/ExternalMomenta"
+                  }
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "momenta",
+                "helicities"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "constant"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "data"
+          ]
+        }
+      ]
+    },
+    "F": {
+      "type": "number",
+      "format": "double"
+    },
+    "FMFTSettings": {
+      "type": "object",
+      "properties": {
+        "expand_masters": {
+          "type": "boolean"
+        },
+        "susbstitute_masters": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "FeyGenSettings": {
+      "type": "object",
+      "properties": {
+        "gamma_simplification_closure_check": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "FilterQuantity": {
+      "type": "string",
+      "enum": [
+        "E",
+        "CosTheta",
+        "PT",
+        "y",
+        "eta",
+        "Px",
+        "Py",
+        "Pz",
+        "Mass"
+      ]
+    },
+    "FinalIntegrandDimension": {
+      "type": "string",
+      "enum": [
+        "FourD",
+        "ThreeD"
+      ]
+    },
+    "GammaloopCompileOptions": {
+      "type": "object",
+      "properties": {
+        "compilation_mode": {
+          "$ref": "#/$defs/CompilationMode"
+        },
+        "compiler": {
+          "type": "string"
+        },
+        "custom": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "fast_math": {
+          "type": "boolean"
+        },
+        "optimization_level": {
+          "$ref": "#/$defs/CompilationOptimizationLevel"
+        },
+        "unsafe_math": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "GeneralSettings": {
+      "type": "object",
+      "properties": {
+        "additional_param_values": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "debug_cache": {
+          "type": "boolean"
+        },
+        "disable_flux_factor": {
+          "type": "boolean"
+        },
+        "enable_cache": {
+          "type": "boolean"
+        },
+        "evaluator_method": {
+          "$ref": "#/$defs/EvaluatorMethod"
+        },
+        "generate_events": {
+          "type": "boolean"
+        },
+        "integral_unit": {
+          "$ref": "#/$defs/IntegralUnit"
+        },
+        "load_compiled_cff": {
+          "type": "boolean"
+        },
+        "m_uv": {
+          "type": "number",
+          "format": "double"
+        },
+        "mu_r": {
+          "type": "number",
+          "format": "double"
+        },
+        "orientation_pat": {
+          "$ref": "#/$defs/OrientationPattern"
+        },
+        "renormalization_localization_scale": {
+          "type": "number",
+          "format": "double"
+        },
+        "store_additional_weights_in_event": {
+          "type": "boolean"
+        },
+        "use_ltd": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Generate": {
+      "description": "Generate integrands",
+      "type": "object",
+      "properties": {
+        "keep_sources": {
+          "description": "Keep generated C++ source files after external compilation",
+          "type": "boolean",
+          "default": false
+        },
+        "mode": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GenerateCmd"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "GenerateCmd": {
+      "description": "Generate integrands",
+      "oneOf": [
+        {
+          "description": "Cross-section (forward-scattering) generation",
+          "type": "object",
+          "properties": {
+            "Xs": {
+              "$ref": "#/$defs/SpecArgs"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Xs"
+          ]
+        },
+        {
+          "description": "Amplitude generation",
+          "type": "object",
+          "properties": {
+            "Amp": {
+              "$ref": "#/$defs/SpecArgs"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Amp"
+          ]
+        },
+        {
+          "description": "Reuse an already generated process",
+          "type": "object",
+          "properties": {
+            "Existing": {
+              "$ref": "#/$defs/ProcessArgs"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Existing"
+          ]
+        }
+      ]
+    },
+    "GenerationSettings": {
+      "type": "object",
+      "properties": {
+        "compile": {
+          "$ref": "#/$defs/GammaloopCompileOptions"
+        },
+        "evaluator": {
+          "$ref": "#/$defs/EvaluatorSettings"
+        },
+        "feyngen": {
+          "$ref": "#/$defs/FeyGenSettings"
+        },
+        "force_cuts": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "orientation_pattern": {
+          "$ref": "#/$defs/OrientationPattern"
+        },
+        "override_lmb_heuristics": {
+          "type": "boolean"
+        },
+        "threshold_subtraction": {
+          "$ref": "#/$defs/ThresholdSubtractionSettings"
+        },
+        "tropical_subgraph_table": {
+          "$ref": "#/$defs/TropicalSubgraphTableSettings"
+        },
+        "uv": {
+          "$ref": "#/$defs/UVgenerationSettings"
+        },
+        "vector_polarization_sum_gauge": {
+          "$ref": "#/$defs/VectorPolarizationSumGauge"
+        }
+      },
+      "additionalProperties": false
+    },
+    "GlobalSettings": {
+      "type": "object",
+      "properties": {
+        "display_directive": {
+          "type": "string"
+        },
+        "generation": {
+          "$ref": "#/$defs/GenerationSettings"
+        },
+        "log_style": {
+          "$ref": "#/$defs/LogStyle"
+        },
+        "logfile_directive": {
+          "type": "string"
+        },
+        "n_cores": {
+          "$ref": "#/$defs/Parallelisation"
+        }
+      },
+      "additionalProperties": false
+    },
+    "GroupingChoice": {
+      "type": "string",
+      "enum": [
+        "NoGrouping",
+        "OnlyDetectZeroes",
+        "GroupIdenticalGraphsUpToSign",
+        "GroupIdenticalGraphsUpToScalarRescaling"
+      ]
+    },
+    "HFunction": {
+      "type": "string",
+      "enum": [
+        "poly_exponential",
+        "exponential",
+        "poly_left_right_exponential",
+        "exponential_ct"
+      ]
+    },
+    "HFunctionSettings": {
+      "type": "object",
+      "properties": {
+        "enabled_dampening": {
+          "type": "boolean"
+        },
+        "function": {
+          "$ref": "#/$defs/HFunction"
+        },
+        "power": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
+        "sigma": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false
+    },
+    "HFunctionTestSettings": {
+      "type": "object",
+      "properties": {
+        "h_function": {
+          "$ref": "#/$defs/HFunctionSettings"
+        }
+      },
+      "required": [
+        "h_function"
+      ]
+    },
+    "Helicity": {
+      "description": "Helicity input. Use -1, 0, or 1 for fixed helicities; or use a string for summed modes.",
+      "oneOf": [
+        {
+          "type": "integer",
+          "enum": [
+            -1,
+            0,
+            1
+          ]
+        },
+        {
+          "type": "string",
+          "enum": [
+            "+",
+            "-",
+            "0",
+            "plus",
+            "minus",
+            "zero",
+            "summed",
+            "summed_averaged",
+            "summed-averaged"
+          ]
+        }
+      ]
+    },
+    "HistogramKindSerde": {
+      "type": "string",
+      "enum": [
+        "continuous",
+        "discrete"
+      ]
+    },
+    "Import": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "Model": {
+              "$ref": "#/$defs/ImportModel"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Model"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Graphs": {
+              "type": "object",
+              "properties": {
+                "append": {
+                  "type": "boolean"
+                },
+                "integrand_name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "overwrite": {
+                  "type": "boolean"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "process": {
+                  "description": "Process reference: #<id>, name:<name>, or <id>/<name>",
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/ProcessRef"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "path",
+                "overwrite",
+                "append"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Graphs"
+          ]
+        }
+      ]
+    },
+    "ImportModel": {
+      "description": "Generate integrands",
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "simplify_model": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "path",
+        "simplify_model"
+      ]
+    },
+    "ImprovementMode": {
+      "type": "string",
+      "enum": [
+        "vh",
+        "mf",
+        "none"
+      ]
+    },
+    "InfraRedProfile": {
+      "type": "object",
+      "properties": {
+        "integrand_name": {
+          "description": "The cross-section name to inspect",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "max_scale_exponent": {
+          "description": "Maximum scaling factor",
+          "type": "number",
+          "format": "double"
+        },
+        "min_scale_exponent": {
+          "description": "Minimum scaling factor",
+          "type": "number",
+          "format": "double"
+        },
+        "n_points": {
+          "description": "Number of scaling points to sample",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "output_file": {
+          "description": "Output file for results (optional)",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "per_orientation": {
+          "description": "Profile each visible orientation separately and report one row per orientation",
+          "type": "boolean"
+        },
+        "process": {
+          "description": "Process reference: #<id>, name:<name>, or <id>/<name>",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProcessRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "seed": {
+          "description": "Random seed for momentum sampling",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "select": {
+          "description": "restrict test to particular graphs or limits",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "show_per_cut_info": {
+          "description": "Retain generated event data so per-cut IR fits can be computed and displayed",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "n_points",
+        "min_scale_exponent",
+        "max_scale_exponent",
+        "per_orientation",
+        "show_per_cut_info"
+      ]
+    },
+    "Inspect": {
+      "type": "object",
+      "properties": {
+        "discrete_dim": {
+          "description": "The discrete dimensions of the sample",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          }
+        },
+        "graph_id": {
+          "description": "Select a specific graph in momentum-space inspect",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
+        "integrand_name": {
+          "description": "The integrand name to inspect",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "momentum_space": {
+          "description": "Interpret point as momentum-space coordinates",
+          "type": "boolean"
+        },
+        "orientation_id": {
+          "description": "Select a specific orientation of the selected graph in momentum-space inspect",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
+        "point": {
+          "description": "The point to inspect (x y) or (p0 px ...)",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "process": {
+          "description": "Process reference: #<id>, name:<name>, or <id>/<name>",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProcessRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "use_arb_prec": {
+          "description": "Evaluate in f128 precision",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "point",
+        "use_arb_prec",
+        "momentum_space",
+        "discrete_dim"
+      ]
+    },
+    "IntegralUnit": {
+      "type": "string",
+      "enum": [
+        "auto",
+        "picobarn",
+        "femtobarn",
+        "attobarn",
+        "millibarn",
+        "none"
+      ]
+    },
+    "IntegrandDisplayCategory": {
+      "type": "string",
+      "enum": [
+        "generation",
+        "orientation",
+        "loop_momentum_basis",
+        "cuts"
+      ]
+    },
+    "IntegrandSettings": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "unit_surface"
+            }
+          },
+          "$ref": "#/$defs/UnitSurfaceSettings",
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "unit_volume"
+            }
+          },
+          "$ref": "#/$defs/UnitVolumeSettings",
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "h_function_test"
+            }
+          },
+          "$ref": "#/$defs/HFunctionTestSettings",
+          "required": [
+            "type"
+          ]
+        }
+      ]
+    },
+    "Integrate": {
+      "type": "object",
+      "properties": {
+        "batch_size": {
+          "description": "Evaluate each iteration in per-core batches of this size",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
+        "batch_timing": {
+          "description": "Target per-core batch wall time in seconds when batch size is not specified",
+          "type": "number",
+          "format": "double"
+        },
+        "integrand_name": {
+          "description": "The integrand name to integrate; repeat with -p to select multiple integrands",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "max_table_width": {
+          "description": "Maximum width used when normalizing integration status tables",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "min_time_between_status_updates": {
+          "description": "Minimum time between streamed in-iteration status updates",
+          "type": "number",
+          "format": "double"
+        },
+        "n_cores": {
+          "description": "Number of cores to parallelize over",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
+        "no_show_integration_statistics": {
+          "description": "Hide integration statistics during intermediate iteration updates",
+          "type": "boolean"
+        },
+        "no_stream_iterations": {
+          "description": "Disable streaming of end-of-iteration integration summaries in interactive terminals",
+          "type": "boolean"
+        },
+        "no_stream_updates": {
+          "description": "Disable live streaming of in-iteration integration status updates",
+          "type": "boolean"
+        },
+        "process": {
+          "description": "Process reference: #<id>, name:<name>, or <id>/<name>; repeat with -i to select multiple integrands",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProcessRef"
+          }
+        },
+        "renderer": {
+          "description": "Renderer used for interactive streaming integration updates",
+          "$ref": "#/$defs/RendererOption"
+        },
+        "restart": {
+          "description": "Whether to restart the integration from scratch, or continue from a previous run if possible",
+          "type": "boolean"
+        },
+        "show_discrete_contributions_sum": {
+          "description": "Show the summed discrete contributions block independently of per-bin rows",
+          "type": "boolean"
+        },
+        "show_max_weight_info": {
+          "description": "Show the overall max-weight details table",
+          "type": "boolean"
+        },
+        "show_max_weight_info_for_discrete_bins": {
+          "description": "Show per-bin max-weight information for the first non-trivial discrete dimension",
+          "type": "boolean"
+        },
+        "show_phase": {
+          "description": "Control which complex phase is shown in integration summary tables",
+          "$ref": "#/$defs/ShowPhaseOption"
+        },
+        "show_summary_only": {
+          "description": "Only render the saved integration summary, without performing integration work",
+          "type": "boolean"
+        },
+        "show_top_discrete_grid": {
+          "description": "Show monitoring rows for the first non-trivial discrete dimension",
+          "type": "boolean"
+        },
+        "sort_contributions": {
+          "description": "Sort discrete contribution rows by index, absolute integral, or error",
+          "$ref": "#/$defs/ContributionSortOption"
+        },
+        "target": {
+          "description": "Specify a target as either `re im` / `re,im` for one shared target or `process@integrand=re,im`",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "uncorrelated": {
+          "description": "Use one independent sampling/training grid per selected integrand instead of a shared grid",
+          "type": "boolean"
+        },
+        "workspace_path": {
+          "description": "The path to run the integrationg within",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "write_results_for_each_iteration": {
+          "description": "Keep per-iteration result and observable snapshot files in addition to the latest snapshots",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "process",
+        "integrand_name",
+        "target",
+        "restart",
+        "uncorrelated",
+        "show_max_weight_info",
+        "no_show_integration_statistics",
+        "show_phase",
+        "show_top_discrete_grid",
+        "show_discrete_contributions_sum",
+        "sort_contributions",
+        "show_max_weight_info_for_discrete_bins",
+        "show_summary_only",
+        "no_stream_iterations",
+        "no_stream_updates",
+        "renderer",
+        "batch_timing",
+        "min_time_between_status_updates",
+        "max_table_width",
+        "write_results_for_each_iteration"
+      ]
+    },
+    "IntegratedCounterTermRange": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "h_function_settings": {
+              "$ref": "#/$defs/HFunctionSettings"
+            },
+            "type": {
+              "type": "string",
+              "const": "infinite"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "h_function_settings"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "compact"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        }
+      ]
+    },
+    "IntegratedCounterTermSettings": {
+      "type": "object",
+      "properties": {
+        "range": {
+          "$ref": "#/$defs/IntegratedCounterTermRange"
+        }
+      },
+      "additionalProperties": false
+    },
+    "IntegratedPhase": {
+      "type": "string",
+      "enum": [
+        "real",
+        "imag",
+        "both"
+      ]
+    },
+    "IntegratorSettings": {
+      "type": "object",
+      "properties": {
+        "bin_number_evolution": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          }
+        },
+        "continuous_dim_learning_rate": {
+          "type": "number",
+          "format": "double"
+        },
+        "discrete_dim_learning_rate": {
+          "type": "number",
+          "format": "double"
+        },
+        "integrated_phase": {
+          "$ref": "#/$defs/IntegratedPhase"
+        },
+        "max_prob_ratio": {
+          "type": "number",
+          "format": "double"
+        },
+        "min_samples_for_update": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "n_bins": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "n_increase": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "n_max": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "n_start": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "observables_output": {
+          "$ref": "#/$defs/ObservablesOutputSettings"
+        },
+        "seed": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "show_max_wgt_info": {
+          "type": "boolean"
+        },
+        "target_absolute_accuracy": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "target_relative_accuracy": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "train_on_avg": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "JetAlgorithm": {
+      "type": "string",
+      "enum": [
+        "kt",
+        "cambridge_aachen",
+        "anti_kt"
+      ]
+    },
+    "KinematicsSettings": {
+      "type": "object",
+      "properties": {
+        "e_cm": {
+          "type": "number",
+          "format": "double"
+        },
+        "externals": {
+          "$ref": "#/$defs/Externals"
+        }
+      },
+      "additionalProperties": false
+    },
+    "KvPair": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "value"
+      ]
+    },
+    "LmbChannelWeight": {
+      "type": "string",
+      "enum": [
+        "ose",
+        "inverse_jacobian"
+      ]
+    },
+    "LocalCounterTermSettings": {
+      "type": "object",
+      "properties": {
+        "uv_localisation": {
+          "$ref": "#/$defs/UVLocalisationSettings"
+        }
+      },
+      "additionalProperties": false
+    },
+    "LogFormat": {
+      "type": "string",
+      "enum": [
+        "Long",
+        "Full",
+        "Short",
+        "Min",
+        "None"
+      ]
+    },
+    "LogStyle": {
+      "type": "object",
+      "properties": {
+        "full_line_source": {
+          "type": "boolean"
+        },
+        "include_fields": {
+          "type": "boolean"
+        },
+        "log_format": {
+          "$ref": "#/$defs/LogFormat"
+        },
+        "short_timestamp": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "MATADSettings": {
+      "type": "object",
+      "properties": {
+        "direct_numerical_substition": {
+          "type": "boolean"
+        },
+        "expand_masters": {
+          "type": "boolean"
+        },
+        "substitute_hpls": {
+          "type": "boolean"
+        },
+        "susbstitute_masters": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ModelSetValue": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "Defaults"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Assignment": {
+              "$ref": "#/$defs/KvPair"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Assignment"
+          ]
+        }
+      ]
+    },
+    "ObservableFileFormat": {
+      "type": "string",
+      "enum": [
+        "none",
+        "hwu",
+        "json"
+      ]
+    },
+    "ObservablePhase": {
+      "type": "string",
+      "enum": [
+        "real",
+        "imag"
+      ]
+    },
+    "ObservableSettings": {
+      "type": "object",
+      "properties": {
+        "domain": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DiscreteBinDomainSettings"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "entry_index": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "entry_selection": {
+          "$ref": "#/$defs/EntrySelection"
+        },
+        "kind": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HistogramKindSerde"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "labels": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DiscreteBinLabelsSettings"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "log_x_axis": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "log_y_axis": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "misbinning_max_normalized_distance": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "n_bins": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
+        "ordering": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DiscreteBinOrdering"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "phase": {
+          "$ref": "#/$defs/ObservablePhase"
+        },
+        "quantity": {
+          "type": "string"
+        },
+        "selections": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "type_description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "value_transform": {
+          "$ref": "#/$defs/ObservableValueTransform"
+        },
+        "x_max": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "x_min": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "quantity"
+      ]
+    },
+    "ObservableValueTransform": {
+      "type": "string",
+      "enum": [
+        "identity",
+        "log10"
+      ]
+    },
+    "ObservablesOutputSettings": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ObservableFileFormat"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "OrientationPattern": {
+      "type": "object",
+      "properties": {
+        "pat": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ParseableAtom"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "OsString": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "Unix": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint8",
+                "maximum": 255,
+                "minimum": 0
+              }
+            }
+          },
+          "required": [
+            "Unix"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Windows": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint16",
+                "maximum": 65535,
+                "minimum": 0
+              }
+            }
+          },
+          "required": [
+            "Windows"
+          ]
+        }
+      ]
+    },
+    "OverlapSettings": {
+      "type": "object",
+      "properties": {
+        "check_global_center": {
+          "type": "boolean"
+        },
+        "force_global_center": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            },
+            "maxItems": 3,
+            "minItems": 3
+          }
+        },
+        "try_origin": {
+          "type": "boolean"
+        },
+        "try_origin_all_lmbs": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "PairQuantity": {
+      "type": "string",
+      "enum": [
+        "DeltaR"
+      ]
+    },
+    "PairingMode": {
+      "type": "string",
+      "enum": [
+        "all_pairs"
+      ]
+    },
+    "Parallelisation": {
+      "type": "object",
+      "properties": {
+        "compile": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "feyngen": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "generate": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "integrate": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "ParameterizationMapping": {
+      "type": "string",
+      "enum": [
+        "log",
+        "power",
+        "linear"
+      ]
+    },
+    "ParseableAtom": {
+      "description": "An atom that is serialized as a string. Do not make any assumptions about the state",
+      "type": [
+        "string"
+      ]
+    },
+    "PhaseSpaceImprovementSettings": {
+      "type": "object",
+      "properties": {
+        "large_deformation_check": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/F"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mode": {
+          "$ref": "#/$defs/ImprovementMode"
+        },
+        "only_warn_on_large_deformation": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Precision": {
+      "type": "string",
+      "enum": [
+        "Double",
+        "Quad",
+        "Arb"
+      ]
+    },
+    "ProcessAddTarget": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "Quantity": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "pairs": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/KvPair"
+                  }
+                }
+              },
+              "required": [
+                "name",
+                "kind",
+                "pairs"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Quantity"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Observable": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "pairs": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/KvPair"
+                  }
+                }
+              },
+              "required": [
+                "name",
+                "pairs"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Observable"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Selector": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "pairs": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/KvPair"
+                  }
+                }
+              },
+              "required": [
+                "name",
+                "kind",
+                "pairs"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Selector"
+          ]
+        }
+      ]
+    },
+    "ProcessArgs": {
+      "type": "object",
+      "properties": {
+        "integrand_name": {
+          "description": "Optional human name",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "process": {
+          "description": "Process reference: #<id>, name:<name>, or <id>/<name>",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProcessRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "ProcessRef": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "Id": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Name": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Name"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Unqualified": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Unqualified"
+          ]
+        }
+      ]
+    },
+    "ProcessRemoveTarget": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "Quantity": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Quantity"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Observable": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Observable"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Selector": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Selector"
+          ]
+        }
+      ]
+    },
+    "ProcessSetArgs": {
+      "oneOf": [
+        {
+          "description": "Load from a settings file",
+          "type": "object",
+          "properties": {
+            "File": {
+              "type": "object",
+              "properties": {
+                "file": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "file"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "File"
+          ]
+        },
+        {
+          "description": "Load settings from TOML content passed as a CLI string",
+          "type": "object",
+          "properties": {
+            "String": {
+              "type": "object",
+              "properties": {
+                "string": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "string"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "String"
+          ]
+        },
+        {
+          "description": "Set one or more dotted key-paths",
+          "type": "object",
+          "properties": {
+            "Kv": {
+              "type": "object",
+              "properties": {
+                "pairs": {
+                  "description": "Any number of KEY=VALUE pairs",
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/KvPair"
+                  }
+                }
+              },
+              "required": [
+                "pairs"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Kv"
+          ]
+        },
+        {
+          "description": "Sync process runtime settings from the current default runtime settings",
+          "type": "string",
+          "const": "Defaults"
+        },
+        {
+          "description": "Use the stored settings file",
+          "type": "string",
+          "const": "Stored"
+        },
+        {
+          "description": "Add a named quantity/observable/selector",
+          "type": "object",
+          "properties": {
+            "Add": {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "$ref": "#/$defs/ProcessAddTarget"
+                }
+              },
+              "required": [
+                "target"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Add"
+          ]
+        },
+        {
+          "description": "Update a named quantity/observable/selector",
+          "type": "object",
+          "properties": {
+            "Update": {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "$ref": "#/$defs/ProcessUpdateTarget"
+                }
+              },
+              "required": [
+                "target"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Update"
+          ]
+        },
+        {
+          "description": "Remove a named quantity/observable/selector",
+          "type": "object",
+          "properties": {
+            "Remove": {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "$ref": "#/$defs/ProcessRemoveTarget"
+                }
+              },
+              "required": [
+                "target"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Remove"
+          ]
+        }
+      ]
+    },
+    "ProcessUpdateTarget": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "Quantity": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "pairs": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/KvPair"
+                  }
+                }
+              },
+              "required": [
+                "name",
+                "pairs"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Quantity"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Observable": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "pairs": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/KvPair"
+                  }
+                }
+              },
+              "required": [
+                "name",
+                "pairs"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Observable"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Selector": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "pairs": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/KvPair"
+                  }
+                }
+              },
+              "required": [
+                "name",
+                "pairs"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Selector"
+          ]
+        }
+      ]
+    },
+    "Profile": {
+      "oneOf": [
+        {
+          "description": "Ultraviolet profile analysis",
+          "type": "object",
+          "properties": {
+            "UltraViolet": {
+              "$ref": "#/$defs/UltraVioletProfile"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "UltraViolet"
+          ]
+        },
+        {
+          "description": "Bulk profile analysis",
+          "type": "object",
+          "properties": {
+            "InfraRed": {
+              "$ref": "#/$defs/InfraRedProfile"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "InfraRed"
+          ]
+        }
+      ]
+    },
+    "PySecDecSettings": {
+      "type": "object",
+      "properties": {
+        "max_n_evals": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "min_n_evals": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "quiet": {
+          "type": "boolean"
+        },
+        "relative_precision": {
+          "type": "number",
+          "format": "double"
+        },
+        "reuse_existing_output": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "QuantityComputation": {
+      "type": "string",
+      "enum": [
+        "scalar",
+        "count",
+        "pair"
+      ]
+    },
+    "QuantityOrder": {
+      "type": "string",
+      "enum": [
+        "Ascending",
+        "Descending"
+      ]
+    },
+    "QuantityOrdering": {
+      "type": "string",
+      "enum": [
+        "PT",
+        "Energy",
+        "AbsRapidity",
+        "Quantity"
+      ]
+    },
+    "QuantitySettings": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "computation": {
+              "description": "Quantity computation mode: scalar projection per object, exact object count, or pairwise quantity.",
+              "$ref": "#/$defs/QuantityComputation"
+            },
+            "order": {
+              "description": "Sorting direction applied together with ordering.",
+              "$ref": "#/$defs/QuantityOrder",
+              "examples": [
+                "Descending"
+              ]
+            },
+            "ordering": {
+              "description": "Ordering key used before entry_selection. Particle scalar quantities default to Quantity, jet scalar quantities default to PT, and pair quantities default to Quantity.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/QuantityOrdering"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "examples": [
+                "Quantity"
+              ]
+            },
+            "pair_quantity": {
+              "description": "Pairwise quantity used when computation = \"pair\".",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PairQuantity"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "examples": [
+                "DeltaR"
+              ]
+            },
+            "pairing": {
+              "description": "Pairing strategy used when computation = \"pair\".",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PairingMode"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "examples": [
+                "all_pairs"
+              ]
+            },
+            "pdgs": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "int"
+              }
+            },
+            "quantity": {
+              "description": "Per-object scalar quantity used when computation = \"scalar\".",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/FilterQuantity"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "examples": [
+                "PT"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "particle"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "pdgs"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "algorithm": {
+              "$ref": "#/$defs/JetAlgorithm"
+            },
+            "clustered_pdgs": {
+              "description": "Optional list of PDG IDs allowed to be clustered. Use null to derive the default from the model, or a compact list like [-1,1,21,82] in CLI key-value assignments.",
+              "type": [
+                "array",
+                "null"
+              ],
+              "examples": [
+                [
+                  -1,
+                  1,
+                  21,
+                  82
+                ]
+              ],
+              "items": {
+                "type": "integer",
+                "format": "int"
+              }
+            },
+            "computation": {
+              "description": "Quantity computation mode: scalar projection per object, exact object count, or pairwise quantity.",
+              "$ref": "#/$defs/QuantityComputation"
+            },
+            "dR": {
+              "type": "number",
+              "format": "double"
+            },
+            "min_jpt": {
+              "type": "number",
+              "format": "double"
+            },
+            "order": {
+              "description": "Sorting direction applied together with ordering.",
+              "$ref": "#/$defs/QuantityOrder",
+              "examples": [
+                "Descending"
+              ]
+            },
+            "ordering": {
+              "description": "Ordering key used before entry_selection. Particle scalar quantities default to Quantity, jet scalar quantities default to PT, and pair quantities default to Quantity.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/QuantityOrdering"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "examples": [
+                "Quantity"
+              ]
+            },
+            "pair_quantity": {
+              "description": "Pairwise quantity used when computation = \"pair\".",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PairQuantity"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "examples": [
+                "DeltaR"
+              ]
+            },
+            "pairing": {
+              "description": "Pairing strategy used when computation = \"pair\".",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PairingMode"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "examples": [
+                "all_pairs"
+              ]
+            },
+            "quantity": {
+              "description": "Per-object scalar quantity used when computation = \"scalar\".",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/FilterQuantity"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "examples": [
+                "PT"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "jet"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "a_f_b"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "integral"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "graph_id"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "graph_group_id"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "orientation_id"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "lmb_channel_id"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        }
+      ]
+    },
+    "Remove": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "Processes": {
+              "type": "object",
+              "properties": {
+                "integrand_name": {
+                  "description": "Restrict the removal to a single integrand within the selected process",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "process": {
+                  "description": "Process reference: #<id>, name:<name>, or <id>/<name>",
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/ProcessRef"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Processes"
+          ]
+        }
+      ]
+    },
+    "RendererOption": {
+      "type": "string",
+      "enum": [
+        "Tabled",
+        "Ratatui"
+      ]
+    },
+    "RenormalizationPrescriptionSettings": {
+      "type": "object",
+      "properties": {
+        "log_divergent": {
+          "$ref": "#/$defs/ApproximationType"
+        },
+        "massive_power_divergent": {
+          "$ref": "#/$defs/ApproximationType"
+        },
+        "massless_power_divergent": {
+          "$ref": "#/$defs/ApproximationType"
+        },
+        "overrides": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CTRenormalizationRule"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "Renormalize": {
+      "type": "object",
+      "properties": {
+        "align_to_rqft": {
+          "type": "boolean"
+        },
+        "integrand_name": {
+          "description": "The name of the process to inspect\nThe amplitude name to renormalize",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "print_namespaces": {
+          "type": "boolean"
+        },
+        "process": {
+          "description": "Process reference: #<id>, name:<name>, or <id>/<name>",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProcessRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "result_path": {
+          "description": "The directory to store per-graph results in",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "align_to_rqft",
+        "print_namespaces"
+      ]
+    },
+    "RotationSetting": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "x"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "y"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "z"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "none"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "alpha": {
+              "type": "number",
+              "format": "double"
+            },
+            "beta": {
+              "type": "number",
+              "format": "double"
+            },
+            "gamma": {
+              "type": "number",
+              "format": "double"
+            },
+            "type": {
+              "type": "string",
+              "const": "euler_angles"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "alpha",
+            "beta",
+            "gamma"
+          ]
+        }
+      ]
+    },
+    "Run": {
+      "type": "object",
+      "properties": {
+        "block_names": {
+          "description": "Command block names to execute (in order)",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "commands": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "block_names"
+      ]
+    },
+    "RuntimeModelSettings": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "maxItems": 2,
+        "minItems": 2,
+        "prefixItems": [
+          {
+            "$ref": "#/$defs/F"
+          },
+          {
+            "$ref": "#/$defs/F"
+          }
+        ]
+      }
+    },
+    "RuntimeSettings": {
+      "type": "object",
+      "properties": {
+        "general": {
+          "$ref": "#/$defs/GeneralSettings"
+        },
+        "h_function": {
+          "$ref": "#/$defs/HFunctionSettings"
+        },
+        "integrand": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IntegrandSettings"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "integrator": {
+          "$ref": "#/$defs/IntegratorSettings"
+        },
+        "kinematics": {
+          "$ref": "#/$defs/KinematicsSettings"
+        },
+        "model": {
+          "$ref": "#/$defs/RuntimeModelSettings"
+        },
+        "observables": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/ObservableSettings"
+          }
+        },
+        "quantities": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/QuantitySettings"
+          }
+        },
+        "sampling": {
+          "$ref": "#/$defs/SamplingSettings"
+        },
+        "selectors": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/SelectorSettings"
+          }
+        },
+        "stability": {
+          "$ref": "#/$defs/StabilitySettings"
+        },
+        "subtraction": {
+          "$ref": "#/$defs/SubtractionSettings"
+        }
+      },
+      "additionalProperties": false
+    },
+    "SamplingSettings": {
+      "type": "object",
+      "properties": {
+        "alpha": {
+          "type": "number",
+          "format": "double"
+        },
+        "b": {
+          "type": "number",
+          "format": "double"
+        },
+        "coordinate_system": {
+          "$ref": "#/$defs/CoordinateSystem"
+        },
+        "graph_names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "graphs": {
+          "$ref": "#/$defs/SumMode"
+        },
+        "lmb_basis_ids": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            }
+          }
+        },
+        "lmb_channel_weight": {
+          "$ref": "#/$defs/LmbChannelWeight"
+        },
+        "lmb_channels": {
+          "$ref": "#/$defs/SumMode"
+        },
+        "lmb_multichanneling": {
+          "type": "boolean"
+        },
+        "mapping": {
+          "$ref": "#/$defs/ParameterizationMapping"
+        },
+        "orientations": {
+          "$ref": "#/$defs/SumMode"
+        },
+        "power": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Save": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "Dot": {
+              "type": "object",
+              "properties": {
+                "combine_diagrams": {
+                  "type": "boolean"
+                },
+                "do_color_algebra": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "do_gamma_algebra": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "include_autogenerated_fields": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "output_full_numerator": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "path": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "split_xs_by_initial_states": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "with_uv": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "combine_diagrams"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Dot"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "UvForest": {
+              "type": "object",
+              "properties": {
+                "computed": {
+                  "type": "boolean"
+                },
+                "graph": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "path": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "process": {
+                  "$ref": "#/$defs/ProcessArgs"
+                }
+              },
+              "required": [
+                "process",
+                "graph",
+                "computed"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "UvForest"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Standalone": {
+              "type": "object",
+              "properties": {
+                "arbprec": {
+                  "type": "boolean"
+                },
+                "binary": {
+                  "type": "boolean"
+                },
+                "json": {
+                  "type": "boolean"
+                },
+                "path": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "python": {
+                  "type": "boolean"
+                },
+                "quadprec": {
+                  "type": "boolean"
+                },
+                "rust": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "python",
+                "rust",
+                "binary",
+                "json",
+                "quadprec",
+                "arbprec"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Standalone"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "State": {
+              "$ref": "#/$defs/SaveState"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "State"
+          ]
+        },
+        {
+          "description": "regenerate the schema files",
+          "type": "object",
+          "properties": {
+            "Schema": {
+              "type": "object"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Schema"
+          ]
+        }
+      ]
+    },
+    "SaveState": {
+      "type": "object",
+      "properties": {
+        "no_save_state": {
+          "type": "boolean"
+        },
+        "override_state": {
+          "description": "Save state to file after each call",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "path": {
+          "description": "Path to save the state to, by default is the current state folder",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "strict": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "try_strings": {
+          "description": "Try to serialize using strings when saving run history",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "no_save_state"
+      ]
+    },
+    "Select": {
+      "type": "object",
+      "properties": {
+        "amplitude_graphs": {
+          "description": "Apply structural filters to left/right amplitude graphs of cross-section cuts",
+          "type": "boolean"
+        },
+        "clear_existing_processes": {
+          "description": "Allow copy-mode selection to replace an existing output process or integrand",
+          "type": "boolean"
+        },
+        "integrand_name": {
+          "description": "Integrand name inside the selected process",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "output_integrand": {
+          "description": "Copy the selected graph groups to this output integrand instead of modifying in place",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "output_process": {
+          "description": "Copy the selected graph groups to this output process instead of modifying in place",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "process": {
+          "description": "Process reference: #<id>, name:<name>, or <id>/<name>",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProcessRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "with_cycle_signatures": {
+          "description": "Retain graph groups matching one of these cycle signatures",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "with_graph_names": {
+          "description": "Retain graph groups with these master graph names",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "with_massive_raised_cuts_signatures": {
+          "description": "Retain graph groups where a process-valid cut touches one of these massive raised-propagator group signatures",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "with_massive_raised_propagator_signatures": {
+          "description": "Retain graph groups with one of these massive raised-propagator signatures",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "with_massless_raised_cuts_signatures": {
+          "description": "Retain graph groups where a process-valid cut touches one of these massless raised-propagator group signatures",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "with_massless_raised_propagator_signatures": {
+          "description": "Retain graph groups with one of these massless raised-propagator signatures",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "with_only_graph_names": {
+          "description": "Retain exactly these graph groups and ignore every other selection filter",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "with_particles": {
+          "description": "Retain graph groups containing all particles from at least one of these particle sets",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "with_raised_cuts_signatures": {
+          "description": "Retain graph groups where a process-valid cut touches one of these raised-propagator group signatures",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "with_raised_propagator_signatures": {
+          "description": "Retain graph groups with one of these raised-propagator signatures",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "with_vertices": {
+          "description": "Retain graph groups containing at least one of these vertex-rule multisets",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "without_cycle_signatures": {
+          "description": "Remove graph groups matching one of these cycle signatures",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "without_graph_names": {
+          "description": "Remove graph groups with these master graph names",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "without_massive_raised_cuts_signatures": {
+          "description": "Remove graph groups where a process-valid cut touches one of these massive raised-propagator group signatures",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "without_massive_raised_propagator_signatures": {
+          "description": "Remove graph groups with one of these massive raised-propagator signatures",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "without_massless_raised_cuts_signatures": {
+          "description": "Remove graph groups where a process-valid cut touches one of these massless raised-propagator group signatures",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "without_massless_raised_propagator_signatures": {
+          "description": "Remove graph groups with one of these massless raised-propagator signatures",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "without_particles": {
+          "description": "Remove graph groups containing all particles from at least one of these particle sets",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "without_raised_cuts_signatures": {
+          "description": "Remove graph groups where a process-valid cut touches one of these raised-propagator group signatures",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "without_raised_propagator_signatures": {
+          "description": "Remove graph groups with one of these raised-propagator signatures",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "without_vertices": {
+          "description": "Remove graph groups containing at least one of these vertex-rule multisets",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "amplitude_graphs",
+        "with_graph_names",
+        "with_only_graph_names",
+        "without_graph_names",
+        "with_raised_propagator_signatures",
+        "without_raised_propagator_signatures",
+        "with_massive_raised_propagator_signatures",
+        "without_massive_raised_propagator_signatures",
+        "with_massless_raised_propagator_signatures",
+        "without_massless_raised_propagator_signatures",
+        "with_raised_cuts_signatures",
+        "without_raised_cuts_signatures",
+        "with_massive_raised_cuts_signatures",
+        "without_massive_raised_cuts_signatures",
+        "with_massless_raised_cuts_signatures",
+        "without_massless_raised_cuts_signatures",
+        "with_cycle_signatures",
+        "without_cycle_signatures",
+        "with_vertices",
+        "without_vertices",
+        "with_particles",
+        "without_particles",
+        "clear_existing_processes"
+      ]
+    },
+    "SelectorReduction": {
+      "type": "string",
+      "enum": [
+        "any_in_range",
+        "all_in_range"
+      ]
+    },
+    "SelectorSettings": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ValueRangeSelectorSettingsSerde"
+        },
+        {
+          "$ref": "#/$defs/DiscreteRangeSelectorSettingsSerde"
+        },
+        {
+          "$ref": "#/$defs/CountRangeSelectorSettingsSerde"
+        }
+      ]
+    },
+    "Set": {
+      "oneOf": [
+        {
+          "description": "Set the base directory for gammaloop state and logs",
+          "type": "object",
+          "properties": {
+            "BaseDir": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "BaseDir"
+          ]
+        },
+        {
+          "description": "Set GLOBAL settings",
+          "type": "object",
+          "properties": {
+            "Global": {
+              "type": "object",
+              "properties": {
+                "input": {
+                  "$ref": "#/$defs/SetArgs"
+                }
+              },
+              "required": [
+                "input"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Global"
+          ]
+        },
+        {
+          "description": "Set DEFAULT RUNTIME settings",
+          "type": "object",
+          "properties": {
+            "DefaultRuntime": {
+              "type": "object",
+              "properties": {
+                "input": {
+                  "$ref": "#/$defs/SetArgs"
+                }
+              },
+              "required": [
+                "input"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "DefaultRuntime"
+          ]
+        },
+        {
+          "description": "Set Model parameters",
+          "type": "object",
+          "properties": {
+            "Model": {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "$ref": "#/$defs/ProcessArgs"
+                },
+                "values": {
+                  "description": "Any number of PARAM=COMPLEX pairs, or 'defaults' for process-targeted resets",
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/ModelSetValue"
+                  }
+                }
+              },
+              "required": [
+                "target",
+                "values"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Model"
+          ]
+        },
+        {
+          "description": "Set settings for a PROCESS",
+          "type": "object",
+          "properties": {
+            "Process": {
+              "type": "object",
+              "properties": {
+                "input": {
+                  "$ref": "#/$defs/ProcessSetArgs"
+                },
+                "process": {
+                  "$ref": "#/$defs/ProcessArgs"
+                }
+              },
+              "required": [
+                "input",
+                "process"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Process"
+          ]
+        }
+      ]
+    },
+    "SetArgs": {
+      "oneOf": [
+        {
+          "description": "Load from a settings file",
+          "type": "object",
+          "properties": {
+            "File": {
+              "type": "object",
+              "properties": {
+                "file": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "file"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "File"
+          ]
+        },
+        {
+          "description": "Load settings from TOML content passed as a CLI string",
+          "type": "object",
+          "properties": {
+            "String": {
+              "type": "object",
+              "properties": {
+                "string": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "string"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "String"
+          ]
+        },
+        {
+          "description": "Set one or more dotted key-paths",
+          "type": "object",
+          "properties": {
+            "Kv": {
+              "type": "object",
+              "properties": {
+                "pairs": {
+                  "description": "Any number of KEY=VALUE pairs",
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/KvPair"
+                  }
+                }
+              },
+              "required": [
+                "pairs"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Kv"
+          ]
+        },
+        {
+          "description": "Sync process runtime settings from the current default runtime settings",
+          "type": "string",
+          "const": "Defaults"
+        },
+        {
+          "description": "Use the stored settings file",
+          "type": "string",
+          "const": "Stored"
+        }
+      ]
+    },
+    "Shell": {
+      "type": "object",
+      "properties": {
+        "cmd": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/OsString"
+          }
+        }
+      },
+      "required": [
+        "cmd"
+      ]
+    },
+    "ShowPhaseOption": {
+      "type": "string",
+      "enum": [
+        "Both",
+        "Real",
+        "Imag",
+        "Selected"
+      ]
+    },
+    "SpecArgs": {
+      "type": "object",
+      "properties": {
+        "allow_symmetrization_of_external_fermions_in_amplitudes": {
+          "description": "Symmetrization (Option<bool> for smart defaults depending on generation type)",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "allowed_vertex_interactions": {
+          "description": "Restrict generation to an allow-list of vertex interactions",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "append": {
+          "type": "boolean"
+        },
+        "clear_existing_processes": {
+          "description": "Clear pre-existing processes",
+          "type": "boolean"
+        },
+        "compare_canonized_numerator": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "consider_internal_masses_only_in_numerator_isomorphisms": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "filter_cross_section_tadpoles": {
+          "description": "Cross-section tadpole filtering when sewing",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "filter_self_loop": {
+          "description": "Filter self-loop (explicit; default false)",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "filter_selfenergies": {
+          "description": "Topology filters (Option<bool> to enable smart defaults)",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "filter_snails": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "filter_tadpoles": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "filter_zero_flow_edges": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "fully_numerical_substitution_when_comparing_numerators": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "global_prefactor_num": {
+          "description": "Global prefactor numerator (Symbolica atom string)",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "global_prefactor_projector": {
+          "description": "Global prefactor projector (Symbolica atom string)",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "graph_prefix": {
+          "description": "Graph name prefix",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "integrand_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "loop_momentum_bases": {
+          "description": "Graph processing toggles\n\nFormat:\n  --loop-momentum-bases \"GL_12=7,10 GL_77=4,2\"\n  --select-graphs \"GL_12 GL_13\"\n  --veto-graphs \"GL_11 GL_15\"",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/KvPair"
+          }
+        },
+        "max_n_bridges": {
+          "description": "Extra filters / constraints",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        },
+        "n_cut_blobs": {
+          "description": "Cut options (cross-section)\nRange of cut blobs on either side of the cut",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          }
+        },
+        "n_cut_spectators": {
+          "description": "Range of cut spectators on either side of the cut",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          }
+        },
+        "number_of_factorized_loop_subtopologies": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "number_of_fermion_loops": {
+          "description": "Number of closed fermion loops; negative disables",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "number_of_samples_for_numerator_comparisons": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
+        "numerator_aware_isomorphism_grouping": {
+          "description": "Numerator-aware grouping choice",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GroupingChoice"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "numerical_samples_seed": {
+          "description": "Grouping attributes",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "only_diagrams": {
+          "type": "boolean"
+        },
+        "process_name": {
+          "description": "Optional human-readable process name",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "select_graphs": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "symmetric_left_right_polarizations": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "symmetrize_final_states": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "symmetrize_initial_states": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "symmetrize_left_right_states": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "tokens": {
+          "description": "Quote-free spec.\n\nGrammar (unquoted): `INITIAL to FINAL [process_options] [generation_options]`\nAlso accepts: `INITIAL > FINAL [ ... ]`\n\nExamples:\n  e+ e- to d d~ g veto u d xs QED^2==2 QCD^2<=4 pert loops=1 fsloops=2 QCD=2\n  e+ e- > { z z, a a } [ {1} {{2}} QCD=2 QED=1 ] / u d | g ghG QED==2 QCD>=2 QCD<=4\n\nNotes:\n- `veto` and `only` are synonyms for `/` and `|`.\n- The `[ ... ]` block holds perturbative spec: `{n}`, `{{n}}`, and orders `QCD=n` with shorthand `QCD`≡1.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "veto_graphs": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "veto_only_scaleless_self_energy": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "veto_only_scaleless_snails": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "veto_only_scaleless_tadpoles": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "veto_self_energy_of_massive_lines": {
+          "description": "Self-energy veto details",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "veto_self_energy_of_massless_lines": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "veto_snails_attached_to_massive_lines": {
+          "description": "Snail veto details",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "veto_snails_attached_to_massless_lines": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "veto_tadpoles_attached_to_massive_lines": {
+          "description": "Tadpole veto details",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "veto_tadpoles_attached_to_massless_lines": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "veto_vertex_interactions": {
+          "description": "Veto vertex interactions",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "tokens",
+        "append",
+        "clear_existing_processes",
+        "only_diagrams"
+      ]
+    },
+    "StabilityLevelSetting": {
+      "type": "object",
+      "properties": {
+        "escalate_for_large_weight_threshold": {
+          "type": "number",
+          "format": "double"
+        },
+        "precision": {
+          "$ref": "#/$defs/Precision"
+        },
+        "required_precision_for_im": {
+          "type": "number",
+          "format": "double"
+        },
+        "required_precision_for_re": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "precision",
+        "required_precision_for_re",
+        "required_precision_for_im",
+        "escalate_for_large_weight_threshold"
+      ]
+    },
+    "StabilityRecordingSettings": {
+      "type": "object",
+      "properties": {
+        "record_all_stability_levels": {
+          "type": "boolean"
+        },
+        "record_loop_momenta_escalation": {
+          "type": "boolean"
+        },
+        "record_rotated_results": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "StabilitySettings": {
+      "type": "object",
+      "properties": {
+        "check_on_norm": {
+          "type": "boolean"
+        },
+        "escalate_if_exact_zero": {
+          "type": "boolean",
+          "default": false
+        },
+        "levels": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StabilityLevelSetting"
+          }
+        },
+        "loop_momenta_norm_escalation_factor": {
+          "type": "number",
+          "format": "double"
+        },
+        "recording": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StabilityRecordingSettings"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rotation_axis": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RotationSetting"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "StartCommandsBlock": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "StateSettings": {
+      "type": "object",
+      "properties": {
+        "folder": {
+          "type": "string",
+          "default": "./gammaloop_state"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "SubtractionSettings": {
+      "type": "object",
+      "properties": {
+        "disable_threshold_subtraction": {
+          "type": "boolean"
+        },
+        "esurface_existence_threshold": {
+          "description": "Dimensionless tolerance used to compare the energy-squared E-surface invariant margin\nagainst `esurface_existence_threshold * E_cm^2` at runtime.",
+          "type": "number",
+          "format": "double",
+          "minimum": 0.0
+        },
+        "integrated_ct_settings": {
+          "$ref": "#/$defs/IntegratedCounterTermSettings"
+        },
+        "local_ct_settings": {
+          "$ref": "#/$defs/LocalCounterTermSettings"
+        },
+        "overlap_settings": {
+          "$ref": "#/$defs/OverlapSettings"
+        },
+        "radial_root_residual_tolerance": {
+          "description": "Multiplier of `epsilon(T) * E_cm` used as the direct residual limit for\nthreshold-counterterm radial roots at numerical precision `T`. A residual-limited\nhigher-precision root may instead be accepted against the corresponding lower-precision\nlimit after satisfying the cross-precision consistency checks.",
+          "type": "number",
+          "format": "double",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false
+    },
+    "SumMode": {
+      "type": "string",
+      "enum": [
+        "summed",
+        "monte_carlo"
+      ]
+    },
+    "TensorNetworkContractionOrder": {
+      "type": "string",
+      "enum": [
+        "sparse_atom_aware",
+        "atom_aware",
+        "result_rank_only",
+        "entry_aware"
+      ]
+    },
+    "ThresholdSubtractionSettings": {
+      "type": "object",
+      "properties": {
+        "assume_positive_external_energies": {
+          "type": "boolean"
+        },
+        "check_esurface_at_generation": {
+          "type": "boolean"
+        },
+        "disable_integrated_ct": {
+          "type": "boolean"
+        },
+        "enable_thresholds": {
+          "type": "boolean"
+        },
+        "esurface_existence_threshold": {
+          "description": "Dimensionless tolerance used to compare the energy-squared E-surface invariant margin\nagainst `esurface_existence_threshold * E_cm^2` during generation-time checks.",
+          "type": "number",
+          "format": "double",
+          "minimum": 0.0
+        },
+        "skip_thresholds_that_are_cuts": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "TropicalSubgraphTableSettings": {
+      "type": "object",
+      "properties": {
+        "disable_tropical_generation": {
+          "type": "boolean"
+        },
+        "panic_on_fail": {
+          "type": "boolean"
+        },
+        "target_omega": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false
+    },
+    "UVLocalisationSettings": {
+      "type": "object",
+      "properties": {
+        "dynamic_width": {
+          "type": "boolean"
+        },
+        "force_uv_dampers_to_one": {
+          "type": "boolean"
+        },
+        "gaussian_width": {
+          "type": "number",
+          "format": "double"
+        },
+        "sliver_width": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false
+    },
+    "UVOrchestrator": {
+      "type": "string",
+      "enum": [
+        "legacy_dag_forest",
+        "hedge_poset",
+        "compare"
+      ]
+    },
+    "UVgenerationSettings": {
+      "type": "object",
+      "properties": {
+        "add_marker": {
+          "type": "boolean"
+        },
+        "final_integrand": {
+          "$ref": "#/$defs/FinalIntegrandDimension"
+        },
+        "generate_integrated": {
+          "type": "boolean"
+        },
+        "inner_products": {
+          "type": "boolean"
+        },
+        "keep_marker": {
+          "type": "boolean"
+        },
+        "orchestrator": {
+          "$ref": "#/$defs/UVOrchestrator"
+        },
+        "renormalization_prescription": {
+          "$ref": "#/$defs/RenormalizationPrescriptionSettings"
+        },
+        "softct": {
+          "type": "boolean"
+        },
+        "subtract_uv": {
+          "type": "boolean"
+        },
+        "vakint": {
+          "$ref": "#/$defs/VakintSettings"
+        }
+      },
+      "additionalProperties": false
+    },
+    "UltraVioletProfile": {
+      "type": "object",
+      "properties": {
+        "analyse_analytically": {
+          "type": "boolean"
+        },
+        "integrand_name": {
+          "description": "The integrand name to inspect",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "max_scale_exponent": {
+          "description": "Maximum scaling factor",
+          "type": "number",
+          "format": "double"
+        },
+        "min_scale_exponent": {
+          "description": "Minimum scaling factor",
+          "type": "number",
+          "format": "double"
+        },
+        "n_points": {
+          "description": "Number of scaling points to sample",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "output_file": {
+          "description": "Output file for results (optional)",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "per_orientation": {
+          "description": "Profile each visible orientation separately and include per-orientation results",
+          "type": "boolean"
+        },
+        "process": {
+          "description": "Process reference: #<id>, name:<name>, or <id>/<name>",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProcessRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "seed": {
+          "description": "Random seed for momentum sampling",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "use_f128": {
+          "description": "Use f128 precision for evaluation",
+          "type": "boolean"
+        },
+        "uv_ray_directions": {
+          "description": "Fixed UV ray directions as flattened 3-vectors, repeated for all rays if one direction is supplied",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "uv_ray_norms": {
+          "description": "Fixed UV ray starting norms, repeated for all rays if one norm is supplied",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "required": [
+        "n_points",
+        "min_scale_exponent",
+        "max_scale_exponent",
+        "use_f128",
+        "analyse_analytically",
+        "per_orientation",
+        "uv_ray_directions",
+        "uv_ray_norms"
+      ]
+    },
+    "UnitSurfaceSettings": {
+      "type": "object",
+      "properties": {
+        "n_3d_momenta": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "n_3d_momenta"
+      ]
+    },
+    "UnitVolumeSettings": {
+      "type": "object",
+      "properties": {
+        "n_3d_momenta": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "n_3d_momenta"
+      ]
+    },
+    "VakintSettings": {
+      "type": "object",
+      "properties": {
+        "additional_normalization": {
+          "type": "string"
+        },
+        "alphaloop": {
+          "$ref": "#/$defs/AlphaLoopSettings"
+        },
+        "clean_tmp_dir": {
+          "type": "boolean"
+        },
+        "evaluation_methods": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "fmft": {
+          "$ref": "#/$defs/FMFTSettings"
+        },
+        "form_exe_path": {
+          "type": "string"
+        },
+        "matad": {
+          "$ref": "#/$defs/MATADSettings"
+        },
+        "normalization": {
+          "type": "string"
+        },
+        "pysecdec": {
+          "$ref": "#/$defs/PySecDecSettings"
+        },
+        "python_exe_path": {
+          "type": "string"
+        },
+        "run_time_decimal_precision": {
+          "type": "integer",
+          "format": "uint",
+          "default": 100,
+          "minimum": 0
+        },
+        "temporary_directory": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tensor_reduction_method": {
+          "$ref": "#/$defs/VakintTensorReductionMethod"
+        }
+      },
+      "additionalProperties": false
+    },
+    "VakintTensorReductionMethod": {
+      "description": "Numerator tensor-reduction backend used by Vakint.",
+      "oneOf": [
+        {
+          "description": "Historical FORM implementation shipped with AlphaLoop.",
+          "type": "string",
+          "const": "alphaloop"
+        },
+        {
+          "description": "Native, FORM-less FeynKit tensor projector.",
+          "type": "string",
+          "const": "feynkit"
+        }
+      ]
+    },
+    "ValueRangeSelectorSerdeTag": {
+      "type": "string",
+      "enum": [
+        "value_range"
+      ]
+    },
+    "ValueRangeSelectorSettingsSerde": {
+      "type": "object",
+      "properties": {
+        "active": {
+          "type": "boolean"
+        },
+        "entry_index": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "entry_selection": {
+          "$ref": "#/$defs/EntrySelection"
+        },
+        "max": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "min": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "quantity": {
+          "type": "string"
+        },
+        "reduction": {
+          "$ref": "#/$defs/SelectorReduction"
+        },
+        "selector": {
+          "$ref": "#/$defs/ValueRangeSelectorSerdeTag"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "quantity",
+        "selector"
+      ]
+    },
+    "VectorPolarizationSumGauge": {
+      "type": "string",
+      "enum": [
+        "Feynman",
+        "LightLikeAxial"
+      ]
+    }
+  }
+}

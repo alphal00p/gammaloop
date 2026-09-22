@@ -3120,6 +3120,52 @@ mod tests {
     }
 
     #[test]
+    fn finalization_transports_signed_momentum_sums_once() {
+        for coefficient in [1, 2] {
+            let model = scalar_model();
+            let particle = model.particle_id("phi").unwrap();
+            let rule = model.vertex_rule_id("V_1").unwrap();
+            let mut builder = FeynmanDiagram::builder(model, "signed-momentum-sum");
+            let incoming = builder.add_generation_external("in", 0, ExternalState::Incoming, 0);
+            let outgoing_1 = builder.add_generation_external("out1", 1, ExternalState::Outgoing, 1);
+            let outgoing_2 = builder.add_generation_external("out2", 2, ExternalState::Outgoing, 2);
+            let vertex = builder.add_vertex(DiagramVertex::interaction("vertex", rule));
+            // All edge IDs change; the incoming edge also reverses its flow.
+            builder
+                .add_edge(vertex, outgoing_2, DiagramEdge::new(particle, false))
+                .unwrap();
+            builder
+                .add_edge(vertex, incoming, DiagramEdge::new(particle, false))
+                .unwrap();
+            builder
+                .add_edge(vertex, outgoing_1, DiagramEdge::new(particle, false))
+                .unwrap();
+            let numerator = Atom::parse(
+                format!(
+                    "-{coefficient}*gammalooprs::Q(1,spenso::mink(4,gammalooprs::hedge(2,1)))\
+                     -gammalooprs::Q(0,spenso::mink(4,gammalooprs::edge(0,1)))\
+                     +gammalooprs::Q(2,spenso::mink(4,gammalooprs::vertex(3,1)))"
+                ),
+                "feynkit_graph",
+                ParseSettings::default(),
+            )
+            .unwrap();
+            let diagram = builder.numerator(numerator).build().unwrap();
+            let expected = Atom::parse(
+                format!(
+                    "{coefficient}*gammalooprs::Q(0,spenso::mink(4,gammalooprs::hedge(0,1)))\
+                     -gammalooprs::Q(2,spenso::mink(4,gammalooprs::edge(2,1)))\
+                     +gammalooprs::Q(1,spenso::mink(4,gammalooprs::vertex(0,1)))"
+                ),
+                "feynkit_graph",
+                ParseSettings::default(),
+            )
+            .unwrap();
+            assert_eq!(diagram.numerator(), &expected, "coefficient {coefficient}");
+        }
+    }
+
+    #[test]
     fn uv_expansion_preserves_boundary_momenta() {
         let bubble = one_loop();
         let full = bubble

@@ -44,7 +44,7 @@ not treat the presence of a primitive as an end-to-end validation.
   [UV expansion], [`feynkit-graph` and Vakint],
   [Graph and subgraph expansion and vacuum-integral infrastructure exist.
    The one-loop QED and QCD renormalization workflows combine generated
-   self-energies and fermion vertices with symbolic gauge dependence and
+   self-energies, fermion vertices and the ghost-gluon vertex with symbolic gauge dependence and
    counterterm linear solves. Generated two-loop massless QED in Feynman gauge
    and scalar self-energy examples validate bare UV poles. Analytic vacuum values remain
    explicit inputs; the two-loop counterterm sums are supplied reference inputs.
@@ -660,13 +660,55 @@ state and 27 combinations of gauge parameter, quark-flavor count and SU(N)
 color group. Its interactive counterterm table checks the vertex cancellation
 and the gauge-independent one-loop coefficient $beta_0=(11C_A-2N_f)/3$.
 
-The separate ghost-gluon vertex check remains open. The stored SM model's
-historically modified `UUV1` rule gives an inconsistent relative UV pole.
-Restoring the upstream UFO rule reproduces the ghost-vertex reference in a
-scratch calculation; a shared-model fix needs electroweak ghost validation as
-well, since those vertices use the same Lorentz rule. This notebook uses the
-independently validated quark-gluon vertex to determine $Z_g$.
-Other QCD vertices and finite form factors remain separate coverage.
+== Generated ghost-gluon vertex and crossing
+
+`hep/qcd_ghost_vertex.py` and `installed_feyncalc_qcd_ghost_vertex.py` generate
+both one-loop vertex topologies and the ghost self-energy for incoming ghosts
+and antighosts. They reproduce the UV result of
+#link("https://feyncalc.github.io/FeynCalcExamples/QCD/OneLoop/GhGl-Gh")[the separate ghost-gluon vertex example]
+with symbolic $xi$. Every external color and Lorentz index remains open;
+the full pole tensor is compared with its generated tree tensor before taking
+a ratio. The two diagrams contribute, in units of $a_4$ relative to the tree,
+$ frac(C_A xi,8epsilon) quad "and" quad frac(3C_A xi,8epsilon). $
+Their sum is $C_A xi/(2epsilon)$ and vanishes in Landau gauge.
+
+The shared SM model supplies the canonical UFO `UUV1` rule
+`P(3,2) + P(3,3)`, equal to $-p_1$ when all vertex momenta are incoming.
+Both FeynKit and GammaLoop consume that rule; the notebook only specializes
+the gluon propagator's gauge parameter. Shared graph finalization remaps
+indices inside momentum arguments before transporting their momentum carriers.
+Each signed carrier is transported once, including when a sign change causes
+a product to collapse. This preserves linearity of sums for incoming neutral
+vectors as well as the charged-vector and ghost crossings.
+
+The model correction was also validated in all three crossings of the twelve
+electroweak and one QCD SM interactions using `UUV1`: 36 electroweak and three
+QCD cases. Those checks compared the generated tensor, particle order and
+couplings with the original UFO convention, retained the QCD
+structure-constant sign, and passed 15 additional Lorentz-linearity probes.
+They used the portable SM fixture without an external MadGraph installation.
+
+The vertex workflow reuses graph UV expansion, Spenso/Idenso color algebra,
+vacuum tensor reduction and native IBP. The two integral targets $I(2)$ and
+$I(3)$ reduce to $I(1)$; the tadpole pole $I(1)=M/epsilon+O(1)$ is an explicit
+analytic input with $M=m_("UV")^2$ and loop measure $i/(16pi^2)$.
+The regression checks the full crossed tensors, the absence of residual loop
+momentum and double poles, and cancellation of auxiliary mass dependence.
+The computed self-energy gives $delta Z_c=C_A(3-xi)/(4epsilon)$ with no
+auxiliary ghost mass pole.
+
+The gluon field counterterm $delta Z_A$ is supplied from the separate QCD
+renormalization calculation above. Combining it with the calculated ghost
+and vertex poles yields
+$ delta Z_g=-frac(C_A xi,2epsilon)-delta Z_c-frac(delta Z_A,2)
+  =-frac(11C_A-2N_f,6epsilon). $
+The notebook displays both crossing choices, the IBP reductions and the
+counterterm cancellation as the gauge parameter, color count and flavor
+count vary. The live notebook passes its default state and 18 combinations
+of crossing, gauge, color and flavor. This checks the coupling result
+independently of the quark-gluon
+vertex. Finite vertex form factors, other QCD vertices and automatic
+counterterm-diagram or subtraction-forest generation remain separate coverage.
 
 == Native IBP reduction through RustRed
 

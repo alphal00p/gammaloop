@@ -1,0 +1,12 @@
+---
+source: src/half_edge/algorithms/topological_order.rs
+expression: order
+---
+[
+  NodeIndex(0),
+  NodeIndex(1),
+  NodeIndex(2),
+  NodeIndex(3),
+  NodeIndex(4),
+  NodeIndex(5),
+]

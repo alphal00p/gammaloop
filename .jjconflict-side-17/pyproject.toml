@@ -1,0 +1,82 @@
+[project]
+name = "gammaloop"
+version = "0.3.4"
+description = "Gammaloop computes differential cross-sections using Local Unitarity"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+  { name = "Valentin Hirschi", email = "valentin.hirschi@gmail.com" },
+  { name = "Mathijs Fraaije", email = "mathijsfraaije@gmail.com" },
+  { name = "Lucien Huber", email = "mail@lcnbr.ch" },
+]
+
+keywords = ["collider", "cross-section", "loop", "perturbative", "physics"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Programming Language :: Rust",
+  "Topic :: Scientific/Engineering :: Physics",
+]
+dependencies = [
+  "PyMuPDF>=1.23.4",
+  "jupyter>=1.1.1",
+  "numpy>=2.3.3",
+  "polars>=1.33.1",
+  "pydot",
+  "pytest",
+  "pyyaml>=6.0.1",
+  "symbolica>=3.0",
+  "ufo-model-loader @ git+https://github.com/alphal00p/ufo_model_loader.git@70ddee6b416f8c8b340e0d087646d77095c5d24b",
+]
+
+[project.optional-dependencies]
+typst-display = ["typst>=0.15,<0.16"]
+
+[project.urls]
+homepage = "https://alphaloop.ch"
+repository = "https://github.com/alphal00p/gammaloop"
+
+[dependency-groups]
+dev = [
+  "PyYAML>=6.0.1,<7",
+  "black>=23.12.1,<24",
+  "inline-snapshot>=0.21.2",
+  "marimo>=0.24,<0.25",
+  "pytest>=8.3.5,<9",
+  "symbolica>=3.0",
+  "ufo-model-loader @ git+https://github.com/alphal00p/ufo_model_loader.git@70ddee6b416f8c8b340e0d087646d77095c5d24b",
+]
+
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[tool.maturin]
+features = ["python_abi"]
+module-name = "gammaloop._gammaloop"
+python-source = "crates/gammaloop-api/python"
+
+[tool.mypy]
+disable_error_code = "no-redef"
+check_untyped_defs = true
+exclude = [
+  "python/gammaloop/data/templates/drawing/combine_pages.py",
+  "python/gammaloop/data/models/*",
+]
+
+[[tool.mypy.overrides]]
+module = "yaml.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "pydot.*"
+ignore_missing_imports = true
+
+[tool.pyright]
+# reportPrivateImportUsage = "none"
+# include = ["gamm/gammaloop"]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+symbolica = { git = "https://github.com/symbolica-dev/symbolica.git", rev = "a19c760dd567c239f30d87e4e924ca2f8b8457ab" }
