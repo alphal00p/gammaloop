@@ -590,6 +590,21 @@ def browser_smoke(
                         raise RuntimeError(
                             "FeynKit preview did not initialize SVG interaction"
                         )
+                    for theme in ("dark", "light"):
+                        page.locator("html").evaluate(
+                            "(root, theme) => { root.dataset.theme = theme; }", theme
+                        )
+                        page.wait_for_function(
+                            """([selector, theme]) => {
+                                const frame = document.querySelector(`${selector} iframe`);
+                                const doc = frame?.contentDocument;
+                                return doc?.querySelector('svg')?.dataset.theme === theme
+                                    && frame.contentWindow.getComputedStyle(doc.documentElement).colorScheme
+                                        === getComputedStyle(frame).colorScheme;
+                            }""",
+                            arg=[notebook.ready_selector, theme],
+                            timeout=timeout,
+                        )
                     half_edge = svg.locator('[data-linnet-kind="halfedge"]').first
                     half_id = int(half_edge.get_attribute("data-linnet-id"))
                     half_edge.dispatch_event("click", {"shiftKey": True})

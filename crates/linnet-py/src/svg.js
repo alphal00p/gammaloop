@@ -55,6 +55,9 @@
           const style = frame.ownerDocument.defaultView.getComputedStyle(frame.parentElement);
           document.body.style.color = style.color;
           document.body.style.fontFamily = style.fontFamily;
+          /* Browsers paint an opaque canvas when an iframe's declared scheme
+             differs from its document, even when both backgrounds are transparent. */
+          document.documentElement.style.colorScheme = frame.ownerDocument.defaultView.getComputedStyle(frame).colorScheme;
         }
       } catch (_) { /* Cross-origin embeddings retain their own text styling. */ }
     };
