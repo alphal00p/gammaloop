@@ -2406,7 +2406,31 @@
         "Sqrt",
         "TID"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "passed: both generated massive top-quark triangles, native tensor/IBP reduction, complete tensor UV cancellation, finite form factor across threshold and leading-order decay width",
+      "validated_components": [
+        {
+          "scope": "Typed model vertices generate both quark-loop orientations with their native weights. External-basis tensor reduction and 10-target native IBP reproduce the exact D-dimensional physical form factor; all tensor UV poles cancel while the finite evanescent bubble contribution is retained. Physical projectors annihilate the additional on-shell open-tensor term. Independent numerical references cover 19 spacelike, below-threshold, threshold and above-threshold points.",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_higgs_gluons.py",
+          "components": [
+            "Model.generate_diagrams",
+            "Model.expand_couplings",
+            "TensorExpression.simplify_gamma",
+            "TensorExpression.simplify_color",
+            "TensorReducer.with_external_vector",
+            "IntegralFamily.rewrite_numerator",
+            "IntegralFamily.mapping_to",
+            "IntegralFamily.symanzik",
+            "IBPFamily.reduce_laporta",
+            "Particle.spin_sum",
+            "Particle.color_sum",
+            "Kinematics.two_body_phase_space",
+            "Kinematics.flux",
+            "oneloop.master_coefficients"
+          ],
+          "result": "passed against the installed live host; the notebook passed its default state and 17 reactive mass/threshold/coupling combinations",
+          "note": "Live notebook: hep/higgs_gluons.py. This is the gallery single-top-quark contribution, with y=m/v imposed for its width; additional flavors require a coherent amplitude sum. The generated tree fixes the native phase, while the gallery uses an explicit overall PreFactor=-1. Both Ward identities, Bose symmetry, massless raw traces, heavy-mass expansion and identical-gluon 1/2! normalization are checked. Above threshold the width uses the complex modulus. The shared OneLOop owner fixes the zero-root triangle evaluation; no scalar integration formula is duplicated in Feynkit or GammaLoop."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/QCD/OneLoop/Gl-Gl-BackgroundFieldGauge",
