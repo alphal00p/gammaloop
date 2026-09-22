@@ -2773,6 +2773,8 @@ impl PyFeynmanDiagram {
     ///     use ``template_options`` with the same names as ``just draw --input``:
     ///     ``show-particle``, ``show-edge-index``, ``show-node-index``, ``debug``,
     ///     ``momentum-arrows`` and the ``momentum-arrow-*``/``momentum-label-*`` options.
+    ///     Cross sections open their initial-state connections by default; set
+    ///     ``split-initial-state`` to ``False`` to draw the sewn graph.
     /// momenta : bool, optional
     ///     Show momentum arrows and labels routed in the diagram's stored basis.
     ///     Explicit physics settings in ``config`` override these display defaults.

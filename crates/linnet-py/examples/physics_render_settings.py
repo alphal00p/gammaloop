@@ -53,7 +53,9 @@ def _(mo):
 
     **Automatic** placement puts incoming legs on the left and outgoing legs
     on the right, with a centroid bias that separates them from the diagram.
-    Cross-section pairs share movable rows. Momentum labels use the diagram's
+    Cross-sections open initial-state connections into left/right legs by default;
+    matching pairs share movable rows. Disable **Split initial state** to draw
+    the sewn graph. Momentum labels use the diagram's
     stored loop momentum basis. Debug mode adds node and half-edge IDs.
 
     Hover for physics information; click to inspect an edge or vertex.
@@ -117,16 +119,31 @@ def _(examples, mo):
         value="Automatic",
         label="External placement",
     )
+    split_initial_state = mo.ui.checkbox(value=True, label="Split initial state")
     show_momenta = mo.ui.checkbox(value=False, label="Momentum arrows")
     show_momentum_labels = mo.ui.checkbox(value=False, label="Momentum labels")
     show_half_edge_ids = mo.ui.checkbox(value=False, label="Debug IDs")
     mo.hstack(
-        [example, mode, show_momenta, show_momentum_labels, show_half_edge_ids],
+        [
+            example,
+            mode,
+            split_initial_state,
+            show_momenta,
+            show_momentum_labels,
+            show_half_edge_ids,
+        ],
         justify="start",
         wrap=True,
         gap=1.5,
     )
-    return example, mode, show_half_edge_ids, show_momentum_labels, show_momenta
+    return (
+        example,
+        mode,
+        show_half_edge_ids,
+        show_momentum_labels,
+        show_momenta,
+        split_initial_state,
+    )
 
 
 @app.cell(hide_code=True)
@@ -303,6 +320,7 @@ def _(
     show_momentum_labels,
     show_momenta,
     spring_strength,
+    split_initial_state,
 ):
     _forces = {}
     if custom_forces.value:
@@ -326,6 +344,7 @@ def _(
         ),
         template_options={
             "mode": mode.value,
+            "split-initial-state": split_initial_state.value,
             "momentum-arrows": show_momenta.value,
             "show-momentum": show_momentum_labels.value,
             "debug": show_half_edge_ids.value,
