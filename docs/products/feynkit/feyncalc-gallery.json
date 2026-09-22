@@ -844,7 +844,42 @@
         "TimeUsed",
         "TrickMandelstam"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "passed: generated massive ordinary amplitudes and angular-cut cross sections; massive sewn-forward conversion remains unresolved",
+      "validated_components": [
+        {
+          "scope": "Two generated amplitudes with interference; massive reference in covariant, null-reference and timelike-reference photon gauges; both Ward identities; Bose symmetry and massless limit; massive and massless identical-photon angular-cut cross sections",
+          "components": [
+            "Generator.generate",
+            "TensorExpression.dirac_adjoint",
+            "Particle.spin_sum",
+            "TensorExpression.simplify_gamma",
+            "Kinematics.mandelstam",
+            "Kinematics.flux",
+            "Kinematics.two_body_phase_space",
+            "Symbolica.Expression.integrate"
+          ],
+          "result": "passed in installed host",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_diphoton.py",
+          "reference_expression": "2*e^4*((t-m^2)/(u-m^2)+(u-m^2)/(t-m^2)+4*m^2*s/((t-m^2)*(u-m^2))-4*m^4*s^2/((t-m^2)^2*(u-m^2)^2))",
+          "massless_event_cross_section": "2*pi*alpha^2/s*(log((1+C)/(1-C))-C), 0<C<1"
+        },
+        {
+          "scope": "Bose-completed massive sewn-forward diphoton result",
+          "result": "failed: covariant and axial photon projectors disagree, confirming the unresolved sewing convention",
+          "counterexample": {
+            "e": 1,
+            "electron_mass": 1,
+            "s": 10,
+            "t": -1,
+            "u": -7,
+            "expected": "83/8",
+            "covariant_result": "59/8",
+            "axial_reference": "incoming electron momentum",
+            "axial_result": "265/16"
+          },
+          "note": "The massless sewn limit agrees. The prepared shared sewing correction and two existing fixture updates remain pending maintainer approval."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/QED/Tree/ElMu-ElMu",
