@@ -611,7 +611,27 @@
         "SubscriptBox",
         "TimeUsed"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "passed: generated ordinary Bhabha amplitudes, massive spin-averaged square and interference, massless angular distribution and angular-cut cross section",
+      "validated_components": [
+        {
+          "scope": "Both generated s- and t-channel amplitudes retain graph signs and propagators. The full massive square, separate interference term, massless limit, angular density and integrated symmetric angular-cut cross section are checked against independent expressions.",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_identical_leptons.py",
+          "components": [
+            "Generator.generate",
+            "Model.expand_couplings",
+            "FeynmanDiagram.denominator_expression",
+            "TensorExpression.dirac_adjoint",
+            "Particle.spin_sum",
+            "Idenso.simplify_gamma",
+            "Kinematics.mandelstam",
+            "Kinematics.flux",
+            "Kinematics.two_body_phase_space",
+            "Symbolica.integrate"
+          ],
+          "result": "passed in the installed live host",
+          "note": "Live notebook: hep/identical_leptons.py. This uses ordinary labeled amplitudes with initial spin averages and final spin sums; it does not validate sewn-forward conversion. Angular-cut integration is tested in the massless limit, with a cut excluding the Coulomb pole."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/QED/OneLoop/ElAel-ElAel",
@@ -1114,7 +1134,27 @@
         "SubscriptBox",
         "TimeUsed"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "passed: generated ordinary Moller amplitudes, massive spin-averaged square and interference, final-electron exchange, massless angular-cut cross section and identical-event counting",
+      "validated_components": [
+        {
+          "scope": "Both generated t- and u-channel amplitudes retain their relative fermion sign. The massive square, separate interference term, massless limit and final-electron exchange symmetry are checked. Full-sphere integration with 1/2! agrees exactly with one-hemisphere event counting.",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_identical_leptons.py",
+          "components": [
+            "Generator.generate",
+            "Model.expand_couplings",
+            "FeynmanDiagram.denominator_expression",
+            "TensorExpression.dirac_adjoint",
+            "Particle.spin_sum",
+            "Idenso.simplify_gamma",
+            "Kinematics.mandelstam",
+            "Kinematics.flux",
+            "Kinematics.two_body_phase_space",
+            "Symbolica.integrate"
+          ],
+          "result": "passed in the installed live host",
+          "note": "Live notebook: hep/identical_leptons.py. Ordinary labeled amplitudes are used; the identical-particle factor belongs to phase space, not the amplitude or spin sum. Angular-cut integration is tested in the massless limit; sewn-forward conversion is not validated by this regression."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/QED/OneLoop/El-GaEl",
@@ -3758,7 +3798,26 @@
         "Sqrt",
         "TimeUsed"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "passed: generated massive Higgs decay amplitudes and on-shell two-body widths for charged-lepton, up-type-quark and down-type-quark channels",
+      "validated_components": [
+        {
+          "scope": "Generated H -> e- e+, c cbar and b bbar amplitudes, final spin/color sums, exact massive squared amplitudes and widths, vanishing massless Yukawa limit and beta^3 threshold behavior.",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_higgs_decay.py",
+          "components": [
+            "Generator.generate",
+            "Model.expand_couplings",
+            "TensorExpression.dirac_adjoint",
+            "Particle.spin_sum",
+            "Particle.color_sum",
+            "Idenso.simplify_gamma",
+            "Idenso.simplify_color",
+            "Kinematics.flux",
+            "Kinematics.two_body_phase_space"
+          ],
+          "result": "passed in the installed live host",
+          "note": "Live notebook: hep/higgs_decay.py. For the tree-level gallery comparison, each independent UFO Yukawa mass is explicitly identified with the corresponding pole mass. These are physical on-shell two-body decays above threshold."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/EW/Tree/H-WW",
@@ -3791,7 +3850,26 @@
         "Sqrt",
         "TimeUsed"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "passed: generated massive on-shell Higgs-to-WW amplitude and above-threshold two-body width with all physical vector polarizations",
+      "validated_components": [
+        {
+          "scope": "Generated H -> W- W+ amplitude, all three Proca polarizations for each final vector, exact massive squared amplitude, shared decay flux/phase space and the above-threshold width.",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_higgs_decay.py",
+          "components": [
+            "Generator.generate",
+            "Model.expand_couplings",
+            "TensorExpression.dirac_adjoint",
+            "Particle.spin_sum",
+            "Particle.color_sum",
+            "Idenso.simplify_gamma",
+            "Idenso.simplify_color",
+            "Kinematics.flux",
+            "Kinematics.two_body_phase_space"
+          ],
+          "result": "passed in the installed live host",
+          "note": "Live notebook: hep/higgs_decay.py. W- and W+ are distinct, so no identical-particle phase-space factor is applied. This validates on-shell WW above threshold, not off-shell WW* at the physical 125 GeV Higgs mass."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/EW/Tree/H-ZZ",
@@ -3825,7 +3903,26 @@
         "Sqrt",
         "TimeUsed"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "passed: generated massive on-shell Higgs-to-ZZ amplitude and above-threshold width with physical vector polarizations and identical-Z normalization",
+      "validated_components": [
+        {
+          "scope": "Generated labeled H -> Z Z amplitude, all three Proca polarizations for each vector, exact massive squared amplitude, shared decay flux/phase space and width with the explicit final-state 1/2! factor.",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_higgs_decay.py",
+          "components": [
+            "Generator.generate",
+            "Model.expand_couplings",
+            "TensorExpression.dirac_adjoint",
+            "Particle.spin_sum",
+            "Particle.color_sum",
+            "Idenso.simplify_gamma",
+            "Idenso.simplify_color",
+            "Kinematics.flux",
+            "Kinematics.two_body_phase_space"
+          ],
+          "result": "passed in the installed live host",
+          "note": "Live notebook: hep/higgs_decay.py. The width comparison uses the tree-level relation MW=cw*MZ. The identical-Z factor is applied only in phase space. This validates on-shell ZZ above threshold, not off-shell ZZ* at the physical 125 GeV Higgs mass."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/EW/Tree/W-QiQjbar",
