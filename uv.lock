@@ -457,9 +457,9 @@ requires-dist = [
     { name = "pymupdf", specifier = ">=1.23.4" },
     { name = "pytest" },
     { name = "pyyaml", specifier = ">=6.0.1" },
-    { name = "symbolica", specifier = ">=0.14.0" },
+    { name = "symbolica", git = "https://github.com/symbolica-dev/symbolica.git?rev=a19c760dd567c239f30d87e4e924ca2f8b8457ab" },
     { name = "typst", marker = "extra == 'typst-display'", specifier = ">=0.15,<0.16" },
-    { name = "ufo-model-loader", specifier = ">=0.1.6" },
+    { name = "ufo-model-loader", git = "https://github.com/alphal00p/ufo_model_loader.git?rev=70ddee6b416f8c8b340e0d087646d77095c5d24b" },
 ]
 provides-extras = ["typst-display"]
 
@@ -470,8 +470,8 @@ dev = [
     { name = "marimo", specifier = ">=0.24,<0.25" },
     { name = "pytest", specifier = ">=8.3.5,<9" },
     { name = "pyyaml", specifier = ">=6.0.1,<7" },
-    { name = "symbolica", specifier = ">=0.16.0" },
-    { name = "ufo-model-loader", specifier = ">=0.1.6" },
+    { name = "symbolica", git = "https://github.com/symbolica-dev/symbolica.git?rev=a19c760dd567c239f30d87e4e924ca2f8b8457ab" },
+    { name = "ufo-model-loader", git = "https://github.com/alphal00p/ufo_model_loader.git?rev=70ddee6b416f8c8b340e0d087646d77095c5d24b" },
 ]
 
 [[package]]
@@ -2020,15 +2020,8 @@ wheels = [
 
 [[package]]
 name = "symbolica"
-version = "0.18.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/f8/87/8ea8f29b0f4193b6feb2eda0094422684863ad94062a75414cdee600cdeb/symbolica-0.18.0.tar.gz", hash = "sha256:60f06ac3c61864af6835eb448114521c3eb3adc2d4e7439cd9396b5d884f08a9", size = 84251, upload-time = "2025-09-04T08:35:24.628Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/ca/c5/1b96e9ed14294a18c876509e81efb844eaafe174b85a7094cbfe7ecf41d1/symbolica-0.18.0-1-cp39-abi3-win_amd64.whl", hash = "sha256:37e9470e67e8c0750a02f47f908a0f73c13541d8ea5b39e8d1703ff0f77dcb5f", size = 22236477, upload-time = "2025-09-19T08:38:16.527Z" },
-    { url = "https://files.pythonhosted.org/packages/a0/45/cfae4a98a1fe9663e5a0e7f232f547308cff3ea732933b2fcb0b7a38ab65/symbolica-0.18.0-cp310-abi3-macosx_10_12_x86_64.whl", hash = "sha256:4fb8bd329642b7ec51a0b9a226954b0312425323b3542f2e63c171e48df05b52", size = 20398835, upload-time = "2025-09-04T08:36:03.815Z" },
-    { url = "https://files.pythonhosted.org/packages/9c/82/d3cf3df128c9188e1b064f87fd88b55b1d8019d959ea1e74cc4558db63f6/symbolica-0.18.0-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:959dbf51c201db529fe526335df08f4876489f9d63b69c34381364711a5936f6", size = 18412032, upload-time = "2025-09-04T08:36:14.162Z" },
-    { url = "https://files.pythonhosted.org/packages/da/07/6a5e5ea0656efcddb7198cd23fce0780709aef480bbd0757bd2e8194cef0/symbolica-0.18.0-cp38-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:f462839b0a5837a8ecbe7dba981e9bb5d57562ef614d94c4597445f707fcd161", size = 20874383, upload-time = "2025-09-04T08:35:52.222Z" },
-]
+version = "3.0.0"
+source = { git = "https://github.com/symbolica-dev/symbolica.git?rev=a19c760dd567c239f30d87e4e924ca2f8b8457ab#a19c760dd567c239f30d87e4e924ca2f8b8457ab" }
 
 [[package]]
 name = "terminado"
@@ -2138,14 +2131,10 @@ wheels = [
 
 [[package]]
 name = "ufo-model-loader"
-version = "0.1.7"
-source = { registry = "https://pypi.org/simple" }
+version = "0.1.8"
+source = { git = "https://github.com/alphal00p/ufo_model_loader.git?rev=70ddee6b416f8c8b340e0d087646d77095c5d24b#70ddee6b416f8c8b340e0d087646d77095c5d24b" }
 dependencies = [
     { name = "symbolica" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/91/ea/3060478303daa465572f17c0c2550bfbf5d61b6c78b0167a7bcd13b7d5bd/ufo_model_loader-0.1.7.tar.gz", hash = "sha256:79530b7bfb0b63f7c5547bf2a6309dbd162fdb7108800318cb08b93d227fbf67", size = 60941, upload-time = "2026-07-16T10:05:10.28Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/e8/64/eb05d1e04f8353559a10c4184a7749f42955616b146af0f6501c4e3577af/ufo_model_loader-0.1.7-py3-none-any.whl", hash = "sha256:803ae28141ec4be3189cc62469b88da17ca33907791fe99774c2fe756a45edf7", size = 74973, upload-time = "2026-07-16T10:05:09.1Z" },
 ]
 
 [[package]]
