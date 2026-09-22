@@ -88,6 +88,18 @@ passes handle fundamental/adjoint deltas, generators, structure constants, and r
 group parameters. Apply one algebra family at a time and inspect the intermediate expression;
 an all-at-once fixed-point loop can obscure which convention produced a sign or normalization.
 
+For explicit color generators, `spenso_conjugate` and `dirac_adjoint` exchange
+fundamental and antifundamental slots and transpose the generator ports. This
+uses the Hermiticity of the SU(N) generators. Scalar representation labels in
+Casimir and index invariants are preserved. Real momenta and couplings still
+need explicit assumptions or substitutions for unevaluated conjugations.
+
+Color simplification contracts metrics inside collected chains and traces before
+applying trace identities. A symmetric trace through degree four with a repeated
+adjoint pair is expanded using Spenso's normalized projector and reduced by the
+existing Casimir rules. Open symmetric invariants and higher-degree projectors
+remain symbolic; this does not claim a general higher-rank invariant reduction.
+
 #callout("Canonical does not mean physically equivalent by itself", [
   Canonical ordering makes structurally equivalent expressions comparable under the registered
   rules. On-shell relations, gauge choices, dimension-specific identities, and model parameter
