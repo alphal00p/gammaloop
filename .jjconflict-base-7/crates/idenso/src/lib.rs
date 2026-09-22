@@ -590,15 +590,18 @@ impl IndexTooling for AtomView<'_> {
                 }
             }
         }
-        Ok(a.simplify_gamma_conj::<Aind>()
+        a = a
+            .simplify_gamma_conj::<Aind>()
             .map_err(|error| AdjointError::GammaConjugation {
                 reason: error.to_string(),
-            })?
-            // Boundary gamma0 factors multiply the complete amplitude. Distribute
-            // them across sums before canceling each chain's conjugation factors.
-            .expand()
-            .simplify_gamma0()
-            .simplify_metrics())
+            })?;
+        // In the physical-leg convention, boundary gamma0 factors multiply the
+        // complete amplitude. Distribute them across sums before canceling each
+        // chain's conjugation factors; retain factored output for matrix adjoints.
+        if preserve_indices {
+            a = a.expand();
+        }
+        Ok(a.simplify_gamma0().simplify_metrics())
     }
 
     fn wrap_indices(&self, header: Symbol) -> Atom {
