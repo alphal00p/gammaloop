@@ -676,7 +676,7 @@ impl NumeratorInstantiation<'_> {
                         ColorRepresentation::AntiFundamental,
                     )
                 }),
-                "f" => self.exact_arguments(term, &arguments, 3).and_then(|args| {
+                "f" | "d" => self.exact_arguments(term, &arguments, 3).and_then(|args| {
                     for argument in args {
                         self.assign_color_representation(
                             &mut representations,
@@ -686,7 +686,7 @@ impl NumeratorInstantiation<'_> {
                     }
                     Ok(())
                 }),
-                "d" | "Epsilon" | "EpsilonBar" | "T6" | "K6" | "K6Bar" => {
+                "Epsilon" | "EpsilonBar" | "T6" | "K6" | "K6Bar" => {
                     Err(self.unsupported_tensor(term))
                 }
                 "IdentityL" | "Gamma" | "Gamma5" | "ProjM" | "ProjP" | "Sigma" | "C" | "Metric"
@@ -807,16 +807,29 @@ impl NumeratorInstantiation<'_> {
                         )
                         .finish()
                 }),
-                "f" => self.exact_arguments(term, &arguments, 3).map(|args| {
-                    args.iter()
-                        .fold(FunctionBuilder::new(CS.f), |builder, argument| {
-                            builder.add_arg(
-                                ColorRepresentation::Adjoint
+                "f" | "d" => self.exact_arguments(term, &arguments, 3).map(|args| {
+                    let adjoint_indices = args.iter().map(|argument| {
+                        ColorRepresentation::Adjoint
+                            .representation()
+                            .to_symbolic([argument.clone()])
+                    });
+                    if name == "d" {
+                        // UFO d^{abc} = 2 Tr({T^a,T^b} T^c), whereas Idenso
+                        // stores the normalized symmetric generator trace.
+                        Atom::num(4)
+                            * CS.symmetric_generator_trace(
+                                ColorRepresentation::Fundamental
                                     .representation()
-                                    .to_symbolic([argument.clone()]),
+                                    .to_symbolic([]),
+                                adjoint_indices,
                             )
-                        })
-                        .finish()
+                    } else {
+                        adjoint_indices
+                            .fold(FunctionBuilder::new(CS.f), |builder, argument| {
+                                builder.add_arg(argument)
+                            })
+                            .finish()
+                    }
                 }),
                 _ => return,
             };
@@ -6028,6 +6041,72 @@ mod tests {
             test_atom(
                 "spenso::gamma(spenso::bis(4,gammalooprs::hedge(11,1)),spenso::bis(4,gammalooprs::hedge(10,1)),spenso::mink(4,gammalooprs::edge(5,5)))*gammalooprs::Q(5,spenso::mink(4,gammalooprs::edge(5,5)))*spenso::g(spenso::mink(4,gammalooprs::edge(5,4)),spenso::mink(4,gammalooprs::edge(5,4)))"
             )
+        );
+    }
+
+    #[test]
+    fn lowers_ufo_symmetric_color_tensor_with_standard_normalization() {
+        use idenso::{IndexTooling, color::ColorSimplifier};
+
+        let mut legs = [0, 1, 2].map(|edge| NumeratorHalfEdge {
+            edge,
+            flow: Flow::Source,
+            spin: 1,
+            color: 8,
+        });
+        let instantiation = NumeratorInstantiation {
+            owner: NumeratorOwner::Vertex(0),
+            legs: &legs,
+        };
+        let tensor = instantiation
+            .instantiate(&test_atom("d(1,2,3)"), NumeratorSector::Color)
+            .unwrap();
+        assert_eq!(tensor, tensor.spenso_conj());
+        assert_eq!(
+            tensor,
+            instantiation
+                .instantiate(&test_atom("d(3,1,2)"), NumeratorSector::Color)
+                .unwrap()
+        );
+        assert_eq!(
+            (tensor.clone() * &tensor)
+                .simplify_color()
+                .to_cof_dimension_invariants(),
+            test_atom("40/3")
+        );
+        let third = instantiation.index(legs[2], 1).unwrap();
+        let other = test_atom("other_color_index");
+        let right = tensor.replace(third.to_pattern()).with(other.clone());
+        assert_eq!(
+            (tensor * right)
+                .simplify_color()
+                .to_cof_dimension_invariants(),
+            test_atom("5/3")
+                * ETS.metric(
+                    ColorRepresentation::Adjoint
+                        .representation()
+                        .to_symbolic([third]),
+                    ColorRepresentation::Adjoint
+                        .representation()
+                        .to_symbolic([other]),
+                )
+        );
+        assert_eq!(
+            instantiation
+                .instantiate(&test_atom("d(-1,-1,3)"), NumeratorSector::Color)
+                .unwrap()
+                .simplify_color(),
+            Atom::Zero
+        );
+        legs[0].color = 3;
+        let incompatible = NumeratorInstantiation {
+            owner: NumeratorOwner::Vertex(0),
+            legs: &legs,
+        };
+        assert!(
+            incompatible
+                .instantiate(&test_atom("d(1,2,3)"), NumeratorSector::Color)
+                .is_err()
         );
     }
 
