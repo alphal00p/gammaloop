@@ -3772,7 +3772,26 @@
         "SubscriptBox",
         "TimeUsed"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "passed: generated ordinary amplitudes and massive two-body widths for neutrinos, charged leptons, up-type and down-type quarks",
+      "validated_components": [
+        {
+          "scope": "Four generated chiral decay channels with full Proca spin averaging, final spin/color sums, massive widths, massless limits and vector/axial threshold powers",
+          "components": [
+            "Generator.generate",
+            "TensorExpression.dirac_adjoint",
+            "Particle.spin_sum",
+            "Particle.color_sum",
+            "TensorExpression.simplify_gamma",
+            "Kinematics.with_scalar_product",
+            "Kinematics.flux",
+            "Kinematics.two_body_phase_space"
+          ],
+          "result": "passed in installed host and live Marimo notebook, including all four channel selections",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_z_decay.py",
+          "reference_expression": "Nc*GF*M^3*beta/(6*pi*sqrt(2))*(cv^2*(1+2*r)+ca^2*(1-4*r)), r=mf^2/M^2, beta=sqrt(1-4*r), cv=T3-2*Qf*sw^2, ca=T3",
+          "shared_fix": "Idenso special-matrix conjugation for four-dimensional gamma5 and chiral projectors; exact identities and 64 numerical Dirac-adjoint components"
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/EW/Tree/AnelEl-AnmuMu",
