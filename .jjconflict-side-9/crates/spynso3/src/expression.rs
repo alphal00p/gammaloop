@@ -1651,16 +1651,26 @@ impl TensorExpression {
         ))
     }
 
-    /// Create an unresolved metric tensor for `rep`.
+    /// Create an unresolved metric with ports in `rep` and `other`.
     ///
+    /// `other` defaults to `rep`; it may also be the dual of the same space.
+    /// For example, `g(fund, fund.dual())("i", "j")` creates a fundamental identity.
     /// Call the result with two indices to fill its ports in logical order.
     #[staticmethod]
-    fn g(py: Python<'_>, rep: &SpensoRepresentation) -> PyResult<Py<TensorExpression>> {
-        let structure = ExplicitKey::<AbstractIndex>::from_iter(
-            [rep.representation, rep.representation],
-            ETS.metric,
-            None,
-        );
+    #[pyo3(signature = (rep, other = None))]
+    fn g(
+        py: Python<'_>,
+        rep: &SpensoRepresentation,
+        other: Option<&SpensoRepresentation>,
+    ) -> PyResult<Py<TensorExpression>> {
+        let left = rep.representation;
+        let right = other.unwrap_or(rep).representation;
+        if left != right && left.dual() != right {
+            return Err(PyValueError::new_err(
+                "metric ports must belong to the same representation space (possibly dual)",
+            ));
+        }
+        let structure = ExplicitKey::<AbstractIndex>::from_iter([left, right], ETS.metric, None);
         Self::from_structure(py, &structure)
     }
 
@@ -4730,7 +4740,10 @@ mod tests {
                 representation: ExtendibleReps::EUCLIDEAN.new_rep(dimension),
             };
             let cases = vec![
-                (TensorExpression::g(py, &euc_object)?, vec![dimension; 2]),
+                (
+                    TensorExpression::g(py, &euc_object, None)?,
+                    vec![dimension; 2],
+                ),
                 (TensorExpression::flat(py, &euc_object)?, vec![dimension; 2]),
                 (
                     TensorExpression::gamma(py, ConvertibleToDimension(dimension))?,
@@ -4973,7 +4986,7 @@ mod tests {
                     .new_rep(Dimension::Concrete(3))
                     .cast(),
             };
-            let metric = TensorExpression::g(py, &representation)?;
+            let metric = TensorExpression::g(py, &representation, None)?;
             let tensor_type = py.get_type::<TensorExpression>();
             let kwargs = pyo3::types::PyDict::new(py);
             kwargs.set_item("cook_indices", PyCookSettings::indices())?;
@@ -5999,7 +6012,7 @@ mod tests {
         }
 
         Python::attach(|py| -> PyResult<()> {
-            let metric = TensorExpression::g(py, &SpensoRepresentation { representation })?;
+            let metric = TensorExpression::g(py, &SpensoRepresentation { representation }, None)?;
             let right = metric.clone_ref(py);
             let TensorDispatch::Expression(composed) = TensorExpression::compose(
                 metric.bind(py).borrow(),

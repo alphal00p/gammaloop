@@ -89,6 +89,28 @@ The generated #link("reference/python/spynso3/Representation/")[`Representation`
 versioned contracts. Do not infer index compatibility from two equal dimensions: names,
 representations, and duality remain part of the value.
 
+== Metrics and oriented identities
+
+`TensorExpression.g(left, right)` creates an unresolved metric with ports in the
+specified logical order. The representations must identify the same space and
+have exactly equal dimensions; either port may carry its dual orientation.
+Omitting `right` uses `left` for both ports, as in a Minkowski metric.
+For a fundamental color identity, pair the fundamental space with its dual:
+
+// docs-example: compile
+```python
+from symbolica import E
+from symbolica.community.spenso import Representation, TensorExpression
+
+fund = Representation.cof(3)
+identity = TensorExpression.g(fund, fund.dual())
+indexed_identity = identity("i", "j")
+assert identity("i", "i").simplify_metrics().to_expression() == E("3")
+```
+
+The same constructor supports symbolic dimensions. Distinct symbolic dimensions
+are rejected, even when no numerical values have been assigned.
+
 == Construct and inspect concrete data
 
 This complete source creates a named rank-two tensor, verifies one component, and converts its

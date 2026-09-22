@@ -42,7 +42,7 @@
     spring: "number",
     repulsion: "number",
     steps: "integer",
-    model: ("normal", "dangling-tangent", "fixed-length"),
+    model: ("normal", "dangling-tangent", "fixed-length", "fixed-gap"),
     step: "number",
     tolerance: "number",
     "max-movement": "number",
@@ -404,7 +404,9 @@
   /// `"dangling-tangent"` uses the edge direction for dangling half-edge labels
   /// and a perpendicular offset for paired edges, and `"fixed-length"` keeps
   /// each label at a fixed distance from its edge point and only lets that
-  /// segment rotate. -> string
+  /// segment rotate. `"fixed-gap"` keeps internal labels at a uniform clearance
+  /// from their measured text box, moving them only to resolve collisions;
+  /// dangling labels retain outward tangent relaxation. -> string
   label-layout: "normal",
   /// Label relaxation step size. Applies after both modes. -> float
   label-step: 0.15,

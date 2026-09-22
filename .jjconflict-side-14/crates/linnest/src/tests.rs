@@ -4985,3 +4985,64 @@ fn dangling_centroid_incremental_delta_matches_total_delta() {
         baseline_cached = baseline_incremental;
     }
 }
+
+#[test]
+fn fixed_gap_labels_preserve_clearance_across_sizes_bends_and_rotations() {
+    for angle in [
+        0.0_f64,
+        std::f64::consts::FRAC_PI_4,
+        std::f64::consts::FRAC_PI_2,
+    ] {
+        let (sin, cos) = angle.sin_cos();
+        let dot = format!(
+            r#"digraph {{
+                a [pos="{},{}!" "layout-width"="0.2" "layout-height"="0.2"]
+                b [pos="{},{}!" "layout-width"="0.2" "layout-height"="0.2"]
+                a -> b [id=0 pos="{},{}!" "label-width"="0.2" "label-height"="0.4"]
+                b -> a [id=1 pos="{},{}!" "label-width"="2.2" "label-height"="1.4"]
+                a -> b [id=2 pos="0,0!" "label-width"="0.6" "label-height"="0.6"]
+            }}"#,
+            -4.0 * cos,
+            -4.0 * sin,
+            4.0 * cos,
+            4.0 * sin,
+            -2.0 * sin,
+            2.0 * cos,
+            2.0 * sin,
+            -2.0 * cos,
+        );
+        let graph = decode_graphs(&parse_dot_graphs_bytes(dot.as_bytes()).unwrap()).remove(0);
+        for charge in ["0", "100"] {
+            let config = BTreeMap::from([
+                ("layout-algo", "tree"),
+                ("layout-nodes", "fixed"),
+                ("viewport-w", "2"),
+                ("viewport-h", "1"),
+                ("length-scale", "1"),
+                ("label-layout", "fixed-gap"),
+                ("internal-label-length-scale", "0.6"),
+                ("label-charge", charge),
+                ("label-steps", "30"),
+            ]);
+            let laid_out = layout_parsed_graph_bytes(&graph, &encode_cbor(&config)).unwrap();
+            let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&laid_out).unwrap());
+            for (edge, (width, height, side)) in
+                edges
+                    .iter()
+                    .zip([(0.2, 0.4, 1.0), (2.2, 1.4, -1.0), (0.6, 0.6, 1.0)])
+            {
+                let point = edge.pos.as_ref().unwrap();
+                let label = edge.label_pos.as_ref().unwrap();
+                let outward_distance =
+                    side * (-(label.x - point.x) * sin + (label.y - point.y) * cos);
+                let text_extent = (width * sin.abs() + height * cos.abs()) / 2.0;
+                assert!(
+                    (outward_distance - text_extent - 0.6).abs() < 1e-9,
+                    "angle={angle}, charge={charge}, edge={}, clearance={}",
+                    edge.edge,
+                    outward_distance - text_extent
+                );
+            }
+        }
+    }
+}

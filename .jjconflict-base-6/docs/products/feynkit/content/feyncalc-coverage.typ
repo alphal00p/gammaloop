@@ -463,7 +463,10 @@ $ sum_(a,b,c) abs(op("Tr")(T^a T^b T^c))^2
   = frac((N^2-1)(N^2-2), 8N). $
 An independent contraction with Spenso's numerical SU(3) matrices gives $7/3$.
 Numerical validation also checks every free-index component of the mixed
-trace/chain identity. The shared Spenso syntax classifier recognizes dual
+trace/chain identity. The identity uses the existing typed metric factory as
+`TensorExpression.g(fund, fund.dual())("i", "j")`; the optional second
+representation preserves its supplied logical port order and validates exact
+dimension equality. The shared Spenso syntax classifier recognizes dual
 representation slots inside metrics, so a fundamental identity retains its
 oriented tensor ports when added to generator products. Regression tests cover
 all parser filters, expanded and opaque parsing, and scalar precontraction;
@@ -540,6 +543,14 @@ Symanzik polynomials and exercise the same shared power-reordering implementatio
 Singular-form regressions compare cofactor results with a nonsingular regulator
 limit. Scaling and mapping APIs reject singular forms rather than interpreting
 vanishing polynomials as a proof.
+
+Charge conjugation remains a separate gap: UFO `C(i,j)` is rejected by the
+shared generator, and neither Idenso's `GammaLibrary` nor the shared HEP tensor
+libraries register a charge-conjugation tensor. The existing GammaLoop reindexer
+also leaves `C` unlowered. A complete implementation needs shared Dirac algebra
+and tensor data before exposing the generator lowering. General Majorana and
+fermion-number-violating generation additionally require changes to the current
+external fermion-flow normalization, which accepts particle/antiparticle pairs.
 
 An example counts as reproduced only after exercising the relevant shared
 components and comparing its final observable or symbolic identity with the
