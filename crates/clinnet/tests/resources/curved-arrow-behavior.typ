@@ -1013,6 +1013,24 @@
         }
       }
 
+      // A near miss at base clearance becomes a collision when label boxes grow.
+      let small = (bounds: (left: 0, right: 1, bottom: 0, top: 1), cost: 0)
+      let moved = (bounds: (left: -2, right: -1, bottom: 0, top: 1), cost: 0.001)
+      let obstacle = (left: 1.2, right: 2.2, bottom: 0, top: 1)
+      let movable = (candidates: (small, moved))
+      assert.eq(drawing._relax-label-placements((movable,), (obstacle,), label-padding: 0).first(), small, message: "zero padding keeps a clear label in place")
+      assert.eq(drawing._relax-label-placements((movable,), (obstacle,), label-padding: 0.3).first().bounds, moved.bounds, message: "padding repels labels from nearby obstacles")
+      // Inspect a fixed candidate too: the enclosing label must not enlarge the obstacle.
+      let fixed = (candidates: (small,))
+      let scored = drawing._relax-label-placements((fixed, movable), ((left: 0.3, right: 0.7, bottom: 0.3, top: 0.7),), label-padding: 0.3)
+      assert(calc.abs(scored.first().cost - calc.pow(0.48, 2)) < epsilon, message: "collision cost matches the displayed contained obstacle box")
+      let neighbour = (candidates: ((bounds: obstacle, cost: 0),))
+      // Separate the labels beyond the base pair padding, but inside added padding.
+      neighbour.candidates.at(0).bounds.left = 1.5
+      neighbour.candidates.at(0).bounds.right = 2.5
+      assert.eq(drawing._relax-label-placements((movable, neighbour), (), label-padding: 0).first(), small, message: "base pair clearance is preserved")
+      assert.eq(drawing._relax-label-placements((movable, neighbour), (), label-padding: 0.3).first().bounds, moved.bounds, message: "padding also repels labels from each other")
+
       let offset-label = drawing._layer-label-element(
         native, curve.line((0, 0), (8, 0)),
         (label: [AB], offset: -0.2), (4, 0), (edge: (pos: (4, 0))), placement: true,

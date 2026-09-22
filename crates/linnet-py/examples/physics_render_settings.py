@@ -62,6 +62,8 @@ def _(mo):
     **Collision boxes** shows padded label boxes: dashed purple for label–label
     clearance, cyan for label–edge/node clearance, and orange for edge/node
     obstacles. Only matching purple–purple or cyan–orange overlaps are penalized.
+    **Extra label collision padding** enlarges both label boxes by that amount
+    on every side, in canvas units; zero restores their base sizes.
 
     Hover for physics information; click to inspect an edge or vertex.
     Shift-click toggles selection. The outer quarters of an internal edge
@@ -129,6 +131,15 @@ def _(examples, mo):
     show_momentum_labels = mo.ui.checkbox(value=False, label="Momentum labels")
     show_half_edge_ids = mo.ui.checkbox(value=False, label="Debug IDs")
     show_collision_boxes = mo.ui.checkbox(value=False, label="Collision boxes")
+    label_collision_padding = mo.ui.slider(
+        0,
+        0.6,
+        0.05,
+        0.15,
+        debounce=True,
+        show_value=True,
+        label="Extra label collision padding",
+    )
     mo.hstack(
         [
             example,
@@ -138,6 +149,7 @@ def _(examples, mo):
             show_momentum_labels,
             show_half_edge_ids,
             show_collision_boxes,
+            label_collision_padding,
         ],
         justify="start",
         wrap=True,
@@ -145,6 +157,7 @@ def _(examples, mo):
     )
     return (
         example,
+        label_collision_padding,
         mode,
         show_collision_boxes,
         show_half_edge_ids,
@@ -321,6 +334,7 @@ def _(
     force_seed,
     force_steps,
     label_steps,
+    label_collision_padding,
     layout_algorithm,
     lp,
     mode,
@@ -345,7 +359,10 @@ def _(
     # The shared physics template lightens sink halves by 45% and owns the
     # particle, label, arrow, and placement conventions.
     render_config = lp.RenderConfig(
-        drawing=lp.DrawOptions(debug_label_collisions=show_collision_boxes.value),
+        drawing=lp.DrawOptions(
+            debug_label_collisions=show_collision_boxes.value,
+            label_collision_padding=label_collision_padding.value,
+        ),
         layouts=lp.LayoutOptions(
             algorithm=layout_algorithm.value,
             steps=force_steps.value,

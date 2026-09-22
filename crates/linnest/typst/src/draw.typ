@@ -290,10 +290,16 @@
   debug: false,
   /// Show the padded boxes used by label placement: dashed purple for
   /// label–label clearance, cyan for label–obstacle clearance, and orange for
-  /// node/edge obstacles. Each pair shares the padding equally. Floating
+  /// node/edge obstacles. Base pair padding is shared equally; label boxes also
+  /// include `label-collision-padding`. Floating
   /// overlays do not affect placement, canvas bounds, or interaction targets.
   /// -> bool
   debug-label-collisions: false,
+  /// Extra padding on every side of label collision boxes, in canvas units.
+  /// Adds to the base label–label and label–obstacle clearances; zero restores
+  /// those base boxes. Affects sliding/side choices, not the normal label gap.
+  /// -> int | float
+  label-collision-padding: _impl._label-collision-padding.extra,
   /// Show `h_i` beside every half-edge without an explicit endpoint label.
   /// -> bool
   show-half-edge-ids: false,
@@ -488,6 +494,7 @@
       subgraph: subgraph,
       debug: debug,
       debug-label-collisions: debug-label-collisions,
+      label-collision-padding: label-collision-padding,
       show-half-edge-ids: show-half-edge-ids,
       node-radius: node-radius,
       node-min-radius: node-min-radius,
