@@ -291,7 +291,8 @@
   /// Show the padded boxes used by label placement: dashed purple for
   /// label–label clearance, cyan for label–obstacle clearance, and orange for
   /// node/edge obstacles. Base pair padding is shared equally; label boxes also
-  /// include `label-collision-padding`. Floating
+  /// include `label-collision-padding`. A label ignores orange boxes belonging
+  /// to its own edge unless it is a self-loop. Floating
   /// overlays do not affect placement, canvas bounds, or interaction targets.
   /// -> bool
   debug-label-collisions: false,

@@ -967,7 +967,8 @@
       for carrier in (curve.line((0, 0), (8, 0)), path) {
         for side in ("left", "right") {
           let style = (label: [AB], label-gap: 0.3, label-side: side)
-          let label = drawing._layer-label-element(native, carrier, style, none, (:), placement: true)
+          let label = drawing._layer-label-element(native, carrier, style, none, (eid: 0), placement: true)
+          assert.eq(label.edge, 0, message: "path labels retain carrier ownership")
           let total = curve.length(carrier, accuracy: 0.001)
           let chosen = drawing._relax-label-placements((label, label), ())
           assert.eq(chosen, drawing._relax-label-placements((label, label), ()), message: "deterministic label annealing")
@@ -1024,6 +1025,17 @@
       let fixed = (candidates: (small,))
       let scored = drawing._relax-label-placements((fixed, movable), ((left: 0.3, right: 0.7, bottom: 0.3, top: 0.7),), label-padding: 0.3)
       assert(calc.abs(scored.first().cost - calc.pow(0.48, 2)) < epsilon, message: "collision cost matches the displayed contained obstacle box")
+      // Padding must not move a label away from its own non-loop carrier.
+      let owned = movable + (edge: 0)
+      for padding in (0, 0.25, 0.6) {
+        let own-edge = small.bounds + (edge: 0, self-loop: false)
+        assert.eq(drawing._relax-label-placements((owned,), (own-edge,), label-padding: padding).first(), small, message: "own edge does not cause label drift")
+        for blocking in (own-edge + (edge: 1), own-edge + (self-loop: true), small.bounds) {
+          assert.eq(drawing._relax-label-placements((owned,), (blocking,), label-padding: padding).first().bounds, moved.bounds, message: "other edges, self-loops, and nodes still repel labels")
+        }
+      }
+      let same-edge = drawing._relax-label-placements((owned, owned), (), label-padding: 0.25)
+      assert.ne(same-edge.first().bounds, same-edge.last().bounds, message: "labels on the same edge still repel each other")
       let neighbour = (candidates: ((bounds: obstacle, cost: 0),))
       // Separate the labels beyond the base pair padding, but inside added padding.
       neighbour.candidates.at(0).bounds.left = 1.5

@@ -62,6 +62,8 @@ def _(mo):
     **Collision boxes** shows padded label boxes: dashed purple for label–label
     clearance, cyan for label–edge/node clearance, and orange for edge/node
     obstacles. Only matching purple–purple or cyan–orange overlaps are penalized.
+    Labels ignore their own edge's boxes, except for self-loops; their fixed
+    offset already controls clearance from the carrier.
     **Extra label collision padding** enlarges both label boxes by that amount
     on every side, in canvas units; zero restores their base sizes.
 

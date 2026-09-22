@@ -1916,7 +1916,9 @@
       )
     })
   }).flatten()
-  if placement { (label: label, style: label-style, candidates: candidates) } else {
+  if placement {
+    (label: label, style: label-style, candidates: candidates, edge: data.at("eid", default: none))
+  } else {
     cetz.draw.content(candidates.first().position, label, padding: 0, ..label-style)
   }
 }
@@ -1945,12 +1947,19 @@
   }
   let choices = placements.map(_ => 0)
   for i in range(placements.len()) {
+    let edge = placements.at(i).at("edge", default: none)
+    // Normal clearance already constrains the label against its own carrier.
+    // Keep self-loop obstacles: a different part of the loop can approach it.
+    let relevant = obstacles.filter(obstacle => (
+      edge == none or obstacle.at("edge", default: none) != edge
+        or obstacle.at("self-loop", default: false)
+    ))
     let candidates = placements.at(i).candidates
     for j in range(candidates.len()) {
       let box = candidates.at(j).bounds
       let area = calc.max(1e-9, (box.right - box.left) * (box.top - box.bottom))
       let cost = candidates.at(j).cost
-      for obstacle in obstacles {
+      for obstacle in relevant {
         cost += overlap(box, obstacle) / area
       }
       candidates.at(j).cost = cost
@@ -3621,8 +3630,9 @@
             }
           }
 
-          // Cover the visible carriers with short segment boxes, including the
-          // label's own curve: a remote bend can approach from another side.
+          // Cover visible carriers with short segment boxes, retaining ownership
+          // so each label ignores its own non-loop edge. Self-loops still repel
+          // their labels: a remote bend can approach from another side.
           // Waves and coils occupy a band around the carrier, not just a line.
           let radius = 0.06 + calc.max(0, ..(source-style-layers + sink-style-layers).map(style => (
             if _style-value(style, "pattern") == none { 0 } else {
@@ -3640,6 +3650,7 @@
               })
               for (start, end) in points.slice(0, 12).zip(points.slice(1)) {
                 label-obstacles.push((
+                  edge: edge.edge, self-loop: self-loop,
                   left: calc.min(start.at(0), end.at(0)) - pad-x,
                   right: calc.max(start.at(0), end.at(0)) + pad-x,
                   bottom: calc.min(start.at(1), end.at(1)) - pad-y,
