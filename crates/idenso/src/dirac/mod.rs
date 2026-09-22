@@ -38,6 +38,7 @@ pub struct GammaLibrary {
     pub projp: Symbol,
     pub projm: Symbol,
     pub gamma5: Symbol,
+    pub charge_conjugation: Symbol,
     pub sigma: Symbol,
 }
 
@@ -341,6 +342,8 @@ pub static AGS, AGS_INNER: GammaLibrary = || GammaLibrary {
         }
     }),
     gammaconj: spenso::tensor_symbol!("spenso::gammaconj"),
+    // ALOHA's Weyl convention C = -i gamma^2 gamma^0: C* = C and C^T = -C.
+    charge_conjugation: spenso::tensor_symbol!("spenso::charge_conjugation"; Real, Antisymmetric),
 };
 }
 
@@ -384,7 +387,9 @@ pub fn gamma_tensor(first: Atom, second: Atom, lorentz: Atom) -> Atom {
         .finish()
 }
 
-fn spinor_matrix_structure<Aind: AbsInd>(
+/// A two-bispinor matrix key with its logical row/column order retained.
+/// Shared component libraries use this constructor for additional Dirac matrices.
+pub fn spinor_matrix_structure<Aind: AbsInd>(
     symbol: Symbol,
     dim: impl Into<Dimension>,
 ) -> Canonicalized<ExplicitKey<Aind>> {

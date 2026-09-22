@@ -157,6 +157,7 @@ enum DiracFactor<'a> {
     },
     Gamma5(AtomView<'a>),
     Gamma0(AtomView<'a>),
+    ChargeConjugation(AtomView<'a>),
     ProjectorPlus(AtomView<'a>),
     ProjectorMinus(AtomView<'a>),
     Other(AtomView<'a>),
@@ -166,6 +167,7 @@ enum DiracFactor<'a> {
 struct DiracFactorKinds {
     has_gamma5: bool,
     has_gamma0: bool,
+    has_charge_conjugation: bool,
     has_projector: bool,
 }
 
@@ -174,6 +176,7 @@ impl DiracFactorKinds {
         match factor {
             DiracFactor::Gamma5(_) => self.has_gamma5 = true,
             DiracFactor::Gamma0(_) => self.has_gamma0 = true,
+            DiracFactor::ChargeConjugation(_) => self.has_charge_conjugation = true,
             DiracFactor::ProjectorPlus(_) | DiracFactor::ProjectorMinus(_) => {
                 self.has_projector = true;
             }
@@ -182,15 +185,15 @@ impl DiracFactorKinds {
     }
 
     fn has_non_pure_gamma(self) -> bool {
-        self.has_gamma5 || self.has_gamma0 || self.has_projector
+        self.has_gamma5 || self.has_gamma0 || self.has_charge_conjugation || self.has_projector
     }
 
-    fn has_gamma_five_or_zero(self) -> bool {
-        self.has_gamma5 || self.has_gamma0
+    fn has_special_trace_pair(self) -> bool {
+        self.has_gamma5 || self.has_gamma0 || self.has_charge_conjugation
     }
 
-    fn has_gamma0_conjugation_candidate(self) -> bool {
-        self.has_gamma0 && (self.has_gamma5 || self.has_projector)
+    fn has_conjugation_candidate(self) -> bool {
+        self.has_charge_conjugation || (self.has_gamma0 && (self.has_gamma5 || self.has_projector))
     }
 }
 
@@ -199,9 +202,11 @@ impl<'a> DiracFactor<'a> {
     /// materializing owned atoms.
     ///
     /// Ordinary gammas are recognized as `gamma(in,out,mu)` and keep `mu`
-    /// by view. Reversed matrix endpoints remain opaque: the Clifford and
-    /// special-matrix rules do not track transposition and cannot safely act
-    /// on mixed ordinary/transposed words. Their dimension is inferred
+    /// by view. Reversed matrix endpoints remain opaque to ordinary Clifford
+    /// and special-matrix rules, which cannot safely act on mixed
+    /// ordinary/transposed words. An explicit four-dimensional C sandwich may
+    /// flip their orientation using the charge-conjugation identities.
+    /// Their dimension is inferred
     /// from `mu` when it is a Minkowski slot, or from the first visible
     /// Minkowski representation inside slash-like tensorial indices such as
     /// `P(1,mink(D))`.
@@ -232,6 +237,14 @@ impl<'a> DiracFactor<'a> {
             let (Some(left), Some(right)) = (args.next(), args.next()) else {
                 return Self::Other(factor);
             };
+            // Antisymmetric normalization puts every C in the same endpoint
+            // order, extracting any transposition sign into the chain scalar.
+            if f.get_symbol() == AGS.charge_conjugation
+                && (has_forward_chain_endpoints(left, right)
+                    || has_forward_chain_endpoints(right, left))
+            {
+                return Self::ChargeConjugation(factor);
+            }
             if has_forward_chain_endpoints(left, right) {
                 return match f.get_symbol() {
                     symbol if symbol == AGS.gamma5 => Self::Gamma5(factor),
@@ -252,6 +265,7 @@ impl<'a> DiracFactor<'a> {
             Self::Gamma { factor, .. }
             | Self::Gamma5(factor)
             | Self::Gamma0(factor)
+            | Self::ChargeConjugation(factor)
             | Self::ProjectorPlus(factor)
             | Self::ProjectorMinus(factor)
             | Self::Other(factor) => factor,
@@ -407,10 +421,11 @@ impl<'settings> DiracSimplifier<'settings> {
                     .flatten()
             })
             .or_else(|| {
-                factor_kinds
-                    .has_gamma0_conjugation_candidate()
-                    .then(|| Self::conjugate_special_factor_by_gamma0(*start, *end, &factors))
-                    .flatten()
+                (factor_kinds.has_conjugation_candidate()
+                    && has_four_dimensional_spin_endpoints(*start, *end))
+                .then(|| Self::conjugate_special_dirac_factor(&factors))
+                .flatten()
+                .map(|(sign, factors)| Atom::num(sign) * chain!(*start, *end; factors))
             })
             .or_else(|| Self::four_dim_chisholm_contraction(*start, *end, &factors))
             .or_else(|| {
@@ -475,7 +490,7 @@ impl DiracSimplifier<'_> {
 
     /// Reduces adjacent special 4D factors:
     /// `gamma5 gamma5 -> 1`, `gamma0 gamma0 -> 1`, `P+ P+ -> P+`,
-    /// `P- P- -> P-`, and `P+ P- -> 0`.
+    /// `P- P- -> P-`, `P+ P- -> 0`, and `C C -> -1`.
     fn contract_adjacent_special_dirac_pair(
         start: AtomView<'_>,
         end: AtomView<'_>,
@@ -489,8 +504,20 @@ impl DiracSimplifier<'_> {
             let [left, right] = pair else {
                 unreachable!("windows(2) always yields pairs")
             };
+            let sign = if matches!(
+                (left, right),
+                (
+                    DiracFactor::ChargeConjugation(_),
+                    DiracFactor::ChargeConjugation(_)
+                )
+            ) {
+                -1
+            } else {
+                1
+            };
             let replacement = match (left, right) {
-                (DiracFactor::Gamma5(_), DiracFactor::Gamma5(_))
+                (DiracFactor::ChargeConjugation(_), DiracFactor::ChargeConjugation(_))
+                | (DiracFactor::Gamma5(_), DiracFactor::Gamma5(_))
                 | (DiracFactor::Gamma0(_), DiracFactor::Gamma0(_)) => Vec::new(),
                 (DiracFactor::ProjectorPlus(_), DiracFactor::ProjectorPlus(_)) => {
                     vec![endpoint_factor(AGS.projp)]
@@ -505,53 +532,101 @@ impl DiracSimplifier<'_> {
                 _ => continue,
             };
 
-            return Some(chain!(start, end; Self::chain_factors(
-                factors,
-                i,
-                i + 1,
-                replacement,
-            )));
+            return Some(
+                Atom::num(sign)
+                    * chain!(start, end; Self::chain_factors(
+                        factors,
+                        i,
+                        i + 1,
+                        replacement,
+                    )),
+            );
         }
 
         None
     }
 
-    /// Conjugates a special 4D factor by `gamma0`:
+    /// Conjugates special 4D factors by `gamma0` or charge conjugation:
     /// `gamma0 gamma5 gamma0 -> -gamma5`,
     /// `gamma0 P+ gamma0 -> P-`, and `gamma0 P- gamma0 -> P+`.
-    fn conjugate_special_factor_by_gamma0(
-        start: AtomView<'_>,
-        end: AtomView<'_>,
-        factors: &[DiracFactor<'_>],
-    ) -> Option<Atom> {
-        if !has_four_dimensional_spin_endpoints(start, end) {
-            return None;
-        }
-
-        for (i, triple) in factors.windows(3).enumerate() {
-            let [left, middle, right] = triple else {
-                unreachable!("windows(3) always yields triples")
-            };
-            if !matches!(left, DiracFactor::Gamma0(_)) || !matches!(right, DiracFactor::Gamma0(_)) {
+    /// With C^-1 = -C, `C gamma(mu) C = gamma(mu)^T` and
+    /// `C gamma(mu)^T C = gamma(mu)`. For a word, insert C^-1 C between
+    /// factors: `C A1...An C = -product(sigma_i) A1^T...An^T`, with
+    /// sigma = -1 for gamma/gamma0 and +1 for gamma5/projectors. Preserve
+    /// factor order: this is a product of transposes, not the transposed word.
+    /// Symbolic-D gamma sandwiches stay opaque; their charge-conjugation
+    /// convention has not been specified.
+    fn conjugate_special_dirac_factor(factors: &[DiracFactor<'_>]) -> Option<(i64, Vec<Atom>)> {
+        for (i, left) in factors.iter().enumerate() {
+            if matches!(left, DiracFactor::Gamma0(_)) {
+                let [middle, DiracFactor::Gamma0(_), ..] = &factors[i + 1..] else {
+                    continue;
+                };
+                let (sign, replacement) = match *middle {
+                    DiracFactor::Gamma5(_) => (-1, gamma5_factor()),
+                    DiracFactor::ProjectorPlus(_) => (1, endpoint_factor(AGS.projm)),
+                    DiracFactor::ProjectorMinus(_) => (1, endpoint_factor(AGS.projp)),
+                    _ => continue,
+                };
+                return Some((sign, Self::chain_factors(factors, i, i + 2, [replacement])));
+            }
+            if !matches!(left, DiracFactor::ChargeConjugation(_)) {
                 continue;
             }
-
-            let (sign, replacement) = match *middle {
-                DiracFactor::Gamma5(_) => (-1, gamma5_factor()),
-                DiracFactor::ProjectorPlus(_) => (1, endpoint_factor(AGS.projm)),
-                DiracFactor::ProjectorMinus(_) => (1, endpoint_factor(AGS.projp)),
-                _ => continue,
+            let Some(end) = factors
+                .iter()
+                .enumerate()
+                .skip(i + 1)
+                .find_map(|(index, factor)| {
+                    matches!(factor, DiracFactor::ChargeConjugation(_)).then_some(index)
+                })
+            else {
+                continue;
             };
-
-            let rewritten =
-                chain!(start, end; Self::chain_factors(factors, i, i + 2, [replacement]));
-            return Some(if sign == 1 {
-                rewritten
-            } else {
-                Atom::num(sign) * rewritten
-            });
+            let mut sign = -1;
+            let mut transposes = Vec::with_capacity(end - i - 1);
+            for middle in &factors[i + 1..end] {
+                let AtomView::Fun(matrix) = middle.as_view() else {
+                    break;
+                };
+                let args = matrix.iter().collect::<Vec<_>>();
+                let [row, column, rest @ ..] = args.as_slice() else {
+                    break;
+                };
+                if !has_forward_chain_endpoints(*row, *column)
+                    && !has_forward_chain_endpoints(*column, *row)
+                {
+                    break;
+                }
+                let sigma = match (matrix.get_symbol(), rest) {
+                    (symbol, [mu])
+                        if symbol == AGS.gamma
+                            && mink_slot_dimension(*mu).is_some_and(is_four_dimension) =>
+                    {
+                        -1
+                    }
+                    (symbol, []) if symbol == AGS.gamma0 => -1,
+                    (symbol, [])
+                        if symbol == AGS.gamma5 || symbol == AGS.projp || symbol == AGS.projm =>
+                    {
+                        1
+                    }
+                    _ => break,
+                };
+                sign *= sigma;
+                transposes.push(
+                    FunctionBuilder::new(matrix.get_symbol())
+                        .add_arg(*column)
+                        .add_arg(*row)
+                        .add_args(rest.iter().copied())
+                        .finish(),
+                );
+            }
+            // A single unsupported factor invalidates the whole sandwich.
+            if transposes.len() == end - i - 1 {
+                return Some((sign, Self::chain_factors(factors, i, end, transposes)));
+            }
         }
-
         None
     }
 
@@ -1103,7 +1178,7 @@ impl DiracSimplifier<'_> {
     /// Evaluates a Dirac trace.
     ///
     /// The pass first handles four-dimensional special factors (`gamma0`,
-    /// `gamma5`, chiral projectors), then falls back to ordinary gamma traces:
+    /// `gamma5`, chiral projectors, charge conjugation), then falls back to ordinary gamma traces:
     /// odd traces vanish and even traces recurse by contracting the first gamma
     /// with each later gamma.
     fn simplify_trace_node(self, f: FunView) -> Option<Atom> {
@@ -1127,7 +1202,7 @@ impl DiracSimplifier<'_> {
             && has_four_dimensional_trace_rep(rep)
             && factors.iter().all(|factor| match factor {
                 DiracFactor::Gamma { dimension, .. } => dimension.is_some_and(is_four_dimension),
-                DiracFactor::Other(_) => false,
+                DiracFactor::ChargeConjugation(_) | DiracFactor::Other(_) => false,
                 _ => true,
             })
         {
@@ -1149,10 +1224,17 @@ impl DiracSimplifier<'_> {
             }
         }
 
-        if factor_kinds.has_gamma_five_or_zero()
+        if factor_kinds.has_special_trace_pair()
             && let Some(rewritten) = Self::simplify_special_trace_pair(rep, &factors)
         {
             return Some(rewritten);
+        }
+
+        if factor_kinds.has_conjugation_candidate()
+            && has_four_dimensional_trace_rep(rep)
+            && let Some((sign, factors)) = Self::conjugate_special_dirac_factor(&factors)
+        {
+            return Some(Atom::num(sign) * Self::trace_or_terminal(rep, factors));
         }
 
         if factor_kinds.has_gamma5
@@ -1206,11 +1288,21 @@ impl DiracSimplifier<'_> {
             return None;
         }
 
+        if matches!(factors, [DiracFactor::ChargeConjugation(_)]) {
+            return Some(Atom::Zero);
+        }
+
         for (i, pair) in factors.windows(2).enumerate() {
             let [left, right] = pair else {
                 unreachable!("windows(2) always yields pairs")
             };
             match (left, right) {
+                (DiracFactor::ChargeConjugation(_), DiracFactor::ChargeConjugation(_)) => {
+                    let mut rest = Vec::with_capacity(factors.len() - 2);
+                    Self::extend_factors(&mut rest, &factors[..i]);
+                    Self::extend_factors(&mut rest, &factors[i + 2..]);
+                    return Some(-Self::trace_or_terminal(rep, rest));
+                }
                 (DiracFactor::Gamma5(_), DiracFactor::Gamma5(_))
                 | (DiracFactor::Gamma0(_), DiracFactor::Gamma0(_)) => {
                     // Four-dimensional involutions inside a trace:

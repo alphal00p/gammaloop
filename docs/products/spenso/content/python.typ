@@ -228,10 +228,21 @@ Reversed gamma, gamma-zero, gamma-five and chiral-projector factors remain
 explicit instead of entering forward-matrix Clifford or projector rules.
 Ordinary subwords can still simplify, but mixed ordinary/transposed words are
 not treated as if all their factors had the same orientation. Canonical chain
-ordering does not supply a general transpose algebra. Numerical evaluation with
-the shared HEP matrix data remains a separate way to check such expressions.
-An installed-host comparison validates all sixteen matrix components of a mixed
-ordinary/transposed product against that data.
+ordering does not supply a general transpose algebra. A supported explicit
+four-dimensional `spenso::charge_conjugation` sandwich is an exception: Idenso
+transposes each known gamma, gamma-zero, gamma-five or projector factor with
+the sign fixed by $C = -i γ^2 γ^0$. Factor order is preserved and scalar
+coefficients are not conjugated. Gamma/slash arguments of symbolic dimension
+remain opaque. The same chain collector joins common starts or ends only in
+self-dual spaces, reversing one word and exchanging its `in`/`out` markers.
+
+Numerical evaluation with the shared HEP matrix data remains a separate way to
+check such expressions. An installed-host comparison validates all sixteen
+matrix components of a mixed ordinary/transposed product against that data.
+The new `installed_charge_conjugation.py` regression additionally compares C
+sandwiches with independent products of those Weyl matrices. Its initial
+symbolic identities pass in the rebuilt host; full installed-host validation
+awaits fixture setup corrections.
 
 == Register data and execute a network
 

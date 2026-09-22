@@ -1255,3 +1255,240 @@ fn transposed_special_dirac_factors_remain_opaque() {
         }
     }
 }
+
+#[test]
+fn charge_conjugation_is_real_antisymmetric_with_ordered_structure() {
+    test_initialize();
+    let left = bis!(4, charge_i);
+    let right = bis!(4, charge_j);
+    let matrix = function!(AGS.charge_conjugation, &left, &right);
+    assert_eq!(matrix.spenso_conj(), matrix);
+    assert_eq!(function!(AGS.charge_conjugation, &right, &left), -&matrix);
+    assert_eq!(function!(AGS.charge_conjugation, &left, &left), Atom::Zero);
+    let structure = spinor_matrix_structure::<AbstractIndex>(AGS.charge_conjugation, 4);
+    assert_eq!(structure.canonical().external_reps().len(), 2);
+    assert!(
+        structure
+            .canonical()
+            .external_reps()
+            .iter()
+            .all(|rep| { *rep == Bispinor {}.new_rep(4).to_lib() })
+    );
+}
+
+#[test]
+fn charge_conjugation_square_and_transposed_norm() {
+    test_initialize();
+    let tags = &*SPENSO_TAG;
+    let left = bis!(4, charge_square_i);
+    let right = bis!(4, charge_square_j);
+    let internal = bis!(4, charge_square_k);
+    let spin = Bispinor {}.to_symbolic([Atom::num(4)]);
+    let matrix = function!(AGS.charge_conjugation, tags.chain_in, tags.chain_out);
+    let transpose = function!(AGS.charge_conjugation, tags.chain_out, tags.chain_in);
+    let identity = id_atom(left.clone(), right.clone());
+    for settings in [
+        GammaSimplifySettings::repeated_pairs(),
+        GammaSimplifySettings::canonical(),
+    ] {
+        assert_eq!(
+            chain!(&left, &right, &matrix, &matrix).simplify_gamma_with(settings),
+            -&identity
+        );
+        assert_eq!(
+            chain!(&left, &right, &transpose, &matrix).simplify_gamma_with(settings),
+            identity
+        );
+        assert_eq!(
+            chain!(&left, &right, &matrix, &transpose).simplify_gamma_with(settings),
+            identity
+        );
+        assert_eq!(
+            trace!(&spin, &matrix, &matrix).simplify_gamma_with(settings),
+            Atom::num(-4)
+        );
+        assert_eq!(
+            trace!(&spin, &matrix).simplify_gamma_with(settings),
+            Atom::Zero
+        );
+    }
+    let explicit = function!(AGS.charge_conjugation, &left, &internal)
+        * function!(AGS.charge_conjugation, &internal, &right);
+    assert_eq!(explicit.simplify_gamma(), -identity);
+}
+
+#[test]
+fn charge_conjugation_sandwich_tracks_gamma_transposition() {
+    test_initialize();
+    let tags = &*SPENSO_TAG;
+    let left = bis!(4, charge_gamma_i);
+    let right = bis!(4, charge_gamma_j);
+    let spin = Bispinor {}.to_symbolic([Atom::num(4)]);
+    let mu = Minkowski {}.new_rep(4).pattern(symbol!("charge_gamma_mu"));
+    let matrix = function!(AGS.charge_conjugation, tags.chain_in, tags.chain_out);
+    let gamma = function!(AGS.gamma, tags.chain_in, tags.chain_out, &mu);
+    let transpose = function!(AGS.gamma, tags.chain_out, tags.chain_in, &mu);
+    for settings in [
+        GammaSimplifySettings::repeated_pairs(),
+        GammaSimplifySettings::canonical(),
+    ] {
+        for (middle, expected) in [(&gamma, &transpose), (&transpose, &gamma)] {
+            let word = chain!(&left, &right, &matrix, middle, &matrix);
+            let result = word.simplify_gamma_with(settings);
+            assert_eq!(result, chain!(&left, &right, expected));
+            assert_eq!(result.simplify_gamma_with(settings), result);
+        }
+        // Removing the C sandwich exposes an ordinary Clifford contraction.
+        // The unprotected mixed-transpose word must still remain opaque.
+        assert_eq!(
+            chain!(&left, &right, &matrix, &transpose, &matrix, &gamma)
+                .simplify_gamma_with(settings),
+            Atom::num(4) * id_atom(left.clone(), right.clone())
+        );
+        assert_eq!(
+            trace!(&spin, &matrix, &transpose, &matrix, &gamma).simplify_gamma_with(settings),
+            Atom::num(16)
+        );
+    }
+}
+
+#[test]
+fn charge_conjugation_special_sandwiches_retain_chirality_and_sign() {
+    test_initialize();
+    let tags = &*SPENSO_TAG;
+    let left = bis!(4, charge_special_i);
+    let right = bis!(4, charge_special_j);
+    let matrix = function!(AGS.charge_conjugation, tags.chain_in, tags.chain_out);
+    for (head, sign) in [
+        (AGS.gamma0, 1),
+        (AGS.gamma5, -1),
+        (AGS.projp, -1),
+        (AGS.projm, -1),
+    ] {
+        for (row, column) in [
+            (tags.chain_in, tags.chain_out),
+            (tags.chain_out, tags.chain_in),
+        ] {
+            let middle = function!(head, row, column);
+            let transpose = function!(head, column, row);
+            let result = chain!(&left, &right, &matrix, &middle, &matrix).simplify_gamma();
+            assert_eq!(result, Atom::num(sign) * chain!(&left, &right, &transpose));
+            assert_eq!(result.simplify_gamma(), result);
+        }
+    }
+}
+
+#[test]
+fn charge_conjugation_leaves_unspecified_dimensions_and_unknown_factors_opaque() {
+    test_initialize();
+    let tags = &*SPENSO_TAG;
+    let matrix = function!(AGS.charge_conjugation, tags.chain_in, tags.chain_out);
+    let left = bis!(4, charge_opaque_i);
+    let right = bis!(4, charge_opaque_j);
+    let dimension = Atom::var(symbol!("charge_opaque_D"));
+    for dim in [Atom::num(3), dimension.clone()] {
+        let mu = Minkowski {}.to_symbolic([dim.clone(), Atom::var(symbol!("charge_opaque_mu"))]);
+        let gamma = function!(AGS.gamma, tags.chain_in, tags.chain_out, &mu);
+        let word = chain!(&left, &right, &matrix, &gamma, &matrix);
+        assert_eq!(word.simplify_gamma(), word);
+        let spin_left = Bispinor {}.to_symbolic([dim.clone(), Atom::var(symbol!("charge_spin_i"))]);
+        let spin_right = Bispinor {}.to_symbolic([dim, Atom::var(symbol!("charge_spin_j"))]);
+        let square = chain!(&spin_left, &spin_right, &matrix, &matrix);
+        assert_eq!(square.simplify_gamma(), square);
+    }
+    let unknown = function!(
+        spenso::tensor_symbol!("charge_unknown"),
+        tags.chain_in,
+        tags.chain_out
+    );
+    let word = chain!(&left, &right, &matrix, &unknown, &matrix);
+    assert_eq!(word.simplify_gamma(), word);
+}
+
+#[test]
+fn charge_conjugation_multiword_preserves_factor_order_and_complex_scalars() {
+    test_initialize();
+    let tags = &*SPENSO_TAG;
+    let left = bis!(4, charge_word_i);
+    let right = bis!(4, charge_word_j);
+    let c = function!(AGS.charge_conjugation, tags.chain_in, tags.chain_out);
+    let mu = Minkowski {}.new_rep(4).pattern(symbol!("charge_word_mu"));
+    let nu = Minkowski {}.new_rep(4).pattern(symbol!("charge_word_nu"));
+    let gamma_mu = function!(AGS.gamma, tags.chain_in, tags.chain_out, &mu);
+    let gamma_nu = function!(AGS.gamma, tags.chain_in, tags.chain_out, &nu);
+    let transposed_mu = function!(AGS.gamma, tags.chain_out, tags.chain_in, &mu);
+    let transposed_nu = function!(AGS.gamma, tags.chain_out, tags.chain_in, &nu);
+    let gamma5 = function!(AGS.gamma5, tags.chain_in, tags.chain_out);
+    let transposed5 = function!(AGS.gamma5, tags.chain_out, tags.chain_in);
+    let scalar = Atom::num(2) + Atom::num(3) * Atom::i();
+    // Independent two-matrix identity: C gamma(mu) gamma(nu) C
+    // = -gamma(mu)^T gamma(nu)^T, with neither order reversal nor conjugation.
+    let word = &scalar * chain!(&left, &right, &c, &gamma_mu, &gamma_nu, &c);
+    let expected = -&scalar * chain!(&left, &right, &transposed_mu, &transposed_nu);
+    assert_eq!(word.simplify_gamma(), expected);
+    assert_eq!(expected.simplify_gamma(), expected);
+    // Three matrices, including gamma5, still have two vector signs.
+    // Using already transposed inputs gives a forward, reducible output.
+    let word = &scalar
+        * chain!(
+            &left,
+            &right,
+            &c,
+            &transposed_mu,
+            &transposed5,
+            &transposed_nu,
+            &c
+        );
+    let expected = -&scalar * chain!(&left, &right, &gamma_mu, &gamma5, &gamma_nu);
+    let result = word.simplify_gamma();
+    assert_eq!(result, expected.simplify_gamma());
+    assert_eq!(result.simplify_gamma(), result);
+}
+
+#[test]
+fn charge_conjugation_multiword_trace_matches_clifford_contractions() {
+    test_initialize();
+    let tags = &*SPENSO_TAG;
+    let c = function!(AGS.charge_conjugation, tags.chain_in, tags.chain_out);
+    let spin = Bispinor {}.to_symbolic([Atom::num(4)]);
+    let mu = Minkowski {}.new_rep(4).pattern(symbol!("charge_trace_mu"));
+    let nu = Minkowski {}.new_rep(4).pattern(symbol!("charge_trace_nu"));
+    let gamma_mu = function!(AGS.gamma, tags.chain_in, tags.chain_out, &mu);
+    let gamma_nu = function!(AGS.gamma, tags.chain_in, tags.chain_out, &nu);
+    let transposed_mu = function!(AGS.gamma, tags.chain_out, tags.chain_in, &mu);
+    let transposed_nu = function!(AGS.gamma, tags.chain_out, tags.chain_in, &nu);
+    let word = trace!(
+        &spin,
+        &c, &transposed_mu, &transposed_nu, &c, &gamma_mu, &gamma_nu
+    );
+    // C gamma(mu)^T gamma(nu)^T C = -gamma(mu) gamma(nu),
+    // while Tr(gamma(mu) gamma(nu) gamma_mu gamma_nu) = -32 in 4D.
+    let result = word.simplify_gamma();
+    assert_eq!(result, Atom::num(32));
+    assert_eq!(result.simplify_gamma(), result);
+}
+
+#[test]
+fn charge_conjugation_multiword_requires_every_factor_to_be_known_and_four_dimensional() {
+    test_initialize();
+    let tags = &*SPENSO_TAG;
+    let left = bis!(4, charge_word_guard_i);
+    let right = bis!(4, charge_word_guard_j);
+    let c = function!(AGS.charge_conjugation, tags.chain_in, tags.chain_out);
+    let mu = Minkowski {}
+        .new_rep(4)
+        .pattern(symbol!("charge_word_guard_mu"));
+    let gamma = function!(AGS.gamma, tags.chain_in, tags.chain_out, &mu);
+    let unknown = function!(
+        spenso::tensor_symbol!("charge_word_unknown"),
+        tags.chain_in,
+        tags.chain_out
+    );
+    let dimension = Atom::var(symbol!("charge_word_guard_D"));
+    let generic = Minkowski {}.to_symbolic([dimension, Atom::var(symbol!("charge_word_guard_nu"))]);
+    let generic_gamma = function!(AGS.gamma, tags.chain_in, tags.chain_out, generic);
+    for unsupported in [unknown, generic_gamma] {
+        let word = chain!(&left, &right, &c, &gamma, &unsupported, &c);
+        assert_eq!(word.simplify_gamma(), word);
+    }
+}

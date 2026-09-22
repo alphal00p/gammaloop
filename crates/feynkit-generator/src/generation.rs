@@ -484,6 +484,7 @@ impl NumeratorInstantiation<'_> {
         let _ = (
             AGS.gamma,
             AGS.gamma5,
+            AGS.charge_conjugation,
             AGS.projm,
             AGS.projp,
             AGS.sigma,
@@ -583,7 +584,12 @@ impl NumeratorInstantiation<'_> {
                             .finish())
                     }
                 }
-                "C" => Err(self.unsupported_tensor(term)),
+                "C" => self.exact_arguments(term, &arguments, 2).map(|args| {
+                    FunctionBuilder::new(AGS.charge_conjugation)
+                        .add_arg(self.bispinor(args[0].clone()))
+                        .add_arg(self.bispinor(args[1].clone()))
+                        .finish()
+                }),
                 "T" | "f" | "d" | "EpsilonBar" | "T6" | "K6" | "K6Bar" => {
                     Err(self.invalid_tensor(term, "a color tensor appeared in a Lorentz structure"))
                 }
@@ -6084,6 +6090,41 @@ mod tests {
             test_atom(
                 "spenso::g(spenso::bis(4,gammalooprs::hedge(20,1)),spenso::bis(4,gammalooprs::hedge(41,1)))"
             )
+        );
+    }
+
+    #[test]
+    fn lowers_ufo_charge_conjugation_and_rejects_invalid_arity() {
+        let legs = tensor_test_legs();
+        let instantiation = NumeratorInstantiation {
+            owner: NumeratorOwner::Vertex(7),
+            legs: &legs,
+        };
+        let charge_conjugation = instantiation
+            .instantiate(&test_atom("C(1,2)"), NumeratorSector::Spin)
+            .unwrap();
+        assert_eq!(
+            charge_conjugation,
+            test_atom(
+                "spenso::charge_conjugation(spenso::bis(4,gammalooprs::hedge(20,1)),spenso::bis(4,gammalooprs::hedge(41,1)))"
+            )
+        );
+        assert_eq!(
+            instantiation
+                .instantiate(&test_atom("C(2,1)"), NumeratorSector::Spin)
+                .unwrap(),
+            -charge_conjugation,
+        );
+        for malformed in ["C()", "C(1)", "C(1,2,3)"] {
+            assert!(matches!(
+                instantiation.instantiate(&test_atom(malformed), NumeratorSector::Spin),
+                Err(GenerationError::InvalidNumeratorTensor { .. })
+            ));
+        }
+        assert!(
+            instantiation
+                .instantiate(&test_atom("C(1,2)"), NumeratorSector::Color)
+                .is_err()
         );
     }
 

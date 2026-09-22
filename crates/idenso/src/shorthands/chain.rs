@@ -9,7 +9,7 @@ use spenso::{
     trace,
 };
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView},
+    atom::{Atom, AtomCore, AtomView, FunctionBuilder},
     function,
     id::{Match, Replacement},
 };
@@ -75,6 +75,10 @@ pub trait Chain {
     ///  becomes
     ///
     /// `chain(rep(d,i), rep(d,k), ...,A(..,in,out...),B(..,in,out...),...)`
+    ///
+    /// In self-dual spaces, common starts or ends can also be joined by
+    /// transposing one chain: reverse its factors and exchange `in`/`out`.
+    /// This is an ordinary transpose and does not conjugate scalar entries.
     fn collect_chains(&self, representation: LibraryRep) -> Atom;
 
     /// Turns traced out chains into traces e.g.
@@ -123,44 +127,91 @@ impl<'a> Chain for AtomView<'a> {
         let out_index = representation.dual().to_symbolic([W_.d_, W_.k_]);
         let chain = function!(T.chain, &in_index, &out_index, W_.x___).to_pattern();
 
-        let product = function!(
-            T.chain,
-            in_index,
-            dummy_out,
-            W_.d___,
-            function!(W_.a_, W_.a___, T.chain_in, W_.b___, T.chain_out, W_.c___)
-        ) * function!(
-            T.chain,
-            dummy_in,
-            out_index,
-            function!(W_.b_, W_.e___, T.chain_in, W_.f___, T.chain_out, W_.g___),
-            W_.h___
-        );
-
-        // println!("{}", product);
-        let collected = function!(
-            T.chain,
-            in_index,
-            out_index,
-            W_.d___,
-            function!(W_.a_, W_.a___, T.chain_in, W_.b___, T.chain_out, W_.c___),
-            function!(W_.b_, W_.e___, T.chain_in, W_.f___, T.chain_out, W_.g___),
-            W_.h___
-        );
-        // println!("{}", collected);
-
+        let mut joins = vec![(
+            chain!(&in_index, &dummy_out, W_.a___) * chain!(&dummy_in, &out_index, W_.b___),
+            false,
+            false,
+        )];
+        if representation.is_self_dual() {
+            // Common-end contractions need a transpose, not a conjugate:
+            // A(i,j) B(k,j) = (A B^T)(i,k), and similarly for common starts.
+            joins.extend([
+                (
+                    chain!(&in_index, &dummy_out, W_.a___) * chain!(&out_index, &dummy_in, W_.b___),
+                    false,
+                    true,
+                ),
+                (
+                    chain!(&dummy_out, &in_index, W_.a___) * chain!(&dummy_in, &out_index, W_.b___),
+                    true,
+                    false,
+                ),
+            ]);
+        }
         // Use the shared collector's opaque coefficients here as well: chain
         // composition must not statistically simplify the momentum numerator.
         // Select the ports used by composition, not incidental representations
         // inside the payload or chains belonging to another representation.
-        self.collect_with_map(|atom| {
-            atom.get_symbol() == Some(T.chain) && atom.replace(&chain).max_level(0).matches()
-        })
-        .unwrap_collect()
-        .replace(product)
-        .repeat()
-        .with(collected)
-        .normalize_chains()
+        let mut result = self
+            .collect_with_map(|atom| {
+                atom.get_symbol() == Some(T.chain) && atom.replace(&chain).max_level(0).matches()
+            })
+            .unwrap_collect();
+        loop {
+            let previous = result.clone();
+            for (product, transpose_left, transpose_right) in &joins {
+                // println!("{}", product);
+                let start = in_index.to_pattern();
+                let end = out_index.to_pattern();
+                let transpose_left = *transpose_left;
+                let transpose_right = *transpose_right;
+                result = result
+                    .replace(product.to_pattern())
+                    .repeat()
+                    .with_map(move |matches| {
+                        let mut collected = FunctionBuilder::new(T.chain)
+                            .add_arg(start.replace_wildcards_with_matches(matches))
+                            .add_arg(end.replace_wildcards_with_matches(matches));
+                        for (sequence, transpose) in
+                            [(W_.a___, transpose_left), (W_.b___, transpose_right)]
+                        {
+                            let mut factors = match matches.get(sequence).unwrap() {
+                                Match::Single(factor) => vec![*factor],
+                                Match::Multiple(_, factors) => factors.to_vec(),
+                                Match::FunctionName(_) => {
+                                    unreachable!("a factor sequence is not a function name")
+                                }
+                            };
+                            if transpose {
+                                factors.reverse();
+                            }
+                            for factor in factors {
+                                let factor = if transpose {
+                                    factor.replace_map(|atom, _, output| {
+                                        if let AtomView::Var(symbol) = atom {
+                                            if symbol.get_symbol() == T.chain_in {
+                                                **output = Atom::var(T.chain_out);
+                                            } else if symbol.get_symbol() == T.chain_out {
+                                                **output = Atom::var(T.chain_in);
+                                            }
+                                        }
+                                    })
+                                } else {
+                                    factor.to_owned()
+                                };
+                                collected = collected.add_arg(factor);
+                            }
+                        }
+                        // println!("{}", collected);
+                        collected.finish()
+                    });
+            }
+            result = result.normalize_chains();
+            // Every join removes one chain; normalization may close it as a trace.
+            if result == previous {
+                return result;
+            }
+        }
     }
 
     fn chainify(&self, representation: LibraryRep) -> Atom {
@@ -496,5 +547,113 @@ mod tests {
         );
 
         println!("{}", expr.normalize_chains())
+    }
+
+    #[test]
+    fn self_dual_common_end_chains_preserve_complex_matrix_components() {
+        use crate::{dirac::spinor_matrix_structure, tensor::SymbolicTensor};
+        use spenso::{
+            network::{
+                ExecutionResult, Sequential, SmallestDegree,
+                library::{
+                    function_lib::PanicMissingConcrete,
+                    symbolic::{ExplicitKey, TensorLibrary},
+                },
+            },
+            structure::{TensorStructure, abstract_index::AbstractIndex},
+            tensors::{
+                data::{DenseTensor, GetTensorData},
+                parametric::{MixedTensor, ParamOrConcrete},
+            },
+        };
+        test_initialize();
+        let names = [
+            spenso::tensor_symbol!("chain_numeric_A"),
+            spenso::tensor_symbol!("chain_numeric_B"),
+            spenso::tensor_symbol!("chain_numeric_C"),
+        ];
+        let data = [
+            vec![Atom::num(1), Atom::i(), Atom::num(2), Atom::num(3)],
+            vec![Atom::num(2), Atom::num(1), Atom::num(-1), Atom::num(4)],
+            vec![Atom::num(3), Atom::num(-2), Atom::num(1), Atom::num(2)],
+        ];
+        let mut library =
+            TensorLibrary::<MixedTensor<f64, ExplicitKey<AbstractIndex>>, AbstractIndex>::new();
+        for (name, components) in names.into_iter().zip(data) {
+            let key = spinor_matrix_structure::<AbstractIndex>(name, 2);
+            library.insert_explicit(key.map_canonical(|structure| {
+                ParamOrConcrete::param(
+                    DenseTensor::from_storage_data(components, structure)
+                        .unwrap()
+                        .into(),
+                )
+            }));
+        }
+        let functions = PanicMissingConcrete::new_lib::<
+            spenso::tensors::complex::RealOrComplexTensor<
+                f64,
+                spenso::network::parsing::ShadowedStructure<AbstractIndex>,
+            >,
+        >();
+        let rep: LibraryRep = Bispinor {}.into();
+        let left = bis!(2, chain_numeric_i);
+        let right = bis!(2, chain_numeric_j);
+        let dummy = bis!(2, chain_numeric_k);
+        let factors = names.map(|name| function!(name, T.chain_in, T.chain_out));
+        let [a, b, c] = &factors;
+        // Independently multiplied matrices: (A B) C^T and (A B)^T C.
+        // A contains i, so an accidental Hermitian conjugate is also detected.
+        let cases = [
+            (
+                chain!(&left, &dummy, a, b) * chain!(&right, &dummy, c),
+                [
+                    Atom::num(4) - Atom::num(11) * Atom::i(),
+                    Atom::num(4) + Atom::num(7) * Atom::i(),
+                    Atom::num(-25),
+                    Atom::num(29),
+                ],
+            ),
+            (
+                chain!(&dummy, &left, a, b) * chain!(&dummy, &right, c),
+                [
+                    Atom::num(7) - Atom::num(3) * Atom::i(),
+                    Atom::num(-2) + Atom::num(2) * Atom::i(),
+                    Atom::num(17) + Atom::num(12) * Atom::i(),
+                    Atom::num(26) - Atom::num(8) * Atom::i(),
+                ],
+            ),
+        ];
+        for (expression, expected) in cases {
+            let collected = expression.collect_chains(rep);
+            assert_ne!(collected, expression);
+            assert_eq!(collected.collect_chains(rep), collected);
+            let mut reference_indices = None;
+            for candidate in [expression, collected] {
+                let mut network = SymbolicTensor::<AbstractIndex>::empty(candidate)
+                    .to_network(&library)
+                    .unwrap();
+                network
+                    .execute::<Sequential, SmallestDegree, _, _, _>(&library, &functions)
+                    .unwrap();
+                let ExecutionResult::Val(tensor) = network.result_tensor(&library).unwrap() else {
+                    panic!("the matrix product must have two open indices");
+                };
+                let tensor = tensor.into_owned().try_into_parametric().unwrap();
+                let indices = tensor.external_indices();
+                if let Some(reference) = &reference_indices {
+                    assert_eq!(&indices, reference);
+                } else {
+                    reference_indices = Some(indices);
+                }
+                for row in 0..2 {
+                    for column in 0..2 {
+                        assert_eq!(
+                            tensor.get_owned([row, column]).unwrap(),
+                            expected[2 * row + column]
+                        );
+                    }
+                }
+            }
+        }
     }
 }

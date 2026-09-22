@@ -1,6 +1,11 @@
 use std::{ops::Neg, sync::LazyLock};
 
-use idenso::{IndexTooling, color::CS, dirac::AGS, representations::initialize};
+use idenso::{
+    IndexTooling,
+    color::CS,
+    dirac::{AGS, spinor_matrix_structure},
+    representations::initialize,
+};
 
 use spenso::{
     algebra::complex::Complex,
@@ -28,6 +33,10 @@ use symbolica::{
     atom::{Atom, Symbol},
     parse_lit,
 };
+
+/// Nonzero Weyl-basis entries of the UFO charge-conjugation matrix C = -i γ² γ⁰.
+pub const CHARGE_CONJUGATION_WEYL_COMPONENTS: [([usize; 2], i8); 4] =
+    [([0, 1], -1), ([1, 0], 1), ([2, 3], 1), ([3, 2], -1)];
 
 struct LogicalSparseInput<T, N> {
     layout: TensorDataLayout,
@@ -671,6 +680,21 @@ where
         .map_canonical(Into::into);
     weyl.insert_explicit(projp_key);
 
+    let charge_conjugation = sparse_from_logical(
+        spinor_matrix_structure::<Aind>(AGS.charge_conjugation, 4),
+        Complex::new(zero.clone(), zero.clone()),
+        |tensor| {
+            for (indices, sign) in CHARGE_CONJUGATION_WEYL_COMPONENTS {
+                let value = if sign < 0 { -one.clone() } else { one.clone() };
+                tensor
+                    .set(&indices, Complex::new(value, zero.clone()))
+                    .unwrap();
+            }
+        },
+    )
+    .map_canonical(Into::into);
+    weyl.insert_explicit(charge_conjugation);
+
     weyl
 }
 
@@ -752,6 +776,18 @@ where
         });
     weyl.insert_explicit(projp_key);
 
+    let charge_conjugation = sparse_from_logical(
+        spinor_matrix_structure::<Aind>(AGS.charge_conjugation, 4),
+        Atom::Zero,
+        |tensor| {
+            for (indices, sign) in CHARGE_CONJUGATION_WEYL_COMPONENTS {
+                tensor.set(&indices, Atom::num(sign)).unwrap();
+            }
+        },
+    )
+    .map_canonical(|tensor| ParamOrConcrete::param(tensor.into()));
+    weyl.insert_explicit(charge_conjugation);
+
     let color_t_key = su3_generator_data_atom(CS.t_strct::<Aind>(3, 8))
         .map_canonical(|tensor| ParamTensor::param(tensor.into()).into());
     weyl.insert_explicit(color_t_key);
@@ -831,6 +867,74 @@ mod tests {
         assert_eq!(*gamma.get_ref([1, 1, 0]).unwrap(), Complex::new(1, 0));
         assert_eq!(*gamma.get_ref([2, 2, 0]).unwrap(), Complex::new(-1, 0));
         assert_eq!(*gamma.get_ref([3, 3, 0]).unwrap(), Complex::new(-1, 0));
+    }
+
+    #[test]
+    fn charge_conjugation_weyl_components_and_clifford_identities() {
+        initialize();
+        let key = spinor_matrix_structure::<AbstractIndex>(AGS.charge_conjugation, 4);
+        let concrete_library = hep_lib::<AbstractIndex, i32>(1, 0);
+        let concrete = concrete_library
+            .get_storage(key.canonical())
+            .unwrap()
+            .into_owned()
+            .try_into_concrete()
+            .unwrap();
+        let RealOrComplexTensor::Complex(charge_conjugation) = concrete else {
+            panic!("the Weyl library stores complex matrix components");
+        };
+        let atom_library = hep_lib_atom::<AbstractIndex, i32>();
+        let atom_matrix = atom_library
+            .get_storage(key.canonical())
+            .unwrap()
+            .into_owned()
+            .try_into_parametric()
+            .unwrap();
+        let gamma = gamma_data_weyl(AGS.gamma_strct::<AbstractIndex>(4), 1, 0).into_canonical();
+
+        for row in 0..4 {
+            for column in 0..4 {
+                let value = charge_conjugation.get_owned([row, column]).unwrap();
+                // Derive the matrix independently from the shared Weyl gammas.
+                let definition = (0..4).fold(Complex::new(0, 0), |sum, inner| {
+                    sum + Complex::new(0, -1)
+                        * gamma.get_owned([row, inner, 2]).unwrap()
+                        * gamma.get_owned([inner, column, 0]).unwrap()
+                });
+                assert_eq!(value, definition);
+                assert_eq!(value.conj(), value);
+                assert_eq!(value, -charge_conjugation.get_owned([column, row]).unwrap());
+                assert_eq!(
+                    atom_matrix.get_owned([row, column]).unwrap(),
+                    Atom::num(value.re)
+                );
+
+                let square = (0..4).fold(Complex::new(0, 0), |sum, inner| {
+                    sum + charge_conjugation.get_owned([row, inner]).unwrap()
+                        * charge_conjugation.get_owned([inner, column]).unwrap()
+                });
+                assert_eq!(square, Complex::new(-i32::from(row == column), 0));
+                for mu in 0..4 {
+                    let mut sandwich = Complex::new(0, 0);
+                    let mut transposed_sandwich = Complex::new(0, 0);
+                    for first in 0..4 {
+                        for second in 0..4 {
+                            let left = charge_conjugation.get_owned([row, first]).unwrap();
+                            let right = charge_conjugation.get_owned([second, column]).unwrap();
+                            sandwich +=
+                                left * gamma.get_owned([first, second, mu]).unwrap() * right;
+                            transposed_sandwich +=
+                                left * gamma.get_owned([second, first, mu]).unwrap() * right;
+                        }
+                    }
+                    assert_eq!(sandwich, gamma.get_owned([column, row, mu]).unwrap());
+                    assert_eq!(
+                        transposed_sandwich,
+                        gamma.get_owned([row, column, mu]).unwrap()
+                    );
+                }
+            }
+        }
     }
 
     #[test]
