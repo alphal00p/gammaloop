@@ -5,7 +5,7 @@ use spenso::{
     chain,
     network::{library::symbolic::ETS, tags::SPENSO_TAG as T},
     rep_,
-    shadowing::{self, TensorCollectExt},
+    shadowing::{self, ProjectorExpander, TensorCollectExt},
     structure::{
         abstract_index::{AIND_SYMBOLS, AbstractIndex},
         representation::RepName,
@@ -24,7 +24,11 @@ use symbolica_utils::PatternReplacement;
 use crate::{
     W_, color_f, color_t,
     representations::{ColorAdjoint, ColorFundamental},
-    shorthands::{chain::Chain, metric::MetricSimplifier},
+    shorthands::{
+        chain::Chain,
+        metric::MetricSimplifier,
+        schoonschip::{Schoonschip, SchoonschipSettings},
+    },
     tensor::remove_antisymmetric_zero_terms,
 };
 
@@ -81,10 +85,16 @@ impl ColorAlgebraSimplifier {
     }
 
     fn apply_once(&self, expression: AtomView<'_>) -> Atom {
-        let collected = self.collect_lines(expression);
+        // Contract metrics before trace terminals turn ordered generators into
+        // symmetric invariants. The same rules also handle already-collected traces.
+        let metrics = SchoonschipSettings::default()
+            .without_rank1_tensors()
+            .with_chain_like_functions();
+        let contracted = expression.schoonschip_with_settings(&metrics);
+        let collected = self.collect_lines(contracted.as_view());
         self.rewrite_terms(collected.as_view())
             .collect_color()
-            .simplify_metrics()
+            .schoonschip_with_settings(&metrics)
     }
 
     fn rewrite_terms(&self, expr: AtomView<'_>) -> Atom {
@@ -236,6 +246,20 @@ impl ColorAlgebraSimplifier {
                 rep,
                 factors_excluding_indices(&factors, &[identity_index]),
             ));
+        }
+
+        // Through degree four, every cyclic ordering of a repeated adjoint pair
+        // reduces by the adjacent or separated Casimir rules below. Preserve open
+        // symmetric invariants and higher-degree projectors without factorial expansion.
+        if let [factor] = factors.as_slice()
+            && let Some(args) = color_symmetric_trace_arg_views(factor.as_view())
+            && args.len() <= 4
+            && args
+                .iter()
+                .enumerate()
+                .any(|(i, a)| args[i + 1..].contains(a))
+        {
+            return Some(trace.expand_projectors());
         }
 
         if let Some(rewritten) = Self::simplify_antisymmetric_trace_projector(&rep, &factors) {
