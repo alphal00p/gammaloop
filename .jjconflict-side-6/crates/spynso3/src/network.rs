@@ -47,7 +47,7 @@ use symbolica::{
 use symbolica::api::python::ConvertibleToExpression;
 
 use crate::{
-    composition::{self, StructuredAtom},
+    composition::{self, ProductPlan, StructuredAtom},
     display,
     expression::TensorExpression,
     library::SpensorFunctionLibrary,
@@ -390,14 +390,6 @@ impl PyStubType for ConvertibleToSpensoNet {
     }
 }
 
-#[derive(Clone, Copy)]
-enum ProductPlan {
-    Scalar,
-    Outer,
-    Contract(composition::PortPair),
-    Compose(composition::MatrixChannel, composition::MatrixChannel),
-}
-
 fn composition_error(error: composition::TensorCompositionError) -> PyErr {
     PyValueError::new_err(error.to_string())
 }
@@ -408,39 +400,6 @@ fn additive_interfaces_match(left: &PartialStructure, right: &PartialStructure) 
         || (left.open_positions().is_empty()
             && right.open_positions().is_empty()
             && left.canonical() == right.canonical())
-}
-
-fn product_plan(
-    left: &StructuredAtom,
-    right: &StructuredAtom,
-) -> Result<(StructuredAtom, ProductPlan), composition::TensorCompositionError> {
-    let result = composition::multiply(left, right)?;
-    if left.is_scalar() || right.is_scalar() {
-        return Ok((result, ProductPlan::Scalar));
-    }
-
-    let compatible = composition::compatible_pairs(&left.interface, &right.interface);
-    if let (Some(left_channel), Some(right_channel)) = (
-        composition::matrix_channel(left),
-        composition::matrix_channel(right),
-    ) {
-        let channel_pair = composition::PortPair {
-            left: left_channel.output,
-            right: right_channel.input,
-        };
-        if compatible.contains(&channel_pair) {
-            return Ok((result, ProductPlan::Compose(left_channel, right_channel)));
-        }
-    }
-
-    Ok((
-        result,
-        match compatible.as_slice() {
-            [] => ProductPlan::Outer,
-            [pair] => ProductPlan::Contract(*pair),
-            _ => unreachable!("composition::multiply rejected ambiguous compatible pairs"),
-        },
-    ))
 }
 
 impl SpensoNet {
@@ -668,16 +627,20 @@ impl SpensoNet {
     }
 
     pub(crate) fn multiply_network(mut self, mut right: Self) -> PyResult<Self> {
-        let (structure, plan) =
-            product_plan(&self.structure, &right.structure).map_err(composition_error)?;
+        let plan = composition::product_plan(&self.structure, &right.structure)
+            .map_err(composition_error)?;
+        let structure =
+            composition::multiply(&self.structure, &right.structure).map_err(composition_error)?;
         self.freshen_open_ports()?;
         right.freshen_open_ports()?;
         let materialized = match plan {
             ProductPlan::Scalar => composition::multiply(&self.materialized, &right.materialized),
             ProductPlan::Outer => Ok(composition::outer(&self.materialized, &right.materialized)),
-            ProductPlan::Contract(pair) => {
-                Self::align_pair(&mut self, &mut right, pair)?;
-                composition::contract(&self.materialized, &right.materialized, pair)
+            ProductPlan::Contract(pairs) => {
+                for &pair in &pairs {
+                    Self::align_pair(&mut self, &mut right, pair)?;
+                }
+                composition::contract(&self.materialized, &right.materialized, &pairs)
             }
             ProductPlan::Compose(left_channel, right_channel) => {
                 Self::align_pair(
@@ -1646,12 +1609,12 @@ impl SpensoNet {
         let mut lhs = self.clone();
         let mut rhs = rhs.to_net();
         let pair = composition::PortPair { left, right };
-        let structure = composition::contract(&lhs.structure, &rhs.structure, pair)
+        let structure = composition::contract(&lhs.structure, &rhs.structure, &[pair])
             .map_err(composition_error)?;
         lhs.freshen_open_ports()?;
         rhs.freshen_open_ports()?;
         Self::align_pair(&mut lhs, &mut rhs, pair)?;
-        let materialized = composition::contract(&lhs.materialized, &rhs.materialized, pair)
+        let materialized = composition::contract(&lhs.materialized, &rhs.materialized, &[pair])
             .map_err(composition_error)?;
         Self::finish(lhs.network * rhs.network, structure, materialized)
     }
@@ -2324,6 +2287,81 @@ mod tests {
             product.structure.interface.logical_slots()[0].aind,
             PartialIndex::Explicit(AbstractIndex::Normal(41))
         );
+    }
+
+    #[test]
+    fn tensor_product_contracts_permuted_explicit_indices() {
+        initialize();
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let representation = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(2));
+            let mut operands = Vec::new();
+            for (name, indices) in [
+                ("network_explicit_product_left", [71, 73, 79]),
+                ("network_explicit_product_right", [73, 79, 71]),
+            ] {
+                let (descriptor, name) = tensor_descriptor(
+                    name,
+                    indices.map(|index| {
+                        representation.slot(PartialIndex::Explicit(AbstractIndex::Normal(index)))
+                    }),
+                );
+                let expression = TensorExpression::from_atom_interface_descriptor(
+                    py,
+                    descriptor.atom,
+                    descriptor.interface,
+                    Some(name),
+                    Vec::new(),
+                )?;
+                let tensor = Spensor::dense(
+                    expression.bind(py).as_any().extract()?,
+                    crate::AtomsOrFloats::Floats((1..=8).map(f64::from).collect()),
+                )?;
+                operands.push(SpensoNet::from_tensor(tensor)?);
+            }
+            let mut product = operands.remove(0).multiply_network(operands.remove(0))?;
+
+            assert!(product.structure.is_scalar());
+            assert!(product.materialized.is_scalar());
+            assert!(product.network.graph.dangling_indices().is_empty());
+            product.execute(None, None, None, ExecutionMode::All)?;
+            let result = SymComplex::<f64>::try_from(&product.result_scalar()?.expr).unwrap();
+            // Sum T[i,j,k] U[j,k,i] with both arrays containing 1 through 8.
+            assert_eq!(result.re, 190.0);
+            assert_eq!(result.im, 0.0);
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn tensor_product_aligns_each_unique_open_representation_pair() {
+        initialize();
+        let euclidean = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(2));
+        let minkowski = ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(2));
+        let (left, left_name) = tensor_descriptor(
+            "network_disjoint_open_left",
+            [
+                euclidean.slot(PartialIndex::open(0)),
+                minkowski.slot(PartialIndex::open(1)),
+            ],
+        );
+        let (right, right_name) = tensor_descriptor(
+            "network_disjoint_open_right",
+            [
+                minkowski.slot(PartialIndex::open(0)),
+                euclidean.slot(PartialIndex::open(1)),
+            ],
+        );
+
+        let product = SpensoNet::from_tensor(data_tensor(left, left_name))
+            .unwrap()
+            .multiply_network(SpensoNet::from_tensor(data_tensor(right, right_name)).unwrap())
+            .unwrap();
+
+        assert!(product.structure.is_scalar());
+        assert!(product.materialized.is_scalar());
+        assert!(product.network.graph.dangling_indices().is_empty());
     }
 
     #[test]

@@ -1,4 +1,5 @@
 #import "crates/linnest/typst/src/curve.typ" as curve
+#import "crates/linnest/typst/src/lib.typ": draw, graph
 #import "crates/linnest/typst/src/impl/draw.typ" as drawing
 #import "@preview/cetz:0.5.1" as cetz
 #import "map-style.typ" as feynman
@@ -1009,6 +1010,12 @@
       ()
     })
   })
+  // Hidden edges provide neither label carriers nor stroke obstacles.
+  draw(graph.build({
+    graph.node(<hidden-a>, pos: graph.pos(x: 0, y: 0))
+    graph.node(<hidden-b>, pos: graph.pos(x: 2, y: 0))
+    graph.edge(graph.source(<hidden-a>), graph.sink(<hidden-b>))
+  }), source-style: none, sink-style: none, node-label: none)
 }
 
 #curved-arrow-behavior
