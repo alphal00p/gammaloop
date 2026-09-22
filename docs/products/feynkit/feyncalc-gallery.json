@@ -1270,7 +1270,27 @@
         "Print",
         "SMP"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "passed: generated massive one-photon amplitude vanishes by verified loop reflection and odd vacuum tensor reduction at symbolic D",
+      "validated_components": [
+        {
+          "scope": "one generated massive electron tadpole with nonzero weighted numerator; exact oddness under a verified unit-Jacobian loop reflection and zero vacuum tensor projection",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_odd_photons.py",
+          "components": [
+            "Model.generate_diagrams",
+            "Model.expand_couplings",
+            "Idenso.simplify_gamma",
+            "LoopMomentumBasis.route_expression",
+            "FeynmanDiagram.integral_family",
+            "IntegralFamily.mapping_to",
+            "TensorReducer.reduce",
+            "IntegralMapping.apply",
+            "IntegralMapping.map_powers",
+            "Kinematics.apply"
+          ],
+          "result": "passed",
+          "note": "The zero amplitude does not validate the tadpole symmetry-factor normalization; a separate nonzero Higgs-fermion tadpole checks that boundary. Notebook: hep/odd_photons.py selects an orientation pair before tracing. No on-shell or polarization constraints, IBP reduction, or scalar-master evaluation are needed. These vector-current Dirac loops do not establish general gamma-five, anomaly, or Majorana conventions."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/QED/OneLoop/Ga-GaGa",
@@ -1298,12 +1318,34 @@
         "Paint",
         "Print"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "passed: the complete generated massive three-photon amplitude cancels at generic off-shell momenta and symbolic D",
+      "validated_components": [
+        {
+          "scope": "two nonzero generated triangle orientations cancel exactly after a verified loop-momentum mapping, including native weights and the full generic off-shell Lorentz tensor",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_odd_photons.py",
+          "components": [
+            "Model.generate_diagrams",
+            "Model.expand_couplings",
+            "Idenso.simplify_gamma",
+            "LoopMomentumBasis.route_expression",
+            "FeynmanDiagram.integral_family",
+            "IntegralFamily.find_mapping",
+            "IntegralMapping.apply",
+            "IntegralMapping.map_powers",
+            "Kinematics.apply"
+          ],
+          "result": "passed",
+          "note": "One reversed triangle pair is checked; independent unconstrained probe vectors test the complete amputated tensor. Notebook: hep/odd_photons.py selects an orientation pair before tracing. No on-shell or polarization constraints, IBP reduction, or scalar-master evaluation are needed. These vector-current Dirac loops do not establish general gamma-five, anomaly, or Majorana conventions."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/QED/OneLoop/Ga-GaGaGaGa",
       "retrieval": "inspected",
-      "requirements": [],
+      "requirements": [
+        "dirac_algebra",
+        "loop_families"
+      ],
       "functions": [
         "CreateFeynAmp",
         "CreateTopologies",
@@ -1318,7 +1360,26 @@
         "Print",
         "Total"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "passed: all 24 generated massive five-photon diagrams cancel in twelve verified orientation pairs at generic off-shell momenta and symbolic D",
+      "validated_components": [
+        {
+          "scope": "all 24 nonzero generated pentagon diagrams cancel in twelve verified reversed-orientation pairs, retaining native graph weights, symbolic dimension and mass, and generic off-shell momenta",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_odd_photons.py",
+          "components": [
+            "Model.generate_diagrams",
+            "Model.expand_couplings",
+            "Idenso.simplify_gamma",
+            "LoopMomentumBasis.route_expression",
+            "FeynmanDiagram.integral_family",
+            "IntegralFamily.find_mapping",
+            "IntegralMapping.apply",
+            "IntegralMapping.map_powers",
+            "Kinematics.apply"
+          ],
+          "result": "passed",
+          "note": "The installed regression exhaustively checks all twelve pairs. Independent unconstrained probe vectors test all five Lorentz slots. Notebook: hep/odd_photons.py selects an orientation pair before tracing. No on-shell or polarization constraints, IBP reduction, or scalar-master evaluation are needed. These vector-current Dirac loops do not establish general gamma-five, anomaly, or Majorana conventions."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/QED/Tree/Ga-MuAmu",
