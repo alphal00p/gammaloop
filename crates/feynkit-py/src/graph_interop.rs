@@ -1,6 +1,6 @@
 //! Interoperate with the installed Linnet extension, not a second set of PyO3 classes.
 
-use std::sync::Mutex;
+use std::{collections::BTreeSet, sync::Mutex};
 
 use linnet::half_edge::{
     involution::{Flow, Hedge, HedgePair, Orientation},
@@ -16,7 +16,14 @@ use pyo3::{
 use crate::graph::PyFeynmanDiagram;
 
 #[derive(Default)]
-pub(crate) struct LinnetCache(Mutex<Option<LinnetExport>>);
+pub(crate) struct LinnetCache(Mutex<Option<Py<LinnetCacheHolder>>>);
+
+// Each physics wrapper owns one counted Python reference to this holder. The
+// holder owns the graph reference once, so shared refreshes remain visible to
+// every view without reporting one graph reference repeatedly to Python's GC.
+#[pyclass(frozen, name = "_LinnetCache", module = "symbolica.community.feynkit")]
+#[derive(Default)]
+struct LinnetCacheHolder(Mutex<Option<LinnetExport>>);
 
 struct LinnetExport {
     graph: Py<PyAny>,
@@ -29,28 +36,43 @@ struct LinnetExport {
 impl Clone for LinnetCache {
     fn clone(&self) -> Self {
         Python::attach(|py| {
-            let cloned = self
-                .0
-                .lock()
-                .expect("Linnet cache lock")
-                .as_ref()
-                .map(|export| LinnetExport {
-                    graph: export.graph.clone_ref(py),
-                    revision: export.revision,
-                    native_hedges: export.native_hedges.clone(),
-                    exported_hedges: export.exported_hedges.clone(),
-                });
-            Self(Mutex::new(cloned))
+            Self(Mutex::new(Some(
+                self.holder(py).expect("initialize shared Linnet cache"),
+            )))
         })
     }
 }
 
 impl LinnetCache {
+    fn holder(&self, py: Python<'_>) -> PyResult<Py<LinnetCacheHolder>> {
+        let cached = self
+            .0
+            .lock()
+            .map_err(|_| PyRuntimeError::new_err("Linnet cache poisoned"))?
+            .as_ref()
+            .map(|holder| holder.clone_ref(py));
+        if let Some(holder) = cached {
+            return Ok(holder);
+        }
+        // Allocation may trigger GC traversal of this wrapper; keep it outside
+        // the mutex, including on the first clone before any graph is exported.
+        let candidate = Py::new(py, LinnetCacheHolder::default())?;
+        let mut cache = self
+            .0
+            .lock()
+            .map_err(|_| PyRuntimeError::new_err("Linnet cache poisoned"))?;
+        let holder = cache
+            .get_or_insert_with(|| candidate.clone_ref(py))
+            .clone_ref(py);
+        drop(cache);
+        Ok(holder)
+    }
+
     pub(crate) fn traverse(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
         if let Ok(cache) = self.0.lock()
-            && let Some(export) = &*cache
+            && let Some(holder) = &*cache
         {
-            visit.call(&export.graph)?;
+            visit.call(holder)?;
         }
         Ok(())
     }
@@ -61,6 +83,52 @@ impl LinnetCache {
     }
 
     pub(crate) fn graph(&self, py: Python<'_>, diagram: &PyFeynmanDiagram) -> PyResult<Py<PyAny>> {
+        self.holder(py)?.borrow(py).graph(py, diagram)
+    }
+
+    pub(crate) fn selection(
+        &self,
+        py: Python<'_>,
+        diagram: &PyFeynmanDiagram,
+        selection: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<SuBitGraph> {
+        self.holder(py)?
+            .borrow(py)
+            .selection(py, diagram, selection)
+    }
+
+    pub(crate) fn export_selection(
+        &self,
+        py: Python<'_>,
+        diagram: &PyFeynmanDiagram,
+        selection: &SuBitGraph,
+        isolated: &BTreeSet<usize>,
+    ) -> PyResult<Py<PyAny>> {
+        self.holder(py)?
+            .borrow(py)
+            .export_selection(py, diagram, selection, isolated)
+    }
+}
+
+#[pymethods]
+impl LinnetCacheHolder {
+    fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
+        if let Ok(cache) = self.0.lock()
+            && let Some(export) = &*cache
+        {
+            visit.call(&export.graph)?;
+        }
+        Ok(())
+    }
+
+    fn __clear__(&self) {
+        let previous = self.0.lock().ok().and_then(|mut cache| cache.take());
+        drop(previous);
+    }
+}
+
+impl LinnetCacheHolder {
+    fn graph(&self, py: Python<'_>, diagram: &PyFeynmanDiagram) -> PyResult<Py<PyAny>> {
         // Never hold this lock across Python calls: GC can traverse the diagram
         // while a Python factory allocates or a payload destructor runs.
         let cached = {
@@ -93,7 +161,7 @@ impl LinnetCache {
         Ok(graph)
     }
 
-    pub(crate) fn selection(
+    fn selection(
         &self,
         py: Python<'_>,
         diagram: &PyFeynmanDiagram,
@@ -133,11 +201,12 @@ impl LinnetCache {
         Ok(native)
     }
 
-    pub(crate) fn export_selection(
+    fn export_selection(
         &self,
         py: Python<'_>,
         diagram: &PyFeynmanDiagram,
         selection: &SuBitGraph,
+        isolated: &BTreeSet<usize>,
     ) -> PyResult<Py<PyAny>> {
         let graph = self.graph(py, diagram)?;
         let hedges: Vec<_> = {
@@ -153,6 +222,7 @@ impl LinnetCache {
         };
         let kwargs = PyDict::new(py);
         kwargs.set_item("half_edges", hedges)?;
+        kwargs.set_item("nodes", isolated.iter().copied().collect::<Vec<_>>())?;
         Ok(graph
             .bind(py)
             .call_method("subgraph", (), Some(&kwargs))?
@@ -163,6 +233,9 @@ impl LinnetCache {
 impl LinnetExport {
     fn build(py: Python<'_>, diagram: &PyFeynmanDiagram) -> PyResult<Self> {
         let module = py.import("linnet")?;
+        // A selection retains its parent's topology and stable element IDs.
+        // Export the complete owner graph even when the caller is a view.
+        let diagram = diagram.whole();
         let native = diagram.inner.underlying();
         let mut items = Vec::new();
         for vertex in diagram.vertices() {

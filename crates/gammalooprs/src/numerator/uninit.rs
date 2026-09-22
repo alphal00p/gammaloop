@@ -43,7 +43,7 @@ impl Numerator<UnInit> {
             &graph.underlying,
             &selected,
             &graph.underlying.empty_subgraph(),
-            |vertex| vertex.get_num(),
+            |_, vertex| vertex.get_num(),
             |edge| edge.num.value.clone(), //.kill_color();
             |edge| edge.is_dummy,
         );
@@ -69,7 +69,7 @@ impl Numerator<UnInit> {
             &graph.underlying,
             subgraph,
             ignore,
-            |vertex| vertex.get_num(),
+            |_, vertex| vertex.get_num(),
             |edge| edge.num.value.clone(),
             |edge| edge.is_dummy,
         );

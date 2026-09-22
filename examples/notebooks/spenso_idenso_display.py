@@ -26,8 +26,8 @@ def _(mo):
     mo.md(r"""
     # Spenso + Idenso, live
 
-    Build typed tensor expressions with **Spenso**, transform their ordinary
-    Symbolica atoms with **Idenso**, and render the same semantics through the
+    Build typed tensor expressions with **Spenso**, apply **Idenso** algebra
+    through their methods, and render the same semantics through the
     configurable Typst display. Change any control or edit any cell: Marimo
     recomputes only the affected section.
 
@@ -41,7 +41,7 @@ def _(mo):
 def _():
     import linnet as lp
     import symbolica as sy
-    from symbolica.community import idenso, spenso
+    from symbolica.community import spenso
     from symbolica.community.spenso import (
         AUTO,
         DisplaySettings,
@@ -63,7 +63,6 @@ def _():
         TensorName,
         as_tensor,
         dot,
-        idenso,
         lp,
         spenso,
         sy,
@@ -449,14 +448,14 @@ def _(amplitude, display_settings, mo, show_dimensions, source_block):
 
 
 @app.cell
-def _(Representation, as_tensor, idenso, mu, p):
+def _(Representation, TensorExpression, mu, p):
     metric = Representation.mink(4).g("mu", "nu")
 
     # Crossing to ordinary Symbolica explicitly leaves the repeated index visible
     # to Idenso instead of asking Spenso to choose a tensor-aware contraction.
     metric_product = metric.to_expression() * p(1, mu).to_expression()
-    simplified_atom = idenso.simplify_metrics(metric_product)
-    simplified_tensor = as_tensor(simplified_atom)
+    simplified_tensor = TensorExpression(metric_product).simplify_metrics()
+    simplified_atom = simplified_tensor.to_expression()
     return metric_product, simplified_atom, simplified_tensor
 
 
@@ -475,9 +474,9 @@ def _(
     mo.vstack(
         [
             mo.md(
-                "## 3. Idenso transformation, then Spenso reinference\n\n"
-                "`simplify_metrics` accepts and returns an ordinary Symbolica "
-                "`Expression`. `as_tensor` validates the result and restores its "
+                "## 3. Idenso transformation on a TensorExpression\n\n"
+                "`TensorExpression` validates the Symbolica input. Its "
+                "`simplify_metrics()` method applies Idenso and infers the result’s "
                 "typed external interface."
             ),
             mo.hstack(
@@ -508,10 +507,10 @@ def _(
 
 
 @app.cell
-def _(as_tensor, idenso, mu, p, q):
+def _(TensorExpression, mu, p, q):
     indexed_product = p(1, mu).to_expression() * q(2, mu).to_expression()
-    dotted_atom = idenso.to_dots(indexed_product)
-    dotted_tensor = as_tensor(dotted_atom)
+    dotted_tensor = TensorExpression(indexed_product).to_dots()
+    dotted_atom = dotted_tensor.to_expression()
     return dotted_atom, dotted_tensor, indexed_product
 
 

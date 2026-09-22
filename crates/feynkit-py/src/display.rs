@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use feynkit_graph::FeynmanDiagram;
 use linnet::half_edge::subgraph::SuBitGraph;
 use linnet_py::PreparedRender;
@@ -23,6 +25,7 @@ pub(crate) fn render_diagram_svg(
     py: Python<'_>,
     diagram: &FeynmanDiagram,
     highlight: Option<&SuBitGraph>,
+    isolated: &BTreeSet<usize>,
 ) -> PyResult<String> {
     py.import("typst").map_err(|error| {
         if error.is_instance_of::<pyo3::exceptions::PyImportError>(py) {
@@ -35,7 +38,7 @@ pub(crate) fn render_diagram_svg(
     })?;
     let svg = PreparedRender::from_sources(
         [
-            ("main.typ", diagram.to_linnest(highlight)),
+            ("main.typ", diagram.to_linnest(highlight, isolated)),
             (
                 "assets/embedded/drawing/templates/layout-core.typ",
                 include_str!("../../../assets/embedded/drawing/templates/layout-core.typ")
@@ -70,8 +73,9 @@ pub(crate) fn render_diagram_svg(
         ("accent", "#6f4d85", "#d8b9e3"),
         ("ink-sink", "#948899", "#fbf6fc"),
         ("accent-sink", "#b09dbc", "#ead9f0"),
-        // Keep pale diagram strokes legible over Linnest's native underlay in dark mode.
-        ("highlight", "#ffd166", "#8a681f"),
+        // Selection strokes stay visible over dark notebook backgrounds.
+        ("highlight", "#ffd166", "#f0bb4f"),
+        ("outside", "#77777773", "#aaaaaa73"),
     ] {
         light.push_str(&format!("--feynkit-{name}:{light_color};"));
         dark.push_str(&format!("--feynkit-{name}:{dark_color};"));
@@ -82,11 +86,13 @@ pub(crate) fn render_diagram_svg(
         }
     }
     // Explicit notebook themes override the browser preference for saved SVGs.
+    // The interactive renderer mirrors an accessible iframe parent's theme onto
+    // the SVG itself, so the same palette also applies inside notebook frames.
     styles.push_str(&format!(
         r#".feynkit-diagram-svg{{{light}}}
 @media(prefers-color-scheme:dark){{.feynkit-diagram-svg{{{dark}}}}}
-:is(.dark,[data-theme="dark"],[data-jp-theme-light="false"]) .feynkit-diagram-svg{{{dark}}}
-:is(.light,[data-theme="light"],[data-jp-theme-light="true"]) .feynkit-diagram-svg{{{light}}}
+.feynkit-diagram-svg[data-theme="dark"],:is(.dark,[data-theme="dark"],[data-jp-theme-light="false"]) .feynkit-diagram-svg{{{dark}}}
+.feynkit-diagram-svg[data-theme="light"],:is(.light,[data-theme="light"],[data-jp-theme-light="true"]) .feynkit-diagram-svg{{{light}}}
 </style>"#
     ));
     Ok(svg
@@ -98,8 +104,9 @@ pub(crate) fn render_diagram_html(
     py: Python<'_>,
     diagram: &FeynmanDiagram,
     highlight: Option<&SuBitGraph>,
+    isolated: &BTreeSet<usize>,
 ) -> PyResult<String> {
-    let svg = render_diagram_svg(py, diagram, highlight)?;
+    let svg = render_diagram_svg(py, diagram, highlight, isolated)?;
     Ok(format!(
         "<figure class=\"feynkit-diagram\" style=\"max-width:100%;margin:.5rem 0\">\
          <div style=\"max-width:100%;overflow-x:auto\">{svg}</div>\

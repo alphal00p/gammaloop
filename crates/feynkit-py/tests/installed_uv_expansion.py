@@ -30,16 +30,16 @@ assert bubble.to_json() == original
 region = bubble.filter(
     edge=lambda e: e.data.id in {x.id for x in bubble.internal_edges}
 )
-assert bubble.uv_expansion(mass, subgraph=region) == expanded
-assert bubble.uv_counterterm(mass, subgraph=region) == -expanded
+assert region.uv_expansion(mass) == expanded
+assert region.uv_counterterm(mass) == -expanded
 assert bubble.uv_expansion(mass, dimension=2) == 0
 assert bubble.uv_expansion(mass, numerator=0) == 0
-assert bubble.uv_expansion(mass, subgraph=bubble.to_linnet().empty_subgraph()) == 0
+assert bubble.subgraph().uv_expansion(mass) == 0
 tree = bubble.filter(edge=lambda e: e.data.id == bubble.internal_edges[0].id)
-assert bubble.uv_expansion(mass, subgraph=tree) == 0
+assert tree.uv_expansion(mass) == 0
 
 # An external-only numerator must stay soft even when its polynomial degree is high.
-basis = bubble.momentum_basis(subgraph=region)
+basis = region.momentum_basis()
 external = next(e for e in basis.external_edges if e not in basis.dependent_externals)
 soft = E(f"gammalooprs::Q({external},spenso::mink(4,uv_test::mu))")
 tensor = bubble.uv_expansion(mass, numerator=soft * bubble.numerator_expression())
@@ -51,7 +51,7 @@ assert bubble.uv_expansion(mass, numerator=soft**4, dimension=2) == 0
 # Filters carry diagram ownership, even for an identical serialized topology.
 copy = fk.FeynmanDiagram.from_json(model, original)
 try:
-    copy.uv_counterterm(mass, subgraph=region)
+    copy.subgraph(region)
 except (ValueError, TypeError):
     pass
 else:

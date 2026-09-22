@@ -755,7 +755,12 @@ impl PreparedRender {
                 ))
             })?;
         }
-        compile_typst(py, self, Some(&output), format)?;
+        if format == "svg" {
+            fs::write(&output, self.svg(py)?)
+                .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
+        } else {
+            compile_typst(py, self, Some(&output), format)?;
+        }
         Ok(output)
     }
 
@@ -781,9 +786,10 @@ impl PreparedRender {
                 "typst.compile(format='svg') did not return SVG bytes",
             ));
         };
-        String::from_utf8(bytes).map_err(|error| {
+        let svg = String::from_utf8(bytes).map_err(|error| {
             PyRuntimeError::new_err(format!("Typst returned invalid UTF-8 SVG: {error}"))
-        })
+        })?;
+        Self::interactive_svg(&svg)
     }
 }
 

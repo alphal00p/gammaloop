@@ -49,8 +49,12 @@ selectors and run the affected cell with its play button.
 
 == The rendering boundary
 
-Returning a `Graph` from a cell invokes its SVG representation. `graph.to_svg()` explicitly
-produces the same kind of drawing; the notebook shows both forms. The graph's `RenderConfig`
+Returning a `Graph` from a cell invokes its interactive HTML representation. `graph.to_svg()`
+explicitly produces the same native drawing with hover labels, pinned click details, and local
+selection using Shift-, Ctrl-, or Meta-click. These interactions do not update Python graph
+selections automatically. In Marimo, direct rich display enables the embedded script; when
+embedding the SVG explicitly, use `mo.iframe(graph.to_svg())`.
+The graph's `RenderConfig`
 combines layout options, drawing defaults, and Python selectors. Only topology and the selectors'
 typed drawing results pass to Typst; application payloads stay in Python.
 

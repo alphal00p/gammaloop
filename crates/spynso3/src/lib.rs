@@ -72,6 +72,7 @@ pub mod expression;
 pub mod library;
 pub mod network;
 pub mod pattern;
+mod simplification;
 pub mod structure;
 
 use composition::StructuredAtom;
@@ -221,6 +222,14 @@ define_spenso_python_surface! {
         set_symbolica_rayon_enabled => "set_symbolica_rayon_enabled",
     ],
     registered_modules: [
+        simplification => [
+            "CanonicalizationError", "ColorCasimirSettings", "ColorSimplifySettings",
+            "CookMode", "CookSettings", "CookSourceFilter", "CookTagFilter", "CookingError",
+            "DiracAdjointError", "DotExpansionError", "GammaChainOrdering",
+            "GammaConjugationError", "GammaSimplifySettings", "NetworkToolingError",
+            "SchoonschipContractionOrder", "SchoonschipMode", "SchoonschipSettings",
+            "SchoonschipTraversal",
+        ],
         display => [
             "DisplaySettings", "format_tensor", "to_typst", "to_html", "to_svg", "formatted",
         ],
@@ -1682,6 +1691,7 @@ Examples
     }
 }
 
+/// Gather the unified Spenso and Idenso Python API registered by Spynso3.
 #[cfg(feature = "python_stubgen")]
 pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
     pyo3_stub_gen::StubInfo::from_project_root(

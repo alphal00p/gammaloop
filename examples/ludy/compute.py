@@ -12,7 +12,6 @@ from math import factorial, prod
 from pathlib import Path
 
 from symbolica import E, Expression, S
-from symbolica.community.idenso import simplify_gamma, simplify_metrics, to_dots
 from symbolica.community.spenso import Representation, TensorExpression, TensorName, dot
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -119,9 +118,16 @@ for process in ("dy", "dis") if args.process == "both" else (args.process,):
                 ).to_expression()
                 if vector is not None:
                     chain *= vector(lorentz(label)).to_expression()
-            scalar = to_dots(
-                simplify_metrics(simplify_gamma(chain).expand()).expand()
-            ).expand()
+            scalar = (
+                TensorExpression(chain)
+                .simplify_gamma()
+                .expand()
+                .simplify_metrics()
+                .expand()
+                .to_dots()
+                .expand()
+                .to_expression()
+            )
             for source, target in dot_rules:
                 scalar = scalar.replace(source, target)
             numerators[projection] = scalar.expand().together().cancel()

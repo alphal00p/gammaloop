@@ -45,6 +45,38 @@
   }
 }
 
+// Typst preserves links as transparent SVG rectangles. Floating content keeps
+// these identity targets out of the graph's bounds and visible drawing styles.
+#let _identity-target(pos, href, width: 8pt, height: 8pt) = {
+  // SVG link attributes escape quotes but need JSON escapes for XML metacharacters.
+  let href = href.replace("&", "\\u0026").replace("<", "\\u003c").replace(">", "\\u003e")
+  cetz.draw.floating(cetz.draw.content(
+    _point(pos),
+    link(href, box(width: width, height: height)),
+    padding: 0,
+  ))
+}
+
+#let _edge-identity-targets(ctx, segments, href) = {
+  let targets = ()
+  if segments != none {
+    for segment in segments {
+      // The maximum control-polygon step bounds the cubic's derivative, so
+      // adjacent targets overlap even on highly nonuniform curves.
+      let speed = 3 * calc.max(
+        _point-distance(segment.start, segment.control-start),
+        _point-distance(segment.control-start, segment.control-end),
+        _point-distance(segment.control-end, segment.end),
+      )
+      let steps = calc.max(1, int(calc.ceil(speed * ctx.length / 4pt)))
+      for step in range(steps + 1) {
+        targets += _identity-target(curve-api.cubic-point(segment, step / steps), href)
+      }
+    }
+  }
+  targets
+}
+
 #let _graph-style(info) = {
   let data = info.at("data", default: none)
   if type(data) == dictionary {
@@ -2628,6 +2660,8 @@
         let node-elements = ()
         let node-outsets = ()
         let node-boxes = ()
+        let node-targets = ()
+        let edge-targets = ()
         let debug-level = _debug-level(debug)
         let subgraph-records = _subgraph-records(
           graph,
@@ -2741,6 +2775,26 @@
                 ..node-label-draw-style,
               ))
             }
+          }
+          if not boundary {
+            let details = (
+              edges: edges.filter(e => (
+                (e.source != none and e.source.node == i)
+                  or (e.sink != none and e.sink.node == i)
+              )).map(e => e.edge),
+            )
+            if type(node.name) == str {
+              details.insert("name", node.name)
+            }
+            let label-size = if label == none { (width: 0pt, height: 0pt) } else {
+              measure(label)
+            }
+            node-targets += _identity-target(
+              pos,
+              "#linnet-node-" + str(i) + "?" + json.encode(details),
+              width: calc.max(10pt, node-width * ctx.length, label-size.width),
+              height: calc.max(10pt, node-height * ctx.length, label-size.height),
+            )
           }
         }
 
@@ -3375,6 +3429,21 @@
             }
           }
 
+          let details = (
+            source: if source-half-edge == none { none } else { source-half-edge.node },
+            sink: if sink-half-edge == none { none } else { sink-half-edge.node },
+            orientation: edge.orientation,
+          )
+          for key in ("particle", "pdg", "external-state", "external-index") {
+            let value = edge-data.at(key, default: none)
+            if type(value) in (str, int, float, bool) {
+              details.insert(key, value)
+            }
+          }
+          let href = "#linnet-edge-" + str(edge.edge) + "?" + json.encode(details)
+          for segments in (source-label-segments, sink-label-segments) {
+            edge-targets += _edge-identity-targets(ctx, segments, href)
+          }
           if ev-label != none {
             elements.push(cetz.draw.content(
               _point(label-pos),
@@ -3382,6 +3451,12 @@
               padding: 0,
               ..edge-label-draw-style,
             ))
+            let size = measure(ev-label)
+            edge-targets += _identity-target(
+              label-pos, href,
+              width: calc.max(8pt, size.width),
+              height: calc.max(8pt, size.height),
+            )
           }
 
           for half-edge in (source-half-edge, sink-half-edge) {
@@ -3466,7 +3541,11 @@
           if overlay == none { () } else { overlay.flatten().filter(element => element != none) },
           compute-bounds: false,
         )
-        (ctx: after.ctx, drawables: rendered.drawables + after.drawables)
+        // Nodes come last so incident edge targets cannot intercept node hits.
+        let targets = cetz.process.many(
+          after.ctx, edge-targets + node-targets, compute-bounds: false,
+        )
+        (ctx: targets.ctx, drawables: rendered.drawables + after.drawables + targets.drawables)
       },
     ),
   )

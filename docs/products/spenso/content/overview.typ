@@ -69,7 +69,8 @@ useful for typed tensors and contractions without that layer.
 
 Spenso uses #product-link("linnet", label: "Linnet") for the underlying network graph.
 #product-link("idenso", label: "Idenso") is the symbolic-identity layer for Spenso-formatted
-Symbolica expressions.
+Symbolica expressions. In Python, `spynso3` exposes these identities as `TensorExpression`
+methods and exports their settings from the same `symbolica.community.spenso` module.
 #product-link("feynkit", page: "guides/tensor-reduction/", label: "FeynKit") supplies vacuum tensor
 projection with explicit integrated-momentum selectors.
 #product-link("gammaloop", label: "GammaLoop") consumes these components

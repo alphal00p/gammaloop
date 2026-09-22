@@ -211,7 +211,7 @@ class CffGenerator:
         edge : int
             Diagram edge ID to classify as initial state.
         """
-    def generate(self, diagram: FeynmanDiagram, *, subgraph: linnet.Subgraph | None = None) -> CffResult:
+    def generate(self, diagram: FeynmanDiagram) -> CffResult:
         r"""
         Generate a Cross-Free Family representation for a diagram.
 
@@ -223,9 +223,7 @@ class CffGenerator:
         Parameters
         ----------
         diagram : FeynmanDiagram
-            Diagram whose energy-flow orientations are enumerated.
-        subgraph : linnet.Subgraph, optional
-            Graph-bound selection from diagram.to_linnet().
+            Diagram or subgraph whose energy-flow orientations are enumerated.
         """
 
 @typing.final
@@ -811,7 +809,7 @@ class DiagramCut:
         Return the right amplitude and its generation metadata.
         """
     @property
-    def subgraph(self) -> linnet.Subgraph:
+    def subgraph(self) -> Subgraph:
         r"""
         Return the oriented crossing half-edges as a reusable selection.
         """
@@ -823,8 +821,11 @@ class DiagramCut:
     @property
     def particles(self) -> builtins.list[Particle]:
         r"""
-        Return physical particles crossing from the left amplitude to the right.
-        Sink-oriented lines become antiparticles, matching generation's final-state filter.
+        Return physical final-state particles in the stored cut-edge order.
+
+        The finalized left side is the conjugate amplitude, so source-oriented
+        lines correspond to antiparticles of their stored edge species.
+        Momentum orientations retain the native positive-energy routing.
         """
     @property
     def orientations(self) -> builtins.dict[builtins.int, builtins.int]:
@@ -865,12 +866,12 @@ class DiagramCutSide:
     Examples
     --------
     >>> side = diagram.cuts[0].left
-    >>> side_numerator = diagram.numerator_expression(subgraph=side.subgraph)
+    >>> side_numerator = side.subgraph.numerator_expression()
     """
     @property
-    def subgraph(self) -> linnet.Subgraph:
+    def subgraph(self) -> Subgraph:
         r"""
-        Return the reusable Linnet selection for this amplitude side.
+        Return a physics view of this amplitude side, retaining its original diagram.
         """
     @property
     def coupling_orders(self) -> builtins.dict[builtins.str, builtins.int]:
@@ -1093,17 +1094,17 @@ class DiagramThresholdCandidate:
     >>> crossing_lines = threshold.edges
     """
     @property
-    def left(self) -> linnet.Subgraph:
+    def left(self) -> Subgraph:
         r"""
         Return the left topology selection.
         """
     @property
-    def right(self) -> linnet.Subgraph:
+    def right(self) -> Subgraph:
         r"""
         Return the right topology selection.
         """
     @property
-    def subgraph(self) -> linnet.Subgraph:
+    def subgraph(self) -> Subgraph:
         r"""
         Return the oriented crossing half-edge selection.
         """
@@ -1314,7 +1315,6 @@ class FeynkitError(builtins.Exception):
     """
     ...
 
-@typing.final
 class FeynmanDiagram:
     r"""
     A typed Feynman graph with model and symbolic physics annotations.
@@ -1328,6 +1328,11 @@ class FeynmanDiagram:
     >>> diagram.validate()
     >>> diagram  # renders as a Linnest graph in Jupyter or Marimo
     """
+    @property
+    def linnet_selection(self) -> linnet.Subgraph:
+        r"""
+        Return the canonical Linnet selection representing this physics region.
+        """
     @property
     def name(self) -> builtins.str:
         r"""
@@ -1440,17 +1445,20 @@ class FeynmanDiagram:
         >>> graph = diagram.to_linnet()
         >>> gluons = graph.filter(edge=lambda edge: edge.data.particle_name == "g")
         """
-    def subgraph(self, *, nodes: typing.Optional[typing.Sequence[builtins.int]] = None, edges: typing.Optional[typing.Sequence[builtins.int]] = None, half_edges: typing.Optional[typing.Sequence[builtins.int]] = None) -> linnet.Subgraph:
+    def subgraph(self, selection: Subgraph | linnet.Subgraph | None = None, *, nodes: typing.Optional[typing.Sequence[builtins.int]] = None, edges: typing.Optional[typing.Sequence[builtins.int]] = None, half_edges: typing.Optional[typing.Sequence[builtins.int]] = None) -> Subgraph:
         r"""
-        Select graph elements using the canonical Linnet IDs.
+        Select graph elements using canonical Linnet IDs, or import a graph-bound selection.
+        Nested selections intersect this region and retain its immutable original diagram.
 
         Examples
         --------
         >>> region = diagram.subgraph(edges=[0, 1])
-        >>> numerator = diagram.numerator_expression(subgraph=region)
+        >>> numerator = region.numerator_expression()
 
         Parameters
         ----------
+        selection : Subgraph or linnet.Subgraph or None, optional
+            Existing selection from the same original diagram; exclusive with element IDs.
         nodes : list[int] or None, optional
             Canonical Linnet nodes IDs to include.
         edges : list[int] or None, optional
@@ -1458,7 +1466,7 @@ class FeynmanDiagram:
         half_edges : list[int] or None, optional
             Canonical Linnet half-edges IDs to include.
         """
-    def filter(self, *, node: typing.Callable[[linnet.Node], bool] | None = None, edge: typing.Callable[[linnet.Edge], bool] | None = None, half_edge: typing.Callable[[linnet.HalfEdge], bool] | None = None) -> linnet.Subgraph:
+    def filter(self, *, node: typing.Callable[[linnet.Node], bool] | None = None, edge: typing.Callable[[linnet.Edge], bool] | None = None, half_edge: typing.Callable[[linnet.HalfEdge], bool] | None = None) -> Subgraph:
         r"""
         Select by predicates on Linnet views; their ``data`` is a physics object.
 
@@ -1475,86 +1483,58 @@ class FeynmanDiagram:
         half_edge : callable or None, optional
             Predicate on canonical Linnet half-edge views.
         """
-    def boundary(self, subgraph: linnet.Subgraph) -> linnet.Subgraph:
+    def boundary(self) -> Subgraph:
         r"""
         Return boundaries around the selected interaction region.
+
+        The current region determines which interaction boundaries are returned.
 
         Examples
         --------
         >>> region = diagram.subgraph(nodes=[0])
-        >>> boundary = diagram.boundary(region)
-
-        Parameters
-        ----------
-        subgraph : linnet.Subgraph
-            Region from this diagram's analysis graph.
+        >>> boundary = region.boundary()
         """
-    def connected_components(self, subgraph: linnet.Subgraph | None = None) -> list[linnet.Subgraph]:
+    def connected_components(self) -> builtins.list[Subgraph]:
         r"""
         Return connected interaction regions as reusable selections.
 
         Examples
         --------
         >>> components = diagram.connected_components()
-
-        Parameters
-        ----------
-        subgraph : linnet.Subgraph or None, optional
-            Region from this diagram's analysis graph; None selects the complete graph.
         """
-    def is_connected(self, subgraph: linnet.Subgraph | None = None) -> builtins.bool:
+    def is_connected(self) -> builtins.bool:
         r"""
-        Test connectivity of an optional selection.
+        Test connectivity of the current diagram or selected region.
 
         Examples
         --------
         >>> connected = diagram.is_connected()
-
-        Parameters
-        ----------
-        subgraph : linnet.Subgraph or None, optional
-            Region from this diagram's analysis graph; None selects the complete graph.
         """
-    def bridges(self, subgraph: linnet.Subgraph | None = None) -> linnet.Subgraph:
+    def bridges(self) -> Subgraph:
         r"""
         Return lines whose removal disconnects the selection.
 
         Examples
         --------
         >>> bridges = diagram.bridges()
-
-        Parameters
-        ----------
-        subgraph : linnet.Subgraph or None, optional
-            Region from this diagram's analysis graph; None selects the complete graph.
         """
-    def cycle_basis(self, subgraph: linnet.Subgraph | None = None) -> tuple[list[linnet.Cycle], linnet.Subgraph]:
+    def cycle_basis(self) -> tuple[list[linnet.Cycle], Subgraph]:
         r"""
         Return a cycle basis and its covered half-edges.
 
         Examples
         --------
         >>> cycles, covered = diagram.cycle_basis()
-
-        Parameters
-        ----------
-        subgraph : linnet.Subgraph or None, optional
-            Region from this diagram's analysis graph; None selects the complete graph.
         """
-    def all_spanning_forests(self, subgraph: linnet.Subgraph | None = None) -> list[linnet.Subgraph]:
+    def all_spanning_forests(self) -> builtins.list[Subgraph]:
         r"""
         Enumerate spanning forests within the selected topology.
 
         Examples
         --------
         >>> forests = diagram.all_spanning_forests()
-
-        Parameters
-        ----------
-        subgraph : linnet.Subgraph or None, optional
-            Region from this diagram's analysis graph; None selects the complete graph.
         """
-    def all_bonds(self, *, subgraph: linnet.Subgraph | None = None, min_size: typing.Optional[builtins.int] = None, max_size: typing.Optional[builtins.int] = None) -> list[linnet.Subgraph]:
+    def all_bonds(self, *, min_size: typing.Optional[builtins.int] = None, max_size: typing.Optional[builtins.int] = None) -> builtins.list[Subgraph]:
         r"""
         Enumerate minimal cutsets, independently of physical final-state cuts.
 
@@ -1564,8 +1544,6 @@ class FeynmanDiagram:
 
         Parameters
         ----------
-        subgraph : linnet.Subgraph or None, optional
-            Region from this diagram's analysis graph; None selects the complete graph.
         min_size : int or None, optional
             Minimum number of crossing edges.
         max_size : int or None, optional
@@ -1586,7 +1564,7 @@ class FeynmanDiagram:
         target : list[int]
             Canonical Linnet vertices required on the opposite side.
         """
-    def depth_first_traverse(self, root: builtins.int, *, subgraph: linnet.Subgraph | None = None, include: typing.Optional[builtins.int] = None) -> linnet.TraversalTree:
+    def depth_first_traverse(self, root: builtins.int, *, include: typing.Optional[builtins.int] = None) -> linnet.TraversalTree:
         r"""
         Traverse a selected interaction region in depth-first order.
 
@@ -1598,12 +1576,10 @@ class FeynmanDiagram:
         ----------
         root : int
             Canonical Linnet vertex ID at which traversal starts.
-        subgraph : linnet.Subgraph or None, optional
-            Region from this diagram's analysis graph; None selects the complete graph.
         include : int or None, optional
             Canonical Linnet half-edge ID to prioritize at the root.
         """
-    def breadth_first_traverse(self, root: builtins.int, *, subgraph: linnet.Subgraph | None = None, include: typing.Optional[builtins.int] = None) -> linnet.TraversalTree:
+    def breadth_first_traverse(self, root: builtins.int, *, include: typing.Optional[builtins.int] = None) -> linnet.TraversalTree:
         r"""
         Traverse a selected interaction region in breadth-first order.
 
@@ -1615,8 +1591,6 @@ class FeynmanDiagram:
         ----------
         root : int
             Canonical Linnet vertex ID at which traversal starts.
-        subgraph : linnet.Subgraph or None, optional
-            Region from this diagram's analysis graph; None selects the complete graph.
         include : int or None, optional
             Canonical Linnet half-edge ID to prioritize at the root.
         """
@@ -1678,7 +1652,7 @@ class FeynmanDiagram:
         evaluate : bool
             Evaluate known graph-factor annotations while preserving other symbols.
         """
-    def denominator_expression(self, *, subgraph: linnet.Subgraph | None = None, edge_powers: typing.Optional[typing.Mapping[builtins.int, builtins.int]] = None, dimension: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None, in_lmb: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None) -> TensorExpression:
+    def denominator_expression(self, *, edge_powers: typing.Optional[typing.Mapping[builtins.int, builtins.int]] = None, dimension: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None, in_lmb: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None) -> TensorExpression:
         r"""
         Return the product of internal propagator denominators as a scalar TensorExpression.
 
@@ -1699,8 +1673,7 @@ class FeynmanDiagram:
 
         Parameters
         ----------
-        subgraph : linnet.Subgraph or None, optional
-            Region from this diagram; None selects internal propagators only.
+        A complete diagram defaults to internal propagators; a Subgraph uses its region.
         edge_powers : mapping[int, int] or None, optional
             Signed propagator powers by diagram edge ID; omitted edges have power one.
         dimension : Expression or int or None, optional
@@ -1736,7 +1709,7 @@ class FeynmanDiagram:
             Assumptions on routed momentum names and the Lorentz dimension.
             None uses the shared symbolic dimension with no on-shell assumptions.
         """
-    def numerator_expression(self, *, subgraph: linnet.Subgraph | None = None, without: linnet.Subgraph | None = None, in_lmb: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None) -> TensorExpression:
+    def numerator_expression(self, *, without: Subgraph | linnet.Subgraph | None = None, in_lmb: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None) -> TensorExpression:
         r"""
         Return the diagram numerator as a Spenso TensorExpression.
 
@@ -1750,9 +1723,7 @@ class FeynmanDiagram:
 
         Parameters
         ----------
-        subgraph : linnet.Subgraph or None, optional
-            Region from this diagram's analysis graph; None selects the complete graph.
-        without : linnet.Subgraph or None, optional
+        without : Subgraph or linnet.Subgraph or None, optional
             Ignored region, using GammaLoop boundary and local-factor selection semantics.
         in_lmb : bool, optional
             Express edge momenta in the diagram's stored loop-momentum basis.
@@ -1760,7 +1731,7 @@ class FeynmanDiagram:
             Basis from this diagram instance. Supplying it enables routing and
             takes precedence over ``in_lmb``, including for a selected region.
         """
-    def uv_expansion(self, uv_mass: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], *, subgraph: linnet.Subgraph | None = None, dimension: builtins.int = 4, numerator: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None) -> TensorExpression:
+    def uv_expansion(self, uv_mass: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], *, dimension: builtins.int = 4, numerator: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None) -> TensorExpression:
         r"""
         Expand the local integrand through its UV degree of divergence.
 
@@ -1782,20 +1753,18 @@ class FeynmanDiagram:
         >>> mass = S("mUV", is_scalar=True)
         >>> expansion = diagram.uv_expansion(mass)
         >>> region = diagram.filter(edge=lambda e: e.data.id in selected_edge_ids)
-        >>> local_ct = diagram.uv_counterterm(mass, subgraph=region)
+        >>> local_ct = region.uv_counterterm(mass)
 
         Parameters
         ----------
         uv_mass : Expression or int
             Auxiliary mass used for the propagator expansion.
-        subgraph : linnet.Subgraph or None, optional
-            Region from this diagram's analysis graph; None selects the complete graph.
         dimension : int, optional
             Positive spacetime dimension for UV power counting; defaults to four.
         numerator : Expression or TensorExpression or None, optional
             Prepared numerator in edge momenta; None uses the selected local numerator.
         """
-    def uv_counterterm(self, uv_mass: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], *, subgraph: linnet.Subgraph | None = None, dimension: builtins.int = 4, numerator: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None) -> TensorExpression:
+    def uv_counterterm(self, uv_mass: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], *, dimension: builtins.int = 4, numerator: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None) -> TensorExpression:
         r"""
         Return the additive local UV counterterm, the negative of ``uv_expansion``.
 
@@ -1813,8 +1782,6 @@ class FeynmanDiagram:
         ----------
         uv_mass : Expression or int
             Auxiliary mass used for the propagator expansion.
-        subgraph : linnet.Subgraph or None, optional
-            Region from this diagram's analysis graph; None selects the complete graph.
         dimension : int, optional
             Positive spacetime dimension for UV power counting; defaults to four.
         numerator : Expression or TensorExpression or None, optional
@@ -1840,7 +1807,7 @@ class FeynmanDiagram:
         >>> projected_numerator = projector * diagram.numerator_expression()
         >>> projected_numerator
         """
-    def tensor_reduce(self, dimension: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], *, expression: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None, subgraph: linnet.Subgraph | None = None, projector: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None) -> TensorExpression:
+    def tensor_reduce(self, dimension: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], *, expression: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None, projector: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None) -> TensorExpression:
         r"""
         Reduce the numerator and projector using the diagram's internal edge momenta.
 
@@ -1862,8 +1829,6 @@ class FeynmanDiagram:
         expression : Expression or TensorExpression, optional
             Complete prepared input to reduce instead of the numerator and projector.
             Cannot be combined with an explicit projector.
-        subgraph : linnet.Subgraph or None, optional
-            Region from this diagram's analysis graph; None selects the complete graph.
         projector : Expression or None, optional
             Explicit external tensor projector, required for partial regions unless expression is supplied.
         """
@@ -1945,7 +1910,7 @@ class FeynmanDiagram:
         edges : list[int]
             Diagram edge IDs specifying the requested routing coordinates.
         """
-    def momentum_basis(self, *, subgraph: linnet.Subgraph | None = None) -> LoopMomentumBasis:
+    def momentum_basis(self) -> LoopMomentumBasis:
         r"""
         Construct the canonical routing of the selected interaction region.
 
@@ -1953,13 +1918,8 @@ class FeynmanDiagram:
         --------
         >>> basis = diagram.momentum_basis()
         >>> routed = basis.route_expression(diagram.numerator_expression())
-
-        Parameters
-        ----------
-        subgraph : linnet.Subgraph or None, optional
-            Region from this diagram's analysis graph; None selects the complete graph.
         """
-    def compatible_momentum_basis(self, parent: LoopMomentumBasis, *, subgraph: linnet.Subgraph | None = None) -> LoopMomentumBasis:
+    def compatible_momentum_basis(self, parent: LoopMomentumBasis) -> LoopMomentumBasis:
         r"""
         Reuse a parent basis's loop coordinates wherever the selected topology permits it.
 
@@ -1971,10 +1931,8 @@ class FeynmanDiagram:
         ----------
         parent : LoopMomentumBasis
             Parent coordinates belonging to this same diagram instance.
-        subgraph : linnet.Subgraph or None, optional
-            Region from this diagram's analysis graph; None selects the complete graph.
         """
-    def contracted_momentum_basis(self, contracted: linnet.Subgraph, *, subgraph: linnet.Subgraph | None = None) -> LoopMomentumBasis:
+    def contracted_momentum_basis(self, contracted: Subgraph | linnet.Subgraph) -> LoopMomentumBasis:
         r"""
         Route the selected region after contracting complete internal edges.
 
@@ -1985,26 +1943,10 @@ class FeynmanDiagram:
 
         Parameters
         ----------
-        contracted : linnet.Subgraph
+        contracted : Subgraph or linnet.Subgraph
             Complete internal edges to contract, selected from this diagram.
-        subgraph : linnet.Subgraph or None, optional
-            Region from this diagram's analysis graph; None selects the complete graph.
         """
-    def loop_count_of(self, *, subgraph: linnet.Subgraph | None = None) -> builtins.int:
-        r"""
-        Count independent loops within a selected region.
-
-        Examples
-        --------
-        >>> region = diagram.filter(edge=lambda edge: not edge.data.is_external)
-        >>> loops = diagram.loop_count_of(subgraph=region)
-
-        Parameters
-        ----------
-        subgraph : linnet.Subgraph or None, optional
-            Region from this diagram's analysis graph; None selects the complete graph.
-        """
-    def superficial_degree_of_divergence(self, *, dimension: builtins.int = 4, subgraph: linnet.Subgraph | None = None) -> builtins.int:
+    def superficial_degree_of_divergence(self, *, dimension: builtins.int = 4) -> builtins.int:
         r"""
         Return the local superficial UV degree of divergence.
 
@@ -2024,8 +1966,6 @@ class FeynmanDiagram:
         ----------
         dimension : int, optional
             Spacetime dimension for each loop integration measure; defaults to four.
-        subgraph : linnet.Subgraph or None, optional
-            Region from this diagram's analysis graph; None selects the complete graph.
         """
     def validate(self) -> None:
         r"""
@@ -2038,7 +1978,7 @@ class FeynmanDiagram:
 
         >>> diagram.validate()
         """
-    def build_cff(self, *, max_orientations: typing.Optional[builtins.int] = None, fixed_orientations: typing.Optional[typing.Mapping[builtins.int, builtins.bool]] = None, contracted_edges: typing.Optional[typing.Sequence[builtins.int]] = None, initial_state_edges: typing.Optional[typing.Sequence[builtins.int]] = None, subgraph: linnet.Subgraph | None = None) -> CffResult:
+    def build_cff(self, *, max_orientations: typing.Optional[builtins.int] = None, fixed_orientations: typing.Optional[typing.Mapping[builtins.int, builtins.bool]] = None, contracted_edges: typing.Optional[typing.Sequence[builtins.int]] = None, initial_state_edges: typing.Optional[typing.Sequence[builtins.int]] = None) -> CffResult:
         r"""
         Build the diagram's Cross-Free Family representation.
 
@@ -2063,8 +2003,6 @@ class FeynmanDiagram:
             Edge IDs to contract before constructing denominator surfaces.
         initial_state_edges : iterable[int], optional
             Edge IDs to classify as incoming external lines.
-        subgraph : linnet.Subgraph or None, optional
-            Region from this diagram's analysis graph; None selects the complete graph.
         """
     def to_json(self) -> builtins.str:
         r"""
@@ -2086,7 +2024,7 @@ class FeynmanDiagram:
         >>> restored = FeynmanDiagram.from_dot(model, dot)
         >>> restored.validate()
         """
-    def to_linnest(self, *, highlight: linnet.Subgraph | None = None) -> builtins.str:
+    def to_linnest(self, *, highlight: Subgraph | linnet.Subgraph | None = None) -> builtins.str:
         r"""
         Emit a complete Typst document that draws the graph with Linnest.
 
@@ -2101,12 +2039,12 @@ class FeynmanDiagram:
 
         Parameters
         ----------
-        highlight : linnet.Subgraph or None, optional
+        highlight : Subgraph or linnet.Subgraph or None, optional
             Highlight a region from this diagram's analysis graph with Linnest's
-            edge underlay. The complete diagram is retained; half-edge selections
-            preserve their source/sink sides. Foreign or stale selections are rejected.
+            selection styling. The complete original diagram remains as muted, dotted
+            context; source/sink halves stay distinct. Foreign selections are rejected.
         """
-    def to_svg(self, *, highlight: linnet.Subgraph | None = None) -> builtins.str:
+    def to_svg(self, *, highlight: Subgraph | linnet.Subgraph | None = None) -> builtins.str:
         r"""
         Render the Linnest diagram as a self-contained SVG with ``typst-py``.
 
@@ -2117,11 +2055,11 @@ class FeynmanDiagram:
 
         Parameters
         ----------
-        highlight : linnet.Subgraph or None, optional
-            Region from this diagram's analysis graph to highlight. Linnest draws
-            an underlay behind the selected half-edges without changing the diagram.
+        highlight : Subgraph or linnet.Subgraph or None, optional
+            Region from this diagram to highlight with muted, dotted context.
+            A Subgraph highlights itself by default without changing its original.
         """
-    def to_html(self, *, highlight: linnet.Subgraph | None = None) -> builtins.str:
+    def to_html(self, *, highlight: Subgraph | linnet.Subgraph | None = None) -> builtins.str:
         r"""
         Render the Linnest diagram as a self-contained HTML figure.
 
@@ -2134,7 +2072,7 @@ class FeynmanDiagram:
 
         Parameters
         ----------
-        highlight : linnet.Subgraph or None, optional
+        highlight : Subgraph or linnet.Subgraph or None, optional
             Region from this diagram's analysis graph to highlight in the full figure.
         """
     def _repr_html_(self) -> builtins.str:
@@ -2169,7 +2107,7 @@ class FeynmanDiagram:
         cycle : bool
             Whether this object is part of a recursive formatting cycle.
         """
-    def loop_momentum_bases(self, limit: typing.Optional[builtins.int] = None, *, subgraph: linnet.Subgraph | None = None) -> builtins.list[LoopMomentumBasis]:
+    def loop_momentum_bases(self, limit: typing.Optional[builtins.int] = None) -> builtins.list[LoopMomentumBasis]:
         r"""
         Enumerate valid loop-momentum bases for this diagram.
 
@@ -2188,8 +2126,6 @@ class FeynmanDiagram:
         limit : int or None
             Maximum number of bases to return. Pass ``None`` to enumerate every
             valid basis.
-        subgraph : linnet.Subgraph or None, optional
-            Region from this diagram's analysis graph; None selects the complete graph.
         """
     def __repr__(self) -> builtins.str:
         r"""
@@ -3273,7 +3209,8 @@ class IntegralFamily:
         None means this criterion did not detect scalelessness, not that the
         integral is nonzero. Every denominator is treated as present; use
         ``sector(powers)`` first to select positive-power entries. Singular
-        quadratic loop forms raise IntegralFamilyError as in ``symanzik``.
+        quadratic loop forms raise IntegralFamilyError: their algebraic U/F
+        polynomials do not establish this parametric scaling certificate.
 
         Examples
         --------
@@ -3301,7 +3238,8 @@ class IntegralFamily:
         without a loop shift at fixed external momenta. The result supplies no
         momentum or tensor-numerator substitution and does not check contours or
         propagator prescriptions. Both families must have equal denominator
-        counts and the same external kinematics.
+        counts and the same external kinematics. Singular quadratic forms are
+        rejected because their U/F polynomials can discard physical parameters.
 
         Examples
         --------
@@ -3327,8 +3265,10 @@ class IntegralFamily:
 
         Uses Minkowski inverse propagators: k^2-m^2 gives U=x and F=m^2*x^2.
         For a weighted denominator k.M.k + 2 k.Q + J, this returns
-        U=det(M) and F=U*(Q.M^-1.Q-J). The quadratic loop matrix must be
-        nonsingular. This prepares polynomials without performing integration.
+        U=det(M) and F=Q.adj(M).Q-U*J, using Symbolica determinants and cofactors.
+        Singular quadratic forms are accepted as algebraic polynomial data;
+        they do not establish a Gaussian integration formula or scalelessness.
+        This prepares polynomials without performing integration.
 
         Examples
         --------
@@ -5766,6 +5706,141 @@ class SnailFilterOptions:
             Reject zero-momentum snails attached through a massless particle.
         only_scaleless : bool, optional
             Currently unsupported; ``True`` makes generation return an error.
+        """
+
+@typing.final
+class Subgraph(FeynmanDiagram):
+    r"""
+    A physics region retaining an Arc to its immutable original Feynman diagram.
+
+    Construct with ``diagram.subgraph(...)`` or ``diagram.filter(...)``. Inherited
+    physics operations use this selection, with original edge IDs and momentum
+    coordinates. Display keeps the full original graph as muted context.
+    ``excise()`` creates independent topology and routing when those are needed.
+
+    Examples
+    --------
+    >>> region = diagram.filter(edge=lambda edge: not edge.data.is_external)
+    >>> numerator = region.numerator_expression()
+    >>> independent = region.excise()
+    """
+    @property
+    def original(self) -> FeynmanDiagram:
+        r"""
+        Return a full view of the immutable original diagram, sharing its Arc.
+        """
+    @property
+    def n_half_edges(self) -> builtins.int:
+        r"""
+        Return the number of selected half-edges, excluding isolated vertices.
+        """
+    def excise(self) -> FeynmanDiagram:
+        r"""
+        Materialize an independent diagram with dangling legs at the region boundary.
+
+        Complete interaction crowns are retained. Only selected internal pairs stay
+        paired; remaining incident halves become boundary legs. Proper regions get
+        independent momentum coordinates and unit global weights and projector.
+        Excising the complete original preserves its factors, cuts and routing.
+
+        Examples
+        --------
+        >>> region = diagram.subgraph(nodes=[0])
+        >>> independent = region.excise()
+        >>> independent.validate()
+        """
+    def half_edge_indices(self) -> builtins.list[builtins.int]:
+        r"""
+        Return canonical Linnet half-edge IDs of this region.
+
+        Examples
+        --------
+        >>> selected_half_edges = region.half_edge_indices()
+        >>> canonical = region.to_linnet().subgraph(half_edges=selected_half_edges)
+        """
+    def isolated_node_indices(self) -> builtins.list[builtins.int]:
+        r"""
+        Return explicitly selected vertices with no incident half-edges.
+
+        Examples
+        --------
+        >>> isolated_vertices = region.isolated_node_indices()
+        """
+    def __len__(self) -> builtins.int:
+        r"""
+        Count selected half-edges and explicitly selected isolated vertices.
+
+        Examples
+        --------
+        >>> size = len(region)
+        """
+    def __bool__(self) -> builtins.bool:
+        r"""
+        Test whether any half-edge or isolated vertex is selected.
+
+        Examples
+        --------
+        >>> nonempty = bool(region)
+        """
+    def __and__(self, other: FeynmanDiagram) -> Subgraph:
+        r"""
+        Intersect two regions belonging to the same original diagram.
+
+        Examples
+        --------
+        >>> common = left & right
+
+        Parameters
+        ----------
+        other : FeynmanDiagram
+            Region or full diagram sharing this region's immutable original.
+        """
+    def __or__(self, other: FeynmanDiagram) -> Subgraph:
+        r"""
+        Unite two regions belonging to the same original diagram.
+
+        Examples
+        --------
+        >>> combined = left | right
+
+        Parameters
+        ----------
+        other : FeynmanDiagram
+            Region or full diagram sharing this region's immutable original.
+        """
+    def __xor__(self, other: FeynmanDiagram) -> Subgraph:
+        r"""
+        Select elements present in exactly one of two regions.
+
+        Examples
+        --------
+        >>> exclusive = left ^ right
+
+        Parameters
+        ----------
+        other : FeynmanDiagram
+            Region or full diagram sharing this region's immutable original.
+        """
+    def __sub__(self, other: FeynmanDiagram) -> Subgraph:
+        r"""
+        Remove the other region's elements from this selection.
+
+        Examples
+        --------
+        >>> remaining = left - right
+
+        Parameters
+        ----------
+        other : FeynmanDiagram
+            Region or full diagram sharing this region's immutable original.
+        """
+    def __invert__(self) -> Subgraph:
+        r"""
+        Complement the region relative to its immutable original diagram.
+
+        Examples
+        --------
+        >>> outside = ~region
         """
 
 @typing.final

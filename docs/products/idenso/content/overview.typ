@@ -23,7 +23,7 @@ metric, epsilon, and color algebra.
   #link("quickstart/rust/")[Rust guide].
 - To verify the rewrite as a controlled, observable pass, follow the
   #link("tutorial/")[controlled identity tutorial] and the
-  #link("reference/python/idenso-community/simplify_metrics-function/")[Python function reference].
+  #link("reference/python/spynso3/TensorExpression/#exports-tensorexpression-simplify-metrics-method")[Python method reference].
 - To isolate dummy-index namespaces or cook a large expression, use the
   #link("guides/algebra/")[algebra guide] with the exact
   #link("reference/rust/idenso/trait.IndexTooling.html")[`IndexTooling`] and
@@ -50,7 +50,7 @@ expressions: equal printed index names can otherwise acquire an unintended contr
 == Representations and cooking
 
 The representation layer defines spin-fundamental, color-fundamental, color-sextet, bispinor,
-and color-adjoint types together with their duality. Importing the published Idenso community
+and color-adjoint types together with their duality. Importing the Spenso community
 module registers the related Symbolica symbols and Spenso tags before expressions are built.
 
 The `Cookable` API can replace selected function-like subexpressions or index payloads with

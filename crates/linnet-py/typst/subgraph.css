@@ -6,9 +6,11 @@
 @media (prefers-color-scheme: dark) {
   .linnet-subgraph { --linnet-ink: #f3f4f6; --linnet-highlight: #ffd166; }
 }
+.linnet-subgraph[data-theme="dark"],
 :is(.dark, [data-theme="dark"], [data-jp-theme-light="false"]) .linnet-subgraph {
   --linnet-ink: #f3f4f6; --linnet-highlight: #ffd166;
 }
+.linnet-subgraph[data-theme="light"],
 :is(.light, [data-theme="light"], [data-jp-theme-light="true"]) .linnet-subgraph {
   --linnet-ink: #000000; --linnet-highlight: #c58b13;
 }

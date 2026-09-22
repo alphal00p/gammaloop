@@ -8,7 +8,7 @@ from pathlib import Path
 
 from symbolica import E, Expression, S
 from symbolica.community import feynkit as fk
-from symbolica.community.idenso import simplify_gamma, to_dots
+from symbolica.community.spenso import TensorExpression
 
 model = fk.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
 # A sewn tree x tree graph has one loop and its two muon lines form the cut.
@@ -51,7 +51,13 @@ for edge in diagram.external_edges:
 numerator = model.expand_couplings(
     diagram.numerator_expression().to_expression() * projector
 )
-contracted = to_dots(simplify_gamma(numerator.expand()).expand())
+contracted = (
+    TensorExpression(numerator.expand())
+    .simplify_gamma()
+    .expand()
+    .to_dots()
+    .to_expression()
+)
 contracted = kin.apply(diagram.loop_momentum_basis.route_expression(contracted))
 
 # Cut propagators belong to the phase-space measure, not the squared amplitude.

@@ -217,7 +217,6 @@
       "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
       "packages.x86_64-linux.crate-test-dependencies-feynkit-py"
       "packages.x86_64-linux.crate-test-dependencies-gammaloop-api"
-      "packages.x86_64-linux.crate-test-dependencies-idenso"
       "packages.x86_64-linux.crate-test-dependencies-linnet-py"
       "packages.x86_64-linux.crate-test-dependencies-spynso3"
       "packages.x86_64-linux.crate-test-dependencies-vakint"

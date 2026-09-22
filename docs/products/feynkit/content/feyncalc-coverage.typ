@@ -46,8 +46,10 @@ not treat the presence of a primitive as an end-to-end validation.
    permutations beyond fixed-external-momentum shifts. Family discovery and
    subtopology minimization remain outstanding.],
   [Feynman parameters], [`feynkit-graph::IntegralFamily`],
-  [Symanzik polynomials use Symbolica determinant and inverse operations.
-   One- and two-loop reference polynomials are validated. Complete parameter
+  [Symanzik polynomials use Symbolica determinant and cofactor operations.
+   One- and two-loop reference polynomials and singular quadratic forms are
+   validated. Singular output is algebraic data, not an integration formula.
+   Complete parameter
    measures and tensor numerators remain outstanding. Polynomial equivalence
    alone does not establish contour or prescription equivalence.],
   [Scaleless sectors], [`feynkit-graph::IntegralFamily`],
@@ -150,11 +152,18 @@ cut fermion numerators already contain the final-state completeness factors.
 The test excludes cut denominators from the squared amplitude and retains the
 uncut photon denominators and complete graph weight. Its massless result is
 integrated with the two-body phase-space measure and Symbolica polynomial
-integration, reproducing the unpolarized total cross section. Polarized
-production from the generated sewn graph remains a separate check before marking
-the full example complete: inserting the same right projector at every generated
-vertex gives the opposite angular correlation to the physical current benchmark.
-The external-state and cut-flow conventions still need to be reconciled.
+integration, reproducing the unpolarized total cross section.
+
+The live `symbolica-community/examples/hep_showcase.py` notebook also constructs
+chiral-projected production directly from the generated vertices and propagators.
+Its massive and massless results agree with the reference. Physical final-state
+charges come from `cut.particles`: the finalized left side is the conjugate
+amplitude, so the stored species of a cut edge need not be the outgoing species.
+`cut.orientations` supplies the sign relating a selected loop coordinate to the
+positive-energy outgoing momentum. Apply that sign when assigning physical
+Mandelstam labels. These conventions leave native graph momentum routing intact;
+changing which cut edge carries the loop coordinate must not interchange the
+physical angular invariants.
 
 Idenso now evaluates four-dimensional traces containing Spenso's `projp` and
 `projm` by reducing them through its existing gamma-five trace identities. Use
@@ -162,6 +171,53 @@ Idenso now evaluates four-dimensional traces containing Spenso's `projp` and
 projected currents. Symbolic-dimensional traces remain inert; this does not
 choose a dimensional-regularization gamma-five scheme. Chirality specifies
 helicity only in the massless limit.
+
+== Massive Compton scattering: unresolved sewn-state convention
+
+The #link("https://feyncalc.github.io/FeynCalcExamples/QED/Tree/ElGa-ElGa")[Compton reference]
+is not yet reproduced for a massive electron. Generation supplies four sewn
+contributions for `e gamma -> e gamma`: both diagonal terms and both
+interferences. Select the electron cut edge with
+`with_loop_momentum_edges`, obtain its physical charge and momentum sign from
+the cut, exclude cut denominators, and contract the initial-state spin sums.
+This calculation reproduces the massless result
+$-2 e^4 (s/u + u/s)$ for electrons and positrons.
+
+The massive result currently fails when the physical `Particle.sum_spins`
+tensor is applied directly to the native sewn projector. At
+$e = m_e = 1$, $s = 3$, $t = -1$, $u = 0$, the reference squared matrix element
+is $3$. The generated result is $-17$ with covariant photon sums and $1$ with
+an axial incoming-photon sum whose reference is the incoming electron momentum.
+The reference is timelike and has nonzero contraction with the photon, so these
+are two admissible polarization sums for the same physical process.
+
+Reversing only the mass term in the incoming fermion density matrix is a
+diagnostic: it restores the complete massive reference expression and agreement
+between both photon sums, for electrons and positrons. This is not a change to
+the physical completeness relation. The missing boundary is between a physical
+spin density and the sewn initial-state momentum convention. The unsquared
+Compton amplitude routes its fermion propagator with the expected physical
+momentum. Resolve the sewing boundary in shared code before treating this
+example as validated; do not compensate by changing a reference formula or
+inserting a process-specific mass replacement into an example.
+
+GammaLoop already owns the relevant workflow:
+`CrossSectionGraph.apply_spin_sum` calls `ParticleTrait.polarization_sum`, which
+now delegates to the shared `SpinSum`. Its original `GeneratePolarizations`
+implementation selects wavefunctions from each half-edge's flow after sewing.
+The physical completeness relation must remain shared and unchanged.
+
+A comparison with GammaLoop's original `ParseGraph` sewing callback found that
+FeynKit finalization reverses the incoming attachment, while the original
+callback preserves it. A diagnostic restoring that callback, its vertex-slot
+assignments, and the corresponding physical cut side restored covariant/axial
+agreement for massive electron and positron Compton scattering. Both then gave
+the negative of the complete reference expression. Thus this change alone is
+insufficient: the overall sewn-graph sign and its conversion into a squared
+amplitude must also be accounted for. This diagnostic is not applied to the
+production implementation. Two native fixtures explicitly encode the current
+reversed-carrier convention and also require review before that convention can
+change. No separate sewing-specific spin-sum formula has been introduced.
 
 == Normalize and integrate two-body observables
 
@@ -249,6 +305,9 @@ Parameter-space regressions cover a published family pair that requires an
 external-momentum transformation for an affine map, all permutations of a
 massive vacuum family, and rejection of changed masses. These compare both
 Symanzik polynomials and exercise the same shared power-reordering implementation.
+Singular-form regressions compare cofactor results with a nonsingular regulator
+limit. Scaling and mapping APIs reject singular forms rather than interpreting
+vanishing polynomials as a proof.
 
 An example counts as reproduced only after exercising the relevant shared
 components and comparing its final observable or symbolic identity with the

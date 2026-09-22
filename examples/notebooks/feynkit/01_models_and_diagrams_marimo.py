@@ -252,8 +252,9 @@ def _(mo):
 
     External states live on dangling edges in an amplitude. Every vertex is
     an interaction. The canonical `linnet.Graph` keeps the diagram's typed
-    physics objects in its element payloads, so ordinary graph predicates can
-    select the region for a numerator, denominator, routing, or CFF calculation.
+    physics objects in its element payloads. `diagram.filter(...)` returns a
+    `Subgraph` inheriting `FeynmanDiagram`, so the selected region can compute
+    its own numerator, denominator, routing, or CFF expression.
     """)
     return
 
@@ -261,24 +262,23 @@ def _(mo):
 @app.cell
 def _(from_json, mo, table):
     analysis_graph = from_json.to_linnet()
-    selected_region = analysis_graph.filter(edge=lambda edge: not edge.data.is_external)
-    _basis = from_json.momentum_basis(subgraph=selected_region)
-    _numerator = from_json.numerator_expression(subgraph=selected_region)
+    selected_region = from_json.filter(edge=lambda edge: not edge.data.is_external)
+    _basis = selected_region.momentum_basis()
+    _numerator = selected_region.numerator_expression()
     mo.vstack(
         [
+            selected_region,
             table(
                 [
                     {
                         "interaction vertices": analysis_graph.n_nodes,
                         "external momentum carriers": len(from_json.external_edges),
                         "selected components": len(
-                            from_json.connected_components(selected_region)
+                            selected_region.connected_components()
                         ),
-                        "selected loops": from_json.loop_count_of(
-                            subgraph=selected_region
-                        ),
+                        "selected loops": selected_region.loop_count,
                         "selected bridge half-edges": len(
-                            from_json.bridges(selected_region)
+                            selected_region.bridges().linnet_selection
                         ),
                     }
                 ]

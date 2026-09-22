@@ -681,7 +681,26 @@
             "Kinematics.two_body_phase_space",
             "Symbolica.Polynomial.integrate"
           ],
-          "result": "passed"
+          "result": "routing-label test setup update pending",
+          "note": "The physical formulas pass in the live notebook and in the proposed orientation-aware setup; the repository test still assumes the old cut-particle convention."
+        },
+        {
+          "scope": "generated massive and massless chiral-projected squared matrix elements using physical cut particle identities and momentum orientations",
+          "example": "symbolica-community/examples/hep_showcase.py",
+          "components": [
+            "Generator.generate",
+            "Particle.sum_spins",
+            "FeynmanDiagram.overall_factor_expression",
+            "FeynmanDiagram.denominator_expression",
+            "DiagramCut.particles",
+            "DiagramCut.orientations",
+            "LoopMomentumBasis.route_expression",
+            "TensorExpression.projp",
+            "TensorExpression.simplify_gamma",
+            "TensorExpression.simplify_epsilon",
+            "Kinematics.mandelstam"
+          ],
+          "result": "passed in live notebook"
         }
       ]
     },
@@ -883,7 +902,40 @@
         "TimeUsed",
         "TrickMandelstam"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "pending: massive sewn initial-state projector fails",
+      "validated_components": [
+        {
+          "scope": "generated massless electron and positron Compton squared matrix elements with all four sewn contributions",
+          "components": [
+            "Generator.generate",
+            "FeynmanDiagram.with_loop_momentum_edges",
+            "Particle.sum_spins",
+            "DiagramCut.particles",
+            "DiagramCut.orientations",
+            "TensorExpression.simplify_gamma",
+            "TensorExpression.to_dots",
+            "Kinematics.mandelstam"
+          ],
+          "result": "passed in installed-host diagnostic",
+          "reference_expression": "-2*e^4*(s/u+u/s)"
+        },
+        {
+          "scope": "massive generated Compton squared matrix element and incoming-photon gauge independence",
+          "result": "failed: physical completeness tensor applied directly to the native sewn projector",
+          "counterexample": {
+            "e": 1,
+            "electron_mass": 1,
+            "s": 3,
+            "t": -1,
+            "u": 0,
+            "reference": 3,
+            "covariant_result": -17,
+            "axial_reference": "incoming electron momentum",
+            "axial_result": 1
+          },
+          "diagnostic": "Reversing the incoming fermion density mass term restores the full massive reference in both gauges; the shared sewing boundary remains unresolved."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/QED/Tree/ElEl-ElEl",

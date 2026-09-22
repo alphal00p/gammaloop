@@ -13,6 +13,7 @@ mod finalization;
 mod integrals;
 mod power_counting;
 pub mod routing;
+mod subgraph;
 pub mod symbols;
 pub mod thresholds;
 mod uv;
@@ -670,6 +671,31 @@ impl FeynmanDiagram {
     /// Physical cut partitions retained by cross-section generation.
     pub fn cuts(&self) -> &[DiagramCut] {
         &self.cuts
+    }
+
+    /// Physical final-state particles in the stored order of a finalized cut.
+    ///
+    /// The native left side contains the outgoing copy of each sewn initial
+    /// state, hence the conjugate amplitude. A source endpoint on that side
+    /// represents the antiparticle of the edge's stored species. This charge
+    /// convention does not reverse the positive-energy cut momentum routing.
+    pub fn cut_particles(&self, cut: &DiagramCut) -> Result<Vec<ParticleId>, DiagramError> {
+        cut.cut
+            .iter()
+            .map(|half| {
+                if self.half_edge_id(*half).is_none() {
+                    return Err(DiagramError::Invariant {
+                        operation: "reading cut particles",
+                        message: format!("cut references missing half-edge {half:?}"),
+                    });
+                }
+                let particle = self.graph[EdgeIndex(half.edge.0)].particle;
+                Ok(match half.endpoint {
+                    DiagramEndpoint::Source => self.model.particle_by_id(particle)?.antiparticle,
+                    DiagramEndpoint::Target => particle,
+                })
+            })
+            .collect()
     }
 
     /// Complete topology-only s-channel inventory used for threshold construction.
@@ -3375,7 +3401,7 @@ mod tests {
             FeynmanDiagram::from_dot(diagram.model_arc(), &diagram.to_dot().unwrap()).unwrap();
         assert_eq!(from_dot.cuts(), diagram.cuts());
 
-        let source = diagram.to_linnest(None);
+        let source = diagram.to_linnest(None, &Default::default());
         assert!(source.contains("amplitude-mode: false"));
         assert!(source.contains("cross-section-mode: true"));
         assert_eq!(source.matches("is_cut: 0").count(), 1);

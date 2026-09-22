@@ -82,22 +82,21 @@ for expression in (diagram.numerator_expression, diagram.denominator_expression)
         assert routed != raw
 
 graph = diagram.to_linnet()
-full = graph.full_subgraph()
-empty = graph.empty_subgraph()
+full = diagram.subgraph(graph.full_subgraph())
+empty = diagram.subgraph()
 region = diagram.filter(edge=lambda edge: edge.data.id == loop_edge.id)
-region_basis = diagram.momentum_basis(subgraph=region)
-for expression in (diagram.numerator_expression, diagram.denominator_expression):
-    assert expression(subgraph=full, in_lmb=True) == expression(in_lmb=True)
+region_basis = region.momentum_basis()
+for name in ("numerator_expression", "denominator_expression"):
+    assert getattr(full, name)(in_lmb=True) == getattr(diagram, name)(in_lmb=True)
     for selection, selected_basis in ((region, region_basis), (empty, basis)):
-        raw = expression(subgraph=selection)
-        assert expression(subgraph=selection, in_lmb=True) == basis.route_expression(
-            raw
-        )
-        routed = expression(subgraph=selection, lmb=selected_basis)
+        expression = getattr(selection, name)
+        raw = expression()
+        assert expression(in_lmb=True) == basis.route_expression(raw)
+        routed = expression(lmb=selected_basis)
         assert isinstance(routed, TensorExpression)
         assert routed == selected_basis.route_expression(raw)
-    assert expression(subgraph=empty, in_lmb=True) == 1
-    assert expression(subgraph=empty, lmb=alternate) == 1
+    assert getattr(empty, name)(in_lmb=True) == 1
+    assert getattr(empty, name)(lmb=alternate) == 1
 
 without_region = diagram.numerator_expression(without=region)
 assert without_region == 1
@@ -123,9 +122,9 @@ for dimension in (4, S("lmb_test::D")):
     assert diagram.denominator_expression(**options, in_lmb=True) == (
         basis.route_expression(raw)
     )
-    partial = diagram.denominator_expression(subgraph=region, **options)
-    assert diagram.denominator_expression(
-        subgraph=region, **options, lmb=region_basis
+    partial = region.denominator_expression(**options)
+    assert region.denominator_expression(
+        **options, lmb=region_basis
     ) == region_basis.route_expression(partial)
 
 restored = fk.FeynmanDiagram.from_json(model, diagram.to_json())

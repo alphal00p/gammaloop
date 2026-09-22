@@ -1,0 +1,68 @@
+svg[data-linnet-interactive] {
+  --linnet-selection: #c18a18;
+  --linnet-panel-bg: #fffdf9;
+  --linnet-panel-ink: #302c35;
+  max-width: 100%;
+  height: auto;
+}
+@media (prefers-color-scheme: dark) {
+  svg[data-linnet-interactive] {
+    --linnet-selection: #ffd166;
+    --linnet-panel-bg: #25212b;
+    --linnet-panel-ink: #f5eff8;
+  }
+}
+svg[data-linnet-interactive][data-theme="dark"] {
+  --linnet-selection: #ffd166;
+  --linnet-panel-bg: #25212b;
+  --linnet-panel-ink: #f5eff8;
+}
+svg[data-linnet-interactive][data-theme="light"] {
+  --linnet-selection: #c18a18;
+  --linnet-panel-bg: #fffdf9;
+  --linnet-panel-ink: #302c35;
+}
+svg[data-linnet-interactive] [data-linnet-kind] {
+  cursor: pointer;
+  outline: none;
+}
+svg[data-linnet-interactive] [data-linnet-kind] rect {
+  pointer-events: all;
+  fill: transparent;
+}
+svg[data-linnet-interactive] [data-linnet-kind][data-linnet-active] rect,
+svg[data-linnet-interactive] [data-linnet-kind]:focus-visible rect {
+  fill: var(--linnet-selection);
+  fill-opacity: .15;
+}
+svg[data-linnet-interactive] [data-linnet-kind][aria-pressed="true"] rect {
+  fill: var(--linnet-selection);
+  fill-opacity: .3;
+}
+svg[data-linnet-interactive] [data-linnet-kind="node"] rect { rx: 50%; }
+svg[data-linnet-interactive] .linnet-inspector {
+  box-sizing: border-box;
+  height: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--linnet-selection);
+  border-radius: 6px;
+  background: var(--linnet-panel-bg);
+  color: var(--linnet-panel-ink);
+  font: 12px/1.45 system-ui, sans-serif;
+  overflow: auto;
+}
+svg[data-linnet-interactive] .linnet-inspector button {
+  float: right;
+  border: 0;
+  padding: 0 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+svg[data-linnet-interactive] .linnet-inspector code {
+  display: block;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin-top: 5px;
+}

@@ -205,9 +205,10 @@ sectors. Kira/FIRE execution and master-integral evaluation remain separate work
 `family.symanzik(parameters)` returns `(U, F)` with one Feynman parameter per
 inverse propagator, in the original order. With
 `sum_i x_i D_i = k.M.k + 2 k.Q + J`, the convention is
-`U = det(M)` and `F = U*(Q.M^-1.Q - J)`. It matches Minkowski denominators
+`U = det(M)` and `F = Q.adj(M).Q - U*J`. It matches Minkowski denominators
 `k^2-m^2`; for a single massive tadpole, `U=x` and `F=m^2*x^2`.
-Symbolica computes the determinant, inverse and rational cancellation.
+Symbolica computes the determinant, cofactors and rational cancellation.
+For nonsingular matrices this equals `U*(Q.M^-1.Q - J)`.
 
 // docs-example: compile feynkit-integral-family-symanzik
 ```python
@@ -226,8 +227,13 @@ assert (F - ((x1+x2)*(m1sq*x1+m2sq*x2)-s*x1*x2)).expand() == E("0")
 ```
 
 Parameters must be distinct new symbols or labeled calls. The quadratic loop
-matrix must be generically invertible; purely eikonal or degenerate forms raise
-an error. Eikonal denominators may accompany quadratic propagators. Choose a
+matrix may be singular: the adjugate formula still defines algebraic polynomials
+without an inverse. For example, the two-loop denominators
+`(k+l)^2-m^2` and `(k-l).p+delta`, with `p^2=s`, give `U=0`, `F=s*x*y^2`.
+This does not define a Gaussian integral or prove the sector scaleless.
+`parametric_mapping` also rejects singular forms because their polynomials can
+lose physical information, such as the masses in this example.
+Eikonal denominators may accompany quadratic propagators. Choose a
 family containing the propagators of the desired sector before preparation;
 auxiliary numerator denominators are not automatically omitted.
 
@@ -313,7 +319,8 @@ dimensional regularization at generic dimension. This uses
 #link("https://arxiv.org/html/1310.1145")[Lee's parametric zero-sector criterion,
 equations (13)--(16)]. `None` means the criterion found no certificate; it does
 not assert that the integral is nonzero. A singular quadratic loop matrix raises
-an error, as it does in `symanzik`, rather than producing an inconclusive Boolean.
+an error rather than treating a degenerate polynomial identity as a scaling
+certificate. This restriction is stronger than the algebraic `symanzik` API.
 
 // docs-example: compile feynkit-integral-family-scaleless-sector
 ```python

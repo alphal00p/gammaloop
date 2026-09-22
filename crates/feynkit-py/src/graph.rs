@@ -1,17 +1,24 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 
+use feynkit_graph::expressions::GraphExpressions;
 use feynkit_graph::{
     DiagramCut, DiagramCutSide, DiagramEdge, DiagramEndpoint, DiagramHalfEdge,
     DiagramThresholdCandidate, DiagramVertex, FeynmanDiagram, LoopMomentumBasis, MomentumSignature,
 };
 use feynkit_model::Model;
 use feynkit_tensor::FeynmanDiagramTensorExt;
-use linnet::half_edge::subgraph::{ModifySubSet, SuBitGraph, SubSetLike};
+use linnet::half_edge::{
+    NodeIndex,
+    subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps},
+};
 use pyo3::{
     PyTraverseError, PyVisit,
-    exceptions::PyTypeError,
+    exceptions::{PyTypeError, PyValueError},
     prelude::*,
-    types::{PyAny, PyDict, PyModule},
+    types::{PyAny, PyDict, PyModule, PyTuple},
 };
 use spynso3::expression::TensorExpression;
 use symbolica::{
@@ -389,7 +396,7 @@ impl PyDiagramEdge {
 /// Examples
 /// --------
 /// >>> side = diagram.cuts[0].left
-/// >>> side_numerator = diagram.numerator_expression(subgraph=side.subgraph)
+/// >>> side_numerator = side.subgraph.numerator_expression()
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "DiagramCutSide",
@@ -405,10 +412,9 @@ pub struct PyDiagramCutSide {
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyDiagramCutSide {
-    /// Return the reusable Linnet selection for this amplitude side.
+    /// Return a physics view of this amplitude side, retaining its original diagram.
     #[getter]
-    #[gen_stub(override_return_type(type_repr="linnet.Subgraph", imports=("linnet")))]
-    fn subgraph(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    fn subgraph(&self, py: Python<'_>) -> PyResult<Py<PySubgraph>> {
         self.diagram
             .borrow(py)
             .half_edge_selection(py, &self.inner.half_edges)
@@ -464,8 +470,7 @@ impl PyDiagramCut {
     }
     /// Return the oriented crossing half-edges as a reusable selection.
     #[getter]
-    #[gen_stub(override_return_type(type_repr="linnet.Subgraph", imports=("linnet")))]
-    fn subgraph(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    fn subgraph(&self, py: Python<'_>) -> PyResult<Py<PySubgraph>> {
         self.diagram
             .borrow(py)
             .half_edge_selection(py, &self.inner.cut)
@@ -473,37 +478,29 @@ impl PyDiagramCut {
     /// Return the crossing particle lines in their stored cut order.
     #[getter]
     fn edges(&self, py: Python<'_>) -> Vec<PyDiagramEdge> {
-        let edges = self.diagram.borrow(py).edges();
+        let edges = self.diagram.borrow(py).whole().edges();
         self.inner
             .cut
             .iter()
             .map(|half| edges[half.edge.0].clone())
             .collect()
     }
-    /// Return physical particles crossing from the left amplitude to the right.
-    /// Sink-oriented lines become antiparticles, matching generation's final-state filter.
+    /// Return physical final-state particles in the stored cut-edge order.
+    ///
+    /// The finalized left side is the conjugate amplitude, so source-oriented
+    /// lines correspond to antiparticles of their stored edge species.
+    /// Momentum orientations retain the native positive-energy routing.
     #[getter]
     fn particles(&self, py: Python<'_>) -> PyResult<Vec<PyParticle>> {
         let diagram = self.diagram.borrow(py);
         let model = diagram.inner.model_arc();
-        self.inner
-            .cut
-            .iter()
-            .map(|half| {
-                let edge = &diagram.inner.underlying()
-                    [linnet::half_edge::involution::EdgeIndex(half.edge.0)];
-                let particle = match half.endpoint {
-                    DiagramEndpoint::Source => edge.particle,
-                    DiagramEndpoint::Target => {
-                        model
-                            .particle_by_id(edge.particle)
-                            .map_err(error::model)?
-                            .antiparticle
-                    }
-                };
-                Ok(PyParticle::new(particle, Arc::clone(&model)))
-            })
-            .collect()
+        Ok(diagram
+            .inner
+            .cut_particles(&self.inner)
+            .map_err(error::diagram)?
+            .into_iter()
+            .map(|particle| PyParticle::new(particle, Arc::clone(&model)))
+            .collect())
     }
 
     /// Orient crossing lines from the left side to the right side.
@@ -620,24 +617,21 @@ pub struct PyDiagramThresholdCandidate {
 impl PyDiagramThresholdCandidate {
     /// Return the left topology selection.
     #[getter]
-    #[gen_stub(override_return_type(type_repr="linnet.Subgraph", imports=("linnet")))]
-    fn left(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    fn left(&self, py: Python<'_>) -> PyResult<Py<PySubgraph>> {
         self.diagram
             .borrow(py)
             .half_edge_selection(py, &self.inner.left)
     }
     /// Return the right topology selection.
     #[getter]
-    #[gen_stub(override_return_type(type_repr="linnet.Subgraph", imports=("linnet")))]
-    fn right(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    fn right(&self, py: Python<'_>) -> PyResult<Py<PySubgraph>> {
         self.diagram
             .borrow(py)
             .half_edge_selection(py, &self.inner.right)
     }
     /// Return the oriented crossing half-edge selection.
     #[getter]
-    #[gen_stub(override_return_type(type_repr="linnet.Subgraph", imports=("linnet")))]
-    fn subgraph(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    fn subgraph(&self, py: Python<'_>) -> PyResult<Py<PySubgraph>> {
         self.diagram
             .borrow(py)
             .half_edge_selection(py, &self.inner.cut)
@@ -645,7 +639,7 @@ impl PyDiagramThresholdCandidate {
     /// Return threshold-crossing lines in their stored order.
     #[getter]
     fn edges(&self, py: Python<'_>) -> Vec<PyDiagramEdge> {
-        let edges = self.diagram.borrow(py).edges();
+        let edges = self.diagram.borrow(py).whole().edges();
         self.inner
             .cut
             .iter()
@@ -1243,32 +1237,135 @@ submit! {
 #[pyclass(
     name = "FeynmanDiagram",
     module = "symbolica.community.feynkit",
+    subclass,
     frozen,
     from_py_object
 )]
 #[derive(Clone)]
 pub struct PyFeynmanDiagram {
-    pub(crate) inner: FeynmanDiagram,
+    pub(crate) inner: Arc<FeynmanDiagram>,
     linnet: LinnetCache,
     owner: Arc<()>,
+    selected_region: Option<DiagramSelection>,
 }
 
 impl From<FeynmanDiagram> for PyFeynmanDiagram {
     fn from(inner: FeynmanDiagram) -> Self {
         Self {
-            inner,
+            inner: Arc::new(inner),
             linnet: LinnetCache::default(),
             owner: Arc::new(()),
+            selected_region: None,
         }
     }
 }
 
+#[derive(Clone)]
+struct DiagramSelection {
+    hedges: SuBitGraph,
+    isolated: BTreeSet<usize>,
+}
+
 impl PyFeynmanDiagram {
+    pub(crate) fn whole(&self) -> Self {
+        let mut whole = self.clone();
+        whole.selected_region = None;
+        whole
+    }
+
+    pub(crate) fn selection(&self) -> SuBitGraph {
+        self.selected_region.as_ref().map_or_else(
+            || self.inner.underlying().full_filter(),
+            |region| region.hedges.clone(),
+        )
+    }
+
+    fn isolated_nodes(&self) -> BTreeSet<usize> {
+        self.selected_region.as_ref().map_or_else(
+            || {
+                self.inner
+                    .underlying()
+                    .iter_nodes()
+                    .filter_map(|(node, mut crown, _)| crown.next().is_none().then_some(node.0))
+                    .collect()
+            },
+            |region| region.isolated.clone(),
+        )
+    }
+
+    fn region_argument(
+        &self,
+        py: Python<'_>,
+        value: &Bound<'_, PyAny>,
+    ) -> PyResult<DiagramSelection> {
+        if let Ok(diagram) = value.extract::<PyRef<'_, PyFeynmanDiagram>>() {
+            if !Arc::ptr_eq(&self.inner, &diagram.inner) {
+                return Err(PyValueError::new_err(
+                    "subgraph belongs to a different original diagram",
+                ));
+            }
+            return Ok(DiagramSelection {
+                hedges: diagram.selection(),
+                isolated: diagram.isolated_nodes(),
+            });
+        }
+        Ok(DiagramSelection {
+            hedges: self.linnet.selection(py, self, Some(value))?,
+            isolated: value
+                .call_method0("isolated_node_indices")?
+                .extract::<Vec<usize>>()?
+                .into_iter()
+                .collect(),
+        })
+    }
+
+    pub(crate) fn selection_argument(
+        &self,
+        py: Python<'_>,
+        value: &Bound<'_, PyAny>,
+    ) -> PyResult<SuBitGraph> {
+        Ok(self.region_argument(py, value)?.hedges)
+    }
+
+    fn view(&self, py: Python<'_>, region: DiagramSelection) -> PyResult<Py<PySubgraph>> {
+        // Share the canonical export holder with the original diagram.
+        let mut base = self.clone();
+        base.selected_region = Some(region);
+        Py::new(py, (PySubgraph {}, base))
+    }
+
+    fn wrap_selection(
+        &self,
+        py: Python<'_>,
+        selection: &Bound<'_, PyAny>,
+    ) -> PyResult<Py<PySubgraph>> {
+        self.view(py, self.region_argument(py, selection)?)
+    }
+
+    fn restrict_selection(
+        &self,
+        py: Python<'_>,
+        selection: &Bound<'_, PyAny>,
+    ) -> PyResult<Py<PySubgraph>> {
+        let region = self.region_argument(py, selection)?;
+        self.view(
+            py,
+            DiagramSelection {
+                hedges: region.hedges.intersection(&self.selection()),
+                isolated: region
+                    .isolated
+                    .intersection(&self.isolated_nodes())
+                    .copied()
+                    .collect(),
+            },
+        )
+    }
+
     fn half_edge_selection(
         &self,
         py: Python<'_>,
         halves: &[DiagramHalfEdge],
-    ) -> PyResult<Py<PyAny>> {
+    ) -> PyResult<Py<PySubgraph>> {
         let graph = self.inner.underlying();
         let mut selected = SuBitGraph::empty(graph.n_hedges());
         for half in halves {
@@ -1276,15 +1373,83 @@ impl PyFeynmanDiagram {
                 error::DiagramError::new_err("cut references a missing half-edge")
             })?);
         }
-        self.linnet.export_selection(py, self, &selected)
+        self.view(
+            py,
+            DiagramSelection {
+                hedges: selected,
+                isolated: BTreeSet::new(),
+            },
+        )
     }
 
-    pub(crate) fn selection(
-        &self,
-        py: Python<'_>,
-        subgraph: Option<&Bound<'_, PyAny>>,
-    ) -> PyResult<linnet::half_edge::subgraph::SuBitGraph> {
-        self.linnet.selection(py, self, subgraph)
+    fn local_numerator(&self, without: Option<&DiagramSelection>) -> Atom {
+        let graph = self.inner.underlying();
+        let excluded = without.map_or_else(
+            || SuBitGraph::empty(graph.n_hedges()),
+            |region| region.hedges.clone(),
+        );
+        let isolated = self.isolated_nodes();
+        graph.numerator_of(
+            &self.selection(),
+            &excluded,
+            |node, vertex| {
+                if graph.iter_crown(node).next().is_none()
+                    && (!isolated.contains(&node.0)
+                        || without.is_some_and(|region| region.isolated.contains(&node.0)))
+                {
+                    Atom::one()
+                } else {
+                    vertex.numerator.clone()
+                }
+            },
+            |edge| edge.numerator.clone(),
+            |edge| edge.is_dummy,
+        )
+    }
+
+    fn is_complete(&self) -> bool {
+        self.selected_region.as_ref().is_none_or(|region| {
+            region.hedges == self.inner.underlying().full_filter()
+                && self
+                    .inner
+                    .underlying()
+                    .iter_nodes()
+                    .all(|(node, mut crown, _)| {
+                        crown.next().is_some() || region.isolated.contains(&node.0)
+                    })
+        })
+    }
+
+    fn require_complete(&self) -> PyResult<()> {
+        if !self.is_complete() {
+            return Err(error::DiagramError::new_err(
+                "this operation needs an independent diagram; call subgraph.excise() first",
+            ));
+        }
+        Ok(())
+    }
+
+    fn includes_vertex(&self, vertex: usize) -> bool {
+        self.selected_region.as_ref().is_none_or(|region| {
+            region.isolated.contains(&vertex)
+                || self
+                    .inner
+                    .underlying()
+                    .iter_crown(NodeIndex(vertex))
+                    .any(|hedge| region.hedges.includes(&hedge))
+        })
+    }
+
+    fn includes_edge(&self, edge: feynkit_graph::EdgeId) -> bool {
+        self.selected_region.as_ref().is_none_or(|region| {
+            [DiagramEndpoint::Source, DiagramEndpoint::Target]
+                .into_iter()
+                .any(|endpoint| {
+                    self.inner
+                        .half_edge_id(DiagramHalfEdge { edge, endpoint })
+                        .is_some_and(|hedge| region.hedges.includes(&hedge))
+                })
+        })
     }
 }
 
@@ -1308,6 +1473,14 @@ impl PyFeynmanDiagram {
         self.linnet.graph(py, self)
     }
 
+    /// Return the canonical Linnet selection representing this physics region.
+    #[getter]
+    #[gen_stub(override_return_type(type_repr="linnet.Subgraph", imports=("linnet")))]
+    fn linnet_selection(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.linnet
+            .export_selection(py, self, &self.selection(), &self.isolated_nodes())
+    }
+
     #[gen_stub(skip)]
     fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
         self.linnet.traverse(visit)
@@ -1318,45 +1491,55 @@ impl PyFeynmanDiagram {
         self.linnet.clear();
     }
 
-    /// Select graph elements using the canonical Linnet IDs.
+    /// Select graph elements using canonical Linnet IDs, or import a graph-bound selection.
+    /// Nested selections intersect this region and retain its immutable original diagram.
     ///
     /// Examples
     /// --------
     /// >>> region = diagram.subgraph(edges=[0, 1])
-    /// >>> numerator = diagram.numerator_expression(subgraph=region)
+    /// >>> numerator = region.numerator_expression()
     ///
     /// Parameters
     /// ----------
+    /// selection : Subgraph or linnet.Subgraph or None, optional
+    ///     Existing selection from the same original diagram; exclusive with element IDs.
     /// nodes : list[int] or None, optional
     ///     Canonical Linnet nodes IDs to include.
     /// edges : list[int] or None, optional
     ///     Canonical Linnet edges IDs to include.
     /// half_edges : list[int] or None, optional
     ///     Canonical Linnet half-edges IDs to include.
-    #[pyo3(signature = (*, nodes=None, edges=None, half_edges=None))]
-    #[gen_stub(override_return_type(type_repr="linnet.Subgraph", imports=("linnet")))]
+    #[pyo3(signature = (selection=None, *, nodes=None, edges=None, half_edges=None))]
     fn subgraph(
         &self,
         py: Python<'_>,
+        #[gen_stub(override_type(type_repr="Subgraph | linnet.Subgraph | None", imports=("linnet")))]
+        selection: Option<&Bound<'_, PyAny>>,
         nodes: Option<Vec<usize>>,
         edges: Option<Vec<usize>>,
         half_edges: Option<Vec<usize>>,
-    ) -> PyResult<Py<PyAny>> {
+    ) -> PyResult<Py<PySubgraph>> {
+        if let Some(selection) = selection {
+            if nodes.is_some() || edges.is_some() || half_edges.is_some() {
+                return Err(PyTypeError::new_err(
+                    "pass either a selection or element IDs, not both",
+                ));
+            }
+            return self.restrict_selection(py, selection);
+        }
         let graph = self.to_linnet(py)?;
         let kwargs = PyDict::new(py);
-        if let Some(nodes) = nodes {
-            kwargs.set_item("nodes", nodes)?;
+        for (name, indices) in [
+            ("nodes", nodes),
+            ("edges", edges),
+            ("half_edges", half_edges),
+        ] {
+            if let Some(indices) = indices {
+                kwargs.set_item(name, indices)?;
+            }
         }
-        if let Some(edges) = edges {
-            kwargs.set_item("edges", edges)?;
-        }
-        if let Some(half_edges) = half_edges {
-            kwargs.set_item("half_edges", half_edges)?;
-        }
-        Ok(graph
-            .bind(py)
-            .call_method("subgraph", (), Some(&kwargs))?
-            .unbind())
+        let selected = graph.bind(py).call_method("subgraph", (), Some(&kwargs))?;
+        self.restrict_selection(py, &selected)
     }
 
     /// Select by predicates on Linnet views; their ``data`` is a physics object.
@@ -1374,7 +1557,6 @@ impl PyFeynmanDiagram {
     /// half_edge : callable or None, optional
     ///     Predicate on canonical Linnet half-edge views.
     #[pyo3(signature = (*, node=None, edge=None, half_edge=None))]
-    #[gen_stub(override_return_type(type_repr="linnet.Subgraph", imports=("linnet")))]
     fn filter(
         &self,
         py: Python<'_>,
@@ -1384,41 +1566,31 @@ impl PyFeynmanDiagram {
         edge: Option<Py<PyAny>>,
         #[gen_stub(override_type(type_repr="typing.Callable[[linnet.HalfEdge], bool] | None", imports=("typing", "linnet")))]
         half_edge: Option<Py<PyAny>>,
-    ) -> PyResult<Py<PyAny>> {
+    ) -> PyResult<Py<PySubgraph>> {
         let graph = self.to_linnet(py)?;
         let kwargs = PyDict::new(py);
         kwargs.set_item("node", node)?;
         kwargs.set_item("edge", edge)?;
         kwargs.set_item("half_edge", half_edge)?;
-        Ok(graph
-            .bind(py)
-            .call_method("filter", (), Some(&kwargs))?
-            .unbind())
+        let selected = graph.bind(py).call_method("filter", (), Some(&kwargs))?;
+        self.restrict_selection(py, &selected)
     }
 
     /// Return boundaries around the selected interaction region.
     ///
+    /// The current region determines which interaction boundaries are returned.
+    ///
     /// Examples
     /// --------
     /// >>> region = diagram.subgraph(nodes=[0])
-    /// >>> boundary = diagram.boundary(region)
-    ///
-    /// Parameters
-    /// ----------
-    /// subgraph : linnet.Subgraph
-    ///     Region from this diagram's analysis graph.
-    #[gen_stub(override_return_type(type_repr="linnet.Subgraph", imports=("linnet")))]
-    fn boundary(
-        &self,
-        py: Python<'_>,
-        #[gen_stub(override_type(type_repr="linnet.Subgraph", imports=("linnet")))]
-        subgraph: &Bound<'_, PyAny>,
-    ) -> PyResult<Py<PyAny>> {
-        Ok(self
+    /// >>> boundary = region.boundary()
+    fn boundary(&self, py: Python<'_>) -> PyResult<Py<PySubgraph>> {
+        let selected = self.linnet_selection(py)?;
+        let result = self
             .to_linnet(py)?
             .bind(py)
-            .call_method1("boundary", (subgraph,))?
-            .unbind())
+            .call_method1("boundary", (selected,))?;
+        self.wrap_selection(py, &result)
     }
 
     /// Return connected interaction regions as reusable selections.
@@ -1426,46 +1598,26 @@ impl PyFeynmanDiagram {
     /// Examples
     /// --------
     /// >>> components = diagram.connected_components()
-    ///
-    /// Parameters
-    /// ----------
-    /// subgraph : linnet.Subgraph or None, optional
-    ///     Region from this diagram's analysis graph; None selects the complete graph.
-    #[pyo3(signature = (subgraph=None))]
-    #[gen_stub(override_return_type(type_repr="list[linnet.Subgraph]", imports=("linnet")))]
-    fn connected_components(
-        &self,
-        py: Python<'_>,
-        #[gen_stub(override_type(type_repr="linnet.Subgraph | None", imports=("linnet")))]
-        subgraph: Option<&Bound<'_, PyAny>>,
-    ) -> PyResult<Py<PyAny>> {
-        Ok(self
-            .to_linnet(py)?
+    fn connected_components(&self, py: Python<'_>) -> PyResult<Vec<Py<PySubgraph>>> {
+        let selected = self.linnet_selection(py)?;
+        self.to_linnet(py)?
             .bind(py)
-            .call_method1("connected_components", (subgraph,))?
-            .unbind())
+            .call_method1("connected_components", (selected,))?
+            .try_iter()?
+            .map(|value| self.wrap_selection(py, &value?))
+            .collect()
     }
 
-    /// Test connectivity of an optional selection.
+    /// Test connectivity of the current diagram or selected region.
     ///
     /// Examples
     /// --------
     /// >>> connected = diagram.is_connected()
-    ///
-    /// Parameters
-    /// ----------
-    /// subgraph : linnet.Subgraph or None, optional
-    ///     Region from this diagram's analysis graph; None selects the complete graph.
-    #[pyo3(signature = (subgraph=None))]
-    fn is_connected(
-        &self,
-        py: Python<'_>,
-        #[gen_stub(override_type(type_repr="linnet.Subgraph | None", imports=("linnet")))]
-        subgraph: Option<&Bound<'_, PyAny>>,
-    ) -> PyResult<bool> {
+    fn is_connected(&self, py: Python<'_>) -> PyResult<bool> {
+        let selected = self.linnet_selection(py)?;
         self.to_linnet(py)?
             .bind(py)
-            .call_method1("is_connected", (subgraph,))?
+            .call_method1("is_connected", (selected,))?
             .extract()
     }
 
@@ -1474,24 +1626,13 @@ impl PyFeynmanDiagram {
     /// Examples
     /// --------
     /// >>> bridges = diagram.bridges()
-    ///
-    /// Parameters
-    /// ----------
-    /// subgraph : linnet.Subgraph or None, optional
-    ///     Region from this diagram's analysis graph; None selects the complete graph.
-    #[pyo3(signature = (subgraph=None))]
-    #[gen_stub(override_return_type(type_repr="linnet.Subgraph", imports=("linnet")))]
-    fn bridges(
-        &self,
-        py: Python<'_>,
-        #[gen_stub(override_type(type_repr="linnet.Subgraph | None", imports=("linnet")))]
-        subgraph: Option<&Bound<'_, PyAny>>,
-    ) -> PyResult<Py<PyAny>> {
-        Ok(self
+    fn bridges(&self, py: Python<'_>) -> PyResult<Py<PySubgraph>> {
+        let selected = self.linnet_selection(py)?;
+        let result = self
             .to_linnet(py)?
             .bind(py)
-            .call_method1("bridges", (subgraph,))?
-            .unbind())
+            .call_method1("bridges", (selected,))?;
+        self.wrap_selection(py, &result)
     }
 
     /// Return a cycle basis and its covered half-edges.
@@ -1499,24 +1640,18 @@ impl PyFeynmanDiagram {
     /// Examples
     /// --------
     /// >>> cycles, covered = diagram.cycle_basis()
-    ///
-    /// Parameters
-    /// ----------
-    /// subgraph : linnet.Subgraph or None, optional
-    ///     Region from this diagram's analysis graph; None selects the complete graph.
-    #[pyo3(signature = (subgraph=None))]
-    #[gen_stub(override_return_type(type_repr="tuple[list[linnet.Cycle], linnet.Subgraph]", imports=("linnet")))]
-    fn cycle_basis(
-        &self,
-        py: Python<'_>,
-        #[gen_stub(override_type(type_repr="linnet.Subgraph | None", imports=("linnet")))]
-        subgraph: Option<&Bound<'_, PyAny>>,
-    ) -> PyResult<Py<PyAny>> {
-        Ok(self
+    #[gen_stub(override_return_type(type_repr="tuple[list[linnet.Cycle], Subgraph]", imports=("linnet")))]
+    fn cycle_basis(&self, py: Python<'_>) -> PyResult<(Py<PyAny>, Py<PySubgraph>)> {
+        let selected = self.linnet_selection(py)?;
+        let result = self
             .to_linnet(py)?
             .bind(py)
-            .call_method1("cycle_basis", (subgraph,))?
-            .unbind())
+            .call_method1("cycle_basis", (selected,))?;
+        let result = result.cast::<PyTuple>()?;
+        Ok((
+            result.get_item(0)?.unbind(),
+            self.wrap_selection(py, &result.get_item(1)?)?,
+        ))
     }
 
     /// Enumerate spanning forests within the selected topology.
@@ -1524,24 +1659,14 @@ impl PyFeynmanDiagram {
     /// Examples
     /// --------
     /// >>> forests = diagram.all_spanning_forests()
-    ///
-    /// Parameters
-    /// ----------
-    /// subgraph : linnet.Subgraph or None, optional
-    ///     Region from this diagram's analysis graph; None selects the complete graph.
-    #[pyo3(signature = (subgraph=None))]
-    #[gen_stub(override_return_type(type_repr="list[linnet.Subgraph]", imports=("linnet")))]
-    fn all_spanning_forests(
-        &self,
-        py: Python<'_>,
-        #[gen_stub(override_type(type_repr="linnet.Subgraph | None", imports=("linnet")))]
-        subgraph: Option<&Bound<'_, PyAny>>,
-    ) -> PyResult<Py<PyAny>> {
-        Ok(self
-            .to_linnet(py)?
+    fn all_spanning_forests(&self, py: Python<'_>) -> PyResult<Vec<Py<PySubgraph>>> {
+        let selected = self.linnet_selection(py)?;
+        self.to_linnet(py)?
             .bind(py)
-            .call_method1("all_spanning_forests", (subgraph,))?
-            .unbind())
+            .call_method1("all_spanning_forests", (selected,))?
+            .try_iter()?
+            .map(|value| self.wrap_selection(py, &value?))
+            .collect()
     }
 
     /// Enumerate minimal cutsets, independently of physical final-state cuts.
@@ -1552,31 +1677,27 @@ impl PyFeynmanDiagram {
     ///
     /// Parameters
     /// ----------
-    /// subgraph : linnet.Subgraph or None, optional
-    ///     Region from this diagram's analysis graph; None selects the complete graph.
     /// min_size : int or None, optional
     ///     Minimum number of crossing edges.
     /// max_size : int or None, optional
     ///     Maximum number of crossing edges.
-    #[pyo3(signature = (*, subgraph=None, min_size=None, max_size=None))]
-    #[gen_stub(override_return_type(type_repr="list[linnet.Subgraph]", imports=("linnet")))]
+    #[pyo3(signature = (*, min_size=None, max_size=None))]
     fn all_bonds(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="linnet.Subgraph | None", imports=("linnet")))]
-        subgraph: Option<&Bound<'_, PyAny>>,
         min_size: Option<usize>,
         max_size: Option<usize>,
-    ) -> PyResult<Py<PyAny>> {
+    ) -> PyResult<Vec<Py<PySubgraph>>> {
         let kwargs = PyDict::new(py);
-        kwargs.set_item("subgraph", subgraph)?;
+        kwargs.set_item("subgraph", self.linnet_selection(py)?)?;
         kwargs.set_item("min_size", min_size)?;
         kwargs.set_item("max_size", max_size)?;
-        Ok(self
-            .to_linnet(py)?
+        self.to_linnet(py)?
             .bind(py)
             .call_method("all_bonds", (), Some(&kwargs))?
-            .unbind())
+            .try_iter()?
+            .map(|value| self.wrap_selection(py, &value?))
+            .collect()
     }
 
     /// Enumerate separating partitions between disjoint interaction vertex groups.
@@ -1598,6 +1719,7 @@ impl PyFeynmanDiagram {
         source: Vec<usize>,
         target: Vec<usize>,
     ) -> PyResult<Py<PyAny>> {
+        self.require_complete()?;
         Ok(self
             .to_linnet(py)?
             .bind(py)
@@ -1615,22 +1737,18 @@ impl PyFeynmanDiagram {
     /// ----------
     /// root : int
     ///     Canonical Linnet vertex ID at which traversal starts.
-    /// subgraph : linnet.Subgraph or None, optional
-    ///     Region from this diagram's analysis graph; None selects the complete graph.
     /// include : int or None, optional
     ///     Canonical Linnet half-edge ID to prioritize at the root.
-    #[pyo3(signature = (root, *, subgraph=None, include=None))]
+    #[pyo3(signature = (root, *, include=None))]
     #[gen_stub(override_return_type(type_repr="linnet.TraversalTree", imports=("linnet")))]
     fn depth_first_traverse(
         &self,
         py: Python<'_>,
         root: usize,
-        #[gen_stub(override_type(type_repr="linnet.Subgraph | None", imports=("linnet")))]
-        subgraph: Option<&Bound<'_, PyAny>>,
         include: Option<usize>,
     ) -> PyResult<Py<PyAny>> {
         let kwargs = PyDict::new(py);
-        kwargs.set_item("subgraph", subgraph)?;
+        kwargs.set_item("subgraph", self.linnet_selection(py)?)?;
         kwargs.set_item("include", include)?;
         Ok(self
             .to_linnet(py)?
@@ -1649,22 +1767,18 @@ impl PyFeynmanDiagram {
     /// ----------
     /// root : int
     ///     Canonical Linnet vertex ID at which traversal starts.
-    /// subgraph : linnet.Subgraph or None, optional
-    ///     Region from this diagram's analysis graph; None selects the complete graph.
     /// include : int or None, optional
     ///     Canonical Linnet half-edge ID to prioritize at the root.
-    #[pyo3(signature = (root, *, subgraph=None, include=None))]
+    #[pyo3(signature = (root, *, include=None))]
     #[gen_stub(override_return_type(type_repr="linnet.TraversalTree", imports=("linnet")))]
     fn breadth_first_traverse(
         &self,
         py: Python<'_>,
         root: usize,
-        #[gen_stub(override_type(type_repr="linnet.Subgraph | None", imports=("linnet")))]
-        subgraph: Option<&Bound<'_, PyAny>>,
         include: Option<usize>,
     ) -> PyResult<Py<PyAny>> {
         let kwargs = PyDict::new(py);
-        kwargs.set_item("subgraph", subgraph)?;
+        kwargs.set_item("subgraph", self.linnet_selection(py)?)?;
         kwargs.set_item("include", include)?;
         Ok(self
             .to_linnet(py)?
@@ -1791,7 +1905,7 @@ impl PyFeynmanDiagram {
     ///
     #[getter]
     fn numerator(&self) -> String {
-        self.inner.numerator().to_plain_string()
+        self.local_numerator(None).to_plain_string()
     }
 
     /// Return the product of internal propagator denominators as a scalar TensorExpression.
@@ -1813,8 +1927,7 @@ impl PyFeynmanDiagram {
     ///
     /// Parameters
     /// ----------
-    /// subgraph : linnet.Subgraph or None, optional
-    ///     Region from this diagram; None selects internal propagators only.
+    /// A complete diagram defaults to internal propagators; a Subgraph uses its region.
     /// edge_powers : mapping[int, int] or None, optional
     ///     Signed propagator powers by diagram edge ID; omitted edges have power one.
     /// dimension : Expression or int or None, optional
@@ -1824,21 +1937,19 @@ impl PyFeynmanDiagram {
     /// lmb : LoopMomentumBasis or None, optional
     ///     Basis from this diagram instance. Supplying it enables routing and
     ///     takes precedence over ``in_lmb``, including for a selected region.
-    #[pyo3(signature = (*, subgraph=None, edge_powers=None, dimension=None, in_lmb=false, lmb=None))]
+    #[pyo3(signature = (*, edge_powers=None, dimension=None, in_lmb=false, lmb=None))]
     fn denominator_expression(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="linnet.Subgraph | None", imports=("linnet")))]
-        subgraph: Option<&Bound<'_, PyAny>>,
         edge_powers: Option<BTreeMap<usize, isize>>,
         dimension: Option<ConvertibleToExpression>,
         in_lmb: bool,
         lmb: Option<&PyLoopMomentumBasis>,
     ) -> PyResult<Py<TensorExpression>> {
-        let selected = match subgraph {
-            Some(subgraph) => self.selection(py, Some(subgraph))?,
-            None => self.inner.internal_subgraph(),
-        };
+        let selected = self.selected_region.as_ref().map_or_else(
+            || self.inner.internal_subgraph(),
+            |region| region.hedges.clone(),
+        );
         let powers = edge_powers
             .unwrap_or_default()
             .into_iter()
@@ -1898,6 +2009,7 @@ impl PyFeynmanDiagram {
     ///     None uses the shared symbolic dimension with no on-shell assumptions.
     #[pyo3(signature = (*, kinematics=None))]
     fn integral_family(&self, kinematics: Option<&PyKinematics>) -> PyResult<PyIntegralFamily> {
+        self.require_complete()?;
         let default;
         let kinematics = match kinematics {
             Some(context) => &context.inner,
@@ -1929,32 +2041,26 @@ impl PyFeynmanDiagram {
     ///
     /// Parameters
     /// ----------
-    /// subgraph : linnet.Subgraph or None, optional
-    ///     Region from this diagram's analysis graph; None selects the complete graph.
-    /// without : linnet.Subgraph or None, optional
+    /// without : Subgraph or linnet.Subgraph or None, optional
     ///     Ignored region, using GammaLoop boundary and local-factor selection semantics.
     /// in_lmb : bool, optional
     ///     Express edge momenta in the diagram's stored loop-momentum basis.
     /// lmb : LoopMomentumBasis or None, optional
     ///     Basis from this diagram instance. Supplying it enables routing and
     ///     takes precedence over ``in_lmb``, including for a selected region.
-    #[pyo3(signature = (*, subgraph=None, without=None, in_lmb=false, lmb=None))]
+    #[pyo3(signature = (*, without=None, in_lmb=false, lmb=None))]
     fn numerator_expression(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="linnet.Subgraph | None", imports=("linnet")))]
-        subgraph: Option<&Bound<'_, PyAny>>,
-        #[gen_stub(override_type(type_repr="linnet.Subgraph | None", imports=("linnet")))]
+        #[gen_stub(override_type(type_repr="Subgraph | linnet.Subgraph | None", imports=("linnet")))]
         without: Option<&Bound<'_, PyAny>>,
         in_lmb: bool,
         lmb: Option<&PyLoopMomentumBasis>,
     ) -> PyResult<Py<TensorExpression>> {
-        let selected = self.selection(py, subgraph)?;
-        let without = match without {
-            Some(without) => self.selection(py, Some(without))?,
-            None => SuBitGraph::empty(self.inner.underlying().n_hedges()),
-        };
-        let numerator = self.inner.numerator_of(&selected, &without);
+        let without = without
+            .map(|region| self.region_argument(py, region))
+            .transpose()?;
+        let numerator = self.local_numerator(without.as_ref());
         let numerator = match lmb {
             Some(basis) => {
                 if !Arc::ptr_eq(&basis.owner, &self.owner) {
@@ -1993,37 +2099,36 @@ impl PyFeynmanDiagram {
     /// >>> mass = S("mUV", is_scalar=True)
     /// >>> expansion = diagram.uv_expansion(mass)
     /// >>> region = diagram.filter(edge=lambda e: e.data.id in selected_edge_ids)
-    /// >>> local_ct = diagram.uv_counterterm(mass, subgraph=region)
+    /// >>> local_ct = region.uv_counterterm(mass)
     ///
     /// Parameters
     /// ----------
     /// uv_mass : Expression or int
     ///     Auxiliary mass used for the propagator expansion.
-    /// subgraph : linnet.Subgraph or None, optional
-    ///     Region from this diagram's analysis graph; None selects the complete graph.
     /// dimension : int, optional
     ///     Positive spacetime dimension for UV power counting; defaults to four.
     /// numerator : Expression or TensorExpression or None, optional
     ///     Prepared numerator in edge momenta; None uses the selected local numerator.
-    #[pyo3(signature = (uv_mass, *, subgraph=None, dimension=4, numerator=None))]
+    #[pyo3(signature = (uv_mass, *, dimension=4, numerator=None))]
     fn uv_expansion(
         &self,
         py: Python<'_>,
         uv_mass: ConvertibleToExpression,
-        #[gen_stub(override_type(type_repr="linnet.Subgraph | None", imports=("linnet")))]
-        subgraph: Option<&Bound<'_, PyAny>>,
         dimension: i32,
         numerator: Option<ConvertibleToExpression>,
     ) -> PyResult<Py<TensorExpression>> {
-        let selected = self.selection(py, subgraph)?;
-        let numerator = numerator.map(|value| value.to_expression().expr);
+        let selected = self.selection();
+        let numerator = numerator.map_or_else(
+            || self.local_numerator(None),
+            |value| value.to_expression().expr,
+        );
         let expanded = self
             .inner
             .uv_expansion_of(
                 &selected,
                 &uv_mass.to_expression().expr,
                 dimension,
-                numerator.as_ref(),
+                Some(&numerator),
             )
             .map_err(error::diagram)?;
         TensorExpression::from_atom_interface(py, expanded, None)
@@ -2045,23 +2150,19 @@ impl PyFeynmanDiagram {
     /// ----------
     /// uv_mass : Expression or int
     ///     Auxiliary mass used for the propagator expansion.
-    /// subgraph : linnet.Subgraph or None, optional
-    ///     Region from this diagram's analysis graph; None selects the complete graph.
     /// dimension : int, optional
     ///     Positive spacetime dimension for UV power counting; defaults to four.
     /// numerator : Expression or TensorExpression or None, optional
     ///     Prepared numerator in edge momenta; None uses the selected local numerator.
-    #[pyo3(signature = (uv_mass, *, subgraph=None, dimension=4, numerator=None))]
+    #[pyo3(signature = (uv_mass, *, dimension=4, numerator=None))]
     fn uv_counterterm(
         &self,
         py: Python<'_>,
         uv_mass: ConvertibleToExpression,
-        #[gen_stub(override_type(type_repr="linnet.Subgraph | None", imports=("linnet")))]
-        subgraph: Option<&Bound<'_, PyAny>>,
         dimension: i32,
         numerator: Option<ConvertibleToExpression>,
     ) -> PyResult<Py<TensorExpression>> {
-        let expanded = self.uv_expansion(py, uv_mass, subgraph, dimension, numerator)?;
+        let expanded = self.uv_expansion(py, uv_mass, dimension, numerator)?;
         let counterterm = -&expanded.borrow(py).as_super().expr;
         TensorExpression::from_atom_interface(py, counterterm, None)
     }
@@ -2114,18 +2215,14 @@ impl PyFeynmanDiagram {
     /// expression : Expression or TensorExpression, optional
     ///     Complete prepared input to reduce instead of the numerator and projector.
     ///     Cannot be combined with an explicit projector.
-    /// subgraph : linnet.Subgraph or None, optional
-    ///     Region from this diagram's analysis graph; None selects the complete graph.
     /// projector : Expression or None, optional
     ///     Explicit external tensor projector, required for partial regions unless expression is supplied.
-    #[pyo3(signature = (dimension, *, expression=None, subgraph=None, projector=None))]
+    #[pyo3(signature = (dimension, *, expression=None, projector=None))]
     fn tensor_reduce(
         &self,
         py: Python<'_>,
         dimension: ConvertibleToExpression,
         expression: Option<ConvertibleToExpression>,
-        #[gen_stub(override_type(type_repr="linnet.Subgraph | None", imports=("linnet")))]
-        subgraph: Option<&Bound<'_, PyAny>>,
         projector: Option<ConvertibleToExpression>,
     ) -> PyResult<Py<TensorExpression>> {
         if expression.is_some() && projector.is_some() {
@@ -2133,27 +2230,26 @@ impl PyFeynmanDiagram {
                 "tensor reduction accepts either an expression or a projector, not both",
             ));
         }
-        let selected = self.selection(py, subgraph)?;
+        let selected = self.selection();
         let expression = expression.map(|expression| expression.to_expression().expr);
         let projector = match projector {
             Some(projector) => projector.to_expression().expr,
             None if expression.is_some() => Atom::one(),
-            None if selected == self.inner.underlying().full_filter() => {
-                self.inner.projector().clone()
-            }
+            None if self.is_complete() => self.inner.projector().clone(),
             None => {
                 return Err(error::DiagramError::new_err(
                     "partial-subgraph tensor reduction requires an explicit projector",
                 ));
             }
         };
+        let expression = expression.unwrap_or_else(|| self.local_numerator(None) * &projector);
         let reduction = self
             .inner
             .tensor_reduce_of(
                 &selected,
                 dimension.to_expression().expr,
                 &projector,
-                expression.as_ref(),
+                Some(&expression),
             )
             .map_err(error::tensor)?;
         TensorExpression::from_atom_interface(py, reduction.into_expression(), None)
@@ -2181,6 +2277,7 @@ impl PyFeynmanDiagram {
     /// reducer : TensorReducer
     ///     Tensor projector and integrated-momentum selection to apply.
     fn reduce_tensor_numerator(&self, reducer: &PyTensorReducer) -> PyResult<PythonExpression> {
+        self.require_complete()?;
         self.inner
             .reduce_tensor_numerator(&reducer.inner)
             .map(|reduction| PythonExpression {
@@ -2215,6 +2312,7 @@ impl PyFeynmanDiagram {
     /// reducer : TensorReducer
     ///     Tensor projector and integrated-momentum selection to apply.
     fn reduce_tensor_graphs(&self, reducer: &PyTensorReducer) -> PyResult<Vec<PyFeynmanDiagram>> {
+        self.require_complete()?;
         self.inner
             .reduce_tensor_graphs(&reducer.inner)
             .map(|diagrams| diagrams.into_iter().map(Into::into).collect())
@@ -2224,10 +2322,25 @@ impl PyFeynmanDiagram {
     /// Return physical final-state cuts selected during generation.
     #[getter]
     fn cuts(slf: Py<Self>, py: Python<'_>) -> Vec<PyDiagramCut> {
-        slf.borrow(py)
+        let diagram = slf.borrow(py);
+        let selected = diagram.selection();
+        diagram
             .inner
             .cuts()
             .iter()
+            .filter(|cut| {
+                cut.left
+                    .half_edges
+                    .iter()
+                    .chain(&cut.right.half_edges)
+                    .chain(&cut.cut)
+                    .all(|half| {
+                        diagram
+                            .inner
+                            .half_edge_id(*half)
+                            .is_some_and(|hedge| selected.includes(&hedge))
+                    })
+            })
             .map(|inner| PyDiagramCut {
                 diagram: slf.clone_ref(py),
                 inner: inner.clone(),
@@ -2241,10 +2354,24 @@ impl PyFeynmanDiagram {
         slf: Py<Self>,
         py: Python<'_>,
     ) -> Vec<PyDiagramThresholdCandidate> {
-        slf.borrow(py)
+        let diagram = slf.borrow(py);
+        let selected = diagram.selection();
+        diagram
             .inner
             .topology_threshold_candidates()
             .iter()
+            .filter(|cut| {
+                cut.left
+                    .iter()
+                    .chain(&cut.right)
+                    .chain(&cut.cut)
+                    .all(|half| {
+                        diagram
+                            .inner
+                            .half_edge_id(*half)
+                            .is_some_and(|hedge| selected.includes(&hedge))
+                    })
+            })
             .map(|inner| PyDiagramThresholdCandidate {
                 diagram: slf.clone_ref(py),
                 inner: inner.clone(),
@@ -2263,7 +2390,9 @@ impl PyFeynmanDiagram {
     /// edges : list[int]
     ///     Diagram edge IDs specifying the requested routing coordinates.
     fn with_loop_momentum_edges(&self, edges: Vec<usize>) -> PyResult<Self> {
+        self.require_complete()?;
         self.inner
+            .as_ref()
             .clone()
             .with_loop_momentum_edges(
                 &edges
@@ -2286,7 +2415,9 @@ impl PyFeynmanDiagram {
     /// edges : list[int]
     ///     Diagram edge IDs specifying the requested routing coordinates.
     fn with_loop_momentum_tree_edges(&self, edges: Vec<usize>) -> PyResult<Self> {
+        self.require_complete()?;
         self.inner
+            .as_ref()
             .clone()
             .with_loop_momentum_tree_edges(
                 &edges
@@ -2304,20 +2435,10 @@ impl PyFeynmanDiagram {
     /// --------
     /// >>> basis = diagram.momentum_basis()
     /// >>> routed = basis.route_expression(diagram.numerator_expression())
-    ///
-    /// Parameters
-    /// ----------
-    /// subgraph : linnet.Subgraph or None, optional
-    ///     Region from this diagram's analysis graph; None selects the complete graph.
-    #[pyo3(signature = (*, subgraph=None))]
-    fn momentum_basis(
-        &self,
-        py: Python<'_>,
-        #[gen_stub(override_type(type_repr="linnet.Subgraph | None", imports=("linnet")))]
-        subgraph: Option<&Bound<'_, PyAny>>,
-    ) -> PyResult<PyLoopMomentumBasis> {
+    #[pyo3(signature = (*))]
+    fn momentum_basis(&self) -> PyResult<PyLoopMomentumBasis> {
         self.inner
-            .momentum_basis_of(&self.selection(py, subgraph)?)
+            .momentum_basis_of(&self.selection())
             .map(|basis| PyLoopMomentumBasis::from_diagram(basis, self))
             .map_err(error::diagram)
     }
@@ -2332,15 +2453,10 @@ impl PyFeynmanDiagram {
     /// ----------
     /// parent : LoopMomentumBasis
     ///     Parent coordinates belonging to this same diagram instance.
-    /// subgraph : linnet.Subgraph or None, optional
-    ///     Region from this diagram's analysis graph; None selects the complete graph.
-    #[pyo3(signature = (parent, *, subgraph=None))]
+    #[pyo3(signature = (parent))]
     fn compatible_momentum_basis(
         &self,
-        py: Python<'_>,
         parent: &PyLoopMomentumBasis,
-        #[gen_stub(override_type(type_repr="linnet.Subgraph | None", imports=("linnet")))]
-        subgraph: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<PyLoopMomentumBasis> {
         if !Arc::ptr_eq(&parent.owner, &self.owner) {
             return Err(error::DiagramError::new_err(
@@ -2348,7 +2464,7 @@ impl PyFeynmanDiagram {
             ));
         }
         self.inner
-            .compatible_momentum_basis_of(&self.selection(py, subgraph)?, &parent.inner)
+            .compatible_momentum_basis_of(&self.selection(), &parent.inner)
             .map(|basis| PyLoopMomentumBasis::from_diagram(basis, self))
             .map_err(error::diagram)
     }
@@ -2362,21 +2478,17 @@ impl PyFeynmanDiagram {
     ///
     /// Parameters
     /// ----------
-    /// contracted : linnet.Subgraph
+    /// contracted : Subgraph or linnet.Subgraph
     ///     Complete internal edges to contract, selected from this diagram.
-    /// subgraph : linnet.Subgraph or None, optional
-    ///     Region from this diagram's analysis graph; None selects the complete graph.
-    #[pyo3(signature = (contracted, *, subgraph=None))]
+    #[pyo3(signature = (contracted))]
     fn contracted_momentum_basis(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="linnet.Subgraph", imports=("linnet")))]
+        #[gen_stub(override_type(type_repr="Subgraph | linnet.Subgraph", imports=("linnet")))]
         contracted: &Bound<'_, PyAny>,
-        #[gen_stub(override_type(type_repr="linnet.Subgraph | None", imports=("linnet")))]
-        subgraph: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<PyLoopMomentumBasis> {
-        let selected = self.selection(py, subgraph)?;
-        let contracted = self.selection(py, Some(contracted))?;
+        let selected = self.selection();
+        let contracted = self.selection_argument(py, contracted)?;
         let contracted = linnet::half_edge::subgraph::InternalSubGraph::try_new(
             contracted,
             self.inner.underlying(),
@@ -2390,36 +2502,17 @@ impl PyFeynmanDiagram {
             .map_err(error::diagram)
     }
 
-    /// Count independent loops within a selected region.
-    ///
-    /// Examples
-    /// --------
-    /// >>> region = diagram.filter(edge=lambda edge: not edge.data.is_external)
-    /// >>> loops = diagram.loop_count_of(subgraph=region)
-    ///
-    /// Parameters
-    /// ----------
-    /// subgraph : linnet.Subgraph or None, optional
-    ///     Region from this diagram's analysis graph; None selects the complete graph.
-    #[pyo3(signature = (*, subgraph=None))]
-    fn loop_count_of(
-        &self,
-        py: Python<'_>,
-        #[gen_stub(override_type(type_repr="linnet.Subgraph | None", imports=("linnet")))]
-        subgraph: Option<&Bound<'_, PyAny>>,
-    ) -> PyResult<usize> {
-        Ok(self
-            .inner
-            .momentum_basis_of(&self.selection(py, subgraph)?)
-            .map_err(error::diagram)?
-            .loop_edges
-            .len())
-    }
-
     /// Return the loop-momentum routing selected during generation.
     #[getter]
-    fn loop_momentum_basis(&self) -> PyLoopMomentumBasis {
-        PyLoopMomentumBasis::from_diagram(self.inner.loop_momentum_basis().clone(), self)
+    fn loop_momentum_basis(&self) -> PyResult<PyLoopMomentumBasis> {
+        let basis = if self.selected_region.is_some() {
+            self.inner
+                .compatible_momentum_basis_of(&self.selection(), self.inner.loop_momentum_basis())
+                .map_err(error::diagram)?
+        } else {
+            self.inner.loop_momentum_basis().clone()
+        };
+        Ok(PyLoopMomentumBasis::from_diagram(basis, self))
     }
 
     /// Return the number of independent loops in the diagram topology.
@@ -2431,8 +2524,14 @@ impl PyFeynmanDiagram {
     /// True
     ///
     #[getter]
-    fn loop_count(&self) -> usize {
-        self.inner.loop_count()
+    fn loop_count(&self) -> PyResult<usize> {
+        if self.selected_region.is_none() {
+            return Ok(self.inner.loop_count());
+        }
+        self.inner
+            .momentum_basis_of(&self.selection())
+            .map(|basis| basis.loop_edges.len())
+            .map_err(error::diagram)
     }
 
     /// Return the local superficial UV degree of divergence.
@@ -2453,18 +2552,10 @@ impl PyFeynmanDiagram {
     /// ----------
     /// dimension : int, optional
     ///     Spacetime dimension for each loop integration measure; defaults to four.
-    /// subgraph : linnet.Subgraph or None, optional
-    ///     Region from this diagram's analysis graph; None selects the complete graph.
-    #[pyo3(signature = (*, dimension=4, subgraph=None))]
-    fn superficial_degree_of_divergence(
-        &self,
-        py: Python<'_>,
-        dimension: i32,
-        #[gen_stub(override_type(type_repr="linnet.Subgraph | None", imports=("linnet")))]
-        subgraph: Option<&Bound<'_, PyAny>>,
-    ) -> PyResult<i32> {
+    #[pyo3(signature = (*, dimension=4))]
+    fn superficial_degree_of_divergence(&self, dimension: i32) -> PyResult<i32> {
         self.inner
-            .superficial_degree_of_divergence_of(&self.selection(py, subgraph)?, dimension)
+            .superficial_degree_of_divergence_of(&self.selection(), dimension)
             .map_err(error::diagram)
     }
 
@@ -2474,6 +2565,7 @@ impl PyFeynmanDiagram {
         let model = self.inner.model_arc();
         self.inner
             .vertices()
+            .filter(|(id, _)| self.includes_vertex(id.0))
             .map(|(id, inner)| PyDiagramVertex {
                 id: id.0,
                 inner: inner.clone(),
@@ -2488,6 +2580,7 @@ impl PyFeynmanDiagram {
         let model = self.inner.model_arc();
         self.inner
             .edges()
+            .filter(|(id, _, _)| self.includes_edge(*id))
             .map(|(id, endpoints, inner)| PyDiagramEdge {
                 id: id.0,
                 source: endpoints.source.map(|vertex| vertex.0),
@@ -2503,9 +2596,9 @@ impl PyFeynmanDiagram {
     #[gen_stub(override_return_type(type_repr="list[linnet.HalfEdge]", imports=("linnet")))]
     fn half_edges(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         Ok(self
-            .to_linnet(py)?
+            .linnet_selection(py)?
             .bind(py)
-            .call_method0("half_edges")?
+            .call_method0("to_half_edges")?
             .unbind())
     }
 
@@ -2517,9 +2610,17 @@ impl PyFeynmanDiagram {
     /// >>> on_shell = {edge.id: energy[edge.id] for edge in propagators}
     #[getter]
     fn internal_edges(&self) -> Vec<PyDiagramEdge> {
+        let complete: BTreeSet<_> = self
+            .inner
+            .underlying()
+            .iter_edges_of(&self.selection())
+            .filter_map(|(pair, id, _)| pair.is_paired().then_some(id.0))
+            .collect();
         self.edges()
             .into_iter()
-            .filter(|edge| !edge.is_external() && !edge.inner.is_dummy)
+            .filter(|edge| {
+                !edge.is_external() && !edge.inner.is_dummy && complete.contains(&edge.id)
+            })
             .collect()
     }
 
@@ -2571,9 +2672,7 @@ impl PyFeynmanDiagram {
     ///     Edge IDs to contract before constructing denominator surfaces.
     /// initial_state_edges : iterable[int], optional
     ///     Edge IDs to classify as incoming external lines.
-    /// subgraph : linnet.Subgraph or None, optional
-    ///     Region from this diagram's analysis graph; None selects the complete graph.
-    #[pyo3(signature = (*, max_orientations=None, fixed_orientations=None, contracted_edges=None, initial_state_edges=None, subgraph=None))]
+    #[pyo3(signature = (*, max_orientations=None, fixed_orientations=None, contracted_edges=None, initial_state_edges=None))]
     fn build_cff(
         &self,
         py: Python<'_>,
@@ -2581,8 +2680,6 @@ impl PyFeynmanDiagram {
         fixed_orientations: Option<BTreeMap<usize, bool>>,
         contracted_edges: Option<Vec<usize>>,
         initial_state_edges: Option<Vec<usize>>,
-        #[gen_stub(override_type(type_repr="linnet.Subgraph | None", imports=("linnet")))]
-        subgraph: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<PyCffResult> {
         build_cff_for_diagram(
             py,
@@ -2591,9 +2688,6 @@ impl PyFeynmanDiagram {
             fixed_orientations,
             contracted_edges,
             initial_state_edges,
-            subgraph
-                .map(|selected| self.selection(py, Some(selected)))
-                .transpose()?,
         )
     }
 
@@ -2606,6 +2700,7 @@ impl PyFeynmanDiagram {
     /// >>> restored.validate()
     ///
     fn to_json(&self) -> PyResult<String> {
+        self.require_complete()?;
         self.inner.to_json().map_err(error::diagram)
     }
 
@@ -2618,6 +2713,7 @@ impl PyFeynmanDiagram {
     /// >>> restored.validate()
     ///
     fn to_dot(&self) -> PyResult<String> {
+        self.require_complete()?;
         self.inner.to_dot().map_err(error::diagram)
     }
 
@@ -2634,21 +2730,26 @@ impl PyFeynmanDiagram {
     ///
     /// Parameters
     /// ----------
-    /// highlight : linnet.Subgraph or None, optional
+    /// highlight : Subgraph or linnet.Subgraph or None, optional
     ///     Highlight a region from this diagram's analysis graph with Linnest's
-    ///     edge underlay. The complete diagram is retained; half-edge selections
-    ///     preserve their source/sink sides. Foreign or stale selections are rejected.
+    ///     selection styling. The complete original diagram remains as muted, dotted
+    ///     context; source/sink halves stay distinct. Foreign selections are rejected.
     #[pyo3(signature = (*, highlight=None))]
     fn to_linnest(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="linnet.Subgraph | None", imports=("linnet")))]
+        #[gen_stub(override_type(type_repr="Subgraph | linnet.Subgraph | None", imports=("linnet")))]
         highlight: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<String> {
         let selected = highlight
-            .map(|value| self.selection(py, Some(value)))
-            .transpose()?;
-        Ok(self.inner.to_linnest(selected.as_ref()))
+            .map(|value| self.region_argument(py, value))
+            .transpose()?
+            .or_else(|| self.selected_region.clone());
+        let isolated = selected
+            .as_ref()
+            .map_or_else(BTreeSet::new, |region| region.isolated.clone());
+        let selected = selected.as_ref().map(|region| &region.hedges);
+        Ok(self.inner.to_linnest(selected, &isolated))
     }
 
     /// Render the Linnest diagram as a self-contained SVG with ``typst-py``.
@@ -2660,20 +2761,25 @@ impl PyFeynmanDiagram {
     ///
     /// Parameters
     /// ----------
-    /// highlight : linnet.Subgraph or None, optional
-    ///     Region from this diagram's analysis graph to highlight. Linnest draws
-    ///     an underlay behind the selected half-edges without changing the diagram.
+    /// highlight : Subgraph or linnet.Subgraph or None, optional
+    ///     Region from this diagram to highlight with muted, dotted context.
+    ///     A Subgraph highlights itself by default without changing its original.
     #[pyo3(signature = (*, highlight=None))]
     fn to_svg(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="linnet.Subgraph | None", imports=("linnet")))]
+        #[gen_stub(override_type(type_repr="Subgraph | linnet.Subgraph | None", imports=("linnet")))]
         highlight: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<String> {
         let selected = highlight
-            .map(|value| self.selection(py, Some(value)))
-            .transpose()?;
-        render_diagram_svg(py, &self.inner, selected.as_ref())
+            .map(|value| self.region_argument(py, value))
+            .transpose()?
+            .or_else(|| self.selected_region.clone());
+        let isolated = selected
+            .as_ref()
+            .map_or_else(BTreeSet::new, |region| region.isolated.clone());
+        let selected = selected.as_ref().map(|region| &region.hedges);
+        render_diagram_svg(py, &self.inner, selected, &isolated)
     }
 
     /// Render the Linnest diagram as a self-contained HTML figure.
@@ -2687,19 +2793,24 @@ impl PyFeynmanDiagram {
     ///
     /// Parameters
     /// ----------
-    /// highlight : linnet.Subgraph or None, optional
+    /// highlight : Subgraph or linnet.Subgraph or None, optional
     ///     Region from this diagram's analysis graph to highlight in the full figure.
     #[pyo3(signature = (*, highlight=None))]
     fn to_html(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="linnet.Subgraph | None", imports=("linnet")))]
+        #[gen_stub(override_type(type_repr="Subgraph | linnet.Subgraph | None", imports=("linnet")))]
         highlight: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<String> {
         let selected = highlight
-            .map(|value| self.selection(py, Some(value)))
-            .transpose()?;
-        render_diagram_html(py, &self.inner, selected.as_ref())
+            .map(|value| self.region_argument(py, value))
+            .transpose()?
+            .or_else(|| self.selected_region.clone());
+        let isolated = selected
+            .as_ref()
+            .map_or_else(BTreeSet::new, |region| region.isolated.clone());
+        let selected = selected.as_ref().map(|region| &region.hedges);
+        render_diagram_html(py, &self.inner, selected, &isolated)
     }
 
     /// Render the diagram as HTML in Marimo, Jupyter, and IPython.
@@ -2708,7 +2819,7 @@ impl PyFeynmanDiagram {
     /// --------
     /// Leave `diagram` as the final expression in a notebook cell to render it.
     fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
-        render_diagram_html(py, &self.inner, None)
+        self.to_html(py, None)
     }
 
     /// Return the raw SVG representation used by rich notebook frontends.
@@ -2718,7 +2829,7 @@ impl PyFeynmanDiagram {
     /// >>> from IPython.display import SVG
     /// >>> SVG(diagram._repr_svg_())
     fn _repr_svg_(&self, py: Python<'_>) -> PyResult<String> {
-        render_diagram_svg(py, &self.inner, None)
+        self.to_svg(py, None)
     }
 
     /// Write a concise summary to an IPython pretty printer.
@@ -2737,13 +2848,7 @@ impl PyFeynmanDiagram {
         let text = if cycle {
             "...".to_owned()
         } else {
-            format!(
-                "FeynmanDiagram(name='{}', loops={}, vertices={}, edges={})",
-                self.inner.name(),
-                self.inner.loop_count(),
-                self.inner.vertices().count(),
-                self.inner.edges().count(),
-            )
+            self.__repr__()?
         };
         pretty.call_method1("text", (text,))?;
         Ok(())
@@ -2766,17 +2871,13 @@ impl PyFeynmanDiagram {
     /// limit : int or None
     ///     Maximum number of bases to return. Pass ``None`` to enumerate every
     ///     valid basis.
-    /// subgraph : linnet.Subgraph or None, optional
-    ///     Region from this diagram's analysis graph; None selects the complete graph.
-    #[pyo3(signature = (limit=None, *, subgraph=None))]
+    #[pyo3(signature = (limit=None))]
     fn loop_momentum_bases(
         &self,
         py: Python<'_>,
         limit: Option<usize>,
-        #[gen_stub(override_type(type_repr="linnet.Subgraph | None", imports=("linnet")))]
-        subgraph: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<Vec<PyLoopMomentumBasis>> {
-        let selected = self.selection(py, subgraph)?;
+        let selected = self.selection();
         let diagram = self.inner.clone();
         py.detach(move || diagram.loop_momentum_bases_of(&selected, limit.unwrap_or(usize::MAX)))
             .map(|bases| {
@@ -2794,11 +2895,282 @@ impl PyFeynmanDiagram {
     /// --------
     /// >>> print(diagram)
     ///
-    fn __repr__(&self) -> String {
-        format!(
-            "FeynmanDiagram(name='{}', loops={})",
+    fn __repr__(&self) -> PyResult<String> {
+        Ok(format!(
+            "{}(name='{}', loops={}, vertices={}, edges={})",
+            if self.selected_region.is_some() {
+                "Subgraph"
+            } else {
+                "FeynmanDiagram"
+            },
             self.inner.name(),
-            self.inner.loop_count()
+            self.loop_count()?,
+            self.vertices().len(),
+            self.edges().len()
+        ))
+    }
+}
+
+/// A physics region retaining an Arc to its immutable original Feynman diagram.
+///
+/// Construct with ``diagram.subgraph(...)`` or ``diagram.filter(...)``. Inherited
+/// physics operations use this selection, with original edge IDs and momentum
+/// coordinates. Display keeps the full original graph as muted context.
+/// ``excise()`` creates independent topology and routing when those are needed.
+///
+/// Examples
+/// --------
+/// >>> region = diagram.filter(edge=lambda edge: not edge.data.is_external)
+/// >>> numerator = region.numerator_expression()
+/// >>> independent = region.excise()
+#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
+#[pyclass(name = "Subgraph", module = "symbolica.community.feynkit", extends=PyFeynmanDiagram, frozen)]
+pub struct PySubgraph {}
+
+#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[pymethods]
+impl PySubgraph {
+    /// Return a full view of the immutable original diagram, sharing its Arc.
+    #[getter]
+    fn original(slf: PyRef<'_, Self>) -> PyFeynmanDiagram {
+        slf.into_super().whole()
+    }
+
+    /// Materialize an independent diagram with dangling legs at the region boundary.
+    ///
+    /// Complete interaction crowns are retained. Only selected internal pairs stay
+    /// paired; remaining incident halves become boundary legs. Proper regions get
+    /// independent momentum coordinates and unit global weights and projector.
+    /// Excising the complete original preserves its factors, cuts and routing.
+    ///
+    /// Examples
+    /// --------
+    /// >>> region = diagram.subgraph(nodes=[0])
+    /// >>> independent = region.excise()
+    /// >>> independent.validate()
+    fn excise(slf: PyRef<'_, Self>) -> PyResult<PyFeynmanDiagram> {
+        let diagram = slf.into_super();
+        diagram
+            .inner
+            .excise(
+                &diagram.selection(),
+                &diagram
+                    .isolated_nodes()
+                    .into_iter()
+                    .map(feynkit_graph::VertexId)
+                    .collect::<Vec<_>>(),
+            )
+            .map(Into::into)
+            .map_err(error::diagram)
+    }
+
+    /// Return canonical Linnet half-edge IDs of this region.
+    ///
+    /// Examples
+    /// --------
+    /// >>> selected_half_edges = region.half_edge_indices()
+    /// >>> canonical = region.to_linnet().subgraph(half_edges=selected_half_edges)
+    fn half_edge_indices(slf: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Vec<usize>> {
+        slf.into_super()
+            .linnet_selection(py)?
+            .bind(py)
+            .call_method0("half_edge_indices")?
+            .extract()
+    }
+
+    /// Return explicitly selected vertices with no incident half-edges.
+    ///
+    /// Examples
+    /// --------
+    /// >>> isolated_vertices = region.isolated_node_indices()
+    fn isolated_node_indices(slf: PyRef<'_, Self>) -> Vec<usize> {
+        slf.into_super().isolated_nodes().into_iter().collect()
+    }
+
+    /// Return the number of selected half-edges, excluding isolated vertices.
+    #[getter]
+    fn n_half_edges(slf: PyRef<'_, Self>) -> usize {
+        slf.into_super().selection().n_included()
+    }
+
+    /// Count selected half-edges and explicitly selected isolated vertices.
+    ///
+    /// Examples
+    /// --------
+    /// >>> size = len(region)
+    fn __len__(slf: PyRef<'_, Self>) -> usize {
+        let diagram = slf.into_super();
+        diagram.selection().n_included() + diagram.isolated_nodes().len()
+    }
+
+    /// Test whether any half-edge or isolated vertex is selected.
+    ///
+    /// Examples
+    /// --------
+    /// >>> nonempty = bool(region)
+    fn __bool__(slf: PyRef<'_, Self>) -> bool {
+        Self::__len__(slf) != 0
+    }
+
+    /// Intersect two regions belonging to the same original diagram.
+    ///
+    /// Examples
+    /// --------
+    /// >>> common = left & right
+    ///
+    /// Parameters
+    /// ----------
+    /// other : FeynmanDiagram
+    ///     Region or full diagram sharing this region's immutable original.
+    fn __and__(
+        slf: PyRef<'_, Self>,
+        py: Python<'_>,
+        other: &PyFeynmanDiagram,
+    ) -> PyResult<Py<PySubgraph>> {
+        let diagram = slf.into_super();
+        if !Arc::ptr_eq(&diagram.inner, &other.inner) {
+            return Err(PyValueError::new_err(
+                "subgraphs belong to different original diagrams",
+            ));
+        }
+        diagram.view(
+            py,
+            DiagramSelection {
+                hedges: diagram.selection().intersection(&other.selection()),
+                isolated: diagram
+                    .isolated_nodes()
+                    .intersection(&other.isolated_nodes())
+                    .copied()
+                    .collect(),
+            },
+        )
+    }
+
+    /// Unite two regions belonging to the same original diagram.
+    ///
+    /// Examples
+    /// --------
+    /// >>> combined = left | right
+    ///
+    /// Parameters
+    /// ----------
+    /// other : FeynmanDiagram
+    ///     Region or full diagram sharing this region's immutable original.
+    fn __or__(
+        slf: PyRef<'_, Self>,
+        py: Python<'_>,
+        other: &PyFeynmanDiagram,
+    ) -> PyResult<Py<PySubgraph>> {
+        let diagram = slf.into_super();
+        if !Arc::ptr_eq(&diagram.inner, &other.inner) {
+            return Err(PyValueError::new_err(
+                "subgraphs belong to different original diagrams",
+            ));
+        }
+        diagram.view(
+            py,
+            DiagramSelection {
+                hedges: diagram.selection().union(&other.selection()),
+                isolated: diagram
+                    .isolated_nodes()
+                    .union(&other.isolated_nodes())
+                    .copied()
+                    .collect(),
+            },
+        )
+    }
+
+    /// Select elements present in exactly one of two regions.
+    ///
+    /// Examples
+    /// --------
+    /// >>> exclusive = left ^ right
+    ///
+    /// Parameters
+    /// ----------
+    /// other : FeynmanDiagram
+    ///     Region or full diagram sharing this region's immutable original.
+    fn __xor__(
+        slf: PyRef<'_, Self>,
+        py: Python<'_>,
+        other: &PyFeynmanDiagram,
+    ) -> PyResult<Py<PySubgraph>> {
+        let diagram = slf.into_super();
+        if !Arc::ptr_eq(&diagram.inner, &other.inner) {
+            return Err(PyValueError::new_err(
+                "subgraphs belong to different original diagrams",
+            ));
+        }
+        diagram.view(
+            py,
+            DiagramSelection {
+                hedges: diagram.selection().sym_diff(&other.selection()),
+                isolated: diagram
+                    .isolated_nodes()
+                    .symmetric_difference(&other.isolated_nodes())
+                    .copied()
+                    .collect(),
+            },
+        )
+    }
+
+    /// Remove the other region's elements from this selection.
+    ///
+    /// Examples
+    /// --------
+    /// >>> remaining = left - right
+    ///
+    /// Parameters
+    /// ----------
+    /// other : FeynmanDiagram
+    ///     Region or full diagram sharing this region's immutable original.
+    fn __sub__(
+        slf: PyRef<'_, Self>,
+        py: Python<'_>,
+        other: &PyFeynmanDiagram,
+    ) -> PyResult<Py<PySubgraph>> {
+        let diagram = slf.into_super();
+        if !Arc::ptr_eq(&diagram.inner, &other.inner) {
+            return Err(PyValueError::new_err(
+                "subgraphs belong to different original diagrams",
+            ));
+        }
+        diagram.view(
+            py,
+            DiagramSelection {
+                hedges: diagram.selection().subtract(&other.selection()),
+                isolated: diagram
+                    .isolated_nodes()
+                    .difference(&other.isolated_nodes())
+                    .copied()
+                    .collect(),
+            },
+        )
+    }
+
+    /// Complement the region relative to its immutable original diagram.
+    ///
+    /// Examples
+    /// --------
+    /// >>> outside = ~region
+    fn __invert__(slf: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<PySubgraph>> {
+        let diagram = slf.into_super();
+        diagram.view(
+            py,
+            DiagramSelection {
+                hedges: diagram
+                    .inner
+                    .underlying()
+                    .full_filter()
+                    .subtract(&diagram.selection()),
+                isolated: diagram
+                    .whole()
+                    .isolated_nodes()
+                    .difference(&diagram.isolated_nodes())
+                    .copied()
+                    .collect(),
+            },
         )
     }
 }
@@ -2809,6 +3181,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyMomentumSignature>()?;
     module.add_class::<PyLoopMomentumBasis>()?;
     module.add_class::<PyFeynmanDiagram>()?;
+    module.add_class::<PySubgraph>()?;
     module.add_class::<PyDiagramCut>()?;
     module.add_class::<PyDiagramCutSide>()?;
     module.add_class::<PyDiagramThresholdCandidate>()?;

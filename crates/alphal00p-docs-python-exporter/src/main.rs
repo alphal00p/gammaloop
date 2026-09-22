@@ -2,17 +2,11 @@
 
 use std::{env, error::Error, fs, path::PathBuf};
 
-#[cfg(any(
-    feature = "feynkit",
-    feature = "gammaloop",
-    feature = "idenso",
-    feature = "vakint"
-))]
+#[cfg(any(feature = "feynkit", feature = "gammaloop", feature = "vakint"))]
 use pyo3::types::{PyAnyMethods as _, PyDictMethods as _, PyModuleMethods as _};
 #[cfg(any(
     feature = "feynkit",
     feature = "gammaloop",
-    feature = "idenso",
     feature = "spenso",
     feature = "vakint"
 ))]
@@ -49,10 +43,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     #[cfg(feature = "spenso")]
     if component == "spynso3" {
         validate_spenso_stub_surface(module)?;
-    }
-    #[cfg(feature = "idenso")]
-    if component == "idenso-community" {
-        validate_idenso_stub_surface(module)?;
     }
     #[cfg(feature = "vakint")]
     if component == "vakint-community" {
@@ -175,24 +165,6 @@ fn validate_spenso_stub_surface(
     .into())
 }
 
-#[cfg(feature = "idenso")]
-fn validate_idenso_stub_surface(
-    module: &pyo3_stub_gen::generate::Module,
-) -> Result<(), Box<dyn Error>> {
-    use symbolica::api::python::SymbolicaCommunityModule;
-
-    let expected = idenso::python::PYTHON_STUB_SURFACE
-        .iter()
-        .map(|name| (*name).to_owned())
-        .collect::<BTreeSet<_>>();
-    let runtime = pyo3::Python::attach(|py| {
-        let module = pyo3::types::PyModule::new(py, "symbolica.community.idenso")?;
-        idenso::python::IdensoModule::register_module(&module)?;
-        public_module_names(&module)
-    })?;
-    validate_exact_surface("Idenso", &expected, &stub_names(module), &runtime)
-}
-
 #[cfg(feature = "vakint")]
 fn validate_vakint_stub_surface(
     module: &pyo3_stub_gen::generate::Module,
@@ -214,7 +186,6 @@ fn validate_vakint_stub_surface(
 #[cfg(any(
     feature = "feynkit",
     feature = "gammaloop",
-    feature = "idenso",
     feature = "spenso",
     feature = "vakint"
 ))]
@@ -229,12 +200,7 @@ fn stub_names(module: &pyo3_stub_gen::generate::Module) -> BTreeSet<String> {
         .collect()
 }
 
-#[cfg(any(
-    feature = "feynkit",
-    feature = "gammaloop",
-    feature = "idenso",
-    feature = "vakint"
-))]
+#[cfg(any(feature = "feynkit", feature = "gammaloop", feature = "vakint"))]
 fn public_module_names(
     module: &pyo3::Bound<'_, pyo3::types::PyModule>,
 ) -> pyo3::PyResult<BTreeSet<String>> {
@@ -247,7 +213,7 @@ fn public_module_names(
         .collect()
 }
 
-#[cfg(any(feature = "idenso", feature = "vakint"))]
+#[cfg(feature = "vakint")]
 fn validate_exact_surface(
     product: &str,
     expected: &BTreeSet<String>,
@@ -273,8 +239,6 @@ fn gather(component: &str) -> Result<(&'static str, pyo3_stub_gen::StubInfo), Bo
         "linnet-python" => Ok(("linnet", linnet_py::stub_info()?)),
         #[cfg(feature = "spenso")]
         "spynso3" => Ok(("symbolica.community.spenso", spynso3::stub_info()?)),
-        #[cfg(feature = "idenso")]
-        "idenso-community" => Ok(("symbolica.community.idenso", idenso::stub_info()?)),
         #[cfg(feature = "vakint")]
         "vakint-community" => Ok(("symbolica.community.vakint", vakint::stub_info()?)),
         _ => Err(format!(

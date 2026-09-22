@@ -18,24 +18,23 @@ rewrite families:
 Representation helper macros such as `bis!`, `cof!`, and `coad!` construct the symbolic forms
 expected by Spenso and Idenso. The #link("reference/rust/")[Rust orientation] leads to the
 revision-specific Rustdoc for their accepted forms, return types, feature gates, and source
-locations. APIs behind `bincode`, `reference-cases`, `python`, and `python_stubgen` are available
-only when the matching Cargo feature is enabled.
+locations. APIs behind `bincode` and `reference-cases` are available only when the matching Cargo
+feature is enabled. Python bindings belong to `spynso3`.
 
 == Python community module
 
 #boundary("Part of Symbolica community", [
-  Import Idenso from `symbolica.community.idenso`. The `idenso` Cargo package supplies this
-  community module when built with its Python feature; it is not a standalone PyPI distribution
-  and is not included in the GammaLoop wheel merely because the crates share a repository.
+  Import `TensorExpression` and algebra settings from `symbolica.community.spenso`.
+  The `spynso3` Cargo package supplies the unified Python bindings for Spenso and Idenso;
+  Idenso remains the Rust algebra implementation. There is no separate `idenso` Python module.
 ])
 
-Install the published assembly with `python -m pip install --upgrade symbolica`, then verify it
-with `python -c "import symbolica.community.idenso"`. There is no `pip install idenso` fallback.
-For a source build, add this crate to the external
-#link("https://github.com/symbolica-dev/symbolica-community")[symbolica-community] assembly with the
-`python` feature and call `IdensoModule`'s `SymbolicaCommunityModule` registration when that
-extension is assembled. Building the Rust crate alone does not add the community module to an
-already installed Symbolica package.
+Install a Symbolica community build with the unified `spynso3` bindings, then verify it with
+`python -c "import symbolica.community.spenso"`. There is no `pip install idenso` fallback.
+Source embedders add `spynso3` to their
+#link("https://github.com/symbolica-dev/symbolica-community")[symbolica-community] assembly and
+register `SpensoModule` through `SymbolicaCommunityModule`. Building the Rust crate alone does
+not add the community module to an already installed Symbolica package.
 
 The generated #link("reference/python/")[Python API] records exact signatures and defaults. Its
 operations group naturally into four phases:
@@ -49,27 +48,30 @@ operations group naturally into four phases:
   `simplify_color`.
 
 ```python
-from symbolica.community.idenso import list_dangling, simplify_metrics
 from symbolica.community.spenso import Representation, TensorExpression, TensorName
 
 minkowski = Representation.mink(4)
 mu = minkowski("mu")
 nu = minkowski("nu")
 metric = TensorExpression.g(minkowski)
-momentum = TensorName("p")
+momentum = TensorName.vector("p")
 expression = metric(mu, nu) * momentum(mu)
 
-external_indices = list_dangling(expression)
-reduced = simplify_metrics(expression)
+external_indices = expression.list_dangling()
+reduced = expression.schoonschip_net()
 assert len(external_indices) == 1
-assert len(list_dangling(reduced)) == 1
+assert len(reduced.list_dangling()) == 1
+assert reduced == momentum(nu)
 ```
 
+Use `schoonschip_net()` to execute typed `bracket` contractions. Focused simplifiers such as
+`simplify_metrics()` rewrite ordinary indexed products.
+
 Idenso does not define a second parser syntax: the example constructs a Spenso-compatible
-Symbolica expression and then applies one Idenso transformation. Keep transformations separate
+`TensorExpression` and then applies one Idenso transformation through its methods. Keep transformations separate
 while developing a pipeline so expression growth and convention changes remain observable.
 
 For implementation details, start with
 #source-link("crates/idenso/src/lib.rs", label: "the Rust API") and
-#source-link("crates/idenso/src/python.rs", label: "the Python binding").
+#source-link("crates/spynso3/src/expression.rs", label: "the Python binding").
 ]

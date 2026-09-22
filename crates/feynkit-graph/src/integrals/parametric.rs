@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use spenso::structure::representation::{Minkowski, RepName};
 use symbolica::atom::{Atom, AtomCore};
 use symbolica::graph::{CanonicalForm, Graph};
-use symbolica::tensors::matrix::MatrixError;
+use symbolica::tensors::matrix::{Matrix, MatrixError};
 
 use super::{IntegralFamily, IntegralFamilyError, PropagatorMapping};
 
@@ -23,13 +23,19 @@ impl IntegralFamily {
     /// assertion. The certificate uses the supplied parameter order.
     ///
     /// Every family denominator is treated as present. Use [`Self::sector`]
-    /// first to exclude zero- and negative-power entries. The same nonsingular
-    /// quadratic-form requirement as [`Self::symanzik`] applies.
+    /// first to exclude zero- and negative-power entries. This criterion
+    /// requires a nonsingular quadratic form even though [`Self::symanzik`]
+    /// can return the algebraic polynomials for singular forms.
     pub fn scaleless_scaling(
         &self,
         parameters: &[Atom],
     ) -> Result<Option<Vec<Atom>>, IntegralFamilyError> {
         let (u, f) = self.symanzik(parameters)?;
+        if u.is_zero() {
+            return Err(IntegralFamilyError::InvalidBasis(
+                "Parametric scaling requires a nonsingular quadratic loop matrix".into(),
+            ));
+        }
         let polynomial = (u + f).expand().to_polynomial_in_vars::<u32>(parameters);
         let equations = polynomial
             .into_iter()
@@ -70,6 +76,8 @@ impl IntegralFamily {
     ///
     /// This is an algebraic parameter map, not a contour or prescription check.
     /// There is no implied tensor-numerator or external-momentum substitution.
+    /// Singular quadratic forms are rejected because their degenerate U/F
+    /// polynomials can discard physical masses and external invariants.
     pub fn parametric_mapping(
         &self,
         target: &Self,
@@ -104,6 +112,11 @@ impl IntegralFamily {
         parameters: &[Atom],
     ) -> Result<CanonicalForm<ParametricVertex, u32>, IntegralFamilyError> {
         let (u, f) = self.symanzik(parameters)?;
+        if u.is_zero() {
+            return Err(IntegralFamilyError::InvalidBasis(
+                "Parametric mapping requires a nonsingular quadratic loop matrix".into(),
+            ));
+        }
         let mut graph = Graph::new();
         for _ in parameters {
             graph.add_node(ParametricVertex::Parameter);
@@ -130,13 +143,15 @@ impl IntegralFamily {
     /// Compute the Symanzik polynomials `(U, F)` in propagator order.
     ///
     /// For `sum_i x_i D_i = k.M.k + 2 k.Q + J`, the convention is
-    /// `U = det(M)` and `F = U * (Q.M^-1.Q - J)`. Thus a Minkowski
+    /// `U = det(M)` and `F = Q.adj(M).Q - U*J`. Thus a Minkowski
     /// denominator `k^2-m^2` gives `(x, m^2*x^2)`. No integration measure,
     /// propagator prescription or powers are inferred. Parameters must be
     /// distinct symbols or calls absent from the family expressions.
     ///
-    /// The quadratic loop matrix must be generically invertible. Linear
-    /// eikonal denominators may accompany the quadratic propagators.
+    /// Symbolica evaluates the determinant and cofactors without requiring an
+    /// inverse. Linear eikonal denominators and singular quadratic forms are
+    /// accepted. A singular result is algebraic data, not a valid Gaussian
+    /// integration formula or a scalelessness certificate.
     pub fn symanzik(&self, parameters: &[Atom]) -> Result<(Atom, Atom), IntegralFamilyError> {
         self.validate_labels(parameters)?;
         let rep = Minkowski {}.new_rep(self.kinematics.dimension());
@@ -172,15 +187,6 @@ impl IntegralFamily {
             .det()
             .map_err(|e| IntegralFamilyError::InvalidBasis(e.to_string()))?
             .to_expression();
-        if u.is_zero() {
-            return Err(IntegralFamilyError::InvalidBasis(
-                "Symanzik preparation requires a nonsingular quadratic loop matrix".into(),
-            ));
-        }
-        let inverse = matrix
-            .inv()
-            .map_err(|e| IntegralFamilyError::InvalidBasis(e.to_string()))?
-            .into_vec();
         let shifts = self
             .loop_momenta
             .iter()
@@ -191,15 +197,43 @@ impl IntegralFamily {
                     .sum::<Atom>()
             })
             .collect::<Vec<_>>();
-        let mut completed_square = Atom::new();
+        let constant = coefficients.get(&Atom::one()).cloned().unwrap_or_default();
+        let mut f = -&u * constant;
         for (i, p) in shifts.iter().enumerate() {
-            for (j, q) in shifts.iter().enumerate() {
-                completed_square += inverse[i * shifts.len() + j].to_expression()
-                    * self.kinematics.scalar_product(p, q)?;
+            for (j, q) in shifts[..=i].iter().enumerate() {
+                let product = self.kinematics.scalar_product(p, q)?;
+                if product.is_zero() {
+                    continue;
+                }
+                // M is symmetric. The (i,j) adjugate entry is the signed
+                // minor deleting row j and column i, including det([])=1.
+                let minor = Matrix::from_nested_vec(
+                    matrix
+                        .iter()
+                        .as_slice()
+                        .chunks(shifts.len())
+                        .enumerate()
+                        .filter(|(row, _)| *row != j)
+                        .map(|(_, row)| {
+                            row.iter()
+                                .enumerate()
+                                .filter(|(column, _)| *column != i)
+                                .map(|(_, value)| value.clone())
+                                .collect()
+                        })
+                        .collect(),
+                    matrix.field().clone(),
+                )
+                .map_err(IntegralFamilyError::InvalidBasis)?;
+                let cofactor = minor
+                    .det()
+                    .map_err(|e| IntegralFamilyError::InvalidBasis(e.to_string()))?
+                    .to_expression();
+                let sign = if (i + j) % 2 == 0 { 1 } else { -1 };
+                f += cofactor * product * sign * if i == j { 1 } else { 2 };
             }
         }
-        let constant = coefficients.get(&Atom::one()).cloned().unwrap_or_default();
-        let f = (&u * (completed_square - constant)).together().expand();
+        let f = f.together().expand();
         Ok((u.expand(), f))
     }
 }
@@ -531,6 +565,69 @@ mod tests {
     }
 
     #[test]
+    fn singular_polynomials_match_a_nonsingular_regulator_limit() {
+        let [k, l, p] = ["uf_singular::k", "uf_singular::l", "uf_singular::p"]
+            .map(|s| symbolica::symbol!(s).to_atom());
+        let kin = Kinematics::new()
+            .with_momenta([k.clone(), l.clone(), p.clone()])
+            .unwrap()
+            .with_mass_squared(&p, parse!("s"))
+            .unwrap();
+        let sum = &k + &l;
+        let difference = &k - &l;
+        let quadratic = kin.scalar_product(&sum, &sum).unwrap() - parse!("m2");
+        let linear = kin.scalar_product(&difference, &p).unwrap() + parse!("delta");
+        let family = IntegralFamily::new(
+            vec![k.clone(), l.clone()],
+            vec![p.clone()],
+            vec![quadratic.clone(), linear.clone()],
+            &kin,
+        )
+        .unwrap();
+        let parameters = [parse!("x"), parse!("y")];
+        let (u, f) = family.symanzik(&parameters).unwrap();
+        assert!(u.is_zero());
+        assert_eq!(f, parse!("s*x*y^2"));
+        let eta = parse!("eta");
+        let regular = IntegralFamily::new(
+            vec![k, l.clone()],
+            vec![p],
+            vec![
+                quadratic,
+                linear + &eta * kin.scalar_product(&l, &l).unwrap(),
+            ],
+            &kin,
+        )
+        .unwrap();
+        let (regular_u, regular_f) = regular.symanzik(&parameters).unwrap();
+        assert!(!regular_u.is_zero());
+        assert_eq!(regular_u.replace(eta.to_pattern()).with(Atom::new()), u);
+        assert_eq!(regular_f.replace(eta.to_pattern()).with(Atom::new()), f);
+        assert!(family.scaleless_scaling(&parameters).is_err());
+        assert!(family.parametric_mapping(&family, &parameters).is_err());
+    }
+
+    #[test]
+    fn absent_loop_directions_do_not_create_trivial_scaling_certificates() {
+        let [k, l] = ["uf_absent::k", "uf_absent::l"].map(|s| symbolica::symbol!(s).to_atom());
+        let kin = Kinematics::new();
+        let family = IntegralFamily::new(
+            vec![k.clone(), l],
+            vec![],
+            vec![kin.scalar_product(&k, &k).unwrap() - parse!("m2")],
+            &kin,
+        )
+        .unwrap();
+        let parameters = [parse!("x")];
+        assert_eq!(
+            family.symanzik(&parameters).unwrap(),
+            (Atom::new(), Atom::new())
+        );
+        assert!(family.scaleless_scaling(&parameters).is_err());
+        assert!(family.parametric_mapping(&family, &parameters).is_err());
+    }
+
+    #[test]
     fn eikonal_and_degenerate_quadratic_forms() {
         let k = parse!("ufe::k");
         let p = parse!("ufe::p");
@@ -541,7 +638,12 @@ mod tests {
         let kp = kin.scalar_product(&k, &p).unwrap();
         let linear =
             IntegralFamily::new(vec![k.clone()], vec![p.clone()], vec![kp.clone()], &kin).unwrap();
-        assert!(linear.symanzik(&[parse!("x")]).is_err());
+        assert_eq!(
+            linear.symanzik(&[parse!("x")]).unwrap(),
+            (Atom::new(), parse!("s*x^2/4")),
+        );
+        assert!(linear.scaleless_scaling(&[parse!("x")]).is_err());
+        assert!(linear.parametric_mapping(&linear, &[parse!("x")]).is_err());
         let mixed =
             IntegralFamily::new(vec![k], vec![p], vec![kk, kp + parse!("delta")], &kin).unwrap();
         let (u, f) = mixed.symanzik(&[parse!("x"), parse!("y")]).unwrap();

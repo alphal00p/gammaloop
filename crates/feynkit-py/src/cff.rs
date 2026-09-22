@@ -833,18 +833,9 @@ impl PyCffGenerator {
     /// Parameters
     /// ----------
     /// diagram : FeynmanDiagram
-    ///     Diagram whose energy-flow orientations are enumerated.
-    /// subgraph : linnet.Subgraph, optional
-    ///     Graph-bound selection from diagram.to_linnet().
-    #[pyo3(signature = (diagram, *, subgraph=None))]
-    fn generate(
-        &self,
-        py: Python<'_>,
-        diagram: &PyFeynmanDiagram,
-        #[gen_stub(override_type(type_repr="linnet.Subgraph | None", imports=("linnet")))]
-        subgraph: Option<&Bound<'_, PyAny>>,
-    ) -> PyResult<PyCffResult> {
-        let selection = diagram.selection(py, subgraph)?;
+    ///     Diagram or subgraph whose energy-flow orientations are enumerated.
+    fn generate(&self, py: Python<'_>, diagram: &PyFeynmanDiagram) -> PyResult<PyCffResult> {
+        let selection = diagram.selection();
         PyCffResult::build(py, diagram, self.inner.options().clone(), selection)
     }
 }
@@ -856,7 +847,6 @@ pub(crate) fn build_cff_for_diagram(
     fixed_orientations: Option<BTreeMap<usize, bool>>,
     contracted_edges: Option<Vec<usize>>,
     initial_state_edges: Option<Vec<usize>>,
-    subgraph: Option<SuBitGraph>,
 ) -> PyResult<PyCffResult> {
     let mut options = max_orientations.map_or_else(CffOptions::default, |maximum| {
         CffOptions::default().with_max_orientations(maximum)
@@ -878,7 +868,7 @@ pub(crate) fn build_cff_for_diagram(
         options = options.with_initial_state_edge(feynkit_cff::EdgeId::new(edge));
     }
 
-    let selection = subgraph.unwrap_or_else(|| diagram.inner.underlying().full_filter());
+    let selection = diagram.selection();
     PyCffResult::build(py, diagram, options, selection)
 }
 
