@@ -434,14 +434,21 @@ symbolic.
 
 Compact fundamental generator chains and ordered color traces now conjugate
 consistently with explicit networks, reversing the generator sequence and the
-open endpoints. `installed_color_conjugation.py` checks SU(2), SU(3) and SU(5),
+open endpoints, as in the
+#link("https://feyncalc.github.io/FeynCalcBook/ComplexConjugate.html")[FeynCalc color-trace conjugation example]. `installed_color_conjugation.py` checks SU(2), SU(3) and SU(5),
 including the summed norm $(N_c^2-1)^2/(4 N_c)$ and conjugation twice. The live
 `hep/color_algebra.py` notebook demonstrates the existing tensor constructors,
 chain collection, conjugation and color contraction. Symmetric, antisymmetric
 and cyclic generator groups, including nested groups and complex coefficients,
 conjugate without expanding their permutations. Tests compare against Spenso's
 explicit projector expansion and verify reversal parity for three-generator
-traces. No separate FeynKit or GammaLoop conjugation implementation is introduced.
+traces. Scalar powers, inverse factors and scalar functions inside compact words
+use Symbolica's existing conjugation semantics, including symbolic exponents.
+Unknown matrix factors remain explicitly conjugated. Public Python regressions
+construct weighted words with the existing `chain` and `trace` APIs, check
+involution and Dirac adjoints, and independently evaluate a weighted SU(3) norm
+with explicit matrices. No separate FeynKit or GammaLoop conjugation
+implementation is introduced.
 
 `hep/qcd_gluons.py` presents the generated diagrams and both gauge-reference
 checks in a separate notebook on the same Marimo server.

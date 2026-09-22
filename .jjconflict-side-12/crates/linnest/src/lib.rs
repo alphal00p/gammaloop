@@ -2798,6 +2798,11 @@ impl TypstGraph {
     }
 
     fn layout_edge_labels(&mut self, spring_length: f64) {
+        for i in 0..self.graph.n_edges() {
+            self.graph[EdgeIndex(i)]
+                .statements
+                .remove("layout-label-gap");
+        }
         let cfg = &self.layout_config;
         if cfg.label_steps == 0 {
             return;
@@ -2840,8 +2845,8 @@ impl TypstGraph {
 
             for i in 0..labels.len().0 {
                 let idx = EdgeIndex(i);
-                // Keep internal text boxes at their requested clearance. The
-                // measured-box pass below moves them only for actual collisions.
+                // Keep the initial side and clearance. The renderer slides
+                // these labels along the finished curve at this fixed gap.
                 if matches!(cfg.label_layout, LabelLayout::FixedGap)
                     && !matches!(self.graph[&idx].1, HedgePair::Unpaired { .. })
                 {
@@ -2965,6 +2970,14 @@ impl TypstGraph {
 
         for i in 0..labels.len().0 {
             let idx = EdgeIndex(i);
+            if matches!(self.layout_config.label_layout, LabelLayout::FixedGap)
+                && !matches!(self.graph[&idx].1, HedgePair::Unpaired { .. })
+            {
+                self.graph[idx].statements.insert(
+                    "layout-label-gap".into(),
+                    (self.layout_config.internal_label_length_scale * spring_length).to_string(),
+                );
+            }
             self.graph[idx].label_pos = Some(labels[idx]);
             let angle = self.edge_label_angle(idx);
             self.graph[idx].label_angle = Some(angle);
@@ -2974,6 +2987,9 @@ impl TypstGraph {
     fn clear_edge_label_positions(&mut self) {
         for i in 0..self.graph.n_edges() {
             self.graph[EdgeIndex(i)].label_pos = None;
+            self.graph[EdgeIndex(i)]
+                .statements
+                .remove("layout-label-gap");
         }
     }
 
@@ -3058,6 +3074,12 @@ impl TypstGraph {
 
         let mut placed = Vec::<LayoutRect>::new();
         for (edge, base_target, half_width, half_height, _) in ordered_labels {
+            if matches!(self.layout_config.label_layout, LabelLayout::FixedGap)
+                && !matches!(self.graph[&edge].1, HedgePair::Unpaired { .. })
+            {
+                placed.push(LayoutRect::centered(base_target, half_width, half_height));
+                continue;
+            }
             let axis = Self::normalized_or(axes[edge], Vector2::unit_y());
             let tangent = Vector2::new(-axis.y, axis.x);
             let edge_pos = self.graph[edge].pos;
