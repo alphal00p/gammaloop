@@ -281,3 +281,67 @@ fn sun_simplify_id75_structure_times_two_generator_open_chain() {
 
     assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1𝑖/2*cas(2,coad(dA))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,a),in,out))");
 }
+
+#[test]
+fn fundamental_fierz_contracts_open_and_closed_color_lines() {
+    test_initialize();
+    let r = TestReps::new();
+    let index = color_idx!(2, ColorFundamental {}.to_symbolic([Atom::var(s!(Nc))]));
+    let cases = [
+        (
+            sun_tf!(r, i, j, a) * sun_trace!(r, b, a, c),
+            index.clone() * (sun_tf!(r, i, j, c, b) - sdf!(r, i, j) * sun_trace!(r, b, c) / s!(Nc)),
+        ),
+        (
+            sun_tf!(r, i, j, b, a, c) * sun_trace!(r, d, a, e),
+            index.clone()
+                * (sun_tf!(r, i, j, b, e, d, c)
+                    - sun_tf!(r, i, j, b, c) * sun_trace!(r, d, e) / s!(Nc)),
+        ),
+        (
+            sun_trace!(r, b, a, c) * sun_trace!(r, d, a, e),
+            index
+                * (sun_trace!(r, c, b, e, d) - sun_trace!(r, b, c) * sun_trace!(r, d, e) / s!(Nc)),
+        ),
+    ];
+    for (expression, expected) in cases {
+        for settings in [
+            ColorSimplifySettings::default(),
+            ColorSimplifySettings::default().without_trace_evaluation(),
+        ] {
+            let actual = expression.simplify_color_with(settings);
+            assert_eq!(
+                actual.expand(),
+                expected.simplify_color_with(settings).expand(),
+                "Fierz identity for {expression} with {settings:?}"
+            );
+            assert_eq!(actual.simplify_color_with(settings), actual);
+        }
+    }
+}
+
+#[test]
+fn fundamental_trace_fierz_respects_settings_and_representations() {
+    test_initialize();
+    let r = TestReps::new();
+    let expression = sun_tf!(r, i, j, a) * sun_trace!(r, b, a, c);
+    let disabled = ColorSimplifySettings::default()
+        .without_trace_evaluation()
+        .without_cross_chain_fierz_expansion();
+    assert_eq!(expression.simplify_color_with(disabled), expression);
+    let unevaluated = ColorSimplifySettings::default().without_trace_evaluation();
+    for source in [
+        "chain(cof(3,i),dind(cof(3,j)),t(coad(A,a),in,out))*trace(cof(4),cyclic(t(coad(A,a),in,out),t(coad(A,b),in,out),t(coad(A,c),in,out)))",
+        "trace(coad(A),cyclic(t(coad(A,a),in,out),t(coad(A,b),in,out),t(coad(A,c),in,out)))*trace(cof(3),cyclic(t(coad(A,a),in,out),t(coad(A,d),in,out),t(coad(A,e),in,out)))",
+    ] {
+        let expression = parse!(source, default_namespace = "spenso");
+        assert_eq!(expression.simplify_color_with(unevaluated), expression);
+    }
+    // A one-generator fundamental trace vanishes, including when the cut
+    // produces an empty trace whose value is the fundamental dimension.
+    assert!(
+        (sun_tf!(r, i, j, a) * sun_trace!(r, a))
+            .simplify_color_with(unevaluated)
+            .is_zero()
+    );
+}
