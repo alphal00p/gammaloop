@@ -1921,21 +1921,28 @@
   }
 }
 
-// Pair padding is shared between the two boxes; draw the same half-padding
-// around each box in the collision overlay.
-#let _label-collision-padding = (labels: 0.35, obstacles: 0.08)
+// Base pair padding is shared between the two boxes. Extra label padding
+// enlarges only label boxes; the collision overlay uses the same clearances.
+#let _label-collision-padding = (labels: 0.35, obstacles: 0.08, extra: 0.15)
 
 // Optimize arc length and automatic side choices: every candidate has the same
 // measured normal clearance. Annealing can leave a local minimum, then
 // deterministic coordinate sweeps settle the best arrangement found.
-#let _relax-label-placements(placements, obstacles) = {
+#let _relax-label-placements(placements, obstacles, label-padding: _label-collision-padding.extra) = {
+  assert(label-padding >= 0, message: "label-collision-padding must be non-negative")
   if placements.all(label => label.candidates.len() == 1) {
     return placements.map(label => label.candidates.first())
   }
-  let overlap = (left, right, padding: _label-collision-padding.obstacles) => (
-    calc.max(0, calc.min(left.right, right.right) - calc.max(left.left, right.left) + padding)
-      * calc.max(0, calc.min(left.top, right.top) - calc.max(left.bottom, right.bottom) + padding)
-  )
+  let overlap = (left, right, label-pair: false) => {
+    let padding = if label-pair { _label-collision-padding.labels } else { _label-collision-padding.obstacles }
+    let other-padding = if label-pair { label-padding } else { 0 }
+    // Inflate label bounds before intersecting, including when one box contains
+    // the other; adding extra padding to the overlap would miscount that case.
+    (
+      calc.max(0, calc.min(left.right + label-padding, right.right + other-padding) - calc.max(left.left - label-padding, right.left - other-padding) + padding)
+        * calc.max(0, calc.min(left.top + label-padding, right.top + other-padding) - calc.max(left.bottom - label-padding, right.bottom - other-padding) + padding)
+    )
+  }
   let choices = placements.map(_ => 0)
   for i in range(placements.len()) {
     let candidates = placements.at(i).candidates
@@ -1976,7 +1983,7 @@
             let other = placements.at(j).candidates.at(choices.at(j)).bounds
             let other-area = (other.right - other.left) * (other.top - other.bottom)
             // Repel nearby labels before their text boxes touch.
-            cost += 4 * overlap(box, other, padding: _label-collision-padding.labels) / calc.max(1e-9, calc.min(area, other-area))
+            cost += 4 * overlap(box, other, label-pair: true) / calc.max(1e-9, calc.min(area, other-area))
           }
           scores.push(cost)
         }
@@ -3716,7 +3723,8 @@
         }
 
         label-placements = label-placements.filter(label => label != none)
-        let relaxed = _relax-label-placements(label-placements, label-obstacles)
+        let label-padding = options.label-collision-padding
+        let relaxed = _relax-label-placements(label-placements, label-obstacles, label-padding: label-padding)
         for (label, candidate) in label-placements.zip(relaxed) {
           elements.push(cetz.draw.content(
             candidate.position, label.label, padding: 0, ..label.style,
@@ -3734,8 +3742,8 @@
             cetz.draw.set-transform(none)
             for (boxes, padding, color, dashed) in (
               (label-obstacles, _label-collision-padding.obstacles / 2, rgb("#f59e0b"), false),
-              (relaxed.map(candidate => candidate.bounds), _label-collision-padding.labels / 2, rgb("#a855f7"), true),
-              (relaxed.map(candidate => candidate.bounds), _label-collision-padding.obstacles / 2, rgb("#06b6d4"), false),
+              (relaxed.map(candidate => candidate.bounds), _label-collision-padding.labels / 2 + label-padding, rgb("#a855f7"), true),
+              (relaxed.map(candidate => candidate.bounds), _label-collision-padding.obstacles / 2 + label-padding, rgb("#06b6d4"), false),
             ) {
               for box in boxes {
                 cetz.draw.rect(
