@@ -322,6 +322,42 @@ Both numerical and symbolic APIs, and GammaLoop's integrand, use the same
 `feynkit-kinematics::InitialStateFlux` implementation. GammaLoop retains its
 runtime model masses and barn conversion outside that shared boundary.
 
+== Generated electron–positron annihilation into photons
+
+`installed_feyncalc_diphoton.py` generates both tree diagrams for
+$e^- e^+ -> gamma gamma$ and retains their interference. The full-mass
+spin-averaged result agrees with the
+#link("https://feyncalc.github.io/FeynCalcExamples/QED/Tree/ElAel-GaGa")[FeynCalc diphoton example].
+It is unchanged by choosing covariant photon sums, the other photon as a null
+reference, or the incoming electron as a timelike reference. The spin-summed
+square vanishes when either photon polarization tensor is replaced by its
+longitudinal momentum product. The massless limit and exchange of the two
+photons are checked separately.
+
+The ordinary amplitude labels both photons. Its spin-averaged square contains
+no final-state factorial; neither does `Kinematics.two_body_phase_space`.
+Integrating over both photon labels therefore requires $1/2!$. Equivalently,
+select the forward photon and integrate its angle over a single hemisphere.
+For $abs(cos(theta)) < C < 1$, the massless event cross section is
+$ sigma = frac(2 pi alpha^2, s) (ln frac(1+C, 1-C) - C). $
+This also agrees with the
+#link("https://arxiv.org/pdf/hep-ex/0409058")[DELPHI Born cross section, Eq. (2)].
+Symbolica integrates the rational angular distribution directly. The example
+also integrates the massive distribution at incoming speed
+$ beta = sqrt(1 - 4 m_e^2/s) $, checks the threshold normalization and recovers
+the massless limit. It selects the positive above-threshold flux branch
+explicitly. `hep/diphoton.py` offers polarization-reference, angular-cut and
+incoming-speed controls on the existing Marimo server.
+
+The massive sewn-forward conversion remains unresolved. At
+$m_e=e=1$, $s=10$, $t=-1$ and $u=-7$, its Bose-completed result is $59/8$ with
+covariant photon sums and $265/16$ with an incoming-electron reference; the
+ordinary-amplitude reference is $83/8$. Both sewn massless limits agree with
+the reference. This gauge dependence cannot be repaired by an
+identical-particle normalization factor and supplies another regression target
+for the pending shared sewing correction. Existing graph weights must not be
+multiplied by a second inverse automorphism factor.
+
 == Reduce tensors with external momentum dependence
 
 `TensorReducer(D).with_integrated_vector(k(mink(D)))` selects a loop vector.
