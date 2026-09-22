@@ -106,9 +106,15 @@ Enable the notebook's *Collision boxes* toggle or set
 `DrawOptions(debug_label_collisions=True)` to inspect the optimizer's padded
 boxes. Dashed purple boxes repel other purple boxes; cyan label boxes repel
 orange node/edge boxes. The orange rectangles sample the visible edge carriers,
-including the width of waves and coils. Padding is split equally across each
-pair of boxes. The overlay preserves layout, canvas size, and SVG interaction.
-The Typst option is `draw(graph, debug-label-collisions: true)`.
+including the width of waves and coils. Base padding is split equally across each
+pair of boxes. `DrawOptions(label_collision_padding=0.15)` adds another 0.15
+canvas units on every side of each label box by default. Increase it to encourage
+more clearance from labels, nodes, and edges; use zero for the original base
+sizes. The notebook's *Extra label collision padding* slider controls this value.
+It changes collision avoidance while preserving the fixed normal label gap.
+The debug overlay itself preserves layout, canvas size, and SVG interaction.
+In Typst, pass `label-collision-padding: 0.15` and
+`debug-label-collisions: true` to `draw`.
 
 `momenta=True` draws the graph's stored routing. Passing `lmb=basis` also enables
 momentum display, using that basis without changing the diagram. Loop and external

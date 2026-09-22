@@ -2815,6 +2815,7 @@ class TestTypedTypstSurface(unittest.TestCase):
             subgraph=[[True, False], [False, True]],
             debug=lp.DebugLevel.EdgePositions,
             debug_label_collisions=True,
+            label_collision_padding=0.3,
             show_half_edge_ids=True,
             node_radius=[0.2, 0.3],
             node_min_radius=0.1,
@@ -2947,6 +2948,8 @@ class TestTypedTypstSurface(unittest.TestCase):
         with self.assertRaises(TypeError):
             lp.DrawOptions(show_half_edge_ids=1)
         with self.assertRaises(TypeError):
+            lp.DrawOptions(label_collision_padding=-0.1)
+        with self.assertRaises(TypeError):
             lp.DrawOptions(edge_split_gap=-0.1)
         with self.assertRaises(TypeError):
             lp.DrawOptions(edge_dangling_tangent="horizontal")
@@ -3031,6 +3034,7 @@ class TestTypedTypstSurface(unittest.TestCase):
             render_config=lp.RenderConfig(
                 drawing=lp.DrawOptions(
                     edge_split_gap=0.25,
+                    label_collision_padding=0.3,
                     edge_dangling_tangent=lp.DanglingTangent.Vertical,
                 )
             )
@@ -3038,6 +3042,7 @@ class TestTypedTypstSurface(unittest.TestCase):
 
         source = graph.prepare_render().typst_source
         self.assertIn('("edge-split-gap"): 0.25', source)
+        self.assertIn('("label-collision-padding"): 0.3', source)
         self.assertIn('("edge-dangling-tangent"): "vertical"', source)
 
         graph, _, _, _ = sample_graph(
