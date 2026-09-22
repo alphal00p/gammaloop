@@ -64,30 +64,34 @@ environment with Playwright and Chromium to wait for a real SVG render from
 each Pyodide notebook. Use `--notebook layout_stream` to export just the live
 layout demo, and `--browser-executable /path/to/chromium` for a Nix browser.
 
-The physics notebook uses GammaLoop's actual `save dot` drawing bundle, including
-its generated Standard Model particle map and automatic external placement. The
-exporter builds this revision's `.#gammaloop` executable with Nix, or accepts
-`--gammaloop /path/to/gammaloop`, and writes `public/gammaloop-drawing.zip` beside
-the notebooks. Python passes the original DOT and controls to the bundled Typst
-figure template; it does not implement the physics styles or pinning. Layout
-sliders are collapsible, and custom force overrides are optional.
+The physics notebook loads the Standard Model fixture and parses compact or annotated DOT with
+FeynKit's `FeynmanDiagram.from_dot(model, dot)`. The preview uses the parsed diagram's
+interactive HTML renderer, with shared Linnet layout settings and optional momentum
+labels from its stored loop momentum basis. It includes valid amplitude and cross-section
+examples. Compact cross-sections pair initial-state legs with `is_cut` and specify
+`final_state="mu-,mu+"` to select matching physical cuts.
 
-For a native physics-notebook session, point to that exported archive:
+For a native session, use a Python environment with Marimo, Linnet, and the Symbolica host
+containing `symbolica.community.feynkit`:
 
 ```console
-GAMMALOOP_DRAWING_BUNDLE="$PWD/dist/linnet-wasm/public/gammaloop-drawing.zip" \
-  nix develop --command uv run --no-project --with marimo==0.24.0 \
-  --with-editable crates/linnet-py \
-  marimo edit crates/linnet-py/examples/physics_render_settings.py
+python -m marimo edit crates/linnet-py/examples/physics_render_settings.py
 ```
 
 To add live cells to a built documentation site, run `nix develop --command just
 docs-site linnet`, then `nix develop --command just docs-notebooks /path/to/browser.whl`.
 This exports the rendering guide, DOT playground, and canonical Python quickstart as
 Marimo islands under the Linnet version's `assets/notebooks/` directory. Build the
-GammaLoop docs and pass `gammaloop` after the wheel path to include the physics notebook
-in its DOT input guide. The exporter accepts `--docs linnet` or `--docs gammaloop` for
-the same product selection. The Pages workflow builds one wheel for the documented
+GammaLoop docs and export its physics notebook using the combined Symbolica browser wheel
+and the Linnet dependency wheel:
+
+```console
+python crates/linnet-py/examples/export_wasm.py --docs gammaloop \
+  --wheel /path/to/symbolica-browser.whl --dependency-wheel /path/to/linnet-browser.whl \
+  --output /path/to/gammaloop/version/assets/notebooks
+```
+The exporter accepts `--docs linnet` or `--docs gammaloop` for
+the same product selection. The Pages workflow builds the wheels for the documented
 revision and includes both products' notebook assets. Each example loads automatically
 as it approaches the viewport.
 

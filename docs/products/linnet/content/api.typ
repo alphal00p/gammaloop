@@ -449,10 +449,12 @@ belong to GammaLoop's own template rather than to a `PhysicsOptions` type in `li
 The #source-link(
   "crates/linnet-py/examples/physics_render_settings.py",
   label: "editable DOT physics notebook",
-) parses ordinary DOT with an explicit application codec, then composes particle,
-momentum, edge-index, and node-index layers using the same generic API.
-Run it from a checkout with
-`nix develop -c uvx --from marimo==0.24.0 --with-editable crates/linnet-py marimo edit crates/linnet-py/examples/physics_render_settings.py`.
+) loads a model and parses compact or annotated DOT with `FeynmanDiagram.from_dot(model, dot)`.
+FeynKit renders the parsed diagram with a shared `RenderConfig`, including momentum labels
+from its stored loop momentum basis and interactive SVG hover and selection.
+Run it from a checkout using a Python environment with Marimo, Linnet, and the Symbolica host
+containing `symbolica.community.feynkit`:
+`python -m marimo edit crates/linnet-py/examples/physics_render_settings.py`.
 The #source-link("crates/linnet-py/examples/layout_stream.py", label: "streaming layout notebook")
 previews the force solver as it runs. Its DOT editor and collapsible sliders restart the
 simulation; pause/resume preserves the current state. The viewer creates SVG topology

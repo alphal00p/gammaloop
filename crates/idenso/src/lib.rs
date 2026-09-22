@@ -33,7 +33,7 @@ use symbolica::{
 use thiserror::Error;
 
 use crate::{
-    color::CS,
+    color::{CS, color_conj_impl},
     dirac::{AGS, GammaSimplifier},
     epsilon::EPSILON_SYMBOL,
     rep_symbols::RS,
@@ -475,9 +475,11 @@ impl IndexTooling for AtomView<'_> {
             .replace_multiple(&redual_reps))
     }
     fn spenso_conj(&self) -> Atom {
-        self.conj()
+        let conjugate = self
+            .conj()
             .replace(Atom::var(RS.a__).conj())
-            .with(INBUILTS.conj(RS.a__))
+            .with(INBUILTS.conj(RS.a__));
+        color_conj_impl(conjugate.as_view())
     }
 
     fn conjugate_transpose(&self, rep: impl RepName) -> Atom {

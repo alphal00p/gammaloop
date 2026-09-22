@@ -5,7 +5,7 @@ use spenso::{
     chain,
     network::{library::symbolic::ETS, tags::SPENSO_TAG as T},
     rep_,
-    shadowing::{self, Collectable, TensorCollectExt, TensorCollectFilter},
+    shadowing::{self, Collectable, ProjectorExpander, TensorCollectExt, TensorCollectFilter},
     structure::{
         abstract_index::{AIND_SYMBOLS, AbstractIndex},
         representation::RepName,
@@ -24,7 +24,11 @@ use symbolica_utils::PatternReplacement;
 use crate::{
     W_, color_f, color_t,
     representations::{ColorAdjoint, ColorFundamental, ColorSextet},
-    shorthands::{chain::Chain, metric::MetricSimplifier},
+    shorthands::{
+        chain::Chain,
+        metric::MetricSimplifier,
+        schoonschip::{Schoonschip, SchoonschipSettings},
+    },
     tensor::remove_antisymmetric_zero_terms,
 };
 
@@ -301,6 +305,20 @@ impl ColorAlgebraSimplifier {
                 rep,
                 factors_excluding_indices(&factors, &[identity_index]),
             ));
+        }
+
+        // Through degree four, every cyclic ordering of a repeated adjoint pair
+        // reduces by the adjacent or separated Casimir rules below. Preserve open
+        // symmetric invariants and higher-degree projectors without factorial expansion.
+        if let [factor] = factors.as_slice()
+            && let Some(args) = color_symmetric_trace_arg_views(factor.as_view())
+            && args.len() <= 4
+            && args
+                .iter()
+                .enumerate()
+                .any(|(i, a)| args[i + 1..].contains(a))
+        {
+            return Some(trace.expand_projectors());
         }
 
         if let Some(rewritten) = Self::simplify_antisymmetric_trace_projector(&rep, &factors) {

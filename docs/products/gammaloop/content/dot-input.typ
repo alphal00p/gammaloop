@@ -9,8 +9,8 @@ this page records GammaLoop's physics contract.
 
 == Explore a DOT diagram
 
-Edit an amplitude or cross-section diagram using the same rendering pipeline as `save dot`
-followed by `just draw`.
+Edit an amplitude or cross-section diagram with FeynKit. The notebook parses compact model-aware DOT
+into a `FeynmanDiagram` and uses its interactive renderer for the preview.
 
 The notebook loads automatically when it comes into view. The first visit downloads browser
 Python and its dependencies; rendering then runs locally in your browser.
@@ -33,18 +33,25 @@ Python and its dependencies; rendering then runs locally in your browser.
   to run the same example locally.]
 }
 
-Try changing an internal edge's `particle`: `a` draws a photon wave, `g` a gluon coil, `H` a
-dashed scalar, and `t` a fermion with its model label. The same generated particle map and
-Typst callbacks control these styles in exported GammaLoop drawings.
+The editor accepts compact physics DOT and the annotated format emitted by
+`FeynmanDiagram.to_dot()`. FeynKit resolves `particle` or `pdg` against the bundled Standard
+Model and infers interaction slots. Supply `int_id` if the incident particles match several
+interactions. Invalid particles, interactions, cut pairs, or loop bases produce a parsing
+error in the notebook.
 
-The initial settings match ordinary `just draw`: 100 steps per epoch, 30 epochs, seed 42, and momentum arrows
-and labels disabled. The preview draws edited DOT without importing it into a GammaLoop
-calculation, so it does not validate interactions or numerators against the model.
+The amplitude retains the photon/top/gluon example and its explicit external half-edge order.
+The cross-section describes electron–positron annihilation into muons. Matching `is_cut` tags
+pair its initial-state legs, while `graph [final_state="mu-,mu+"]` requests physical cuts with
+those final-state particles. FeynKit sews the initial-state legs, finds matching separating
+cuts, and routes momenta through the resulting diagram. Its compact importer supports `num`,
+`overall_factor`, `projector`, and `lmb_id`; it does not generate numerator tensors from Feynman
+rules or implement GammaLoop-specific evaluator overrides and local numerator shorthand.
 
-The amplitude assigns half-edge ports `5:12` and `4:15` to put the outgoing leg at vertex `5`
-above the leg at vertex `4`. This external order allows the default layout to draw the internal
-cycle without crossings. The ports are global half-edge indices; the remaining indices are
-inferred. Reordering the DOT statements alone would not establish this order.
+The initial layout uses 100 steps per epoch, 30 epochs, and seed 42, with momentum arrows and
+labels disabled. Enable momentum labels to display the parsed diagram's stored loop momentum
+basis. The preview and edge table both read the parsed FeynKit diagram. Hover to inspect
+physics information, and Shift-click to select vertices, edges, or half-edges near an internal
+edge's ends. The SVG has a transparent background and follows the documentation theme.
 
 == Graph shape and half-edges
 
@@ -144,8 +151,8 @@ incoming cut half-edge index as the tag. On import, however, tags are non-negati
 values: they need not be contiguous or name an existing half-edge. The index bounds described
 above apply to `id` and numeric ports, not to these tags.
 
-The notebook and `just draw` render DOT directly, without this physics import or sewing.
-Both modes give incoming legs one shared, movable X coordinate on the left and outgoing legs
+`just draw` renders compact DOT directly, without this physics import or sewing. The notebook
+instead imports compact DOT with FeynKit and selects physical cuts using `final_state`. Both renderers give incoming legs one shared, movable X coordinate on the left and outgoing legs
 another on the right. Initial Y positions follow half-edge order separately on each side.
 Cross sections additionally group Y coordinates by numeric `is_cut` identity: matching tags
 share a freely moving row, seeded from the mean of their starting positions. The tag's numeric
@@ -155,7 +162,7 @@ Neither mode automatically pins X or Y. All dangling depths are pinned to zero, 
 horizontal and vertical placements retain precedence. A tag without a counterpart still gets
 its side's X group and its own movable Y group; an untagged leg keeps an independent Y coordinate.
 
-Generated momentum labels use the current drawing edge's `eid`, including on split cut legs: the
+In `just draw`, generated momentum labels use the current drawing edge's `eid`, including on split cut legs: the
 example's labels are $q_0$ and $q_5$. With edge IDs fixed, changing `is_cut`, a half-edge port, or
 `lmb_id` does not rename these labels. After importing and saving a graph, the labels instead
 reflect the edge IDs in that newly exported DOT. Do not infer kinematic-list positions from the drawing's $q$ subscripts.

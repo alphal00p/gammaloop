@@ -1822,9 +1822,10 @@ impl PyFeynmanDiagram {
     /// Parameters
     /// ----------
     /// model : Model
-    ///     Model whose stable IDs and fingerprint are referenced by the diagram.
+    ///     Model used to resolve particles and interactions or validate annotated IDs.
     /// dot : str
-    ///     DOT text containing the diagram topology and FeynKit annotations.
+    ///     Compact physics DOT or annotated FeynKit DOT. Compact cross-sections pair
+    ///     initial-state legs with is_cut and specify comma-separated final_state particles.
     #[staticmethod]
     fn from_dot(model: &PyModel, dot: &str) -> PyResult<Self> {
         FeynmanDiagram::from_dot(Arc::clone(&model.inner), dot)

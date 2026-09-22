@@ -383,10 +383,16 @@ jobs:
           fi
           exporter_help=$(python3 crates/linnet-py/examples/export_wasm.py --help)
           products=(linnet)
+          community_products=(spenso idenso feynkit)
           product_selection=false
           if [[ "$exporter_help" == *"--docs {"* ]]; then
-            products+=(gammaloop)
             product_selection=true
+            physics_package=$(python3 -c 'import runpy; notebooks = runpy.run_path("crates/linnet-py/examples/export_wasm.py")["NOTEBOOKS"]; print(next(getattr(notebook, "package", "linnet") for notebook in notebooks if notebook.docs_product == "gammaloop"))')
+            if [ "$physics_package" = symbolica ]; then
+              community_products+=(gammaloop)
+            else
+              products+=(gammaloop)
+            fi
           fi
           for product in "${products[@]}"; do
             # Manual snapshots use the exporter from the selected historical
@@ -414,7 +420,7 @@ jobs:
               echo "Expected exactly one pinned UFO loader wheel" >&2
               exit 2
             fi
-            for product in spenso idenso feynkit; do
+            for product in "${community_products[@]}"; do
               dependency_args=(--dependency-wheel "${ufo_wheels[0]}")
               if [ "$product" != feynkit ]; then
                 dependency_args=(--dependency-wheel "${wheels[0]}")

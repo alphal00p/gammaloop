@@ -57,3 +57,54 @@ impl ColorConjugator {
 pub fn color_conj_impl(expression: AtomView<'_>) -> Atom {
     ColorConjugator::run(expression)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        IndexTooling, color::ColorSimplifier, shorthands::metric::MetricSimplifier,
+        test_support::test_initialize,
+    };
+    use spenso::structure::abstract_index::AbstractIndex;
+    use symbolica::parse;
+
+    #[test]
+    fn adjoint_color_generator_has_positive_su3_norm() {
+        test_initialize();
+        let generator = parse!(
+            "t(coad(8,a),cof(3,i),dind(cof(3,j)))",
+            default_namespace = "spenso"
+        );
+        let adjoint = generator.dirac_adjoint::<AbstractIndex>().unwrap();
+        assert_eq!(
+            adjoint,
+            parse!(
+                "t(coad(8,a),cof(3,j),dind(cof(3,i)))",
+                default_namespace = "spenso"
+            )
+        );
+        let norm = (generator * adjoint)
+            .simplify_color()
+            .to_cof_dimension_invariants()
+            .simplify_metrics();
+        assert_eq!(norm, Atom::num(4));
+    }
+
+    #[test]
+    fn color_conjugation_dualizes_open_network_and_is_involutive() {
+        test_initialize();
+        let network = Atom::i()
+            * parse!(
+                "t(coad(8,a),cof(3,i),dind(cof(3,j)))*g(cof(3,j),dind(cof(3,k)))",
+                default_namespace = "spenso"
+            );
+        let conjugate = network.spenso_conj();
+        let expected = -Atom::i()
+            * parse!(
+                "t(coad(8,a),cof(3,j),dind(cof(3,i)))*g(cof(3,k),dind(cof(3,j)))",
+                default_namespace = "spenso"
+            );
+        assert_eq!(conjugate, expected);
+        assert_eq!(conjugate.spenso_conj(), network);
+    }
+}
