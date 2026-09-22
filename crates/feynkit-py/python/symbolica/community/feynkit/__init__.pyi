@@ -5213,7 +5213,7 @@ class Particle:
         >>> from symbolica import S
         >>> p, i, j = S("p", "i", "j")
         >>> projector = model.particle_by_pdg(11).spin_sum(p, i, j, average=True)
-        >>> polarized = model.particle_by_pdg(11).spin_sum(p, i, j, spin_vector=S("s"))
+        >>> polarized = model.particle_by_pdg(15).spin_sum(p, i, j, spin_vector=S("s"))
 
         Parameters
         ----------
@@ -5237,7 +5237,7 @@ class Particle:
         ------
         ValueError
             If ``spin_vector`` is used with averaging, a massless particle, or
-            a particle other than a Dirac fermion.
+            a particle other than a Dirac fermion, or is not an unindexed name.
         """
     def sum_spins(self, expression: Expression, momentum: Expression, *, edge: builtins.int, average: builtins.bool = False, reference: typing.Optional[Expression] = None, covariant: builtins.bool = False, spin_vector: typing.Optional[Expression] = None) -> Expression:
         r"""
@@ -5283,7 +5283,7 @@ class Particle:
         ------
         ValueError
             If ``spin_vector`` is used with averaging, a massless particle, or
-            a particle other than a Dirac fermion.
+            a particle other than a Dirac fermion, or is not an unindexed name.
         """
     def __repr__(self) -> builtins.str:
         r"""

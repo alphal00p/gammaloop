@@ -3408,6 +3408,128 @@ mod tests {
     use crate::utils::ApproxEq;
 
     #[test]
+    fn shared_polarized_density_matches_runtime_spinors() {
+        use feynkit_generator::SpinSum;
+        use spenso::{
+            network::{
+                ExecutionResult, Sequential, SmallestDegree,
+                library::symbolic::ExplicitKey,
+                parsing::{ParseSettings, StrictTensorFilter},
+            },
+            tensors::data::GetTensorData,
+        };
+        use spenso_hep_lib::{FUN_LIB, HepNet, hep_lib_su3};
+
+        let model = feynkit_model::Model::from_json(include_str!(
+            "../../../feynkit-model/tests/fixtures/sm.json"
+        ))
+        .unwrap();
+        let p = spenso::tensor_symbol!("polarized_runtime::p");
+        let spin = spenso::tensor_symbol!("polarized_runtime::s");
+        let indices = [
+            symbol!("polarized_runtime::a"),
+            symbol!("polarized_runtime::b"),
+        ];
+        for (momentum, axis) in [
+            ([5.0, 0.0, 0.0, 4.0], [4.0 / 3.0, 0.0, 0.0, 5.0 / 3.0]),
+            (
+                [5.0, 12.0 / 5.0, 16.0 / 5.0, 0.0],
+                [4.0 / 3.0, 1.0, 4.0 / 3.0, 0.0],
+            ),
+        ] {
+            let runtime_p = FourMomentum::from_args(
+                F(momentum[0]),
+                F(momentum[1]),
+                F(momentum[2]),
+                F(momentum[3]),
+            );
+            for helicity in [Sign::Positive, Sign::Negative] {
+                let orientation = if helicity == Sign::Positive {
+                    1.0
+                } else {
+                    -1.0
+                };
+                let mut library = hep_lib_su3::<AbstractIndex>();
+                for (name, components) in [(p, momentum), (spin, axis.map(|x| orientation * x))] {
+                    let key = ExplicitKey::from_iter([Minkowski {}.new_rep(4)], name, None);
+                    library.insert_explicit(key.map_canonical(|key| {
+                        DenseTensor::from_storage_data(components.to_vec(), key)
+                            .unwrap()
+                            .into()
+                    }));
+                }
+                for pdg in [15, -15] {
+                    let particle = model
+                        .particle_by_id(model.particle_id_by_pdg(pdg).unwrap())
+                        .unwrap();
+                    let density = SpinSum::new(particle, &model)
+                        .unwrap()
+                        .expression(
+                            &p.to_atom(),
+                            indices.map(|index| index.to_atom()),
+                            None,
+                            Some(&spin.to_atom()),
+                        )
+                        .unwrap()
+                        .replace(particle.symbolic_mass(&model).to_pattern())
+                        .with(Atom::num(3))
+                        .expand();
+                    let mut network = HepNet::<AbstractIndex>::try_from_view(
+                        density.as_view(),
+                        &library,
+                        &ParseSettings::default()
+                            .with_strict_tensor_filter(StrictTensorFilter::ContainsReps),
+                    )
+                    .unwrap();
+                    network
+                        .execute::<Sequential, SmallestDegree, _, _, _>(&library, &*FUN_LIB)
+                        .unwrap();
+                    let ExecutionResult::Val(result) = network.result_tensor(&library).unwrap()
+                    else {
+                        panic!("a polarized density must retain its two spinor indices");
+                    };
+                    let mut density_tensor = result.into_owned();
+                    density_tensor.evaluate_complex::<Atom>(&Default::default());
+                    let concrete = density_tensor.try_into_concrete().unwrap();
+                    assert_eq!(
+                        concrete.external_indices(),
+                        indices.map(AbstractIndex::from),
+                        "density axes must follow the spinor row and adjoint column"
+                    );
+                    let spinor = if pdg > 0 {
+                        runtime_p.u(helicity)
+                    } else {
+                        runtime_p.v(helicity)
+                    };
+                    let adjoint = spinor.bar();
+                    for row in 0..4 {
+                        for column in 0..4 {
+                            let actual = concrete.get_ref([row, column]).unwrap();
+                            let actual = match actual {
+                                spenso::algebra::complex::RealOrComplexRef::Real(value) => {
+                                    Complex::new(*value, 0.0)
+                                }
+                                spenso::algebra::complex::RealOrComplexRef::Complex(value) => {
+                                    *value
+                                }
+                            };
+                            let expected = spinor.tensor.data[row] * adjoint.tensor.data[column];
+                            assert!(
+                                (actual.re - expected.re.0).abs() < 1e-12,
+                                "PDG {pdg}, helicity {helicity:?}, ({row},{column}): {actual:?} vs {expected:?}"
+                            );
+                            assert!(
+                                (actual.im - expected.im.0).abs() < 1e-12,
+                                "PDG {pdg}, helicity {helicity:?}, ({row},{column}): {actual:?} vs {expected:?}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
     fn polarization() {
         let mom = FourMomentum::from_args(F(1.), F(1.), F(0.), F(0.));
 
