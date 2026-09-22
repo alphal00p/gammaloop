@@ -462,6 +462,12 @@ color lines. `installed_color_fierz.py` checks SU(2), SU(3), and SU(5), includin
 $ sum_(a,b,c) abs(op("Tr")(T^a T^b T^c))^2
   = frac((N^2-1)(N^2-2), 8N). $
 An independent contraction with Spenso's numerical SU(3) matrices gives $7/3$.
+Numerical validation also checks every free-index component of the mixed
+trace/chain identity. The shared Spenso syntax classifier recognizes dual
+representation slots inside metrics, so a fundamental identity retains its
+oriented tensor ports when added to generator products. Regression tests cover
+all parser filters, expanded and opaque parsing, and scalar precontraction;
+a scalar cannot be added to an open identity tensor.
 `hep/color_fierz.py` presents the mixed identity and closed norm on the existing
 Marimo server. No separate FeynKit or GammaLoop Fierz formulas are introduced.
 
