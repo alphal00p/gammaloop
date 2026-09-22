@@ -46,8 +46,8 @@ for dimension in (2, 3, 5):
 
 mink = Representation.mink(4)
 assert (
-    TensorExpression.g(mink).to_expression()
-    == TensorExpression.g(mink, mink).to_expression()
+    TensorExpression.g(mink)("mu", "nu").to_expression()
+    == TensorExpression.g(mink, mink)("mu", "nu").to_expression()
 )
 assert TensorExpression.g(mink)("mu", "mu").simplify_metrics().to_expression() == E("4")
 n, m = S("metric_N", "metric_M")
