@@ -1,0 +1,92 @@
+{
+  "parameters": {
+    "MX": 1.6,
+    "MH": 0.6,
+    "ML": 0.25,
+    "T": 0.5,
+    "lam": 1.0,
+    "graph_factor": 0.5,
+    "external_momentum": [
+      1.6,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "reference_source": "https://arxiv.org/pdf/hep-ph/0406109, Eq. (58), evaluated with explicit principal values",
+  "vacuum_reference_source": "https://arxiv.org/pdf/hep-ph/9501201, Eqs. (4)-(12)",
+  "threshold_subtraction": false,
+  "comparison": [
+    {
+      "process": "vacuum",
+      "samples": 2000000,
+      "value": 4.3274483256599464e-05,
+      "mc_error": 1.1578759989288498e-07,
+      "reference": 4.328445495072546e-05,
+      "pull": -0.0861205702098003
+    },
+    {
+      "process": "thermal",
+      "samples": 2000000,
+      "value": 5.218447424333072e-06,
+      "mc_error": 2.94673645138129e-07,
+      "reference": 5.282087736915636e-06,
+      "pull": -0.21596879677764372
+    },
+    {
+      "process": "virtual",
+      "samples": 2000000,
+      "value": 1.5052295506280777e-06,
+      "mc_error": 2.679683508702255e-07,
+      "reference": 1.6289119552881293e-06,
+      "pull": -0.4615560168146491
+    },
+    {
+      "process": "real",
+      "samples": 2000000,
+      "value": 3.7132178737049985e-06,
+      "mc_error": 1.1386151094000103e-07,
+      "reference": 3.6531757816275067e-06,
+      "pull": 0.5273256219929378
+    },
+    {
+      "process": "zero_temperature",
+      "samples": 2000000,
+      "value": 4.327448325659946e-05,
+      "mc_error": 1.1578759989288498e-07,
+      "reference": 4.328445495072546e-05,
+      "pull": -0.08612057020985882
+    }
+  ],
+  "global_statistics": {
+    "num_evals": 10000000,
+    "average_total_time_seconds": 9.8137e-05,
+    "average_parameterization_time_seconds": 2.1e-07,
+    "average_integrand_time_seconds": 4.7853e-05,
+    "average_evaluator_time_seconds": 3.7064e-05,
+    "average_observable_time_seconds": 0.0,
+    "average_integrator_time_seconds": 3.14e-07,
+    "f64_percentage": 99.89042,
+    "f128_percentage": 0.10958000000000001,
+    "arb_percentage": 0.0,
+    "nan_percentage": 0.0,
+    "nan_or_unstable_percentage": 0.0,
+    "generated_event_count": 0,
+    "accepted_event_count": 0,
+    "selection_efficiency_percentage": null
+  },
+  "production_source": {
+    "value": 2.2175462564472077e-07,
+    "mc_error": 1.2521970339352868e-08,
+    "reference": 2.2445898051219616e-07
+  },
+  "differential_production_rate_d3p": {
+    "value": 8.939908680877469e-10,
+    "mc_error": 5.048159469639272e-11,
+    "reference": 9.048933173537435e-10
+  },
+  "inclusive_minus_virtual_minus_real": -4.235164736271502e-21,
+  "zero_temperature_minus_vacuum": -6.776263578034403e-21,
+  "nan_count": 0,
+  "unresolved_stability_count": 0
+}

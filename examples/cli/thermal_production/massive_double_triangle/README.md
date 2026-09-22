@@ -144,3 +144,11 @@ cargo nextest run -p gammaloop-integration-tests --test test_runs \
 The previously reported unrelated thermal failures were outside this test
 selection. No existing failing tests were modified.
 
+
+## Above the thresholds
+
+The [above-threshold continuation](above_threshold/README.md) keeps the same
+internal masses and temperature and raises MX to 1.6. It opens the HH and HHL
+cuts, verifies local cancellation of the virtual threshold poles, and compares
+two-million-sample native integrations with independent principal-value
+evaluations of the literature formulas.

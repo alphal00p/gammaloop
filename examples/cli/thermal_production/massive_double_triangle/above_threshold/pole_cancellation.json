@@ -1,0 +1,2543 @@
+{
+  "parameters": {
+    "M": 1.6,
+    "H": 0.6,
+    "L": 0.25,
+    "T": 0.5
+  },
+  "description": "Approach the coincident HH/LL radial roots from both sides. Quad mode evaluates in f128; stored JSON values are f64. Automatic isolated-cut values need not retain precision after external subtraction of two large numbers; use the jointly evaluated virtual sum.",
+  "points": [
+    {
+      "label": "minus_2",
+      "delta": -0.01,
+      "point": [
+        0.7599342076785333,
+        0,
+        0,
+        0,
+        0.5238587595907891,
+        0
+      ],
+      "automatic": {
+        "virtual_hh": {
+          "value": {
+            "re": 0.0005209180060536433,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 45416
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 21333
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 15291
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 1042
+            },
+            "generated_event_count": 1,
+            "accepted_event_count": 1,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Double",
+                "estimated_relative_accuracy": 3.08036811289118e-14,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 44125
+                }
+              }
+            ]
+          }
+        },
+        "virtual_ll": {
+          "value": {
+            "re": -0.0005154244122146573,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 41084
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 19292
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 14792
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 875
+            },
+            "generated_event_count": 1,
+            "accepted_event_count": 1,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Double",
+                "estimated_relative_accuracy": 6.310540285588778e-16,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 40250
+                }
+              }
+            ]
+          }
+        },
+        "virtual": {
+          "value": {
+            "re": 5.493593838986011e-06,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 152334
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 89916
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 55583
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 7710
+            },
+            "generated_event_count": 2,
+            "accepted_event_count": 2,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Double",
+                "estimated_relative_accuracy": 2.861684347581208e-12,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 146042
+                }
+              }
+            ]
+          }
+        }
+      },
+      "quad": {
+        "virtual_hh": {
+          "value": {
+            "re": 0.0005209180060536861,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 817500
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 342041
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 172083
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 7250
+            },
+            "generated_event_count": 1,
+            "accepted_event_count": 1,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Arb",
+                "estimated_relative_accuracy": 2.571889732211356e-299,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 813917
+                }
+              }
+            ]
+          }
+        },
+        "virtual_ll": {
+          "value": {
+            "re": -0.0005154244122146681,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 724708
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 305208
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 158083
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 5875
+            },
+            "generated_event_count": 1,
+            "accepted_event_count": 1,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Arb",
+                "estimated_relative_accuracy": 3.5364652152524216e-301,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 723042
+                }
+              }
+            ]
+          }
+        },
+        "virtual": {
+          "value": {
+            "re": 5.493593839017911e-06,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 1729417
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 846291
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 382625
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 21250
+            },
+            "generated_event_count": 2,
+            "accepted_event_count": 2,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Arb",
+                "estimated_relative_accuracy": 2.4159267940340507e-297,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 1702375
+                }
+              }
+            ]
+          }
+        }
+      },
+      "quad_sum_residual_after_f64_json_conversion": -1.0842021724855044e-19
+    },
+    {
+      "label": "plus_2",
+      "delta": 0.01,
+      "point": [
+        0.7599342076785333,
+        0,
+        0,
+        0,
+        0.5344417648350475,
+        0
+      ],
+      "automatic": {
+        "virtual_hh": {
+          "value": {
+            "re": -0.0004918796251210127,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 37834
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 17291
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 13625
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 750
+            },
+            "generated_event_count": 1,
+            "accepted_event_count": 1,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Double",
+                "estimated_relative_accuracy": 2.2042022419992862e-16,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 37042
+                }
+              }
+            ]
+          }
+        },
+        "virtual_ll": {
+          "value": {
+            "re": 0.000497438220759421,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 37250
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 17041
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 13417
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 750
+            },
+            "generated_event_count": 1,
+            "accepted_event_count": 1,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Double",
+                "estimated_relative_accuracy": 6.538714521153751e-16,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 36500
+                }
+              }
+            ]
+          }
+        },
+        "virtual": {
+          "value": {
+            "re": 5.55859563840831e-06,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 43125
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 21000
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 16875
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 959
+            },
+            "generated_event_count": 2,
+            "accepted_event_count": 2,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Double",
+                "estimated_relative_accuracy": 4.266711246136026e-14,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 42541
+                }
+              }
+            ]
+          }
+        }
+      },
+      "quad": {
+        "virtual_hh": {
+          "value": {
+            "re": -0.0004918796251209717,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 852958
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 349167
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 180501
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 6125
+            },
+            "generated_event_count": 1,
+            "accepted_event_count": 1,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Arb",
+                "estimated_relative_accuracy": 2.556964111014272e-299,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 849209
+                }
+              }
+            ]
+          }
+        },
+        "virtual_ll": {
+          "value": {
+            "re": 0.0004974382207594162,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 728667
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 302375
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 150959
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 6458
+            },
+            "generated_event_count": 1,
+            "accepted_event_count": 1,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Arb",
+                "estimated_relative_accuracy": 1.3374824380579673e-299,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 725500
+                }
+              }
+            ]
+          }
+        },
+        "virtual": {
+          "value": {
+            "re": 5.558595638444507e-06,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 1327459
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 597625
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 308042
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 10791
+            },
+            "generated_event_count": 2,
+            "accepted_event_count": 2,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Arb",
+                "estimated_relative_accuracy": 1.0811147037739762e-297,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 1325583
+                }
+              }
+            ]
+          }
+        }
+      },
+      "quad_sum_residual_after_f64_json_conversion": 0.0
+    },
+    {
+      "label": "minus_4",
+      "delta": -0.0001,
+      "point": [
+        0.7599342076785333,
+        0,
+        0,
+        0,
+        0.529097347186697,
+        0
+      ],
+      "automatic": {
+        "virtual_hh": {
+          "value": {
+            "re": 0.050649726284566036,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 44708
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 16625
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 13291
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 667
+            },
+            "generated_event_count": 1,
+            "accepted_event_count": 1,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Double",
+                "estimated_relative_accuracy": 2.7399531697061287e-16,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 44042
+                }
+              }
+            ]
+          }
+        },
+        "virtual_ll": {
+          "value": {
+            "re": -0.050644195725746285,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 23791
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 10708
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 8583
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 459
+            },
+            "generated_event_count": 1,
+            "accepted_event_count": 1,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Double",
+                "estimated_relative_accuracy": 6.850630960242161e-16,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 23458
+                }
+              }
+            ]
+          }
+        },
+        "virtual": {
+          "value": {
+            "re": 5.530558819747539e-06,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 66250
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 32083
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 26166
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 1458
+            },
+            "generated_event_count": 2,
+            "accepted_event_count": 2,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Double",
+                "estimated_relative_accuracy": 3.1366151821552016e-12,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 65500
+                }
+              }
+            ]
+          }
+        }
+      },
+      "quad": {
+        "virtual_hh": {
+          "value": {
+            "re": 0.05064972628494108,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 757416
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 320292
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 165293
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 5375
+            },
+            "generated_event_count": 1,
+            "accepted_event_count": 1,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Arb",
+                "estimated_relative_accuracy": 3.4548445036983305e-301,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 756083
+                }
+              }
+            ]
+          }
+        },
+        "virtual_ll": {
+          "value": {
+            "re": -0.05064419572579356,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 718792
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 296625
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 148416
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 5709
+            },
+            "generated_event_count": 1,
+            "accepted_event_count": 1,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Arb",
+                "estimated_relative_accuracy": 1.3330245655198183e-297,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 717500
+                }
+              }
+            ]
+          }
+        },
+        "virtual": {
+          "value": {
+            "re": 5.530559147517826e-06,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 1383708
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 624000
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 325084
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 11541
+            },
+            "generated_event_count": 2,
+            "accepted_event_count": 2,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Arb",
+                "estimated_relative_accuracy": 1.2209087584465465e-293,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 1381166
+                }
+              }
+            ]
+          }
+        }
+      },
+      "quad_sum_residual_after_f64_json_conversion": 0.0
+    },
+    {
+      "label": "plus_4",
+      "delta": 0.0001,
+      "point": [
+        0.7599342076785333,
+        0,
+        0,
+        0,
+        0.5292031772391396,
+        0
+      ],
+      "automatic": {
+        "virtual_hh": {
+          "value": {
+            "re": -0.05062067906047494,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 55084
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 28792
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 19499
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 1583
+            },
+            "generated_event_count": 1,
+            "accepted_event_count": 1,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Double",
+                "estimated_relative_accuracy": 7.692720309467922e-13,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 53375
+                }
+              }
+            ]
+          }
+        },
+        "virtual_ll": {
+          "value": {
+            "re": 0.05062621026760161,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 33042
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 16000
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 11708
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 792
+            },
+            "generated_event_count": 1,
+            "accepted_event_count": 1,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Double",
+                "estimated_relative_accuracy": 1.5853879909708777e-12,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 32417
+                }
+              }
+            ]
+          }
+        },
+        "virtual": {
+          "value": {
+            "re": 5.531207126676513e-06,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 42167
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 20333
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 16834
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 792
+            },
+            "generated_event_count": 2,
+            "accepted_event_count": 2,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Double",
+                "estimated_relative_accuracy": 7.47132576466075e-09,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 41667
+                }
+              }
+            ]
+          }
+        }
+      },
+      "quad": {
+        "virtual_hh": {
+          "value": {
+            "re": -0.05062067906021268,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 786417
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 329333
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 174542
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 5291
+            },
+            "generated_event_count": 1,
+            "accepted_event_count": 1,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Arb",
+                "estimated_relative_accuracy": 6.459657325894662e-298,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 785208
+                }
+              }
+            ]
+          }
+        },
+        "virtual_ll": {
+          "value": {
+            "re": 0.05062621026736934,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 804042
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 328959
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 168459
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 6459
+            },
+            "generated_event_count": 1,
+            "accepted_event_count": 1,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Arb",
+                "estimated_relative_accuracy": 1.3333829206127664e-297,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 801042
+                }
+              }
+            ]
+          }
+        },
+        "virtual": {
+          "value": {
+            "re": 5.531207156667596e-06,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 1411375
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 647542
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 350333
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 11208
+            },
+            "generated_event_count": 2,
+            "accepted_event_count": 2,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Arb",
+                "estimated_relative_accuracy": 6.29298732364474e-294,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 1409667
+                }
+              }
+            ]
+          }
+        }
+      },
+      "quad_sum_residual_after_f64_json_conversion": 6.938893903907228e-18
+    },
+    {
+      "label": "minus_6",
+      "delta": -1e-06,
+      "point": [
+        0.7599342076785333,
+        0,
+        0,
+        0,
+        0.529149733062656,
+        0
+      ],
+      "automatic": {
+        "virtual_hh": {
+          "value": {
+            "re": 5.0635347397600325,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 32083
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 16417
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 13457
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 583
+            },
+            "generated_event_count": 1,
+            "accepted_event_count": 1,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Double",
+                "estimated_relative_accuracy": 1.5379773367185846e-10,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 31416
+                }
+              }
+            ]
+          }
+        },
+        "virtual_ll": {
+          "value": {
+            "re": -5.063529212318758,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 30416
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 13208
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 10458
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 459
+            },
+            "generated_event_count": 1,
+            "accepted_event_count": 1,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Double",
+                "estimated_relative_accuracy": 7.016279614142077e-16,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 29750
+                }
+              }
+            ]
+          }
+        },
+        "virtual": {
+          "value": {
+            "re": 5.5308803907988335e-06,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 367542
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 46375
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 39624
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 27293
+            },
+            "generated_event_count": 2,
+            "accepted_event_count": 2,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Double",
+                "estimated_relative_accuracy": 0.0001408693031995039,
+                "status": {
+                  "Unstable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 83708
+                }
+              },
+              {
+                "precision": "Quad",
+                "estimated_relative_accuracy": 3.785971957764654e-21,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 272208
+                }
+              }
+            ]
+          }
+        }
+      },
+      "quad": {
+        "virtual_hh": {
+          "value": {
+            "re": 5.063534744100011,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 754542
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 318041
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 166084
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 5166
+            },
+            "generated_event_count": 1,
+            "accepted_event_count": 1,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Arb",
+                "estimated_relative_accuracy": 6.46408578946259e-296,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 753042
+                }
+              }
+            ]
+          }
+        },
+        "virtual_ll": {
+          "value": {
+            "re": -5.06352921321962,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 696667
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 291333
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 149792
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 5333
+            },
+            "generated_event_count": 1,
+            "accepted_event_count": 1,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Arb",
+                "estimated_relative_accuracy": 2.9489743748425864e-301,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 695250
+                }
+              }
+            ]
+          }
+        },
+        "virtual": {
+          "value": {
+            "re": 5.5308803907988335e-06,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 1340833
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 603917
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 311375
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 11040
+            },
+            "generated_event_count": 2,
+            "accepted_event_count": 2,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Arb",
+                "estimated_relative_accuracy": 5.917856233301812e-290,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 1338542
+                }
+              }
+            ]
+          }
+        }
+      },
+      "quad_sum_residual_after_f64_json_conversion": 0.0
+    },
+    {
+      "label": "plus_6",
+      "delta": 1e-06,
+      "point": [
+        0.7599342076785333,
+        0,
+        0,
+        0,
+        0.5291507913631804,
+        0
+      ],
+      "automatic": {
+        "virtual_hh": {
+          "value": {
+            "re": -5.063505701013779,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 24292
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 11125
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 8833
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 500
+            },
+            "generated_event_count": 1,
+            "accepted_event_count": 1,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Double",
+                "estimated_relative_accuracy": 3.075949512163023e-10,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 23791
+                }
+              }
+            ]
+          }
+        },
+        "virtual_ll": {
+          "value": {
+            "re": 5.063511227330171,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 44209
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 21375
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 14499
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 1208
+            },
+            "generated_event_count": 1,
+            "accepted_event_count": 1,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Double",
+                "estimated_relative_accuracy": 7.01630453513131e-16,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 43167
+                }
+              }
+            ]
+          }
+        },
+        "virtual": {
+          "value": {
+            "re": 5.530886870888322e-06,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 224125
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 23750
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 19291
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 4001
+            },
+            "generated_event_count": 2,
+            "accepted_event_count": 2,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Double",
+                "estimated_relative_accuracy": 0.00028175594618762057,
+                "status": {
+                  "Unstable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 53291
+                }
+              },
+              {
+                "precision": "Quad",
+                "estimated_relative_accuracy": 8.49641146890806e-26,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 167292
+                }
+              }
+            ]
+          }
+        }
+      },
+      "quad": {
+        "virtual_hh": {
+          "value": {
+            "re": -5.063505696885211,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 776750
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 331792
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 170209
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 5541
+            },
+            "generated_event_count": 1,
+            "accepted_event_count": 1,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Arb",
+                "estimated_relative_accuracy": 6.464122871219706e-296,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 774500
+                }
+              }
+            ]
+          }
+        },
+        "virtual_ll": {
+          "value": {
+            "re": 5.063511227772082,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 701750
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 295708
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 148583
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 5666
+            },
+            "generated_event_count": 1,
+            "accepted_event_count": 1,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Arb",
+                "estimated_relative_accuracy": 2.948984849515501e-301,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 700208
+                }
+              }
+            ]
+          }
+        },
+        "virtual": {
+          "value": {
+            "re": 5.530886870888322e-06,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 1351708
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 608125
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 317458
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 10792
+            },
+            "generated_event_count": 2,
+            "accepted_event_count": 2,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Arb",
+                "estimated_relative_accuracy": 5.917899920842928e-290,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 1350000
+                }
+              }
+            ]
+          }
+        }
+      },
+      "quad_sum_residual_after_f64_json_conversion": 0.0
+    },
+    {
+      "label": "minus_8",
+      "delta": -1e-08,
+      "point": [
+        0.7599342076785333,
+        0,
+        0,
+        0,
+        0.5291502569214156,
+        0
+      ],
+      "automatic": {
+        "virtual_hh": {
+          "value": {
+            "re": 506.3520155501496,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 28416
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 13708
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 10292
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 666
+            },
+            "generated_event_count": 1,
+            "accepted_event_count": 1,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Double",
+                "estimated_relative_accuracy": 2.3069567145903085e-08,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 27666
+                }
+              }
+            ]
+          }
+        },
+        "virtual_ll": {
+          "value": {
+            "re": -506.3520198329293,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 34292
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 15875
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 12167
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 750
+            },
+            "generated_event_count": 1,
+            "accepted_event_count": 1,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Double",
+                "estimated_relative_accuracy": 1.0103460630335215e-15,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 33625
+                }
+              }
+            ]
+          }
+        },
+        "virtual": {
+          "value": {
+            "re": 5.530883598491e-06,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 312166
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 34750
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 26916
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 6875
+            },
+            "generated_event_count": 2,
+            "accepted_event_count": 2,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Double",
+                "estimated_relative_accuracy": 0.7317243532982909,
+                "status": {
+                  "Unstable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 71584
+                }
+              },
+              {
+                "precision": "Quad",
+                "estimated_relative_accuracy": 8.304537624366276e-17,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 235125
+                }
+              }
+            ]
+          }
+        }
+      },
+      "quad": {
+        "virtual_hh": {
+          "value": {
+            "re": 506.3520386245067,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 748667
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 314875
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 161375
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 5292
+            },
+            "generated_event_count": 1,
+            "accepted_event_count": 1,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Arb",
+                "estimated_relative_accuracy": 0.0,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 747458
+                }
+              }
+            ]
+          }
+        },
+        "virtual_ll": {
+          "value": {
+            "re": -506.3520330936231,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 710250
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 296000
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 152583
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 5292
+            },
+            "generated_event_count": 1,
+            "accepted_event_count": 1,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Arb",
+                "estimated_relative_accuracy": 3.774693821247468e-301,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 709000
+                }
+              }
+            ]
+          }
+        },
+        "virtual": {
+          "value": {
+            "re": 5.530883598491006e-06,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 1356584
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 608833
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 319499
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 10875
+            },
+            "generated_event_count": 2,
+            "accepted_event_count": 2,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Arb",
+                "estimated_relative_accuracy": 2.6997888547366044e-293,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 1354750
+                }
+              }
+            ]
+          }
+        }
+      },
+      "quad_sum_residual_after_f64_json_conversion": 0.0
+    },
+    {
+      "label": "plus_8",
+      "delta": 1e-08,
+      "point": [
+        0.7599342076785333,
+        0,
+        0,
+        0,
+        0.5291502675044208,
+        0
+      ],
+      "automatic": {
+        "virtual_hh": {
+          "value": {
+            "re": -506.3520459693404,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 35042
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 17250
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 14000
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 709
+            },
+            "generated_event_count": 1,
+            "accepted_event_count": 1,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Double",
+                "estimated_relative_accuracy": 3.84492848285045e-08,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 34416
+                }
+              }
+            ]
+          }
+        },
+        "virtual_ll": {
+          "value": {
+            "re": 506.3520207575203,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 31875
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 14625
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 11709
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 626
+            },
+            "generated_event_count": 1,
+            "accepted_event_count": 1,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Double",
+                "estimated_relative_accuracy": 5.613033673270252e-16,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 31291
+                }
+              }
+            ]
+          }
+        },
+        "virtual": {
+          "value": {
+            "re": 5.5308836632918964e-06,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 274709
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 32125
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 26541
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 5085
+            },
+            "generated_event_count": 2,
+            "accepted_event_count": 2,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Double",
+                "estimated_relative_accuracy": 0.2949809369824664,
+                "status": {
+                  "Unstable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 65375
+                }
+              },
+              {
+                "precision": "Quad",
+                "estimated_relative_accuracy": 1.711284208357e-16,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 204500
+                }
+              }
+            ]
+          }
+        }
+      },
+      "quad": {
+        "virtual_hh": {
+          "value": {
+            "re": -506.35200968350534,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 788208
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 329666
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 167500
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 6042
+            },
+            "generated_event_count": 1,
+            "accepted_event_count": 1,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Arb",
+                "estimated_relative_accuracy": 6.464163373375896e-294,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 786167
+                }
+              }
+            ]
+          }
+        },
+        "virtual_ll": {
+          "value": {
+            "re": 506.35201521438904,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 727042
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 306125
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 155208
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 5875
+            },
+            "generated_event_count": 1,
+            "accepted_event_count": 1,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Arb",
+                "estimated_relative_accuracy": 9.43673488632873e-302,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 725459
+                }
+              }
+            ]
+          }
+        },
+        "virtual": {
+          "value": {
+            "re": 5.530883663291901e-06,
+            "im": 0.0
+          },
+          "metadata": {
+            "total_timing": {
+              "secs": 0,
+              "nanos": 1446958
+            },
+            "integrand_evaluation_time": {
+              "secs": 0,
+              "nanos": 622625
+            },
+            "evaluator_evaluation_time": {
+              "secs": 0,
+              "nanos": 330292
+            },
+            "parameterization_time": {
+              "secs": 0,
+              "nanos": 0
+            },
+            "event_processing_time": {
+              "secs": 0,
+              "nanos": 10792
+            },
+            "generated_event_count": 2,
+            "accepted_event_count": 2,
+            "relative_instability_error": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "is_nan": false,
+            "loop_momenta_escalation": null,
+            "stability_results": [
+              {
+                "precision": "Arb",
+                "estimated_relative_accuracy": 5.917936884263843e-286,
+                "status": {
+                  "Stable": 2
+                },
+                "total_time": {
+                  "secs": 0,
+                  "nanos": 1443833
+                }
+              }
+            ]
+          }
+        }
+      },
+      "quad_sum_residual_after_f64_json_conversion": -5.684341886080802e-14
+    }
+  ]
+}

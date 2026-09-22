@@ -1,0 +1,629 @@
+{
+  "point": [
+    0.4,
+    0.2,
+    0.1,
+    -0.3,
+    0.5,
+    0.2
+  ],
+  "parameters": {
+    "M": 1.6,
+    "H": 0.6,
+    "L": 0.25,
+    "T": 0.5
+  },
+  "processes": {
+    "inclusive": {
+      "result": {
+        "re": -9.58821293108844e-06,
+        "im": 0.0
+      },
+      "events": [
+        {
+          "cut_id": 2,
+          "pdgs": [
+            [
+              9000001
+            ],
+            [
+              9000003,
+              9000003
+            ]
+          ],
+          "weight": {
+            "re": -1.9159833370584483e-05,
+            "im": 0.0
+          },
+          "momentum_residual": [
+            -4.440892098500626e-16,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "cut_id": 3,
+          "pdgs": [
+            [
+              9000001
+            ],
+            [
+              9000003,
+              9000003,
+              9000002
+            ]
+          ],
+          "weight": {
+            "re": 7.004152153726867e-10,
+            "im": 0.0
+          },
+          "momentum_residual": [
+            -1.1102230246251565e-16,
+            2.7755575615628914e-17,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "cut_id": 0,
+          "pdgs": [
+            [
+              9000001
+            ],
+            [
+              9000002,
+              9000002
+            ]
+          ],
+          "weight": {
+            "re": 1.2829315674987336e-05,
+            "im": 0.0
+          },
+          "momentum_residual": [
+            2.220446049250313e-16,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "cut_id": 1,
+          "pdgs": [
+            [
+              9000001
+            ],
+            [
+              9000003,
+              9000002,
+              9000003
+            ]
+          ],
+          "weight": {
+            "re": 7.004152153726895e-10,
+            "im": 0.0
+          },
+          "momentum_residual": [
+            -1.1102230246251565e-16,
+            -2.7755575615628914e-17,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "cut_id": 3,
+          "pdgs": [
+            [
+              9000001,
+              9000002
+            ],
+            [
+              9000003,
+              9000003
+            ]
+          ],
+          "weight": {
+            "re": -1.6235889852023168e-06,
+            "im": 0.0
+          },
+          "momentum_residual": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "cut_id": 3,
+          "pdgs": [
+            [
+              9000001,
+              9000003
+            ],
+            [
+              9000003,
+              9000002
+            ]
+          ],
+          "weight": {
+            "re": 9.125820296470443e-19,
+            "im": 0.0
+          },
+          "momentum_residual": [
+            -2.611244553918368e-13,
+            -4.440892098500626e-16,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "cut_id": 3,
+          "pdgs": [
+            [
+              9000001,
+              9000003
+            ],
+            [
+              9000003,
+              9000002
+            ]
+          ],
+          "weight": {
+            "re": -5.959047759615093e-09,
+            "im": 0.0
+          },
+          "momentum_residual": [
+            -2.220446049250313e-16,
+            2.220446049250313e-16,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "cut_id": 1,
+          "pdgs": [
+            [
+              9000001,
+              9000003
+            ],
+            [
+              9000003,
+              9000002
+            ]
+          ],
+          "weight": {
+            "re": -5.959047759615093e-09,
+            "im": 0.0
+          },
+          "momentum_residual": [
+            -2.220446049250313e-16,
+            -2.220446049250313e-16,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "cut_id": 1,
+          "pdgs": [
+            [
+              9000001,
+              9000002
+            ],
+            [
+              9000003,
+              9000003
+            ]
+          ],
+          "weight": {
+            "re": -1.6235889852023168e-06,
+            "im": 0.0
+          },
+          "momentum_residual": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "cut_id": 1,
+          "pdgs": [
+            [
+              9000001,
+              9000003
+            ],
+            [
+              9000002,
+              9000003
+            ]
+          ],
+          "weight": {
+            "re": 9.125820296470443e-19,
+            "im": 0.0
+          },
+          "momentum_residual": [
+            -2.611244553918368e-13,
+            2.220446049250313e-16,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "metadata": {
+        "total_timing": {
+          "secs": 0,
+          "nanos": 1858459
+        },
+        "integrand_evaluation_time": {
+          "secs": 0,
+          "nanos": 1024625
+        },
+        "evaluator_evaluation_time": {
+          "secs": 0,
+          "nanos": 165127
+        },
+        "parameterization_time": {
+          "secs": 0,
+          "nanos": 0
+        },
+        "event_processing_time": {
+          "secs": 0,
+          "nanos": 39833
+        },
+        "generated_event_count": 10,
+        "accepted_event_count": 10,
+        "relative_instability_error": {
+          "re": 0.0,
+          "im": 0.0
+        },
+        "is_nan": false,
+        "loop_momenta_escalation": null,
+        "stability_results": [
+          {
+            "precision": "Double",
+            "estimated_relative_accuracy": 1.7668213114206363e-15,
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "secs": 0,
+              "nanos": 1567125
+            }
+          }
+        ]
+      }
+    },
+    "virtual": {
+      "result": {
+        "re": -6.330517695597147e-06,
+        "im": 0.0
+      },
+      "events": [
+        {
+          "cut_id": 1,
+          "pdgs": [
+            [
+              9000001
+            ],
+            [
+              9000003,
+              9000003
+            ]
+          ],
+          "weight": {
+            "re": -1.9159833370584483e-05,
+            "im": 0.0
+          },
+          "momentum_residual": [
+            -4.440892098500626e-16,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "cut_id": 0,
+          "pdgs": [
+            [
+              9000001
+            ],
+            [
+              9000002,
+              9000002
+            ]
+          ],
+          "weight": {
+            "re": 1.2829315674987336e-05,
+            "im": 0.0
+          },
+          "momentum_residual": [
+            2.220446049250313e-16,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "metadata": {
+        "total_timing": {
+          "secs": 0,
+          "nanos": 66292
+        },
+        "integrand_evaluation_time": {
+          "secs": 0,
+          "nanos": 34333
+        },
+        "evaluator_evaluation_time": {
+          "secs": 0,
+          "nanos": 26667
+        },
+        "parameterization_time": {
+          "secs": 0,
+          "nanos": 0
+        },
+        "event_processing_time": {
+          "secs": 0,
+          "nanos": 1375
+        },
+        "generated_event_count": 2,
+        "accepted_event_count": 2,
+        "relative_instability_error": {
+          "re": 0.0,
+          "im": 0.0
+        },
+        "is_nan": false,
+        "loop_momenta_escalation": null,
+        "stability_results": [
+          {
+            "precision": "Double",
+            "estimated_relative_accuracy": 2.5422290516658262e-15,
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "secs": 0,
+              "nanos": 64959
+            }
+          }
+        ]
+      }
+    },
+    "real": {
+      "result": {
+        "re": -3.2576952354912934e-06,
+        "im": 0.0
+      },
+      "events": [
+        {
+          "cut_id": 1,
+          "pdgs": [
+            [
+              9000001
+            ],
+            [
+              9000003,
+              9000003,
+              9000002
+            ]
+          ],
+          "weight": {
+            "re": 7.004152153726867e-10,
+            "im": 0.0
+          },
+          "momentum_residual": [
+            -1.1102230246251565e-16,
+            2.7755575615628914e-17,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "cut_id": 0,
+          "pdgs": [
+            [
+              9000001
+            ],
+            [
+              9000003,
+              9000002,
+              9000003
+            ]
+          ],
+          "weight": {
+            "re": 7.004152153726895e-10,
+            "im": 0.0
+          },
+          "momentum_residual": [
+            -1.1102230246251565e-16,
+            -2.7755575615628914e-17,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "cut_id": 1,
+          "pdgs": [
+            [
+              9000001,
+              9000002
+            ],
+            [
+              9000003,
+              9000003
+            ]
+          ],
+          "weight": {
+            "re": -1.6235889852023168e-06,
+            "im": 0.0
+          },
+          "momentum_residual": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "cut_id": 1,
+          "pdgs": [
+            [
+              9000001,
+              9000003
+            ],
+            [
+              9000003,
+              9000002
+            ]
+          ],
+          "weight": {
+            "re": 9.125820296470443e-19,
+            "im": 0.0
+          },
+          "momentum_residual": [
+            -2.611244553918368e-13,
+            -4.440892098500626e-16,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "cut_id": 1,
+          "pdgs": [
+            [
+              9000001,
+              9000003
+            ],
+            [
+              9000003,
+              9000002
+            ]
+          ],
+          "weight": {
+            "re": -5.959047759615093e-09,
+            "im": 0.0
+          },
+          "momentum_residual": [
+            -2.220446049250313e-16,
+            2.220446049250313e-16,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "cut_id": 0,
+          "pdgs": [
+            [
+              9000001,
+              9000003
+            ],
+            [
+              9000003,
+              9000002
+            ]
+          ],
+          "weight": {
+            "re": -5.959047759615093e-09,
+            "im": 0.0
+          },
+          "momentum_residual": [
+            -2.220446049250313e-16,
+            -2.220446049250313e-16,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "cut_id": 0,
+          "pdgs": [
+            [
+              9000001,
+              9000002
+            ],
+            [
+              9000003,
+              9000003
+            ]
+          ],
+          "weight": {
+            "re": -1.6235889852023168e-06,
+            "im": 0.0
+          },
+          "momentum_residual": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "cut_id": 0,
+          "pdgs": [
+            [
+              9000001,
+              9000003
+            ],
+            [
+              9000002,
+              9000003
+            ]
+          ],
+          "weight": {
+            "re": 9.125820296470443e-19,
+            "im": 0.0
+          },
+          "momentum_residual": [
+            -2.611244553918368e-13,
+            2.220446049250313e-16,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "metadata": {
+        "total_timing": {
+          "secs": 0,
+          "nanos": 203708
+        },
+        "integrand_evaluation_time": {
+          "secs": 0,
+          "nanos": 110541
+        },
+        "evaluator_evaluation_time": {
+          "secs": 0,
+          "nanos": 90332
+        },
+        "parameterization_time": {
+          "secs": 0,
+          "nanos": 0
+        },
+        "event_processing_time": {
+          "secs": 0,
+          "nanos": 5125
+        },
+        "generated_event_count": 8,
+        "accepted_event_count": 8,
+        "relative_instability_error": {
+          "re": 0.0,
+          "im": 0.0
+        },
+        "is_nan": false,
+        "loop_momenta_escalation": null,
+        "stability_results": [
+          {
+            "precision": "Double",
+            "estimated_relative_accuracy": 0.0,
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "secs": 0,
+              "nanos": 201500
+            }
+          }
+        ]
+      }
+    }
+  },
+  "inclusive_minus_virtual_minus_real": 8.470329472543003e-22,
+  "max_momentum_residual": 2.611244553918368e-13
+}
