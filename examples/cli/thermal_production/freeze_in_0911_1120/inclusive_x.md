@@ -1,5 +1,9 @@
 # Forward-X thermal production benchmark
 
+This records the 2026-09-21 investigation before signed LU residues were
+implemented. See [equilibrium_x.md](equilibrium_x.md) for the corrected native
+calculation and its saved run card.
+
 The forward-X construction is the appropriate way to obtain a differential
 production rate without an external bath-averaging driver. The current native
 cross-section implementation generates the necessary thermal CFF, but its LU

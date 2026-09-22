@@ -34,6 +34,7 @@ use crate::{
             OrientationID, normalize_cut_edge_support_with_raised_edge_groups,
             normalize_three_d_expression_cut_support_with_raised_edge_groups,
         },
+        surface::HybridSurfaceID,
     },
     debug_tags, define_index,
     graph::{
@@ -1566,9 +1567,112 @@ impl CrossSectionGraph {
             .graph
             .determine_raised_esurfaces_from_expression(&global_cff.expression);
 
-        let (cut_group_data, cut_group_stats) = CutGroupData::new_from_esurface(
+        let mut equilibrium_groups = Vec::<CutGroup>::new();
+        if settings.medium.mode != three_dimensional_reps::MediumMode::Vacuum {
+            // Thermal scattering cuts have the same physical edge support as
+            // their vacuum counterpart but signed on-shell energies. Group
+            // raised aliases before consuming any residue, as for E-surfaces.
+            let mut signed_groups = BTreeMap::new();
+            for (surface_id, surface) in global_cff
+                .expression
+                .surfaces
+                .hsurface_cache
+                .iter_enumerated()
+            {
+                let positive = Graph::normalize_esurface_with_raised_edge_groups(
+                    &Esurface {
+                        energies: surface.positive_energies.clone(),
+                        external_shift: surface.external_shift.clone(),
+                        vertex_set: surface.vertex_set,
+                    },
+                    &raised_edge_groups,
+                );
+                let negative = Graph::normalize_esurface_with_raised_edge_groups(
+                    &Esurface {
+                        energies: surface.negative_energies.clone(),
+                        external_shift: Vec::new(),
+                        vertex_set: surface.vertex_set,
+                    },
+                    &raised_edge_groups,
+                );
+                signed_groups
+                    .entry((
+                        positive.energies,
+                        negative.energies,
+                        positive.external_shift,
+                    ))
+                    .or_insert_with(Vec::new)
+                    .push(HybridSurfaceID::Hsurface(surface_id));
+            }
+            for ((positive, negative, external_shift), surface_ids) in signed_groups {
+                let mut energies = positive.iter().chain(&negative).copied().collect_vec();
+                energies.sort();
+                let mut cuts = Vec::new();
+                let mut surface_sign = 1;
+                for (cut_id, cut_surface) in self.cut_esurface.iter_enumerated() {
+                    let normalized = Graph::normalize_esurface_with_raised_edge_groups(
+                        cut_surface,
+                        &raised_edge_groups,
+                    );
+                    if normalized.energies != energies {
+                        continue;
+                    }
+                    if external_shift == normalized.external_shift {
+                        surface_sign = 1;
+                    } else if external_shift
+                        .iter()
+                        .map(|(edge, sign)| (*edge, -sign))
+                        .collect_vec()
+                        == normalized.external_shift
+                    {
+                        surface_sign = -1;
+                    } else {
+                        continue;
+                    }
+                    cuts.push(cut_id);
+                }
+                if cuts.is_empty() {
+                    continue;
+                }
+                let mut expression = global_cff.expression.clone();
+                expression.normalize_single_raising(&surface_ids);
+                let max_occurrence = expression
+                    .orientations
+                    .iter()
+                    .map(|orientation| {
+                        orientation.max_effective_denominator_value_count_on_branch(&surface_ids[0])
+                    })
+                    .max()
+                    .unwrap_or(0);
+                if max_occurrence == 0 {
+                    continue;
+                }
+                let mut negative_energies = if surface_sign == 1 {
+                    negative
+                } else {
+                    positive
+                };
+                for group in &raised_edge_groups {
+                    if group.iter().any(|edge| negative_energies.contains(edge)) {
+                        negative_energies.extend(group.iter().copied());
+                    }
+                }
+                negative_energies.sort();
+                negative_energies.dedup();
+                equilibrium_groups.push(CutGroup {
+                    cuts,
+                    surface_ids,
+                    max_occurrence,
+                    negative_energies,
+                    surface_sign,
+                });
+            }
+        }
+
+        let (cut_group_data, cut_group_stats) = CutGroupData::new_from_surfaces(
             &esurface_raised_data,
             &self.cut_esurface_id_map,
+            equilibrium_groups,
             &settings.evaluator,
         );
 
@@ -1747,7 +1851,7 @@ impl CrossSectionGraph {
             .cut_group_data
             .cut_groups
             .iter()
-            .map(|cut_group| cut_group.related_esurface_group.max_occurence)
+            .map(|cut_group| cut_group.max_occurrence)
             .max()
             .unwrap();
 
@@ -3325,12 +3429,17 @@ pub struct CutGroupData {
     pub pass_two_evaluators: Vec<GenericEvaluator>,
 }
 
-/// Physical cuts that share one normalized E-surface residue, whether ordinary or raised.
+/// Physical cuts that share one normalized E/H-surface residue, whether ordinary or raised.
 #[derive(Clone, Encode, Decode, Debug)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct CutGroup {
     pub cuts: Vec<CutId>,
-    pub related_esurface_group: RaisedEsurfaceGroup,
+    pub surface_ids: Vec<HybridSurfaceID>,
+    pub max_occurrence: usize,
+    /// Bath energies absorbed across the cut, in the physical energy-conservation equation.
+    pub negative_energies: Vec<EdgeIndex>,
+    /// Converts the canonical CFF surface to the physical cut with negative incoming energy.
+    pub surface_sign: i8,
 }
 
 impl CutGroup {
@@ -3404,7 +3513,8 @@ impl CutGroup {
             })
             .collect();
         LuCutSelection {
-            raised_group: self.related_esurface_group.clone(),
+            surface_ids: self.surface_ids.clone(),
+            max_occurrence: self.max_occurrence,
             cut_edge_alternatives,
         }
     }
@@ -3425,9 +3535,10 @@ impl CutGroupData {
         }
     }
 
-    pub fn new_from_esurface(
+    pub fn new_from_surfaces(
         raised_esurface_data: &RaisedEsurfaceData,
         cut_esurface_map: &TiVec<CutId, EsurfaceID>,
+        additional_groups: Vec<CutGroup>,
         evaluator_settings: &EvaluatorSettings,
     ) -> (Self, GraphGenerationStats) {
         let mut stats = GraphGenerationStats::default();
@@ -3452,13 +3563,23 @@ impl CutGroupData {
 
             groups.push(CutGroup {
                 cuts,
-                related_esurface_group: raised_esurface_group.clone(),
+                surface_ids: raised_esurface_group
+                    .esurface_ids
+                    .iter()
+                    .copied()
+                    .map(HybridSurfaceID::Esurface)
+                    .collect(),
+                max_occurrence: raised_esurface_group.max_occurence,
+                negative_energies: Vec::new(),
+                surface_sign: 1,
             });
         }
 
+        groups.extend(additional_groups);
+
         let global_max_occurence = groups
             .iter()
-            .map(|group| group.related_esurface_group.max_occurence)
+            .map(|group| group.max_occurrence)
             .max()
             .unwrap_or_else(|| {
                 println!("corrupted groups");
@@ -3709,6 +3830,7 @@ mod tests {
         cff::{
             CutCFFIndex,
             esurface::{EsurfaceID, RaisedEsurfaceData, RaisedEsurfaceGroup},
+            surface::HybridSurfaceID,
         },
         dot,
         graph::parse::from_dot::IntoGraph,
@@ -3735,6 +3857,100 @@ mod tests {
     }
 
     #[test]
+    fn equilibrium_lu_sunset_selects_each_signed_surface_once() -> color_eyre::Result<()> {
+        use crate::{
+            graph::FeynmanGraph,
+            settings::global::{GenerationSettings, MediumMode},
+        };
+
+        test_initialise()?;
+        let graph: crate::graph::Graph = dot!(digraph equilibrium_lu_sunset {
+            node [num=1];
+            edge [particle="scalar_0", num="1𝑖", mass=0];
+            incoming [style=invis];
+            outgoing [style=invis];
+            incoming -> left [is_cut=0, particle="scalar_1", mass=1];
+            left -> right;
+            left -> right;
+            left -> right;
+            right -> outgoing [is_cut=0, particle="scalar_1", mass=1];
+        }, "scalars")?;
+        for mode in [
+            MediumMode::Vacuum,
+            MediumMode::ThermodynamicEquilibrium,
+            MediumMode::ZeroTemperatureEquilibrium,
+        ] {
+            let mut graph = super::CrossSectionGraph::new(graph.clone());
+            graph.cuts = graph
+                .graph
+                .all_st_cuts_for_cs(
+                    graph.source_nodes.clone(),
+                    graph.target_nodes.clone(),
+                    &graph.graph.get_initial_state_tree().0,
+                )
+                .into_iter()
+                .map(|(left, cut, right)| super::CrossSectionCut { cut, left, right })
+                .collect();
+            assert_eq!(graph.cuts.len(), 1);
+            graph.generate_esurface_cuts();
+            let mut settings = GenerationSettings::default();
+            settings.medium.mode = mode;
+            settings.evaluator.compile = false;
+            graph.generate_cff(&settings)?;
+            let groups = &graph.derived_data.cut_group_data.cut_groups;
+            assert_eq!(groups.len(), if mode == MediumMode::Vacuum { 1 } else { 7 });
+            let expression = &graph
+                .derived_data
+                .global_cff_expression
+                .as_ref()
+                .unwrap()
+                .expression;
+            let mut selected_orientations = std::collections::BTreeSet::new();
+            let mut negative_counts = [0; 3];
+            for group in groups {
+                assert_eq!(group.max_occurrence, 1);
+                assert_eq!(group.surface_ids.len(), 1);
+                negative_counts[group.negative_energies.len()] += 1;
+                let selection = group.lu_cut_selection(&graph.graph, &graph.cuts);
+                let residues = expression
+                    .clone()
+                    .restrict_to_cut_alternatives(&selection.cut_edge_alternatives)
+                    .select_surface_residue(&selection.surface_ids, selection.max_occurrence);
+                let retained = residues[0]
+                    .orientations
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, orientation)| !orientation.variants.is_empty())
+                    .collect::<Vec<_>>();
+                assert_eq!(
+                    retained.len(),
+                    1,
+                    "each sunset pole must select exactly one orientation"
+                );
+                assert!(
+                    selected_orientations.insert(retained[0].0),
+                    "a thermal orientation was counted twice"
+                );
+                assert!(
+                    retained[0]
+                        .1
+                        .iter_denominator_nodes()
+                        .all(|node| node.data == HybridSurfaceID::Unit)
+                );
+            }
+            assert_eq!(
+                negative_counts,
+                if mode == MediumMode::Vacuum {
+                    [1, 0, 0]
+                } else {
+                    [1, 3, 3]
+                }
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
     fn cut_groups_include_all_physical_cuts_in_a_raised_group() {
         test_initialise().unwrap();
         let raised_esurface_data = RaisedEsurfaceData {
@@ -3754,9 +3970,10 @@ mod tests {
         };
         let cut_esurface_map = [EsurfaceID(0), EsurfaceID(0)].into_iter().collect();
 
-        let (cut_group_data, _) = super::CutGroupData::new_from_esurface(
+        let (cut_group_data, _) = super::CutGroupData::new_from_surfaces(
             &raised_esurface_data,
             &cut_esurface_map,
+            Vec::new(),
             &super::EvaluatorSettings::default(),
         );
 
@@ -3801,10 +4018,10 @@ mod tests {
         assert_eq!(graph.cuts.len(), 1);
         let group = super::CutGroup {
             cuts: vec![super::CutId(0)],
-            related_esurface_group: RaisedEsurfaceGroup {
-                esurface_ids: vec![EsurfaceID(0)],
-                max_occurence: 1,
-            },
+            surface_ids: vec![HybridSurfaceID::Esurface(EsurfaceID(0))],
+            max_occurrence: 1,
+            negative_energies: Vec::new(),
+            surface_sign: 1,
         };
         let conversion = group
             .lu_prefactor(&graph.graph, &graph.cuts)

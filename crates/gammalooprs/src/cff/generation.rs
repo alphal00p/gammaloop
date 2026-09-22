@@ -1859,7 +1859,13 @@ mod tests {
             .expect("raised production CFF should contain a physical repeated LU surface");
         let mut cutset = CutSet::empty(graph.n_hedges());
         cutset.residue_selector.lu = Some(LuCutSelection {
-            raised_group: lu_cut.clone(),
+            surface_ids: lu_cut
+                .esurface_ids
+                .iter()
+                .copied()
+                .map(crate::cff::surface::HybridSurfaceID::Esurface)
+                .collect(),
+            max_occurrence: lu_cut.max_occurence,
             cut_edge_alternatives: lu_cut
                 .esurface_ids
                 .iter()
@@ -1952,7 +1958,13 @@ mod tests {
             .expect("raised production CFF should contain a physical repeated LU surface");
         let mut cutset = CutSet::empty(graph.n_hedges());
         cutset.residue_selector.lu = Some(LuCutSelection {
-            raised_group: lu_cut.clone(),
+            surface_ids: lu_cut
+                .esurface_ids
+                .iter()
+                .copied()
+                .map(crate::cff::surface::HybridSurfaceID::Esurface)
+                .collect(),
+            max_occurrence: lu_cut.max_occurence,
             cut_edge_alternatives: lu_cut
                 .esurface_ids
                 .iter()

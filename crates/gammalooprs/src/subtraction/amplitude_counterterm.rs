@@ -799,6 +799,7 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
                     .counterterm_builder
                     .graph
                     .loop_momentum_basis,
+                &[],
             )
         };
 
@@ -1140,6 +1141,7 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
                             &ct_builder.real_mass_vector,
                             &dual_loop_momenta_for_esurface,
                             &dualized_externals,
+                            &[],
                         ),
                 )
             };

@@ -238,6 +238,7 @@ impl RstarTDependenceEvaluator {
             masses,
             &rescale_rstar,
             &dualized_external_fourmomenta,
+            &[],
         );
 
         debug!("Dual e-surface: {}", dual_esurface);

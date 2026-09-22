@@ -6,7 +6,7 @@ use linnet::half_edge::{
     subgraph::{SuBitGraph, SubSetLike},
 };
 
-use crate::cff::{CutCFFIndex, esurface::RaisedEsurfaceGroup};
+use crate::cff::{CutCFFIndex, esurface::RaisedEsurfaceGroup, surface::HybridSurfaceID};
 
 #[derive(Debug, Clone, Encode, Decode, PartialEq, Hash, Eq, PartialOrd, Ord)]
 pub struct CutSet {
@@ -23,7 +23,8 @@ impl LogMessage for CutSet {
 
 #[derive(Debug, Clone, Encode, Decode, PartialEq, Hash, Eq, PartialOrd, Ord)]
 pub struct LuCutSelection {
-    pub raised_group: RaisedEsurfaceGroup,
+    pub surface_ids: Vec<HybridSurfaceID>,
+    pub max_occurrence: usize,
     /// Normalized physical edge support for each actual Cutkosky cut in this
     /// raised group. Alternative order remains the physical-cut order so a
     /// future LTD policy can attach representation-specific data without
@@ -45,7 +46,7 @@ impl ResidueSelector {
             .into_iter()
             .flat_map(|index| {
                 if let Some(lu) = &self.lu {
-                    (1..=lu.raised_group.max_occurence)
+                    (1..=lu.max_occurrence)
                         .map(|lu_cut_index| {
                             let mut new_index = index;
                             new_index.lu_cut_order = Some(lu_cut_index);

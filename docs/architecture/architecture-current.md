@@ -135,6 +135,18 @@ chemical potentials, and inverse temperature; the shared generator does not
 own the physics model. Thermal terminal sectors retain their full distribution
 weights rather than applying the vacuum contour-closure normalization.
 
+LU residue selection in equilibrium modes includes mixed-sign H-surfaces on
+physical cut supports as well as vacuum E-surfaces. Raised aliases, numerator
+cancellations, and canonical denominator signs are handled by the same shared
+surface selector; thermal weights remain attached to each selected variant.
+Signed cut energies identify absorbed bath particles, which become incoming
+event legs. Runtime isolates all positive radial crossings using derivative
+bounds after compactifying the radial half-line, and sums their contributions
+with absolute phase-space Jacobians. Canonical surface signs still enter the
+raised-residue derivatives. This enables inclusive equilibrium rates without
+adding thermal threshold or IR subtraction. Persisted states predating these
+signed cut groups must be regenerated (state manifest version 7).
+
 The bounded and known-factor numerator builders share occurrence sampling and
 polynomial reduction across all medium modes. Every resulting scalar sector,
 including a contact, a terminal residue basis, or the zero-edge unit, goes

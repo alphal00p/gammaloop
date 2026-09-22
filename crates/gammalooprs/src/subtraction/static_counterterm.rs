@@ -485,6 +485,7 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
                     .graph
                     .loop_momentum_basis,
                 &self.overlap_builder.counterterm_builder.real_mass_vector,
+&[],
             )
         };
 

@@ -17,7 +17,7 @@ use crate::{
             normalize_three_d_expression_cut_support_with_raised_edge_groups,
         },
         orientations::GraphOrientation,
-        surface::GammaLoopSurfaceCache,
+        surface::{GammaLoopSurfaceCache, HybridSurfaceID},
     },
     graph::{
         ExactUvSubLmbFrame, FeynmanGraph, FourDDenominator, Graph, GraphThreeDSource,
@@ -335,7 +335,17 @@ fn select_indexed_cff_residues(
         residues = apply_indexed_residue_selection(
             residues,
             CutCffResidueAxis::RightThreshold,
-            |expression| expression.select_esurface_residue(right_threshold),
+            |expression| {
+                expression.select_surface_residue(
+                    &right_threshold
+                        .esurface_ids
+                        .iter()
+                        .copied()
+                        .map(HybridSurfaceID::Esurface)
+                        .collect::<Vec<_>>(),
+                    right_threshold.max_occurence,
+                )
+            },
         );
     }
 
@@ -346,7 +356,17 @@ fn select_indexed_cff_residues(
             // Powered poles are completed in the canonical causal basis, so
             // left- and right-threshold selections use the same positive-
             // energy Cutkosky convention as ordinary CFF terms.
-            |expression| expression.select_esurface_residue(left_threshold),
+            |expression| {
+                expression.select_surface_residue(
+                    &left_threshold
+                        .esurface_ids
+                        .iter()
+                        .copied()
+                        .map(HybridSurfaceID::Esurface)
+                        .collect::<Vec<_>>(),
+                    left_threshold.max_occurence,
+                )
+            },
         );
     }
 
@@ -355,11 +375,11 @@ fn select_indexed_cff_residues(
             apply_indexed_residue_selection(residues, CutCffResidueAxis::LuCut, |expression| {
                 // Physical support selection is independent of the 3D
                 // representation. CFF then consumes the selected surface in
-                // GammaLoop's positive-energy Cutkosky convention; future LTD
+                // GammaLoop's selected E/H-surface convention; future LTD
                 // signs and local-series coordinates remain LTD-owned.
                 expression
                     .restrict_to_cut_alternatives(&lu.cut_edge_alternatives)
-                    .select_esurface_residue(&lu.raised_group)
+                    .select_surface_residue(&lu.surface_ids, lu.max_occurrence)
             });
     }
 
@@ -1008,10 +1028,8 @@ mod tests {
     fn lu_residue_selection_rejects_missing_physical_cut_support() {
         let mut cutset = CutSet::empty(0);
         cutset.residue_selector.lu = Some(crate::graph::cuts::LuCutSelection {
-            raised_group: crate::cff::esurface::RaisedEsurfaceGroup {
-                esurface_ids: Vec::new(),
-                max_occurence: 1,
-            },
+            surface_ids: Vec::new(),
+            max_occurrence: 1,
             cut_edge_alternatives: Vec::new(),
         });
 
@@ -1867,7 +1885,13 @@ mod tests {
             }
             if selected_axis_count >= 3 {
                 cutset.residue_selector.lu = Some(crate::graph::cuts::LuCutSelection {
-                    raised_group: raised_group.clone(),
+                    surface_ids: raised_group
+                        .esurface_ids
+                        .iter()
+                        .copied()
+                        .map(crate::cff::surface::HybridSurfaceID::Esurface)
+                        .collect(),
+                    max_occurrence: raised_group.max_occurence,
                     cut_edge_alternatives: vec![vec![EdgeIndex(0)]],
                 });
             }
@@ -2405,7 +2429,13 @@ mod tests {
         lu_cut.max_occurence = 2;
         let mut cutset = CutSet::empty(graph.n_hedges());
         cutset.residue_selector.lu = Some(crate::graph::cuts::LuCutSelection {
-            raised_group: lu_cut.clone(),
+            surface_ids: lu_cut
+                .esurface_ids
+                .iter()
+                .copied()
+                .map(crate::cff::surface::HybridSurfaceID::Esurface)
+                .collect(),
+            max_occurrence: lu_cut.max_occurence,
             cut_edge_alternatives: lu_cut
                 .esurface_ids
                 .iter()
@@ -2613,7 +2643,13 @@ mod tests {
         lu_cut.max_occurence = 2;
         let mut cutset = CutSet::empty(graph.n_hedges());
         cutset.residue_selector.lu = Some(crate::graph::cuts::LuCutSelection {
-            raised_group: lu_cut.clone(),
+            surface_ids: lu_cut
+                .esurface_ids
+                .iter()
+                .copied()
+                .map(crate::cff::surface::HybridSurfaceID::Esurface)
+                .collect(),
+            max_occurrence: lu_cut.max_occurence,
             cut_edge_alternatives: lu_cut
                 .esurface_ids
                 .iter()
@@ -3275,7 +3311,13 @@ mod tests {
                 .expect("the production CFF contains the requested physical LU surface");
             let mut cutset = CutSet::empty(graph.n_hedges());
             cutset.residue_selector.lu = Some(crate::graph::cuts::LuCutSelection {
-                raised_group: lu_cut.clone(),
+                surface_ids: lu_cut
+                    .esurface_ids
+                    .iter()
+                    .copied()
+                    .map(crate::cff::surface::HybridSurfaceID::Esurface)
+                    .collect(),
+                max_occurrence: lu_cut.max_occurence,
                 cut_edge_alternatives: lu_cut
                     .esurface_ids
                     .iter()
@@ -3526,7 +3568,13 @@ mod tests {
             .expect("the production CFF contains a physical raised LU surface");
         let mut cutset = CutSet::empty(graph.n_hedges());
         cutset.residue_selector.lu = Some(crate::graph::cuts::LuCutSelection {
-            raised_group: lu_cut.clone(),
+            surface_ids: lu_cut
+                .esurface_ids
+                .iter()
+                .copied()
+                .map(crate::cff::surface::HybridSurfaceID::Esurface)
+                .collect(),
+            max_occurrence: lu_cut.max_occurence,
             cut_edge_alternatives: lu_cut
                 .esurface_ids
                 .iter()
@@ -3784,7 +3832,13 @@ mod tests {
             .expect("the cograph bubble supplies an LU residue surface");
         let mut lu_cutset = CutSet::empty(graph.n_hedges());
         lu_cutset.residue_selector.lu = Some(crate::graph::cuts::LuCutSelection {
-            raised_group: lu_surface,
+            surface_ids: lu_surface
+                .esurface_ids
+                .iter()
+                .copied()
+                .map(crate::cff::surface::HybridSurfaceID::Esurface)
+                .collect(),
+            max_occurrence: lu_surface.max_occurence,
             cut_edge_alternatives: vec![vec![EdgeIndex(0), EdgeIndex(1)]],
         });
 
@@ -3995,7 +4049,13 @@ mod tests {
                         .clone()
                 })
                 .collect(),
-            raised_group,
+            surface_ids: raised_group
+                .esurface_ids
+                .iter()
+                .copied()
+                .map(HybridSurfaceID::Esurface)
+                .collect(),
+            max_occurrence: raised_group.max_occurence,
         });
         let contracted = graph
             .get_edge_subgraph(EdgeIndex(1))
@@ -4098,7 +4158,13 @@ mod tests {
                         .clone()
                 })
                 .collect(),
-            raised_group,
+            surface_ids: raised_group
+                .esurface_ids
+                .iter()
+                .copied()
+                .map(HybridSurfaceID::Esurface)
+                .collect(),
+            max_occurrence: raised_group.max_occurence,
         });
         let contracted = graph
             .get_edge_subgraph(EdgeIndex(1))
@@ -4221,7 +4287,13 @@ mod tests {
             // A raised physical Cutkosky cut has one cut support even when its
             // two residue orders originate from distinct exact E-surfaces.
             cut_edge_alternatives: vec![physical_cut_support; lu_surface.esurface_ids.len()],
-            raised_group: lu_surface,
+            surface_ids: lu_surface
+                .esurface_ids
+                .iter()
+                .copied()
+                .map(crate::cff::surface::HybridSurfaceID::Esurface)
+                .collect(),
+            max_occurrence: lu_surface.max_occurence,
         });
 
         let cograph_denominators =
@@ -4343,13 +4415,15 @@ mod tests {
             .external_momentum_edge_order()
             .into_iter()
             .collect::<BTreeSet<_>>();
-        let representative_esurface_id = lu_cutset
+        let HybridSurfaceID::Esurface(representative_esurface_id) = lu_cutset
             .residue_selector
             .lu
             .as_ref()
             .expect("the raised LU selector exists")
-            .raised_group
-            .esurface_ids[0];
+            .surface_ids[0]
+        else {
+            panic!("the fixture uses an E-surface")
+        };
         let representative_esurface =
             &production.expression.surfaces.esurface_cache[representative_esurface_id];
         let rescale_star = Atom::one();
@@ -4908,7 +4982,13 @@ mod tests {
             .expect("the nonrepeated cograph bubble supplies an LU residue surface");
         let mut lu_cutset = CutSet::empty(graph.n_hedges());
         lu_cutset.residue_selector.lu = Some(crate::graph::cuts::LuCutSelection {
-            raised_group: lu_surface,
+            surface_ids: lu_surface
+                .esurface_ids
+                .iter()
+                .copied()
+                .map(crate::cff::surface::HybridSurfaceID::Esurface)
+                .collect(),
+            max_occurrence: lu_surface.max_occurence,
             cut_edge_alternatives: vec![vec![EdgeIndex(0), EdgeIndex(1)]],
         });
 
@@ -5462,7 +5542,13 @@ mod tests {
                     })?;
                 let mut selected_cutset = CutSet::empty(graph.n_hedges());
                 selected_cutset.residue_selector.lu = Some(crate::graph::cuts::LuCutSelection {
-                    raised_group: lu_surface,
+                    surface_ids: lu_surface
+                        .esurface_ids
+                        .iter()
+                        .copied()
+                        .map(crate::cff::surface::HybridSurfaceID::Esurface)
+                        .collect(),
+                    max_occurrence: lu_surface.max_occurence,
                     cut_edge_alternatives: vec![lu_support.to_vec()],
                 });
                 let variant_root = graph.cff(
@@ -5656,7 +5742,13 @@ mod tests {
             .ok_or_else(|| eyre::eyre!("GL24 q3/q4 LU surface was not generated"))?;
         let mut cutset = CutSet::empty(graph.n_hedges());
         cutset.residue_selector.lu = Some(crate::graph::cuts::LuCutSelection {
-            raised_group: lu_surface,
+            surface_ids: lu_surface
+                .esurface_ids
+                .iter()
+                .copied()
+                .map(crate::cff::surface::HybridSurfaceID::Esurface)
+                .collect(),
+            max_occurrence: lu_surface.max_occurence,
             cut_edge_alternatives: vec![vec![EdgeIndex(3), EdgeIndex(4)]],
         });
         let pattern = OrientationPattern::default();

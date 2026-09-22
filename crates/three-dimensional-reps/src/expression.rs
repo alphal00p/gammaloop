@@ -364,14 +364,9 @@ impl CFFVariant {
             });
     }
 
-    fn clear_selected_denominator_surface_sign(
-        &mut self,
-        raised_esurface_group: &impl RaisedEsurfaceGroupView,
-    ) {
-        for esurface_id in raised_esurface_group.esurface_ids() {
-            if let Some(sign) = self
-                .denominator_surface_signs
-                .remove(&HybridSurfaceID::Esurface(*esurface_id))
+    fn clear_selected_denominator_surface_sign(&mut self, surface_ids: &[HybridSurfaceID]) {
+        for surface_id in surface_ids {
+            if let Some(sign) = self.denominator_surface_signs.remove(surface_id)
                 && sign < 0
             {
                 self.prefactor *= Atom::num(sign);
@@ -1033,16 +1028,18 @@ where
         self
     }
 
-    pub fn select_esurface_residue(
+    pub fn select_surface_residue(
         mut self,
-        raised_esurface_group: &impl RaisedEsurfaceGroupView,
+        surface_ids: &[HybridSurfaceID],
+        max_occurrence: usize,
     ) -> Vec<ThreeDExpression<O, E, H>>
     where
         E: Clone,
         H: Clone,
     {
-        // Threshold residues are taken with respect to the canonical
-        // E-surface variable used by the local counterterm. This is the
+        // Residues are taken with respect to the selected canonical surface.
+        // Threshold counterterms select E-surfaces; equilibrium LU cuts may
+        // also select signed H-surfaces. This is the
         // positive-energy Cutkosky convention: if the selected generated
         // denominator carries an overall sign, consuming it moves that sign
         // into the residue prefactor without touching spectator-denominator
@@ -1050,41 +1047,34 @@ where
         // Powered-pole generation is completed in this same causal basis.
         // A future LTD or local-series coordinate remains a separate backend
         // and must not change physical CFF residue selection here.
-        self.normalize_single_raising(raised_esurface_group);
+        self.normalize_single_raising(surface_ids);
 
-        let representative_esurface_id = raised_esurface_group.esurface_ids()[0];
+        let representative_surface_id = surface_ids[0];
 
         let mut result = vec![];
-        for occurrence in 1..=raised_esurface_group.max_occurrence() {
+        for occurrence in 1..=max_occurrence {
             let mut new_expression = self.clone();
 
             for orientation in new_expression.orientations.iter_mut() {
                 orientation.variants.retain_mut(|variant| {
-                    let numerator_count = variant.numerator_value_count(
-                        &HybridSurfaceID::Esurface(representative_esurface_id),
-                    );
+                    let numerator_count = variant.numerator_value_count(&representative_surface_id);
                     variant.denominator.keep_branches_with_value_count_mut(
-                        &HybridSurfaceID::Esurface(representative_esurface_id),
+                        &representative_surface_id,
                         occurrence + numerator_count,
                     );
 
-                    variant.clear_selected_denominator_surface_sign(raised_esurface_group);
+                    variant.clear_selected_denominator_surface_sign(surface_ids);
 
-                    variant
-                        .denominator
-                        .map_mut(|hybrid_surface_id| match hybrid_surface_id {
-                            HybridSurfaceID::Esurface(esurface_id)
-                                if *esurface_id == representative_esurface_id =>
-                            {
-                                *hybrid_surface_id = HybridSurfaceID::Unit;
-                            }
-                            _ => (),
-                        });
+                    variant.denominator.map_mut(|surface_id| {
+                        if *surface_id == representative_surface_id {
+                            *surface_id = HybridSurfaceID::Unit;
+                        }
+                    });
 
                     if numerator_count > 0 {
-                        variant.numerator_surfaces.retain(|surface_id| {
-                            *surface_id != HybridSurfaceID::Esurface(representative_esurface_id)
-                        });
+                        variant
+                            .numerator_surfaces
+                            .retain(|surface_id| *surface_id != representative_surface_id);
                     }
                     variant.denominator.get_num_nodes() != 0
                 });
@@ -1096,46 +1086,34 @@ where
         result
     }
 
-    pub fn normalize_single_raising(
-        &mut self,
-        raised_esurface_group: &impl RaisedEsurfaceGroupView,
-    ) {
-        let representative_esurface_id = raised_esurface_group.esurface_ids()[0];
+    pub fn normalize_single_raising(&mut self, surface_ids: &[HybridSurfaceID]) {
+        let representative_surface_id = surface_ids[0];
 
         for orientation in self.orientations.iter_mut() {
             for variant in &mut orientation.variants {
                 let mut representative_sign = 1;
-                for esurface_id in raised_esurface_group.esurface_ids() {
-                    if let Some(sign) = variant
-                        .denominator_surface_signs
-                        .remove(&HybridSurfaceID::Esurface(*esurface_id))
-                    {
+                for surface_id in surface_ids {
+                    if let Some(sign) = variant.denominator_surface_signs.remove(surface_id) {
                         representative_sign *= sign;
                     }
                 }
                 if representative_sign < 0 {
-                    variant.denominator_surface_signs.insert(
-                        HybridSurfaceID::Esurface(representative_esurface_id),
-                        representative_sign,
-                    );
+                    variant
+                        .denominator_surface_signs
+                        .insert(representative_surface_id, representative_sign);
                 }
 
                 for surface_id in &mut variant.numerator_surfaces {
-                    if let HybridSurfaceID::Esurface(esurface_id) = surface_id
-                        && raised_esurface_group.esurface_ids().contains(esurface_id)
-                    {
-                        *esurface_id = representative_esurface_id;
+                    if surface_ids.contains(surface_id) {
+                        *surface_id = representative_surface_id;
                     }
                 }
             }
             orientation.for_each_denominator_tree_mut(|denominator| {
-                denominator.map_mut(|hybrid_surface_id| match hybrid_surface_id {
-                    HybridSurfaceID::Esurface(esurface_id)
-                        if raised_esurface_group.esurface_ids().contains(esurface_id) =>
-                    {
-                        *hybrid_surface_id = HybridSurfaceID::Esurface(representative_esurface_id);
+                denominator.map_mut(|surface_id| {
+                    if surface_ids.contains(surface_id) {
+                        *surface_id = representative_surface_id;
                     }
-                    _ => (),
                 });
             });
         }
@@ -1316,6 +1294,54 @@ mod tests {
             numerator_surfaces: Vec::new(),
             denominator: Tree::from_root(HybridSurfaceID::Unit),
         }
+    }
+
+    #[test]
+    fn raised_hsurface_residue_preserves_thermal_weights_and_spectator_signs() {
+        let mut expression = ThreeDExpression::<OrientationID>::new_empty();
+        let data = OrientationData::new(EdgeVec::from_iter([Orientation::Undirected]));
+        let mut orientation = OrientationExpression::lower_sector_unit(data);
+        let [selected, alias, spectator] =
+            [0, 1, 2].map(|id| HybridSurfaceID::Hsurface(crate::surface::HsurfaceID(id)));
+        let mut variant = cut_variant(&[], &[]);
+        variant.thermal_weight = crate::ThermalWeight {
+            medium_mode: crate::MediumMode::ThermodynamicEquilibrium,
+            numerators: vec![crate::ThermalNumerator {
+                positive_energies: vec![EdgeIndex(0)],
+                negative_energies: vec![EdgeIndex(1)],
+            }],
+            distributions: Vec::new(),
+        };
+        let weight = variant.thermal_weight.clone();
+        variant.denominator = [selected, alias, alias]
+            .into_iter()
+            .rev()
+            .fold(Tree::from_root(spectator), |tree, surface| {
+                Tree::from_root_with_child_trees(surface, vec![tree])
+            });
+        variant.numerator_surfaces = vec![selected];
+        variant.denominator_surface_signs = BTreeMap::from([(selected, -1), (spectator, -1)]);
+        orientation.variants = vec![variant];
+        expression.orientations.push(orientation);
+
+        let residues = expression.select_surface_residue(&[selected, alias], 2);
+        assert!(
+            residues[0].orientations[OrientationID(0)]
+                .variants
+                .is_empty()
+        );
+        let variants = &residues[1].orientations[OrientationID(0)].variants;
+        assert_eq!(variants.len(), 1);
+        let variant = &variants[0];
+        assert_eq!(variant.thermal_weight, weight);
+        assert!(variant.numerator_surfaces.is_empty());
+        assert_eq!(variant.prefactor, -rational_coeff_one());
+        assert_eq!(
+            variant.denominator_surface_signs,
+            BTreeMap::from([(spectator, -1)])
+        );
+        assert_eq!(variant.denominator.max_value_count_on_branch(&spectator), 1);
+        assert_eq!(variant.denominator.max_value_count_on_branch(&selected), 0);
     }
 
     #[test]

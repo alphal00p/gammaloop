@@ -583,7 +583,7 @@ pub(crate) fn safeguarded_newton_iteration_and_derivative<T: FloatLike>(
     let two = inside_radius.from_i64(2);
     let maximum_residual = inside_radius.epsilon() * tolerance * e_cm;
     let (inside_value, _) = f_x_and_df_x(inside_radius);
-    if !is_finite(&inside_value) || inside_value >= -maximum_residual.clone() {
+    if !is_finite(&inside_value) || inside_value >= zero {
         return Err(SafeguardedNewtonError::InvalidInside {
             radius: inside_radius.clone(),
             value: inside_value,
@@ -678,6 +678,108 @@ pub(crate) fn safeguarded_newton_iteration_and_derivative<T: FloatLike>(
     }
 
     unreachable!("safeguarded Newton loop always returns")
+}
+
+/// Isolate every simple root in a finite interval using enclosures of the derivative.
+/// Same-sign endpoints alone cannot exclude a pair of crossings. Subdivide until
+/// each interval either excludes zero or has a certified monotone derivative,
+/// then reuse the bracketed Newton solver. Unresolved/tangent roots are errors,
+/// not silently omitted channels. The caller owns the derivative enclosure.
+pub(crate) fn all_roots_in_interval<T: FloatLike>(
+    lower: &F<T>,
+    upper: &F<T>,
+    function: impl Fn(&F<T>) -> (F<T>, F<T>),
+    derivative_bounds: impl Fn(&F<T>, &F<T>) -> (F<T>, F<T>),
+) -> eyre::Result<Vec<NewtonIterationResult<T>>> {
+    let zero = lower.zero();
+    let two = lower.from_i64(2);
+    let tolerance = lower.from_i64(64);
+    let mut pending = vec![(
+        lower.clone(),
+        upper.clone(),
+        function(lower),
+        function(upper),
+    )];
+    let mut roots = Vec::new();
+    let mut visited = 0;
+    while let Some((left, right, left_data, right_data)) = pending.pop() {
+        visited += 1;
+        let (minimum, maximum) = derivative_bounds(&left, &right);
+        if !is_finite(&minimum)
+            || !is_finite(&maximum)
+            || !is_finite(&left_data.0)
+            || !is_finite(&right_data.0)
+        {
+            return Err(eyre::eyre!(
+                "Non-finite radial root enclosure in [{left}, {right}]"
+            ));
+        }
+        let increasing = minimum >= zero;
+        let decreasing = maximum <= zero;
+        if increasing || decreasing {
+            for (radius, (value, derivative)) in [(&left, &left_data), (&right, &right_data)] {
+                if value == &zero {
+                    if derivative == &zero || !is_finite(derivative) {
+                        return Err(eyre::eyre!("Non-simple radial root at {radius}"));
+                    }
+                    roots.push(NewtonIterationResult {
+                        solution: radius.clone(),
+                        derivative_at_solution: derivative.clone(),
+                        error_of_function: value.clone(),
+                        num_iterations_used: 0,
+                    });
+                }
+            }
+            if (left_data.0 < zero && right_data.0 > zero)
+                || (left_data.0 > zero && right_data.0 < zero)
+            {
+                let sign = if increasing {
+                    lower.one()
+                } else {
+                    -lower.one()
+                };
+                let mut root = safeguarded_newton_iteration_and_derivative(
+                    &left,
+                    &right,
+                    |radius| {
+                        let (value, derivative) = function(radius);
+                        (value * &sign, derivative * &sign)
+                    },
+                    &tolerance,
+                    256,
+                    0,
+                    &lower.one(),
+                )
+                .map_err(|error| eyre::eyre!("Radial root in [{left}, {right}]: {error}"))?;
+                root.derivative_at_solution *= &sign;
+                root.error_of_function *= sign;
+                roots.push(root);
+            }
+            continue;
+        }
+
+        let midpoint = (&left + &right) / &two;
+        let midpoint_data = function(&midpoint);
+        let half_width = (&right - &left) / &two;
+        // The mean-value theorem bounds both halves, even if the derivative
+        // changes sign between the endpoints.
+        let reach = minimum.abs().max(maximum.abs()) * &half_width;
+        let rounding =
+            lower.epsilon() * &tolerance * (midpoint_data.0.abs() + &reach + lower.one());
+        if midpoint_data.0.abs() > reach + rounding {
+            continue;
+        }
+        if visited >= 16384 || midpoint == left || midpoint == right {
+            return Err(eyre::eyre!(
+                "Cannot isolate simple radial roots in [{left}, {right}]; increase precision"
+            ));
+        }
+        pending.push((midpoint.clone(), right, midpoint_data.clone(), right_data));
+        pending.push((left, midpoint, left_data, midpoint_data));
+    }
+    roots.sort_by(|a, b| a.solution.partial_cmp(&b.solution).unwrap());
+    roots.dedup_by(|a, b| a.solution == b.solution);
+    Ok(roots)
 }
 
 /// root finding, returns the derivative at the root, so that we don't have to recompute it.
@@ -819,6 +921,46 @@ mod tests {
             64,
             &one,
         )
+    }
+
+    #[test]
+    fn signed_root_isolation_preserves_quad_precision_and_rejects_tangencies() {
+        let zero = F::<f128>::default();
+        let one = zero.one();
+        let two = zero.from_i64(2);
+        let half = one / two;
+        let quarter = half / two;
+        let upper_root = one - quarter;
+        let roots = all_roots_in_interval(
+            &zero,
+            &one,
+            |x| ((x - quarter) * (x - upper_root), two * x - one),
+            |a, b| (two * a - one, two * b - one),
+        )
+        .unwrap();
+        assert_eq!(roots.len(), 2);
+        for (root, expected) in roots.iter().zip([quarter, upper_root]) {
+            assert!((root.solution - expected).abs() < one.epsilon() * one.from_i64(128));
+        }
+        assert!(
+            all_roots_in_interval(
+                &zero,
+                &one,
+                |x| ((x - half) * (x - half) + quarter, two * x - one),
+                |a, b| (two * a - one, two * b - one),
+            )
+            .unwrap()
+            .is_empty()
+        );
+        assert!(
+            all_roots_in_interval(
+                &zero,
+                &one,
+                |x| ((x - half) * (x - half), two * x - one),
+                |a, b| (two * a - one, two * b - one),
+            )
+            .is_err()
+        );
     }
 
     #[test]

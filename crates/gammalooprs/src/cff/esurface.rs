@@ -9,6 +9,7 @@ use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Flow, HedgePair};
 use linnet::half_edge::subgraph::OrientedCut;
 use ref_ops::RefNeg;
 use serde::{Deserialize, Serialize};
+use spenso::algebra::algebraic_traits::IsZero;
 
 use symbolica::atom::{Atom, AtomCore};
 use symbolica::domains::dual::HyperDual;
@@ -34,6 +35,7 @@ use crate::momentum::sample::{
 };
 use crate::processes::CrossSectionCut;
 use crate::utils::hyperdual_utils::new_constant;
+use crate::utils::newton_solver::{NewtonIterationResult, all_roots_in_interval};
 use crate::utils::{
     DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, ESURFACE_SHIFT_THRESHOLD, F, FloatLike, GS,
     compute_loop_part, compute_loop_part_subspace, compute_shift_part, compute_shift_part_subspace,
@@ -249,6 +251,7 @@ impl Esurface {
         real_mass_vector: &EdgeVec<F<T>>,
         dual_loop_moms: &LoopMomenta<HyperDual<F<T>>>,
         dual_external_moms: &ExternalFourMomenta<HyperDual<F<T>>>,
+        negative_energies: &[EdgeIndex],
     ) -> HyperDual<F<T>> {
         let spatial_part_of_externals = dual_external_moms
             .iter()
@@ -265,7 +268,12 @@ impl Esurface {
                     .unwrap_or_else(|| unreachable!());
                 let mass = &real_mass_vector[*index];
 
-                (momentum.norm_squared() + mass * mass).sqrt()
+                let energy = (momentum.norm_squared() + mass * mass).sqrt();
+                if negative_energies.contains(index) {
+                    -energy
+                } else {
+                    energy
+                }
             })
             .reduce(|acc, x| acc + x)
             .unwrap_or_else(|| dual_loop_moms[LoopIndex(0)].px.zero());
@@ -694,7 +702,128 @@ impl Esurface {
         (energy_sum + shift, derivative)
     }
 
+    /// Find all positive crossings of a signed cut, including disconnected radial
+    /// branches. Compactifying t = u/(1-u) makes the complete half-line finite:
+    /// (1-u) eta(t) is still a signed sum of norms of affine vectors. Each norm
+    /// is convex, so its endpoint derivatives enclose its derivative everywhere.
+    pub(crate) fn positive_radius_roots<T: FloatLike>(
+        &self,
+        loops: &LoopMomenta<F<T>>,
+        center: &LoopMomenta<F<T>>,
+        external_moms: &ExternalFourMomenta<F<T>>,
+        masses: &EdgeVec<F<T>>,
+        lmb: &LoopMomentumBasis,
+        negative_energies: &[EdgeIndex],
+    ) -> Result<Vec<NewtonIterationResult<T>>> {
+        let zero = external_moms[ExternalIndex(0)].temporal.value.zero();
+        let one = zero.one();
+        let external_spatial: ExternalThreeMomenta<F<T>> =
+            external_moms.iter().map(|p| p.spatial.clone()).collect();
+        let shift = self.compute_shift_part_from_momenta(external_moms, lmb);
+        let energies = self
+            .energies
+            .iter()
+            .map(|edge| {
+                let signature = &lmb.edge_signatures[*edge];
+                let origin = signature.compute_momentum(center, &external_spatial);
+                let direction = &compute_loop_part(&signature.internal, loops) - &origin;
+                let mass_squared = &masses[*edge] * &masses[*edge];
+                let slope_bound = (direction.norm_squared() + &mass_squared).sqrt();
+                let sign = zero.from_i64(if negative_energies.contains(edge) {
+                    -1
+                } else {
+                    1
+                });
+                (origin, direction, mass_squared, slope_bound, sign)
+            })
+            .collect_vec();
+        let scale = energies.iter().fold(
+            shift.abs() + &one,
+            |sum, (origin, direction, mass_squared, _, _)| {
+                sum + (origin.norm_squared() + mass_squared).sqrt()
+                    + (origin + direction).norm_squared().sqrt()
+            },
+        );
+        let energy_at = |u: &F<T>, index: usize| {
+            let (origin, direction, mass_squared, slope_bound, _) = &energies[index];
+            let remainder = &one - u;
+            let momentum = origin + direction * u;
+            let energy = (momentum.norm_squared() + mass_squared * &remainder * &remainder).sqrt();
+            let derivative = if energy.is_zero() {
+                // At a massless cusp the two one-sided derivatives are +/-
+                // the norm of the affine direction; callers enclose both.
+                zero.clone()
+            } else {
+                (momentum * direction - mass_squared * remainder) / &energy
+            };
+            (energy, derivative, slope_bound)
+        };
+        let function = |u: &F<T>| {
+            let mut value = &shift * (&one - u);
+            let mut derivative = -&shift;
+            for (index, (_, _, _, _, sign)) in energies.iter().enumerate() {
+                let (energy, slope, _) = energy_at(u, index);
+                value += energy * sign;
+                derivative += slope * sign;
+            }
+            (value / &scale, derivative / &scale)
+        };
+        let derivative_bounds = |left: &F<T>, right: &F<T>| {
+            let mut minimum = -&shift;
+            let mut maximum = -&shift;
+            for (index, (_, _, _, _, sign)) in energies.iter().enumerate() {
+                let (left_energy, left_slope, slope_bound) = energy_at(left, index);
+                let (right_energy, right_slope, _) = energy_at(right, index);
+                // At the left endpoint only the right derivative matters and
+                // conversely at the right endpoint. Convexity encloses cusps
+                // strictly inside the interval without special sampling.
+                let lower = if left_energy.is_zero() {
+                    slope_bound.clone()
+                } else {
+                    left_slope
+                };
+                let upper = if right_energy.is_zero() {
+                    -slope_bound
+                } else {
+                    right_slope
+                };
+                if sign > &zero {
+                    minimum += lower;
+                    maximum += upper;
+                } else {
+                    minimum -= upper;
+                    maximum -= lower;
+                }
+            }
+            (minimum / &scale, maximum / &scale)
+        };
+        let roots = all_roots_in_interval(&zero, &one, function, derivative_bounds)?;
+        Ok(roots
+            .into_iter()
+            .filter(|root| root.solution > zero && root.solution < one)
+            .map(|root| {
+                let radius = &root.solution / (&one - &root.solution);
+                let (value, derivative) = self.compute_self_and_r_derivative(
+                    &radius,
+                    loops,
+                    center,
+                    external_moms,
+                    masses,
+                    lmb,
+                    negative_energies,
+                );
+                NewtonIterationResult {
+                    solution: radius,
+                    derivative_at_solution: derivative,
+                    error_of_function: value,
+                    num_iterations_used: root.num_iterations_used,
+                }
+            })
+            .collect())
+    }
+
     #[inline]
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn compute_self_and_r_derivative<T: FloatLike>(
         &self,
         radius: &F<T>,
@@ -703,6 +832,7 @@ impl Esurface {
         external_moms: &ExternalFourMomenta<F<T>>,
         real_mass_vector: &EdgeVec<F<T>>,
         lmb: &LoopMomentumBasis,
+        negative_energies: &[EdgeIndex],
     ) -> (F<T>, F<T>) {
         let spatial_part_of_externals: ExternalThreeMomenta<F<T>> = external_moms
             .iter()
@@ -732,7 +862,16 @@ impl Esurface {
 
                 let numerator = momentum * &unit_loop_part;
 
-                (numerator / &energy, energy)
+                let sign = radius.from_i64(if negative_energies.contains(&index) {
+                    -1
+                } else {
+                    1
+                });
+                if energy.is_zero() {
+                    (radius.zero(), radius.zero())
+                } else {
+                    (numerator / &energy * &sign, energy * sign)
+                }
             })
             .fold(
                 (radius.zero(), radius.zero()),
@@ -1187,6 +1326,140 @@ mod tests {
     };
 
     use super::{EsurfaceExistence, add_external_shifts};
+
+    #[test]
+    fn signed_lu_sunset_radial_roots_match_three_four_five_kinematics() {
+        use crate::momentum::{ThreeMomentum, sample::LoopMomenta};
+
+        let graph = dummy_hedge_graph(4);
+        let lmb = LoopMomentumBasis {
+            tree: SuBitGraph::empty(0),
+            loop_edges: vec![EdgeIndex(1), EdgeIndex(2)].into(),
+            ext_edges: vec![EdgeIndex(0)].into(),
+            edge_signatures: graph
+                .new_edgevec_from_iter([
+                    LoopExtSignature::from((vec![0, 0], vec![1])),
+                    LoopExtSignature::from((vec![1, 0], vec![0])),
+                    LoopExtSignature::from((vec![0, 1], vec![0])),
+                    LoopExtSignature::from((vec![-1, -1], vec![-1])),
+                ])
+                .unwrap(),
+        };
+        let surface = Esurface {
+            energies: vec![EdgeIndex(1), EdgeIndex(2), EdgeIndex(3)],
+            external_shift: vec![(EdgeIndex(0), -1)],
+            vertex_set: VertexSet::dummy(),
+        };
+        let loops: LoopMomenta<F<f64>> = [
+            ThreeMomentum {
+                px: F(3.0),
+                py: F(0.0),
+                pz: F(0.0),
+            },
+            ThreeMomentum {
+                px: F(0.0),
+                py: F(4.0),
+                pz: F(0.0),
+            },
+        ]
+        .into_iter()
+        .collect();
+        let center: LoopMomenta<F<f64>> = (0..2)
+            .map(|_| ThreeMomentum {
+                px: F(0.0),
+                py: F(0.0),
+                pz: F(0.0),
+            })
+            .collect();
+        let masses = graph.new_edgevec_from_iter([F(0.0); 4]).unwrap();
+        for (negative, slope) in [
+            (vec![], 12.0),
+            (vec![EdgeIndex(1)], 6.0),
+            (vec![EdgeIndex(2)], 4.0),
+            (vec![EdgeIndex(3)], 2.0),
+        ] {
+            let external = [FourMomentum::from_args(F(1.0), F(0.0), F(0.0), F(0.0))]
+                .into_iter()
+                .collect();
+            let roots = surface
+                .positive_radius_roots(&loops, &center, &external, &masses, &lmb, &negative)
+                .unwrap();
+            assert_eq!(roots.len(), 1);
+            let root = &roots[0];
+            assert!((root.solution.0 - 1.0 / slope).abs() < 1e-12);
+            assert!((root.derivative_at_solution.0 - slope).abs() < 1e-12);
+        }
+        // With a unit z boost, the scattering equation is
+        // 7t - sqrt(25t^2 + 1) = sqrt(2); only the larger quadratic root is physical.
+        let external = [FourMomentum::from_args(
+            F(2.0_f64.sqrt()),
+            F(0.0),
+            F(0.0),
+            F(1.0),
+        )]
+        .into_iter()
+        .collect();
+        let negative = [EdgeIndex(3)];
+        let roots = surface
+            .positive_radius_roots(&loops, &center, &external, &masses, &lmb, &negative)
+            .unwrap();
+        assert_eq!(roots.len(), 1);
+        let root = &roots[0];
+        let expected = (14.0 * 2.0_f64.sqrt() + 296.0_f64.sqrt()) / 48.0;
+        assert!((root.solution.0 - expected).abs() < 1e-12);
+        assert!(root.error_of_function.0.abs() < 1e-12);
+    }
+
+    #[test]
+    fn signed_lu_sunset_retains_both_positive_radial_crossings() {
+        use crate::momentum::ThreeMomentum;
+        let graph = dummy_hedge_graph(4);
+        let lmb = LoopMomentumBasis {
+            tree: SuBitGraph::empty(0),
+            loop_edges: vec![EdgeIndex(1), EdgeIndex(2)].into(),
+            ext_edges: vec![EdgeIndex(0)].into(),
+            edge_signatures: graph
+                .new_edgevec_from_iter([
+                    LoopExtSignature::from((vec![0, 0], vec![1])),
+                    LoopExtSignature::from((vec![1, 0], vec![0])),
+                    LoopExtSignature::from((vec![0, 1], vec![0])),
+                    LoopExtSignature::from((vec![-1, -1], vec![-1])),
+                ])
+                .unwrap(),
+        };
+        let surface = Esurface {
+            energies: vec![EdgeIndex(1), EdgeIndex(2), EdgeIndex(3)],
+            external_shift: vec![(EdgeIndex(0), -1)],
+            vertex_set: VertexSet::dummy(),
+        };
+        let loops = [
+            ThreeMomentum::new(F(1.0), F(0.0), F(0.0)),
+            ThreeMomentum::new(F(0.805), F((1.0_f64 - 0.805 * 0.805).sqrt()), F(0.0)),
+        ]
+        .into_iter()
+        .collect();
+        let center = [ThreeMomentum::new(F(0.0), F(0.0), F(0.0)); 2]
+            .into_iter()
+            .collect();
+        let external = [FourMomentum::from_args(F(1.0), F(0.0), F(0.0), F(0.0))]
+            .into_iter()
+            .collect();
+        let masses = graph
+            .new_edgevec_from_iter([F(1.0), F(1.0), F(1.0), F(0.0)])
+            .unwrap();
+        // 2 sqrt(t^2 + 1) - 1.9 t - 1 has two positive roots, even though
+        // its values at both zero and infinity are positive.
+        let roots = surface
+            .positive_radius_roots(&loops, &center, &external, &masses, &lmb, &[EdgeIndex(3)])
+            .unwrap();
+        assert_eq!(roots.len(), 2);
+        for (root, sign) in roots.iter().zip([-1.0, 1.0]) {
+            let expected = (3.8 + sign * 9.76_f64.sqrt()) / 0.78;
+            assert!((root.solution.0 - expected).abs() < 1e-11);
+            assert!(root.error_of_function.0.abs() < 1e-12);
+            assert!(root.derivative_at_solution.0 * sign > 0.0);
+        }
+    }
 
     #[test]
     fn classification_preserves_the_previous_existing_predicate() {

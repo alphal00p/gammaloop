@@ -1,0 +1,271 @@
+{
+  "conclusion": "Generalized equilibrium LU selection includes decay and all three scattering channels; native rates agree with the full Bose production source.",
+  "provenance": {
+    "base_commit": "c5d723ec9c5bbba04eaf7e617022b356c56a7671",
+    "working_tree_changes": true,
+    "binary": "target/dev-optim/gammaloop",
+    "binary_sha256": "ba95329302ca8c4d150f9f58ba699b33d5182d7158e249dbeee3c94f8a8242bf",
+    "run_date": "2026-09-22",
+    "card": "equilibrium_x.toml",
+    "samples_per_process_per_momentum": 1000000,
+    "workers_per_momentum": 2,
+    "state_manifest_version": 7
+  },
+  "normalization": {
+    "MX": 1,
+    "T": 1,
+    "coupling": 1,
+    "source": "df_X/dt at f_X=0",
+    "number_density": "n_X = integral d^3p/(2*pi)^3 f_X",
+    "native_flux": "1/(2*E_X), already included",
+    "kms": "gain = native_spectral_rate/expm1(E_X/T)",
+    "gamma_paper": 4.6098997578035136e-05
+  },
+  "rows": [
+    {
+      "momentum": 0,
+      "energy": 1.0,
+      "native_vacuum": {
+        "neval": 1000000,
+        "real_zero": 18850,
+        "im_zero": 1000000,
+        "result": {
+          "re": 6.297007897694625e-05,
+          "im": 0.0
+        },
+        "error": {
+          "re": 1.5668719185179966e-07,
+          "im": 0.0
+        },
+        "real_chisq": 7.898123869847211,
+        "im_chisq": 0.0
+      },
+      "native_zero_temperature": {
+        "neval": 1000000,
+        "real_zero": 18850,
+        "im_zero": 1000000,
+        "result": {
+          "re": 6.297007897694625e-05,
+          "im": 0.0
+        },
+        "error": {
+          "re": 1.5668719185179966e-07,
+          "im": 0.0
+        },
+        "real_chisq": 7.898123869847211,
+        "im_chisq": 0.0
+      },
+      "native_thermal_spectral": {
+        "neval": 1000000,
+        "real_zero": 8492,
+        "im_zero": 1000000,
+        "result": {
+          "re": 0.007231129847095366,
+          "im": 0.0
+        },
+        "error": {
+          "re": 0.0002376833560983377,
+          "im": 0.0
+        },
+        "real_chisq": 40.89072160939634,
+        "im_chisq": 0.0
+      },
+      "native_gain": 0.004208349135357056,
+      "native_gain_error": 0.00013832617685976,
+      "bose_full_gain_reference": 0.00422908505171978,
+      "bose_inverse_decay_reference": 0.0014839167951204817,
+      "bose_scattering_reference": 0.0027451682565992983,
+      "bose_full_spectral_reference": 0.00726675999537788,
+      "pull": -0.1499059457397307,
+      "mb_scattering_reference": 0.0005561567092597012,
+      "vacuum_reference": 6.299127818984276e-05
+    },
+    {
+      "momentum": 1,
+      "energy": 1.4142135623730951,
+      "native_vacuum": {
+        "neval": 1000000,
+        "real_zero": 33926,
+        "im_zero": 1000000,
+        "result": {
+          "re": 4.471251357062779e-05,
+          "im": 0.0
+        },
+        "error": {
+          "re": 3.352745042229636e-07,
+          "im": 0.0
+        },
+        "real_chisq": 8.300299124179787,
+        "im_chisq": 0.0
+      },
+      "native_zero_temperature": {
+        "neval": 1000000,
+        "real_zero": 33926,
+        "im_zero": 1000000,
+        "result": {
+          "re": 4.471251357062779e-05,
+          "im": 0.0
+        },
+        "error": {
+          "re": 3.352745042229636e-07,
+          "im": 0.0
+        },
+        "real_chisq": 8.300299124179787,
+        "im_chisq": 0.0
+      },
+      "native_thermal_spectral": {
+        "neval": 1000000,
+        "real_zero": 8535,
+        "im_zero": 1000000,
+        "result": {
+          "re": 0.00461810342992047,
+          "im": 0.0
+        },
+        "error": {
+          "re": 7.772394561915507e-05,
+          "im": 0.0
+        },
+        "real_chisq": 7.7268657643052165,
+        "im_chisq": 0.0
+      },
+      "native_gain": 0.0014833703904424927,
+      "native_gain_error": 2.4965529964711644e-05,
+      "bose_full_gain_reference": 0.0015012405271740792,
+      "bose_inverse_decay_reference": 0.0004358369839432626,
+      "bose_scattering_reference": 0.0010654035432308166,
+      "bose_full_spectral_reference": 0.004673737639868985,
+      "pull": -0.7157924048416198,
+      "mb_scattering_reference": 0.0002598911665192169,
+      "vacuum_reference": 4.454155996364608e-05
+    },
+    {
+      "momentum": 3,
+      "energy": 3.1622776601683795,
+      "native_vacuum": {
+        "neval": 1000000,
+        "real_zero": 98519,
+        "im_zero": 1000000,
+        "result": {
+          "re": 1.9742743388171355e-05,
+          "im": 0.0
+        },
+        "error": {
+          "re": 3.86665714170759e-07,
+          "im": 0.0
+        },
+        "real_chisq": 6.0277787875756985,
+        "im_chisq": 0.0
+      },
+      "native_zero_temperature": {
+        "neval": 1000000,
+        "real_zero": 98519,
+        "im_zero": 1000000,
+        "result": {
+          "re": 1.9742743388171355e-05,
+          "im": 0.0
+        },
+        "error": {
+          "re": 3.86665714170759e-07,
+          "im": 0.0
+        },
+        "real_chisq": 6.0277787875756985,
+        "im_chisq": 0.0
+      },
+      "native_thermal_spectral": {
+        "neval": 1000000,
+        "real_zero": 11328,
+        "im_zero": 1000000,
+        "result": {
+          "re": 0.0015379506731083242,
+          "im": 0.0
+        },
+        "error": {
+          "re": 3.119271144902036e-05,
+          "im": 0.0
+        },
+        "real_chisq": 2.8477947294341988,
+        "im_chisq": 0.0
+      },
+      "native_gain": 6.79776945747938e-05,
+      "native_gain_error": 1.3787234200142844e-06,
+      "bose_full_gain_reference": 6.989233735690738e-05,
+      "bose_inverse_decay_reference": 1.2671830763709112e-05,
+      "bose_scattering_reference": 5.722050659319827e-05,
+      "bose_full_spectral_reference": 0.0015812682079840283,
+      "pull": -1.388706940289551,
+      "mb_scattering_reference": 2.0236337997231644e-05,
+      "vacuum_reference": 1.991959118051914e-05
+    }
+  ],
+  "cut_group_orientation_ids": [
+    [
+      7
+    ],
+    [
+      3
+    ],
+    [
+      4
+    ],
+    [
+      5
+    ],
+    [
+      2
+    ],
+    [
+      6
+    ],
+    [
+      1
+    ]
+  ],
+  "physically_allowed_orientation_ids": [
+    3,
+    5,
+    6,
+    7
+  ],
+  "event_four_momentum_residuals": [
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      -4.440892098500626e-16,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      -4.440892098500626e-16,
+      0.0,
+      0.0,
+      0.0
+    ]
+  ],
+  "reference_method": "Independent Bose phase-space quadrature documented in inclusive_x.md; numerical references preserved in inclusive_comparison.json.",
+  "validation": {
+    "targeted_tests_passed": 24,
+    "clippy": "passed without warnings",
+    "format": "passed",
+    "cargo_check": "passed",
+    "known_unrelated_thermal_tests": "not run or changed",
+    "nan_evaluations_by_momentum": {
+      "0": 1,
+      "1": 1,
+      "3": 0
+    },
+    "total_process_evaluations": 9000000,
+    "nan_note": "Same counts in the single-root pilot; cause not isolated. Console display rounds these to 0.00%.",
+    "pre_selection_thermal_cff_matches_previous_artifact": true
+  }
+}

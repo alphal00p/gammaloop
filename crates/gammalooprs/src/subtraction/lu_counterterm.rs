@@ -2529,6 +2529,7 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
                                 .real_mass_vector,
                             &geometry.rstar_loop_momenta,
                             &geometry.external_moms,
+                            &[],
                         );
 
                         esurface_value.clone() * esurface_value
@@ -2563,6 +2564,7 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
                         .real_mass_vector,
                     &geometry.rstar_loop_momenta,
                     &geometry.external_moms,
+                    &[],
                 );
 
                 esurface_value.clone() * esurface_value

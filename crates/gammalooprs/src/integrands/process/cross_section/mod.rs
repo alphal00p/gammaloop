@@ -659,19 +659,9 @@ impl CrossSectionGraphTerm {
             ));
         }
 
-        let selected_generation_esurfaces = selected_generation_orientations
+        let selected_generation_surfaces = selected_generation_orientations
             .iter()
-            .flat_map(|orientation| {
-                orientation
-                    .iter_denominator_nodes()
-                    .filter_map(|tree_node| {
-                        if let HybridSurfaceID::Esurface(esurface_id) = tree_node.data {
-                            Some(esurface_id)
-                        } else {
-                            None
-                        }
-                    })
-            })
+            .flat_map(|orientation| orientation.iter_denominator_nodes().map(|node| node.data))
             .collect::<HashSet<_>>();
 
         let active_cut_groups: TiVec<CutGroupId, bool> = graph
@@ -681,10 +671,9 @@ impl CrossSectionGraphTerm {
             .iter()
             .map(|cut_group| {
                 cut_group
-                    .related_esurface_group
-                    .esurface_ids
+                    .surface_ids
                     .iter()
-                    .any(|esurface_id| selected_generation_esurfaces.contains(esurface_id))
+                    .any(|esurface_id| selected_generation_surfaces.contains(esurface_id))
             })
             .collect();
 
@@ -715,7 +704,8 @@ impl CrossSectionGraphTerm {
                     active_cut_groups[cut_group_id]
                         && (settings.generation.explicit_orientation_sum_only
                             || raised_group.esurface_ids.iter().any(|esurface_id| {
-                                selected_generation_esurfaces.contains(esurface_id)
+                                selected_generation_surfaces
+                                    .contains(&HybridSurfaceID::Esurface(*esurface_id))
                             }))
                 })
                 .collect();
@@ -726,7 +716,8 @@ impl CrossSectionGraphTerm {
                     active_cut_groups[cut_group_id]
                         && (settings.generation.explicit_orientation_sum_only
                             || raised_group.esurface_ids.iter().any(|esurface_id| {
-                                selected_generation_esurfaces.contains(esurface_id)
+                                selected_generation_surfaces
+                                    .contains(&HybridSurfaceID::Esurface(*esurface_id))
                             }))
                 })
                 .collect();
@@ -963,9 +954,7 @@ impl CrossSectionGraphTerm {
 
             let (evaluators, evaluator_timings) = LUCounterTermEvaluators::from_atoms(
                 ct_data,
-                graph.derived_data.cut_group_data.cut_groups[cut_group_id]
-                    .related_esurface_group
-                    .max_occurence,
+                graph.derived_data.cut_group_data.cut_groups[cut_group_id].max_occurrence,
                 threshold_helpers,
                 &graph.graph.param_builder,
                 settings,
@@ -1013,12 +1002,7 @@ impl CrossSectionGraphTerm {
             .cut_groups
             .iter()
             .map(|cut_group| {
-                generate_rstar_t_dependence_evaluator(
-                    cut_group
-                        .related_esurface_group
-                        .max_occurence
-                        .saturating_sub(1),
-                )
+                generate_rstar_t_dependence_evaluator(cut_group.max_occurrence.saturating_sub(1))
             })
             .collect::<Result<TiVec<CutGroupId, _>>>()?;
 
@@ -1176,6 +1160,7 @@ impl CrossSectionGraphTerm {
         momentum_sample: &MomentumSample<T>,
         cut_id: CutId,
         cut: &CrossSectionCut,
+        negative_energies: &[EdgeIndex],
     ) -> Result<GenericEvent<T>> {
         let rescaled_momenta =
             momentum_sample.rescaled_loop_momenta(&t_scaling_solution.solution, Subspace::None);
@@ -1266,6 +1251,8 @@ impl CrossSectionGraphTerm {
                 eyre!("Cut legs in Local Unitarity must have a particle specifier.")
             })?;
 
+            let absorbed = negative_energies.contains(&eid);
+            let cut_flow = if absorbed { -cut_flow } else { cut_flow };
             let cut_pdg = match cut_flow {
                 Flow::Source => edge_pdg,
                 Flow::Sink => {
@@ -1298,13 +1285,18 @@ impl CrossSectionGraphTerm {
                 d.data.name, p, d.orientation, cut_flow, cut_pdg, cut_four_momentum,
             );
 
-            new_event.kinematic_configuration.1.push(cut_four_momentum);
-            new_event.cut_info.particle_pdgs.1.push(
-                self.covariant_cut_representatives
-                    .get(&cut_pdg)
-                    .copied()
-                    .unwrap_or(cut_pdg),
-            );
+            let observable_pdg = self
+                .covariant_cut_representatives
+                .get(&cut_pdg)
+                .copied()
+                .unwrap_or(cut_pdg);
+            if absorbed {
+                new_event.kinematic_configuration.0.push(cut_four_momentum);
+                new_event.cut_info.particle_pdgs.0.push(observable_pdg);
+            } else {
+                new_event.kinematic_configuration.1.push(cut_four_momentum);
+                new_event.cut_info.particle_pdgs.1.push(observable_pdg);
+            }
         }
 
         Ok(new_event)
@@ -1496,7 +1488,8 @@ impl GraphTerm for CrossSectionGraphTerm {
         let hel = context.settings.kinematics.externals.get_helicities();
         let mut cut_results: TiVec<CutGroupId, Vec<Complex<F<T>>>> =
             ti_vec![Vec::new(); self.cut_group_data.cut_groups.len()];
-        let mut cut_threshold_counterterms = TiVec::<CutGroupId, Complex<F<T>>>::new();
+        let mut cut_threshold_counterterms =
+            ti_vec![Complex::new_re(momentum_sample.zero()); self.cut_group_data.cut_groups.len()];
         let mut differential_result = GraphEvaluationResult::zero(momentum_sample.zero());
         let mut accepted_event_group = GenericEventGroup::default();
 
@@ -1535,13 +1528,10 @@ impl GraphTerm for CrossSectionGraphTerm {
         );
 
         for (cut_group_id, cut_group) in self.cut_group_data.cut_groups.iter_enumerated() {
-            let max_occurrence = cut_group.related_esurface_group.max_occurence;
+            let max_occurrence = cut_group.max_occurrence;
+            cut_results[cut_group_id] =
+                vec![Complex::new_re(momentum_sample.zero()); max_occurrence];
             if !self.counterterm.cut_group_is_active(cut_group_id) {
-                let zero = Complex::new_re(momentum_sample.zero());
-                for _ in 1..=max_occurrence {
-                    cut_results[cut_group_id].push(zero.clone());
-                }
-                cut_threshold_counterterms.push(zero);
                 continue;
             }
             crate::debug_tags!(#integration, #cut;
@@ -1555,341 +1545,391 @@ impl GraphTerm for CrossSectionGraphTerm {
                 representative_esurface
             );
 
-            let function = |t: &F<T>| {
-                representative_esurface.compute_self_and_r_derivative(
-                    t,
+            if !cut_group.negative_energies.is_empty() {
+                let outgoing = representative_esurface
+                    .energies
+                    .iter()
+                    .filter(|edge| !cut_group.negative_energies.contains(edge))
+                    .collect_vec();
+                if let [edge] = outgoing.as_slice() {
+                    let total_incoming = momentum_sample
+                        .external_moms()
+                        .iter()
+                        .cloned()
+                        .reduce(|left, right| left + right)
+                        .expect("LU cuts require incoming momenta");
+                    let invariant = total_incoming.square();
+                    if invariant > momentum_sample.zero() {
+                        let minimum_mass = invariant.sqrt()
+                            + representative_esurface
+                                .energies
+                                .iter()
+                                .filter(|edge| cut_group.negative_energies.contains(edge))
+                                .map(|edge| masses[*edge].clone())
+                                .fold(momentum_sample.zero(), |sum, mass| sum + mass);
+                        if masses[**edge] <= minimum_mass {
+                            continue;
+                        }
+                    }
+                }
+            }
+
+            let solutions = if cut_group.negative_energies.is_empty() {
+                let (guess, _) = representative_esurface.get_radius_guess(
+                    momentum_sample.loop_moms(),
+                    momentum_sample.external_moms(),
+                    &self.graph.loop_momentum_basis,
+                );
+                vec![newton_iteration_and_derivative(
+                    &guess,
+                    |t| {
+                        representative_esurface.compute_self_and_r_derivative(
+                            t,
+                            momentum_sample.loop_moms(),
+                            &center,
+                            momentum_sample.external_moms(),
+                            &masses,
+                            &self.graph.loop_momentum_basis,
+                            &[],
+                        )
+                    },
+                    &momentum_sample.one(),
+                    2000,
+                    &F::from_f64(context.settings.kinematics.e_cm),
+                )]
+            } else {
+                representative_esurface.positive_radius_roots(
                     momentum_sample.loop_moms(),
                     &center,
                     momentum_sample.external_moms(),
                     &masses,
                     &self.graph.loop_momentum_basis,
-                )
+                    &cut_group.negative_energies,
+                )?
             };
-
-            let (guess, _) = representative_esurface.get_radius_guess(
-                momentum_sample.loop_moms(),
-                momentum_sample.external_moms(),
-                &self.graph.loop_momentum_basis,
-            );
-
-            let solution = newton_iteration_and_derivative(
-                &guess,
-                function,
-                &F::from_f64(1.0),
-                2000,
-                &F::from_f64(context.settings.kinematics.e_cm),
-            );
-
             crate::debug_tags!(#integration, #cut, #solver;
-                "tolerance for newton solver: {}",
-                F::from_f64(context.settings.kinematics.e_cm) * guess.epsilon()
+                "solutions: {:?}", solutions
             );
 
-            crate::debug_tags!(#integration, #cut, #solver;
-                "solution: {:?}",
-                solution
-            );
+            for solution in solutions {
+                let prepared_event = prepare_buffered_event(
+                    context.settings,
+                    context.rotation,
+                    context.event_processing_runtime.as_deref_mut(),
+                    || {
+                        let mut generated = self.generate_event_for_cut::<T>(
+                            CutEventGenerationContext {
+                                settings: context.settings,
+                                model: context.model,
+                                channel_id: context
+                                    .channel_id
+                                    .as_ref()
+                                    .map(|(channel_id, _, _)| *channel_id),
+                            },
+                            &solution,
+                            &momentum_sample,
+                            self.cut_group_data.cut_groups[cut_group_id].cuts[0],
+                            &self.cuts[self.cut_group_data.cut_groups[cut_group_id].cuts[0]],
+                            &cut_group.negative_energies,
+                        )?;
+                        generated.inverse_rotate(context.rotation);
+                        Ok(generated)
+                    },
+                )?;
+                differential_result.generated_event_count += prepared_event.generated_event_count;
+                differential_result.accepted_event_count += prepared_event.accepted_event_count;
+                differential_result.event_processing_time += prepared_event.event_processing_time;
 
-            let prepared_event = prepare_buffered_event(
-                context.settings,
-                context.rotation,
-                context.event_processing_runtime.as_deref_mut(),
-                || {
-                    let mut generated = self.generate_event_for_cut::<T>(
-                        CutEventGenerationContext {
-                            settings: context.settings,
-                            model: context.model,
-                            channel_id: context
-                                .channel_id
-                                .as_ref()
-                                .map(|(channel_id, _, _)| *channel_id),
-                        },
-                        &solution,
-                        &momentum_sample,
-                        self.cut_group_data.cut_groups[cut_group_id].cuts[0],
-                        &self.cuts[self.cut_group_data.cut_groups[cut_group_id].cuts[0]],
-                    )?;
-                    generated.inverse_rotate(context.rotation);
-                    Ok(generated)
-                },
-            )?;
-            differential_result.generated_event_count += prepared_event.generated_event_count;
-            differential_result.accepted_event_count += prepared_event.accepted_event_count;
-            differential_result.event_processing_time += prepared_event.event_processing_time;
-
-            if !prepared_event.selectors_pass {
-                let zero = Complex::new_re(momentum_sample.zero());
-                for _ in 1..=max_occurrence {
-                    cut_results[cut_group_id].push(zero.clone());
+                if !prepared_event.selectors_pass {
+                    continue;
                 }
-                cut_threshold_counterterms.push(zero);
-                continue;
-            }
 
-            let accepted_event = prepared_event.buffered_event;
-            let mut bare_cut_total = Complex::new_re(momentum_sample.zero());
-            let mut threshold_counterterm_weights = Vec::with_capacity(max_occurrence);
-            let mut kinematic_point = LUCTKinematicPoint::new(momentum_sample.clone());
-            // LMB channel weights partition the fully subtracted LU-cut integrand. Apply the
-            // sampling partition after the raised-residue derivatives: it is not part of the
-            // differentiated physical integrand. This is distinct from the overlap-group
-            // multi-channeling internal to threshold subtraction.
-            let lmb_channel_prefactor = Complex::new_re(
-                if let Some((channel_index, alpha, channel_weight)) = &context.channel_id {
-                    let parameterization_settings = context
-                        .settings
-                        .sampling
-                        .get_parameterization_settings()
-                        .expect("LMB multichanneling requires a parameterization.");
-                    let weighting_settings = LmbChannelWeightingSettings {
-                        graph_name: &self.multi_channeling_setup.graph.name,
-                        model: context.model,
-                        alpha,
-                        channel_weight: *channel_weight,
-                        parameterization_settings: &parameterization_settings,
-                        e_cm: context.settings.kinematics.e_cm,
-                    };
-                    let selected_lmb = self.multi_channeling_setup.effective_channel_lmb_id(
-                        *channel_index,
-                        &self.multi_channeling_setup.graph.name,
-                        &parameterization_settings,
-                    )?;
-                    let cut_momentum_sample =
-                        momentum_sample.rescaled_loop_momenta(&solution.solution, Subspace::None);
-
-                    self.multi_channeling_setup.compute_prefactor_impl(
-                        *channel_index,
-                        selected_lmb,
-                        &cut_momentum_sample,
-                        weighting_settings,
-                    )?
-                } else {
-                    momentum_sample.one()
-                },
-            );
-            for num_esurfaces in 1..=max_occurrence {
-                let dual_shape = if num_esurfaces > 1 {
-                    Some(HyperDual::<F<T>>::new(
-                        self.cut_group_data.dual_shapes[num_esurfaces - 2].clone(),
-                    ))
-                } else {
-                    None
-                };
-
-                let (tstar, h_function, esurface_derivatives, rescaled_momenta) =
-                    if let Some(dual_shape) = dual_shape {
-                        let dual_t_for_integrand =
-                            dual_shape.variable(0, solution.solution.clone());
-                        let dual_h_function = h_dual(
-                            &dual_t_for_integrand,
-                            None,
-                            None,
-                            &context.settings.lu_h_function,
-                        );
-                        let dual_momenta_for_integrand = momentum_sample
-                            .loop_moms()
-                            .rescale_with_hyper_dual(&dual_t_for_integrand, None);
-
-                        let dual_shape_for_esurface =
-                            HyperDual::<F<T>>::new(simple_n_deriv_shape(num_esurfaces));
-
-                        let dual_t_for_esurface =
-                            dual_shape_for_esurface.variable(0, solution.solution.clone());
-                        let dual_momenta_for_esurface = momentum_sample
-                            .loop_moms()
-                            .rescale_with_hyper_dual(&dual_t_for_esurface, None);
-
-                        let dual_externals = momentum_sample
-                            .external_moms()
-                            .iter()
-                            .map(|mom| FourMomentum {
-                                temporal: Energy {
-                                    value: new_constant(&dual_t_for_esurface, &mom.temporal.value),
-                                },
-                                spatial: ThreeMomentum {
-                                    px: new_constant(&dual_t_for_esurface, &mom.spatial.px),
-                                    py: new_constant(&dual_t_for_esurface, &mom.spatial.py),
-                                    pz: new_constant(&dual_t_for_esurface, &mom.spatial.pz),
-                                },
-                            })
-                            .collect();
-
-                        let dual_e_surface = representative_esurface.compute_from_dual_momenta(
-                            &self.graph.loop_momentum_basis,
-                            &masses,
-                            &dual_momenta_for_esurface,
-                            &dual_externals,
-                        );
-
-                        let mut momentum_sample_with_duals = momentum_sample.clone();
-                        momentum_sample_with_duals.sample.dual_loop_moms =
-                            Some(dual_momenta_for_integrand);
-
-                        (
-                            DualOrNot::Dual(dual_t_for_integrand),
-                            DualOrNot::Dual(dual_h_function),
-                            DualOrNot::Dual(dual_e_surface),
-                            momentum_sample_with_duals,
-                        )
-                    } else {
-                        let h_function = h(
-                            &solution.solution,
-                            None,
-                            None,
-                            &context.settings.lu_h_function,
-                        );
-                        let rescaled_momenta = momentum_sample
+                let accepted_event = prepared_event.buffered_event;
+                let mut bare_cut_total = Complex::new_re(momentum_sample.zero());
+                let mut threshold_counterterm_weights = Vec::with_capacity(max_occurrence);
+                let mut kinematic_point = LUCTKinematicPoint::new(momentum_sample.clone());
+                // LMB channel weights partition the fully subtracted LU-cut integrand. Apply the
+                // sampling partition after the raised-residue derivatives: it is not part of the
+                // differentiated physical integrand. This is distinct from the overlap-group
+                // multi-channeling internal to threshold subtraction.
+                let lmb_channel_prefactor = Complex::new_re(
+                    if let Some((channel_index, alpha, channel_weight)) = &context.channel_id {
+                        let parameterization_settings = context
+                            .settings
+                            .sampling
+                            .get_parameterization_settings()
+                            .expect("LMB multichanneling requires a parameterization.");
+                        let weighting_settings = LmbChannelWeightingSettings {
+                            graph_name: &self.multi_channeling_setup.graph.name,
+                            model: context.model,
+                            alpha,
+                            channel_weight: *channel_weight,
+                            parameterization_settings: &parameterization_settings,
+                            e_cm: context.settings.kinematics.e_cm,
+                        };
+                        let selected_lmb = self.multi_channeling_setup.effective_channel_lmb_id(
+                            *channel_index,
+                            &self.multi_channeling_setup.graph.name,
+                            &parameterization_settings,
+                        )?;
+                        let cut_momentum_sample = momentum_sample
                             .rescaled_loop_momenta(&solution.solution, Subspace::None);
 
-                        (
-                            DualOrNot::NonDual(solution.solution.clone()),
-                            DualOrNot::NonDual(h_function),
-                            DualOrNot::NonDual(solution.derivative_at_solution.clone()),
-                            rescaled_momenta,
-                        )
+                        self.multi_channeling_setup.compute_prefactor_impl(
+                            *channel_index,
+                            selected_lmb,
+                            &cut_momentum_sample,
+                            weighting_settings,
+                        )?
+                    } else {
+                        momentum_sample.one()
+                    },
+                );
+                for num_esurfaces in 1..=max_occurrence {
+                    let dual_shape = if num_esurfaces > 1 {
+                        Some(HyperDual::<F<T>>::new(
+                            self.cut_group_data.dual_shapes[num_esurfaces - 2].clone(),
+                        ))
+                    } else {
+                        None
                     };
 
-                debug!("tstar: {}", tstar);
-                debug!("h(tstar): {}", h_function);
-                debug!("esurface derivative at tstar: {}", esurface_derivatives);
+                    let (tstar, h_function, esurface_derivatives, rescaled_momenta) =
+                        if let Some(dual_shape) = dual_shape {
+                            let dual_t_for_integrand =
+                                dual_shape.variable(0, solution.solution.clone());
+                            let dual_h_function = h_dual(
+                                &dual_t_for_integrand,
+                                None,
+                                None,
+                                &context.settings.lu_h_function,
+                            );
+                            let dual_momenta_for_integrand = momentum_sample
+                                .loop_moms()
+                                .rescale_with_hyper_dual(&dual_t_for_integrand, None);
 
-                let lu_params = LUParams { h_function, tstar };
+                            let dual_shape_for_esurface =
+                                HyperDual::<F<T>>::new(simple_n_deriv_shape(num_esurfaces));
 
-                if !context.settings.subtraction.disable_threshold_subtraction {
-                    kinematic_point
-                        .dualized_momentum_sample_cache
-                        .push(rescaled_momenta.clone());
-                    kinematic_point
-                        .lu_cut_parameter_cache
-                        .push(lu_params.clone());
-                    kinematic_point
-                        .lu_cut_esurface_values
-                        .push(esurface_derivatives.clone());
-                }
+                            let dual_t_for_esurface =
+                                dual_shape_for_esurface.variable(0, solution.solution.clone());
+                            let dual_momenta_for_esurface = momentum_sample
+                                .loop_moms()
+                                .rescale_with_hyper_dual(&dual_t_for_esurface, None);
 
-                let params = T::get_parameters(
-                    &mut self.param_builder,
-                    (
-                        context.settings.general.enable_cache,
-                        context.settings.general.debug_cache,
-                    ),
-                    &self.graph,
-                    &rescaled_momenta,
-                    hel,
-                    &context.settings.additional_params(),
-                    None,
-                    None,
-                    Some(&lu_params),
-                );
-                let cut_index = CutCFFIndex {
-                    lu_cut_order: Some(num_esurfaces),
-                    left_threshold_order: None,
-                    right_threshold_order: None,
-                };
+                            let dual_externals = momentum_sample
+                                .external_moms()
+                                .iter()
+                                .map(|mom| FourMomentum {
+                                    temporal: Energy {
+                                        value: new_constant(
+                                            &dual_t_for_esurface,
+                                            &mom.temporal.value,
+                                        ),
+                                    },
+                                    spatial: ThreeMomentum {
+                                        px: new_constant(&dual_t_for_esurface, &mom.spatial.px),
+                                        py: new_constant(&dual_t_for_esurface, &mom.spatial.py),
+                                        pz: new_constant(&dual_t_for_esurface, &mom.spatial.pz),
+                                    },
+                                })
+                                .collect();
 
-                let result = self.integrand[cut_group_id]
-                    .get_mut(&cut_index)
-                    .unwrap()
-                    .evaluate(
-                        params,
-                        orientations,
-                        context.settings,
+                            let mut dual_e_surface = representative_esurface
+                                .compute_from_dual_momenta(
+                                    &self.graph.loop_momentum_basis,
+                                    &masses,
+                                    &dual_momenta_for_esurface,
+                                    &dual_externals,
+                                    &cut_group.negative_energies,
+                                );
+
+                            if cut_group.surface_sign < 0 {
+                                dual_e_surface = -dual_e_surface;
+                            }
+
+                            let mut momentum_sample_with_duals = momentum_sample.clone();
+                            momentum_sample_with_duals.sample.dual_loop_moms =
+                                Some(dual_momenta_for_integrand);
+
+                            (
+                                DualOrNot::Dual(dual_t_for_integrand),
+                                DualOrNot::Dual(dual_h_function),
+                                DualOrNot::Dual(dual_e_surface),
+                                momentum_sample_with_duals,
+                            )
+                        } else {
+                            let h_function = h(
+                                &solution.solution,
+                                None,
+                                None,
+                                &context.settings.lu_h_function,
+                            );
+                            let rescaled_momenta = momentum_sample
+                                .rescaled_loop_momenta(&solution.solution, Subspace::None);
+
+                            (
+                                DualOrNot::NonDual(solution.solution.clone()),
+                                DualOrNot::NonDual(h_function),
+                                DualOrNot::NonDual(
+                                    solution.derivative_at_solution.clone()
+                                        * momentum_sample
+                                            .one()
+                                            .from_i64(i64::from(cut_group.surface_sign)),
+                                ),
+                                rescaled_momenta,
+                            )
+                        };
+
+                    debug!("tstar: {}", tstar);
+                    debug!("h(tstar): {}", h_function);
+                    debug!("esurface derivative at tstar: {}", esurface_derivatives);
+
+                    let lu_params = LUParams { h_function, tstar };
+
+                    if !context.settings.subtraction.disable_threshold_subtraction {
+                        kinematic_point
+                            .dualized_momentum_sample_cache
+                            .push(rescaled_momenta.clone());
+                        kinematic_point
+                            .lu_cut_parameter_cache
+                            .push(lu_params.clone());
+                        kinematic_point
+                            .lu_cut_esurface_values
+                            .push(esurface_derivatives.clone());
+                    }
+
+                    let params = T::get_parameters(
+                        &mut self.param_builder,
+                        (
+                            context.settings.general.enable_cache,
+                            context.settings.general.debug_cache,
+                        ),
+                        &self.graph,
+                        &rescaled_momenta,
+                        hel,
+                        &context.settings.additional_params(),
+                        None,
+                        None,
+                        Some(&lu_params),
+                    );
+                    let cut_index = CutCFFIndex {
+                        lu_cut_order: Some(num_esurfaces),
+                        left_threshold_order: None,
+                        right_threshold_order: None,
+                    };
+
+                    let result = self.integrand[cut_group_id]
+                        .get_mut(&cut_index)
+                        .unwrap()
+                        .evaluate(
+                            params,
+                            orientations,
+                            context.settings,
+                            context.evaluation_metadata,
+                            context.record_primary_timing,
+                        )?
+                        .pop()
+                        .ok_or_else(|| eyre!("Evaluator returned no cut result"))?;
+
+                    debug!("pass 1 result {}", result);
+
+                    let mut params_for_pass_two = vec![];
+                    match result {
+                        DualOrNot::Dual(dual_result) => {
+                            params_for_pass_two
+                                .extend_from_slice(&extract_t_derivatives_complex(dual_result));
+                        }
+                        DualOrNot::NonDual(non_dual_result) => {
+                            params_for_pass_two.push(non_dual_result);
+                        }
+                    }
+
+                    match esurface_derivatives {
+                        DualOrNot::Dual(dual_e_surface) => {
+                            extract_t_derivatives(dual_e_surface)[1..]
+                                .iter()
+                                .for_each(|v| {
+                                    params_for_pass_two.push(Complex::new_re(v.clone()));
+                                });
+                        }
+                        DualOrNot::NonDual(non_dual_e_surface) => {
+                            params_for_pass_two.push(Complex::new_re(non_dual_e_surface));
+                        }
+                    }
+
+                    let pass_two_evaluator =
+                        &mut self.cut_group_data.pass_two_evaluators[num_esurfaces - 1];
+
+                    let pass_two_result = evaluate_evaluator_single(
+                        pass_two_evaluator,
+                        &params_for_pass_two,
                         context.evaluation_metadata,
                         context.record_primary_timing,
-                    )?
-                    .pop()
-                    .ok_or_else(|| eyre!("Evaluator returned no cut result"))?;
+                    );
 
-                debug!("pass 1 result {}", result);
+                    debug!("pass_two_result: {:+16e}", pass_two_result);
+                    //debug!("param builder for cut {}: \n{}", cut, self.param_builder);
 
-                let mut params_for_pass_two = vec![];
-                match result {
-                    DualOrNot::Dual(dual_result) => {
-                        params_for_pass_two
-                            .extend_from_slice(&extract_t_derivatives_complex(dual_result));
-                    }
-                    DualOrNot::NonDual(non_dual_result) => {
-                        params_for_pass_two.push(non_dual_result);
-                    }
-                }
-
-                match esurface_derivatives {
-                    DualOrNot::Dual(dual_e_surface) => {
-                        extract_t_derivatives(dual_e_surface)[1..]
-                            .iter()
-                            .for_each(|v| {
-                                params_for_pass_two.push(Complex::new_re(v.clone()));
-                            });
-                    }
-                    DualOrNot::NonDual(non_dual_e_surface) => {
-                        params_for_pass_two.push(Complex::new_re(non_dual_e_surface));
-                    }
-                }
-
-                let pass_two_evaluator =
-                    &mut self.cut_group_data.pass_two_evaluators[num_esurfaces - 1];
-
-                let pass_two_result = evaluate_evaluator_single(
-                    pass_two_evaluator,
-                    &params_for_pass_two,
-                    context.evaluation_metadata,
-                    context.record_primary_timing,
-                );
-
-                debug!("pass_two_result: {:+16e}", pass_two_result);
-                //debug!("param builder for cut {}: \n{}", cut, self.param_builder);
-
-                let bare_contribution = pass_two_result * lmb_channel_prefactor.clone();
-                bare_cut_total += bare_contribution.clone();
-                cut_results[cut_group_id].push(bare_contribution);
-            }
-
-            let ct_result = if context.settings.subtraction.disable_threshold_subtraction {
-                Complex::new_re(momentum_sample.zero())
-            } else {
-                self.counterterm.evaluate(
-                    &kinematic_point,
-                    cut_group_id,
-                    &self.reversed_edges[cut_group_id],
-                    &self.lmbs,
-                    &self.graph,
-                    &self.graph.get_real_mass_vector(context.model),
-                    context.rotation,
-                    context.settings,
-                    &mut self.param_builder,
-                    orientations,
-                    context.evaluation_metadata,
-                    context.record_primary_timing,
-                )? * lmb_channel_prefactor.clone()
-            };
-
-            threshold_counterterm_weights.push(ct_result.clone());
-            cut_threshold_counterterms.push(ct_result.clone());
-
-            if let Some(mut event) = accepted_event {
-                let threshold_counterterm_total = threshold_counterterm_weights
-                    .iter()
-                    .fold(Complex::new_re(momentum_sample.zero()), |acc, value| {
-                        acc + value.clone()
-                    });
-                event.weight = bare_cut_total.clone() + threshold_counterterm_total;
-
-                if context.settings.general.store_additional_weights_in_event {
-                    event
-                        .additional_weights
-                        .weights
-                        .insert(AdditionalWeightKey::Original, bare_cut_total);
-                    for (subset_index, threshold_counterterm) in
-                        threshold_counterterm_weights.into_iter().enumerate()
+                    let jacobian_sign = if solution.derivative_at_solution < momentum_sample.zero()
                     {
-                        event.additional_weights.weights.insert(
-                            AdditionalWeightKey::ThresholdCounterterm { subset_index },
-                            threshold_counterterm,
-                        );
-                    }
+                        -momentum_sample.one()
+                    } else {
+                        momentum_sample.one()
+                    };
+                    let bare_contribution =
+                        pass_two_result * lmb_channel_prefactor.clone() * jacobian_sign;
+                    bare_cut_total += bare_contribution.clone();
+                    cut_results[cut_group_id][num_esurfaces - 1] += bare_contribution;
                 }
 
-                accepted_event_group.push(event);
+                let ct_result = if context.settings.subtraction.disable_threshold_subtraction {
+                    Complex::new_re(momentum_sample.zero())
+                } else {
+                    self.counterterm.evaluate(
+                        &kinematic_point,
+                        cut_group_id,
+                        &self.reversed_edges[cut_group_id],
+                        &self.lmbs,
+                        &self.graph,
+                        &self.graph.get_real_mass_vector(context.model),
+                        context.rotation,
+                        context.settings,
+                        &mut self.param_builder,
+                        orientations,
+                        context.evaluation_metadata,
+                        context.record_primary_timing,
+                    )? * lmb_channel_prefactor.clone()
+                };
+
+                threshold_counterterm_weights.push(ct_result.clone());
+                cut_threshold_counterterms[cut_group_id] += ct_result.clone();
+
+                if let Some(mut event) = accepted_event {
+                    let threshold_counterterm_total = threshold_counterterm_weights
+                        .iter()
+                        .fold(Complex::new_re(momentum_sample.zero()), |acc, value| {
+                            acc + value.clone()
+                        });
+                    event.weight = bare_cut_total.clone() + threshold_counterterm_total;
+
+                    if context.settings.general.store_additional_weights_in_event {
+                        event
+                            .additional_weights
+                            .weights
+                            .insert(AdditionalWeightKey::Original, bare_cut_total);
+                        for (subset_index, threshold_counterterm) in
+                            threshold_counterterm_weights.into_iter().enumerate()
+                        {
+                            event.additional_weights.weights.insert(
+                                AdditionalWeightKey::ThresholdCounterterm { subset_index },
+                                threshold_counterterm,
+                            );
+                        }
+                    }
+
+                    accepted_event_group.push(event);
+                }
             }
         }
 
