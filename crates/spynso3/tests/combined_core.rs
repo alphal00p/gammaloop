@@ -173,6 +173,9 @@ notation_source = "#let trusted-notation-sentinel = 42"
 
 html = spenso.to_html(expression, notation_source=notation_source)
 assert "<math" in html
+assert "data:font" not in html
+assert "@font-face" not in html
+assert len(html.encode()) < 10_000
 files, format, pretty = typst.calls[-1]
 assert files["notation.typ"] == notation_source.encode()
 assert files["render.typ"]
