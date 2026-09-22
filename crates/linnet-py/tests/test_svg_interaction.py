@@ -55,7 +55,8 @@ class SvgInteractionTests(unittest.TestCase):
         }
         self.assertEqual(
             identities,
-            {("node", 0), ("node", 1), ("node", 2), ("edge", 0), ("edge", 1)},
+            {("node", 0), ("node", 1), ("node", 2), ("edge", 0), ("edge", 1)}
+            | {("halfedge", half.index) for half in self.graph.half_edges()},
         )
         focusable = Counter(
             (target.attrib["data-linnet-kind"], int(target.attrib["data-linnet-id"]))
@@ -86,9 +87,57 @@ class SvgInteractionTests(unittest.TestCase):
                 and target.attrib["data-linnet-id"] == "0"
             ):
                 self.assertEqual(detail["particle"], self.unsafe_edge)
+            if target.attrib["data-linnet-kind"] == "halfedge":
+                half = self.graph.half_edge(int(target.attrib["data-linnet-id"]))
+                self.assertEqual(detail["half-edge"], half.index)
+                self.assertEqual(detail["node"], half.node.index)
+                self.assertEqual(detail["edge"], half.edge.index)
+                self.assertEqual(
+                    detail["pair"], None if half.pair is None else half.pair.index
+                )
         self.assertEqual(len(root.findall(".//" + SVG + "script")), 1)
         self.assertIsNone(root.find(".//*[@id='injected-node']"))
         self.assertIsNone(root.find(".//*[@id='injected-edge']"))
+
+    def test_dangling_and_self_loop_half_edges_keep_native_identity(self):
+        for shape in ("incoming", "outgoing", "self_loop"):
+            with self.subTest(shape=shape):
+                vertex = lp.node("v")
+                endpoints = (
+                    (lp.sink(vertex),)
+                    if shape == "incoming"
+                    else (lp.source(vertex),)
+                    if shape == "outgoing"
+                    else (lp.source(vertex), lp.sink(vertex))
+                )
+                graph = lp.build(
+                    vertex,
+                    lp.edge(endpoints[0], shape, *endpoints[1:]),
+                )
+                root = ET.fromstring(graph.to_svg())
+                targets = root.findall(".//*[@data-linnet-kind='halfedge']")
+                self.assertEqual(
+                    {int(target.get("data-linnet-id")) for target in targets},
+                    {half.index for half in graph.half_edges()},
+                )
+                for target in targets:
+                    half = graph.half_edge(int(target.get("data-linnet-id")))
+                    detail = json.loads(target.get("data-linnet-detail"))
+                    self.assertEqual(detail["edge"], half.edge.index)
+                    self.assertEqual(detail["node"], half.node.index)
+                    self.assertEqual(
+                        detail["flow"],
+                        "source" if half.flow == lp.Flow.Source else "sink",
+                    )
+                    if half.pair is None:
+                        self.assertIsNone(detail["pair"])
+                        self.assertEqual(
+                            graph.subgraph(half_edges=[half.index]).half_edge_indices(),
+                            graph.subgraph(edges=[half.edge.index]).half_edge_indices(),
+                        )
+                    else:
+                        self.assertEqual(detail["pair"], half.pair.index)
+                        self.assertNotEqual(detail["pair"], half.index)
 
     def test_native_drawing_geometry_and_paints_are_unchanged(self):
         compiled = []

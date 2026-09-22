@@ -61,22 +61,41 @@
   ))
 }
 
-#let _edge-identity-targets(ctx, segments, href) = {
+#let _edge-identity-targets(ctx, parts, hrefs) = {
   let targets = ()
-  if segments != none {
-    for segment in segments {
-      // The maximum control-polygon step bounds the cubic's derivative, so
-      // adjacent targets overlap even on highly nonuniform curves.
-      let speed = 3 * calc.max(
-        _point-distance(segment.start, segment.control-start),
-        _point-distance(segment.control-start, segment.control-end),
-        _point-distance(segment.control-end, segment.end),
-      )
-      let steps = calc.max(1, int(calc.ceil(speed * ctx.length / 4pt)))
-      for step in range(steps + 1) {
-        targets += _identity-target(curve-api.cubic-point(segment, step / steps), href)
+  let lengths = parts.map(part => curve-api.length(
+    curve-api.path(..part.segments.map(curve-api.from-cubic)),
+  ))
+  let total = lengths.sum()
+  let offset = 0
+  for (part, length) in parts.zip(lengths) {
+    if part.visible and length > 0 {
+      let path = curve-api.path(..part.segments.map(curve-api.from-cubic))
+      // Pick the endpoint half-edges in the outer quarters of arc length.
+      // Keep the two central quarters separately tagged for half-edge highlighting.
+      for quarter in range(4) {
+        let start = calc.max(0, total * quarter / 4 - offset)
+        let end = calc.min(length, total * (quarter + 1) / 4 - offset)
+        if start >= end { continue }
+        let region = curve-api.trim(path, start-outset: start, end-outset: length - end)
+        for segment in curve-api.segments(region) {
+          // The maximum control-polygon step bounds the cubic's derivative, so
+          // adjacent targets overlap even on highly nonuniform curves.
+          let speed = 3 * calc.max(
+            _point-distance(segment.start, segment.control-start),
+            _point-distance(segment.control-start, segment.control-end),
+            _point-distance(segment.control-end, segment.end),
+          )
+          let steps = calc.max(1, int(calc.ceil(speed * ctx.length / 4pt)))
+          for step in range(steps + 1) {
+            targets += _identity-target(
+              curve-api.cubic-point(segment, step / steps), hrefs.at(quarter),
+            )
+          }
+        }
       }
     }
+    offset += length
   }
   targets
 }
@@ -2947,6 +2966,7 @@
               and source-half-edge.node == sink-half-edge.node
           )
           let details = (
+            edge: edge.edge,
             source: if source-half-edge == none { none } else { source-half-edge.node },
             sink: if sink-half-edge == none { none } else { sink-half-edge.node },
             orientation: edge.orientation,
@@ -2961,6 +2981,22 @@
             }
           }
           let href = _identity-href("edge", edge.edge, details)
+          let half-hrefs = ()
+          let edge-hrefs = ()
+          for (side, half-edge, pair) in (
+            ("source", source-half-edge, sink-half-edge),
+            ("sink", sink-half-edge, source-half-edge),
+          ) {
+            let owner = if half-edge == none { pair } else { half-edge }
+            let half-details = details + ("half-edge": owner.hedge)
+            edge-hrefs.push(_identity-href("edge", edge.edge, half-details))
+            half-hrefs.push(_identity-href("halfedge", owner.hedge, half-details + (
+              node: owner.node,
+              flow: if half-edge != none { side } else if side == "source" { "sink" } else { "source" },
+              pair: if half-edge == none or pair == none { none } else { pair.hedge },
+            )))
+          }
+          let hrefs = (half-hrefs.at(0), edge-hrefs.at(0), edge-hrefs.at(1), half-hrefs.at(1))
 
           for layer-index in range(0, layer-count) {
             let source-layer = _style-layer(source-style-layers, layer-index)
@@ -3069,11 +3105,16 @@
               if sink-label-segments == none and halves.sink.len() > 0 {
                 sink-label-segments = halves.sink
               }
-              for (segments, style) in ((halves.source, source-draw-style), (halves.sink, sink-draw-style)) {
-                if style != none and (_has-visible-stroke(style) or _has-mark(style)) {
-                  edge-targets += _edge-identity-targets(ctx, segments, href)
-                }
-              }
+              edge-targets += _edge-identity-targets(
+                ctx,
+                ((halves.source, source-draw-style), (halves.sink, sink-draw-style)).map(
+                  ((segments, style)) => (
+                    segments: segments,
+                    visible: style != none and (_has-visible-stroke(style) or _has-mark(style)),
+                  ),
+                ),
+                hrefs,
+              )
               if (
                 source-style-value != none
                   and not _style-value(source-style-value, "label-only")
@@ -3357,7 +3398,9 @@
                   elements.push(attached-label)
                 }
                 if _has-visible-stroke(draw-style) or _has-mark(draw-style) {
-                  edge-targets += _edge-identity-targets(ctx, curve-api.segments(visible-path), href)
+                  edge-targets += _edge-identity-targets(
+                    ctx, ((segments: curve-api.segments(visible-path), visible: true),), hrefs,
+                  )
                 }
               }
             } else if sink-half-edge != none {
@@ -3459,7 +3502,9 @@
                   elements.push(attached-label)
                 }
                 if _has-visible-stroke(draw-style) or _has-mark(draw-style) {
-                  edge-targets += _edge-identity-targets(ctx, curve-api.segments(visible-path), href)
+                  edge-targets += _edge-identity-targets(
+                    ctx, ((segments: curve-api.segments(visible-path), visible: true),), hrefs,
+                  )
                 }
               }
             }

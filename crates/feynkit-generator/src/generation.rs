@@ -11,12 +11,7 @@ use feynkit_graph::{
     VertexSlot,
 };
 use feynkit_model::{Model, ModelError, Particle, ParticleId, VertexRule, VertexRuleId};
-use idenso::{
-    color::CS,
-    dirac::AGS,
-    epsilon::EPSILON_SYMBOL,
-    representations::{Bispinor, ColorAdjoint, ColorFundamental, ColorSextet},
-};
+use idenso::{color::CS, dirac::AGS, epsilon::EPSILON_SYMBOL, representations::Bispinor};
 use linnet::half_edge::involution::Flow;
 use linnet::half_edge::subgraph::{InternalSubGraph, SuBitGraph, SubSetLike};
 use linnet::half_edge::{HedgeGraph, NodeIndex};
@@ -35,6 +30,8 @@ use symbolica::{
     symbol,
 };
 use thiserror::Error;
+
+use crate::color::ColorRepresentation;
 
 use crate::{
     FilterScope, GenerationFilter, GenerationFilterKind, GenerationOptions, GenerationType,
@@ -308,37 +305,6 @@ enum NumeratorOwner {
 enum NumeratorSector {
     Spin,
     Color,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ColorRepresentation {
-    Fundamental,
-    AntiFundamental,
-    Sextet,
-    AntiSextet,
-    Adjoint,
-}
-
-impl ColorRepresentation {
-    fn dual(self) -> Self {
-        match self {
-            Self::Fundamental => Self::AntiFundamental,
-            Self::AntiFundamental => Self::Fundamental,
-            Self::Sextet => Self::AntiSextet,
-            Self::AntiSextet => Self::Sextet,
-            Self::Adjoint => Self::Adjoint,
-        }
-    }
-
-    fn index(self, index: Atom) -> Atom {
-        match self {
-            Self::Fundamental => ColorFundamental {}.new_rep(3).to_symbolic([index]),
-            Self::AntiFundamental => ColorFundamental {}.dual().new_rep(3).to_symbolic([index]),
-            Self::Sextet => ColorSextet {}.new_rep(6).to_symbolic([index]),
-            Self::AntiSextet => ColorSextet {}.dual().new_rep(6).to_symbolic([index]),
-            Self::Adjoint => ColorAdjoint {}.new_rep(8).to_symbolic([index]),
-        }
-    }
 }
 
 impl fmt::Display for NumeratorOwner {
@@ -661,7 +627,7 @@ impl NumeratorInstantiation<'_> {
         let _ = (CS.t, CS.f, ETS.metric);
         let mut representations = HashMap::<String, ColorRepresentation>::new();
         for leg in self.legs {
-            if let Some(representation) = Self::vertex_color_representation(leg.color) {
+            if let Some(representation) = ColorRepresentation::from_ufo(leg.color) {
                 let index = self.index(*leg, 1)?;
                 self.assign_color_representation(
                     &mut representations,
@@ -848,7 +814,7 @@ impl NumeratorInstantiation<'_> {
     }
 
     fn edge_color_identity(&self, color: i64) -> Result<Option<Atom>, GenerationError> {
-        let Some(source_representation) = Self::vertex_color_representation(color) else {
+        let Some(source_representation) = ColorRepresentation::from_ufo(color) else {
             return Ok(None);
         };
         let source = self
@@ -947,17 +913,6 @@ impl NumeratorInstantiation<'_> {
                     && function.get_symbol().get_stripped_name() == name
                     && function.get_nargs() == 2
         )
-    }
-
-    fn vertex_color_representation(color: i64) -> Option<ColorRepresentation> {
-        match color {
-            3 => Some(ColorRepresentation::Fundamental),
-            -3 => Some(ColorRepresentation::AntiFundamental),
-            6 => Some(ColorRepresentation::Sextet),
-            -6 => Some(ColorRepresentation::AntiSextet),
-            8 => Some(ColorRepresentation::Adjoint),
-            _ => None,
-        }
     }
 
     fn assign_color_representation(

@@ -71,6 +71,38 @@ impl PyParticle {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyParticle {
+    /// Construct the identity on this particle's color space.
+    ///
+    /// The bare ``left`` index carries the particle representation; ``right``
+    /// carries its dual. Antiquarks and antisextets reverse the dual orientation.
+    /// Supports UFO singlet, fundamental, sextet and adjoint representations.
+    /// ``average=True`` divides by the number of color states (1, 3, 6 or 8).
+    /// This sums color only; spin sums and color-algebra simplification remain
+    /// separate operations. To close an existing tensor, use indices whose
+    /// slots are dual to the open color slots of that tensor.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> i, j = S("i", "j")
+    /// >>> color_projector = model.particle_by_pdg(5).color_sum(i, j, average=True)
+    /// >>> model.particle_by_pdg(11).color_sum(i, j) == 1
+    /// True
+    #[pyo3(signature = (left, right, *, average=false))]
+    fn color_sum(
+        &self,
+        left: &PythonExpression,
+        right: &PythonExpression,
+        average: bool,
+    ) -> PyResult<PythonExpression> {
+        let sum = feynkit_generator::ColorSum::new(self.inner())
+            .map_err(|error| PyValueError::new_err(error.to_string()))?
+            .averaged(average);
+        Ok(PythonExpression {
+            expr: sum.expression([left.expr.clone(), right.expr.clone()]),
+        })
+    }
+
     /// Construct this particle's external-state spin or polarization sum.
     ///
     /// Return an ordinary Symbolica expression using Spenso gamma matrices
