@@ -81,7 +81,25 @@
         "ToString",
         "Total"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "pending",
+      "validated_components": [
+        {
+          "scope": "generated massive photon self-energy: exact D-dimensional transverse form factor, UV pole, five finite-part and two-particle-cut checks; other renormalization components remain pending",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_photon_self_energy.py",
+          "components": [
+            "Generator.generate",
+            "FeynmanDiagram.integral_family",
+            "IntegralFamily.rewrite_numerator",
+            "IntegralFamily.mapping_to",
+            "TensorReducer.reduce",
+            "Idenso.simplify_gamma",
+            "Kinematics.apply",
+            "OneLOop.master_coefficients",
+            "Symbolica.evaluate"
+          ],
+          "result": "passed"
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/QED/OneLoop/RenormalizationMassless",
@@ -933,7 +951,7 @@
             "axial_reference": "incoming electron momentum",
             "axial_result": 1
           },
-          "diagnostic": "Reversing the incoming fermion density mass term restores the full massive reference in both gauges; the shared sewing boundary remains unresolved."
+          "diagnostic": "An isolated correction preserves the incoming sewing attachment and uses open-chain permutation parity (-1)^(n-c), without changing physical spin sums. All six public-API full-mass comparisons pass (both Compton charges in covariant and axial gauges, annihilation, and electron-muon scattering), as does GammaLoop runtime enrichment for both Compton charges. The correction is not installed: two existing native fixtures encode the reversed-carrier convention and await maintainer review."
         },
         {
           "scope": "generated massive electron and positron Compton amplitudes including interference, covariant and axial photon sums, and the massless limit",
