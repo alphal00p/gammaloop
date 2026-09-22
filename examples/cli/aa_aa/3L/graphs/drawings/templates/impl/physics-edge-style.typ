@@ -284,7 +284,10 @@
     }
   }
   if options.show-momentum {
-    pieces.push([$q_(#edge.eid)$])
+    let momentum = (api.momentum-value)(edge)
+    pieces.push(if momentum == none { [$q_(#edge.eid)$] } else {
+      (api.label-content)(momentum, edge, map: options.map, scope: options.scope)
+    })
   }
   if options.show-edge-index {
     pieces.push(_prefixed-content(

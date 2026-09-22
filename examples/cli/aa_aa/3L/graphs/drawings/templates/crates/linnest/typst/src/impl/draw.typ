@@ -45,6 +45,42 @@
   }
 }
 
+// Typst preserves links as transparent SVG rectangles. Floating content keeps
+// these identity targets out of the graph's bounds and visible drawing styles.
+#let _identity-href(kind, id, details) = {
+  // SVG link attributes escape quotes but need JSON escapes for XML metacharacters.
+  let details = json.encode(details).replace("&", "\\u0026").replace("<", "\\u003c").replace(">", "\\u003e")
+  "#linnet-" + kind + "-" + str(id) + "?" + details
+}
+
+#let _identity-target(pos, href, width: 8pt, height: 8pt) = {
+  cetz.draw.floating(cetz.draw.content(
+    _point(pos),
+    link(href, box(width: width, height: height)),
+    padding: 0,
+  ))
+}
+
+#let _edge-identity-targets(ctx, segments, href) = {
+  let targets = ()
+  if segments != none {
+    for segment in segments {
+      // The maximum control-polygon step bounds the cubic's derivative, so
+      // adjacent targets overlap even on highly nonuniform curves.
+      let speed = 3 * calc.max(
+        _point-distance(segment.start, segment.control-start),
+        _point-distance(segment.control-start, segment.control-end),
+        _point-distance(segment.control-end, segment.end),
+      )
+      let steps = calc.max(1, int(calc.ceil(speed * ctx.length / 4pt)))
+      for step in range(steps + 1) {
+        targets += _identity-target(curve-api.cubic-point(segment, step / steps), href)
+      }
+    }
+  }
+  targets
+}
+
 #let _graph-style(info) = {
   let data = info.at("data", default: none)
   if type(data) == dictionary {
@@ -1784,11 +1820,12 @@
   _layer-label(style, data) != none
 ))
 
-#let _layer-label-element(ctx, path, style, label-pos, data) = {
+#let _layer-label-element(ctx, path, style, label-pos, data, href) = {
   let label = _layer-label(style, data)
   if label == none {
     return none
   }
+  label = link(href, label)
   let edge = data.at("edge", default: none)
   let label-origin = if edge == none { none } else {
     edge.at("pos", default: none)
@@ -1870,6 +1907,7 @@
   sink-style,
   label-pos,
   data,
+  href,
 ) = {
   let source-label = _layer-label(source-style, data)
   let sink-label = _layer-label(sink-style, data)
@@ -1889,7 +1927,7 @@
   if segments.len() == 0 {
     none
   } else {
-    _layer-label-element(ctx, _segments-path(segments), style, label-pos, data)
+    _layer-label-element(ctx, _segments-path(segments), style, label-pos, data, href)
   }
 }
 
@@ -2628,6 +2666,8 @@
         let node-elements = ()
         let node-outsets = ()
         let node-boxes = ()
+        let node-targets = ()
+        let edge-targets = ()
         let debug-level = _debug-level(debug)
         let subgraph-records = _subgraph-records(
           graph,
@@ -2741,6 +2781,27 @@
                 ..node-label-draw-style,
               ))
             }
+          }
+          if not boundary {
+            let details = (
+              edges: edges.filter(e => (
+                (e.source != none and e.source.node == i)
+                  or (e.sink != none and e.sink.node == i)
+              )).map(e => e.edge),
+            )
+            let name = node-data.at("feynkit-name", default: node.name)
+            if name != none {
+              details.insert("name", str(name))
+            }
+            let label-size = if label == none { (width: 0pt, height: 0pt) } else {
+              measure(label)
+            }
+            node-targets += _identity-target(
+              pos,
+              _identity-href("node", i, details),
+              width: calc.max(10pt, node-width * ctx.length, label-size.width),
+              height: calc.max(10pt, node-height * ctx.length, label-size.height),
+            )
           }
         }
 
@@ -2885,6 +2946,21 @@
               and sink-half-edge != none
               and source-half-edge.node == sink-half-edge.node
           )
+          let details = (
+            source: if source-half-edge == none { none } else { source-half-edge.node },
+            sink: if sink-half-edge == none { none } else { sink-half-edge.node },
+            orientation: edge.orientation,
+          )
+          if edge.name != none {
+            details.insert("name", str(edge.name))
+          }
+          for key in ("particle", "pdg", "external-state", "external-index", "external-name", "momentum") {
+            let value = edge-data.at(key, default: none)
+            if type(value) in (str, int, float, bool) {
+              details.insert(key, value)
+            }
+          }
+          let href = _identity-href("edge", edge.edge, details)
 
           for layer-index in range(0, layer-count) {
             let source-layer = _style-layer(source-style-layers, layer-index)
@@ -2992,6 +3068,11 @@
               }
               if sink-label-segments == none and halves.sink.len() > 0 {
                 sink-label-segments = halves.sink
+              }
+              for (segments, style) in ((halves.source, source-draw-style), (halves.sink, sink-draw-style)) {
+                if style != none and (_has-visible-stroke(style) or _has-mark(style)) {
+                  edge-targets += _edge-identity-targets(ctx, segments, href)
+                }
               }
               if (
                 source-style-value != none
@@ -3168,6 +3249,7 @@
                 sink-draw-style,
                 label-pos,
                 edge-data,
+                href,
               )
               if attached-label != none {
                 elements.push(attached-label)
@@ -3269,9 +3351,13 @@
                   draw-style,
                   label-pos,
                   edge-data,
+                  href,
                 )
                 if attached-label != none {
                   elements.push(attached-label)
+                }
+                if _has-visible-stroke(draw-style) or _has-mark(draw-style) {
+                  edge-targets += _edge-identity-targets(ctx, curve-api.segments(visible-path), href)
                 }
               }
             } else if sink-half-edge != none {
@@ -3367,9 +3453,13 @@
                   draw-style,
                   label-pos,
                   edge-data,
+                  href,
                 )
                 if attached-label != none {
                   elements.push(attached-label)
+                }
+                if _has-visible-stroke(draw-style) or _has-mark(draw-style) {
+                  edge-targets += _edge-identity-targets(ctx, curve-api.segments(visible-path), href)
                 }
               }
             }
@@ -3382,6 +3472,12 @@
               padding: 0,
               ..edge-label-draw-style,
             ))
+            let size = measure(ev-label)
+            edge-targets += _identity-target(
+              label-pos, href,
+              width: calc.max(8pt, size.width),
+              height: calc.max(8pt, size.height),
+            )
           }
 
           for half-edge in (source-half-edge, sink-half-edge) {
@@ -3466,7 +3562,11 @@
           if overlay == none { () } else { overlay.flatten().filter(element => element != none) },
           compute-bounds: false,
         )
-        (ctx: after.ctx, drawables: rendered.drawables + after.drawables)
+        // Nodes come last so incident edge targets cannot intercept node hits.
+        let targets = cetz.process.many(
+          after.ctx, edge-targets + node-targets, compute-bounds: false,
+        )
+        (ctx: targets.ctx, drawables: rendered.drawables + after.drawables + targets.drawables)
       },
     ),
   )

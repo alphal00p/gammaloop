@@ -220,7 +220,6 @@ pub fn canonical_stub() -> pyo3_stub_gen::Result<String> {
     Python::initialize();
     let import_end_line = Python::attach(|py| -> PyResult<usize> {
         let ast = py.import("ast")?;
-        let imports = (ast.getattr("Import")?, ast.getattr("ImportFrom")?).into_pyobject(py)?;
         let mut import_end = 0;
         for node in ast
             .call_method1("parse", (&generated,))?
@@ -228,7 +227,7 @@ pub fn canonical_stub() -> pyo3_stub_gen::Result<String> {
             .try_iter()?
         {
             let node = node?;
-            if node.is_instance(&imports)? {
+            if matches!(node.get_type().name()?.to_str()?, "Import" | "ImportFrom") {
                 import_end = node.getattr("end_lineno")?.extract()?;
             }
         }

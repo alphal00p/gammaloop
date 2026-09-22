@@ -293,12 +293,26 @@
   }
 }
 
-/// Read a momentum metadata field; physics labels use the edge ID instead.
+/// Render a routed momentum signature, or read an explicit momentum field.
+/// Edges without routing metadata retain their edge-index label.
 /// -> none | any
-#let momentum-value(edge, fields: ("momentum", "mom", "q")) = _field-value(
-  edge,
-  fields,
-)
+#let momentum-value(edge, fields: ("momentum", "mom", "q")) = {
+  let signature = _field-value(edge, "momentum-signature")
+  if signature == none { return _field-value(edge, fields) }
+  let result = none
+  for (kind, coefficients) in (("k", signature.loops), ("p", signature.external)) {
+    for (index, coefficient) in coefficients.enumerate() {
+      if coefficient != 0 {
+        let label = if kind == "k" { [$k_(#index)$] } else { [$p_(#index)$] }
+        if calc.abs(coefficient) != 1 { label = [#calc.abs(coefficient)#label] }
+        result = if result == none {
+          if coefficient < 0 { [$-#label$] } else { label }
+        } else if coefficient < 0 { [#result $-$ #label] } else { [#result $+$ #label] }
+      }
+    }
+  }
+  if result == none { [$0$] } else { result }
+}
 
 /// Return the edge index used by optional edge labels. The DOT `id` statement
 /// wins over the renderer-local `eid`.

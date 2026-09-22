@@ -902,7 +902,7 @@
         "TimeUsed",
         "TrickMandelstam"
       ],
-      "end_to_end_validation": "pending: massive sewn initial-state projector fails",
+      "end_to_end_validation": "passed: generated ordinary amplitudes; sewn-forward conversion remains unresolved",
       "validated_components": [
         {
           "scope": "generated massless electron and positron Compton squared matrix elements with all four sewn contributions",
@@ -934,6 +934,22 @@
             "axial_result": 1
           },
           "diagnostic": "Reversing the incoming fermion density mass term restores the full massive reference in both gauges; the shared sewing boundary remains unresolved."
+        },
+        {
+          "scope": "generated massive electron and positron Compton amplitudes including interference, covariant and axial photon sums, and the massless limit",
+          "components": [
+            "Generator.generate",
+            "TensorExpression.dirac_adjoint",
+            "TensorExpression.wrap_indices",
+            "CookSettings.indices",
+            "Particle.spin_sum",
+            "TensorExpression.simplify_gamma",
+            "Kinematics.mandelstam"
+          ],
+          "result": "passed in installed host for both charges and both photon gauges",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_compton.py",
+          "reference_expression": "2*e^4*(-m^4*(3*s^2+14*s*u+3*u^2)+m^2*(s^3+7*s^2*u+7*s*u^2+u^3)+6*m^8-s*u*(s^2+u^2))/((s-m^2)^2*(u-m^2)^2)",
+          "massless_reference": "-2*e^4*(s/u+u/s)"
         }
       ]
     },

@@ -211,6 +211,7 @@
 // arrays; this layer never parses strings or evaluates source fragments.
 #let render-layout(
   config,
+  input: none,
   graph: none,
   renderer: none,
   physics: none,
@@ -218,7 +219,10 @@
   diagram-options: (:),
 ) = {
   let path = config.at("data-path", default: none)
-  if path == none { panic("render config requires data-path") }
+  if input == none {
+    if path == none { panic("render config requires data-path") }
+    input = read(path)
+  }
   let options = config.at("options", default: (:))
   let amplitude = options.at("amplitude-mode", default: false)
   let cross-section = options.at("cross-section-mode", default: false)
@@ -275,7 +279,7 @@
       + config.at("draw", default: (:))
   )
   layout(
-    read(path),
+    input,
     graph: graph,
     renderer: renderer,
     physics: physics,

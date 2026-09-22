@@ -37,7 +37,7 @@ Copy the package containing
 #source-link("crates/feynkit-py/python/symbolica/community/feynkit/__init__.py", label: "the Python wrapper")
 into the host's `python/symbolica/community` tree. Its wrapper imports the native module and
 calls the initializer. FeynKit itself must not declare another PyO3 extension entry point.
-Include `typst>=0.15,<0.16` in the host's display dependencies for automatic notebook figures;
+Include `linnet==0.1.0` and `typst>=0.15,<0.16` in the host's display dependencies for automatic notebook figures;
 include `ufo-model-loader` when offering raw UFO import.
 
 == Export the documented Python surface

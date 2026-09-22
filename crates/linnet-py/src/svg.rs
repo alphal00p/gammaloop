@@ -55,11 +55,13 @@ impl PreparedRender {
             // Keep the original transform and link geometry byte-for-byte. Removing the
             // destination prevents fragment navigation when scripts are unavailable.
             let mut opening = svg[range.start..open_end].to_owned();
-            if let Some(attribute) = node
+            let mut destinations = node
                 .attributes()
-                .find(|attribute| attribute.name() == "href")
-            {
-                let attribute = attribute.range();
+                .filter(|attribute| attribute.name() == "href")
+                .map(|attribute| attribute.range())
+                .collect::<Vec<_>>();
+            destinations.sort_by_key(|range| range.start);
+            for attribute in destinations.into_iter().rev() {
                 opening.replace_range(
                     attribute.start - range.start..attribute.end - range.start,
                     "",
@@ -124,5 +126,20 @@ mod tests {
     fn svg_without_graph_targets_is_unchanged() {
         let svg = "<svg xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M0 0\"/></svg>";
         assert_eq!(PreparedRender::interactive_svg(svg).unwrap(), svg);
+    }
+
+    #[test]
+    fn svg_identity_links_remove_both_destination_attributes() {
+        let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><a href="#linnet-edge-0" xlink:href="#linnet-edge-0"><rect width="3" height="3"/></a></svg>"##;
+        let output = PreparedRender::interactive_svg(svg).unwrap();
+        let document = roxmltree::Document::parse(&output).unwrap();
+        let target = document
+            .descendants()
+            .find(|node| node.has_tag_name("a"))
+            .unwrap();
+        assert!(target
+            .attributes()
+            .all(|attribute| attribute.name() != "href"));
+        assert_eq!(target.attribute("data-linnet-kind"), Some("edge"));
     }
 }

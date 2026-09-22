@@ -6,9 +6,10 @@
 For complete executable examples, open the #link("guides/showcases/")[FeynKit showcase gallery].
 
 Use a diagram produced by the #link("quickstart/python/")[Python quickstart]. Its
-`to_linnest()` method returns complete Typst source; it does not compile a figure. `to_svg()`,
+`to_linnest()` method returns complete Typst source; it does not compile a figure. `render()`,
 `to_html()`, `_repr_svg_()`, and `_repr_html_()` compile that source with Python's Typst package.
-Rendering uses Linnet’s Python preparation and compilation pipeline.
+Rendering uses Linnet’s Python preparation and compilation pipeline. `render()` replaces
+the earlier diagram `to_svg()` method and returns SVG text, including hover information.
 SVG figures have a transparent background. Their palette follows the browser's
 light/dark preference when opened separately; inline figures also follow explicit
 Marimo and Jupyter notebook themes. Both modes use the website diagram palette,
@@ -44,7 +45,7 @@ internal spacing; `--input external-label-length-scale=0.6` controls external la
 
 // docs-example: syntax
 ```sh
-python -m pip install "typst>=0.15,<0.16"
+python -m pip install "linnet==0.1.0" "typst>=0.15,<0.16"
 ```
 
 Save the resulting SVG or leave the diagram as the last value in a notebook cell:
@@ -53,10 +54,61 @@ Save the resulting SVG or leave the diagram as the last value in a notebook cell
 ```python
 from pathlib import Path
 
-Path("diagram.svg").write_text(diagram.to_svg(), encoding="utf-8")
+Path("diagram.svg").write_text(diagram.render(), encoding="utf-8")
 Path("diagram.typ").write_text(diagram.to_linnest(), encoding="utf-8")
 diagram
 ```
+
+Rendering controls use Linnet's existing typed groups. `layouts` contains solver and
+spacing settings, `drawing` controls the canvas and geometry, and `style` supplies
+node/edge styling. Physics controls belong in `template_options`, using the same
+hyphenated names as `just draw --input`: `show-particle`, `show-edge-index`,
+`show-node-index`, `show-half-edge-index`, `debug`, `momentum-arrows`,
+`momentum-arrow-offset`, `momentum-arrow-length`, `momentum-arrow-side`,
+`momentum-arrow-stroke`, and `momentum-label-gap`, among others. Catalogue pagination
+(`rows` and `columns`) applies to `just draw`, rather than an individual SVG.
+
+// docs-example: compile
+```python
+from linnet import DrawOptions, LayoutOptions, RenderConfig
+
+settings = RenderConfig(
+    layouts=LayoutOptions(
+        seed=42,
+        steps=100,
+        epochs=30,
+        external_centroid_bias=1.5,
+        internal_label_length_scale=0.8,
+        external_label_length_scale=0.7,
+    ),
+    drawing=DrawOptions(unit=1.5),
+    template_options={"show-particle": False},
+)
+Path("momenta.svg").write_text(
+    diagram.render(momenta=True, config=settings), encoding="utf-8"
+)
+basis = next(iter(diagram.loop_momentum_bases()))
+Path("alternative-routing.svg").write_text(
+    diagram.render(lmb=basis, config=settings), encoding="utf-8"
+)
+```
+
+`momenta=True` draws the graph's stored routing. Passing `lmb=basis` also enables
+momentum display, using that basis without changing the diagram. Loop and external
+components use the same zero-based `k_i` and `p_i` conventions as
+`MomentumSignature.format_momentum()`. Momentum arrows always follow source to sink,
+independently of fermion-arrow orientation. A basis from a different diagram is
+rejected; region highlighting can use its original diagram's complete basis.
+Explicit physics settings override the display defaults enabled by `momenta` or
+`lmb`: for example, `momentum-arrows: false` hides arrows while retaining labels,
+and `show-momentum: false` hides momentum labels. Edge hover information still
+contains the routing. `to_html()` and `to_linnest()` accept the same options.
+
+Configurations are per-call snapshots: neither the diagram nor the supplied
+`RenderConfig` is changed. The embedded physics renderer accepts typed layout,
+drawing, style and template options; custom templates and Python drawing selectors
+belong on the generic Linnet graph's `prepare_render()` API. Imported Typst style
+functions are supported through the usual `source_root` and module references.
 
 The example assumes `diagram` from the quickstart. Its rich representation draws the figure
 automatically. Hover over a vertex or edge to identify it, or click to pin its details.
@@ -82,7 +134,7 @@ diagram, with the remaining graph muted and dotted:
 ```python
 region = diagram.filter(edge=lambda edge: edge.data.particle_name == "b")
 Path("highlighted-diagram.svg").write_text(
-    region.to_svg(), encoding="utf-8"
+    region.render(), encoding="utf-8"
 )
 region
 ```
@@ -100,7 +152,7 @@ expression. Displaying those algebraic results is separate from rendering a grap
 algebra and #product-link("linnet", page: "guides/python-rendering/", label: "Linnet's rendering guide")
 for the underlying graph renderer.
 
-If figure compilation reports a missing `typst` module, install it in the interpreter that runs
+If figure compilation reports a missing `linnet` or `typst` module, install it in the interpreter that runs
 the Symbolica host. A model import or successful generation does not require that renderer.
 The #link("guides/community-host/")[host guide] explains how a distribution can include this
 optional dependency for notebook users.

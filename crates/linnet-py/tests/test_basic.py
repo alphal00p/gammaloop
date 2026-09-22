@@ -3331,8 +3331,15 @@ class TestRendering(unittest.TestCase):
                         / "typst.toml"
                     ).is_file()
                 )
-                Path(kwargs["output"]).write_bytes(b"rendered")
                 calls.append(kwargs)
+                if kwargs["format"] == "svg":
+                    self.assertNotIn("output", kwargs)
+                    return (
+                        b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">'
+                        b'<a href="#linnet-node-0"><rect width="4" height="4"/>'
+                        b"</a></svg>"
+                    )
+                Path(kwargs["output"]).write_bytes(b"rendered")
 
             environment = {
                 "TYPST_PACKAGE_PATH": str(local_packages),
@@ -3345,10 +3352,17 @@ class TestRendering(unittest.TestCase):
                 patch.dict(os.environ, environment),
                 patch.object(typst, "compile", side_effect=compile_typst),
             ):
+                expected_svg = graph.to_svg().encode()
+                self.assertIn(b'data-linnet-kind="node"', expected_svg)
+                self.assertIn(b"<script", expected_svg)
+                calls.clear()
                 for suffix in ("pdf", "svg", "png"):
                     output = root / "nested output" / f"diagram.{suffix}"
                     self.assertEqual(graph.render(output), output)
-                    self.assertEqual(output.read_bytes(), b"rendered")
+                    self.assertEqual(
+                        output.read_bytes(),
+                        expected_svg if suffix == "svg" else b"rendered",
+                    )
 
             self.assertEqual([call["format"] for call in calls], ["pdf", "svg", "png"])
             for call in calls:
@@ -3497,7 +3511,7 @@ class TestRendering(unittest.TestCase):
             self.assertEqual(selector_calls, [0])
             self.assertEqual(len(projects), 2)
             self.assertEqual(projects[0], projects[1])
-            self.assertEqual(output.read_bytes(), b"rendered")
+            self.assertEqual(output.read_bytes(), b"<svg>prepared</svg>")
 
     def test_render_transports_structural_names_without_python_data(self):
         class Opaque:

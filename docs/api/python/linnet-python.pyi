@@ -502,6 +502,10 @@ class Graph:
     def render(self, output: builtins.str | os.PathLike[builtins.str], *, config: RenderConfig | None = None) -> pathlib.Path: ...
     def to_svg(self, *, config: RenderConfig | None = None) -> builtins.str: ...
     def _repr_svg_(self) -> builtins.str: ...
+    def _repr_html_(self, slf: Graph) -> builtins.str:
+        r"""
+        Display the SVG with hover details and local interactive selection.
+        """
     def full_subgraph(self) -> Subgraph: ...
     def empty_subgraph(self) -> Subgraph: ...
     def subgraph(self, *, nodes: typing.Sequence[builtins.int | builtins.str] = ..., edges: typing.Sequence[builtins.int | builtins.str] = ..., half_edges: typing.Sequence[builtins.int] = ...) -> Subgraph: ...
@@ -708,7 +712,7 @@ class LayoutStream:
         Source and sink node indices; a missing endpoint denotes a dangling edge.
         """
     @staticmethod
-    def from_dot(dot: builtins.str, *, every: builtins.int = 4, steps: builtins.int = 200, epochs: builtins.int = 8, seed: builtins.int = 1, step: builtins.float = 0.02, cool: builtins.float = 0.85, spring_strength: builtins.float = 1.0, repulsion: builtins.float = 1.5, length_scale: builtins.float = 1.0, depth_scale: builtins.float = 1.0, flattening_end: builtins.float = 0.5, delta: builtins.float = 0.1, early_tolerance: builtins.float = 1e-06) -> LayoutStream:
+    def from_dot(dot: builtins.str, *, every: builtins.int = ..., steps: builtins.int = ..., epochs: builtins.int = ..., seed: builtins.int = ..., step: builtins.float = ..., cool: builtins.float = ..., spring_strength: builtins.float = ..., repulsion: builtins.float = ..., length_scale: builtins.float = ..., depth_scale: builtins.float = ..., flattening_end: builtins.float = ..., delta: builtins.float = ..., early_tolerance: builtins.float = ...) -> LayoutStream:
         r"""
         Start a force-layout preview from a single DOT graph.
 
@@ -809,6 +813,15 @@ class PreparedRender:
     def typst_source(self) -> builtins.str:
         r"""
         Return the exact generated Typst entrypoint for this preparation.
+        """
+    @staticmethod
+    def from_sources(sources: builtins.dict[builtins.str, builtins.bytes], *, config: RenderConfig | None = None) -> PreparedRender:
+        r"""
+        Prepare an authored main.typ document with the shared renderer assets.
+
+        The document can read ``_linnet_config`` for the typed layout, drawing,
+        style and template options. Referenced Typst modules are snapshotted.
+        A template or selectors require Graph.prepare_render instead.
         """
     def render(self, output: builtins.str | os.PathLike[builtins.str]) -> pathlib.Path:
         r"""
