@@ -277,6 +277,71 @@ Zero denotes a logarithmic superficial divergence, a positive value a power dive
 and a negative value superficial convergence. This local bound scales all momenta at each
 vertex together; it does not account for tensor cancellations or rule out UV subdivergences.
 
+== Cancel reversed fermion loops before integration
+
+The host notebook
+#link("https://github.com/symbolica-dev/symbolica-community/blob/main/examples/hep/odd_photons.py")[hep/odd_photons.py]
+uses typed particles and interaction rules to generate the one-, three- and
+five-photon electron loops. Keep the one-point topology by relaxing the bridge
+and tadpole filters explicitly:
+
+// docs-example: compile
+```python
+electron, photon = (model.particle_by_pdg(pdg) for pdg in (11, 22))
+vertices = [
+    vertex for vertex in model.vertex_rules
+    if sorted(vertex.particles) == sorted([electron.name, electron.antiname, photon.name])
+]
+photon_count = 3
+result = model.generate_diagrams(
+    [photon], [photon] * (photon_count - 1), loops=1,
+    max_vertices=photon_count, vertex_allow=vertices,
+    maximum_bridges=None, allow_self_loops=True, allow_zero_flow_edges=True,
+    self_energy=None, tadpoles=None, zero_snails=None, numerator_grouping=None,
+)
+```
+
+Contract the external Lorentz slots with independent symbolic probe vectors,
+promote their Lorentz dimension to $D$, and use Idenso to trace the compact
+graph-edge momenta. Apply `diagram.momentum_basis().route_expression` afterwards
+to expand scalar products into the loop basis. Keep
+`overall_factor_expression(evaluate=True)` and `numerator_prefactor_expression()`
+in every numerator. Add the probes to the diagram family's external-vector
+list, retaining its generated denominators, so an `IntegralMapping` transports
+both loop-momentum and loop-probe scalar products.
+
+With generic off-shell momenta, `find_mapping` identifies the unique reversed
+partner of each triangle or pentagon. Verify its denominator permutation and
+unit propagator powers, then add the mapped weighted numerators. Their exact
+zero proves the full tensor identity without IBP or master integrals. The
+one-photon numerator instead remains nonzero and odd in the loop momentum;
+the shared vacuum tensor reducer integrates it to zero.
+
+The notebook pairs the families before tracing and evaluates a selected pair.
+The #source-link("crates/feynkit-py/tests/installed_feyncalc_odd_photons.py", label: "companion regression")
+checks both triangles and all 24 pentagons, retaining symbolic dimension and
+electron mass throughout. These vector-current examples do not fix general
+gamma-five or Majorana conventions. The corrected shared Graphica automorphism
+count reserves the endpoint-exchange factor for undirected self-loops; directed
+fermion loops retain their orientation. The Symbolica Community host selects
+that owner, while standalone adoption awaits its registry publication. The
+#source-link("crates/feynkit-py/tests/installed_tadpole_normalization.py", label: "nonzero Higgs-fermion tadpole regression")
+checks normalization, which a zero Furry amplitude cannot establish.
+
+For a nonzero example, the
+#link("https://github.com/symbolica-dev/symbolica-community/blob/main/examples/hep/tadpole_mass_insertions.py")[tadpole mass-insertion notebook]
+differentiates the generated massive top-quark Higgs tadpole integrand with
+respect to its propagator mass. Hold the Yukawa coupling and scale fixed, use
+`IntegralFamily.rewrite_numerator` to identify the raised propagator powers,
+and reduce powers one through three with native `IBPFamily.reduce_laporta`.
+Keep the dimension symbolic until combining the $A_0$ pole with its
+coefficients, then evaluate the finite coefficient using shared OneLOop.
+The notebook also compares against numerical differentiation of the full
+finite tadpole. It does not impose a tadpole renormalization condition.
+HTML export and the live default plus twelve mass/scale states pass, including
+zeros of the finite tadpole and its derivative; the scaled finite-difference
+error stays below $2 times 10^(-9)$.
+
 == Carry a generated triangle through its finite amplitude
 
 The host notebook

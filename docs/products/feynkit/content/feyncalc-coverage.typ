@@ -24,7 +24,9 @@ not treat the presence of a primitive as an end-to-end validation.
    decays. The inventory records the validated scope of each process.],
   [Dirac, color and Lorentz algebra], [Idenso and Spenso],
   [Existing gamma, color, metric, epsilon and adjoint operations. Keep their
-   Symbolica expression interface; do not implement a second algebra in FeynKit.],
+   Symbolica expression interface; do not implement a second algebra in FeynKit.
+   Generated massive one-, three- and five-photon amplitudes validate Furry
+   cancellation with symbolic dimension and generic off-shell momenta.],
   [External spin sums], [`feynkit-generator::SpinSum`],
   [Scalar, Dirac and vector completeness tensors and external wavefunction-pair
    replacements. GammaLoop delegates both formulas and replacement construction
@@ -511,6 +513,81 @@ a separate index-expansion step; loop invariants and declared external-basis
 products stay scalar weights. Rust tests also cover two-direction Gram inversion,
 mixed loop momenta, and a basis spanning the full Lorentz space. These tests
 validate the projection identities, not the gallery's completed loop integrals.
+
+== Generated odd-photon cancellations
+
+The host notebook
+#link("https://github.com/symbolica-dev/symbolica-community/blob/main/examples/hep/odd_photons.py")[hep/odd_photons.py]
+and the
+#source-link("crates/feynkit-py/tests/installed_feyncalc_odd_photons.py", label: "installed-host regression")
+reproduce the gallery's #link("https://feyncalc.github.io/FeynCalcExamples/QED/OneLoop/Ga")[one-photon],
+#link("https://feyncalc.github.io/FeynCalcExamples/QED/OneLoop/Ga-GaGa")[three-photon]
+and #link("https://feyncalc.github.io/FeynCalcExamples/QED/OneLoop/Ga-GaGaGaGa")[five-photon]
+identities. Typed model particles select the electron-photon interaction;
+generation retains the massive electron, every diagram and its native weight.
+The dimension remains symbolic and all independent external momenta are
+off shell. Contracting each Lorentz slot with a separate unconstrained probe
+tests the complete amputated tensor, without polarization or Gram constraints.
+
+The one-photon graph has a nonzero numerator odd under loop reflection.
+`IntegralFamily.mapping_to` verifies that reflection, and the shared vacuum
+`TensorReducer` gives zero. The two triangle orientations and all 24 pentagon
+diagrams have nonzero individual numerators. `IntegralFamily.find_mapping`
+finds one reversed partner for each diagram: one triangle pair and twelve
+pentagon pairs. Each verified map preserves the unit propagator powers and has
+unit absolute Jacobian. The paired weighted numerators cancel exactly in a
+common routing, establishing the zero amplitude before IBP or scalar-master
+evaluation.
+
+Idenso traces compact graph-edge momenta before the shared momentum basis
+expands their loop routings. Independent probe vectors are included among each
+family's external vectors so the same scalar map transports loop-probe products.
+The installed regression exhaustively checks every pair. The notebook first
+pairs families and then traces only the selected pair; a pentagon pair takes
+roughly twenty seconds on the validation host. These vector-coupled Dirac-loop
+checks do not establish general gamma-five or anomaly prescriptions, or
+Majorana fermion-flow support.
+
+The calculation also exposed a shared Graphica edge-automorphism error: a
+directed self-loop cannot acquire the endpoint-exchange factor of an undirected
+self-loop. The corrected shared Graphica owner restricts that factor to
+undirected self-loops; FeynKit retains the resulting native weight without a
+compensating factor. The Symbolica Community host selects this corrected owner.
+Standalone FeynKit still uses the registry dependency; adopting the fix there
+awaits upstream publication. The separate
+#source-link("crates/feynkit-py/tests/installed_tadpole_normalization.py", label: "Higgs-fermion tadpole regression")
+passes in the installed host for the nonzero quark tadpole and two scalar
+loop cases, independently checking the Wick weights $-1$, $1/2$ and $1/2$.
+The photon tadpole's vanishing integral alone cannot certify its individual
+symmetry factor.
+
+== Differentiate a generated massive tadpole
+
+The host notebook
+#link("https://github.com/symbolica-dev/symbolica-community/blob/main/examples/hep/tadpole_mass_insertions.py")[hep/tadpole_mass_insertions.py]
+uses the nonzero top-quark contribution to the Higgs one-point function to
+connect graph normalization, mass differentiation and native IBP. With the
+generated tree coupling $-i y$ and $tr(1)=4$, the weighted tadpole is
+$T=-4N_c y m I_1$, with the common loop measure $i/(16pi^2)$ stripped off.
+For $I_n=integral_k (k^2-m^2+i 0)^(-n)$, the graph-owned family supplies
+$ I_2=frac(D-2,2m^2)I_1, quad
+  I_3=frac((D-4)(D-2),8m^4)I_1. $
+
+Differentiating the generated rational integrand raises its propagator power;
+native family coordinates and IBP reduce the result to
+$partial_m T=-4N_c y(D-1)I_1$. The derivative holds both $y$ and the scale fixed,
+without imposing $y=m/v$. Retaining $D=4-2epsilon$ through the Laurent expansion
+preserves its finite rational contribution. OneLOop supplies $I_1=A_0$ and the
+notebook compares the finite derivative with a numerical derivative of the
+complete finite tadpole. This is a finite Laurent coefficient, not a
+renormalized tadpole or a counterterm calculation.
+
+The notebook passes HTML export, its live default state and twelve reactive
+mass/scale states, including zeros of the finite tadpole and its derivative.
+The checks span $m=0.05$ to $500$ and $mu^2=0.01$ to $250000$. Five-point
+finite differences agree with the IBP/OneLOop derivative with scaled error
+below $2 times 10^(-9)$; the error normalization stays finite at derivative
+zeros.
 
 == Generated photon self-energy
 
