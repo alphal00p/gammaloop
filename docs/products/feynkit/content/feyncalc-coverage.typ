@@ -17,7 +17,9 @@ not treat the presence of a primitive as an end-to-end validation.
   [Existing validated models, UFO import and generation. A generated QED
    electron-positron to muon-pair benchmark and a different-flavor QCD quark
    annihilation benchmark check the sewn graph, physical cut, graph factors
-   and uncut propagators. Other gallery processes remain pending.],
+   and uncut propagators. Ordinary generated amplitudes also validate Compton,
+   diphoton, Bhabha, Møller, selected QCD channels and on-shell Higgs and Z
+   decays. The inventory records the validated scope of each process.],
   [Dirac, color and Lorentz algebra], [Idenso and Spenso],
   [Existing gamma, color, metric, epsilon and adjoint operations. Keep their
    Symbolica expression interface; do not implement a second algebra in FeynKit.],
@@ -45,9 +47,11 @@ not treat the presence of a primitive as an end-to-end validation.
   [Graph and subgraph expansion and vacuum-integral infrastructure exist.
    The one-loop QED and QCD renormalization workflows combine generated
    self-energies, fermion vertices and the ghost-gluon vertex with symbolic gauge dependence and
-   counterterm linear solves. Generated two-loop massless QED in Feynman gauge
-   and scalar self-energy examples validate bare UV poles. Analytic vacuum values remain
-   explicit inputs; the two-loop counterterm sums are supplied reference inputs.
+   counterterm linear solves. Generated two-loop massless electron and scalar
+   self-energies validate bare UV poles with supplied counterterm sums. The
+   two-loop photon example retains symbolic gauge dependence and calculates
+   its four one-loop counterterm insertions using signed propagator powers.
+   Analytic vacuum values remain explicit inputs.
    Automatic forest generation stays separate.],
   [Integral families and mappings], [`feynkit-graph::IntegralFamily`],
   [Generated diagrams expose families through their shared denominator builder
@@ -74,8 +78,9 @@ not treat the presence of a primitive as an end-to-end validation.
    `hep.IBPFamily` consumes the existing FeynKit family and exposes symbolic
    identities, bounded Laporta elimination and parametric recurrences. Residual
    integrals at a finite search depth are not certified masters. Two-loop
-   scalar and Feynman-gauge massless electron self-energies, the electron Pauli
-   form factor and unequal-mass bubble regressions pass in the installed host.
+   scalar and Feynman-gauge massless electron self-energies, symbolic-gauge photon
+   renormalization, the electron Pauli form factor and unequal-mass bubble
+   regressions pass in the installed host.
    Separate notebooks run on the existing Marimo instance. Of the gallery pages,
    22 call Kira and four call FIRE through FeynHelpers; those external
    interfaces are not FeynCalc-owned solvers.],
