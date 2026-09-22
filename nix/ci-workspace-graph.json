@@ -34,7 +34,6 @@
     "alphal00p-docs-python-exporter": [
       "feynkit-py",
       "gammaloop-api",
-      "idenso",
       "linnet-py",
       "spynso3",
       "vakint"
@@ -239,9 +238,6 @@
         "python_stubgen"
       ],
       "gammaloop-api": [
-        "python_stubgen"
-      ],
-      "idenso": [
         "python_stubgen"
       ],
       "linnet-py": [
@@ -465,9 +461,7 @@
     },
     "spenso-macros": {},
     "spynso3": {
-      "idenso": [
-        "python"
-      ],
+      "idenso": [],
       "spenso": [
         "portable-payload",
         "python",
@@ -1139,7 +1133,6 @@
     "alphal00p-docs-python-exporter": [
       "feynkit-py",
       "gammaloop-api",
-      "idenso",
       "linnet-py",
       "spynso3",
       "vakint"
@@ -1349,9 +1342,6 @@
         "python_stubgen"
       ],
       "gammaloop-api": [
-        "python_stubgen"
-      ],
-      "idenso": [
         "python_stubgen"
       ],
       "linnet-py": [
@@ -1582,9 +1572,7 @@
     },
     "spenso-macros": {},
     "spynso3": {
-      "idenso": [
-        "python"
-      ],
+      "idenso": [],
       "spenso": [
         "portable-payload",
         "python",

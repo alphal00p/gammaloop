@@ -68,7 +68,7 @@ pub trait GraphExpressions<E, V> {
         &self,
         subgraph: &S,
         without: &S,
-        vertex_numerator: impl Fn(&V) -> Atom,
+        vertex_numerator: impl Fn(NodeIndex, &V) -> Atom,
         edge_numerator: impl Fn(&E) -> Atom,
         is_dummy: impl Fn(&E) -> bool,
     ) -> Atom;
@@ -88,7 +88,7 @@ impl<E, V, H> GraphExpressions<E, V> for HedgeGraph<E, V, H> {
         &self,
         subgraph: &S,
         without: &S,
-        vertex_numerator: impl Fn(&V) -> Atom,
+        vertex_numerator: impl Fn(NodeIndex, &V) -> Atom,
         edge_numerator: impl Fn(&E) -> Atom,
         is_dummy: impl Fn(&E) -> bool,
     ) -> Atom {
@@ -103,7 +103,7 @@ impl<E, V, H> GraphExpressions<E, V> for HedgeGraph<E, V, H> {
                 for node in [self.node_id(source), self.node_id(sink)] {
                     if !seen[node] {
                         seen.add(node);
-                        numerator *= vertex_numerator(&self[node]);
+                        numerator *= vertex_numerator(node, &self[node]);
                     }
                 }
                 numerator *= edge_numerator(edge.data);
@@ -117,7 +117,7 @@ impl<E, V, H> GraphExpressions<E, V> for HedgeGraph<E, V, H> {
                 .iter_crown(node)
                 .all(|hedge| subgraph.includes(&hedge) || is_dummy(&self[self[&hedge]]))
             {
-                numerator *= vertex_numerator(&self[node]);
+                numerator *= vertex_numerator(node, &self[node]);
             }
         }
         numerator
@@ -175,7 +175,7 @@ impl crate::FeynmanDiagram {
         self.graph.numerator_of(
             subgraph,
             without,
-            |vertex| vertex.numerator.clone(),
+            |_, vertex| vertex.numerator.clone(),
             |edge| edge.numerator.clone(),
             |edge| edge.is_dummy,
         )
@@ -300,7 +300,7 @@ mod tests {
         graph.numerator_of(
             selected,
             without,
-            |n| Atom::num(*n),
+            |_, n| Atom::num(*n),
             |e| Atom::num(e.0),
             |e| e.1,
         )
@@ -333,6 +333,41 @@ mod tests {
         let mut last: SuBitGraph = graph.empty_subgraph();
         last.add(Hedge(3));
         assert_eq!(numerator(&graph, &last, &empty), Atom::num(5));
+    }
+
+    #[test]
+    fn indexed_vertex_callback_selects_isolated_factors_without_division() {
+        let mut builder = HedgeGraphBuilder::new();
+        let left = builder.add_node(2);
+        let right = builder.add_node(3);
+        let isolated = builder.add_node(5);
+        let zero = builder.add_node(0);
+        builder.add_edge(left, right, (7, false), Orientation::Default);
+        let graph: HedgeGraph<(i32, bool), i32> = builder.build();
+        let empty: SuBitGraph = graph.empty_subgraph();
+        let evaluate = |selected: &SuBitGraph, isolated_nodes: &[NodeIndex]| {
+            graph.numerator_of(
+                selected,
+                &empty,
+                |id, numerator| {
+                    if graph.iter_crown(id).next().is_some() || isolated_nodes.contains(&id) {
+                        Atom::num(*numerator)
+                    } else {
+                        Atom::one()
+                    }
+                },
+                |edge| Atom::num(edge.0),
+                |edge| edge.1,
+            )
+        };
+        assert_eq!(evaluate(&graph.full_filter(), &[]), Atom::num(2 * 3 * 7));
+        assert_eq!(
+            evaluate(&graph.full_filter(), &[isolated]),
+            Atom::num(2 * 3 * 5 * 7)
+        );
+        assert_eq!(evaluate(&empty, &[isolated]), Atom::num(5));
+        assert_eq!(evaluate(&empty, &[isolated, zero]), Atom::Zero);
+        assert_eq!(evaluate(&empty, &[]), Atom::one());
     }
 
     #[test]
