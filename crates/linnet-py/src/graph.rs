@@ -520,6 +520,13 @@ impl GraphState {
 }
 
 /// An owned topology with arbitrary element data and typed rendering configuration.
+///
+/// Examples
+/// --------
+/// ```python
+/// import linnet
+/// graph = linnet.build(linnet.node("source"), linnet.node("sink"))
+/// ```
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(module = "linnet", unsendable, name = "Graph")]
 pub struct PyGraph {

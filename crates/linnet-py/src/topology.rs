@@ -333,7 +333,12 @@ impl PySubgraph {
         self.complement(py)
     }
 
-    fn __eq__(&self, py: Python<'_>, other: &Self) -> PyResult<bool> {
+    fn __eq__(
+        &self,
+        py: Python<'_>,
+        #[gen_stub(override_type(type_repr = "builtins.object", imports = ("builtins")))]
+        other: &Self,
+    ) -> PyResult<bool> {
         let graph = self.owner(py)?;
         let other_graph = other.owner(py)?;
         Ok(graph.is(other_graph)

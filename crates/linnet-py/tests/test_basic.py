@@ -1,3 +1,4 @@
+import ast
 import copy
 import gc
 import inspect
@@ -1048,6 +1049,21 @@ class TestHedgeGraphTopology(unittest.TestCase):
         other, _, _, _ = topology_graph()
         with self.assertRaisesRegex(ValueError, "different graph revision"):
             ab.union(other.full_subgraph())
+
+    def test_subgraph_equality_preserves_python_fallback(self):
+        graph, _, _, _ = topology_graph()
+        selected = graph.subgraph(edges=["ab"])
+
+        self.assertEqual(selected, graph.subgraph(edges=["ab"]))
+        self.assertNotEqual(selected, graph.subgraph(edges=["bc"]))
+        self.assertIs(selected.__eq__(object()), NotImplemented)
+        self.assertFalse(selected == object())
+
+        class ReflectedEquality:
+            def __eq__(self, other):
+                return other is selected
+
+        self.assertTrue(selected == ReflectedEquality())
 
     def test_construct_and_filter_union_live_views(self):
         graph, _, _, _ = topology_graph()
@@ -2228,6 +2244,27 @@ class TestDotCodec(unittest.TestCase):
 
 
 class TestTypedTypstSurface(unittest.TestCase):
+    def test_generated_stub_declares_aliases_and_only_exported_classes(self):
+        stub = Path(__file__).resolve().parents[1] / "linnet.pyi"
+        declarations = ast.parse(stub.read_text()).body
+        aliases = {
+            node.target.id
+            for node in declarations
+            if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name)
+        }
+        self.assertTrue({"_NativeValue", "_SubgraphSelection"} <= aliases)
+        graph = next(
+            node
+            for node in declarations
+            if isinstance(node, ast.ClassDef) and node.name == "Graph"
+        )
+        self.assertIn("import linnet", ast.get_docstring(graph))
+
+        for node in declarations:
+            if isinstance(node, ast.ClassDef) and not node.name.startswith("_"):
+                with self.subTest(name=node.name):
+                    self.assertIsInstance(getattr(lp, node.name), type)
+
     def test_native_values_drawing_and_configuration_smoke(self):
         length = lp.Length.mm(2)
         ratio = lp.Ratio.from_fraction(0.25)
