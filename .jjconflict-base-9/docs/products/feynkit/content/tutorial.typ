@@ -253,6 +253,15 @@ belong to the same diagram instance; bases for a subgraph or contracted region a
 accepted. Region selection, ignored numerator regions, denominator dimensions, and
 propagator powers are applied before routing. Both methods return `TensorExpression`.
 
+For the local massive Taylor expansion, `diagram.uv_expansion(mUV, edge_powers=powers)`
+and `region.uv_counterterm(mUV, edge_powers=powers)` accept the same signed power map.
+Omitted internal edges have power one; entries outside the selected internal edges are ignored.
+Powers change the integrand, while the selected region and its loop integration measure stay fixed.
+When a prepared numerator contains an extra inverse propagator, move that factor into
+`edge_powers` before UV expansion. For example, multiply a longitudinal massless-vector
+numerator by $q_e^2$ and assign power two to that edge; this preserves the original integrand
+and gives both denominator factors the shared auxiliary-mass expansion.
+
 == Inspect superficial UV power counting
 
 // docs-example: compile

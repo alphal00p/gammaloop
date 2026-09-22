@@ -81,10 +81,10 @@
         "ToString",
         "Total"
       ],
-      "end_to_end_validation": "pending",
+      "end_to_end_validation": "partial: generated massive one-loop UV structures, six counterterm coefficients and Ward identities pass in symbolic gauge; analytic tadpole poles and counterterm operators are supplied, and counterterm-diagram generation remains pending",
       "validated_components": [
         {
-          "scope": "generated massive photon self-energy: exact D-dimensional transverse form factor, UV pole, five finite-part and two-particle-cut checks; other renormalization components remain pending",
+          "scope": "generated massive photon self-energy: exact D-dimensional transverse form factor, UV pole, five finite-part and two-particle-cut checks",
           "test": "crates/feynkit-py/tests/installed_feyncalc_photon_self_energy.py",
           "components": [
             "Generator.generate",
@@ -98,6 +98,40 @@
             "Symbolica.evaluate"
           ],
           "result": "passed"
+        },
+        {
+          "scope": "generated massive electron and photon self-energies and electron-photon vertex in symbolic covariant gauge; four tadpole powers reduce through native IBP, six local counterterm coefficients and Ward identities agree exactly",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_qed_renormalization.py",
+          "components": [
+            "Generator.generate",
+            "Model.expand_couplings",
+            "FeynmanDiagram.uv_expansion",
+            "FeynmanDiagram.momentum_basis",
+            "IntegralFamily.rewrite_numerator",
+            "TensorReducer.reduce",
+            "IBPFamily.reduce_laporta",
+            "IBPSolution.reduce",
+            "Idenso.simplify_gamma",
+            "Matrix.solve",
+            "OneLOop.A0"
+          ],
+          "result": "passed",
+          "note": "Live notebook: hep/qed_renormalization.py. I(1)=M/eps and Lagrangian counterterm structures are explicit inputs. Physical and auxiliary mass poles cancel in the complete UV expansion. No generated counterterm diagrams, subtraction forests or general finite off-shell form factors are claimed."
+        },
+        {
+          "scope": "supporting IBP benchmark, not a generated gallery process: unequal-mass bubble targets I(2,1), I(1,2) and I(2,2), exact total-derivative identities and twelve finite-value checks below threshold",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_ibp_bubble.py",
+          "components": [
+            "IntegralFamily",
+            "Kinematics.with_scalar_product",
+            "IBPFamily.reduce_laporta",
+            "IBPSolution.reduce",
+            "Symbolica.series",
+            "OneLOop.A0",
+            "OneLOop.B0"
+          ],
+          "result": "passed",
+          "note": "Live notebook: hep/ibp_bubble.py. OneLOop evaluates residual tadpoles and the bubble; independent Feynman-parameter quadrature checks the raised powers. This validates a shared reduction component, not the full reference workflow or threshold and exceptional-kinematics limits."
         }
       ]
     },
@@ -319,7 +353,27 @@
         "ToString",
         "Total"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "partial: all three generated two-loop photon diagrams and four calculated one-loop insertions reproduce the complete UV tensor and physical/auxiliary field counterterms in symbolic gauge; analytic master coefficients and the one-loop Ward counterterm are inputs, while general counterterm-model and forest generation remain pending",
+      "validated_components": [
+        {
+          "scope": "generated massless two-loop photon self-energy with open Lorentz indices and symbolic xi/Nf; 112 vacuum targets plus five one-loop insertion targets, calculated vertex/kinetic insertion sum and exact tensor cancellation",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_photon_two_loop.py",
+          "components": [
+            "Generator.generate",
+            "FeynmanDiagram.uv_expansion(edge_powers)",
+            "FeynmanDiagram.momentum_basis",
+            "IntegralFamily.rewrite_numerator",
+            "IntegralFamily.find_mapping",
+            "TensorReducer.reduce",
+            "Idenso.simplify_gamma",
+            "IBPFamily.reduce_laporta",
+            "IBPSolution.reduce",
+            "Symbolica.series"
+          ],
+          "result": "passed",
+          "note": "Live notebook: hep/photon_two_loop.py. Selective infrared rearrangement keeps massive family coordinates while omitting explicit auxiliary numerator compensation terms. Feynman/longitudinal photon pieces retain their separate propagator powers. Tadpole finite term, vacuum master poles and deltaZpsi=deltaZ1=-xi/eps are supplied; the four insertion integrals and their sum are calculated. The auxiliary operator is i*M*(ZAm^2-1), including its nonlinear one-loop term. No general counterterm-model/forest generation, minimal-master certification or finite two-loop amplitude is claimed."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/QED/TwoLoops/Renormalization-LeAle",
@@ -501,7 +555,27 @@
         "ToString",
         "Total"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "partial: all three generated two-loop diagrams, bare UV poles and reference-counterterm Zpsi pass for xi=1; arbitrary gauge and automatic counterterm insertions remain pending",
+      "validated_components": [
+        {
+          "scope": "generated massless two-loop electron self-energy in Feynman gauge; preserved internal fermion-loop signs, symbolic Nf, 22-target vacuum IBP and exact Zpsi through two loops",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_electron_two_loop.py",
+          "components": [
+            "Generator.generate",
+            "FeynmanDiagram.uv_expansion",
+            "FeynmanDiagram.momentum_basis",
+            "IntegralFamily.rewrite_numerator",
+            "TensorReducer.reduce",
+            "IBPFamily.reduce_laporta",
+            "IBPSolution.reduce",
+            "IntegralFamily.mapping_to",
+            "Idenso.simplify_gamma",
+            "Symbolica.series"
+          ],
+          "result": "passed",
+          "note": "Live notebook: hep/electron_two_loop.py. Analytic vacuum Laurent coefficients and summed one-loop counterterm insertions, including the auxiliary photon mass counterterm, are supplied reference inputs. Gauge is fixed to xi=1; finite off-shell self-energy, generated counterterm insertions and forests remain unvalidated."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/QED/Tree/ElAel-ElAel",
@@ -1106,7 +1180,29 @@
         "ToExpression",
         "Total"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "partial: generated Pauli form factor, native IBP and exact Schwinger limit pass; the complete renormalized Dirac form factor and timelike continuation are not validated",
+      "validated_components": [
+        {
+          "scope": "generated tree and one-loop electron-photon vertices, two-projector Gram solve, nine-target native IBP reduction, exact F2(0)=alpha/(2*pi), and five spacelike finite Pauli form factors",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_gminus2.py",
+          "components": [
+            "Generator.generate",
+            "Particle.spin_sum",
+            "Idenso.simplify_gamma",
+            "Matrix.solve",
+            "FeynmanDiagram.integral_family",
+            "IntegralFamily.rewrite_numerator",
+            "IntegralFamily.mapping_to",
+            "IBPFamily.reduce_laporta",
+            "IBPSolution.reduce",
+            "OneLOop.A0",
+            "OneLOop.B0",
+            "OneLOop.dB0"
+          ],
+          "result": "passed",
+          "note": "Live notebook: hep/gminus2.py. External electrons are on shell and photon momentum is spacelike; the zero-momentum limit is taken after reduction and integration. Independent quadrature and the OneLOop bubble derivative check finite values. No full Dirac form factor or general timelike continuation is claimed."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/QED/OneLoop/Ga",
@@ -1365,7 +1461,48 @@
         "ToString",
         "Total"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "partial: generated quark, gluon and ghost self-energies plus quark-gluon and ghost-gluon UV vertices pass in symbolic gauge; analytic master poles and counterterm operators remain supplied inputs, with a distinct complete auxiliary-mass expansion",
+      "validated_components": [
+        {
+          "scope": "generated massive one-loop quark, gluon and ghost self-energies and both quark-gluon vertex topologies; native tadpole IBP, eight local counterterm equations and gauge-independent mass and coupling renormalization",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_qcd_renormalization.py",
+          "components": [
+            "Generator.generate",
+            "Model.expand_couplings",
+            "Particle.color_sum",
+            "FeynmanDiagram.uv_expansion",
+            "FeynmanDiagram.momentum_basis",
+            "IntegralFamily.rewrite_numerator",
+            "TensorReducer.reduce",
+            "IBPFamily.reduce_laporta",
+            "IBPSolution.reduce",
+            "Idenso.simplify_color",
+            "Idenso.simplify_gamma",
+            "Matrix.solve",
+            "OneLOop.A0"
+          ],
+          "result": "passed",
+          "note": "Live notebook: hep/qcd_renormalization.py. Supplied I(1)=M/eps and Lagrangian counterterm operators complete the comparison. Physical constants match; vanishing auxiliary mass coefficients arise from retaining all UV mass-correction terms, whereas the reference uses selective infrared rearrangement. Finite form factors and automatic counterterm diagrams/forests are not covered."
+        },
+        {
+          "scope": "additional ghost-gluon reference https://feyncalc.github.io/FeynCalcExamples/QCD/OneLoop/GhGl-Gh: both generated vertex topologies and ghost self-energy, full open Lorentz/color tensors for incoming ghosts and antighosts, tree-normalized pole CA*xi/(2*eps), and coupling-counterterm consistency",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_qcd_ghost_vertex.py",
+          "components": [
+            "Generator.generate",
+            "FeynmanDiagram.half_edges",
+            "FeynmanDiagram.uv_expansion",
+            "FeynmanDiagram.momentum_basis",
+            "IntegralFamily.rewrite_numerator",
+            "TensorReducer.reduce",
+            "IBPFamily.reduce_laporta",
+            "IBPSolution.reduce",
+            "Idenso.simplify_color",
+            "Symbolica.series"
+          ],
+          "result": "passed",
+          "note": "Live notebook: hep/qcd_ghost_vertex.py. This additional reference is not one of the 86 gallery links captured by this inventory. I(2), I(3) reduce to I(1); its M/eps pole and the gluon field counterterm from the separate QCD calculation are explicit inputs. Canonical shared SM UUV1 and signed-momentum finalization are used. No finite vertex or automatic counterterm generation is claimed."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/QCD/OneLoop/RenormalizationMassless",
@@ -4443,7 +4580,25 @@
         "ToString",
         "Total"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "partial: supplied two-loop scalar integrands, Taylor/tensor projection, native IBP and reference-counterterm renormalization constants pass; model-based diagram and counterterm generation remain pending",
+      "validated_components": [
+        {
+          "scope": "two scalar self-energy integrands from the reference, expansion through external momentum squared, Laporta reduction, six verified vacuum-family symmetry maps, parametric doubled-tadpole recurrence, UV poles and two-loop field/mass renormalization constants",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_ibp_phi4.py",
+          "components": [
+            "Symbolica.series",
+            "TensorReducer.reduce",
+            "IntegralFamily",
+            "IntegralFamily.mapping_to",
+            "IBPFamily.ibp_identities",
+            "IBPFamily.reduce_laporta",
+            "IBPFamily.solve_parametric",
+            "IBPSolution.reduce"
+          ],
+          "result": "passed",
+          "note": "Live notebook: hep/ibp_phi4.py. Integrands, analytic tadpole/equal-mass vacuum Laurent coefficients and one-loop counterterms are supplied inputs. Finite Laporta residuals are identified by verified momentum maps, not certified as a minimal master basis. This does not establish generated diagrams or automatic counterterm insertions."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/Phi4/TwoLoops/Renormalization-SSSS",

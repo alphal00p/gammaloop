@@ -3204,9 +3204,11 @@ mod tests {
         assert!(basis.dependent_externals.is_empty());
         let mass = Atom::var(symbolica::symbol!("feynkit_graph::test_mUV"));
         let soft = symbolica::function!(symbols::momentum(), 2, 0);
-        let scalar = diagram.uv_expansion_of(&selected, &mass, 4, None).unwrap();
+        let scalar = diagram
+            .uv_expansion_of(&selected, &mass, 4, None, &BTreeMap::new())
+            .unwrap();
         let tensor = diagram
-            .uv_expansion_of(&selected, &mass, 4, Some(&soft))
+            .uv_expansion_of(&selected, &mass, 4, Some(&soft), &BTreeMap::new())
             .unwrap();
         assert_eq!(tensor, &soft * scalar);
         let momenta = (0..3)
@@ -3233,7 +3235,9 @@ mod tests {
             atom.replace(symbolica::function!(symbols::denominator(), a, b, c, d))
                 .with(d)
         };
-        let expansion = bubble.uv_expansion_of(&selected, &mass, 4, None).unwrap();
+        let expansion = bubble
+            .uv_expansion_of(&selected, &mass, 4, None, &BTreeMap::new())
+            .unwrap();
         assert_eq!(
             (explicit(expansion) - (&q2 - mass.pow(2)).pow(-2))
                 .expand()
@@ -3241,19 +3245,23 @@ mod tests {
             Atom::Zero
         );
         assert_eq!(
-            bubble.uv_expansion_of(&selected, &mass, 2, None).unwrap(),
+            bubble
+                .uv_expansion_of(&selected, &mass, 2, None, &BTreeMap::new())
+                .unwrap(),
             Atom::Zero
         );
         assert_eq!(
             bubble
-                .uv_expansion_of(&selected, &mass, 4, Some(&Atom::Zero))
+                .uv_expansion_of(&selected, &mass, 4, Some(&Atom::Zero), &BTreeMap::new())
                 .unwrap(),
             Atom::Zero
         );
 
         // With all soft momenta set to zero, the six-dimensional bubble keeps
         // the quadratic leading term and the logarithmic physical-mass term.
-        let expansion = bubble.uv_expansion_of(&selected, &mass, 6, None).unwrap();
+        let expansion = bubble
+            .uv_expansion_of(&selected, &mass, 6, None, &BTreeMap::new())
+            .unwrap();
         let basis = bubble.momentum_basis_of(&selected).unwrap();
         // Before setting external momenta to zero, the subtraction must remove
         // every divergent coefficient of the original, undeformed integrand.
@@ -3333,7 +3341,11 @@ mod tests {
         let expected = vacuum.pow(-1)
             + (Atom::var(symbolica::symbol!("UFO::M")).pow(2) - mass2) * vacuum.pow(-2);
         assert_eq!(
-            (diagram.uv_expansion_of(&selected, &mass, 4, None).unwrap() - expected).expand(),
+            (diagram
+                .uv_expansion_of(&selected, &mass, 4, None, &BTreeMap::new())
+                .unwrap()
+                - expected)
+                .expand(),
             Atom::Zero
         );
         let index = symbolica::symbol!("feynkit_graph::uv_test_mu");
@@ -3344,17 +3356,27 @@ mod tests {
         );
         assert_eq!(
             diagram
-                .uv_expansion_of(&selected, &mass, 2, Some(&tensor))
+                .uv_expansion_of(&selected, &mass, 2, Some(&tensor), &BTreeMap::new())
                 .unwrap(),
             &tensor / &vacuum
         );
         assert_eq!(
             diagram
-                .uv_expansion_of(&diagram.graph.empty_subgraph(), &mass, 4, None)
+                .uv_expansion_of(
+                    &diagram.graph.empty_subgraph(),
+                    &mass,
+                    4,
+                    None,
+                    &BTreeMap::new()
+                )
                 .unwrap(),
             Atom::Zero
         );
-        assert!(diagram.uv_expansion_of(&selected, &mass, 0, None).is_err());
+        assert!(
+            diagram
+                .uv_expansion_of(&selected, &mass, 0, None, &BTreeMap::new())
+                .is_err()
+        );
     }
 
     #[test]

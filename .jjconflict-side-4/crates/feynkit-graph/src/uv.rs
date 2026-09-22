@@ -1,5 +1,7 @@
 //! Local massive UV Taylor expansion, before integration or forest subtraction.
 
+use std::collections::BTreeMap;
+
 use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike, SubSetOps};
 use spenso::structure::representation::{Minkowski, RepName};
 use symbolica::{
@@ -24,6 +26,10 @@ impl FeynmanDiagram {
     /// The result uses edge momenta and tagged `denom` propagators, as does
     /// `denominator_of`. Negate it for an additive local counterterm. A supplied
     /// numerator replaces the selected local numerator and must use edge momenta.
+    /// Signed `edge_powers` override internal propagator powers, defaulting to one;
+    /// zero omits a denominator and negative powers move it to the numerator.
+    /// Powers do not change the selected region or its independent loop momenta.
+    /// Entries outside the selected internal edges are ignored, as in `denominator_of`.
     /// Projectors, overall factors and numerator prefactors are not added.
     /// Empty and tree regions return zero. This is one simultaneous UV limit,
     /// not a recursive forest subtraction or an integrated pole counterterm.
@@ -33,6 +39,7 @@ impl FeynmanDiagram {
         uv_mass: &Atom,
         dimension: i32,
         numerator: Option<&Atom>,
+        edge_powers: &BTreeMap<EdgeId, isize>,
     ) -> Result<Atom, DiagramError> {
         if subgraph.size() != self.graph.n_hedges() || dimension <= 0 {
             return Err(DiagramError::UvExpansion(
@@ -101,7 +108,7 @@ impl FeynmanDiagram {
                     quadratic,
                 ]) / &scale_squared)
             },
-            |_, _| 1,
+            |edge, _| edge_powers.get(&EdgeId(edge.0)).copied().unwrap_or(1),
         )?;
         let measured = rescale(numerator) / denominator
             * Atom::var(scale).pow(-i64::from(dimension) * basis.loop_edges.len() as i64);

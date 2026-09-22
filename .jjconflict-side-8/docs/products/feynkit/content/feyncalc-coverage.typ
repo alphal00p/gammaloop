@@ -842,6 +842,43 @@ The notebook and installed-host regression pass; automatic subtraction forests,
 arbitrary gauge parameter and the finite off-shell self-energy remain separate
 work. The displayed reference counterterms are not inferred by the IBP solver.
 
+== Generated two-loop photon renormalization
+
+`hep/photon_two_loop.py` and `installed_feyncalc_photon_two_loop.py` reproduce
+#link("https://feyncalc.github.io/FeynCalcExamples/QED/TwoLoops/Renormalization-GaGa")[the massless two-loop photon example]
+with symbolic gauge parameter $xi$. All three native diagrams retain their
+closed-fermion-loop signs and both open Lorentz indices. Native IBP reduces
+112 vacuum targets to the sunset and equivalent tadpole products.
+
+The shared `uv_expansion` and `uv_counterterm` accept signed `edge_powers`,
+using the denominator API's edge IDs and selection semantics. The Feynman
+photon term uses power one; the longitudinal term uses a polynomial numerator
+and power two. Freezing the massive denominators before retaining the explicit
+auxiliary-mass zeroth coefficient implements the reference's selective infrared
+rearrangement. The default UV expansion still retains its mass compensation terms.
+
+Four local insertions on a generated one-loop bubble calculate the counterterm
+sum: two vertex factors and two fermion kinetic insertions with squared
+propagators. The supplied one-loop input is $delta Z_psi=delta Z_1=-xi/epsilon$.
+Five one-loop targets reduce to the tadpole. Its finite term and the analytic
+two-loop master poles are explicit inputs; coefficients are checked to be
+regular at $D=4$ before using these truncated series. Tensor basis elements
+remain fixed during the Laurent expansion.
+
+With $Z=1+a_4 delta Z_(1)+a_4^2 delta Z_(2)$, the calculated bubble and insertions
+give
+$ delta Z_(A,1)=-frac(4N_f,3epsilon), quad delta Z_(A,2)=-frac(2N_f,epsilon), $
+$ delta Z_("Am",1)=-frac(2N_f,epsilon), quad
+  delta Z_("Am",2)=frac(N_f xi,2epsilon)-frac(N_f(2N_f+xi),epsilon^2). $
+The auxiliary operator is $i M(Z_("Am")^2-1)g^(mu nu)$, including the square of the
+one-loop coefficient at second order. Both tensor coefficients cancel exactly;
+physical field renormalization is gauge independent and all logarithms cancel.
+These explicit insertions do not provide arbitrary counterterm models or forest
+enumeration. Finite two-loop amplitudes and general analytic master evaluation
+remain separate work. The notebook passes its default state and 18 live
+gauge/flavor/auxiliary-mass combinations; the installed regression and
+headless export pass as well.
+
 == Generated QCD annihilation
 
 `Particle.color_sum(left, right, average=False)` constructs the identity in

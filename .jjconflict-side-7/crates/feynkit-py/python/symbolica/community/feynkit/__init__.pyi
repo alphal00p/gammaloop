@@ -1732,7 +1732,7 @@ class FeynmanDiagram:
             Basis from this diagram instance. Supplying it enables routing and
             takes precedence over ``in_lmb``, including for a selected region.
         """
-    def uv_expansion(self, uv_mass: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], *, dimension: builtins.int = 4, numerator: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None) -> TensorExpression:
+    def uv_expansion(self, uv_mass: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], *, dimension: builtins.int = 4, numerator: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None, edge_powers: typing.Optional[typing.Mapping[builtins.int, builtins.int]] = None) -> TensorExpression:
         r"""
         Expand the local integrand through its UV degree of divergence.
 
@@ -1745,6 +1745,10 @@ class FeynmanDiagram:
         ``numerator`` optionally replaces the local numerator (in edge momenta),
         for example after contracting a projector. Overall factors, numerator
         prefactors and projectors remain separate unless supplied in it.
+        ``edge_powers`` uses the signed powers of :meth:`denominator_expression`.
+        Move rational propagator factors out of a prepared numerator into these
+        powers so they receive the same auxiliary-mass expansion. Powers do not
+        change the selected region or its loop integration measure.
         Empty, tree and UV-convergent regions return zero. This performs one UV
         limit; it does not enumerate forests or integrate the counterterm.
 
@@ -1764,8 +1768,12 @@ class FeynmanDiagram:
             Positive spacetime dimension for UV power counting; defaults to four.
         numerator : Expression or TensorExpression or None, optional
             Prepared numerator in edge momenta; None uses the selected local numerator.
+        edge_powers : mapping[int, int] or None, optional
+            Signed propagator powers by diagram edge ID; omitted edges have power one.
+            Zero omits the denominator; negative powers put it in the numerator.
+            Entries outside the selected internal edges are ignored.
         """
-    def uv_counterterm(self, uv_mass: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], *, dimension: builtins.int = 4, numerator: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None) -> TensorExpression:
+    def uv_counterterm(self, uv_mass: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], *, dimension: builtins.int = 4, numerator: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None, edge_powers: typing.Optional[typing.Mapping[builtins.int, builtins.int]] = None) -> TensorExpression:
         r"""
         Return the additive local UV counterterm, the negative of ``uv_expansion``.
 
@@ -1787,6 +1795,10 @@ class FeynmanDiagram:
             Positive spacetime dimension for UV power counting; defaults to four.
         numerator : Expression or TensorExpression or None, optional
             Prepared numerator in edge momenta; None uses the selected local numerator.
+        edge_powers : mapping[int, int] or None, optional
+            Signed propagator powers by diagram edge ID; omitted edges have power one.
+            Zero omits the denominator; negative powers put it in the numerator.
+            Entries outside the selected internal edges are ignored.
         """
     def numerator_prefactor_expression(self) -> Expression:
         r"""
@@ -2069,6 +2081,8 @@ class FeynmanDiagram:
             use ``template_options`` with the same names as ``just draw --input``:
             ``show-particle``, ``show-edge-index``, ``show-node-index``, ``debug``,
             ``momentum-arrows`` and the ``momentum-arrow-*``/``momentum-label-*`` options.
+            Cross sections open their initial-state connections by default; set
+            ``split-initial-state`` to ``False`` to draw the sewn graph.
         momenta : bool, optional
             Show momentum arrows and labels routed in the diagram's stored basis.
             Explicit physics settings in ``config`` override these display defaults.
@@ -5187,7 +5201,6 @@ class Particle:
         ValueError
             If the particle's UFO color representation is unsupported.
         """
-
     def spin_sum(self, momentum: Expression, left: Expression, right: Expression, *, average: builtins.bool = False, reference: typing.Optional[Expression] = None, covariant: builtins.bool = False, spin_vector: typing.Optional[Expression] = None) -> Expression:
         r"""
         Construct this particle's external-state spin or polarization sum.
