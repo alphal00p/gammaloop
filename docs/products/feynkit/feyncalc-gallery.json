@@ -3342,7 +3342,25 @@
         "TimeUsed",
         "TrickMandelstam"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "passed: generated massive SU(N) and massless SU(3) squared matrix elements with physical gluon polarizations",
+      "validated_components": [
+        {
+          "scope": "three ordinary tree amplitudes, all interference, initial spin/color averages, two physical polarization references and final-gluon exchange",
+          "components": [
+            "Generator.generate",
+            "TensorExpression.dirac_adjoint",
+            "Particle.spin_sum",
+            "Particle.color_sum",
+            "TensorExpression.simplify_color",
+            "TensorExpression.simplify_gamma",
+            "Kinematics.mandelstam"
+          ],
+          "result": "passed in installed host and live Marimo notebook",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_qcd_gluons.py",
+          "massless_reference": "32*gs^4*(t^2+u^2)/(27*t*u)-8*gs^4*(t^2+u^2)/(3*s^2)",
+          "conventions": "TR=1/2; four-dimensional external spins; labeled final gluons; no phase-space symmetry factor included"
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/QQbar-GlGl-2",
