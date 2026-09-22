@@ -225,6 +225,24 @@ impl TensorialSyntax {
             return true;
         }
 
+        // Variance wrappers preserve representation syntax. In particular,
+        // g(rep(i), dind(rep(j))) must retain its oriented tensor ports.
+        if [
+            AIND_SYMBOLS.dind,
+            AIND_SYMBOLS.uind,
+            AIND_SYMBOLS.selfdualind,
+        ]
+        .contains(&symbol)
+            && fun.get_nargs() == 1
+            && fun.iter().next().is_some_and(|arg| match arg {
+                AtomView::Fun(rep) => rep.get_symbol().has_attributes_of(SPENSO_TAG.rep_),
+                AtomView::Var(rep) => rep.get_symbol().has_attributes_of(SPENSO_TAG.rep_),
+                _ => false,
+            })
+        {
+            return true;
+        }
+
         if symbol == ETS.metric {
             return fun.get_nargs() == 2 && fun.iter().all(|arg| arg.is_tensorial(filter));
         }
@@ -738,6 +756,31 @@ mod tests {
 
         assert!(scalar_with_tensor_arg.is_tensorial(StrictTensorFilter::ContainsReps));
         assert!(!scalar.is_tensorial(StrictTensorFilter::ContainsReps));
+    }
+
+    #[test]
+    fn tensorial_syntax_recognizes_dual_representation_wrappers() {
+        let rep = Lorentz {}.new_rep(4);
+        for expression in [rep.dual().to_symbolic([]), slot!(rep.dual(), i).to_atom()] {
+            for filter in [
+                StrictTensorFilter::Tagged,
+                StrictTensorFilter::TaggedChecked,
+                StrictTensorFilter::ContainsReps,
+            ] {
+                assert!(expression.is_tensorial(filter), "{expression}");
+            }
+        }
+        // A variance wrapper is not a generic tensor-valued function.
+        for expression in [
+            function!(AIND_SYMBOLS.dind, symbol!("dual_scalar_argument")),
+            function!(
+                AIND_SYMBOLS.dind,
+                vector!(dual_wrapped_vector, rep.to_symbolic([]))
+            ),
+        ] {
+            assert!(!expression.is_tensorial(StrictTensorFilter::Tagged));
+            assert!(!expression.is_tensorial(StrictTensorFilter::TaggedChecked));
+        }
     }
 
     #[test]
