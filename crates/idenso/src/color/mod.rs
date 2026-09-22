@@ -548,7 +548,7 @@ pub static CS, CS_INNER: ColorSymbols = || {
 pub struct ColorSimplifySettings {
     /// Whether closed color chains should be evaluated as traces.
     pub evaluate_traces: bool,
-    /// Whether contractions between generators on different open chains should
+    /// Whether contractions between generators on different open chains or traces should
     /// be expanded with the fundamental Fierz identity.
     pub expand_cross_chain_fierz: bool,
     /// Whether invariant factors for `cof(N)` should be written directly in
@@ -567,13 +567,13 @@ impl Default for ColorSimplifySettings {
 }
 
 impl ColorSimplifySettings {
-    /// Leaves collected `trace(...)` nodes inert after chain collection.
+    /// Leaves collected `trace(...)` nodes unevaluated; Fierz contractions can still join them.
     pub fn without_trace_evaluation(mut self) -> Self {
         self.evaluate_traces = false;
         self
     }
 
-    /// Keeps separate open chains instead of applying cross-chain Fierz
+    /// Keeps separate open chains and traces instead of applying cross-chain Fierz
     /// expansion.
     pub fn without_cross_chain_fierz_expansion(mut self) -> Self {
         self.expand_cross_chain_fierz = false;
