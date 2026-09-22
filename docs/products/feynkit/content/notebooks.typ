@@ -102,6 +102,14 @@ labels keep their independent spacing. `LabelLayout.FixedGap` exposes the same
 mode on generic Linnet layouts; `LabelLayout.DanglingTangent` retains the freely
 relaxed internal labels.
 
+Enable the notebook's *Collision boxes* toggle or set
+`DrawOptions(debug_label_collisions=True)` to inspect the optimizer's padded
+boxes. Dashed purple boxes repel other purple boxes; cyan label boxes repel
+orange node/edge boxes. The orange rectangles sample the visible edge carriers,
+including the width of waves and coils. Padding is split equally across each
+pair of boxes. The overlay preserves layout, canvas size, and SVG interaction.
+The Typst option is `draw(graph, debug-label-collisions: true)`.
+
 `momenta=True` draws the graph's stored routing. Passing `lmb=basis` also enables
 momentum display, using that basis without changing the diagram. Loop and external
 components use the same zero-based `k_i` and `p_i` conventions as

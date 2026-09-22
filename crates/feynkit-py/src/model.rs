@@ -133,11 +133,19 @@ impl PyParticle {
     /// amplitude. Subsequent kinematic substitutions must enforce on-shell
     /// conditions and a nonzero momentum-reference scalar product.
     ///
+    /// For a massive Dirac particle, ``spin_vector`` selects one physical spin
+    /// state instead of summing states. Supply a dimensionless unindexed vector
+    /// satisfying ``p.s = 0`` and ``s.s = -1``: the rest-frame spin direction,
+    /// boosted with the particle. The same projector sign applies to fermions
+    /// and antifermions; do not reverse this vector for an antiparticle.
+    /// This option requires ``average=False``.
+    ///
     /// Examples
     /// --------
     /// >>> from symbolica import S
     /// >>> p, i, j = S("p", "i", "j")
     /// >>> projector = model.particle_by_pdg(11).spin_sum(p, i, j, average=True)
+    /// >>> polarized = model.particle_by_pdg(11).spin_sum(p, i, j, spin_vector=S("s"))
     ///
     /// Parameters
     /// ----------
@@ -153,7 +161,17 @@ impl PyParticle {
     ///     Axial reference momentum for a massless vector; need not be null.
     /// covariant : bool
     ///     Use the Feynman-gauge vector numerator even for a massive vector.
-    #[pyo3(signature = (momentum, left, right, *, average=false, reference=None, covariant=false))]
+    /// spin_vector : Expression | None
+    ///     Physical spin vector of a massive Dirac state, with ``p.s = 0`` and
+    ///     ``s.s = -1``. Requires ``average=False``; ``None`` sums both states.
+    ///
+    /// Raises
+    /// ------
+    /// ValueError
+    ///     If ``spin_vector`` is used with averaging, a massless particle, or
+    ///     a particle other than a Dirac fermion.
+    #[pyo3(signature = (momentum, left, right, *, average=false, reference=None, covariant=false, spin_vector=None))]
+    #[allow(clippy::too_many_arguments)]
     fn spin_sum(
         &self,
         momentum: &PythonExpression,
@@ -162,6 +180,7 @@ impl PyParticle {
         average: bool,
         reference: Option<&PythonExpression>,
         covariant: bool,
+        spin_vector: Option<&PythonExpression>,
     ) -> PyResult<PythonExpression> {
         let sum = feynkit_generator::SpinSum::new(self.inner(), &self.model)
             .map_err(|error| PyValueError::new_err(error.to_string()))?
@@ -171,6 +190,7 @@ impl PyParticle {
             &momentum.expr,
             [left.expr.clone(), right.expr.clone()],
             reference.map(|reference| &reference.expr),
+            spin_vector.map(|spin_vector| &spin_vector.expr),
         )
         .map(|expr| PythonExpression { expr })
         .map_err(|error| PyValueError::new_err(error.to_string()))
@@ -184,8 +204,10 @@ impl PyParticle {
     /// with the supplied edge label are replaced; unpaired wavefunctions stay
     /// unchanged. Scalar particles have no external wavefunction factors.
     /// External states are four-dimensional; reference and gauge conventions
-    /// are those of ``spin_sum``. This does not sum color or helicity-resolved
-    /// states, conjugate amplitudes, or apply graph symmetry factors.
+    /// are those of ``spin_sum``. For a massive Dirac particle, ``spin_vector``
+    /// selects the same physical spin state as in ``spin_sum``, including for
+    /// antiparticles. This does not sum color, conjugate amplitudes, or apply
+    /// graph symmetry factors.
     ///
     /// Examples
     /// --------
@@ -208,7 +230,16 @@ impl PyParticle {
     ///     Axial reference for a massless vector; need not be null.
     /// covariant : bool
     ///     Use the Feynman-gauge vector numerator even for a massive vector.
-    #[pyo3(signature = (expression, momentum, *, edge, average=false, reference=None, covariant=false))]
+    /// spin_vector : Expression | None
+    ///     Physical spin vector of a massive Dirac state, with ``p.s = 0`` and
+    ///     ``s.s = -1``. Requires ``average=False``; ``None`` sums both states.
+    ///
+    /// Raises
+    /// ------
+    /// ValueError
+    ///     If ``spin_vector`` is used with averaging, a massless particle, or
+    ///     a particle other than a Dirac fermion.
+    #[pyo3(signature = (expression, momentum, *, edge, average=false, reference=None, covariant=false, spin_vector=None))]
     #[allow(clippy::too_many_arguments)]
     fn sum_spins(
         &self,
@@ -218,6 +249,7 @@ impl PyParticle {
         average: bool,
         reference: Option<&PythonExpression>,
         covariant: bool,
+        spin_vector: Option<&PythonExpression>,
     ) -> PyResult<PythonExpression> {
         feynkit_generator::SpinSum::new(self.inner(), &self.model)
             .map_err(|error| PyValueError::new_err(error.to_string()))?
@@ -228,6 +260,7 @@ impl PyParticle {
                 &momentum.expr,
                 edge,
                 reference.map(|reference| &reference.expr),
+                spin_vector.map(|spin_vector| &spin_vector.expr),
             )
             .map(|expr| PythonExpression { expr })
             .map_err(|error| PyValueError::new_err(error.to_string()))

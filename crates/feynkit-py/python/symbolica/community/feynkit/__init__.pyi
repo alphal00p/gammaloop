@@ -5188,7 +5188,7 @@ class Particle:
             If the particle's UFO color representation is unsupported.
         """
 
-    def spin_sum(self, momentum: Expression, left: Expression, right: Expression, *, average: builtins.bool = False, reference: typing.Optional[Expression] = None, covariant: builtins.bool = False) -> Expression:
+    def spin_sum(self, momentum: Expression, left: Expression, right: Expression, *, average: builtins.bool = False, reference: typing.Optional[Expression] = None, covariant: builtins.bool = False, spin_vector: typing.Optional[Expression] = None) -> Expression:
         r"""
         Construct this particle's external-state spin or polarization sum.
 
@@ -5201,11 +5201,19 @@ class Particle:
         amplitude. Subsequent kinematic substitutions must enforce on-shell
         conditions and a nonzero momentum-reference scalar product.
 
+        For a massive Dirac particle, ``spin_vector`` selects one physical spin
+        state instead of summing states. Supply a dimensionless unindexed vector
+        satisfying ``p.s = 0`` and ``s.s = -1``: the rest-frame spin direction,
+        boosted with the particle. The same projector sign applies to fermions
+        and antifermions; do not reverse this vector for an antiparticle.
+        This option requires ``average=False``.
+
         Examples
         --------
         >>> from symbolica import S
         >>> p, i, j = S("p", "i", "j")
         >>> projector = model.particle_by_pdg(11).spin_sum(p, i, j, average=True)
+        >>> polarized = model.particle_by_pdg(11).spin_sum(p, i, j, spin_vector=S("s"))
 
         Parameters
         ----------
@@ -5221,8 +5229,17 @@ class Particle:
             Axial reference momentum for a massless vector; need not be null.
         covariant : bool
             Use the Feynman-gauge vector numerator even for a massive vector.
+        spin_vector : Expression | None
+            Physical spin vector of a massive Dirac state, with ``p.s = 0`` and
+            ``s.s = -1``. Requires ``average=False``; ``None`` sums both states.
+
+        Raises
+        ------
+        ValueError
+            If ``spin_vector`` is used with averaging, a massless particle, or
+            a particle other than a Dirac fermion.
         """
-    def sum_spins(self, expression: Expression, momentum: Expression, *, edge: builtins.int, average: builtins.bool = False, reference: typing.Optional[Expression] = None, covariant: builtins.bool = False) -> Expression:
+    def sum_spins(self, expression: Expression, momentum: Expression, *, edge: builtins.int, average: builtins.bool = False, reference: typing.Optional[Expression] = None, covariant: builtins.bool = False, spin_vector: typing.Optional[Expression] = None) -> Expression:
         r"""
         Sum paired generated external wavefunctions for one edge.
 
@@ -5232,8 +5249,10 @@ class Particle:
         with the supplied edge label are replaced; unpaired wavefunctions stay
         unchanged. Scalar particles have no external wavefunction factors.
         External states are four-dimensional; reference and gauge conventions
-        are those of ``spin_sum``. This does not sum color or helicity-resolved
-        states, conjugate amplitudes, or apply graph symmetry factors.
+        are those of ``spin_sum``. For a massive Dirac particle, ``spin_vector``
+        selects the same physical spin state as in ``spin_sum``, including for
+        antiparticles. This does not sum color, conjugate amplitudes, or apply
+        graph symmetry factors.
 
         Examples
         --------
@@ -5256,6 +5275,15 @@ class Particle:
             Axial reference for a massless vector; need not be null.
         covariant : bool
             Use the Feynman-gauge vector numerator even for a massive vector.
+        spin_vector : Expression | None
+            Physical spin vector of a massive Dirac state, with ``p.s = 0`` and
+            ``s.s = -1``. Requires ``average=False``; ``None`` sums both states.
+
+        Raises
+        ------
+        ValueError
+            If ``spin_vector`` is used with averaging, a massless particle, or
+            a particle other than a Dirac fermion.
         """
     def __repr__(self) -> builtins.str:
         r"""

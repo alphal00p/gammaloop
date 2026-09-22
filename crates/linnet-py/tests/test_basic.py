@@ -2814,6 +2814,7 @@ class TestTypedTypstSurface(unittest.TestCase):
             title=lp.TextLabel("all drawing fields"),
             subgraph=[[True, False], [False, True]],
             debug=lp.DebugLevel.EdgePositions,
+            debug_label_collisions=True,
             show_half_edge_ids=True,
             node_radius=[0.2, 0.3],
             node_min_radius=0.1,
