@@ -94,6 +94,14 @@ uses the Hermiticity of the SU(N) generators. Scalar representation labels in
 Casimir and index invariants are preserved. Real momenta and couplings still
 need explicit assumptions or substitutions for unevaluated conjugations.
 
+Compact fundamental chains and ordered traces of these Hermitian generators
+use the same conjugation: reverse the generator sequence and, for open chains,
+exchange and dualize the endpoints. `collect_chains(Representation.cof(3))`
+therefore commutes with conjugating an explicit SU(3) network. A trace of three
+generators is not assumed real. The existing trace builder retains cyclic
+normalization. This rule recognizes generator words; it does not assign
+Hermiticity to arbitrary matrix-valued functions or projected factor groups.
+
 Color simplification contracts metrics inside collected chains and traces before
 applying trace identities. A symmetric trace through degree four with a repeated
 adjoint pair is expanded using Spenso's normalized projector and reduced by the
