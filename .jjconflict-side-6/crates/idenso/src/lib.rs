@@ -232,8 +232,14 @@ pub trait IndexTooling {
     ///
     /// # Returns
     /// A new [`Atom`] representing the conjugated expression.
-    fn dirac_adjoint<Aind: DummyAind + ParseableAind + AbsInd>(&self)
-    -> Result<Atom, AdjointError>;
+    /// When `preserve_indices` is true, external labels remain attached to the
+    /// same amplitude legs. Gamma-zero boundary factors and conjugation still
+    /// apply, but open-chain endpoints are not exchanged. This convention is
+    /// linear across sums with different external fermion pairings.
+    fn dirac_adjoint<Aind: DummyAind + ParseableAind + AbsInd>(
+        &self,
+        preserve_indices: bool,
+    ) -> Result<Atom, AdjointError>;
 
     fn conjugate_transpose(&self, rep: impl RepName) -> Atom;
 
@@ -282,8 +288,9 @@ impl IndexTooling for Atom {
     }
     fn dirac_adjoint<Aind: DummyAind + ParseableAind + AbsInd>(
         &self,
+        preserve_indices: bool,
     ) -> Result<Atom, AdjointError> {
-        self.as_view().dirac_adjoint::<Aind>()
+        self.as_view().dirac_adjoint::<Aind>(preserve_indices)
     }
 
     fn conjugate_transpose(&self, rep: impl RepName) -> Atom {
@@ -505,6 +512,7 @@ impl IndexTooling for AtomView<'_> {
 
     fn dirac_adjoint<Aind: DummyAind + ParseableAind + AbsInd>(
         &self,
+        preserve_indices: bool,
     ) -> Result<Atom, AdjointError> {
         let net = self
             .parse_to_symbolic_net::<Aind>(&ParseSettings {
@@ -568,10 +576,12 @@ impl IndexTooling for AtomView<'_> {
                         break;
                     };
 
-                    a = a.replace_multiple(&[
-                        Replacement::new(i.to_atom().to_pattern(), j.to_atom()),
-                        Replacement::new(j.to_atom().to_pattern(), i.to_atom()),
-                    ]);
+                    if !preserve_indices {
+                        a = a.replace_multiple(&[
+                            Replacement::new(i.to_atom().to_pattern(), j.to_atom()),
+                            Replacement::new(j.to_atom().to_pattern(), i.to_atom()),
+                        ]);
+                    }
                 }
                 _ => {
                     return Err(AdjointError::TooManyDanglingBispinors {
@@ -584,6 +594,9 @@ impl IndexTooling for AtomView<'_> {
             .map_err(|error| AdjointError::GammaConjugation {
                 reason: error.to_string(),
             })?
+            // Boundary gamma0 factors multiply the complete amplitude. Distribute
+            // them across sums before canceling each chain's conjugation factors.
+            .expand()
             .simplify_gamma0()
             .simplify_metrics())
     }
@@ -622,6 +635,45 @@ pub mod test {
     };
 
     #[test]
+    fn dirac_adjoint_preserves_physical_legs_across_different_pairings() {
+        test_initialize();
+        let direct = gamma!(1, 2, 5) * gamma!(3, 4, 5);
+        let crossed = gamma!(1, 4, 6) * gamma!(3, 2, 6);
+        let first = (Atom::one() + Atom::num(2) * Atom::i()) * &direct;
+        let second = (Atom::num(3) - Atom::i()) * &crossed;
+        let amplitude = &first + &second;
+        let expected = (Atom::one() - Atom::num(2) * Atom::i()) * gamma!(2, 1, 5) * gamma!(4, 3, 5)
+            + (Atom::num(3) + Atom::i()) * gamma!(4, 1, 6) * gamma!(2, 3, 6);
+        let adjoint = amplitude.dirac_adjoint::<AbstractIndex>(true).unwrap();
+        assert!((adjoint.clone() - expected).expand().is_zero());
+        assert!(
+            (adjoint.clone()
+                - first.dirac_adjoint::<AbstractIndex>(true).unwrap()
+                - second.dirac_adjoint::<AbstractIndex>(true).unwrap())
+            .expand()
+            .is_zero()
+        );
+        assert!(
+            (adjoint.dirac_adjoint::<AbstractIndex>(true).unwrap() - amplitude)
+                .expand()
+                .is_zero()
+        );
+        assert!(
+            (direct.dirac_adjoint::<AbstractIndex>(false).unwrap() - direct)
+                .expand()
+                .is_zero()
+        );
+
+        let malformed = FunctionBuilder::new(SPENSO_TAG.dot)
+            .add_arg(Atom::var(symbol!("preserved_adjoint_operand")))
+            .finish();
+        assert!(matches!(
+            malformed.dirac_adjoint::<AbstractIndex>(true),
+            Err(AdjointError::Network(NetworkToolingError::Parse { .. }))
+        ));
+    }
+
+    #[test]
     fn malformed_dirac_adjoint_returns_a_parse_error() {
         test_initialize();
         let malformed = FunctionBuilder::new(SPENSO_TAG.dot)
@@ -629,7 +681,7 @@ pub mod test {
             .finish();
 
         let error = malformed
-            .dirac_adjoint::<AbstractIndex>()
+            .dirac_adjoint::<AbstractIndex>(false)
             .expect_err("one-argument dot notation should not have a Dirac adjoint");
 
         assert!(matches!(
@@ -671,11 +723,11 @@ pub mod test {
         let ubgu = u!(2, slot!(bis4, 2))
             * (gamma!(1, 2, 3) * p1 + bis4.g(1, 2))
             * (u!(1, slot!(bis4, 1))
-                .dirac_adjoint::<AbstractIndex>()
+                .dirac_adjoint::<AbstractIndex>(false)
                 .unwrap());
 
         assert_snapshot!(
-            ubgu.dirac_adjoint::<AbstractIndex>()
+            ubgu.dirac_adjoint::<AbstractIndex>(false)
                 .unwrap()
                 .canonize(AbstractIndex::Dummy)
                 .expect("test expression should canonicalize")

@@ -221,27 +221,50 @@ for label, pdgs in (
         flush=True,
     )
 
-    if label == "Moller":
-        cos_theta, alpha, cutoff = S(
-            "identical_leptons::cos_theta",
-            "identical_leptons::alpha",
-            "identical_leptons::cutoff",
+    cos_theta, alpha, cutoff = S(
+        "identical_leptons::cos_theta",
+        "identical_leptons::alpha",
+        "identical_leptons::cutoff",
+    )
+    angular = (
+        massless.replace(t, -s * (1 - cos_theta) / 2)
+        .replace(s, s_cm)
+        .replace(charge**4, (4 * pi * alpha) ** 2)
+    )
+    labeled = (angular * measure / flux).together()
+    kernel = (labeled * s_cm / alpha**2).together()
+    expected_kernel = (3 + cos_theta**2) ** 2 / (
+        4 * (1 - cos_theta) ** 2 if label == "Bhabha" else (1 - cos_theta**2) ** 2
+    )
+    assert (kernel - expected_kernel).together() == E("0")
+    primitive = kernel.integrate(cos_theta).together()
+    assert (primitive.derivative(cos_theta) - kernel).together() == E("0")
+    # An angular cut 0<cutoff<1 excludes the forward/backward Coulomb poles.
+    symmetric_integral = primitive.replace(cos_theta, cutoff) - primitive.replace(
+        cos_theta, -cutoff
+    )
+    if label == "Bhabha":
+        # Electron and positron are distinct: use the entire angular interval.
+        full_sphere = 2 * pi * alpha**2 / s_cm * symmetric_integral
+        expected_integral = (
+            cutoff**3 / 6
+            + 9 * cutoff / 2
+            - 8 * cutoff.atanh()
+            + 8 * cutoff / (1 - cutoff**2)
         )
-        angular = (
-            massless.replace(t, -s * (1 - cos_theta) / 2)
-            .replace(s, s_cm)
-            .replace(charge**4, (4 * pi * alpha) ** 2)
-        )
-        labeled = (angular * measure / flux).together()
-        kernel = (labeled * s_cm / alpha**2).together()
-        expected_kernel = (3 + cos_theta**2) ** 2 / (1 - cos_theta**2) ** 2
-        assert (kernel - expected_kernel).together() == E("0")
-        primitive = kernel.integrate(cos_theta).together()
-        assert (primitive.derivative(cos_theta) - kernel).together() == E("0")
+        # Symbolica returns logarithms instead of atanh. Equality follows from
+        # the same derivative and value at zero on the real interval |cutoff|<1.
+        residual = (
+            full_sphere * s_cm / (2 * pi * alpha**2) - expected_integral
+        ).together()
+        assert residual.derivative(cutoff).together() == E("0")
+        assert residual.replace(cutoff, E("0")).together() == E("0")
+        for value in ("1/5", "1/2", "4/5"):
+            assert abs(complex(residual.replace(cutoff, E(value)).to_float(40))) < 1e-30
+    else:
         assert (
             primitive - cos_theta - 8 * cos_theta / (1 - cos_theta**2)
         ).together() == E("0")
-        # An angular cut 0<cutoff<1 excludes the forward/backward Coulomb poles.
         # Either count one forward electron per event, or integrate labeled
         # electrons over the full symmetric interval with the explicit 1/2!.
         hemisphere = (
@@ -254,23 +277,13 @@ for label, pdgs in (
                 - primitive.replace(cos_theta, E("0"))
             )
         )
-        full_sphere = (
-            E("1/2")
-            * 2
-            * pi
-            * alpha**2
-            / s_cm
-            * (
-                primitive.replace(cos_theta, cutoff)
-                - primitive.replace(cos_theta, -cutoff)
-            )
-        )
+        full_sphere = E("1/2") * 2 * pi * alpha**2 / s_cm * symmetric_integral
         expected_events = (
             2 * pi * alpha**2 / s_cm * cutoff * (9 - cutoff**2) / (1 - cutoff**2)
         )
         assert (hemisphere - expected_events).together() == E("0")
         assert (full_sphere - expected_events).together() == E("0")
-        print(
-            "Moller: exchange symmetry and identical-electron angular-cut cross section passed",
-            flush=True,
-        )
+    print(
+        f"{label}: angular-cut cross section and final-state event counting passed",
+        flush=True,
+    )

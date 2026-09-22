@@ -237,7 +237,7 @@ mod tests {
             "t(coad(8,a),cof(3,i),dind(cof(3,j)))",
             default_namespace = "spenso"
         );
-        let adjoint = generator.dirac_adjoint::<AbstractIndex>().unwrap();
+        let adjoint = generator.dirac_adjoint::<AbstractIndex>(false).unwrap();
         assert_eq!(
             adjoint,
             parse!(
