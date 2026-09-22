@@ -57,14 +57,17 @@ not treat the presence of a primitive as an end-to-end validation.
    reuse the Symanzik polynomials and Symbolica linear solves. Automatic sector
    discovery, degenerate quadratic forms, UV/IR splitting and generator filter
    integration remain outstanding.],
-  [IBP reduction], [External reducer adapters needed],
+  [IBP reduction], [Integration deferred],
   [22 available examples call Kira and four call FIRE. These are external
    dependencies used through FeynHelpers; they are not FeynCalc's own solvers.
-   Export, invocation and result import still need implementation.],
-  [Analytic loop evaluation], [Shared integration components needed],
-  [General non-vacuum one-loop scalar masters, epsilon expansions and UV/IR
-   separation remain outstanding. Reuse existing integration packages where
-   their conventions and capabilities match.],
+   Integration is on hold at the maintainer's request pending upcoming IBP
+   software; no Kira or FIRE adapter is being added.],
+  [Analytic loop evaluation], [Shared OneLOop integration in the HEP host],
+  [The HEP namespace exposes A0, B0, dB0, C0 and D0, including evaluable
+   Symbolica Laurent coefficients. A generated massive photon self-energy
+   validates the transverse form factor, UV pole and finite part through A0/B0.
+   General reduction to these masters, higher epsilon orders and separate UV/IR
+   bookkeeping remain outstanding.],
   [Cross sections and decay rates], [FeynKit kinematics and process APIs],
   [Shared symbolic/numerical initial-state flux and four-dimensional two-body
    phase space. The generated QED benchmark includes its angular distribution
@@ -234,12 +237,31 @@ FeynKit finalization reverses the incoming attachment, while the original
 callback preserves it. A diagnostic restoring that callback, its vertex-slot
 assignments, and the corresponding physical cut side restored covariant/axial
 agreement for massive electron and positron Compton scattering. Both then gave
-the negative of the complete reference expression. Thus this change alone is
-insufficient: the overall sewn-graph sign and its conversion into a squared
-amplitude must also be accounted for. This diagnostic is not applied to the
-production implementation. Two native fixtures explicitly encode the current
-reversed-carrier convention and also require review before that convention can
-change. No separate sewing-specific spin-sum formula has been introduced.
+the negative of the complete reference expression, while annihilation retained
+the correct sign. A common cut-phase multiplier cannot correct both results.
+
+The external ordering calculation counts the closed fermion cycles created by
+sewing. For $n$ open chains joined into $c$ cycles, the relative permutation
+parity is $(-1)^(n-c)$, rather than the virtual-loop factor $(-1)^c$. An isolated
+correction retaining the incoming attachment and including this chain-count
+parity reproduces six exact full-mass comparisons: electron and positron Compton
+scattering with both covariant and timelike axial incoming-photon sums,
+electron-positron annihilation into muons, and electron-muon scattering. The
+physical completeness tensors and the existing antifermion factor are unchanged.
+
+This correction remains isolated from the production implementation pending
+review of two native fixtures that explicitly encode the reversed-carrier
+convention. With the correction, 142 of 144 graph/generator tests pass; the two
+convention-dependent fixtures fail. Clippy passes with warnings denied. The
+public Python regression also passes all six comparisons in a separate host
+extension, including the massless Compton limit. The single-chain ordering
+regression passes, as does GammaLoop's native-to-runtime parity regression for
+both Compton charges. Two older Python checks still stop at hard-coded routing
+assertions on both the current and corrected implementations; their previously
+proposed routing-independent drafts pass the unpolarized angular distribution,
+total cross section, and both polarized momentum choices without changing the
+reference formulas. No separate sewing-specific spin-sum formula has been
+introduced.
 
 == Normalize and integrate two-body observables
 
@@ -307,6 +329,35 @@ checks covariant moments through rank four, scalar prefactor preservation and
 an auxiliary null basis. Rust tests also cover two-direction Gram inversion,
 mixed loop momenta, and a basis spanning the full Lorentz space. These tests
 validate the projection identities, not the gallery's completed loop integrals.
+
+== Generated photon self-energy
+
+`crates/feynkit-py/tests/installed_feyncalc_photon_self_energy.py` runs in the
+installed `symbolica.community.hep` host, where FeynKit and OneLOop share the
+Symbolica runtime. It generates the electron loop, promotes Lorentz slots to
+symbolic dimension before the Dirac trace, projects the tensor numerator and
+rewrites scalar products with the diagram's integral family. Existing family
+maps and vacuum projection check the shifted tadpole moments. This equal-mass
+bubble needs only A0 and B0; no IBP adapter or second scalar evaluator is used.
+
+With $s=p^2$, $D=4-2 epsilon$ and $tr(1)=4$, the result is
+$(s g^(mu nu)-p^mu p^nu) F(D)$, where
+$ F(D) = frac(2 e^2, s (D-1))
+  (2 (D-2) A_0 - ((D-2)s+4m^2) B_0). $
+The expressions omit the common loop factor $i/(16 pi^2)$.
+The pole of $F$ is $-4 e^2/(3 epsilon)$, agreeing with the photon component of
+#link("https://feyncalc.github.io/FeynCalcExamples/QED/OneLoop/Renormalization")[the gallery's QED renormalization example].
+Keeping the dimension symbolic preserves the finite rational term from the
+product of dimension-dependent coefficients and scalar poles.
+
+Five finite-part checks use independently computed Feynman-parameter integrals,
+including spacelike momenta, points on both sides of the pair threshold, and
+unequal positive mass and renormalization scales. The above-threshold imaginary
+part is checked separately against the two-particle cut. Native OneLOop
+coefficient functions evaluate directly as Symbolica expressions. The benchmark
+assumes positive squared mass and scale and nonzero $s$; it does not establish
+the degenerate Gram limit or reproduce the lepton self-energy, vertex and
+counterterm parts of the full renormalization example.
 
 == Validation standard
 
