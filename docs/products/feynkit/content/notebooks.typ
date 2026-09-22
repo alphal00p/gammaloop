@@ -65,7 +65,8 @@ node/edge styling. Physics controls belong in `template_options`, using the same
 hyphenated names as `just draw --input`: `show-particle`, `show-edge-index`,
 `show-node-index`, `show-half-edge-index`, `debug`, `momentum-arrows`,
 `momentum-arrow-offset`, `momentum-arrow-length`, `momentum-arrow-side`,
-`momentum-arrow-stroke`, and `momentum-label-gap`, among others. Catalogue pagination
+`momentum-arrow-stroke`, `momentum-label-gap`, `momentum-label-side`, and
+`momentum-label-slide`, among others. Catalogue pagination
 (`rows` and `columns`) applies to `just draw`, rather than an individual SVG.
 
 // docs-example: compile
@@ -130,6 +131,30 @@ Explicit physics settings override the display defaults enabled by `momenta` or
 `lmb`: for example, `momentum-arrows: false` hides arrows while retaining labels,
 and `show-momentum: false` hides momentum labels. Edge hover information still
 contains the routing. `to_html()` and `to_linnest()` accept the same options.
+
+Momentum arrows and their labels move together using the same collision optimizer
+and `label_collision_padding` as ordinary labels. `momentum-label-gap` controls
+the label's fixed normal clearance from its arrow carrier, and
+`momentum-label-shift` selects a preferred position along the full edge.
+Arrow and label shifts retain their relative separation during optimization.
+`momentum-label-side: auto` inherits the arrow side; automatic sides may flip,
+while an explicit `left` or `right` stays fixed. Set `momentum-label-slide: false`
+to pin the annotation; an explicit `momentum-label-anchor` also pins it. Global
+template options can be overridden through edge or half-edge data using the same `momentum-*` field names.
+
+// docs-example: compile
+```python
+settings = RenderConfig(
+    drawing=DrawOptions(label_collision_padding=0.6),
+    template_options={
+        "momentum-arrow-length": 0.8,
+        "momentum-arrow-offset": 0.4,
+        "momentum-label-gap": 0.2,
+        "momentum-label-slide": True,
+    },
+)
+diagram.render(momenta=True, config=settings)
+```
 
 Cross sections open their initial-state connections into matched incoming and outgoing
 legs by default, retaining the physical final-state cut edges. Use

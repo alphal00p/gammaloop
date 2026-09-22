@@ -306,9 +306,55 @@
   Use `interpolation: "linear"` for corners and `"smooth"` for a spline through
   sampled points.
 
-  `endpoint-ramp: true` tapers amplitude at anchored endpoints. This is useful
-  for coils, whose longitudinal offset would otherwise put the first and last
-  visible points inside the turn near nodes.
+  `kurvst.coil` defaults to `samples-per-period: 16`,
+  `longitudinal-scale: 1.25`, `fit-length: none`, `amplitude: 0.1`, and
+  `wavelength: 1.0`. With `fit-length: none`, the periodic coil is unchanged;
+  `amplitude` and `wavelength` are used only for fitting.
+
+  Set `fit-length: L` to return an ordinary normalized point-pattern dictionary
+  spanning `P = max(1, round(L / wavelength)) - 0.5` coil periods, using the
+  requested wavelength. It retains full amplitude with inward endpoint phases,
+  exact zero offsets at both ends, and `endpoint-ramp: false`: no taper,
+  straight stubs, or connectors. Longitudinal fitting depends on `amplitude`,
+  so apply the dictionary once over a carrier of length `L` with the same
+  amplitude, a wavelength of `L`, all its samples, and zero phase:
+
+  ```typ
+  #let base = kurvst.from-cubic(segment)
+  #let L = kurvst.length(base)
+  #let A = 0.12
+  #let coil = kurvst.coil(fit-length: L, amplitude: A, wavelength: 0.55)
+  #let fitted = kurvst.pattern(
+    base,
+    pattern: coil,
+    amplitude: A,
+    wavelength: L,
+    samples-per-period: coil.points.len() - 1,
+    phase: 0,
+  )
+  ```
+
+  Fitting requires positive, finite `fit-length` and `wavelength`, finite
+  `amplitude`, and finite, nonnegative `longitudinal-scale`. Fitting happens
+  in Typst; `kurvst.pattern` has no `natural-endpoints` argument. As for other
+  point patterns, curved carriers use local tangent/normal offsets, not
+  evaluation at a corrected arc distance. `endpoint-slope` has no effect
+  with `endpoint-ramp: false`.
+
+  Patterns with `endpoint-ramp: true`, including periodic coils, taper amplitude
+  over 75% of a wavelength at each anchored endpoint, capped at half the path
+  length for short paths. This is useful for coils, whose longitudinal offset would
+  otherwise put the first and last visible points inside the turn near nodes.
+  The longitudinal offset uses the square of the taper envelope, letting the
+  coil open sideways before it starts doubling back.
+
+  On `kurvst.pattern`, `endpoint-slope: 0` keeps the taper tangential to the
+  base path. Values from `0` to `3` control the envelope's initial slope;
+  try `1` for an angled finish with coil `phase: calc.pi / 2`. This keeps the
+  endpoint attached and still flattens the envelope into the full-sized coil.
+  It is not an angle: the direction also depends on amplitude, wavelength,
+  and the lateral offset at the endpoint phase. Unanchored endpoints and
+  patterns without `endpoint-ramp` are unaffected.
 
   ```typ
   #let base = kurvst.from-cubic(segment)

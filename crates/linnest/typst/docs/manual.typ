@@ -618,6 +618,83 @@
   #draw(layout(g, layout-algo: "stable-layered"), edge-style: edge-style)
   ```
 
+  The Feynman example style is configured before layout. `graph-style` is a
+  function returning options for `graph.style`; `draw-style` remains a dictionary
+  of drawing callbacks and defaults:
+
+  ```typ
+  #import "../examples/map-style.typ" as feynman
+  #let styled = graph.style(g, ..feynman.graph-style(
+    unit: 1.35, line-width: 0.7pt, node-radius: 0.2,
+    momentum-line-width: 0.4pt,
+  ))
+  #draw(layout(styled), ..feynman.draw-style)
+  ```
+
+  Call `feynman.graph-style()` for the default appearance; replace the former
+  dictionary spread `..feynman.graph-style` with `..feynman.graph-style()`.
+  Its named options are:
+
+  - `unit: 1.35`: graph coordinate unit; a number multiplies the current `1em`,
+    or supply an absolute length such as `10pt`.
+  - `line-width: 0.5pt`: ordinary particle stroke thickness.
+  - `node-radius: 0.08`: visible node radius in graph units.
+  - `node-line-width: auto`: node outline, defaulting to `line-width`.
+  - `massive-line-width: auto`: scalar/ghost stroke, defaulting to
+    `2 * line-width`.
+  - `fermion-arrow-line-width: auto`: fermion arrowhead outline, defaulting to
+    `0.4 * line-width`.
+  - `momentum-line-width: auto`: momentum shaft and arrowhead thickness, both
+    defaulting to `0.8 * line-width`.
+
+  Width overrides are Typst lengths, independent of the graph unit and node
+  radius. With all defaults, the node and ordinary edge strokes are `0.5pt`,
+  scalar/ghost strokes `1pt`, fermion arrowheads `0.2pt`, and momentum strokes
+  `0.4pt`. The constructor stores resolved `node-style`, `fermion`, `particles`,
+  `momentum-stroke`, and `momentum-mark` presets in `scope.feynman`.
+  `graph.style` uses this scope for measurement, and `draw` inherits it after
+  layout; no repeated draw-time configuration is needed. Separate styles do not
+  share configuration. Direct calls to the exported `feynman.node-style` and
+  `feynman.edge-style` without scope still use the original defaults.
+
+  Particle aliases remain `a`/`photon`, `g`/`gluon`, and `scalar`/`ghG`;
+  other particle names use the fermion preset. Hidden nodes always have radius
+  zero and no fill or stroke. Per-edge momentum fields, including sparse
+  `mom(...)` patches described below, retain priority over inherited edge data
+  and keep their arrow/label placement independent of these width options.
+
+  Momentum visibility belongs to edge data: set `show-momentum: false` on an
+  `edge(...)` or in a `graph.map` edge patch to omit its momentum arrow and label
+  while retaining the propagator and fermion arrow. It defaults to `true`.
+  Set `default-edge-data: (show-momentum: false)` on `graph.build` to hide all
+  momenta, then opt individual edges back in with `show-momentum: true`.
+
+  Momentum arrows and labels are placed together by the shared label annealing
+  step. Their normal offset and relative arc shift remain fixed; the optimizer
+  chooses a position along the full edge and may switch an automatic side.
+  The complete arrow stays within the carrier. Sparse `momentum(...)` patches
+  configure the arrow and nested label options independently:
+
+  ```typ
+  #import "../examples/map-style.typ": momentum
+  #let options = momentum(
+    offset: 0.4, length: 1.0, shift: 0.2,
+    label: (gap: 0.2, slide: true),
+  )
+  ```
+
+  Use `label: (slide: false)` to pin the arrow and text at their requested
+  positions, or `side: "left"` / `"right"` to keep the annotation on that side
+  while still allowing arc movement. An explicit label anchor also pins it.
+  Collision padding and the debugging boxes use the same settings as ordinary
+  edge labels.
+
+  Cut fragments inherit the flag like other edge data. Use `..feynman.draw-style`
+  unchanged; `edge-style` no longer takes a `show-momentum` argument.
+  Only drawing layers are suppressed: physical momentum data is retained, and
+  hidden layout labels still participate, so the switch does not change solved
+  graph geometry.
+
   An edge can sparsely patch the `edge-style` passed to `draw` with
   `style: (...)`, compute the patch with a callback, use `auto` to delegate, or
   use `none` to hide its paint while
@@ -709,6 +786,41 @@
   Set `offset-side: "label"` on an offset layer to choose the sign of `offset`
   so the layer is drawn on the same side of the curve as the edge label.
 
+  Pattern layers are generated over each continuous path, so internal curve
+  segments do not restart the phase or shorten the endpoint taper.
+
+  `pattern-natural-endpoints` defaults to `false`. For built-in coil strings
+  (`"coil"`, `"helix"`, or `"spring"`) on complete continuous paths with both
+  endpoints anchored, `true` constructs a fitted `kurvst.coil` dictionary in
+  Typst from the path length and layer's pattern settings, then applies it once
+  through ordinary `kurvst.pattern`. Its half-integer coil periods retain full
+  amplitude, inward endpoint phases, and exact endpoints, without taper, stubs,
+  or connectors. This overrides `pattern-phase`, bypasses `pattern-fit` integer
+  fitting, and ignores `pattern-endpoint-slope` (`endpoint-ramp: false`).
+
+  Only automatic construction requires a built-in coil string. A fitted
+  dictionary can be passed directly as `pattern` without this flag, with matching
+  `pattern-*` settings; see the Kurvst manual's Path Patterns section for fitting
+  and one-pass application. On curved carriers, fitted coils use local
+  tangent/normal offsets, not evaluation at a corrected arc distance.
+
+  The gluon preset in `examples/map-style.typ` enables this option. Set
+  `pattern-natural-endpoints: false` to restore its earlier 75%-wavelength
+  endpoint taper (capped at half the path length), with a squared longitudinal
+  envelope and no straight end sections. Without automatic fitting, `pattern-fit: true`
+  adjusts `pattern-wavelength` to the nearest whole number of periods on a
+  complete edge; `pattern-phase` is in radians, with `calc.pi / 2` giving coils
+  matching endpoint phases. Set `pattern-endpoint-slope: 1` on a layer to
+  allow an angled endpoint instead of a tangential one; the default is `0` and
+  the valid range is `0` to `3`. This controls the taper envelope, not an angle,
+  so the final direction also depends on phase, amplitude, and wavelength.
+  Endpoints remain attached.
+
+  Partially anchored paths, including split-style halves and crossing-gap
+  fragments, keep the requested wavelength, taper only anchored endpoints,
+  and preserve phase continuity across hidden spans. Neither automatic coil
+  construction nor integer fitting applies.
+
   Paired edges are Kurvst paths split at their edge layout point. Set
   `edge-split-gap` on `draw` to open a centered arc-length gap there, or set
   `split-gap` on an individual source/sink style layer to override the global
@@ -746,6 +858,15 @@
   length. `bend` affects dangling edges only. A paired edge instead follows its
   source node, `edge.pos`, and sink node, with `edge-omega` controlling its Hobby
   curve.
+
+  For anchored paired edges, `anchor-control-distance` sets the control-handle
+  distance in graph units, not the endpoint position. Each edge can specify
+  `source-style: (anchor-control-distance: 4)` and
+  `sink-style: (anchor-control-distance: 1.5)` to tune the two ends independently.
+  Set `source-anchor` and `sink-anchor` in its `edge-style` to choose the tangent
+  directions. A shared `edge-style: (anchor-control-distance: 2)` supplies both
+  ends unless an endpoint style overrides it; `auto` is computed independently
+  for each end. An override no longer supplies the opposite endpoint's distance.
 
   ```typ
   #draw(
@@ -859,7 +980,8 @@
   with horizontal spacing $tau_x L$ and vertical spacing $tau_y L$. Here
   $lambda$ is `length-scale`, $W$ is `viewport-w`, $H$ is `viewport-h`, $tau_x$
   is `tree-dx`, and $tau_y$ is `tree-dy`. These fields set the geometry scale for
-  both layout modes.
+  both layout modes. Isolated subgraph layout uses the number of selected incident
+  nodes for $n$; other layouts use the full graph node count.
 
   For deterministic, non-iterative placement, use `layout-algo: "tree"` or
   `layout-algo: "dot"`. `"tree"` places a traversal forest by levels. `"dot"`
@@ -880,9 +1002,14 @@
   otherwise.
 
   `layout-algo: "force"` and `layout-algo: "anneal"` also accept `subgraph`.
-  For these iterative modes, nodes and edge control points outside the selected
-  subgraph stay fixed and act as boundary points while the selected subgraph is
-  optimized.
+  The default `solver.subgraph-mode: "fixed-boundary"` keeps nodes and edge
+  control points outside the selection fixed while retaining their spring,
+  repulsion, centroid, and crossing interactions. Set
+  `solver: (subgraph-mode: "isolated")` to omit unselected half edges, nodes,
+  control points, and labels from those interactions. Selected halves of otherwise paired edges become dangling
+  boundaries of the isolated solver domain. Complement coordinates and labels
+  remain unchanged, and an empty selection is a no-op. An isolated selection
+  cannot split a grouped coordinate; expand the selection or remove that group.
 
   Set `layout-nodes: "fixed"` to keep every node at its current `pos` for this
   layout pass and move only edge control points. With `subgraph`, only edges in

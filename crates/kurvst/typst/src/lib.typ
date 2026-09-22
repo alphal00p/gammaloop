@@ -36,10 +36,22 @@
   samples-per-period: 16,
   /// Horizontal scale of the coil before it is mapped onto a path. -> int | float
   longitudinal-scale: 1.25,
+  /// Fit a complete coil between inward-facing natural endpoints, without tapering.
+  /// A positive path length fits half-integer periods using wavelength as nominal spacing.
+  /// Apply once with pattern wavelength equal to fit-length, phase zero, and
+  /// samples-per-period equal to the returned points.len() - 1. -> none | int | float
+  fit-length: none,
+  /// Amplitude used for longitudinal fitting; pass the same amplitude to pattern. -> int | float
+  amplitude: 0.1,
+  /// Requested coil spacing when fit-length is set. -> int | float
+  wavelength: 1.0,
 ) = {
   _impl.coil(
     samples-per-period: samples-per-period,
     longitudinal-scale: longitudinal-scale,
+    fit-length: fit-length,
+    amplitude: amplitude,
+    wavelength: wavelength,
   )
 }
 
@@ -331,9 +343,9 @@
   amplitude: 0.1,
   /// Arc length of one pattern period. -> int | float
   wavelength: 1.0,
-  /// Initial phase offset in pattern periods. -> int | float
+  /// Initial phase offset in radians. -> int | float
   phase: 0,
-  /// Samples per period for string-resolved smooth patterns. -> int
+  /// Samples per period for string-resolved patterns and smooth point-pattern mapping. -> int
   samples-per-period: 16,
   /// Longitudinal scale used when resolving the built-in coil pattern. -> int | float
   coil-longitudinal-scale: 1.25,
@@ -341,6 +353,11 @@
   anchor-start: true,
   /// Force the generated path to end on the base path. -> bool
   anchor-end: true,
+  /// Initial slope of an anchored taper envelope, from 0 to 3. Zero keeps
+  /// tangential ends; positive values allow angled ends when the pattern's
+  /// lateral offset is nonzero at its endpoint phase. This is not an angle.
+  /// Ignored for unanchored ends and patterns without endpoint ramping, including fitted coils. -> int | float
+  endpoint-slope: 0,
   /// Geometry approximation accuracy passed to the Rust geometry engine. -> float
   accuracy: 0.001,
 ) = _impl.pattern(
@@ -353,6 +370,7 @@
   coil-longitudinal-scale: coil-longitudinal-scale,
   anchor-start: anchor-start,
   anchor-end: anchor-end,
+  endpoint-slope: endpoint-slope,
   accuracy: accuracy,
 )
 
