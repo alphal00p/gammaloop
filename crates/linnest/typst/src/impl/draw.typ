@@ -139,6 +139,7 @@
   label: none,
   label-style: (:),
   label-shift: 0,
+  label-slide: true,
   label-gap: 0.15,
   label-side: auto,
 )
@@ -1839,84 +1840,140 @@
   _layer-label(style, data) != none
 ))
 
-#let _layer-label-element(ctx, path, style, label-pos, data, href) = {
+#let _layer-label-element(ctx, path, style, label-pos, data, href: none, fixed-position: none, placement: false) = {
   let label = _layer-label(style, data)
-  if label == none {
-    return none
-  }
-  label = link(href, label)
+  if label == none { return none }
+  if href != none { label = link(href, label) }
   let edge = data.at("edge", default: none)
-  let label-origin = if edge == none { none } else {
-    edge.at("pos", default: none)
-  }
-  let frame = _path-mid-frame(
-    path, _style-value(style, "accuracy"), shift: _style-value(style, "label-shift"),
-  )
-  if frame == none {
-    return none
-  }
-  let tangent-length = _point-length(frame.tangent)
-  let normal = if tangent-length <= 1e-9 {
-    (0, 1)
-  } else {
-    (
-      -_point-y(frame.tangent) / tangent-length,
-      _point-x(frame.tangent) / tangent-length,
-    )
-  }
-  let normal = _point-scale(normal, _label-side(
-    style,
-    frame,
-    label-pos,
-    label-origin,
-  ))
+  let label-origin = if edge == none { none } else { edge.at("pos", default: none) }
+  let accuracy = _style-value(style, "accuracy")
+  let shift = _style-value(style, "label-shift")
+  let frame = if fixed-position != none {
+    (point: _point(fixed-position), tangent: (1, 0))
+  } else { _path-mid-frame(path, accuracy, shift: shift) }
+  if frame == none { return none }
+  let side = _label-side(style, frame, label-pos, label-origin)
   let label-style = _style(_style-value(style, "label-style"), data)
   let gap = calc.max(0, _style-value(style, "label-gap"))
   // Explicit anchors are deliberate placement, not a request for box clearance.
-  if label-style.at("anchor", default: auto) not in (auto, "auto") {
-    return cetz.draw.content(
-      _point-add(frame.point, _point-scale(normal, gap)),
-      label,
-      padding: 0,
-      ..label-style,
-    )
-  }
-  label-style.anchor = "center"
-  let element = cetz.draw.content(
-    _point(frame.point),
-    label,
-    padding: 0,
-    ..label-style,
-  )
+  let clear-box = label-style.at("anchor", default: auto) in (auto, "auto")
+  if clear-box { label-style.anchor = "center" }
   // CeTZ owns text bounds, wrapping, padding and rotation; measure its actual box.
+  let element = cetz.draw.content((0, 0), label, padding: 0, ..label-style)
   let measured = element.first()(ctx)
-  let origin = cetz.matrix.mul4x4-vec3(ctx.transform, (
-    .._point(frame.point),
-    0,
-  ))
-  let outward = cetz.vector.sub(
-    cetz.matrix.mul4x4-vec3(ctx.transform, (
-      .._point-add(frame.point, normal),
-      0,
-    )),
-    origin,
+  let origin = cetz.matrix.mul4x4-vec3(ctx.transform, (0, 0, 0))
+  let corners = ("north-west", "north-east", "south-west", "south-east").map(
+    anchor => cetz.vector.sub((measured.anchors)(anchor), origin),
   )
-  let normal-squared = cetz.vector.dot(outward, outward)
-  if normal-squared <= 1e-18 { return element }
-  let nearest = (
-    calc.min(..("north-west", "north-east", "south-west", "south-east").map(
-      anchor => cetz.vector.dot(
-        cetz.vector.sub((measured.anchors)(anchor), origin),
-        outward,
+  let total = if path == none { 0 } else { curve-api.length(path, accuracy: accuracy) }
+  let preferred = calc.clamp(total / 2 + shift, 0, total)
+  let positions = (preferred,)
+  if placement and fixed-position == none and clear-box and _style-value(style, "label-slide") and total > accuracy {
+    // Stay inside the carrier; endpoints belong to the vertex labels.
+    positions += range(3, 30).map(i => total * i / 32).filter(at => calc.abs(at - preferred) > accuracy)
+  }
+  let candidates = positions.map(at => {
+    let frame = if fixed-position != none { frame } else {
+      _path-mid-frame(path, accuracy, shift: at - total / 2)
+    }
+    let tangent-length = _point-length(frame.tangent)
+    let normal = if tangent-length <= 1e-9 { (0, side) } else {
+      _point-scale((-_point-y(frame.tangent), _point-x(frame.tangent)), side / tangent-length)
+    }
+    let outward = cetz.vector.sub(
+      cetz.matrix.mul4x4-vec3(ctx.transform, (..normal, 0)), origin,
+    )
+    let normal-squared = cetz.vector.dot(outward, outward)
+    let nearest = if clear-box and normal-squared > 1e-18 {
+      calc.min(..corners.map(corner => cetz.vector.dot(corner, outward))) / normal-squared
+    } else { 0 }
+    let position = if fixed-position != none { frame.point } else {
+      _point-add(frame.point, _point-scale(normal, gap - nearest))
+    }
+    let center = cetz.matrix.mul4x4-vec3(ctx.transform, (..position, 0))
+    let bounds = corners.map(corner => cetz.vector.add(center, corner))
+    (
+      position: position,
+      at: at,
+      bounds: (
+        left: calc.min(..bounds.map(p => p.at(0))),
+        right: calc.max(..bounds.map(p => p.at(0))),
+        bottom: calc.min(..bounds.map(p => p.at(1))),
+        top: calc.max(..bounds.map(p => p.at(1))),
       ),
-    ))
-      / normal-squared
+      cost: if total <= accuracy { 0 } else { 0.002 * calc.pow((at - preferred) / total, 2) },
+    )
+  })
+  if placement { (label: label, style: label-style, candidates: candidates) } else {
+    cetz.draw.content(candidates.first().position, label, padding: 0, ..label-style)
+  }
+}
+
+// Optimize only arc-length choices: every candidate already has the same
+// measured normal clearance. Annealing can leave a local minimum, then
+// deterministic coordinate sweeps settle the best arrangement found.
+#let _relax-label-placements(placements, obstacles) = {
+  let overlap = (left, right) => (
+    calc.max(0, calc.min(left.right, right.right) - calc.max(left.left, right.left) + 0.08)
+      * calc.max(0, calc.min(left.top, right.top) - calc.max(left.bottom, right.bottom) + 0.08)
   )
-  let position = _point-add(frame.point, _point-scale(
-    normal,
-    gap - nearest,
-  ))
-  cetz.draw.content(_point(position), label, padding: 0, ..label-style)
+  let choices = placements.map(_ => 0)
+  for i in range(placements.len()) {
+    let candidates = placements.at(i).candidates
+    for j in range(candidates.len()) {
+      let box = candidates.at(j).bounds
+      let area = calc.max(1e-9, (box.right - box.left) * (box.top - box.bottom))
+      let cost = candidates.at(j).cost
+      for obstacle in obstacles {
+        cost += overlap(box, obstacle) / area
+      }
+      candidates.at(j).cost = cost
+    }
+    placements.at(i).candidates = candidates
+  }
+  let best-choices = choices
+  // Energy is relative to the initial arrangement; only deltas matter.
+  let energy = 0
+  let best-energy = 0
+  let random = 42
+  for sweep in range(84) {
+    if sweep == 80 { choices = best-choices; energy = best-energy }
+    for i in range(placements.len()) {
+      let candidates = placements.at(i).candidates
+      if candidates.len() <= 1 { continue }
+      random = calc.rem(1664525 * random + 1013904223, 4294967296)
+      let proposals = if sweep < 80 { (calc.rem(random, candidates.len()),) } else { range(candidates.len()) }
+      for proposal in proposals {
+        if proposal == choices.at(i) { continue }
+        let scores = ()
+        for choice in (choices.at(i), proposal) {
+          let candidate = candidates.at(choice)
+          let box = candidate.bounds
+          let area = (box.right - box.left) * (box.top - box.bottom)
+          let cost = candidate.cost
+          for j in range(placements.len()) {
+            if i == j { continue }
+            let other = placements.at(j).candidates.at(choices.at(j)).bounds
+            let other-area = (other.right - other.left) * (other.top - other.bottom)
+            cost += overlap(box, other) / calc.max(1e-9, calc.min(area, other-area))
+          }
+          scores.push(cost)
+        }
+        let delta = scores.last() - scores.first()
+        random = calc.rem(1664525 * random + 1013904223, 4294967296)
+        let temperature = 0.15 * calc.pow(0.9, sweep)
+        if delta < -1e-12 or (sweep < 80 and random / 4294967296 < calc.exp(-calc.max(0, delta) / temperature)) {
+          choices.at(i) = proposal
+          energy += delta
+          if energy < best-energy - 1e-12 {
+            best-energy = energy
+            best-choices = choices
+          }
+        }
+      }
+    }
+  }
+  placements.zip(best-choices).map(pair => pair.first().candidates.at(pair.last()))
 }
 
 #let _paired-layer-label-element(
@@ -1926,7 +1983,8 @@
   sink-style,
   label-pos,
   data,
-  href,
+  href: none,
+  placement: false,
 ) = {
   let source-label = _layer-label(source-style, data)
   let sink-label = _layer-label(sink-style, data)
@@ -1946,7 +2004,7 @@
   if segments.len() == 0 {
     none
   } else {
-    _layer-label-element(ctx, _segments-path(segments), style, label-pos, data, href)
+    _layer-label-element(ctx, _segments-path(segments), style, label-pos, data, href: href, placement: placement)
   }
 }
 
@@ -2687,6 +2745,8 @@
         let node-boxes = ()
         let node-targets = ()
         let edge-targets = ()
+        let label-placements = ()
+        let label-obstacles = ()
         let debug-level = _debug-level(debug)
         let subgraph-records = _subgraph-records(
           graph,
@@ -2771,6 +2831,21 @@
             node: node,
           )
           node-boxes.push(box)
+          if not boundary {
+            let corners = ((-1, -1), (-1, 1), (1, -1), (1, 1)).map(sign => (
+              cetz.matrix.mul4x4-vec3(ctx.transform, (
+                _point-x(pos) + sign.at(0) * node-width / 2,
+                _point-y(pos) + sign.at(1) * node-height / 2,
+                0,
+              ))
+            ))
+            label-obstacles.push((
+              left: calc.min(..corners.map(p => p.at(0))),
+              right: calc.max(..corners.map(p => p.at(0))),
+              bottom: calc.min(..corners.map(p => p.at(1))),
+              top: calc.max(..corners.map(p => p.at(1))),
+            ))
+          }
           node-outsets.push(if boundary { 0 } else if draw-node == auto {
             _node-outset(node-style, node-outset)
           } else if node-outset == auto {
@@ -2930,7 +3005,9 @@
                 )
             )
         ))
-        let crossing-paths = if has-crossings {
+        let crossing-paths = if has-crossings or edge-records.any(record => (
+          record.ev-label != none and _statement-number(record.edge, "layout-label-gap") != none
+        )) {
           _crossing-path-index(
             edge-records,
             nodes,
@@ -3296,10 +3373,11 @@
                 sink-draw-style,
                 label-pos,
                 edge-data,
-                href,
+                href: href,
+                placement: true,
               )
               if attached-label != none {
-                elements.push(attached-label)
+                label-placements.push(attached-label)
               }
             } else if source-half-edge != none {
               let source-geometry-style = if source-style-value == none {
@@ -3398,10 +3476,11 @@
                   draw-style,
                   label-pos,
                   edge-data,
-                  href,
+                  href: href,
+                  placement: true,
                 )
                 if attached-label != none {
-                  elements.push(attached-label)
+                  label-placements.push(attached-label)
                 }
                 if _has-visible-stroke(draw-style) or _has-mark(draw-style) {
                   edge-targets += _edge-identity-targets(
@@ -3502,10 +3581,11 @@
                   draw-style,
                   label-pos,
                   edge-data,
-                  href,
+                  href: href,
+                  placement: true,
                 )
                 if attached-label != none {
-                  elements.push(attached-label)
+                  label-placements.push(attached-label)
                 }
                 if _has-visible-stroke(draw-style) or _has-mark(draw-style) {
                   edge-targets += _edge-identity-targets(
@@ -3516,19 +3596,33 @@
             }
           }
 
+          // Sample the visible carriers as small obstacles, including the label's
+          // own curve: a remote bend can approach its text box from another side.
+          for segment in source-label-segments + sink-label-segments {
+            for step in range(13) {
+              let point = curve-api.cubic-point(segment, step / 12)
+              let point = cetz.matrix.mul4x4-vec3(ctx.transform, (.._point(point), 0))
+              label-obstacles.push((
+                left: point.at(0) - 0.06, right: point.at(0) + 0.06,
+                bottom: point.at(1) - 0.06, top: point.at(1) + 0.06,
+              ))
+            }
+          }
+
           if ev-label != none {
-            elements.push(cetz.draw.content(
-              _point(label-pos),
-              ev-label,
-              padding: 0,
-              ..edge-label-draw-style,
+            let gap = _statement-number(edge, "layout-label-gap")
+            let carrier = crossing-paths.ids.at(str(edge.edge), default: none)
+            let follows-path = gap != none and carrier != none
+            label-placements.push(_layer-label-element(
+              ctx,
+              if follows-path { carrier.path } else { none },
+              (label: ev-label, label-style: edge-label-draw-style, label-gap: if gap == none { 0 } else { gap }),
+              label-pos,
+              edge-data,
+              href: href,
+              placement: true,
+              fixed-position: if follows-path { none } else { label-pos },
             ))
-            let size = measure(ev-label)
-            edge-targets += _identity-target(
-              label-pos, href,
-              width: calc.max(8pt, size.width),
-              height: calc.max(8pt, size.height),
-            )
           }
 
           for half-edge in (source-half-edge, sink-half-edge) {
@@ -3586,6 +3680,14 @@
               padding: 0,
             ))
           }
+        }
+
+        label-placements = label-placements.filter(label => label != none)
+        let relaxed = _relax-label-placements(label-placements, label-obstacles)
+        for (label, candidate) in label-placements.zip(relaxed) {
+          elements.push(cetz.draw.content(
+            candidate.position, label.label, padding: 0, ..label.style,
+          ))
         }
 
         for element in node-elements {

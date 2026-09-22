@@ -225,8 +225,8 @@
 }
 
 // Label relaxation selects the side first. A per-edge offset then moves the
-// result farther along that radial direction; coincident labels use the left
-// normal of the oriented edge as a deterministic fallback.
+// result farther along that radial direction; fixed-gap labels adjust their
+// curve clearance instead. Coincident labels use the oriented edge's left normal.
 #let _apply-label-offsets(g) = {
   let nodes = graph.nodes(g)
   graph.map(
@@ -244,7 +244,13 @@
         if type(offset) not in (int, float) {
           panic("EdgeDrawing.label_offset must be a number")
         }
-        (label-pos: _edge-label-offset-point(edge, nodes, offset))
+        let gap = _statement-number(edge, "layout-label-gap", default: none)
+        (
+          label-pos: _edge-label-offset-point(edge, nodes, offset),
+          statements: if gap == none { (:) } else {
+            (layout-label-gap: calc.max(0, gap + offset))
+          },
+        )
       }
     },
     source: none,

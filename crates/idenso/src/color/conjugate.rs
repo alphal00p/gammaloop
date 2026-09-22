@@ -1,7 +1,11 @@
 use std::sync::LazyLock;
 
 use spenso::{
-    network::{library::function_lib::INBUILTS, tags::SPENSO_TAG as T},
+    network::{
+        library::function_lib::INBUILTS,
+        parsing::{AtomStructureExt, StrictTensorFilter},
+        tags::SPENSO_TAG as T,
+    },
     shadowing,
     structure::representation::RepName,
 };
@@ -57,8 +61,23 @@ struct ColorConjugator;
 impl ColorConjugator {
     // Adjoint a compact generator word without expanding its projectors.
     fn run(expression: AtomView<'_>) -> Option<Atom> {
+        let mut scalar = true;
+        expression.visitor(&mut |value| {
+            if matches!(value, AtomView::Fun(fun) if fun.get_symbol().is_scalar()) {
+                return false;
+            }
+            scalar &= !matches!(value, AtomView::Var(var) if [T.chain_in, T.chain_out].contains(&var.get_symbol()))
+                && !matches!(value, AtomView::Fun(fun) if [*shadowing::SYM, *shadowing::ANTISYM, *shadowing::CYCLIC].contains(&fun.get_symbol()))
+                && !value.is_tensorial(StrictTensorFilter::Tagged)
+                && !value.is_tensorial(StrictTensorFilter::ContainsReps);
+            scalar
+        });
+        if scalar {
+            // Symbolica owns scalar conjugation, including powers and functions.
+            // Matrix placeholders and projectors retain their tensor semantics.
+            return Some(expression.spenso_conj());
+        }
         let word = match expression {
-            AtomView::Num(_) | AtomView::Var(_) => return Some(expression.spenso_conj()),
             AtomView::Mul(product) => {
                 return product.iter().try_fold(Atom::one(), |result, factor| {
                     Some(result * Self::run(factor)?)
@@ -74,12 +93,6 @@ impl ColorConjugator {
         };
         if color_generator_adjoint_view(expression).is_some() {
             return Some(expression.to_owned());
-        }
-        if word.get_symbol() == INBUILTS.conj
-            && word.get_nargs() == 1
-            && matches!(word.iter().next(), Some(AtomView::Var(_)))
-        {
-            return Some(expression.spenso_conj());
         }
         let args = word.iter().collect::<Vec<_>>();
         let (prefix, factors) = if word.get_symbol() == T.chain {
@@ -298,6 +311,81 @@ mod tests {
             default_namespace = "spenso"
         );
         assert_eq!(unknown.spenso_conj(), INBUILTS.conj(unknown));
+    }
+
+    #[test]
+    fn compact_color_words_conjugate_scalar_powers_and_functions() {
+        test_initialize();
+        let generator = parse!("t(coad(8,a),in,out)", default_namespace = "spenso");
+        for source in [
+            "chain(cof(3,i),dind(cof(3,j)),t(coad(8,a),in,out),t(coad(8,b),in,out))",
+            "trace(cof(3),cyclic(t(coad(8,a),in,out),t(coad(8,b),in,out),t(coad(8,c),in,out)))",
+            "trace(cof(3),sym(t(coad(8,a),in,out),antisym(t(coad(8,b),in,out),t(coad(8,c),in,out))))",
+            "trace(cof(3),cyclic(sym(z,w),t(coad(8,a),in,out),t(coad(8,b),in,out)))",
+            "chain(cof(3,i),dind(cof(3,j)),cyclic(z,w),t(coad(8,a),in,out),t(coad(8,b),in,out))",
+            "trace(cof(3),cyclic(z*sym(w,x),t(coad(8,a),in,out),t(coad(8,b),in,out)))",
+        ] {
+            let word = parse!(source, default_namespace = "spenso");
+            for scalar in [
+                "z^2",
+                "z^-1",
+                "(z+w)^2",
+                "z^(1/2)",
+                "z^w",
+                "h(z)",
+                "h(z)^-1",
+                "spenso::conj(h(z))",
+                "cas(2,cof(3))",
+            ] {
+                let coefficient = parse!(scalar, default_namespace = "spenso");
+                let weighted = word
+                    .replace(generator.to_pattern())
+                    .with(&coefficient * &generator);
+                let expected = word
+                    .spenso_conj()
+                    .replace(generator.to_pattern())
+                    .with(coefficient.spenso_conj() * &generator);
+                assert_eq!(weighted.spenso_conj(), expected, "{source}, {scalar}");
+                assert_eq!(
+                    expected.spenso_conj(),
+                    weighted,
+                    "involution: {source}, {scalar}"
+                );
+                assert_eq!(
+                    expected.expand_projectors().expand(),
+                    weighted.expand_projectors().spenso_conj().expand(),
+                    "projector expansion: {source}, {scalar}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn compact_color_conjugation_keeps_unknown_matrix_factors_explicit() {
+        test_initialize();
+        let word = parse!(
+            "trace(cof(3),cyclic(A,t(coad(8,a),in,out),t(coad(8,b),in,out)))",
+            default_namespace = "spenso"
+        );
+        for matrix in [
+            "A(in,out)",
+            "A(coad(8,c))",
+            "wrapper(A(in,out))",
+            "A(in,out)^2",
+            "t(coad(8,c),in,out)^2",
+            "z^A(in,out)",
+        ] {
+            let matrix = parse!(matrix, default_namespace = "spenso");
+            let expression = word
+                .replace(parse!("A", default_namespace = "spenso"))
+                .with(matrix);
+            assert_eq!(expression.spenso_conj(), INBUILTS.conj(&expression));
+        }
+        let tagged = symbolica::function!(spenso::tensor_symbol!("unknown_color_matrix"));
+        let expression = word
+            .replace(parse!("A", default_namespace = "spenso"))
+            .with(tagged);
+        assert_eq!(expression.spenso_conj(), INBUILTS.conj(&expression));
     }
 
     #[test]

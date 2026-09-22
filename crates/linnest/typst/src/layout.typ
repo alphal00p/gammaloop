@@ -405,7 +405,8 @@
   /// and a perpendicular offset for paired edges, and `"fixed-length"` keeps
   /// each label at a fixed distance from its edge point and only lets that
   /// segment rotate. `"fixed-gap"` keeps internal labels at a uniform clearance
-  /// from their measured text box, moving them only to resolve collisions;
+  /// from their measured text box, sliding along the rendered curve to avoid
+  /// overlaps without changing that gap;
   /// dangling labels retain outward tangent relaxation. -> string
   label-layout: "normal",
   /// Label relaxation step size. Applies after both modes. -> float

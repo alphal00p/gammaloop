@@ -56,7 +56,7 @@ def _(mo):
     Cross-sections open initial-state connections into left/right legs by default;
     matching pairs share movable rows. Disable **Split initial state** to draw
     the sewn graph. Internal labels keep a uniform gap to their text bounds,
-    moving farther only to avoid collisions. Momentum labels use the diagram's
+    sliding along their curves to avoid overlaps. Momentum labels use the diagram's
     stored loop momentum basis. Debug mode adds node and half-edge IDs.
 
     Hover for physics information; click to inspect an edge or vertex.

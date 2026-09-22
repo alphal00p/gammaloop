@@ -404,6 +404,9 @@
   /// layer midpoint; `label-shift` (default `0`) moves its reference point by
   /// signed arc length on that derived path, clamped to the path's endpoints.
   /// Positive values move toward its end without moving or trimming the layer.
+  /// Automatic labels slide along the path to reduce overlaps while preserving
+  /// `label-gap`; `label-shift` sets their preferred position. Set `label-slide:
+  /// false` to keep that exact position. Explicit anchors also stay fixed.
   /// `label-side` is `auto`, `"left"`, `"right"`, or a signed number; `auto`
   /// follows the side selected by ordinary edge-label layout. If a label-side
   /// offset has no layout direction yet, both offset and label follow the sign
