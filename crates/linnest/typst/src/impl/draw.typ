@@ -1813,6 +1813,9 @@
       1
     } else {
       let toward = _point-sub(_point(label-pos), _point(label-origin))
+      if _point-length(toward) <= 1e-9 {
+        return if _style-value(style, "offset") < 0 { -1 } else { 1 }
+      }
       let cross = (
         _point-x(frame.tangent) * _point-y(toward)
           - _point-y(frame.tangent) * _point-x(toward)
@@ -1868,48 +1871,57 @@
   let total = if path == none { 0 } else { curve-api.length(path, accuracy: accuracy) }
   let preferred = calc.clamp(total / 2 + shift, 0, total)
   let positions = (preferred,)
+  let sides = (side,)
   if placement and fixed-position == none and clear-box and _style-value(style, "label-slide") and total > accuracy {
     // Stay inside the carrier; endpoints belong to the vertex labels.
     positions += range(3, 30).map(i => total * i / 32).filter(at => calc.abs(at - preferred) > accuracy)
+    if _style-value(style, "label-side") == auto { sides.push(-side) }
   }
   let candidates = positions.map(at => {
     let frame = if fixed-position != none { frame } else {
       _path-mid-frame(path, accuracy, shift: at - total / 2)
     }
-    let tangent-length = _point-length(frame.tangent)
-    let normal = if tangent-length <= 1e-9 { (0, side) } else {
-      _point-scale((-_point-y(frame.tangent), _point-x(frame.tangent)), side / tangent-length)
-    }
-    let outward = cetz.vector.sub(
-      cetz.matrix.mul4x4-vec3(ctx.transform, (..normal, 0)), origin,
-    )
-    let normal-squared = cetz.vector.dot(outward, outward)
-    let nearest = if clear-box and normal-squared > 1e-18 {
-      calc.min(..corners.map(corner => cetz.vector.dot(corner, outward))) / normal-squared
-    } else { 0 }
-    let position = if fixed-position != none { frame.point } else {
-      _point-add(frame.point, _point-scale(normal, gap - nearest))
-    }
-    let center = cetz.matrix.mul4x4-vec3(ctx.transform, (..position, 0))
-    let bounds = corners.map(corner => cetz.vector.add(center, corner))
-    (
-      position: position,
-      at: at,
-      bounds: (
-        left: calc.min(..bounds.map(p => p.at(0))),
-        right: calc.max(..bounds.map(p => p.at(0))),
-        bottom: calc.min(..bounds.map(p => p.at(1))),
-        top: calc.max(..bounds.map(p => p.at(1))),
-      ),
-      cost: if total <= accuracy { 0 } else { 0.002 * calc.pow((at - preferred) / total, 2) },
-    )
-  })
+    sides.map(candidate-side => {
+      let tangent-length = _point-length(frame.tangent)
+      let normal = if tangent-length <= 1e-9 { (0, candidate-side) } else {
+        _point-scale((-_point-y(frame.tangent), _point-x(frame.tangent)), candidate-side / tangent-length)
+      }
+      let outward = cetz.vector.sub(
+        cetz.matrix.mul4x4-vec3(ctx.transform, (..normal, 0)), origin,
+      )
+      let normal-squared = cetz.vector.dot(outward, outward)
+      let nearest = if clear-box and normal-squared > 1e-18 {
+        calc.min(..corners.map(corner => cetz.vector.dot(corner, outward))) / normal-squared
+      } else { 0 }
+      let position = if fixed-position != none { frame.point } else {
+        _point-add(frame.point, _point-scale(normal, gap - nearest))
+      }
+      let center = cetz.matrix.mul4x4-vec3(ctx.transform, (..position, 0))
+      let bounds = corners.map(corner => cetz.vector.add(center, corner))
+      (
+        position: position,
+        at: at,
+        side: candidate-side,
+        bounds: (
+          left: calc.min(..bounds.map(p => p.at(0))),
+          right: calc.max(..bounds.map(p => p.at(0))),
+          bottom: calc.min(..bounds.map(p => p.at(1))),
+          top: calc.max(..bounds.map(p => p.at(1))),
+        ),
+        // Prefer the original side when both placements are otherwise equivalent.
+        cost: (
+          (if total <= accuracy { 0 } else { 0.002 * calc.pow((at - preferred) / total, 2) })
+            + if candidate-side == side { 0 } else { 0.00002 }
+        ),
+      )
+    })
+  }).flatten()
   if placement { (label: label, style: label-style, candidates: candidates) } else {
     cetz.draw.content(candidates.first().position, label, padding: 0, ..label-style)
   }
 }
 
-// Optimize only arc-length choices: every candidate already has the same
+// Optimize arc length and automatic side choices: every candidate has the same
 // measured normal clearance. Annealing can leave a local minimum, then
 // deterministic coordinate sweeps settle the best arrangement found.
 #let _relax-label-placements(placements, obstacles) = {
@@ -1945,7 +1957,8 @@
       let candidates = placements.at(i).candidates
       if candidates.len() <= 1 { continue }
       random = calc.rem(1664525 * random + 1013904223, 4294967296)
-      let proposals = if sweep < 80 { (calc.rem(random, candidates.len()),) } else { range(candidates.len()) }
+      // Use upper bits so interleaved side candidates both receive proposals.
+      let proposals = if sweep < 80 { (calc.rem(calc.floor(random / 65536), candidates.len()),) } else { range(candidates.len()) }
       for proposal in proposals {
         if proposal == choices.at(i) { continue }
         let scores = ()
@@ -2942,17 +2955,14 @@
           )
           for side in ("source", "sink") {
             layers.at(side) = layers.at(side).map(layer => {
-              // With no label direction, both the offset and label use the
-              // signed offset instead of inferring sides from curve-fit noise.
+              // With no label direction, the signed offset sets the preferred
+              // label side. Keep automatic labels free to flip during placement.
               if (
                 _style-value(layer, "offset-side") == "label"
                   and _point-distance(record.label-pos, record.edge.pos) <= 1e-9
               ) {
                 layer.offset-side = none
-                if _style-value(layer, "label-side") == auto {
-                  let offset = layer.at("offset", default: geometry-style.offset)
-                  layer.label-side = if offset < 0 { "right" } else { "left" }
-                }
+                layer.offset = layer.at("offset", default: geometry-style.offset)
               }
               let label = _call(_style-value(layer, "label"), record.edge-data)
               if label == auto {
