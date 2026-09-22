@@ -10,7 +10,7 @@ use symbolica::{
     id::Replacement,
 };
 
-use crate::{color_t, rep_symbols::RS, representations::ColorFundamental};
+use crate::{IndexTooling, color_t, rep_symbols::RS, representations::ColorFundamental};
 
 use super::{
     CS,
@@ -55,63 +55,92 @@ static COLOR_CONJ_REPRESENTATION_SWAPS: LazyLock<[Replacement; 2]> = LazyLock::n
 struct ColorConjugator;
 
 impl ColorConjugator {
-    fn run(expression: AtomView<'_>) -> Atom {
-        expression
-            .to_owned()
-            .replace_map(|arg, _context, out| {
-                let AtomView::Fun(conjugate) = arg else {
-                    return;
-                };
-                if conjugate.get_symbol() != INBUILTS.conj || conjugate.get_nargs() != 1 {
-                    return;
-                }
-                let Some(AtomView::Fun(word)) = conjugate.iter().next() else {
-                    return;
-                };
-                let args = word.iter().collect::<Vec<_>>();
-                let (prefix, factors) = if word.get_symbol() == T.chain {
-                    let [start, end, factors @ ..] = args.as_slice() else {
-                        return;
-                    };
-                    if fundamental_chain_dimension_view(*start, *end).is_none() {
-                        return;
-                    }
-                    // Hermitian generators reverse the word and transpose its
-                    // endpoints. The shared representation swap below dualizes them.
-                    (vec![*end, *start], factors.to_vec())
-                } else if let Some((rep, factors)) = shadowing::trace_parts(word) {
-                    if !matches!(rep, AtomView::Fun(f) if f.get_symbol() == CS.fundamental_rep && f.get_nargs() == 1) {
-                        return;
-                    }
-                    (vec![rep], factors)
-                } else {
-                    return;
-                };
-                if !factors
+    // Adjoint a compact generator word without expanding its projectors.
+    fn run(expression: AtomView<'_>) -> Option<Atom> {
+        let word = match expression {
+            AtomView::Num(_) | AtomView::Var(_) => return Some(expression.spenso_conj()),
+            AtomView::Mul(product) => {
+                return product.iter().try_fold(Atom::one(), |result, factor| {
+                    Some(result * Self::run(factor)?)
+                });
+            }
+            AtomView::Add(sum) => {
+                return sum
                     .iter()
-                    .all(|factor| color_generator_adjoint_view(*factor).is_some())
-                {
-                    return;
-                }
-                **out = if word.get_symbol() == T.trace {
-                    shadowing::trace(prefix[0], factors.into_iter().rev())
-                } else {
-                    prefix
-                        .into_iter()
-                        .chain(factors.into_iter().rev())
-                        .fold(FunctionBuilder::new(T.chain), |builder, factor| {
-                            builder.add_arg(factor)
-                        })
-                        .finish()
-                };
-            })
-            .replace_multiple(&*COLOR_CONJ_GENERATOR_TRANSPOSITIONS)
-            .replace_multiple(&*COLOR_CONJ_REPRESENTATION_SWAPS)
+                    .try_fold(Atom::Zero, |result, term| Some(result + Self::run(term)?));
+            }
+            AtomView::Fun(word) => word,
+            _ => return None,
+        };
+        if color_generator_adjoint_view(expression).is_some() {
+            return Some(expression.to_owned());
+        }
+        if word.get_symbol() == INBUILTS.conj
+            && word.get_nargs() == 1
+            && matches!(word.iter().next(), Some(AtomView::Var(_)))
+        {
+            return Some(expression.spenso_conj());
+        }
+        let args = word.iter().collect::<Vec<_>>();
+        let (prefix, factors) = if word.get_symbol() == T.chain {
+            let [start, end, factors @ ..] = args.as_slice() else {
+                return None;
+            };
+            let _ = fundamental_chain_dimension_view(*start, *end)?;
+            // Hermitian generators reverse the word and transpose its
+            // endpoints. The shared representation swap below dualizes them.
+            (vec![*end, *start], factors.to_vec())
+        } else if let Some((rep, factors)) = shadowing::trace_parts(word) {
+            if !matches!(rep, AtomView::Fun(f) if f.get_symbol() == CS.fundamental_rep && f.get_nargs() == 1)
+            {
+                return None;
+            }
+            (vec![rep], factors)
+        } else if [*shadowing::SYM, *shadowing::ANTISYM, *shadowing::CYCLIC]
+            .contains(&word.get_symbol())
+        {
+            (vec![], args)
+        } else {
+            return None;
+        };
+        let factors = factors
+            .into_iter()
+            .rev()
+            .map(Self::run)
+            .collect::<Option<Vec<_>>>()?;
+        Some(if word.get_symbol() == T.trace {
+            shadowing::trace(prefix[0], factors)
+        } else {
+            prefix
+                .into_iter()
+                .map(|arg| arg.to_owned())
+                .chain(factors)
+                .fold(
+                    FunctionBuilder::new(word.get_symbol()),
+                    |builder, factor| builder.add_arg(factor),
+                )
+                .finish()
+        })
     }
 }
 
 pub fn color_conj_impl(expression: AtomView<'_>) -> Atom {
-    ColorConjugator::run(expression)
+    expression
+        .replace_map(|arg, _context, out| {
+            let AtomView::Fun(conjugate) = arg else {
+                return;
+            };
+            if conjugate.get_symbol() == INBUILTS.conj
+                && conjugate.get_nargs() == 1
+                && let Some(AtomView::Fun(word)) = conjugate.iter().next()
+                && [T.chain, T.trace].contains(&word.get_symbol())
+                && let Some(result) = ColorConjugator::run(AtomView::Fun(word))
+            {
+                **out = result;
+            }
+        })
+        .replace_multiple(&*COLOR_CONJ_GENERATOR_TRANSPOSITIONS)
+        .replace_multiple(&*COLOR_CONJ_REPRESENTATION_SWAPS)
 }
 
 #[cfg(test)]
@@ -123,7 +152,7 @@ mod tests {
         shorthands::{UndoShorthands, metric::MetricSimplifier},
         test_support::test_initialize,
     };
-    use spenso::structure::abstract_index::AbstractIndex;
+    use spenso::{shadowing::ProjectorExpander, structure::abstract_index::AbstractIndex};
     use symbolica::parse;
 
     #[test]
@@ -218,6 +247,57 @@ mod tests {
             conjugate.simplify_color(),
             explicit.spenso_conj().simplify_color()
         );
+    }
+
+    #[test]
+    fn projected_color_words_match_expanded_conjugation() {
+        test_initialize();
+        for source in [
+            "chain(cof(3,i),dind(cof(3,j)),sym(t(coad(8,a),in,out),t(coad(8,b),in,out)),t(coad(8,c),in,out))",
+            "chain(cof(3,i),dind(cof(3,j)),antisym(t(coad(8,a),in,out),t(coad(8,b),in,out)),t(coad(8,c),in,out))",
+            "trace(cof(3),sym(t(coad(8,a),in,out),t(coad(8,b),in,out),t(coad(8,c),in,out)))",
+            "trace(cof(3),cyclic(antisym(t(coad(8,a),in,out),t(coad(8,b),in,out),t(coad(8,c),in,out))))",
+            "trace(cof(3),sym(t(coad(8,a),in,out),cyclic(t(coad(8,b),in,out),t(coad(8,c),in,out),t(coad(8,d),in,out))))",
+            "trace(cof(3),sym((1+1𝑖)*t(coad(8,a),in,out),t(coad(8,b),in,out),t(coad(8,c),in,out)))",
+            "trace(cof(3),sym(z*t(coad(8,a),in,out),t(coad(8,b),in,out),t(coad(8,c),in,out)))",
+        ] {
+            let expression = parse!(source, default_namespace = "spenso");
+            let conjugate = expression.spenso_conj();
+            assert_eq!(
+                conjugate.expand_projectors().expand(),
+                expression.expand_projectors().spenso_conj().expand(),
+                "compact projector conjugation: {source}"
+            );
+            assert_eq!(
+                conjugate.spenso_conj().expand_projectors().expand(),
+                expression.expand_projectors().expand(),
+                "projector conjugation must be involutive: {source}"
+            );
+        }
+    }
+
+    #[test]
+    fn color_projector_trace_reality_follows_reversal_parity() {
+        test_initialize();
+        let symmetric = parse!(
+            "trace(cof(3),sym(t(coad(8,a),in,out),t(coad(8,b),in,out),t(coad(8,c),in,out)))",
+            default_namespace = "spenso"
+        );
+        let antisymmetric = parse!(
+            "trace(cof(3),cyclic(antisym(t(coad(8,a),in,out),t(coad(8,b),in,out),t(coad(8,c),in,out))))",
+            default_namespace = "spenso"
+        );
+        assert_eq!(symmetric.spenso_conj(), symmetric);
+        assert_eq!(
+            antisymmetric.spenso_conj().expand_projectors().expand(),
+            (-antisymmetric.expand_projectors()).expand()
+        );
+        // Unknown matrix factors must not be assumed Hermitian.
+        let unknown = parse!(
+            "trace(cof(3),cyclic(A(in,out)))",
+            default_namespace = "spenso"
+        );
+        assert_eq!(unknown.spenso_conj(), INBUILTS.conj(unknown));
     }
 
     #[test]

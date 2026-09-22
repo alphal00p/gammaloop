@@ -1,6 +1,6 @@
 """Compact color words use the same conjugation as explicit indexed networks."""
 
-from symbolica import E
+from symbolica import E, S
 from symbolica.community.spenso import Representation, TensorExpression
 
 for colors in (2, 3, 5):
@@ -37,3 +37,31 @@ for colors in (2, 3, 5):
         loop.spenso_conjugate().simplify_color().to_expression()
     )
     print(f"SU({colors}): compact/explicit color conjugation and norm passed")
+
+    cyclic, sym, antisym, factors = S(
+        "spenso::cyclic", "spenso::sym", "spenso::antisym", "factors__"
+    )
+    symmetric_trace = TensorExpression(
+        trace.to_expression().replace(cyclic(factors), sym(factors))
+    )
+    antisymmetric_trace = TensorExpression(
+        trace.to_expression().replace(cyclic(factors), antisym(factors))
+    )
+    # Cyclic invariance reduces the six permutations of three generators to
+    # two orientations. Their half-sum is real and half-difference imaginary.
+    assert (
+        symmetric_trace.spenso_conjugate().to_expression()
+        == symmetric_trace.to_expression()
+    )
+    assert (
+        antisymmetric_trace.spenso_conjugate() + antisymmetric_trace
+    ).simplify_color().to_expression() == E("0")
+    assert (
+        symmetric_trace.simplify_color().to_expression()
+        == ((trace + conjugate_trace) / 2).simplify_color().to_expression()
+    )
+    assert (
+        antisymmetric_trace.simplify_color().to_expression()
+        == ((trace - conjugate_trace) / 2).simplify_color().to_expression()
+    )
+    print(f"SU({colors}): symmetric and antisymmetric projector conjugation passed")
