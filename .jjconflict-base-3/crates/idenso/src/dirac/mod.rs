@@ -616,15 +616,48 @@ impl GammaSimplifier for AtomView<'_> {
             * gamma0!([Atom::var(RS.d_), function!(dummy, RS.i_)], [RS.d_, RS.i_]))
         .to_pattern();
 
-        Ok(self.replace(conj_gamma).with_map(move |m| {
-            let a = conj_gamma_rhs.replace_wildcards_with_matches(m);
-            let i = dummypati.replace_wildcards_with_matches(m);
-            let j = dummypatj.replace_wildcards_with_matches(m);
-            a.replace(i)
-                .with(Aind::new_dummy().to_atom())
-                .replace(j)
-                .with(Aind::new_dummy().to_atom())
-        }))
+        let mut rules = vec![(conj_gamma, conj_gamma_rhs)];
+        // These four-dimensional matrices are Hermitian. Express their
+        // transposes with gamma0 sandwiches so the usual Dirac-adjoint
+        // boundary factors cancel without reversing a matrix-chain channel.
+        // gamma0 already owns its conjugation through its Real/Symmetric tags.
+        for (matrix, adjoint, sign) in [
+            (AGS.gamma5, AGS.gamma5, -1),
+            (AGS.projm, AGS.projp, 1),
+            (AGS.projp, AGS.projm, 1),
+        ] {
+            let tensor = function!(matrix, bis!(4, RS.i_), bis!(4, RS.j_));
+            let transpose = Atom::num(sign)
+                * gamma0!(
+                    [Atom::num(4), Atom::var(RS.j_)],
+                    [Atom::num(4), function!(dummy, RS.j_)]
+                )
+                * function!(
+                    adjoint,
+                    bis!(4, function!(dummy, RS.j_)),
+                    bis!(4, function!(dummy, RS.i_))
+                )
+                * gamma0!(
+                    [Atom::num(4), function!(dummy, RS.i_)],
+                    [Atom::num(4), Atom::var(RS.i_)]
+                );
+            rules.push((tensor.spenso_conj(), transpose.to_pattern()));
+        }
+        let mut result = self.to_owned();
+        for (conjugate, transpose) in rules {
+            let dummypati = dummypati.clone();
+            let dummypatj = dummypatj.clone();
+            result = result.replace(conjugate).with_map(move |m| {
+                let a = transpose.replace_wildcards_with_matches(m);
+                let i = dummypati.replace_wildcards_with_matches(m);
+                let j = dummypatj.replace_wildcards_with_matches(m);
+                a.replace(i)
+                    .with(Aind::new_dummy().to_atom())
+                    .replace(j)
+                    .with(Aind::new_dummy().to_atom())
+            });
+        }
+        Ok(result)
     }
 }
 

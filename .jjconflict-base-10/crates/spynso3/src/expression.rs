@@ -2144,9 +2144,11 @@ impl TensorExpression {
         Self::from_transformed_atom(&self_, py, result)
     }
 
-    /// Rewrite conjugated gamma matrices as gamma0-sandwiched matrices.
+    /// Rewrite conjugated Dirac matrices using gamma0 sandwiches and fresh spinor indices.
     ///
-    /// Rewrite conjugated gamma matrices as gamma0-sandwiched matrices with fresh spinor indices.
+    /// Includes ordinary gamma matrices and Hermitian four-dimensional gamma0,
+    /// gamma5, and chiral projectors. The special-matrix rules leave other spinor
+    /// dimensions unchanged; this does not choose a gamma-five regularization scheme.
     ///
     /// Raises `GammaConjugationError` when the expression cannot be rewritten consistently.
     fn simplify_gamma_conjugate(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
