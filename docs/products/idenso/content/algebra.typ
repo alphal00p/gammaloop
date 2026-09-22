@@ -99,8 +99,14 @@ use the same conjugation: reverse the generator sequence and, for open chains,
 exchange and dualize the endpoints. `collect_chains(Representation.cof(3))`
 therefore commutes with conjugating an explicit SU(3) network. A trace of three
 generators is not assumed real. The existing trace builder retains cyclic
-normalization. This rule recognizes generator words; it does not assign
-Hermiticity to arbitrary matrix-valued functions or projected factor groups.
+normalization. Symmetric, antisymmetric and cyclic groups are traversed
+recursively, keeping the projectors compact. Reversing an antisymmetric group
+produces its permutation sign through Spenso's existing normalization. Numeric
+coefficients and scalar symbols, including their sums and products, are
+conjugated within groups.
+For three generators, the symmetric trace is real and the antisymmetric trace
+is purely imaginary. These rules recognize generator words; they do not assign
+Hermiticity to arbitrary matrix-valued functions.
 
 Color simplification contracts metrics inside collected chains and traces before
 applying trace identities. A symmetric trace through degree four with a repeated
