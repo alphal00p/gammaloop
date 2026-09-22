@@ -94,8 +94,9 @@ Path("alternative-routing.svg").write_text(
 ```
 
 Internal particle labels use a uniform gap to the measured text box by default;
-a deterministic annealing pass slides them along the rendered curves to reduce
-label/node overlaps without changing that gap. Adjust
+a deterministic annealing pass slides them along the rendered curves and can
+switch sides to reduce overlaps without changing that gap. Explicit `label-side`
+choices on path labels stay fixed. Adjust
 `LayoutOptions(internal_label_length_scale=...)` to change that gap. External
 labels keep their independent spacing. `LabelLayout.FixedGap` exposes the same
 mode on generic Linnet layouts; `LabelLayout.DanglingTangent` retains the freely
