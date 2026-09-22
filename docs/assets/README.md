@@ -2,7 +2,7 @@
 
 The portraits below are size-optimized WebP derivatives of public professional profile images. Every SVG used by the website is generated from editable Typst under `docs/assets/typst/`, with graph layout shared from GammaLoop's `assets/embedded/drawing/templates/layout-core.typ`; run `nix develop --command just docs-svg-assets` after changing them.
 
-`crates/spynso3/typst/STIXTwoMath-Regular.woff2` is the unmodified STIX Two Math 2.13 webfont from the [official STIX Fonts release](https://github.com/stipub/stixfonts/releases/tag/v2.13). It is distributed under the SIL Open Font License 1.1 in `STIX-Two-OFL.txt` and is shared by the documentation website and Spenso notebook output so MathML renders consistently without relying on a system font.
+`crates/spynso3/typst/STIXTwoMath-Regular.woff2` is the unmodified STIX Two Math 2.13 webfont from the [official STIX Fonts release](https://github.com/stipub/stixfonts/releases/tag/v2.13). It is distributed under the SIL Open Font License 1.1 in `STIX-Two-OFL.txt` and served as a shared asset by the documentation website. Spenso notebook output uses STIX Two Math when supplied by the page or system, otherwise the browser's math font; formula fragments do not embed font files.
 
 | Local asset | Subject | Public source |
 | --- | --- | --- |

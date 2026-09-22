@@ -7,8 +7,7 @@ use std::{
 use pyo3::{
     exceptions::{PyImportError, PyRuntimeError, PyValueError},
     prelude::*,
-    sync::PyOnceLock,
-    types::{PyBytes, PyDict},
+    types::PyDict,
 };
 use spenso::{
     algebra::complex::RealOrComplexRef,
@@ -54,7 +53,7 @@ use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pyfunction, gen_stub_pyme
 
 const RENDER_TYP: &str = include_str!("../typst/render.typ");
 const NOTATION_TYP: &str = include_str!("../typst/notation.typ");
-static NOTEBOOK_STYLE: PyOnceLock<String> = PyOnceLock::new();
+const NOTEBOOK_STYLE: &str = include_str!("../typst/notebook.css");
 
 /// Presentation settings shared by Typst source, HTML, and SVG rendering.
 ///
@@ -797,23 +796,9 @@ pub(crate) fn atom_to_html(
         PyRuntimeError::new_err(format!("Typst returned invalid UTF-8: {error}"))
     })?;
     let fragment = extract_html_fragment(&html).map_err(PyRuntimeError::new_err)?;
-    // Embed the shared font so standalone notebooks also render consistently offline.
-    let style = NOTEBOOK_STYLE.get_or_try_init(py, || -> PyResult<String> {
-        let font: String = py
-            .import("base64")?
-            .call_method1(
-                "b64encode",
-                (PyBytes::new(
-                    py,
-                    include_bytes!("../typst/STIXTwoMath-Regular.woff2"),
-                ),),
-            )?
-            .call_method1("decode", ("ascii",))?
-            .extract()?;
-        Ok(include_str!("../typst/notebook.css").replace("__FONT_BASE64__", &font))
-    })?;
+    // Use the page's math fonts so each standalone fragment stays small.
     Ok(format!(
-        "<style>{style}</style><div data-spenso-math>{fragment}</div>"
+        "<style>{NOTEBOOK_STYLE}</style><div data-spenso-math>{fragment}</div>"
     ))
 }
 
