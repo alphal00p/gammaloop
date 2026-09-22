@@ -38,7 +38,11 @@ Copy the package containing
 into the host's `python/symbolica/community` tree. Its wrapper imports the native module and
 calls the initializer. FeynKit itself must not declare another PyO3 extension entry point.
 Include `linnet==0.1.0` and `typst>=0.15,<0.16` in the host's display dependencies for automatic notebook figures;
-include `ufo-model-loader` when offering raw UFO import.
+include the UFO loader revision documented in the #link("guides/showcases/ufo/")[UFO import example]
+when offering raw UFO import. Install it with `--no-deps` into the existing host environment:
+the host supplies the single Symbolica extension. The checkout's `uv.lock` instead installs a
+standalone Symbolica 3 kernel for GammaLoop development; do not sync that environment over a
+community host containing its own native extension.
 
 == Export the documented Python surface
 
