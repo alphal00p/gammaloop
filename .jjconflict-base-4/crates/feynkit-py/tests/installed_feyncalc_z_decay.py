@@ -200,7 +200,8 @@ for pdg, mass, weak_isospin, electric_charge in (
         * gf
         * physical_mass**3
         * beta
-        / (6 * pi * E("2").sqrt())
+        * E("2").sqrt()
+        / (12 * pi)
         * (
             cv**2 * (1 + 2 * mass_squared / physical_mass**2)
             + ca**2 * (1 - 4 * mass_squared / physical_mass**2)
@@ -213,18 +214,18 @@ for pdg, mass, weak_isospin, electric_charge in (
     if mass != E("0"):
         massless_width = width.replace(beta, E("1"))
         expected_massless = (
-            colors * gf * physical_mass**3 * (cv**2 + ca**2) / (6 * pi * E("2").sqrt())
+            colors * gf * physical_mass**3 * (cv**2 + ca**2) * E("2").sqrt() / (12 * pi)
         )
         assert (massless_width - expected_massless).expand().replace(
             cw, (1 - sw**2).sqrt()
         ).together() == E("0")
     else:
         assert (
-            width - gf * physical_mass**3 / (12 * pi * E("2").sqrt())
+            width - gf * physical_mass**3 * E("2").sqrt() / (24 * pi)
         ).expand().replace(cw, (1 - sw**2).sqrt()).together() == E("0")
 
     if pdg == 11:
-        # Isolate the vector and axial coefficients of the generated charged
+        # Isolate the vector and axial coefficients of the generated charged-lepton
         # current: at sw^2=1/4 its vector coupling vanishes, and the difference
         # from sw=0 removes the same axial contribution.
         normalized = (

@@ -1120,16 +1120,25 @@ fn val_test() {
 }
 
 #[test]
-fn special_dirac_matrix_conjugation_uses_hermitian_transposes() {
+fn special_dirac_matrix_conjugation_is_explicit_and_idempotent() {
     test_initialize();
     for matrix in [AGS.gamma0, AGS.gamma5, AGS.projm, AGS.projp] {
         let tensor = function!(matrix, bis!(4, special_matrix_i), bis!(4, special_matrix_j));
-        let transpose = function!(matrix, bis!(4, special_matrix_j), bis!(4, special_matrix_i));
         let conjugate = tensor
             .spenso_conj()
             .simplify_gamma_conj::<AbstractIndex>()
             .unwrap();
-        assert_eq!(conjugate.simplify_gamma(), transpose.simplify_gamma());
+        assert_eq!(
+            conjugate.simplify_gamma_conj::<AbstractIndex>().unwrap(),
+            conjugate
+        );
+        let mut has_conjugate = false;
+        conjugate.visitor(&mut |atom| {
+            has_conjugate |= matches!(atom, AtomView::Fun(fun) if fun.get_symbol()
+                == spenso::network::library::function_lib::INBUILTS.conj);
+            true
+        });
+        assert!(!has_conjugate);
 
         // A dimension-generic gamma-five convention must remain unspecified.
         let generic = function!(
