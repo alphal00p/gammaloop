@@ -2827,6 +2827,11 @@ impl TensorExpression {
     ///
     /// Idenso takes the symbolic complex conjugate, reverses compatible open bispinor chains, and
     /// inserts the registered `gamma0` factors required at dangling bispinor slots.
+    /// With `preserve_indices=True`, external labels remain attached to the same physical
+    /// amplitude legs instead of exchanging the two endpoints of each open chain. Use this
+    /// when summing diagrams with different fermion pairings before squaring an amplitude.
+    /// The gamma-zero boundary factors still apply. The default matrix-adjoint convention
+    /// exchanges endpoints and is unchanged.
     /// The input must use the representation-aware Spenso forms registered on import.
     /// Raises `DiracAdjointError` when the tensor network does not define a consistent adjoint.
     ///
@@ -2850,11 +2855,16 @@ impl TensorExpression {
     ///
     /// # Returns
     /// The representation-aware Dirac adjoint.
-    fn dirac_adjoint(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
+    #[pyo3(signature = (*, preserve_indices=false))]
+    fn dirac_adjoint(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        preserve_indices: bool,
+    ) -> PyResult<Py<Self>> {
         let result = self_
             .as_super()
             .expr
-            .dirac_adjoint::<AbstractIndex>()
+            .dirac_adjoint::<AbstractIndex>(preserve_indices)
             .map_err(|error| DiracAdjointError::new_err(error.to_string()))?;
         Self::from_transformed_atom(&self_, py, result)
     }
