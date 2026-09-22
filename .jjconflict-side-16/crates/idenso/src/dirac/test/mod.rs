@@ -1,0 +1,1494 @@
+use insta::assert_snapshot;
+use spenso::network::StructureLessDisplay;
+use spenso::network::parsing::ParseSettings;
+use spenso::network::store::TensorScalarStore;
+use spenso::p;
+use spenso::q;
+use spenso::shadowing::{TensorCollectExt, symbolica_utils::SpensoPrintSettings};
+use spenso::structure::{Canonicalized, IndexlessNamedStructure, TensorStructure};
+use spenso::{chain, g, s, slot, trace};
+use symbolica_utils::AtomPrintExt;
+
+use crate::representations::Bispinor;
+use crate::shorthands::{
+    metric::MetricSimplifier,
+    schoonschip::{Schoonschip, SchoonschipSettings},
+};
+use crate::{gamma, gamma0, gamma5, u, v};
+
+static GG: LazyLock<Canonicalized<IndexlessNamedStructure<Symbol, ()>>> = LazyLock::new(|| {
+    IndexlessNamedStructure::from_iter(
+        [
+            Bispinor {}.new_rep(4).to_lib(),
+            Bispinor {}.new_rep(4).cast(),
+            Minkowski {}.new_rep(4).cast(),
+        ],
+        AGS.gamma,
+        None,
+    )
+});
+
+use super::*;
+
+use crate::color::ColorSimplifier;
+use crate::tensor::SymbolicNetParse;
+use crate::tensor::SymbolicTensor;
+use spenso::structure::{
+    abstract_index::AbstractIndex,
+    representation::{LibraryRep, Minkowski},
+};
+use symbolica::{
+    atom::{Atom, AtomCore},
+    parse_lit,
+    printer::PrintOptions,
+};
+
+use crate::test_support::test_initialize;
+use crate::{CookMode, CookSettings, Cookable};
+
+#[test]
+fn gamma_simplification_reaches_fixed_point_after_metric_contraction() {
+    let r = test_initialize();
+    // An identity propagator closes this loop when its bispinor metric contracts.
+    let expr = g!(slot!(r.bis4, a), slot!(r.bis4, b))
+        * gamma!(b, c, slot!(r.mink_d, mu))
+        * gamma!(c, a, slot!(r.mink_d, nu));
+
+    let once = expr.simplify_gamma();
+    let twice = once.simplify_gamma();
+    let expected = Atom::num(4) * g!(slot!(r.mink_d, mu), slot!(r.mink_d, nu));
+
+    assert_eq!(twice, expected);
+    assert_eq!(
+        once, twice,
+        "gamma simplification must reach its fixed point"
+    );
+}
+
+#[test]
+fn gamma_simplification_joins_chains_after_metric_contraction() {
+    let r = test_initialize();
+    let coefficient = parse_lit!((x + y) ^ 8 * (z + w));
+    let expr = gamma!(a, b, slot!(r.mink_d, mu))
+        * g!(slot!(r.bis4, b), slot!(r.bis4, c))
+        * gamma!(c, e, slot!(r.mink_d, nu));
+    let joined = chain!(
+        slot!(r.bis4, a),
+        slot!(r.bis4, e),
+        gamma!(slot!(r.mink_d, mu)),
+        gamma!(slot!(r.mink_d, nu)),
+    );
+
+    for settings in [
+        GammaSimplifySettings::repeated_pairs(),
+        GammaSimplifySettings::canonical(),
+    ] {
+        let result = (&coefficient * &expr).simplify_gamma_with(settings);
+        assert_eq!(result, &coefficient * joined.simplify_gamma_with(settings));
+        assert_eq!(result.simplify_gamma_with(settings), result);
+    }
+}
+
+#[test]
+fn gamma_construct() {
+    test_initialize();
+
+    println!("{}", gamma!(RS.b_, RS.c_, RS.a_));
+
+    let f = GG.clone();
+    let logical_indices: [AbstractIndex; 3] = [4.into(), 3.into(), 2.into()];
+    let storage_indices = f.layout().logical_to_canonical(&logical_indices);
+    let f = f
+        .into_canonical()
+        .reindex_storage(&storage_indices)
+        .unwrap()
+        .map_target(|a| SymbolicTensor::from_named(&a).unwrap());
+
+    let f_p = f.apply();
+
+    println!(
+        "Permuted:{}\nPermuted Structure{}\nMetric simplified{}",
+        f_p,
+        f_p.structure,
+        f_p.expression.simplify_metrics()
+    );
+}
+
+#[test]
+fn sigma_structure_preserves_logical_interface() {
+    test_initialize();
+
+    let structure = AGS.sigma_strct::<AbstractIndex>(6);
+    let canonical_reps = structure.canonical().external_reps();
+
+    assert_eq!(
+        structure.layout().canonical_to_logical(&canonical_reps),
+        [
+            LibraryRep::from(Minkowski {}).new_rep(6),
+            LibraryRep::from(Minkowski {}).new_rep(6),
+            Bispinor {}.new_rep(4).cast(),
+            Bispinor {}.new_rep(4).cast(),
+        ]
+    );
+}
+
+#[test]
+fn chain_test() {
+    test_initialize();
+
+    let expr = parse_lit!(
+        (-1 * P(2, mink(dim, l(20))) + P(1, mink(dim, l(20)))) * 1𝑖 * G
+            ^ 2 * g(bis(4, l(2)), bis(4, l(4)))
+                * g(bis(4, l(3)), bis(4, l(7)))
+                * g(mink(dim, l(0)), mink(dim, l(5)))
+                * g(mink(dim, l(1)), mink(dim, l(4)))
+                * gamma(bis(4, l(5)), bis(4, l(4)), mink(dim, l(4)))
+                * gamma(bis(4, l(6)), bis(4, l(5)), mink(dim, l(20)))
+                * gamma(bis(4, l(7)), bis(4, l(6)), mink(dim, l(5))),
+        default_namespace = "spenso"
+    );
+
+    println!("Bef:{}", expr);
+    println!("{}", expr.printer(PrintOptions::typst()));
+    println!(
+        "Aft:{}",
+        expr.simplify_gamma()
+            .printer(SpensoPrintSettings::compact().nice_symbolica())
+    );
+}
+
+#[test]
+fn normalise_g() {
+    test_initialize();
+
+    let expr = parse_lit!(
+        gamma_chain(mink(dim, mu), bis(5), mink(dim, mu), bis(1), bis(2)),
+        default_namespace = "spenso"
+    );
+
+    println!("{}", expr.simplify_gamma())
+}
+
+#[test]
+fn gamma_macro_uses_storage_order() {
+    test_initialize();
+    let expr = gamma!(a, b, mu);
+
+    assert_snapshot!(expr.to_bare_ordered_string(), @"gamma(bis(4,a),bis(4,b),mink(4,mu))");
+}
+
+#[test]
+#[should_panic(expected = "gamma first argument must be a bispinor slot")]
+fn gamma_macro_rejects_lorentz_first_ports() {
+    let r = test_initialize();
+    let _ = gamma!(slot!(r.mink4, mu), slot!(r.bis4, a), slot!(r.bis4, b));
+}
+
+#[test]
+fn gamma_macro_accepts_integer_indices() {
+    test_initialize();
+    let expr = gamma!(2, 3, 1);
+
+    assert_snapshot!(expr.to_bare_ordered_string(), @"gamma(bis(4,2),bis(4,3),mink(4,1))");
+}
+
+#[test]
+fn gamma_macro_accepts_mixed_default_and_explicit_indices() {
+    let r = test_initialize();
+    let expr = gamma!(slot!(r.bis_d, a), 1, mu);
+
+    assert_snapshot!(expr.to_bare_ordered_string(), @"gamma(bis(d,a),bis(4,1),mink(4,mu))");
+}
+
+#[test]
+fn spinor_macros_accept_default_and_explicit_indices() {
+    let r = test_initialize();
+    let expr = u!(1, a) * v!(2, slot!(r.bis_d, b));
+
+    assert_snapshot!(expr.to_bare_ordered_string(), @"u(1,bis(4,a))*v(2,bis(d,b))");
+}
+
+#[test]
+fn gamma5_macro_accepts_explicit_indices() {
+    let r = test_initialize();
+    let expr = gamma5!(slot!(r.bis4, a), slot!(r.bis4, b));
+
+    assert_snapshot!(expr.to_bare_ordered_string(), @"gamma5(bis(4,a),bis(4,b))");
+}
+
+#[test]
+fn gamma0_macro_builds_chain_factor() {
+    test_initialize();
+
+    let expr = gamma0!();
+
+    assert_snapshot!(expr.to_bare_ordered_string(), @"gamma0(in,out)");
+}
+
+#[test]
+fn gamma_macros_accept_pattern_indices() {
+    test_initialize();
+
+    let gamma = gamma!(RS.b__, RS.c__, RS.a__);
+    let gamma5 = gamma5!(RS.b__, RS.c__);
+    let gamma0 = gamma0!(RS.b__, RS.c__);
+    let dimensioned_gamma = gamma!([RS.d_, RS.b_], [RS.d_, RS.c_], RS.a__);
+    let dimensioned_gamma0 = gamma0!([RS.d_, RS.b_], [RS.d_, RS.c_]);
+
+    assert_snapshot!(gamma.to_bare_ordered_string(), @"gamma(bis(b__),bis(c__),mink(a__))");
+    assert_snapshot!(gamma5.to_bare_ordered_string(), @"gamma5(bis(b__),bis(c__))");
+    assert_snapshot!(gamma0.to_bare_ordered_string(), @"gamma0(bis(b__),bis(c__))");
+    assert_snapshot!(dimensioned_gamma.to_bare_ordered_string(), @"gamma(bis(d_,b_),bis(d_,c_),mink(a__))");
+    assert_snapshot!(dimensioned_gamma0.to_bare_ordered_string(), @"gamma0(bis(d_,b_),bis(d_,c_))");
+}
+
+#[test]
+fn gamma_chain_canonical_ordering_is_opt_in() {
+    let r = test_initialize();
+    let expr = chain!(
+        slot!(r.bis4, a),
+        slot!(r.bis4, b),
+        gamma!(slot!(r.mink4, mu)),
+        gamma!(slot!(r.mink4, nu)),
+    );
+
+    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,mu)),gamma(in,out,mink(4,nu)))");
+
+    assert_snapshot!(expr.simplify_gamma_with(GammaSimplifySettings::canonical()).to_bare_ordered_string(), @"-1*chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,nu)),gamma(in,out,mink(4,mu)))+2*g(bis(4,a),bis(4,b))*g(mink(4,mu),mink(4,nu))");
+}
+
+#[test]
+fn gamma5_anticommutes_with_four_dimensional_gamma() {
+    let r = test_initialize();
+    let expr = chain!(
+        slot!(r.bis4, a),
+        slot!(r.bis4, b),
+        gamma!(slot!(r.mink4, mu)),
+        gamma5!(),
+        gamma!(slot!(r.mink4, mu)),
+    );
+
+    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"-4*chain(bis(4,a),bis(4,b),gamma5(in,out))");
+}
+
+#[test]
+fn gamma5_does_not_move_in_dimension_generic_chain() {
+    let r = test_initialize();
+    let expr = chain!(
+        slot!(r.bis_d, a),
+        slot!(r.bis_d, b),
+        gamma5!(),
+        gamma!(slot!(r.mink_d, mu)),
+    );
+
+    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"chain(bis(d,a),bis(d,b),gamma5(in,out),gamma(in,out,mink(d,mu)))");
+}
+
+#[test]
+fn gamma0_square_collapses_inside_chain() {
+    let r = test_initialize();
+    let expr = chain!(slot!(r.bis4, a), slot!(r.bis4, b), gamma0!(), gamma0!(),);
+
+    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"g(bis(4,a),bis(4,b))");
+}
+
+#[test]
+fn gamma0_conjugates_gamma5_inside_chain() {
+    let r = test_initialize();
+    let expr = chain!(
+        slot!(r.bis4, a),
+        slot!(r.bis4, b),
+        gamma0!(),
+        gamma5!(),
+        gamma0!(),
+    );
+
+    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"-1*chain(bis(4,a),bis(4,b),gamma5(in,out))");
+}
+
+#[test]
+fn gamma0_square_is_four_dimensional() {
+    let r = test_initialize();
+    let expr = chain!(slot!(r.bis_d, a), slot!(r.bis_d, b), gamma0!(), gamma0!(),);
+
+    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"chain(bis(d,a),bis(d,b),gamma0(in,out),gamma0(in,out))");
+}
+
+#[test]
+fn gamma5_square_collapses_inside_chain() {
+    let r = test_initialize();
+    let expr = chain!(slot!(r.bis4, a), slot!(r.bis4, b), gamma5!(), gamma5!(),);
+
+    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"g(bis(4,a),bis(4,b))");
+}
+
+#[test]
+fn gamma5_trace_pair_reduces_to_ordinary_trace() {
+    let r = test_initialize();
+    let expr = trace!(
+        r.bis4.to_symbolic([]),
+        gamma5!(),
+        gamma!(slot!(r.mink4, mu)),
+        gamma!(slot!(r.mink4, nu)),
+        gamma5!(),
+    );
+
+    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"4*g(mink(4,mu),mink(4,nu))");
+}
+
+#[test]
+fn gamma0_trace_pair_reduces_to_spin_dimension() {
+    let r = test_initialize();
+    let expr = trace!(r.bis4.to_symbolic([]), gamma0!(), gamma0!());
+
+    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"4");
+}
+
+#[test]
+fn gamma5_square_is_four_dimensional() {
+    let r = test_initialize();
+    let expr = chain!(slot!(r.bis_d, a), slot!(r.bis_d, b), gamma5!(), gamma5!(),);
+
+    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"chain(bis(d,a),bis(d,b),gamma5(in,out),gamma5(in,out))");
+}
+
+#[test]
+fn four_dimensional_chisholm_requires_four_dimensional_interior() {
+    let r = test_initialize();
+    let expr = chain!(
+        slot!(r.bis4, a),
+        slot!(r.bis4, b),
+        gamma!(slot!(r.mink4, mu)),
+        gamma!(slot!(r.mink_d, nu)),
+        gamma!(slot!(r.mink4, mu)),
+    );
+
+    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,mu)),gamma(in,out,mink(d,nu)),gamma(in,out,mink(4,mu)))");
+}
+
+#[test]
+fn gamma_trace_evaluation_can_be_disabled() {
+    test_initialize();
+    let expr = gamma!(a, b, mu) * gamma!(b, a, nu);
+
+    assert_snapshot!(expr.simplify_gamma_with(GammaSimplifySettings::repeated_pairs().without_trace_evaluation()).to_bare_ordered_string(), @"trace(bis(4),cyclic(gamma(in,out,mink(4,nu)),gamma(in,out,mink(4,mu))))");
+}
+
+#[test]
+fn gamma_simplification_reaches_fixed_point_after_metric_contraction() {
+    let r = test_initialize();
+    // An identity propagator closes this loop when its bispinor metric contracts.
+    let expr = g!(slot!(r.bis4, a), slot!(r.bis4, b))
+        * gamma!(b, c, slot!(r.mink_d, mu))
+        * gamma!(c, a, slot!(r.mink_d, nu));
+
+    let once = expr.simplify_gamma();
+    let twice = once.simplify_gamma();
+    let expected = Atom::num(4) * g!(slot!(r.mink_d, mu), slot!(r.mink_d, nu));
+
+    assert_eq!(twice, expected);
+    assert_eq!(
+        once, twice,
+        "gamma simplification must reach its fixed point"
+    );
+}
+
+#[test]
+fn gamma_metric_contraction_preserves_unevaluated_trace() {
+    let r = test_initialize();
+    let expr = g!(slot!(r.bis4, a), slot!(r.bis4, b))
+        * gamma!(b, c, slot!(r.mink_d, mu))
+        * gamma!(c, a, slot!(r.mink_d, nu));
+    let expected = trace!(
+        r.bis4.to_symbolic([]),
+        gamma!(slot!(r.mink_d, mu)),
+        gamma!(slot!(r.mink_d, nu)),
+    );
+
+    for settings in [
+        GammaSimplifySettings::repeated_pairs(),
+        GammaSimplifySettings::canonical(),
+    ] {
+        let settings = settings.without_trace_evaluation();
+        let simplified = expr.simplify_gamma_with(settings);
+        assert_eq!(simplified, expected);
+        assert_eq!(simplified.simplify_gamma_with(settings), simplified);
+    }
+}
+
+mod form_reference;
+
+mod feyncalc_reference;
+
+#[test]
+fn gl23() {
+    test_initialize();
+    let expr = parse_lit!(
+        (-1 * Q(2, mink(4, hedge(8))) * g(mink(4, hedge(12)), mink(4, hedge(4)))
+            + -1 * Q(4, mink(4, hedge(12))) * g(mink(4, hedge(4)), mink(4, hedge(8)))
+            + -1 * Q(6, mink(4, hedge(4))) * g(mink(4, hedge(12)), mink(4, hedge(8)))
+            + Q(2, mink(4, hedge(12))) * g(mink(4, hedge(4)), mink(4, hedge(8)))
+            + Q(4, mink(4, hedge(4))) * g(mink(4, hedge(12)), mink(4, hedge(8)))
+            + Q(6, mink(4, hedge(8))) * g(mink(4, hedge(12)), mink(4, hedge(4))))
+            * 1𝑖
+            / 9
+            * G
+            ^ 4 * Q(1, mink(4, edge(1, 1)))
+                * Q(3, mink(4, edge(3, 1)))
+                * Q(5, mink(4, edge(5, 1)))
+                * Q(7, mink(4, edge(7, 1)))
+                * Q(8, mink(4, edge(8, 1)))
+                * ee
+            ^ 2 * f(coad(8, hedge(4)), coad(8, hedge(8)), coad(8, hedge(12)))
+                * g(coad(8, hedge(11)), coad(8, hedge(12)))
+                * g(coad(8, hedge(3)), coad(8, hedge(4)))
+                * g(coad(8, hedge(7)), coad(8, hedge(8)))
+                * g(cof(3, hedge(1)), dind(cof(3, hedge(2))))
+                * g(cof(3, hedge(10)), dind(cof(3, hedge(14))))
+                * g(cof(3, hedge(14)), dind(cof(3, hedge(13))))
+                * g(cof(3, hedge(15)), dind(cof(3, hedge(16))))
+                * g(cof(3, hedge(16)), dind(cof(3, hedge(6))))
+                * g(cof(3, hedge(6)), dind(cof(3, hedge(5))))
+                * g(cof(3, hedge(9)), dind(cof(3, hedge(10))))
+                * g(mink(4, hedge(11)), mink(4, hedge(12)))
+                * g(mink(4, hedge(3)), mink(4, hedge(4)))
+                * g(mink(4, hedge(7)), mink(4, hedge(8)))
+                * gamma(bis(4, hedge(1)), bis(4, hedge(5)), mink(4, hedge(3)))
+                * gamma(bis(4, hedge(10)), bis(4, hedge(9)), mink(4, edge(5, 1)))
+                * gamma(bis(4, hedge(13)), bis(4, hedge(14)), mink(4, edge(7, 1)))
+                * gamma(bis(4, hedge(14)), bis(4, hedge(10)), mink(4, hedge(17)))
+                * gamma(bis(4, hedge(15)), bis(4, hedge(13)), mink(4, hedge(11)))
+                * gamma(bis(4, hedge(16)), bis(4, hedge(15)), mink(4, edge(8, 1)))
+                * gamma(bis(4, hedge(2)), bis(4, hedge(1)), mink(4, edge(1, 1)))
+                * gamma(bis(4, hedge(5)), bis(4, hedge(6)), mink(4, edge(3, 1)))
+                * gamma(bis(4, hedge(6)), bis(4, hedge(16)), mink(4, hedge(0)))
+                * gamma(bis(4, hedge(9)), bis(4, hedge(2)), mink(4, hedge(7)))
+                * t(
+                    coad(8, hedge(11)),
+                    cof(3, hedge(13)),
+                    dind(cof(3, hedge(15)))
+                )
+                * t(coad(8, hedge(3)), cof(3, hedge(5)), dind(cof(3, hedge(1))))
+                * t(coad(8, hedge(7)), cof(3, hedge(2)), dind(cof(3, hedge(9)))),
+        default_namespace = "spenso"
+    );
+
+    println!(
+        "{}\n",
+        expr.simplify_metrics()
+            .cook_indices()
+            .canonize(AbstractIndex::Dummy)
+            .expect("test expression should canonicalize")
+    );
+
+    println!(
+        "Colored done: {}\n",
+        expr.simplify_metrics()
+            .cook_indices()
+            .canonize(AbstractIndex::Dummy)
+            .expect("test expression should canonicalize")
+            .simplify_color()
+    );
+}
+
+#[test]
+fn gl24() {
+    test_initialize();
+    let expr = parse_lit!(
+        (-1 * Q(2, mink(4, hedge(8))) * g(mink(4, hedge(12)), mink(4, hedge(4)))
+            + -1 * Q(4, mink(4, hedge(12))) * g(mink(4, hedge(4)), mink(4, hedge(8)))
+            + -1 * Q(6, mink(4, hedge(4))) * g(mink(4, hedge(12)), mink(4, hedge(8)))
+            + Q(2, mink(4, hedge(12))) * g(mink(4, hedge(4)), mink(4, hedge(8)))
+            + Q(4, mink(4, hedge(4))) * g(mink(4, hedge(12)), mink(4, hedge(8)))
+            + Q(6, mink(4, hedge(8))) * g(mink(4, hedge(12)), mink(4, hedge(4))))
+            * 1𝑖
+            / 9
+            * G
+            ^ 4 * Q(1, mink(4, edge(1, 1)))
+                * Q(3, mink(4, edge(3, 1)))
+                * Q(5, mink(4, edge(5, 1)))
+                * Q(7, mink(4, edge(7, 1)))
+                * Q(8, mink(4, edge(8, 1)))
+                * ee
+            ^ 2 * f(coad(8, hedge(4)), coad(8, hedge(8)), coad(8, hedge(12)))
+                * g(coad(8, hedge(11)), coad(8, hedge(12)))
+                * g(coad(8, hedge(3)), coad(8, hedge(4)))
+                * g(coad(8, hedge(7)), coad(8, hedge(8)))
+                * g(cof(3, hedge(10)), dind(cof(3, hedge(9))))
+                * g(cof(3, hedge(13)), dind(cof(3, hedge(14))))
+                * g(cof(3, hedge(14)), dind(cof(3, hedge(10))))
+                * g(cof(3, hedge(16)), dind(cof(3, hedge(15))))
+                * g(cof(3, hedge(2)), dind(cof(3, hedge(1))))
+                * g(cof(3, hedge(5)), dind(cof(3, hedge(6))))
+                * g(cof(3, hedge(6)), dind(cof(3, hedge(16))))
+                * g(mink(4, hedge(11)), mink(4, hedge(12)))
+                * g(mink(4, hedge(3)), mink(4, hedge(4)))
+                * g(mink(4, hedge(7)), mink(4, hedge(8)))
+                * gamma(bis(4, hedge(1)), bis(4, hedge(2)), mink(4, edge(1, 1)))
+                * gamma(bis(4, hedge(10)), bis(4, hedge(14)), mink(4, hedge(17)))
+                * gamma(bis(4, hedge(13)), bis(4, hedge(15)), mink(4, hedge(11)))
+                * gamma(bis(4, hedge(14)), bis(4, hedge(13)), mink(4, edge(7, 1)))
+                * gamma(bis(4, hedge(15)), bis(4, hedge(16)), mink(4, edge(8, 1)))
+                * gamma(bis(4, hedge(16)), bis(4, hedge(6)), mink(4, hedge(0)))
+                * gamma(bis(4, hedge(2)), bis(4, hedge(9)), mink(4, hedge(7)))
+                * gamma(bis(4, hedge(5)), bis(4, hedge(1)), mink(4, hedge(3)))
+                * gamma(bis(4, hedge(6)), bis(4, hedge(5)), mink(4, edge(3, 1)))
+                * gamma(bis(4, hedge(9)), bis(4, hedge(10)), mink(4, edge(5, 1)))
+                * t(
+                    coad(8, hedge(11)),
+                    cof(3, hedge(15)),
+                    dind(cof(3, hedge(13)))
+                )
+                * t(coad(8, hedge(3)), cof(3, hedge(1)), dind(cof(3, hedge(5))))
+                * t(coad(8, hedge(7)), cof(3, hedge(9)), dind(cof(3, hedge(2))))
+                * ϵ(0, mink(4, hedge(0)))
+                * ϵbar(0, mink(4, hedge(17))),
+        default_namespace = "spenso"
+    );
+
+    println!(
+        "{}\n",
+        expr.simplify_metrics()
+            .cook_indices()
+            .canonize(AbstractIndex::Dummy)
+            .expect("test expression should canonicalize")
+    );
+
+    println!(
+        "Colored done: {}\n",
+        expr.simplify_metrics()
+            .cook_indices()
+            .canonize(AbstractIndex::Dummy)
+            .expect("test expression should canonicalize")
+            .simplify_color()
+    );
+}
+
+#[test]
+fn gl_06() {
+    test_initialize();
+    let expr = parse_lit!(
+        1 / 6 * Nc * ee
+            ^ 4 * sw
+            ^ -2 * vev
+                * I3x21
+                * (MC * g(bis(4, hedge(1)), bis(4, hedge(2)))
+                    - K(0, mink(4, edge(1, 1)))
+                        * gamma(bis(4, hedge(1)), bis(4, hedge(2)), mink(4, edge(1, 1))))
+                * (-K(0, mink(4, edge(3, 1))) - K(1, mink(4, edge(3, 1))))
+                * (-g(mink(4, hedge(7)), mink(4, hedge(8))) + MW
+                    ^ -2 * (-P(0, mink(4, hedge(7))) - K(1, mink(4, hedge(7))))
+                        * (-P(0, mink(4, hedge(8))) - K(1, mink(4, hedge(8)))))
+                * (P(0, mink(4, edge(5, 1)))
+                    + K(0, mink(4, edge(5, 1)))
+                    + K(1, mink(4, edge(5, 1))))
+                * conj(CKM2x1)
+                * ϵ(0, mink(4, hedge(0)))
+                * ϵbar(0, mink(4, hedge(11)))
+                * g(mink(4, hedge(0)), mink(4, hedge(8)))
+                * gamma(bis(4, hedge(10)), bis(4, hedge(6)), mink(4, hedge(11)))
+                * gamma(bis(4, hedge(2)), bis(4, vertex(1, 1)), mink(4, hedge(7)))
+                * gamma(bis(4, hedge(6)), bis(4, hedge(5)), mink(4, edge(3, 1)))
+                * gamma(bis(4, hedge(9)), bis(4, hedge(10)), mink(4, edge(5, 1)))
+                * projm(bis(4, hedge(5)), bis(4, hedge(1)))
+                * projm(bis(4, vertex(1, 1)), bis(4, hedge(9)))
+                * (1 / 2)
+            ^ (1 / 2),
+        default_namespace = "spenso"
+    );
+
+    let simplified = expr
+        .cook_indices()
+        .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings {
+            depth_limit: Some(0),
+            ..Default::default()
+        })
+        .unwrap();
+
+    println!(
+        "{}",
+        simplified.graph.dot_impl(
+            |i| {
+                let ss = &simplified.store.get_scalar(i);
+                format!("{}:{}", i, ss)
+            },
+            |k| k.display(),
+            |t| {
+                let tt = &simplified.store.get_tensor(t);
+                format!("T{}:{}", t, tt.expression.to_bare_ordered_string())
+            },
+            |fk| fk.to_string(),
+        )
+    )
+
+    // println!("{}", expr.cook_indices().simplify_gamma().simplify_gamma());
+}
+
+#[test]
+fn gammaloop_uv_factored_vertex_chain_reduces_in_d_dimensions() {
+    let r = test_initialize();
+    let mu = slot!(r.mink_d, mu);
+    let nu = slot!(r.mink_d, nu);
+    let rho = slot!(r.mink_d, rho);
+    let p = p!(&r.mink_d);
+
+    // Minimal form of the open {15yi} numerator that remained factored before
+    // integration: (-4 g_{mu nu} q_rho + 4 g_{mu rho} q_nu + 4 g_{nu rho} q_mu)
+    // gamma^nu slash(p) gamma^mu.
+    let expr = (Atom::num(-4) * g!(mu, nu) * q!(rho)
+        + Atom::num(4) * g!(mu, rho) * q!(nu)
+        + Atom::num(4) * g!(nu, rho) * q!(mu))
+        * chain!(
+            slot!(r.bis_d, i),
+            slot!(r.bis_d, j),
+            gamma!(nu),
+            gamma!(p.clone()),
+            gamma!(mu),
+        );
+
+    let simplified = expr
+        .collect_rep(Minkowski {}.into())
+        .schoonschip_with_settings(&SchoonschipSettings::default().with_chain_like_functions())
+        .simplify_gamma_with(GammaSimplifySettings::canonical())
+        .collect_rep(Minkowski {}.into())
+        .expand_num();
+
+    // 4 (d - 4) q_rho slash(p) + 8 p_rho slash(q) + 8 (p.q) gamma_rho.
+    assert_snapshot!(simplified.to_bare_ordered_string(), @"(-16+4*d)*chain(bis(d,i),bis(d,j),gamma(in,out,p(mink(d))))*q(mink(d,rho))+8*chain(bis(d,i),bis(d,j),gamma(in,out,mink(d,rho)))*g(p(mink(d)),q(mink(d)))+8*chain(bis(d,i),bis(d,j),gamma(in,out,q(mink(d))))*p(mink(d,rho))");
+}
+
+#[test]
+fn gamma_alg() {
+    let r = test_initialize();
+    let mink4 = r.mink4;
+    let mink_dim = r.mink_d;
+    let bis4 = r.bis4;
+
+    let expr = (gamma!(1, 3, 0) * gamma!(3, 2, 0)).simplify_gamma();
+
+    assert_snapshot!(expr.to_bare_ordered_string(), @"4*g(bis(4,1),bis(4,2))");
+
+    let expr = (p!(slot!(mink4, nu1))
+        * (p!(slot!(mink4, nu3)) + q!(slot!(mink4, nu3)))
+        * gamma!(1, 3, nu1)
+        * gamma!(3, 4, mu)
+        * gamma!(4, 5, nu3)
+        * gamma!(5, 1, nu))
+    .simplify_gamma()
+    .schoonschip_with_net_full::<AbstractIndex>()
+    .unwrap();
+
+    assert_snapshot!(expr.to_bare_ordered_string(), @"-4*g(mink(4,mu),mink(4,nu))*g(p(mink(4)),p(mink(4)))+-4*g(mink(4,mu),mink(4,nu))*g(p(mink(4)),q(mink(4)))+4*p(mink(4,mu))*q(mink(4,nu))+4*p(mink(4,nu))*q(mink(4,mu))+8*p(mink(4,mu))*p(mink(4,nu))");
+
+    let expr = (mink_dim.g(5, 6)
+        * (mink_dim.g(1, 2) * mink_dim.g(3, 4) * mink_dim.g(5, 6)
+            - mink_dim.g(1, 3) * mink_dim.g(2, 6) * mink_dim.g(5, 4))
+        * (mink_dim.g(1, 2) * mink_dim.g(3, 4) - mink_dim.g(1, 3) * mink_dim.g(2, 4)))
+    .simplify_gamma()
+    .collect_metrics()
+    .simplify_metrics();
+
+    assert_snapshot!(expr.to_bare_ordered_string(), @"-1*d+d^3");
+
+    let expr = (p!(slot!(mink4, nu1))
+        * (p!(slot!(mink4, nu3)) + q!(slot!(mink4, nu3)))
+        * gamma!(1, 3, nu1)
+        * gamma!(3, 4, mu)
+        * gamma!(4, 5, nu)
+        * gamma!(5, 1, nu3))
+    .simplify_gamma()
+    .schoonschip_with_net_full::<AbstractIndex>()
+    .unwrap();
+
+    assert_snapshot!(expr.to_bare_ordered_string(), @"-4*p(mink(4,nu))*q(mink(4,mu))+4*g(mink(4,mu),mink(4,nu))*g(p(mink(4)),p(mink(4)))+4*g(mink(4,mu),mink(4,nu))*g(p(mink(4)),q(mink(4)))+4*p(mink(4,mu))*q(mink(4,nu))");
+
+    let expr = (p!(slot!(mink_dim, nu1))
+        * (p!(slot!(mink_dim, nu3)) + q!(slot!(mink_dim, nu3)))
+        * gamma!(slot!(bis4, 1), slot!(bis4, 3), slot!(mink_dim, nu1))
+        * gamma!(slot!(bis4, 3), slot!(bis4, 4), slot!(mink_dim, nu))
+        * gamma!(slot!(bis4, 4), slot!(bis4, 5), slot!(mink_dim, nu))
+        * gamma!(slot!(bis4, 5), slot!(bis4, 1), slot!(mink_dim, nu3)))
+    .simplify_gamma();
+
+    assert_snapshot!(expr.expand().canonize(AbstractIndex::Dummy).expect("test expression should canonicalize").to_bare_ordered_string(), @"(p(mink(d,d_0)))^2*4*d+4*d*p(mink(d,d_0))*q(mink(d,d_0))");
+
+    let expr = (p!(slot!(mink_dim, nu1))
+        * (p!(slot!(mink_dim, nu3)) + q!(slot!(mink_dim, nu3)))
+        * gamma!(slot!(bis4, 1), slot!(bis4, 3), slot!(mink_dim, nu1))
+        * gamma!(slot!(bis4, 3), slot!(bis4, 4), slot!(mink_dim, nu))
+        * gamma!(slot!(bis4, 4), slot!(bis4, 5), slot!(mink_dim, nu3))
+        * gamma!(slot!(bis4, 5), slot!(bis4, 1), slot!(mink_dim, nu)))
+    .collect_reps([
+        LibraryRep::from(Minkowski {}),
+        LibraryRep::from(Bispinor {}),
+    ])
+    .schoonschip()
+    .simplify_gamma();
+
+    assert_snapshot!(expr.expand().canonize(AbstractIndex::Dummy).expect("test expression should canonicalize").to_bare_ordered_string(), @"(p(mink(d,d_0)))^2*-4*d+(p(mink(d,d_0)))^2*8+-4*d*p(mink(d,d_0))*q(mink(d,d_0))+8*p(mink(d,d_0))*q(mink(d,d_0))");
+
+    let expr = (p!(slot!(mink_dim, nu1))
+        * q!(slot!(mink_dim, nu2))
+        * (p!(slot!(mink_dim, nu3)) + q!(slot!(mink_dim, nu3)))
+        * q!(slot!(mink_dim, nu4))
+        * gamma!(slot!(bis4, 1), slot!(bis4, 3), slot!(mink_dim, nu1))
+        * gamma!(slot!(bis4, 3), slot!(bis4, 4), slot!(mink_dim, nu4))
+        * gamma!(slot!(bis4, 4), slot!(bis4, 5), slot!(mink_dim, nu3))
+        * gamma!(slot!(bis4, 5), slot!(bis4, 1), slot!(mink_dim, nu2)))
+    .simplify_gamma()
+    .schoonschip_with_net_full::<AbstractIndex>()
+    .unwrap()
+    .metric_shorthand_to_dot();
+
+    assert_snapshot!(expr.to_bare_ordered_string(), @"(dot(p(mink(d)),q(mink(d))))^2*8+-4*dot(p(mink(d)),p(mink(d)))*dot(q(mink(d)),q(mink(d)))+4*dot(p(mink(d)),q(mink(d)))*dot(q(mink(d)),q(mink(d)))");
+
+    let expr = (gamma!(slot!(bis4, 1), slot!(bis4, 3), slot!(mink_dim, mu))
+        * gamma!(slot!(bis4, 3), slot!(bis4, 4), slot!(mink_dim, nu))
+        * gamma!(slot!(bis4, 4), slot!(bis4, 5), slot!(mink_dim, mu))
+        * gamma!(slot!(bis4, 5), slot!(bis4, 2), slot!(mink_dim, nu)))
+    .simplify_gamma()
+    .collect_metrics()
+    .simplify_metrics();
+
+    assert_snapshot!(expr.to_bare_ordered_string(), @"(-1*d^2+2*d)*g(bis(4,1),bis(4,2))");
+}
+
+#[test]
+fn val_test() {
+    test_initialize();
+    // let expr = parse_lit!(
+    //     (MB * g(bis(4, hedge(0, 0)), bis(4, hedge(1, 0)))
+    //         + gamma(
+    //             bis(4, hedge(0, 0)),
+    //             bis(4, hedge(1, 0)),
+    //             mink(4, edge(0, 1))
+    //         ) * Q(0, mink(4, edge(0, 1))))
+    //         * (MB * g(bis(4, hedge(4, 0)), bis(4, hedge(5, 0)))
+    //             + gamma(
+    //                 bis(4, hedge(4, 0)),
+    //                 bis(4, hedge(5, 0)),
+    //                 mink(4, edge(2, 1))
+    //             ) * Q(2, mink(4, edge(2, 1))))
+    //         * (MB * g(bis(4, hedge(8, 0)), bis(4, hedge(9, 0)))
+    //             + gamma(
+    //                 bis(4, hedge(8, 0)),
+    //                 bis(4, hedge(9, 0)),
+    //                 mink(4, edge(5, 1))
+    //             ) * Q(5, mink(4, edge(5, 1))))
+    //         * gamma(
+    //             bis(4, hedge(1, 0)),
+    //             bis(4, hedge(4, 0)),
+    //             mink(4, hedge(10, 0))
+    //         )
+    //         * gamma(
+    //             bis(4, hedge(5, 0)),
+    //             bis(4, hedge(8, 0)),
+    //             mink(4, hedge(2, 0))
+    //         )
+    //         * gamma(
+    //             bis(4, hedge(9, 0)),
+    //             bis(4, hedge(11, 0)),
+    //             mink(4, hedge(7, 0))
+    //         )
+    //         * gamma(
+    //             bis(4, hedge(11, 0)),
+    //             bis(4, hedge(0, 0)),
+    //             mink(4, hedge(2, 0))
+    //         )
+    //         * p(1, mink(4, hedge(10, 0)))
+    //         * p(7, mink(4, hedge(7, 0))),
+    //     "spenso"
+    // );
+
+    let _expr = parse_lit!(
+        (MB * g(bis(4, hedge(0, 0)), bis(4, hedge(1, 0)))
+            + gamma(
+                bis(4, hedge(0, 0)),
+                bis(4, hedge(1, 0)),
+                mink(4, edge(0, 1))
+            ) * Q(0, mink(4, edge(0, 1))))
+            * (MB * g(bis(4, hedge(2, 0)), bis(4, hedge(3, 0)))
+                + gamma(
+                    bis(4, hedge(2, 0)),
+                    bis(4, hedge(3, 0)),
+                    mink(4, edge(1, 1))
+                ) * Q(1, mink(4, edge(1, 1))))
+            * (MB * g(bis(4, hedge(5, 0)), bis(4, hedge(6, 0)))
+                + gamma(
+                    bis(4, hedge(5, 0)),
+                    bis(4, hedge(6, 0)),
+                    mink(4, edge(3, 1))
+                ) * Q(3, mink(4, edge(3, 1))))
+            * (gamma(
+                bis(4, hedge(9, 0)),
+                bis(4, hedge(10, 0)),
+                mink(4, edge(5, 1))
+            ) * Q(5, mink(4, edge(5, 1))))
+            * gamma(
+                bis(4, hedge(1, 0)),
+                bis(4, hedge(9, 0)),
+                mink(4, hedge(7, 0))
+            )
+            * gamma(
+                bis(4, hedge(3, 0)),
+                bis(4, hedge(5, 0)),
+                mink(4, hedge(7, 0))
+            )
+            * gamma(
+                bis(4, hedge(6, 0)),
+                bis(4, hedge(0, 0)),
+                mink(4, hedge(11, 0))
+            )
+            * gamma(
+                bis(4, hedge(10, 0)),
+                bis(4, hedge(2, 0)),
+                mink(4, hedge(4, 0))
+            )
+            * p(1, mink(4, hedge(4, 0)))
+            * p(7, mink(4, hedge(11, 0))),
+        default_namespace = "spenso"
+    );
+
+    // let expr = parse_lit!(
+    //     g(mink(D, left(2)), mink(D, left(5)))
+    //         * g(mink(D, left(2)), mink(D, right(2)))
+    //         * g(mink(D, left(3)), mink(D, left(6)))
+    //         * g(mink(D, left(3)), mink(D, right(3)))
+    //         * g(mink(D, left(4)), mink(D, left(7)))
+    //         * g(mink(D, left(5)), mink(D, left(6)))
+    //         * g(mink(D, right(2)), mink(D, right(5)))
+    //         * g(mink(D, right(3)), mink(D, right(6)))
+    //         * g(mink(D, right(4)), mink(D, right(7)))
+    //         * g(mink(D, right(6)), mink(D, right(7)))
+    //         * g(bis(D, left(0)), bis(D, left(5)))
+    //         * g(bis(D, left(1)), bis(D, left(4)))
+    //         * g(bis(D, right(0)), bis(D, right(5)))
+    //         * g(bis(D, right(1)), bis(D, right(4)))
+    //         * gamma(bis(D, left(1)), bis(D, right(1)), mink(D, 1337))
+    //         * gamma(bis(D, right(0)), bis(D, left(0)), mink(D, 1338))
+    //         * gamma(bis(D, left(5)), bis(D, left(4)), mink(D, left(4)))
+    //         * gamma(bis(D, right(4)), bis(D, right(5)), mink(D, right(4)))
+    //         * Q(0, mink(D, 1338))
+    //         * Q(1, mink(D, 1337))
+    //         * Q(3, mink(D, left(7)))
+    //         * Q(3, mink(D, right(5))),
+    //     "spenso"
+    // );
+    //
+    let gamma_product = gamma!(
+        parse_lit!(bis(4, l(2)), default_namespace = "spenso"),
+        parse_lit!(bis(4, r(2)), default_namespace = "spenso"),
+        parse_lit!(mink(4, dummy(2, 2)), default_namespace = "spenso")
+    ) * gamma!(
+        parse_lit!(bis(4, l(6)), default_namespace = "spenso"),
+        parse_lit!(bis(4, l(5)), default_namespace = "spenso"),
+        parse_lit!(mink(4, l(5)), default_namespace = "spenso")
+    ) * gamma!(
+        parse_lit!(bis(4, r(3)), default_namespace = "spenso"),
+        parse_lit!(bis(4, l(3)), default_namespace = "spenso"),
+        parse_lit!(mink(4, dummy(3, 3)), default_namespace = "spenso")
+    ) * gamma!(
+        parse_lit!(bis(4, r(5)), default_namespace = "spenso"),
+        parse_lit!(bis(4, r(6)), default_namespace = "spenso"),
+        parse_lit!(mink(4, r(5)), default_namespace = "spenso")
+    );
+
+    let expr = parse_lit!(
+        ((-1 * g(mink(4, l(6)), mink(4, l(7))) * g(mink(4, l(8)), mink(4, l(9)))
+            + g(mink(4, l(6)), mink(4, l(8))) * g(mink(4, l(7)), mink(4, l(9))))
+            * (-1 * g(mink(4, r(6)), mink(4, r(7))) * g(mink(4, r(8)), mink(4, r(9)))
+                + g(mink(4, r(6)), mink(4, r(8))) * g(mink(4, r(7)), mink(4, r(9))))
+            * 2
+            * G
+            ^ 6 * P(2, mink(4, dummy(2, 2)))
+                * P(3, mink(4, dummy(3, 3)))
+                * g(bis(4, l(2)), bis(4, l(5)))
+                * g(bis(4, l(3)), bis(4, l(6)))
+                * g(bis(4, r(2)), bis(4, r(5)))
+                * g(bis(4, r(3)), bis(4, r(6)))
+                * g(mink(4, l(0)), mink(4, l(6)))
+                * g(mink(4, l(0)), mink(4, r(0)))
+                * g(mink(4, l(1)), mink(4, l(7)))
+                * g(mink(4, l(1)), mink(4, r(1)))
+                * g(mink(4, l(4)), mink(4, l(8)))
+                * g(mink(4, l(4)), mink(4, r(4)))
+                * g(mink(4, l(5)), mink(4, l(9)))
+                * g(mink(4, r(0)), mink(4, r(6)))
+                * g(mink(4, r(1)), mink(4, r(7)))
+                * g(mink(4, r(4)), mink(4, r(8)))
+                * g(mink(4, r(5)), mink(4, r(9)))
+                + (-1 * g(mink(4, l(6)), mink(4, l(7))) * g(mink(4, l(8)), mink(4, l(9)))
+                    + g(mink(4, l(6)), mink(4, l(8))) * g(mink(4, l(7)), mink(4, l(9))))
+                    * (-1 * g(mink(4, r(6)), mink(4, r(7))) * g(mink(4, r(8)), mink(4, r(9)))
+                        + g(mink(4, r(6)), mink(4, r(9))) * g(mink(4, r(7)), mink(4, r(8))))
+                    * G
+            ^ 6 * P(2, mink(4, dummy(2, 2)))
+                * P(3, mink(4, dummy(3, 3)))
+                * g(bis(4, l(2)), bis(4, l(5)))
+                * g(bis(4, l(3)), bis(4, l(6)))
+                * g(bis(4, r(2)), bis(4, r(5)))
+                * g(bis(4, r(3)), bis(4, r(6)))
+                * g(mink(4, l(0)), mink(4, l(6)))
+                * g(mink(4, l(0)), mink(4, r(0)))
+                * g(mink(4, l(1)), mink(4, l(7)))
+                * g(mink(4, l(1)), mink(4, r(1)))
+                * g(mink(4, l(4)), mink(4, l(8)))
+                * g(mink(4, l(4)), mink(4, r(4)))
+                * g(mink(4, l(5)), mink(4, l(9)))
+                * g(mink(4, r(0)), mink(4, r(6)))
+                * g(mink(4, r(1)), mink(4, r(7)))
+                * g(mink(4, r(4)), mink(4, r(8)))
+                * g(mink(4, r(5)), mink(4, r(9)))
+                + (-1 * g(mink(4, l(6)), mink(4, l(7))) * g(mink(4, l(8)), mink(4, l(9)))
+                    + g(mink(4, l(6)), mink(4, l(8))) * g(mink(4, l(7)), mink(4, l(9))))
+                    * (-1 * g(mink(4, r(6)), mink(4, r(8))) * g(mink(4, r(7)), mink(4, r(9)))
+                        + g(mink(4, r(6)), mink(4, r(9))) * g(mink(4, r(7)), mink(4, r(8))))
+                    * -1
+                    * G
+            ^ 6 * P(2, mink(4, dummy(2, 2)))
+                * P(3, mink(4, dummy(3, 3)))
+                * g(bis(4, l(2)), bis(4, l(5)))
+                * g(bis(4, l(3)), bis(4, l(6)))
+                * g(bis(4, r(2)), bis(4, r(5)))
+                * g(bis(4, r(3)), bis(4, r(6)))
+                * g(mink(4, l(0)), mink(4, l(6)))
+                * g(mink(4, l(0)), mink(4, r(0)))
+                * g(mink(4, l(1)), mink(4, l(7)))
+                * g(mink(4, l(1)), mink(4, r(1)))
+                * g(mink(4, l(4)), mink(4, l(8)))
+                * g(mink(4, l(4)), mink(4, r(4)))
+                * g(mink(4, l(5)), mink(4, l(9)))
+                * g(mink(4, r(0)), mink(4, r(6)))
+                * g(mink(4, r(1)), mink(4, r(7)))
+                * g(mink(4, r(4)), mink(4, r(8)))
+                * g(mink(4, r(5)), mink(4, r(9)))
+                + (-1 * g(mink(4, l(6)), mink(4, l(7))) * g(mink(4, l(8)), mink(4, l(9)))
+                    + g(mink(4, l(6)), mink(4, l(9))) * g(mink(4, l(7)), mink(4, l(8))))
+                    * (-1 * g(mink(4, r(6)), mink(4, r(7))) * g(mink(4, r(8)), mink(4, r(9)))
+                        + g(mink(4, r(6)), mink(4, r(8))) * g(mink(4, r(7)), mink(4, r(9))))
+                    * G
+            ^ 6 * P(2, mink(4, dummy(2, 2)))
+                * P(3, mink(4, dummy(3, 3)))
+                * g(bis(4, l(2)), bis(4, l(5)))
+                * g(bis(4, l(3)), bis(4, l(6)))
+                * g(bis(4, r(2)), bis(4, r(5)))
+                * g(bis(4, r(3)), bis(4, r(6)))
+                * g(mink(4, l(0)), mink(4, l(6)))
+                * g(mink(4, l(0)), mink(4, r(0)))
+                * g(mink(4, l(1)), mink(4, l(7)))
+                * g(mink(4, l(1)), mink(4, r(1)))
+                * g(mink(4, l(4)), mink(4, l(8)))
+                * g(mink(4, l(4)), mink(4, r(4)))
+                * g(mink(4, l(5)), mink(4, l(9)))
+                * g(mink(4, r(0)), mink(4, r(6)))
+                * g(mink(4, r(1)), mink(4, r(7)))
+                * g(mink(4, r(4)), mink(4, r(8)))
+                * g(mink(4, r(5)), mink(4, r(9)))
+                + (-1 * g(mink(4, l(6)), mink(4, l(7))) * g(mink(4, l(8)), mink(4, l(9)))
+                    + g(mink(4, l(6)), mink(4, l(9))) * g(mink(4, l(7)), mink(4, l(8))))
+                    * (-1 * g(mink(4, r(6)), mink(4, r(7))) * g(mink(4, r(8)), mink(4, r(9)))
+                        + g(mink(4, r(6)), mink(4, r(9))) * g(mink(4, r(7)), mink(4, r(8))))
+                    * 2
+                    * G
+            ^ 6 * P(2, mink(4, dummy(2, 2)))
+                * P(3, mink(4, dummy(3, 3)))
+                * g(bis(4, l(2)), bis(4, l(5)))
+                * g(bis(4, l(3)), bis(4, l(6)))
+                * g(bis(4, r(2)), bis(4, r(5)))
+                * g(bis(4, r(3)), bis(4, r(6)))
+                * g(mink(4, l(0)), mink(4, l(6)))
+                * g(mink(4, l(0)), mink(4, r(0)))
+                * g(mink(4, l(1)), mink(4, l(7)))
+                * g(mink(4, l(1)), mink(4, r(1)))
+                * g(mink(4, l(4)), mink(4, l(8)))
+                * g(mink(4, l(4)), mink(4, r(4)))
+                * g(mink(4, l(5)), mink(4, l(9)))
+                * g(mink(4, r(0)), mink(4, r(6)))
+                * g(mink(4, r(1)), mink(4, r(7)))
+                * g(mink(4, r(4)), mink(4, r(8)))
+                * g(mink(4, r(5)), mink(4, r(9)))
+                + (-1 * g(mink(4, l(6)), mink(4, l(7))) * g(mink(4, l(8)), mink(4, l(9)))
+                    + g(mink(4, l(6)), mink(4, l(9))) * g(mink(4, l(7)), mink(4, l(8))))
+                    * (-1 * g(mink(4, r(6)), mink(4, r(8))) * g(mink(4, r(7)), mink(4, r(9)))
+                        + g(mink(4, r(6)), mink(4, r(9))) * g(mink(4, r(7)), mink(4, r(8))))
+                    * G
+            ^ 6 * P(2, mink(4, dummy(2, 2)))
+                * P(3, mink(4, dummy(3, 3)))
+                * g(bis(4, l(2)), bis(4, l(5)))
+                * g(bis(4, l(3)), bis(4, l(6)))
+                * g(bis(4, r(2)), bis(4, r(5)))
+                * g(bis(4, r(3)), bis(4, r(6)))
+                * g(mink(4, l(0)), mink(4, l(6)))
+                * g(mink(4, l(0)), mink(4, r(0)))
+                * g(mink(4, l(1)), mink(4, l(7)))
+                * g(mink(4, l(1)), mink(4, r(1)))
+                * g(mink(4, l(4)), mink(4, l(8)))
+                * g(mink(4, l(4)), mink(4, r(4)))
+                * g(mink(4, l(5)), mink(4, l(9)))
+                * g(mink(4, r(0)), mink(4, r(6)))
+                * g(mink(4, r(1)), mink(4, r(7)))
+                * g(mink(4, r(4)), mink(4, r(8)))
+                * g(mink(4, r(5)), mink(4, r(9)))
+                + (-1 * g(mink(4, l(6)), mink(4, l(8))) * g(mink(4, l(7)), mink(4, l(9)))
+                    + g(mink(4, l(6)), mink(4, l(9))) * g(mink(4, l(7)), mink(4, l(8))))
+                    * (-1 * g(mink(4, r(6)), mink(4, r(7))) * g(mink(4, r(8)), mink(4, r(9)))
+                        + g(mink(4, r(6)), mink(4, r(8))) * g(mink(4, r(7)), mink(4, r(9))))
+                    * -1
+                    * G
+            ^ 6 * P(2, mink(4, dummy(2, 2)))
+                * P(3, mink(4, dummy(3, 3)))
+                * g(bis(4, l(2)), bis(4, l(5)))
+                * g(bis(4, l(3)), bis(4, l(6)))
+                * g(bis(4, r(2)), bis(4, r(5)))
+                * g(bis(4, r(3)), bis(4, r(6)))
+                * g(mink(4, l(0)), mink(4, l(6)))
+                * g(mink(4, l(0)), mink(4, r(0)))
+                * g(mink(4, l(1)), mink(4, l(7)))
+                * g(mink(4, l(1)), mink(4, r(1)))
+                * g(mink(4, l(4)), mink(4, l(8)))
+                * g(mink(4, l(4)), mink(4, r(4)))
+                * g(mink(4, l(5)), mink(4, l(9)))
+                * g(mink(4, r(0)), mink(4, r(6)))
+                * g(mink(4, r(1)), mink(4, r(7)))
+                * g(mink(4, r(4)), mink(4, r(8)))
+                * g(mink(4, r(5)), mink(4, r(9)))
+                + (-1 * g(mink(4, l(6)), mink(4, l(8))) * g(mink(4, l(7)), mink(4, l(9)))
+                    + g(mink(4, l(6)), mink(4, l(9))) * g(mink(4, l(7)), mink(4, l(8))))
+                    * (-1 * g(mink(4, r(6)), mink(4, r(7))) * g(mink(4, r(8)), mink(4, r(9)))
+                        + g(mink(4, r(6)), mink(4, r(9))) * g(mink(4, r(7)), mink(4, r(8))))
+                    * G
+            ^ 6 * P(2, mink(4, dummy(2, 2)))
+                * P(3, mink(4, dummy(3, 3)))
+                * g(bis(4, l(2)), bis(4, l(5)))
+                * g(bis(4, l(3)), bis(4, l(6)))
+                * g(bis(4, r(2)), bis(4, r(5)))
+                * g(bis(4, r(3)), bis(4, r(6)))
+                * g(mink(4, l(0)), mink(4, l(6)))
+                * g(mink(4, l(0)), mink(4, r(0)))
+                * g(mink(4, l(1)), mink(4, l(7)))
+                * g(mink(4, l(1)), mink(4, r(1)))
+                * g(mink(4, l(4)), mink(4, l(8)))
+                * g(mink(4, l(4)), mink(4, r(4)))
+                * g(mink(4, l(5)), mink(4, l(9)))
+                * g(mink(4, r(0)), mink(4, r(6)))
+                * g(mink(4, r(1)), mink(4, r(7)))
+                * g(mink(4, r(4)), mink(4, r(8)))
+                * g(mink(4, r(5)), mink(4, r(9)))
+                + (-1 * g(mink(4, l(6)), mink(4, l(8))) * g(mink(4, l(7)), mink(4, l(9)))
+                    + g(mink(4, l(6)), mink(4, l(9))) * g(mink(4, l(7)), mink(4, l(8))))
+                    * (-1 * g(mink(4, r(6)), mink(4, r(8))) * g(mink(4, r(7)), mink(4, r(9)))
+                        + g(mink(4, r(6)), mink(4, r(9))) * g(mink(4, r(7)), mink(4, r(8))))
+                    * 2
+                    * G
+            ^ 6 * P(2, mink(4, dummy(2, 2)))
+                * P(3, mink(4, dummy(3, 3)))
+                * g(bis(4, l(2)), bis(4, l(5)))
+                * g(bis(4, l(3)), bis(4, l(6)))
+                * g(bis(4, r(2)), bis(4, r(5)))
+                * g(bis(4, r(3)), bis(4, r(6)))
+                * g(mink(4, l(0)), mink(4, l(6)))
+                * g(mink(4, l(0)), mink(4, r(0)))
+                * g(mink(4, l(1)), mink(4, l(7)))
+                * g(mink(4, l(1)), mink(4, r(1)))
+                * g(mink(4, l(4)), mink(4, l(8)))
+                * g(mink(4, l(4)), mink(4, r(4)))
+                * g(mink(4, l(5)), mink(4, l(9)))
+                * g(mink(4, r(0)), mink(4, r(6)))
+                * g(mink(4, r(1)), mink(4, r(7)))
+                * g(mink(4, r(4)), mink(4, r(8)))
+                * g(mink(4, r(5)), mink(4, r(9))))
+            * -18,
+        default_namespace = "spenso"
+    ) * gamma_product;
+
+    let res = parse_lit!(
+        7776 * G ^ 6 * dot(P(2, mink(4)), P(3, mink(4))),
+        default_namespace = "spenso"
+    );
+    let index_cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+    let simplified = expr
+        .cook_indices_with_settings(&index_cooking)
+        .collect_reps([
+            LibraryRep::from(Minkowski {}),
+            LibraryRep::from(Bispinor {}),
+        ])
+        .simplify_metrics()
+        .simplify_gamma()
+        .uncook_with_settings(&index_cooking)
+        .to_dots();
+    assert_eq!(res, simplified, "fount{}", simplified);
+}
+
+#[test]
+fn special_dirac_matrix_conjugation_is_explicit_and_idempotent() {
+    test_initialize();
+    for matrix in [AGS.gamma0, AGS.gamma5, AGS.projm, AGS.projp] {
+        let tensor = function!(matrix, bis!(4, special_matrix_i), bis!(4, special_matrix_j));
+        let conjugate = tensor
+            .spenso_conj()
+            .simplify_gamma_conj::<AbstractIndex>()
+            .unwrap();
+        assert_eq!(
+            conjugate.simplify_gamma_conj::<AbstractIndex>().unwrap(),
+            conjugate
+        );
+        let mut has_conjugate = false;
+        conjugate.visitor(&mut |atom| {
+            has_conjugate |= matches!(atom, AtomView::Fun(fun) if fun.get_symbol()
+                == spenso::network::library::function_lib::INBUILTS.conj);
+            true
+        });
+        assert!(!has_conjugate);
+
+        // A dimension-generic gamma-five convention must remain unspecified.
+        let generic = function!(
+            matrix,
+            bis!(special_matrix_D, special_matrix_i),
+            bis!(special_matrix_D, special_matrix_j)
+        );
+        assert_eq!(
+            generic
+                .spenso_conj()
+                .simplify_gamma_conj::<AbstractIndex>()
+                .unwrap(),
+            generic.spenso_conj()
+        );
+    }
+}
+
+#[test]
+fn special_matrices_have_the_physical_dirac_adjoints() {
+    test_initialize();
+    for (matrix, expected, sign) in [
+        (AGS.gamma0, AGS.gamma0, 1),
+        (AGS.gamma5, AGS.gamma5, -1),
+        (AGS.projm, AGS.projp, 1),
+        (AGS.projp, AGS.projm, 1),
+    ] {
+        let matrix = function!(matrix, bis!(4, special_matrix_i), bis!(4, special_matrix_j));
+        let expected = Atom::num(sign)
+            * function!(
+                expected,
+                bis!(4, special_matrix_i),
+                bis!(4, special_matrix_j)
+            );
+        let actual = matrix
+            .dirac_adjoint::<AbstractIndex>(false)
+            .unwrap()
+            .simplify_gamma();
+        assert_eq!(actual, expected.simplify_gamma());
+    }
+}
+
+#[test]
+fn transposed_gamma_words_are_preserved_without_clifford_reduction() {
+    test_initialize();
+    let tags = &*spenso::network::tags::SPENSO_TAG;
+    let left = bis!(4, transposed_i);
+    let right = bis!(4, transposed_j);
+    let spin = Bispinor {}.to_symbolic([Atom::num(4)]);
+    let mu = Minkowski {}.new_rep(4).pattern(symbol!("transposed_mu"));
+    let nu = Minkowski {}.new_rep(4).pattern(symbol!("transposed_nu"));
+    let forward = function!(AGS.gamma, tags.chain_in, tags.chain_out, &mu);
+    let transposed = function!(AGS.gamma, tags.chain_out, tags.chain_in, &mu);
+    let other = function!(AGS.gamma, tags.chain_in, tags.chain_out, &nu);
+
+    for settings in [
+        GammaSimplifySettings::repeated_pairs(),
+        GammaSimplifySettings::canonical(),
+        GammaSimplifySettings::canonical().with_gamma5_epsilon_expansion(),
+    ] {
+        // In the registered Weyl basis, sum_mu gamma(mu)^T gamma_mu is zero,
+        // whereas treating the first factor as an ordinary gamma gives 4 I.
+        // Idenso must leave the mixed word for explicit tensor evaluation.
+        for factors in [
+            vec![transposed.clone(), forward.clone()],
+            vec![forward.clone(), transposed.clone()],
+            vec![transposed.clone(), transposed.clone()],
+            vec![transposed.clone(), other.clone()],
+            vec![other.clone(), transposed.clone()],
+            vec![other.clone(), transposed.clone(), other.clone()],
+        ] {
+            for expression in [
+                chain!(&left, &right; factors.clone()),
+                trace!(&spin; factors),
+            ] {
+                let simplified = expression.simplify_gamma_with(settings);
+                assert_eq!(simplified, expression);
+                assert_eq!(simplified.simplify_gamma_with(settings), simplified);
+            }
+        }
+        let ordinary = chain!(&left, &right, &forward, &forward);
+        assert_eq!(
+            ordinary.simplify_gamma_with(settings),
+            Atom::num(4) * id_atom(left.clone(), right.clone())
+        );
+    }
+}
+
+#[test]
+fn transposed_special_dirac_factors_remain_opaque() {
+    test_initialize();
+    let tags = &*spenso::network::tags::SPENSO_TAG;
+    let left = bis!(4, transposed_special_i);
+    let right = bis!(4, transposed_special_j);
+    let mu = Minkowski {}
+        .new_rep(4)
+        .pattern(symbol!("transposed_special_mu"));
+    let gamma = function!(AGS.gamma, tags.chain_in, tags.chain_out, &mu);
+    let transposed_gamma = function!(AGS.gamma, tags.chain_out, tags.chain_in, &mu);
+    for matrix in [AGS.gamma5, AGS.projm, AGS.projp] {
+        let forward = function!(matrix, tags.chain_in, tags.chain_out);
+        let transposed = function!(matrix, tags.chain_out, tags.chain_in);
+        for factors in [
+            vec![transposed.clone(), gamma.clone()],
+            vec![forward.clone(), transposed_gamma.clone()],
+            vec![transposed, forward],
+        ] {
+            let expression = chain!(&left, &right; factors);
+            for settings in [
+                GammaSimplifySettings::repeated_pairs(),
+                GammaSimplifySettings::canonical(),
+            ] {
+                assert_eq!(expression.simplify_gamma_with(settings), expression);
+            }
+        }
+    }
+}
+
+#[test]
+fn charge_conjugation_is_real_antisymmetric_with_ordered_structure() {
+    test_initialize();
+    let left = bis!(4, charge_i);
+    let right = bis!(4, charge_j);
+    let matrix = function!(AGS.charge_conjugation, &left, &right);
+    assert_eq!(matrix.spenso_conj(), matrix);
+    assert_eq!(function!(AGS.charge_conjugation, &right, &left), -&matrix);
+    assert_eq!(function!(AGS.charge_conjugation, &left, &left), Atom::Zero);
+    let structure = spinor_matrix_structure::<AbstractIndex>(AGS.charge_conjugation, 4);
+    assert_eq!(structure.canonical().external_reps().len(), 2);
+    assert!(
+        structure
+            .canonical()
+            .external_reps()
+            .iter()
+            .all(|rep| { *rep == Bispinor {}.new_rep(4).to_lib() })
+    );
+}
+
+#[test]
+fn charge_conjugation_square_and_transposed_norm() {
+    test_initialize();
+    let tags = &*SPENSO_TAG;
+    let left = bis!(4, charge_square_i);
+    let right = bis!(4, charge_square_j);
+    let internal = bis!(4, charge_square_k);
+    let spin = Bispinor {}.to_symbolic([Atom::num(4)]);
+    let matrix = function!(AGS.charge_conjugation, tags.chain_in, tags.chain_out);
+    let transpose = function!(AGS.charge_conjugation, tags.chain_out, tags.chain_in);
+    let identity = id_atom(left.clone(), right.clone());
+    for settings in [
+        GammaSimplifySettings::repeated_pairs(),
+        GammaSimplifySettings::canonical(),
+    ] {
+        assert_eq!(
+            chain!(&left, &right, &matrix, &matrix).simplify_gamma_with(settings),
+            -&identity
+        );
+        assert_eq!(
+            chain!(&left, &right, &transpose, &matrix).simplify_gamma_with(settings),
+            identity
+        );
+        assert_eq!(
+            chain!(&left, &right, &matrix, &transpose).simplify_gamma_with(settings),
+            identity
+        );
+        assert_eq!(
+            trace!(&spin, &matrix, &matrix).simplify_gamma_with(settings),
+            Atom::num(-4)
+        );
+        assert_eq!(
+            trace!(&spin, &matrix).simplify_gamma_with(settings),
+            Atom::Zero
+        );
+    }
+    let explicit = function!(AGS.charge_conjugation, &left, &internal)
+        * function!(AGS.charge_conjugation, &internal, &right);
+    assert_eq!(explicit.simplify_gamma(), -identity);
+}
+
+#[test]
+fn charge_conjugation_sandwich_tracks_gamma_transposition() {
+    test_initialize();
+    let tags = &*SPENSO_TAG;
+    let left = bis!(4, charge_gamma_i);
+    let right = bis!(4, charge_gamma_j);
+    let spin = Bispinor {}.to_symbolic([Atom::num(4)]);
+    let mu = Minkowski {}.new_rep(4).pattern(symbol!("charge_gamma_mu"));
+    let matrix = function!(AGS.charge_conjugation, tags.chain_in, tags.chain_out);
+    let gamma = function!(AGS.gamma, tags.chain_in, tags.chain_out, &mu);
+    let transpose = function!(AGS.gamma, tags.chain_out, tags.chain_in, &mu);
+    for settings in [
+        GammaSimplifySettings::repeated_pairs(),
+        GammaSimplifySettings::canonical(),
+    ] {
+        for (middle, expected) in [(&gamma, &transpose), (&transpose, &gamma)] {
+            let word = chain!(&left, &right, &matrix, middle, &matrix);
+            let result = word.simplify_gamma_with(settings);
+            assert_eq!(result, chain!(&left, &right, expected));
+            assert_eq!(result.simplify_gamma_with(settings), result);
+        }
+        // Removing the C sandwich exposes an ordinary Clifford contraction.
+        // The unprotected mixed-transpose word must still remain opaque.
+        assert_eq!(
+            chain!(&left, &right, &matrix, &transpose, &matrix, &gamma)
+                .simplify_gamma_with(settings),
+            Atom::num(4) * id_atom(left.clone(), right.clone())
+        );
+        assert_eq!(
+            trace!(&spin, &matrix, &transpose, &matrix, &gamma).simplify_gamma_with(settings),
+            Atom::num(16)
+        );
+    }
+}
+
+#[test]
+fn charge_conjugation_special_sandwiches_retain_chirality_and_sign() {
+    test_initialize();
+    let tags = &*SPENSO_TAG;
+    let left = bis!(4, charge_special_i);
+    let right = bis!(4, charge_special_j);
+    let matrix = function!(AGS.charge_conjugation, tags.chain_in, tags.chain_out);
+    for (head, sign) in [
+        (AGS.gamma0, 1),
+        (AGS.gamma5, -1),
+        (AGS.projp, -1),
+        (AGS.projm, -1),
+    ] {
+        for (row, column) in [
+            (tags.chain_in, tags.chain_out),
+            (tags.chain_out, tags.chain_in),
+        ] {
+            let middle = function!(head, row, column);
+            let transpose = function!(head, column, row);
+            let result = chain!(&left, &right, &matrix, &middle, &matrix).simplify_gamma();
+            assert_eq!(result, Atom::num(sign) * chain!(&left, &right, &transpose));
+            assert_eq!(result.simplify_gamma(), result);
+        }
+    }
+}
+
+#[test]
+fn charge_conjugation_leaves_unspecified_dimensions_and_unknown_factors_opaque() {
+    test_initialize();
+    let tags = &*SPENSO_TAG;
+    let matrix = function!(AGS.charge_conjugation, tags.chain_in, tags.chain_out);
+    let left = bis!(4, charge_opaque_i);
+    let right = bis!(4, charge_opaque_j);
+    let dimension = Atom::var(symbol!("charge_opaque_D"));
+    for dim in [Atom::num(3), dimension.clone()] {
+        let mu = Minkowski {}.to_symbolic([dim.clone(), Atom::var(symbol!("charge_opaque_mu"))]);
+        let gamma = function!(AGS.gamma, tags.chain_in, tags.chain_out, &mu);
+        let word = chain!(&left, &right, &matrix, &gamma, &matrix);
+        assert_eq!(word.simplify_gamma(), word);
+        let spin_left = Bispinor {}.to_symbolic([dim.clone(), Atom::var(symbol!("charge_spin_i"))]);
+        let spin_right = Bispinor {}.to_symbolic([dim, Atom::var(symbol!("charge_spin_j"))]);
+        let square = chain!(&spin_left, &spin_right, &matrix, &matrix);
+        assert_eq!(square.simplify_gamma(), square);
+    }
+    let unknown = function!(
+        spenso::tensor_symbol!("charge_unknown"),
+        tags.chain_in,
+        tags.chain_out
+    );
+    let word = chain!(&left, &right, &matrix, &unknown, &matrix);
+    assert_eq!(word.simplify_gamma(), word);
+}
+
+#[test]
+fn charge_conjugation_multiword_preserves_factor_order_and_complex_scalars() {
+    test_initialize();
+    let tags = &*SPENSO_TAG;
+    let left = bis!(4, charge_word_i);
+    let right = bis!(4, charge_word_j);
+    let c = function!(AGS.charge_conjugation, tags.chain_in, tags.chain_out);
+    let mu = Minkowski {}.new_rep(4).pattern(symbol!("charge_word_mu"));
+    let nu = Minkowski {}.new_rep(4).pattern(symbol!("charge_word_nu"));
+    let gamma_mu = function!(AGS.gamma, tags.chain_in, tags.chain_out, &mu);
+    let gamma_nu = function!(AGS.gamma, tags.chain_in, tags.chain_out, &nu);
+    let transposed_mu = function!(AGS.gamma, tags.chain_out, tags.chain_in, &mu);
+    let transposed_nu = function!(AGS.gamma, tags.chain_out, tags.chain_in, &nu);
+    let gamma5 = function!(AGS.gamma5, tags.chain_in, tags.chain_out);
+    let transposed5 = function!(AGS.gamma5, tags.chain_out, tags.chain_in);
+    let scalar = Atom::num(2) + Atom::num(3) * Atom::i();
+    // Independent two-matrix identity: C gamma(mu) gamma(nu) C
+    // = -gamma(mu)^T gamma(nu)^T, with neither order reversal nor conjugation.
+    let word = &scalar * chain!(&left, &right, &c, &gamma_mu, &gamma_nu, &c);
+    let expected = -&scalar * chain!(&left, &right, &transposed_mu, &transposed_nu);
+    assert_eq!(word.simplify_gamma(), expected);
+    assert_eq!(expected.simplify_gamma(), expected);
+    // Three matrices, including gamma5, still have two vector signs.
+    // Using already transposed inputs gives a forward, reducible output.
+    let word = &scalar
+        * chain!(
+            &left,
+            &right,
+            &c,
+            &transposed_mu,
+            &transposed5,
+            &transposed_nu,
+            &c
+        );
+    let expected = -&scalar * chain!(&left, &right, &gamma_mu, &gamma5, &gamma_nu);
+    let result = word.simplify_gamma();
+    assert_eq!(result, expected.simplify_gamma());
+    assert_eq!(result.simplify_gamma(), result);
+}
+
+#[test]
+fn charge_conjugation_multiword_trace_matches_clifford_contractions() {
+    test_initialize();
+    let tags = &*SPENSO_TAG;
+    let c = function!(AGS.charge_conjugation, tags.chain_in, tags.chain_out);
+    let spin = Bispinor {}.to_symbolic([Atom::num(4)]);
+    let mu = Minkowski {}.new_rep(4).pattern(symbol!("charge_trace_mu"));
+    let nu = Minkowski {}.new_rep(4).pattern(symbol!("charge_trace_nu"));
+    let gamma_mu = function!(AGS.gamma, tags.chain_in, tags.chain_out, &mu);
+    let gamma_nu = function!(AGS.gamma, tags.chain_in, tags.chain_out, &nu);
+    let transposed_mu = function!(AGS.gamma, tags.chain_out, tags.chain_in, &mu);
+    let transposed_nu = function!(AGS.gamma, tags.chain_out, tags.chain_in, &nu);
+    let word = trace!(
+        &spin,
+        &c, &transposed_mu, &transposed_nu, &c, &gamma_mu, &gamma_nu
+    );
+    // C gamma(mu)^T gamma(nu)^T C = -gamma(mu) gamma(nu),
+    // while Tr(gamma(mu) gamma(nu) gamma_mu gamma_nu) = -32 in 4D.
+    let result = word.simplify_gamma();
+    assert_eq!(result, Atom::num(32));
+    assert_eq!(result.simplify_gamma(), result);
+}
+
+#[test]
+fn charge_conjugation_multiword_requires_every_factor_to_be_known_and_four_dimensional() {
+    test_initialize();
+    let tags = &*SPENSO_TAG;
+    let left = bis!(4, charge_word_guard_i);
+    let right = bis!(4, charge_word_guard_j);
+    let c = function!(AGS.charge_conjugation, tags.chain_in, tags.chain_out);
+    let mu = Minkowski {}
+        .new_rep(4)
+        .pattern(symbol!("charge_word_guard_mu"));
+    let gamma = function!(AGS.gamma, tags.chain_in, tags.chain_out, &mu);
+    let unknown = function!(
+        spenso::tensor_symbol!("charge_word_unknown"),
+        tags.chain_in,
+        tags.chain_out
+    );
+    let dimension = Atom::var(symbol!("charge_word_guard_D"));
+    let generic = Minkowski {}.to_symbolic([dimension, Atom::var(symbol!("charge_word_guard_nu"))]);
+    let generic_gamma = function!(AGS.gamma, tags.chain_in, tags.chain_out, generic);
+    for unsupported in [unknown, generic_gamma] {
+        let word = chain!(&left, &right, &c, &gamma, &unsupported, &c);
+        assert_eq!(word.simplify_gamma(), word);
+    }
+}

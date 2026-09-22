@@ -1338,6 +1338,84 @@ and
   label: "the dimension-gating tests",
 ).
 
+== Charge conjugation and matrix orientation
+
+The registered tensor `spenso::charge_conjugation` uses the
+#link("https://raw.githubusercontent.com/mg5amcnlo/mg5amcnlo/3.x/aloha/aloha_object.py")[ALOHA Weyl convention]
+
+$ C = -i γ^2 γ^0, quad C^2 = -1, quad C^T = -C, quad C^"*" = C. $
+
+In Rust, its symbol is `AGS.charge_conjugation`; the existing
+`spinor_matrix_structure` constructor supplies its ordered bispinor ports.
+`spenso-hep-lib` owns the component data reused by both HEP libraries and
+numeric generator grouping. UFO `C(i,j)` is lowered to this symbol in the shared
+generator and GammaLoop reindexer.
+
+Explicit-index contractions and compact chains enter the existing
+`simplify_gamma` path. The generic Python expression boundary already supports
+this tensor; no separate reduction API is needed:
+
+// docs-example: compile
+```python
+from symbolica import S
+from symbolica.community.spenso import Representation, TensorExpression
+
+spin = Representation.bis(4)
+i, j, k, mu = S("c_example::i", "c_example::j", "c_example::k", "c_example::mu")
+C = S("spenso::charge_conjugation")
+ci, cj, ck = (spin(index).to_expression() for index in (i, j, k))
+charge = TensorExpression(C(ci, cj))
+square = TensorExpression(C(ci, ck) * C(ck, cj))
+assert square.simplify_gamma().to_expression() == -spin.g(i, j).to_expression()
+gamma, chain_head, incoming, outgoing = S(
+    "spenso::gamma", "spenso::chain", "spenso::in", "spenso::out"
+)
+factor = gamma(incoming, outgoing, Representation.mink(4)(mu).to_expression())
+c_factor = C(incoming, outgoing)
+sandwich = TensorExpression(chain_head(ci, cj, c_factor, factor, c_factor))
+transposed_gamma = sandwich.simplify_gamma()
+```
+
+The compact chain declares its external endpoints once; each matrix uses the
+reserved `in` and `out` markers. The separate `chain()` convenience builder
+requires any explicit neighboring matrix ports to carry matching index labels.
+
+For four-dimensional bispinor endpoints and explicitly four-dimensional gamma
+arguments, the local rules include
+
+$ C γ^μ C = (γ^μ)^T, quad C (γ^μ)^T C = γ^μ. $
+
+For a supported matrix word, insertion of $C^(-1) C$ between factors gives
+
+$ C A_1 dots A_n C = -(product_(r=1)^n σ_r) A_1^T dots A_n^T, $
+
+where $σ_r = -1$ for ordinary gamma and gamma-zero matrices, and $σ_r = 1$
+for gamma five and either chiral projector. Each matrix is transposed in place;
+the order of these factors is preserved and scalar coefficients are not
+conjugated. The nearest closing $C$ is used only when every intervening factor
+is supported. Unknown matrices leave that sandwich opaque.
+
+The dimension check also recognizes compact slash arguments such as
+`p(mink(4))` and `P(label,mink(4))`. It reads a direct Minkowski annotation or
+one among the immediate momentum-function arguments. A symbolic dimension does
+not specify a charge-conjugation convention and is left untouched. These rules
+do not provide a gamma-five prescription for dimensional regularization.
+
+In self-dual representation spaces, `collect_chains` can join two chains with
+a common start or common end. It transposes the necessary word by reversing its
+factors and simultaneously exchanging their `in`/`out` markers, retaining the
+representation's contraction convention. Dualizable spaces keep their directed
+end-to-start joins. Outside a supported $C$ sandwich, reversed gamma factors
+remain excluded from ordinary forward-matrix Clifford reductions.
+
+Focused Rust identities and an independent nonsymmetric complex-matrix check
+cover these transformations. The installed public-host regression
+`installed_charge_conjugation.py` passes its initial symbolic identities in
+the rebuilt host; full installed-host validation awaits fixture setup
+corrections. Supporting this tensor and its algebra does not implement
+general Majorana or fermion-number-violating diagram generation, whose external
+fermion-flow normalization still requires particle/antiparticle pairs.
+
 == Color convention
 
 Fundamental generators are written $(T^a)_i^j$. Idenso keeps the trace normalization $T_R$ and
@@ -1377,6 +1455,7 @@ normalization and free/dummy-index placement above are locked by
   table.header([Rule family], [Status], [Boundary]),
   [Ordinary Clifford chains and traces], [Shipped], [Compatible dimensions; default Python path.],
   [Chisholm, gamma zero, projectors, and gamma five], [Shipped], [Explicit four-dimensional representations only.],
+  [Charge-conjugation matrix and sandwiches], [Implemented], [ALOHA Weyl convention; explicit 4D gamma/slash guards. Full installed-host validation awaits fixture setup corrections.],
   [Three-gamma epsilon expansion], [Opt-in], [Rust `GammaSimplifySettings`; disabled by the Python default.],
   [Color traces, Casimirs, structure contractions, and fundamental Fierz], [Shipped], [Registered color representations; invariants remain symbolic by default.],
   [Every FORM `color.h` identity and high-order invariant], [Not implied], [Only rules represented in the current Idenso implementation and tests are public behavior.],

@@ -12,7 +12,7 @@ use feynkit_model::{Model, ModelError, ParameterId, ParticleId};
 use idenso::{
     IndexTooling,
     color::{CS, ColorSimplifier, ColorSimplifySettings},
-    dirac::AGS,
+    dirac::{AGS, spinor_matrix_structure},
     representations::Bispinor,
 };
 use spenso::{
@@ -36,7 +36,10 @@ use spenso::{
         parametric::ParamTensor,
     },
 };
-use spenso_hep_lib::{gamma_data_weyl, gamma5_weyl_data, proj_m_data_weyl, proj_p_data_weyl};
+use spenso_hep_lib::{
+    CHARGE_CONJUGATION_WEYL_COMPONENTS, gamma_data_weyl, gamma5_weyl_data, proj_m_data_weyl,
+    proj_p_data_weyl,
+};
 #[cfg(test)]
 use symbolica::parser::ParseSettings;
 use symbolica::{
@@ -1117,6 +1120,14 @@ fn insert_dirac_tensors(library: &mut GroupingTensorLibrary) {
         ))
     });
     library.insert_explicit(projp);
+    library
+        .insert_explicit_sparse(
+            spinor_matrix_structure::<GroupingIndex>(AGS.charge_conjugation, 4),
+            CHARGE_CONJUGATION_WEYL_COMPONENTS
+                .map(|(indices, sign)| (indices.to_vec(), Atom::num(sign))),
+            Atom::Zero,
+        )
+        .expect("charge-conjugation entries have valid four-dimensional spinor indices");
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1823,6 +1834,29 @@ mod tests {
         GraphGroupingOptions {
             check_canonical_numerator: true,
             ..GraphGroupingOptions::default()
+        }
+    }
+
+    #[test]
+    fn numeric_grouping_contracts_the_shared_charge_conjugation_matrix() {
+        let _ = AGS.charge_conjugation;
+        let model = Arc::new(model());
+        let diagram = diagram(&model, "charge_conjugation", "1", 25, 25);
+        let options = GraphGroupingOptions::default();
+        for (expression, expected) in [
+            (
+                "spenso::charge_conjugation(spenso::bis(4,1),spenso::bis(4,2))*spenso::charge_conjugation(spenso::bis(4,2),spenso::bis(4,1))",
+                -4,
+            ),
+            (
+                "spenso::charge_conjugation(spenso::bis(4,1),spenso::bis(4,2))^2",
+                4,
+            ),
+        ] {
+            assert_eq!(
+                evaluate_tensor_sample(&test_atom(expression), &diagram, &options, 0).unwrap(),
+                Atom::num(expected),
+            );
         }
     }
 

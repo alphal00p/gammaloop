@@ -336,6 +336,12 @@ impl UFOSymbols {
                     .call_args([bis.pattern(W_.a_), bis.pattern(W_.b_)]),
             ),
             (
+                self.charge_conj
+                    .call_args([bis.pattern(W_.a_), bis.pattern(W_.b_)]),
+                AGS.charge_conjugation
+                    .call_args([bis.pattern(W_.a_), bis.pattern(W_.b_)]),
+            ),
+            (
                 self.sigma.call_args([
                     bis.pattern(W_.a_),
                     bis.pattern(W_.b_),
@@ -440,7 +446,7 @@ impl UFOSymbols {
                 .next()
                 .is_some()
             || atom
-                .replace(self.charge_conj.call_args([W_.a__]))
+                .replace(self.charge_conj.call_args([W_.a___]))
                 .match_iter()
                 .next()
                 .is_some()
@@ -730,6 +736,52 @@ impl UFOSymbols {
 
 #[cfg(test)]
 pub mod test {
+    use super::*;
+
+    #[test]
+    fn ufo_charge_conjugation_uses_shared_tensor_and_rejects_invalid_arity() {
+        idenso::representations::initialize();
+        let bis = Bispinor {}.new_rep(4).cast::<LibraryRep>();
+        let first = bis.slot(Aind::Hedge(20, 1));
+        let second = bis.slot(Aind::Hedge(41, 1));
+        let expected = AGS
+            .charge_conjugation
+            .call((first.to_atom(), second.to_atom()));
+        let structures =
+            [first, second].map(|slot| OrderedStructure::new(vec![slot]).into_canonical());
+        let slots = structures.iter().collect::<Vec<_>>();
+        let momenta = [(Flow::Sink, EdgeIndex(0))];
+        let lowered = UFO
+            .reindex_spin(&slots, &momenta, UFO.charge_conj.call((1, 2)), Aind::Dummy)
+            .unwrap();
+        assert_eq!(lowered, expected);
+        assert_eq!(
+            UFO.reindex_spin(&slots, &momenta, UFO.charge_conj.call((2, 1)), Aind::Dummy)
+                .unwrap(),
+            -expected,
+        );
+        assert_eq!(
+            UFO.reindex_spin(&[], &momenta, UFO.charge_conj.call((-1, -2)), Aind::Dummy)
+                .unwrap(),
+            AGS.charge_conjugation.call((
+                bis.slot::<Aind, _>(Aind::Dummy(1)).to_atom(),
+                bis.slot::<Aind, _>(Aind::Dummy(2)).to_atom(),
+            )),
+        );
+        for arguments in [vec![], vec![1], vec![1, 2, 3]] {
+            let malformed = arguments
+                .into_iter()
+                .fold(
+                    FunctionBuilder::new(UFO.charge_conj),
+                    |builder, argument| builder.add_arg(argument),
+                )
+                .finish();
+            assert!(
+                UFO.reindex_spin(&slots, &momenta, malformed, Aind::Dummy)
+                    .is_err()
+            );
+        }
+    }
 
     #[test]
     fn ufo_spin_processing() {}

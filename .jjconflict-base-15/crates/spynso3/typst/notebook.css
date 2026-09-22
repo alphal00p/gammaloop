@@ -1,0 +1,13 @@
+/* Use STIX Two Math when supplied by the page or system, otherwise the browser's math font. */
+[data-spenso-math] {
+  box-sizing: border-box;
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 0.6em 0.3em;
+}
+
+[data-spenso-math] math {
+  font-family: "STIX Two Math", math;
+  font-size: var(--spenso-math-font-size, 21px);
+  font-synthesis: none;
+}

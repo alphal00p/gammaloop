@@ -1,0 +1,1211 @@
+use bincode_trait_derive::{Decode, Encode};
+use global::{GenerationSettings, Parallelisation};
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+
+use crate::{
+    GammaLoopContext,
+    integrands::IntegrandSettings,
+    observables::{ObservablesSettings, QuantitiesSettings, SelectorsSettings},
+    settings::runtime::HFunctionSettings,
+    utils::{
+        F, FloatLike,
+        serde_utils::{IsDefault, show_defaults_helper},
+        tracing::LogStyle,
+    },
+};
+
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
+#[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, JsonSchema, PartialEq)]
+#[trait_decode(trait= GammaLoopContext)]
+#[serde(default, deny_unknown_fields)]
+pub struct GlobalSettings {
+    /// Tracing filter applied to the optional log-file sink; `off` disables that sink.
+    #[serde(skip_serializing_if = "is_default_logfile_directive")]
+    #[serde(default = "default_logfile_directive")]
+    pub logfile_directive: String,
+    /// Tracing filter applied to terminal output shown by the interactive session.
+    #[serde(skip_serializing_if = "is_default_display_directive")]
+    #[serde(default = "default_display_directive")]
+    pub display_directive: String,
+    /// Formatting choices shared by terminal and file tracing subscribers.
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub log_style: LogStyle,
+    /// Diagram, numerator, counterterm, evaluator, and compilation settings used during generation.
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub generation: GenerationSettings,
+    /// Per-stage worker counts for diagram generation, evaluator construction, compilation, and integration.
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub n_cores: Parallelisation,
+}
+
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize, Encode, Decode, JsonSchema, PartialEq)]
+#[trait_decode(trait= GammaLoopContext)]
+#[serde(default, deny_unknown_fields)]
+pub struct RuntimeSettings {
+    // Runtime settings
+    /// Evaluation scales, backend, caching, event generation, and output-unit controls.
+    #[serde(rename = "general", skip_serializing_if = "IsDefault::is_default")]
+    pub general: GeneralSettings,
+    /// Per-integrand overrides for external model parameters.
+    #[serde(rename = "model", skip_serializing_if = "IsDefault::is_default")]
+    pub model: RuntimeModelSettings,
+    /// Optional built-in test integrand used instead of a generated process integrand.
+    #[serde(rename = "integrand", skip_serializing_if = "IsDefault::is_default")]
+    pub hard_coded_integrand: Option<IntegrandSettings>,
+    /// Center-of-mass energy, external momenta, helicities, and phase-space improvement.
+    #[serde(rename = "kinematics", skip_serializing_if = "IsDefault::is_default")]
+    pub kinematics: KinematicsSettings,
+    /// Adaptive Monte Carlo iteration, accuracy, learning, and output controls.
+    #[serde(rename = "integrator", skip_serializing_if = "IsDefault::is_default")]
+    pub integrator: IntegratorSettings,
+    /// Named derived quantities available to selectors and observables.
+    #[serde(rename = "quantities", skip_serializing_if = "IsDefault::is_default")]
+    pub quantities: QuantitiesSettings,
+    /// Named histograms and other observable accumulators.
+    #[serde(rename = "observables", skip_serializing_if = "IsDefault::is_default")]
+    pub observables: ObservablesSettings,
+    /// Named event-selection predicates applied before observable accumulation.
+    #[serde(rename = "selectors", skip_serializing_if = "IsDefault::is_default")]
+    pub selectors: SelectorsSettings,
+    /// Precision escalation, rotated checks, and optional stability diagnostics.
+    #[serde(rename = "stability")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub stability: StabilitySettings,
+    /// Continuous parameterization and discrete graph/orientation/channel sampling strategy.
+    #[serde(rename = "sampling", skip_serializing_if = "IsDefault::is_default")]
+    pub sampling: SamplingSettings,
+    /// Local and integrated threshold/ultraviolet subtraction controls.
+    #[serde(rename = "subtraction", skip_serializing_if = "IsDefault::is_default")]
+    pub subtraction: SubtractionSettings,
+    /// Damping profile shared by Local Unitarity threshold terms.
+    #[serde(rename = "h_function", skip_serializing_if = "IsDefault::is_default")]
+    pub lu_h_function: HFunctionSettings,
+}
+
+impl RuntimeSettings {
+    pub(crate) fn additional_params<T: FloatLike>(&self) -> Vec<F<T>> {
+        self.general
+            .additional_param_values
+            .iter()
+            .map(|a| F(T::from_f64(*a)))
+            .collect()
+    }
+
+    pub(crate) fn should_generate_events(&self) -> bool {
+        self.general.generate_events
+            || self.selectors.values().any(|selector| selector.active)
+            || !self.observables.is_empty()
+    }
+
+    pub(crate) fn should_buffer_generated_events(&self) -> bool {
+        self.general.generate_events || !self.observables.is_empty()
+    }
+
+    pub(crate) fn should_return_generated_events(&self) -> bool {
+        self.general.generate_events
+    }
+}
+
+fn default_logfile_directive() -> String {
+    "off".to_string()
+}
+
+fn default_display_directive() -> String {
+    "info".to_string()
+}
+
+fn is_default_logfile_directive(val: &String) -> bool {
+    show_defaults_helper(val == &default_logfile_directive())
+}
+
+fn is_default_display_directive(val: &String) -> bool {
+    show_defaults_helper(val == &default_display_directive())
+}
+
+impl Default for GlobalSettings {
+    fn default() -> Self {
+        Self {
+            logfile_directive: default_logfile_directive(),
+            display_directive: default_display_directive(),
+            log_style: LogStyle::default(),
+            generation: GenerationSettings::default(),
+            n_cores: Parallelisation::default(),
+        }
+    }
+}
+
+pub mod global;
+pub use runtime::{
+    GeneralSettings, IntegratorSettings, ObservablesOutputSettings, RuntimeModelSettings,
+    SamplingSettings, StabilitySettings, SubtractionSettings, kinematic::KinematicsSettings,
+};
+pub mod runtime;
+
+#[cfg(test)]
+mod tests {
+    use serde::{Deserialize, Serialize};
+
+    use crate::{
+        momentum::{Dep, ExternalMomenta, Helicity},
+        settings::{
+            GlobalSettings, RuntimeSettings, SamplingSettings, SubtractionSettings,
+            global::{GammaloopCompileOptions, GenerationSettings, ThresholdSubtractionSettings},
+            runtime::{
+                DiscreteGraphSamplingSettings, DiscreteGraphSamplingType,
+                GammaloopTropicalSamplingSettings,
+                kinematic::{Externals, improvement::PhaseSpaceImprovementSettings},
+            },
+        },
+        utils::{
+            DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, F,
+            serde_utils::{SHOWDEFAULTS, ShowDefaultsGuard},
+        },
+    };
+    use std::fmt::Debug;
+
+    fn generic_test_settings<T>()
+    where
+        T: Serialize + for<'de> Deserialize<'de> + Default + PartialEq + Debug,
+    {
+        {
+            let default = T::default();
+            let serialized = serde_yaml::to_string(&default).unwrap();
+            assert_eq!(serialized, "{}\n");
+            let deserialized: T = serde_yaml::from_str(&serialized).unwrap();
+            assert_eq!(default, deserialized);
+
+            let deserialized_from_empty: T = serde_yaml::from_str("").unwrap();
+            assert_eq!(default, deserialized_from_empty);
+        }
+        {
+            let default = T::default();
+            let serialized = toml::to_string_pretty(&default).unwrap();
+            assert_eq!(serialized, "");
+            let deserialized: T = toml::from_str(&serialized).unwrap();
+            assert_eq!(default, deserialized);
+
+            let deserialized_from_empty: T = toml::from_str("").unwrap();
+            assert_eq!(default, deserialized_from_empty);
+        }
+        {
+            let default = T::default();
+            let serialized = serde_json::to_string(&default).unwrap();
+            assert_eq!(serialized, "{}");
+            let deserialized: T = serde_json::from_str(&serialized).unwrap();
+            assert_eq!(default, deserialized);
+
+            let deserialized_from_empty: T = serde_yaml::from_str("").unwrap();
+            assert_eq!(default, deserialized_from_empty);
+        }
+    }
+
+    #[test]
+    fn global_test_serialize_deserialize() {
+        generic_test_settings::<GlobalSettings>();
+    }
+
+    #[test]
+    fn generation_test_serialize_deserialize() {
+        generic_test_settings::<GenerationSettings>();
+    }
+
+    #[test]
+    fn esurface_existence_threshold_defaults_and_overrides() {
+        assert_eq!(
+            ThresholdSubtractionSettings::default().esurface_existence_threshold,
+            DEFAULT_ESURFACE_EXISTENCE_THRESHOLD,
+        );
+        assert_eq!(
+            SubtractionSettings::default().esurface_existence_threshold,
+            DEFAULT_ESURFACE_EXISTENCE_THRESHOLD,
+        );
+
+        let generation: GenerationSettings =
+            toml::from_str("[threshold_subtraction]\nesurface_existence_threshold = 2.5e-8\n")
+                .unwrap();
+        assert_eq!(
+            generation
+                .threshold_subtraction
+                .esurface_existence_threshold,
+            2.5e-8,
+        );
+
+        let runtime: RuntimeSettings =
+            toml::from_str("[subtraction]\nesurface_existence_threshold = 4.0e-9\n").unwrap();
+        assert_eq!(runtime.subtraction.esurface_existence_threshold, 4.0e-9,);
+
+        let zero_generation: GenerationSettings =
+            toml::from_str("[threshold_subtraction]\nesurface_existence_threshold = 0.0\n")
+                .unwrap();
+        assert_eq!(
+            zero_generation
+                .threshold_subtraction
+                .esurface_existence_threshold,
+            0.0,
+        );
+
+        for invalid in ["-1.0e-7", "nan", "inf", "-inf"] {
+            let generation = toml::from_str::<GenerationSettings>(&format!(
+                "[threshold_subtraction]\nesurface_existence_threshold = {invalid}\n"
+            ));
+            assert!(
+                generation.is_err(),
+                "generation-time E-surface tolerance {invalid} must be rejected"
+            );
+
+            let runtime = toml::from_str::<RuntimeSettings>(&format!(
+                "[subtraction]\nesurface_existence_threshold = {invalid}\n"
+            ));
+            assert!(
+                runtime.is_err(),
+                "runtime E-surface tolerance {invalid} must be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn radial_root_residual_tolerance_defaults_and_overrides() {
+        assert_eq!(
+            SubtractionSettings::default().radial_root_residual_tolerance,
+            64.0,
+        );
+        assert!(
+            !toml::to_string(&RuntimeSettings::default())
+                .unwrap()
+                .contains("radial_root_residual_tolerance")
+        );
+
+        let runtime: RuntimeSettings =
+            toml::from_str("[subtraction]\nradial_root_residual_tolerance = 128.0\n").unwrap();
+        assert_eq!(runtime.subtraction.radial_root_residual_tolerance, 128.0);
+
+        for invalid in ["-1.0", "nan", "inf", "-inf"] {
+            let runtime = toml::from_str::<RuntimeSettings>(&format!(
+                "[subtraction]\nradial_root_residual_tolerance = {invalid}\n"
+            ));
+            assert!(
+                runtime.is_err(),
+                "radial-root residual tolerance {invalid} must be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn evaluator_settings_partial_tables_use_evaluator_defaults() {
+        use crate::processes::EvaluatorSettings;
+
+        let parsed: EvaluatorSettings =
+            toml::from_str("horner_iterations = 0\ncpe_iterations = 0\n").unwrap();
+
+        assert_eq!(
+            parsed,
+            EvaluatorSettings {
+                horner_iterations: 0,
+                cpe_iterations: Some(0),
+                ..EvaluatorSettings::default()
+            }
+        );
+
+        let serialized = toml::to_string(&parsed).unwrap();
+        assert!(serialized.contains("horner_iterations = 0"));
+        assert!(serialized.contains("cpe_iterations = 0"));
+        assert!(!serialized.contains("iterative_orientation_optimization"));
+        assert!(!serialized.contains("n_cores"));
+        assert!(!serialized.contains("max_horner_scheme_variables"));
+        assert!(!serialized.contains("max_common_pair_cache_entries"));
+        assert!(!serialized.contains("max_common_pair_distance"));
+    }
+
+    #[test]
+    fn evaluator_contraction_order_defaults_and_explicit_presets_roundtrip() {
+        use crate::processes::{EvaluatorSettings, TensorNetworkContractionOrder};
+
+        let defaults_guard = ShowDefaultsGuard::new(false);
+        let defaults: EvaluatorSettings = toml::from_str("").unwrap();
+        assert_eq!(
+            defaults.tensor_network_contraction_order,
+            TensorNetworkContractionOrder::IntermediateCost
+        );
+        assert_eq!(defaults, EvaluatorSettings::default());
+        assert!(
+            !toml::to_string(&defaults)
+                .unwrap()
+                .contains("tensor_network_contraction_order")
+        );
+        for (name, expected) in [
+            (
+                "intermediate_cost",
+                TensorNetworkContractionOrder::IntermediateCost,
+            ),
+            (
+                "sparse_atom_aware",
+                TensorNetworkContractionOrder::SparseAtomAware,
+            ),
+            ("atom_aware", TensorNetworkContractionOrder::AtomAware),
+            (
+                "result_rank_only",
+                TensorNetworkContractionOrder::ResultRankOnly,
+            ),
+            ("entry_aware", TensorNetworkContractionOrder::EntryAware),
+        ] {
+            let settings: EvaluatorSettings =
+                toml::from_str(&format!("tensor_network_contraction_order = \"{name}\"\n"))
+                    .unwrap();
+            assert_eq!(settings.tensor_network_contraction_order, expected);
+            let serialized = toml::to_string(&settings).unwrap();
+            assert_eq!(
+                toml::from_str::<EvaluatorSettings>(&serialized).unwrap(),
+                settings
+            );
+            if expected != TensorNetworkContractionOrder::IntermediateCost {
+                assert!(serialized.contains(name));
+            }
+        }
+        drop(defaults_guard);
+        let _defaults_guard = ShowDefaultsGuard::new(true);
+        assert!(
+            toml::to_string(&defaults)
+                .unwrap()
+                .contains("tensor_network_contraction_order = \"intermediate_cost\"")
+        );
+    }
+
+    #[test]
+    fn compile_test_serialize_deserialize() {
+        use crate::settings::global::GammaloopCompileOptions;
+        generic_test_settings::<GammaloopCompileOptions>();
+    }
+
+    #[test]
+    fn compile_settings_default_to_symjit_o2() {
+        use crate::{
+            processes::EvaluatorSettings,
+            settings::global::{
+                CompilationMode, CompilationOptimizationLevel, FrozenCompilationMode,
+                GammaloopCompileOptions,
+            },
+        };
+
+        let options = GammaloopCompileOptions::default();
+        assert_eq!(options.compilation_mode, CompilationMode::Symjit);
+        assert_eq!(options.optimization_level, CompilationOptimizationLevel::O2);
+        assert_eq!(
+            options.frozen_mode(&EvaluatorSettings {
+                compile: true,
+                ..Default::default()
+            }),
+            FrozenCompilationMode::Symjit(CompilationOptimizationLevel::O2)
+        );
+    }
+
+    #[test]
+    fn compile_settings_forward_symjit_optimization_level() {
+        use crate::{
+            processes::EvaluatorSettings,
+            settings::global::{
+                CompilationOptimizationLevel, FrozenCompilationMode, GammaloopCompileOptions,
+            },
+        };
+
+        let options = GammaloopCompileOptions {
+            optimization_level: CompilationOptimizationLevel::O1,
+            ..Default::default()
+        };
+
+        assert_eq!(
+            options.frozen_mode(&EvaluatorSettings {
+                compile: true,
+                ..Default::default()
+            }),
+            FrozenCompilationMode::Symjit(CompilationOptimizationLevel::O1)
+        );
+    }
+
+    #[test]
+    fn compile_settings_resolve_frozen_mode_from_compile_flag() {
+        use crate::{
+            processes::EvaluatorSettings,
+            settings::global::{CompilationMode, FrozenCompilationMode, GammaloopCompileOptions},
+        };
+
+        let options = GammaloopCompileOptions {
+            compilation_mode: CompilationMode::Assembly,
+            ..Default::default()
+        };
+
+        assert_eq!(
+            options.frozen_mode(&EvaluatorSettings {
+                compile: false,
+                ..Default::default()
+            }),
+            FrozenCompilationMode::Eager
+        );
+        assert!(matches!(
+            options.frozen_mode(&EvaluatorSettings {
+                compile: true,
+                ..Default::default()
+            }),
+            FrozenCompilationMode::Assembly(_)
+        ));
+    }
+
+    #[test]
+    fn compile_settings_map_custom_args_into_symbolica_compile_options() {
+        use crate::settings::global::{
+            CompilationMode, CompilationOptimizationLevel, GammaloopCompileOptions,
+        };
+
+        let options = GammaloopCompileOptions {
+            compilation_mode: CompilationMode::Cpp,
+            optimization_level: CompilationOptimizationLevel::O1,
+            fast_math: false,
+            unsafe_math: false,
+            compiler: "clang++".to_string(),
+            custom: vec!["-g".to_string(), "-Winvalid".to_string()],
+        };
+        let symbolica = options.to_symbolica_compile_options();
+
+        assert_eq!(
+            symbolica.to_string(),
+            "clang++ -shared -O1 -fPIC -march=native -g -Winvalid"
+        );
+    }
+
+    #[test]
+    fn tropical_subgraph_table_test_serialize_deserialize() {
+        use crate::settings::global::TropicalSubgraphTableSettings;
+        generic_test_settings::<TropicalSubgraphTableSettings>();
+    }
+
+    #[test]
+    fn runtime_test_serialize_deserialize() {
+        generic_test_settings::<RuntimeSettings>();
+    }
+
+    #[test]
+    fn runtime_model_settings_serialize_deserialize() {
+        use crate::settings::runtime::RuntimeModelSettings;
+        generic_test_settings::<RuntimeModelSettings>();
+    }
+
+    #[test]
+    fn runtime_settings_serializes_model_overrides_under_model_block() {
+        let mut settings = RuntimeSettings::default();
+        settings
+            .model
+            .external_parameters
+            .insert("mass_scalar_2".to_string(), (F(2.0), F(0.0)));
+
+        let serialized = toml::to_string_pretty(&settings).unwrap();
+        assert!(serialized.contains("[model]"));
+        assert!(serialized.contains("mass_scalar_2 = ["));
+
+        let deserialized: RuntimeSettings = toml::from_str(&serialized).unwrap();
+        assert_eq!(settings, deserialized);
+    }
+
+    #[test]
+    fn subtraction_settings_test_serialize_deserialize() {
+        use crate::settings::runtime::SubtractionSettings;
+        generic_test_settings::<SubtractionSettings>();
+    }
+
+    #[test]
+    fn test_general_settings_serialize_deserialize() {
+        use crate::settings::runtime::GeneralSettings;
+        generic_test_settings::<GeneralSettings>();
+    }
+
+    #[test]
+    fn runtime_event_generation_policy() {
+        let mut settings = RuntimeSettings::default();
+        assert!(!settings.should_generate_events());
+        assert!(!settings.should_buffer_generated_events());
+        assert!(!settings.should_return_generated_events());
+
+        settings.observables.insert(
+            "observable".to_string(),
+            crate::observables::ObservableSettings {
+                quantity: "pt".to_string(),
+                selections: Vec::new(),
+                entry_selection: crate::observables::EntrySelection::All,
+                entry_index: 0,
+                value_transform: crate::observables::ObservableValueTransform::Identity,
+                phase: crate::observables::ObservablePhase::Real,
+                misbinning_max_normalized_distance: None,
+                histogram: crate::observables::HistogramSettings::Continuous(
+                    crate::observables::ContinuousHistogramSettings {
+                        x_min: 0.0,
+                        x_max: 1.0,
+                        n_bins: 1,
+                        log_x_axis: false,
+                        log_y_axis: true,
+                        title: None,
+                        type_description: "AL".to_string(),
+                    },
+                ),
+            },
+        );
+        assert!(settings.should_generate_events());
+        assert!(settings.should_buffer_generated_events());
+        assert!(!settings.should_return_generated_events());
+
+        settings.observables.clear();
+
+        settings.selectors.insert(
+            "selector".to_string(),
+            crate::observables::SelectorSettings {
+                quantity: "pt".to_string(),
+                active: true,
+                entry_selection: crate::observables::EntrySelection::All,
+                entry_index: 0,
+                selector: crate::observables::SelectorDefinitionSettings::CountRange(
+                    crate::observables::CountRangeSelectorSettings {
+                        min_count: 1,
+                        max_count: None,
+                    },
+                ),
+            },
+        );
+        assert!(settings.should_generate_events());
+        assert!(!settings.should_buffer_generated_events());
+        assert!(!settings.should_return_generated_events());
+
+        settings.observables.insert(
+            "observable".to_string(),
+            crate::observables::ObservableSettings {
+                quantity: "pt".to_string(),
+                selections: Vec::new(),
+                entry_selection: crate::observables::EntrySelection::All,
+                entry_index: 0,
+                value_transform: crate::observables::ObservableValueTransform::Identity,
+                phase: crate::observables::ObservablePhase::Real,
+                misbinning_max_normalized_distance: None,
+                histogram: crate::observables::HistogramSettings::Continuous(
+                    crate::observables::ContinuousHistogramSettings {
+                        x_min: 0.0,
+                        x_max: 1.0,
+                        n_bins: 1,
+                        log_x_axis: false,
+                        log_y_axis: true,
+                        title: None,
+                        type_description: "AL".to_string(),
+                    },
+                ),
+            },
+        );
+        assert!(settings.should_generate_events());
+        assert!(settings.should_buffer_generated_events());
+        assert!(!settings.should_return_generated_events());
+
+        settings.general.generate_events = true;
+        assert!(settings.should_generate_events());
+        assert!(settings.should_buffer_generated_events());
+        assert!(settings.should_return_generated_events());
+    }
+
+    #[test]
+    fn test_integrator_settings_serialize_deserialize() {
+        use crate::settings::runtime::IntegratorSettings;
+        generic_test_settings::<IntegratorSettings>();
+    }
+
+    #[test]
+    fn test_observables_output_settings_serialize_deserialize() {
+        use crate::settings::runtime::ObservablesOutputSettings;
+        generic_test_settings::<ObservablesOutputSettings>();
+    }
+
+    #[test]
+    fn observables_output_settings_accept_single_entry_format_lists() {
+        use crate::{
+            observables::ObservableFileFormat, settings::runtime::ObservablesOutputSettings,
+        };
+
+        let parsed: ObservablesOutputSettings = toml::from_str("format = [\"hwu\"]").unwrap();
+        assert_eq!(parsed.format, vec![ObservableFileFormat::Hwu]);
+
+        let serialized = toml::to_string_pretty(&parsed).unwrap();
+        assert_eq!(serialized, "format = [\"hwu\"]\n");
+    }
+
+    #[test]
+    fn observables_output_settings_accept_multiple_formats() {
+        use crate::{
+            observables::ObservableFileFormat, settings::runtime::ObservablesOutputSettings,
+        };
+
+        let parsed: ObservablesOutputSettings =
+            toml::from_str("format = [\"hwu\", \"json\"]").unwrap();
+        assert_eq!(
+            parsed.format,
+            vec![ObservableFileFormat::Hwu, ObservableFileFormat::Json]
+        );
+
+        let serialized = toml::to_string_pretty(&parsed).unwrap();
+        let reparsed: ObservablesOutputSettings = toml::from_str(&serialized).unwrap();
+        assert_eq!(parsed, reparsed);
+    }
+
+    #[test]
+    fn test_parameterization_settings_serialize_deserialize() {
+        use crate::settings::runtime::ParameterizationSettings;
+        generic_test_settings::<ParameterizationSettings>();
+    }
+
+    #[test]
+    fn test_multi_channeling_settings_serialize_deserialize() {
+        use crate::settings::runtime::MultiChannelingSettings;
+        generic_test_settings::<MultiChannelingSettings>();
+    }
+
+    #[test]
+    fn test_gammaloop_tropical_sampling_settings_serialize_deserialize() {
+        use crate::settings::runtime::GammaloopTropicalSamplingSettings;
+        generic_test_settings::<GammaloopTropicalSamplingSettings>();
+    }
+
+    #[test]
+    fn test_discrete_graph_sampling_settings_serialize_deserialize() {
+        use crate::settings::runtime::DiscreteGraphSamplingSettings;
+        generic_test_settings::<DiscreteGraphSamplingSettings>();
+    }
+
+    #[test]
+    fn test_local_counter_term_settings_serialize_deserialize() {
+        use crate::settings::runtime::LocalCounterTermSettings;
+        generic_test_settings::<LocalCounterTermSettings>();
+    }
+
+    #[test]
+    fn test_uv_localisation_settings_serialize_deserialize() {
+        use crate::settings::runtime::UVLocalisationSettings;
+        generic_test_settings::<UVLocalisationSettings>();
+    }
+
+    #[test]
+    fn test_integrated_counterterm_settings_serialize_deserialize() {
+        use crate::settings::runtime::IntegratedCounterTermSettings;
+        generic_test_settings::<IntegratedCounterTermSettings>();
+    }
+
+    #[test]
+    fn test_uv_generation_settings_serialize_deserialize() {
+        use crate::uv::UVgenerationSettings;
+        generic_test_settings::<UVgenerationSettings>();
+    }
+
+    #[test]
+    fn test_overlap_settings_serialize_deserialize() {
+        use crate::settings::runtime::OverlapSettings;
+        generic_test_settings::<OverlapSettings>();
+    }
+    #[test]
+    fn test_h_function_settings_serialize_deserialize() {
+        use crate::settings::runtime::HFunctionSettings;
+        generic_test_settings::<HFunctionSettings>();
+    }
+
+    #[test]
+    fn test_kinematics_settings_serialize_deserialize() {
+        use crate::settings::KinematicsSettings;
+        generic_test_settings::<KinematicsSettings>();
+
+        let kinematics_settings = KinematicsSettings {
+            e_cm: 100.0,
+            externals: Externals::Constant {
+                momenta: vec![
+                    ExternalMomenta::Independent([F(1.), F(2.), F(3.), F(4.)]),
+                    ExternalMomenta::Dependent(Dep::Dep),
+                ],
+                helicities: vec![Helicity::PLUS, Helicity::MINUS],
+                improvement_settings: PhaseSpaceImprovementSettings::default(),
+                f_64_cache: None,
+                f_128_cache: None,
+            },
+        };
+
+        let toml = toml::to_string_pretty(&kinematics_settings).unwrap();
+        let deserialized: KinematicsSettings = toml::from_str(&toml).unwrap();
+        assert_eq!(kinematics_settings, deserialized);
+
+        let toml_without_ecm = format!(
+            "{}\n",
+            toml.lines()
+                .filter(|line| !line.trim_start().starts_with("e_cm = "))
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
+        let deserialized_without_ecm: KinematicsSettings =
+            toml::from_str(&toml_without_ecm).unwrap();
+        assert_eq!(
+            deserialized_without_ecm.externals,
+            kinematics_settings.externals
+        );
+        assert_eq!(deserialized_without_ecm.e_cm, 2.5);
+    }
+
+    #[test]
+    fn sampling_settings_serializes_to_parser_shape() {
+        let sampling_settings = SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
+            graph_names: Vec::new(),
+            sample_orientations: true,
+            sampling_type: DiscreteGraphSamplingType::DiscreteMultiChanneling(
+                crate::settings::runtime::MultiChannelingSettings::default(),
+            ),
+        });
+
+        let _guard = ShowDefaultsGuard::new(true);
+        let toml = toml::to_string_pretty(&sampling_settings).unwrap();
+        assert!(toml.contains("graphs = \"monte_carlo\""));
+        assert!(toml.contains("orientations = \"monte_carlo\""));
+        assert!(toml.contains("lmb_multichanneling = true"));
+        assert!(toml.contains("lmb_channels = \"monte_carlo\""));
+        assert!(toml.contains("alpha = 3.0"));
+        assert!(toml.contains("lmb_channel_weight = \"ose\""));
+        assert!(toml.contains("coordinate_system = \"spherical\""));
+        assert!(toml.contains("power = 1.0"));
+        assert!(toml.contains("graph_names = []"));
+        assert!(!toml.contains("type = \"discrete_graph_sampling\""));
+        assert!(!toml.contains("subtype = \"discrete_multi_channeling\""));
+    }
+
+    #[test]
+    fn sampling_settings_graph_names_round_trip() {
+        let sampling_settings = SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
+            graph_names: vec!["GL22".to_string(), "GL30".to_string()],
+            sample_orientations: false,
+            sampling_type: DiscreteGraphSamplingType::Default(Default::default()),
+        });
+
+        let toml = toml::to_string_pretty(&sampling_settings).unwrap();
+        assert!(toml.contains("graphs = \"monte_carlo\""));
+        assert!(toml.contains("graph_names = ["));
+        assert!(toml.contains("\"GL22\""));
+        assert!(toml.contains("\"GL30\""));
+        let reparsed: SamplingSettings = toml::from_str(&toml).unwrap();
+        assert_eq!(reparsed, sampling_settings);
+        assert_eq!(reparsed.selected_graph_names(), ["GL22", "GL30"]);
+    }
+
+    #[test]
+    fn sampling_settings_default_has_no_graph_name_filter() {
+        assert!(
+            SamplingSettings::default()
+                .selected_graph_names()
+                .is_empty()
+        );
+
+        let parsed: SamplingSettings = toml::from_str("graphs = \"monte_carlo\"").unwrap();
+        assert!(parsed.selected_graph_names().is_empty());
+        assert!(
+            !toml::to_string_pretty(&parsed)
+                .unwrap()
+                .contains("graph_names")
+        );
+    }
+
+    #[test]
+    fn sampling_settings_rejects_graph_names_with_summed_graphs() {
+        let err =
+            toml::from_str::<SamplingSettings>("graphs = \"summed\"\ngraph_names = [\"GL22\"]")
+                .unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("graph_names requires graphs = 'monte_carlo'")
+        );
+    }
+
+    #[test]
+    fn sampling_settings_rejects_duplicate_graph_names() {
+        let err = toml::from_str::<SamplingSettings>(
+            "graphs = \"monte_carlo\"\ngraph_names = [\"GL22\", \"GL22\"]",
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("duplicate graph name 'GL22'"));
+    }
+
+    #[test]
+    fn sampling_settings_rejects_incompatible_orientation_sampling() {
+        let invalid_toml = r#"
+graphs = "summed"
+orientations = "monte_carlo"
+lmb_multichanneling = false
+lmb_channels = "summed"
+coordinate_system = "spherical"
+mapping = "linear"
+b = 1.0
+"#;
+
+        let err = toml::from_str::<SamplingSettings>(invalid_toml).unwrap_err();
+        assert!(err.to_string().contains(
+            "orientations can only be set to 'monte_carlo' when graphs is 'monte_carlo'"
+        ));
+    }
+
+    #[test]
+    fn sampling_settings_serializes_lmb_basis_ids_for_default_sampling() {
+        let sampling_settings =
+            SamplingSettings::Default(crate::settings::runtime::ParameterizationSettings {
+                lmb_basis_ids: std::collections::BTreeMap::from([
+                    ("GL02".to_string(), vec![0, 3]),
+                    ("GL05".to_string(), vec![1]),
+                ]),
+                ..Default::default()
+            });
+
+        let toml = toml::to_string_pretty(&sampling_settings).unwrap();
+        assert!(toml.contains("lmb_basis_ids"));
+        let reparsed: SamplingSettings = toml::from_str(&toml).unwrap();
+        assert_eq!(reparsed, sampling_settings);
+    }
+
+    #[test]
+    fn sampling_settings_deserializes_lmb_basis_ids_for_default_sampling() {
+        let toml = r#"
+graphs = "summed"
+orientations = "summed"
+lmb_multichanneling = false
+lmb_channels = "summed"
+coordinate_system = "spherical"
+mapping = "linear"
+lmb_basis_ids = { GL02 = [0, 3], GL05 = [1] }
+"#;
+
+        let settings: SamplingSettings = toml::from_str(toml).unwrap();
+        assert_eq!(
+            settings,
+            SamplingSettings::Default(crate::settings::runtime::ParameterizationSettings {
+                lmb_basis_ids: std::collections::BTreeMap::from([
+                    ("GL02".to_string(), vec![0, 3]),
+                    ("GL05".to_string(), vec![1]),
+                ]),
+                ..Default::default()
+            })
+        );
+    }
+
+    #[test]
+    fn sampling_settings_allows_lmb_basis_ids_with_multichanneling() {
+        let toml = r#"
+graphs = "summed"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "summed"
+coordinate_system = "spherical"
+lmb_basis_ids = { GL02 = [1] }
+"#;
+
+        let settings: SamplingSettings = toml::from_str(toml).unwrap();
+        assert!(
+            settings
+                .get_parameterization_settings()
+                .unwrap()
+                .lmb_basis_ids
+                .contains_key("GL02")
+        );
+    }
+
+    #[test]
+    fn sampling_settings_rejects_scalar_lmb_basis_id_as_unknown() {
+        let invalid_toml = r#"
+graphs = "summed"
+orientations = "summed"
+lmb_multichanneling = false
+lmb_channels = "summed"
+coordinate_system = "spherical"
+lmb_basis_id = 1
+"#;
+
+        let err = toml::from_str::<SamplingSettings>(invalid_toml).unwrap_err();
+        assert!(err.to_string().contains("unknown field `lmb_basis_id`"));
+    }
+
+    #[test]
+    fn sampling_settings_rejects_empty_lmb_basis_ids_list() {
+        let invalid_toml = r#"
+graphs = "summed"
+orientations = "summed"
+lmb_multichanneling = false
+lmb_channels = "summed"
+coordinate_system = "spherical"
+lmb_basis_ids = { GL02 = [] }
+"#;
+
+        let err = toml::from_str::<SamplingSettings>(invalid_toml).unwrap_err();
+        assert!(err.to_string().contains("cannot be empty"));
+    }
+
+    #[test]
+    fn sampling_settings_rejects_duplicate_lmb_basis_ids() {
+        let invalid_toml = r#"
+graphs = "summed"
+orientations = "summed"
+lmb_multichanneling = false
+lmb_channels = "summed"
+coordinate_system = "spherical"
+lmb_basis_ids = { GL02 = [1, 1] }
+"#;
+
+        let err = toml::from_str::<SamplingSettings>(invalid_toml).unwrap_err();
+        assert!(err.to_string().contains("duplicate basis id 1"));
+    }
+
+    #[test]
+    fn sampling_settings_rejects_lmb_basis_ids_with_tropical_sampling() {
+        let invalid_toml = r#"
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = false
+lmb_channels = "summed"
+coordinate_system = "tropical"
+lmb_basis_ids = { GL02 = [1] }
+"#;
+
+        let err = toml::from_str::<SamplingSettings>(invalid_toml).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("coordinate_system = 'tropical' is incompatible with lmb_basis_ids")
+        );
+    }
+
+    #[test]
+    fn sampling_settings_deserializes_from_parser_shape() {
+        let toml = r#"
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "summed"
+alpha = 1.5
+lmb_channel_weight = "inverse_jacobian"
+coordinate_system = "momentum_space"
+mapping = "log"
+b = 5.0
+power = 2.0
+"#;
+
+        let settings: SamplingSettings = toml::from_str(toml).unwrap();
+        assert_eq!(
+            settings,
+            SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
+                graph_names: Vec::new(),
+                sample_orientations: false,
+                sampling_type: DiscreteGraphSamplingType::MultiChanneling(
+                    crate::settings::runtime::MultiChannelingSettings {
+                        alpha: 1.5,
+                        channel_weight: crate::settings::runtime::LmbChannelWeight::InverseJacobian,
+                        parameterization_settings:
+                            crate::settings::runtime::ParameterizationSettings {
+                                mode: crate::settings::runtime::ParameterizationMode::MomentumSpace,
+                                mapping: crate::settings::runtime::ParameterizationMapping::Log,
+                                b: 5.0,
+                                power: 2.0,
+                                lmb_basis_ids: Default::default(),
+                            },
+                    },
+                ),
+            })
+        );
+    }
+
+    #[test]
+    fn sampling_settings_deserializes_power_mapping() {
+        let toml = r#"
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "summed"
+lmb_channel_weight = "inverse_jacobian"
+coordinate_system = "spherical"
+mapping = "power"
+b = 1.5
+power = 4.0
+"#;
+
+        let settings: SamplingSettings = toml::from_str(toml).unwrap();
+        assert_eq!(
+            settings,
+            SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
+                graph_names: Vec::new(),
+                sample_orientations: false,
+                sampling_type: DiscreteGraphSamplingType::MultiChanneling(
+                    crate::settings::runtime::MultiChannelingSettings {
+                        alpha: 3.0,
+                        channel_weight: crate::settings::runtime::LmbChannelWeight::InverseJacobian,
+                        parameterization_settings:
+                            crate::settings::runtime::ParameterizationSettings {
+                                mode: crate::settings::runtime::ParameterizationMode::Spherical,
+                                mapping: crate::settings::runtime::ParameterizationMapping::Power,
+                                b: 1.5,
+                                power: 4.0,
+                                lmb_basis_ids: Default::default(),
+                            },
+                    },
+                ),
+            })
+        );
+    }
+
+    #[test]
+    fn sampling_settings_rejects_invalid_power_mapping_exponent() {
+        let invalid_toml = r#"
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "summed"
+coordinate_system = "spherical"
+mapping = "power"
+power = 0.0
+"#;
+
+        let err = toml::from_str::<SamplingSettings>(invalid_toml).unwrap_err();
+        assert!(err.to_string().contains("requires power >= 1"));
+    }
+
+    #[test]
+    fn sampling_settings_deserializes_relative_spherical_coordinates() {
+        let toml = r#"
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "summed"
+lmb_channel_weight = "inverse_jacobian"
+coordinate_system = "relative_spherical"
+mapping = "linear"
+b = 1.0
+"#;
+
+        let settings: SamplingSettings = toml::from_str(toml).unwrap();
+        assert_eq!(
+            settings,
+            SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
+                graph_names: Vec::new(),
+                sample_orientations: false,
+                sampling_type: DiscreteGraphSamplingType::MultiChanneling(
+                    crate::settings::runtime::MultiChannelingSettings {
+                        alpha: 3.0,
+                        channel_weight: crate::settings::runtime::LmbChannelWeight::InverseJacobian,
+                        parameterization_settings:
+                            crate::settings::runtime::ParameterizationSettings {
+                                mode: crate::settings::runtime::ParameterizationMode::RelativeSpherical,
+                                mapping: crate::settings::runtime::ParameterizationMapping::Linear,
+                                b: 1.0,
+                                power: 1.0,
+                                lmb_basis_ids: Default::default(),
+                            },
+                    },
+                ),
+            })
+        );
+    }
+
+    #[test]
+    fn sampling_settings_rejects_inverse_jacobian_for_flat_hyperspherical() {
+        let invalid_toml = r#"
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "summed"
+alpha = 1.5
+lmb_channel_weight = "inverse_jacobian"
+coordinate_system = "hyperspherical_flat"
+mapping = "linear"
+b = 1.0
+"#;
+
+        let err = toml::from_str::<SamplingSettings>(invalid_toml).unwrap_err();
+        assert!(err.to_string().contains("inverse map is not available"));
+    }
+
+    #[test]
+    fn how_does_tropical_look() {
+        SHOWDEFAULTS.store(true, std::sync::atomic::Ordering::Relaxed);
+        let sampling_settings = SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
+            graph_names: Vec::new(),
+            sample_orientations: false,
+            sampling_type: DiscreteGraphSamplingType::TropicalSampling(
+                GammaloopTropicalSamplingSettings {
+                    upcast_on_failure: false,
+                    matrix_stability_test: Some(1e-5),
+                },
+            ),
+        });
+        let toml = toml::to_string_pretty(&sampling_settings).unwrap();
+        println!("{toml}");
+        SHOWDEFAULTS.store(false, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    mod failing {
+        use super::*;
+
+        #[test]
+        fn test_stability_settings_serialize_deserialize() {
+            use crate::settings::runtime::StabilitySettings;
+            generic_test_settings::<StabilitySettings>();
+        }
+
+        #[test]
+        fn test_uv_generation_settings_serializes_renormalization_prescription() {
+            use crate::uv::{
+                ApproximationType, CTIdentifier, CTRenormalizationRule,
+                RenormalizationPrescriptionSettings, UVgenerationSettings,
+            };
+            use std::collections::BTreeSet;
+
+            let settings = UVgenerationSettings {
+                softct: true,
+                renormalization_prescription: RenormalizationPrescriptionSettings {
+                    log_divergent: ApproximationType::MUV,
+                    massive_power_divergent: ApproximationType::OS,
+                    massless_power_divergent: ApproximationType::IR,
+                    overrides: vec![
+                        CTRenormalizationRule::new(
+                            CTIdentifier::new(BTreeSet::from([1]), Some(BTreeSet::from([1, 22]))),
+                            ApproximationType::OS,
+                        ),
+                        CTRenormalizationRule::new(
+                            CTIdentifier::new(BTreeSet::from([6]), None),
+                            ApproximationType::Unsubtracted,
+                        ),
+                    ],
+                },
+                ..Default::default()
+            };
+
+            let toml = toml::to_string_pretty(&GenerationSettings {
+                compile: GammaloopCompileOptions {
+                    compiler: "symjit".to_string(),
+                    ..Default::default()
+                },
+                uv: settings.clone(),
+                ..Default::default()
+            })
+            .unwrap();
+            println!("{}", toml);
+            assert!(toml.contains("[uv.renormalization_prescription]"));
+            assert!(toml.contains("[[uv.renormalization_prescription.overrides]]"));
+            assert!(toml.contains("prescription = \"Unsubtracted\""));
+
+            let deserialized_from_toml: GenerationSettings = toml::from_str(&toml).unwrap();
+            assert_eq!(settings, deserialized_from_toml.uv);
+
+            let json = serde_json::to_string(&settings).unwrap();
+            let deserialized_from_json: UVgenerationSettings = serde_json::from_str(&json).unwrap();
+            assert_eq!(settings, deserialized_from_json);
+        }
+
+        #[test]
+        fn test_stability_level_settings_serialize_deserialize() {
+            use crate::settings::runtime::StabilitySettings;
+            generic_test_settings::<StabilitySettings>();
+        }
+    }
+}

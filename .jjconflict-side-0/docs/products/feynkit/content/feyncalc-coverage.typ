@@ -867,13 +867,28 @@ Singular-form regressions compare cofactor results with a nonsingular regulator
 limit. Scaling and mapping APIs reject singular forms rather than interpreting
 vanishing polynomials as a proof.
 
-Charge conjugation remains a separate gap: UFO `C(i,j)` is rejected by the
-shared generator, and neither Idenso's `GammaLibrary` nor the shared HEP tensor
-libraries register a charge-conjugation tensor. The existing GammaLoop reindexer
-also leaves `C` unlowered. A complete implementation needs shared Dirac algebra
-and tensor data before exposing the generator lowering. General Majorana and
-fermion-number-violating generation additionally require changes to the current
-external fermion-flow normalization, which accepts particle/antiparticle pairs.
+Charge conjugation now has a shared algebra and tensor-data implementation.
+Idenso's `GammaLibrary.charge_conjugation` registers
+`spenso::charge_conjugation` with the ALOHA Weyl convention
+$C = -i γ^2 γ^0$. It is real and antisymmetric, with $C^2 = -1$.
+Explicit-index products and compact chains use the same Idenso simplifier;
+charge-conjugation sandwiches transpose each supported matrix with its correct
+sign, preserving factor order. Four-dimensional gamma and slash arguments are
+supported, including `P(label,mink(4))`; symbolic-D gamma arguments remain
+opaque. Self-dual common-end chain joins transpose one ordered word without
+conjugating scalar coefficients.
+
+`spenso-hep-lib` owns the single sparse component definition used by the numeric
+and symbolic HEP libraries and generator grouping. Both the shared generator
+and GammaLoop's UFO reindexer lower `C(i,j)` to this registered tensor. The
+focused symbolic and common-end component tests pass, as do the shared Cargo
+check and Clippy checks. `installed_charge_conjugation.py` adds explicit-index,
+compact-slash and independent Weyl-component comparisons. Its initial symbolic
+identities pass in the rebuilt public host; full installed-host validation
+awaits fixture setup corrections. This primitive support does not close the
+Majorana-generation gap: general Majorana and fermion-number-violating diagrams
+still require changes to external fermion-flow normalization, which currently
+accepts particle/antiparticle pairs.
 
 An example counts as reproduced only after exercising the relevant shared
 components and comparing its final observable or symbolic identity with the
