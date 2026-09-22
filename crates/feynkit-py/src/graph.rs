@@ -2091,6 +2091,10 @@ impl PyFeynmanDiagram {
     /// ``numerator`` optionally replaces the local numerator (in edge momenta),
     /// for example after contracting a projector. Overall factors, numerator
     /// prefactors and projectors remain separate unless supplied in it.
+    /// ``edge_powers`` uses the signed powers of :meth:`denominator_expression`.
+    /// Move rational propagator factors out of a prepared numerator into these
+    /// powers so they receive the same auxiliary-mass expansion. Powers do not
+    /// change the selected region or its loop integration measure.
     /// Empty, tree and UV-convergent regions return zero. This performs one UV
     /// limit; it does not enumerate forests or integrate the counterterm.
     ///
@@ -2110,15 +2114,25 @@ impl PyFeynmanDiagram {
     ///     Positive spacetime dimension for UV power counting; defaults to four.
     /// numerator : Expression or TensorExpression or None, optional
     ///     Prepared numerator in edge momenta; None uses the selected local numerator.
-    #[pyo3(signature = (uv_mass, *, dimension=4, numerator=None))]
+    /// edge_powers : mapping[int, int] or None, optional
+    ///     Signed propagator powers by diagram edge ID; omitted edges have power one.
+    ///     Zero omits the denominator; negative powers put it in the numerator.
+    ///     Entries outside the selected internal edges are ignored.
+    #[pyo3(signature = (uv_mass, *, dimension=4, numerator=None, edge_powers=None))]
     fn uv_expansion(
         &self,
         py: Python<'_>,
         uv_mass: ConvertibleToExpression,
         dimension: i32,
         numerator: Option<ConvertibleToExpression>,
+        edge_powers: Option<BTreeMap<usize, isize>>,
     ) -> PyResult<Py<TensorExpression>> {
         let selected = self.selection();
+        let powers = edge_powers
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(edge, power)| (feynkit_graph::EdgeId(edge), power))
+            .collect();
         let numerator = numerator.map_or_else(
             || self.local_numerator(None),
             |value| value.to_expression().expr,
@@ -2130,6 +2144,7 @@ impl PyFeynmanDiagram {
                 &uv_mass.to_expression().expr,
                 dimension,
                 Some(&numerator),
+                &powers,
             )
             .map_err(error::diagram)?;
         TensorExpression::from_atom_interface(py, expanded, None)
@@ -2155,15 +2170,20 @@ impl PyFeynmanDiagram {
     ///     Positive spacetime dimension for UV power counting; defaults to four.
     /// numerator : Expression or TensorExpression or None, optional
     ///     Prepared numerator in edge momenta; None uses the selected local numerator.
-    #[pyo3(signature = (uv_mass, *, dimension=4, numerator=None))]
+    /// edge_powers : mapping[int, int] or None, optional
+    ///     Signed propagator powers by diagram edge ID; omitted edges have power one.
+    ///     Zero omits the denominator; negative powers put it in the numerator.
+    ///     Entries outside the selected internal edges are ignored.
+    #[pyo3(signature = (uv_mass, *, dimension=4, numerator=None, edge_powers=None))]
     fn uv_counterterm(
         &self,
         py: Python<'_>,
         uv_mass: ConvertibleToExpression,
         dimension: i32,
         numerator: Option<ConvertibleToExpression>,
+        edge_powers: Option<BTreeMap<usize, isize>>,
     ) -> PyResult<Py<TensorExpression>> {
-        let expanded = self.uv_expansion(py, uv_mass, dimension, numerator)?;
+        let expanded = self.uv_expansion(py, uv_mass, dimension, numerator, edge_powers)?;
         let counterterm = -&expanded.borrow(py).as_super().expr;
         TensorExpression::from_atom_interface(py, counterterm, None)
     }

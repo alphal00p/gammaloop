@@ -1732,7 +1732,7 @@ class FeynmanDiagram:
             Basis from this diagram instance. Supplying it enables routing and
             takes precedence over ``in_lmb``, including for a selected region.
         """
-    def uv_expansion(self, uv_mass: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], *, dimension: builtins.int = 4, numerator: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None) -> TensorExpression:
+    def uv_expansion(self, uv_mass: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], *, dimension: builtins.int = 4, numerator: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None, edge_powers: typing.Optional[typing.Mapping[builtins.int, builtins.int]] = None) -> TensorExpression:
         r"""
         Expand the local integrand through its UV degree of divergence.
 
@@ -1745,6 +1745,10 @@ class FeynmanDiagram:
         ``numerator`` optionally replaces the local numerator (in edge momenta),
         for example after contracting a projector. Overall factors, numerator
         prefactors and projectors remain separate unless supplied in it.
+        ``edge_powers`` uses the signed powers of :meth:`denominator_expression`.
+        Move rational propagator factors out of a prepared numerator into these
+        powers so they receive the same auxiliary-mass expansion. Powers do not
+        change the selected region or its loop integration measure.
         Empty, tree and UV-convergent regions return zero. This performs one UV
         limit; it does not enumerate forests or integrate the counterterm.
 
@@ -1764,8 +1768,12 @@ class FeynmanDiagram:
             Positive spacetime dimension for UV power counting; defaults to four.
         numerator : Expression or TensorExpression or None, optional
             Prepared numerator in edge momenta; None uses the selected local numerator.
+        edge_powers : mapping[int, int] or None, optional
+            Signed propagator powers by diagram edge ID; omitted edges have power one.
+            Zero omits the denominator; negative powers put it in the numerator.
+            Entries outside the selected internal edges are ignored.
         """
-    def uv_counterterm(self, uv_mass: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], *, dimension: builtins.int = 4, numerator: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None) -> TensorExpression:
+    def uv_counterterm(self, uv_mass: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], *, dimension: builtins.int = 4, numerator: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None, edge_powers: typing.Optional[typing.Mapping[builtins.int, builtins.int]] = None) -> TensorExpression:
         r"""
         Return the additive local UV counterterm, the negative of ``uv_expansion``.
 
@@ -1787,6 +1795,10 @@ class FeynmanDiagram:
             Positive spacetime dimension for UV power counting; defaults to four.
         numerator : Expression or TensorExpression or None, optional
             Prepared numerator in edge momenta; None uses the selected local numerator.
+        edge_powers : mapping[int, int] or None, optional
+            Signed propagator powers by diagram edge ID; omitted edges have power one.
+            Zero omits the denominator; negative powers put it in the numerator.
+            Entries outside the selected internal edges are ignored.
         """
     def numerator_prefactor_expression(self) -> Expression:
         r"""
@@ -2069,6 +2081,8 @@ class FeynmanDiagram:
             use ``template_options`` with the same names as ``just draw --input``:
             ``show-particle``, ``show-edge-index``, ``show-node-index``, ``debug``,
             ``momentum-arrows`` and the ``momentum-arrow-*``/``momentum-label-*`` options.
+            Cross sections open their initial-state connections by default; set
+            ``split-initial-state`` to ``False`` to draw the sewn graph.
         momenta : bool, optional
             Show momentum arrows and labels routed in the diagram's stored basis.
             Explicit physics settings in ``config`` override these display defaults.
@@ -5187,8 +5201,7 @@ class Particle:
         ValueError
             If the particle's UFO color representation is unsupported.
         """
-
-    def spin_sum(self, momentum: Expression, left: Expression, right: Expression, *, average: builtins.bool = False, reference: typing.Optional[Expression] = None, covariant: builtins.bool = False) -> Expression:
+    def spin_sum(self, momentum: Expression, left: Expression, right: Expression, *, average: builtins.bool = False, reference: typing.Optional[Expression] = None, covariant: builtins.bool = False, spin_vector: typing.Optional[Expression] = None) -> Expression:
         r"""
         Construct this particle's external-state spin or polarization sum.
 
@@ -5201,11 +5214,19 @@ class Particle:
         amplitude. Subsequent kinematic substitutions must enforce on-shell
         conditions and a nonzero momentum-reference scalar product.
 
+        For a massive Dirac particle, ``spin_vector`` selects one physical spin
+        state instead of summing states. Supply a dimensionless unindexed vector
+        satisfying ``p.s = 0`` and ``s.s = -1``: the rest-frame spin direction,
+        boosted with the particle. The same projector sign applies to fermions
+        and antifermions; do not reverse this vector for an antiparticle.
+        This option requires ``average=False``.
+
         Examples
         --------
         >>> from symbolica import S
         >>> p, i, j = S("p", "i", "j")
         >>> projector = model.particle_by_pdg(11).spin_sum(p, i, j, average=True)
+        >>> polarized = model.particle_by_pdg(15).spin_sum(p, i, j, spin_vector=S("s"))
 
         Parameters
         ----------
@@ -5221,8 +5242,17 @@ class Particle:
             Axial reference momentum for a massless vector; need not be null.
         covariant : bool
             Use the Feynman-gauge vector numerator even for a massive vector.
+        spin_vector : Expression | None
+            Physical spin vector of a massive Dirac state, with ``p.s = 0`` and
+            ``s.s = -1``. Requires ``average=False``; ``None`` sums both states.
+
+        Raises
+        ------
+        ValueError
+            If ``spin_vector`` is used with averaging, a massless particle, or
+            a particle other than a Dirac fermion, or is not an unindexed name.
         """
-    def sum_spins(self, expression: Expression, momentum: Expression, *, edge: builtins.int, average: builtins.bool = False, reference: typing.Optional[Expression] = None, covariant: builtins.bool = False) -> Expression:
+    def sum_spins(self, expression: Expression, momentum: Expression, *, edge: builtins.int, average: builtins.bool = False, reference: typing.Optional[Expression] = None, covariant: builtins.bool = False, spin_vector: typing.Optional[Expression] = None) -> Expression:
         r"""
         Sum paired generated external wavefunctions for one edge.
 
@@ -5232,8 +5262,10 @@ class Particle:
         with the supplied edge label are replaced; unpaired wavefunctions stay
         unchanged. Scalar particles have no external wavefunction factors.
         External states are four-dimensional; reference and gauge conventions
-        are those of ``spin_sum``. This does not sum color or helicity-resolved
-        states, conjugate amplitudes, or apply graph symmetry factors.
+        are those of ``spin_sum``. For a massive Dirac particle, ``spin_vector``
+        selects the same physical spin state as in ``spin_sum``, including for
+        antiparticles. This does not sum color, conjugate amplitudes, or apply
+        graph symmetry factors.
 
         Examples
         --------
@@ -5256,6 +5288,15 @@ class Particle:
             Axial reference for a massless vector; need not be null.
         covariant : bool
             Use the Feynman-gauge vector numerator even for a massive vector.
+        spin_vector : Expression | None
+            Physical spin vector of a massive Dirac state, with ``p.s = 0`` and
+            ``s.s = -1``. Requires ``average=False``; ``None`` sums both states.
+
+        Raises
+        ------
+        ValueError
+            If ``spin_vector`` is used with averaging, a massless particle, or
+            a particle other than a Dirac fermion, or is not an unindexed name.
         """
     def __repr__(self) -> builtins.str:
         r"""

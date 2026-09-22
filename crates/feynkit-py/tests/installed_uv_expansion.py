@@ -38,6 +38,37 @@ assert bubble.subgraph().uv_expansion(mass) == 0
 tree = bubble.filter(edge=lambda e: e.data.id == bubble.internal_edges[0].id)
 assert tree.uv_expansion(mass) == 0
 
+# Signed powers share denominator_expression's edge IDs and selection semantics.
+internal_ids = [edge.id for edge in bubble.internal_edges]
+for powers in ({internal_ids[0]: 2}, {internal_ids[0]: 0}, {internal_ids[0]: -1}):
+    powered = bubble.uv_expansion(mass, dimension=6, numerator=1, edge_powers=powers)
+    assert (
+        region.uv_expansion(mass, dimension=6, numerator=1, edge_powers=powers)
+        == powered
+    )
+    assert (
+        bubble.uv_counterterm(mass, dimension=6, numerator=1, edge_powers=powers)
+        == -powered
+    )
+    assert (
+        region.uv_counterterm(mass, dimension=6, numerator=1, edge_powers=powers)
+        == -powered
+    )
+assert bubble.uv_expansion(mass, numerator=1, edge_powers={internal_ids[0]: 2}) == 0
+assert bubble.uv_expansion(mass, edge_powers={10**6: 2}) == expanded
+for operation in (
+    bubble.denominator_expression,
+    bubble.uv_expansion,
+    bubble.uv_counterterm,
+):
+    arguments = () if operation.__name__ == "denominator_expression" else (mass,)
+    try:
+        operation(*arguments, edge_powers={-1: 2})
+    except OverflowError:
+        pass
+    else:
+        raise AssertionError("negative edge ID accepted")
+
 # An external-only numerator must stay soft even when its polynomial degree is high.
 basis = region.momentum_basis()
 external = next(e for e in basis.external_edges if e not in basis.dependent_externals)
