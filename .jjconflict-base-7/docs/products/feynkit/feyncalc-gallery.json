@@ -3400,7 +3400,26 @@
         "Total",
         "TrickMandelstam"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "passed: generated massive SU(N) and massless SU(3) squared matrix elements with covariant gluon sums and both ghost orderings",
+      "validated_components": [
+        {
+          "scope": "three gluon amplitudes with all interference; two independently generated ghost orderings; exact ghost subtraction, initial spin/color averages and final-gluon exchange",
+          "components": [
+            "Generator.generate",
+            "Diagram.half_edges",
+            "TensorExpression.dirac_adjoint",
+            "Particle.spin_sum",
+            "Particle.color_sum",
+            "TensorExpression.simplify_color",
+            "TensorExpression.simplify_gamma",
+            "Kinematics.mandelstam"
+          ],
+          "result": "passed in installed host and live Marimo notebook",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_qcd_ghosts.py",
+          "ghost_reference": "(Nc^2-1)*gs^4*(u-m^2)*(t-m^2)/(4*Nc*s^2)",
+          "conventions": "TR=1/2; four-dimensional external spins; covariant minus two ghost contributions; labeled final gluons; no phase-space symmetry factor included"
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/QQbar-MuAmu",
