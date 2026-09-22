@@ -762,6 +762,14 @@
   let defaults = core.notation(
     heads: _default-heads,
     calls: (
+      "spenso::bracket": ctx => {
+        if ctx.arguments.len() == 0 { return (ctx.default)() }
+        let body = ctx.arguments.map(argument => {
+          let visual = _visual(ctx, argument)
+          if _kind(argument) == "sum" { _parentheses(visual) } else { visual }
+        }).join(h(settings.factor-gap))
+        if ctx.power-base { _parentheses(body) } else { body }
+      },
       "spenso::gamma": ctx => _render-gamma(ctx, settings),
       "spenso::dot": ctx => _render-dot(ctx, settings),
       "spenso::chain": ctx => _render-chain(ctx, settings),
