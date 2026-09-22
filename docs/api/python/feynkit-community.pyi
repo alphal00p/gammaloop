@@ -5147,6 +5147,46 @@ class Particle:
         >>> model.particle_by_pdg(22).is_massless
         True
         """
+    def color_sum(self, left: Expression, right: Expression, *, average: builtins.bool = False) -> Expression:
+        r"""
+        Construct the identity on this particle's color space.
+
+        The bare ``left`` index carries the particle representation; ``right``
+        carries its dual. Antiquarks and antisextets reverse the dual orientation.
+        Supports UFO singlet, fundamental, sextet and adjoint representations.
+        ``average=True`` divides by the number of color states (1, 3, 6 or 8).
+        This sums color only; spin sums and color-algebra simplification remain
+        separate operations. To close an existing tensor, use indices whose
+        slots are dual to the open color slots of that tensor.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> i, j = S("i", "j")
+        >>> color_projector = model.particle_by_pdg(5).color_sum(i, j, average=True)
+        >>> model.particle_by_pdg(11).color_sum(i, j) == 1
+        True
+
+        Parameters
+        ----------
+        left : Expression
+            Bare index in the particle's color representation.
+        right : Expression
+            Bare index in its dual representation.
+        average : bool, optional
+            Divide by the number of color states. Defaults to ``False``.
+
+        Returns
+        -------
+        Expression
+            Spenso color identity, or one for a color singlet.
+
+        Raises
+        ------
+        ValueError
+            If the particle's UFO color representation is unsupported.
+        """
+
     def spin_sum(self, momentum: Expression, left: Expression, right: Expression, *, average: builtins.bool = False, reference: typing.Optional[Expression] = None, covariant: builtins.bool = False) -> Expression:
         r"""
         Construct this particle's external-state spin or polarization sum.
