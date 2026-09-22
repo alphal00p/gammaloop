@@ -1456,7 +1456,7 @@ mod failing {
 
         // return;
         let amplitude_color_right = amplitude_color
-            .dirac_adjoint::<AbstractIndex>()
+            .dirac_adjoint::<AbstractIndex>(false)
             .unwrap()
             .wrap_indices(symbol!("spenso::right"));
         println!("left{amplitude_color_left}");
@@ -1513,13 +1513,15 @@ mod failing {
         println!(
             "Amplitude right conj:\n{}",
             amplitude_right
-                .dirac_adjoint::<AbstractIndex>()
+                .dirac_adjoint::<AbstractIndex>(false)
                 .unwrap()
                 .factor()
         );
 
-        let mut amp_squared =
-            amplitude_left * amplitude_right.dirac_adjoint::<AbstractIndex>().unwrap();
+        let mut amp_squared = amplitude_left
+            * amplitude_right
+                .dirac_adjoint::<AbstractIndex>(false)
+                .unwrap();
 
         println!("Amplitude squared:\n{}", amp_squared.factor());
 
