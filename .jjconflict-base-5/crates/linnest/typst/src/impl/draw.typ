@@ -1925,7 +1925,7 @@
 
 // Base pair padding is shared between the two boxes. Extra label padding
 // enlarges only label boxes; the collision overlay uses the same clearances.
-#let _label-collision-padding = (labels: 0.35, obstacles: 0.08, extra: 0.15)
+#let _label-collision-padding = (labels: 0.35, obstacles: 0.08, extra: 0.6)
 
 // Optimize arc length and automatic side choices: every candidate has the same
 // measured normal clearance. Annealing can leave a local minimum, then

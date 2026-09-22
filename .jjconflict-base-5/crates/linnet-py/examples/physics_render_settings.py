@@ -137,7 +137,7 @@ def _(examples, mo):
         0,
         0.6,
         0.05,
-        0.15,
+        0.6,
         debounce=True,
         show_value=True,
         label="Extra label collision padding",
