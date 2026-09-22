@@ -2,7 +2,7 @@
 <phase-conventions-and-forward-cut-conjugation>
 This note fixes the convention for GammaLoop amplitudes and LU cross-sections and records the independent audit of right-side conjugation. It is intended for GammaLoop contributors. The supported physical setting is a Hermitian UFO theory with real propagator masses. The complex-mass scheme requires additional machinery and is outside this implementation. The companion #link("sm-conventions-audit.typ")[SM convention audit] covers derivative vertices, scalar/pseudoscalar and vector/axial structures, fermion momentum signs and the W/Z virtual and cut-state gauge contract.
 
-=== Amplitudes
+== Amplitudes
 <amplitudes>
 GammaLoop returns the complete amputated Feynman graph, including vertex and propagator numerator factors, with the measure
 
@@ -18,7 +18,7 @@ $ I_M = i^L \( - 1 \)^P I_E . $
 
 Thus absence of thresholds does not make all scalar topology integrals real. Their phase can alternate with loop count. In four-point quartic topologies $P = 2 L$, the sequence is $1 \, i \, - 1 \, - i \, 1 \, dots.h$. A full UFO amplitude also contains its vertex and propagator factors. Ultraviolet subtraction can change the sign of a finite real coefficient; absence of a threshold alone is not a positivity theorem for a renormalized amplitude.
 
-=== The right side is an inverse-process graph
+== The right side is an inverse-process graph
 <the-right-side-is-an-inverse-process-graph>
 Conjugating an independently constructed amplitude is necessary. Conjugating the raw right-hand numerator of a forward graph again generally acts on the wrong object.
 
@@ -50,7 +50,7 @@ The independent audit used explicit Weyl matrices and actual SM vertex pairs:
 
 The first failure is a chirality error and cannot be repaired with an overall phase. Real scalar and ordinary real-coupling vector vertices hide this problem because their tensor adjoints leave their spin structures unchanged.
 
-=== Marking, contours and cut lines
+== Marking, contours and cut lines
 <marking-contours-and-cut-lines>
 The largest-time construction marks the right-side vertices with a minus sign while retaining their inverse-process values. Marked virtual propagators have the anti-causal prescription. Hermiticity then identifies the marked region with the conjugated amplitude; this statement does not assume CP invariance. #link("https://arxiv.org/pdf/1606.06348")[Anselmi, sections 2.2--3];.
 
@@ -90,7 +90,7 @@ The same cut-group factor multiplies bare, local UV, integrated UV, and threshol
 
 Computed UV-forest exports contain the same finalized physical expressions as production. They reuse the cut-group conversion and must not divide the spatial measure a second time. Comparisons for both UV orchestrators preserve the factorized expression trees: they use structural equality where possible and exact signed values at sampled nonsingular rational points otherwise. These sampled checks are not a general symbolic identity proof. The independent scalar Born residue normalization is checked structurally with $pi$ left symbolic.
 
-=== Complex couplings and the complex-mass scheme
+== Complex couplings and the complex-mass scheme
 <complex-couplings-and-the-complex-mass-scheme>
 Intrinsic complex couplings in a Hermitian interaction are compatible with marking. In the vendored SM, the unique conjugate-field partners `V_125` and `V_95` contain $i V_(u b)$ and $i V_(u b)^(\*)$, respectively. The parameter $V_(u b) = A lambda^3 \( rho - i eta \)$ is complex even though its Wolfenstein inputs are real. Leaving the inverse vertex value intact preserves $\| V_(u b) \|^2$. Testing whether a numerical UFO coupling has a nonzero imaginary part would wrongly reject conventional Feynman-rule factors of $i$. Model Hermiticity and correct partner assignment, rather than that numerical test, are the relevant assumptions.
 
@@ -110,7 +110,7 @@ GammaLoop currently constructs real on-shell energies and does not implement tho
 
 The mass check does not prove that an arbitrary UFO is Hermitian. Unpaired complex interaction coefficients, including CMS-derived coefficients in a graph whose propagator masses happen to be real, violate the supported model contract and are not comprehensively diagnosed by this check.
 
-=== Acceptance and user-supplied numerators
+== Acceptance and user-supplied numerators
 <acceptance-and-user-supplied-numerators>
 For symmetric scalar Born halves, the full cut result must equal $\| A_Gamma \|^2 d Phi_n$, with physical real flux and symmetry factors. The independent massless phase-space oracle is
 
@@ -120,7 +120,7 @@ The acceptance suite covers multiplicities two through six, massive decay, two i
 
 An explicit complete global numerator retains its full-forward meaning; it does not specify two separately supplied amplitude factors. A literal numerator-one topology need not have the phase or positivity of a squared physical UFO amplitude. No new `exact`/`scalar_only` modes are introduced. Regenerate integrands and saved compiled states after the convention change; old numerical artifacts contain the old phases.
 
-=== Generation options and generated states
+== Generation options and generated states
 <generation-options-and-generated-states>
 The CLI option `--symmetrize-left-right-states` and the serialized `symmetrize_left_right_states` fields remain available, with the optimization disabled by default. The generated cross-section integrand retains the selected flag so runtime warm-up can repeat its CP-validity warning, including after model updates. The amplitude option retains its existing external-state crossing/symmetrization behavior; independent initial and final permutations remain separately selectable.
 

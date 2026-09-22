@@ -50,7 +50,7 @@ impl ThreeDRep {
 
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub struct GraphSelectorArgs {
-    /// Process reference: #<id>, name:<name>, or <id>/<name>.
+    /// Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`.
     #[arg(
         short = 'p',
         long = "process",

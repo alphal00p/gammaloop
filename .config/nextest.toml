@@ -163,8 +163,9 @@ threads-required = "num-test-threads"
 filter = "test(bench) or test(benchmark)"
 
 [[profile.ci.overrides]]
-# Keep the production GL20 event snapshot under the same explicit bound in CI.
-filter = "test(/^gl20_multichannel_local_inspect_event_snapshot$/)"
+# The GL20 event snapshot and GL00 higher-power numerator generation build large
+# evaluators. Reserve the full CI budget and allow their generation to complete.
+filter = "test(/^gl20_multichannel_local_inspect_event_snapshot$/) or test(=scalar_3l_cross_section_inspects::scalar_3l_gl00_higher_power_cff_is_invariant_under_nonzero_sampling_scale)"
 threads-required = "num-test-threads"
 slow-timeout = { period = "5m", terminate-after = 2 }
 
@@ -198,8 +199,9 @@ binary(=test_runs) and (
 threads-required = "num-test-threads"
 
 [[profile.ci_gammaloop.overrides]]
-# Keep the production GL20 event snapshot under the same explicit bound in CI.
-filter = "test(/^gl20_multichannel_local_inspect_event_snapshot$/)"
+# The GL20 event snapshot and GL00 higher-power numerator generation build large
+# evaluators. Reserve the full CI budget and allow their generation to complete.
+filter = "test(/^gl20_multichannel_local_inspect_event_snapshot$/) or test(=scalar_3l_cross_section_inspects::scalar_3l_gl00_higher_power_cff_is_invariant_under_nonzero_sampling_scale)"
 threads-required = "num-test-threads"
 slow-timeout = { period = "5m", terminate-after = 2 }
 

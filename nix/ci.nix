@@ -401,7 +401,7 @@ in {
   configuration = {
     systems = [system];
     inherit onlyBuild;
-    fail-fast = false;
+    fail-fast = true;
     fail-on-dangling-dependencies = true;
     # Trial synchronous discovery before jobs start. The earlier concern was
     # evaluating derivation paths for many generated package/check attrs during

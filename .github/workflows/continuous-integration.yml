@@ -269,7 +269,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         if: matrix.check != 'fmt'
         with:
-          key: cargo-ubuntu-latest
+          # Cache entries are immutable; each compilation mode must save its own artifacts.
+          key: cargo-ubuntu-latest-${{ matrix.check }}
 
       - name: Run clippy
         if: matrix.check == 'clippy'

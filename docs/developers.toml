@@ -895,7 +895,10 @@ symbol = "documentation source ownership"
 # snapshot renders, whose source-link validation reads the staged repository.
 anchor = "repositoryDocumentationSources ="
 end_anchor = "documentationRegistry = builtins.fromTOML"
-digest = "e9896090fd53ab4f5ede95116048e0420b80bb01"
+# No-impact attestation 2026-09-22: stage the three graph fixtures linked by
+# the CFF architecture note. The terminal documentation source gains those
+# files; Cargo producer inputs and the documented cache boundaries are unchanged.
+digest = "270e978a3a6565a3c88cf370aead34009350d307"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"

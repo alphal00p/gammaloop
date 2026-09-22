@@ -338,7 +338,7 @@
     };
   };
   enable = true;
-  fail-fast = false;
+  fail-fast = true;
   fail-on-dangling-dependencies = true;
   onlyBuild = [
     "checks.x86_64-linux.gammaloop-clippy"

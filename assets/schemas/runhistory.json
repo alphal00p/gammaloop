@@ -239,7 +239,7 @@
           }
         },
         "process": {
-          "description": "Process reference: #<id>, name:<name>, or <id>/<name>",
+          "description": "Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`",
           "anyOf": [
             {
               "$ref": "#/$defs/ProcessRef"
@@ -1900,7 +1900,7 @@
           ]
         },
         "process": {
-          "description": "Process reference: #<id>, name:<name>, or <id>/<name>.",
+          "description": "Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`.",
           "anyOf": [
             {
               "$ref": "#/$defs/ProcessRef"
