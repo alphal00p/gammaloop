@@ -2808,6 +2808,8 @@
                   or (e.sink != none and e.sink.node == i)
               )).map(e => e.edge),
             )
+            // Display transformations may retain the source graph's inspection identities.
+            details += node-data.at("inspection", default: (:))
             let name = node-data.at("feynkit-name", default: node.name)
             if name != none {
               details.insert("name", str(name))
@@ -2817,7 +2819,7 @@
             }
             node-targets += _identity-target(
               pos,
-              _identity-href("node", i, details),
+              _identity-href("node", details.at("node", default: i), details),
               width: calc.max(10pt, node-width * ctx.length, label-size.width),
               height: calc.max(10pt, node-height * ctx.length, label-size.height),
             )
@@ -2965,12 +2967,13 @@
               and sink-half-edge != none
               and source-half-edge.node == sink-half-edge.node
           )
+          let inspection = edge-data.at("inspection", default: (:))
           let details = (
             edge: edge.edge,
             source: if source-half-edge == none { none } else { source-half-edge.node },
             sink: if sink-half-edge == none { none } else { sink-half-edge.node },
             orientation: edge.orientation,
-          )
+          ) + inspection
           if edge.name != none {
             details.insert("name", str(edge.name))
           }
@@ -2980,7 +2983,7 @@
               details.insert(key, value)
             }
           }
-          let href = _identity-href("edge", edge.edge, details)
+          let href = _identity-href("edge", details.edge, details)
           let half-hrefs = ()
           let edge-hrefs = ()
           for (side, half-edge, pair) in (
@@ -2988,12 +2991,15 @@
             ("sink", sink-half-edge, source-half-edge),
           ) {
             let owner = if half-edge == none { pair } else { half-edge }
-            let half-details = details + ("half-edge": owner.hedge)
-            edge-hrefs.push(_identity-href("edge", edge.edge, half-details))
-            half-hrefs.push(_identity-href("halfedge", owner.hedge, half-details + (
+            let flow = if half-edge != none { side } else if side == "source" { "sink" } else { "source" }
+            let other = if flow == "source" { "sink" } else { "source" }
+            let hedge = inspection.at(flow + "-hedge", default: owner.hedge)
+            let half-details = details + ("half-edge": hedge)
+            edge-hrefs.push(_identity-href("edge", details.edge, half-details))
+            half-hrefs.push(_identity-href("halfedge", hedge, half-details + (
               node: owner.node,
-              flow: if half-edge != none { side } else if side == "source" { "sink" } else { "source" },
-              pair: if half-edge == none or pair == none { none } else { pair.hedge },
+              flow: flow,
+              pair: inspection.at(other + "-hedge", default: if half-edge == none or pair == none { none } else { pair.hedge }),
             )))
           }
           let hrefs = (half-hrefs.at(0), edge-hrefs.at(0), edge-hrefs.at(1), half-hrefs.at(1))

@@ -46,7 +46,9 @@ impl FeynmanDiagram {
     ///
     /// GammaLoop's shared physics layout owns particle styling, label measurement,
     /// force settings, and left/right amplitude placement. Finalized cross sections
-    /// already contain paired initial-state edges with their sewing connection IDs.
+    /// contain paired initial-state edges, opened for drawing by default. Set
+    /// `options.split-initial-state` to false to retain their sewn appearance.
+    /// Inspection and highlighting always refer to the original diagram.
     ///
     /// A native half-edge selection highlights the corresponding structural
     /// halves while retaining the complete graph and its particle styles.
@@ -117,9 +119,16 @@ impl FeynmanDiagram {
                 .and_then(|rule| self.model().vertex_rule_by_id(rule).ok())
                 .map(|rule| typst_string(&rule.name))
                 .unwrap_or_else(|| "none".to_owned());
+            let incident = self
+                .edges()
+                .filter(|(_, endpoints, _)| {
+                    endpoints.source == Some(*id) || endpoints.target == Some(*id)
+                })
+                .map(|(edge, _, _)| format!("{},", edge.0))
+                .collect::<String>();
             writeln!(
                 output,
-                "    node(<v{dense_id}>, id: {dense_id}, feynkit-id: {}, feynkit-name: {}, interaction: {}, numerator: {})",
+                "    node(<v{dense_id}>, id: {dense_id}, inspection: (node: {}, edges: ({incident})), feynkit-name: {}, interaction: {}, numerator: {})",
                 id.0,
                 typst_string(&vertex.name),
                 interaction,
@@ -170,7 +179,7 @@ impl FeynmanDiagram {
                 .collect::<String>();
             writeln!(
                 output,
-                "    edge({endpoint_spec}, id: {}, orientation: {orientation:?}, particle: {}, pdg: {}, directed: {}, numerator: {}, feynkit-source: {}, feynkit-target: {}, momentum: {}, momentum-signature: (loops: ({loops}), external: ({external})){external_metadata}{cut_metadata})",
+                "    edge({endpoint_spec}, id: {}, orientation: {orientation:?}, particle: {}, pdg: {}, directed: {}, numerator: {}, inspection: (edge: {edge_id}, source: {}, sink: {}), momentum: {}, momentum-signature: (loops: ({loops}), external: ({external})){external_metadata}{cut_metadata})",
                 id.0,
                 typst_string(&particle.name),
                 particle.pdg_code,
@@ -179,6 +188,7 @@ impl FeynmanDiagram {
                 endpoints.source.map(|vertex| vertex.0.to_string()).unwrap_or_else(|| "none".to_owned()),
                 endpoints.target.map(|vertex| vertex.0.to_string()).unwrap_or_else(|| "none".to_owned()),
                 typst_string(&momentum.format_momentum()),
+                edge_id = id.0,
             )
             .expect("writing to a string cannot fail");
         }
@@ -193,6 +203,14 @@ impl FeynmanDiagram {
             self.loop_count(),
         )
         .expect("writing to a string cannot fail");
+        // Match the edge-ordered public Linnet view before any display-only cuts.
+        output.push_str(
+            r#"  raw = graph.map(raw, edge: e => (inspection: e.data.inspection + (
+    source-hedge: if e.source == none { none } else { e.source.hedge },
+    sink-hedge: if e.sink == none { none } else { e.sink.hedge },
+  )))
+"#,
+        );
         let (highlight_options, node_style) = if let Some(highlight) = highlight {
             let mut source = String::new();
             let mut sink = String::new();
@@ -241,6 +259,13 @@ impl FeynmanDiagram {
   if not ("mode", "amplitude-mode", "cross-section-mode").any(key => options.keys().contains(key)) {{
     options += (mode: "{}",)
   }}
+  // Open only the sewn initial-state connections; final-state cut edges remain paired.
+  if options.at("split-initial-state", default: true) {{
+    let initial = graph.edges(raw).filter(e => e.source != none and e.sink != none and e.data.at("is_cut", default: none) != none).map(e => e.edge)
+    if initial.len() > 0 {{
+      raw = graph.cut(raw, left: subgraph.select(raw, sink: initial), right: subgraph.select(raw, source: initial))
+{remap_highlight}    }}
+  }}
   let style = config.at("style", default: (:))
   let node-label-default = if options.at("show-node-index", default: false) or options.at("debug", default: false) {{ (:) }} else {{ (node-label: none) }}
   let style = node-label-default + ({node_style}) + if style == none {{ (:) }} else {{ style }}
@@ -259,6 +284,9 @@ impl FeynmanDiagram {
 }}
 "##,
             if self.cuts().is_empty() { "amplitude" } else { "cross-section" },
+            remap_highlight = if highlight.is_some() {
+                "      highlighted = subgraph.select(raw, hedges: graph.edges(raw).map(e => (e.source, e.sink).filter(h => h != none and subgraph.contains(highlighted, h.origin)).map(h => h.hedge)).flatten())\n"
+            } else { "" },
         )
         .expect("writing to a string cannot fail");
         Ok(output)

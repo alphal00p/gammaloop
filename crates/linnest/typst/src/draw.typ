@@ -259,6 +259,12 @@
 /// layer cannot participate in a subgraph underlay. References to self,
 /// unknown, or invisible edges are errors.
 /// A valid pair with no proper interior intersection is left unchanged.
+///
+/// SVG inspection normally uses the drawn graph's IDs. Display transformations
+/// can retain a source graph's identities with native `inspection` data:
+/// nodes accept `(node, edges)` and edges accept `(edge, source, sink,
+/// source-hedge, sink-hedge)`. These override inspection and selection only;
+/// layout, drawing callbacks, and subgraphs still use the drawn graph's IDs.
 /// -> content
 #let draw(
   /// Graph object with positions from `layout` or explicit graph API `pos` fields. -> dictionary

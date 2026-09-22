@@ -7,6 +7,7 @@ import xml.etree.ElementTree as ET
 from collections import Counter
 from pathlib import Path
 
+import linnet
 from marimo._output.formatting import try_format
 
 fk = importlib.import_module(
@@ -90,3 +91,81 @@ for value in (diagram, region):
         ), "inspection must retain the muted, dotted subgraph context"
 
 print("installed FeynmanDiagram and Subgraph SVG interaction checks passed")
+
+# Opening initial-state connections changes only the drawing. Both displayed
+# stubs must still inspect and select the same edge in the canonical diagram.
+
+cross_section = model.generate_diagrams(
+    ["scalar_0"],
+    ["scalar_0", "scalar_0"],
+    kind="cross_section",
+    loops=1,
+    max_vertices=2,
+    vertex_allow=["V_3_SCALAR_000"],
+    allow_self_loops=True,
+).diagrams[0]
+snapshot = cross_section.to_json()
+graph = cross_section.to_linnet()
+edges = {edge.id: edge for edge in cross_section.edges}
+expected = (
+    {("node", vertex.id) for vertex in cross_section.vertices}
+    | {("edge", edge_id) for edge_id in edges}
+    | {("halfedge", half.index) for half in graph.half_edges()}
+)
+for options in (
+    {},
+    {"mode": "auto"},
+    {"split-initial-state": True},
+    {"split-initial-state": False},
+):
+    split = options.get("split-initial-state", True)
+    config = linnet.RenderConfig(template_options=options)
+    for value in (
+        cross_section,
+        cross_section.filter(edge=lambda edge: edge.data.is_external),
+    ):
+        root = ET.fromstring(value.render(config=config, momenta=True))
+        targets = root.findall(".//*[@data-linnet-kind]")
+        assert {
+            (target.attrib["data-linnet-kind"], int(target.attrib["data-linnet-id"]))
+            for target in targets
+        } == expected
+        assert Counter(
+            (target.attrib["data-linnet-kind"], int(target.attrib["data-linnet-id"]))
+            for target in targets
+            if target.get("tabindex") == "0"
+        ) == Counter(dict.fromkeys(expected, 1))
+        fragments = {edge: set() for edge in edges}
+        for target in targets:
+            kind = target.attrib["data-linnet-kind"]
+            identity = int(target.attrib["data-linnet-id"])
+            detail = json.loads(target.attrib["data-linnet-detail"])
+            if kind == "node":
+                assert set(detail["edges"]) == {
+                    edge.id
+                    for edge in edges.values()
+                    if identity in (edge.source, edge.target)
+                }
+            else:
+                edge = edges[detail["edge"]]
+                assert (detail["source"], detail["sink"]) == (edge.source, edge.target)
+                assert detail["particle"] == edge.particle_name
+                assert "momentum" in detail
+                if kind == "edge":
+                    assert identity == edge.id
+                    fragments[identity].add(detail["name"])
+                else:
+                    native = graph.edges()[edge.id]
+                    owner, partner = (
+                        (native.source, native.sink)
+                        if detail["flow"] == "source"
+                        else (native.sink, native.source)
+                    )
+                    assert identity == owner.index
+                    assert detail["pair"] == partner.index
+        assert {edge: len(names) for edge, names in fragments.items()} == {
+            edge.id: 2 if split and edge.is_external else 1 for edge in edges.values()
+        }
+        assert cross_section.to_json() == snapshot
+
+print("split and sewn cross-section SVG identity and highlighting checks passed")
