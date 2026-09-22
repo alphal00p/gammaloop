@@ -40,7 +40,13 @@ const FEYNKIT_PYTHON_CRATES: &[&str] = &[
     "spenso-macros",
 ];
 const LINNET_PYTHON_CRATES: &[&str] = &["linnet-py", "linnet"];
-const SPENSO_PYTHON_CRATES: &[&str] = &["spynso3", "spenso", "spenso-macros", "spenso-hep-lib"];
+const SPENSO_PYTHON_CRATES: &[&str] = &[
+    "spynso3",
+    "spenso",
+    "spenso-macros",
+    "spenso-hep-lib",
+    "idenso",
+];
 
 #[derive(Clone, Debug)]
 pub struct WatchRequest {
@@ -636,7 +642,7 @@ impl SiteBuilder {
             ),
             ("linnet", "linnet", "linnet-python", LINNET_PYTHON_CRATES),
             ("spenso", "spenso", "spynso3", SPENSO_PYTHON_CRATES),
-            ("idenso", "idenso", "idenso-community", &["idenso"][..]),
+            ("idenso", "spenso", "spynso3", SPENSO_PYTHON_CRATES),
             ("vakint", "vakint", "vakint-community", &["vakint"][..]),
         ] {
             if exporter_matches_change(product, owner, crates, global, changed) {

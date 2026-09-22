@@ -16,8 +16,6 @@ symbolica = { workspace = true }
 symbolica-utils = { workspace = true, default-features = false }
 
 nu-ansi-term = { workspace = true }
-pyo3 = { workspace = true, optional = true }
-pyo3-stub-gen = { workspace = true, optional = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 
@@ -61,8 +59,6 @@ native = [
   "symbolica-utils/native",
 ]
 reference-cases = []
-python = ["dep:pyo3", "symbolica/python_export"]
-python_stubgen = ["dep:pyo3-stub-gen", "python", "symbolica/python_stubgen"]
 wasm = [
   "linnet/wasm",
   "spenso/wasm",

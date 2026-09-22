@@ -60,6 +60,11 @@ to the external #link("https://github.com/symbolica-dev/symbolica-community")[sy
 assembly and invoke its `SymbolicaCommunityModule` registration while building that extension;
 building the Rust crate alone does not inject the module into another Symbolica wheel.
 
+The same module exports Idenso's algebra settings and exceptions. Its simplification
+operations are `TensorExpression` methods, so symbolic pipelines can chain
+`expression.simplify_gamma().simplify_color().simplify_metrics()` while retaining the
+tensor interface.
+
 ```python
 from symbolica.community.spenso import (
     Representation,

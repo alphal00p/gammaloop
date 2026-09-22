@@ -10,6 +10,7 @@ mod native_graph;
 mod render;
 pub use render::PreparedRender;
 mod streaming;
+mod svg;
 mod topology;
 mod typst;
 

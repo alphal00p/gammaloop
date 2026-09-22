@@ -56,50 +56,48 @@ assert sorted(half.data for half in graph.half_edges()) == list(
     range(graph.n_half_edges)
 )
 
-full = graph.full_subgraph()
-assert type(full).__module__ == "linnet"
-empty = graph.empty_subgraph()
-internal = graph.filter(edge=lambda edge: not edge.data.is_external)
-assert diagram.numerator_expression(subgraph=full) == diagram.numerator_expression()
-assert diagram.denominator_expression(subgraph=full) == diagram.denominator_expression()
-assert diagram.denominator_expression(subgraph=empty) == 1
-assert diagram.numerator_expression(subgraph=empty) == 1
-assert diagram.loop_count_of(subgraph=full) == diagram.loop_count
-assert diagram.loop_count_of(subgraph=internal) == diagram.loop_count
-external = graph.filter(edge=lambda edge: edge.data.is_external)
+raw_full = graph.full_subgraph()
+assert type(raw_full).__module__ == "linnet"
+full = diagram.subgraph(raw_full)
+empty = diagram.subgraph()
+internal = diagram.filter(edge=lambda edge: not edge.data.is_external)
+assert isinstance(full, fk.Subgraph)
+assert isinstance(full, fk.FeynmanDiagram)
+assert full.numerator_expression() == diagram.numerator_expression()
+assert full.denominator_expression() == diagram.denominator_expression()
+assert empty.denominator_expression() == 1
+assert empty.numerator_expression() == 1
+assert full.loop_count == diagram.loop_count
+assert internal.loop_count == diagram.loop_count
+external = diagram.filter(edge=lambda edge: edge.data.is_external)
 external_vertices = {
     edge.source if edge.source is not None else edge.target
     for edge in diagram.external_edges
 }
-assert len(diagram.connected_components(external)) == len(external_vertices)
-assert diagram.loop_count_of(subgraph=external) == 0
-assert diagram.denominator_expression(subgraph=external) == 1
+assert len(external.connected_components()) == len(external_vertices)
+assert external.loop_count == 0
+assert external.denominator_expression() == 1
 paired = next(edge for edge in graph.edges() if not edge.data.is_external)
-boundary_half = graph.subgraph(half_edges=[paired.source.index])
-assert diagram.denominator_expression(subgraph=boundary_half) == 1
-assert diagram.numerator_expression(subgraph=boundary_half) == 1
-assert diagram.is_connected(full)
-assert len(diagram.connected_components(full)) == 1
-assert diagram.momentum_basis(subgraph=full).loop_edges
-assert diagram.loop_momentum_bases(limit=1, subgraph=full)
+boundary_half = diagram.subgraph(half_edges=[paired.source.index])
+assert boundary_half.denominator_expression() == 1
+assert boundary_half.numerator_expression() == 1
+assert full.is_connected()
+assert len(full.connected_components()) == 1
+assert full.momentum_basis().loop_edges
+assert full.loop_momentum_bases(limit=1)
 assert len(diagram.loop_momentum_basis.momentum_replacements()) == len(diagram.edges)
-assert (
-    diagram.build_cff(subgraph=full).to_expression()
-    == diagram.build_cff().to_expression()
-)
+assert full.build_cff().to_expression() == diagram.build_cff().to_expression()
 
-cycles, covered = diagram.cycle_basis(internal)
+cycles, covered = internal.cycle_basis()
 assert len(cycles) == diagram.loop_count
-assert isinstance(covered, linnet.Subgraph)
-assert isinstance(diagram.bridges(full), linnet.Subgraph)
-assert isinstance(diagram.boundary(internal), linnet.Subgraph)
-assert diagram.all_spanning_forests(internal)
-assert diagram.all_bonds(subgraph=full)
+assert isinstance(covered, fk.Subgraph)
+assert isinstance(full.bridges(), fk.Subgraph)
+assert isinstance(internal.boundary(), fk.Subgraph)
+assert internal.all_spanning_forests()
+assert full.all_bonds()
 assert diagram.all_cuts([0], [1])
-assert isinstance(diagram.depth_first_traverse(0, subgraph=full), linnet.TraversalTree)
-assert isinstance(
-    diagram.breadth_first_traverse(0, subgraph=full), linnet.TraversalTree
-)
+assert isinstance(full.depth_first_traverse(0), linnet.TraversalTree)
+assert isinstance(full.breadth_first_traverse(0), linnet.TraversalTree)
 
 restored = fk.FeynmanDiagram.from_json(model, diagram.to_json())
 assert restored.to_json() == diagram.to_json()
@@ -115,7 +113,7 @@ assert diagram.compatible_momentum_basis(diagram.loop_momentum_basis)
 
 for invalid in [restored.to_linnet().full_subgraph(), object()]:
     try:
-        diagram.numerator_expression(subgraph=invalid)
+        diagram.subgraph(invalid)
     except (ValueError, TypeError):
         pass
     else:
@@ -124,15 +122,17 @@ for invalid in [restored.to_linnet().full_subgraph(), object()]:
 # Even an in-place edit that keeps the number of half-edges invalidates selections.
 graph.reverse_edge(0)
 try:
-    diagram.numerator_expression(subgraph=full)
+    diagram.subgraph(raw_full)
 except (ValueError, ReferenceError):
     pass
 else:
     raise AssertionError("stale selections must be rejected")
+# Physics views retain immutable diagram ownership independently of analysis edits.
+assert full.numerator_expression() == diagram.numerator_expression()
 fresh = diagram.to_linnet()
 assert fresh is not graph
 assert (
-    diagram.numerator_expression(subgraph=fresh.full_subgraph())
+    diagram.subgraph(fresh.full_subgraph()).numerator_expression()
     == diagram.numerator_expression()
 )
 
@@ -154,14 +154,14 @@ for cut in cross_section.cuts:
     assert cut.left.loop_count == cut.right.loop_count == 0
     assert len(cut.particles) == len(cut.edges) == 2
     assert all(particle.name == "scalar_0" for particle in cut.particles)
-    assert isinstance(cut.left.subgraph, linnet.Subgraph)
-    assert isinstance(cut.right.subgraph, linnet.Subgraph)
-    assert cross_section.numerator_expression(subgraph=cut.left.subgraph) != 1
+    assert isinstance(cut.left.subgraph, fk.Subgraph)
+    assert isinstance(cut.right.subgraph, fk.Subgraph)
+    assert cut.left.subgraph.numerator_expression() != 1
     assert len(cut.propagators()) == 2
     assert len(cut.propagators(edge_powers={cut.edges[0].id: 2})) == 2
 for candidate in cross_section.topology_threshold_candidates:
-    assert isinstance(candidate.left, linnet.Subgraph)
-    assert isinstance(candidate.right, linnet.Subgraph)
+    assert isinstance(candidate.left, fk.Subgraph)
+    assert isinstance(candidate.right, fk.Subgraph)
 assert "is_cut:" in cross_section.to_linnest()
 assert (
     fk.FeynmanDiagram.from_json(model, cross_section.to_json()).to_json()

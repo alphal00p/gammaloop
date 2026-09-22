@@ -1,6 +1,6 @@
 # Spenso Python adapter
 
-`spynso3` registers Spenso's native Python interface as
+`spynso3` registers the unified Spenso and Idenso Python interface as
 `symbolica.community.spenso`. It is an adapter crate for the Symbolica community
 module assembly, not a standalone `spenso` Python distribution.
 
@@ -8,6 +8,8 @@ The canonical user guide is the rendered
 [Spenso Python workflow](https://alphal00p.github.io/gammaloop/products/spenso/latest/guides/python/).
 It covers tensor construction, reusable libraries, network execution, rich
 display, symbolic evaluation, parallelism, failure boundaries, and links to the generated API.
+Idenso's algebra operations are methods on `TensorExpression`, with their settings
+and exceptions exported from the same module.
 Exact signatures and defaults are in the
 [generated Python reference](https://alphal00p.github.io/gammaloop/products/spenso/latest/reference/python/spynso3/);
 the checked [`spynso3.pyi`](../../docs/api/python/spynso3.pyi) remains a tooling artifact.

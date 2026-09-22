@@ -319,6 +319,16 @@ svg = graph.to_svg()
 graph  # the final expression in a notebook renders inline
 ```
 
+SVG output preserves the native drawing and adds vertex/edge inspection. Hover to see an
+element's identity; click to pin its details without changing the selection. Shift-, Ctrl-, or
+Meta-click toggles the element in that displayed selection. Enter and Space perform the same
+actions on a focused element; Escape dismisses the details while retaining the selection.
+Copy the panel's node and edge IDs into `graph.subgraph(nodes=[...], edges=[...])` to create
+a Python selection. Figure selections are browser state and do not mutate the Python graph.
+Embedding applications can read the SVG element's `linnetSelection` property or listen for
+`linnet-selection-change`; its event detail contains sorted `nodes` and `edges` arrays.
+Use the Python selection API explicitly when applying graph algorithms to those IDs.
+
 A `Subgraph` also renders directly as the final expression of a notebook cell:
 
 ```python
@@ -337,7 +347,8 @@ revision and raises `ReferenceError` for a stale selection.
 
 The selected template's defaults are overlaid by the graph's `render_config` and then by a sparse
 per-call `config`. `render(output, config=None)` writes PDF, SVG, or PNG according to the output
-suffix. `to_svg(config=None)` returns SVG text, and `_repr_svg_()` supports notebooks. These are
+suffix. `to_svg(config=None)` returns SVG text; `_repr_html_()` supports interactive notebook
+display, while `_repr_svg_()` supplies the SVG representation. These are
 the only high-level rendering methods; there are no raw command-line inputs or string-expression
 escape hatches. The Python distribution depends on `typst` 0.15.0 and compiles in-process without
 looking up or launching a Typst executable. Generated inputs and imported modules remain alive

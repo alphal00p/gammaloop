@@ -115,7 +115,7 @@ citation = { title = "Idenso", creators = ["Lucien Huber", "Valentin Hirschi", "
 pages = [
   { id = "overview", title = "Overview", summary = "Symbolic tensor identities, controlled rewrite stages, representation setup, and reversible cooking.", source = "docs/products/idenso/content/overview.typ", symbol = "overview", route = "", group = "Start here" },
   { id = "quickstart", title = "Simplify your first tensor expression", summary = "Choose Python or Rust to apply an Idenso identity while preserving the free-index structure.", source = "docs/products/idenso/content/quickstart.typ", symbol = "quickstart", route = "quickstart/", group = "Start here" },
-  { id = "quickstart-python", title = "Using Idenso from Python", summary = "Import Idenso's Symbolica community module and simplify one indexed metric contraction.", source = "docs/products/idenso/content/quickstart-python.typ", symbol = "quickstart-python", route = "quickstart/python/", group = "Getting started" },
+  { id = "quickstart-python", title = "Using Idenso from Python", summary = "Use TensorExpression methods in the Spenso community module to simplify one indexed metric contraction.", source = "docs/products/idenso/content/quickstart-python.typ", symbol = "quickstart-python", route = "quickstart/python/", group = "Getting started" },
   { id = "quickstart-rust", title = "Using Idenso from Rust", summary = "Add Idenso and apply a representation-aware metric simplification from Rust.", source = "docs/products/idenso/content/quickstart-rust.typ", symbol = "quickstart-rust", route = "quickstart/rust/", group = "Getting started" },
   { id = "tutorial", title = "A controlled identity pass", summary = "Construct representation-aware indices, apply a focused rewrite, and verify the result.", source = "docs/products/idenso/content/tutorial.typ", symbol = "tutorial", route = "tutorial/", group = "Tutorial" },
   { id = "algebra", title = "Algebra and rewrites", summary = "Index tooling, cooking, metric, epsilon, Dirac, color, and Schoonschip network parsing.", source = "docs/products/idenso/content/algebra.typ", symbol = "algebra", route = "guides/algebra/", aliases = ["manual/algebra/"], group = "Guides" },
@@ -131,7 +131,7 @@ rust_components = [
   { id = "idenso", package = "idenso", kind = "library", version_source = "crates/idenso/Cargo.toml", features = ["native", "bincode", "reference-cases"] },
 ]
 python_components = [
-  { id = "idenso-community", package = "idenso", kind = "symbolica-community-module", version_source = "crates/idenso/Cargo.toml", module = "symbolica.community.idenso", features = ["python", "python_stubgen"] },
+  { id = "spynso3", package = "spynso3", kind = "symbolica-community-module", version_source = "crates/spynso3/Cargo.toml", module = "symbolica.community.spenso", features = ["python_stubgen"] },
 ]
 
 [[product]]

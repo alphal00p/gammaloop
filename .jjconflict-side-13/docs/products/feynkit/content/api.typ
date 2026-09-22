@@ -38,7 +38,7 @@ revision of this manual, so pin matching dependencies when reproducing a calcula
 
 The #link("reference/python/feynkit-community/")[generated Python reference] covers native
 classes, properties, signatures, examples, and error types. The primary owners are `Model`,
-`Process`, `Generator`, `SnailFilterOptions`, `NumeratorGrouping`, `FeynmanDiagram`, `CffGenerator`, `TensorReducer`,
+`Process`, `Generator`, `SnailFilterOptions`, `NumeratorGrouping`, `FeynmanDiagram`, `Subgraph`, `CffGenerator`, `TensorReducer`,
 `Kinematics`, `IntegralFamily`, `JetDefinition`, and the optional `UfoLoader`. Expressions cross the boundary as Symbolica values.
 
 Use the #link("quickstart/python/")[quickstart] for an installed host or the
@@ -48,8 +48,9 @@ CFF, kinematics, and tensor-reduction failures distinguishable.
 
 == CFF coefficients and generalized cuts
 
-`diagram.build_cff(subgraph=selection)` and `CffGenerator.generate` accept a
-selection from `diagram.to_linnet()`. `result.to_expression()` returns the same
+`diagram.subgraph(selection).build_cff()` constructs the selected region's CFF;
+`CffGenerator.generate` accepts the diagram or its `Subgraph` view.
+`result.to_expression()` returns the same
 canonical surface placeholders used by GammaLoop. Set `expand_surfaces=True`
 to substitute energies, or `normalized=True` to include the internal
 propagator energy factors and GammaLoop's loop measure. Numerators, projectors,

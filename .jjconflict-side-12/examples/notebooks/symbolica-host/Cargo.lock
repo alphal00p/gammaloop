@@ -63,7 +63,6 @@ name = "alphal00p-notebook-host"
 version = "0.1.0"
 dependencies = [
  "feynkit-py",
- "idenso",
  "pyo3",
  "spynso3",
  "symbolica",
@@ -1388,7 +1387,6 @@ dependencies = [
  "itertools 0.14.0",
  "linnet",
  "nu-ansi-term",
- "pyo3",
  "spenso",
  "spenso-macros",
  "symbolica",

@@ -58,28 +58,40 @@ Path("diagram.typ").write_text(diagram.to_linnest(), encoding="utf-8")
 diagram
 ```
 
-The example assumes `diagram` from the quickstart. In Jupyter, its rich representation draws
-the figure automatically. In another notebook frontend, display `diagram.to_html()` using that
-frontend's HTML object when it does not consume the standard rich-display methods. Model,
-generation, and CFF objects also expose compact representations for inspection.
+The example assumes `diagram` from the quickstart. Its rich representation draws the figure
+automatically. Hover over a vertex or edge to identify it, or click to pin its details.
+Shift-, Ctrl-, or Meta-click toggles that element in the displayed selection; an ordinary
+click leaves the selection unchanged. Enter and Space provide the same inspection and selection
+actions for a focused element. Escape dismisses the details without clearing the selection.
+The original particle
+line styles, labels, and transparent background are preserved. Model, generation, and CFF
+objects also expose compact representations for inspection.
 
-Pass a Linnet selection as `highlight` to draw a region with Linnest's subgraph
-highlighting while keeping the complete diagram visible:
+For explicit Marimo embedding, use `mo.iframe(diagram.to_html())` so the interaction script
+runs. Displaying `diagram` directly already uses Marimo's interactive HTML path.
+Without scripts, inline SVG still shows native hover labels; embedding it as a static image
+shows the drawing. Figure selections are local browser state; they do not alter the Python
+diagram or create a physics `Subgraph`. Copy the node and edge IDs from the details panel into
+`diagram.subgraph(nodes=[...], edges=[...])` for subsequent symbolic calculations, or use
+`diagram.filter(...)` to select by physics properties.
+
+Display a FeynKit `Subgraph` directly to show the selected region in its original
+diagram, with the remaining graph muted and dotted:
 
 // docs-example: compile
 ```python
-graph = diagram.to_linnet()
-selected = graph.filter(edge=lambda edge: edge.data.particle_name == "b")
+region = diagram.filter(edge=lambda edge: edge.data.particle_name == "b")
 Path("highlighted-diagram.svg").write_text(
-    diagram.to_svg(highlight=selected), encoding="utf-8"
+    region.to_svg(), encoding="utf-8"
 )
+region
 ```
 
-`to_linnest(highlight=selected)` and `to_html(highlight=selected)` accept the same
-selection; omitting `highlight` keeps the usual drawing. Selections may identify
-individual half-edges as well as complete edges. They must belong to this diagram's
-exported graph at its current topology revision; foreign or stale selections raise
-an error, as they do for the physics operations.
+`Subgraph` inherits the physics diagram's renderer and retains shared ownership of
+the original diagram, including its particle styles and labels. Selections may identify
+individual half-edges as well as complete edges. Use `diagram.subgraph(selection)`
+to import a canonical Linnet selection; foreign or stale selections raise an error.
+For a standalone drawing of the excised topology, display `region.excise()`.
 
 `diagram.numerator_expression()` returns Spenso’s `TensorExpression`, retaining the tensor interface
 and index display hooks. `diagram.build_cff().to_expression()` returns a native Symbolica

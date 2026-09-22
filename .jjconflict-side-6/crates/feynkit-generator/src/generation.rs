@@ -4757,6 +4757,47 @@ mod tests {
     }
 
     #[test]
+    fn compton_cuts_preserve_the_requested_particle_charge() {
+        let generator = Generator::new(fermion_model());
+        for pdg in [1_i64, -1] {
+            let process = Process::cross_section([pdg, 22], [pdg, 22])
+                .with_loop_count(1, 1)
+                .unwrap();
+            let generated = generator
+                .generate(
+                    &process,
+                    &GenerationOptions::default().threads(1).max_vertices(4),
+                )
+                .unwrap();
+            assert!(!generated.diagrams.is_empty());
+            for diagram in generated.diagrams {
+                assert!(!diagram.cuts().is_empty());
+                for cut in diagram.cuts() {
+                    let mut particles = diagram
+                        .cut_particles(cut)
+                        .unwrap()
+                        .into_iter()
+                        .map(|id| diagram.model().particle_by_id(id).unwrap().pdg_code)
+                        .collect::<Vec<_>>();
+                    particles.sort();
+                    assert_eq!(particles, vec![pdg, 22]);
+                    // Reversing a stored edge conjugates its species and its
+                    // cut endpoint together, preserving the physical state.
+                    let reversed = diagram.reverse_edge(cut.cut[0].edge).unwrap();
+                    let mut reversed_particles = reversed
+                        .cut_particles(&reversed.cuts()[0])
+                        .unwrap()
+                        .into_iter()
+                        .map(|id| reversed.model().particle_by_id(id).unwrap().pdg_code)
+                        .collect::<Vec<_>>();
+                    reversed_particles.sort();
+                    assert_eq!(reversed_particles, particles);
+                }
+            }
+        }
+    }
+
+    #[test]
     fn normalized_cross_section_fermion_chains_keep_valid_cuts() {
         let generator = Generator::new(fermion_model());
         let process = Process::cross_section([1_i64, -1], [22_i64])

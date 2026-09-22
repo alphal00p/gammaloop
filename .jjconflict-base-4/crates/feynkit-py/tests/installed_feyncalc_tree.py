@@ -8,7 +8,6 @@ from pathlib import Path
 
 from symbolica import E, S
 from symbolica.community import feynkit as fk
-from symbolica.community.idenso import simplify_epsilon, simplify_gamma, to_dots
 from symbolica.community.spenso import Representation, TensorExpression, chain
 
 model = fk.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
@@ -33,7 +32,15 @@ outgoing = (
 kin = fk.Kinematics.mandelstam(
     [p1, p2, k1, k2], [me**2, me**2, mm**2, mm**2], [s, t, u]
 )
-contracted = to_dots((simplify_gamma(incoming) * simplify_gamma(outgoing)).expand())
+contracted = (
+    TensorExpression(
+        TensorExpression(incoming).simplify_gamma().to_expression()
+        * TensorExpression(outgoing).simplify_gamma().to_expression()
+    )
+    .expand()
+    .to_dots()
+    .to_expression()
+)
 squared = kin.apply(contracted) * e**4 / s**2
 expected = (
     2
@@ -71,8 +78,8 @@ right_current = chain(
     TensorExpression.projp(4)("middle", b),
 ).to_expression()
 projected = (incoming * outgoing).replace(pattern, right_current)
-traces = simplify_gamma(projected.expand()).expand()
-contracted = to_dots(simplify_epsilon(traces).expand())
+traces = TensorExpression(projected.expand()).simplify_gamma().expand()
+contracted = traces.simplify_epsilon().expand().to_dots().to_expression()
 # Undo the two initial spin averages: each projected state is specified.
 polarized = 4 * kin.apply(contracted) * e**4 / s**2
 assert (polarized - 4 * e**4 * (me**2 + mm**2 - u) ** 2 / s**2).together() == E("0")

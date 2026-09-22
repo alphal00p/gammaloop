@@ -1,0 +1,662 @@
+[
+  {
+    "additional_weights": {
+      "full_multiplicative_factor": {
+        "im": 0.0,
+        "re": 1.0
+      },
+      "original": {
+        "im": -2.246749737228317e-14,
+        "re": -1.4396326334294588e-32
+      }
+    },
+    "event_group_sizes": [
+      1
+    ],
+    "event_weight_sum": {
+      "im": -2.246749737228317e-14,
+      "re": -1.4396326334294588e-32
+    },
+    "graph": "GL00",
+    "metadata": {
+      "accepted_event_count": 1,
+      "generated_event_count": 1,
+      "is_nan": false
+    },
+    "mode": "integrated",
+    "result": {
+      "im": -2.246749737228317e-14,
+      "re": -1.4396326334294588e-32
+    }
+  },
+  {
+    "additional_weights": {
+      "full_multiplicative_factor": {
+        "im": 0.0,
+        "re": 1.0
+      },
+      "original": {
+        "im": -5.284251780123195e-15,
+        "re": -9.268537857363573e-32
+      }
+    },
+    "event_group_sizes": [
+      1
+    ],
+    "event_weight_sum": {
+      "im": -5.284251780123195e-15,
+      "re": -9.268537857363573e-32
+    },
+    "graph": "GL00",
+    "metadata": {
+      "accepted_event_count": 1,
+      "generated_event_count": 1,
+      "is_nan": false
+    },
+    "mode": "no_integrated",
+    "result": {
+      "im": -5.284251780123195e-15,
+      "re": -9.268537857363573e-32
+    }
+  },
+  {
+    "additional_weights": {
+      "full_multiplicative_factor": {
+        "im": 0.0,
+        "re": 1.0
+      },
+      "original": {
+        "im": -1.0520632435206887e-13,
+        "re": 3.188766259247892e-18
+      }
+    },
+    "event_group_sizes": [
+      1
+    ],
+    "event_weight_sum": {
+      "im": -1.0520632435206887e-13,
+      "re": 3.188766259247892e-18
+    },
+    "graph": "GL01",
+    "metadata": {
+      "accepted_event_count": 1,
+      "generated_event_count": 1,
+      "is_nan": false
+    },
+    "mode": "integrated",
+    "result": {
+      "im": -1.0520632435206887e-13,
+      "re": 3.188766259247892e-18
+    }
+  },
+  {
+    "additional_weights": {
+      "full_multiplicative_factor": {
+        "im": 0.0,
+        "re": 1.0
+      },
+      "original": {
+        "im": -2.4674650604166684e-14,
+        "re": 3.188189400463555e-18
+      }
+    },
+    "event_group_sizes": [
+      1
+    ],
+    "event_weight_sum": {
+      "im": -2.4674650604166684e-14,
+      "re": 3.188189400463555e-18
+    },
+    "graph": "GL01",
+    "metadata": {
+      "accepted_event_count": 1,
+      "generated_event_count": 1,
+      "is_nan": false
+    },
+    "mode": "no_integrated",
+    "result": {
+      "im": -2.4674650604166684e-14,
+      "re": 3.188189400463555e-18
+    }
+  },
+  {
+    "additional_weights": {
+      "full_multiplicative_factor": {
+        "im": 0.0,
+        "re": 1.0
+      },
+      "original": {
+        "im": 3.155499270789692e-14,
+        "re": -1.7023233099397374e-18
+      }
+    },
+    "event_group_sizes": [
+      1
+    ],
+    "event_weight_sum": {
+      "im": 3.155499270789692e-14,
+      "re": -1.7023233099397374e-18
+    },
+    "graph": "GL03",
+    "metadata": {
+      "accepted_event_count": 1,
+      "generated_event_count": 1,
+      "is_nan": false
+    },
+    "mode": "integrated",
+    "result": {
+      "im": 3.155499270789692e-14,
+      "re": -1.7023233099397374e-18
+    }
+  },
+  {
+    "additional_weights": {
+      "full_multiplicative_factor": {
+        "im": 0.0,
+        "re": 1.0
+      },
+      "original": {
+        "im": 7.445067097584611e-15,
+        "re": -1.7027783045851118e-18
+      }
+    },
+    "event_group_sizes": [
+      1
+    ],
+    "event_weight_sum": {
+      "im": 7.445067097584611e-15,
+      "re": -1.7027783045851118e-18
+    },
+    "graph": "GL03",
+    "metadata": {
+      "accepted_event_count": 1,
+      "generated_event_count": 1,
+      "is_nan": false
+    },
+    "mode": "no_integrated",
+    "result": {
+      "im": 7.445067097584611e-15,
+      "re": -1.7027783045851118e-18
+    }
+  },
+  {
+    "additional_weights": {
+      "full_multiplicative_factor": {
+        "im": 0.0,
+        "re": 1.0
+      },
+      "original": {
+        "im": -2.24540866093464e-14,
+        "re": 2.558026170666203e-31
+      }
+    },
+    "event_group_sizes": [
+      1
+    ],
+    "event_weight_sum": {
+      "im": -2.24540866093464e-14,
+      "re": 2.558026170666203e-31
+    },
+    "graph": "GL05",
+    "metadata": {
+      "accepted_event_count": 1,
+      "generated_event_count": 1,
+      "is_nan": false
+    },
+    "mode": "integrated",
+    "result": {
+      "im": -2.24540866093464e-14,
+      "re": 2.558026170666203e-31
+    }
+  },
+  {
+    "additional_weights": {
+      "full_multiplicative_factor": {
+        "im": 0.0,
+        "re": 1.0
+      },
+      "original": {
+        "im": -5.315024922059864e-15,
+        "re": -1.5452578538169463e-32
+      }
+    },
+    "event_group_sizes": [
+      1
+    ],
+    "event_weight_sum": {
+      "im": -5.315024922059864e-15,
+      "re": -1.5452578538169463e-32
+    },
+    "graph": "GL05",
+    "metadata": {
+      "accepted_event_count": 1,
+      "generated_event_count": 1,
+      "is_nan": false
+    },
+    "mode": "no_integrated",
+    "result": {
+      "im": -5.315024922059864e-15,
+      "re": -1.5452578538169463e-32
+    }
+  },
+  {
+    "additional_weights": {
+      "full_multiplicative_factor": {
+        "im": 0.0,
+        "re": 1.0
+      },
+      "original": {
+        "im": -2.1250509320781907e-13,
+        "re": 1.5806569720509342e-17
+      }
+    },
+    "event_group_sizes": [
+      1
+    ],
+    "event_weight_sum": {
+      "im": -2.1250509320781907e-13,
+      "re": 1.5806569720509342e-17
+    },
+    "graph": "GL06",
+    "metadata": {
+      "accepted_event_count": 1,
+      "generated_event_count": 1,
+      "is_nan": false
+    },
+    "mode": "integrated",
+    "result": {
+      "im": -2.1250509320781907e-13,
+      "re": 1.5806569720509342e-17
+    }
+  },
+  {
+    "additional_weights": {
+      "full_multiplicative_factor": {
+        "im": 0.0,
+        "re": 1.0
+      },
+      "original": {
+        "im": -1.8610975998038243e-16,
+        "re": 1.5806569720509545e-17
+      }
+    },
+    "event_group_sizes": [
+      1
+    ],
+    "event_weight_sum": {
+      "im": -1.8610975998038243e-16,
+      "re": 1.5806569720509545e-17
+    },
+    "graph": "GL06",
+    "metadata": {
+      "accepted_event_count": 1,
+      "generated_event_count": 1,
+      "is_nan": false
+    },
+    "mode": "no_integrated",
+    "result": {
+      "im": -1.8610975998038243e-16,
+      "re": 1.5806569720509545e-17
+    }
+  },
+  {
+    "additional_weights": {
+      "full_multiplicative_factor": {
+        "im": 0.0,
+        "re": 1.0
+      },
+      "original": {
+        "im": 6.375702139417626e-15,
+        "re": -1.9656955875273141e-32
+      }
+    },
+    "event_group_sizes": [
+      1
+    ],
+    "event_weight_sum": {
+      "im": 6.375702139417626e-15,
+      "re": -1.9656955875273141e-32
+    },
+    "graph": "GL08",
+    "metadata": {
+      "accepted_event_count": 1,
+      "generated_event_count": 1,
+      "is_nan": false
+    },
+    "mode": "integrated",
+    "result": {
+      "im": 6.375702139417626e-15,
+      "re": -1.9656955875273141e-32
+    }
+  },
+  {
+    "additional_weights": {
+      "full_multiplicative_factor": {
+        "im": 0.0,
+        "re": 1.0
+      },
+      "original": {
+        "im": 6.375702139417626e-15,
+        "re": -2.813104763057698e-32
+      }
+    },
+    "event_group_sizes": [
+      1
+    ],
+    "event_weight_sum": {
+      "im": 6.375702139417626e-15,
+      "re": -2.813104763057698e-32
+    },
+    "graph": "GL08",
+    "metadata": {
+      "accepted_event_count": 1,
+      "generated_event_count": 1,
+      "is_nan": false
+    },
+    "mode": "no_integrated",
+    "result": {
+      "im": 6.375702139417626e-15,
+      "re": -2.813104763057698e-32
+    }
+  },
+  {
+    "additional_weights": {
+      "full_multiplicative_factor": {
+        "im": 0.0,
+        "re": 1.0
+      },
+      "original": {
+        "im": 6.409064200174921e-15,
+        "re": 1.0790979616794324e-17
+      }
+    },
+    "event_group_sizes": [
+      1
+    ],
+    "event_weight_sum": {
+      "im": 6.409064200174921e-15,
+      "re": 1.0790979616794324e-17
+    },
+    "graph": "GL12",
+    "metadata": {
+      "accepted_event_count": 1,
+      "generated_event_count": 1,
+      "is_nan": false
+    },
+    "mode": "integrated",
+    "result": {
+      "im": 6.409064200174921e-15,
+      "re": 1.0790979616794324e-17
+    }
+  },
+  {
+    "additional_weights": {
+      "full_multiplicative_factor": {
+        "im": 0.0,
+        "re": 1.0
+      },
+      "original": {
+        "im": 6.409064200174921e-15,
+        "re": 1.0790979616794324e-17
+      }
+    },
+    "event_group_sizes": [
+      1
+    ],
+    "event_weight_sum": {
+      "im": 6.409064200174921e-15,
+      "re": 1.0790979616794324e-17
+    },
+    "graph": "GL12",
+    "metadata": {
+      "accepted_event_count": 1,
+      "generated_event_count": 1,
+      "is_nan": false
+    },
+    "mode": "no_integrated",
+    "result": {
+      "im": 6.409064200174921e-15,
+      "re": 1.0790979616794324e-17
+    }
+  },
+  {
+    "additional_weights": {
+      "full_multiplicative_factor": {
+        "im": 0.0,
+        "re": 1.0
+      },
+      "original": {
+        "im": 3.1943517524792385e-14,
+        "re": 1.6189796651795896e-17
+      }
+    },
+    "event_group_sizes": [
+      1
+    ],
+    "event_weight_sum": {
+      "im": 3.1943517524792385e-14,
+      "re": 1.6189796651795896e-17
+    },
+    "graph": "GL14",
+    "metadata": {
+      "accepted_event_count": 1,
+      "generated_event_count": 1,
+      "is_nan": false
+    },
+    "mode": "integrated",
+    "result": {
+      "im": 3.1943517524792385e-14,
+      "re": 1.6189796651795896e-17
+    }
+  },
+  {
+    "additional_weights": {
+      "full_multiplicative_factor": {
+        "im": 0.0,
+        "re": 1.0
+      },
+      "original": {
+        "im": 4.254436345787238e-17,
+        "re": 1.618979665179573e-17
+      }
+    },
+    "event_group_sizes": [
+      1
+    ],
+    "event_weight_sum": {
+      "im": 4.254436345787238e-17,
+      "re": 1.618979665179573e-17
+    },
+    "graph": "GL14",
+    "metadata": {
+      "accepted_event_count": 1,
+      "generated_event_count": 1,
+      "is_nan": false
+    },
+    "mode": "no_integrated",
+    "result": {
+      "im": 4.254436345787238e-17,
+      "re": 1.618979665179573e-17
+    }
+  },
+  {
+    "additional_weights": {
+      "full_multiplicative_factor": {
+        "im": 0.0,
+        "re": 1.0
+      },
+      "original": {
+        "im": -4.4715345092259526e-15,
+        "re": 7.855069886564543e-18
+      }
+    },
+    "event_group_sizes": [
+      1
+    ],
+    "event_weight_sum": {
+      "im": -4.4715345092259526e-15,
+      "re": 7.855069886564543e-18
+    },
+    "graph": "GL16",
+    "metadata": {
+      "accepted_event_count": 1,
+      "generated_event_count": 1,
+      "is_nan": false
+    },
+    "mode": "integrated",
+    "result": {
+      "im": -4.4715345092259526e-15,
+      "re": 7.855069886564543e-18
+    }
+  },
+  {
+    "additional_weights": {
+      "full_multiplicative_factor": {
+        "im": 0.0,
+        "re": 1.0
+      },
+      "original": {
+        "im": -4.4715345092259526e-15,
+        "re": 7.855069886564543e-18
+      }
+    },
+    "event_group_sizes": [
+      1
+    ],
+    "event_weight_sum": {
+      "im": -4.4715345092259526e-15,
+      "re": 7.855069886564543e-18
+    },
+    "graph": "GL16",
+    "metadata": {
+      "accepted_event_count": 1,
+      "generated_event_count": 1,
+      "is_nan": false
+    },
+    "mode": "no_integrated",
+    "result": {
+      "im": -4.4715345092259526e-15,
+      "re": 7.855069886564543e-18
+    }
+  },
+  {
+    "additional_weights": {
+      "full_multiplicative_factor": {
+        "im": 0.0,
+        "re": 1.0
+      },
+      "original": {
+        "im": 3.1926380976942995e-14,
+        "re": 3.721700086448059e-18
+      }
+    },
+    "event_group_sizes": [
+      1
+    ],
+    "event_weight_sum": {
+      "im": 3.1926380976942995e-14,
+      "re": 3.721700086448059e-18
+    },
+    "graph": "GL17",
+    "metadata": {
+      "accepted_event_count": 1,
+      "generated_event_count": 1,
+      "is_nan": false
+    },
+    "mode": "integrated",
+    "result": {
+      "im": 3.1926380976942995e-14,
+      "re": 3.721700086448059e-18
+    }
+  },
+  {
+    "additional_weights": {
+      "full_multiplicative_factor": {
+        "im": 0.0,
+        "re": 1.0
+      },
+      "original": {
+        "im": 1.8531882912872525e-17,
+        "re": 3.721700086447925e-18
+      }
+    },
+    "event_group_sizes": [
+      1
+    ],
+    "event_weight_sum": {
+      "im": 1.8531882912872525e-17,
+      "re": 3.721700086447925e-18
+    },
+    "graph": "GL17",
+    "metadata": {
+      "accepted_event_count": 1,
+      "generated_event_count": 1,
+      "is_nan": false
+    },
+    "mode": "no_integrated",
+    "result": {
+      "im": 1.8531882912872525e-17,
+      "re": 3.721700086447925e-18
+    }
+  },
+  {
+    "additional_weights": {
+      "full_multiplicative_factor": {
+        "im": 0.0,
+        "re": 1.0
+      },
+      "original": {
+        "im": -2.126330454456394e-13,
+        "re": -3.114403014354381e-17
+      }
+    },
+    "event_group_sizes": [
+      1
+    ],
+    "event_weight_sum": {
+      "im": -2.126330454456394e-13,
+      "re": -3.114403014354381e-17
+    },
+    "graph": "GL18",
+    "metadata": {
+      "accepted_event_count": 1,
+      "generated_event_count": 1,
+      "is_nan": false
+    },
+    "mode": "integrated",
+    "result": {
+      "im": -2.126330454456394e-13,
+      "re": -3.114403014354381e-17
+    }
+  },
+  {
+    "additional_weights": {
+      "full_multiplicative_factor": {
+        "im": 0.0,
+        "re": 1.0
+      },
+      "original": {
+        "im": -2.3546903724948936e-16,
+        "re": -3.114403014354082e-17
+      }
+    },
+    "event_group_sizes": [
+      1
+    ],
+    "event_weight_sum": {
+      "im": -2.3546903724948936e-16,
+      "re": -3.114403014354082e-17
+    },
+    "graph": "GL18",
+    "metadata": {
+      "accepted_event_count": 1,
+      "generated_event_count": 1,
+      "is_nan": false
+    },
+    "mode": "no_integrated",
+    "result": {
+      "im": -2.3546903724948936e-16,
+      "re": -3.114403014354082e-17
+    }
+  }
+]

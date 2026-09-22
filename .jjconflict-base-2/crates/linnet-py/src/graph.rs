@@ -1572,6 +1572,11 @@ impl PyGraph {
         crate::render::graph_to_svg(py, &slf, None)
     }
 
+    /// Display the SVG with hover details and local interactive selection.
+    fn _repr_html_(slf: Py<PyGraph>, py: Python<'_>) -> PyResult<String> {
+        crate::render::graph_to_svg(py, &slf, None)
+    }
+
     #[pyo3(name = "full_subgraph", signature = ())]
     fn py_full_subgraph(slf: Py<PyGraph>, py: Python<'_>) -> PyResult<PySubgraph> {
         Self::full_subgraph(slf, py)

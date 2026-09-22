@@ -166,34 +166,50 @@ endpoint is `None`, and external names, indices, and states belong to the edge.
 
 Install the matching `linnet` extension to use the graph analysis interface.
 `to_linnet()` returns that module's canonical `Graph`, with `DiagramVertex` and
-`DiagramEdge` payloads. Its selection algebra and graph algorithms therefore work directly:
+`DiagramEdge` payloads. Wrap a canonical selection with `diagram.subgraph(selection)`,
+or use `diagram.filter(...)` to obtain a FeynKit `Subgraph` directly:
 
 // docs-example: compile
 ```python
 graph = diagram.to_linnet()
 selected = graph.filter(edge=lambda edge: not edge.data.is_external)
-numerator = diagram.numerator_expression(subgraph=selected)
-components = diagram.connected_components(selected)
-boundary = diagram.boundary(selected)
-basis = diagram.momentum_basis(subgraph=selected)
+region = diagram.subgraph(selected)
+numerator = region.numerator_expression()
+components = region.connected_components()
+boundary = region.boundary()
+basis = region.momentum_basis()
 routed = basis.route_expression(numerator)
 ```
 
-Optional `subgraph` filters also apply to denominators, momentum-basis enumeration,
-parent-compatible and contracted routing, superficial divergence, CFF construction, and
-tensor reduction. Numerator `without` excludes edges and their incident vertex factors,
-using the shared GammaLoop traversal. Full-graph defaults retain whole-diagram behavior.
+`Subgraph` inherits `FeynmanDiagram` and retains shared ownership of its original diagram.
+Its inherited operations use the selected region: denominators, momentum-basis enumeration,
+parent-compatible and contracted routing, superficial divergence, CFF construction, UV
+expansion, and tensor reduction. These methods have no `subgraph` argument.
+Numerator `without` excludes edges and their incident vertex factors, using the shared
+GammaLoop traversal. `region.original` accesses the full original diagram.
 Partial tensor reduction requires an explicit `projector`; a boundary momentum is never
 implicitly integrated. Overall factors, numerator prefactors, and projectors remain separate.
 
-Selections belong to one exported graph revision. A structural edit to that graph leaves
-the physics diagram unchanged and invalidates its selections. The next `to_linnet()` call
-creates a fresh analysis graph. Foreign or stale selections raise an error. Half-edge
-views carry their native diagram half-edge ID in `data`; the bridge preserves this mapping
-even when the exported builder assigns different half-edge numbers.
+Nested `region.subgraph(...)` and `region.filter(...)` intersect with the current region.
+Set operations `&`, `|`, `^`, `-`, and `~` preserve the original diagram owner.
+`region.to_linnet()` returns the complete analysis graph; `region.linnet_selection` supplies
+its corresponding canonical selection for direct Linnet algorithms. Importing a canonical
+selection checks the graph owner and topology revision. A structural edit to the analysis
+graph invalidates those canonical selections, while existing physics views retain their
+immutable topology and remain usable. Half-edge views carry their native diagram half-edge
+ID in `data`; the bridge preserves this mapping even when exported IDs differ.
+
+Call `region.excise()` to obtain an independent `FeynmanDiagram`. Excision retains selected
+vertices and their complete interaction slots, preserving selected paired edges and opening
+other incident halves into external boundary legs. It remaps local edge, vertex, half-edge,
+tensor, and momentum identities consistently. A proper extraction starts with unit global
+factors, numerator prefactor, projector, and symmetry factor, and does not inherit whole-graph
+physical cuts or add external wavefunctions. A full selection gives an independent exact
+copy, including the original factors and routing. Serialization and operations requiring a
+complete topology, such as integral-family construction, require explicit excision first.
 
 `diagram.cuts` contains generated physical cuts with reusable `left.subgraph` and
-`right.subgraph`, coupling orders, side loop counts, crossing edges, and momentum signatures.
+`right.subgraph` physics views, coupling orders, side loop counts, crossing edges, and momentum signatures.
 `diagram.topology_threshold_candidates` records the distinct process-independent partitions.
 Linnet's `all_bonds` and `all_cuts` describe structural cuts, without assigning physical
 final-state validity.

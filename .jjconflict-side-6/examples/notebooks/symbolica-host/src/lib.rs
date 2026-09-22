@@ -31,7 +31,6 @@ macro_rules! register_module {
 fn core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     create_symbolica_module(m)?;
     register_module!(m, feynkit_py::FeynkitModule);
-    register_module!(m, idenso::python::IdensoModule);
     register_module!(m, spynso3::SpensoModule);
     Ok(())
 }

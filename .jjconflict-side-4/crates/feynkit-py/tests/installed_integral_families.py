@@ -37,3 +37,28 @@ except fk.IntegralFamilyError:
 else:
     raise AssertionError("dependent propagators were accepted for completion")
 print("Integral-family rank, completion and numerator mapping checks passed")
+
+# Cofactors define U/F even where completing the square has no inverse.
+x, y, delta = S("family::x", "family::y", "family::delta")
+singular = fk.IntegralFamily(
+    [k, q],
+    [p],
+    [kin.scalar_product(k + q, k + q) - m1, kin.scalar_product(k - q, p) + delta],
+    kinematics=kin,
+)
+U, F = singular.symanzik([x, y])
+assert U == E("0")
+assert (F - s * x * y**2).expand() == E("0")
+for operation in (
+    lambda: singular.scaleless_scaling([x, y]),
+    lambda: singular.parametric_mapping(singular, [x, y]),
+):
+    try:
+        operation()
+    except fk.IntegralFamilyError:
+        pass
+    else:
+        raise AssertionError(
+            "singular U/F polynomials were accepted as a scaling or mapping proof"
+        )
+print("Singular Symanzik polynomials and proof-domain checks passed")

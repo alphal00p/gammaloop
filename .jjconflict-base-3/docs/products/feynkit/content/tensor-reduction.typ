@@ -92,7 +92,9 @@ prefactor remains separate, and at least one internal edge is required.
 Use `diagram.tensor_reduce(D, expression=prepared)` after contractions or a UV expansion.
 The supplied expression replaces the stored numerator and projector and must use the graph's
 `gammalooprs::Q(edge_id, ...)` names. It cannot be combined with an explicit `projector`.
-Internal edge momenta are still selected from the diagram, including when reducing a subgraph.
+Internal edge momenta are still selected from the diagram. For a `Subgraph`, call
+`region.tensor_reduce(D, expression=prepared)` to integrate only its selected internal
+momenta. An explicit projector is required when reducing a proper region's stored numerator.
 
 For standalone tensors, `TensorExpression(expression)` performs the same conversion as
 `as_tensor(expression)`. Algebraic rearrangements return tensor expressions with their ordered

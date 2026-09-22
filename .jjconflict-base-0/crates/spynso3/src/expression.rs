@@ -1,14 +1,18 @@
 use std::collections::{HashMap, HashSet};
 
 use idenso::{
-    Cookable,
-    color::CS,
-    dirac::AGS,
-    python::{
-        PyColorCasimirSettings, PyColorSimplifySettings, PyCookSettings, PyGammaSimplifySettings,
-        PySchoonschipSettings, RegisteredRepresentation,
-    },
+    Cookable, IndexTooling,
+    color::{CS, ColorCasimirSettings, ColorSimplifier},
+    dirac::{AGS, GammaSimplifier},
+    epsilon::{EPSILON_SYMBOL, EpsilonSimplifier},
     representations::{Bispinor, ColorAdjoint, ColorAntiFundamental, ColorFundamental},
+    selective_expand::SelectiveExpand,
+    shorthands::{
+        UndoShorthands,
+        chain::Chain,
+        metric::MetricSimplifier,
+        schoonschip::{Schoonschip, SchoonschipSettings},
+    },
     tensor::SymbolicTensor,
 };
 use pyo3::{
@@ -51,6 +55,12 @@ use crate::{
     display,
     library::SpensorLibrary,
     network::{ConvertibleToSpensoNet, SpensoNet},
+    simplification::{
+        CanonicalizationError, CookingError, DiracAdjointError, DotExpansionError,
+        GammaConjugationError, NetworkToolingError, PyColorCasimirSettings,
+        PyColorSimplifySettings, PyCookSettings, PyGammaSimplifySettings, PySchoonschipSettings,
+        expansion::{PythonTerm, python_terms},
+    },
     structure::{
         ArithmeticStructure, ConvertibleToAbstractIndex, ConvertibleToDimension,
         ConvertibleToSpensoName, SpensoIndices, SpensoName, SpensoRepresentation, SpensoSlot,
@@ -180,6 +190,31 @@ impl TensorExpression {
                 },
                 PythonExpression { expr: atom },
             ),
+        )
+    }
+
+    fn from_transformed_atom(
+        self_: &PyRef<'_, TensorExpression>,
+        py: Python<'_>,
+        atom: Atom,
+    ) -> PyResult<Py<TensorExpression>> {
+        let interface = if atom.as_view().is_zero() {
+            self_.interface.clone()
+        } else if has_structured_syntax(atom.as_view()) {
+            reinfer_structured(atom.clone())?.interface
+        } else if self_.interface.canonical().is_scalar() {
+            PartialStructure::from_logical_slots(std::iter::empty())
+        } else {
+            return Err(PyValueError::new_err(
+                "Tensor transformation removed the tensor syntax of a non-scalar expression",
+            ));
+        };
+        TensorExpression::from_atom_interface_descriptor(
+            py,
+            atom,
+            interface,
+            self_.name,
+            self_.name_args.clone(),
         )
     }
 
@@ -349,7 +384,8 @@ fn builtin_tensor_structure(
     symbol: Symbol,
     arguments: &[AtomView<'_>],
 ) -> PyResult<Option<Canonicalized<ExplicitKey<AbstractIndex>>>> {
-    let builtin = symbol == ETS.metric
+    let builtin = symbol == *EPSILON_SYMBOL
+        || symbol == ETS.metric
         || symbol == ETS.flat
         || symbol == AGS.gamma
         || symbol == AGS.gamma5
@@ -442,6 +478,22 @@ fn builtin_tensor_structure(
                 _ => None,
             };
             (factory, "two compatible representation ports", expected)
+        } else if symbol == *EPSILON_SYMBOL {
+            let signature = "equal representation ports or contracted vectors";
+            let ports = ports.as_ref().map_err(|_| invalid("epsilon", signature))?;
+            let visible = ports
+                .iter()
+                .copied()
+                .collect::<Option<Vec<_>>>()
+                .ok_or_else(|| invalid("epsilon", signature))?;
+            if visible.is_empty() || visible.iter().any(|port| *port != visible[0]) {
+                return Err(invalid("epsilon", signature));
+            }
+            (
+                "epsilon",
+                signature,
+                Some(ExplicitKey::from_iter(visible, symbol, None)),
+            )
         } else if symbol == AGS.gamma {
             (
                 "gamma",
@@ -607,37 +659,6 @@ fn validate_builtin_placeholder_channels(
         _ => {}
     }
     Ok(())
-}
-
-fn from_idenso_atom(
-    self_: &PyRef<'_, TensorExpression>,
-    py: Python<'_>,
-    atom: Atom,
-) -> PyResult<Py<TensorExpression>> {
-    let interface = if atom.as_view().is_zero() {
-        self_.interface.clone()
-    } else if has_structured_syntax(atom.as_view()) {
-        reinfer_structured(atom.clone())?.interface
-    } else if self_.interface.canonical().is_scalar() {
-        PartialStructure::from_logical_slots(std::iter::empty())
-    } else {
-        return Err(PyValueError::new_err(
-            "Idenso transformation removed the tensor syntax of a non-scalar expression",
-        ));
-    };
-    TensorExpression::from_atom_interface_descriptor(
-        py,
-        atom,
-        interface,
-        self_.name,
-        self_.name_args.clone(),
-    )
-}
-
-fn idenso_input(self_: &PyRef<'_, TensorExpression>) -> PythonExpression {
-    PythonExpression {
-        expr: self_.as_super().expr.clone(),
-    }
 }
 
 pub(crate) enum TensorOperand {
@@ -888,6 +909,18 @@ fn infer_interface(atom: &Atom) -> PyResult<PartialStructure> {
                     return false;
                 }
                 let arguments = function.iter().collect::<Vec<_>>();
+                // A representation carrying an index must be a valid slot. Falling back
+                // to its bare representation would turn contracted indices into open ports.
+                if symbol.has_tag(&SPENSO_TAG.representation)
+                    && arguments.len() > 1
+                    && (arguments.len() != 2
+                        || Slot::<LibraryRep, AbstractIndex>::try_from(value).is_err())
+                {
+                    syntax_error = Some(format!(
+                        "invalid indexed representation `{value}`; cook nested indices before constructing a TensorExpression"
+                    ));
+                    return false;
+                }
                 if symbol == SPENSO_TAG.bracket && arguments.is_empty() {
                     syntax_error = Some("ordered tensor products require at least one operand".into());
                     return false;
@@ -1023,6 +1056,11 @@ fn lower_tensor_powers(value: AtomView<'_>) -> PyResult<Atom> {
             })?;
             if repetitions == 0 {
                 return Ok(Atom::num(1));
+            }
+            // Explicit Einstein labels already identify every contraction. Only unresolved
+            // ports need the automatic pair selection performed by tensor multiplication.
+            if interface.open_positions().is_empty() {
+                return Ok(base.pow(Atom::num(repetitions)));
             }
 
             let factor = StructuredAtom::new(base, interface);
@@ -1573,13 +1611,37 @@ fn inferred_descriptor(atom: AtomView<'_>) -> (Option<Symbol>, Vec<Atom>) {
 #[pymethods]
 impl TensorExpression {
     /// Construct a tensor expression, preserving existing tensor metadata or inferring it.
+    ///
+    /// Pass `cook_indices=CookSettings.indices()` to flatten nested index payloads before
+    /// inferring the tensor interface, including expressions returned by `wrap_indices()`.
+    /// Custom settings control the index encoding, source filters, and output tags.
     #[new]
+    #[pyo3(signature = (expression, *, cook_indices = None))]
     #[gen_stub(override_return_type(type_repr = "TensorExpression"))]
     fn new(
         py: Python<'_>,
         expression: &Bound<'_, PyAny>,
+        cook_indices: Option<&PyCookSettings>,
     ) -> PyResult<(TensorExpression, PythonExpression)> {
-        let tensor = as_tensor(py, expression)?;
+        let tensor = if let Some(settings) = cook_indices {
+            let atom = expression
+                .extract::<ConvertibleToExpression>()?
+                .to_expression()
+                .expr;
+            let atom = settings
+                .rust()
+                .try_cook_indices(atom.as_view())
+                .map_err(|error| {
+                    CookingError::new_err(format!("cannot cook indices: {error:?}"))
+                })?;
+            if let Ok(expression) = expression.extract::<PyRef<'_, Self>>() {
+                Self::from_transformed_atom(&expression, py, atom)?
+            } else {
+                Self::from_atom_interface(py, atom, None)?
+            }
+        } else {
+            as_tensor(py, expression)?
+        };
         let tensor = tensor.borrow(py);
         Ok((
             tensor.clone(),
@@ -1996,70 +2058,228 @@ impl TensorExpression {
     }
 
     /// Apply Idenso's gamma-algebra simplifier and re-infer the tensor interface.
+    ///
+    /// Simplify registered Spenso gamma chains and traces with Idenso's default rules.
+    ///
+    /// The dimension-generic part applies compatible Clifford anticommutation, adjacent
+    /// contractions, and ordinary odd/even trace recursion. Chisholm identities, gamma-five
+    /// anticommutation and traces, gamma-zero conjugation, and chiral-projector rules are applied
+    /// only when the expression carries explicit four-dimensional Minkowski and bispinor
+    /// representations.
+    ///
+    /// This method does not select or implement a dimensional-regularization gamma-five scheme.
+    /// Its gamma-five rules are strictly four-dimensional, and the default method does
+    /// not enable the optional three-gamma epsilon expansion available through `GammaSimplifySettings`.
+    /// Gamma factors must use the Spenso representation-aware forms registered on import;
+    /// unrecognized plain Symbolica functions are left unchanged.
+    ///
+    /// # Examples
+    /// ```python
+    /// >>> from symbolica import E
+    /// >>> from symbolica.community.spenso import TensorExpression
+    /// >>> # Built-in representations are registered automatically on import.
+    /// >>> trace = E('''
+    /// ...     gamma(bis(4,a),bis(4,b),mink(4,mu))
+    /// ...     * gamma(bis(4,b),bis(4,a),mink(4,nu))
+    /// ... ''', default_namespace="spenso")
+    /// >>> simplified = TensorExpression(trace).simplify_gamma()
+    /// >>> "gamma(" not in str(simplified) and "g(" in str(simplified)
+    /// True
+    /// ```
+    ///
+    /// The native gamma argument order is `bis(dim,alpha), bis(dim,beta), mink(dim,mu)`:
+    /// `alpha` and `beta` are spinor indices, followed by the Lorentz index `mu`.
+    /// These forms can also be constructed through the HEP tensor library.
+    ///
+    /// # Arguments
+    /// - `self`: expression containing gamma matrix products and traces
+    ///
+    /// # Returns
+    /// The simplified expression with gamma algebra applied.
+    ///
+    /// # Examples:
+    /// ```python
+    /// from symbolica.community.spenso import TensorLibrary, TensorName
+    /// from symbolica.community.spenso import TensorExpression
+    /// from symbolica import S, Expression
+    /// # Get HEP library with standard tensors
+    /// hep_lib = TensorLibrary.hep_lib()
+    /// # Access standard tensors like gamma matrices
+    /// gamma_structure = hep_lib[S("spenso::gamma")]
+    /// print(gamma_structure)
+    /// print(TensorExpression(gamma_structure(3, 4, 7) * gamma_structure(7, 4, 3)).simplify_gamma())
+    /// ```
     #[pyo3(signature = (settings = None))]
     fn simplify_gamma(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
         settings: Option<&PyGammaSimplifySettings>,
     ) -> PyResult<Py<Self>> {
-        let result = idenso::python::simplify_gamma(&idenso_input(&self_), settings);
-        from_idenso_atom(&self_, py, result.expr)
+        let result = match settings {
+            Some(settings) => self_.as_super().expr.simplify_gamma_with(settings.rust()),
+            None => self_.as_super().expr.simplify_gamma(),
+        };
+        Self::from_transformed_atom(&self_, py, result)
     }
 
     /// Convert bispinor tensors into chain/trace shorthands and join adjacent gamma chains.
     fn collect_gamma_chains(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = idenso::python::collect_gamma_chains(&idenso_input(&self_));
-        from_idenso_atom(&self_, py, result.expr)
+        let result = self_.as_super().expr.collect_gamma_chains();
+        Self::from_transformed_atom(&self_, py, result)
     }
 
     /// Simplify products and linear combinations involving the time-like gamma matrix `gamma0`.
     fn simplify_gamma0(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = idenso::python::simplify_gamma0(&idenso_input(&self_));
-        from_idenso_atom(&self_, py, result.expr)
+        let result = self_.as_super().expr.simplify_gamma0();
+        Self::from_transformed_atom(&self_, py, result)
     }
 
     /// Rewrite conjugated gamma matrices as gamma0-sandwiched matrices.
+    ///
+    /// Rewrite conjugated gamma matrices as gamma0-sandwiched matrices with fresh spinor indices.
+    ///
+    /// Raises `GammaConjugationError` when the expression cannot be rewritten consistently.
     fn simplify_gamma_conjugate(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = idenso::python::simplify_gamma_conjugate(&idenso_input(&self_))?;
-        from_idenso_atom(&self_, py, result.expr)
+        let result = self_
+            .as_super()
+            .expr
+            .simplify_gamma_conj::<AbstractIndex>()
+            .map_err(|error| GammaConjugationError::new_err(error.to_string()))?;
+        Self::from_transformed_atom(&self_, py, result)
     }
 
     /// Simplify Levi-Civita/metric contractions and pairs of Levi-Civita tensors.
+    ///
+    /// Simplify Levi-Civita/metric contractions and pairs of Levi-Civita tensors to a fixed point.
     fn simplify_epsilon(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = idenso::python::simplify_epsilon(&idenso_input(&self_));
-        from_idenso_atom(&self_, py, result.expr)
+        let result = self_.as_super().expr.simplify_epsilon();
+        Self::from_transformed_atom(&self_, py, result)
     }
 
     /// Contract metric and identity tensors and re-infer the external interface.
+    ///
+    /// Simplifies contractions involving metric tensors and identity tensors.
+    ///
+    /// Applies fundamental tensor algebra rules for metric and identity tensors:
+    ///
+    /// **Metric tensor rules:**
+    /// - `gᵘᵛ pᵥ → pᵘ` (index raising/lowering)
+    /// - `gᵘᵛ gᵥρ → gᵘρ` or `δᵘρ` (metric composition)
+    /// - `gᵘᵤ → D` (dimension of spacetime)
+    /// - `ηᵘᵛ pᵥ → pᵘ` (flat metric contractions)
+    ///
+    /// **Identity tensor rules:**
+    /// - `δᵘᵛ pᵥ → pᵘ` (Kronecker delta contraction)
+    /// - `δᵘᵤ → D` (trace of identity)
+    ///
+    /// The function recognizes metrics as `spenso::g(...)`
+    ///
+    /// # Arguments
+    /// - `self`: expression containing metric/identity tensor contractions
+    ///
+    /// # Returns
+    /// The simplified expression with metric rules applied.
+    ///
+    /// # Examples:
+    /// ```python
+    /// from symbolica.community.spenso import TensorExpression
+    /// from symbolica.community.spenso import Representation, TensorExpression, TensorName
+    /// q = TensorName("q")
+    /// rep = Representation.euc(3)
+    /// g = TensorExpression.g(rep)
+    /// # With slots (creates TensorExpression)
+    /// mu = rep("mu")
+    /// nu = rep("nu")
+    /// print(TensorExpression(g('mu', 'nu') * q(mu)).simplify_metrics())
+    /// ```
     fn simplify_metrics(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = idenso::python::simplify_metrics(&idenso_input(&self_));
-        from_idenso_atom(&self_, py, result.expr)
+        let result = self_.as_super().expr.simplify_metrics();
+        Self::from_transformed_atom(&self_, py, result)
     }
 
     /// Apply Idenso's SU(N) color-algebra simplifier and re-infer the interface.
+    ///
+    /// Simplify registered Spenso color chains, traces, generators, and structure constants.
+    ///
+    /// With the default Python settings, the simplifier evaluates supported closed traces and
+    /// expands contractions between generators on separate fundamental chains. Its normalization
+    /// conventions are
+    ///
+    /// - `Tr(T^a T^b) = TR δ^{ab}`;
+    /// - `Σ_a (T^a)_i^j (T^a)_k^l = TR (δ_i^l δ_k^j - δ_i^j δ_k^l/Nc)`;
+    /// - `Σ_a (T^a)_i^j (T^a)_j^k = CF δ_i^k`;
+    /// - `Σ_{c,d} f^{acd} f^{bcd} = CA δ^{ab}`.
+    /// Antisymmetry and Jacobi identities apply to the registered structure constants.
+    ///
+    /// `CA = Nc`, `CF = (Nc² - 1)/(2Nc)`, and `TR = 1/2` are the conventional fundamental
+    /// SU(Nc) specialization, not identities imposed on every input. The default simplifier keeps
+    /// representation invariants symbolic where possible; explicit dimension substitution is a
+    /// separate `ColorSimplifySettings` option.
+    ///
+    /// # Examples
+    /// ```python
+    /// >>> from symbolica import E
+    /// >>> from symbolica.community.spenso import TensorExpression
+    /// >>> # Built-in representations are registered automatically on import.
+    /// >>> generators = E('''
+    /// ...     t(coad(Nc^2-1,a),cof(Nc,i),dind(cof(Nc,j)))
+    /// ...     * t(coad(Nc^2-1,a),cof(Nc,k),dind(cof(Nc,l)))
+    /// ... ''', default_namespace="spenso")
+    /// >>> simplified = TensorExpression(generators).simplify_color()
+    /// >>> "t(" not in str(simplified) and "g(" in str(simplified)
+    /// True
+    /// ```
+    ///
+    /// **Representation invariants:**
+    /// Use `Representation.dimension`, `.casimir()`, `.dynkin_index()`, and `.gram(...)`
+    /// to construct the scalar invariants associated with explicitly typed color structures.
+    ///
+    /// # Arguments
+    /// - `self`: expression containing SU(N) color structures
+    ///
+    /// # Returns
+    /// The simplified expression, reduced to representation-owned scalar invariants when possible.
+    /// Unsupported or open indexed structures may remain explicitly in the result; their presence
+    /// is not an error.
+    ///
+    /// # Notes
+    /// Only representation-aware Spenso color forms are recognized. Plain Symbolica functions with
+    /// similar names are left unchanged.
     #[pyo3(signature = (settings = None))]
     fn simplify_color(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
         settings: Option<&PyColorSimplifySettings>,
     ) -> PyResult<Py<Self>> {
-        let result = idenso::python::simplify_color(&idenso_input(&self_), settings);
-        from_idenso_atom(&self_, py, result.expr)
+        let result = match settings {
+            Some(settings) => self_.as_super().expr.simplify_color_with(settings.rust()),
+            None => self_.as_super().expr.simplify_color(),
+        };
+        Self::from_transformed_atom(&self_, py, result)
     }
 
     /// Factor around tensors carrying fundamental, antifundamental, or adjoint color.
+    ///
+    /// Factor an expression around tensors carrying fundamental, antifundamental, or adjoint color.
     fn collect_color(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = idenso::python::collect_color(&idenso_input(&self_));
-        from_idenso_atom(&self_, py, result.expr)
+        let result = self_.as_super().expr.collect_color();
+        Self::from_transformed_atom(&self_, py, result)
     }
 
     /// Factor around recognized scalar color invariants such as Casimirs and indices.
+    ///
+    /// Factor an expression around recognized scalar color invariants such as Casimirs and indices.
     fn collect_color_constants(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = idenso::python::collect_color_constants(&idenso_input(&self_));
-        from_idenso_atom(&self_, py, result.expr)
+        let result = self_.as_super().expr.collect_color_constants();
+        Self::from_transformed_atom(&self_, py, result)
     }
 
     /// Rewrite supplied color dimensions and invariants into a representation-aware Casimir basis.
+    ///
+    /// Rewrite the supplied color-representation dimensions and invariants into a Casimir basis.
+    ///
+    /// `fundamental` and `adjoint` are registered Spenso representations supplied by the
+    /// tensor-construction API. Only scalar coefficient positions are rewritten.
     #[pyo3(signature = (*, fundamental, adjoint, settings = None))]
     fn to_color_casimir(
         self_: PyRef<'_, Self>,
@@ -2068,160 +2288,593 @@ impl TensorExpression {
         adjoint: &SpensoRepresentation,
         settings: Option<&PyColorCasimirSettings>,
     ) -> PyResult<Py<Self>> {
-        let result = idenso::python::to_color_casimir(
-            &idenso_input(&self_),
-            RegisteredRepresentation(fundamental.representation),
-            RegisteredRepresentation(adjoint.representation),
-            settings,
+        let fundamental = fundamental.representation.to_symbolic([]);
+        let adjoint = adjoint.representation.to_symbolic([]);
+        let result = self_.as_super().expr.to_color_casimir_with(
+            fundamental.as_view(),
+            adjoint.as_view(),
+            settings.map_or_else(ColorCasimirSettings::default, PyColorCasimirSettings::rust),
         );
-        from_idenso_atom(&self_, py, result.expr)
+        Self::from_transformed_atom(&self_, py, result)
     }
 
     /// Replace supported `cof(N)` invariants by explicit dimension formulas.
+    ///
+    /// Replace supported `cof(N)` Casimir, Dynkin-index, and Gram invariants by dimension formulas.
     fn to_cof_dimension_invariants(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = idenso::python::to_cof_dimension_invariants(&idenso_input(&self_));
-        from_idenso_atom(&self_, py, result.expr)
+        let result = self_.as_super().expr.to_cof_dimension_invariants();
+        Self::from_transformed_atom(&self_, py, result)
     }
 
     /// Expand around color structures and wrap each scalar coefficient with `symbol`.
+    ///
+    /// Expand around color structures and wrap each resulting scalar coefficient with `symbol`.
     fn wrap_color(self_: PyRef<'_, Self>, py: Python<'_>, symbol: Symbol) -> PyResult<Py<Self>> {
-        let result = idenso::python::wrap_color(&idenso_input(&self_), symbol);
-        from_idenso_atom(&self_, py, result.expr)
+        let result = self_.as_super().expr.wrap_color(symbol);
+        Self::from_transformed_atom(&self_, py, result)
     }
 
     /// Selectively expand around Minkowski structures into `(structure, coefficient)` pairs.
-    fn expand_mink(self_: PyRef<'_, Self>) -> Vec<idenso::python::PythonTerm> {
-        idenso::python::expand_mink(&idenso_input(&self_))
+    ///
+    /// Expand products around factors carrying registered Minkowski indices.
+    ///
+    /// This is a selective symbolic expansion: Minkowski-bearing factors become polynomial
+    /// variables while unrelated sectors remain coefficients. It does not substitute explicit
+    /// four-vector components or choose a metric signature.
+    ///
+    /// # Arguments
+    /// - `self`: a factorized Spenso-compatible expression.
+    ///
+    /// # Returns
+    /// `(structure, coefficient)` pairs distributed around Minkowski-bearing factors.
+    ///
+    /// # Examples
+    /// ```python
+    /// >>> from symbolica.community.spenso import TensorExpression
+    /// >>> from symbolica.community.spenso import Representation, TensorName
+    /// >>> # Built-in representations are registered automatically on import.
+    /// >>> minkowski = Representation.mink(4)
+    /// >>> mu, nu = minkowski("mu"), minkowski("nu")
+    /// >>> p, q, r = TensorName("p"), TensorName("q"), TensorName("r")
+    /// >>> p_mu = p(mu).to_expression()
+    /// >>> q_nu, r_nu = q(nu).to_expression(), r(nu).to_expression()
+    /// >>> factorized = p_mu * (q_nu + r_nu)
+    /// >>> terms = TensorExpression(factorized).expand_mink()
+    /// >>> sum(structure * coefficient for structure, coefficient in terms) == p_mu * q_nu + p_mu * r_nu
+    /// True
+    /// ```
+    fn expand_mink(self_: PyRef<'_, Self>) -> Vec<PythonTerm> {
+        python_terms(self_.as_super().expr.expand_mink())
     }
 
     /// Selectively expand around bispinor structures into `(structure, coefficient)` pairs.
-    fn expand_bis(self_: PyRef<'_, Self>) -> Vec<idenso::python::PythonTerm> {
-        idenso::python::expand_bis(&idenso_input(&self_))
+    ///
+    /// Expand products around factors carrying registered bispinor indices.
+    ///
+    /// # Arguments
+    /// - `self`: a factorized Spenso-compatible expression.
+    ///
+    /// # Returns
+    /// `(structure, coefficient)` pairs distributed around bispinor-bearing factors. No explicit
+    /// spinor components are substituted.
+    ///
+    /// # Examples
+    /// ```python
+    /// >>> from symbolica.community.spenso import TensorExpression
+    /// >>> from symbolica.community.spenso import Representation, TensorName
+    /// >>> # Built-in representations are registered automatically on import.
+    /// >>> bispinor = Representation.bis(4)
+    /// >>> alpha, beta = bispinor("alpha"), bispinor("beta")
+    /// >>> u, v, w = TensorName("u"), TensorName("v"), TensorName("w")
+    /// >>> u_alpha = u(alpha).to_expression()
+    /// >>> v_beta, w_beta = v(beta).to_expression(), w(beta).to_expression()
+    /// >>> factorized = u_alpha * (v_beta + w_beta)
+    /// >>> terms = TensorExpression(factorized).expand_bis()
+    /// >>> sum(structure * coefficient for structure, coefficient in terms) == u_alpha * v_beta + u_alpha * w_beta
+    /// True
+    /// ```
+    fn expand_bis(self_: PyRef<'_, Self>) -> Vec<PythonTerm> {
+        python_terms(self_.as_super().expr.expand_bis())
     }
 
     /// Selectively expand around Minkowski and bispinor structures into factorized pairs.
-    fn expand_mink_bis(self_: PyRef<'_, Self>) -> Vec<idenso::python::PythonTerm> {
-        idenso::python::expand_mink_bis(&idenso_input(&self_))
+    ///
+    /// Expand products around factors carrying Minkowski or bispinor indices.
+    ///
+    /// This combines the selection patterns of `expand_mink()` and `expand_bis()` in one
+    /// coefficient pass. Other representation families remain in the coefficient sector.
+    ///
+    /// # Arguments
+    /// - `self`: a factorized Spenso-compatible expression.
+    ///
+    /// # Returns
+    /// `(structure, coefficient)` pairs distributed around both selected representation families.
+    ///
+    /// # Examples
+    /// ```python
+    /// >>> from symbolica.community.spenso import TensorExpression
+    /// >>> from symbolica.community.spenso import Representation, TensorName
+    /// >>> # Built-in representations are registered automatically on import.
+    /// >>> minkowski, bispinor = Representation.mink(4), Representation.bis(4)
+    /// >>> p_mu = TensorName("p")(minkowski("mu")).to_expression()
+    /// >>> q_mu = TensorName("q")(minkowski("mu")).to_expression()
+    /// >>> u_a = TensorName("u")(bispinor("a")).to_expression()
+    /// >>> v_a = TensorName("v")(bispinor("a")).to_expression()
+    /// >>> factorized = (p_mu + q_mu) * (u_a + v_a)
+    /// >>> expected = p_mu * u_a + p_mu * v_a + q_mu * u_a + q_mu * v_a
+    /// >>> terms = TensorExpression(factorized).expand_mink_bis()
+    /// >>> sum(structure * coefficient for structure, coefficient in terms) == expected
+    /// True
+    /// ```
+    fn expand_mink_bis(self_: PyRef<'_, Self>) -> Vec<PythonTerm> {
+        python_terms(self_.as_super().expr.expand_mink_bis())
     }
 
     /// Selectively expand around metric tensors into `(structure, coefficient)` pairs.
-    fn expand_metrics(self_: PyRef<'_, Self>) -> Vec<idenso::python::PythonTerm> {
-        idenso::python::expand_metrics(&idenso_input(&self_))
+    ///
+    /// Expand products around registered metric tensors.
+    ///
+    /// This is a structural expansion only. It neither contracts the metrics nor substitutes a
+    /// dimension or signature; call `simplify_metrics()` separately for supported contractions.
+    ///
+    /// # Arguments
+    /// - `self`: a factorized Spenso-compatible expression.
+    ///
+    /// # Returns
+    /// `(structure, coefficient)` pairs distributed around metric factors.
+    ///
+    /// # Examples
+    /// ```python
+    /// >>> from symbolica.community.spenso import TensorExpression
+    /// >>> from symbolica.community.spenso import Representation, TensorExpression
+    /// >>> # Built-in representations are registered automatically on import.
+    /// >>> minkowski = Representation.mink(4)
+    /// >>> metric = TensorExpression.g(minkowski)
+    /// >>> g_mn = metric(minkowski("mu"), minkowski("nu")).to_expression()
+    /// >>> g_rs = metric(minkowski("rho"), minkowski("sigma")).to_expression()
+    /// >>> g_ab = metric(minkowski("alpha"), minkowski("beta")).to_expression()
+    /// >>> factorized = g_mn * (g_rs + g_ab)
+    /// >>> terms = TensorExpression(factorized).expand_metrics()
+    /// >>> sum(structure * coefficient for structure, coefficient in terms) == g_mn * g_rs + g_mn * g_ab
+    /// True
+    /// ```
+    fn expand_metrics(self_: PyRef<'_, Self>) -> Vec<PythonTerm> {
+        python_terms(self_.as_super().expr.expand_metrics())
     }
 
     /// Selectively expand around color structures into `(structure, coefficient)` pairs.
-    fn expand_color(self_: PyRef<'_, Self>) -> Vec<idenso::python::PythonTerm> {
-        idenso::python::expand_color(&idenso_input(&self_))
+    ///
+    /// Expand products around registered color factors.
+    ///
+    /// Fundamental, antifundamental, adjoint, color-chain, color-trace, and supported invariant
+    /// factors form the selected sector. This only distributes the symbolic expression; use
+    /// `simplify_color()` separately to apply SU(N) identities.
+    ///
+    /// # Arguments
+    /// - `self`: a factorized Spenso-compatible expression.
+    ///
+    /// # Returns
+    /// `(structure, coefficient)` pairs distributed around color-bearing factors.
+    ///
+    /// # Examples
+    /// ```python
+    /// >>> from symbolica.community.spenso import TensorExpression
+    /// >>> from symbolica.community.spenso import Representation, TensorExpression
+    /// >>> # Built-in representations are registered automatically on import.
+    /// >>> adjoint, fundamental = Representation.coad(8), Representation.cof(3)
+    /// >>> antifundamental = fundamental.dual()
+    /// >>> generator = TensorExpression.t(8, 3)
+    /// >>> t_a = generator(
+    /// ...     adjoint("a"), fundamental("i"), antifundamental("j")
+    /// ... ).to_expression()
+    /// >>> t_b = generator(
+    /// ...     adjoint("b"), fundamental("k"), antifundamental("l")
+    /// ... ).to_expression()
+    /// >>> t_c = generator(
+    /// ...     adjoint("c"), fundamental("m"), antifundamental("n")
+    /// ... ).to_expression()
+    /// >>> factorized = t_a * (t_b + t_c)
+    /// >>> terms = TensorExpression(factorized).expand_color()
+    /// >>> sum(structure * coefficient for structure, coefficient in terms) == t_a * t_b + t_a * t_c
+    /// True
+    /// ```
+    fn expand_color(self_: PyRef<'_, Self>) -> Vec<PythonTerm> {
+        python_terms(ColorSimplifier::expand_color(&self_.as_super().expr))
     }
 
     /// Selectively expand around the supplied Symbolica patterns into factorized pairs.
+    ///
+    /// Selectively expand around the supplied expression patterns.
+    ///
+    /// Results retain the Rust API's `(structure, coefficient)` factorization.
     fn expand_in_patterns(
         self_: PyRef<'_, Self>,
         patterns: Vec<PythonExpression>,
-    ) -> Vec<idenso::python::PythonTerm> {
-        idenso::python::expand_in_patterns(&idenso_input(&self_), patterns)
+    ) -> Vec<PythonTerm> {
+        let patterns = patterns
+            .iter()
+            .map(|pattern| pattern.expr.to_pattern())
+            .collect::<Vec<_>>();
+        python_terms(self_.as_super().expr.expand_in_patterns(&patterns))
     }
 
     /// Wrap every abstract-index payload with `header` and return an ordinary expression.
     ///
     /// Wrapped payloads are not Spenso abstract indices until they are cooked, so the result
     /// intentionally has no `TensorExpression` interface.
+    ///
+    /// Wrap all abstract indices with a header symbol
+    ///
+    /// # Arguments
+    /// - `self`: input expression containing tensor indices
+    /// - `header`: symbol to use as the wrapper function for all indices
+    ///
+    /// # Returns
+    /// Expression with all indices wrapped by the header symbol.
+    ///
+    /// # Examples:
+    /// ```python
+    /// from symbolica.community.spenso import TensorName, Slot, Representation
+    /// import symbolica as sp
+    /// from symbolica.community.spenso import TensorExpression
+    ///
+    /// T = TensorName("T")
+    /// rep = Representation.euc(3)
+    /// # With slots (creates TensorExpression)
+    /// mu = rep("mu")
+    /// nu = rep("nu")
+    /// x = sp.S("x")
+    /// tensor_with_args = T(x, mu, nu)  # T(x; mu, nu)
+    /// print(tensor_with_args)
+    /// print(tensor_with_args.wrap_indices(sp.S('wrap')))
+    ///
+    /// ```
     fn wrap_indices(self_: PyRef<'_, Self>, header: Symbol) -> PythonExpression {
-        idenso::python::wrap_indices(&idenso_input(&self_), header)
+        self_.as_super().expr.wrap_indices(header).into()
     }
 
     /// Flatten nested representation-index payloads using index cooking by default.
+    ///
+    /// Convert complex nested index structures into flattened symbolic names.
+    ///
+    /// Transforms hierarchical index expressions within tensor function arguments
+    /// into simplified, flat symbolic representations. This "cooking" process is
+    /// essential for pattern matching, simplification, and computational efficiency
+    /// when dealing with complex tensor expressions.
+    ///
+    /// **Index Cooking Transformation:**
+    /// - Nested structure: `mink(4, f(g(h(μ))))` → `mink(4, f_g_h_mu)`
+    /// - Function chains: `lorentz(up(mu))` → `lorentz(up_mu)`
+    /// - Complex arguments: `tensor(rep(dim,type(idx)))` → `tensor(rep(dim,type_idx))`
+    ///
+    /// **Scope:**
+    /// - Only affects indices appearing as function arguments
+    /// - Preserves top-level function structure
+    /// # Arguments
+    /// - `self`: expression containing complex nested index structures
+    ///
+    /// # Returns
+    /// Expression with flattened, simplified index names.
+    ///
+    /// # Examples:
+    /// ```python
+    /// from symbolica.community.spenso import TensorName, Slot, Representation
+    /// import symbolica as sp
+    /// from symbolica.community.spenso import CookSettings, TensorExpression
+    ///
+    /// T = TensorName("T")
+    /// rep = Representation.euc(3)
+    /// # With slots (creates TensorExpression)
+    /// mu = rep("mu")
+    /// nu = rep("nu")
+    /// x = sp.S("x")
+    /// tensor_with_args = T(x, mu, nu)  # T(x; mu, nu)
+    /// print(tensor_with_args)
+    /// print(
+    ///     TensorExpression(
+    ///         tensor_with_args.wrap_indices(sp.S("wrap")),
+    ///         cook_indices=CookSettings.indices(),
+    ///     )
+    /// )
+    /// ```
     #[pyo3(signature = (settings = None))]
     fn cook_indices(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
         settings: Option<&PyCookSettings>,
     ) -> PyResult<Py<Self>> {
-        let result = idenso::python::cook_indices(&idenso_input(&self_), settings)?;
-        from_idenso_atom(&self_, py, result.expr)
+        let result = PyCookSettings::indices_or(settings)
+            .try_cook_indices(self_.as_super().expr.as_view())
+            .map_err(|error| CookingError::new_err(format!("cannot cook indices: {error:?}")))?;
+        Self::from_transformed_atom(&self_, py, result)
     }
 
     /// Encode one function call as an ordinary Symbolica expression.
+    ///
+    /// Convert a single function call into a flattened variable symbol.
+    ///
+    /// Transforms a function expression with arguments into a single symbolic variable
+    /// whose name encodes both the function name and its arguments. This is the
+    /// atomic version of `cook_indices()`, operating on individual function calls
+    /// rather than complete expressions.
+    ///
+    /// **Function Cooking Transform:**
+    /// - Simple function: `f(a, b)` → `f_a_b`
+    /// - Nested arguments: `tensor(rep(mu))` → `tensor_rep_mu`
+    /// - Multiple arguments: `gamma(alpha, beta, mu)` → `gamma_alpha_beta_mu`
+    /// - Complex names: `my_function(x, y)` → `my_function_x_y`
+    ///
+    ///
+    /// **Constraints:**
+    /// - Input must be a single function call (not sum, product, etc.)
+    /// - Arguments must be cookable (symbols, numbers, simple functions)
+    /// - Cannot cook expressions containing polynomials or complex structures
+    ///
+    /// # Arguments
+    /// - `self`: expression representing a single function call to cook
+    ///
+    /// # Returns
+    /// Expression containing the flattened variable symbol.
+    ///
+    /// # Raises
+    /// `TypeError` if input is not a cookable function or contains invalid argument types.
+    ///
+    /// # Examples:
+    /// ```python
+    /// import symbolica as sp
+    /// from symbolica.community.spenso import TensorExpression
+    ///
+    /// # Simple function cooking
+    /// f = sp.S('f')
+    /// a, b = sp.S('a','b')
+    ///
+    /// cooked = TensorExpression(f(a, b)).cook_function()
+    /// print(cooked)  # Outputs: f_a_b
+    /// ```
     #[pyo3(signature = (settings = None))]
     fn cook_function(
         self_: PyRef<'_, Self>,
         settings: Option<&PyCookSettings>,
     ) -> PyResult<PythonExpression> {
-        idenso::python::cook_function(&idenso_input(&self_), settings)
+        let settings = PyCookSettings::flattened_or(settings);
+        self_
+            .as_super()
+            .expr
+            .cook_function_with_settings(&settings)
+            .map(Into::into)
+            .map_err(|error| CookingError::new_err(format!("cannot cook: {error:?}")))
     }
 
-    /// Wrap only contracted-index payloads with `header` and re-infer the interface.
+    /// Wrap only contracted-index payloads with `header` and return an ordinary expression.
     ///
+    /// Wrapped payloads remain available for symbolic matching and custom cooking. Restore
+    /// tensor inference with `TensorExpression(result, cook_indices=CookSettings.indices())`.
     /// Raises `ValueError` when the expression cannot be parsed as a tensor network.
-    fn wrap_dummies(self_: PyRef<'_, Self>, py: Python<'_>, header: Symbol) -> PyResult<Py<Self>> {
-        let result = idenso::python::wrap_dummies(&idenso_input(&self_), header)?;
-        from_idenso_atom(&self_, py, result.expr)
+    ///
+    /// Wraps only the dummy (contracted) indices within the expression using a header symbol.
+    ///
+    /// Similar to `wrap_indices`, but selectively identifies and wraps only contracted
+    /// indices (those appearing once upstairs and once downstairs, or twice in a
+    /// self-dual representation), leaving external (dangling) indices untouched.
+    /// This is crucial for proper index management in tensor calculations.
+    ///
+    /// Contracted indices are those that:
+    /// - Appear in both upper and lower positions (for dualizable reps)
+    /// - Appear twice in the same position (for self-dual reps)
+    /// - Are summed over (Einstein summation convention)
+    ///
+    /// # Arguments
+    /// - `self`: input expression containing both dummy and free indices
+    /// - `header`: symbol to use as wrapper function name for dummy indices only
+    ///
+    /// # Returns
+    /// A new expression with only contracted indices wrapped.
+    ///
+    /// # Raises
+    /// `ValueError` when the expression cannot be parsed as a tensor network.
+    ///
+    /// # Examples:
+    /// ```python
+    /// from symbolica.community.spenso import TensorName, Slot, Representation
+    /// import symbolica as sp
+    /// from symbolica.community.spenso import TensorExpression
+    ///
+    /// T = TensorName("T")
+    /// rep = Representation.euc(3)
+    /// # With slots (creates TensorExpression)
+    /// mu = rep("mu")
+    /// nu = rep("nu")
+    /// x = sp.S("x")
+    /// tensor_with_args = T(x, mu, nu, nu)  # T(x; mu, nu, nu)
+    /// # print(tensor_with_args)
+    /// print(tensor_with_args.wrap_dummies(sp.S('wrap')))
+    ///
+    /// ```
+    fn wrap_dummies(self_: PyRef<'_, Self>, header: Symbol) -> PyResult<PythonExpression> {
+        self_
+            .as_super()
+            .expr
+            .wrap_dummies::<AbstractIndex>(header)
+            .map(Into::into)
+            .map_err(|error| PyValueError::new_err(error.to_string()))
     }
 
     /// Return the ordered external, uncontracted indices as Symbolica expressions.
     ///
     /// Raises `ValueError` when the expression cannot be parsed as a tensor network.
+    ///
+    /// Lists the dangling (external, uncontracted) indices present in the expression.
+    ///
+    /// Identifies and returns all indices that are not summed over (i.e., not dummy
+    /// indices). These are the "free" indices that appear in the final result and
+    /// determine the tensor rank of the expression. For dualizable representations,
+    /// downstairs indices are represented wrapped in `dind(...)`.
+    ///
+    /// This is essential for:
+    /// - Verifying index conservation in tensor equations
+    /// - Determining the rank and structure of tensor expressions
+    /// - Debugging index contractions
+    ///
+    /// # Arguments
+    /// - `self`: tensor expression to analyze
+    ///
+    /// # Returns
+    /// A list of expressions, each representing a free (dangling) index.
+    ///
+    /// # Raises
+    /// `ValueError` when the expression cannot be parsed as a tensor network.
+    ///
+    /// # Examples:
+    /// ```python
+    /// from symbolica.community.spenso import TensorName, Slot, Representation
+    /// import symbolica as sp
+    /// from symbolica.community.spenso import TensorExpression
+    ///
+    /// T = TensorName("T")
+    /// rep = Representation.euc(3)
+    /// # With slots (creates TensorExpression)
+    /// mu = rep("mu")
+    /// nu = rep("nu")
+    /// x = sp.S("x")
+    /// tensor_with_args = T(x, mu, nu, nu)  # T(x; mu, nu, nu)
+    /// # print(tensor_with_args)
+    /// print(tensor_with_args.list_dangling())
+    /// ```
     fn list_dangling(self_: PyRef<'_, Self>) -> PyResult<Vec<PythonExpression>> {
-        idenso::python::list_dangling(&idenso_input(&self_))
+        self_
+            .as_super()
+            .expr
+            .list_dangling::<AbstractIndex>()
+            .map(|indices| indices.into_iter().map(Into::into).collect())
+            .map_err(|error| PyValueError::new_err(error.to_string()))
     }
 
     /// Canonically order tensor factors and deterministically rename contracted indices.
+    ///
+    /// Raises `CanonicalizationError` when the expression cannot be parsed or canonicalized.
     fn canonize(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = idenso::python::canonize(&idenso_input(&self_))?;
-        from_idenso_atom(&self_, py, result.expr)
+        let result = self_
+            .as_super()
+            .expr
+            .canonize::<AbstractIndex>(AbstractIndex::Dummy)
+            .map_err(|error| CanonicalizationError::new_err(error.to_string()))?;
+        Self::from_transformed_atom(&self_, py, result)
     }
 
     /// Replace nested tensor subexpressions by aliases and return the root plus alias mappings.
+    ///
+    /// Replace nested tensor subexpressions by generated aliases.
+    ///
+    /// Returns the rewritten root followed by sorted `(alias, original)` pairs.
     fn alias_subtensors(
         self_: PyRef<'_, Self>,
         tensor_name: &str,
     ) -> (PythonExpression, Vec<(PythonExpression, PythonExpression)>) {
-        idenso::python::alias_subtensors(&idenso_input(&self_), tensor_name)
+        let (root, aliases) = self_
+            .as_super()
+            .expr
+            .alias_subtensors(tensor_name)
+            .into_inner_with_aliases();
+        let mut aliases = aliases.into_iter().collect::<Vec<_>>();
+        aliases.sort_by_cached_key(|(alias, _)| alias.to_string());
+        (
+            root.into(),
+            aliases
+                .into_iter()
+                .map(|(alias, original)| (alias.into(), original.into()))
+                .collect(),
+        )
     }
 
     /// Complex-conjugate this tensor expression and re-infer its interface.
+    ///
+    /// Complex-conjugate an expression while keeping unevaluated conjugations explicit.
     fn spenso_conjugate(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = idenso::python::spenso_conjugate(&idenso_input(&self_));
-        from_idenso_atom(&self_, py, result.expr)
+        let result = self_.as_super().expr.spenso_conj();
+        Self::from_transformed_atom(&self_, py, result)
     }
 
     /// Complex-conjugate this expression and transpose slots in `representation`.
+    ///
+    /// Complex-conjugate an expression and transpose tensor slots in `representation`.
     fn conjugate_transpose(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
         representation: &SpensoRepresentation,
     ) -> PyResult<Py<Self>> {
-        let result = idenso::python::conjugate_transpose(
-            &idenso_input(&self_),
-            RegisteredRepresentation(representation.representation),
-        );
-        from_idenso_atom(&self_, py, result.expr)
+        let result = self_
+            .as_super()
+            .expr
+            .conjugate_transpose(representation.representation.rep);
+        Self::from_transformed_atom(&self_, py, result)
     }
 
     /// Construct the physics-aware Dirac adjoint and re-infer the tensor interface.
+    ///
+    /// Construct the physics-aware Dirac adjoint of a tensor expression.
+    ///
+    /// Idenso takes the symbolic complex conjugate, reverses compatible open bispinor chains, and
+    /// inserts the registered `gamma0` factors required at dangling bispinor slots.
+    /// The input must use the representation-aware Spenso forms registered on import.
+    /// Raises `DiracAdjointError` when the tensor network does not define a consistent adjoint.
+    ///
+    /// # Examples
+    /// ```python
+    /// >>> from symbolica.community.spenso import TensorExpression
+    /// >>> from symbolica.community.spenso import Representation, TensorName
+    /// >>> # Built-in representations are registered automatically on import.
+    /// >>> # Re-importing the module does not require explicit re-registration.
+    /// >>> bispinor = Representation.bis(4)
+    /// >>> spinor = TensorName("u")(bispinor("alpha")).to_expression()
+    /// >>> adjoint = TensorExpression(spinor).dirac_adjoint()
+    /// >>> len(TensorExpression(adjoint).list_dangling()) == 1
+    /// True
+    /// >>> "gamma0" in str(adjoint)
+    /// True
+    /// ```
+    ///
+    /// # Arguments
+    /// - `self`: a Spenso-compatible tensor expression.
+    ///
+    /// # Returns
+    /// The representation-aware Dirac adjoint.
     fn dirac_adjoint(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = idenso::python::dirac_adjoint(&idenso_input(&self_))?;
-        from_idenso_atom(&self_, py, result.expr)
+        let result = self_
+            .as_super()
+            .expr
+            .dirac_adjoint::<AbstractIndex>()
+            .map_err(|error| DiracAdjointError::new_err(error.to_string()))?;
+        Self::from_transformed_atom(&self_, py, result)
     }
 
     /// Encode this expression using Idenso's reversible cooking format.
+    ///
+    /// Encode selected functions as symbols using reversible cooking by default.
+    ///
+    /// Raises `CookingError` when a selected function payload cannot be encoded.
     #[pyo3(signature = (settings = None))]
     fn cook(
         self_: PyRef<'_, Self>,
         settings: Option<&PyCookSettings>,
     ) -> PyResult<PythonExpression> {
-        idenso::python::cook(&idenso_input(&self_), settings)
+        PyCookSettings::reversible_or(settings)
+            .try_cook(self_.as_super().expr.as_view())
+            .map(Into::into)
+            .map_err(|error| CookingError::new_err(format!("cannot cook: {error:?}")))
     }
 
     /// Restore a reversibly cooked expression and re-infer its tensor interface.
+    ///
+    /// Restore symbols produced by matching reversible cooking settings.
     #[pyo3(signature = (settings = None))]
     fn uncook(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
         settings: Option<&PyCookSettings>,
     ) -> PyResult<Py<Self>> {
-        let result = idenso::python::uncook(&idenso_input(&self_), settings);
-        from_idenso_atom(&self_, py, result.expr)
+        let result =
+            PyCookSettings::reversible_or(settings).uncook(self_.as_super().expr.as_view());
+        Self::from_transformed_atom(&self_, py, result)
     }
 
     /// Simplify tensor shorthands using the configured Schoonschip traversal.
@@ -2231,11 +2884,24 @@ impl TensorExpression {
         py: Python<'_>,
         settings: Option<&PySchoonschipSettings>,
     ) -> PyResult<Py<Self>> {
-        let result = idenso::python::schoonschip(&idenso_input(&self_), settings);
-        from_idenso_atom(&self_, py, result.expr)
+        let result = match settings {
+            Some(settings) => self_
+                .as_super()
+                .expr
+                .schoonschip_with_settings(&settings.rust()),
+            None => self_.as_super().expr.schoonschip(),
+        };
+        Self::from_transformed_atom(&self_, py, result)
     }
 
     /// Parse and contract this expression as a symbolic tensor network.
+    ///
+    /// Parse and contract a symbolic tensor network using Schoonschip rules.
+    ///
+    /// Set `expand_contracted_sums=True` to distribute sums before contracted products are executed.
+    ///
+    /// Raises `NetworkToolingError` when the expression is not a valid tensor network or contraction
+    /// fails.
     #[pyo3(signature = (settings = None, *, expand_contracted_sums = false))]
     fn schoonschip_net(
         self_: PyRef<'_, Self>,
@@ -2243,104 +2909,186 @@ impl TensorExpression {
         settings: Option<&PySchoonschipSettings>,
         expand_contracted_sums: bool,
     ) -> PyResult<Py<Self>> {
-        let result = idenso::python::schoonschip_net(
-            &idenso_input(&self_),
-            settings,
-            expand_contracted_sums,
-        )?;
-        from_idenso_atom(&self_, py, result.expr)
+        let mut settings = settings
+            .map(PySchoonschipSettings::rust)
+            .unwrap_or_else(SchoonschipSettings::default_network);
+        settings.expand_contracted_sums |= expand_contracted_sums;
+        let result = self_
+            .as_super()
+            .expr
+            .schoonschip_with_net::<false, AbstractIndex>(&settings)
+            .map_err(|error| NetworkToolingError::new_err(error.to_string()))?;
+        Self::from_transformed_atom(&self_, py, result)
     }
 
     /// Convert contracted rank-one tensors into compact dot-product notation.
+    ///
+    /// Converts contracted Lorentz/Minkowski indices into dot product notation.
+    ///
+    /// Automatically identifies and converts patterns like `p(mink(D, mu)) * q(mink(D, mu))`
+    /// into the compact, representation-carrying `dot(p(mink(D)), q(mink(D)))` notation. This
+    /// simplification is essential for physics calculations involving four-vectors.
+    ///
+    /// The function recognizes:
+    /// - Contracted vector indices: `pᵘqᵤ → p·q`
+    /// - Multiple contractions: `pᵘqᵤrᵛsᵥ → (p·q)(r·s)`
+    /// - Self-contractions: `pᵘpᵤ → p²`
+    ///
+    /// # Arguments
+    /// - `self`: expression containing contracted Minkowski vector indices
+    ///
+    /// # Returns
+    /// The expression with vector contractions converted to dot products.
+    ///
+    /// # Examples:
+    /// ```python
+    /// from symbolica.community.spenso import TensorExpression
+    /// from symbolica.community.spenso import Representation, TensorName
+    /// p = TensorName("p")
+    /// q = TensorName("q")
+    /// rep = Representation.euc(3)
+    /// # With slots (creates TensorExpression)
+    /// mu = rep("mu")
+    /// nu = rep("nu")
+    ///
+    /// print(TensorExpression(p(mu) * q(mu)).to_dots())
+    /// ```
     fn to_dots(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = idenso::python::to_dots(&idenso_input(&self_));
-        from_idenso_atom(&self_, py, result.expr)
+        let result = self_.as_super().expr.to_dots();
+        Self::from_transformed_atom(&self_, py, result)
     }
 
     /// Canonicalize compact dot-product shorthands without expanding them.
+    ///
+    /// Canonicalize compact dot-product shorthands without expanding their tensor structure.
     fn normalize_dots(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = idenso::python::normalize_dots(&idenso_input(&self_));
-        from_idenso_atom(&self_, py, result.expr)
+        let result = self_.as_super().expr.normalize_dots();
+        Self::from_transformed_atom(&self_, py, result)
     }
 
     /// Expand dot products into explicit metric and indexed-vector contractions.
+    ///
+    /// Expand compact dot products into explicit metric and indexed-vector contractions.
+    ///
+    /// Raises `DotExpansionError` when a dot product does not define a valid tensor contraction.
     fn expand_dots(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = idenso::python::expand_dots(&idenso_input(&self_))?;
-        from_idenso_atom(&self_, py, result.expr)
+        let result = self_
+            .as_super()
+            .expr
+            .expand_dots()
+            .map_err(|error| DotExpansionError::new_err(error.to_string()))?;
+        Self::from_transformed_atom(&self_, py, result)
     }
 
     /// Replace metric shorthand such as `g(p(rep), q(rep))` by a compact dot product.
+    ///
+    /// Replace metric shorthand such as `g(p(rep), q(rep.dual()))` by
+    /// `dot(p(rep), q(rep.dual()))`.
     fn metric_shorthand_to_dot(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = idenso::python::metric_shorthand_to_dot(&idenso_input(&self_));
-        from_idenso_atom(&self_, py, result.expr)
+        let result = self_.as_super().expr.metric_shorthand_to_dot();
+        Self::from_transformed_atom(&self_, py, result)
     }
 
     /// Expand every Idenso tensor shorthand into explicit tensor syntax.
+    ///
+    /// Raises `NetworkToolingError` when the expression is not a valid tensor network or evaluation fails.
     fn undo_all(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = idenso::python::undo_all(&idenso_input(&self_))?;
-        from_idenso_atom(&self_, py, result.expr)
+        let result = self_
+            .as_super()
+            .expr
+            .undo_all::<AbstractIndex>()
+            .map_err(|error| NetworkToolingError::new_err(error.to_string()))?;
+        Self::from_transformed_atom(&self_, py, result)
     }
 
     /// Expand Schoonschip shorthands while leaving dots, chains, and traces compact.
+    ///
+    /// Raises `NetworkToolingError` when the expression is not a valid tensor network or evaluation fails.
     fn undo_schoonschip(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = idenso::python::undo_schoonschip(&idenso_input(&self_))?;
-        from_idenso_atom(&self_, py, result.expr)
+        let result = self_
+            .as_super()
+            .expr
+            .undo_schoonschip::<AbstractIndex>()
+            .map_err(|error| NetworkToolingError::new_err(error.to_string()))?;
+        Self::from_transformed_atom(&self_, py, result)
     }
 
     /// Expand dot-product shorthands while leaving other shorthands compact.
+    ///
+    /// Raises `NetworkToolingError` when the expression is not a valid tensor network or evaluation fails.
     fn undo_dots(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = idenso::python::undo_dots(&idenso_input(&self_))?;
-        from_idenso_atom(&self_, py, result.expr)
+        let result = self_
+            .as_super()
+            .expr
+            .undo_dots::<AbstractIndex>()
+            .map_err(|error| NetworkToolingError::new_err(error.to_string()))?;
+        Self::from_transformed_atom(&self_, py, result)
     }
 
     /// Expand open-chain shorthands while leaving other shorthands compact.
+    ///
+    /// Raises `NetworkToolingError` when the expression is not a valid tensor network or evaluation fails.
     fn undo_chain(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = idenso::python::undo_chain(&idenso_input(&self_))?;
-        from_idenso_atom(&self_, py, result.expr)
+        let result = self_
+            .as_super()
+            .expr
+            .undo_chain::<AbstractIndex>()
+            .map_err(|error| NetworkToolingError::new_err(error.to_string()))?;
+        Self::from_transformed_atom(&self_, py, result)
     }
 
     /// Expand trace shorthands while leaving other shorthands compact.
+    ///
+    /// Raises `NetworkToolingError` when the expression is not a valid tensor network or evaluation fails.
     fn undo_trace(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = idenso::python::undo_trace(&idenso_input(&self_))?;
-        from_idenso_atom(&self_, py, result.expr)
+        let result = self_
+            .as_super()
+            .expr
+            .undo_trace::<AbstractIndex>()
+            .map_err(|error| NetworkToolingError::new_err(error.to_string()))?;
+        Self::from_transformed_atom(&self_, py, result)
     }
 
     /// Join adjacent open chains for `representation` and re-infer the interface.
+    ///
+    /// Join adjacent open chains for the supplied representation.
     fn collect_chains(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
         representation: &SpensoRepresentation,
     ) -> PyResult<Py<Self>> {
-        let result = idenso::python::collect_chains(
-            &idenso_input(&self_),
-            RegisteredRepresentation(representation.representation),
-        );
-        from_idenso_atom(&self_, py, result.expr)
+        let result = self_
+            .as_super()
+            .expr
+            .collect_chains(representation.representation.rep);
+        Self::from_transformed_atom(&self_, py, result)
     }
 
     /// Rewrite tensors with two `representation` slots as open-chain factors.
+    ///
+    /// Rewrite tensors with two slots in `representation` as explicit open-chain factors.
     fn chainify(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
         representation: &SpensoRepresentation,
     ) -> PyResult<Py<Self>> {
-        let result = idenso::python::chainify(
-            &idenso_input(&self_),
-            RegisteredRepresentation(representation.representation),
-        );
-        from_idenso_atom(&self_, py, result.expr)
+        let result = self_
+            .as_super()
+            .expr
+            .chainify(representation.representation.rep);
+        Self::from_transformed_atom(&self_, py, result)
     }
 
     /// Convert chains whose endpoints coincide into trace shorthands.
     fn normalize_chains(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = idenso::python::normalize_chains(&idenso_input(&self_));
-        from_idenso_atom(&self_, py, result.expr)
+        let result = self_.as_super().expr.normalize_chains();
+        Self::from_transformed_atom(&self_, py, result)
     }
 
     /// Replace one-factor chain shorthands by their underlying tensor factor.
     fn undo_single_length(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = idenso::python::undo_single_length(&idenso_input(&self_));
-        from_idenso_atom(&self_, py, result.expr)
+        let result = self_.as_super().expr.undo_single_length();
+        Self::from_transformed_atom(&self_, py, result)
     }
 
     /// Materialize unresolved ports and parse this expression as a tensor network.
@@ -3540,6 +4288,38 @@ mod tests {
     }
 
     #[test]
+    fn compact_epsilon_preserves_only_uncontracted_ports() {
+        idenso::representations::initialize();
+        Python::initialize();
+        let mink = Minkowski {}.new_rep(4);
+        let [mu, nu] = [1, 2].map(|index| {
+            mink.slot::<AbstractIndex, _>(AbstractIndex::Normal(index))
+                .to_atom()
+        });
+        let [p, q] = [
+            spenso::vector_symbol!("epsilon_validation_p"),
+            spenso::vector_symbol!("epsilon_validation_q"),
+        ]
+        .map(|symbol| {
+            FunctionBuilder::new(symbol)
+                .add_arg(mink.to_symbolic([]))
+                .finish()
+        });
+        let epsilon = idenso::epsilon::epsilon4(&mu, &nu, &p, &q);
+        let interface = infer_interface(&epsilon).unwrap();
+        assert_eq!(interface.canonical().order(), 2);
+        let scalar = epsilon.clone() * epsilon;
+        assert!(infer_interface(&scalar).unwrap().canonical().is_scalar());
+        assert!(
+            infer_interface(&scalar.simplify_epsilon())
+                .unwrap()
+                .canonical()
+                .is_scalar()
+        );
+        assert!(infer_interface(&idenso::epsilon::epsilon4(&mu, &nu, &p, Atom::num(1))).is_err());
+    }
+
+    #[test]
     fn raw_gamma_trace_accepts_longitudinal_projection() {
         use idenso::shorthands::schoonschip::{Schoonschip, SchoonschipSettings};
 
@@ -4178,6 +4958,155 @@ mod tests {
             assert!(contracted.interface.canonical().is_scalar());
             assert_eq!(contracted.name, None);
             assert!(contracted.name_args.is_empty());
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn tensor_constructor_cooks_wrapped_indices_and_restores_encoded_tensors() {
+        idenso::representations::initialize();
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let representation = SpensoRepresentation {
+                representation: ExtendibleReps::EUCLIDEAN
+                    .new_rep(Dimension::Concrete(3))
+                    .cast(),
+            };
+            let metric = TensorExpression::g(py, &representation)?;
+            let tensor_type = py.get_type::<TensorExpression>();
+            let kwargs = pyo3::types::PyDict::new(py);
+            kwargs.set_item("cook_indices", PyCookSettings::indices())?;
+            for (right, rank) in [("mu", 0), ("nu", 2)] {
+                let indexed = metric.bind(py).call1(("mu", right))?;
+                let wrapped = indexed.call_method1(
+                    "wrap_indices",
+                    (PythonExpression {
+                        expr: Atom::var(symbol!("unified_index_wrapper")),
+                    },),
+                )?;
+                assert!(!wrapped.is_instance_of::<TensorExpression>());
+                assert!(tensor_type.call1((&wrapped,)).is_err());
+                let cooked = tensor_type.call((&wrapped,), Some(&kwargs))?;
+                let cooked = cooked.extract::<Py<TensorExpression>>()?;
+                assert_eq!(cooked.borrow(py).interface.canonical().order(), rank);
+                if rank == 0 {
+                    let simplified = cooked.bind(py).call_method0("simplify_metrics")?;
+                    let simplified = simplified.extract::<PyRef<'_, TensorExpression>>()?;
+                    assert_eq!(simplified.as_super().expr, Atom::num(3));
+                }
+                let encoded = indexed.call_method0("cook")?;
+                assert!(!encoded.is_instance_of::<TensorExpression>());
+                let restored = tensor_type.call1((encoded,))?.call_method0("uncook")?;
+                let restored = restored.extract::<PyRef<'_, TensorExpression>>()?;
+                let indexed = indexed.extract::<PyRef<'_, TensorExpression>>()?;
+                assert_eq!(restored.as_super().expr, indexed.as_super().expr);
+                assert_eq!(restored.interface, indexed.interface);
+            }
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn tensor_constructor_preserves_custom_index_encoding_and_tags() {
+        use symbolica::atom::UserData;
+
+        idenso::representations::initialize();
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let module = pyo3::types::PyModule::new(py, "spenso")?;
+            crate::simplification::register(&module)?;
+            let mode = module
+                .getattr("CookMode")?
+                .getattr("ReversibleEncoding")?
+                .extract()?;
+            let payload = FunctionBuilder::new(symbol!(
+                "constructor_index_source",
+                tags = ["idenso::constructor_input_index"]
+            ))
+            .add_arg(Atom::num(7))
+            .finish();
+            let representation = Minkowski {}.new_rep(4).cast::<LibraryRep>();
+            let raw = FunctionBuilder::new(SPENSO_TAG.tensor_symbol("constructor_cooked_tensor"))
+                .add_arg(representation.to_symbolic([payload.clone()]))
+                .finish();
+            let expression = PythonExpression { expr: raw.clone() }.into_pyobject(py)?;
+            let tensor_type = py.get_type::<TensorExpression>();
+            for preserve_tags in [false, true] {
+                let settings = PyCookSettings::new(
+                    mode,
+                    None,
+                    Some(vec!["idenso::constructor_output_index".into()]),
+                    preserve_tags,
+                );
+                let kwargs = pyo3::types::PyDict::new(py);
+                kwargs.set_item("cook_indices", settings.clone())?;
+                let cooked = tensor_type.call((&expression,), Some(&kwargs))?;
+                let cooked = cooked.extract::<PyRef<'_, TensorExpression>>()?;
+                let slots = cooked.interface.logical_slots();
+                assert_eq!(slots.len(), 1);
+                assert_eq!(slots[0].rep(), representation);
+                let PartialIndex::Explicit(AbstractIndex::Symbol(symbol)) = slots[0].aind else {
+                    panic!("cooking must retain an explicit external index");
+                };
+                let symbol: Symbol = symbol.into();
+                let expected_tag = if preserve_tags {
+                    "idenso::constructor_input_index"
+                } else {
+                    "idenso::constructor_output_index"
+                };
+                assert!(symbol.has_tag(expected_tag));
+                assert_eq!(symbol.get_data(), &UserData::Atom(payload.clone()));
+                assert_eq!(
+                    settings.rust().uncook(cooked.as_super().expr.as_view()),
+                    raw
+                );
+            }
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn wrap_dummies_preserves_raw_payloads_and_free_indices() {
+        idenso::representations::initialize();
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let representation = Minkowski {}.new_rep(4);
+            let mu = representation
+                .slot::<AbstractIndex, _>(AbstractIndex::Normal(17))
+                .to_atom();
+            let nu = representation
+                .slot::<AbstractIndex, _>(AbstractIndex::Normal(19))
+                .to_atom();
+            let momentum = spenso::vector_symbol!("wrapped_dummy_momentum");
+            let atom = ETS.metric(&mu, &nu) * FunctionBuilder::new(momentum).add_arg(&mu).finish();
+            let tensor = TensorExpression::from_atom_interface(py, atom, None)?;
+            let header = symbol!("wrapped_dummy_payload");
+            let wrapped = TensorExpression::wrap_dummies(tensor.borrow(py), header)?;
+            let payload = FunctionBuilder::new(header).add_arg(Atom::num(17)).finish();
+            let wrapped_mu = representation.to_symbolic([payload]);
+            assert_eq!(
+                wrapped.expr,
+                ETS.metric(&wrapped_mu, &nu)
+                    * FunctionBuilder::new(momentum).add_arg(&wrapped_mu).finish()
+            );
+            let wrapped = wrapped.into_pyobject(py)?;
+            assert!(!wrapped.is_instance_of::<TensorExpression>());
+            let kwargs = pyo3::types::PyDict::new(py);
+            kwargs.set_item("cook_indices", PyCookSettings::indices())?;
+            let cooked = py
+                .get_type::<TensorExpression>()
+                .call((wrapped,), Some(&kwargs))?;
+            let cooked = cooked.extract::<Py<TensorExpression>>()?;
+            assert_eq!(cooked.borrow(py).interface, tensor.borrow(py).interface);
+            let simplified = cooked.bind(py).call_method0("simplify_metrics")?;
+            let simplified = simplified.extract::<PyRef<'_, TensorExpression>>()?;
+            assert_eq!(
+                simplified.as_super().expr,
+                FunctionBuilder::new(momentum).add_arg(nu).finish()
+            );
             Ok(())
         })
         .unwrap();
@@ -4849,6 +5778,41 @@ mod tests {
     }
 
     #[test]
+    fn explicit_color_tensor_squares_contract_all_index_pairs() {
+        idenso::representations::initialize();
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let adjoint = ColorAdjoint {}.new_rep(8);
+            let [a, b, c] = [1, 2, 3].map(|index| {
+                adjoint
+                    .slot::<AbstractIndex, _>(AbstractIndex::Normal(index))
+                    .to_atom()
+            });
+            let atom = idenso::color_f!(&a, &b, &c) * idenso::color_f!(&c, &b, &a);
+            let expression = PythonExpression { expr: atom.clone() }.into_pyobject(py)?;
+            let tensor = py.get_type::<TensorExpression>().call1((expression,))?;
+            let tensor = tensor.extract::<Py<TensorExpression>>()?;
+            assert!(tensor.borrow(py).interface.canonical().is_scalar());
+            assert_eq!(tensor.borrow(py).as_super().expr, atom);
+            let simplified = tensor.bind(py).call_method0("simplify_color")?;
+            let simplified = simplified.extract::<PyRef<'_, TensorExpression>>()?;
+            assert!(simplified.interface.canonical().is_scalar());
+            assert_eq!(
+                simplified.as_super().expr,
+                Atom::num(-8) * CS.cas(Atom::num(2), adjoint.to_symbolic([]))
+            );
+
+            let open = TensorExpression::f(py, ConvertibleToDimension(8.into()))?;
+            let square = open.borrow(py).as_super().expr.as_ref().pow(Atom::num(2));
+            let error = TensorExpression::from_atom_interface(py, square, None)
+                .expect_err("a bare rank-three square still has ambiguous port pairings");
+            assert!(error.to_string().contains("ambiguous"));
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
     fn powers_reject_more_than_two_explicit_index_occurrences() {
         let representation = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(4));
         let index = AbstractIndex::Normal(17);
@@ -5203,10 +6167,10 @@ mod tests {
                 .expect("unresolved chain endpoints should return a parse error");
             let wrap_error = TensorExpression::wrap_dummies(
                 expression.bind(py).borrow(),
-                py,
                 symbolica::symbol!("index_tooling_wrap"),
             )
-            .expect_err("unresolved chain endpoints should return a parse error");
+            .err()
+            .expect("unresolved chain endpoints should return a parse error");
 
             for (error, context) in [
                 (list_error, "cannot list dangling indices"),

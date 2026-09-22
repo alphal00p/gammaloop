@@ -22,7 +22,7 @@ follows:
 - `dirac`, `color`, and `epsilon` own domain-specific identities and settings;
 - `selective_expand`, `IndexTooling`, and `cook` provide expression preparation, index hygiene,
   compact symbol encodings, and canonicalization;
-- the optional `python` module registers a Symbolica community-module facade.
+- `spynso3` owns the unified Python facade, exposing Idenso algebra on `TensorExpression`.
 
 Idenso always depends on Spenso with `shadowing`, as well as Linnet and Symbolica. It reuses
 Spenso's representation tags, slot parser, tensor-network graph, and contraction scheduling;
@@ -154,8 +154,8 @@ The shared concrete syntax and which crate owns each rewrite are specified in th
 
 Idenso defaults to `native`, forwarding GMP/MPFR support; `wasm` selects the Wasm backend with
 default features disabled. The core Rust rewrite layer always includes Symbolica and Spenso's
-`shadowing` support. `python` enables community-module functions and automatic representation
-initialization; `python_stubgen` adds stub metadata and enables Symbolica's stub surface.
+`shadowing` support. The `spynso3` crate provides the Python methods and automatic representation
+initialization; its `python_stubgen` feature adds metadata for the unified Spenso module.
 `reference-cases` exposes the otherwise test-only curated identity cases.
 
 The optional `bincode` feature derives binary encoding only for Idenso's zero-sized
@@ -211,8 +211,8 @@ and FeynCalc examples are reference fixtures checked by tests; they are not runt
 those external systems. Benchmarks separately cover Schoonschip modes and vertex-algebra paths.
 
 The default boundary is exercised with `cargo test -p idenso`. Optional representation encoding
-uses `cargo test -p idenso --features bincode`; community-module and stub coverage require their
-respective Python features. The `reference-cases` feature makes the curated cases available to
+uses `cargo test -p idenso --features bincode`; community-module and stub coverage live in
+`spynso3` with its `python_stubgen` feature. The `reference-cases` feature makes the curated cases available to
 non-test consumers but does not add a second simplifier.
 
 For supported workflows, start with the
@@ -223,7 +223,7 @@ and consult the
 specification]. Exact public signatures are in the
 #link("../../../products/idenso/latest/reference/rust/idenso/")[native Idenso Rustdoc]
 and the
-#link("../../../products/idenso/latest/reference/python/idenso-community/")[Python community
+#link("../../../products/idenso/latest/reference/python/spynso3/")[Python community
 module reference].
 
 == Factorized canonicalization and symbolic targets

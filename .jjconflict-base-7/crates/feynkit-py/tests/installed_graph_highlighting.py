@@ -31,7 +31,15 @@ diagram = next(
 graph = diagram.to_linnet()
 snapshot = diagram.to_json()
 source = diagram.to_linnest()
-assert diagram.to_linnest(highlight=graph.empty_subgraph()) == source
+empty = graph.empty_subgraph()
+assert diagram.to_linnest(highlight=empty) != source
+empty_svg = ET.fromstring(diagram.to_svg(highlight=empty))
+assert any(
+    element.get("stroke", "").lower() == "#77777773" for element in empty_svg.iter()
+)
+assert not any(
+    element.get("stroke", "").lower() == "#ffd166" for element in empty_svg.iter()
+)
 internal = graph.filter(edge=lambda edge: not edge.data.is_external)
 paired = next(edge for edge in graph.edges() if not edge.data.is_external)
 highlights = [
@@ -49,7 +57,13 @@ for selected in highlights:
     root = ET.fromstring(svg)
     assert any(
         element.get("stroke", "").lower() == "#ffd166" for element in root.iter()
-    ), "Linnest's default underlay is missing"
+    ), "selected half-edges must retain gold strokes"
+    if selected != graph.full_subgraph():
+        assert any(
+            element.get("stroke", "").lower() == "#77777773"
+            and element.get("stroke-dasharray")
+            for element in root.iter()
+        ), "unselected half-edges must remain visible, muted and dotted"
     assert "prefers-color-scheme:dark" in svg
     assert 'data-theme="dark"' in svg
     assert diagram.to_json() == snapshot

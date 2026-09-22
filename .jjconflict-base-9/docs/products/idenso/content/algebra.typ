@@ -5,7 +5,7 @@
 
 Idenso consumes the Symbolica function form emitted for Spenso structures. Function heads carry
 representation meaning and their arguments carry abstract indices or tensor data. Import the
-Idenso community module before parsing so Symbolica attributes, Spenso tags, and dual
+Spenso community module before parsing so Symbolica attributes, Spenso tags, and dual
 representations are registered in one deterministic order.
 
 == Indices and cooking
@@ -28,27 +28,40 @@ each factor with a distinct header first, while leaving its external indices unt
 // docs-example: compile idenso-dummy-namespaces
 ```python
 import symbolica as sp
-from symbolica.community.idenso import list_dangling, wrap_dummies
-from symbolica.community.spenso import Representation, TensorExpression, TensorName
+from symbolica.community.spenso import (
+    CookSettings,
+    Representation,
+    TensorExpression,
+    TensorName,
+)
 
 rep = Representation.euc(3)
 mu = rep("mu")
 nu = rep("nu")
 rho = rep("rho")
 g = TensorExpression.g(rep)
-p = TensorName("p")
-q = TensorName("q")
+p = TensorName.vector("p")
+q = TensorName.vector("q")
 
-left = g(mu, nu) * p(mu)
-right = g(mu, rho) * q(mu)
-safe_product = wrap_dummies(left, sp.S("lhs")) * wrap_dummies(right, sp.S("rhs"))
+left = TensorExpression(g(mu, nu).to_expression() * p(mu).to_expression())
+right = TensorExpression(g(mu, rho).to_expression() * q(mu).to_expression())
+safe_product = TensorExpression(
+    left.wrap_dummies(sp.S("lhs")) * right.wrap_dummies(sp.S("rhs")),
+    cook_indices=CookSettings.indices(),
+)
 
-assert len(list_dangling(safe_product)) == 2
+assert len(safe_product.list_dangling()) == 2
+assert (
+    safe_product.simplify_metrics().to_expression()
+    == p(nu).to_expression() * q(rho).to_expression()
+)
 ```
 
 The stable invariant is two free indices, `nu` and `rho`; the two occurrences of local `mu`
-belong to separate contractions after wrapping. The generated
-#link("reference/python/idenso-community/wrap_dummies-function/")[`wrap_dummies` reference] records the
+belong to separate contractions after wrapping. `wrap_dummies` returns an ordinary Symbolica
+expression with nested index payloads. The constructor cooks those payloads using the explicit
+`CookSettings.indices()` policy before validating the tensor interface. The generated
+#link("reference/python/spynso3/TensorExpression/#exports-tensorexpression-wrap-dummies-method")[`wrap_dummies` reference] records the
 Python signature, while the exact
 #link("reference/rust/idenso/trait.IndexTooling.html")[`IndexTooling` Rustdoc] covers
 the underlying Rust boundary.
@@ -56,7 +69,7 @@ the underlying Rust boundary.
 #callout("Interpret index failures before simplifying", [
   More or fewer than two dangling indices means a name collided or a slot's representation or
   duality differs from the intended one. An unchanged plain Symbolica function means it was not
-  constructed through Spenso tensor names/representations, or the Idenso module was imported
+  constructed through Spenso tensor names/representations, or the Spenso module was imported
   only after parsing.
   Correct those structural issues before metric, Dirac, or color simplification.
 ])

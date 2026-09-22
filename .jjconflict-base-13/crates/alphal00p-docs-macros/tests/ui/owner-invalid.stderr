@@ -1,0 +1,7 @@
+error: invalid owner type `Vec<`: unexpected end of input, expected one of: `for`, parentheses, `fn`, `unsafe`, `extern`, identifier, `::`, `<`, `dyn`, square brackets, `*`, `&`, `!`, `impl`, `_`, lifetime
+ --> tests/ui/owner-invalid.rs:6:5
+  |
+6 |     #[func(owner = "Vec<")]
+  |     ^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the attribute macro `func` (in Nightly builds, run with -Z macro-backtrace for more info)

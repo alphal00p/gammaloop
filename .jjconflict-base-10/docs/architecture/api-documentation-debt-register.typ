@@ -152,7 +152,7 @@ registration-to-execution journey with an asserted result.
 
 === APIDOC-004 · Idenso identity claims require scientific review
 
-*Priority:* P0 · *Status:* In progress · *Surface:* `idenso-community` Python reference
+*Priority:* P0 · *Status:* In progress · *Surface:* Idenso methods on `spynso3.TensorExpression`
 
 The `simplify_color` prose contains index-inconsistent contractions and a Fierz formula
 that is not consistent with the stated normalization. Gamma-trace and gamma-five
@@ -453,7 +453,7 @@ compilation, mutation, and result-kind errors.
 
 === APIDOC-205 · Idenso Python transformation coverage
 
-*Priority:* P1 · *Status:* In progress · *Surface:* `idenso-community`
+*Priority:* P1 · *Status:* In progress · *Surface:* Idenso methods on `spynso3.TensorExpression`
 
 `dirac_adjoint`, bispinor/color/metric/Minkowski expansion, initialization, and color
 simplification lack checked examples. Existing authored examples are syntax-compiled

@@ -13,14 +13,13 @@ crate-type = ["cdylib"]
 [dependencies]
 feynkit-py = { path = "../../../crates/feynkit-py", default-features = false, features = ["ufo"] }
 spynso3 = { path = "../../../crates/spynso3", default-features = false }
-idenso = { path = "../../../crates/idenso", default-features = false, features = ["python"] }
 symbolica = { version = "=3.0.0", default-features = false, features = ["python_export", "python_abi3"] }
 pyo3 = { version = "0.28", features = ["abi3", "extension-module"] }
 
 [features]
 default = ["native"]
-native = ["feynkit-py/native", "spynso3/native", "idenso/native"]
-wasm = ["feynkit-py/wasm", "spynso3/wasm", "idenso/wasm"]
+native = ["feynkit-py/native", "spynso3/native"]
+wasm = ["feynkit-py/wasm", "spynso3/wasm"]
 
 [profile.dev]
 debug = 0

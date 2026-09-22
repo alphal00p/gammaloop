@@ -1047,6 +1047,24 @@ fn python_required_exports(component: &str) -> Result<&'static [&'static str]> {
             "to_dots",
         ]),
         "spynso3" => Ok(&[
+            "CanonicalizationError",
+            "ColorCasimirSettings",
+            "ColorSimplifySettings",
+            "CookMode",
+            "CookSettings",
+            "CookSourceFilter",
+            "CookTagFilter",
+            "CookingError",
+            "DiracAdjointError",
+            "DotExpansionError",
+            "GammaChainOrdering",
+            "GammaConjugationError",
+            "GammaSimplifySettings",
+            "NetworkToolingError",
+            "SchoonschipContractionOrder",
+            "SchoonschipMode",
+            "SchoonschipSettings",
+            "SchoonschipTraversal",
             "BroadcastFunction",
             "CompiledTensorEvaluator",
             "DisplaySettings",
@@ -1074,14 +1092,14 @@ fn python_required_exports(component: &str) -> Result<&'static [&'static str]> {
             "to_typst",
             "trace",
         ]),
-        "feynkit-community" | "linnet-python" | "idenso-community" | "vakint-community" => Ok(&[]),
+        "feynkit-community" | "linnet-python" | "vakint-community" => Ok(&[]),
         _ => bail!("unknown Python component {component}"),
     }
 }
 
 fn python_export_is_supported(component: &str, name: &str) -> Result<bool> {
     match component {
-        "feynkit-community" | "linnet-python" | "idenso-community" | "vakint-community" => Ok(true),
+        "feynkit-community" | "linnet-python" | "vakint-community" => Ok(true),
         "gammaloop-python" | "spynso3" => Ok(python_required_exports(component)?.contains(&name)),
         _ => bail!("unknown Python component {component}"),
     }
@@ -1454,7 +1472,7 @@ mod tests {
     #[test]
     fn spynso_supported_surface_covers_the_documented_workflow_types() {
         let required = python_required_exports("spynso3").unwrap();
-        assert_eq!(required.len(), 26);
+        assert_eq!(required.len(), 44);
         for entry in [
             "CompiledTensorEvaluator",
             "TensorExpression",
@@ -1498,7 +1516,7 @@ mod tests {
             .iter()
             .flat_map(|declaration| &declaration.members)
             .collect::<Vec<_>>();
-        assert_eq!(members.len(), 111);
+        assert_eq!(members.len(), 125);
         let overload_groups = members
             .iter()
             .filter(|member| {
@@ -1513,7 +1531,7 @@ mod tests {
             .flat_map(|member| &member.members)
             .filter(|member| member.kind == alphal00p_docs_schema::DocMemberKind::Overload)
             .collect::<Vec<_>>();
-        assert_eq!(members.len() - overload_groups + overloads.len(), 113);
+        assert_eq!(members.len() - overload_groups + overloads.len(), 138);
         assert_eq!(
             members
                 .iter()
@@ -1529,7 +1547,7 @@ mod tests {
                     .iter()
                     .filter(|member| member.docs.is_some())
                     .count(),
-            96
+            113
         );
     }
 
@@ -1574,18 +1592,18 @@ def run(value: int) -> int:
         let request = CatalogRequest {
             product_id: "test".to_owned(),
             product_title: "Test".to_owned(),
-            component_id: "idenso-community".to_owned(),
-            package: "idenso".to_owned(),
-            component_title: "Idenso Python".to_owned(),
+            component_id: "spynso3".to_owned(),
+            package: "spynso3".to_owned(),
+            component_title: "Spenso and Idenso Python".to_owned(),
             version: "0.1.0".to_owned(),
             language: ApiLanguage::Python,
-            module: Some("symbolica.community.idenso".to_owned()),
+            module: Some("symbolica.community.spenso".to_owned()),
             features: vec![],
         };
         let catalog = export_catalog(
             &request,
             root,
-            Some(&root.join("docs/api/python/idenso-community.pyi")),
+            Some(&root.join("docs/api/python/spynso3.pyi")),
         )
         .unwrap();
         let items = catalog.root.scopes["exports"]

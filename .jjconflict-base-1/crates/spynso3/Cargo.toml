@@ -2,13 +2,13 @@
 name = "spynso3"
 version = "0.1.2"
 edition = "2024"
-description = "Pyo3 bindings for spenso"
+description = "Python tensor and simplification bindings for Spenso and Idenso"
 license = "MIT"
 repository = "https://github.com/alphal00p/gammaloop"
 
 [dependencies]
 ahash = { workspace = true, features = ["serde"] }
-idenso = { workspace = true, features = ["python"] }
+idenso = { workspace = true }
 spenso = { workspace = true, features = ["portable-payload", "python", "shadowing"] }
 spenso-hep-lib = { workspace = true, default-features = false }
 spenso-macros = { workspace = true }
@@ -47,7 +47,6 @@ wasm = [
 ]
 python_stubgen = [
   "dep:pyo3-stub-gen",
-  "idenso/python_stubgen",
   "spenso/python_stubgen",
   "symbolica/python_stubgen",
 ]

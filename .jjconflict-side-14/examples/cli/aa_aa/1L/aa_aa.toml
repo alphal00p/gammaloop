@@ -1,0 +1,418 @@
+[cli_settings]
+[cli_settings.state]
+folder = "./examples/cli/aa_aa/1L/gammaloop_state"
+
+[[command_blocks]]
+name = "generate"
+commands = [
+    "import model sm-default.json",
+    "set global kv global.n_cores.feyngen=10",
+    #"set global kv global.generation.uv.orchestrator=legacy_dag_forest",
+
+    "remove processes -p aa_aa",
+    """generate amp a a > a a | a t t~ g ghG ghG~ QCD==0 QED==4 [{1}]
+        --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
+        -p aa_aa -i 1L""",
+    "save dot",
+    "duplicate integrand -p aa_aa -i 1L --output_process_name aa_aa --output_integrand_name 1L_m_uv_UP",
+    "set process -p aa_aa -i 1L_m_uv_UP kv general.m_uv=364.752",
+    "duplicate integrand -p aa_aa -i 1L --output_process_name aa_aa --output_integrand_name 1L_m_uv_DOWN",
+    "set process -p aa_aa -i 1L_m_uv_DOWN kv general.m_uv=22.797",
+    "duplicate integrand -p aa_aa -i 1L --output_process_name aa_aa --output_integrand_name 1L_mu_r_UP",
+    "set process -p aa_aa -i 1L_mu_r_UP kv general.mu_r=364.752",
+    "duplicate integrand -p aa_aa -i 1L --output_process_name aa_aa --output_integrand_name 1L_mu_r_DOWN",
+    "set process -p aa_aa -i 1L_mu_r_DOWN kv general.mu_r=22.797",
+    "save state -o"
+]
+
+[[command_blocks]]
+name = "generate_all_helicities"
+commands = [
+    "import model sm-default.json",
+    "set global kv global.n_cores.feyngen=10",
+
+    "remove processes -p aa_aa_all_helicities",
+    """generate amp a a > a a | a t t~ g ghG ghG~ QCD==0 QED==4 [{1}]
+        --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
+        -p aa_aa_all_helicities -i 1L_ppmm""",
+    #"import graphs ./aa_aa_1L.dot -p aa_aa_all_helicities -i 1L_ppmm",
+    #"import graphs /Users/vjhirsch/Documents/Work/gammaloop_main/examples/cli/aa_aa/1L/aa_aa_1L.dot -p aa_aa_all_helicities -i 1L_ppmm",
+    "save dot",
+    "save state -o",
+    "set process -p aa_aa_all_helicities -i 1L_ppmm kv kinematics.externals.data.helicities=[+1,+1,-1,-1]",
+    "duplicate integrand -p aa_aa_all_helicities -i 1L_ppmm --output_process_name aa_aa_all_helicities --output_integrand_name 1L_mpmm",
+    "set process -p aa_aa_all_helicities -i 1L_mpmm kv kinematics.externals.data.helicities=[-1,+1,-1,-1]",
+    "duplicate integrand -p aa_aa_all_helicities -i 1L_ppmm --output_process_name aa_aa_all_helicities --output_integrand_name 1L_mmmm",
+    "set process -p aa_aa_all_helicities -i 1L_mmmm kv kinematics.externals.data.helicities=[-1,-1,-1,-1]",
+    "duplicate integrand -p aa_aa_all_helicities -i 1L_ppmm --output_process_name aa_aa_all_helicities --output_integrand_name 1L_pmmp",
+    "set process -p aa_aa_all_helicities -i 1L_pmmp kv kinematics.externals.data.helicities=[+1,-1,-1,+1]",
+    "duplicate integrand -p aa_aa_all_helicities -i 1L_ppmm --output_process_name aa_aa_all_helicities --output_integrand_name 1L_pmpm",
+    "set process -p aa_aa_all_helicities -i 1L_pmpm kv kinematics.externals.data.helicities=[+1,-1,+1,-1]",
+
+    "set process -p aa_aa_all_helicities kv general.m_uv=20.0",
+    "set process -p aa_aa_all_helicities kv general.mu_r=20.0",
+]
+
+[default_runtime_settings.kinematics]
+e_cm = 300.0
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [
+   	[ 500.0, 0.0, 0.0,  500.0 ],
+   	[ 500.0, 0.0, 0.0, -500.0 ],
+    [ 500.0, 500.0, 0.0, 0.0 ],
+    "dependent"
+]
+helicities = [+1,+1,-1,-1]
+
+[default_runtime_settings.general]
+evaluator_method = "SummedFunctionMap"
+enable_cache = false
+debug_cache = false
+generate_events = false
+store_additional_weights_in_event = false
+integral_unit = "none"
+mu_r = 91.188
+m_uv = 91.188
+
+[cli_settings.global.generation.evaluator]
+iterative_orientation_optimization = false
+store_atom = false
+compile = true
+summed = false
+summed_function_map = true
+
+# Otherwise leave them enabled with
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = true
+# The option below specifies the generation of threshold for the kinematics supplied
+check_esurface_at_generation = false
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = false
+
+[cli_settings.global.generation.compile]
+compilation_mode = "assembly"
+optimization_level = "O3"
+fast_math = true
+unsafe_math = true
+custom = []
+
+[cli_settings.global.n_cores]
+feyngen = 10
+generate = 10
+compile = 10
+integrate = 10
+
+[cli_settings.global.generation.tropical_subgraph_table]
+panic_on_fail = true
+disable_tropical_generation = false
+
+[default_runtime_settings.sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "summed"
+coordinate_system = "spherical"
+mapping = "linear"
+b = 1.0
+
+[default_runtime_settings.stability]
+check_on_norm = true
+escalate_if_exact_zero = false
+loop_momenta_norm_escalation_factor = -1.0
+
+[[default_runtime_settings.stability.rotation_axis]]
+type = "z"
+
+[[default_runtime_settings.stability.levels]]
+precision = "Double"
+required_precision_for_re = 0.0000000001
+required_precision_for_im = 0.0000000001
+escalate_for_large_weight_threshold = 0.9
+
+[[default_runtime_settings.stability.levels]]
+precision = "Quad"
+required_precision_for_re = 0.00001
+required_precision_for_im = 0.00001
+escalate_for_large_weight_threshold = -1.0
+
+[[default_runtime_settings.stability.levels]]
+precision = "Arb"
+required_precision_for_re = 0.00001
+required_precision_for_im = 0.00001
+escalate_for_large_weight_threshold = -1.0
+
+[[command_blocks]]
+name = "integrate"
+commands = [
+    "run set_model_parameters",
+
+    # --target 1.0214510394091818e-6 0.0
+    "run set_kinematics_a",
+    "set process -p aa_aa kv kinematics.externals.data.helicities=[+1,+1,-1,-1]",
+
+    # --target 5.9925800791548554e-9 0.0
+    # "run set_kinematics_a",
+    # "set process -p aa_aa kv kinematics.externals.data.helicities=[-1,+1,-1,-1]",
+    # "set process -p aa_aa kv kinematics.externals.data.helicities=[-1,-1,-1,-1]",
+    # "set process -p aa_aa kv kinematics.externals.data.helicities=[+1,-1,-1,+1]",
+    # "set process -p aa_aa kv kinematics.externals.data.helicities=[+1,-1,+1,-1]",
+
+    """set process -p aa_aa -i 1L kv
+        integrator.n_increase=0
+        integrator.n_start=1000000
+        integrator.n_max=10000000000
+        integrator.seed=1337
+        integrator.integrated_phase="real"
+        integrator.target_relative_accuracy=1.0e-3
+    """,
+
+    # --show-max-weight-info-for-discrete-bins
+	# --batch-size 100000
+	# --no-stream-iterations
+	# --show-max-weight-info-for-discrete-bins
+	# --no-stream-iterations
+	#			 --show-phase both
+	#			 --show-top-discrete-grid
+	#			 --show-discrete-contributions-sum
+	#			 --sort-contributions integral
+	#			 --show-max-weight-info
+	#			 --renderer tabled
+	"""integrate -p aa_aa -i 1L -p aa_aa -i 1L_m_uv_UP -p aa_aa -i 1L_m_uv_DOWN -p aa_aa -i 1L_mu_r_UP -p aa_aa -i 1L_mu_r_DOWN
+	             --n-cores 5
+				 --target 3.63182591790267920e-6 0.0
+				 --renderer ratatui
+				 --batch-size 10000
+				 --show-phase both
+				 --show-max-weight-info
+				 --show-top-discrete-grid
+				 --show-discrete-contributions-sum
+				 --write-results-for-each-iteration
+                 --restart
+    """
+]
+
+[[command_blocks]]
+name = "integrate_all_helicities"
+commands = [
+    "run set_model_parameters",
+
+	#--target aa_aa_all_helicities@1L_ppmm=3.63182591790267920e-6,0.0
+	#--target aa_aa_all_helicities@1L_mpmm=-2.13069514021268017e-8,0.0
+	#--target aa_aa_all_helicities@1L_mmmm=-8.27161798130538633e-6,0.0
+	#--target aa_aa_all_helicities@1L_pmmp=3.69112439644513285e-6,0.0
+	#--target aa_aa_all_helicities@1L_pmpm=6.90286252249926050e-7,0.0
+	"run set_kinematics_a",
+
+	#--target aa_aa_all_helicities@1L_ppmm=-2.52544984689473894e-4,4.51548791001815878e-7
+	#--target aa_aa_all_helicities@1L_mpmm=1.97549385954745148e-4,-1.20899966147470349e-5
+	#--target aa_aa_all_helicities@1L_mmmm=1.04012005904810848e-3,-9.21580084172666879e-5
+	#--target aa_aa_all_helicities@1L_pmmp=-1.31193940033998277e-4,6.29399386830744299e-4
+    #--target aa_aa_all_helicities@1L_pmpm=-1.40294235326375406e-5,1.73893721809192085e-4
+	#"run set_kinematics_f",
+
+
+    """set process -p aa_aa_all_helicities kv
+        integrator.n_increase=0
+        integrator.n_start=1000000
+        integrator.n_max=10000000000
+        integrator.seed=1337
+        integrator.integrated_phase="real"
+        integrator.target_relative_accuracy=1.0e-3
+    """,
+
+    # --show-max-weight-info-for-discrete-bins
+	# --batch-size 100000
+	# --no-stream-iterations
+	# --show-max-weight-info-for-discrete-bins
+	# --no-stream-iterations
+	#			 --show-phase both
+	#			 --show-top-discrete-grid
+	#			 --show-discrete-contributions-sum
+	#			 --sort-contributions integral
+	#			 --show-max-weight-info
+	#			 --renderer tabled
+	"""integrate -p aa_aa_all_helicities -i 1L_ppmm -p aa_aa_all_helicities -i 1L_mpmm -p aa_aa_all_helicities -i 1L_mmmm -p aa_aa_all_helicities -i 1L_pmmp -p aa_aa_all_helicities -i 1L_pmpm
+	             --n-cores 5
+				 --target aa_aa_all_helicities@1L_ppmm=3.63182591790267920e-6,0.0
+				 --target aa_aa_all_helicities@1L_mpmm=-2.13069514021268017e-8,0.0
+				 --target aa_aa_all_helicities@1L_mmmm=-8.27161798130538633e-6,0.0
+				 --target aa_aa_all_helicities@1L_pmmp=3.69112439644513285e-6,0.0
+				 --target aa_aa_all_helicities@1L_pmpm=6.90286252249926050e-7,0.0
+				 --uncorrelated
+				 --renderer ratatui
+				 --batch-size 10000
+				 --show-phase both
+				 --show-max-weight-info
+				 --show-top-discrete-grid
+				 --show-discrete-contributions-sum
+				 --write-results-for-each-iteration
+                 --restart
+    """
+]
+
+[[command_blocks]]
+name = "integrate_all_helicities_kinematics_f"
+commands = [
+    "run set_model_parameters",
+
+	#--target aa_aa_all_helicities@1L_ppmm=3.63182591790267920e-6,0.0
+	#--target aa_aa_all_helicities@1L_mpmm=-2.13069514021268017e-8,0.0
+	#--target aa_aa_all_helicities@1L_mmmm=-8.27161798130538633e-6,0.0
+	#--target aa_aa_all_helicities@1L_pmmp=3.69112439644513285e-6,0.0
+	#--target aa_aa_all_helicities@1L_pmpm=6.90286252249926050e-7,0.0
+	#"run set_kinematics_a",
+
+	#--target aa_aa_all_helicities@1L_ppmm=-2.52544984689473894e-4,4.51548791001815878e-7
+	#--target aa_aa_all_helicities@1L_mpmm=1.97549385954745148e-4,-1.20899966147470349e-5
+	#--target aa_aa_all_helicities@1L_mmmm=1.04012005904810848e-3,-9.21580084172666879e-5
+	#--target aa_aa_all_helicities@1L_pmmp=-1.31193940033998277e-4,6.29399386830744299e-4
+    #--target aa_aa_all_helicities@1L_pmpm=-1.40294235326375406e-5,1.73893721809192085e-4
+	"run set_kinematics_f",
+
+
+    """set process -p aa_aa_all_helicities kv
+        integrator.n_increase=0
+        integrator.n_start=1000000
+        integrator.n_max=10000000000
+        integrator.seed=1337
+        integrator.integrated_phase="real"
+        integrator.target_relative_accuracy=1.0e-3
+    """,
+
+	"""integrate -p aa_aa_all_helicities -i 1L_ppmm -p aa_aa_all_helicities -i 1L_mpmm -p aa_aa_all_helicities -i 1L_mmmm -p aa_aa_all_helicities -i 1L_pmmp -p aa_aa_all_helicities -i 1L_pmpm
+	             --n-cores 5
+				 --target aa_aa_all_helicities@1L_ppmm=-2.52544984689473894e-4,4.51548791001815878e-7
+				 --target aa_aa_all_helicities@1L_mpmm=1.97549385954745148e-4,-1.20899966147470349e-5
+				 --target aa_aa_all_helicities@1L_mmmm=1.04012005904810848e-3,-9.21580084172666879e-5
+				 --target aa_aa_all_helicities@1L_pmmp=-1.31193940033998277e-4,6.29399386830744299e-4
+				 --target aa_aa_all_helicities@1L_pmpm=-1.40294235326375406e-5,1.73893721809192085e-4
+				 --uncorrelated
+				 --renderer ratatui
+				 --batch-size 10000
+				 --show-phase both
+				 --show-max-weight-info
+				 --show-top-discrete-grid
+				 --show-discrete-contributions-sum
+				 --write-results-for-each-iteration
+                 --restart
+    """
+]
+
+[[command_blocks]]
+name = "set_model_parameters"
+commands = [
+    "set model MT=173.0",
+    "set model WT=0.0",
+    "set model ymt=173.0",
+    "set model aS=0.118",
+    "set model aEWM1=137.036",
+    "set model Gf=1.166390e-05",
+    "set model MZ=91.188",
+]
+
+[[command_blocks]]
+name = "set_kinematics_a"
+commands = [
+    # s / m_t^2 = 1, u / s = -0.3
+    """set process string '
+    [kinematics.externals]
+    type = "constant"
+    [kinematics.externals.data]
+    momenta = [
+       	[ 86.5, 0.0, 0.0, 86.5 ],
+       	[ 86.5, 0.0, 0.0, -86.5 ],
+        [ 86.5, 0.0, -79.27855952273603, -34.6 ],
+        "dependent"
+    ]
+    '""",
+]
+
+[[command_blocks]]
+name = "set_kinematics_b"
+commands = [
+    # s / m_t^2 = 1.44, u / s = -0.3
+    """set process string '
+    [kinematics.externals]
+    type = "constant"
+    [kinematics.externals.data]
+    momenta = [
+       	[ 103.8, 0.0, 0.0, 103.8 ],
+       	[ 103.8, 0.0, 0.0, -103.8 ],
+        [ 103.8, 0.0, -95.13427142728324, -41.52 ],
+        "dependent"
+    ]
+    '""",
+]
+
+[[command_blocks]]
+name = "set_kinematics_c"
+commands = [
+    # s / m_t^2 = 2.985984, u / s = -0.3
+    """set process string '
+    [kinematics.externals]
+    type = "constant"
+    [kinematics.externals.data]
+    momenta = [
+       	[ 149.472, 0.0, 0.0, 149.472 ],
+       	[ 149.472, 0.0, 0.0, -149.472 ],
+        [ 149.472, 0.0, -136.99335085528787, -59.7888 ],
+        "dependent"
+    ]
+    '""",
+]
+
+[[command_blocks]]
+name = "set_kinematics_d"
+commands = [
+    # s / m_t^2 = 4.29981696, u / s = -0.3
+    """set process string '
+    [kinematics.externals]
+    type = "constant"
+    [kinematics.externals.data]
+    momenta = [
+       	[ 179.3664, 0.0, 0.0, 179.3664 ],
+       	[ 179.3664, 0.0, 0.0, -179.3664 ],
+        [ 179.3664, 0.0, -164.39202102634547, -71.74656 ],
+        "dependent"
+    ]
+    '""",
+]
+
+[[command_blocks]]
+name = "set_kinematics_e"
+commands = [
+    # s / m_t^2 = 22.18611106740436992, u / s = -0.3
+    """set process string '
+    [kinematics.externals]
+    type = "constant"
+    [kinematics.externals.data]
+    momenta = [
+       	[ 407.4334663894049, 0.0, 0.0, 407.4334663894049 ],
+       	[ 407.4334663894049, 0.0, 0.0, -407.4334663894049 ],
+        [ 407.4334663894049, 0.0, -373.4189400775389, -162.97338655576192 ],
+        "dependent"
+    ]
+    '""",
+]
+
+[[command_blocks]]
+name = "set_kinematics_f"
+commands = [
+    # s / m_t^2 = 410.186270246002225336426103593500274, u / s = -0.3
+    """set process string '
+    [kinematics.externals]
+    type = "constant"
+    [kinematics.externals.data]
+    momenta = [
+       	[ 1751.8893288527534, 0.0, 0.0, 1751.8893288527534 ],
+       	[ 1751.8893288527534, 0.0, 0.0, -1751.8893288527534 ],
+        [ 1751.8893288527534, 0.0, -1605.6330917306252, -700.755731541101 ],
+        "dependent"
+    ]
+    '""",
+]

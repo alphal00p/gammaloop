@@ -300,7 +300,8 @@ impl PyIntegralFamily {
     /// None means this criterion did not detect scalelessness, not that the
     /// integral is nonzero. Every denominator is treated as present; use
     /// ``sector(powers)`` first to select positive-power entries. Singular
-    /// quadratic loop forms raise IntegralFamilyError as in ``symanzik``.
+    /// quadratic loop forms raise IntegralFamilyError: their algebraic U/F
+    /// polynomials do not establish this parametric scaling certificate.
     ///
     /// Examples
     /// --------
@@ -336,7 +337,8 @@ impl PyIntegralFamily {
     /// without a loop shift at fixed external momenta. The result supplies no
     /// momentum or tensor-numerator substitution and does not check contours or
     /// propagator prescriptions. Both families must have equal denominator
-    /// counts and the same external kinematics.
+    /// counts and the same external kinematics. Singular quadratic forms are
+    /// rejected because their U/F polynomials can discard physical parameters.
     ///
     /// Examples
     /// --------
@@ -371,8 +373,10 @@ impl PyIntegralFamily {
     ///
     /// Uses Minkowski inverse propagators: k^2-m^2 gives U=x and F=m^2*x^2.
     /// For a weighted denominator k.M.k + 2 k.Q + J, this returns
-    /// U=det(M) and F=U*(Q.M^-1.Q-J). The quadratic loop matrix must be
-    /// nonsingular. This prepares polynomials without performing integration.
+    /// U=det(M) and F=Q.adj(M).Q-U*J, using Symbolica determinants and cofactors.
+    /// Singular quadratic forms are accepted as algebraic polynomial data;
+    /// they do not establish a Gaussian integration formula or scalelessness.
+    /// This prepares polynomials without performing integration.
     ///
     /// Examples
     /// --------
