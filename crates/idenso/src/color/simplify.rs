@@ -1322,7 +1322,7 @@ fn color_generator_adjoint(factor: AtomView) -> Option<Atom> {
     color_generator_adjoint_view(factor).map(|arg| arg.to_owned())
 }
 
-fn color_generator_adjoint_view(factor: AtomView<'_>) -> Option<AtomView<'_>> {
+pub(super) fn color_generator_adjoint_view(factor: AtomView<'_>) -> Option<AtomView<'_>> {
     let AtomView::Fun(f) = factor else {
         return None;
     };
@@ -1580,7 +1580,10 @@ fn fundamental_chain_dimension(start: &Atom, end: &Atom) -> Option<Atom> {
     fundamental_chain_dimension_view(start.as_view(), end.as_view())
 }
 
-fn fundamental_chain_dimension_view(start: AtomView<'_>, end: AtomView<'_>) -> Option<Atom> {
+pub(super) fn fundamental_chain_dimension_view(
+    start: AtomView<'_>,
+    end: AtomView<'_>,
+) -> Option<Atom> {
     let Some((start_dimension, _, false)) = color_fundamental_slot(start) else {
         return None;
     };

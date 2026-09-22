@@ -427,6 +427,14 @@ projector expansion and Idenso's Casimir rules. Scalar representation labels
 remain unchanged under conjugation. Higher-degree symmetric invariants remain
 symbolic.
 
+Compact fundamental generator chains and ordered color traces now conjugate
+consistently with explicit networks, reversing the generator sequence and the
+open endpoints. `installed_color_conjugation.py` checks SU(2), SU(3) and SU(5),
+including the summed norm $(N_c^2-1)^2/(4 N_c)$ and conjugation twice. The live
+`hep/color_algebra.py` notebook demonstrates the existing tensor constructors,
+chain collection, conjugation and color contraction. No separate FeynKit or
+GammaLoop conjugation implementation is introduced.
+
 `hep/qcd_gluons.py` presents the generated diagrams and both gauge-reference
 checks in a separate notebook on the same Marimo server.
 
