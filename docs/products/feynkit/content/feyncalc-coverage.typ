@@ -43,10 +43,10 @@ not treat the presence of a primitive as an end-to-end validation.
    transverse components. Integral-family reduction remains a separate step.],
   [UV expansion], [`feynkit-graph` and Vakint],
   [Graph and subgraph expansion and vacuum-integral infrastructure exist.
-   The one-loop QED renormalization workflow combines generated massive
-   self-energies and vertex with symbolic gauge dependence and a counterterm
-   linear solve. Generated two-loop massless QED in Feynman gauge and scalar
-   self-energy examples validate bare UV poles. Analytic vacuum values remain
+   The one-loop QED and QCD renormalization workflows combine generated
+   self-energies and fermion vertices with symbolic gauge dependence and
+   counterterm linear solves. Generated two-loop massless QED in Feynman gauge
+   and scalar self-energy examples validate bare UV poles. Analytic vacuum values remain
    explicit inputs; the two-loop counterterm sums are supplied reference inputs.
    Automatic forest generation stays separate.],
   [Integral families and mappings], [`feynkit-graph::IntegralFamily`],
@@ -604,6 +604,69 @@ generator tests and ten installed physics regressions pass. The notebook
 passes strict Marimo checks and headless export; the existing live instance
 executes its default and nine combinations of gauge parameter and flavor count
 without cell errors. The native extension is installed in that same host.
+
+== Generated one-loop QCD renormalization
+
+`hep/qcd_renormalization.py` and
+`installed_feyncalc_qcd_renormalization.py` assemble the quark, gluon and ghost
+self-energies and the quark-gluon vertex for the
+#link("https://feyncalc.github.io/FeynCalcExamples/QCD/OneLoop/Renormalization")[massive one-loop QCD renormalization reference].
+The gluon two-point function includes gluon, ghost, quark and four-gluon
+tadpole diagrams. The vertex includes both its Abelian and non-Abelian
+contributions, normalized against the generated tree vertex. The internal
+gluon propagator keeps symbolic $xi$, and the quark mass remains symbolic.
+Shared particle color tensors close external color slots; Idenso's color
+simplification and representation-aware Casimir conversion retain $C_F$ and
+$C_A$. Quark-loop multiplicity is $N_f$, with $T_F=1/2$.
+
+The calculation reuses the graph UV expansion, vacuum tensor reduction and
+native IBP path described above. Four vacuum-integral powers reduce to the
+single tadpole with supplied pole $A_0(M)=M/epsilon+O(1)$, checked with OneLOop.
+The total gluon pole is transverse. In units of $a_4=g_s^2/(16 pi^2)$ relative
+to the tree vertex, the two vertex poles are
+$ frac(xi(C_F-C_A/2),epsilon) quad "and" quad
+  frac(3C_A(xi+1),4epsilon). $
+Their sum fixes the coupling counterterm together with the quark and gluon
+field counterterms.
+
+An eight-by-eight Symbolica solve matches the generated local structures to
+Lagrangian counterterm operators, using $Z_j=1+a_4 delta Z_j$. The six
+physical renormalization constants are compared with
+$ delta Z_q=-frac(C_F xi,epsilon), quad
+  delta Z_m=-frac(3C_F,epsilon), $
+$ delta Z_A=delta Z_xi=frac(C_A(13-3xi)-4N_f,6epsilon), quad
+  delta Z_c=frac(C_A(3-xi),4epsilon), $
+$ delta Z_g=-frac(11C_A-2N_f,6epsilon). $
+Here $Z_c$ renormalizes the ghost field and $Z_g$ the strong coupling. The
+quark-gluon counterterm coefficient is $delta Z_q+delta Z_g+delta Z_A/2$;
+the mass and coupling results are independent of $xi$.
+
+The two auxiliary mass coefficients are $delta Z_(A m)=delta Z_(c m)=0$ in
+this complete UV expansion. Terms correcting the auxiliary mass are retained
+through logarithmic order; even the expanded massless tadpole has cancelling
+UV poles. FeynCalc's nonzero auxiliary gluon mass counterterm belongs to its
+selective infrared rearrangement and is a different prescription. The physical
+renormalization constants agree between the two prescriptions. Analytic master
+values and Lagrangian counterterm structures remain explicit inputs; this
+workflow does not generate counterterm diagrams or subtraction forests.
+
+The installed regression passes the symbolic-gauge pole comparisons, all eight
+counterterm equations and the exact linear-system residual. It checks that
+scalar-family coefficients contain no hidden loop momentum, the projected UV
+coefficients contain neither physical nor auxiliary mass dependence, and no
+double poles remain. Ruff, strict Marimo validation and a headless HTML export
+pass. The notebook also passes in the existing live instance for its default
+state and 27 combinations of gauge parameter, quark-flavor count and SU(N)
+color group. Its interactive counterterm table checks the vertex cancellation
+and the gauge-independent one-loop coefficient $beta_0=(11C_A-2N_f)/3$.
+
+The separate ghost-gluon vertex check remains open. The stored SM model's
+historically modified `UUV1` rule gives an inconsistent relative UV pole.
+Restoring the upstream UFO rule reproduces the ghost-vertex reference in a
+scratch calculation; a shared-model fix needs electroweak ghost validation as
+well, since those vertices use the same Lorentz rule. This notebook uses the
+independently validated quark-gluon vertex to determine $Z_g$.
+Other QCD vertices and finite form factors remain separate coverage.
 
 == Native IBP reduction through RustRed
 
