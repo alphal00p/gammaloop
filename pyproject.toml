@@ -24,8 +24,8 @@ dependencies = [
   "pydot",
   "pytest",
   "pyyaml>=6.0.1",
-  "symbolica>=0.14.0",
-  "ufo-model-loader>=0.1.6",
+  "symbolica>=3.0",
+  "ufo-model-loader @ git+https://github.com/alphal00p/ufo_model_loader.git@70ddee6b416f8c8b340e0d087646d77095c5d24b",
 ]
 
 [project.optional-dependencies]
@@ -42,8 +42,8 @@ dev = [
   "inline-snapshot>=0.21.2",
   "marimo>=0.24,<0.25",
   "pytest>=8.3.5,<9",
-  "symbolica>=0.16.0",
-  "ufo-model-loader>=0.1.6",
+  "symbolica>=3.0",
+  "ufo-model-loader @ git+https://github.com/alphal00p/ufo_model_loader.git@70ddee6b416f8c8b340e0d087646d77095c5d24b",
 ]
 
 [build-system]
@@ -77,3 +77,6 @@ ignore_missing_imports = true
 
 [tool.uv]
 package = false
+
+[tool.uv.sources]
+symbolica = { git = "https://github.com/symbolica-dev/symbolica.git", rev = "a19c760dd567c239f30d87e4e924ca2f8b8457ab" }
