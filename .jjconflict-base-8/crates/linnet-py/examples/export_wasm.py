@@ -10,7 +10,6 @@ import filecmp
 import functools
 import http.server
 import json
-import os
 import re
 import shlex
 import shutil
@@ -62,7 +61,13 @@ class Notebook:
 
 NOTEBOOKS = (
     Notebook("rendering_api.py", "generic", "linnet", "guides/python-rendering/"),
-    Notebook("physics_render_settings.py", "physics", "gammaloop", "guides/dot-input/"),
+    Notebook(
+        "physics_render_settings.py",
+        "physics",
+        "gammaloop",
+        "guides/dot-input/",
+        "symbolica",
+    ),
     Notebook("layout_stream.py", "stream", "linnet", "playground/"),
     Notebook(
         "../../../examples/notebooks/spenso_idenso_display.py",
@@ -155,7 +160,6 @@ def with_local_wheel(source: str, wheel_name: str, package: str = "linnet") -> s
 def staged_notebooks(
     wheel: Path | None,
     notebooks: Sequence[Notebook],
-    gammaloop: Path | None = None,
     dependency_wheel: Path | None = None,
 ) -> Iterator[tuple[tuple[Notebook, Path], ...]]:
     """Stage copies so a local wheel override never edits the notebooks."""
@@ -178,138 +182,7 @@ def staged_notebooks(
                 dependency = dependency_wheel.name.split("-")[0].replace("_", "-")
                 if PUBLISHED_REQUIREMENTS[dependency] in source:
                     source = with_local_wheel(source, dependency_wheel.name, dependency)
-            if notebook.ready_value == "physics":
-                repository = EXAMPLES_DIR.parents[2]
-                if gammaloop is None:
-                    package = subprocess.check_output(
-                        [
-                            "nix",
-                            "build",
-                            "--no-link",
-                            "--print-out-paths",
-                            ".#gammaloop",
-                        ],
-                        cwd=repository,
-                        text=True,
-                    ).strip()
-                    gammaloop = Path(package) / "bin/gammaloop"
-                gammaloop = gammaloop.expanduser().resolve()
-                drawing_export = stage / "gammaloop-export"
-                model = repository / "assets/models/json/sm/sm.json"
-                print(
-                    "Generating GammaLoop drawing bundle from the Standard Model",
-                    flush=True,
-                )
-                subprocess.run(
-                    [
-                        str(gammaloop),
-                        "-l",
-                        "warn",
-                        "--state-folder",
-                        str(stage / "gammaloop-state"),
-                        "--no-save-state",
-                        "run",
-                        "-c",
-                        (
-                            f"import model {shlex.quote(str(model))}; "
-                            f"save dot {shlex.quote(str(drawing_export))}"
-                        ),
-                    ],
-                    cwd=repository,
-                    check=True,
-                )
-                templates = drawing_export / "drawings/templates"
-                # GammaLoop's CLI can report execution errors without a failing
-                # process status. Require a complete bundle from this source tree.
-                canonical = repository / "assets/embedded/drawing/templates"
-                sources = [
-                    (expected, templates / expected.relative_to(canonical))
-                    for expected in canonical.rglob("*.typ")
-                ]
-                for package in ("linnest", "kurvst"):
-                    relative = Path("crates") / package / "typst"
-                    canonical = repository / relative
-                    sources.extend(
-                        (
-                            expected,
-                            templates / relative / expected.relative_to(canonical),
-                        )
-                        for expected in (
-                            canonical / "typst.toml",
-                            *(canonical / "src").rglob("*.typ"),
-                        )
-                    )
-                    wasm = templates / relative / f"{package}.wasm"
-                    if not wasm.is_file():
-                        raise RuntimeError(
-                            f"GammaLoop drawing bundle is missing {wasm}"
-                        )
-                for expected, actual in sources:
-                    if (
-                        not actual.is_file()
-                        or actual.read_bytes() != expected.read_bytes()
-                    ):
-                        raise RuntimeError(
-                            "GammaLoop exported missing or stale template "
-                            f"{actual.relative_to(templates)}"
-                        )
-                particle_map = templates / "edge-style.typ"
-                if not particle_map.is_file() or not all(
-                    marker in particle_map.read_text(encoding="utf-8")
-                    for marker in (
-                        "#let generated-map = (",
-                        '"a":',
-                        '"g":',
-                        '"t":',
-                        '"H":',
-                    )
-                ):
-                    raise RuntimeError(
-                        "GammaLoop did not generate the Standard Model particle map"
-                    )
-                package_cache = os.environ.get("TYPST_PACKAGE_CACHE_PATH")
-                if not package_cache:
-                    raise RuntimeError(
-                        "Use the flake to provide TYPST_PACKAGE_CACHE_PATH for MiTeX"
-                    )
-                roots = [(templates, "drawings/templates")]
-                for package in ("cetz/0.5.1", "oxifmt/1.0.0", "mitex/0.2.6"):
-                    package_root = (
-                        (
-                            Path(package_cache)
-                            if package.startswith("mitex/")
-                            else EXAMPLES_DIR.parent / "vendor/typst-packages"
-                        )
-                        / "preview"
-                        / package
-                    )
-                    if not (package_root / "typst.toml").is_file():
-                        raise RuntimeError(
-                            f"Missing pinned Typst package {package_root}"
-                        )
-                    roots.append((package_root, "typst-packages/preview/" + package))
-                assets = sorted(
-                    (f"{prefix}/{asset.relative_to(root).as_posix()}", asset)
-                    for root, prefix in roots
-                    for asset in root.rglob("*")
-                    if asset.is_file()
-                )
-                bundle = stage / "gammaloop-drawing.zip"
-                with zipfile.ZipFile(bundle, "w") as archive:
-                    for name, asset in assets:
-                        entry = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
-                        entry.compress_type = zipfile.ZIP_DEFLATED
-                        entry.create_system = 3
-                        entry.external_attr = 0o644 << 16
-                        archive.writestr(entry, asset.read_bytes())
-                marker = "    drawing_bundle = None"
-                if source.count(marker) != 1:
-                    raise ValueError(
-                        "Expected one drawing_bundle placeholder in the physics notebook"
-                    )
-                encoded = base64.b64encode(bundle.read_bytes()).decode("ascii")
-                source = source.replace(marker, f"    drawing_bundle = {encoded!r}")
-            if notebook.docs_product == "feynkit":
+            if notebook.docs_product in {"feynkit", "gammaloop"}:
                 source = source.replace(
                     "Path(__file__).resolve().parents[3]", 'Path("/feynkit-data")'
                 )
@@ -343,10 +216,6 @@ def export(
     staged: Sequence[tuple[Notebook, Path]], output: Path, *, docs: str | None = None
 ) -> tuple[tuple[Notebook, Path], ...]:
     output.mkdir(parents=True, exist_ok=True)
-    bundle = staged[0][1].parent / "gammaloop-drawing.zip"
-    if bundle.is_file():
-        (output / "public").mkdir(exist_ok=True)
-        shutil.copy2(bundle, output / "public/gammaloop-drawing.zip")
     artifacts = []
     if docs:
         import marimo as mo
@@ -390,7 +259,7 @@ def export(
                 for island, cell in zip(generator.stubs, cells, strict=True):
                     island._display_code = not cell.config.hide_code
             bootstrap = ""
-            if notebook.docs_product == "feynkit":
+            if notebook.docs_product in {"feynkit", "gammaloop"}:
                 repository = EXAMPLES_DIR.parents[2]
                 assets = [
                     repository
@@ -404,6 +273,12 @@ def export(
                         if asset.is_file() and "__pycache__" not in asset.parts
                     ),
                 ]
+                # Require the model assets from this source tree; missing fixtures
+                # must fail export rather than leave the browser with a partial bundle.
+                if notebook.ready_value == "physics":
+                    assets = [
+                        repository / "crates/feynkit-model/tests/fixtures/sm.json"
+                    ]
                 bundle = source.parent / "feynkit-data.zip"
                 with zipfile.ZipFile(bundle, "w") as archive:
                     for asset in sorted(assets):
@@ -688,11 +563,11 @@ def browser_smoke(
                     )
                     for name in (
                         "Momentum arrows",
-                        "Momentum labels qₑ",
+                        "Momentum labels",
                         "Cross-section",
                     ):
                         previous = page.locator(notebook.ready_selector).evaluate(
-                            "svg => svg.outerHTML"
+                            "preview => preview.outerHTML"
                         )
                         if name == "Cross-section":
                             page.get_by_role(
@@ -702,12 +577,26 @@ def browser_smoke(
                             page.get_by_role("checkbox", name=name, exact=True).check()
                         page.wait_for_function(
                             """([selector, previous]) => {
-                                const svg = document.querySelector(selector);
-                                return svg && svg.outerHTML !== previous;
+                                const preview = document.querySelector(selector);
+                                return preview && preview.outerHTML !== previous;
                             }""",
                             arg=[notebook.ready_selector, previous],
                             timeout=timeout,
                         )
+                    preview = page.frame_locator(f"{notebook.ready_selector} iframe")
+                    svg = preview.locator("svg[data-linnet-interactive]")
+                    svg.wait_for(state="visible", timeout=timeout)
+                    if not svg.evaluate("svg => Boolean(svg.linnetSelection)"):
+                        raise RuntimeError(
+                            "FeynKit preview did not initialize SVG interaction"
+                        )
+                    half_edge = svg.locator('[data-linnet-kind="halfedge"]').first
+                    half_id = int(half_edge.get_attribute("data-linnet-id"))
+                    half_edge.dispatch_event("click", {"shiftKey": True})
+                    if svg.evaluate("svg => svg.linnetSelection.half_edges") != [
+                        half_id
+                    ]:
+                        raise RuntimeError("FeynKit preview did not select a half-edge")
                 if errors:
                     raise RuntimeError(
                         f"Browser errors while loading {artifact.name}: "
@@ -741,20 +630,15 @@ def parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
         "--wheel",
         type=Path,
         help=(
-            "Local Emscripten wheel: linnet for Linnet/GammaLoop, or symbolica "
-            "with FeynKit/Spenso/Idenso for community showcases. Without this option the "
+            "Local Emscripten wheel: linnet for Linnet, or symbolica "
+            "with FeynKit/Spenso/Idenso for GammaLoop and community showcases. Without this option the "
             "published linnet==0.1.0 dependency is used."
         ),
     )
     parser.add_argument(
         "--dependency-wheel",
         type=Path,
-        help="Linnet WASM wheel for Spenso/Idenso, or the pinned UFO loader wheel for FeynKit",
-    )
-    parser.add_argument(
-        "--gammaloop",
-        type=Path,
-        help="GammaLoop executable for the physics bundle (default: build this revision with Nix)",
+        help="Linnet WASM wheel for GammaLoop/Spenso/Idenso, or the pinned UFO loader wheel for FeynKit",
     )
     parser.add_argument(
         "--browser-smoke",
@@ -819,19 +703,21 @@ def main(arguments: Sequence[str] | None = None) -> int:
         if options.dependency_wheel
         else None
     )
-    if options.docs in {"spenso", "idenso", "feynkit"} and dependency_wheel is None:
+    if (
+        options.docs in {"gammaloop", "spenso", "idenso", "feynkit"}
+        and dependency_wheel is None
+    ):
         raise ValueError(
             "Community showcases require --dependency-wheel (Linnet or UFO loader)"
         )
     if dependency_wheel is not None and options.docs not in {
+        "gammaloop",
         "spenso",
         "idenso",
         "feynkit",
     }:
         raise ValueError("--dependency-wheel applies only to community showcases")
-    with staged_notebooks(
-        wheel, notebooks, options.gammaloop, dependency_wheel
-    ) as staged:
+    with staged_notebooks(wheel, notebooks, dependency_wheel) as staged:
         lint(staged)
         artifacts = export(staged, output, docs=options.docs)
 

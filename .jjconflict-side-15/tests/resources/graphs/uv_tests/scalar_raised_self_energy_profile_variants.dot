@@ -1,0 +1,139 @@
+digraph raised_se_unit {
+    num = 1
+    edge [pdg=1001, num=1]
+    node [num=1]
+    ext0 [style=invis, is_cut=0]
+    v2 -> ext0 [id=0]
+    ext0 -> v3
+    v0 -> v1 [id=1, lmb_id=0]
+    v0 -> v1 [id=2]
+    v3 -> v0 [id=3, lmb_id=1]
+    v1 -> v2 [id=4]
+    v2 -> v3 [id=5]
+}
+
+digraph raised_se_q1_temporal {
+    num = 1
+    edge [pdg=1001, num=1]
+    node [num=1]
+    ext0 [style=invis, is_cut=0]
+    v2 -> ext0 [id=0]
+    ext0 -> v3
+    v0 -> v1 [id=1, lmb_id=0, num="Q(1,spenso::cind(0))"]
+    v0 -> v1 [id=2]
+    v3 -> v0 [id=3, lmb_id=1]
+    v1 -> v2 [id=4]
+    v2 -> v3 [id=5]
+}
+
+digraph raised_se_q3_temporal {
+    num = 1
+    edge [pdg=1001, num=1]
+    node [num=1]
+    ext0 [style=invis, is_cut=0]
+    v2 -> ext0 [id=0]
+    ext0 -> v3
+    v0 -> v1 [id=1, lmb_id=0]
+    v0 -> v1 [id=2]
+    v3 -> v0 [id=3, lmb_id=1, num="Q(3,spenso::cind(0))"]
+    v1 -> v2 [id=4]
+    v2 -> v3 [id=5]
+}
+
+digraph raised_se_q4_temporal {
+    num = 1
+    edge [pdg=1001, num=1]
+    node [num=1]
+    ext0 [style=invis, is_cut=0]
+    v2 -> ext0 [id=0]
+    ext0 -> v3
+    v0 -> v1 [id=1, lmb_id=0]
+    v0 -> v1 [id=2]
+    v3 -> v0 [id=3, lmb_id=1]
+    v1 -> v2 [id=4, num="Q(4,spenso::cind(0))"]
+    v2 -> v3 [id=5]
+}
+
+digraph raised_se_q5_temporal {
+    num = 1
+    edge [pdg=1001, num=1]
+    node [num=1]
+    ext0 [style=invis, is_cut=0]
+    v2 -> ext0 [id=0]
+    ext0 -> v3
+    v0 -> v1 [id=1, lmb_id=0]
+    v0 -> v1 [id=2]
+    v3 -> v0 [id=3, lmb_id=1]
+    v1 -> v2 [id=4]
+    v2 -> v3 [id=5, num="Q(5,spenso::cind(0))"]
+}
+
+digraph raised_se_q1_dot_q3 {
+    num = 1
+    edge [pdg=1001, num=1]
+    node [num=1]
+    ext0 [style=invis, is_cut=0]
+    v2 -> ext0 [id=0]
+    ext0 -> v3
+    v0 -> v1 [id=1, lmb_id=0, num="Q(1,spenso::mink(4,1))"]
+    v0 -> v1 [id=2]
+    v3 -> v0 [id=3, lmb_id=1, num="Q(3,spenso::mink(4,1))"]
+    v1 -> v2 [id=4]
+    v2 -> v3 [id=5]
+}
+
+digraph raised_se_q1_dot_q3_q3e {
+    num = 1
+    edge [pdg=1001, num=1]
+    node [num=1]
+    ext0 [style=invis, is_cut=0]
+    v2 -> ext0 [id=0]
+    ext0 -> v3
+    v0 -> v1 [id=1, lmb_id=0, num="Q(1,spenso::mink(4,1))"]
+    v0 -> v1 [id=2]
+    v3 -> v0 [id=3, lmb_id=1, num="Q(3,spenso::mink(4,1))*Q(3,spenso::cind(0))"]
+    v1 -> v2 [id=4]
+    v2 -> v3 [id=5]
+}
+
+digraph raised_se_q1_dot_q3_q4e {
+    num = 1
+    edge [pdg=1001, num=1]
+    node [num=1]
+    ext0 [style=invis, is_cut=0]
+    v2 -> ext0 [id=0]
+    ext0 -> v3
+    v0 -> v1 [id=1, lmb_id=0, num="Q(1,spenso::mink(4,1))"]
+    v0 -> v1 [id=2]
+    v3 -> v0 [id=3, lmb_id=1, num="Q(3,spenso::mink(4,1))"]
+    v1 -> v2 [id=4, num="Q(4,spenso::cind(0))"]
+    v2 -> v3 [id=5]
+}
+
+digraph raised_se_q1_dot_q3_q3e_q4e {
+    num = 1
+    edge [pdg=1001, num=1]
+    node [num=1]
+    ext0 [style=invis, is_cut=0]
+    v2 -> ext0 [id=0]
+    ext0 -> v3
+    v0 -> v1 [id=1, lmb_id=0, num="Q(1,spenso::mink(4,1))"]
+    v0 -> v1 [id=2]
+    v3 -> v0 [id=3, lmb_id=1, num="Q(3,spenso::mink(4,1))*Q(3,spenso::cind(0))"]
+    v1 -> v2 [id=4, num="Q(4,spenso::cind(0))"]
+    v2 -> v3 [id=5]
+}
+
+digraph raised_se_q1_dot_q3_q3e_q4e_q5e {
+    num = 1
+    edge [pdg=1001, num=1]
+    node [num=1]
+    ext0 [style=invis, is_cut=0]
+    v2 -> ext0 [id=0]
+    ext0 -> v3
+    v0 -> v1 [id=1, lmb_id=0, num="Q(1,spenso::mink(4,1))"]
+    v0 -> v1 [id=2]
+    v3 -> v0 [id=3, lmb_id=1, num="Q(3,spenso::mink(4,1))*Q(3,spenso::cind(0))"]
+    v1 -> v2 [id=4, num="Q(4,spenso::cind(0))"]
+    v2 -> v3 [id=5, num="Q(5,spenso::cind(0))"]
+}

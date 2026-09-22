@@ -7,6 +7,7 @@
 
 #![forbid(unsafe_code)]
 
+mod compact_dot;
 mod display;
 pub mod expressions;
 mod finalization;
@@ -1909,11 +1910,27 @@ impl FeynmanDiagram {
         Ok(output)
     }
 
-    /// Parse the stable FeynKit DOT dialect emitted by [`Self::to_dot`].
+    /// Parse compact model-aware DOT or the stable dialect emitted by [`Self::to_dot`].
     pub fn from_dot(model: impl Into<Arc<Model>>, input: &str) -> Result<Self, DiagramError> {
         let model = model.into();
         let parsed: DotGraph = DotGraph::from_string(input)
             .map_err(|error| DiagramError::DotParse(error.to_string()))?;
+        if ![
+            "model_fingerprint",
+            "feynkit_name",
+            "half_edge_order",
+            "loop_momentum_basis",
+            "cuts",
+            "topology_threshold_candidates",
+        ]
+        .iter()
+        .any(|key| parsed.global_data.statements.contains_key(*key))
+            && !parsed
+                .iter_edges()
+                .any(|(_, _, edge)| edge.data.statements.contains_key("particle_id"))
+        {
+            return Self::from_compact_dot(model, parsed);
+        }
         let serialized_fingerprint = parsed
             .global_data
             .statements
@@ -2701,6 +2718,127 @@ mod tests {
             }"#,
         )
         .unwrap())
+    }
+
+    #[test]
+    fn compact_dot_resolves_particles_slots_numerators_ports_and_routing() {
+        let model = scalar_model();
+        let dot = r#"digraph triangle {
+            graph [num="5"];
+            ext [style=invis];
+            a [num="2"];
+            ext -> a:4 [id=0, pdg=25];
+            b -> ext [id=1, particle="phi"];
+            c -> ext [id=2, particle="phi"];
+            a -> b [id=3, particle="phi", num="3", lmb_id=0];
+            b -> c [id=4, particle="phi"];
+            c -> a [id=5, particle="phi"];
+        }"#;
+        let diagram = FeynmanDiagram::from_dot(model.clone(), dot).unwrap();
+        diagram.validate().unwrap();
+        assert_eq!(diagram.loop_count(), 1);
+        assert_eq!(diagram.numerator(), &Atom::num(6));
+        assert_eq!(diagram.numerator_prefactor(), &Atom::num(5));
+        assert_eq!(diagram.loop_momentum_basis().loop_edges, vec![EdgeId(3)]);
+        assert!(
+            diagram
+                .vertices()
+                .all(|(_, vertex)| vertex.interaction.is_some())
+        );
+        assert_eq!(
+            diagram
+                .half_edge_id(DiagramHalfEdge {
+                    edge: EdgeId(0),
+                    endpoint: DiagramEndpoint::Target
+                })
+                .unwrap()
+                .0,
+            4
+        );
+        assert_eq!(
+            FeynmanDiagram::from_dot(model, &diagram.to_dot().unwrap())
+                .unwrap()
+                .to_json()
+                .unwrap(),
+            diagram.to_json().unwrap()
+        );
+    }
+
+    #[test]
+    fn compact_dot_sews_initial_states_and_selects_physical_cuts() {
+        let model = scalar_model();
+        let dot = r#"digraph bubble {
+            graph [final_state="phi,phi"];
+            ext [style=invis];
+            ext -> a [particle="phi", is_cut=9];
+            b -> ext [particle="phi", is_cut=9];
+            a -> b [particle="phi", lmb_id=0];
+            b -> a [particle="phi"];
+        }"#;
+        let diagram = FeynmanDiagram::from_dot(model.clone(), dot).unwrap();
+        diagram.validate().unwrap();
+        assert_eq!(diagram.loop_count(), 1);
+        assert_eq!(diagram.cuts().len(), 1);
+        assert_eq!(diagram.cuts()[0].cut.len(), 2);
+        assert_eq!(diagram.cuts()[0].left.loop_count, 0);
+        assert_eq!(diagram.cuts()[0].right.loop_count, 0);
+        assert_eq!(diagram.topology_threshold_candidates().len(), 1);
+        assert_eq!(
+            diagram
+                .edges()
+                .filter(|(_, _, edge)| edge.external.is_some())
+                .count(),
+            1
+        );
+        assert_eq!(
+            FeynmanDiagram::from_dot(model.clone(), &diagram.to_dot().unwrap())
+                .unwrap()
+                .to_json()
+                .unwrap(),
+            diagram.to_json().unwrap()
+        );
+        assert!(FeynmanDiagram::from_dot(model.clone(), &dot.replace("phi,phi", "phi")).is_err());
+        assert!(
+            FeynmanDiagram::from_dot(
+                model.clone(),
+                &dot.replace("graph [final_state=\"phi,phi\"];", "")
+            )
+            .is_err()
+        );
+        assert!(FeynmanDiagram::from_dot(model, &dot.replace("b -> ext", "ext -> b")).is_err());
+    }
+
+    #[test]
+    fn compact_dot_rejects_inconsistent_model_data_and_loop_slots() {
+        let model = scalar_model();
+        for dot in [
+            r#"digraph { ext [style=invis]; ext -> a [particle="missing"]; a -> ext [particle="phi"]; a -> ext [particle="phi"]; }"#,
+            r#"digraph { ext [style=invis]; ext -> a [particle="phi"]; a -> ext [particle="phi"]; }"#,
+            r#"digraph { ext [style=invis]; ext -> a [particle="phi", lmb_id=0]; a -> ext [particle="phi"]; a -> ext [particle="phi"]; }"#,
+            r#"digraph { ext [style=invis]; ext -> a [particle="phi", pdg=999]; a -> ext [particle="phi"]; a -> ext [particle="phi"]; }"#,
+        ] {
+            assert!(
+                FeynmanDiagram::from_dot(model.clone(), dot).is_err(),
+                "{dot}"
+            );
+        }
+    }
+
+    #[test]
+    fn canonical_dot_missing_fingerprint_does_not_become_compact() {
+        let model = scalar_model();
+        let diagram = FeynmanDiagram::from_dot(model.clone(), r#"digraph { ext [style=invis]; ext -> a [particle="phi"]; a -> ext [particle="phi"]; a -> ext [particle="phi"]; }"#).unwrap();
+        let dot = diagram.to_dot().unwrap().replace(
+            &format!("model_fingerprint=\"{}\", ", model.fingerprint()),
+            "",
+        );
+        assert!(matches!(
+            FeynmanDiagram::from_dot(model, &dot),
+            Err(DiagramError::MissingDotAttribute {
+                attribute: "model_fingerprint",
+                ..
+            })
+        ));
     }
 
     fn external_edge(
