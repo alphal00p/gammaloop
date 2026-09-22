@@ -180,8 +180,10 @@ for pdgs, mass, yukawa, yukawa_mass in (
             colors * alpha * physical_mass * mass**2 * beta**3 / (8 * mw**2 * sw**2)
         )
     else:
+        # Independent reference coefficients: ZZ has the identical-state 1/2.
+        reference_denominator = 32 if pdgs == (23, 23) else 16
         expected_width = (
-            symmetry * alpha * physical_mass**3 * beta / (16 * mw**2 * sw**2)
+            alpha * physical_mass**3 * beta / (reference_denominator * mw**2 * sw**2)
         )
         expected_width *= (
             1

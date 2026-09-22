@@ -145,7 +145,7 @@ impl PyParticle {
     /// >>> from symbolica import S
     /// >>> p, i, j = S("p", "i", "j")
     /// >>> projector = model.particle_by_pdg(11).spin_sum(p, i, j, average=True)
-    /// >>> polarized = model.particle_by_pdg(11).spin_sum(p, i, j, spin_vector=S("s"))
+    /// >>> polarized = model.particle_by_pdg(15).spin_sum(p, i, j, spin_vector=S("s"))
     ///
     /// Parameters
     /// ----------
@@ -169,7 +169,7 @@ impl PyParticle {
     /// ------
     /// ValueError
     ///     If ``spin_vector`` is used with averaging, a massless particle, or
-    ///     a particle other than a Dirac fermion.
+    ///     a particle other than a Dirac fermion, or is not an unindexed name.
     #[pyo3(signature = (momentum, left, right, *, average=false, reference=None, covariant=false, spin_vector=None))]
     #[allow(clippy::too_many_arguments)]
     fn spin_sum(
@@ -238,7 +238,7 @@ impl PyParticle {
     /// ------
     /// ValueError
     ///     If ``spin_vector`` is used with averaging, a massless particle, or
-    ///     a particle other than a Dirac fermion.
+    ///     a particle other than a Dirac fermion, or is not an unindexed name.
     #[pyo3(signature = (expression, momentum, *, edge, average=false, reference=None, covariant=false, spin_vector=None))]
     #[allow(clippy::too_many_arguments)]
     fn sum_spins(
