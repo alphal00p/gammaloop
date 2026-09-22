@@ -15,8 +15,9 @@ not treat the presence of a primitive as an end-to-end validation.
   [Capability], [Owner], [Coverage and remaining work],
   [Models and diagrams], [`feynkit-model`, `feynkit-ufo`, `feynkit-generator`],
   [Existing validated models, UFO import and generation. A generated QED
-   electron-positron to muon-pair benchmark checks the sewn graph, physical cut,
-   graph factors and uncut propagators. Other gallery processes remain pending.],
+   electron-positron to muon-pair benchmark and a different-flavor QCD quark
+   annihilation benchmark check the sewn graph, physical cut, graph factors
+   and uncut propagators. Other gallery processes remain pending.],
   [Dirac, color and Lorentz algebra], [Idenso and Spenso],
   [Existing gamma, color, metric, epsilon and adjoint operations. Keep their
    Symbolica expression interface; do not implement a second algebra in FeynKit.],
@@ -25,6 +26,11 @@ not treat the presence of a primitive as an end-to-end validation.
    replacements. GammaLoop delegates both formulas and replacement construction
    here. Higher-spin states and polarized projectors
    are still missing.],
+  [External color sums], [`feynkit-generator::ColorSum`],
+  [Singlet, fundamental, sextet and adjoint completeness tensors reuse the
+   generator's representation mapping and Spenso metrics. The Python particle
+   API exposes optional initial-state averaging. Different-flavor QCD
+   annihilation validates the generated massive SU(N) result.],
   [Symbolic kinematics], [`feynkit-kinematics::Kinematics`],
   [Scoped scalar products in integer or symbolic dimensions and four-dimensional
    unequal-mass Mandelstam substitutions. Scalar products expand bilinearly in
@@ -70,8 +76,8 @@ not treat the presence of a primitive as an end-to-end validation.
    bookkeeping remain outstanding.],
   [Cross sections and decay rates], [FeynKit kinematics and process APIs],
   [Shared symbolic/numerical initial-state flux and four-dimensional two-body
-   phase space. The generated QED benchmark includes its angular distribution
-   and total unpolarized cross section. General phase space, identical-particle
+   phase space. The generated QED and QCD annihilation benchmarks include their
+   angular distributions and total unpolarized cross sections. General phase space, identical-particle
    bookkeeping and the remaining gallery observables need further coverage.],
 )
 
@@ -361,6 +367,35 @@ coefficient functions evaluate directly as Symbolica expressions. The benchmark
 assumes positive squared mass and scale and nonzero $s$; it does not establish
 the degenerate Gram limit or reproduce the lepton self-energy, vertex and
 counterterm parts of the full renormalization example.
+
+== Generated QCD annihilation
+
+`Particle.color_sum(left, right, average=False)` constructs the identity in
+that particle's color representation. Supply bare indices: the left slot carries
+its representation and the right slot its dual. Antiquarks and antisextets
+reverse the dual orientation. Singlets contribute one; averaging divides by
+1, 3, 6 or 8 according to the UFO representation. Closing existing color slots
+requires the dual slots. This operation uses the same representation mapping
+as generated vertices and returns a standard Symbolica expression for Spenso
+and Idenso to simplify.
+
+`installed_feyncalc_qcd_annihilation.py` generates
+$b bar(b) -> t bar(t)$ through gluon exchange with both masses retained.
+The cut supplies final-state completeness; `Particle.sum_spins` and
+`Particle.color_sum` supply initial-state averages. No color algebra is
+reimplemented in Python or GammaLoop. The full massive result agrees with the
+#link("https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/QiQibar-QjQjbar")[different-flavor FeynCalc example],
+with $T_R=1/2$ and four-dimensional external spin states.
+
+For symbolic SU(N), Spenso takes named fundamental and adjoint dimensions.
+The relation $d_A=N_c^2-1$ is imposed after contraction. The massless result is
+$ abs(cal(M))^2 = frac((N_c^2-1) g_s^4, 2 N_c^2 s^2) (t^2+u^2). $
+At $N_c=3$, the existing flux and two-body phase-space APIs give
+$ frac(d sigma, d Omega) = frac(alpha_s^2, 18s) (1+cos^2 theta), quad
+  sigma = frac(8 pi alpha_s^2, 27s). $
+The separate `hep/qcd_annihilation.py` notebook runs these exact comparisons
+in the same Marimo instance as the other examples. Identical-flavor channels,
+external-gluon scattering and general QCD observables remain unvalidated.
 
 == Validation standard
 

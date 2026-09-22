@@ -26,8 +26,8 @@ pub use feynkit_ufo as ufo;
 pub use feynkit_cff::{CffGenerator, CffOptions, CffResult};
 #[cfg(feature = "generator")]
 pub use feynkit_generator::{
-    AxialReference, GenerationOptions, GenerationResult, Generator, ParticleSelector, Process,
-    SpinSum, SpinSumError,
+    AxialReference, ColorSum, ColorSumError, GenerationOptions, GenerationResult, Generator,
+    ParticleSelector, Process, SpinSum, SpinSumError,
 };
 #[cfg(feature = "graph")]
 pub use feynkit_graph::{

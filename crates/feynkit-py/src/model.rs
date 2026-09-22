@@ -88,6 +88,25 @@ impl PyParticle {
     /// >>> color_projector = model.particle_by_pdg(5).color_sum(i, j, average=True)
     /// >>> model.particle_by_pdg(11).color_sum(i, j) == 1
     /// True
+    ///
+    /// Parameters
+    /// ----------
+    /// left : Expression
+    ///     Bare index in the particle's color representation.
+    /// right : Expression
+    ///     Bare index in its dual representation.
+    /// average : bool, optional
+    ///     Divide by the number of color states. Defaults to ``False``.
+    ///
+    /// Returns
+    /// -------
+    /// Expression
+    ///     Spenso color identity, or one for a color singlet.
+    ///
+    /// Raises
+    /// ------
+    /// ValueError
+    ///     If the particle's UFO color representation is unsupported.
     #[pyo3(signature = (left, right, *, average=false))]
     fn color_sum(
         &self,
