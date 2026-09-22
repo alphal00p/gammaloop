@@ -5001,6 +5001,7 @@ fn fixed_gap_labels_preserve_clearance_across_sizes_bends_and_rotations() {
                 a -> b [id=0 pos="{},{}!" "label-width"="0.2" "label-height"="0.4"]
                 b -> a [id=1 pos="{},{}!" "label-width"="2.2" "label-height"="1.4"]
                 a -> b [id=2 pos="0,0!" "label-width"="0.6" "label-height"="0.6"]
+                a -> b [id=3 pos="0,0!" "label-width"="2.0" "label-height"="1.2"]
             }}"#,
             -4.0 * cos,
             -4.0 * sin,
@@ -5026,11 +5027,13 @@ fn fixed_gap_labels_preserve_clearance_across_sizes_bends_and_rotations() {
             ]);
             let laid_out = layout_parsed_graph_bytes(&graph, &encode_cbor(&config)).unwrap();
             let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&laid_out).unwrap());
-            for (edge, (width, height, side)) in
-                edges
-                    .iter()
-                    .zip([(0.2, 0.4, 1.0), (2.2, 1.4, -1.0), (0.6, 0.6, 1.0)])
-            {
+            for (edge, (width, height, side)) in edges.iter().zip([
+                (0.2, 0.4, 1.0),
+                (2.2, 1.4, -1.0),
+                (0.6, 0.6, 1.0),
+                (2.0, 1.2, 1.0),
+            ]) {
+                assert_eq!(edge.statements["layout-label-gap"], "0.6");
                 let point = edge.pos.as_ref().unwrap();
                 let label = edge.label_pos.as_ref().unwrap();
                 let outward_distance =
@@ -5043,6 +5046,13 @@ fn fixed_gap_labels_preserve_clearance_across_sizes_bends_and_rotations() {
                     outward_distance - text_extent
                 );
             }
+            let mut config = config;
+            config.insert("label-layout", "normal");
+            let relaxed = layout_parsed_graph_bytes(&laid_out, &encode_cbor(&config)).unwrap();
+            let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&relaxed).unwrap());
+            assert!(edges
+                .iter()
+                .all(|edge| !edge.statements.contains_key("layout-label-gap")));
         }
     }
 }

@@ -961,6 +961,43 @@
         }
       }
 
+      // Crowded labels may move along a straight or curved carrier, never away
+      // from it. Check the rendered text bounds at the chosen arc-length point.
+      for carrier in (curve.line((0, 0), (8, 0)), path) {
+        for side in ("left", "right") {
+          let style = (label: [AB], label-gap: 0.3, label-side: side)
+          let label = drawing._layer-label-element(native, carrier, style, none, (:), placement: true)
+          let total = curve.length(carrier, accuracy: 0.001)
+          let chosen = drawing._relax-label-placements((label, label), ())
+          assert.eq(chosen, drawing._relax-label-placements((label, label), ()), message: "deterministic label annealing")
+          assert(chosen.any(candidate => candidate.position != label.candidates.first().position), message: "crowded labels slide")
+          let (a, b) = chosen.map(candidate => candidate.bounds)
+          assert(a.right <= b.left or b.right <= a.left or a.top <= b.bottom or b.top <= a.bottom, message: "sliding separates overlapping labels")
+          assert.eq(drawing._relax-label-placements((label,), ()).first().position, label.candidates.first().position, message: "uncrowded labels keep their preferred position")
+          for candidate in chosen {
+            assert(candidate.at >= 0 and candidate.at <= total, message: "labels stay on the carrier")
+            let frame = drawing._path-mid-frame(carrier, 0.001, shift: candidate.at - total / 2)
+            let tangent = cetz.vector.norm(frame.tangent)
+            let normal = cetz.vector.scale((-tangent.at(1), tangent.at(0)), if side == "left" { 1 } else { -1 })
+            let origin = cetz.matrix.mul4x4-vec3(native.transform, (..frame.point, 0))
+            let outward = cetz.vector.sub(cetz.matrix.mul4x4-vec3(native.transform, (..cetz.vector.add(frame.point, normal), 0)), origin)
+            let element = cetz.draw.content(candidate.position, label.label, padding: 0, ..label.style)
+            let measured = element.first()(native)
+            let nearest = calc.min(..("north-west", "north-east", "south-west", "south-east").map(anchor => (
+              cetz.vector.dot(cetz.vector.sub((measured.anchors)(anchor), origin), outward) / cetz.vector.dot(outward, outward)
+            )))
+            assert(calc.abs(nearest - 0.3) < epsilon, message: "sliding preserves measured normal clearance")
+          }
+          let blocked = drawing._relax-label-placements((label,), (label.candidates.first().bounds,))
+          assert.ne(blocked.first().position, label.candidates.first().position, message: "labels slide away from node obstacles")
+          for pinned-style in ((label-slide: false), (label-style: (anchor: "center"))) {
+            let pinned = drawing._layer-label-element(native, carrier, style + pinned-style + (label-shift: 1000), none, (:), placement: true)
+            assert.eq(pinned.candidates.len(), 1, message: "explicit placements stay fixed")
+            assert.eq(pinned.candidates.first().at, total, message: "explicit shifts clamp to the carrier endpoint")
+          }
+        }
+      }
+
       // Compare drawable structure and points in CeTZ's resolved 3D coordinates.
       for (case, actual, expected) in comparisons {
         assert.eq(
