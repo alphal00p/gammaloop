@@ -1,3 +1,5 @@
+#import "../../shared.typ": source-link
+
 #let feyncalc-coverage = [
 = FeynCalc example coverage
 
@@ -540,6 +542,58 @@ the degenerate Gram limit. The one-loop renormalization workflow below adds
 the lepton self-energy, vertex UV pole and counterterm matching. Complete finite
 lepton self-energy and renormalized vertex form factors remain outside that
 workflow.
+
+== Generated finite Higgs-to-gluon amplitude
+
+The host notebook
+#link("https://github.com/symbolica-dev/symbolica-community/blob/main/examples/hep/higgs_gluons.py")[hep/higgs_gluons.py]
+and the companion
+#source-link("crates/feynkit-py/tests/installed_feyncalc_higgs_gluons.py", label: "installed-host regression")
+follow the #link("https://feyncalc.github.io/FeynCalcExamples/QCD/OneLoop/H-GlGl")[one-loop Higgs-to-gluons reference].
+Typed model particles identify the top-Higgs and top-gluon `VertexRule` objects
+passed to `vertex_allow`. Both quark-loop orientations retain their generated
+fermion signs and color traces. The Yukawa coupling is defined by the generated
+tree vertex $-i y$; the width comparison explicitly sets $y=m/v$.
+
+Lorentz slots are promoted to $D$ before the Dirac trace, with $tr(1)=4$.
+`TensorReducer` uses both independent external directions, and the diagram's
+`IntegralFamily` feeds the scalar targets to native `IBPFamily.reduce_laporta`.
+For $k_1^2=k_2^2=0$ and $s=(k_1+k_2)^2$, the physical tensor is
+$ T^(mu nu)=frac(s,2)g^(mu nu)-k_2^mu k_1^nu. $
+The full open tensor can also contain $k_1^mu k_2^nu$; explicit shared physical
+polarization projectors annihilate this term. Both Ward contractions, Bose
+symmetry and the tensor norm are separate algebraic checks.
+
+In the native UFO convention, restoring the scalar loop measure gives
+$ i cal(M)_(a b)^(mu nu)=-frac(i g_s^2 y m,4 pi^2 s)
+  delta_(a b) T^(mu nu) K_D, $
+$ K_D=frac(2(4-D),D-2)B_0(s;m^2,m^2)
+  +(frac(8m^2,D-2)-s)C_0(0,0,s;m^2,m^2,m^2). $
+Keep $D=4-2epsilon$ until after inserting the bubble pole: the factor
+$2epsilon/(1-epsilon)$ multiplying $B_0=1/epsilon+O(1)$ supplies the finite
+constant $2$. The result has no UV pole and its finite kernel is
+$ K=2+(4m^2-s)C_0. $
+The gallery chooses `PreFactor -> -1`, so its displayed amplitude has the
+opposite overall phase; #link("https://feyncalc.github.io/FeynCalcBook/Extra/FeynArtsSigns.html")[the FeynArts convention]
+uses `PreFactor -> 1` for $i cal(M)$. Graph signs and model couplings are retained.
+
+Shared OneLOop supplies the finite triangle with squared masses and the
+Feynman prescription. Defining $A=3m^2 K/s$ gives $A -> 1$ for a heavy quark
+and $A=3/2$ at $s=4m^2$. Above this threshold $A$ is complex, so the width
+uses $A A^*$ rather than $A^2$. Shared `Particle.spin_sum`, `color_sum`,
+`Kinematics.two_body_phase_space` and the rest-frame flux give
+$ Gamma(H -> g g)=frac((N_c^2-1)alpha_s^2 m_H^3,576 pi^3 v^2) abs(A)^2. $
+The explicit $1/2!$ counts identical gluons and is not part of their labeled
+amplitude. This is one massive quark flavor at leading order; other flavors
+require a coherent amplitude sum before squaring, and QCD radiative corrections
+are outside this workflow.
+
+The installed-host regression passes 19 spacelike, threshold and timelike
+points, including scale independence and mass scaling. The live notebook
+passes its default state and 17 reactive mass, threshold and coupling
+combinations. The shared OneLOop owner restores the zero-root ordering in its
+three-mass triangle formula; separate native, expression and master-callback
+checks agree with independent analytic values to 110 decimal digits.
 
 == Generated one-loop QED renormalization
 
