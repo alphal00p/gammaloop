@@ -395,7 +395,40 @@ $ frac(d sigma, d Omega) = frac(alpha_s^2, 18s) (1+cos^2 theta), quad
   sigma = frac(8 pi alpha_s^2, 27s). $
 The separate `hep/qcd_annihilation.py` notebook runs these exact comparisons
 in the same Marimo instance as the other examples. Identical-flavor channels,
-external-gluon scattering and general QCD observables remain unvalidated.
+quark-gluon scattering and general QCD observables remain unvalidated.
+
+== Generated quark annihilation into gluons
+
+`installed_feyncalc_qcd_gluons.py` generates the three ordinary tree amplitudes
+for $b bar(b) -> g g$, aligns their external ports, and forms the Dirac adjoint
+of their sum. All interference terms are retained. Initial spin and color
+averages use `Particle.spin_sum` and `Particle.color_sum`; final colors and
+physical polarizations are summed with the same shared APIs.
+
+The full massive SU(N) result is compared with
+#link("https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/QQbar-GlGl")[the FeynCalc two-gluon example].
+Choosing the opposite final gluon or the incoming massive quark as each
+polarization reference gives the same result, including the nonzero
+reference-norm terms for the latter choice. The massless SU(3) limit is
+$ abs(cal(M))^2 = frac(32 g_s^4, 27) frac(t^2+u^2, t u)
+  - frac(8 g_s^4, 3) frac(t^2+u^2, s^2). $
+The squared amplitude is symmetric under exchanging the labeled final gluons.
+Integrating over both labels requires the usual $1/2!$ identical-particle factor;
+this example does not supply a finite total massless cross section.
+
+The calculation exposed two shared Idenso gaps: the existing color-conjugation
+helper was disconnected from `spenso_conjugate` and `dirac_adjoint`, and color
+metrics were not contracted inside collected traces before applying terminal
+trace identities. Both paths now reuse their existing shared implementations.
+Contracted symmetric traces through degree four reuse Spenso's normalized
+projector expansion and Idenso's Casimir rules. Scalar representation labels
+remain unchanged under conjugation. Higher-degree symmetric invariants remain
+symbolic.
+
+`hep/qcd_gluons.py` presents the generated diagrams and both gauge-reference
+checks in a separate notebook on the same Marimo server. The ghost-subtraction
+variant of this gallery example is still pending; covariant polarization sums
+alone are not a replacement for physical gluon sums.
 
 == Validation standard
 

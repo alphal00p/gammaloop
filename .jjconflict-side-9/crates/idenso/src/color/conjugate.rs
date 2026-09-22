@@ -33,12 +33,12 @@ static COLOR_CONJ_REPRESENTATION_SWAPS: LazyLock<[Replacement; 2]> = LazyLock::n
 
     [
         Replacement::new(
-            coaf.to_symbolic([RS.a__]).to_pattern(),
-            cof.to_symbolic([RS.a__]),
+            coaf.to_symbolic([RS.d_, RS.a_]).to_pattern(),
+            cof.to_symbolic([RS.d_, RS.a_]),
         ),
         Replacement::new(
-            cof.to_symbolic([RS.a__]).to_pattern(),
-            coaf.to_symbolic([RS.a__]),
+            cof.to_symbolic([RS.d_, RS.a_]).to_pattern(),
+            coaf.to_symbolic([RS.d_, RS.a_]),
         ),
     ]
 });
@@ -106,5 +106,12 @@ mod tests {
             );
         assert_eq!(conjugate, expected);
         assert_eq!(conjugate.spenso_conj(), network);
+    }
+
+    #[test]
+    fn color_conjugation_preserves_scalar_representation_invariants() {
+        test_initialize();
+        let invariant = parse!("cas(2,cof(3))", default_namespace = "spenso");
+        assert_eq!(invariant.spenso_conj(), invariant);
     }
 }
