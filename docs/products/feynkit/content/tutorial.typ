@@ -277,6 +277,46 @@ Zero denotes a logarithmic superficial divergence, a positive value a power dive
 and a negative value superficial convergence. This local bound scales all momenta at each
 vertex together; it does not account for tensor cancellations or rule out UV subdivergences.
 
+== Carry a generated triangle through its finite amplitude
+
+The host notebook
+#link("https://github.com/symbolica-dev/symbolica-community/blob/main/examples/hep/higgs_gluons.py")[hep/higgs_gluons.py]
+starts from the model's top-quark interactions for $H -> g g$. Select typed
+`VertexRule` objects by their particle content instead of relying on model-specific
+vertex numbers:
+
+// docs-example: compile
+```python
+top, higgs, gluon = (model.particle_by_pdg(pdg) for pdg in (6, 25, 21))
+allowed_particles = [
+    sorted([top.antiname, top.name, higgs.name]),
+    sorted([top.antiname, top.name, gluon.name]),
+]
+vertices = [v for v in model.vertex_rules if sorted(v.particles) in allowed_particles]
+result = model.generate_diagrams(
+    [higgs], [gluon, gluon], loops=1, max_vertices=3,
+    maximum_bridges=0, vertex_allow=vertices, numerator_grouping=None,
+)
+```
+
+Keep both orientations and each diagram's complete weight. Promote Lorentz slots
+to a dimension symbol before tracing, then give `TensorReducer` the loop vector
+and both independent external directions. `IntegralFamily.rewrite_numerator`
+produces scalar integral targets for native `IBPFamily.reduce_laporta`; OneLOop
+supplies their Laurent coefficients. Reduction and master evaluation are distinct
+steps. Substituting $D=4$ before the Laurent expansion would lose the finite
+rational $2$ from the dimension-dependent bubble coefficient.
+
+Use the generated tree Yukawa vertex to fix the phase. The
+#link("https://feyncalc.github.io/FeynCalcExamples/QCD/OneLoop/H-GlGl")[FeynCalc example]
+chooses `PreFactor -> -1`, which reverses the native $i cal(M)$ convention.
+Shared physical gluon spin and color sums, two-body phase space and decay flux
+then form the width, with one explicit $1/2!$ for identical gluons. Above the
+quark-pair threshold, square the complex amplitude with its conjugate. The
+#source-link("crates/feynkit-py/tests/installed_feyncalc_higgs_gluons.py", label: "companion regression")
+checks this single-flavor leading-order calculation; additional flavors must be
+summed coherently before forming a rate.
+
 == Use finalized output
 
 Generation performs topology expansion, interaction assignment, filters, canonicalization,
