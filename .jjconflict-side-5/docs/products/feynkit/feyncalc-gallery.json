@@ -3043,7 +3043,27 @@
         "TimeUsed",
         "TrickMandelstam"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "passed: generated massive SU(N) and massless SU(3) squared matrix elements",
+      "validated_components": [
+        {
+          "scope": "generated different-flavor quark annihilation with initial spin/color averages and final-state sums; massless angular and total cross sections",
+          "components": [
+            "Generator.generate",
+            "Particle.sum_spins",
+            "Particle.color_sum",
+            "TensorExpression.simplify_color",
+            "TensorExpression.simplify_gamma",
+            "Kinematics.mandelstam",
+            "Kinematics.two_body_phase_space",
+            "Kinematics.flux"
+          ],
+          "result": "passed in installed host and live Marimo notebook",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_qcd_annihilation.py",
+          "massless_reference": "(Nc^2-1)*gs^4*(t^2+u^2)/(2*Nc^2*s^2)",
+          "total_cross_section": "8*pi*alpha_s^2/(27*s)",
+          "conventions": "TR=1/2; four-dimensional external spins; different flavors; SU(3) for cross sections"
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/QiQi-QiQi",
