@@ -288,6 +288,12 @@
   /// Debug level. `1` enables CeTZ canvas debug; `2` also marks edge positions.
   /// -> bool | int
   debug: false,
+  /// Show the padded boxes used by label placement: dashed purple for
+  /// label–label clearance, cyan for label–obstacle clearance, and orange for
+  /// node/edge obstacles. Each pair shares the padding equally. Floating
+  /// overlays do not affect placement, canvas bounds, or interaction targets.
+  /// -> bool
+  debug-label-collisions: false,
   /// Show `h_i` beside every half-edge without an explicit endpoint label.
   /// -> bool
   show-half-edge-ids: false,
@@ -481,6 +487,7 @@
       title: title,
       subgraph: subgraph,
       debug: debug,
+      debug-label-collisions: debug-label-collisions,
       show-half-edge-ids: show-half-edge-ids,
       node-radius: node-radius,
       node-min-radius: node-min-radius,

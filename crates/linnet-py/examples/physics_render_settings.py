@@ -58,7 +58,10 @@ def _(mo):
     the sewn graph. Internal labels keep a uniform gap to their text bounds,
     sliding along their curves or switching sides to avoid overlaps.
     Momentum labels use the diagram's
-    stored loop momentum basis. Debug mode adds node and half-edge IDs.
+    stored loop momentum basis. **Debug IDs** adds node and half-edge IDs.
+    **Collision boxes** shows padded label boxes: dashed purple for label–label
+    clearance, cyan for label–edge/node clearance, and orange for edge/node
+    obstacles. Only matching purple–purple or cyan–orange overlaps are penalized.
 
     Hover for physics information; click to inspect an edge or vertex.
     Shift-click toggles selection. The outer quarters of an internal edge
@@ -125,6 +128,7 @@ def _(examples, mo):
     show_momenta = mo.ui.checkbox(value=False, label="Momentum arrows")
     show_momentum_labels = mo.ui.checkbox(value=False, label="Momentum labels")
     show_half_edge_ids = mo.ui.checkbox(value=False, label="Debug IDs")
+    show_collision_boxes = mo.ui.checkbox(value=False, label="Collision boxes")
     mo.hstack(
         [
             example,
@@ -133,6 +137,7 @@ def _(examples, mo):
             show_momenta,
             show_momentum_labels,
             show_half_edge_ids,
+            show_collision_boxes,
         ],
         justify="start",
         wrap=True,
@@ -141,6 +146,7 @@ def _(examples, mo):
     return (
         example,
         mode,
+        show_collision_boxes,
         show_half_edge_ids,
         show_momentum_labels,
         show_momenta,
@@ -318,6 +324,7 @@ def _(
     layout_algorithm,
     lp,
     mode,
+    show_collision_boxes,
     show_half_edge_ids,
     show_momentum_labels,
     show_momenta,
@@ -338,6 +345,7 @@ def _(
     # The shared physics template lightens sink halves by 45% and owns the
     # particle, label, arrow, and placement conventions.
     render_config = lp.RenderConfig(
+        drawing=lp.DrawOptions(debug_label_collisions=show_collision_boxes.value),
         layouts=lp.LayoutOptions(
             algorithm=layout_algorithm.value,
             steps=force_steps.value,

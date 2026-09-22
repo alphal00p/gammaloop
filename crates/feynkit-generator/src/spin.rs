@@ -4,7 +4,11 @@ use feynkit_graph::symbols;
 use feynkit_model::{Model, Particle};
 use idenso::{dirac::AGS, representations::Bispinor};
 use spenso::network::library::symbolic::ETS;
-use spenso::structure::representation::{Minkowski, RepName};
+use spenso::structure::{
+    abstract_index::AbstractIndex,
+    representation::{Minkowski, RepName},
+    slot::DummyAind,
+};
 use symbolica::{
     atom::{Atom, AtomCore},
     function,
@@ -23,6 +27,10 @@ pub enum SpinSumError {
     OrthogonalReference,
     #[error("a momentum must be an unindexed symbol or function call")]
     InvalidMomentum,
+    #[error("a spin vector requires a massive Dirac fermion")]
+    SpinVectorRequiresMassiveFermion,
+    #[error("a selected spin state cannot also be spin averaged")]
+    PolarizedAverage,
 }
 
 /// An axial-gauge reference contracted with the two open Lorentz slots.
@@ -87,19 +95,33 @@ impl SpinSum {
     /// The two indices are bare Symbolica indices, not Spenso slots. Fermions
     /// use `bis(4, index)` and vectors use `mink(4, index)`. A momentum may be
     /// a symbol (`p`) or a labeled function (`Q(1)`). For massless vectors,
-    /// omitting the reference selects the covariant sum.
+    /// omitting the reference selects the covariant sum. A massive Dirac spin
+    /// vector selects one physical state, with `p.s = 0` and `s.s = -1` imposed
+    /// by the caller. It uses `(slash(p) +/- m)(1 + gamma5 slash(s))/2` for
+    /// particles and antiparticles alike and cannot be combined with averaging.
     pub fn expression(
         &self,
         momentum: &Atom,
         indices: [Atom; 2],
         reference: Option<&Atom>,
+        spin_vector: Option<&Atom>,
     ) -> Result<Atom, SpinSumError> {
         use symbolica::atom::AtomView;
         if !matches!(momentum.as_view(), AtomView::Var(_) | AtomView::Fun(_))
-            || reference
-                .is_some_and(|r| !matches!(r.as_view(), AtomView::Var(_) | AtomView::Fun(_)))
+            || [reference, spin_vector]
+                .into_iter()
+                .flatten()
+                .any(|vector| !matches!(vector.as_view(), AtomView::Var(_) | AtomView::Fun(_)))
         {
             return Err(SpinSumError::InvalidMomentum);
+        }
+        if spin_vector.is_some() {
+            if self.spin != 2 || self.massless {
+                return Err(SpinSumError::SpinVectorRequiresMassiveFermion);
+            }
+            if self.average {
+                return Err(SpinSumError::PolarizedAverage);
+            }
         }
         let lorentz = Minkowski {}.new_rep(4);
         match self.spin {
@@ -107,13 +129,32 @@ impl SpinSum {
             2 => {
                 let spinor = Bispinor {}.new_rep(4);
                 let [left, right] = indices.map(|index| spinor.pattern(index));
+                let end = if spin_vector.is_some() {
+                    spinor.pattern(AbstractIndex::new_dummy().to_atom())
+                } else {
+                    right.clone()
+                };
                 let slash = function!(
                     AGS.gamma,
                     &left,
-                    &right,
+                    &end,
                     lorentz.vector(momentum.as_view(), [])
                 );
-                self.fermion(slash, &left, &right)
+                let completeness = self.fermion(slash, &left, &end)?;
+                Ok(if let Some(spin) = spin_vector {
+                    let middle = spinor.pattern(AbstractIndex::new_dummy().to_atom());
+                    let projection = function!(ETS.metric, &end, &right)
+                        + function!(AGS.gamma5, &end, &middle)
+                            * function!(
+                                AGS.gamma,
+                                &middle,
+                                &right,
+                                lorentz.vector(spin.as_view(), [])
+                            );
+                    completeness * projection / Atom::num(2)
+                } else {
+                    completeness
+                })
             }
             3 => {
                 let components = indices
@@ -156,12 +197,13 @@ impl SpinSum {
         momentum: &Atom,
         edge: usize,
         reference: Option<&Atom>,
+        spin_vector: Option<&Atom>,
     ) -> Result<Atom, SpinSumError> {
         let indices = [
             symbolica::symbol!("feynkit::spin_left_").into(),
             symbolica::symbol!("feynkit::spin_right_").into(),
         ];
-        let tensor = self.expression(momentum, indices.clone(), reference)?;
+        let tensor = self.expression(momentum, indices.clone(), reference, spin_vector)?;
         let slots = indices.map(|index| match self.spin {
             2 => Bispinor {}.new_rep(4).pattern(index),
             _ => Minkowski {}.new_rep(4).pattern(index),
@@ -283,17 +325,17 @@ mod tests {
             let spectator = function!(ket, 8, &slots[0]) * function!(bra, 8, &slots[1]);
             let unpaired = function!(ket, 7, &slots[0]);
             let input = &pair * &spectator + &unpaired;
-            let tensor = sum.expression(&p, indices.clone(), None).unwrap();
-            let output = sum.apply(&input, &p, 7, None).unwrap();
+            let tensor = sum.expression(&p, indices.clone(), None, None).unwrap();
+            let output = sum.apply(&input, &p, 7, None, None).unwrap();
             assert!(
                 (output.clone() - tensor * spectator - unpaired)
                     .expand()
                     .is_zero()
             );
-            assert_eq!(sum.apply(&output, &p, 7, None).unwrap(), output);
+            assert_eq!(sum.apply(&output, &p, 7, None, None).unwrap(), output);
             let wrong =
                 function!(symbols::v(), 7, &slots[0]) * function!(symbols::ubar(), 7, &slots[1]);
-            assert_eq!(sum.apply(&wrong, &p, 7, None).unwrap(), wrong);
+            assert_eq!(sum.apply(&wrong, &p, 7, None, None).unwrap(), wrong);
         }
         let scalar = model
             .particle_by_id(model.particle_id_by_pdg(25).unwrap())
@@ -302,7 +344,7 @@ mod tests {
         assert_eq!(
             SpinSum::new(scalar, &model)
                 .unwrap()
-                .apply(&input, &p, 7, None)
+                .apply(&input, &p, 7, None, None)
                 .unwrap(),
             input
         );
@@ -320,11 +362,11 @@ mod tests {
         let antiparticle = model.particle_by_id(particle.antiparticle).unwrap();
         let u = SpinSum::new(particle, &model)
             .unwrap()
-            .expression(&p, indices.clone(), None)
+            .expression(&p, indices.clone(), None, None)
             .unwrap();
         let v = SpinSum::new(antiparticle, &model)
             .unwrap()
-            .expression(&p, indices.clone(), None)
+            .expression(&p, indices.clone(), None, None)
             .unwrap();
         let identity = Bispinor {}.new_rep(4).id(&indices[0], &indices[1]);
         assert!(
@@ -335,7 +377,7 @@ mod tests {
         let averaged = SpinSum::new(particle, &model)
             .unwrap()
             .averaged(true)
-            .expression(&p, indices, None)
+            .expression(&p, indices, None, None)
             .unwrap();
         assert!((Atom::num(2) * averaged - u).expand().is_zero());
     }
@@ -356,7 +398,7 @@ mod tests {
                 .unwrap();
             let projector = SpinSum::new(particle, &model)
                 .unwrap()
-                .expression(&p, [mu.clone(), nu.clone()], reference)
+                .expression(&p, [mu.clone(), nu.clone()], reference, None)
                 .unwrap();
             let mass_squared = if pdg == 22 {
                 Atom::Zero
@@ -397,7 +439,7 @@ mod tests {
                 .unwrap();
             let projector = SpinSum::new(particle, &model)
                 .unwrap()
-                .expression(&parse!("p"), [parse!("i"), parse!("i")], None)
+                .expression(&parse!("p"), [parse!("i"), parse!("i")], None, None)
                 .unwrap();
             assert_eq!(
                 projector.simplify_gamma().expand(),
@@ -411,7 +453,7 @@ mod tests {
             SpinSum::new(scalar, &model)
                 .unwrap()
                 .averaged(true)
-                .expression(&parse!("p"), [parse!("i"), parse!("j")], None)
+                .expression(&parse!("p"), [parse!("i"), parse!("j")], None, None)
                 .unwrap(),
             Atom::one()
         );
