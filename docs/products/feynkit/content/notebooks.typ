@@ -105,7 +105,11 @@ relaxed internal labels.
 Enable the notebook's *Collision boxes* toggle or set
 `DrawOptions(debug_label_collisions=True)` to inspect the optimizer's padded
 boxes. Dashed purple boxes repel other purple boxes; cyan label boxes repel
-orange node/edge boxes. The orange rectangles sample the visible edge carriers,
+orange node/edge boxes, excluding each label's own edge unless it is a self-loop.
+The fixed normal gap controls clearance from its own carrier, so increasing
+padding does not push labels along that edge. Self-loops retain collision checks
+because another part of the loop can approach the label.
+The orange rectangles sample the visible edge carriers,
 including the width of waves and coils. Base padding is split equally across each
 pair of boxes. `DrawOptions(label_collision_padding=0.15)` adds another 0.15
 canvas units on every side of each label box by default. Increase it to encourage
