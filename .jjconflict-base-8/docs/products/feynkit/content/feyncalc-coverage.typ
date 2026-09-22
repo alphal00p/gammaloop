@@ -43,9 +43,12 @@ not treat the presence of a primitive as an end-to-end validation.
    transverse components. Integral-family reduction remains a separate step.],
   [UV expansion], [`feynkit-graph` and Vakint],
   [Graph and subgraph expansion and vacuum-integral infrastructure exist.
-   Generated two-loop massless QED in Feynman gauge and scalar self-energy
-   examples validate bare UV poles. Their analytic vacuum values and counterterm
-   sums are explicit reference inputs; automatic forest generation stays separate.],
+   The one-loop QED renormalization workflow combines generated massive
+   self-energies and vertex with symbolic gauge dependence and a counterterm
+   linear solve. Generated two-loop massless QED in Feynman gauge and scalar
+   self-energy examples validate bare UV poles. Analytic vacuum values remain
+   explicit inputs; the two-loop counterterm sums are supplied reference inputs.
+   Automatic forest generation stays separate.],
   [Integral families and mappings], [`feynkit-graph::IntegralFamily`],
   [Generated diagrams expose families through their shared denominator builder
    and momentum routing. Affine propagator rank, partial fractions, scalar-product completion and
@@ -528,8 +531,79 @@ unequal positive mass and renormalization scales. The above-threshold imaginary
 part is checked separately against the two-particle cut. Native OneLOop
 coefficient functions evaluate directly as Symbolica expressions. The benchmark
 assumes positive squared mass and scale and nonzero $s$; it does not establish
-the degenerate Gram limit or reproduce the lepton self-energy, vertex and
-counterterm parts of the full renormalization example.
+the degenerate Gram limit. The one-loop renormalization workflow below adds
+the lepton self-energy, vertex UV pole and counterterm matching. Complete finite
+lepton self-energy and renormalized vertex form factors remain outside that
+workflow.
+
+== Generated one-loop QED renormalization
+
+`hep/qed_renormalization.py` and
+`installed_feyncalc_qed_renormalization.py` assemble the local UV structures of
+#link("https://feyncalc.github.io/FeynCalcExamples/QED/OneLoop/Renormalization")[the massive one-loop QED renormalization example].
+They generate the electron and photon self-energies, electron-photon vertex,
+and its tree normalization from the model. The internal photon propagator
+retains the symbolic covariant-gauge parameter $xi$; the electron mass stays
+symbolic throughout. Generated wavefunctions identify the open tensor ports.
+Only the external Wick-order sign is removed from the amputated electron
+self-energy; internal fermion-loop signs and other graph weights are retained.
+The vertex is normalized against the generated tree vertex.
+
+`diagram.uv_expansion` retains every term through the graph's UV degree.
+Idenso traces and the shared vacuum `TensorReducer` project the local
+structures, and `IntegralFamily` rewrites them in the common vacuum denominator
+$k^2-M$, where $M=m_"UV"^2$. Native `IBPFamily.reduce_laporta` reduces raised
+powers to the tadpole. Its analytic pole $A_0(M)=M/epsilon+O(1)$ is a supplied
+input, checked with OneLOop; it is not inferred by the IBP solver. Restoring the
+loop measure $i (4 pi)^(epsilon-2)$ and using $a_4=e^2/(16 pi^2)$ fixes the
+normalization. Lorentz contractions keep $D$ symbolic and use $tr(1)=4$;
+substitute $D=4-2 epsilon$ after reduction.
+
+The reference structures compared by the calculation are
+$ Sigma_"UV" = frac(i a_4,epsilon)
+  (xi slash(p)-(xi+3)m), quad
+  Pi_"UV"^(mu nu) = -frac(4 i a_4 N_f,3 epsilon)
+  (p^2 g^(mu nu)-p^mu p^nu), $
+and the vertex pole is $a_4 xi/epsilon$ times its tree value. The photon loop
+receives a symbolic flavor multiplicity $N_f$. Physical-mass and auxiliary-mass
+correction terms in the UV expansion cancel local $m^2 g^(mu nu)$ and
+$M g^(mu nu)$ poles; the auxiliary mass does not survive in the final poles.
+
+A six-by-six Symbolica linear solve matches these generated poles to the
+counterterm operators, with $Z_j=1+a_4 delta Z_j$. The structures follow from
+$psi_0=sqrt(Z_psi) psi$, $m_0=Z_m m$, $A_0=sqrt(Z_A) A$,
+$xi_0=Z_xi xi$ and $e_0=Z_e e$. The electron counterterm is proportional to
+$delta Z_psi slash(p)-m(delta Z_psi+delta Z_m)$, while the vertex coefficient is
+$delta Z_psi+delta Z_e+delta Z_A/2$. The photon longitudinal equation is
+$xi B+(xi-1)delta Z_A+delta Z_xi=0$, where $B$ multiplies $p^mu p^nu$ in the
+loop pole divided by $i a_4$. Solving with symbolic $xi$ gives a regular
+continuation to Landau gauge, $xi=0$.
+
+The comparison values are
+$ delta Z_psi=-frac(xi,epsilon), quad delta Z_m=-frac(3,epsilon), quad
+  delta Z_A=delta Z_xi=-frac(4 N_f,3 epsilon), quad
+  delta Z_e=frac(2 N_f,3 epsilon), quad delta Z_(A m)=0. $
+They obey the Ward relation $delta Z_e+delta Z_A/2=0$, or
+$delta Z_1=delta Z_psi$ for the vertex renormalization constant
+$Z_1=Z_psi Z_e sqrt(Z_A)$. Here $delta Z_(A m)$ multiplies the additive
+auxiliary operator $a_4 M A_mu A^mu/2$; its zero follows from retaining the
+mass-correction terms above. These counterterm structures are supplied from
+the Lagrangian and their coefficients are solved, rather than generated from
+a counterterm model. Automatic counterterm insertions and subtraction forests,
+finite off-shell form factors and higher-loop renormalization remain separate
+work.
+
+The installed regression passes the four UV-structure comparisons and all six
+counterterm references with symbolic $xi$ in the rebuilt HEP host. It also
+checks the exact linear-system residual, Ward relations, cancellation of
+physical and auxiliary mass dependence, and absence of double poles. An
+independent electron self-energy calculation verifies that the longitudinal
+photon denominator cancels after trace and vacuum projection, leaving no
+hidden loop-momentum dependence in the scalar-family coefficients. All 78
+generator tests and ten installed physics regressions pass. The notebook
+passes strict Marimo checks and headless export; the existing live instance
+executes its default and nine combinations of gauge parameter and flavor count
+without cell errors. The native extension is installed in that same host.
 
 == Native IBP reduction through RustRed
 
