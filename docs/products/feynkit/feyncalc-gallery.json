@@ -1301,10 +1301,10 @@
         "ToExpression",
         "Total"
       ],
-      "end_to_end_validation": "partial: generated Pauli form factor, native IBP and exact Schwinger limit pass; the complete renormalized Dirac form factor and timelike continuation are not validated",
+      "end_to_end_validation": "passed: generated one-loop Pauli projection, native IBP and exact F2(0)=alpha/(2*pi) cover the reference; additional spacelike and timelike continuation, physical cut and threshold checks pass",
       "validated_components": [
         {
-          "scope": "generated tree and one-loop electron-photon vertices, two-projector Gram solve, nine-target native IBP reduction, exact F2(0)=alpha/(2*pi), and five spacelike finite Pauli form factors",
+          "scope": "generated tree and one-loop electron-photon vertices, two-projector Gram solve, nine-target native IBP reduction, exact Schwinger limit, 60 spacelike/timelike mass-and-scale checks, physical two-electron cut, low-energy expansion, exact differential equation and threshold limits",
           "test": "crates/feynkit-py/tests/installed_feyncalc_gminus2.py",
           "components": [
             "Generator.generate",
@@ -1313,15 +1313,17 @@
             "Matrix.solve",
             "FeynmanDiagram.integral_family",
             "IntegralFamily.rewrite_numerator",
-            "IntegralFamily.mapping_to",
             "IBPFamily.reduce_laporta",
             "IBPSolution.reduce",
             "OneLOop.A0",
             "OneLOop.B0",
-            "OneLOop.dB0"
+            "OneLOop.dB0",
+            "Symbolica.series",
+            "Symbolica.integrate",
+            "Symbolica.derivative"
           ],
           "result": "passed",
-          "note": "Live notebook: hep/gminus2.py. External electrons are on shell and photon momentum is spacelike; the zero-momentum limit is taken after reduction and integration. Independent quadrature and the OneLOop bubble derivative check finite values. No full Dirac form factor or general timelike continuation is claimed."
+          "note": "Live notebooks: hep/gminus2.py and hep/pauli_form_factor.py. The continuation notebook composes the generated vertex calculation. Two independent parameter contours, a closed-form parameter integral and the OneLOop bubble derivative check the finite values; residues fix the positive imaginary part on the t+i0 sheet. All 60 live control combinations, strict Marimo checks, HTML export and the installed regression pass. The gallery reference asks only for F2(0), not the full renormalized Dirac form factor. F1 remains outstanding; the threshold itself is singular."
         }
       ]
     },
