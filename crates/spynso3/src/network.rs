@@ -62,9 +62,10 @@ use pyo3_stub_gen::{PyStubType, derive::*};
 
 /// A graph of tensor operations that can be simplified and executed.
 ///
-/// Named tensor expressions are resolved through a `TensorLibrary`. Register concrete data
-/// before constructing and executing a network; an expression alone supplies structure, not
-/// component values.
+/// Named tensor expressions are resolved through a `TensorLibrary`. Register tensors
+/// to supply their component values. Unregistered tensors with concrete dimensions
+/// acquire symbolic components automatically; `TensorExpression.components()` exposes
+/// the same components without requiring a surrounding network.
 ///
 /// A network retains the semantic source expression and its public tensor interface
 /// separately from the executable graph and its stored values. Value specialization
@@ -1177,7 +1178,7 @@ impl SpensoNet {
     /// >>> lib = TensorLibrary.hep_lib()
     /// >>> network.execute(library=lib)
     #[pyo3(signature = (library=None,function_library=None, n_steps=None, mode=ExecutionMode::All))]
-    fn execute(
+    pub(crate) fn execute(
         &mut self,
         library: Option<&SpensorLibrary>,
         function_library: Option<&SpensorFunctionLibrary>,
@@ -1259,7 +1260,7 @@ impl SpensoNet {
     /// >>> lib = TensorLibrary.hep_lib()
     /// >>> result_with_lib = network.result_tensor(library=lib)
     #[pyo3(signature = (library=None))]
-    fn result_tensor(&self, library: Option<&SpensorLibrary>) -> PyResult<Spensor> {
+    pub(crate) fn result_tensor(&self, library: Option<&SpensorLibrary>) -> PyResult<Spensor> {
         let lib = library.map(|l| &l.library).unwrap_or(HEP_LIB.deref());
         let descriptor = self.structure.clone();
         let (name, args) = self

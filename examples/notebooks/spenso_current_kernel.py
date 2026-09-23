@@ -40,7 +40,8 @@ def _(mo):
     indices, and keep the Lorentz index open. Here `Jbar` is an already
     barred current supplied independently of `J`; no conjugation is implicit.
 
-    The current API uses `Tensor.dense` and simplification methods on
+    The current API generates unknown components automatically and provides
+    simplification methods on
     `TensorExpression`. Gamma's slots are **(row, column, Lorentz)**:
     `gamma(a, b, mu)` implements the equation above. Reversing `a, b`, as
     in the paper's listing, transposes the matrix in this contraction.
@@ -53,10 +54,10 @@ def _(mo):
     mo.md(r"""
     ## Suggested paper listing — copy the next cell
 
-    The next cell is self-contained Python, including imports and symbolic
-    input components. Copy its body into the paper; no other notebook cell
-    or Marimo helper is needed. Multiplying indexed concrete tensors builds
-    the network automatically. The exact HEP library supplies the Weyl matrices.
+    The next cell is self-contained Python. Copy its body into the paper;
+    no other notebook cell or Marimo helper is needed. Unknown currents acquire
+    symbolic components automatically. The exact HEP library supplies the Weyl
+    matrices; `components()` exposes the same generated input symbols afterward.
 
     **Suggested caption:** Deriving the four symbolic components of
     $K^\mu=\bar J\gamma^\mu J$ with Spenso. Repeated spinor indices are
@@ -67,27 +68,26 @@ def _(mo):
 
 @app.cell
 def _():
-    from symbolica import S
     from symbolica.community.spenso import (
         Representation,
-        Tensor,
         TensorExpression,
         TensorLibrary,
         TensorName,
     )
 
     spinor = Representation.bis(4)
-    bar_components = S("bar0", "bar1", "bar2", "bar3")
-    components = S("j0", "j1", "j2", "j3")
-    Jbar = Tensor.dense(TensorName("Jbar")(spinor), bar_components)
-    J = Tensor.dense(TensorName("J")(spinor), components)
+    Jbar = TensorName("Jbar")(spinor)
+    J = TensorName("J")(spinor)
     gamma = TensorExpression.gamma(4)
 
     # Gamma slots: row, column, Lorentz. Only mu remains open.
-    network = Jbar("a") * gamma("a", "b", "mu") * J("b")
-    network.execute(library=TensorLibrary.hep_lib_atom())
-    kernel = network.result_tensor()
-    print(kernel[:])  # Components in the order mu = 0, 1, 2, 3.
+    current = Jbar("a") * gamma("a", "b", "mu") * J("b")
+    library = TensorLibrary.hep_lib_atom()
+    network = current.to_network(library=library)
+    network.execute(library=library)
+    kernel = network.result_tensor(library=library)
+    bar_components, components = Jbar.components(), J.components()
+    print(kernel)  # Components in the order mu = 0, 1, 2, 3.
     return (
         Representation,
         TensorExpression,
