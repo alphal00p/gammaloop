@@ -9,10 +9,16 @@ use pyo3::{
 };
 
 #[cfg(feature = "python_stubgen")]
-use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_pymethods};
+use pyo3_stub_gen::{
+    derive::{
+        gen_methods_from_python, gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_pymethods,
+    },
+    inventory::submit,
+};
 
 use crate::error;
-use symbolica::api::python::PythonExpression;
+use spynso3::expression::TensorExpression;
+use symbolica::api::python::{ConvertibleToExpression, PythonExpression};
 
 /// Scoped symbolic scalar products and two-to-two Mandelstam kinematics.
 ///
@@ -39,6 +45,7 @@ pub struct PyKinematics {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyKinematics {
     /// Start with no scalar-product assumptions in the chosen dimension.
@@ -245,12 +252,69 @@ impl PyKinematics {
     ///
     /// Parameters
     /// ----------
-    /// expression : Expression
-    ///     Expression after tensor contractions have been simplified.
-    fn apply(&self, expression: &PythonExpression) -> PythonExpression {
-        PythonExpression {
-            expr: self.inner.apply(&expression.expr),
+    /// expression : Expression or TensorExpression
+    ///     Expression after tensor contractions have been simplified. Tensor
+    ///     inputs retain their ordered interface, including when they become zero.
+    #[gen_stub(skip)]
+    fn apply(&self, py: Python<'_>, expression: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        let atom = expression
+            .extract::<ConvertibleToExpression>()?
+            .to_expression()
+            .expr;
+        let result = self.inner.apply(&atom);
+        if expression.is_instance_of::<TensorExpression>() {
+            let tensor = expression.extract::<PyRef<'_, TensorExpression>>()?;
+            TensorExpression::preserving_interface(&tensor, py, result).map(Py::into_any)
+        } else {
+            Py::new(py, PythonExpression { expr: result }).map(Py::into_any)
         }
+    }
+}
+
+#[cfg(feature = "python_stubgen")]
+submit! {
+    gen_methods_from_python! {
+        r#"
+        import typing
+
+        class PyKinematics:
+            @typing.overload
+            def apply(
+                self,
+                expression: pyo3_stub_gen.RustType["TensorExpression"],
+            ) -> pyo3_stub_gen.RustType["TensorExpression"]:
+                """Substitute scalar products while preserving the ordered tensor interface.
+
+                Tensor zeros retain their original ports.
+
+                Examples
+                --------
+                >>> result = kin.apply(contracted_tensor)
+                >>> assert result.interface == contracted_tensor.interface
+
+                Parameters
+                ----------
+                expression : TensorExpression
+                    Tensor expression with compact scalar products.
+                """
+
+            @typing.overload
+            def apply(
+                self,
+                expression: pyo3_stub_gen.RustType["ConvertibleToExpression"],
+            ) -> pyo3_stub_gen.RustType["PythonExpression"]:
+                """Substitute scalar products without mutating global assumptions.
+
+                Examples
+                --------
+                >>> result = kin.apply(contracted_expression)
+
+                Parameters
+                ----------
+                expression : Expression
+                    Expression with compact scalar products.
+                """
+        "#
     }
 }
 
