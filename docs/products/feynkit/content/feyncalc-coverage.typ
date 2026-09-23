@@ -431,11 +431,22 @@ the massless limit. It selects the positive above-threshold flux branch
 explicitly. `hep/diphoton.py` offers polarization-reference, angular-cut and
 incoming-speed controls on the existing Marimo server.
 
-The sewn-forward diphoton calculation, including Bose completion, remains a
-separate validation target. The shared sewing correction above is certified
-for Compton, muon production, and electron-muon scattering; this section's
-diphoton results use ordinary amplitudes. Existing graph weights must not be
-multiplied by a second inverse automorphism factor.
+The separate `hep/sewn_diphoton.py` notebook and
+`installed_feyncalc_sewn_diphoton.py` regression now certify the sewn-forward
+calculation too. Both cut photons can serve as the loop coordinate. Convert
+its stored directed momentum with `cut.orientations` before substituting the
+physical Mandelstam labels, and omit cut denominators from the squared amplitude.
+Adding the exchanged photon assignment restores the labeled result.
+
+Ten exact comparisons check both coordinates with covariant, null-reference
+and timelike-reference photon projectors, plus both photon Ward identities.
+The massless limit also agrees. All three physical results equal $83/8$ at
+$e=m_e=1$, $t=-1$, $u=-7$. The shared finalizer and physical cut routing
+reproduce the ordinary-amplitude result. The notebook
+shows the coordinate orientations explicitly and compares massive and massless
+results interactively. Existing graph weights must not be multiplied by a
+second inverse automorphism factor, and the labeled squared amplitude does
+not yet include the final-state event-counting factor $1/2!$.
 
 == Generated charged-current decays
 

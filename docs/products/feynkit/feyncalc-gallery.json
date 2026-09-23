@@ -1020,7 +1020,7 @@
         "TimeUsed",
         "TrickMandelstam"
       ],
-      "end_to_end_validation": "passed: generated massive ordinary amplitudes and angular-cut cross sections; massive sewn-forward conversion remains unresolved",
+      "end_to_end_validation": "passed: massive ordinary amplitudes and sewn forward graphs agree in covariant and physical photon gauges; Ward identities, both cut coordinates and massive angular-cut event rates",
       "validated_components": [
         {
           "scope": "Two generated amplitudes with interference; massive reference in covariant, null-reference and timelike-reference photon gauges; both Ward identities; Bose symmetry and massless limit; massive and massless identical-photon angular-cut cross sections",
@@ -1040,20 +1040,21 @@
           "massless_event_cross_section": "2*pi*alpha^2/s*(log((1+C)/(1-C))-C), 0<C<1"
         },
         {
-          "scope": "Bose-completed massive sewn-forward diphoton result",
-          "result": "failed: covariant and axial photon projectors disagree, confirming the unresolved sewing convention",
-          "counterexample": {
-            "e": 1,
-            "electron_mass": 1,
-            "s": 10,
-            "t": -1,
-            "u": -7,
-            "expected": "83/8",
-            "covariant_result": "59/8",
-            "axial_reference": "incoming electron momentum",
-            "axial_result": "265/16"
-          },
-          "note": "The massless sewn limit agrees. The prepared shared sewing correction and two existing fixture updates remain pending maintainer approval."
+          "scope": "Massive sewn-forward diphoton result with both cut photons as the loop coordinate, Bose completion, covariant/null-reference/timelike-reference photon projectors, both Ward identities and the massless limit.",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_sewn_diphoton.py",
+          "components": [
+            "Model.generate_diagrams",
+            "Particle.sum_spins",
+            "Particle.spin_sum",
+            "DiagramCut.orientations",
+            "LoopMomentumBasis.route_expression",
+            "TensorExpression.simplify_gamma",
+            "TensorExpression.simplify_metrics",
+            "TensorExpression.to_dots",
+            "Kinematics.mandelstam"
+          ],
+          "result": "passed",
+          "note": "Notebook: hep/sewn_diphoton.py. All ten exact comparisons pass. The stored cut momentum must be converted using cut.orientations before physical kinematic substitutions. Current shared sewing and oriented routing give 83/8 at e=m=1,t=-1,u=-7 in all three photon gauges. The two cut-photon assignments restore the labeled squared amplitude; the final-state 1/2! belongs to event-rate integration."
         }
       ]
     },
@@ -1149,7 +1150,7 @@
         "TimeUsed",
         "TrickMandelstam"
       ],
-      "end_to_end_validation": "passed: generated ordinary amplitudes; sewn-forward conversion remains unresolved",
+      "end_to_end_validation": "passed: generated massive electron and positron Compton scattering from ordinary amplitudes and sewn forward graphs, with covariant and axial photon sums and the massless limit",
       "validated_components": [
         {
           "scope": "generated massless electron and positron Compton squared matrix elements with all four sewn contributions",
@@ -1163,24 +1164,15 @@
             "TensorExpression.to_dots",
             "Kinematics.mandelstam"
           ],
-          "result": "passed in installed-host diagnostic",
-          "reference_expression": "-2*e^4*(s/u+u/s)"
+          "result": "passed",
+          "reference_expression": "-2*e^4*(s/u+u/s)",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_sewn_qed.py"
         },
         {
-          "scope": "massive generated Compton squared matrix element and incoming-photon gauge independence",
-          "result": "failed: physical completeness tensor applied directly to the native sewn projector",
-          "counterexample": {
-            "e": 1,
-            "electron_mass": 1,
-            "s": 3,
-            "t": -1,
-            "u": 0,
-            "reference": 3,
-            "covariant_result": -17,
-            "axial_reference": "incoming electron momentum",
-            "axial_result": 1
-          },
-          "diagnostic": "An isolated correction preserves the incoming sewing attachment and uses open-chain permutation parity (-1)^(n-c), without changing physical spin sums. All six public-API full-mass comparisons pass (both Compton charges in covariant and axial gauges, annihilation, and electron-muon scattering), as does GammaLoop runtime enrichment for both Compton charges. The correction is not installed: two existing native fixtures encode the reversed-carrier convention and await maintainer review."
+          "scope": "Massive generated sewn Compton squared matrix elements for both electron and positron, including all four contributions and incoming-photon gauge independence.",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_sewn_qed.py",
+          "result": "passed",
+          "note": "Current installed-host regressions pass both charges with covariant and timelike axial projectors, plus the full massive annihilation and electron-muon cases. The shared finalizer preserves the incoming sewing attachment; the generator owns open-chain permutation signs. Physical cut momenta use cut.orientations. Notebook: hep/sewn_qed.py."
         },
         {
           "scope": "generated massive electron and positron Compton amplitudes including interference, covariant and axial photon sums, and the massless limit",
