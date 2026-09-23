@@ -707,8 +707,9 @@ receives a symbolic flavor multiplicity $N_f$. Physical-mass and auxiliary-mass
 correction terms in the UV expansion cancel local $m^2 g^(mu nu)$ and
 $M g^(mu nu)$ poles; the auxiliary mass does not survive in the final poles.
 
-A six-by-six Symbolica linear solve matches these generated poles to the
-counterterm operators, with $Z_j=1+a_4 delta Z_j$. The structures follow from
+Six actual counterterm diagrams provide the coefficient matrix for a
+six-by-six Symbolica linear solve, with $Z_j=1+a_4 delta Z_j$. The structures
+follow from
 $psi_0=sqrt(Z_psi) psi$, $m_0=Z_m m$, $A_0=sqrt(Z_A) A$,
 $xi_0=Z_xi xi$ and $e_0=Z_e e$. The electron counterterm is proportional to
 $delta Z_psi slash(p)-m(delta Z_psi+delta Z_m)$, while the vertex coefficient is
@@ -723,25 +724,92 @@ $ delta Z_psi=-frac(xi,epsilon), quad delta Z_m=-frac(3,epsilon), quad
   delta Z_e=frac(2 N_f,3 epsilon), quad delta Z_(A m)=0. $
 They obey the Ward relation $delta Z_e+delta Z_A/2=0$, or
 $delta Z_1=delta Z_psi$ for the vertex renormalization constant
-$Z_1=Z_psi Z_e sqrt(Z_A)$. Here $delta Z_(A m)$ multiplies the additive
-auxiliary operator $a_4 M A_mu A^mu/2$; its zero follows from retaining the
-mass-correction terms above. These counterterm structures are supplied from
-the Lagrangian and their coefficients are solved, rather than generated from
-a counterterm model. Automatic counterterm insertions and subtraction forests,
-the complete finite off-shell vertex and higher-loop renormalization remain
-separate work; the full finite electron self-energy is validated below.
+$Z_1=Z_psi Z_e sqrt(Z_A)$. The reference auxiliary-mass operator is
+$M(Z_(A m)^2-1)A_mu A^mu/2$, whose linear term is
+$a_4 M delta Z_(A m) A_mu A^mu$. The resulting two-point rule contains
+$2 delta Z_(A m)$; this factor matters for the massless comparison below.
+Its massive value is zero after retaining the mass-correction terms above.
 
-The installed regression passes the four UV-structure comparisons and all six
-counterterm references with symbolic $xi$ in the rebuilt HEP host. It also
+The local kinetic, mass, gauge-fixing and vertex operators are explicit model
+inputs, as in the reference's QED model. Symbolica expands their bare field
+and parameter factors through first order in $a_4$. The normalized model
+stores the resulting rules with a separate `CT` coupling order. Existing
+`Model.generate_diagrams` generates two electron, three photon and one vertex
+counterterm diagrams at topological loop count zero and `CT=1`. Setting
+`CT=0` removes them. Bound `max_vertices` explicitly: two-point insertions do
+not increase the loop count. Shared Dirac projection of these actual graph
+numerators yields every matrix entry; no matching matrix is supplied by hand.
+Their native weights and tree phase are checked before pole cancellation.
+
+Both
+#link("https://feyncalc.github.io/FeynCalcExamples/QED/OneLoop/Renormalization")[the IR-rearrangement reference] and
+#link("https://feyncalc.github.io/FeynCalcExamples/QED/OneLoop/Renormalization2")[the one-loop MS/MSbar reference]
+are checked for their displayed UV-renormalization results. With
+$D=4-2 epsilon$, their $-2/(D-4)$ is $1/epsilon$ and
+$Delta=1/epsilon+c_Delta$, where $c_Delta=log(4 pi)-gamma_E$.
+#link("https://arxiv.org/abs/1007.4716")[OneLOop, Eq. (2)] divides its masters
+by $r_Gamma=Gamma(1-epsilon)^2 Gamma(1+epsilon)/Gamma(1-2 epsilon)$.
+Converting to the conventional loop measure multiplies by
+$(4 pi)^epsilon r_Gamma=1+c_Delta epsilon+O(epsilon^2)$, after stripping
+$i/(16 pi^2)$. Actual generated counterterm amplitudes cancel the loop's
+simple poles in MS and the pole plus $c_Delta$ terms in MSbar. Separate
+OneLOop tadpole and bubble checks retain the finite scheme shift in MS.
+The live notebook exposes both schemes. A full finite vertex, automatic
+NLO-UFO import and subtraction forests remain broader capabilities; they are
+not requirements of these one-loop UV examples.
+
+The installed regression passes the four UV-structure comparisons, all six
+generated counterterm references and the scheme-conversion identities with
+symbolic $xi$ in the installed HEP host. It also
 checks the exact linear-system residual, Ward relations, cancellation of
 physical and auxiliary mass dependence, and absence of double poles. An
 independent electron self-energy calculation verifies that the longitudinal
 photon denominator cancels after trace and vacuum projection, leaving no
-hidden loop-momentum dependence in the scalar-family coefficients. All 78
-generator tests and ten installed physics regressions pass. The notebook
-passes strict Marimo checks and headless export; the existing live instance
-executes its default and nine combinations of gauge parameter and flavor count
-without cell errors. The native extension is installed in that same host.
+hidden loop-momentum dependence in the scalar-family coefficients. The earlier
+78 generator tests and ten installed physics regressions also passed. The
+updated notebook passes strict Marimo checks and headless export, plus all
+156 combinations of its thirteen gauge values, six flavor counts and two
+subtraction schemes in the same live instance. It checks both massive and
+massless constants and restores the default controls afterwards.
+
+== Massless QED infrared rearrangement
+
+The same QED regression and live notebook also implement
+#link("https://feyncalc.github.io/FeynCalcExamples/QED/OneLoop/RenormalizationMassless")[the massless reference].
+Set the electron mass to zero before generating the calculation. Its
+`FCLoopAddAuxiliaryMass[..., 0]` prescription replaces every massless
+propagator denominator by a massive one, then Taylor-expands external
+momenta at fixed $M$. Separate the Feynman and longitudinal photon terms
+before this replacement.
+The first retains its single graph-edge denominator; promote only the
+longitudinal remainder to power two. This preserves the reference's
+massification prescription; promoting both terms together would preserve
+these UV poles but introduce finite differences.
+`FeynmanDiagram.denominator_expression` supplies the actual routed
+quadratics, while Symbolica series, shared tensor reduction and native IBP
+perform the remaining operations.
+
+This prescription gives
+$ Pi_"UV"^(mu nu)=frac(i a_4 N_f,epsilon)
+  (4M g^(mu nu)-frac(4,3)(p^2g^(mu nu)-p^mu p^nu)). $
+Its auxiliary mass term cancels against the generated counterterm with
+$delta Z_(A m)=-2N_f/epsilon$. The other four constants are
+$delta Z_psi=-xi/epsilon$,
+$delta Z_A=delta Z_xi=-4N_f/(3epsilon)$ and
+$delta Z_e=2N_f/(3epsilon)$. There is no mass-renormalization equation when
+the fermion mass is zero. The same generated counterterm operators determine
+this five-by-five system after removing the vanishing electron mass operator.
+
+A separate check applies the shared full UV expansion to the massless graphs.
+That operation retains the auxiliary-mass compensation terms promised by its
+contract. Their exact-dimensional photon contribution reduces to
+$-N_f(D-2)^2 A_0(M)g^(mu nu)$, cancelling the $4N_f M/epsilon$ pole.
+The physical kinetic and vertex poles agree in both prescriptions. The
+reference's directly massified Taylor expansion is also compared after
+vacuum tensor reduction and before IBP with the full UV expansion after its denominators have been frozen and only
+its explicit compensation terms removed. These checks distinguish the
+prescribed rearrangement from an accidental loss of mass terms; the shared
+UV expansion itself is unchanged.
 
 == Full massive electron self-energy
 
@@ -788,9 +856,9 @@ and threshold momentum. Controls are restored to their defaults afterwards.
 This validates the electron component of
 #link("https://feyncalc.github.io/FeynCalcExamples/QED/OneLoop/Renormalization2")[the second one-loop QED renormalization example],
 which extracts UV poles after its massive self-energy intermediate. The
-full counterterm-diagram and MS/MSbar workflow remains partial. The existing
-massive IR-rearrangement regression also does not establish the distinct
-massless auxiliary-mass counterterm.
+generated counterterm diagrams and scheme matching are validated by the
+QED renormalization workflow above, including the distinct massless
+auxiliary-mass prescription.
 
 The custom gauge symbol exposed a shared model serialization defect:
 export stripped every namespace, changing user symbols into `UFO` symbols
