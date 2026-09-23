@@ -3966,19 +3966,6 @@ class LoopMomentumBasis:
         >>> rules = diagram.loop_momentum_basis.momentum_replacements()
         >>> routed = diagram.numerator_expression().replace_multiple(rules)
         """
-    def route_expression(self, expression: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]) -> Expression:
-        r"""
-        Express edge momenta in this basis while retaining any tensor index arguments.
-
-        Examples
-        --------
-        >>> routed = diagram.loop_momentum_basis.route_expression(diagram.numerator_expression())
-
-        Parameters
-        ----------
-        expression : Expression or TensorExpression
-            Expression with canonical indexed edge momenta to route.
-        """
     def __repr__(self) -> builtins.str:
         r"""
         Return a concise description of the selected momentum basis.
@@ -4011,6 +3998,37 @@ class LoopMomentumBasis:
             The IPython pretty-printer object.
         cycle : bool
             Whether this object is part of a recursive formatting cycle.
+        """
+    @typing.overload
+    def route_expression(self, expression: TensorExpression) -> TensorExpression:
+        r"""
+        Express edge momenta in this basis while preserving the tensor interface.
+
+        Tensor zeros retain their original ordered interface.
+
+        Examples
+        --------
+        >>> routed = basis.route_expression(diagram.numerator_expression())
+        >>> assert routed.interface == diagram.numerator_expression().interface
+
+        Parameters
+        ----------
+        expression : TensorExpression
+            Tensor expression with canonical indexed edge momenta to route.
+        """
+    @typing.overload
+    def route_expression(self, expression: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]) -> Expression:
+        r"""
+        Express edge momenta in this basis while retaining tensor index arguments.
+
+        Examples
+        --------
+        >>> routed = basis.route_expression(diagram.numerator_expression().to_expression())
+
+        Parameters
+        ----------
+        expression : Expression or number
+            Expression with canonical edge momenta to route, or a scalar constant.
         """
     @typing.overload
     def route(self, loop_momenta: typing.Sequence[ThreeMomentum], external_momenta: typing.Sequence[ThreeMomentum]) -> dict[int, ThreeMomentum]:

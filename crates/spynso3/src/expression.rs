@@ -218,7 +218,9 @@ impl TensorExpression {
         )
     }
 
-    fn preserving_interface(
+    /// Wrap a transformed atom after validating that it retains this tensor's
+    /// interface. Preserve logical port order and the interface of tensor zeros.
+    pub fn preserving_interface(
         self_: &PyRef<'_, Self>,
         py: Python<'_>,
         atom: Atom,

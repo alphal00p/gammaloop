@@ -253,6 +253,10 @@ belong to the same diagram instance; bases for a subgraph or contracted region a
 accepted. Region selection, ignored numerator regions, denominator dimensions, and
 propagator powers are applied before routing. Both methods return `TensorExpression`.
 
+`basis.route_expression(expression)` also preserves `TensorExpression` inputs and
+their ordered interfaces, including when routing cancels the tensor to zero.
+Plain Symbolica expressions and scalar constants return a plain `Expression`.
+
 For the local massive Taylor expansion, `diagram.uv_expansion(mUV, edge_powers=powers)`
 and `region.uv_counterterm(mUV, edge_powers=powers)` accept the same signed power map.
 Omitted internal edges have power one; entries outside the selected internal edges are ignored.
