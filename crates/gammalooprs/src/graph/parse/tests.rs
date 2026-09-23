@@ -610,6 +610,36 @@ fn native_cross_section_runtime_enrichment_preserves_cuts_and_positive_external_
 }
 
 #[test]
+fn native_compton_runtime_enrichment_preserves_sewn_fermions() {
+    use feynkit_generator::{GenerationFilter, GenerationOptions, Generator, Process};
+    test_initialise().unwrap();
+    let model = std::sync::Arc::new(
+        feynkit_model::Model::from_json(include_str!(
+            "../../../../feynkit-model/tests/fixtures/sm.json"
+        ))
+        .unwrap(),
+    );
+    let generator = Generator::new(model);
+    for pdg in [11_i64, -11] {
+        let generated = generator
+            .generate(
+                &Process::cross_section([pdg, 22], [pdg, 22])
+                    .with_loop_count(1, 1)
+                    .unwrap(),
+                &GenerationOptions::default()
+                    .threads(1)
+                    .max_vertices(4)
+                    .with_graph_filter(GenerationFilter::VertexAllow(vec!["V_98".into()])),
+            )
+            .unwrap();
+        assert_eq!(generated.diagrams.len(), 4);
+        for diagram in generated.diagrams {
+            assert_native_runtime_parity(&diagram);
+        }
+    }
+}
+
+#[test]
 fn native_runtime_enrichment_preserves_explicit_loop_order() {
     use feynkit_graph::{DiagramVertex, ExternalState, FeynmanDiagram};
     use symbolica::atom::Atom;

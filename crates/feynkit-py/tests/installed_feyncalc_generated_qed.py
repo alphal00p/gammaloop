@@ -7,7 +7,7 @@ Polarized production remains a separate benchmark.
 from pathlib import Path
 
 from symbolica import E, Expression, S
-from symbolica.community import feynkit as fk
+from symbolica.community import hep as fk
 from symbolica.community.spenso import TensorExpression
 
 model = fk.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
@@ -29,15 +29,18 @@ assert sorted(p.pdg_code for p in cut.particles) == [-13, 13]
 assert all(side.loop_count == 0 for side in (cut.left, cut.right))
 
 Q, P, K = S("gammalooprs::Q", "gammalooprs::P", "gammalooprs::K")
-p1, p2, k1, k2 = P(0), P(1), K(0), S("k2")
+p1, p2, k1, k2 = P(0), P(1), S("k1"), S("k2")
+index = S("index_")
 s, t, u, me, mm, e = S("s", "t", "u", "UFO::Me", "UFO::MM", "UFO::ee")
 kin = fk.Kinematics.mandelstam(
     [p1, p2, k1, k2], [me**2, me**2, mm**2, mm**2], [s, t, u]
 )
-# The selected routing takes the physical mu- momentum as K(0).
+# Select the mu- line explicitly; its cut orientation fixes the physical momentum.
 muon_edge = next(edge for edge, p in zip(cut.edges, cut.particles) if p.pdg_code == 13)
+diagram = diagram.with_loop_momentum_edges([muon_edge.id])
+cut = diagram.cuts[0]
 assert diagram.loop_momentum_basis.loop_edges == [muon_edge.id]
-assert cut.orientations[muon_edge.id] == 1
+orientation = cut.orientations[muon_edge.id]
 
 projector = diagram.projector_expression()
 for edge in diagram.external_edges:
@@ -58,7 +61,11 @@ contracted = (
     .to_dots()
     .to_expression()
 )
-contracted = kin.apply(diagram.loop_momentum_basis.route_expression(contracted))
+contracted = kin.apply(
+    diagram.loop_momentum_basis.route_expression(contracted).replace(
+        K(0, index), orientation * k1(index)
+    )
+)
 
 # Cut propagators belong to the phase-space measure, not the squared amplitude.
 denominator = diagram.denominator_expression(
@@ -66,7 +73,11 @@ denominator = diagram.denominator_expression(
 ).to_expression()
 denom = S("gammalooprs::denom")
 a, b, c, inverse = S("a_", "b_", "c_", "inverse_")
-denominator = kin.apply(denominator.replace(denom(a, b, c, inverse), inverse))
+denominator = kin.apply(
+    denominator.replace(denom(a, b, c, inverse), inverse).replace(
+        K(0, index), orientation * k1(index)
+    )
+)
 assert (denominator - s**2).expand() == E("0")
 factor = diagram.overall_factor_expression(evaluate=True)
 assert factor == E("-1")
