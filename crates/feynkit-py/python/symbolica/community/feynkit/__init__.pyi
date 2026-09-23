@@ -3792,6 +3792,32 @@ class Kinematics:
         second : Expression
             Second outgoing unindexed momentum or declared linear combination.
         """
+    def three_body_phase_space(self, first: Expression, second: Expression, third: Expression) -> Expression:
+        r"""
+        Return four-dimensional three-body phase space per two Dalitz invariants.
+
+        This is ``dPhi_3/(ds12*ds23) = 1/(128*pi**3*P**2)``, where
+        ``P=first+second+third`` and ``sij=(pi+pj)**2``. The overall spatial
+        orientation is integrated. Use an orientation-independent or
+        orientation-averaged squared amplitude and physical on-shell momenta.
+        The measure includes ``(2*pi)**4*delta**4`` and one
+        ``d**3p/((2*pi)**3*2E)`` for each final particle.
+
+        Masses constrain the allowed Dalitz region; its boundaries are not
+        imposed here. Flux, spin/color averages and identical-particle factors
+        remain separate. Non-four-dimensional contexts are rejected.
+
+        Examples
+        --------
+        >>> density = kin.three_body_phase_space(k1, k2, k3)
+        >>> differential_width = squared * density / kin.flux(parent)
+
+        Parameters
+        ----------
+        first, second, third : Expression
+            Final-state on-shell momenta. Their scalar products determine the
+            total invariant mass squared through this kinematic context.
+        """
     @typing.overload
     def apply(self, expression: TensorExpression) -> TensorExpression:
         r"""

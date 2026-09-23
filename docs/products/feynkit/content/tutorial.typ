@@ -314,7 +314,7 @@ and tadpole filters explicitly:
 
 // docs-example: compile
 ```python
-electron, photon = (model.particle_by_pdg(pdg) for pdg in (11, 22))
+electron, photon = (model.particle(name) for name in ("e-", "a"))
 vertices = [
     vertex for vertex in model.vertex_rules
     if sorted(vertex.particles) == sorted([electron.name, electron.antiname, photon.name])
@@ -379,7 +379,7 @@ vertex numbers:
 
 // docs-example: compile
 ```python
-top, higgs, gluon = (model.particle_by_pdg(pdg) for pdg in (6, 25, 21))
+top, higgs, gluon = (model.particle(name) for name in ("t", "H", "g"))
 allowed_particles = [
     sorted([top.antiname, top.name, higgs.name]),
     sorted([top.antiname, top.name, gluon.name]),

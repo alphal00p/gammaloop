@@ -107,7 +107,9 @@ not treat the presence of a primitive as an end-to-end validation.
    and separate UV/IR bookkeeping remain outstanding.],
   [Cross sections and decay rates], [FeynKit kinematics and process APIs],
   [Shared symbolic/numerical initial-state flux and four-dimensional two-body
-   phase space. The generated QED and QCD annihilation benchmarks include their
+   and three-body Dalitz densities. Generated virtual-photon Born currents and
+   real QCD radiation validate the Born-normalized Dalitz distribution and its
+   regulated integral. The generated QED and QCD annihilation benchmarks include their
    angular distributions and total unpolarized cross sections. Chiral Z decays
    validate massive two-body widths for all four fermion classes; Higgs decays
    cover charged leptons, quarks, WW and ZZ. General phase space, identical-particle
@@ -488,8 +490,9 @@ the complete massive squared amplitude in the
 including the longitudinal W term. Its low-energy expansion gives the Fermi
 amplitude with the initial muon spin averaged.
 
-Two existing `Kinematics.two_body_phase_space` calls factor the three-body
-measure. Pair-rest-frame energies determine the invariant bounds and angular
+`Kinematics.three_body_phase_space` supplies the measure. Two independent
+`Kinematics.two_body_phase_space` calls check it by recursive factorization.
+Pair-rest-frame energies determine the invariant bounds and angular
 Jacobian. Integrating the orientation and azimuth yields
 $dif Phi_3/(dif s dif t)=1/(128 pi^3 M^2)$; `flux` supplies $2M$.
 Symbolica derives the normalized massless Michel spectrum
@@ -1523,6 +1526,65 @@ Symbolica's antiderivative passes exact differentiation and boundary checks;
 nine independent Gaussian quadratures check $N_c=2,3,5$ at three cuts.
 The controls expose both spin-average conventions, symbolic or concrete Lorentz
 dimensions, color groups and angular cuts without repeating diagram generation.
+
+== Virtual-photon Born currents and real QCD radiation
+
+`hep/photon_radiation.py` and `installed_feyncalc_photon_radiation.py` cover
+the #link("https://feyncalc.github.io/FeynCalcExamples/QED/Tree/Ga-MuAmu")[muon-pair],
+#link("https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/Ga-QQbar")[quark-pair] and
+#link("https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/Ga-QQbarGl")[real-radiation]
+examples. The shared generator supplies both Born currents and both gluon
+emissions with their relative factors. Spenso and Idenso contract the shared
+particle spin and color sums. The full massive SU(N) squares agree exactly
+with the references. Photon and gluon Ward contractions vanish, and using
+either massive quark momentum as the gluon polarization reference reproduces
+the covariant result.
+
+Contract the timelike photon current with $-g_(mu nu)$ without an initial spin
+average, as in the references. With $Q=sqrt(q^2)>0$, the massless Born rates
+are $Gamma_mu=alpha Q$ and $Gamma_q=N_c Q_q^2 alpha Q$.
+These are current normalizations, not physical on-shell photon decays.
+The model's bottom field has $Q_q=-1/3$; its charge cancels from the normalized
+real-emission rate.
+
+The shared `Kinematics.three_body_phase_space(k1, k2, k3)` returns
+$dif Phi_3/(dif s_(12) dif s_(23))=1/(128 pi^3 q^2)$, with the overall
+orientation integrated. It uses the same invariant-measure convention as the
+two-body API and #link("https://pdg.lbl.gov/2025/reviews/rpp2025-rev-kinematics.pdf")[PDG kinematics review].
+Use an orientation-independent or orientation-averaged squared amplitude.
+Masses determine the physical Dalitz boundaries; this density does not impose
+them. Flux, initial averages and identical-particle factors remain explicit.
+Non-four-dimensional contexts are rejected. The implementation lives in
+`feynkit-kinematics`; Python only forwards the call. Its Rust tests verify
+permutation symmetry, massive invariants, dimension checks and the massless
+integrated volume $q^2/(256 pi^3)$.
+
+For massless final states, set $x_i=2E_i/Q$ with $sum_i x_i=2$.
+The Jacobian from pair invariants is $q^4$. Dividing by the generated Born rate
+gives
+$ frac(1, Gamma_q) frac(dif Gamma_(q bar(q) g), dif x_1 dif x_2)
+  = frac(alpha_s C_F, 2 pi) frac(x_1^2+x_2^2, (1-x_1)(1-x_2)). $
+The leading soft coefficient also agrees with the independent light-cone
+calculation below.
+
+The cut $y_1,y_2 >= beta$, $y_1+y_2 <= 1$, where $y_i=1-x_i$ and
+$0<beta<1/2$, excludes the soft and collinear singularities.
+Symbolica automatically integrates both stages. Differentiating each primitive
+checks it exactly. Euler's dilogarithm reflection gives a real expression for
+the dimensionless integral:
+$ I(beta)=2 ln^2(beta)+(3-4 beta+beta^2)(ln(beta)-ln(1-beta))
+  +5/2-5 beta+4 "Li"_2(beta)-pi^2/3. $
+Its cut derivative obeys the independent Leibniz boundary identity and its
+threshold value is zero. The small-cut expansion is
+$I(beta)=2 ln^2(beta)+3 ln(beta)+5/2-pi^2/3+cal(O)(beta ln(beta))$.
+Multiply by $alpha_s C_F/(2 pi)$ for the real/Born rate. This real-emission
+contribution remains infrared divergent when the cut is removed; virtual
+corrections are a separate calculation.
+
+Independent two-dimensional Gaussian quadratures check five cuts, with rate
+normalization at $N_c=2,3,5$. The live notebook exposes color, coupling, cut
+and two physical Dalitz coordinates. All 45 tested control combinations pass,
+along with the generated-amplitude regression and strict Marimo checks.
 
 == Generated light-cone soft radiation
 

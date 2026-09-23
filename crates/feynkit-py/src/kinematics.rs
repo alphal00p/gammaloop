@@ -244,6 +244,43 @@ impl PyKinematics {
         })
     }
 
+    /// Return four-dimensional three-body phase space per two Dalitz invariants.
+    ///
+    /// This is ``dPhi_3/(ds12*ds23) = 1/(128*pi**3*P**2)``, where
+    /// ``P=first+second+third`` and ``sij=(pi+pj)**2``. The overall spatial
+    /// orientation is integrated. Use an orientation-independent or
+    /// orientation-averaged squared amplitude and physical on-shell momenta.
+    /// The measure includes ``(2*pi)**4*delta**4`` and one
+    /// ``d**3p/((2*pi)**3*2E)`` for each final particle.
+    ///
+    /// Masses constrain the allowed Dalitz region; its boundaries are not
+    /// imposed here. Flux, spin/color averages and identical-particle factors
+    /// remain separate. Non-four-dimensional contexts are rejected.
+    ///
+    /// Examples
+    /// --------
+    /// >>> density = kin.three_body_phase_space(k1, k2, k3)
+    /// >>> differential_width = squared * density / kin.flux(parent)
+    ///
+    /// Parameters
+    /// ----------
+    /// first, second, third : Expression
+    ///     Final-state on-shell momenta. Their scalar products determine the
+    ///     total invariant mass squared through this kinematic context.
+    fn three_body_phase_space(
+        &self,
+        first: &PythonExpression,
+        second: &PythonExpression,
+        third: &PythonExpression,
+    ) -> PyResult<PythonExpression> {
+        Ok(PythonExpression {
+            expr: self
+                .inner
+                .three_body_phase_space(&first.expr, &second.expr, &third.expr)
+                .map_err(error::kinematics)?,
+        })
+    }
+
     /// Substitute scalar products without mutating global assumptions.
     ///
     /// Examples

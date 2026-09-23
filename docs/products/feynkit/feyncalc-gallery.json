@@ -1512,7 +1512,29 @@
         "SubscriptBox",
         "TimeUsed"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "passed: generated massive muon Born current, photon Ward identity and massless current rate using shared flux and two-body phase space",
+      "validated_components": [
+        {
+          "scope": "generated massive muon Born current, photon Ward identity and massless current rate using shared flux and two-body phase space",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_photon_radiation.py",
+          "components": [
+            "Model.standard_model",
+            "Model.particle",
+            "Model.generate_diagrams",
+            "Model.expand_couplings",
+            "Particle.spin_sum",
+            "Particle.color_sum",
+            "TensorExpression.dirac_adjoint",
+            "TensorExpression.simplify_gamma",
+            "TensorExpression.simplify_color",
+            "Kinematics.apply",
+            "Kinematics.flux",
+            "Kinematics.two_body_phase_space"
+          ],
+          "result": "passed",
+          "note": "Notebook: hep/photon_radiation.py. Timelike photon current contracted with -g without an initial spin average, matching the reference; not an on-shell photon decay. The full massive amplitudes are checked before the massless width/distribution limit. For real radiation, both automatic primitives pass exact differentiation; the closed form passes a cut-boundary identity and five independent 2D quadratures, with SU(2), SU(3), SU(5) rate normalization. All 45 live control combinations, strict Marimo checks, Ruff and HTML export pass. Virtual corrections and an infrared-finite inclusive rate are not claimed."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/QED/OneLoop/Pi-GaGa",
@@ -3156,7 +3178,29 @@
         "SubscriptBox",
         "TimeUsed"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "passed: generated massive SU(N) quark Born current, photon Ward identity, massless current rate and quark/muon normalization ratio",
+      "validated_components": [
+        {
+          "scope": "generated massive SU(N) quark Born current, photon Ward identity, massless current rate and quark/muon normalization ratio",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_photon_radiation.py",
+          "components": [
+            "Model.standard_model",
+            "Model.particle",
+            "Model.generate_diagrams",
+            "Model.expand_couplings",
+            "Particle.spin_sum",
+            "Particle.color_sum",
+            "TensorExpression.dirac_adjoint",
+            "TensorExpression.simplify_gamma",
+            "TensorExpression.simplify_color",
+            "Kinematics.apply",
+            "Kinematics.flux",
+            "Kinematics.two_body_phase_space"
+          ],
+          "result": "passed",
+          "note": "Notebook: hep/photon_radiation.py. Timelike photon current contracted with -g without an initial spin average, matching the reference; not an on-shell photon decay. The full massive amplitudes are checked before the massless width/distribution limit. For real radiation, both automatic primitives pass exact differentiation; the closed form passes a cut-boundary identity and five independent 2D quadratures, with SU(2), SU(3), SU(5) rate normalization. All 45 live control combinations, strict Marimo checks, Ruff and HTML export pass. Virtual corrections and an infrared-finite inclusive rate are not claimed."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/Ga-QQbarGl",
@@ -3205,7 +3249,32 @@
         "SubscriptBox",
         "TimeUsed"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "passed: generated massive SU(N) real-radiation square, physical gluon gauges and Ward identities, soft limit, massless Dalitz distribution and regulated integrated rate including infrared logarithms",
+      "validated_components": [
+        {
+          "scope": "generated massive SU(N) real-radiation square, physical gluon gauges and Ward identities, soft limit, massless Dalitz distribution and regulated integrated rate including infrared logarithms",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_photon_radiation.py",
+          "components": [
+            "Model.standard_model",
+            "Model.particle",
+            "Model.generate_diagrams",
+            "Model.expand_couplings",
+            "Particle.spin_sum",
+            "Particle.color_sum",
+            "TensorExpression.dirac_adjoint",
+            "TensorExpression.simplify_gamma",
+            "TensorExpression.simplify_color",
+            "Kinematics.apply",
+            "Kinematics.flux",
+            "Kinematics.two_body_phase_space",
+            "Kinematics.three_body_phase_space",
+            "Symbolica.integrate",
+            "Symbolica.series"
+          ],
+          "result": "passed",
+          "note": "Notebook: hep/photon_radiation.py. Timelike photon current contracted with -g without an initial spin average, matching the reference; not an on-shell photon decay. The full massive amplitudes are checked before the massless width/distribution limit. For real radiation, both automatic primitives pass exact differentiation; the closed form passes a cut-boundary identity and five independent 2D quadratures, with SU(2), SU(3), SU(5) rate normalization. All 45 live control combinations, strict Marimo checks, Ruff and HTML export pass. Virtual corrections and an infrared-finite inclusive rate are not claimed."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/GlGl-GlGl",
@@ -4975,7 +5044,8 @@
             "Kinematics.two_body_phase_space",
             "Kinematics.flux",
             "Symbolica.series",
-            "Symbolica.integrate"
+            "Symbolica.integrate",
+            "Kinematics.three_body_phase_space"
           ],
           "result": "passed",
           "note": "Live notebook: hep/muon_decay.py. The existing massive W propagator supplies the unitary-gauge numerator; charged-current vertex selection excludes Goldstone diagrams. The complete squared amplitude is compared before taking the Fermi limit. The Dalitz density is derived from two native two-body measures and an angular Jacobian. Symbolica integrations reproduce the reference Michel spectrum and massless width, derive the exact electron-mass correction checked by six independent quadratures, and give 3M^2/(5mW^2) as the first relative W correction at zero electron mass. The finite-mass and finite-W results are evaluated in their stated limits. Installed regression, strict Marimo, HTML export and all eighteen live selections pass. This is tree level with massless neutrinos; radiative corrections are not included."
