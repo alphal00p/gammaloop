@@ -92,6 +92,8 @@ not treat the presence of a primitive as an end-to-end validation.
   [The HEP namespace exposes A0, B0, dB0, C0 and D0, including evaluable
    Symbolica Laurent coefficients. A generated massive photon self-energy
    validates the transverse form factor, UV pole and finite part through A0/B0.
+   The massive electron self-energy adds full symbolic-gauge finite terms,
+   raised photon denominators, threshold continuation and gauge checks.
    The generated electron vertex also reproduces the Pauli form factor after
    native IBP reduction. General reduction to these masters, higher epsilon orders
    and separate UV/IR bookkeeping remain outstanding.],
@@ -726,8 +728,8 @@ auxiliary operator $a_4 M A_mu A^mu/2$; its zero follows from retaining the
 mass-correction terms above. These counterterm structures are supplied from
 the Lagrangian and their coefficients are solved, rather than generated from
 a counterterm model. Automatic counterterm insertions and subtraction forests,
-finite off-shell form factors and higher-loop renormalization remain separate
-work.
+the complete finite off-shell vertex and higher-loop renormalization remain
+separate work; the full finite electron self-energy is validated below.
 
 The installed regression passes the four UV-structure comparisons and all six
 counterterm references with symbolic $xi$ in the rebuilt HEP host. It also
@@ -740,6 +742,63 @@ generator tests and ten installed physics regressions pass. The notebook
 passes strict Marimo checks and headless export; the existing live instance
 executes its default and nine combinations of gauge parameter and flavor count
 without cell errors. The native extension is installed in that same host.
+
+== Full massive electron self-energy
+
+`hep/electron_self_energy.py` and
+`installed_feyncalc_electron_self_energy.py` retain the finite off-shell
+self-energy instead of applying a UV expansion. The internal photon numerator
+keeps a symbolic covariant gauge parameter. The generated ordered tree
+amplitude fixes the external Wick sign; native graph factors are kept in the
+loop before the explicit conversion to the amputated inverse-propagator
+insertion $Gamma_2=-i Sigma=i a_4(V slash(p)+S m)$.
+
+Two Idenso trace projectors extract the scalar coefficients with
+$tr(1)=4$. The generated family has denominators $q^2-m^2$ and $(q-p)^2$;
+the longitudinal numerator raises the photon power. Six targets reduce to
+$A=A_0(m^2)$ and $B=B_0(s;m^2,0)$, with $s=p^2$. The family's Symanzik
+polynomials verify this master identification. Exact-dimensional checks give
+$ V=frac(xi(D-2),2s)((s+m^2)B-A), quad S=-(D-1+xi)B. $
+These agree with the Abelian limit of
+#link("https://arxiv.org/abs/hep-ph/0008171")[Davydychev, Osland and Saks,
+Eqs. (2.19)–(2.21)], whose gauge parameter is $1-xi$ in this convention.
+
+Expanding $D=4-2 epsilon$ only after reduction retains the finite rational
+terms $-xi$ and $+2$. Landau gauge makes the vector coefficient exactly zero.
+The on-shell sum has pole $-3/epsilon$ and finite coefficient
+$-4+3 log(m^2/mu^2)$, independent of gauge; the conventional mass shift
+$Sigma/m$ has the opposite signs. This is not an on-shell wavefunction
+renormalization calculation: its momentum derivative has an IR singularity.
+The finite coefficients are unrenormalized in the shared OneLOop convention.
+
+The installed regression checks sixty combinations of kinematics and gauge,
+including spacelike, below-threshold, threshold and above-threshold points,
+plus the symbolic $s -> 0$ limit. Independent scratch quadrature of
+$log((x m^2-x(1-x)s-i 0)/mu^2)$ and its $(1-x)$ moment passed 360 mass,
+scale, gauge and kinematic points. Splitting at the internal root preserves
+the branch prescription. The two quadrature orders agree within
+$2 times 10^(-13)$; their maximum absolute difference from OneLOop is
+$3.5 times 10^(-11)$. Near zero momentum the comparison accounts for the
+conditioning of the separate $A_0-B_0$ subtraction, and the exact limit is
+used at zero. The live notebook exposes all four inputs with the same
+independent check. Its HTML export and 125 live control combinations pass,
+including the endpoints of the mass/scale/gauge controls and exact zero
+and threshold momentum. Controls are restored to their defaults afterwards.
+
+This validates the electron component of
+#link("https://feyncalc.github.io/FeynCalcExamples/QED/OneLoop/Renormalization2")[the second one-loop QED renormalization example],
+which extracts UV poles after its massive self-energy intermediate. The
+full counterterm-diagram and MS/MSbar workflow remains partial. The existing
+massive IR-rearrangement regression also does not establish the distinct
+massless auxiliary-mass counterterm.
+
+The custom gauge symbol exposed a shared model serialization defect:
+export stripped every namespace, changing user symbols into `UFO` symbols
+on reload and allowing distinct models to share a fingerprint. The existing
+`feynkit-model` serializer now hides only its implicit `UFO` namespace.
+Symbolica's existing printer preserves every other namespace; two owner-local
+regressions cover round-trip/restriction rebuilds and fingerprint distinction.
+GammaLoop uses the same model implementation.
 
 == Generated one-loop QCD renormalization
 

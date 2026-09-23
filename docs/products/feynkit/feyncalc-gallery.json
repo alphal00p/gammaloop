@@ -132,6 +132,24 @@
           ],
           "result": "passed",
           "note": "Live notebook: hep/ibp_bubble.py. OneLOop evaluates residual tadpoles and the bubble; independent Feynman-parameter quadrature checks the raised powers. This validates a shared reduction component, not the full reference workflow or threshold and exceptional-kinematics limits."
+        },
+        {
+          "scope": "generated full massive off-shell electron self-energy in symbolic covariant gauge: exact-D trace projectors, six IBP targets, native phase, UV poles, finite rational terms, Landau and on-shell identities, 60 OneLOop evaluations and symbolic zero-momentum limit",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_electron_self_energy.py",
+          "components": [
+            "Model.expand_couplings",
+            "Generator.generate",
+            "FeynmanDiagram.integral_family",
+            "IntegralFamily.rewrite_numerator",
+            "IntegralFamily.symanzik",
+            "Idenso.simplify_gamma",
+            "IBPFamily.reduce_laporta",
+            "IBPSolution.reduce",
+            "Symbolica.series",
+            "OneLOop.master_coefficients"
+          ],
+          "result": "passed",
+          "note": "Live notebook: hep/electron_self_energy.py. It also checks a separate Feynman-parameter quadrature below, at and above threshold, with exact s=0 limits. The shared OneLOop finite coefficient is unrenormalized. Full generated counterterm diagrams, the complete vertex and MS/MSbar matching of the reference remain separate."
         }
       ]
     },
@@ -264,7 +282,27 @@
         "TID",
         "Total"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "partial: the generated massive electron self-energy passes exact-D, UV and finite checks in symbolic gauge; the full counterterm-diagram and MS/MSbar reference workflow remains pending",
+      "validated_components": [
+        {
+          "scope": "generated full massive off-shell electron self-energy in symbolic covariant gauge: exact-D trace projectors, six IBP targets, native phase, UV poles, finite rational terms, Landau and on-shell identities, 60 OneLOop evaluations and symbolic zero-momentum limit",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_electron_self_energy.py",
+          "components": [
+            "Model.expand_couplings",
+            "Generator.generate",
+            "FeynmanDiagram.integral_family",
+            "IntegralFamily.rewrite_numerator",
+            "IntegralFamily.symanzik",
+            "Idenso.simplify_gamma",
+            "IBPFamily.reduce_laporta",
+            "IBPSolution.reduce",
+            "Symbolica.series",
+            "OneLOop.master_coefficients"
+          ],
+          "result": "passed",
+          "note": "Live notebook: hep/electron_self_energy.py. It also checks a separate Feynman-parameter quadrature below, at and above threshold, with exact s=0 limits. The shared OneLOop finite coefficient is unrenormalized. Full generated counterterm diagrams, the complete vertex and MS/MSbar matching of the reference remain separate."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/QED/TwoLoops/Renormalization-GaGa",

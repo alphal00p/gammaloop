@@ -382,6 +382,34 @@ quark-pair threshold, square the complex amplitude with its conjugate. The
 checks this single-flavor leading-order calculation; additional flavors must be
 summed coherently before forming a rate.
 
+== Keep finite terms in an off-shell self-energy
+
+The host notebook
+#link("https://github.com/symbolica-dev/symbolica-community/blob/main/examples/hep/electron_self_energy.py")[hep/electron_self_energy.py]
+generates the massive electron self-energy with a symbolic covariant-gauge
+photon numerator. Two trace projectors extract the coefficients of
+$slash(p)$ and $m$ without imposing an on-shell equation. Rewrite these
+coefficients in the generated family's denominator coordinates before native
+IBP reduction. The longitudinal photon contributes an additional inverse
+photon denominator, so the target powers must retain that factor.
+
+Keep each diagram's native weight. Its generated tree vertex establishes the
+external ordering convention, which is then explicitly converted to the
+amputated inverse-propagator insertion. The two residual masters are the
+massive tadpole and massive-massless bubble; use their OneLOop Laurent
+coefficients and keep $D$ symbolic until the series expansion. This retains
+the finite rational terms from $D$ multiplying UV poles.
+
+The notebook compares the result with independent parameter quadrature as
+momentum, mass, scale and gauge change. It splits at the physical branch cut,
+checks Landau gauge and the on-shell gauge-independent mass combination,
+and evaluates the symbolic zero-momentum limit separately from the generic
+$1/p^2$ projector. The
+#source-link("crates/feynkit-py/tests/installed_feyncalc_electron_self_energy.py", label: "companion regression")
+checks exact-dimensional identities, limits and sixty numerical points.
+The finite answer is unrenormalized; matching all counterterm diagrams remains
+separate from the scalar-integral reduction.
+
 == Use finalized output
 
 Generation performs topology expansion, interaction assignment, filters, canonicalization,
@@ -401,7 +429,11 @@ analytic_numerator = model.expand_couplings(diagram.numerator_expression())
 This returns a new expression and preserves the stored named coefficients. Serialize with
 `to_json()` or `to_dot()` and restore with `FeynmanDiagram.from_json(model, text)` or
 `from_dot(model, text)`. The model fingerprint and structural validation protect the
-interpretation of stored IDs.
+interpretation of stored IDs. Model serialization keeps `UFO` implicit and
+preserves all other Symbolica namespaces, so custom gauge symbols and tensor
+functions retain their identities through `Model.to_json()` and
+`Model.from_json()`. Distinct namespaces also remain distinct in the model
+fingerprint.
 
 #callout("CFF IDs belong to their arena", [
   `diagram.build_cff()` returns orientations, surfaces, generation statistics, and symbolic
