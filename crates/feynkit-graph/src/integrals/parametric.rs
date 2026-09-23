@@ -6,7 +6,7 @@ use symbolica::atom::{Atom, AtomCore};
 use symbolica::graph::{CanonicalForm, Graph};
 use symbolica::tensors::matrix::{Matrix, MatrixError};
 
-use super::{IntegralFamily, IntegralFamilyError, PropagatorMapping};
+use super::{IntegralFamily, IntegralFamilyError, IntegralMapping, PropagatorMapping};
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum ParametricVertex {
@@ -15,6 +15,87 @@ enum ParametricVertex {
 }
 
 impl IntegralFamily {
+    /// Group families using verified affine loop-momentum maps.
+    ///
+    /// Returns one `(representative_index, mapping)` per input, in input order.
+    /// Indices refer to the original list; representatives map to themselves.
+    /// The first compatible representative is retained, so there are no chains.
+    /// Symanzik incidence graphs are canonized once per family to limit the
+    /// shift searches. Polynomial equivalence alone never merges families:
+    /// [`Self::find_mapping`] must verify every denominator and the Jacobian.
+    ///
+    /// All families must have compatible external kinematics and nonsingular
+    /// quadratic forms. Search limitations and candidate-budget exhaustion are
+    /// errors, not proofs of inequivalence. `max_candidates` applies per pair.
+    /// Different propagator counts remain separate; subtopology embeddings,
+    /// external-momentum exchanges and scalelessness are separate operations.
+    pub fn find_mappings(
+        families: &[Self],
+        max_candidates: usize,
+    ) -> Result<Vec<(usize, IntegralMapping)>, IntegralFamilyError> {
+        let Some(first) = families.first() else {
+            return Ok(Vec::new());
+        };
+        let mut occupied = Vec::new();
+        for family in families {
+            first.compatible_kinematics(family)?;
+            occupied.extend(family.denominators.iter().cloned());
+            occupied.extend(
+                family
+                    .loop_momenta
+                    .iter()
+                    .chain(&family.external_momenta)
+                    .cloned(),
+            );
+            for (i, p) in family.external_momenta.iter().enumerate() {
+                for q in &family.external_momenta[i..] {
+                    occupied.push(family.kinematics.scalar_product(p, q)?);
+                }
+            }
+        }
+        let parameter_count = families.iter().map(|f| f.denominators.len()).max().unwrap();
+        let parameters = (0..)
+            .map(|i: usize| {
+                symbolica::function!(
+                    symbolica::symbol!("feynkit::topology_parameter"),
+                    Atom::num(i)
+                )
+            })
+            .filter(|label| {
+                !occupied
+                    .iter()
+                    .any(|expression| expression.contains(label.as_view()))
+            })
+            .take(parameter_count)
+            .collect::<Vec<_>>();
+        let mut groups: BTreeMap<Graph<ParametricVertex, u32>, Vec<usize>> = BTreeMap::new();
+        let mut mappings = Vec::with_capacity(families.len());
+        for (source, family) in families.iter().enumerate() {
+            let canonical = family.canonical_symanzik(&parameters[..family.denominators.len()])?;
+            let representatives = groups.entry(canonical.graph).or_default();
+            let mut found = None;
+            for &target in representatives.iter() {
+                if let Some(mapping) = family.find_mapping(&families[target], max_candidates)? {
+                    found = Some((target, mapping));
+                    break;
+                }
+            }
+            mappings.push(match found {
+                Some(mapping) => mapping,
+                None => {
+                    let identity = family
+                        .mapping_to(family, &family.loop_momenta)?
+                        .ok_or_else(|| {
+                            IntegralFamilyError::InvalidMapping("family has no identity map".into())
+                        })?;
+                    representatives.push(source);
+                    (source, identity)
+                }
+            });
+        }
+        Ok(mappings)
+    }
+
     /// Find a real loop direction with an unconstrained transverse integral.
     ///
     /// The returned nonzero vector `w` is in loop-momentum order and satisfies
@@ -337,6 +418,86 @@ mod tests {
     use symbolica::parse;
 
     #[test]
+    fn collection_maps_directly_to_first_verified_representatives() {
+        let [k, l, p] = [parse!("group::k"), parse!("group::l"), parse!("group::p")];
+        // Deliberately occupy an internal parameter label with a physical mass.
+        let mass = symbolica::function!(
+            symbolica::symbol!("feynkit::topology_parameter"),
+            Atom::num(0)
+        );
+        let kin = Kinematics::new()
+            .with_momenta([k.clone(), l.clone(), p.clone()])
+            .unwrap()
+            .with_mass_squared(&p, parse!("s"))
+            .unwrap();
+        let first = IntegralFamily::new(
+            vec![k.clone()],
+            vec![p.clone()],
+            vec![
+                kin.scalar_product(&k, &k).unwrap() - &mass,
+                kin.scalar_product(&(&k + &p / 2), &(&k + &p / 2)).unwrap() - parse!("M2"),
+            ],
+            &kin,
+        )
+        .unwrap();
+        let shifted = IntegralFamily::new(
+            vec![l.clone()],
+            vec![p.clone()],
+            vec![
+                kin.scalar_product(&l, &l).unwrap() - parse!("M2"),
+                kin.scalar_product(&(&l - &p / 2), &(&l - &p / 2)).unwrap() - &mass,
+            ],
+            &kin,
+        )
+        .unwrap();
+        let different = IntegralFamily::new(
+            vec![k.clone()],
+            vec![p.clone()],
+            vec![kin.scalar_product(&k, &k).unwrap() - parse!("other_mass")],
+            &kin,
+        )
+        .unwrap();
+        let families = [first.clone(), shifted, different.clone(), different];
+        let mappings = IntegralFamily::find_mappings(&families, 100).unwrap();
+        assert_eq!(
+            mappings
+                .iter()
+                .map(|(target, _)| *target)
+                .collect::<Vec<_>>(),
+            vec![0, 0, 2, 2]
+        );
+        assert_eq!(mappings[1].1.map_powers(&[2, -1]).unwrap(), vec![-1, 2]);
+        for (source, (target, mapping)) in mappings.iter().enumerate() {
+            for (i, j) in mapping.denominator_map().iter().enumerate() {
+                assert!(
+                    (mapping.apply(&families[source].denominators[i])
+                        - &families[*target].denominators[*j])
+                        .together()
+                        .is_zero()
+                );
+            }
+        }
+        assert!(IntegralFamily::find_mappings(&[], 0).unwrap().is_empty());
+        assert!(matches!(
+            IntegralFamily::find_mappings(&[first.clone(), first.clone()], 0),
+            Err(IntegralFamilyError::MappingSearchLimit(0))
+        ));
+        let singular = IntegralFamily::new(
+            vec![k.clone()],
+            vec![p.clone()],
+            vec![kin.scalar_product(&k, &p).unwrap()],
+            &kin,
+        )
+        .unwrap();
+        assert!(IntegralFamily::find_mappings(&[singular], 100).is_err());
+        let different_kin = kin.with_mass_squared(&p, parse!("2*s")).unwrap();
+        let incompatible =
+            IntegralFamily::new(vec![k], vec![p], first.denominators.clone(), &different_kin)
+                .unwrap();
+        assert!(IntegralFamily::find_mappings(&[first, incompatible], 100).is_err());
+    }
+
+    #[test]
     fn scaleless_bubble_certificates_obey_euler_identity() {
         let k = parse!("scale_bubble::k");
         let p = parse!("scale_bubble::p");
@@ -492,6 +653,15 @@ mod tests {
         )
         .unwrap();
         assert!(source.find_mapping(&target, 10_000).unwrap().is_none());
+        let grouped =
+            IntegralFamily::find_mappings(&[source.clone(), target.clone()], 10_000).unwrap();
+        assert_eq!(
+            grouped
+                .iter()
+                .map(|(target, _)| *target)
+                .collect::<Vec<_>>(),
+            vec![0, 1]
+        );
         let parameters = ["x1", "x2", "x3", "x4", "x5"].map(|s| symbolica::symbol!(s).to_atom());
         let mapping = source
             .parametric_mapping(&target, &parameters)

@@ -404,6 +404,56 @@ impl PyIntegralFamily {
             .map_err(error::integral_family)
     }
 
+    /// Group families and return verified maps to their representatives.
+    ///
+    /// Returns one ``(target_index, mapping)`` per input family in input order.
+    /// Indices refer to the original list. Representatives map to themselves;
+    /// every other mapping goes directly to a retained representative.
+    /// The first compatible representative wins. Symbolica canonizes each
+    /// Symanzik pair once, then native affine-shift search verifies all merges.
+    /// A parametric equivalence without a verified loop map remains separate.
+    ///
+    /// Families need compatible external kinematics and nonsingular quadratic
+    /// forms. Unsupported shift searches and exhausted budgets raise errors.
+    /// Different propagator counts stay separate. Select sectors and remove
+    /// certified scaleless integrals before grouping; complete bases afterwards.
+    /// This does not exchange external momenta or infer integration prescriptions.
+    ///
+    /// Examples
+    /// --------
+    /// >>> mappings = fk.IntegralFamily.find_mappings(families)
+    /// >>> representatives = sorted({target for target, mapping in mappings})
+    /// >>> target, mapping = mappings[0]
+    /// >>> target_powers = mapping.map_powers(source_powers)
+    ///
+    /// Parameters
+    /// ----------
+    /// families : list[IntegralFamily]
+    ///     Ordered families; earlier entries are preferred as representatives.
+    /// max_candidates : int
+    ///     Affine-shift candidate budget per pair; exhaustion raises an error.
+    ///
+    /// Returns
+    /// -------
+    /// list[tuple[int, IntegralMapping]]
+    ///     Target index and verified map for each input, including representatives.
+    #[staticmethod]
+    #[pyo3(signature = (families, *, max_candidates=100_000))]
+    fn find_mappings(
+        families: Vec<PyIntegralFamily>,
+        max_candidates: usize,
+    ) -> PyResult<Vec<(usize, PyIntegralMapping)>> {
+        let families = families.into_iter().map(|f| f.inner).collect::<Vec<_>>();
+        IntegralFamily::find_mappings(&families, max_candidates)
+            .map(|mappings| {
+                mappings
+                    .into_iter()
+                    .map(|(target, inner)| (target, PyIntegralMapping { inner }))
+                    .collect()
+            })
+            .map_err(error::integral_family)
+    }
+
     /// Select the positive-power propagators of an integral's sector.
     ///
     /// Zero and negative powers are omitted. Loop variables and external
