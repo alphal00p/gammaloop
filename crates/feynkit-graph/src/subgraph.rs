@@ -122,11 +122,8 @@ impl FeynmanDiagram {
                 if !keep_paired {
                     let hedge = group[0];
                     edge.numerator = Atom::one();
-                    if pair.is_paired() && edge.external.is_some() {
-                        // A sewn carrier's particle assignment uses the opposite
-                        // convention from each of its amplitude half-edges.
-                        edge.particle = self.model.particle_by_id(edge.particle)?.antiparticle;
-                    }
+                    // Sewing preserves the amplitude half-edge particle flow,
+                    // so opening a carrier retains its species and orientation.
                     if !edge.is_dummy && pair.is_paired() {
                         while !external_ids.insert(next_external) {
                             next_external = next_external
@@ -153,11 +150,7 @@ impl FeynmanDiagram {
                         Flow::Sink => target = vertex,
                     }
                 }
-                let orientation = if pair.is_paired() && data.data.external.is_some() {
-                    data.orientation.reverse()
-                } else {
-                    data.orientation
-                };
+                let orientation = data.orientation;
                 let (source_slot, target_slot) = (edge.source_slot(), edge.target_slot());
                 let new =
                     builder.add_edge_with_slots(source, target, edge, source_slot, target_slot)?;
@@ -537,7 +530,6 @@ mod tests {
             ]
         }"#).unwrap());
         let fermion = model.particle_id("f").unwrap();
-        let antifermion = model.particle_id("f~").unwrap();
         let mut builder = FeynmanDiagram::builder(model.clone(), "sewn");
         let left = builder.add_vertex(DiagramVertex::interaction(
             "left",
@@ -554,7 +546,7 @@ mod tests {
             state: ExternalState::Incoming,
             connection: 0,
         });
-        builder.add_edge(left, right, carrier).unwrap();
+        builder.add_edge(right, left, carrier).unwrap();
         builder
             .add_edge(left, right, DiagramEdge::new(fermion, true))
             .unwrap();
@@ -570,8 +562,8 @@ mod tests {
             .build()
             .unwrap()
             .with_cut_partitions(vec![(
-                vec![target(0), target(1)],
-                vec![source(0), source(1)],
+                vec![target(0), source(1)],
+                vec![source(0), target(1)],
             )])
             .unwrap();
         parent.validate().unwrap();
@@ -583,7 +575,7 @@ mod tests {
         assert_eq!(
             result
                 .edges()
-                .filter(|(_, _, edge)| edge.external.is_some() && edge.particle == antifermion)
+                .filter(|(_, _, edge)| edge.external.is_some() && edge.particle == fermion)
                 .count(),
             2
         );

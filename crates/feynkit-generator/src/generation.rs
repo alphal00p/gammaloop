@@ -4191,7 +4191,9 @@ impl ResolvedProcess {
             }
             GenerationType::Amplitude => permutation_is_odd(&concatenated_lines),
             GenerationType::CrossSection => {
-                self.external_fermion_loop_count(&line_pairings)? % 2 == 1
+                // Closing n open fermion chains into c cycles has permutation
+                // parity (-1)^(n-c). The closure itself is not a virtual loop.
+                (line_pairings.len() + self.external_fermion_loop_count(&line_pairings)?) % 2 == 1
             }
         };
         let antifermion_spin_sum_negative = self.generation_type == GenerationType::CrossSection
@@ -4892,6 +4894,33 @@ mod tests {
     }
 
     #[test]
+    fn sewing_a_single_external_fermion_chain_has_even_ordering() {
+        let model = fermion_model();
+        let generator = Generator::new(model);
+        for pdg in [1_i64, -1] {
+            let process = Process::cross_section([pdg, 22], [pdg, 22])
+                .with_loop_count(1, 1)
+                .unwrap();
+            let generated = generator
+                .generate(
+                    &process,
+                    &GenerationOptions::default().threads(1).max_vertices(4),
+                )
+                .unwrap();
+            assert!(!generated.diagrams.is_empty());
+            for diagram in generated.diagrams {
+                // One external chain closes into one cycle without exchanging
+                // any external fermions. Its ordering sign must be positive.
+                let positive = symbolica::function!(
+                    symbol!("feynkit_generator_factor::ExternalFermionOrderingSign"),
+                    Atom::num(1)
+                );
+                assert!(diagram.overall_factor().contains(positive.as_view()));
+            }
+        }
+    }
+
+    #[test]
     fn normalized_cross_section_fermion_chains_keep_valid_cuts() {
         let generator = Generator::new(fermion_model());
         let process = Process::cross_section([1_i64, -1], [22_i64])
@@ -4944,8 +4973,8 @@ mod tests {
                 .iter()
                 .map(|(edge, _, _, _)| *edge)
                 .collect::<BTreeSet<_>>();
-            // Sewn initial-state carriers use the process momentum direction,
-            // which can be opposite the normalized internal particle flow.
+            // Sewing preserves the ordinary particle flow at both attachment
+            // vertices, including initial-state carriers.
             for (node, _, _) in diagram.underlying().iter_nodes() {
                 let signed_pdgs = diagram
                     .underlying()
@@ -4953,11 +4982,7 @@ mod tests {
                     .map(|hedge| {
                         let edge = &diagram.underlying()[diagram.underlying()[&hedge]];
                         let particle = diagram.model().particle_by_id(edge.particle).unwrap();
-                        let pdg = if edge.external.is_some() {
-                            -particle.pdg_code
-                        } else {
-                            particle.pdg_code
-                        };
+                        let pdg = particle.pdg_code;
                         if !particle.is_fermion() {
                             0
                         } else if diagram.underlying().flow(hedge) == Flow::Source {

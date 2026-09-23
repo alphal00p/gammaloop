@@ -221,15 +221,13 @@ impl FeynmanDiagramBuilder {
                     },
                     |left_flow, mut left, right_flow, right| match (left_flow, right_flow) {
                         (Flow::Sink, Flow::Source) => {
-                            left.data.data.source_slot = left.data.data.target_slot;
-                            left.data.data.target_slot = right.data.data.source_slot;
-                            (Flow::Source, left)
+                            left.data.data.source_slot = right.data.data.source_slot;
+                            (Flow::Sink, left)
                         }
                         (Flow::Source, Flow::Sink) => {
                             let mut incoming = right;
-                            incoming.data.data.source_slot = incoming.data.data.target_slot;
-                            incoming.data.data.target_slot = left.data.data.source_slot;
-                            (Flow::Sink, incoming)
+                            incoming.data.data.source_slot = left.data.data.source_slot;
+                            (Flow::Source, incoming)
                         }
                         _ => unreachable!("external connections have opposite process flows"),
                     },
@@ -639,7 +637,7 @@ impl FeynmanDiagram {
     ) -> Result<(), DiagramError> {
         // Decide the process side before sewing: the two provisional external
         // edges become aliases, so their original membership is not recoverable
-        // from the sewn half-edge sets. GammaLoop retains the outgoing sink on
+        // from the sewn half-edge sets. GammaLoop retains the incoming sink on
         // the physical left side and the positive external momentum frame.
         let requires_swap = |left: &[DiagramHalfEdge],
                              right: &[DiagramHalfEdge]|
@@ -647,8 +645,8 @@ impl FeynmanDiagram {
             let left = left.iter().copied().collect::<BTreeSet<_>>();
             let right = right.iter().copied().collect::<BTreeSet<_>>();
             match (incoming.is_subset(&left) && outgoing.is_subset(&right), incoming.is_subset(&right) && outgoing.is_subset(&left)) {
-                (true, false) => Ok(true),
-                (false, true) => Ok(false),
+                (true, false) => Ok(false),
+                (false, true) => Ok(true),
                 _ => Err(DiagramError::Invariant { operation: "normalizing cut sides", message: "the provisional partition does not have an unambiguous incoming/outgoing side".into() }),
             }
         };
@@ -686,7 +684,7 @@ impl FeynmanDiagram {
             })
             .collect::<BTreeSet<_>>();
         for cut in &mut self.cuts {
-            // GammaLoop's physical left side contains the sewn outgoing endpoint.
+            // GammaLoop's physical left side contains the sewn incoming endpoint.
             let reversed = requires_swap(&cut.left.half_edges, &cut.right.half_edges)?;
             let mut left = cut
                 .left

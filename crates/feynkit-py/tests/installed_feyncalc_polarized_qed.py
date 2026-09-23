@@ -7,7 +7,7 @@ Chirality coincides with the specified helicities only in the massless limit.
 from pathlib import Path
 
 from symbolica import E, S
-from symbolica.community import feynkit as fk
+from symbolica.community import hep as fk
 from symbolica.community.spenso import Representation, TensorExpression, chain
 
 model = fk.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
@@ -42,9 +42,11 @@ for coordinate in generated.cuts[0].edges:
         edge.id: particle.pdg_code for edge, particle in zip(cut.edges, cut.particles)
     }
     assert sorted(particles.values()) == [-13, 13]
-    assert cut.orientations[coordinate.id] == 1
-    other = S("other_final_momentum")
-    k1, k2 = (K(0), other) if particles[coordinate.id] == 13 else (other, K(0))
+    orientation = cut.orientations[coordinate.id]
+    physical, other, index = S(
+        "selected_final_momentum", "other_final_momentum", "index_"
+    )
+    k1, k2 = (physical, other) if particles[coordinate.id] == 13 else (other, physical)
     kin = fk.Kinematics.mandelstam(
         [P(0), P(1), k1, k2], [me**2, me**2, mm**2, mm**2], [s, t, u]
     )
@@ -72,13 +74,19 @@ for coordinate in generated.cuts[0].edges:
         .to_dots()
         .to_expression()
     )
-    contracted = kin.apply(diagram.loop_momentum_basis.route_expression(contracted))
+    contracted = kin.apply(
+        diagram.loop_momentum_basis.route_expression(contracted).replace(
+            K(0, index), orientation * physical(index)
+        )
+    )
     denominator = diagram.denominator_expression(
         edge_powers={edge.id: 0 for edge in cut.edges}, dimension=4, in_lmb=True
     ).to_expression()
     q, m, power, inverse = S("den::q_", "den::m_", "den::power_", "den::inverse_")
     denominator = kin.apply(
-        denominator.replace(S("gammalooprs::denom")(q, m, power, inverse), inverse)
+        denominator.replace(
+            S("gammalooprs::denom")(q, m, power, inverse), inverse
+        ).replace(K(0, index), orientation * physical(index))
     )
     assert (denominator - s**2).together() == E("0")
     squared = (

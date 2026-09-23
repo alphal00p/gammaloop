@@ -676,10 +676,10 @@ impl FeynmanDiagram {
 
     /// Physical final-state particles in the stored order of a finalized cut.
     ///
-    /// The native left side contains the outgoing copy of each sewn initial
-    /// state, hence the conjugate amplitude. A source endpoint on that side
-    /// represents the antiparticle of the edge's stored species. This charge
-    /// convention does not reverse the positive-energy cut momentum routing.
+    /// The native left side contains the incoming endpoint of each sewn initial
+    /// state. A source endpoint on that side carries the stored species into
+    /// the final state; a target endpoint carries its antiparticle. The same
+    /// orientation determines the positive-energy cut momentum routing.
     pub fn cut_particles(&self, cut: &DiagramCut) -> Result<Vec<ParticleId>, DiagramError> {
         cut.cut
             .iter()
@@ -692,8 +692,8 @@ impl FeynmanDiagram {
                 }
                 let particle = self.graph[EdgeIndex(half.edge.0)].particle;
                 Ok(match half.endpoint {
-                    DiagramEndpoint::Source => self.model.particle_by_id(particle)?.antiparticle,
-                    DiagramEndpoint::Target => particle,
+                    DiagramEndpoint::Source => particle,
+                    DiagramEndpoint::Target => self.model.particle_by_id(particle)?.antiparticle,
                 })
             })
             .collect()
@@ -1662,23 +1662,13 @@ impl FeynmanDiagram {
                     if endpoints.source == Some(vertex_id) {
                         actual[edge.source_slot.0] = Some((
                             base.pdg_code,
-                            edge.directed.then_some(
-                                !particle.is_antiparticle()
-                                    ^ (edge.external.is_some()
-                                        && endpoints.source.is_some()
-                                        && endpoints.target.is_some()),
-                            ),
+                            edge.directed.then_some(!particle.is_antiparticle()),
                         ));
                     }
                     if endpoints.target == Some(vertex_id) {
                         actual[edge.target_slot.0] = Some((
                             base.pdg_code,
-                            edge.directed.then_some(
-                                particle.is_antiparticle()
-                                    ^ (edge.external.is_some()
-                                        && endpoints.source.is_some()
-                                        && endpoints.target.is_some()),
-                            ),
+                            edge.directed.then_some(particle.is_antiparticle()),
                         ));
                     }
                 }

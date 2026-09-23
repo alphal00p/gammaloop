@@ -487,9 +487,10 @@ impl PyDiagramCut {
     }
     /// Return physical final-state particles in the stored cut-edge order.
     ///
-    /// The finalized left side is the conjugate amplitude, so source-oriented
-    /// lines correspond to antiparticles of their stored edge species.
-    /// Momentum orientations retain the native positive-energy routing.
+    /// The finalized left side contains the incoming initial-state endpoints.
+    /// A source-oriented cut line carries its stored species into the final
+    /// state; a target-oriented line carries its antiparticle. Momentum
+    /// orientations use the same left-to-right positive-energy routing.
     #[getter]
     fn particles(&self, py: Python<'_>) -> PyResult<Vec<PyParticle>> {
         let diagram = self.diagram.borrow(py);
