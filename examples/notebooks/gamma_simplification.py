@@ -1275,6 +1275,39 @@ def _(mo):
     These finite assignments are regression checks, not a proof for all
     tensors. The Rust HEP tests additionally cover every length 1–14,
     gamma5 positions, repeated momenta and cyclic contracted indices.
+
+    ### Recorded comparison: gamma5 and twelve ordinary gammas
+
+    For $\operatorname{Tr}(\gamma_5\gamma^{\mu_0}\cdots\gamma^{\mu_{11}})$,
+    both Idenso's **first gamma rewrite** and FORM 5.0.0 `trace4` produce
+    **1,029 terms**. The expressions are different: **741 terms coincide**,
+    with **288 unique to each**. Their raw symbolic difference has 576 terms.
+    The first rewrite equals Idenso's full pipeline output exactly.
+
+    Three separate full-rank integer momentum assignments give these exact
+    HEP component contractions of all twelve Lorentz indices:
+
+    | Assignment | Original gamma network | Idenso first rewrite | FORM `trace4` |
+    |--:|--:|--:|--:|
+    | 1 | −96,536 i | −96,536 i | −96,536 i |
+    | 2 | 468,485,024 i | 468,485,024 i | 468,485,024 i |
+    | 3 | 114,798,012 i | 114,798,012 i | 114,798,012 i |
+
+    FORM's `d_` and `e_` map to the same HEP metric and epsilon convention.
+    The four-gamma axial trace is `4*e_(mu0,mu1,mu2,mu3)` in FORM and
+    `4*epsilon(mu0,mu1,mu2,mu3)` in Idenso; no fitted sign is introduced.
+    The [FORM metric conventions](https://form-dev.github.io/form-docs/master/manual/#a-few-notes-on-the-use-of-a-metric)
+    specify this trace normalization.
+
+    A fresh optimized run measures **2.42 ms** for the first rewrite versus
+    **0.654 ms** amortized FORM wall time, about **3.7×** in FORM's favor.
+    Full FORM process latency is 11.97 ms; its internal trace-and-sort CPU time
+    is 0.624 ms. These are different timing boundaries. The first rewrite is
+    already complete on this input, while Idenso's public pipeline still pays
+    the previously measured 2.56 s for its extra passes.
+
+    The component assignments, outputs, timings and executable FORM program
+    are recorded in `examples/notebooks/gamma_trace_axial_form.json`.
     """)
     return
 

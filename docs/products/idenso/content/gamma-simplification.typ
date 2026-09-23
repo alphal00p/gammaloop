@@ -227,6 +227,32 @@ the original gamma-matrix network is contracted independently.
 cargo nextest run -p spenso-hep-lib --test short_trace_validation --cargo-profile dev-optim
 ```
 
+== Comparing the first axial rewrite directly with FORM
+
+For gamma-five followed by twelve ordinary gammas with distinct Lorentz indices,
+Idenso's first rewrite and FORM 5.0.0 `trace4` each give 1,029 terms. The outputs
+share 741 identical terms and have 288 terms unique to each. Their raw symbolic
+difference has 576 terms. This example makes the non-uniqueness concrete.
+
+Mapping FORM's `d_` and `e_` to the HEP metric and epsilon, three full-rank integer
+momentum assignments give identical exact values for the original gamma network,
+Idenso's first rewrite and FORM's polynomial: `-96536i`, `468485024i` and
+`114798012i`. The first rewrite also equals Idenso's full production output exactly.
+The epsilon convention follows the
+#link("https://form-dev.github.io/form-docs/master/manual/#a-few-notes-on-the-use-of-a-metric")[FORM manual's trace normalization];
+no sign or factor is fitted to the twelve-gamma result.
+
+A fresh optimized run measures 2.42 ms for the first rewrite and 0.654 ms amortized
+FORM wall time, about 3.7 times faster for FORM. FORM process latency is 11.97 ms,
+while its internal trace-and-sort CPU time is 0.624 ms. The first rewrite timing
+excludes Idenso's later passes; the complete pipeline previously measured 2.56 s.
+Both batch and in-process measurements are on a shared host, without CPU pinning.
+
+The #source-link("examples/notebooks/gamma_trace_axial_form.json", label: "axial FORM comparison record")
+contains the exact assignments, result values, raw timing samples, source hashes
+and executable FORM programs. These finite component checks support equivalence
+without requiring a common symbolic normal form.
+
 == Run locally
 
 Use an interpreter containing the combined Symbolica community host with Spenso and Idenso,
