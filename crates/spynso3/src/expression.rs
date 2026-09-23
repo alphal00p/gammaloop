@@ -18,7 +18,7 @@ use idenso::{
 use pyo3::{
     exceptions::{PyIndexError, PyOverflowError, PyRuntimeError, PyTypeError, PyValueError},
     prelude::*,
-    types::{PyAny, PyTuple},
+    types::{PyAny, PySlice, PyTuple},
 };
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::{
@@ -54,7 +54,7 @@ use crate::{
     composition::{self, StructuredAtom},
     display,
     library::SpensorLibrary,
-    network::{ConvertibleToSpensoNet, SpensoNet},
+    network::{ConvertibleToSpensoNet, ExecutionMode, SpensoNet},
     simplification::{
         CanonicalizationError, CookingError, DiracAdjointError, DotExpansionError,
         GammaConjugationError, NetworkToolingError, PyColorCasimirSettings,
@@ -3133,6 +3133,35 @@ impl TensorExpression {
         )?;
         SpensoNet::from_arithmetic(ArithmeticStructure::Tensor(expression), library)
             .map_err(|error| PyRuntimeError::new_err(error.to_string()))
+    }
+
+    /// Return component values in logical row-major interface order.
+    ///
+    /// Parse and execute through the same path as `to_network()`. Tensors absent
+    /// from the library acquire symbolic components, with the same identities
+    /// used when they occur in a larger network. Registered tensors use their
+    /// library values; compound expressions are contracted before extraction.
+    /// Abstract index labels do not change a named tensor's component identities.
+    ///
+    /// The result is a flat list (one element for a scalar). Dimensions must be
+    /// concrete. This does not mutate the expression or register generated data.
+    /// When `library` is omitted, use the default HEP library; pass
+    /// `TensorLibrary.hep_lib_atom()` to select its atom-valued variant.
+    /// Values retain the Python types returned by `TensorNetwork.result_tensor()`.
+    #[pyo3(signature = (library = None))]
+    #[gen_stub(override_return_type(
+        type_repr = "builtins.list[Expression | builtins.complex | builtins.float]"
+    ))]
+    fn components(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        library: Option<&SpensorLibrary>,
+    ) -> PyResult<Py<PyAny>> {
+        let mut network = Self::to_network(self_, py, library)?;
+        network.execute(library, None, None, ExecutionMode::All)?;
+        network
+            .result_tensor(library)?
+            .__getitem__(SliceOrIntOrExpanded::Slice(PySlice::full(py)))
     }
 
     /// Fill the unresolved external ports with `indices` in interface order.

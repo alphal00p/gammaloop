@@ -311,3 +311,100 @@ fn metric_factory_rejects_different_concrete_and_symbolic_spaces() {
     })
     .unwrap();
 }
+
+#[test]
+fn components_preserve_generated_identities_and_logical_order() {
+    Python::initialize();
+    Python::attach(|py| -> PyResult<()> {
+        let globals = PyDict::new(py);
+        globals.set_item("spenso", spenso_module(py)?)?;
+        py.run(
+            c"
+euc = spenso.Representation.euc(2)
+bis = spenso.Representation.bis(4)
+name = spenso.TensorName('component_identity_matrix')
+expr = name(bis, euc)
+before = expr.to_expression()
+interface = expr.interface
+components = expr.components()
+assert len(components) == 8
+assert len(set(str(x) for x in components)) == 8
+assert components == expr.components()
+assert components == name(bis('j'), euc('i')).components()
+assert components == name(bis('l'), euc('k')).components()
+assert expr.to_expression() == before
+assert expr.interface == interface
+
+# Contracting one axis must select the same component identities and order.
+selector = spenso.Tensor.dense(
+    spenso.TensorName('component_selector')(bis), [0.0, 0.0, 1.0, 0.0]
+)
+network = name(bis('j'), euc('i')) * selector('j')
+network.execute()
+selected = network.result_tensor()[:]
+assert all((x - y).expand() == 0 for x, y in zip(selected, components[4:6]))
+
+# Scalar contractions return a one-element list, using the same generated atoms.
+v = spenso.TensorName('component_identity_vector')
+vector = v(euc).components()
+scalar = (v(euc('i')) * v(euc('i'))).components()
+assert len(scalar) == 1
+assert (scalar[0] - sum(x*x for x in vector)).expand() == 0
+",
+            Some(&globals),
+            None,
+        )?;
+        Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
+fn components_resolve_library_values_and_compound_expressions() {
+    Python::initialize();
+    Python::attach(|py| -> PyResult<()> {
+        let globals = PyDict::new(py);
+        globals.set_item("spenso", spenso_module(py)?)?;
+        py.run(
+            c"
+euc = spenso.Representation.euc(2)
+bis = spenso.Representation.bis(4)
+name = spenso.TensorName('component_library_matrix')
+expr = name(bis, euc)
+lib = spenso.TensorLibrary()
+values = [float(i) for i in range(8)]
+tensor = spenso.Tensor.dense(expr, values)
+tensor.to_sparse()
+lib.register(tensor)
+assert expr.components(library=lib) == values
+assert name(bis('j'), euc('i')).components(library=lib) == values
+assert (2 * expr).components(library=lib) == [2*x for x in values]
+
+# Built-in values and sparse zeros retain the ordinary network result types.
+mink = spenso.Representation.mink(4)
+metric = mink.g('mu', 'nu').components(library=spenso.TensorLibrary.hep_lib_atom())
+assert metric == [1, 0, 0, 0, 0, -1, 0, 0, 0, 0, -1, 0, 0, 0, 0, -1]
+assert all(isinstance(x, float) for x in metric)
+
+# A symbolic library entry keeps exact coefficients and input identities.
+symbols = spenso.TensorName('component_exact_input')(euc).components()
+exact = [symbols[0] / 3, symbols[1] / 7]
+exact_name = spenso.TensorName('component_exact_library')
+lib.register(spenso.Tensor.dense(exact_name(euc), exact))
+assert exact_name(euc).components(library=lib) == exact
+
+# Components of an unknown, unbounded tensor cannot be enumerated.
+try:
+    name(spenso.Representation.euc('component_dimension')).components()
+except (ValueError, RuntimeError):
+    pass
+else:
+    raise AssertionError('symbolic dimensions must reject component enumeration')
+",
+            Some(&globals),
+            None,
+        )?;
+        Ok(())
+    })
+    .unwrap();
+}

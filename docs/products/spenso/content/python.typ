@@ -111,6 +111,37 @@ assert identity("i", "i").simplify_metrics().to_expression() == E("3")
 The same constructor supports symbolic dimensions. Distinct symbolic dimensions
 are rejected, even when no numerical values have been assigned.
 
+== Generated symbolic components
+
+A named tensor with concrete dimensions needs no manually supplied component array.
+If the library has no entry for it, network parsing generates symbolic components.
+`TensorExpression.components(library=None)` exposes those same values in flat logical
+row-major order, independent of the abstract index labels used in a contraction.
+
+// docs-example: compile
+```python
+from symbolica.community.spenso import Representation, TensorName
+
+spinor = Representation.bis(4)
+J = TensorName("J")(spinor)
+parameters = J.components()
+assert len(parameters) == 4
+assert J("s").components() == parameters
+```
+
+The values are the actual component expressions used by the parser, such as
+`J(cind(0))`; use them directly as evaluator parameters or substitution keys.
+The accessor executes a temporary network through the normal parser and executor.
+For compound expressions it returns the contracted result; for a scalar it returns
+a one-element list. It neither changes the expression nor registers generated tensors.
+All enumerated dimensions must be concrete.
+
+A supplied `TensorLibrary` is used for parsing, execution, and result extraction.
+Registered tensors contribute their stored values instead of generated symbols.
+The default is the ordinary HEP library; `TensorLibrary.hep_lib_atom()` selects
+its atom-valued variant. Component values retain the same Python types as
+`TensorNetwork.result_tensor()`: expressions, floats, or complex numbers.
+
 == Construct and inspect concrete data
 
 This complete source creates a named rank-two tensor, verifies one component, and converts its

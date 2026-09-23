@@ -2226,6 +2226,22 @@ class TensorExpression(Expression):
 
         When `library` is omitted, use the built-in four-dimensional HEP and SU(3) library.
         """
+    def components(self, library: typing.Optional[TensorLibrary] = None) -> builtins.list[Expression | builtins.complex | builtins.float]:
+        r"""
+        Return component values in logical row-major interface order.
+
+        Parse and execute through the same path as `to_network()`. Tensors absent
+        from the library acquire symbolic components, with the same identities
+        used when they occur in a larger network. Registered tensors use their
+        library values; compound expressions are contracted before extraction.
+        Abstract index labels do not change a named tensor's component identities.
+
+        The result is a flat list (one element for a scalar). Dimensions must be
+        concrete. This does not mutate the expression or register generated data.
+        When `library` is omitted, use the default HEP library; pass
+        `TensorLibrary.hep_lib_atom()` to select its atom-valued variant.
+        Values retain the Python types returned by `TensorNetwork.result_tensor()`.
+        """
     def index(self, *indices: typing.Any, cook_indices: builtins.bool = False) -> TensorExpression:
         r"""
         Fill the unresolved external ports with `indices` in interface order.
@@ -2712,9 +2728,10 @@ class TensorNetwork:
     r"""
     A graph of tensor operations that can be simplified and executed.
 
-    Named tensor expressions are resolved through a `TensorLibrary`. Register concrete data
-    before constructing and executing a network; an expression alone supplies structure, not
-    component values.
+    Named tensor expressions are resolved through a `TensorLibrary`. Register tensors
+    to supply their component values. Unregistered tensors with concrete dimensions
+    acquire symbolic components automatically; `TensorExpression.components()` exposes
+    the same components without requiring a surrounding network.
 
     A network retains the semantic source expression and its public tensor interface
     separately from the executable graph and its stored values. Value specialization
