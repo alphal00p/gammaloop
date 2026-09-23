@@ -38,6 +38,8 @@ pub struct SpensoPrintSettings {
     pub commas: bool,
     pub index_subscripts: bool,
     pub symbol_scripts: bool,
+    /// Display concrete coordinates as array indices instead of a superscript.
+    pub array_components: bool,
 }
 
 /// Output syntax selected by Symbolica's print mode.
@@ -96,6 +98,7 @@ impl SpensoPrintSettings {
             with_dim: (x & 0b00100) != 0,
             symbol_scripts: (x & 0b01000) != 0,
             index_subscripts: (x & 0b10000) != 0,
+            array_components: (x & 0b100000) != 0,
         }
     }
 
@@ -105,6 +108,7 @@ impl SpensoPrintSettings {
             | ((self.with_dim as usize) << 2)
             | ((self.symbol_scripts as usize) << 3)
             | ((self.index_subscripts as usize) << 4)
+            | ((self.array_components as usize) << 5)
     }
 
     /// Resolve Spenso presentation and backend syntax from Symbolica options.
@@ -139,6 +143,7 @@ impl SpensoPrintSettings {
             with_dim: false,
             symbol_scripts: true,
             index_subscripts: true,
+            array_components: false,
         }
     }
 
@@ -155,6 +160,7 @@ impl SpensoPrintSettings {
             with_dim: false,
             symbol_scripts: false,
             index_subscripts: false,
+            array_components: false,
         }
     }
 

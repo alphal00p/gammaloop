@@ -1371,6 +1371,7 @@ fn compact_printing() {
                 commas: false,
                 index_subscripts: false,
                 symbol_scripts: false,
+                array_components: false,
             }
             .nice_symbolica()
         )

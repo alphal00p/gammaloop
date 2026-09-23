@@ -61,6 +61,9 @@ const NOTEBOOK_STYLE: &str = include_str!("../typst/notebook.css");
 /// indices within each displayed expression. ``"graph"`` keeps graph identities
 /// in their subscripts; ``"raw"`` preserves the original index notation. All
 /// styles leave the underlying expression and tensor interface unchanged.
+/// ``component_style="superscript"`` displays concrete components as A(x,7)^{0,1}.
+/// Use ``component_style="array"`` for A(x,7)[0,1]; ordinary arguments remain in
+/// parentheses in both styles.
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     frozen,
@@ -74,6 +77,8 @@ pub struct DisplaySettings {
     tensor_layout: String,
     #[pyo3(get)]
     index_style: String,
+    #[pyo3(get)]
+    component_style: String,
     #[pyo3(get)]
     show_dimensions: bool,
     #[pyo3(get)]
@@ -93,6 +98,7 @@ impl Default for DisplaySettings {
         Self {
             tensor_layout: "ports".to_owned(),
             index_style: "alphabet".to_owned(),
+            component_style: "superscript".to_owned(),
             show_dimensions: false,
             parentheses: true,
             commas: None,
@@ -132,6 +138,7 @@ impl DisplaySettings {
         index_gap = "0.08em",
         factor_gap = "0.12em",
         index_style = "alphabet",
+        component_style = "superscript",
     ))]
     #[allow(clippy::too_many_arguments)] // Each Python display setting is independently optional.
     fn new(
@@ -143,6 +150,7 @@ impl DisplaySettings {
         index_gap: &str,
         factor_gap: &str,
         index_style: &str,
+        component_style: &str,
     ) -> PyResult<Self> {
         if !matches!(tensor_layout, "ports" | "schoonschip" | "call") {
             return Err(PyValueError::new_err(
@@ -154,11 +162,17 @@ impl DisplaySettings {
                 "index_style must be 'alphabet', 'graph', or 'raw'",
             ));
         }
+        if !matches!(component_style, "superscript" | "array") {
+            return Err(PyValueError::new_err(
+                "component_style must be 'superscript' or 'array'",
+            ));
+        }
         validate_typst_length(index_gap, "index_gap")?;
         validate_typst_length(factor_gap, "factor_gap")?;
         Ok(Self {
             tensor_layout: tensor_layout.to_owned(),
             index_style: index_style.to_owned(),
+            component_style: component_style.to_owned(),
             show_dimensions,
             parentheses,
             commas,
@@ -192,8 +206,8 @@ impl DisplaySettings {
 
     fn __repr__(&self) -> String {
         format!(
-            "DisplaySettings(tensor_layout={:?}, show_dimensions={}, index_style={:?})",
-            self.tensor_layout, self.show_dimensions, self.index_style
+            "DisplaySettings(tensor_layout={:?}, show_dimensions={}, index_style={:?}, component_style={:?})",
+            self.tensor_layout, self.show_dimensions, self.index_style, self.component_style
         )
     }
 }
@@ -287,6 +301,7 @@ fn display_options_with_settings(
     presentation.parens = settings.parentheses;
     presentation.commas = settings.commas.unwrap_or(settings.tensor_layout == "call");
     presentation.symbol_scripts = settings.symbol_scripts;
+    presentation.array_components = settings.component_style == "array";
 
     let mut options = match mode {
         TensorDisplayMode::Plain => presentation.nice_symbolica(),
@@ -661,6 +676,7 @@ fn typst_settings_source(settings: &DisplaySettings, atom: &Atom) -> String {
         concat!(
             "(\n",
             "  tensor-layout: {:?},\n",
+            "  component-style: {:?},\n",
             "  with-dim: {},\n",
             "  parens: {},\n",
             "  commas: {},\n",
@@ -671,6 +687,7 @@ fn typst_settings_source(settings: &DisplaySettings, atom: &Atom) -> String {
             ")"
         ),
         settings.tensor_layout,
+        settings.component_style,
         settings.show_dimensions,
         settings.parentheses,
         commas,
@@ -1941,19 +1958,59 @@ mod tests {
     #[test]
     fn index_styles_are_validated_and_reported_in_settings() {
         for style in ["alphabet", "graph", "raw"] {
-            let settings =
-                DisplaySettings::new("ports", false, true, None, true, "0.08em", "0.12em", style)
-                    .unwrap();
+            let settings = DisplaySettings::new(
+                "ports",
+                false,
+                true,
+                None,
+                true,
+                "0.08em",
+                "0.12em",
+                style,
+                "superscript",
+            )
+            .unwrap();
             assert_eq!(settings.index_style, style);
             assert!(settings.__repr__().contains(style));
         }
         assert!(
             DisplaySettings::new(
-                "ports", false, true, None, true, "0.08em", "0.12em", "invalid"
+                "ports",
+                false,
+                true,
+                None,
+                true,
+                "0.08em",
+                "0.12em",
+                "invalid",
+                "superscript"
             )
             .is_err()
         );
         assert_eq!(DisplaySettings::default().index_style, "alphabet");
+    }
+
+    #[test]
+    fn component_styles_are_validated_and_reported_in_settings() {
+        for style in ["superscript", "array"] {
+            let settings = DisplaySettings::new(
+                "ports", false, true, None, true, "0.08em", "0.12em", "alphabet", style,
+            )
+            .unwrap();
+            assert_eq!(settings.component_style, style);
+            assert!(settings.__repr__().contains(style));
+            assert!(
+                typst_settings_source(&settings, &Atom::Zero)
+                    .contains(&format!("component-style: {style:?}"))
+            );
+        }
+        assert!(
+            DisplaySettings::new(
+                "ports", false, true, None, true, "0.08em", "0.12em", "alphabet", "invalid",
+            )
+            .is_err()
+        );
+        assert_eq!(DisplaySettings::default().component_style, "superscript");
     }
 
     #[test]
@@ -2190,6 +2247,42 @@ mod tests {
                 );
             }
         }
+        let array = DisplaySettings {
+            component_style: "array".to_owned(),
+            ..DisplaySettings::default()
+        };
+        for (mode, bare, labeled) in [
+            (TensorDisplayMode::Plain, "A[0,12]", "A(x,7)[0,12]"),
+            (
+                TensorDisplayMode::Latex,
+                r"A\!\left[0,12\right]",
+                r"A\!\left(x,7\right)\!\left[0,12\right]",
+            ),
+            (
+                TensorDisplayMode::Typst,
+                "A lr([0 comma 12])",
+                "A(x,7) lr([0 comma 12])",
+            ),
+        ] {
+            assert_eq!(format_atom_with_settings(&component, mode, &array), bare);
+            assert_eq!(
+                format_atom_with_settings(&parameterized, mode, &array),
+                labeled
+            );
+        }
+        let squared = parameterized.clone().pow(2);
+        assert_eq!(
+            format_atom_with_settings(&squared, TensorDisplayMode::Typst, &array),
+            "A(x,7) lr([0 comma 12])^2",
+        );
+        let scalar = function!(
+            head,
+            function!(spenso::structure::abstract_index::AIND_SYMBOLS.cind)
+        );
+        assert_eq!(
+            format_atom_with_settings(&scalar, TensorDisplayMode::Typst, &array),
+            "A"
+        );
         assert!(head.get_print_function().is_none());
         assert_eq!(
             component,
@@ -2410,6 +2503,7 @@ mod tests {
                 "0.04em",
                 "0.1em",
                 "alphabet",
+                "superscript",
             )
             .unwrap();
             let source = typst_settings_source(&settings, &Atom::Zero);

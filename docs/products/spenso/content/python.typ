@@ -323,7 +323,7 @@ and #link("reference/python/spynso3/ExecutionMode/")[`ExecutionMode`].
 
 `TensorExpression`, `Tensor`, and `TensorNetwork` share semantic display methods.
 `DisplaySettings` controls the ports, Schoonschip, and call layouts, dimensions, parentheses,
-commas, symbol scripts, and index/factor spacing. Positional calls such as `to_typst(True)`
+commas, symbol scripts, component notation, and index/factor spacing. Positional calls such as `to_typst(True)`
 and `formatted(True)` still request dimensions. Rich Typst output collects inverse factors
 at the same product level into a single fraction, including rational coefficients.
 Compound graph indices use each representation's alphabet by default: Lorentz indices
@@ -343,6 +343,14 @@ subscript notation, including distinct higher-spin and dummy slots.
 After `to_expression()`, ordinary Symbolica printing owns namespace elision and nested
 bracket highlighting. Use `format(show_namespaces=True)` to display qualified names.
 
+
+Concrete tensor components default to $A(x,7)^(0,1)$. Choose
+`DisplaySettings(component_style="array")` for $A(x,7)[0,1]$, or
+`component_style="superscript"` for the default. Both styles keep ordinary
+arguments in parentheses and apply to individual components and matrix entries.
+Use `component.formatted(settings=DisplaySettings(component_style="array"))`
+to show array notation in a notebook. The setting changes presentation only;
+component coordinates remain independent of abstract-index styles.
 
 // docs-example: compile
 ```python

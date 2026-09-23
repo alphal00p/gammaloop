@@ -15,6 +15,8 @@
 #assert.eq(mu.representation.dimension, 4)
 #assert.eq(inspect(simplify-metrics(parsed)), inspect(p(mu)))
 #assert(type(to-typst(contracted)) == content)
+// Component style is a public notation option and leaves abstract indices unchanged.
+#assert.eq(to-typst(contracted, notation: notation(component-style: "array")), to-typst(contracted))
 #assert(type(to-string(contracted)) == str)
 #assert.eq(inspect(math($#to-typst(contracted)$)), inspect(contracted))
 

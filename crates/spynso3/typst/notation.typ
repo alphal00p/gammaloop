@@ -15,6 +15,7 @@
 
 #let _settings(value) = _merge((
   tensor-layout: "ports",
+  component-style: "superscript",
   with-dim: false,
   parens: true,
   commas: none,
@@ -488,6 +489,9 @@
       }
       if component.arguments.len() == 0 { return base }
       let coordinates = component.arguments.map(index => _visual(ctx, index)).join($,$)
+      if settings.component-style == "array" {
+        return _tight((base, math.lr($ [#coordinates] $)))
+      }
       let body = math.attach(base, t: coordinates)
       return if ctx.power-base { _parentheses(body) } else { body }
     }
@@ -730,6 +734,7 @@
 #let notation(
   settings: (:),
   tensor-layout: none,
+  component-style: none,
   with-dim: none,
   parens: none,
   commas: none,
@@ -744,6 +749,7 @@
   let settings = _settings(settings)
   for (key, value) in (
     tensor-layout: tensor-layout,
+    component-style: component-style,
     with-dim: with-dim,
     parens: parens,
     commas: commas,
@@ -755,6 +761,9 @@
   }
   if settings.tensor-layout not in ("ports", "schoonschip", "call") {
     panic("tensor-layout must be \"ports\", \"schoonschip\", or \"call\"")
+  }
+  if settings.component-style not in ("superscript", "array") {
+    panic("component-style must be \"superscript\" or \"array\"")
   }
   if settings.commas == none {
     settings.insert("commas", settings.tensor-layout == "call")
