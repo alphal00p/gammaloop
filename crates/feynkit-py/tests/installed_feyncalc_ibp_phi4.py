@@ -274,17 +274,18 @@ zg1, zm1 = 3 / (2 * eps), 1 / (2 * eps)
 # Build local counterterm vertices from the bare Lagrangian factors. Keep the
 # one-loop field constant symbolic through graph generation, although its
 # reference value vanishes in phi4. h counts powers of g/(16*pi^2).
-h, field1, mass1, vertex1, field2, mass2 = S(
+h, field1, mass1, vertex1, field2, mass2, vertex2 = S(
     "ibp_phi4::h",
     "ibp_phi4::field1",
     "ibp_phi4::mass1",
     "ibp_phi4::vertex1",
     "ibp_phi4::field2",
     "ibp_phi4::mass2",
+    "ibp_phi4::vertex2",
 )
 Zfield = 1 + h * field1 + h**2 * field2
 Zmass = 1 + h * mass1 + h**2 * mass2
-Zvertex = 1 + h * vertex1
+Zvertex = 1 + h * vertex1 + h**2 * vertex2
 specification = json.loads(model.to_json())
 specification["orders"].append({"name": "CT", "expansion_order": 2, "hierarchy": 1})
 for label, valence, lorentz, bare_factor in [
@@ -295,7 +296,7 @@ for label, valence, lorentz, bare_factor in [
     specification["lorentz_structures"].append(
         {"name": "CT_L_" + label, "spins": [1] * valence, "structure": lorentz}
     )
-    for order in [1, 2] if valence == 2 else [1]:
+    for order in [1, 2]:
         name = f"CT_{label}_{order}"
         specification["couplings"].append(
             {
@@ -441,4 +442,251 @@ assert (
 print(
     "Generated phi4 diagrams and counterterms, native UV/tensor expansion, IBP and renormalization constants passed",
     laporta.stats,
+)
+
+# Two-loop four-point function. The self-energy calculation above supplies
+# the vacuum family, symmetry maps, counterterm model and field constant.
+vertex_diagrams = model.generate_diagrams(
+    [particle] * 2,
+    [particle] * 2,
+    loops=2,
+    max_vertices=3,
+    maximum_bridges=0,
+    self_energy=None,
+    tadpoles=None,
+    zero_snails=None,
+    numerator_grouping=None,
+    progress=None,
+).diagrams
+assert len(vertex_diagrams) == 12
+vertex_input, vertex_terms = zero, []
+for diagram in vertex_diagrams:
+    numerator = model.expand_couplings(diagram.numerator_expression().to_expression())
+    expanded = diagram.momentum_basis().route_expression(
+        diagram.uv_expansion(model_mass, numerator=numerator).to_expression()
+    )
+    # A unit-Jacobian reversal of the second integration coordinate puts all
+    # generated K(0)-K(1) lines in the existing (k1+k2) vacuum family.
+    expanded = (
+        expanded.replace(dim, d)
+        .replace(K(0, index), k1(index))
+        .replace(K(1, index), -k2(index))
+        .replace(model_mass**2, mass_squared)
+    )
+    for match in list(expanded.match(den(edge_, mom_, mass_, quad_))):
+        values = dict(match)
+        expanded = expanded.replace(
+            den(values[edge_], values[mom_], values[mass_], values[quad_]),
+            family.rewrite_numerator(values[quad_], coordinates),
+        )
+    scalar = (
+        (
+            expanded
+            * diagram.overall_factor_expression(evaluate=True)
+            * diagram.numerator_prefactor_expression()
+            / (Symbol.I * model_coupling**3)
+        )
+        .together()
+        .expand()
+    )
+    for monomial, coefficient in scalar.coefficient_list(*coordinates):
+        powers = [
+            -int((monomial.derivative(x) * x / monomial).together())
+            for x in coordinates
+        ]
+        assert monomial == prod(
+            x ** (-power) for x, power in zip(coordinates, powers, strict=True)
+        )
+        vertex_terms.append((powers, coefficient))
+        vertex_input += coefficient * integral(*powers)
+assert (
+    vertex_input
+    - 3 * integral(3, 1, 0) / 2
+    - 3 * integral(2, 2, 0) / 4
+    - 3 * integral(2, 1, 1)
+).together() == zero
+vertex_targets = sorted({tuple(powers) for powers, coefficient in vertex_terms})
+vertex_laporta = ibp.reduce_laporta(vertex_targets, max_depth=2)
+vertex_canonical = {
+    tuple(powers): min(tuple(mapping.map_powers(powers)) for mapping in symmetries)
+    for powers in vertex_laporta.residuals
+}
+vertex_reductions = {}
+for target in vertex_targets:
+    terms = vertex_laporta.reduce(target)
+    assert all(
+        vertex_canonical[tuple(powers)] in reference_basis
+        for powers, coefficient in terms
+    )
+    vertex_reductions[target] = sum(
+        (
+            coefficient * reference_basis[vertex_canonical[tuple(powers)]]
+            for powers, coefficient in terms
+        ),
+        zero,
+    ).together()
+vertex_reduced = vertex_input.replace_multiple(
+    [
+        Replacement(integral(*target), value)
+        for target, value in vertex_reductions.items()
+    ]
+)
+vertex_bare_uv = (
+    (
+        -(1 + 2 * eps * log_4pi)
+        * vertex_reduced.replace(d, 4 - 2 * eps)
+        .replace(tadpole_squared, tadpole_squared_poles)
+        .replace(vacuum_integral, vacuum_poles)
+    )
+    .series(eps, 0, -1)
+    .to_expression()
+    .expand()
+)
+assert (
+    vertex_bare_uv
+    + E("9/4") / eps**2
+    - (E("9/2") * (log_mass - log_4pi) - E("3/4")) / eps
+).together() == zero
+
+# A one-loop mass insertion is UV finite before multiplication by its
+# divergent renormalization constant. Keep its full zeroth-order Taylor
+# integral, including I(3); a local UV-only truncation would lose its pole.
+vertex_ct_diagrams = {}
+vertex_ct_input, vertex_tree_ct = zero, zero
+external_index = S("ibp_phi4::external_")
+for loops, order in [(1, 1), (0, 2)]:
+    result = ct_model.generate_diagrams(
+        [particle.name] * 2,
+        [particle.name] * 2,
+        loops=loops,
+        max_vertices=3 if loops else 1,
+        coupling_orders={"CT": order},
+        maximum_bridges=0,
+        self_energy=None,
+        tadpoles=None,
+        zero_snails=None,
+        numerator_grouping=None,
+        progress=None,
+    )
+    vertex_ct_diagrams[loops] = result.diagrams
+    assert len(result.diagrams) == (12 if loops else 1)
+    for diagram in result.diagrams:
+        numerator = ct_model.expand_couplings(
+            diagram.numerator_expression().to_expression()
+        )
+        numerator = TensorExpression(numerator.expand()).to_dots().to_expression()
+        numerator = diagram.momentum_basis().route_expression(numerator)
+        if loops:
+            numerator /= diagram.denominator_expression(
+                dimension=d, in_lmb=True
+            ).to_expression()
+        numerator = (
+            numerator.replace(mink(dimension), mink(d))
+            .replace(P(external_index, index), zero)
+            .replace(K(0, index), k1(index))
+            .replace(model_mass**2, mass_squared)
+        )
+        for match in list(numerator.match(den(edge_, mom_, mass_, quad_))):
+            values = dict(match)
+            numerator = numerator.replace(
+                den(values[edge_], values[mom_], values[mass_], values[quad_]),
+                tadpole_family.rewrite_numerator(values[quad_], [ct_coordinate]),
+            )
+        numerator *= (
+            diagram.overall_factor_expression(evaluate=True)
+            * diagram.numerator_prefactor_expression()
+        )
+        if loops:
+            scalar = (
+                (
+                    tadpole_family.rewrite_numerator(numerator, [ct_coordinate])
+                    / (model_coupling**2 * h)
+                )
+                .together()
+                .expand()
+            )
+            for monomial, coefficient in scalar.coefficient_list(ct_coordinate):
+                power = -int(
+                    (
+                        monomial.derivative(ct_coordinate) * ct_coordinate / monomial
+                    ).together()
+                )
+                assert monomial == ct_coordinate ** (-power)
+                vertex_ct_input += coefficient * ct_integral(power)
+        else:
+            vertex_tree_ct += numerator / (Symbol.I * model_coupling * h**2)
+assert (
+    vertex_ct_input
+    - 3 * (vertex1 + field1) * ct_integral(2)
+    - 3 * mass_squared * mass1 * ct_integral(3)
+).together() == zero
+assert (
+    vertex_tree_ct + vertex2 + 2 * field2 + 2 * vertex1 * field1 + field1**2
+).together() == zero
+tripled_tadpole = parametric.reduce([3], integral=ct_integral).replace(
+    ct_integral(2), tadpole_coefficient * ct_integral(1)
+)
+vertex_ct_reduced = vertex_ct_input.replace(ct_integral(3), tripled_tadpole).replace(
+    ct_integral(2), tadpole_coefficient * ct_integral(1)
+)
+vertex_ct_reduced = (
+    vertex_ct_reduced.replace(field1, zero).replace(vertex1, zg1).replace(mass1, zm1)
+)
+vertex_ct_uv = (
+    (
+        (1 + eps * log_4pi)
+        * vertex_ct_reduced.replace(d, 4 - 2 * eps).replace(
+            ct_integral(1), tadpole_poles
+        )
+    )
+    .series(eps, 0, -1)
+    .to_expression()
+    .expand()
+)
+assert (
+    vertex_ct_uv
+    - E("9/2") / eps**2
+    - (-E("3/4") + E("9/2") * (log_4pi - log_mass)) / eps
+).together() == zero
+mass_insertion_pole = (
+    (vertex_ct_input.expand().coefficient(mass1) * zm1)
+    .replace(ct_integral(3), tripled_tadpole)
+    .replace(d, 4 - 2 * eps)
+    .replace(ct_integral(1), tadpole_poles)
+    .series(eps, 0, -1)
+    .to_expression()
+)
+assert (mass_insertion_pole + E("3/4") / eps).together() == zero
+vertex_loop_uv = (vertex_bare_uv + vertex_ct_uv).expand()
+vertex_tree_ct = vertex_tree_ct.replace(field1, zero).replace(field2, zphi2).expand()
+vertex_matrix = Matrix.from_linear(1, 1, [vertex_tree_ct.coefficient(vertex2)])
+vertex_rhs = Matrix.vec([-vertex_loop_uv - vertex_tree_ct.replace(vertex2, zero)])
+vertex_solution = vertex_matrix.solve(vertex_rhs)
+zg2 = vertex_solution[0, 0].to_expression().expand()
+assert (zg2 - E("9/4") / eps**2 + E("17/12") / eps).together() == zero
+assert (vertex_loop_uv + vertex_tree_ct.replace(vertex2, zg2)).together() == zero
+zg = (1 + loop_coupling * zg1 + loop_coupling**2 * zg2).expand()
+assert (
+    zg
+    - 1
+    - 3 * coupling / (32 * pi**2 * eps)
+    - 9 * coupling**2 / (1024 * pi**4 * eps**2)
+    + 17 * coupling**2 / (3072 * pi**4 * eps)
+).together() == zero
+
+# Scale independence of the bare coupling derives the beta function from Zg.
+a = S("ibp_phi4::a")
+Zg = 1 + a * zg1 + a**2 * zg2
+beta = (
+    (-2 * eps * a * Zg / (Zg + a * Zg.derivative(a)))
+    .series(a, 0, 3)
+    .to_expression()
+    .series(eps, 0, 0)
+    .to_expression()
+    .expand()
+)
+assert (beta - 3 * a**2 + E("17/3") * a**3).together() == zero
+print(
+    "Generated two-loop phi4 four-point renormalization, finite CT insertions, Zg and beta function passed",
+    vertex_laporta.stats,
 )

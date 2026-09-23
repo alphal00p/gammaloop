@@ -51,9 +51,11 @@ not treat the presence of a primitive as an end-to-end validation.
   [Graph and subgraph expansion and vacuum-integral infrastructure exist.
    The one-loop QED and QCD renormalization workflows combine generated
    self-energies, fermion vertices and the ghost-gluon vertex with symbolic gauge dependence and
-   counterterm linear solves. Generated two-loop massless electron and scalar
-   self-energies validate bare UV poles with supplied counterterm sums. The
-   two-loop photon example retains symbolic gauge dependence and calculates
+   counterterm linear solves. The generated two-loop massless electron
+   self-energy validates bare UV poles with a supplied counterterm sum.
+   The scalar self-energy and four-point examples generate their counterterm
+   insertions and determine the two-loop field, mass and coupling constants.
+   The two-loop photon example retains symbolic gauge dependence and calculates
    its four one-loop counterterm insertions using signed propagator powers.
    Analytic vacuum values remain explicit inputs.
    Automatic forest generation stays separate.],
@@ -82,7 +84,8 @@ not treat the presence of a primitive as an end-to-end validation.
    `hep.IBPFamily` consumes the existing FeynKit family and exposes symbolic
    identities, bounded Laporta elimination and parametric recurrences. Residual
    integrals at a finite search depth are not certified masters. Two-loop
-   scalar and Feynman-gauge massless electron self-energies, symbolic-gauge photon
+   scalar self-energy and four-point renormalization, Feynman-gauge massless
+   electron self-energy, symbolic-gauge photon
    renormalization, the electron Pauli form factor and unequal-mass bubble
    regressions pass in the installed host.
    Separate notebooks run on the existing Marimo instance. Of the gallery pages,
@@ -1089,6 +1092,28 @@ all momentum, mass and logarithmic poles exactly. The installed regression,
 strict Marimo check, HTML export and live execution pass. These checks cover
 the displayed two-loop self-energy renormalization example; the IBP solver
 does not evaluate analytic masters or certify a minimal master basis.
+
+`hep/phi4_two_loop_vertex.py` composes the self-energy notebook to reuse its
+model, vacuum family, verified momentum mappings, analytic inputs, counterterm
+rules and computed two-loop field constant. It generates twelve bare two-loop
+four-point diagrams, twelve one-loop counterterm insertions and one local
+second-order counterterm, matching the
+#link("https://feyncalc.github.io/FeynCalcExamples/Phi4/TwoLoops/Renormalization-SSSS")[four-point renormalization reference].
+Native UV expansion and Laporta reduction give the bare poles. The one-loop
+insertions retain their full zeroth Taylor coefficient in external momenta:
+the UV-finite mass insertion multiplies a divergent first-order counterterm
+and contributes $-3/(4 epsilon)$ in units of $i g^3/(16 pi^2)^2$.
+A parametric tadpole recurrence retains this term.
+
+The generated local vertex supplies the matching equation. Using the computed
+field constant gives
+$Z_g=1+3a/(2 epsilon)+a^2(9/(4 epsilon^2)-17/(12 epsilon))$.
+All poles, including the logarithmic terms, cancel exactly. Differentiating
+the bare coupling at fixed scale dependence yields
+$beta(a)=3a^2-17a^3/3$ in four dimensions. Analytic vacuum Laurent coefficients
+and first-order renormalization constants remain explicit reference inputs.
+The installed regression, strict Marimo checks, HTML export and all three live
+diagram selections pass.
 
 `hep/ibp_bubble.py` constructs a bubble with unequal nonzero masses and nonzero
 external momentum. The targets $I_(2 1)$, $I_(1 2)$ and $I_(2 2)$ reduce to the
