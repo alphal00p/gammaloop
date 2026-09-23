@@ -4102,15 +4102,24 @@ class Model:
 
     Examples
     --------
+    >>> from symbolica.community import hep
+
+    Load a built-in model without any model files or UFO installation:
+
+    >>> model = hep.Model.standard_model()
+    >>> photon = model.particle("a")
+    >>> scalar_model = hep.Model.phi4()
+    >>> phi = scalar_model.particle("phi")
+
     Load a raw UFO model while retaining its parameter card and diagnostics:
 
-    >>> loaded = fk.UfoLoader().load("path/to/MyUFO")
+    >>> loaded = hep.UfoLoader().load("path/to/MyUFO")
     >>> model = loaded.model
     >>> electron = model.particle_by_pdg(11)
 
     Or open a previously normalized FeynKit JSON model directly:
 
-    >>> model = fk.Model("models/sm.json")
+    >>> model = hep.Model("models/sm.json")
     >>> photon = model.particle("a")
 
     Parameters
