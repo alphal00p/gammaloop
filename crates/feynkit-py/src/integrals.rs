@@ -425,6 +425,37 @@ impl PyIntegralFamily {
         })
     }
 
+    /// Find an unconstrained transverse loop direction proving scalelessness.
+    ///
+    /// Returns a nonzero real list ``w`` in loop order such that each inverse
+    /// propagator is invariant under ``k_i -> k_i + w_i*r_perp`` for any
+    /// vector orthogonal to the external span. The corresponding unrestricted
+    /// transverse integral vanishes in dimensional regularization, including
+    /// polynomial numerators. Apply ``sector(powers)`` first to exclude
+    /// numerator-only entries.
+    ///
+    /// Requires a nonsingular external Gram matrix. Symbolic dimension is
+    /// interpreted generically; a concrete dimension must exceed the external
+    /// basis size. None means no certificate was found. A vanishing Symanzik U
+    /// alone is not sufficient, and complex loop directions are not accepted.
+    ///
+    /// Examples
+    /// --------
+    /// >>> direction = family.sector(powers).scaleless_transverse_direction()
+    /// >>> if direction is not None:
+    /// ...     print("Scaleless transverse integration:", direction)
+    ///
+    /// Returns
+    /// -------
+    /// list[Expression] | None
+    ///     Verified real loop direction, or no certificate.
+    fn scaleless_transverse_direction(&self) -> PyResult<Option<Vec<PythonExpression>>> {
+        self.inner
+            .scaleless_transverse_direction()
+            .map(|direction| direction.map(|v| v.into_iter().map(Into::into).collect()))
+            .map_err(error::integral_family)
+    }
+
     /// Find parameter weights proving a sector scaleless in dimensional regularization.
     ///
     /// For G=U+F, the returned weights satisfy sum(w_i*x_i*dG/dx_i)=G.

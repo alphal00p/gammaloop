@@ -366,6 +366,41 @@ covers positive powers and polynomial numerators in this sector. Apply any
 exceptional kinematics before constructing the family so vanished scales are
 visible to the test.
 
+`sector.scaleless_transverse_direction()` covers a different source of zero
+sectors, including degenerate quadratic forms with eikonal denominators. It
+returns a nonzero real vector `w` in loop order such that every denominator is
+invariant under `k_i -> k_i + w_i*r_perp`, with `r_perp` orthogonal to the
+external span. The implementation stacks the individual quadratic loop
+matrices and uses Symbolica to find a common null direction. It also requires
+a nonsingular external Gram matrix and a nonempty transverse space. Symbolic
+dimension is generic; concrete dimension must exceed the external basis size.
+`None` is inconclusive, and a vanishing Symanzik `U` alone is insufficient.
+
+A real change of loop coordinates isolates an unrestricted transverse integral
+whose integrand is polynomial, even when the remaining denominators carry
+masses or eikonal scales. Its vanishing follows from the polynomial-integral
+corollary in the
+#link("https://arxiv.org/html/2203.13014v3")[SAGEX review, section 1.1]. The
+common-null-direction test is our application of that result. Polynomial
+numerators do not obstruct the proof; exclude their entries with `sector`
+before testing. Complex directions are rejected because they would require
+an additional contour argument.
+
+// docs-example: compile feynkit-integral-family-transverse-sector
+```python
+from symbolica import E, S
+import symbolica.community.feynkit as fk
+
+k, q, p, s, m2, delta = S("transverse_docs::k", "transverse_docs::q", "transverse_docs::p", "s", "m2", "delta")
+kin = fk.Kinematics(momenta=[k, q, p]).with_scalar_product(p, p, s)
+family = fk.IntegralFamily(
+    [k, q], [p],
+    [kin.scalar_product(k+q, k+q)-m2, kin.scalar_product(k-q, p)+delta],
+    kinematics=kin,
+)
+assert family.scaleless_transverse_direction() == [E("1"), E("-1")]
+```
+
 Regressions additionally check an on-shell massless bubble and the massless and
 massive eikonal examples from
 #link("https://feyncalc.github.io/FeynCalcBookDev/FCLoopPakScalelessQ.html")[FeynCalc's scalelessness documentation].

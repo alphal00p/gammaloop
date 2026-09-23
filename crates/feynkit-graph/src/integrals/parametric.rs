@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use spenso::structure::dimension::Dimension;
 use spenso::structure::representation::{Minkowski, RepName};
 use symbolica::atom::{Atom, AtomCore};
 use symbolica::graph::{CanonicalForm, Graph};
@@ -14,6 +15,96 @@ enum ParametricVertex {
 }
 
 impl IntegralFamily {
+    /// Find a real loop direction with an unconstrained transverse integral.
+    ///
+    /// The returned nonzero vector `w` is in loop-momentum order and satisfies
+    /// `A_a w = 0` for every denominator's quadratic loop matrix `A_a`.
+    /// Thus `k_i -> k_i + w_i r_perp` leaves all denominators unchanged for
+    /// any vector orthogonal to the external span. Its unrestricted polynomial
+    /// integral is scaleless in dimensional regularization, even with masses
+    /// and eikonal terms in the remaining coordinates.
+    ///
+    /// Requires a nonsingular external Gram matrix and a nonempty transverse
+    /// space. Symbolic dimension is interpreted generically; a concrete
+    /// dimension must exceed the number of external basis vectors. `None`
+    /// means no certificate was found, not that the integral is nonzero.
+    /// Use [`Self::sector`] first to exclude numerator-only propagators.
+    /// This verifies a common real null direction, not merely `det(A)=0`.
+    pub fn scaleless_transverse_direction(&self) -> Result<Option<Vec<Atom>>, IntegralFamilyError> {
+        if matches!(self.kinematics.dimension(), Dimension::Concrete(d) if d <= self.external_momenta.len())
+        {
+            return Ok(None);
+        }
+        if !self.external_momenta.is_empty() {
+            let rows = self
+                .external_momenta
+                .iter()
+                .map(|p| {
+                    self.external_momenta
+                        .iter()
+                        .map(|q| Ok(self.kinematics.scalar_product(p, q)? * q))
+                        .collect::<Result<Vec<Atom>, IntegralFamilyError>>()
+                        .map(|row| row.into_iter().sum::<Atom>())
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            let (gram, _) = Atom::system_to_matrix::<u16, _, _>(&rows, &self.external_momenta)
+                .map_err(|e| IntegralFamilyError::InvalidBasis(e.to_string()))?;
+            if gram
+                .det()
+                .map_err(|e| IntegralFamilyError::InvalidBasis(e.to_string()))?
+                .is_zero()
+            {
+                return Ok(None);
+            }
+        }
+        let rep = Minkowski {}.new_rep(self.kinematics.dimension());
+        let mut equations = Vec::new();
+        for denominator in &self.denominators {
+            let coefficients = denominator
+                .coefficient_list::<i32>(&self.scalar_products)
+                .into_iter()
+                .collect::<BTreeMap<_, _>>();
+            for p in &self.loop_momenta {
+                let row = self
+                    .loop_momenta
+                    .iter()
+                    .map(|q| {
+                        coefficients
+                            .get(&rep.inner_product(p, q))
+                            .cloned()
+                            .unwrap_or_default()
+                            * q
+                            * if p == q { 2 } else { 1 }
+                    })
+                    .sum::<Atom>();
+                equations.push(row);
+            }
+        }
+        // Fix one component to one to exclude the trivial kernel vector.
+        // Symbolica supplies the linear solve; no separate row reduction lives here.
+        for pivot in &self.loop_momenta {
+            equations.push(pivot - 1);
+            let (matrix, rhs) = Atom::system_to_matrix::<u16, _, _>(&equations, &self.loop_momenta)
+                .map_err(|e| IntegralFamilyError::InvalidBasis(e.to_string()))?;
+            equations.pop();
+            match matrix.solve_any(&rhs) {
+                Ok(solution) => {
+                    let weights = solution
+                        .into_vec()
+                        .into_iter()
+                        .map(|w| w.to_expression())
+                        .collect::<Vec<_>>();
+                    if weights.iter().all(|w| w.is_real().is_true()) {
+                        return Ok(Some(weights));
+                    }
+                }
+                Err(MatrixError::Inconsistent) => {}
+                Err(error) => return Err(IntegralFamilyError::InvalidBasis(error.to_string())),
+            }
+        }
+        Ok(None)
+    }
+
     /// Find a parametric scaling certificate for a scaleless sector.
     ///
     /// For `G = U + F`, solve `sum_i w_i*x_i*dG/dx_i = G` over constant
@@ -649,5 +740,103 @@ mod tests {
         let (u, f) = mixed.symanzik(&[parse!("x"), parse!("y")]).unwrap();
         assert_eq!(u, parse!("x"));
         assert_eq!(f, parse!("s*y^2/4-x*y*delta"));
+    }
+
+    #[test]
+    fn transverse_direction_certifies_mixed_eikonal_sectors() {
+        let [k, q, p] = [
+            parse!("transverse::k"),
+            parse!("transverse::q"),
+            parse!("transverse::p"),
+        ];
+        let kin = Kinematics::new()
+            .with_momenta([k.clone(), q.clone(), p.clone()])
+            .unwrap()
+            .with_mass_squared(&p, parse!("s"))
+            .unwrap();
+        let denominators = vec![
+            kin.scalar_product(&(&k + &q), &(&k + &q)).unwrap() - parse!("m2"),
+            kin.scalar_product(&(&k - &q), &p).unwrap() + parse!("delta"),
+        ];
+        let family = IntegralFamily::new(
+            vec![k.clone(), q.clone()],
+            vec![p.clone()],
+            denominators.clone(),
+            &kin,
+        )
+        .unwrap();
+        assert_eq!(
+            family.scaleless_transverse_direction().unwrap(),
+            Some(vec![Atom::one(), Atom::num(-1)])
+        );
+        let mut constrained = denominators.clone();
+        constrained.push(kin.scalar_product(&(&k - &q), &(&k - &q)).unwrap());
+        assert!(
+            IntegralFamily::new(
+                vec![k.clone(), q.clone()],
+                vec![p.clone()],
+                constrained,
+                &kin
+            )
+            .unwrap()
+            .scaleless_transverse_direction()
+            .unwrap()
+            .is_none()
+        );
+        let null_kin = kin.clone().with_mass_squared(&p, Atom::Zero).unwrap();
+        assert!(
+            IntegralFamily::new(
+                vec![k.clone(), q.clone()],
+                vec![p.clone()],
+                denominators,
+                &null_kin
+            )
+            .unwrap()
+            .scaleless_transverse_direction()
+            .unwrap()
+            .is_none()
+        );
+        let one_dimensional = Kinematics::in_dimension(&Atom::one())
+            .unwrap()
+            .with_mass_squared(&p, Atom::one())
+            .unwrap();
+        let linear = one_dimensional.scalar_product(&k, &p).unwrap();
+        assert!(
+            IntegralFamily::new(vec![k.clone()], vec![p], vec![linear], &one_dimensional)
+                .unwrap()
+                .scaleless_transverse_direction()
+                .unwrap()
+                .is_none()
+        );
+        let complex = &k + parse!("𝑖") * &q;
+        let family = IntegralFamily::new(
+            vec![k, q],
+            vec![],
+            vec![kin.scalar_product(&complex, &complex).unwrap()],
+            &kin,
+        )
+        .unwrap();
+        assert!(family.scaleless_transverse_direction().unwrap().is_none());
+    }
+
+    #[test]
+    fn singular_matrix_pencil_without_common_kernel_is_not_a_certificate() {
+        let [k, q, r] = [
+            parse!("pencil::k"),
+            parse!("pencil::q"),
+            parse!("pencil::r"),
+        ];
+        let kin = Kinematics::new();
+        // det([[x,y,z],[y,0,0],[z,0,0]]) = 0, but its null direction
+        // depends on the parameters. No loop direction leaves each form fixed.
+        let denominators = [&k, &q, &r]
+            .map(|p| kin.scalar_product(&k, p).unwrap())
+            .to_vec();
+        let family = IntegralFamily::new(vec![k, q, r], vec![], denominators, &kin).unwrap();
+        let (u, _) = family
+            .symanzik(&[parse!("x"), parse!("y"), parse!("z")])
+            .unwrap();
+        assert!(u.is_zero());
+        assert!(family.scaleless_transverse_direction().unwrap().is_none());
     }
 }
