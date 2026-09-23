@@ -4797,7 +4797,31 @@
         "ToString",
         "Total"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "passed: generated massive one-loop scalar bubble, triangle and local counterterms, native tadpole IBP, exact MS/MSbar constants, finite zero-momentum triangle and generic-momentum self-energy",
+      "validated_components": [
+        {
+          "scope": "generated bubble and triangle with exact graph factors and routed denominators, doubled/tripled tadpole recurrences checked against Laporta, Laurent expansion before pole removal, generic-momentum bubble UV coefficient, generated three-by-three counterterm system and independent finite parameter-integral comparisons",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_phi3.py",
+          "components": [
+            "Model.phi3",
+            "Model.generate_diagrams",
+            "Model.expand_couplings",
+            "FeynmanDiagram.integral_family",
+            "LoopMomentumBasis.route_expression",
+            "IntegralFamily.rewrite_numerator",
+            "IBPFamily.solve_parametric",
+            "IBPFamily.reduce_laporta",
+            "IBPSolution.reduce",
+            "Matrix.solve",
+            "Symbolica.series",
+            "oneloop.IntegralFamily.reduce",
+            "oneloop.reduction_coefficients",
+            "oneloop.compile_native"
+          ],
+          "result": "passed",
+          "note": "Live notebook: hep/phi3_renormalization.py. All renormalization constants come from generated local counterterms. Nonzero scalar mass makes the zero-momentum triangle infrared safe. Its finite value is retained by expanding the dimension-dependent IBP coefficient before dropping the tadpole pole. Four kinematic points and both subtraction schemes pass; finite self-energy checks use independent Feynman-parameter quadrature below threshold. This covers the reference two- and three-point functions in four dimensions, without a one-point tadpole/vacuum condition. Installed regression, strict Marimo, HTML export and all eight live control states pass."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/Phi4/OneLoop/Renormalization",
