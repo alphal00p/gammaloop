@@ -1643,13 +1643,14 @@
         "ToString",
         "Total"
       ],
-      "end_to_end_validation": "partial: generated quark, gluon and ghost self-energies plus quark-gluon and ghost-gluon UV vertices pass in symbolic gauge; analytic master poles and counterterm operators remain supplied inputs, with a distinct complete auxiliary-mass expansion",
+      "end_to_end_validation": "partial: generated quark, gluon and ghost self-energies plus quark-gluon and ghost-gluon UV vertices pass in symbolic gauge; eight generated counterterm diagrams determine the physical constants, while the reference-specific selective infrared rearrangement and its nonzero auxiliary gluon mass counterterm remain pending",
       "validated_components": [
         {
-          "scope": "generated massive one-loop quark, gluon and ghost self-energies and both quark-gluon vertex topologies; native tadpole IBP, eight local counterterm equations and gauge-independent mass and coupling renormalization",
+          "scope": "generated massive one-loop quark, gluon and ghost self-energies and both quark-gluon vertex topologies; native tadpole IBP, eight generated counterterm diagrams, matrix extraction and gauge-independent mass and coupling renormalization",
           "test": "crates/feynkit-py/tests/installed_feyncalc_qcd_renormalization.py",
           "components": [
-            "Generator.generate",
+            "Model.generate_diagrams",
+            "Model.from_json",
             "Model.expand_couplings",
             "Particle.color_sum",
             "FeynmanDiagram.uv_expansion",
@@ -1664,7 +1665,7 @@
             "OneLOop.A0"
           ],
           "result": "passed",
-          "note": "Live notebook: hep/qcd_renormalization.py. Supplied I(1)=M/eps and Lagrangian counterterm operators complete the comparison. Physical constants match; vanishing auxiliary mass coefficients arise from retaining all UV mass-correction terms, whereas the reference uses selective infrared rearrangement. Finite form factors and automatic counterterm diagrams/forests are not covered."
+          "note": "Live notebook: hep/qcd_renormalization.py. The local operator basis and analytic I(1)=M/eps pole remain explicit inputs. Bare-factor expansions supply CT couplings; generated numerators supply every matrix entry. Physical constants match. Full UV compensation gives zero auxiliary coefficients; the original selective-IRR reference requires deltaZAm=-CA*(1+3*xi)/(8*eps), which is not yet reproduced by that prescription. Finite form factors and general subtraction forests are not covered."
         },
         {
           "scope": "additional ghost-gluon reference https://feyncalc.github.io/FeynCalcExamples/QCD/OneLoop/GhGl-Gh: both generated vertex topologies and ghost self-energy, full open Lorentz/color tensors for incoming ghosts and antighosts, tree-normalized pole CA*xi/(2*eps), and coupling-counterterm consistency",
@@ -1820,7 +1821,31 @@
         "ToExpression",
         "Total"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "passed: displayed one-loop MS/MSbar UV-renormalization constants and quark-gluon coupling relation, with generated counterterm diagrams and complete tensor cancellation; the reference explicitly discards finite form factors",
+      "validated_components": [
+        {
+          "scope": "generated massive QCD one-loop UV amplitudes and eight local counterterm diagrams; separate MS/MSbar tensor cancellation, shared OneLOop measure conversion, six physical renormalization constants and gauge-independent mass and coupling results",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_qcd_renormalization.py",
+          "components": [
+            "Model.generate_diagrams",
+            "Model.from_json",
+            "Model.expand_couplings",
+            "Particle.color_sum",
+            "FeynmanDiagram.uv_expansion",
+            "FeynmanDiagram.momentum_basis",
+            "IntegralFamily.rewrite_numerator",
+            "TensorReducer.reduce",
+            "IBPFamily.reduce_laporta",
+            "IBPSolution.reduce",
+            "Idenso.simplify_color",
+            "Idenso.simplify_gamma",
+            "Matrix.solve",
+            "OneLOop.A0"
+          ],
+          "result": "passed",
+          "note": "Live notebook: hep/qcd_renormalization.py. Eight generated insertions determine the matching matrix through coefficient derivatives. Auxiliary gluon/ghost normalizations are checked independently. Installed regression, ghost/antighost regression, HTML export and 314 live gauge/flavor/color/scheme combinations pass. The local operator basis and tadpole Laurent pole remain explicit inputs. Only the displayed UV subtraction results are covered; full finite amplitudes, general NLO-UFO metadata import and subtraction forests are not claimed."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/QCD/OneLoop/RenormalizationMassless2",
