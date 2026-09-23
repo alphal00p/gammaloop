@@ -1,4 +1,5 @@
 use std::{
+    cell::Cell,
     collections::HashMap,
     ops::Deref,
     sync::atomic::{AtomicUsize, Ordering},
@@ -476,6 +477,7 @@ impl From<ConcreteOrParam<RealOrComplex<f64>>> for TensorElements {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl Spensor {
     /// Return the exact structured expression describing this tensor's data.
@@ -789,6 +791,7 @@ impl Spensor {
     /// An integer is a flat logical row-major position. A list supplies one coordinate
     /// per slot in `structure().interface`; slices likewise traverse flat logical order.
     /// Canonical storage-axis order is never exposed through this API.
+    #[gen_stub(skip)]
     fn __getitem__(&self, item: SliceOrIntOrExpanded) -> PyResult<Py<PyAny>> {
         let layout = tensor_data_layout(&self.descriptor.interface)?;
         let size = layout.size();
@@ -890,6 +893,7 @@ impl Spensor {
     /// >>> tensor = Tensor.sparse(structure, float)
     /// >>> tensor[0] = 4.0
     /// >>> tensor[1, 1] = 1.0
+    #[gen_stub(skip)]
     fn __setitem__<'py>(
         &mut self,
         item: Bound<'py, PyAny>,
@@ -1033,19 +1037,31 @@ impl Spensor {
 
         let params: Vec<_> = params.iter().map(|x| x.expr.clone()).collect();
 
+        use spenso::tensors::parametric::to_param::ToParam;
         let mut evaltensor = match &self.tensor {
-            ParamOrConcrete::Param(s) => s.to_evaluation_tree(&fn_map, &params).map_err(|e| {
-                exceptions::PyValueError::new_err(format!("Could not create evaluator: {}", e))
-            })?,
-            ParamOrConcrete::Concrete(_) => return Err(PyRuntimeError::new_err("not atom")),
-        };
+            ParamOrConcrete::Param(s) => s.to_evaluation_tree(&fn_map, &params),
+            ParamOrConcrete::Concrete(c) => {
+                c.clone().to_param().to_evaluation_tree(&fn_map, &params)
+            }
+        }
+        .map_err(|e| {
+            exceptions::PyValueError::new_err(format!("Could not create evaluator: {e}"))
+        })?;
 
         evaltensor.optimize_horner_scheme(&settings);
 
         evaltensor.common_subexpression_elimination();
         let linear = evaltensor.linearize(&settings);
+        // Decide from exact coefficients before converting to floating point.
+        let real_coefficients = Cell::new(true);
+        let real = linear.clone().map_coeff(&|coefficient| {
+            if !coefficient.im.is_zero() {
+                real_coefficients.set(false);
+            }
+            coefficient.re.to_f64()
+        });
         Ok(SpensoExpressionEvaluator {
-            eval: None,
+            eval: real_coefficients.get().then_some(real),
             eval_complex: linear
                 .clone()
                 .map_coeff(&|x| Complex::new(x.re.to_f64(), x.im.to_f64())),
@@ -1206,6 +1222,14 @@ pub struct SpensoExpressionEvaluator {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl SpensoExpressionEvaluator {
+    fn __repr__(&self) -> String {
+        format!(
+            "TensorEvaluator({}, real={}, complex=True)",
+            display::format_structured(&self.descriptor, false),
+            if self.eval.is_some() { "True" } else { "False" }
+        )
+    }
+
     /// Evaluate the tensor expression for multiple real-valued parameter inputs.
     ///
     /// Parameters
@@ -1418,6 +1442,13 @@ pub struct SpensoCompiledExpressionEvaluator {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl SpensoCompiledExpressionEvaluator {
+    fn __repr__(&self) -> String {
+        format!(
+            "CompiledTensorEvaluator({}, complex=True)",
+            display::format_structured(&self.descriptor, false)
+        )
+    }
+
     /// Evaluate the tensor expression for multiple complex-valued parameter inputs.
     ///
     /// Evaluate the tensor expression for multiple complex-valued parameter inputs.
@@ -1478,7 +1509,7 @@ submit! {
                         name: "aind",
                         kind: ParameterKind::PositionalOrKeyword,
                         default: ParameterDefault::None,
-                        type_info: structure::ConvertibleToAbstractIndex::type_input,
+                        type_info: || i64::type_input() | String::type_input(),
                     },
                 ],
                 r#type: MethodType::Instance,
@@ -1568,7 +1599,7 @@ submit! {
                 r#type: MethodType::Instance,
                 r#return:||
                 TypeInfo {
-                    name: "typing.Iterator[typing.Any]".into(),
+                    name: "typing.Iterator[Expression | float | complex]".into(),
                     import: std::collections::HashSet::new(),
                 },
                 doc:r##"Iterator"##,
@@ -1694,10 +1725,102 @@ Examples
 /// Gather the unified Spenso and Idenso Python API registered by Spynso3.
 #[cfg(feature = "python_stubgen")]
 pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
-    pyo3_stub_gen::StubInfo::from_project_root(
+    let mut info = pyo3_stub_gen::StubInfo::from_project_root(
         "symbolica".to_owned(),
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")),
-    )
+    )?;
+    if let Some(module) = info.modules.get_mut("symbolica.community.spenso") {
+        SpensoModule::prepare_stub_module(module);
+    }
+    Ok(info)
+}
+
+#[cfg(feature = "python_stubgen")]
+impl SpensoModule {
+    /// Render the same checked signature inventory for docs and community packages.
+    pub fn stub_source(module: &pyo3_stub_gen::generate::Module) -> String {
+        module
+            .to_string()
+            .lines()
+            .map(|line| {
+                // These methods deliberately specialize Expression's scalar API. Keep
+                // both checkers' narrowly scoped override annotations on the definition.
+                if line.trim_start().starts_with("def ")
+                    && let Some(prefix) =
+                        line.strip_suffix("# type: ignore[override,invalid-method-override]")
+                {
+                    format!(
+                        "{prefix}# type: ignore[override]  # ty: ignore[invalid-method-override]"
+                    )
+                } else {
+                    line.to_owned()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+            + "\n"
+    }
+
+    /// PyO3 simple enums are classes with constants, not Python `enum.Enum` subclasses.
+    /// Preserve their actual surface instead of promising `.name`, `.value`, or iteration.
+    pub fn prepare_stub_module(module: &mut pyo3_stub_gen::generate::Module) {
+        use pyo3_stub_gen::generate::{ClassDef, MemberDef, MethodDef, MethodType};
+        for (id, enumeration) in std::mem::take(&mut module.enum_) {
+            let mut class = ClassDef {
+                name: enumeration.name,
+                doc: enumeration.doc,
+                attrs: enumeration.attrs,
+                getter_setters: Default::default(),
+                methods: Default::default(),
+                bases: Vec::new(),
+                classes: Vec::new(),
+                match_args: None,
+                subclass: false,
+            };
+            for (name, doc) in enumeration.variants {
+                class.attrs.push(MemberDef {
+                    name,
+                    doc,
+                    r#type: TypeInfo {
+                        name: format!("typing.ClassVar[{}]", enumeration.name),
+                        import: ["typing".into()].into(),
+                    },
+                    default: None,
+                    deprecated: None,
+                });
+            }
+            for getter in enumeration.getters {
+                let name = getter.name.to_owned();
+                class.getter_setters.entry(name).or_default().0 = Some(getter);
+            }
+            for setter in enumeration.setters {
+                let name = setter.name.to_owned();
+                class.getter_setters.entry(name).or_default().1 = Some(setter);
+            }
+            for method in enumeration.methods {
+                class
+                    .methods
+                    .entry(method.name.to_owned())
+                    .or_default()
+                    .push(method);
+            }
+            class.methods.insert(
+                "__int__".to_owned(),
+                vec![MethodDef {
+                    name: "__int__",
+                    parameters: Default::default(),
+                    r#return: i64::type_output(),
+                    doc: "Return the underlying integer discriminant.",
+                    r#type: MethodType::Instance,
+                    is_async: false,
+                    deprecated: None,
+                    type_ignored: None,
+                    is_overload: false,
+                }],
+            );
+            module.class.insert(id, class);
+        }
+    }
 }
 
 #[cfg(test)]

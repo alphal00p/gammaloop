@@ -82,7 +82,7 @@ use symbolica::{
 };
 
 #[cfg(feature = "native-code-generation")]
-use symbolica::domains::float::{FloatLike, SingleFloat};
+use symbolica::domains::float::SingleFloat;
 
 #[cfg(feature = "shadowing")]
 fn horner_contract_atom<CStrat: crate::network::AtomComponentOptimizer>(atom: Atom) -> Atom {
@@ -2591,7 +2591,9 @@ impl<T, S: TensorStructure> EvalTreeTensorSet<T, S> {
         T: Real,
         S: TensorStructure + Clone,
     {
-        let zero = params[0].zero();
+        let zero = params
+            .first()
+            .map_or_else(T::new_zero, |value| value.zero());
 
         let mut elements = vec![zero; self.size];
         self.eval.0.evaluate(params, &mut elements);
@@ -2719,7 +2721,9 @@ impl<S: Clone, T> EvalTreeTensor<T, S> {
         T: Real,
         S: TensorStructure,
     {
-        let zero = params[0].zero();
+        let zero = params
+            .first()
+            .map_or_else(T::new_zero, |value| value.zero());
         if let Some(ref indexmap) = self.indexmap {
             let mut elements = vec![zero.clone(); indexmap.len()];
             self.eval.evaluate(params, &mut elements);
@@ -2995,7 +2999,9 @@ impl<T, S> EvalTensor<ExpressionEvaluator<T>, S> {
         T: Real,
         S: TensorStructure + Clone,
     {
-        let zero = params[0].zero();
+        let zero = params
+            .first()
+            .map_or_else(T::new_zero, |value| value.zero());
         if let Some(ref indexmap) = self.indexmap {
             let mut elements = vec![zero.clone(); indexmap.len()];
             self.eval.evaluate(params, &mut elements);
@@ -3088,7 +3094,9 @@ impl<T, S: TensorStructure> LinearizedEvalTensorSet<T, S> {
         T: Real,
         S: TensorStructure + Clone,
     {
-        let zero = params[0].zero();
+        let zero = params
+            .first()
+            .map_or_else(T::new_zero, |value| value.zero());
 
         let mut elements = vec![zero; self.size];
         self.eval.0.evaluate(params, &mut elements);
@@ -3197,7 +3205,7 @@ impl<S: TensorStructure> CompiledEvalTensorSet<S> {
     where
         S: TensorStructure + Clone,
     {
-        let zero = params[0].zero();
+        let zero = Complex::new_zero();
 
         let mut elements = vec![zero; self.size];
         self.eval.evaluate(params, &mut elements);

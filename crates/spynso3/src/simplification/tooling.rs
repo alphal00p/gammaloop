@@ -6,15 +6,13 @@ use idenso::{
         SchoonschipSettings as RustSchoonschipSettings,
     },
 };
-#[cfg(test)]
-use pyo3::Python;
 #[cfg(not(feature = "python_stubgen"))]
 use pyo3::create_exception;
 use pyo3::{
-    Bound, PyResult,
+    Bound, IntoPyObject, PyResult, Python,
     exceptions::{PyTypeError, PyValueError},
     pyclass, pymethods,
-    types::{PyModule, PyModuleMethods},
+    types::{PyAnyMethods, PyModule, PyModuleMethods},
 };
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::create_exception;
@@ -113,6 +111,20 @@ impl PyCookTagFilter {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyCookTagFilter {
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        let (factory, tags) = match &self.inner {
+            RustCookTagFilter::Any(tags) => ("any", tags),
+            RustCookTagFilter::All(tags) => ("all", tags),
+            RustCookTagFilter::MatchedOutputTags => {
+                return Ok("CookTagFilter.matched_output_tags()".into());
+            }
+        };
+        Ok(format!(
+            "CookTagFilter.{factory}({})",
+            tags.into_pyobject(py)?.repr()?
+        ))
+    }
+
     /// Match a function head when it carries at least one listed tag.
     #[staticmethod]
     pub(crate) fn any(tags: Vec<String>) -> Self {
@@ -160,6 +172,30 @@ impl PyCookSourceFilter {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyCookSourceFilter {
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        Ok(match &self.inner {
+            RustCookSourceFilter::AnyFunction => "CookSourceFilter.any_function()".into(),
+            RustCookSourceFilter::FunctionTags(filter) => format!(
+                "CookSourceFilter.function_tags({})",
+                PyCookTagFilter {
+                    inner: filter.clone()
+                }
+                .__repr__(py)?
+            ),
+            RustCookSourceFilter::RepresentationIndexPayload { filter } => format!(
+                "CookSourceFilter.representation_index_payload({})",
+                filter
+                    .as_ref()
+                    .map(|filter| PyCookTagFilter {
+                        inner: filter.clone()
+                    }
+                    .__repr__(py))
+                    .transpose()?
+                    .unwrap_or_else(|| "None".into())
+            ),
+        })
+    }
+
     /// Select every function-like subexpression.
     #[staticmethod]
     pub(crate) fn any_function() -> Self {
@@ -250,6 +286,20 @@ impl PyCookSettings {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyCookSettings {
+    fn __repr__(self_: pyo3::PyRef<'_, Self>) -> PyResult<String> {
+        let py = self_.py();
+        let object = pyo3::IntoPyObject::into_pyobject(self_, py)?;
+        crate::display::constructor_repr(
+            object.as_any(),
+            &[
+                ("mode", "mode"),
+                ("source", "source_filter"),
+                ("output_tags", "output_tags"),
+                ("preserve_tags", "preserve_tags"),
+            ],
+        )
+    }
+
     /// Configure how functions are selected, encoded, and tagged when cooked.
     ///
     /// Tags must be fully namespaced Symbolica tags, for example `idenso::cooked`.
@@ -519,6 +569,26 @@ impl PySchoonschipSettings {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PySchoonschipSettings {
+    fn __repr__(self_: pyo3::PyRef<'_, Self>) -> PyResult<String> {
+        let py = self_.py();
+        let object = pyo3::IntoPyObject::into_pyobject(self_, py)?;
+        crate::display::constructor_repr(
+            object.as_any(),
+            &[
+                ("depth_limit", "depth_limit"),
+                ("mode", "mode"),
+                ("traversal", "traversal"),
+                ("expand_contracted_sums", "expand_contracted_sums"),
+                (
+                    "simplify_chain_like_functions",
+                    "simplify_chain_like_functions",
+                ),
+                ("schoonschip_rank1_tensors", "schoonschip_rank1_tensors"),
+                ("contraction_order", "contraction_order"),
+            ],
+        )
+    }
+
     /// Configure traversal, depth, shorthand expansion, and network-contraction policies.
     ///
     /// `depth_limit=None` removes the recursion-depth limit. `traversal` is ignored in

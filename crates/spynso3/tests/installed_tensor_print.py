@@ -16,7 +16,7 @@ from symbolica.community.spenso import (
 
 
 def mathml(expression):
-    return "".join(re.findall(r"<math\b.*?</math>", expression.to_html(), re.S))
+    return "".join(re.findall(r"<math\b.*?</math>", expression.to_html(), re.DOTALL))
 
 
 class TensorPrintTests(unittest.TestCase):
@@ -68,9 +68,9 @@ class TensorPrintTests(unittest.TestCase):
         self.assertEqual(current.to_expression(), original)
 
     def test_callable_owns_the_display_and_none_uses_tensor_notation(self):
-        def printer(expression, *, mode, in_exp_base, **options):
+        def printer(expression, *, mode, **options):
             if mode == PrintMode.Typst:
-                return "bold(J)" if in_exp_base else "cal(J)"
+                return "cal(J)"
             return None
 
         tensor = TensorName("tensor_print_tests::Callback", print=printer)(
@@ -82,8 +82,9 @@ class TensorPrintTests(unittest.TestCase):
         self.assertIn("𝒥", mathml(component))
         self.assertEqual(component._repr_latex_(), "$$Callback^{0}$$")
         power = TensorExpression(component**2)
-        self.assertIn("bold(J)", power.to_typst())
-        self.assertIn("𝐉", mathml(power))
+        self.assertIn("cal(J)", power.to_typst())
+        self.assertIn("𝒥", mathml(power))
+        self.assertIn("<mn>2</mn>", mathml(power))
 
         def defer(expression, **options):
             return None
@@ -92,7 +93,9 @@ class TensorPrintTests(unittest.TestCase):
             Representation.euc(2)
         )
         default = TensorExpression(fallback.components()[0])
-        self.assertEqual(default.to_typst(), 'attach(upright("Fallback"),t:0)')
+        ordinary = TensorName("tensor_print_defaults::Fallback")(Representation.euc(2))
+        expected = TensorExpression(ordinary.components()[0])
+        self.assertEqual(default.to_typst(), expected.to_typst())
         self.assertIn("<msup", mathml(default))
 
     def test_vector_names_and_plain_mapping(self):

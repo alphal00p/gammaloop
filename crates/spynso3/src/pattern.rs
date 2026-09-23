@@ -544,6 +544,8 @@ impl TensorPattern {
 
     /// Match a gamma matrix in storage `(i, j, mu)` order.
     #[staticmethod]
+    // This factory constructs gamma tensor patterns, not the scalar gamma function.
+    #[gen_stub(type_ignore = ["override", "invalid-method-override"])]
     fn gamma(
         py: Python<'_>,
         minkowski_dimension: ConvertibleToExpression,
@@ -1219,7 +1221,7 @@ mod tests {
         }
 
         for (method, expected) in [
-            ("g", &["rep"][..]),
+            ("g", &["rep", "other"][..]),
             ("flat", &["rep"]),
             ("gamma", &["minkowski_dimension"]),
             ("gamma5", &["spinor_dimension"]),

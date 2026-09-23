@@ -1686,6 +1686,8 @@ impl TensorExpression {
     /// The bispinor dimension is four. Call the result with `(i, j, mu)` to
     /// index it.
     #[staticmethod]
+    // Tensor semantics intentionally specialize the inherited Expression API.
+    #[gen_stub(type_ignore = ["override", "invalid-method-override"])]
     fn gamma(
         py: Python<'_>,
         minkowski_dimension: ConvertibleToDimension,
@@ -1784,6 +1786,7 @@ impl TensorExpression {
 
     /// Ordered external interface as concrete `Slot` objects or unresolved `Representation`s.
     #[getter]
+    #[gen_stub(override_return_type(type_repr = "tuple[Representation | Slot, ...]", imports = ())) ]
     fn interface(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
         let values = self
             .interface
@@ -3185,6 +3188,8 @@ impl TensorExpression {
 
     /// Fill the unresolved external ports with `indices` in interface order.
     #[pyo3(signature = (*indices, cook_indices = false))]
+    // Tensor semantics intentionally specialize the inherited Expression API.
+    #[gen_stub(type_ignore = ["override", "invalid-method-override"])]
     fn __call__(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
@@ -3579,6 +3584,8 @@ impl TensorExpression {
 
     /// Format this structured expression as Typst math source.
     #[pyo3(signature = (show_dimensions = None, *, settings = None))]
+    // Tensor semantics intentionally specialize the inherited Expression API.
+    #[gen_stub(type_ignore = ["override", "invalid-method-override"])]
     fn to_typst(
         self_: PyRef<'_, Self>,
         show_dimensions: Option<bool>,
@@ -3599,6 +3606,8 @@ impl TensorExpression {
     /// ``notation_source`` is a trusted complete replacement for the bundled
     /// ``notation.typ`` module, not a style fragment. Typst executes it. When
     /// HTML cannot be rendered, the result retains its LaTeX and text forms.
+    // Tensor semantics intentionally specialize the inherited Expression API.
+    #[gen_stub(type_ignore = ["override", "invalid-method-override"])]
     fn formatted(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
@@ -3682,6 +3691,8 @@ impl TensorExpression {
         Ok(())
     }
 
+    // Tensor semantics intentionally specialize the inherited Expression API.
+    #[gen_stub(type_ignore = ["override", "invalid-method-override"])]
     fn _repr_html_(self_: PyRef<'_, Self>, py: Python<'_>) -> Option<String> {
         let settings = display::DisplaySettings::default();
         display::structured_to_html(py, &Self::structured(&self_), &settings, None).ok()
@@ -3788,14 +3799,14 @@ fn dot(
         import typing
 
         @overload
+        def chain(start_slot: pyo3_stub_gen.RustType["SpensoSlot"], end_slot: pyo3_stub_gen.RustType["SpensoSlot"], factor: typing.Union[Tensor, TensorNetwork], /, *factors: pyo3_stub_gen.RustType["ConvertibleToSpensoNet"]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
+        @overload
+        def chain(start_slot: pyo3_stub_gen.RustType["SpensoSlot"], end_slot: pyo3_stub_gen.RustType["SpensoSlot"], first: pyo3_stub_gen.RustType["ConvertibleToSpensoNet"], second: typing.Union[Tensor, TensorNetwork], /, *factors: pyo3_stub_gen.RustType["ConvertibleToSpensoNet"]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
+        @overload
         def chain(start_slot: pyo3_stub_gen.RustType["SpensoSlot"], end_slot: pyo3_stub_gen.RustType["SpensoSlot"], *factors: pyo3_stub_gen.RustType["PythonExpression"]) -> pyo3_stub_gen.RustType["TensorExpression"]:
             """Build an explicitly-ended ordered tensor chain."""
         @overload
-        def chain(start_slot: pyo3_stub_gen.RustType["SpensoSlot"], end_slot: pyo3_stub_gen.RustType["SpensoSlot"], *factors: typing.Unpack[tuple[typing.Union[Tensor, TensorNetwork], typing.Unpack[tuple[typing.Union[Expression, int, Float, ComplexFloat, Tensor, TensorNetwork], ...]]]]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
-        @overload
-        def chain(start_slot: pyo3_stub_gen.RustType["SpensoSlot"], end_slot: pyo3_stub_gen.RustType["SpensoSlot"], *factors: typing.Unpack[tuple[typing.Unpack[tuple[typing.Union[Expression, int, Float, ComplexFloat, Tensor, TensorNetwork], ...]], typing.Union[Tensor, TensorNetwork]]]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
-        @overload
-        def chain(start_slot: pyo3_stub_gen.RustType["SpensoSlot"], end_slot: pyo3_stub_gen.RustType["SpensoSlot"], *factors: typing.Union[Expression, int, Float, ComplexFloat, Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["TensorDispatch"]: ...
+        def chain(start_slot: pyo3_stub_gen.RustType["SpensoSlot"], end_slot: pyo3_stub_gen.RustType["SpensoSlot"], *factors: pyo3_stub_gen.RustType["ConvertibleToSpensoNet"]) -> pyo3_stub_gen.RustType["TensorDispatch"]: ...
         "#,
     )
 )]
@@ -3986,14 +3997,14 @@ fn chain(
         import typing
 
         @overload
+        def trace(representation: pyo3_stub_gen.RustType["SpensoRepresentation"], factor: typing.Union[Tensor, TensorNetwork], /, *factors: pyo3_stub_gen.RustType["ConvertibleToSpensoNet"]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
+        @overload
+        def trace(representation: pyo3_stub_gen.RustType["SpensoRepresentation"], first: pyo3_stub_gen.RustType["ConvertibleToSpensoNet"], second: typing.Union[Tensor, TensorNetwork], /, *factors: pyo3_stub_gen.RustType["ConvertibleToSpensoNet"]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
+        @overload
         def trace(representation: pyo3_stub_gen.RustType["SpensoRepresentation"], *factors: pyo3_stub_gen.RustType["PythonExpression"]) -> pyo3_stub_gen.RustType["TensorExpression"]:
             """Close an ordered factor sequence into a canonical cyclic trace."""
         @overload
-        def trace(representation: pyo3_stub_gen.RustType["SpensoRepresentation"], *factors: typing.Unpack[tuple[typing.Union[Tensor, TensorNetwork], typing.Unpack[tuple[typing.Union[Expression, int, Float, ComplexFloat, Tensor, TensorNetwork], ...]]]]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
-        @overload
-        def trace(representation: pyo3_stub_gen.RustType["SpensoRepresentation"], *factors: typing.Unpack[tuple[typing.Unpack[tuple[typing.Union[Expression, int, Float, ComplexFloat, Tensor, TensorNetwork], ...]], typing.Union[Tensor, TensorNetwork]]]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
-        @overload
-        def trace(representation: pyo3_stub_gen.RustType["SpensoRepresentation"], *factors: typing.Union[Expression, int, Float, ComplexFloat, Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["TensorDispatch"]: ...
+        def trace(representation: pyo3_stub_gen.RustType["SpensoRepresentation"], *factors: pyo3_stub_gen.RustType["ConvertibleToSpensoNet"]) -> pyo3_stub_gen.RustType["TensorDispatch"]: ...
         "#,
     )
 )]
@@ -4164,7 +4175,7 @@ submit! {
                 doc: "Convert a logical row-major flat index to tensor coordinates.",
                 is_async: false,
                 deprecated: None,
-                type_ignored: None,
+                type_ignored: Some(pyo3_stub_gen::type_info::IgnoreTarget::Specified(&["override"])),
                 is_overload: true,
             },
             MethodInfo {
@@ -4180,7 +4191,7 @@ submit! {
                 doc: "Convert tensor coordinates to a logical row-major flat index.",
                 is_async: false,
                 deprecated: None,
-                type_ignored: None,
+                type_ignored: Some(pyo3_stub_gen::type_info::IgnoreTarget::Specified(&["override"])),
                 is_overload: true,
             },
             MethodInfo {
@@ -4196,7 +4207,7 @@ submit! {
                 doc: "Expand a slice of logical row-major flat indices to tensor coordinates.",
                 is_async: false,
                 deprecated: None,
-                type_ignored: None,
+                type_ignored: Some(pyo3_stub_gen::type_info::IgnoreTarget::Specified(&["override", "invalid-method-override"])),
                 is_overload: true,
             },
         ],
@@ -4279,6 +4290,18 @@ mod tests {
                 .filter(|function| function.name == name)
                 .collect::<Vec<_>>();
             assert_eq!(overloads.len(), 4);
+            // Concrete prefixes let type checkers resolve common mixed calls without
+            // relying on overlapping variadic-tuple inference.
+            for concrete_parameter in ["factor", "second"] {
+                assert!(overloads.iter().any(|function| {
+                    function.parameters.iter().any(|parameter| {
+                        parameter.name == concrete_parameter
+                            && matches!(parameter.kind, ParameterKind::PositionalOnly)
+                            && (parameter.type_info)().to_string()
+                                == "typing.Union[Tensor, TensorNetwork]"
+                    }) && (function.r#return)() == SpensoNet::type_output()
+                }));
+            }
             assert!(overloads.iter().all(|function| function.is_overload));
             assert!(overloads.iter().any(|function| {
                 let factors = function.parameters.last().unwrap();

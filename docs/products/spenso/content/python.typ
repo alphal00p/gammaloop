@@ -89,6 +89,40 @@ The generated #link("reference/python/spynso3/Representation/")[`Representation`
 versioned contracts. Do not infer index compatibility from two equal dimensions: names,
 representations, and duality remain part of the value.
 
+== Executable API tour and displays
+
+#source-link("examples/notebooks/spenso_api_tour.py", label: "The complete Python API tour")
+is a marimo notebook with one executed example for every declared type. Each entry shows its
+construction, live display, Python representation, and declared members. Run it in a native
+community-module environment with marimo, Typst, and a C++ compiler on `PATH`:
+
+// docs-example: syntax
+```sh
+python -m marimo edit examples/notebooks/spenso_api_tour.py
+```
+
+Mathematical objects expose notebook HTML and LaTeX displays. `TensorNetwork` prints its
+semantic source expression; `to_dot()` exports the operation graph, while `result_tensor()`
+shows evaluated component data. Printing a network does not execute it. Settings and filters
+print their full constructor arguments, and libraries and evaluators show concise summaries.
+The policy types expose named constants and integer conversion; they are PyO3 classes, not
+Python `enum.Enum` subclasses with `.name` and `.value` attributes.
+
+The generated stubs distinguish symbolic results from concrete networks and type component
+access as `Expression | float | complex`. For variadic `chain` and `trace`, symbolic-only
+arguments retain `TensorExpression`; a concrete first or second factor selects
+`TensorNetwork`. General mixed argument sequences retain the union return type. This avoids
+unresolved types from overlapping variadic-tuple overloads in current type checkers.
+`TensorExpression` deliberately specializes a few
+inherited Symbolica names: `gamma` constructs a Dirac tensor, and `__getitem__` translates
+between logical flat indices and coordinates. Their narrow override annotations document
+this specialization instead of suppressing diagnostics for the entire module.
+
+The installed API regression checks compare every declared class member with the runtime,
+exercise all tour examples, round-trip settings representations, and check real, complex,
+sparse, and compiled evaluator results. The separate static fixture checks inferred return
+types for indexing, arithmetic, composition, simplification, and evaluation.
+
 == Metrics and oriented identities
 
 `TensorExpression.g(left, right)` creates an unresolved metric with ports in the

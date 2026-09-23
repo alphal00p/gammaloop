@@ -535,6 +535,16 @@ impl<T: HasStructure<Structure = ExplicitKey<Aind>>, Aind: AbsInd> TensorLibrary
         Self::default()
     }
 
+    /// Number of entries with fully specified dimensions.
+    pub fn explicit_len(&self) -> usize {
+        self.explicit_dimension.len()
+    }
+
+    /// Number of factories accepting generic dimensions.
+    pub fn generic_len(&self) -> usize {
+        self.generic_dimension.len()
+    }
+
     pub fn merge(&mut self, other: &mut Self) {
         self.explicit_dimension
             .extend(other.explicit_dimension.drain());
