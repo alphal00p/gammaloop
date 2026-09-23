@@ -7,6 +7,7 @@
 #import "content/algebra.typ": algebra
 #import "content/form-symbolica-color-and-dirac.typ": form-color-dirac-content
 #import "content/showcase.typ": showcase
+#import "content/gamma-simplification.typ": gamma-simplification
 #import "content/api.typ": api
 #import "content/changelog.typ": changelog
 #import "content/idenso-releases.typ": idenso-releases
@@ -25,6 +26,7 @@
     #algebra
     #form-color-dirac-content("manual")
     #showcase
+    #gamma-simplification
     #api
     #changelog
     #idenso-releases

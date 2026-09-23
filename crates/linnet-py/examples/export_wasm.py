@@ -76,6 +76,13 @@ NOTEBOOKS = (
         "guides/showcase/",
         "symbolica",
     ),
+    Notebook(
+        "../../../examples/notebooks/gamma_simplification.py",
+        "gamma_simplification",
+        "idenso",
+        "guides/gamma-simplification/",
+        "symbolica",
+    ),
     *(
         Notebook(
             f"../../../examples/notebooks/feynkit/{filename}.py",
