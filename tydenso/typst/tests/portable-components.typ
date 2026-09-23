@@ -65,6 +65,21 @@
 })
 #assert.eq(actual, annotated)
 
+// Head mappings preserve coordinates and exact payloads; complete-call overrides
+// are keyed by the exact Atom, and none selects the standard tensor layout.
+#let mapped = notation.notation(settings: (print-heads: ("A": $overline(J)$)))
+#assert.eq(notation.render(tree(component()), notation: mapped), math.attach(($overline(J)$).body, t: ([0], [12]).join($,$)))
+#let printed = notation.notation(settings: (print-calls: ((payload, $cal(J)$, $bold(J)$),)))
+#let customized = notation.render(tree(component(atom: payload)), notation: printed, annotate: (atom, visual, node) => {
+  assert.eq(atom, payload)
+  assert.eq(node.arguments.first(), coordinates)
+  visual
+})
+#assert.eq(customized, ($cal(J)$).body)
+#assert.eq(notation.render(tree(component()), notation: printed), actual)
+#let deferred = notation.notation(settings: (print-calls: ((payload, none, none),)))
+#assert.eq(notation.render(tree(component(atom: payload)), notation: deferred), actual)
+
 // An unrelated function named cind must not acquire coordinate semantics.
 #let unrelated = call("A", (call("other::cind", (number(0), number(12))),), tags: ("spenso::tensor",))
 #assert.ne(actual, notation.render(tree(unrelated)))

@@ -8,7 +8,7 @@ use pyo3::{
     exceptions::{self, PyTypeError, PyValueError},
     prelude::*,
     pybacked::PyBackedStr,
-    types::{PyAny, PyTuple},
+    types::{PyAny, PyDict, PyTuple},
 };
 
 #[cfg(feature = "python_stubgen")]
@@ -19,7 +19,11 @@ use pyo3_stub_gen::{
 };
 use spenso::structure::slot::DualSlotTo;
 use spenso::{
-    network::{library::symbolic::ETS, parsing::ShadowedStructure, tags::SPENSO_TAG},
+    network::{
+        library::symbolic::ETS,
+        parsing::ShadowedStructure,
+        tags::{SPENSO_TAG, TENSOR_PRINT_CALLBACK_TAG, TENSOR_PRINT_HEAD_PREFIX},
+    },
     structure::{
         Canonicalized, TensorStructure,
         abstract_index::AbstractIndex,
@@ -220,6 +224,35 @@ pub struct SpensoName {
 impl ModuleInit for SpensoName {}
 
 impl SpensoName {
+    fn prepare_print(
+        py: Python<'_>,
+        print: Option<Py<PyAny>>,
+        tags: &mut Vec<String>,
+    ) -> PyResult<Option<Py<PyAny>>> {
+        let Some(print) = print else {
+            return Ok(None);
+        };
+        if let Ok(mapping) = print.bind(py).cast::<PyDict>() {
+            let sources = mapping.extract::<std::collections::BTreeMap<String, String>>()?;
+            for (backend, source) in &sources {
+                if !matches!(backend.as_str(), "plain" | "latex" | "typst") {
+                    return Err(PyValueError::new_err(
+                        "print mapping keys must be 'plain', 'latex', or 'typst'",
+                    ));
+                }
+                tags.push(format!("{TENSOR_PRINT_HEAD_PREFIX}{backend}:{source}"));
+            }
+            Ok(None)
+        } else if print.bind(py).is_callable() {
+            tags.push(TENSOR_PRINT_CALLBACK_TAG.to_owned());
+            Ok(Some(print))
+        } else {
+            Err(PyTypeError::new_err(
+                "print must be a mapping of backend names to strings, a callable, or None",
+            ))
+        }
+    }
+
     /// Whether this name declares a rank-one tensor.
     pub fn is_vector(&self) -> bool {
         self.name.has_tag(&SPENSO_TAG.rank1)
@@ -273,7 +306,15 @@ impl SpensoName {
     ///     The declared rank. Only rank one has a dedicated construction invariant.
     /// tags : list[str], optional
     ///     Extra Symbolica tags. The Spenso tensor tag is always included.
-    /// normalization, print, derivative, series, eval, data : optional
+    /// print : dict[str, str] | Callable[..., str | None] | None
+    ///     A mapping with ``typst``, ``latex``, and/or ``plain`` keys customizes only
+    ///     the tensor name. Values are backend source without math delimiters,
+    ///     for example ``{"typst": "macron(J)", "latex": r"\bar{J}"}``.
+    ///     Spenso adds arguments, indices, and component coordinates. Missing
+    ///     backends use the ordinary name. A callable uses Symbolica's print
+    ///     signature and overrides the complete display; returning None selects
+    ///     standard tensor notation. Typst source is trusted formatting code.
+    /// normalization, derivative, series, eval, data : optional
     ///     Symbolica symbol callbacks and metadata.
     ///
     /// Returns
@@ -309,6 +350,10 @@ impl SpensoName {
             imports = ("typing", "symbolica.core")
         ))]
         normalization: Option<PythonNormalization>,
+        #[gen_stub(override_type(
+            type_repr = "typing.Optional[dict[str, str] | typing.Callable[..., str | None]]",
+            imports = ("typing",)
+        ))]
         print: Option<Py<PyAny>>,
         derivative: Option<Py<PyAny>>,
         series: Option<Py<PyAny>>,
@@ -333,6 +378,7 @@ impl SpensoName {
             tags.push(SPENSO_TAG.rank1.clone());
         }
 
+        let print = Self::prepare_print(py, print, &mut tags)?;
         let namespace = DefaultNamespace {
             namespace: "spenso_python".into(),
             data: "",
@@ -377,7 +423,7 @@ impl SpensoName {
         })
     }
 
-    /// Create a rank-one tensor name.
+    /// Create a rank-one tensor name; ``print`` accepts the same mappings and callbacks as ``TensorName``.
     #[staticmethod]
     #[pyo3(signature = (name, *, is_symmetric=None, is_antisymmetric=None, is_cyclesymmetric=None, is_linear=None, is_flat=None, is_scalar=None, is_real=None, is_integer=None, is_positive=None, tags=None, aliases=None, normalization=None, print=None, derivative=None, series=None, eval=None, data=None))]
     #[allow(clippy::too_many_arguments)]
@@ -400,6 +446,10 @@ impl SpensoName {
             imports = ("typing", "symbolica.core")
         ))]
         normalization: Option<PythonNormalization>,
+        #[gen_stub(override_type(
+            type_repr = "typing.Optional[dict[str, str] | typing.Callable[..., str | None]]",
+            imports = ("typing",)
+        ))]
         print: Option<Py<PyAny>>,
         derivative: Option<Py<PyAny>>,
         series: Option<Py<PyAny>>,

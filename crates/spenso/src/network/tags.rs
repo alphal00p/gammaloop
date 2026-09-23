@@ -18,6 +18,42 @@ use symbolica::{
     printer::{PrintOptions, PrintState},
     symbol, tag,
 };
+/// Presentation-only tensor head sources, carried with the symbol's tags.
+pub const TENSOR_PRINT_HEAD_PREFIX: &str = "spenso::print-head:";
+/// Marks a user callable, as distinct from Spenso's own tensor print callback.
+pub const TENSOR_PRINT_CALLBACK_TAG: &str = "spenso::print-callback";
+
+/// Resolve a user-supplied head without interpreting it as a literal symbol name.
+pub fn tensor_head_print(symbol: Symbol, backend: SpensoPrintBackend) -> Option<String> {
+    let backend = match backend {
+        SpensoPrintBackend::Plain => "plain:",
+        SpensoPrintBackend::Latex => "latex:",
+        SpensoPrintBackend::Typst => "typst:",
+    };
+    symbol.get_tags().iter().find_map(|tag| {
+        tag.strip_prefix(TENSOR_PRINT_HEAD_PREFIX)?
+            .strip_prefix(backend)
+            .map(str::to_owned)
+    })
+}
+
+/// A callable owns the complete tensor display; `None` defers to tensor notation.
+pub fn tensor_custom_print(
+    atom: AtomView<'_>,
+    options: &PrintOptions,
+    state: &PrintState,
+) -> Option<String> {
+    let symbol = match atom {
+        AtomView::Fun(function) => function.get_symbol(),
+        AtomView::Var(variable) => variable.get_symbol(),
+        _ => return None,
+    };
+    if !symbol.has_tag(TENSOR_PRINT_CALLBACK_TAG) {
+        return None;
+    }
+    (symbol.get_print_function()?)(atom, options, state)
+}
+
 pub struct SpensoTags {
     pub broadcast: String,
     /// Marks rank-one tensor symbols whose final argument is the tensor slot.
@@ -242,6 +278,9 @@ fn escape_typst_string(value: &str) -> String {
 }
 
 fn typst_tensor_head(symbol: Symbol) -> String {
+    if let Some(source) = tensor_head_print(symbol, SpensoPrintBackend::Typst) {
+        return source;
+    }
     match symbol.get_name() {
         "spenso::projp" => return "ℙ_p".to_owned(),
         "spenso::projm" => return "ℙ_m".to_owned(),
@@ -648,7 +687,9 @@ fn tensor_component_print(
         .map(natural_index)
         .collect::<Option<Vec<_>>>()?;
     let head = function.get_symbol();
-    let mut base = if resolved.backend == SpensoPrintBackend::Typst {
+    let mut base = if let Some(source) = tensor_head_print(head, resolved.backend) {
+        source
+    } else if resolved.backend == SpensoPrintBackend::Typst {
         typst_tensor_head(head)
     } else if let Some(label) = head
         .get_tags()
@@ -723,6 +764,12 @@ pub fn tensor_print(
     state: &PrintState,
 ) -> Option<String> {
     let resolved = SpensoPrintSettings::resolve(options)?;
+    if let Some(custom) = tensor_custom_print(atom, options, state) {
+        return Some(custom);
+    }
+    if let AtomView::Var(variable) = atom {
+        return tensor_head_print(variable.get_symbol(), resolved.backend);
+    }
     let settings = resolved.presentation;
     let AtomView::Fun(function) = atom else {
         return None;
@@ -785,7 +832,23 @@ pub fn tensor_print(
         return crate::spenso_print_scripted_indexed!(atom, options, label);
     }
     if !matches!(resolved.backend, SpensoPrintBackend::Typst) {
-        return None;
+        let head = tensor_head_print(symbol, resolved.backend)?;
+        let arguments = function
+            .iter()
+            .map(|argument| {
+                let mut source = String::new();
+                argument
+                    .format(&mut source, options, PrintState::new())
+                    .ok()?;
+                Some(source)
+            })
+            .collect::<Option<Vec<_>>>()?
+            .join(",");
+        return Some(if resolved.backend == SpensoPrintBackend::Latex {
+            format!(r"{head}\!\left({arguments}\right)")
+        } else {
+            format!("{head}({arguments})")
+        });
     }
     if !function.get_symbol().has_tag(&SPENSO_TAG.tensor) {
         return None;
@@ -928,11 +991,15 @@ fn gamma_typst_print(
 /// the algebraic Atom.
 pub fn prepare_tensor_print(atom: &Atom) -> Atom {
     atom.replace_map_bottom_up(|view, _, output| {
-        let AtomView::Fun(function) = view else {
-            return;
+        let symbol = match view {
+            AtomView::Fun(function) => function.get_symbol(),
+            AtomView::Var(variable) => variable.get_symbol(),
+            _ => return,
         };
-        let symbol = function.get_symbol();
-        if symbol == SPENSO_TAG.tensor_display && function.get_nargs() == 1 {
+        if let AtomView::Fun(function) = view
+            && symbol == SPENSO_TAG.tensor_display
+            && function.get_nargs() == 1
+        {
             let argument = function.iter().next().expect("one-argument tensor wrapper");
             **output = FunctionBuilder::new(SPENSO_TAG.tensor_display)
                 .add_arg(unwrap_tensor_display(argument))
@@ -2071,6 +2138,72 @@ mod tests {
                 .printer(PrintOptions::typst())
                 .to_string()
                 .contains("lr((attach(q(7),t:0)))")
+        );
+    }
+
+    #[test]
+    fn tensor_print_mappings_keep_components_and_abstract_indices() {
+        let head = SymbolBuilder::new(wrap_symbol!("mapped_tensor_print::Jbar"))
+            .with_tags([
+                SPENSO_TAG.tensor.as_str(),
+                "spenso::print-head:typst:overline(J)",
+                r"spenso::print-head:latex:\bar{J}",
+                "spenso::print-head:plain:Jbar",
+            ])
+            .build()
+            .unwrap();
+        let abstract_tensor = function!(head, mink!(4, symbol!("a")));
+        let rendered = prepare_tensor_print(&abstract_tensor)
+            .printer(PrintOptions::typst())
+            .to_string();
+        assert!(rendered.contains("overline(J)"));
+        assert!(!rendered.contains("Jbar"));
+        let component = function!(
+            head,
+            function!(crate::structure::abstract_index::AIND_SYMBOLS.cind, 0, 1)
+        );
+        assert_eq!(
+            prepare_tensor_print(&component)
+                .printer(PrintOptions::typst())
+                .to_string(),
+            "attach(overline(J),t:0 comma 1)"
+        );
+        let latex = PrintOptions {
+            custom_print_mode: SpensoPrintSettings::typst().into(),
+            ..PrintOptions::latex()
+        };
+        assert_eq!(
+            prepare_tensor_print(&component).printer(latex).to_string(),
+            r"\bar{J}^{0,1}"
+        );
+    }
+
+    #[test]
+    fn tensor_custom_printers_override_or_defer_to_component_notation() {
+        let head = SymbolBuilder::new(wrap_symbol!("callable_tensor_print::Jbar"))
+            .with_tags([SPENSO_TAG.tensor.as_str(), super::TENSOR_PRINT_CALLBACK_TAG])
+            .with_print_function(|_, options, _| {
+                options.mode.is_typst().then(|| "overline(J)".to_owned())
+            })
+            .build()
+            .unwrap();
+        let component = function!(
+            head,
+            function!(crate::structure::abstract_index::AIND_SYMBOLS.cind, 0)
+        );
+        assert_eq!(
+            prepare_tensor_print(&component)
+                .printer(PrintOptions::typst())
+                .to_string(),
+            "overline(J)"
+        );
+        let latex = PrintOptions {
+            custom_print_mode: SpensoPrintSettings::typst().into(),
+            ..PrintOptions::latex()
+        };
+        assert_eq!(
+            prepare_tensor_print(&component).printer(latex).to_string(),
+            "Jbar^{0}"
         );
     }
 

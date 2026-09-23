@@ -344,6 +344,26 @@ After `to_expression()`, ordinary Symbolica printing owns namespace elision and 
 bracket highlighting. Use `format(show_namespaces=True)` to display qualified names.
 
 
+Tensor names accept backend-specific head formatting through `print`:
+
+// docs-example: compile
+```python
+from symbolica.community.spenso import Representation, TensorName
+
+Jbar = TensorName(
+    "Jbar",
+    print={"typst": "macron(J)", "latex": r"\bar{J}"},
+)(Representation.bis(4))
+```
+
+Mapping values are trusted backend source without math delimiters. Spenso adds ordinary
+arguments, abstract indices, and component coordinates, including inside concrete tensor
+matrices. An omitted backend keeps the ordinary name; `plain` can also be supplied.
+A callable retains Symbolica's `print(expression, mode=..., **options)` signature and
+replaces the complete tensor display. Returning `None` selects standard tensor notation.
+Notebook rendering evaluates local callbacks before sending their visual output to Typst;
+the callable itself is not serialized into portable Atom payloads.
+
 Concrete tensor components default to $A(x,7)^(0,1)$. Choose
 `DisplaySettings(component_style="array")` for $A(x,7)[0,1]$, or
 `component_style="superscript"` for the default. Both styles keep ordinary
