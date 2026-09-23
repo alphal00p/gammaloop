@@ -56,21 +56,73 @@ Measurements use three timed runs after a warm-up, rotate execution order, and e
 construction, assertions, and rendering. They characterize the installed build and machine;
 they are not a release benchmark of the engines.
 
-Idenso's ordinary closed traces currently use signed pairing recursion. FORM's `trace4`
-adds trace-specific reductions, including a four-dimensional reduction for distinct
-arguments. In a FORM 5.0.0 probe, ten free indices gave 693 terms with `trace4` and 945
-with `tracen`; Idenso's generic recursion gives 945. These are different representations
-of the same four-dimensional tensor, not evidence of an algebraic discrepancy. See the
-#link("https://github.com/form-dev/form/blob/master/doc/manual/gamma.tex")[FORM Dirac-algebra manual].
+Closed traces now reuse adjacent contractions and the four-dimensional Chisholm
+identities from open chains. A macro dispatches lengths 1–14 to generated short-trace
+kernels, with separate ordinary and gamma-five tables and immediate zero for odd words.
+The integer recipes follow the same three-gamma epsilon identity as open chains and
+are initialized lazily. Standalone short traces with distinct explicit indices can
+return their terminal metric products directly; surrounding contractions retain the
+full tensor simplification pass.
+
+Ten, twelve and fourteen free indices now give 693, 4,383 and 26,931 ordinary trace
+terms, matching FORM 5.0.0 `trace4`; generic-dimensional pairing gives 945, 10,395 and
+135,135. FORM uses a general four-dimensional reduction internally: the arity-specific
+caches are our implementation choice. This agreement does not establish full FORM
+parity, including its cross-trace Chisholm and symmetrization options. See the
+#link("https://github.com/form-dev/form/blob/master/doc/manual/gamma.tex")[FORM Dirac-algebra manual]
+and #link("https://github.com/form-dev/form/blob/v5.0.0/sources/opera.c")[FORM 5.0.0 source].
 
 When FORM is installed locally, the notebook runs the selected compact scalar case with
 both `trace4` and `tracen`, plus a fourteen-index trace that better exposes their cost
 and output-size differences. It checks the compact results and the free-index results
 contracted with paired momenta against exact scalar identities. Generated programs and
-FORM output remain visible in the notebook. Native process timings include startup,
-parsing, sorting and verification, so they are not comparable as isolated kernels to
-Idenso's in-process timing. This establishes selected identities and performance examples,
-not full FORM correctness or performance parity. Browser exports skip native execution.
+FORM output remain visible in the notebook. An optional table times the same fourteen-index
+trace in the installed Idenso host; it is disabled by default because reconstructing
+Python tensor metadata for 26,931 terms can take minutes. First and warm calls distinguish
+lazy initialization when the table has not already been used. Native FORM process timings
+include startup, parsing, sorting and verification; Idenso's timings are in process.
+This establishes selected identities and performance examples, not full FORM correctness
+or performance parity. Browser exports skip native execution.
+
+The native Rust example measures all even lengths through fourteen, for distinct free
+indices and paired or alternating momenta. Both engines must pass exact scalar checks;
+FORM programs and logs are retained at the printed path. Its CSV reports first-call
+and warm Idenso timings alongside FORM `trace4` and `tracen` process timings. Use the
+same optimization profile when comparing revisions.
+
+// docs-example: syntax
+```sh
+cargo run -p idenso --profile dev-optim --example trace_form -- /path/to/form
+```
+
+== Recorded native measurement
+
+On 2026-09-23, with Rust 1.98.1, Symbolica 3.0.0, `dev-optim` and FORM 5.0.0 on
+a shared AMD EPYC 9754 host, the example measured the following medians in milliseconds:
+
+#table(
+  columns: 5,
+  [Case], [Old Idenso], [New Idenso], [FORM `trace4`], [FORM `tracen`],
+  [10 free indices], [168.05], [1.12], [10.81], [10.63],
+  [12 free indices], [Not measured], [8.00], [16.54], [22.57],
+  [14 free indices], [Not measured], [63.61], [54.42], [190.45],
+  [14 paired slashes], [Not measured], [0.75], [9.12], [8.74],
+  [14 alternating slashes], [Not measured], [9.52], [9.58], [9.50],
+)
+
+The ten-index case improves by about 150 times in this controlled before/after
+comparison. The first fourteen-index call takes 73.12 ms, including initialization.
+FORM's fourteen-index pipeline is about 3.5 times faster with `trace4` than `tracen`.
+Idenso and FORM now have comparable elapsed times in that example, but the different
+timing boundaries do not establish engine parity. In particular, the small FORM
+cases include substantial process overhead. Full symbolic scalar checks passed for
+every reported input. The #source-link("examples/notebooks/gamma_trace_measurements.json", label: "measurement record")
+contains every length, the baseline provenance, timing boundaries and source hashes.
+
+The separately measured Python notebook's default eight-factor paired example gives
+590.16 ms for tracing first, 18.88 ms for contracting first, and 4.66 ms for compact
+input: about 31 times faster with early contraction. This unoptimized Python-host
+measurement is not compared directly with the optimized native Rust numbers above.
 
 == Run locally
 

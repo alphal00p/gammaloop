@@ -121,19 +121,144 @@ fn gamma_five_two_gamma_trace_vanishes() {
 }
 
 #[test]
-#[ignore = "pending gamma-five trace term-count stress support"]
-fn gamma_five_symmetric_12_term_count() {
-    test_initialize();
-    let term_count = 0usize;
-
-    assert_snapshot!(term_count.to_string(), @"0");
+fn short_trace_dispatch_covers_every_arity_and_gamma5() {
+    let r = test_initialize();
+    let ordinary_counts = [1, 3, 15, 105, 693, 4383, 26931];
+    let axial_counts = [0, 1, 6, 33, 180, 1029, 6042];
+    let indices = (0..14)
+        .map(|i| {
+            r.mink4
+                .pattern(symbolica::symbol!(&format!("short_trace_mu{i}")))
+        })
+        .collect::<Vec<_>>();
+    for n in 1..=14 {
+        for axial in [false, true] {
+            let mut factors = indices[..n].iter().map(|mu| gamma!(mu)).collect::<Vec<_>>();
+            if axial {
+                factors.insert(0, gamma5!());
+            }
+            let expr = trace!(r.bis4.to_symbolic([]); factors);
+            let result = expr.simplify_gamma();
+            let expected = if n % 2 == 1 {
+                0
+            } else if axial {
+                axial_counts[n / 2 - 1]
+            } else {
+                ordinary_counts[n / 2 - 1]
+            };
+            let count = if result.is_zero() {
+                0
+            } else {
+                result.expand().nterms()
+            };
+            assert_eq!(count, expected, "length {n}, axial {axial}");
+            assert_eq!(
+                result.simplify_gamma(),
+                result,
+                "trace result must be a fixed point"
+            );
+        }
+    }
 }
 
 #[test]
-#[ignore = "pending gamma-five trace4 term-count stress support"]
-fn gamma_five_regular_12_term_count() {
-    test_initialize();
-    let term_count = 0usize;
+fn chisholm_trace_reduction_is_cyclic_and_preserves_coefficients() {
+    let r = test_initialize();
+    let mu = gamma!(slot!(r.mink4, mu));
+    let middle = [
+        gamma!(slot!(r.mink4, nu)),
+        gamma!(slot!(r.mink4, rho)),
+        gamma!(slot!(r.mink4, alpha)),
+    ];
+    let tail = [
+        gamma!(slot!(r.mink4, beta)),
+        gamma!(slot!(r.mink4, sigma)),
+        gamma!(slot!(r.mink4, tau)),
+    ];
+    let mut factors = [vec![mu.clone()], middle.to_vec(), vec![mu], tail.to_vec()].concat();
+    let coefficient = parse_lit!((x + y) ^ 8);
+    let expected = -2
+        * &coefficient
+        * trace!(r.bis4.to_symbolic([]); middle.iter().rev().chain(tail.iter())).simplify_gamma();
+    for _ in 0..factors.len() {
+        let expr = &coefficient * trace!(r.bis4.to_symbolic([]); &factors);
+        assert_eq!(expr.simplify_gamma(), expected);
+        factors.rotate_left(1);
+    }
+}
 
-    assert_snapshot!(term_count.to_string(), @"0");
+#[test]
+fn long_chisholm_interiors_use_shared_open_chain_identity() {
+    let r = test_initialize();
+    let mu = gamma!(slot!(r.mink4, mu));
+    let interior = (0..6)
+        .map(|i| {
+            gamma!(
+                r.mink4
+                    .pattern(symbolica::symbol!(&format!("long_chisholm_mu{i}")))
+            )
+        })
+        .collect::<Vec<_>>();
+    for n in [5, 6] {
+        let word = [vec![mu.clone()], interior[..n].to_vec(), vec![mu.clone()]].concat();
+        let result = chain!(slot!(r.bis4, a), slot!(r.bis4, b); word).simplify_gamma();
+        let expected = if n % 2 == 1 {
+            -2 * chain!(slot!(r.bis4, a), slot!(r.bis4, b); interior[..n].iter().rev())
+        } else {
+            2 * chain!(slot!(r.bis4, a), slot!(r.bis4, b); interior[..n-1].iter().rev().chain([&interior[n-1]]))
+                + 2 * chain!(slot!(r.bis4, a), slot!(r.bis4, b); [&interior[n-1]].into_iter().chain(interior[..n-1].iter()))
+        };
+        assert_eq!(result, expected);
+    }
+}
+
+#[test]
+fn symbolic_dimension_keeps_generic_trace_recursion() {
+    let r = test_initialize();
+    let factors = (0..10)
+        .map(|i| {
+            gamma!(
+                r.mink_d
+                    .pattern(symbolica::symbol!(&format!("generic_trace_mu{i}")))
+            )
+        })
+        .collect::<Vec<_>>();
+    let result = trace!(r.bis4.to_symbolic([]); factors).simplify_gamma();
+    assert_eq!(result.expand().nterms(), 945);
+}
+
+#[test]
+fn short_trace_terminal_shortcut_preserves_surrounding_contractions() {
+    let r = test_initialize();
+    let factors = (0..10)
+        .map(|i| {
+            gamma!(
+                r.mink4
+                    .pattern(symbolica::symbol!(&format!("terminal_trace_mu{i}")))
+            )
+        })
+        .collect::<Vec<_>>();
+    let expr = trace!(r.bis4.to_symbolic([]); factors);
+    let coefficient = parse_lit!((x + y) ^ 8);
+    assert_eq!(
+        (&coefficient * &expr).simplify_gamma(),
+        &coefficient * expr.simplify_gamma()
+    );
+
+    let mu = r.mink4.pattern(s!(mu));
+    let nu = r.mink4.pattern(s!(nu));
+    let alpha = r.mink4.pattern(s!(alpha));
+    let beta = r.mink4.pattern(s!(beta));
+    let contracted = g!(&mu, &nu)
+        * trace!(
+            r.bis4.to_symbolic([]),
+            gamma!(&mu),
+            gamma!(&alpha),
+            gamma!(&nu),
+            gamma!(&beta)
+        );
+    assert_eq!(
+        contracted.simplify_gamma().expand().simplify_metrics(),
+        -8 * g!(&alpha, &beta)
+    );
 }
