@@ -451,6 +451,32 @@ the top threshold limit. HTML export, strict Marimo checks and all 64 live
 channel, color and kinematic selections pass. These are on-shell two-body
 widths; off-shell W decay chains are separate.
 
+== Muon decay and recursive three-body phase space
+
+`hep/muon_decay.py` generates the full unitary-gauge W exchange in
+$mu^- -> e^- overline(nu)_e nu_mu$. Shared spin sums and Spenso traces reproduce
+the complete massive squared amplitude in the
+#link("https://feyncalc.github.io/FeynCalcExamples/EW/Tree/Mu-ElAnelNmu")[muon-decay reference],
+including the longitudinal W term. Its low-energy expansion gives the Fermi
+amplitude with the initial muon spin averaged.
+
+Two existing `Kinematics.two_body_phase_space` calls factor the three-body
+measure. Pair-rest-frame energies determine the invariant bounds and angular
+Jacobian. Integrating the orientation and azimuth yields
+$dif Phi_3/(dif s dif t)=1/(128 pi^3 M^2)$; `flux` supplies $2M$.
+Symbolica derives the normalized massless Michel spectrum
+$2x^2(3-2x)$ and $Gamma_0=G_F^2 M^5/(192 pi^3)$.
+For $r=m_e^2/M^2$, exact integration retains
+$Gamma/Gamma_0=1-8r+8r^3-r^4-12r^2 ln(r)$ in the Fermi limit.
+Six independent quadratures check the mass dependence. Expanding and integrating
+the generated full amplitude at zero electron mass also derives
+$Gamma/Gamma_0=1+3M^2/(5m_W^2)+cal(O)(M^4/m_W^4)$.
+
+The installed regression, HTML export, strict Marimo checks and all eighteen
+live mass and W-scale selections pass. The notebook evaluates the finite-mass
+and finite-W results in their stated limits. This is a tree-level result with
+massless neutrinos; radiative corrections are separate.
+
 == Generated chiral Z decays
 
 `installed_feyncalc_z_decay.py` reproduces all four classes in the

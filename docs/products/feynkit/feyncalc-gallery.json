@@ -4721,7 +4721,30 @@
         "TimeUsed",
         "Uncontract"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "passed: generated full unitary-gauge W amplitude, Fermi limit, recursively derived three-body phase space, Michel spectrum and total rate, exact electron-mass factor and leading finite-W correction",
+      "validated_components": [
+        {
+          "scope": "full massive tree-level muon squared amplitude with longitudinal W numerator; generated low-energy limit; two-body phase-space factorization and derived Dalitz Jacobian/bounds; analytic massless spectrum, exact finite-electron-mass rate and first finite-W term",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_muon_decay.py",
+          "components": [
+            "Model.standard_model",
+            "Model.generate_diagrams",
+            "Model.expand_couplings",
+            "FeynmanDiagram.denominator_expression",
+            "Particle.spin_sum",
+            "TensorExpression.dirac_adjoint",
+            "TensorExpression.simplify_gamma",
+            "TensorExpression.simplify_epsilon",
+            "Kinematics.with_scalar_product",
+            "Kinematics.two_body_phase_space",
+            "Kinematics.flux",
+            "Symbolica.series",
+            "Symbolica.integrate"
+          ],
+          "result": "passed",
+          "note": "Live notebook: hep/muon_decay.py. The existing massive W propagator supplies the unitary-gauge numerator; charged-current vertex selection excludes Goldstone diagrams. The complete squared amplitude is compared before taking the Fermi limit. The Dalitz density is derived from two native two-body measures and an angular Jacobian. Symbolica integrations reproduce the reference Michel spectrum and massless width, derive the exact electron-mass correction checked by six independent quadratures, and give 3M^2/(5mW^2) as the first relative W correction at zero electron mass. The finite-mass and finite-W results are evaluated in their stated limits. Installed regression, strict Marimo, HTML export and all eighteen live selections pass. This is tree level with massless neutrinos; radiative corrections are not included."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/EW/Tree/Qt-QbW",
