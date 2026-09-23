@@ -1335,10 +1335,34 @@ would make those projectors degenerate.
 
 Five spacelike points, including unequal mass and scale, agree with independent
 96-node Feynman-parameter quadrature and OneLOop's bubble derivative to better
-than $2 times 10^(-12)$. The live notebook varies $-t/m^2$ over five decades;
-its default and five slider states execute without cell errors. This covers
-the Pauli form factor, not the complete renormalized Dirac form factor or
-analytic continuation through timelike thresholds.
+than $2 times 10^(-12)$. The original live notebook varies $-t/m^2$ over five
+decades; its default and five slider states execute without cell errors.
+
+`hep/pauli_form_factor.py` composes that generated calculation and continues
+the Pauli form factor to the physical $t+i 0$ sheet. With $r=t/m^2$ and
+$R=F_2/(alpha/(2 pi))$, the independent parameter integral is
+$R=integral_0^1 dif x/(1-r x(1-x)-i 0)$.
+Above pair threshold, $beta=sqrt(1-4/r)$ gives
+$R=2/(r beta) [log((1-beta)/(1+beta))+i pi]$.
+The positive imaginary part agrees with the sum of the two parameter-pole
+residues. Two complex integration contours with fixed endpoints independently
+check the same physical branch, including a point just above threshold.
+Sixty mass, scale and momentum combinations agree with this quadrature, the
+closed form and the OneLOop bubble derivative. The renormalization scale cancels.
+
+Symbolica verifies the differential equation
+$r(r-4) R'(r)+(r-2)R(r)+2=0$ and integrates the low-energy expansion through
+$r^4$. Checks on both sides of threshold establish
+$sqrt(delta) Re R(4-delta) -> pi$,
+$sqrt(delta) Im R(4+delta) -> pi$, and $Re R(4+delta) -> -1$.
+The threshold point itself is singular and is excluded from the controls.
+The installed regression, strict Marimo check, HTML export and all 60 live
+control combinations pass.
+
+The gallery reference computes only $F_2(0)$; it does not require the complete
+renormalized Dirac form factor. Its anomalous-moment result is therefore
+validated, with nonzero spacelike and timelike Pauli form factors as additional
+coverage. The full $F_1$ remains a separate outstanding observable.
 
 == Generated two-loop massless electron self-energy
 
