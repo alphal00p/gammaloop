@@ -12,7 +12,7 @@ use pyo3::{
 use spenso::{
     algebra::complex::RealOrComplexRef,
     iterators::IteratableTensor,
-    network::tags::SPENSO_TAG,
+    network::tags::{SPENSO_TAG, prepare_tensor_print},
     portable_payload::register_math_display_symbol,
     shadowing::symbolica_utils::SpensoPrintSettings,
     structure::{
@@ -565,7 +565,7 @@ fn format_atom_with_settings(
 ) -> String {
     let aliases = IndexAliases::for_atom(atom, &settings.index_style);
     let presentation = aliases.presentation_atom(atom, &settings.index_style);
-    presentation.format_string(
+    prepare_tensor_print(&presentation).format_string(
         &display_options_with_settings(mode, settings),
         PrintState::new(),
     )
@@ -573,8 +573,7 @@ fn format_atom_with_settings(
 
 fn format_atom_with_mode(atom: &Atom, mode: TensorDisplayMode, show_dimensions: bool) -> String {
     let aliases = IndexAliases::for_atom(atom, "alphabet");
-    aliases
-        .presentation_atom(atom, "alphabet")
+    prepare_tensor_print(&aliases.presentation_atom(atom, "alphabet"))
         .format_string(&display_options(mode, show_dimensions), PrintState::new())
 }
 
@@ -2145,6 +2144,40 @@ mod tests {
         assert!(!automatic.contains("spenso::"));
         assert!(symbol!("display_test_vector").has_tag(&SPENSO_TAG.rank1));
     }
+    #[test]
+    fn tagged_components_render_without_a_registered_print_callback() {
+        let head = symbolica::atom::SymbolBuilder::new(symbolica::wrap_symbol!(
+            "component_display_test::A"
+        ))
+        .with_tags([SPENSO_TAG.tensor.clone()])
+        .build()
+        .unwrap();
+        assert!(head.get_print_function().is_none());
+        let component = function!(
+            head,
+            function!(spenso::structure::abstract_index::AIND_SYMBOLS.cind, 0, 12)
+        );
+        let settings = DisplaySettings::default();
+        for (mode, expected) in [
+            (TensorDisplayMode::Plain, "A^(0,12)"),
+            (TensorDisplayMode::Latex, "A^{0,12}"),
+            (TensorDisplayMode::Typst, r#"attach(A,t:0 "," 12)"#),
+        ] {
+            assert_eq!(
+                format_atom_with_settings(&component, mode, &settings),
+                expected
+            );
+        }
+        assert!(head.get_print_function().is_none());
+        assert_eq!(
+            component,
+            function!(
+                head,
+                function!(spenso::structure::abstract_index::AIND_SYMBOLS.cind, 0, 12)
+            )
+        );
+    }
+
     #[test]
     fn display_selection_keeps_both_edges() {
         assert_eq!(
