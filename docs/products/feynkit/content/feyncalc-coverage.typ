@@ -20,8 +20,8 @@ not treat the presence of a primitive as an end-to-end validation.
    electron-positron to muon-pair benchmark and a different-flavor QCD quark
    annihilation benchmark check the sewn graph, physical cut, graph factors
    and uncut propagators. Ordinary generated amplitudes also validate Compton,
-   diphoton, Bhabha, Møller, selected QCD channels and on-shell Higgs and Z
-   decays. The inventory records the validated scope of each process.],
+   diphoton, Bhabha, Møller, selected QCD channels, W-pair production and
+   on-shell Higgs and Z decays. The inventory records the validated scope of each process.],
   [Dirac, color and Lorentz algebra], [Idenso and Spenso],
   [Existing gamma, color, metric, epsilon and adjoint operations. Keep their
    Symbolica expression interface; do not implement a second algebra in FeynKit.
@@ -476,6 +476,38 @@ The installed regression, HTML export, strict Marimo checks and all eighteen
 live mass and W-scale selections pass. The notebook evaluates the finite-mass
 and finite-W results in their stated limits. This is a tree-level result with
 massless neutrinos; radiative corrections are separate.
+
+== W-pair production and electroweak cancellations
+
+`hep/ww_production.py` generates photon, Z, neutrino and Higgs exchange in
+$e^- e^+ -> W^- W^+$. Shared particle spin sums average the incoming spins
+and retain all physical W polarizations. All sixteen amplitude products,
+including reversed interference pairs, reproduce the complete massive
+#link("https://feyncalc.github.io/FeynCalcExamples/EW/Tree/AnelEl-WW")[FeynCalc result]
+with the electron Yukawa coupling fixed by its mass.
+
+The generated longitudinal Z numerator is first certified to vanish against
+the two physical W sums. Spenso's existing compact/indexed conversion also
+allows the explicit relation $p_3=p_0+p_1-p_2$ to eliminate the residual
+four-momentum epsilon contraction. Scalar-product substitutions alone do not
+impose this relation inside an epsilon tensor. Both steps reuse shared tensor
+operations; the example adds no second algebra or spin-sum implementation.
+
+With a marker $H$ multiplying Higgs exchange, the coefficient growing as $s$
+at fixed angle is $e^4 m_e^2 (H-1)^2/(32 m_W^4 sin^4(theta_W))$.
+It vanishes for the Standard Model, and the quadratic growth cancels as well.
+The notebook exposes the separate diagonal and interference contributions and
+a diagnostic rate with Higgs exchange omitted.
+
+Symbolica integrates the full rational angular dependence and verifies the
+primitive by differentiation. The shared flux and two-body phase-space APIs
+give $dif sigma/dif t=overline(abs(cal(M))^2)/(16 pi s(s-4m_e^2))$.
+The reference retains the mass in its amplitude and endpoints but uses the
+massless flux prefactor $1/(16 pi s^2)$. Its massive rate is therefore the
+physical rate here times $1-4m_e^2/s$. The massless total agrees directly.
+Nine independent quadratures check massive rates, including three checks
+against the published massless total. The notebook keeps widths zero and
+uses illustrative tree-level inputs.
 
 == Generated chiral Z decays
 

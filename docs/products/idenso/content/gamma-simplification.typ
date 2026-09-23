@@ -42,6 +42,36 @@ See #product-link("idenso", page: "reference/form-color-dirac/", label: "Shipped
 for the conventions and #product-link("idenso", page: "guides/showcase/", label: "the tensor display showcase")
 for additional notation controls.
 
+== Schoonschip performance and FORM comparison
+
+The performance section follows equivalent paired and alternating slash traces through
+three routes: evaluate a free-index trace then contract momenta; contract the indexed
+input with `schoonschip_net()` before taking the trace; or start from the compact slash
+expression. Each route must match an independent scalar identity. The displayed speedup
+compares the first two complete pipelines, including early conversion cost. The compact
+input timing is reported separately. Changing the display layout alone does not change
+the algebra or its cost.
+
+Measurements use three timed runs after a warm-up, rotate execution order, and exclude
+construction, assertions, and rendering. They characterize the installed build and machine;
+they are not a release benchmark of the engines.
+
+Idenso's ordinary closed traces currently use signed pairing recursion. FORM's `trace4`
+adds trace-specific reductions, including a four-dimensional reduction for distinct
+arguments. In a FORM 5.0.0 probe, ten free indices gave 693 terms with `trace4` and 945
+with `tracen`; Idenso's generic recursion gives 945. These are different representations
+of the same four-dimensional tensor, not evidence of an algebraic discrepancy. See the
+#link("https://github.com/form-dev/form/blob/master/doc/manual/gamma.tex")[FORM Dirac-algebra manual].
+
+When FORM is installed locally, the notebook runs the selected compact scalar case with
+both `trace4` and `tracen`, plus a fourteen-index trace that better exposes their cost
+and output-size differences. It checks the compact results and the free-index results
+contracted with paired momenta against exact scalar identities. Generated programs and
+FORM output remain visible in the notebook. Native process timings include startup,
+parsing, sorting and verification, so they are not comparable as isolated kernels to
+Idenso's in-process timing. This establishes selected identities and performance examples,
+not full FORM correctness or performance parity. Browser exports skip native execution.
+
 == Run locally
 
 Use an interpreter containing the combined Symbolica community host with Spenso and Idenso,
@@ -51,5 +81,12 @@ community extension.
 // docs-example: syntax
 ```sh
 just notebook gamma_simplification /path/to/python
+```
+
+Put `form` on `PATH`, or select its executable explicitly for native comparisons:
+
+// docs-example: syntax
+```sh
+FORM_EXECUTABLE=/path/to/form just notebook gamma_simplification /path/to/python
 ```
 ]
