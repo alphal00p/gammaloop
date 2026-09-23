@@ -1586,6 +1586,44 @@ normalization at $N_c=2,3,5$. The live notebook exposes color, coupling, cut
 and two physical Dalitz coordinates. All 45 tested control combinations pass,
 along with the generated-amplitude regression and strict Marimo checks.
 
+== Crossed photon-gluon currents
+
+`hep/photon_gluon.py` and `installed_feyncalc_photon_gluon.py` cover
+#link("https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/GaGl-QQbar")[photon-gluon fusion],
+#link("https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/QGa-GlQ")[QCD Compton scattering], and
+#link("https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/QQbar-GaGl")[quark annihilation into a photon and gluon].
+Each channel is generated independently with two massive-quark exchange
+diagrams. Name-based vertex selection retains only photon-quark and
+gluon-quark interactions. Their full graph weights, Dirac adjoints and
+interference use the existing generator, Idenso and Spenso operations.
+
+The photon has arbitrary virtuality $v=q^2$ and its current is contracted
+with $-g_(mu nu)$, without a photon spin average. Incoming quark/gluon spins
+and colors are averaged through the shared particle API. Generic SU(N)
+dimensions are inserted before the color contraction. The massive results
+agree with all three references. Covariant gluon sums and physical projectors
+referenced to either the quark or photon agree exactly, including the
+reference-norm term for non-null vectors. Both photon and gluon Ward
+contractions vanish independently in every channel.
+
+If $F(s,t,u)$ denotes the fusion current contraction, the annihilation result
+is $(N_c^2-1)F(s,t,u)/(2N_c^2)$. The Compton result is
+$-(N_c^2-1)F(u,t,s)/N_c$, with the crossed fermion sign and incoming color
+averages included. These are checks of independently generated channels;
+crossing is not used to construct their amplitudes. Further exact comparisons
+check the massless limits and spacelike continuation $q^2=-Q^2$.
+
+For a real photon, the same results and native `Kinematics.flux` and
+`two_body_phase_space` give ordinary differential cross sections.
+An incoming photon then receives its missing factor $1/2$. All three final
+states contain distinct particles. Numerical checks cover 81 combinations
+of color, mass and angle, including energy scaling, and 54 off-shell
+center-of-mass points. The notebook separates the virtual-current contraction
+from real-photon angular rates and computes an angular-cut integral with
+converged Gaussian quadrature. A virtual-photon observable requires contraction
+with a lepton tensor; the notebook does not interpret $-g_(mu nu)$ as that tensor.
+All 27 live control combinations, strict Marimo checks, Ruff and HTML export pass.
+
 == Generated light-cone soft radiation
 
 `hep/soft_function.py` and `installed_feyncalc_soft_function.py` cover the
