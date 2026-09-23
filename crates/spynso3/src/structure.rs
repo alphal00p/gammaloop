@@ -1217,6 +1217,14 @@ impl SpensoSlot {
         format!("{}", self.slot.to_atom())
     }
 
+    /// The representation carried by this slot, including its dimension and duality.
+    #[getter]
+    fn representation(&self) -> SpensoRepresentation {
+        SpensoRepresentation {
+            representation: self.slot.rep(),
+        }
+    }
+
     /// Return this slot with its representation replaced by the dual representation.
     fn dual(&self) -> Self {
         SpensoSlot {
