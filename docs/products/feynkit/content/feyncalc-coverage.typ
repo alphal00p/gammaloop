@@ -1466,6 +1466,45 @@ The separate `hep/qcd_annihilation.py` notebook runs these exact comparisons
 in the same Marimo instance as the other examples. Identical-flavor channels,
 quark-gluon scattering and general QCD observables remain unvalidated.
 
+== Generated elastic quark scattering
+
+`hep/quark_scattering.py` and `installed_feyncalc_quark_scattering.py` cover
+#link("https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/QiQj-QiQj")[distinct quarks],
+#link("https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/QiQjbar-QiQjbar")[distinct-flavor quark-antiquark scattering],
+#link("https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/QiQi-QiQi")[identical quarks], and
+#link("https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/QiQibar-QiQibar")[same-flavor quark-antiquark scattering].
+Only the two selected quark-gluon vertices of the built-in model participate.
+The bottom and top fields supply independent symbolic masses for the two
+flavor labels. The generated amplitudes retain their relative fermion signs
+and graph weights. Each distinct-flavor process has one diagram; each
+same-flavor process has two.
+
+Particle spin and color completeness tensors close the amplitude and its
+index-preserving Dirac adjoint. Incoming states are averaged and final states
+are summed. Spenso performs the color contractions with fundamental dimension
+$N_c$ and a symbolic adjoint dimension; substituting $d_A=N_c^2-1$ before the
+final Casimir conversion resolves the interference color trace. Both full
+massive SU(N) reference expressions and their massless limits agree exactly.
+The diagonal and interference pieces are also checked separately. The
+identical-quark result is invariant under exchange of $t$ and $u$.
+
+Native kinematics gives the elastic ratio of differential two-body phase
+space to initial flux, $1/(64 pi^2 s)$ per solid angle. Symbolica integrates
+the generated angular density over $abs(cos theta)<c<1$ after the substitution
+$t=-lambda(s,m_1^2,m_2^2)(1-cos theta)/(2s)$.
+The identical-quark event rate includes $1/2!$ for the full labeled phase
+space. Equal derivatives and the value at zero cut prove that this is the
+same rate as counting one forward quark per event. Distinct flavors retain
+their distinct-particle normalization even when their masses coincide.
+
+Exact antiderivative checks and 216 independent numerical quadratures cover
+four channels, three color numbers, three mass profiles, two energies and
+three angular cuts. The live notebook exposes the full, diagonal and
+interference angular distributions and the event rate normalized by
+$alpha_s^2/s$. Its 108 control combinations, installed regression, strict
+Marimo check and HTML export pass. The cuts exclude the forward or backward
+massless-exchange poles; no uncut finite total rate is claimed.
+
 == Generated quark annihilation into gluons
 
 `installed_feyncalc_qcd_gluons.py` generates the three ordinary tree amplitudes
