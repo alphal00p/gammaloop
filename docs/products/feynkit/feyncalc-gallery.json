@@ -844,7 +844,7 @@
         "SubscriptBox",
         "TimeUsed"
       ],
-      "end_to_end_validation": "pending",
+      "end_to_end_validation": "passed: generated massive and massless unpolarized and chiral-projected squared amplitudes; both final-state loop coordinates; angular and Mandelstam-t differential rates and matching total cross sections",
       "validated_components": [
         {
           "scope": "unpolarized and chiral-projected massive and massless squared-current contraction",
@@ -858,7 +858,7 @@
           "result": "passed"
         },
         {
-          "scope": "generated massive and massless unpolarized squared matrix elements, massless angular distribution and total cross section",
+          "scope": "Generated massive and massless unpolarized squared matrix elements, physical cut orientation, angular and Mandelstam-t differential cross sections and exact total cross sections from both coordinates.",
           "test": "crates/feynkit-py/tests/installed_feyncalc_generated_qed.py",
           "components": [
             "Generator.generate",
@@ -874,12 +874,11 @@
             "Kinematics.two_body_phase_space",
             "Symbolica.Polynomial.integrate"
           ],
-          "result": "routing-label test setup update pending",
-          "note": "The physical formulas pass in the live notebook and in the proposed orientation-aware setup; the repository test still assumes the old cut-particle convention."
+          "result": "passed",
+          "note": "The repository regression uses the physical cut particle and its momentum orientation. Notebook: hep/qed_cross_section.py."
         },
         {
           "scope": "generated massive and massless chiral-projected squared matrix elements using physical cut particle identities and momentum orientations",
-          "example": "symbolica-community/examples/hep_showcase.py",
           "components": [
             "Generator.generate",
             "Particle.sum_spins",
@@ -893,7 +892,9 @@
             "TensorExpression.simplify_epsilon",
             "Kinematics.mandelstam"
           ],
-          "result": "passed in live notebook"
+          "result": "passed",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_polarized_qed.py",
+          "note": "Both outgoing particles are tested as the loop coordinate, preserving their physical charges and momentum orientations. Chiral projections are not massive helicity eigenstates. Notebook: hep/qed_cross_section.py."
         }
       ]
     },
@@ -1092,7 +1093,25 @@
         "SubscriptBox",
         "TimeUsed"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "passed: generated massive electron-muon squared amplitude with physical cut routing and incoming spin averages",
+      "validated_components": [
+        {
+          "scope": "Generated sewn tree amplitudes for electron-muon scattering with both masses, physical cut orientation, all graph factors and the complete Mandelstam reference.",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_sewn_qed.py",
+          "components": [
+            "Model.generate_diagrams",
+            "DiagramCut.particles",
+            "DiagramCut.orientations",
+            "Particle.sum_spins",
+            "LoopMomentumBasis.route_expression",
+            "TensorExpression.simplify_gamma",
+            "TensorExpression.to_dots",
+            "Kinematics.mandelstam"
+          ],
+          "result": "passed",
+          "note": "The full massive identity also covers both zero-mass substitutions in the gallery. Notebook: hep/sewn_qed.py. Its companion cases verify electron and positron Compton scattering with covariant and timelike axial projectors."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/QED/Tree/ElGa-ElGa",
