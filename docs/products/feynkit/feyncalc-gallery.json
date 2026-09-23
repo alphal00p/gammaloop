@@ -4214,7 +4214,28 @@
         "SubscriptBox",
         "TimeUsed"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "passed: generated charged-current amplitudes, full mass-dependent squared amplitudes and widths, complex CKM, charge conjugation and explicit spin/color conventions",
+      "validated_components": [
+        {
+          "scope": "unequal-mass quark W decays with a generic complex CKM element, both charges, shared spin/color sums, phase space and exact widths; massless light-quark channels",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_weak_decays.py",
+          "components": [
+            "Model.standard_model",
+            "Model.generate_diagrams",
+            "Model.expand_couplings",
+            "Particle.spin_sum",
+            "Particle.color_sum",
+            "TensorExpression.dirac_adjoint",
+            "TensorExpression.simplify_gamma",
+            "TensorExpression.simplify_color",
+            "Kinematics.with_scalar_product",
+            "Kinematics.two_body_phase_space",
+            "Kinematics.flux"
+          ],
+          "result": "passed",
+          "note": "Live notebook: hep/weak_decays.py. Charm/bottom fields supply two independent nonzero masses and CKM2x3; the resulting formula is generation independent. Up/down channels with CKM1x1 verify the massless case. Both members of each charge-conjugate pair agree for generic real and imaginary CKM components. The installed regression verifies exact formulas and 64 finite comparisons, including the top threshold limit. HTML export, strict Marimo and all 64 live channel/color/kinematics selections pass. Scope is on-shell two-body decay; off-shell W decay chains are separate."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/EW/Tree/Z-FFbar",
@@ -4629,7 +4650,28 @@
         "SubscriptBox",
         "TimeUsed"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "passed: generated charged-current amplitudes, full mass-dependent squared amplitudes and widths, complex CKM, charge conjugation and explicit spin/color conventions",
+      "validated_components": [
+        {
+          "scope": "massive charged-lepton and massless-neutrino W decays, both charges, full chiral spin sums and Proca polarization average, shared phase space and exact total widths",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_weak_decays.py",
+          "components": [
+            "Model.standard_model",
+            "Model.generate_diagrams",
+            "Model.expand_couplings",
+            "Particle.spin_sum",
+            "Particle.color_sum",
+            "TensorExpression.dirac_adjoint",
+            "TensorExpression.simplify_gamma",
+            "TensorExpression.simplify_color",
+            "Kinematics.with_scalar_product",
+            "Kinematics.two_body_phase_space",
+            "Kinematics.flux"
+          ],
+          "result": "passed",
+          "note": "Live notebook: hep/weak_decays.py. The neutrino is massless; the charged-lepton mass remains symbolic. Both members of each charge-conjugate pair agree for generic real and imaginary CKM components. The installed regression verifies exact formulas and 64 finite comparisons, including the top threshold limit. HTML export, strict Marimo and all 64 live channel/color/kinematics selections pass. Scope is on-shell two-body decay; off-shell W decay chains are separate."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/EW/Tree/Mu-ElAnelNmu",
@@ -4720,7 +4762,28 @@
         "SubscriptBox",
         "TimeUsed"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "passed: generated charged-current amplitudes, full mass-dependent squared amplitudes and widths, complex CKM, charge conjugation and explicit spin/color conventions",
+      "validated_components": [
+        {
+          "scope": "massive top and antitop decay with a generic complex CKM element, shared chiral spin sums, complete W polarization sum, physical and gallery color conventions and exact widths",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_weak_decays.py",
+          "components": [
+            "Model.standard_model",
+            "Model.generate_diagrams",
+            "Model.expand_couplings",
+            "Particle.spin_sum",
+            "Particle.color_sum",
+            "TensorExpression.dirac_adjoint",
+            "TensorExpression.simplify_gamma",
+            "TensorExpression.simplify_color",
+            "Kinematics.with_scalar_product",
+            "Kinematics.two_body_phase_space",
+            "Kinematics.flux"
+          ],
+          "result": "passed",
+          "note": "Live notebook: hep/weak_decays.py. The gallery sums initial colors. The physical width averages them through Particle.color_sum(average=True); their ratio is exactly three. The notebook defaults to the physical convention. Both members of each charge-conjugate pair agree for generic real and imaginary CKM components. The installed regression verifies exact formulas and 64 finite comparisons, including the top threshold limit. HTML export, strict Marimo and all 64 live channel/color/kinematics selections pass. Scope is on-shell two-body decay; off-shell W decay chains are separate."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/Phi3/OneLoop/Renormalization",
