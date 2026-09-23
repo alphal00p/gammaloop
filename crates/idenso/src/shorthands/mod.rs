@@ -9,6 +9,7 @@ use crate::{
     tensor::{SymbolicNetExt, SymbolicNetParse},
 };
 
+pub(crate) mod bracket;
 pub mod chain;
 pub mod metric;
 pub mod schoonschip;
