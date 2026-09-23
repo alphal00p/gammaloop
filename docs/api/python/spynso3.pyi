@@ -98,7 +98,7 @@ class ColorSimplifySettings:
     @property
     def expand_cross_chain_fierz(self) -> builtins.bool:
         r"""
-        Whether generators on different open chains are expanded with the Fierz identity.
+        Whether generators on different open chains or traces are expanded with the Fierz identity.
         """
     @property
     def substitute_cof_dimension_invariants(self) -> builtins.bool:
@@ -741,6 +741,11 @@ class Slot:
     tensor_expression = TensorName("T")(slot1, slot2)
     ```
     """
+    @property
+    def representation(self) -> Representation:
+        r"""
+        The representation carried by this slot, including its dimension and duality.
+        """
     def __eq__(self, other: builtins.object) -> builtins.bool: ...
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
@@ -1277,10 +1282,12 @@ class TensorExpression(Expression):
         Custom settings control the index encoding, source filters, and output tags.
         """
     @staticmethod
-    def g(rep: Representation) -> TensorExpression:
+    def g(rep: Representation, other: typing.Optional[Representation] = None) -> TensorExpression:
         r"""
-        Create an unresolved metric tensor for `rep`.
+        Create an unresolved metric with ports in `rep` and `other`.
 
+        `other` defaults to `rep`; it may also be the dual of the same space.
+        For example, `g(fund, fund.dual())("i", "j")` creates a fundamental identity.
         Call the result with two indices to fill its ports in logical order.
         """
     @staticmethod
@@ -2041,7 +2048,7 @@ class TensorExpression(Expression):
 
         Complex-conjugate an expression and transpose tensor slots in `representation`.
         """
-    def dirac_adjoint(self) -> TensorExpression:
+    def dirac_adjoint(self, *, preserve_indices: builtins.bool = False) -> TensorExpression:
         r"""
         Construct the physics-aware Dirac adjoint and re-infer the tensor interface.
 
@@ -2049,6 +2056,11 @@ class TensorExpression(Expression):
 
         Idenso takes the symbolic complex conjugate, reverses compatible open bispinor chains, and
         inserts the registered `gamma0` factors required at dangling bispinor slots.
+        With `preserve_indices=True`, external labels remain attached to the same physical
+        amplitude legs instead of exchanging the two endpoints of each open chain. Use this
+        when summing diagrams with different fermion pairings before squaring an amplitude.
+        The gamma-zero boundary factors still apply. The default matrix-adjoint convention
+        exchanges endpoints and is unchanged.
         The input must use the representation-aware Spenso forms registered on import.
         Raises `DiracAdjointError` when the tensor network does not define a consistent adjoint.
 

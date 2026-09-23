@@ -65,6 +65,11 @@ operations are `TensorExpression` methods, so symbolic pipelines can chain
 `expression.simplify_gamma().simplify_color().simplify_metrics()` while retaining the
 tensor interface.
 
+For indexed tensors, `expression.interface` exposes the external `Slot` objects.
+The read-only `slot.representation` property returns their typed `Representation`,
+including dimension and duality. Filter slots with `slot.representation == rep`
+when constructing a projector for a particular representation.
+
 Tensor multiplication contracts matching explicit indices together, including several
 pairs in one product. Unresolved ports are contracted when their representations and
 remaining labels determine a unique maximum pairing; competing pairings require an
