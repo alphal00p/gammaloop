@@ -10,7 +10,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crate::DependentMomentaConstructor;
+<<<<<<< pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (rebased revision)
 use crate::cff::expression::{OrientationData, OrientationID};
+||||||| pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (parents of rebased revision)
+use crate::cff::expression::OrientationData;
+=======
+>>>>>>> xzuonylm 3e5f0ddf (rebased revision)
 use crate::cff::orientations::GraphOrientation;
 use crate::graph::parse::string_utils::ToOrderedSimple;
 use crate::graph::{FeynmanGraph, Graph, LmbIndex, LoopMomentumBasis};
@@ -30,6 +35,7 @@ use clap::ValueEnum;
 use color_eyre::{Result, eyre::Context};
 use colored::Colorize;
 use eyre::eyre;
+use feynkit_cff::OrientationData;
 use itertools::Itertools;
 use linnet::half_edge::PowersetIterator;
 use linnet::half_edge::involution::{EdgeIndex, HedgePair, SignOrZero};
@@ -55,6 +61,7 @@ use tracing_indicatif::{span_ext::IndicatifSpanExt, style::ProgressStyle};
 use typed_index_collections::TiVec;
 
 type LoopMomentumSample = TiVec<LoopIndex, ThreeMomentum<F<f64>>>;
+<<<<<<< pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (rebased revision)
 type ProfileLmbLimits = Vec<(LoopMomentumBasis, Vec<(SubSet<LoopIndex>, i32)>)>;
 /// Numerical UV-profile acceptance threshold, also used to trigger precision retries.
 pub const UV_PROFILE_MAX_DOD: f64 = -0.9;
@@ -229,6 +236,22 @@ impl UVLimitSelection {
         Ok(selected)
     }
 }
+||||||| pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (parents of rebased revision)
+const UV_PROFILE_RETRY_MAX_DOD: f64 = -0.9;
+=======
+const UV_PROFILE_RETRY_MAX_DOD: f64 = -0.9;
+// Symbolica evaluation is recursive. Match the generation workers' stack so
+// large explicit FeynKit numerators do not overflow Rayon's 2 MiB default.
+const UV_PROFILE_THREAD_STACK_SIZE_BYTES: usize = 32 * 1024 * 1024;
+
+fn profile_thread_pool(work_items: usize) -> Result<rayon::ThreadPool> {
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(work_items.max(1).min(rayon::current_num_threads()))
+        .stack_size(UV_PROFILE_THREAD_STACK_SIZE_BYTES)
+        .build()
+        .wrap_err("failed to create UV profile worker pool")
+}
+>>>>>>> xzuonylm 3e5f0ddf (rebased revision)
 
 pub struct ProfileSettings {
     pub fail_fast: bool,
@@ -1090,6 +1113,7 @@ impl UVProfileable for Amplitude {
             .ok_or(eyre!("Integrand Not built yet"))?
             .get_settings()
             .clone();
+<<<<<<< pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (rebased revision)
         let graph_inputs = self
             .graphs
             .iter()
@@ -1154,6 +1178,97 @@ impl UVProfileable for Amplitude {
                 graph_inputs.par_iter().map(sample_graph).collect()
             }
         })?;
+||||||| pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (parents of rebased revision)
+        let externals: ExternalMomenta = settings
+            .kinematics
+            .externals
+            .get_dependent_externals(DependentMomentaConstructor::Amplitude(
+                &self.external_signature,
+            ))
+            .unwrap()
+            .into_iter()
+            .map(|a| a.spatial)
+            .collect();
+
+        let base_seed = profile_settings.seed;
+        let integrand = Arc::new(Mutex::new(self.integrand.take().unwrap()));
+
+        let profile_span = info_span!("Profiling graphs", indicatif.pb_show = true);
+        profile_span.pb_set_style(&ProgressStyle::with_template(
+            "{wide_bar} {pos}/{len} {msg}",
+        )?);
+        profile_span.pb_set_length(self.graphs.len() as u64);
+        profile_span.pb_set_message("Profiling graphs");
+        profile_span.pb_set_finish_message("all graphs profiled");
+        let _profile_span_enter = profile_span.enter();
+
+        let runner = UVProfileRunner {
+            integrand: &integrand,
+            scales: &scales,
+            externals: &externals,
+            model,
+            settings: &settings,
+            profile_settings,
+            base_seed,
+        };
+
+        let per_graph = self
+            .graphs
+            .par_iter()
+            .enumerate()
+            .map(|(i, g)| {
+                let res = runner.sample_graph(i, g)?;
+                profile_span.pb_inc(1);
+                Ok(res)
+            })
+            .collect::<Result<Vec<_>>>()?;
+=======
+        let externals: ExternalMomenta = settings
+            .kinematics
+            .externals
+            .get_dependent_externals(DependentMomentaConstructor::Amplitude(
+                &self.external_signature,
+            ))
+            .unwrap()
+            .into_iter()
+            .map(|a| a.spatial)
+            .collect();
+
+        let base_seed = profile_settings.seed;
+        let integrand = Arc::new(Mutex::new(self.integrand.take().unwrap()));
+
+        let profile_span = info_span!("Profiling graphs", indicatif.pb_show = true);
+        profile_span.pb_set_style(&ProgressStyle::with_template(
+            "{wide_bar} {pos}/{len} {msg}",
+        )?);
+        profile_span.pb_set_length(self.graphs.len() as u64);
+        profile_span.pb_set_message("Profiling graphs");
+        profile_span.pb_set_finish_message("all graphs profiled");
+        let _profile_span_enter = profile_span.enter();
+
+        let runner = UVProfileRunner {
+            integrand: &integrand,
+            scales: &scales,
+            externals: &externals,
+            model,
+            settings: &settings,
+            profile_settings,
+            base_seed,
+        };
+
+        let profile_pool = profile_thread_pool(self.graphs.len())?;
+        let per_graph = profile_pool.install(|| {
+            self.graphs
+                .par_iter()
+                .enumerate()
+                .map(|(i, g)| {
+                    let res = runner.sample_graph(i, g)?;
+                    profile_span.pb_inc(1);
+                    Ok(res)
+                })
+                .collect::<Result<Vec<_>>>()
+        })?;
+>>>>>>> xzuonylm 3e5f0ddf (rebased revision)
 
         if runner.stopped.load(Ordering::Relaxed) {
             profile_span.pb_set_finish_message("stopped at failing UV limit");
@@ -1365,6 +1480,7 @@ impl UVProfileable for CrossSection {
             stopped: AtomicBool::new(false),
         };
 
+<<<<<<< pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (rebased revision)
         // Generated symbolic evaluators need the same worker-stack headroom while profiling as
         // they do in the production generation pool.
         let profile_pool = rayon::ThreadPoolBuilder::new()
@@ -1387,6 +1503,30 @@ impl UVProfileable for CrossSection {
                 graph_inputs.par_iter().map(sample_graph).collect()
             }
         })?;
+||||||| pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (parents of rebased revision)
+        let per_graph = graph_inputs
+            .par_iter()
+            .enumerate()
+            .map(|(i, (graph, lmbs))| {
+                let res = runner.sample_cross_section_graph(i, graph, lmbs)?;
+                profile_span.pb_inc(1);
+                Ok(res)
+            })
+            .collect::<Result<Vec<_>>>()?;
+=======
+        let profile_pool = profile_thread_pool(graph_inputs.len())?;
+        let per_graph = profile_pool.install(|| {
+            graph_inputs
+                .par_iter()
+                .enumerate()
+                .map(|(i, (graph, lmbs))| {
+                    let res = runner.sample_cross_section_graph(i, graph, lmbs)?;
+                    profile_span.pb_inc(1);
+                    Ok(res)
+                })
+                .collect::<Result<Vec<_>>>()
+        })?;
+>>>>>>> xzuonylm 3e5f0ddf (rebased revision)
 
         if runner.stopped.load(Ordering::Relaxed) {
             profile_span.pb_set_finish_message("stopped at failing UV limit");
@@ -2192,6 +2332,7 @@ impl<'a> UVProfileRunner<'a> {
                 None,
             )?;
 
+<<<<<<< pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (rebased revision)
             // A failed numerical limit stops before optional analytic work.
             if self.profile_settings.analyse_analytically && !self.stopped.load(Ordering::Relaxed) {
                 let orientation_limits: Vec<(
@@ -2211,6 +2352,53 @@ impl<'a> UVProfileRunner<'a> {
                         limits.append(&mut more_limits);
                         limits
                     });
+||||||| pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (parents of rebased revision)
+                if self.profile_settings.analyse_analytically {
+                    let orientation_limits: Vec<(
+                        SubSet<LoopIndex>,
+                        OrientationData,
+                        Series<AtomField>,
+                    )> = analytic_orientations
+                        .par_iter()
+                        .map(|o| {
+                            let oatom = o.data.orientation.select(integrand_expr);
+                            g.graph
+                                .all_limits(&g.graph.full_filter(), &oatom, symbol!("lambd"), lmb)
+                                .into_iter()
+                                .map(|(l, v)| (l, o.data.clone(), v))
+                                .collect::<Vec<_>>()
+                        })
+                        .reduce(Vec::new, |mut acc, mut v| {
+                            acc.append(&mut v);
+                            acc
+                        });
+=======
+                if self.profile_settings.analyse_analytically {
+                    let orientation_limits: Vec<(
+                        SubSet<LoopIndex>,
+                        OrientationData,
+                        Series<AtomField>,
+                    )> = analytic_orientations
+                        .par_iter()
+                        .map(|o| {
+                            let oatom = o.data.orientation.select(integrand_expr);
+                            g.graph
+                                .all_limits(
+                                    self.model,
+                                    &g.graph.full_filter(),
+                                    &oatom,
+                                    symbol!("lambd"),
+                                    lmb,
+                                )
+                                .into_iter()
+                                .map(|(l, v)| (l, o.data.clone(), v))
+                                .collect::<Vec<_>>()
+                        })
+                        .reduce(Vec::new, |mut acc, mut v| {
+                            acc.append(&mut v);
+                            acc
+                        });
+>>>>>>> xzuonylm 3e5f0ddf (rebased revision)
 
                 for (limit, orientation, value) in orientation_limits {
                     let Some(subset) = result.per_subsets.get_mut(&limit) else {

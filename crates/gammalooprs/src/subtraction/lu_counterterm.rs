@@ -4,6 +4,7 @@ use std::{collections::BTreeMap, path::Path};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use eyre::eyre;
+use feynkit_cff::{EnergySurface, EnergySurfaceId, OrientationId};
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
 use spenso::algebra::complex::Complex;
@@ -19,10 +20,9 @@ use crate::{
     cff::{
         CutCFFIndex,
         esurface::{
-            Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId,
+            EnergySurfaceCollection, EnergySurfaceExt, ExistingEsurfaceId,
             esurface_value_is_strictly_inside,
         },
-        expression::OrientationID,
     },
     graph::{Graph, LmbIndex, LoopMomentumBasis},
     integrands::{
@@ -481,7 +481,7 @@ fn dual_shifted_radius<T: FloatLike>(
 }
 
 fn compute_shift_part_from_dual_momenta_in_subspace<T: FloatLike>(
-    esurface: &Esurface,
+    esurface: &EnergySurface,
     loop_moms: &LoopMomenta<HyperDual<F<T>>>,
     external_moms: &ExternalFourMomenta<HyperDual<F<T>>>,
     subspace: &SubspaceData,
@@ -536,7 +536,7 @@ fn compute_shift_part_from_dual_momenta_in_subspace<T: FloatLike>(
 
 #[allow(clippy::too_many_arguments)]
 fn compute_self_and_r_derivative_subspace_dual<T: FloatLike>(
-    esurface: &Esurface,
+    esurface: &EnergySurface,
     radius: &HyperDual<F<T>>,
     shifted_unit_loops_in_subspace: &LoopMomenta<HyperDual<F<T>>>,
     center_in_subspace: &LoopMomenta<HyperDual<F<T>>>,
@@ -728,8 +728,14 @@ impl LUCounterTermEvaluators {
         threshold_helpers: LUThresholdHelperEvaluators,
         param_builder: &ParamBuilder,
         settings: &GlobalSettings,
+<<<<<<< pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (rebased revision)
         orientations: &TiVec<OrientationID, EdgeVec<Orientation>>,
         production_orientation_ids: &[OrientationID],
+||||||| pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (parents of rebased revision)
+        orientations: &TiVec<OrientationID, EdgeVec<Orientation>>,
+=======
+        orientations: &TiVec<OrientationId, EdgeVec<Orientation>>,
+>>>>>>> xzuonylm 3e5f0ddf (rebased revision)
     ) -> (Self, EvaluatorBuildTimings) {
         let mut timings = EvaluatorBuildTimings::default();
         let left_thresholds_evaluator = counterterm_data
@@ -884,8 +890,8 @@ impl LUCounterTermEvaluators {
 }
 
 type CutThresholds = (
-    TiVec<LeftThresholdId, Esurface>,
-    TiVec<RightThresholdId, Esurface>,
+    TiVec<LeftThresholdId, EnergySurface>,
+    TiVec<RightThresholdId, EnergySurface>,
 );
 
 #[derive(Clone, Encode, Decode)]
@@ -996,7 +1002,7 @@ impl LUCounterTerm {
         cut_group_id: CutGroupId,
         side: &str,
         overlap_group: usize,
-        esurface_id: EsurfaceID,
+        esurface_id: EnergySurfaceId,
         probe_rotation: &Rotation,
     ) -> RadialRootIdentity {
         RadialRootIdentity::new(format!(
@@ -1102,7 +1108,7 @@ impl LUCounterTerm {
         probe_rotation: &Rotation,
         settings: &RuntimeSettings,
         param_builder: &mut ParamBuilder<f64>,
-        orientations: SingleOrAllOrientations<'_, OrientationID>,
+        orientations: SingleOrAllOrientations<'_, OrientationId>,
         evaluation_meta_data: &mut EvaluationMetaData,
         record_primary_timing: bool,
     ) -> Result<Complex<F<T>>> {
@@ -1179,7 +1185,7 @@ impl LUCounterTerm {
                     "classified LU threshold surface"
                 );
                 if classification.is_existing() {
-                    Some(EsurfaceID::from(left_id.0))
+                    Some(EnergySurfaceId::from(left_id.0))
                 } else {
                     None
                 }
@@ -1211,7 +1217,7 @@ impl LUCounterTerm {
                     "classified LU threshold surface"
                 );
                 if classification.is_existing() {
-                    Some(EsurfaceID::from(right_id.0))
+                    Some(EnergySurfaceId::from(right_id.0))
                 } else {
                     None
                 }
@@ -1799,7 +1805,7 @@ struct CounterTermBuilder<'a, T: FloatLike> {
     subspace: &'a SubspaceData,
     all_lmbs: &'a TiVec<LmbIndex, LoopMomentumBasis>,
     settings: &'a RuntimeSettings,
-    esurface_collection: &'a EsurfaceCollection,
+    esurface_collection: &'a EnergySurfaceCollection,
     transformed_kinematic_point: LUCTKinematicPoint<T>,
     probe_rotation: &'a Rotation,
 }
@@ -1809,7 +1815,7 @@ impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
     fn new(
         graph: &'a Graph,
         settings: &'a RuntimeSettings,
-        esurface_collection: &'a EsurfaceCollection,
+        esurface_collection: &'a EnergySurfaceCollection,
         transformed_kinematic_point: LUCTKinematicPoint<T>,
         overlap_structure: &'a OverlapStructure,
         masses: &'a EdgeVec<F<T>>,
@@ -1895,8 +1901,8 @@ const MAX_ITERATIONS: usize = 40;
 struct EsurfaceCTBuilder<'a, T: FloatLike> {
     overlap_builder: &'a OverlapBuilder<'a, T>,
     _existing_esurface_id: ExistingEsurfaceId,
-    esurface: &'a Esurface,
-    esurface_id: EsurfaceID,
+    esurface: &'a EnergySurface,
+    esurface_id: EnergySurfaceId,
 }
 
 impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
@@ -2868,7 +2874,7 @@ impl<'solution, 'a, T: FloatLike> RstarSample<'solution, 'a, T> {
         self.rstar_sample.lmb_transform(current_lmb, target_lmb)
     }
 
-    fn get_esurface_id(&self) -> EsurfaceID {
+    fn get_esurface_id(&self) -> EnergySurfaceId {
         self.rstar_solution.esurface_ct_builder.esurface_id
     }
 }

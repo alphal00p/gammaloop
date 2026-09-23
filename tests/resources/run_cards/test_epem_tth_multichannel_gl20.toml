@@ -16,8 +16,14 @@ commands = [
       -p epem_a_tth -i NLO
       --only-diagrams
   """,
+<<<<<<< kuzwroom 48682396 "repair nix closures after feynkit extraction" (rebased revision)
   "select -p epem_a_tth -i NLO --with-graph-names GL38",
   "generate existing -p epem_a_tth -i NLO",
+||||||| kuzwroom 48682396 "repair nix closures after feynkit extraction" (parents of rebased revision)
+  "select -p epem_a_tth -i NLO --with-graph-names GL20",
+  "generate existing -p epem_a_tth -i NLO",
+=======
+>>>>>>> xzuonylm 3e5f0ddf (rebased revision)
 ]
 
 [default_runtime_settings.general]

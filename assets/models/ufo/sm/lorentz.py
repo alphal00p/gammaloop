@@ -17,7 +17,16 @@ except ImportError:
 
 UUS1 = Lorentz(name="UUS1", spins=[-1, -1, 1], structure="1")
 
+<<<<<<< sspztzrz fe97ec8b "pin the Symbolica 3 compatible UFO loader" (rebased revision)
 UUV1 = Lorentz(name="UUV1", spins=[-1, -1, 3], structure="P(3,2)")
+||||||| sspztzrz fe97ec8b "pin the Symbolica 3 compatible UFO loader" (parents of rebased revision)
+UUV1 = Lorentz(name="UUV1", spins=[-1, -1, 3], structure="-P(3,2)")
+=======
+# Keep the upstream all-incoming ghost momentum convention: P2 + P3 = -P1.
+# Replacing this by -P2 without changing the other ghost rules violates the
+# ghost-gluon Slavnov-Taylor relation, even though ghost-pair squares can agree.
+UUV1 = Lorentz(name="UUV1", spins=[-1, -1, 3], structure="P(3,2) + P(3,3)")
+>>>>>>> xzuonylm 3e5f0ddf (rebased revision)
 
 SSS1 = Lorentz(name="SSS1", spins=[1, 1, 1], structure="1")
 

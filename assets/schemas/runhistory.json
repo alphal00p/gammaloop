@@ -5740,10 +5740,14 @@
             "string",
             "null"
           ]
+        },
+        "tensor_reduction_method": {
+          "$ref": "#/$defs/VakintTensorReductionMethod"
         }
       },
       "additionalProperties": false
     },
+<<<<<<< vlyukwmu 6b5ff4df "make Python event-group test order-independent" (rebased revision)
     "Validate": {
       "type": "object",
       "properties": {
@@ -5761,6 +5765,24 @@
         "selection"
       ]
     },
+||||||| vlyukwmu 6b5ff4df "make Python event-group test order-independent" (parents of rebased revision)
+=======
+    "VakintTensorReductionMethod": {
+      "description": "Numerator tensor-reduction backend used by Vakint.",
+      "oneOf": [
+        {
+          "description": "Historical FORM implementation shipped with AlphaLoop.",
+          "type": "string",
+          "const": "alphaloop"
+        },
+        {
+          "description": "Native, FORM-less FeynKit tensor projector.",
+          "type": "string",
+          "const": "feynkit"
+        }
+      ]
+    },
+>>>>>>> xzuonylm 3e5f0ddf (rebased revision)
     "ValueRangeSelectorSerdeTag": {
       "type": "string",
       "enum": [

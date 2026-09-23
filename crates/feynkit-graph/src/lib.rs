@@ -3298,6 +3298,87 @@ mod tests {
     }
 
     #[test]
+    fn uv_expansion_matches_taylor_coefficients_for_signed_edge_powers() {
+        let bubble = one_loop();
+        let selected = bubble.internal_subgraph();
+        let basis = bubble.momentum_basis_of(&selected).unwrap();
+        let loop_edge = basis.loop_edges[0];
+        let shifted_edge = basis.tree_edges[0];
+        let external_edge = basis.external_edges[0];
+        let k = symbols::momentum().call(loop_edge.0);
+        let p = symbols::momentum().call(external_edge.0);
+        assert_eq!(
+            basis.route_expression(&symbols::momentum().call(shifted_edge.0)),
+            basis.route_expression(&(&p - &k))
+        );
+        let metric = Minkowski {}.new_rep(symbols::dimension());
+        let k2 = metric.inner_product(&k, &k);
+        let kp = metric.inner_product(&k, &p);
+        let p2 = metric.inner_product(&p, &p);
+        let mass = Atom::var(symbolica::symbol!("feynkit_graph::test_mUV"));
+        let mass_difference = Atom::var(symbolica::symbol!("UFO::M")).pow(2) - mass.pow(2);
+        let vacuum = &k2 - mass.pow(2);
+        let a = symbolica::symbol!("feynkit_graph::uv_a_");
+        let b = symbolica::symbol!("feynkit_graph::uv_b_");
+        let c = symbolica::symbol!("feynkit_graph::uv_c_");
+        let d = symbolica::symbol!("feynkit_graph::uv_d_");
+        for (hard_power, shifted_power, dimension) in [(1, 2, 8), (1, 0, 4), (2, -1, 4)] {
+            let powers = BTreeMap::from([(loop_edge, hard_power), (shifted_edge, shifted_power)]);
+            let expanded = bubble
+                .uv_expansion_of(&selected, &mass, dimension, None, &powers)
+                .unwrap()
+                .replace(symbolica::function!(symbols::denominator(), a, b, c, d))
+                .with(d);
+            // Taylor-expand (V + mUV² - m²)^-a [V - 2 k.p + p² + mUV² - m²]^-b
+            // through degree two. Keep the odd term before tensor integration.
+            let n = (hard_power + shifted_power) as i64;
+            let shifted_power = shifted_power as i64;
+            let expected = vacuum.pow(-n)
+                + Atom::num(2 * shifted_power) * &kp * vacuum.pow(-n - 1)
+                + (Atom::num(n) * &mass_difference - Atom::num(shifted_power) * &p2)
+                    * vacuum.pow(-n - 1)
+                + Atom::num(2 * shifted_power * (shifted_power + 1))
+                    * kp.pow(2)
+                    * vacuum.pow(-n - 2);
+            assert_eq!((expanded - expected).expand().cancel(), Atom::Zero);
+        }
+        let powers = BTreeMap::from([(shifted_edge, 2)]);
+        assert_eq!(
+            bubble
+                .uv_expansion_of(&selected, &mass, 4, None, &powers)
+                .unwrap(),
+            Atom::Zero
+        );
+        let logarithmic = bubble
+            .uv_expansion_of(&selected, &mass, 6, None, &powers)
+            .unwrap();
+        assert_eq!(
+            (logarithmic
+                .clone()
+                .replace(symbolica::function!(symbols::denominator(), a, b, c, d))
+                .with(d)
+                - vacuum.pow(-3))
+            .expand()
+            .cancel(),
+            Atom::Zero
+        );
+        // As for denominator_of, powers for non-selected or unknown edges are ignored.
+        let mut unused_powers = powers.clone();
+        unused_powers.insert(external_edge, -2);
+        unused_powers.insert(EdgeId(usize::MAX), 3);
+        assert_eq!(
+            bubble.denominator_of(&selected, &unused_powers).unwrap(),
+            bubble.denominator_of(&selected, &powers).unwrap()
+        );
+        assert_eq!(
+            bubble
+                .uv_expansion_of(&selected, &mass, 6, None, &unused_powers)
+                .unwrap(),
+            logarithmic
+        );
+    }
+
+    #[test]
     fn uv_expansion_uses_only_selected_loops_and_preserves_tensor_numerators() {
         use linnet::half_edge::subgraph::ModifySubSet;
         let model = scalar_model();

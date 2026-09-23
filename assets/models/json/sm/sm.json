@@ -768,7 +768,13 @@
   }, {
     "name": "UUV1",
     "spins": [-1, -1, 3],
+<<<<<<< sspztzrz fe97ec8b "pin the Symbolica 3 compatible UFO loader" (rebased revision)
     "structure": "UFO::{}::P(UFO::{}::idx(1,3),UFO::{}::idx(1,2))"
+||||||| sspztzrz fe97ec8b "pin the Symbolica 3 compatible UFO loader" (parents of rebased revision)
+    "structure": "-1*UFO::{}::P(UFO::{}::idx(1,3),UFO::{}::idx(1,2))"
+=======
+    "structure": "UFO::{}::P(UFO::{}::idx(1,3),UFO::{}::idx(1,2))+UFO::{}::P(UFO::{}::idx(1,3),UFO::{}::idx(1,3))"
+>>>>>>> xzuonylm 3e5f0ddf (rebased revision)
   }, {
     "name": "SSS1",
     "spins": [1, 1, 1],

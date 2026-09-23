@@ -1596,8 +1596,16 @@ fn grow<S: super::ForestNodeLike>(
         .get_single_atom()
         .unwrap();
 
+<<<<<<< pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (rebased revision)
     t_arg /= graph.denominator(&reduced, |_| 1);
     let integrand = (integrand * t_arg).simplify_metrics();
+||||||| pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (parents of rebased revision)
+    t_arg /= graph.denominator(&reduced, |_| 1);
+    let integrand = (integrand.atom() * t_arg).simplify_metrics();
+=======
+    t_arg /= graph.denominator(&reduced, ctx.model, |_| 1);
+    let integrand = (integrand.atom() * t_arg).simplify_metrics();
+>>>>>>> xzuonylm 3e5f0ddf (rebased revision)
 
     debug_tags!(#uv, #integrated, #algebra, #start; log.integrand = integrand, reduced = %reduced.string_label());
 

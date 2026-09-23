@@ -1,12 +1,24 @@
 use crate::{
     DependentMomentaConstructor, GammaLoopContext, GammaLoopContextContainer,
+<<<<<<< pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (rebased revision)
     cff::{
         CutCFFIndex, esurface::Esurface, expression::OrientationID, orientations::GraphOrientation,
         surface::HybridSurfaceID,
     },
+||||||| pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (parents of rebased revision)
+    cff::{
+        CutCFFIndex,
+        esurface::{Esurface, EsurfaceID},
+        expression::OrientationID,
+        orientations::GraphOrientation,
+        surface::HybridSurfaceID,
+    },
+=======
+    cff::{CutCFFIndex, esurface::EnergySurfaceExt, orientations::GraphOrientation},
+>>>>>>> xzuonylm 3e5f0ddf (rebased revision)
     graph::{
-        ExternalConnection, FeynmanGraph, Graph, GraphGroup, GroupId, LmbIndex, LoopMomentumBasis,
-        parse::complete_group_parsing,
+        ExternalConnection, FeynmanGraph, FinalizedCut, Graph, GraphGroup, GroupId, LmbIndex,
+        LoopMomentumBasis, parse::complete_group_parsing,
     },
     integrands::{
         HasIntegrand,
@@ -19,14 +31,14 @@ use crate::{
             prepare_buffered_event,
         },
     },
-    model::Model,
+    model::{Model, ParticleIdGammaLoopExt},
     momentum::{
         Energy, FourMomentum, Rotation, RotationMethod, ThreeMomentum,
         sample::{ExternalIndex, LoopMomenta, MomentumSample, Subspace},
     },
     observables::{AdditionalWeightKey, EventProcessingRuntime, GenericEvent, GenericEventGroup},
     processes::{
-        self, CrossSectionCut, CrossSectionGraph, CutGroupData, CutGroupId, CutId,
+        self, CrossSectionGraph, CutGroupData, CutGroupId, CutId,
         CutThresholdCountertermAssociations, GraphGenerationStats, GraphGroupSelectionPlan,
         IteratedCtCollection, TopologicalThresholdId,
     },
@@ -56,6 +68,7 @@ use bincode_trait_derive::Decode;
 use color_eyre::{Result, owo_colors::OwoColorize};
 use eyre::Context;
 use eyre::eyre;
+use feynkit_cff::{EnergySurface, EnergySurfaceId, OrientationId, SurfaceId};
 use std::{
     collections::{BTreeMap, HashSet},
     time::{Duration, Instant},
@@ -572,20 +585,38 @@ impl ProcessIntegrandImpl for CrossSectionIntegrand {
 pub struct CrossSectionGraphTerm {
     pub integrand: TiVec<CutGroupId, BTreeMap<CutCFFIndex, EvaluatorStack>>,
     pub graph: Graph,
+<<<<<<< pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (rebased revision)
     pub cut_esurface: TiVec<CutId, Esurface>,
     pub cuts: TiVec<CutId, CrossSectionCut>,
     pub covariant_cut_representatives: BTreeMap<isize, isize>,
     pub topological_threshold_esurfaces: TiVec<TopologicalThresholdId, Esurface>,
+||||||| pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (parents of rebased revision)
+    pub cut_esurface: TiVec<CutId, Esurface>,
+    pub cuts: TiVec<CutId, CrossSectionCut>,
+    pub threshold_candidate_esurface_ids: Vec<EsurfaceID>,
+=======
+    pub cut_esurface: TiVec<CutId, EnergySurface>,
+    pub cuts: TiVec<CutId, FinalizedCut>,
+    pub threshold_candidate_esurface_ids: Vec<EnergySurfaceId>,
+>>>>>>> xzuonylm 3e5f0ddf (rebased revision)
     pub cut_threshold_associations: TiVec<CutId, CutThresholdCountertermAssociations>,
     pub reversed_edges: TiVec<CutGroupId, Vec<EdgeIndex>>,
     pub multi_channeling_setup: LmbMultiChannelingSetup,
     pub lmbs: TiVec<LmbIndex, LoopMomentumBasis>,
     pub estimated_scale: Option<F<f64>>,
     pub param_builder: ParamBuilder<f64>,
+<<<<<<< pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (rebased revision)
     pub orientations: TiVec<OrientationID, EdgeVec<Orientation>>,
     production_orientation_keys: Vec<String>,
     pub orientation_filter: SubSet<OrientationID>,
     pub explicit_orientation_sum_only: bool,
+||||||| pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (parents of rebased revision)
+    pub orientations: TiVec<OrientationID, EdgeVec<Orientation>>,
+    pub orientation_filter: SubSet<OrientationID>,
+=======
+    pub orientations: TiVec<OrientationId, EdgeVec<Orientation>>,
+    pub orientation_filter: SubSet<OrientationId>,
+>>>>>>> xzuonylm 3e5f0ddf (rebased revision)
     #[allow(private_interfaces)]
     pub counterterm: LUCounterTerm,
     pub cut_group_data: CutGroupData,
@@ -622,6 +653,7 @@ impl CrossSectionGraphTerm {
             .collect_vec();
         let selected_generation_orientations = production_orientation_ids
             .iter()
+<<<<<<< pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (rebased revision)
             .map(|orientation_id| {
                 &graph
                     .derived_data
@@ -630,12 +662,35 @@ impl CrossSectionGraphTerm {
                     .unwrap()
                     .expression
                     .orientations[*orientation_id]
+||||||| pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (parents of rebased revision)
+            .filter(|orientation| {
+                settings.generation.orientation_pattern.filter(*orientation)
+                    && orientation.expression.iter_nodes().any(|tree_node| {
+                        graph.cut_esurface_id_map.iter().any(|cut_esurface_id| {
+                            tree_node.data == HybridSurfaceID::Esurface(*cut_esurface_id)
+                        })
+                    })
+=======
+            .filter(|orientation| {
+                settings.generation.orientation_pattern.filter(*orientation)
+                    && orientation.expression.iter_nodes().any(|tree_node| {
+                        graph.cut_esurface_id_map.iter().any(|cut_esurface_id| {
+                            tree_node.data == SurfaceId::Energy(*cut_esurface_id)
+                        })
+                    })
+>>>>>>> xzuonylm 3e5f0ddf (rebased revision)
             })
             .collect_vec();
+<<<<<<< pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (rebased revision)
         // Every generalized residue map is a separate runtime channel. Its
         // physical directions are metadata and therefore must not deduplicate
         // maps that differ only by numerator/M sampling data.
         let orientations: TiVec<OrientationID, EdgeVec<Orientation>> =
+||||||| pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (parents of rebased revision)
+        let orientations: TiVec<OrientationID, EdgeVec<Orientation>> =
+=======
+        let orientations: TiVec<OrientationId, EdgeVec<Orientation>> =
+>>>>>>> xzuonylm 3e5f0ddf (rebased revision)
             selected_generation_orientations
                 .iter()
                 .map(|orientation| orientation.orientation().clone())
@@ -661,6 +716,7 @@ impl CrossSectionGraphTerm {
         let selected_generation_esurfaces = selected_generation_orientations
             .iter()
             .flat_map(|orientation| {
+<<<<<<< pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (rebased revision)
                 orientation
                     .iter_denominator_nodes()
                     .filter_map(|tree_node| {
@@ -670,6 +726,23 @@ impl CrossSectionGraphTerm {
                             None
                         }
                     })
+||||||| pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (parents of rebased revision)
+                orientation.expression.iter_nodes().filter_map(|tree_node| {
+                    if let HybridSurfaceID::Esurface(esurface_id) = tree_node.data {
+                        Some(esurface_id)
+                    } else {
+                        None
+                    }
+                })
+=======
+                orientation.expression.iter_nodes().filter_map(|tree_node| {
+                    if let SurfaceId::Energy(esurface_id) = tree_node.data {
+                        Some(esurface_id)
+                    } else {
+                        None
+                    }
+                })
+>>>>>>> xzuonylm 3e5f0ddf (rebased revision)
             })
             .collect::<HashSet<_>>();
 
@@ -681,7 +754,7 @@ impl CrossSectionGraphTerm {
             .map(|cut_group| {
                 cut_group
                     .related_esurface_group
-                    .esurface_ids
+                    .surface_ids
                     .iter()
                     .any(|esurface_id| selected_generation_esurfaces.contains(esurface_id))
             })
@@ -712,10 +785,22 @@ impl CrossSectionGraphTerm {
                 .iter()
                 .map(|raised_group| {
                     active_cut_groups[cut_group_id]
+<<<<<<< pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (rebased revision)
                         && (settings.generation.explicit_orientation_sum_only
                             || raised_group.esurface_ids.iter().any(|esurface_id| {
                                 selected_generation_esurfaces.contains(esurface_id)
                             }))
+||||||| pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (parents of rebased revision)
+                        && raised_group
+                            .esurface_ids
+                            .iter()
+                            .any(|esurface_id| selected_generation_esurfaces.contains(esurface_id))
+=======
+                        && raised_group
+                            .surface_ids
+                            .iter()
+                            .any(|esurface_id| selected_generation_esurfaces.contains(esurface_id))
+>>>>>>> xzuonylm 3e5f0ddf (rebased revision)
                 })
                 .collect();
             let right_active: TiVec<_, bool> = counterterm_data
@@ -723,10 +808,22 @@ impl CrossSectionGraphTerm {
                 .iter()
                 .map(|raised_group| {
                     active_cut_groups[cut_group_id]
+<<<<<<< pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (rebased revision)
                         && (settings.generation.explicit_orientation_sum_only
                             || raised_group.esurface_ids.iter().any(|esurface_id| {
                                 selected_generation_esurfaces.contains(esurface_id)
                             }))
+||||||| pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (parents of rebased revision)
+                        && raised_group
+                            .esurface_ids
+                            .iter()
+                            .any(|esurface_id| selected_generation_esurfaces.contains(esurface_id))
+=======
+                        && raised_group
+                            .surface_ids
+                            .iter()
+                            .any(|esurface_id| selected_generation_esurfaces.contains(esurface_id))
+>>>>>>> xzuonylm 3e5f0ddf (rebased revision)
                 })
                 .collect();
             let mut iterated_active = counterterm_data.iterated.map_ref(|_| false);
@@ -956,7 +1053,7 @@ impl CrossSectionGraphTerm {
                 ct_data,
                 graph.derived_data.cut_group_data.cut_groups[cut_group_id]
                     .related_esurface_group
-                    .max_occurence,
+                    .max_occurrence,
                 threshold_helpers,
                 &graph.graph.param_builder,
                 settings,
@@ -988,12 +1085,36 @@ impl CrossSectionGraphTerm {
                 ct_data
                     .left_thresholds
                     .iter()
+<<<<<<< pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (rebased revision)
                     .map(|raised_group| expression_esurfaces[raised_group.esurface_ids[0]].clone())
+||||||| pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (parents of rebased revision)
+                    .map(|raised_group| {
+                        graph.graph.surface_cache.esurface_cache[raised_group.esurface_ids[0]]
+                            .clone()
+                    })
+=======
+                    .map(|raised_group| {
+                        graph.graph.surface_cache.energy_surfaces()[raised_group.surface_ids[0]]
+                            .clone()
+                    })
+>>>>>>> xzuonylm 3e5f0ddf (rebased revision)
                     .collect(),
                 ct_data
                     .right_thresholds
                     .iter()
+<<<<<<< pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (rebased revision)
                     .map(|raised_group| expression_esurfaces[raised_group.esurface_ids[0]].clone())
+||||||| pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (parents of rebased revision)
+                    .map(|raised_group| {
+                        graph.graph.surface_cache.esurface_cache[raised_group.esurface_ids[0]]
+                            .clone()
+                    })
+=======
+                    .map(|raised_group| {
+                        graph.graph.surface_cache.energy_surfaces()[raised_group.surface_ids[0]]
+                            .clone()
+                    })
+>>>>>>> xzuonylm 3e5f0ddf (rebased revision)
                     .collect(),
             ));
         }
@@ -1007,7 +1128,7 @@ impl CrossSectionGraphTerm {
                 generate_rstar_t_dependence_evaluator(
                     cut_group
                         .related_esurface_group
-                        .max_occurence
+                        .max_occurrence
                         .saturating_sub(1),
                 )
             })
@@ -1166,7 +1287,7 @@ impl CrossSectionGraphTerm {
         t_scaling_solution: &NewtonIterationResult<T>,
         momentum_sample: &MomentumSample<T>,
         cut_id: CutId,
-        cut: &CrossSectionCut,
+        cut: &FinalizedCut,
     ) -> Result<GenericEvent<T>> {
         let rescaled_momenta =
             momentum_sample.rescaled_loop_momenta(&t_scaling_solution.solution, Subspace::None);
@@ -1208,7 +1329,14 @@ impl CrossSectionGraphTerm {
                 edge_data
                     .data
                     .particle()
-                    .map(|particle| (edge_index, particle.pdg_code))
+                    .map(|particle| {
+                        let pdg = particle
+                            .resolve(event_context.model)
+                            .pdg_code
+                            .try_into()
+                            .expect("PDG code must fit in an isize");
+                        (edge_index, pdg)
+                    })
                     .ok_or_else(|| {
                         eyre!(
                             "Initial-state cut edge {edge_index:?} in graph {} has no particle specifier",
@@ -1253,19 +1381,25 @@ impl CrossSectionGraphTerm {
                     momentum_sample.external_moms(),
                 );
 
-            let edge_pdg = d.data.particle().map(|p| p.pdg_code).ok_or_else(|| {
+            let particle = d.data.particle().ok_or_else(|| {
                 eyre!("Cut legs in Local Unitarity must have a particle specifier.")
             })?;
+            let edge_pdg: isize = particle
+                .resolve(event_context.model)
+                .pdg_code
+                .try_into()
+                .expect("PDG code must fit in an isize");
 
             let cut_pdg = match cut_flow {
                 Flow::Source => edge_pdg,
                 Flow::Sink => {
                     edge_spatial_momentum = -edge_spatial_momentum;
-                    event_context
-                        .model
-                        .get_particle_from_pdg(edge_pdg)
-                        .get_anti_particle(event_context.model)
+                    particle
+                        .antiparticle(event_context.model)
+                        .resolve(event_context.model)
                         .pdg_code
+                        .try_into()
+                        .expect("PDG code must fit in an isize")
                 }
             };
 
@@ -1523,7 +1657,7 @@ impl GraphTerm for CrossSectionGraphTerm {
         );
 
         for (cut_group_id, cut_group) in self.cut_group_data.cut_groups.iter_enumerated() {
-            let max_occurrence = cut_group.related_esurface_group.max_occurence;
+            let max_occurrence = cut_group.related_esurface_group.max_occurrence;
             if !self.counterterm.cut_group_is_active(cut_group_id) {
                 let zero = Complex::new_re(momentum_sample.zero());
                 for _ in 1..=max_occurrence {
@@ -1919,19 +2053,17 @@ impl GraphTerm for CrossSectionGraphTerm {
                 self.graph.initial_state_cut.iter_edges(&self.graph).count(),
             );
         let flux_factor = if context.settings.general.disable_flux_factor {
-            F::from_f64(1.0)
+            momentum_sample.one()
         } else {
             match momentum_sample.external_moms().len() {
                 1 => {
-                    momentum_sample.one()
-                        / (F::from_f64(2.0)
-                            * &momentum_sample
-                                .external_moms()
-                                .first()
-                                .as_ref()
-                                .unwrap()
-                                .temporal
-                                .value)
+                    let energy = momentum_sample.external_moms()[ExternalIndex::from(0)]
+                        .temporal
+                        .value
+                        .clone();
+                    let flux = feynkit_kinematics::InitialStateFlux::Decay { energy }
+                        .denominator(|value| value.sqrt());
+                    momentum_sample.one() / flux
                 }
                 2 => {
                     let mom_1 = &(momentum_sample.external_moms()[ExternalIndex::from(0)]);
@@ -1951,7 +2083,11 @@ impl GraphTerm for CrossSectionGraphTerm {
                         })
                         .re;
 
-                    let f = F::from_f64(4.0) * (mom_1.dot(mom_2).square() - mass_factor).sqrt();
+                    let f = feynkit_kinematics::InitialStateFlux::Scattering {
+                        momentum_dot: mom_1.dot(mom_2),
+                        mass_squared_product: mass_factor,
+                    }
+                    .denominator(|value| value.sqrt());
 
                     momentum_sample.one() / f
                         * barn_conversion_factor(resolved_integral_unit, momentum_sample.one())

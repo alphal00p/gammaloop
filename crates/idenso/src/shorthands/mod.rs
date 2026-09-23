@@ -186,6 +186,7 @@ mod tests {
     use super::*;
 
     #[test]
+<<<<<<< oqkxqwny cf240851 "keep notebook grouping progress visible" (rebased revision)
     fn undo_dots_positive_integer_powers_roundtrip() {
         let _ = test_initialize();
         let product = dot!(
@@ -282,6 +283,57 @@ mod tests {
     }
 
     #[test]
+||||||| oqkxqwny cf240851 "keep notebook grouping progress visible" (parents of rebased revision)
+=======
+    fn undo_dots_positive_integer_powers_roundtrip() {
+        let _ = test_initialize();
+        let product = dot!(
+            vector!(powered_dot_p, mink!(4)),
+            vector!(powered_dot_q, mink!(4))
+        );
+
+        for exponent in [2, 3] {
+            let expression = product.clone().pow(Atom::num(exponent));
+            let expanded = expression.undo_dots::<AbstractIndex>().unwrap();
+
+            assert_eq!(
+                expanded
+                    .schoonschip_net::<AbstractIndex>()
+                    .unwrap()
+                    .metric_shorthand_to_dot(),
+                expression,
+                "independent contractions must survive power {exponent}"
+            );
+        }
+    }
+
+    #[test]
+    fn undo_dots_negative_integer_powers_roundtrip() {
+        let _ = test_initialize();
+        let p = vector!(inverse_dot_p, mink!(4));
+        let q = vector!(inverse_dot_q, mink!(4));
+
+        for product in [dot!(p.clone(), q), dot!(p.clone(), p)] {
+            for exponent in [-1, -2, -3] {
+                let expression = product.clone().pow(Atom::num(exponent));
+                let expanded = expression.undo_dots::<AbstractIndex>().unwrap();
+
+                assert!(expanded.contains_symbol(SPENSO_TAG.bracket));
+                assert_eq!(expanded.undo_dots::<AbstractIndex>().unwrap(), expanded);
+                assert_eq!(
+                    expanded
+                        .schoonschip_net::<AbstractIndex>()
+                        .unwrap()
+                        .metric_shorthand_to_dot(),
+                    expression,
+                    "the contracted denominator must survive power {exponent}"
+                );
+            }
+        }
+    }
+
+    #[test]
+>>>>>>> xzuonylm 3e5f0ddf (rebased revision)
     fn undo_schoonschip_across_chain() {
         let _ = test_initialize();
         let expr = chain!(

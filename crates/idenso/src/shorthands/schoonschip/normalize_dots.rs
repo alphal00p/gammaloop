@@ -8,18 +8,23 @@ use spenso::{
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomView},
+    function,
     id::Replacement,
 };
 
-use crate::W_;
+use crate::{W_, rep_symbols::RS, shorthands::metric::not_slot};
 
 static ASYMMETRIC_SCHOONSCHIP_VECTOR_IN_VECTOR: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
     let stripped = rep_!(0; W_.d_);
+    // A stripped representation identifies the inner vector even when its
+    // Symbolica head was not registered with a rank-one tensor tag.
+    let inner = function!(RS.f_, RS.a___, &stripped);
 
     [
         //  p(...,q(..,rep)) is asymmetric, so we replace it with a dot product, using a schoonschiped metric:
         //  p(...,q(..,rep)) => g(p(...,rep), q(..,rep))
         Replacement::new(
+<<<<<<< mstwoqwm c6dbe442 "fix selected UV momentum routing and validate counterterms" (rebased revision)
             rank1_!(0; W_.c___, rank1_!(1; W_.a___, &stripped)).to_pattern(),
             g!(
                 rank1_!(0; W_.c___, &stripped),
@@ -29,6 +34,19 @@ static ASYMMETRIC_SCHOONSCHIP_VECTOR_IN_VECTOR: LazyLock<[Replacement; 1]> = Laz
         .min_level(0)
         .max_level(0)
         .level_is_tree_depth(true),
+||||||| mstwoqwm c6dbe442 "fix selected UV momentum routing and validate counterterms" (parents of rebased revision)
+            rank1_!(0; W_.c___, rank1_!(1; W_.a___, &stripped)).to_pattern(),
+            g!(
+                rank1_!(0; W_.c___, &stripped),
+                rank1_!(1; W_.a___, &stripped),
+            ),
+        ),
+=======
+            rank1_!(0; W_.c___, &inner).to_pattern(),
+            g!(rank1_!(0; W_.c___, &stripped), inner,),
+        )
+        .when(not_slot(RS.a___)),
+>>>>>>> xzuonylm 3e5f0ddf (rebased revision)
     ]
 });
 

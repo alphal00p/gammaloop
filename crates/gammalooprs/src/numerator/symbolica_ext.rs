@@ -1,10 +1,19 @@
 use std::ops::Deref;
 
+<<<<<<< kuzwroom 48682396 "repair nix closures after feynkit extraction" (rebased revision)
 use color_eyre::eyre::{bail, ensure};
 use idenso::{
     color::{CS, ColorSimplifier},
     representations::{ColorAdjoint, ColorFundamental},
 };
+||||||| kuzwroom 48682396 "repair nix closures after feynkit extraction" (parents of rebased revision)
+use idenso::{
+    color::{CS, ColorSimplifier},
+    representations::{ColorAdjoint, ColorFundamental},
+};
+=======
+use idenso::color::ColorSimplifier;
+>>>>>>> xzuonylm 3e5f0ddf (rebased revision)
 use spenso::{
     network::parsing::{ParseSettings, SchoonschipExpansionMode, ShorthandParsing},
     structure::representation::{Minkowski, RepName},
@@ -30,6 +39,7 @@ pub type ParsingNetError = spenso::network::TensorNetworkError<
 >;
 
 pub trait NumeratorAtomExt {
+<<<<<<< kuzwroom 48682396 "repair nix closures after feynkit extraction" (rebased revision)
     /// Truncate through an absolute integer order, preserving an existing root
     /// product's variable-independent factors outside the coefficient sum.
     /// Other roots retain native series behavior, including additive zeros.
@@ -47,6 +57,10 @@ pub trait NumeratorAtomExt {
     ) -> color_eyre::Result<Atom>;
 
     fn to_param_color(&self) -> Atom;
+||||||| kuzwroom 48682396 "repair nix closures after feynkit extraction" (parents of rebased revision)
+    fn to_param_color(&self) -> Atom;
+=======
+>>>>>>> xzuonylm 3e5f0ddf (rebased revision)
     // fn wrap_color(&self, symbol: Symbol) -> Atom;
     fn kill_color(&self) -> Atom;
 
@@ -59,6 +73,7 @@ pub trait NumeratorAtomExt {
 }
 
 impl NumeratorAtomExt for Atom {
+<<<<<<< kuzwroom 48682396 "repair nix closures after feynkit extraction" (rebased revision)
     fn series_preserving_factors(
         &self,
         variable: Symbol,
@@ -77,6 +92,12 @@ impl NumeratorAtomExt for Atom {
     fn to_param_color(&self) -> Atom {
         self.as_view().to_param_color()
     }
+||||||| kuzwroom 48682396 "repair nix closures after feynkit extraction" (parents of rebased revision)
+    fn to_param_color(&self) -> Atom {
+        self.as_view().to_param_color()
+    }
+=======
+>>>>>>> xzuonylm 3e5f0ddf (rebased revision)
     fn kill_color(&self) -> Atom {
         self.wrap_color(GS.killing_func)
     }
@@ -191,14 +212,6 @@ impl NumeratorAtomExt for AtomView<'_> {
         self.wrap_color(GS.killing_func)
     }
 
-    fn to_param_color(&self) -> Atom {
-        let adj = ColorAdjoint {};
-        let fund = ColorFundamental {};
-        self.replace(adj.to_symbolic([W_.d_, W_.a_]))
-            .with(adj.to_symbolic([CS.nc * CS.nc - 1, Atom::var(W_.a_)]))
-            .replace(fund.to_symbolic([W_.d_, W_.a_]))
-            .with(fund.to_symbolic([CS.nc, W_.a_]))
-    }
     fn map_mink_dim<'a>(&self, dim: impl Into<AtomOrView<'a>>) -> Atom {
         self.replace(Minkowski {}.to_symbolic([W_.d_, W_.a___]))
             .with(Minkowski {}.to_symbolic([dim.into().into_owned(), Atom::var(W_.a___)]))

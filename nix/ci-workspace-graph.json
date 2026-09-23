@@ -13,6 +13,14 @@
     "alphal00p-docs-examples": [
       "alphal00p-docs-catalogs",
       "alphal00p-docs-schema",
+      "feynkit",
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "feynkit-tensor",
+      "feynkit-ufo",
       "gammaloop-api",
       "gammalooprs",
       "idenso",
@@ -24,8 +32,8 @@
     ],
     "alphal00p-docs-macros": [],
     "alphal00p-docs-python-exporter": [
+      "feynkit-py",
       "gammaloop-api",
-      "idenso",
       "linnet-py",
       "spynso3",
       "vakint"
@@ -38,23 +46,32 @@
       "feynkit-graph",
       "feynkit-kinematics",
       "feynkit-model",
+      "feynkit-tensor",
       "feynkit-ufo"
     ],
     "feynkit-cff": [
-      "feynkit-graph"
+      "feynkit-graph",
+      "linnet",
+      "spenso"
     ],
     "feynkit-generator": [
       "feynkit-graph",
       "feynkit-model",
-      "linnet"
+      "idenso",
+      "linnet",
+      "spenso",
+      "spenso-hep-lib"
     ],
     "feynkit-graph": [
       "feynkit-kinematics",
       "feynkit-model",
-      "linnet"
+      "linnet",
+      "spenso",
+      "symbolica-utils"
     ],
     "feynkit-kinematics": [
-      "linnet"
+      "linnet",
+      "spenso"
     ],
     "feynkit-model": [],
     "feynkit-py": [
@@ -63,12 +80,25 @@
       "feynkit-graph",
       "feynkit-kinematics",
       "feynkit-model",
-      "feynkit-ufo"
+      "feynkit-tensor",
+      "feynkit-ufo",
+      "linnet",
+      "linnet-py",
+      "spynso3"
+    ],
+    "feynkit-tensor": [
+      "feynkit-graph",
+      "idenso",
+      "linnet",
+      "spenso"
     ],
     "feynkit-ufo": [
       "feynkit-model"
     ],
     "gammaloop-api": [
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
       "feynkit-ufo",
       "gammaloop-tracing-filter",
       "gammaloop-workspace-hack",
@@ -85,7 +115,12 @@
       "gammaloop-api",
       "gammaloop-workspace-hack",
       "gammalooprs",
+<<<<<<< vlyukwmu 6b5ff4df "make Python event-group test order-independent" (rebased revision)
       "linnet",
+||||||| vlyukwmu 6b5ff4df "make Python event-group test order-independent" (parents of rebased revision)
+=======
+      "idenso",
+>>>>>>> xzuonylm 3e5f0ddf (rebased revision)
       "spenso",
       "symbolica-utils",
       "three-dimensional-reps",
@@ -140,7 +175,6 @@
       "symbolica-utils"
     ],
     "spenso-hep-lib": [
-      "gammaloop-workspace-hack",
       "idenso",
       "spenso",
       "spenso-macros"
@@ -153,10 +187,19 @@
       "spenso-macros"
     ],
     "symbolica-utils": [],
+<<<<<<< vlyukwmu 6b5ff4df "make Python event-group test order-independent" (rebased revision)
     "three-dimensional-reps": [
       "linnet"
     ],
     "vakint": []
+||||||| vlyukwmu 6b5ff4df "make Python event-group test order-independent" (parents of rebased revision)
+    "vakint": []
+=======
+    "vakint": [
+      "feynkit-tensor",
+      "spenso"
+    ]
+>>>>>>> xzuonylm 3e5f0ddf (rebased revision)
   },
   "normal_dependency_features": {
     "alphal00p-docs-builder": {
@@ -174,6 +217,14 @@
     "alphal00p-docs-examples": {
       "alphal00p-docs-catalogs": [],
       "alphal00p-docs-schema": [],
+      "feynkit": [],
+      "feynkit-cff": [],
+      "feynkit-generator": [],
+      "feynkit-graph": [],
+      "feynkit-kinematics": [],
+      "feynkit-model": [],
+      "feynkit-tensor": [],
+      "feynkit-ufo": [],
       "gammaloop-api": [
         "cli"
       ],
@@ -200,10 +251,10 @@
     },
     "alphal00p-docs-macros": {},
     "alphal00p-docs-python-exporter": {
-      "gammaloop-api": [
+      "feynkit-py": [
         "python_stubgen"
       ],
-      "idenso": [
+      "gammaloop-api": [
         "python_stubgen"
       ],
       "linnet-py": [
@@ -225,27 +276,47 @@
       "feynkit-graph": [],
       "feynkit-kinematics": [],
       "feynkit-model": [],
+      "feynkit-tensor": [],
       "feynkit-ufo": []
     },
     "feynkit-cff": {
-      "feynkit-graph": []
+      "feynkit-graph": [],
+      "linnet": [
+        "bincode",
+        "serde"
+      ],
+      "spenso": [
+        "shadowing"
+      ]
     },
     "feynkit-generator": {
       "feynkit-graph": [],
       "feynkit-model": [],
+      "idenso": [],
       "linnet": [
         "symbolica"
-      ]
+      ],
+      "spenso": [
+        "shadowing"
+      ],
+      "spenso-hep-lib": []
     },
     "feynkit-graph": {
       "feynkit-kinematics": [],
       "feynkit-model": [],
       "linnet": [
         "serde"
-      ]
+      ],
+      "spenso": [
+        "shadowing"
+      ],
+      "symbolica-utils": []
     },
     "feynkit-kinematics": {
-      "linnet": []
+      "linnet": [],
+      "spenso": [
+        "shadowing"
+      ]
     },
     "feynkit-model": {},
     "feynkit-py": {
@@ -254,12 +325,27 @@
       "feynkit-graph": [],
       "feynkit-kinematics": [],
       "feynkit-model": [],
-      "feynkit-ufo": []
+      "feynkit-tensor": [],
+      "feynkit-ufo": [],
+      "linnet": [],
+      "linnet-py": [],
+      "spynso3": []
+    },
+    "feynkit-tensor": {
+      "feynkit-graph": [],
+      "idenso": [],
+      "linnet": [],
+      "spenso": [
+        "shadowing"
+      ]
     },
     "feynkit-ufo": {
       "feynkit-model": []
     },
     "gammaloop-api": {
+      "feynkit-cff": [],
+      "feynkit-generator": [],
+      "feynkit-graph": [],
       "feynkit-ufo": [],
       "gammaloop-tracing-filter": [
         "clap"
@@ -291,7 +377,12 @@
       "gammaloop-api": [],
       "gammaloop-workspace-hack": [],
       "gammalooprs": [],
+<<<<<<< vlyukwmu 6b5ff4df "make Python event-group test order-independent" (rebased revision)
       "linnet": [],
+||||||| vlyukwmu 6b5ff4df "make Python event-group test order-independent" (parents of rebased revision)
+=======
+      "idenso": [],
+>>>>>>> xzuonylm 3e5f0ddf (rebased revision)
       "spenso": [
         "native",
         "shadowing"
@@ -389,7 +480,6 @@
       "symbolica-utils": []
     },
     "spenso-hep-lib": {
-      "gammaloop-workspace-hack": [],
       "idenso": [
         "reference-cases"
       ],
@@ -400,9 +490,7 @@
     },
     "spenso-macros": {},
     "spynso3": {
-      "idenso": [
-        "python"
-      ],
+      "idenso": [],
       "spenso": [
         "portable-payload",
         "python",
@@ -412,6 +500,7 @@
       "spenso-macros": []
     },
     "symbolica-utils": {},
+<<<<<<< vlyukwmu 6b5ff4df "make Python event-group test order-independent" (rebased revision)
     "three-dimensional-reps": {
       "linnet": [
         "bincode",
@@ -420,6 +509,14 @@
       ]
     },
     "vakint": {}
+||||||| vlyukwmu 6b5ff4df "make Python event-group test order-independent" (parents of rebased revision)
+    "vakint": {}
+=======
+    "vakint": {
+      "feynkit-tensor": [],
+      "spenso": []
+    }
+>>>>>>> xzuonylm 3e5f0ddf (rebased revision)
   },
   "package_dirs": {
     "alphal00p-docs-builder": "crates/alphal00p-docs-builder",
@@ -436,6 +533,7 @@
     "feynkit-kinematics": "crates/feynkit-kinematics",
     "feynkit-model": "crates/feynkit-model",
     "feynkit-py": "crates/feynkit-py",
+    "feynkit-tensor": "crates/feynkit-tensor",
     "feynkit-ufo": "crates/feynkit-ufo",
     "gammaloop-api": "crates/gammaloop-api",
     "gammaloop-integration-tests": "tests",
@@ -471,6 +569,7 @@
     "feynkit-kinematics",
     "feynkit-model",
     "feynkit-py",
+    "feynkit-tensor",
     "feynkit-ufo",
     "gammaloop-api",
     "gammaloop-integration-tests",
@@ -503,6 +602,14 @@
       "alphal00p-docs-catalogs",
       "alphal00p-docs-macros",
       "alphal00p-docs-schema",
+      "feynkit",
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "feynkit-tensor",
+      "feynkit-ufo",
       "gammaloop-api",
       "gammaloop-tracing-filter",
       "gammaloop-tracing-filter-macros",
@@ -527,8 +634,13 @@
       "feynkit-graph",
       "feynkit-kinematics",
       "feynkit-model",
+      "feynkit-tensor",
       "gammaloop-workspace-hack",
+      "idenso",
       "linnet",
+      "spenso",
+      "spenso-hep-lib",
+      "spenso-macros",
       "symbolica-utils"
     ],
     "feynkit-cff": [
@@ -536,25 +648,38 @@
       "feynkit-kinematics",
       "feynkit-model",
       "gammaloop-workspace-hack",
-      "linnet"
+      "linnet",
+      "spenso",
+      "spenso-macros",
+      "symbolica-utils"
     ],
     "feynkit-generator": [
       "feynkit-graph",
       "feynkit-kinematics",
       "feynkit-model",
       "gammaloop-workspace-hack",
+      "idenso",
       "linnet",
+      "spenso",
+      "spenso-hep-lib",
+      "spenso-macros",
       "symbolica-utils"
     ],
     "feynkit-graph": [
       "feynkit-kinematics",
       "feynkit-model",
       "gammaloop-workspace-hack",
-      "linnet"
+      "linnet",
+      "spenso",
+      "spenso-macros",
+      "symbolica-utils"
     ],
     "feynkit-kinematics": [
       "gammaloop-workspace-hack",
-      "linnet"
+      "linnet",
+      "spenso",
+      "spenso-macros",
+      "symbolica-utils"
     ],
     "feynkit-model": [],
     "feynkit-py": [
@@ -563,9 +688,29 @@
       "feynkit-graph",
       "feynkit-kinematics",
       "feynkit-model",
+      "feynkit-tensor",
       "feynkit-ufo",
       "gammaloop-workspace-hack",
+      "idenso",
+      "kurvst",
+      "linnest",
       "linnet",
+      "linnet-py",
+      "spenso",
+      "spenso-hep-lib",
+      "spenso-macros",
+      "spynso3",
+      "symbolica-utils"
+    ],
+    "feynkit-tensor": [
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "gammaloop-workspace-hack",
+      "idenso",
+      "linnet",
+      "spenso",
+      "spenso-macros",
       "symbolica-utils"
     ],
     "feynkit-ufo": [
@@ -577,6 +722,7 @@
       "feynkit-graph",
       "feynkit-kinematics",
       "feynkit-model",
+      "feynkit-tensor",
       "gammaloop-tracing-filter",
       "gammaloop-tracing-filter-macros",
       "gammaloop-workspace-hack",
@@ -596,6 +742,7 @@
       "feynkit-graph",
       "feynkit-kinematics",
       "feynkit-model",
+      "feynkit-tensor",
       "gammaloop-api",
       "gammaloop-tracing-filter",
       "gammaloop-tracing-filter-macros",
@@ -626,6 +773,7 @@
       "feynkit-graph",
       "feynkit-kinematics",
       "feynkit-model",
+      "feynkit-tensor",
       "gammaloop-tracing-filter",
       "gammaloop-tracing-filter-macros",
       "gammaloop-workspace-hack",
@@ -683,11 +831,28 @@
       "symbolica-utils"
     ],
     "symbolica-utils": [],
+<<<<<<< vlyukwmu 6b5ff4df "make Python event-group test order-independent" (rebased revision)
     "three-dimensional-reps": [
       "linnet",
       "symbolica-utils"
     ],
     "vakint": []
+||||||| vlyukwmu 6b5ff4df "make Python event-group test order-independent" (parents of rebased revision)
+    "vakint": []
+=======
+    "vakint": [
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "feynkit-tensor",
+      "gammaloop-workspace-hack",
+      "idenso",
+      "linnet",
+      "spenso",
+      "spenso-macros",
+      "symbolica-utils"
+    ]
+>>>>>>> xzuonylm 3e5f0ddf (rebased revision)
   },
   "resolved_test_dependencies": {
     "alphal00p-docs-builder": [
@@ -701,6 +866,14 @@
       "alphal00p-docs-catalogs",
       "alphal00p-docs-macros",
       "alphal00p-docs-schema",
+      "feynkit",
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "feynkit-tensor",
+      "feynkit-ufo",
       "gammaloop-api",
       "gammaloop-tracing-filter",
       "gammaloop-tracing-filter-macros",
@@ -727,8 +900,13 @@
       "feynkit-graph",
       "feynkit-kinematics",
       "feynkit-model",
+      "feynkit-tensor",
       "gammaloop-workspace-hack",
+      "idenso",
       "linnet",
+      "spenso",
+      "spenso-hep-lib",
+      "spenso-macros",
       "symbolica-utils"
     ],
     "feynkit-cff": [
@@ -736,25 +914,38 @@
       "feynkit-kinematics",
       "feynkit-model",
       "gammaloop-workspace-hack",
-      "linnet"
+      "linnet",
+      "spenso",
+      "spenso-macros",
+      "symbolica-utils"
     ],
     "feynkit-generator": [
       "feynkit-graph",
       "feynkit-kinematics",
       "feynkit-model",
       "gammaloop-workspace-hack",
+      "idenso",
       "linnet",
+      "spenso",
+      "spenso-hep-lib",
+      "spenso-macros",
       "symbolica-utils"
     ],
     "feynkit-graph": [
       "feynkit-kinematics",
       "feynkit-model",
       "gammaloop-workspace-hack",
-      "linnet"
+      "linnet",
+      "spenso",
+      "spenso-macros",
+      "symbolica-utils"
     ],
     "feynkit-kinematics": [
       "gammaloop-workspace-hack",
-      "linnet"
+      "linnet",
+      "spenso",
+      "spenso-macros",
+      "symbolica-utils"
     ],
     "feynkit-model": [],
     "feynkit-py": [
@@ -763,14 +954,29 @@
       "feynkit-graph",
       "feynkit-kinematics",
       "feynkit-model",
+      "feynkit-tensor",
       "feynkit-ufo",
       "gammaloop-workspace-hack",
       "idenso",
+      "kurvst",
+      "linnest",
       "linnet",
+      "linnet-py",
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
       "spynso3",
+      "symbolica-utils"
+    ],
+    "feynkit-tensor": [
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "gammaloop-workspace-hack",
+      "idenso",
+      "linnet",
+      "spenso",
+      "spenso-macros",
       "symbolica-utils"
     ],
     "feynkit-ufo": [
@@ -782,6 +988,7 @@
       "feynkit-graph",
       "feynkit-kinematics",
       "feynkit-model",
+      "feynkit-tensor",
       "gammaloop-tracing-filter",
       "gammaloop-tracing-filter-macros",
       "gammaloop-workspace-hack",
@@ -801,6 +1008,7 @@
       "feynkit-graph",
       "feynkit-kinematics",
       "feynkit-model",
+      "feynkit-tensor",
       "gammaloop-api",
       "gammaloop-tracing-filter",
       "gammaloop-tracing-filter-macros",
@@ -831,6 +1039,7 @@
       "feynkit-graph",
       "feynkit-kinematics",
       "feynkit-model",
+      "feynkit-tensor",
       "gammaloop-tracing-filter",
       "gammaloop-tracing-filter-macros",
       "gammaloop-workspace-hack",
@@ -888,14 +1097,40 @@
       "symbolica-utils"
     ],
     "symbolica-utils": [],
+<<<<<<< vlyukwmu 6b5ff4df "make Python event-group test order-independent" (rebased revision)
     "three-dimensional-reps": [
       "linnet",
       "symbolica-utils"
     ],
     "vakint": []
+||||||| vlyukwmu 6b5ff4df "make Python event-group test order-independent" (parents of rebased revision)
+    "vakint": []
+=======
+    "vakint": [
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "feynkit-tensor",
+      "gammaloop-workspace-hack",
+      "idenso",
+      "linnet",
+      "spenso",
+      "spenso-macros",
+      "symbolica-utils"
+    ]
+>>>>>>> xzuonylm 3e5f0ddf (rebased revision)
   },
   "symbolica_normal_packages": [
     "alphal00p-docs-examples",
+    "feynkit",
+    "feynkit-cff",
+    "feynkit-generator",
+    "feynkit-graph",
+    "feynkit-kinematics",
+    "feynkit-model",
+    "feynkit-py",
+    "feynkit-tensor",
+    "feynkit-ufo",
     "gammaloop-api",
     "gammaloop-integration-tests",
     "gammaloop-tracing-filter",
@@ -912,6 +1147,15 @@
   ],
   "symbolica_test_packages": [
     "alphal00p-docs-examples",
+    "feynkit",
+    "feynkit-cff",
+    "feynkit-generator",
+    "feynkit-graph",
+    "feynkit-kinematics",
+    "feynkit-model",
+    "feynkit-py",
+    "feynkit-tensor",
+    "feynkit-ufo",
     "gammaloop-api",
     "gammaloop-integration-tests",
     "gammaloop-tracing-filter",
@@ -940,6 +1184,14 @@
     "alphal00p-docs-examples": [
       "alphal00p-docs-catalogs",
       "alphal00p-docs-schema",
+      "feynkit",
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "feynkit-tensor",
+      "feynkit-ufo",
       "gammaloop-api",
       "gammalooprs",
       "idenso",
@@ -953,8 +1205,8 @@
       "alphal00p-docs-schema"
     ],
     "alphal00p-docs-python-exporter": [
+      "feynkit-py",
       "gammaloop-api",
-      "idenso",
       "linnet-py",
       "spynso3",
       "vakint"
@@ -967,23 +1219,33 @@
       "feynkit-graph",
       "feynkit-kinematics",
       "feynkit-model",
+      "feynkit-tensor",
       "feynkit-ufo"
     ],
     "feynkit-cff": [
-      "feynkit-graph"
+      "feynkit-graph",
+      "feynkit-model",
+      "linnet",
+      "spenso"
     ],
     "feynkit-generator": [
       "feynkit-graph",
       "feynkit-model",
-      "linnet"
+      "idenso",
+      "linnet",
+      "spenso",
+      "spenso-hep-lib"
     ],
     "feynkit-graph": [
       "feynkit-kinematics",
       "feynkit-model",
-      "linnet"
+      "linnet",
+      "spenso",
+      "symbolica-utils"
     ],
     "feynkit-kinematics": [
-      "linnet"
+      "linnet",
+      "spenso"
     ],
     "feynkit-model": [],
     "feynkit-py": [
@@ -992,13 +1254,26 @@
       "feynkit-graph",
       "feynkit-kinematics",
       "feynkit-model",
+      "feynkit-tensor",
       "feynkit-ufo",
+      "linnet",
+      "linnet-py",
       "spynso3"
+    ],
+    "feynkit-tensor": [
+      "feynkit-graph",
+      "feynkit-model",
+      "idenso",
+      "linnet",
+      "spenso"
     ],
     "feynkit-ufo": [
       "feynkit-model"
     ],
     "gammaloop-api": [
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
       "feynkit-ufo",
       "gammaloop-tracing-filter",
       "gammaloop-workspace-hack",
@@ -1015,7 +1290,12 @@
       "gammaloop-api",
       "gammaloop-workspace-hack",
       "gammalooprs",
+<<<<<<< vlyukwmu 6b5ff4df "make Python event-group test order-independent" (rebased revision)
       "linnet",
+||||||| vlyukwmu 6b5ff4df "make Python event-group test order-independent" (parents of rebased revision)
+=======
+      "idenso",
+>>>>>>> xzuonylm 3e5f0ddf (rebased revision)
       "spenso",
       "symbolica-utils",
       "three-dimensional-reps",
@@ -1071,7 +1351,6 @@
       "symbolica-utils"
     ],
     "spenso-hep-lib": [
-      "gammaloop-workspace-hack",
       "idenso",
       "spenso",
       "spenso-macros"
@@ -1084,10 +1363,19 @@
       "spenso-macros"
     ],
     "symbolica-utils": [],
+<<<<<<< vlyukwmu 6b5ff4df "make Python event-group test order-independent" (rebased revision)
     "three-dimensional-reps": [
       "linnet"
     ],
     "vakint": []
+||||||| vlyukwmu 6b5ff4df "make Python event-group test order-independent" (parents of rebased revision)
+    "vakint": []
+=======
+    "vakint": [
+      "feynkit-tensor",
+      "spenso"
+    ]
+>>>>>>> xzuonylm 3e5f0ddf (rebased revision)
   },
   "test_dependency_features": {
     "alphal00p-docs-builder": {
@@ -1105,6 +1393,14 @@
     "alphal00p-docs-examples": {
       "alphal00p-docs-catalogs": [],
       "alphal00p-docs-schema": [],
+      "feynkit": [],
+      "feynkit-cff": [],
+      "feynkit-generator": [],
+      "feynkit-graph": [],
+      "feynkit-kinematics": [],
+      "feynkit-model": [],
+      "feynkit-tensor": [],
+      "feynkit-ufo": [],
       "gammaloop-api": [
         "cli"
       ],
@@ -1133,10 +1429,10 @@
       "alphal00p-docs-schema": []
     },
     "alphal00p-docs-python-exporter": {
-      "gammaloop-api": [
+      "feynkit-py": [
         "python_stubgen"
       ],
-      "idenso": [
+      "gammaloop-api": [
         "python_stubgen"
       ],
       "linnet-py": [
@@ -1158,27 +1454,48 @@
       "feynkit-graph": [],
       "feynkit-kinematics": [],
       "feynkit-model": [],
+      "feynkit-tensor": [],
       "feynkit-ufo": []
     },
     "feynkit-cff": {
-      "feynkit-graph": []
+      "feynkit-graph": [],
+      "feynkit-model": [],
+      "linnet": [
+        "bincode",
+        "serde"
+      ],
+      "spenso": [
+        "shadowing"
+      ]
     },
     "feynkit-generator": {
       "feynkit-graph": [],
       "feynkit-model": [],
+      "idenso": [],
       "linnet": [
         "symbolica"
-      ]
+      ],
+      "spenso": [
+        "shadowing"
+      ],
+      "spenso-hep-lib": []
     },
     "feynkit-graph": {
       "feynkit-kinematics": [],
       "feynkit-model": [],
       "linnet": [
         "serde"
-      ]
+      ],
+      "spenso": [
+        "shadowing"
+      ],
+      "symbolica-utils": []
     },
     "feynkit-kinematics": {
-      "linnet": []
+      "linnet": [],
+      "spenso": [
+        "shadowing"
+      ]
     },
     "feynkit-model": {},
     "feynkit-py": {
@@ -1187,13 +1504,28 @@
       "feynkit-graph": [],
       "feynkit-kinematics": [],
       "feynkit-model": [],
+      "feynkit-tensor": [],
       "feynkit-ufo": [],
+      "linnet": [],
+      "linnet-py": [],
       "spynso3": []
+    },
+    "feynkit-tensor": {
+      "feynkit-graph": [],
+      "feynkit-model": [],
+      "idenso": [],
+      "linnet": [],
+      "spenso": [
+        "shadowing"
+      ]
     },
     "feynkit-ufo": {
       "feynkit-model": []
     },
     "gammaloop-api": {
+      "feynkit-cff": [],
+      "feynkit-generator": [],
+      "feynkit-graph": [],
       "feynkit-ufo": [],
       "gammaloop-tracing-filter": [
         "clap"
@@ -1225,7 +1557,12 @@
       "gammaloop-api": [],
       "gammaloop-workspace-hack": [],
       "gammalooprs": [],
+<<<<<<< vlyukwmu 6b5ff4df "make Python event-group test order-independent" (rebased revision)
       "linnet": [],
+||||||| vlyukwmu 6b5ff4df "make Python event-group test order-independent" (parents of rebased revision)
+=======
+      "idenso": [],
+>>>>>>> xzuonylm 3e5f0ddf (rebased revision)
       "spenso": [
         "native",
         "shadowing"
@@ -1328,7 +1665,6 @@
       "symbolica-utils": []
     },
     "spenso-hep-lib": {
-      "gammaloop-workspace-hack": [],
       "idenso": [
         "reference-cases"
       ],
@@ -1339,9 +1675,7 @@
     },
     "spenso-macros": {},
     "spynso3": {
-      "idenso": [
-        "python"
-      ],
+      "idenso": [],
       "spenso": [
         "portable-payload",
         "python",
@@ -1351,6 +1685,7 @@
       "spenso-macros": []
     },
     "symbolica-utils": {},
+<<<<<<< vlyukwmu 6b5ff4df "make Python event-group test order-independent" (rebased revision)
     "three-dimensional-reps": {
       "linnet": [
         "bincode",
@@ -1359,6 +1694,14 @@
       ]
     },
     "vakint": {}
+||||||| vlyukwmu 6b5ff4df "make Python event-group test order-independent" (parents of rebased revision)
+    "vakint": {}
+=======
+    "vakint": {
+      "feynkit-tensor": [],
+      "spenso": []
+    }
+>>>>>>> xzuonylm 3e5f0ddf (rebased revision)
   },
   "workspace_root": "."
 }

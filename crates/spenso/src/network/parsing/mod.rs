@@ -636,8 +636,8 @@ where
             ));
         }
 
-        if symbol.has_tag(&SPENSO_TAG.broadcast) {
-            return Self::parse_broadcast_function::<S, Lib, FunLib>(
+        if symbol == SPENSO_TAG.bracket || symbol.has_tag(&SPENSO_TAG.broadcast) {
+            return Self::parse_expanded_function::<S, Lib, FunLib>(
                 value,
                 state,
                 library,
@@ -867,30 +867,43 @@ where
             // println!("base state {:?}", base.state);
             if settings.precontract_scalars
                 && let NetworkState::PureScalar = base.state
+                && !matches!(base_expression, AtomView::Fun(fun) if fun.get_symbol() == SPENSO_TAG.bracket)
             {
                 // println!("Pure");
                 return Ok(Self::from_scalar(value.as_view().try_into()?));
             }
 
             if let NetworkState::Tensor = base.state {
-                Err(TensorNetworkError::NonSelfDualTensorPower(
+                return Err(TensorNetworkError::NonSelfDualTensorPower(
                     value.as_view().to_plain_string(),
-                ))
-            } else if n < 0 {
-                // An even power of a self_dual tensor, or scalar is a scalar
-                if n % 2 == 0 || base.state.is_scalar() {
-                    let out = base.pow(n);
-                    // println!("{:?}", out.state);
-                    Ok(out)
-                } else {
-                    Err(TensorNetworkError::NegativeExponentNonScalar(format!(
-                        "Atom:{},graph of base: {}, dangling indices: {:?}",
-                        value.as_view().to_plain_string(),
-                        base.dot(),
-                        base.graph.dangling_indices()
-                    )))
-                }
+                ));
+            }
+            // An even power of a self_dual tensor, or scalar is a scalar
+            if n < 0 && n % 2 != 0 && !base.state.is_scalar() {
+                return Err(TensorNetworkError::NegativeExponentNonScalar(format!(
+                    "Atom:{},graph of base: {}, dangling indices: {:?}",
+                    value.as_view().to_plain_string(),
+                    base.dot(),
+                    base.graph.dangling_indices()
+                )));
+            }
+
+            let out = if n > 1 && state.next_dummy.get() != next_dummy {
+                // Each lowered shorthand copy needs independent internal indices.
+                let rest = (1..n)
+                    .map(|_| {
+                        Self::try_from_view_impl(
+                            base_expression,
+                            state.clone(),
+                            library,
+                            function_library,
+                            settings,
+                        )
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                base.n_mul(rest)
             } else {
+<<<<<<< oqkxqwny cf240851 "keep notebook grouping progress visible" (rebased revision)
                 let out = if n > 1 && state.next_dummy.get() != next_dummy {
                     // Each lowered shorthand copy needs independent internal indices.
                     let rest = (1..n)
@@ -911,6 +924,18 @@ where
                 // println!("{:?}", out.state);
                 Ok(out)
             }
+||||||| oqkxqwny cf240851 "keep notebook grouping progress visible" (parents of rebased revision)
+                let out = base.pow(n);
+                // println!("{:?}", out.state);
+                Ok(out)
+            }
+=======
+                // println!("{:?}", base.state);
+                base.pow(n)
+            };
+            // println!("{:?}", out.state);
+            Ok(out)
+>>>>>>> xzuonylm 3e5f0ddf (rebased revision)
         } else {
             Ok(Self::from_scalar(value.as_view().try_into()?))
         }

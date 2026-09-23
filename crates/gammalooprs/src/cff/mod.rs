@@ -17,6 +17,7 @@ use symbolica::{
     symbol,
 };
 
+use self::generation::{GammaLoopGraphCffExt, GammaLoopSurfaceCacheExt};
 use crate::{
     cff::{
         expression::{
@@ -38,11 +39,18 @@ use crate::{
     },
     numerator::energy_degree::{EnergyPowerAssignmentPlan, PlannedEnergyExpression},
     settings::global::OrientationPattern,
+<<<<<<< pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (rebased revision)
     utils::GS,
     uv::{
         Integrands,
         approx::{local_4d::CanonicalUvDenominatorClass, projected_4d::Local4dProjectionContext},
     },
+||||||| pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (parents of rebased revision)
+    utils::GS,
+    uv::Integrands,
+=======
+    uv::Integrands,
+>>>>>>> xzuonylm 3e5f0ddf (rebased revision)
 };
 use color_eyre::Result;
 use three_dimensional_reps::{
@@ -58,6 +66,7 @@ mod feynkit;
 pub mod generation;
 pub mod hsurface;
 pub mod surface;
+<<<<<<< pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (rebased revision)
 pub mod tree;
 mod vertex_set;
 pub(crate) use vertex_set::VertexSet;
@@ -67,6 +76,10 @@ pub(crate) struct CFFOrientationTerm {
     pub(crate) orientation: OrientationExpression,
     pub(crate) production_orientation_id: Option<OrientationID>,
 }
+||||||| pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (parents of rebased revision)
+pub mod tree;
+=======
+>>>>>>> xzuonylm 3e5f0ddf (rebased revision)
 
 pub struct CFFTerm {
     // Ordinary CFF maps retain production identity for direct-3D localization;
@@ -1401,6 +1414,7 @@ impl Graph {
                 contract_edges.push(eid);
             }
         }
+<<<<<<< pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (rebased revision)
         contract_edges.sort_unstable();
         contract_edges.dedup();
 
@@ -1449,6 +1463,129 @@ impl Graph {
         );
 
         let residues = select_indexed_cff_residues(cff, cutset)?;
+||||||| pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (parents of rebased revision)
+
+        let cff = [(
+            CutCFFIndex::new_all_none(),
+            self.generate_cff(&contract_edges, &canonize_esurface, orientation_pattern)?,
+        )];
+
+        let mut residues = BTreeMap::new();
+
+        cff.into_iter()
+            .flat_map(|(index, cff_expression)| {
+                if let Some(right_threshold) = cutset.residue_selector.right_th_cut.as_ref() {
+                    cff_expression
+                        .select_esurface_residue(right_threshold)
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, residue)| {
+                            let mut new_index = index;
+                            new_index.right_threshold_order = Some(i + 1);
+                            (new_index, residue)
+                        })
+                        .collect()
+                } else {
+                    vec![(index, cff_expression)]
+                }
+            })
+            .flat_map(|(index, cff_expression)| {
+                if let Some(left_threshold) = cutset.residue_selector.left_th_cut.as_ref() {
+                    cff_expression
+                        .select_esurface_residue(left_threshold)
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, residue)| {
+                            let mut new_index = index;
+                            new_index.left_threshold_order = Some(i + 1);
+                            (new_index, residue)
+                        })
+                        .collect()
+                } else {
+                    vec![(index, cff_expression)]
+                }
+            })
+            .flat_map(|(index, cff_expression)| {
+                if let Some(lu_cut) = cutset.residue_selector.lu_cut.as_ref() {
+                    cff_expression
+                        .select_esurface_residue(lu_cut)
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, residue)| {
+                            let mut new_index = index;
+                            new_index.lu_cut_order = Some(i + 1);
+                            (new_index, residue)
+                        })
+                        .collect()
+                } else {
+                    vec![(index, cff_expression)]
+                }
+            })
+            .for_each(|(index, residue)| {
+                residues.insert(index, residue);
+            });
+=======
+
+        let cff = [(
+            CutCFFIndex::new_all_none(),
+            self.generate_cff(&contract_edges, &canonize_esurface, orientation_pattern)?,
+        )];
+
+        let mut residues = BTreeMap::new();
+
+        cff.into_iter()
+            .flat_map(|(index, cff_expression)| {
+                if let Some(right_threshold) = cutset.residue_selector.right_th_cut.as_ref() {
+                    cff_expression
+                        .select_energy_surface_residue(right_threshold)
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, residue)| {
+                            let mut new_index = index;
+                            new_index.right_threshold_order = Some(i + 1);
+                            (new_index, residue)
+                        })
+                        .collect()
+                } else {
+                    vec![(index, cff_expression)]
+                }
+            })
+            .flat_map(|(index, cff_expression)| {
+                if let Some(left_threshold) = cutset.residue_selector.left_th_cut.as_ref() {
+                    cff_expression
+                        .select_energy_surface_residue(left_threshold)
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, residue)| {
+                            let mut new_index = index;
+                            new_index.left_threshold_order = Some(i + 1);
+                            (new_index, residue)
+                        })
+                        .collect()
+                } else {
+                    vec![(index, cff_expression)]
+                }
+            })
+            .flat_map(|(index, cff_expression)| {
+                if let Some(lu_cut) = cutset.residue_selector.lu_cut.as_ref() {
+                    cff_expression
+                        .select_energy_surface_residue(lu_cut)
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, residue)| {
+                            let mut new_index = index;
+                            new_index.lu_cut_order = Some(i + 1);
+                            (new_index, residue)
+                        })
+                        .collect()
+                } else {
+                    vec![(index, cff_expression)]
+                }
+            })
+            .for_each(|(index, residue)| {
+                residues.insert(index, residue);
+            });
+>>>>>>> xzuonylm 3e5f0ddf (rebased revision)
 
         // println!("residue orders: {}", residue.len());
 
@@ -1463,6 +1600,7 @@ impl Graph {
         let cff_loop_number = self
             .get_loop_number()
             .saturating_sub(self.cyclotomatic_number(contract_subgraph));
+<<<<<<< pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (rebased revision)
         let cff_phase = Atom::i().pow(cff_loop_number as i64);
         let cff_normalization = cff_phase / (Atom::var(GS.pi) * 2).pow(3 * cff_loop_number as i64);
         let cff_energy_factor = match energy_factor_ownership {
@@ -1471,6 +1609,12 @@ impl Graph {
             }
             CffEnergyFactorOwnership::VariantLocal => Atom::num(1),
         };
+||||||| pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (parents of rebased revision)
+        let cff_phase = (-Atom::i()).pow(cff_loop_number as i64);
+        let cff_normalization = cff_phase / (Atom::var(GS.pi) * 2).pow(3 * cff_loop_number as i64);
+=======
+        let cff_normalization = feynkit_cff::CffExpression::measure_normalization(cff_loop_number);
+>>>>>>> xzuonylm 3e5f0ddf (rebased revision)
         crate::debug_tags!(#cff, #trace;
             stage = "graph_cff_normalization",
             graph = %self.name,
@@ -1497,10 +1641,18 @@ impl Graph {
                 orientations: vec![],
                 exact_source_numerator: None,
             };
+<<<<<<< pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (rebased revision)
             for orientation in expr.orientations.iter().filter(|orientation| {
                 orientation_pattern.filter_orientation(&orientation.data.orientation)
             }) {
                 let eta_expr = orientation.to_atom_gs();
+||||||| pvqotmrp c31c29c1 "lower UFO numerators to native Spenso tensors" (parents of rebased revision)
+            for orientation in expr.orientations.iter() {
+                let eta_expr = orientation.expression.to_atom_inv();
+=======
+            for orientation in expr.orientations.iter() {
+                let eta_expr = orientation.expression.to_atom_inverse();
+>>>>>>> xzuonylm 3e5f0ddf (rebased revision)
                 let mut ose_expr = eta_expr.replace_multiple(&replacement_rules);
                 ose_expr *= &cff_energy_factor;
                 ose_expr *= cff_normalization.clone();

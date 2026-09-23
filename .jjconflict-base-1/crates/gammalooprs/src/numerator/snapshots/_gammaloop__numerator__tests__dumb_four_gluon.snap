@@ -1,5 +1,0 @@
----
-source: src/numerator/tests.rs
-expression: expanded.to_canonical_string()
----
--48*G^2*Nc*TR*𝑖+48*G^2*Nc^3*TR*𝑖

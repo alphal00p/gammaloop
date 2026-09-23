@@ -1,3 +1,0 @@
-[target.wasm32-unknown-unknown]
-linker = "rust-lld"
-rustflags = ["--cfg", "getrandom_backend=\"custom\""]

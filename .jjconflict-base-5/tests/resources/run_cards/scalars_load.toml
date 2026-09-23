@@ -1,3 +1,0 @@
-commands = ["import model scalars-default.json"]
-[cli_settings.global.generation.uv.vakint]
-evaluation_methods = []
