@@ -2778,8 +2778,11 @@ class TestTypedTypstSurface(unittest.TestCase):
             crossing_penalty=20,
             dangling_repulsion=2,
             dangling_centroid_repulsion=1.25,
-            external_centroid_bias=1.0,
-            external_centroid_distance=3.0,
+            external_pull=1.0,
+            external_pull_balance=2.5,
+            spring_length_scale=0.75,
+            initial_repulsion=0.15,
+            repulsion_growth=0.7,
             edge_edge_repulsion=0.2,
             directional_force=4.5,
             internal_label_length_scale=1.1,
@@ -3059,7 +3062,7 @@ class TestTypedTypstSurface(unittest.TestCase):
         graph, _, _, _ = sample_graph(
             render_config=lp.RenderConfig(
                 layouts=lp.LayoutOptions(
-                    dangling_centroid_repulsion=1.25, external_centroid_bias=1.0
+                    dangling_centroid_repulsion=1.25, external_pull=1.0
                 )
             )
         )
@@ -3069,9 +3072,29 @@ class TestTypedTypstSurface(unittest.TestCase):
             graph.prepare_render().typst_source,
         )
         self.assertIn(
-            '("external-centroid-bias"): 1.0',
+            '("external-pull"): 1.0',
             graph.prepare_render().typst_source,
         )
+
+    def test_external_pull_balance_is_validated_and_preserved_across_passes(self):
+        layouts = (
+            lp.LayoutOptions(external_pull_balance=0)
+            .then(external_pull_balance=0.25)
+            .then(external_pull_balance=1)
+            .then(external_pull_balance=2)
+        )
+        graph, _, _, _ = sample_graph(render_config=lp.RenderConfig(layouts=layouts))
+        source = graph.prepare_render().typst_source
+        self.assertEqual(layouts.pass_count, 4)
+        for value in ("0", "0.25", "1", "2"):
+            self.assertIn(f'("external-pull-balance"): {value}', source)
+        self.assertEqual(source.count('("external-pull-balance"):'), 4)
+        for value in (-0.1, float("nan"), float("inf"), -float("inf")):
+            with self.subTest(value=value):
+                with self.assertRaises((TypeError, ValueError)):
+                    lp.LayoutOptions(external_pull_balance=value)
+                with self.assertRaises((TypeError, ValueError)):
+                    lp.LayoutOptions().then(external_pull_balance=value)
 
     def test_typed_option_constructors_expose_explicit_runtime_signatures(self):
         constructors = (

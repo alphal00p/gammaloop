@@ -214,6 +214,7 @@ pub(crate) fn process_svg(
 #import "crates/linnest/typst/src/graph.typ" as graph
 #import "crates/linnest/typst/src/render/layout.typ" as renderer
 #import "crates/linnest/typst/src/impl/draw.typ": _node-radius, _radius-outset
+#import "crates/linnest/typst/src/impl/graph.typ": _node-style-data, _canvas-length
 #import "assets/embedded/drawing/templates/layout-core.typ" as physics-layout
 #import "assets/embedded/drawing/templates/physics-edge-style.typ" as physics
 #import physics: mi, palette, massive, massless, dashed, dotted, source-stroke, sink-stroke, fermion-flow, wave, coil, zigzag
@@ -308,17 +309,18 @@ pub(crate) fn process_svg(
  let measured = graph.style(renderer.attach-elements(raw, config.at("elements", default: (:))), ..(effective + callbacks))
  let node = graph.nodes(measured).first()
  let bounds = node.statements
- let node-data = graph._impl._node-style-data(node, effective)
+ let node-data = _node-style-data(node, effective)
  let fitted-radius = _node-radius(
-   (length: graph._impl._canvas-length(effective.unit).to-absolute()),
+   (length: _canvas-length(effective.unit).to-absolute()),
    (callbacks.node-label)(node-data), (callbacks.node-style)(node-data),
    drawing.at("node-min-radius", default: 0.16), drawing.at("node-label-padding", default: 0.08),
  )
  let outset = drawing.at("node-outset", default: auto)
  let radius = calc.max(1.0, _radius-outset(fitted-radius), float(bounds.at("layout-width")) / 2, float(bounds.at("layout-height")) / 2, if outset == auto { 0 } else { outset })
- // At the default 10 x 10 viewport, dangling spring rest length is 20 times length-scale.
- // Repulsion leaves a visible leg beyond the blob; mixed states keep left/right groups.
- let defaults = (length-scale: radius / 20, external-centroid-distance: 1.5)
+ // The process uses blob-sized force-layout springs rather than the point-node ImPrEd seed.
+ // At the default 10 x 10 viewport, dangling rest length is 20 times length-scale.
+ // A modest outward pull leaves visible legs while mixed states retain left/right groups.
+ let defaults = (layout-algo: "force", length-scale: radius / 20, spring-length-scale: 1.0, external-pull: 0.5)
  let layouts = renderer._layout-passes(config.at("layouts", default: ((:),))).map(pass => defaults + pass)
  physics-layout.render-layout(config + (options: options, style: style, layouts: layouts), input: raw, graph: graph, renderer: renderer, physics: physics, edge-style: (map: particle-map, default-edge: physics.default-edge))
 },

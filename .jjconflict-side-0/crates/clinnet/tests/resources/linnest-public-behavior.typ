@@ -11,6 +11,7 @@
 #import "named-map-behavior.typ"
 #include "identity-target-behavior.typ"
 #include "cetz-bounds-behavior.typ"
+#import "annotation-placement-behavior.typ"
 
 #let close(a, b, epsilon: 1e-6) = calc.abs(a - b) < epsilon
 #let same-pos(a, b) = close(a.x, b.x) and close(a.y, b.y)
@@ -218,6 +219,47 @@
     semantic-pos.at(index),
   )),
 )
+
+// Pull balancing reaches the solver through both flat and semantic options.
+// Pin the bridge so this probe measures only the external endpoints' response.
+#let balance-probe = graph.build({
+  node(<balance-left>, pos: pos(x: pin(-1), y: pin(0)))
+  node(<balance-right>, pos: pos(x: pin(1), y: pin(0)))
+  edge(source(<balance-left>), sink(<balance-right>),
+    pos: pos(x: pin(0), y: pin(0)))
+  for y in (-1, 1) {
+    edge(sink(<balance-left>), pos: pos(x: start(-3), y: pin(y)))
+    edge(source(<balance-right>), pos: pos(x: start(3), y: pin(y)))
+  }
+})
+#let balance-options = (
+  viewport-w: 2, viewport-h: 2,
+  spring: (strength: 1, length: 1),
+  repulsion: (strength: 0),
+  external-pull: 1,
+  labels: (steps: 0),
+  solver: (steps: 1, epochs: 1, step: 0.01, max-movement: 100, depth-scale: 0),
+)
+#let balanced-default = layout(balance-probe, ..balance-options)
+#let balance-spans = (0, 0.5, 1, 2).map(balance => {
+  let flat = layout(balance-probe, ..balance-options, external-pull-balance: balance)
+  let grouped = layout(balance-probe, ..balance-options,
+    external-pull-balance: 0,
+    constraints: (external-pull-balance: balance))
+  let positions = graph.edges(flat).map(edge => edge.pos)
+  assert.eq(positions, graph.edges(grouped).map(edge => edge.pos))
+  if balance == 1 {
+    assert.eq(positions, graph.edges(balanced-default).map(edge => edge.pos))
+  }
+  positions.map(point => calc.abs(point.x)).sum()
+})
+#assert(balance-spans.at(0) > balance-spans.at(1))
+#assert(balance-spans.at(1) > balance-spans.at(2))
+#assert(balance-spans.at(2) > balance-spans.at(3))
+#assert(close(
+  (balance-spans.at(0) - balance-spans.at(2)) / 2,
+  balance-spans.at(2) - balance-spans.at(3),
+))
 
 // Semantic rank constraints override the corresponding flat option and are
 // visible in the public node positions.
@@ -597,10 +639,16 @@
         } else { layer }
       }))
     }
+    for ratio in (none, 0.25, 0.75, "0.6", "none") {
+      let customized = feynman.edge-style((momentum: [], fields: fields + feynman.momentum(ratio: ratio)))
+      let ratio = if ratio in (none, "none") { none } else { float(ratio) }
+      assert.eq(customized.last().label-path.ratio, ratio)
+      assert.eq(customized.last().label-path.resolve-length, if ratio == none { "length" } else { "min" })
+    }
     let automatic = side in (auto, "auto")
     assert(arrow.offset-side == if automatic { "label" } else { none })
     assert(arrow.label-side == if automatic { auto } else { side })
-    assert(arrow.offset == if side == "right" { -0.62 } else { 0.62 })
+    assert(arrow.offset == if side == "right" { -0.5 } else { 0.5 })
     assert(label.offset == 0 and label.label-side == arrow.label-side)
     assert(label.offset-side == none)
     assert(arrow.label-gap == 0.45 and label.label-gap == 0.45)

@@ -27,6 +27,23 @@ pub struct ForceLayoutConfig {
     /// Fraction of the iteration budget used to collapse depth, in 0..=1 (normally 0.5).
     /// Zero starts planar; one still evaluates the final iteration on the exact plane.
     pub flattening_end: f64,
+    /// Initial fraction of the final repulsion coefficients, in 0..=1 (normally 1).
+    pub initial_repulsion: f64,
+    /// Fraction of the iteration budget used to grow repulsion, in 0..=1 (normally 0.7).
+    /// Zero starts with final repulsion; one still reaches it on the final iteration.
+    pub repulsion_growth: f64,
+}
+
+impl ForceLayoutConfig {
+    fn repulsion_scale(self, iteration: usize, total_iterations: usize) -> f64 {
+        let finish = self.repulsion_growth * total_iterations.saturating_sub(1) as f64;
+        if iteration as f64 >= finish || self.initial_repulsion == 1.0 {
+            1.0
+        } else {
+            let u = iteration as f64 / finish;
+            self.initial_repulsion + (1.0 - self.initial_repulsion) * u * u * (3.0 - 2.0 * u)
+        }
+    }
 }
 
 pub fn force_directed_layout<'a, E, V, H, N>(
@@ -91,6 +108,8 @@ where
     ) -> Self {
         assert!(cfg.depth_scale.is_finite() && cfg.depth_scale >= 0.0);
         assert!((0.0..=1.0).contains(&cfg.flattening_end));
+        assert!((0.0..=1.0).contains(&cfg.initial_repulsion));
+        assert!((0.0..=1.0).contains(&cfg.repulsion_growth));
         state.synchronize_grouped_coordinates();
         let mut rng = SmallRng::seed_from_u64(cfg.seed);
         let workset = ForceWorkSet::new(&state);
@@ -109,7 +128,8 @@ where
             energy.c_center,
         ]
         .into_iter()
-        .any(|strength| strength != 0.0);
+        .any(|strength| strength != 0.0)
+            || energy.external_pull != 0.0 && !state.external_flows_are_mixed();
         let jitter = 1e-3 * energy.spring_length * step_size;
         if total_iterations > 0 && jitter > 0.0 && radial_forces {
             apply_initial_jitter(&mut state, &mut rng, jitter, &workset);
@@ -204,9 +224,18 @@ where
             let u = iteration as f64 / self.flattening_finish;
             self.cfg.depth_scale * (1.0 - u).powi(2) * (1.0 + 2.0 * u)
         };
+        // Continue from a compact layout to the final repulsion, without changing
+        // coordinates, spring lengths, endpoint pull, or the cooling schedule.
+        let repulsion_scale = self.cfg.repulsion_scale(iteration, self.total_iterations);
+        let mut energy = self.energy;
+        energy.c_vv *= repulsion_scale;
+        energy.c_ev *= repulsion_scale;
+        energy.c_ee_local *= repulsion_scale;
+        energy.dangling_charge *= repulsion_scale;
+        energy.dangling_centroid_charge *= repulsion_scale;
         self.forces.compute(
             &self.state,
-            &self.energy,
+            &energy,
             &self.node_z,
             &self.edge_z,
             scale,
@@ -258,14 +287,25 @@ where
         }
 
         self.iteration += 1;
+        let epoch_end = self.cfg.steps != 0 && self.iteration.is_multiple_of(self.cfg.steps);
+        let budget_end = self.iteration >= self.total_iterations;
+        let stationary = max_move < self.cfg.early_tol || self.step_size <= 0.0;
+        // Continuous forces cannot easily exchange points sharing a constrained
+        // line. Try the same discrete coordinate move as annealing once planar,
+        // including before an apparent convergence or the final budgeted step.
+        let swap_move = if scale == 0.0 && (epoch_end || budget_end || stationary) {
+            self.state.improve_constrained_lines(&energy)
+        } else {
+            0.0
+        };
+        max_move = max_move.max(swap_move);
         self.last_max_move = max_move;
-        // Even a zero/underflowed step must not terminate before depth collapses.
-        if scale == 0.0 && (max_move < self.cfg.early_tol || self.step_size <= 0.0)
-            || self.iteration >= self.total_iterations
-        {
+        // Even a zero/underflowed step must reach the final planar force settings.
+        // An accepted exchange gets another chance to settle or improve ordering.
+        if scale == 0.0 && repulsion_scale == 1.0 && stationary && swap_move == 0.0 || budget_end {
             self.done = true;
         }
-        if self.cfg.steps != 0 && self.iteration.is_multiple_of(self.cfg.steps) {
+        if epoch_end {
             self.step_size = (self.step_size * self.cfg.cool).max(0.0);
         }
     }
@@ -638,13 +678,14 @@ impl ForceBuffers {
             }
         }
 
-        // Repel each dangling endpoint from the current node centroid, and bias
-        // incoming endpoints left and outgoing endpoints right with an X-only spring.
-        // Its target distance scales the external edge's natural spring length. Sharing the
-        // opposite reaction over active nodes prevents this internal force from
-        // introducing translational drift. This term is intentionally planar, so
-        // auxiliary depth cannot reduce its pressure on the visible endpoints.
-        if (energy.dangling_centroid_charge != 0.0 || energy.external_centroid_strength != 0.0)
+        // Pull mixed external flows horizontally with constant, topology-normalized
+        // force. Balancing side loads and capping the greatest spring load prevents
+        // a narrow connection from overstretching under several external legs.
+        // A single external flow instead pulls radially outward. Neither mode imposes
+        // a target extent, so springs along a long chain can each stretch. Sharing the
+        // opposite reaction over active nodes prevents translational drift. This term
+        // is planar, so auxiliary depth cannot reduce pressure on visible endpoints.
+        if (energy.dangling_centroid_charge != 0.0 || energy.external_pull != 0.0)
             && !workset.active_nodes.is_empty()
         {
             let centroid = workset
@@ -654,6 +695,7 @@ impl ForceBuffers {
                     sum + state.vertex_points[node].to_vec()
                 })
                 / workset.active_nodes.len() as f64;
+            let horizontal = state.external_flows_are_mixed();
             let mut reaction = Vector2::zero();
             for hedge in state.ext.included_iter() {
                 let ei = state.graph[&hedge];
@@ -664,14 +706,16 @@ impl ForceBuffers {
                 } else {
                     Vector2::zero()
                 };
-                let side = match state.graph.flow(hedge) {
-                    Flow::Source => 1.0,
-                    Flow::Sink => -1.0,
-                };
-                let target = side
-                    * energy.external_centroid_distance
-                    * SpringChargeEnergy::edge_spring_length(state, ei, energy.spring_length);
-                force.x -= energy.external_centroid_strength * (d.x - target);
+                if horizontal {
+                    force.x += energy.external_pull_strength(state.external_pull_scales[ei])
+                        * match state.graph.flow(hedge) {
+                            Flow::Source => 1.0,
+                            Flow::Sink => -1.0,
+                        };
+                } else if dist > 1e-9 {
+                    force +=
+                        d / dist * energy.external_pull_strength(state.external_pull_scales[ei]);
+                }
                 if workset.force_edge[ei] {
                     forces_e[ei] += Vector3::new(force.x, force.y, 0.0);
                 }
@@ -843,7 +887,649 @@ mod tests {
     }
 
     #[test]
-    fn external_centroid_bias_is_horizontal_balanced_and_matches_energy() {
+    fn constrained_line_swaps_precede_stopping_and_preserve_streamed_execution() {
+        let fixed = PointConstraint {
+            x: Constraint::Fixed,
+            y: Constraint::Fixed,
+        };
+        let rail = PointConstraint {
+            x: Constraint::Fixed,
+            y: Constraint::Free,
+        };
+        let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
+        let a = builder.add_node(fixed);
+        let b = builder.add_node(fixed);
+        builder.add_external_edge(a, rail, false, Flow::Source);
+        builder.add_external_edge(b, rail, false, Flow::Source);
+        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let mut state = graph.new_layout_state(
+            vec![Point2::new(-1.0, -2.0), Point2::new(-1.0, 2.0)].into(),
+            vec![Point2::new(1.0, 2.0), Point2::new(1.0, -2.0)].into(),
+            1.0,
+            0.0,
+            true,
+        );
+        state.vertex_depths = vec![Some(3.0), Some(-4.0)].into();
+        state.edge_depths = vec![Some(5.0), Some(-6.0)].into();
+        let energy = SpringChargeEnergy {
+            k_spring: 0.0,
+            crossing_penalty: 2.0,
+            ..SpringChargeEnergy::from_graph(
+                2,
+                2.0,
+                2.0,
+                ParamTuning {
+                    beta: 0.0,
+                    ..ParamTuning::default()
+                },
+            )
+        };
+        let cfg = ForceLayoutConfig {
+            steps: 100,
+            epochs: 2,
+            step: 0.0,
+            cool: 1.0,
+            max_delta: 0.2,
+            early_tol: 1e-6,
+            seed: 7,
+            depth_scale: 0.0,
+            flattening_end: 0.0,
+            initial_repulsion: 1.0,
+            repulsion_growth: 0.7,
+        };
+        let initial_energy = energy.energy(None, &state);
+        let mut streamed = ForceLayoutSession::new(state.clone(), energy, cfg);
+        let unchanged = streamed.step(0);
+        assert_eq!(unchanged.edge_points, state.edge_points);
+        let reordered = streamed.step(1);
+        assert_eq!(reordered.iteration, 1);
+        assert_eq!(reordered.max_move, 4.0);
+        assert!(!reordered.done);
+        assert_eq!(
+            reordered.edge_points,
+            vec![Point2::new(1.0, -2.0), Point2::new(1.0, 2.0)].into()
+        );
+        let settled = streamed.step(1);
+        assert!(settled.done);
+        assert_eq!(settled.iteration, 2);
+        assert_eq!(settled.max_move, 0.0);
+        let mut batch = ForceLayoutSession::new(state.clone(), energy, cfg);
+        batch.run_to_end();
+        assert_eq!(batch.snapshot().vertex_points, settled.vertex_points);
+        assert_eq!(batch.snapshot().edge_points, settled.edge_points);
+        let out = streamed.into_state();
+        let mut full = out.clone();
+        full.incremental = false;
+        assert!(energy.energy(None, &full) < initial_energy);
+        assert_eq!(out.vertex_depths, state.vertex_depths);
+        assert_eq!(out.edge_depths, state.edge_depths);
+        // Final-budget steps still attempt an exchange, while a zero budget
+        // remains an identity operation and never initializes a discrete move.
+        let mut last = ForceLayoutSession::new(
+            state.clone(),
+            energy,
+            ForceLayoutConfig {
+                steps: 1,
+                epochs: 1,
+                ..cfg
+            },
+        );
+        last.run_to_end();
+        assert_eq!(last.snapshot().edge_points, out.edge_points);
+        assert_eq!(last.snapshot().max_move, 4.0);
+        let mut zero =
+            ForceLayoutSession::new(state.clone(), energy, ForceLayoutConfig { steps: 0, ..cfg });
+        zero.run_to_end();
+        assert_eq!(zero.snapshot().edge_points, state.edge_points);
+        assert_eq!(zero.snapshot().iteration, 0);
+    }
+
+    #[test]
+    fn external_pull_balance_matches_energy_and_is_translation_invariant() {
+        let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
+        let a = builder.add_node(PointConstraint::default());
+        let b = builder.add_node(PointConstraint::default());
+        builder.add_edge(a, b, PointConstraint::default(), false);
+        for _ in 0..2 {
+            builder.add_external_edge(a, PointConstraint::default(), false, Flow::Sink);
+        }
+        for _ in 0..3 {
+            builder.add_external_edge(b, PointConstraint::default(), false, Flow::Source);
+        }
+        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let original = graph.new_layout_state(
+            vec![Point2::new(-1.0, -2.0), Point2::new(3.0, 2.0)].into(),
+            vec![
+                Point2::new(1.0, 1.0),
+                Point2::new(-4.0, -1.0),
+                Point2::new(-3.0, 2.0),
+                Point2::new(6.0, -3.0),
+                Point2::new(5.0, 1.0),
+                Point2::new(4.0, 4.0),
+            ]
+            .into(),
+            1.0,
+            0.0,
+            true,
+        );
+        let node_z = vec![0.0; 2].into();
+        let edge_z = vec![0.0; 6].into();
+        for (balance, incoming, outgoing, reaction) in [
+            (0.0, -6.0, 6.0, -3.0),
+            (
+                0.5,
+                -6.0 * 0.5_f64.sqrt(),
+                6.0 * (1.0_f64 / 3.0).sqrt(),
+                6.0 * 0.5_f64.sqrt() - 9.0 * (1.0_f64 / 3.0).sqrt(),
+            ),
+            (1.0, -3.0, 2.0, 0.0),
+            (2.0, -1.5, 2.0 / 3.0, 0.5),
+            (
+                2.5,
+                -1.5 * 0.5_f64.sqrt(),
+                (2.0 / 3.0) * (1.0_f64 / 3.0).sqrt(),
+                1.5 * 0.5_f64.sqrt() - (1.0_f64 / 3.0).sqrt(),
+            ),
+        ] {
+            for centroid_charge in [0.0, 1.7] {
+                let energy = SpringChargeEnergy {
+                    k_spring: 0.0,
+                    external_pull: 6.0,
+                    external_pull_balance: balance,
+                    dangling_centroid_charge: centroid_charge,
+                    ..SpringChargeEnergy::from_graph(
+                        2,
+                        2.0,
+                        2.0,
+                        ParamTuning {
+                            beta: 0.0,
+                            ..ParamTuning::default()
+                        },
+                    )
+                };
+                let original_energy = energy.energy(None, &original);
+                for translation in [Vector2::zero(), Vector2::new(-53.0, 18.0)] {
+                    let mut state = original.clone();
+                    for (_, point) in state.vertex_points.iter_mut() {
+                        *point += translation;
+                    }
+                    for (_, point) in state.edge_points.iter_mut() {
+                        *point += translation;
+                    }
+                    assert!((energy.energy(None, &state) - original_energy).abs() < 1e-10);
+                    let (forces_v, forces_e) = compute_forces(
+                        &state,
+                        &energy,
+                        &node_z,
+                        &edge_z,
+                        0.0,
+                        &ForceWorkSet::new(&state),
+                    );
+                    let total = forces_v
+                        .iter()
+                        .map(|(_, f)| f)
+                        .chain(forces_e.iter().map(|(_, f)| f))
+                        .fold(Vector3::zero(), |sum, f| sum + f);
+                    assert!(total.magnitude() < 1e-12);
+                    if centroid_charge == 0.0 {
+                        let expected_force = |force: Vector3<f64>, x| {
+                            let expected = Vector3::new(x, 0.0, 0.0);
+                            if balance == 0.0 || balance == 1.0 {
+                                assert_eq!(force, expected);
+                            } else {
+                                assert!((force - expected).magnitude() < 1e-12);
+                            }
+                        };
+                        for (_, force) in &forces_v {
+                            expected_force(*force, reaction);
+                        }
+                        for i in 1..3 {
+                            expected_force(forces_e[EdgeIndex(i)], incoming);
+                        }
+                        for i in 3..6 {
+                            expected_force(forces_e[EdgeIndex(i)], outgoing);
+                        }
+                    }
+                    for (index, force) in forces_v
+                        .iter()
+                        .map(|(i, f)| (LayoutPointIndex::Node(i), f))
+                        .chain(forces_e.iter().map(|(i, f)| (LayoutPointIndex::Edge(i), f)))
+                    {
+                        for axis in 0..2 {
+                            let mut plus = state.clone();
+                            let mut minus = state.clone();
+                            for (sample, offset) in [(&mut plus, 1e-4), (&mut minus, -1e-4)] {
+                                match index {
+                                    LayoutPointIndex::Node(i) => {
+                                        sample.vertex_points[i][axis] += offset;
+                                        sample.changed_nodes.add(i);
+                                    }
+                                    LayoutPointIndex::Edge(i) => {
+                                        sample.edge_points[i][axis] += offset;
+                                        sample.changed_edges.add(i);
+                                    }
+                                }
+                            }
+                            let plus_energy = energy.energy(None, &plus);
+                            let gradient = (plus_energy - energy.energy(None, &minus)) / 2e-4;
+                            assert!((force[axis] + gradient).abs() < 1e-7);
+                            let incremental = energy.energy(Some((&state, original_energy)), &plus);
+                            assert!((incremental - plus_energy).abs() < 1e-10);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn external_pull_balance_leaves_radial_and_single_leg_series_forces_unchanged() {
+        for length in [1, 4] {
+            for last_flow in [Flow::Sink, Flow::Source] {
+                let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
+                let nodes = (0..=length)
+                    .map(|_| builder.add_node(PointConstraint::default()))
+                    .collect::<Vec<_>>();
+                for i in 0..length {
+                    builder.add_edge(nodes[i], nodes[i + 1], PointConstraint::default(), false);
+                }
+                builder.add_external_edge(nodes[0], PointConstraint::default(), false, Flow::Sink);
+                builder.add_external_edge(
+                    nodes[length],
+                    PointConstraint::default(),
+                    false,
+                    last_flow,
+                );
+                let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+                let state = graph.new_layout_state(
+                    (0..=length)
+                        .map(|i| Point2::new(i as f64, 0.0))
+                        .collect::<Vec<_>>()
+                        .into(),
+                    (0..length + 2)
+                        .map(|i| Point2::new(i as f64 - 1.0, 2.0))
+                        .collect::<Vec<_>>()
+                        .into(),
+                    1.0,
+                    0.0,
+                    false,
+                );
+                let mut energy = SpringChargeEnergy {
+                    k_spring: 0.0,
+                    external_pull: 5.0,
+                    external_pull_balance: 0.0,
+                    ..SpringChargeEnergy::from_graph(
+                        length + 1,
+                        4.0,
+                        4.0,
+                        ParamTuning {
+                            beta: 0.0,
+                            ..ParamTuning::default()
+                        },
+                    )
+                };
+                let node_z = vec![0.0; length + 1].into();
+                let edge_z = vec![0.0; length + 2].into();
+                let workset = ForceWorkSet::new(&state);
+                let baseline = compute_forces(&state, &energy, &node_z, &edge_z, 0.0, &workset);
+                let baseline_energy = energy.energy(None, &state);
+                for balance in [0.5, 1.0, 2.0, 2.5] {
+                    energy.external_pull_balance = balance;
+                    let forces = compute_forces(&state, &energy, &node_z, &edge_z, 0.0, &workset);
+                    assert!((energy.energy(None, &state) - baseline_energy).abs() < 1e-10);
+                    for (i, force) in &forces.0 {
+                        assert!((*force - baseline.0[i]).magnitude() < 1e-12);
+                    }
+                    for (i, force) in &forces.1 {
+                        assert!((*force - baseline.1[i]).magnitude() < 1e-12);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn normalized_pull_preserves_pins_and_streamed_execution() {
+        let fixed = PointConstraint {
+            x: Constraint::Fixed,
+            y: Constraint::Fixed,
+        };
+        let free = PointConstraint::default();
+        let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
+        let a = builder.add_node(fixed);
+        let b = builder.add_node(free);
+        builder.add_edge(a, b, free, false);
+        builder.add_external_edge(a, fixed, false, Flow::Sink);
+        builder.add_external_edge(a, free, false, Flow::Sink);
+        for _ in 0..3 {
+            builder.add_external_edge(b, free, false, Flow::Source);
+        }
+        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let state = graph.new_layout_state(
+            vec![Point2::new(-1.0, -2.0), Point2::new(3.0, 2.0)].into(),
+            vec![
+                Point2::new(1.0, 1.0),
+                Point2::new(-4.0, -1.0),
+                Point2::new(-3.0, 2.0),
+                Point2::new(6.0, -3.0),
+                Point2::new(5.0, 1.0),
+                Point2::new(4.0, 4.0),
+            ]
+            .into(),
+            1.0,
+            0.0,
+            false,
+        );
+        let energy = SpringChargeEnergy::from_graph(
+            2,
+            4.0,
+            4.0,
+            ParamTuning {
+                external_pull: 1.0,
+                ..ParamTuning::default()
+            },
+        );
+        let cfg = ForceLayoutConfig {
+            steps: 13,
+            epochs: 3,
+            step: 0.02,
+            cool: 0.85,
+            max_delta: 0.1,
+            early_tol: 0.0,
+            seed: 17,
+            depth_scale: 1.0,
+            flattening_end: 0.5,
+            initial_repulsion: 0.15,
+            repulsion_growth: 0.7,
+        };
+        let mut batch = ForceLayoutSession::new(state.clone(), energy, cfg);
+        batch.run_to_end();
+        let mut streamed = ForceLayoutSession::new(state.clone(), energy, cfg);
+        for amount in [1, 7, 0, 3, 11] {
+            streamed.step(amount);
+        }
+        streamed.run_to_end();
+        let batch = batch.into_state();
+        let streamed = streamed.into_state();
+        assert_eq!(streamed.vertex_points, batch.vertex_points);
+        assert_eq!(streamed.edge_points, batch.edge_points);
+        assert_eq!(streamed.vertex_depths, batch.vertex_depths);
+        assert_eq!(streamed.edge_depths, batch.edge_depths);
+        assert_eq!(streamed.external_pull_scales, state.external_pull_scales);
+        assert_eq!(streamed.vertex_points[a], state.vertex_points[a]);
+        assert_eq!(
+            streamed.edge_points[EdgeIndex(1)],
+            state.edge_points[EdgeIndex(1)]
+        );
+        assert_eq!(state.external_pull_scales[EdgeIndex(1)], 0.5);
+        assert_eq!(state.external_pull_scales[EdgeIndex(2)], 0.5);
+        for i in 3..6 {
+            assert_eq!(state.external_pull_scales[EdgeIndex(i)], 1.0 / 3.0);
+        }
+    }
+
+    #[test]
+    fn same_direction_external_pull_is_radial_balanced_and_matches_energy() {
+        for flow in [Flow::Source, Flow::Sink] {
+            let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
+            let a = builder.add_node(PointConstraint::default());
+            let b = builder.add_node(PointConstraint::default());
+            builder.add_external_edge(a, PointConstraint::default(), false, flow);
+            builder.add_external_edge(b, PointConstraint::default(), false, flow);
+            let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+            let energy = SpringChargeEnergy {
+                k_spring: 0.0,
+                external_pull: 5.0,
+                ..SpringChargeEnergy::from_graph(
+                    2,
+                    2.0,
+                    2.0,
+                    ParamTuning {
+                        beta: 0.0,
+                        ..ParamTuning::default()
+                    },
+                )
+            };
+            let mut state = graph.new_layout_state(
+                vec![Point2::new(-1.0, -2.0), Point2::new(1.0, 2.0)].into(),
+                vec![Point2::new(3.0, 4.0), Point2::new(-12.0, 5.0)].into(),
+                1.0,
+                0.0,
+                false,
+            );
+            let workset = ForceWorkSet::new(&state);
+            let (forces_v, forces_e) = compute_forces(
+                &state,
+                &energy,
+                &vec![0.0; 2].into(),
+                &vec![0.0; 2].into(),
+                0.0,
+                &workset,
+            );
+            assert!((forces_e[EdgeIndex(0)] - Vector3::new(3.0, 4.0, 0.0)).magnitude() < 1e-12);
+            assert!((forces_e[EdgeIndex(1)].magnitude() - 5.0).abs() < 1e-12);
+            let total = forces_v
+                .iter()
+                .map(|(_, force)| force)
+                .chain(forces_e.iter().map(|(_, force)| force))
+                .fold(Vector3::zero(), |sum, force| sum + force);
+            assert!(total.magnitude() < 1e-12);
+            assert_eq!(energy.energy(None, &state), -90.0);
+            for (index, force) in forces_v
+                .iter()
+                .map(|(i, f)| (LayoutPointIndex::Node(i), f))
+                .chain(forces_e.iter().map(|(i, f)| (LayoutPointIndex::Edge(i), f)))
+            {
+                for axis in 0..2 {
+                    let mut plus = state.clone();
+                    let mut minus = state.clone();
+                    for (sample, shift) in [(&mut plus, 1e-5), (&mut minus, -1e-5)] {
+                        let point = match index {
+                            LayoutPointIndex::Node(i) => &mut sample.vertex_points[i],
+                            LayoutPointIndex::Edge(i) => &mut sample.edge_points[i],
+                        };
+                        point[axis] += shift;
+                    }
+                    let gradient =
+                        (energy.energy(None, &plus) - energy.energy(None, &minus)) / 2e-5;
+                    assert!((force[axis] + gradient).abs() < 1e-8);
+                }
+            }
+            // Increasing distance and changing only rest lengths cannot change the pull.
+            state.edge_points[EdgeIndex(0)] = Point2::new(30.0, 40.0);
+            state.edge_spring_length_scales = vec![10.0, 0.1].into();
+            let (_, stretched) = compute_forces(
+                &state,
+                &energy,
+                &vec![0.0; 2].into(),
+                &vec![0.0; 2].into(),
+                0.0,
+                &workset,
+            );
+            assert!((stretched[EdgeIndex(0)] - forces_e[EdgeIndex(0)]).magnitude() < 1e-12);
+        }
+    }
+
+    #[test]
+    fn repulsion_continuation_is_smooth_monotone_and_reaches_final_settings() {
+        let cfg = ForceLayoutConfig {
+            steps: 1001,
+            epochs: 1,
+            step: 0.1,
+            cool: 1.0,
+            max_delta: 0.0,
+            early_tol: 0.0,
+            seed: 7,
+            depth_scale: 0.0,
+            flattening_end: 0.0,
+            initial_repulsion: 0.15,
+            repulsion_growth: 0.7,
+        };
+        assert_eq!(cfg.repulsion_scale(0, 1001), 0.15);
+        assert_eq!(cfg.repulsion_scale(700, 1001), 1.0);
+        assert_eq!(cfg.repulsion_scale(1000, 1001), 1.0);
+        assert!((cfg.repulsion_scale(350, 1001) - 0.575).abs() < 1e-12);
+        let mut previous = 0.15;
+        for iteration in 0..=1000 {
+            let scale = cfg.repulsion_scale(iteration, 1001);
+            assert!(scale >= previous && scale <= 1.0);
+            previous = scale;
+        }
+        // Smoothstep has zero slope at both joins to constant settings.
+        assert!(cfg.repulsion_scale(1, 1001) - 0.15 < 1e-5);
+        assert!(1.0 - cfg.repulsion_scale(699, 1001) < 1e-5);
+        for total in [0_usize, 1, 11] {
+            assert_eq!(cfg.repulsion_scale(total.saturating_sub(1), total), 1.0);
+            for iteration in 0..total {
+                assert_eq!(
+                    ForceLayoutConfig {
+                        initial_repulsion: 1.0,
+                        ..cfg
+                    }
+                    .repulsion_scale(iteration, total),
+                    1.0
+                );
+                assert_eq!(
+                    ForceLayoutConfig {
+                        repulsion_growth: 0.0,
+                        ..cfg
+                    }
+                    .repulsion_scale(iteration, total),
+                    1.0
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn repulsion_continuation_preserves_session_coordinates_and_default_trajectory() {
+        let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
+        let a = builder.add_node(PointConstraint::default());
+        let b = builder.add_node(PointConstraint::default());
+        builder.add_edge(a, b, PointConstraint::default(), false);
+        builder.add_external_edge(a, PointConstraint::default(), false, Flow::Sink);
+        builder.add_external_edge(b, PointConstraint::default(), false, Flow::Source);
+        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let state = graph.new_layout_state(
+            vec![Point2::new(-1.0, -0.5), Point2::new(1.0, 0.5)].into(),
+            vec![
+                Point2::new(0.0, 0.5),
+                Point2::new(-2.0, -1.0),
+                Point2::new(2.0, 1.0),
+            ]
+            .into(),
+            1.0,
+            0.0,
+            false,
+        );
+        let energy = SpringChargeEnergy::from_graph(
+            2,
+            2.0,
+            2.0,
+            ParamTuning {
+                gamma_dangling_centroid: 1.0,
+                external_pull: 0.5,
+                ..ParamTuning::default()
+            },
+        );
+        let cfg = ForceLayoutConfig {
+            steps: 11,
+            epochs: 1,
+            step: 0.02,
+            cool: 1.0,
+            max_delta: 0.1,
+            early_tol: 0.0,
+            seed: 7,
+            depth_scale: 0.0,
+            flattening_end: 0.0,
+            initial_repulsion: 0.15,
+            repulsion_growth: 0.7,
+        };
+        let mut session = ForceLayoutSession::new(state.clone(), energy, cfg);
+        let initial = session.snapshot();
+        let unchanged = session.step(0);
+        assert_eq!(unchanged.vertex_points, initial.vertex_points);
+        assert_eq!(unchanged.edge_points, initial.edge_points);
+        // The first continuation step equals the same ordinary solver with all
+        // repulsive coefficients reduced, while springs and pulling stay fixed.
+        let mut compact = energy;
+        compact.c_vv *= cfg.initial_repulsion;
+        compact.c_ev *= cfg.initial_repulsion;
+        compact.c_ee_local *= cfg.initial_repulsion;
+        compact.dangling_charge *= cfg.initial_repulsion;
+        compact.dangling_centroid_charge *= cfg.initial_repulsion;
+        let mut fixed = ForceLayoutSession::new(
+            state.clone(),
+            compact,
+            ForceLayoutConfig {
+                initial_repulsion: 1.0,
+                ..cfg
+            },
+        );
+        let first = session.step(1);
+        let expected = fixed.step(1);
+        assert_eq!(first.vertex_points, expected.vertex_points);
+        assert_eq!(first.edge_points, expected.edge_points);
+        session.step(3);
+        session.run_to_end();
+        let mut continuous = ForceLayoutSession::new(state.clone(), energy, cfg);
+        continuous.run_to_end();
+        assert_eq!(
+            session.snapshot().vertex_points,
+            continuous.snapshot().vertex_points
+        );
+        assert_eq!(
+            session.snapshot().edge_points,
+            continuous.snapshot().edge_points
+        );
+        for initial_repulsion in [0.0, 0.15, 1.0] {
+            let base_cfg = ForceLayoutConfig {
+                initial_repulsion,
+                repulsion_growth: 0.0,
+                ..cfg
+            };
+            let mut instant = ForceLayoutSession::new(state.clone(), energy, base_cfg);
+            let mut default = ForceLayoutSession::new(
+                state.clone(),
+                energy,
+                ForceLayoutConfig {
+                    initial_repulsion: 1.0,
+                    ..cfg
+                },
+            );
+            instant.run_to_end();
+            default.run_to_end();
+            assert_eq!(
+                instant.snapshot().vertex_points,
+                default.snapshot().vertex_points
+            );
+            assert_eq!(
+                instant.snapshot().edge_points,
+                default.snapshot().edge_points
+            );
+        }
+        // A frozen or apparently converged compact state is not a final solution.
+        for (depth_scale, flattening_end, expected_iterations) in [(0.0, 0.0, 8), (1.0, 0.9, 10)] {
+            let mut frozen = ForceLayoutSession::new(
+                state.clone(),
+                energy,
+                ForceLayoutConfig {
+                    step: 0.0,
+                    early_tol: f64::MAX,
+                    depth_scale,
+                    flattening_end,
+                    ..cfg
+                },
+            );
+            frozen.run_to_end();
+            assert_eq!(frozen.snapshot().iteration, expected_iterations);
+            assert_eq!(frozen.snapshot().vertex_points, state.vertex_points);
+            assert_eq!(frozen.snapshot().edge_points, state.edge_points);
+        }
+    }
+
+    #[test]
+    fn external_pull_is_constant_horizontal_balanced_and_matches_energy() {
         let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
         let a = builder.add_node(PointConstraint::default());
         let b = builder.add_node(PointConstraint::default());
@@ -858,7 +1544,7 @@ mod tests {
                 4.0,
                 ParamTuning {
                     beta: 0.0,
-                    external_centroid_bias: 3.0,
+                    external_pull: 3.0,
                     ..ParamTuning::default()
                 },
             )
@@ -879,7 +1565,7 @@ mod tests {
                 0.0,
                 false,
             );
-            assert!((energy.energy(None, &state) - 120.0).abs() < 1e-10);
+            assert!((energy.energy(None, &state) - 24.0).abs() < 1e-10);
             let workset = ForceWorkSet::new(&state);
             for scale in [0.0, 1.0] {
                 let (forces_v, forces_e) = compute_forces(
@@ -891,10 +1577,10 @@ mod tests {
                     &workset,
                 );
                 // One endpoint starts at the centroid; the incoming one starts on the wrong side.
-                assert_eq!(forces_e[EdgeIndex(0)], Vector3::new(12.0, 0.0, 0.0));
-                assert_eq!(forces_e[EdgeIndex(1)], Vector3::new(-24.0, 0.0, 0.0));
+                assert_eq!(forces_e[EdgeIndex(0)], Vector3::new(6.0, 0.0, 0.0));
+                assert_eq!(forces_e[EdgeIndex(1)], Vector3::new(-6.0, 0.0, 0.0));
                 for (_, force) in &forces_v {
-                    assert_eq!(*force, Vector3::new(6.0, 0.0, 0.0));
+                    assert_eq!(*force, Vector3::zero());
                 }
                 for i in 0..4 {
                     let mut plus = state.clone();
@@ -918,7 +1604,7 @@ mod tests {
     }
 
     #[test]
-    fn isolated_half_edge_centroid_bias_matches_energy_and_ignores_complement() {
+    fn isolated_half_edge_radial_pull_matches_energy_and_ignores_complement() {
         let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
         let a = builder.add_node(PointConstraint::default());
         let b = builder.add_node(PointConstraint::default());
@@ -935,7 +1621,7 @@ mod tests {
                 1.0,
                 ParamTuning {
                     beta: 0.0,
-                    external_centroid_bias: 3.0,
+                    external_pull: 3.0,
                     ..ParamTuning::default()
                 },
             )
@@ -964,14 +1650,12 @@ mod tests {
                 0.0,
                 &workset,
             );
-            let side = if graph.flow(hedge) == Flow::Source {
-                1.0
-            } else {
-                -1.0
-            };
-            assert_eq!(
-                forces_e[EdgeIndex(0)],
-                Vector3::new(-3.0 * (4.0 - 2.0 * side), 0.0, 0.0)
+            // A single exposed half-edge has no incoming/outgoing partition.
+            assert!(
+                (forces_e[EdgeIndex(0)]
+                    - Vector3::new(12.0 / 17.0_f64.sqrt(), 3.0 / 17.0_f64.sqrt(), 0.0))
+                .magnitude()
+                    < 1e-12
             );
             assert_eq!(forces_v[selected_node], -forces_e[EdgeIndex(0)]);
             for i in 0..3 {
@@ -995,7 +1679,7 @@ mod tests {
     }
 
     #[test]
-    fn external_centroid_bias_respects_pins_and_preserves_free_y() {
+    fn external_pull_respects_pins_and_preserves_free_y() {
         let fixed = PointConstraint {
             x: Constraint::Fixed,
             y: Constraint::Fixed,
@@ -1020,7 +1704,7 @@ mod tests {
                 1.0,
                 ParamTuning {
                     beta: 0.0,
-                    external_centroid_bias: 3.0,
+                    external_pull: 3.0,
                     ..ParamTuning::default()
                 },
             )
@@ -1038,11 +1722,13 @@ mod tests {
                 seed: 42,
                 depth_scale: 0.0,
                 flattening_end: 0.0,
+                initial_repulsion: 1.0,
+                repulsion_growth: 0.7,
             },
         );
         assert_eq!(state.vertex_points[NodeIndex(0)], Point2::new(20.0, 30.0));
         assert_eq!(state.edge_points[EdgeIndex(0)], Point2::new(25.0, 35.0));
-        assert!((state.edge_points[EdgeIndex(1)].x - 22.0).abs() < 1e-6);
+        assert!((state.edge_points[EdgeIndex(1)].x - 45.0).abs() < 1e-6);
         assert_eq!(state.edge_points[EdgeIndex(1)].y, 32.0);
     }
 
@@ -1073,8 +1759,8 @@ mod tests {
             c_vv: 0.0,
             dangling_charge: 0.0,
             dangling_centroid_charge: 0.0,
-            external_centroid_strength: 0.0,
-            external_centroid_distance: 1.0,
+            external_pull: 0.0,
+            external_pull_balance: 1.0,
             c_ev: 0.0,
             c_ee_local: 0.0,
             c_center: 0.0,
@@ -1170,7 +1856,7 @@ mod tests {
             0.0,
             false,
         );
-        let energy = SpringChargeEnergy::from_graph(
+        let mut energy = SpringChargeEnergy::from_graph(
             2,
             6.0,
             8.0,
@@ -1182,6 +1868,7 @@ mod tests {
             },
         );
         let workset = ForceWorkSet::new(&state);
+        energy.external_pull = 2.0;
         let node_z = vec![1.0, -2.0].into();
         let edge_z = vec![3.0, 4.0, -5.0].into();
         let baseline_energy = energy.energy(None, &state);
@@ -1240,8 +1927,8 @@ mod tests {
             c_vv: 0.0,
             dangling_charge: 0.0,
             dangling_centroid_charge: 0.0,
-            external_centroid_strength: 0.0,
-            external_centroid_distance: 1.0,
+            external_pull: 0.0,
+            external_pull_balance: 1.0,
             c_ev: 0.0,
             c_ee_local: 0.0,
             c_center: 0.0,
@@ -1261,6 +1948,8 @@ mod tests {
                 seed: 2,
                 depth_scale: 1.0,
                 flattening_end: 0.5,
+                initial_repulsion: 1.0,
+                repulsion_growth: 0.7,
             },
         );
         assert_eq!(state.vertex_points, original.vertex_points);
@@ -1291,8 +1980,8 @@ mod tests {
             c_vv: 0.0,
             dangling_charge: 0.0,
             dangling_centroid_charge: 0.0,
-            external_centroid_strength: 0.0,
-            external_centroid_distance: 1.0,
+            external_pull: 0.0,
+            external_pull_balance: 1.0,
             c_ev: 1e8,
             c_ee_local: 0.0,
             c_center: 0.0,
@@ -1322,6 +2011,8 @@ mod tests {
                     seed: 2,
                     depth_scale: 1.0,
                     flattening_end: 0.5,
+                    initial_repulsion: 1.0,
+                    repulsion_growth: 0.7,
                 },
             );
             assert_eq!(state.vertex_depths, vec![Some(bound), Some(-bound)].into());
@@ -1350,8 +2041,8 @@ mod tests {
             c_vv: 0.0,
             dangling_charge: 0.0,
             dangling_centroid_charge: 0.0,
-            external_centroid_strength: 0.0,
-            external_centroid_distance: 1.0,
+            external_pull: 0.0,
+            external_pull_balance: 1.0,
             c_ev: 0.0,
             c_ee_local: 0.0,
             c_center: 0.5,
@@ -1388,8 +2079,7 @@ mod tests {
             k_spring: 0.0,
             c_center: 0.0,
             dangling_centroid_charge: 125.0,
-            external_centroid_strength: 0.0,
-            external_centroid_distance: 1.0,
+            external_pull: 0.0,
             eps: 0.0,
             ..energy
         };
@@ -1413,8 +2103,8 @@ mod tests {
             c_vv: 0.0,
             dangling_charge: 0.0,
             dangling_centroid_charge: 0.0,
-            external_centroid_strength: 0.0,
-            external_centroid_distance: 1.0,
+            external_pull: 0.0,
+            external_pull_balance: 1.0,
             c_ev: 0.0,
             c_ee_local: 0.0,
             c_center: 1.0,
@@ -1451,6 +2141,8 @@ mod tests {
                             seed: 2,
                             depth_scale,
                             flattening_end,
+                            initial_repulsion: 1.0,
+                            repulsion_growth: 0.7,
                         };
                         let mut expected = state.clone();
                         if !scales.is_empty() {
@@ -1546,6 +2238,8 @@ mod tests {
                     seed: 2,
                     depth_scale,
                     flattening_end: 0.5,
+                    initial_repulsion: 1.0,
+                    repulsion_growth: 0.7,
                 },
             );
             let endpoint = state.edge_points[EdgeIndex(0)];
@@ -1673,6 +2367,8 @@ mod tests {
                 seed: 2,
                 depth_scale: 1.0,
                 flattening_end: 0.5,
+                initial_repulsion: 1.0,
+                repulsion_growth: 0.7,
             },
         );
         assert_eq!(state.vertex_points[a].x, state.edge_points[EdgeIndex(0)].x);

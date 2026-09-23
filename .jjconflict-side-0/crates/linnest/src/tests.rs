@@ -5196,6 +5196,62 @@ fn edge_spring_length_scales_reject_invalid_statements() {
 }
 
 #[test]
+fn external_pull_balance_defaults_and_propagates_through_settings() {
+    let mut graph = TypstGraph::parse("digraph { a -> b }").unwrap();
+    graph.layout_config = crate::LayoutConfig::from_figment(&test_figment());
+    assert_eq!(graph.layout_config.spring.external_pull_balance, 1.0);
+    assert_eq!(graph.layout_energy_state().1.external_pull_balance, 1.0);
+    assert!(crate::LayoutConfig::is_layout_statement_key(
+        "external-pull-balance"
+    ));
+    assert!(crate::LayoutConfig::is_layout_statement_key(
+        "external_pull_balance"
+    ));
+
+    for balance in [0.0, 0.25, 1.0, 2.0, 3.5] {
+        let config = one_statement("external-pull-balance", &balance.to_string());
+        graph.layout_config = crate::LayoutConfig::from_figment(&Figment::from(Serialized::from(
+            config,
+            Profile::Default,
+        )));
+        assert_eq!(graph.layout_config.spring.external_pull_balance, balance);
+        graph.validate_layout().unwrap();
+        assert_eq!(graph.layout_energy_state().1.external_pull_balance, balance);
+        let archived = rkyv::to_bytes::<_, 4096>(&graph).unwrap();
+        let restored = crate::graph_api::decode_typst_graph(&archived).unwrap();
+        assert_eq!(
+            restored.layout_energy_state().1.external_pull_balance,
+            balance
+        );
+    }
+}
+
+#[test]
+fn external_pull_balance_rejects_invalid_settings_before_layout_or_streaming() {
+    for value in ["-0.1", "NaN", "inf", "-inf"] {
+        let config = one_statement("external-pull-balance", value);
+        let mut graph = TypstGraph::parse("digraph { a -> b }").unwrap();
+        graph.layout_config = crate::LayoutConfig::from_figment(&Figment::from(Serialized::from(
+            &config,
+            Profile::Default,
+        )));
+        assert!(
+            graph
+                .validate_layout()
+                .unwrap_err()
+                .contains("external-pull-balance")
+        );
+        let bytes = encode_cbor(&config);
+        assert!(
+            crate::ForceLayoutStream::from_dot("digraph { a -> b }", &bytes)
+                .err()
+                .unwrap()
+                .contains("external-pull-balance")
+        );
+    }
+}
+
+#[test]
 fn dangling_centroid_incremental_delta_matches_total_delta() {
     let input = r#"digraph {
         ext [style=invis]
@@ -5207,8 +5263,7 @@ fn dangling_centroid_incremental_delta_matches_total_delta() {
     }"#;
     let settings = BTreeMap::from([
         ("gamma-dangling-centroid".to_string(), "1.25".to_string()),
-        ("external-centroid-bias".to_string(), "2.0".to_string()),
-        ("external-centroid-distance".to_string(), "3.0".to_string()),
+        ("external-pull".to_string(), "2.0".to_string()),
     ]);
     let figment = Figment::from(Serialized::from(settings, Profile::Default));
     let mut graph = TypstGraph::parse(input).unwrap();
@@ -5216,9 +5271,11 @@ fn dangling_centroid_incremental_delta_matches_total_delta() {
     let (mut state, energy) = graph.layout_energy_state();
     let mut baseline_energy = energy;
     baseline_energy.dangling_centroid_charge = 0.0;
-    assert_eq!(energy.external_centroid_strength, 2.0 * energy.k_spring);
-    assert_eq!(energy.external_centroid_distance, 3.0);
-    baseline_energy.external_centroid_strength = 0.0;
+    assert_eq!(
+        energy.external_pull,
+        2.0 * energy.k_spring * energy.spring_length
+    );
+    baseline_energy.external_pull = 0.0;
     let mut rng = SmallRng::seed_from_u64(17);
     let mut cached = energy.energy(None, &state);
     let mut baseline_cached = baseline_energy.energy(None, &state);
@@ -5314,5 +5371,42 @@ fn fixed_gap_labels_preserve_clearance_across_sizes_bends_and_rotations() {
                 .iter()
                 .all(|edge| !edge.statements.contains_key("layout-label-gap")));
         }
+    }
+}
+
+#[test]
+fn global_rest_length_scale_multiplies_edges_without_rescaling_forces() {
+    let mut graph =
+        TypstGraph::parse(r#"digraph { a -> b ["spring-length"=2]; b -> c; c -> a }"#).unwrap();
+    graph.layout_config.spring.external_pull = 1.0;
+    let (_, baseline_energy) = graph.layout_energy_state();
+    graph.layout_config.spring_length_scale = 0.75;
+    let (state, energy) = graph.layout_energy_state();
+    assert_eq!(state.edge_spring_length_scales[EdgeIndex(0)], 1.5);
+    assert_eq!(state.edge_spring_length_scales[EdgeIndex(1)], 0.75);
+    assert_eq!(state.edge_spring_length_scales[EdgeIndex(2)], 0.75);
+    assert_eq!(energy.spring_length, baseline_energy.spring_length);
+    assert_eq!(energy.c_vv, baseline_energy.c_vv);
+    assert_eq!(energy.external_pull, baseline_energy.external_pull);
+}
+
+#[test]
+fn relaxation_parameters_reject_invalid_values() {
+    for key in ["initial-repulsion", "repulsion-growth"] {
+        for value in ["-0.1", "1.1", "NaN", "inf"] {
+            let mut graph = TypstGraph::parse("digraph { a -> b }").unwrap();
+            graph.layout_config = crate::LayoutConfig::from_figment(&Figment::from(
+                Serialized::from(one_statement(key, value), Profile::Default),
+            ));
+            assert!(graph.validate_layout().unwrap_err().contains(key));
+        }
+    }
+    for value in [0.0, -1.0, f64::NAN, f64::INFINITY] {
+        let mut graph = TypstGraph::parse("digraph { a -> b }").unwrap();
+        graph.layout_config.spring_length_scale = value;
+        assert!(graph
+            .validate_layout()
+            .unwrap_err()
+            .contains("spring-length-scale"));
     }
 }

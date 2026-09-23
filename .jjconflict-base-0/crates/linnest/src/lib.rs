@@ -1511,6 +1511,21 @@ struct LayoutConfig {
     #[serde(default = "default_depth_scale", deserialize_with = "deserialize_f64")]
     depth_scale: f64,
     #[serde(
+        default = "default_initial_repulsion",
+        deserialize_with = "deserialize_f64"
+    )]
+    initial_repulsion: f64,
+    #[serde(
+        default = "default_repulsion_growth",
+        deserialize_with = "deserialize_f64"
+    )]
+    repulsion_growth: f64,
+    #[serde(
+        default = "default_spring_length_scale",
+        deserialize_with = "deserialize_f64"
+    )]
+    spring_length_scale: f64,
+    #[serde(
         default = "default_flattening_end",
         deserialize_with = "deserialize_f64"
     )]
@@ -1606,6 +1621,9 @@ impl Default for LayoutConfig {
             delta: default_delta(),
             directional_force: default_directional_force(),
             depth_scale: default_depth_scale(),
+            initial_repulsion: default_initial_repulsion(),
+            repulsion_growth: default_repulsion_growth(),
+            spring_length_scale: default_spring_length_scale(),
             flattening_end: default_flattening_end(),
             label_steps: default_label_steps(),
             label_layout: default_label_layout(),
@@ -1655,8 +1673,8 @@ impl LayoutConfig {
                 | "g-center"
                 | "gamma-dangling"
                 | "gamma-dangling-centroid"
-                | "external-centroid-bias"
-                | "external-centroid-distance"
+                | "external-pull"
+                | "external-pull-balance"
                 | "gamma-ee"
                 | "gamma-ev"
                 | "incremental-energy"
@@ -1693,6 +1711,9 @@ impl LayoutConfig {
                 | "tree-dy"
                 | "viewport-h"
                 | "viewport-w"
+                | "initial-repulsion"
+                | "repulsion-growth"
+                | "spring-length-scale"
                 | "depth-scale"
                 | "flattening-end"
         )
@@ -1825,9 +1846,9 @@ struct SpringConfig {
     )]
     gamma_dangling_centroid: f64,
     #[serde(default, deserialize_with = "deserialize_f64")]
-    external_centroid_bias: f64,
+    external_pull: f64,
     #[serde(deserialize_with = "deserialize_f64")]
-    external_centroid_distance: f64,
+    external_pull_balance: f64,
     #[serde(default = "default_gamma_ev", deserialize_with = "deserialize_f64")]
     gamma_ev: f64,
     #[serde(default = "default_gamma_ee", deserialize_with = "deserialize_f64")]
@@ -1851,8 +1872,8 @@ impl Default for SpringConfig {
             beta: default_beta(),
             gamma_dangling: default_gamma_dangling(),
             gamma_dangling_centroid: default_gamma_dangling_centroid(),
-            external_centroid_bias: 0.0,
-            external_centroid_distance: 1.0,
+            external_pull: 0.0,
+            external_pull_balance: 1.0,
             gamma_ev: default_gamma_ev(),
             gamma_ee: default_gamma_ee(),
             g_center: default_g_center(),
@@ -1870,8 +1891,8 @@ impl From<&SpringConfig> for ParamTuning {
             beta: cfg.beta,
             gamma_dangling: cfg.gamma_dangling,
             gamma_dangling_centroid: cfg.gamma_dangling_centroid,
-            external_centroid_bias: cfg.external_centroid_bias,
-            external_centroid_distance: cfg.external_centroid_distance,
+            external_pull: cfg.external_pull,
+            external_pull_balance: cfg.external_pull_balance,
             gamma_ev: cfg.gamma_ev,
             gamma_ee: cfg.gamma_ee,
             g_center: cfg.g_center,
@@ -1925,6 +1946,18 @@ impl From<&ScheduleConfig> for GeoSchedule {
             cfg.early_tol,
         )
     }
+}
+
+fn default_initial_repulsion() -> f64 {
+    1.0
+}
+
+fn default_repulsion_growth() -> f64 {
+    0.7
+}
+
+fn default_spring_length_scale() -> f64 {
+    1.0
 }
 
 fn default_length_scale() -> f64 {
@@ -2408,6 +2441,30 @@ impl TypstGraph {
     }
 
     fn validate_layout(&self) -> Result<(), String> {
+        for (name, value) in [
+            ("initial-repulsion", self.layout_config.initial_repulsion),
+            ("repulsion-growth", self.layout_config.repulsion_growth),
+        ] {
+            if !(0.0..=1.0).contains(&value) {
+                return Err(format!("{name} must be a finite fraction between 0 and 1"));
+            }
+        }
+        if !self.layout_config.spring_length_scale.is_finite()
+            || self.layout_config.spring_length_scale <= 0.0
+        {
+            return Err("spring-length-scale must be a positive finite multiplier".to_string());
+        }
+        for (name, value) in [
+            ("external-pull", self.layout_config.spring.external_pull),
+            (
+                "external-pull-balance",
+                self.layout_config.spring.external_pull_balance,
+            ),
+        ] {
+            if !value.is_finite() || value < 0.0 {
+                return Err(format!("{name} must be a non-negative finite number"));
+            }
+        }
         if !self.layout_config.depth_scale.is_finite() || self.layout_config.depth_scale < 0.0 {
             return Err("depth-scale must be a non-negative finite number".to_string());
         }
@@ -2470,7 +2527,8 @@ impl TypstGraph {
             self.layout_config.incremental_energy,
         );
         state.edge_spring_length_scales = self.new_edgevec(|edge, _, _| {
-            Self::positive_statement_f64(&edge.statements, "spring-length").unwrap_or(1.0)
+            self.layout_config.spring_length_scale
+                * Self::positive_statement_f64(&edge.statements, "spring-length").unwrap_or(1.0)
         });
 
         (state, energy)
@@ -2766,7 +2824,8 @@ impl TypstGraph {
             self.layout_config.incremental_energy,
         );
         state.edge_spring_length_scales = self.new_edgevec(|edge, _, _| {
-            Self::positive_statement_f64(&edge.statements, "spring-length").unwrap_or(1.0)
+            self.layout_config.spring_length_scale
+                * Self::positive_statement_f64(&edge.statements, "spring-length").unwrap_or(1.0)
         });
         if let Some(active_subgraph) = active_subgraph {
             state = state.with_active_subgraph(active_subgraph.clone());
@@ -2836,6 +2895,8 @@ impl TypstGraph {
                 early_tol: self.layout_config.schedule.early_tol * spring_length,
                 seed: self.layout_config.seed,
                 depth_scale: self.layout_config.depth_scale,
+                initial_repulsion: self.layout_config.initial_repulsion,
+                repulsion_growth: self.layout_config.repulsion_growth,
                 flattening_end: self.layout_config.flattening_end,
             },
         )

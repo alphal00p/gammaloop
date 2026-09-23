@@ -4,7 +4,21 @@
 #import "gamma-layout-core.typ": autogen-external-edge-fields, bind-layout
 #set page(width: auto, height: auto, margin: 0pt)
 
-#let input = read("epemttbar.dot")
+// This tests the renderer's compact DOT contract. The physics corpus uses
+// annotated FeynKit DOT, whose external-state metadata belongs to its own parser.
+#let input = ```dot
+digraph {
+  ext0 [style=invis, is_cut=10];
+  ext1 [style=invis, is_cut=20];
+  ext2 [style=invis, is_cut=20];
+  ext3 [style=invis, is_cut=10];
+  right -> ext0 [id=0, particle="e-"];
+  right -> ext1 [id=1, particle="e+"];
+  ext2 -> left [id=2, particle="e-"];
+  ext3 -> left [id=3, particle="e+"];
+  left -> right [id=4, particle="photon"];
+}
+```.text
 #let original = graph.parse(input).first()
 #let gamma-layout = bind-layout(
   graph: graph, renderer: renderer, physics: physics,
@@ -24,7 +38,10 @@
     let labels = graph.info(g).data.at("linnest-style").at("edge-label")
     for eid in range(4) {
       let edge = edges.at(eid)
-      assert(edge.statements.at("pin").contains("y:@is_cut-"))
+      let edge-dot = graph.dot(g).split("\n").find(
+        line => line.contains("[id=" + str(eid) + " "),
+      )
+      assert(edge-dot.contains("y:@is_cut-"))
       assert(edge.statements.at("pos-z") == "0")
       assert(edge.statements.at("pos-z-mode") == "pin")
       if eid < 2 { assert(edge.pos.x > right) }
@@ -70,7 +87,10 @@
 #assert(edges.at(1).pos == before.at(1).pos)
 #assert(edges.at(2).pos.x == -30)
 #for eid in (2, 3) {
-  assert(edges.at(eid).statements.at("pin").contains("y:@is_cut-"))
+  let edge-dot = graph.dot(positioned).split("\n").find(
+    line => line.contains("[id=" + str(eid) + " "),
+  )
+  assert(edge-dot.contains("y:@is_cut-"))
   assert(edges.at(eid).pos.y != prepared-edges.at(eid).pos.y)
 }
 #for eid in (0, 1, 2, 3) {
@@ -94,10 +114,10 @@ digraph {
 ```.text
 #for cross-section in (false, true) {
   for (arrows, momentum, distance, expected) in (
-    (true, auto, none, 0.25),
-    (true, false, none, 0.10),
-    (false, auto, none, 0.10),
-    (false, true, none, 0.25),
+    (true, auto, none, 0.60),
+    (true, false, none, 0.45),
+    (false, auto, none, 0.45),
+    (false, true, none, 0.60),
     (true, false, 0.6, 0.6),
   ) {
     context gamma-layout(spacing-input,
@@ -105,7 +125,7 @@ digraph {
       edge-style-options: (momentum-arrows: arrows, show-momentum: momentum),
       layout-passes: ((viewport-w: 1, viewport-h: 1, spring: (length: 1),
         solver: (steps: 0), labels: (steps: 1, repulsion: 0,
-          ..if distance == none { (:) } else { (distance: distance) })),),
+          ..if distance == none { (:) } else { (external-distance: distance) })),),
       diagram-options: (title: none, draw-after: (g, _) => {
         for edge in graph.edges(g) {
           let sign = if edge.source == none { -1 } else { 1 }

@@ -917,8 +917,11 @@ fn figure_render_config(plan: &FigurePlan, inputs: &[(String, String)]) -> Resul
     for key in [
         "internal-label-length-scale",
         "external-label-length-scale",
-        "external-centroid-bias",
-        "external-centroid-distance",
+        "external-pull",
+        "spring-length-scale",
+        "k-spring",
+        "initial-repulsion",
+        "repulsion-growth",
     ] {
         if let Some(value) = inputs.get(key) {
             let value = typst_native_value(value);
@@ -939,8 +942,11 @@ fn figure_render_config(plan: &FigurePlan, inputs: &[(String, String)]) -> Resul
                     | "seed"
                     | "internal-label-length-scale"
                     | "external-label-length-scale"
-                    | "external-centroid-bias"
-                    | "external-centroid-distance"
+                    | "external-pull"
+                    | "spring-length-scale"
+                    | "k-spring"
+                    | "initial-repulsion"
+                    | "repulsion-growth"
             )
         })
         .map(|(key, value)| (*key, typst_native_value(value)));

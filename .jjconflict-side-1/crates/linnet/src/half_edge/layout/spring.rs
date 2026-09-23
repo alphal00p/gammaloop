@@ -126,6 +126,8 @@ pub struct LayoutState<'a, E, V, H, N: NodeStorageOps<NodeData = V>> {
     pub graph: &'a HedgeGraph<E, V, H, N>,
     pub ext: SuBitGraph,
     active_subgraph: Option<SuBitGraph>,
+    /// Topology-only external load sharing, recomputed when the active graph changes.
+    pub(super) external_pull_scales: EdgeVec<f64>,
     pub vertex_points: NodeVec<Point2<f64>>,
     pub edge_points: EdgeVec<Point2<f64>>,
     /// Raw auxiliary depths: optional seeds before force layout, final raw values afterwards.
@@ -158,10 +160,11 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         let ext = self.external_filter();
         let len_v = vertex_points.len().0;
         let len_e = edge_points.len().0;
-        LayoutState {
+        let mut state = LayoutState {
             graph: self,
             ext,
             active_subgraph: None,
+            external_pull_scales: vec![1.0; len_e].into(),
             vertex_points,
             edge_points,
             vertex_depths: vec![None; len_v].into(),
@@ -174,7 +177,9 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
             changed_nodes: SubSet::empty(len_v),
             changed_edges: SubSet::empty(len_e),
             incremental,
-        }
+        };
+        state.rebuild_external_pull_scales();
+        state
     }
 }
 
@@ -184,6 +189,7 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> Clone for LayoutState<'a, E, 
             graph: self.graph,
             ext: self.ext.clone(),
             active_subgraph: self.active_subgraph.clone(),
+            external_pull_scales: self.external_pull_scales.clone(),
             vertex_points: self.vertex_points.clone(),
             edge_points: self.edge_points.clone(),
             vertex_depths: self.vertex_depths.clone(),
@@ -223,7 +229,221 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayoutState<'a, E, V, H, N> {
         }
         self.ext = ext;
         self.active_subgraph = Some(active_subgraph);
+        self.rebuild_external_pull_scales();
         self
+    }
+
+    fn rebuild_external_pull_scales(&mut self) {
+        self.external_pull_scales = vec![1.0; self.edge_points.len().0].into();
+        if self.ext.included_iter().next().is_none() {
+            return;
+        }
+        let n = self.vertex_points.len().0;
+        let mut adjacency = vec![Vec::new(); n];
+        for edge in self.active_edges() {
+            let (_, pair) = &self.graph[&edge];
+            if let HedgePair::Paired { source, sink } = *pair {
+                if self.hedge_is_active(source) && self.hedge_is_active(sink) {
+                    let a = self.graph.node_id(source).0;
+                    let b = self.graph.node_id(sink).0;
+                    if a != b {
+                        adjacency[a].push(b);
+                        adjacency[b].push(a);
+                    }
+                }
+            }
+        }
+        let mut external = vec![Vec::new(); n];
+        for hedge in self.ext.included_iter() {
+            external[self.graph.node_id(hedge).0]
+                .push((self.graph[&hedge], self.graph.flow(hedge)));
+        }
+        let mut visited = vec![false; n];
+        let mut local_index = vec![0; n];
+        let roots = self.active_nodes().collect::<Vec<_>>();
+        for root in roots {
+            if visited[root.0] {
+                continue;
+            }
+            let mut nodes = vec![root.0];
+            visited[root.0] = true;
+            let mut cursor = 0;
+            while cursor < nodes.len() {
+                for &neighbor in &adjacency[nodes[cursor]] {
+                    if !visited[neighbor] {
+                        visited[neighbor] = true;
+                        nodes.push(neighbor);
+                    }
+                }
+                cursor += 1;
+            }
+            let mut incoming = 0;
+            let mut outgoing = 0;
+            for (i, &node) in nodes.iter().enumerate() {
+                local_index[node] = i;
+                for &(_, flow) in &external[node] {
+                    match flow {
+                        Flow::Source => outgoing += 1,
+                        Flow::Sink => incoming += 1,
+                    }
+                }
+            }
+            if incoming == 0 || outgoing == 0 {
+                continue;
+            }
+
+            // Unit total load on each side. Local incoming/outgoing attachments
+            // cancel at their vertex before the internal spring network carries it.
+            let demand = nodes
+                .iter()
+                .map(|&node| {
+                    let local_outgoing = external[node]
+                        .iter()
+                        .filter(|(_, flow)| *flow == Flow::Source)
+                        .count();
+                    let local_incoming = external[node].len() - local_outgoing;
+                    // Cancel equal rational loads exactly, independently of
+                    // half-edge order, before converting to floating point.
+                    let outward = local_outgoing as u128 * incoming as u128;
+                    let inward = local_incoming as u128 * outgoing as u128;
+                    let numerator = if outward >= inward {
+                        (outward - inward) as f64
+                    } else {
+                        -((inward - outward) as f64)
+                    };
+                    numerator / (incoming as f64 * outgoing as f64)
+                })
+                .collect::<Vec<f64>>();
+            let local_adjacency = nodes
+                .iter()
+                .map(|&node| {
+                    adjacency[node]
+                        .iter()
+                        .map(|&neighbor| local_index[neighbor])
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>();
+            let width = Self::component_pull_width(
+                &local_adjacency,
+                &demand,
+                (1.0 / incoming as f64).max(1.0 / outgoing as f64),
+            );
+            for node in nodes {
+                for &(edge, flow) in &external[node] {
+                    let side_count = match flow {
+                        Flow::Source => outgoing,
+                        Flow::Sink => incoming,
+                    };
+                    self.external_pull_scales[edge] = (width / side_count as f64).min(1.0);
+                }
+            }
+        }
+    }
+
+    /// Normalize by the greatest spring load, including the external stems.
+    /// Unit-conductance edges share load in parallel; series edges retain the
+    /// same load, so longer chains can still stretch naturally. Rest lengths
+    /// do not enter this topology calculation, and self-loops conduct no load.
+    fn component_pull_width(adjacency: &[Vec<usize>], demand: &[f64], boundary_load: f64) -> f64 {
+        let n = adjacency.len();
+        let ground = (0..n).max_by_key(|&i| adjacency[i].len()).unwrap_or(0);
+        let apply_laplacian = |values: &[f64], result: &mut [f64]| {
+            for (i, neighbors) in adjacency.iter().enumerate() {
+                result[i] = if i == ground {
+                    0.0
+                } else {
+                    neighbors.iter().map(|&j| values[i] - values[j]).sum()
+                };
+            }
+        };
+        let mut potential = vec![0.0; n];
+        let mut residual = demand.to_vec();
+        residual[ground] = 0.0;
+        let rhs_norm_sq = residual.iter().map(|r| r * r).sum::<f64>();
+        if rhs_norm_sq == 0.0 {
+            return 1.0 / boundary_load;
+        }
+        let tolerance_sq = rhs_norm_sq * 1e-22;
+        let mut direction = residual
+            .iter()
+            .enumerate()
+            .map(|(i, &r)| {
+                if i == ground {
+                    0.0
+                } else {
+                    r / adjacency[i].len() as f64
+                }
+            })
+            .collect::<Vec<_>>();
+        let mut residual_dot_preconditioned = residual
+            .iter()
+            .zip(&direction)
+            .map(|(r, z)| r * z)
+            .sum::<f64>();
+        let mut product = vec![0.0; n];
+        let mut converged = false;
+        // Grounded Jacobi-preconditioned conjugate gradients use O(V + E)
+        // storage. A bounded solve avoids introducing a dense matrix dependency.
+        for _ in 0..n.saturating_mul(4).saturating_add(32) {
+            apply_laplacian(&direction, &mut product);
+            let curvature = direction
+                .iter()
+                .zip(&product)
+                .map(|(p, q)| p * q)
+                .sum::<f64>();
+            if !curvature.is_finite() || curvature <= 0.0 {
+                break;
+            }
+            let alpha = residual_dot_preconditioned / curvature;
+            for i in 0..n {
+                potential[i] += alpha * direction[i];
+                residual[i] -= alpha * product[i];
+            }
+            let norm_sq = residual.iter().map(|r| r * r).sum::<f64>();
+            if !norm_sq.is_finite() {
+                break;
+            }
+            if norm_sq <= tolerance_sq {
+                // Verify the actual residual, including the grounded equation;
+                // recurrence roundoff must not silently overestimate capacity.
+                let actual_sq = adjacency
+                    .iter()
+                    .enumerate()
+                    .map(|(i, neighbors)| {
+                        let current: f64 =
+                            neighbors.iter().map(|&j| potential[i] - potential[j]).sum();
+                        (demand[i] - current).powi(2)
+                    })
+                    .sum::<f64>();
+                converged = actual_sq <= tolerance_sq * 4.0;
+                break;
+            }
+            let next_dot = residual
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| *i != ground)
+                .map(|(i, &r)| r * r / adjacency[i].len() as f64)
+                .sum::<f64>();
+            let beta = next_dot / residual_dot_preconditioned;
+            for i in 0..n {
+                if i != ground {
+                    direction[i] = residual[i] / adjacency[i].len() as f64 + beta * direction[i];
+                }
+            }
+            residual_dot_preconditioned = next_dot;
+        }
+        if !converged {
+            // One channel is a conservative fallback if numerical conditioning
+            // prevents convergence; it never amplifies any endpoint's old pull.
+            return 1.0;
+        }
+        let max_load = adjacency
+            .iter()
+            .enumerate()
+            .flat_map(|(i, neighbors)| neighbors.iter().map(move |&j| (i, j)))
+            .map(|(i, j)| (potential[i] - potential[j]).abs())
+            .fold(boundary_load, f64::max);
+        1.0 / max_load
     }
 
     pub(super) fn has_active_subgraph(&self) -> bool {
@@ -249,6 +469,14 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayoutState<'a, E, V, H, N> {
             let (_, pair) = &self.graph[&edge];
             active.intersects(pair)
         })
+    }
+
+    /// Incoming and outgoing flows select horizontal pulling; a single flow is radial.
+    pub(super) fn external_flows_are_mixed(&self) -> bool {
+        let mut flows = self.ext.included_iter().map(|hedge| self.graph.flow(hedge));
+        flows
+            .next()
+            .is_some_and(|first| flows.any(|flow| flow != first))
     }
 
     fn point_is_active(&self, point: LayoutPointIndex) -> bool {
@@ -421,13 +649,8 @@ where
             }
             match rng.gen_range(0..100) {
                 0..=6 => {
-                    // swap along pinned axis to allow reordering on fixed lines
-                    let changed = if rng.gen_bool(0.6) {
-                        swap_on_fixed_axis_nodes(&mut st, rng)
-                    } else {
-                        swap_on_fixed_axis_edges(&mut st, rng)
-                    };
-                    didnothing = !changed;
+                    // Reorder constrained lines without crossing their repulsive barrier.
+                    didnothing = !st.swap_on_constrained_line(rng);
                 }
                 7..=69 => {
                     // single-DOF
@@ -680,6 +903,131 @@ where
         }
     }
 
+    /// Movable coordinates on a common constrained line. Nodes and edge control
+    /// points share the same coordinate space and can participate in the same move.
+    fn constrained_lines(&self) -> Vec<(LayoutAxis, Vec<LayoutPointIndex>)> {
+        let mut lines = Vec::new();
+        for (axis, fixed_axis) in [
+            (LayoutAxis::X, LayoutAxis::Y),
+            (LayoutAxis::Y, LayoutAxis::X),
+        ] {
+            let mut points = self
+                .active_nodes()
+                .map(LayoutPointIndex::Node)
+                .chain(self.active_edges().map(LayoutPointIndex::Edge))
+                .filter(|&point| {
+                    let constraint = self.constraints(point);
+                    let (free, fixed) = match axis {
+                        LayoutAxis::X => (constraint.x, constraint.y),
+                        LayoutAxis::Y => (constraint.y, constraint.x),
+                    };
+                    matches!(free, Constraint::Free)
+                        && matches!(fixed, Constraint::Fixed | Constraint::Grouped(_, _))
+                        && self.group_members(point, axis).is_empty()
+                        && self.coordinate(point, axis).is_finite()
+                        && self.coordinate(point, fixed_axis).is_finite()
+                })
+                .collect::<Vec<_>>();
+            points.sort_by(|&a, &b| {
+                self.coordinate(a, fixed_axis)
+                    .total_cmp(&self.coordinate(b, fixed_axis))
+            });
+            let mut start = 0;
+            while start < points.len() {
+                let fixed = self.coordinate(points[start], fixed_axis);
+                let mut end = start + 1;
+                while end < points.len()
+                    && (self.coordinate(points[end], fixed_axis) - fixed).abs() <= 1e-9
+                {
+                    end += 1;
+                }
+                if end - start >= 2 {
+                    let mut line = points[start..end].to_vec();
+                    line.sort_by(|&a, &b| {
+                        self.coordinate(a, axis)
+                            .total_cmp(&self.coordinate(b, axis))
+                    });
+                    lines.push((axis, line));
+                }
+                start = end;
+            }
+        }
+        lines
+    }
+
+    fn swap_line_coordinates(
+        &mut self,
+        a: LayoutPointIndex,
+        b: LayoutPointIndex,
+        axis: LayoutAxis,
+    ) -> bool {
+        let pa = self.coordinate(a, axis);
+        let pb = self.coordinate(b, axis);
+        if pa == pb {
+            return false;
+        }
+        self.set_coordinate(a, axis, pb);
+        self.set_coordinate(b, axis, pa);
+        true
+    }
+
+    // Swaps along a pinned/grouped axis allow reordering on constrained lines
+    // without forcing points through the short-range repulsion between them.
+    fn swap_on_constrained_line(&mut self, rng: &mut impl Rng) -> bool {
+        let lines = self.constrained_lines();
+        if lines.is_empty() {
+            return false;
+        }
+        let (axis, points) = &lines[rng.gen_range(0..lines.len())];
+        let a = rng.gen_range(0..points.len());
+        let mut b = rng.gen_range(0..points.len() - 1);
+        if b >= a {
+            b += 1;
+        }
+        self.swap_line_coordinates(points[a], points[b], *axis)
+    }
+
+    /// Try one deterministic forward/backward sweep of adjacent line exchanges.
+    /// Only a strict decrease of the current planar energy is accepted. Bounding
+    /// the sweep limits full energy evaluations; later epochs can improve further.
+    pub(super) fn improve_constrained_lines(&mut self, energy: &SpringChargeEnergy) -> f64 {
+        let mut lines = self.constrained_lines();
+        if lines.is_empty() {
+            return 0.0;
+        }
+        let mut current = energy.total_energy(self);
+        if !current.is_finite() {
+            return 0.0;
+        }
+        let original_nodes = self.vertex_points.clone();
+        let original_edges = self.edge_points.clone();
+        for (axis, points) in &mut lines {
+            let count = points.len() - 1;
+            for index in (0..count).chain((0..count).rev()) {
+                let mut proposal = self.clone();
+                if !proposal.swap_line_coordinates(points[index], points[index + 1], *axis) {
+                    continue;
+                }
+                // Evaluate the full energy: node swaps also change incident
+                // segment crossings, which a control-point-only delta can miss.
+                let next = energy.total_energy(&proposal);
+                let tolerance = 1e-12 * (1.0 + current.abs().max(next.abs()));
+                if next.is_finite() && next < current - tolerance {
+                    *self = proposal;
+                    current = next;
+                    points.swap(index, index + 1);
+                }
+            }
+        }
+        self.active_nodes()
+            .map(|node| self.vertex_points[node].distance(original_nodes[node]))
+            .chain(
+                self.active_edges()
+                    .map(|edge| self.edge_points[edge].distance(original_edges[edge])),
+            )
+            .fold(0.0, f64::max)
+    }
+
     fn shift_axis(
         &mut self,
         index: LayoutPointIndex,
@@ -745,182 +1093,22 @@ where
     state.shift_constrained(LayoutPointIndex::Edge(idx), shift)
 }
 
-fn swap_on_fixed_axis_nodes<'a, E, V, H, N>(
-    state: &mut LayoutState<'a, E, V, H, N>,
-    rng: &mut impl Rng,
-) -> bool
-where
-    V: HasPointConstraint,
-    N: NodeStorageOps<NodeData = V> + Clone,
-{
-    fn is_pinned_axis(constraint: Constraint) -> bool {
-        matches!(constraint, Constraint::Fixed | Constraint::Grouped(_, _))
-    }
-
-    fn is_free_axis(constraint: Constraint) -> bool {
-        matches!(constraint, Constraint::Free)
-    }
-
-    let len = state.vertex_points.len().0;
-    if len < 2 {
-        return false;
-    }
-
-    let mut candidates: Vec<NodeIndex> = Vec::new();
-    for i in 0..len {
-        let idx = NodeIndex(i);
-        if !state.node_is_active(idx) {
-            continue;
-        }
-        let constraints = state.graph[idx].point_constraint();
-        let free_x_fixed_y = is_free_axis(constraints.x) && is_pinned_axis(constraints.y);
-        let fixed_x_free_y = is_pinned_axis(constraints.x) && is_free_axis(constraints.y);
-        if free_x_fixed_y || fixed_x_free_y {
-            candidates.push(idx);
-        }
-    }
-
-    if candidates.len() < 2 {
-        return false;
-    }
-
-    for _ in 0..8 {
-        let a = candidates[rng.gen_range(0..candidates.len())];
-        let b = candidates[rng.gen_range(0..candidates.len())];
-        if a == b {
-            continue;
-        }
-        let ca = state.graph[a].point_constraint();
-        let cb = state.graph[b].point_constraint();
-        let pa = state.vertex_points[a];
-        let pb = state.vertex_points[b];
-        let tol = 1e-9;
-
-        let swap_x = is_pinned_axis(ca.y)
-            && is_pinned_axis(cb.y)
-            && is_free_axis(ca.x)
-            && is_free_axis(cb.x)
-            && (pa.y - pb.y).abs() <= tol;
-        if swap_x {
-            state.vertex_points[a].x = pb.x;
-            state.vertex_points[b].x = pa.x;
-            state.mark_node_changed(a);
-            state.mark_node_changed(b);
-            return true;
-        }
-
-        let swap_y = is_pinned_axis(ca.x)
-            && is_pinned_axis(cb.x)
-            && is_free_axis(ca.y)
-            && is_free_axis(cb.y)
-            && (pa.x - pb.x).abs() <= tol;
-        if swap_y {
-            state.vertex_points[a].y = pb.y;
-            state.vertex_points[b].y = pa.y;
-            state.mark_node_changed(a);
-            state.mark_node_changed(b);
-            return true;
-        }
-    }
-
-    false
-}
-
-fn swap_on_fixed_axis_edges<'a, E, V, H, N>(
-    state: &mut LayoutState<'a, E, V, H, N>,
-    rng: &mut impl Rng,
-) -> bool
-where
-    E: HasPointConstraint,
-    N: NodeStorageOps<NodeData = V> + Clone,
-{
-    fn is_pinned_axis(constraint: Constraint) -> bool {
-        matches!(constraint, Constraint::Fixed | Constraint::Grouped(_, _))
-    }
-
-    fn is_free_axis(constraint: Constraint) -> bool {
-        matches!(constraint, Constraint::Free)
-    }
-
-    let len = state.edge_points.len().0;
-    if len < 2 {
-        return false;
-    }
-
-    let mut candidates: Vec<EdgeIndex> = Vec::new();
-    for i in 0..len {
-        let idx = EdgeIndex(i);
-        if !state.edge_is_active(idx) {
-            continue;
-        }
-        let constraints = state.graph[idx].point_constraint();
-        let free_x_fixed_y = is_free_axis(constraints.x) && is_pinned_axis(constraints.y);
-        let fixed_x_free_y = is_pinned_axis(constraints.x) && is_free_axis(constraints.y);
-        if free_x_fixed_y || fixed_x_free_y {
-            candidates.push(idx);
-        }
-    }
-
-    if candidates.len() < 2 {
-        return false;
-    }
-
-    for _ in 0..8 {
-        let a = candidates[rng.gen_range(0..candidates.len())];
-        let b = candidates[rng.gen_range(0..candidates.len())];
-        if a == b {
-            continue;
-        }
-        let ca = state.graph[a].point_constraint();
-        let cb = state.graph[b].point_constraint();
-        let pa = state.edge_points[a];
-        let pb = state.edge_points[b];
-        let tol = 1e-9;
-
-        let swap_x = is_pinned_axis(ca.y)
-            && is_pinned_axis(cb.y)
-            && is_free_axis(ca.x)
-            && is_free_axis(cb.x)
-            && (pa.y - pb.y).abs() <= tol;
-        if swap_x {
-            state.edge_points[a].x = pb.x;
-            state.edge_points[b].x = pa.x;
-            state.mark_edge_changed(a);
-            state.mark_edge_changed(b);
-            return true;
-        }
-
-        let swap_y = is_pinned_axis(ca.x)
-            && is_pinned_axis(cb.x)
-            && is_free_axis(ca.y)
-            && is_free_axis(cb.y)
-            && (pa.x - pb.x).abs() <= tol;
-        if swap_y {
-            state.edge_points[a].y = pb.y;
-            state.edge_points[b].y = pa.y;
-            state.mark_edge_changed(a);
-            state.mark_edge_changed(b);
-            return true;
-        }
-    }
-
-    false
-}
-
 #[derive(Clone, Copy)]
 pub struct SpringChargeEnergy {
-    pub spring_length: f64,              // L
-    pub k_spring: f64,                   // 1.0
-    pub c_vv: f64,                       // vertex-vertex charge (≈ 0.14*L^3)
-    pub dangling_charge: f64,            // dangling edge charge (≈ 0.14*L^3)
-    pub dangling_centroid_charge: f64,   // dangling edge vs node-centroid charge
-    pub external_centroid_strength: f64, // horizontal spring about the node centroid
-    pub external_centroid_distance: f64, // target offset in external spring lengths
-    pub c_ev: f64,                       // edge-vertex (≈ 0.028*L^3)
-    pub c_ee_local: f64,                 // edge-edge local (≈ 0.014*L^3)
-    pub c_center: f64,                   // central pull (dimensionless relative strength)
-    pub crossing_penalty: f64,           // crossing energy penalty (≈ penalty*L^2)
-    pub eps: f64,                        // softened distance (≈ eps*L)
+    pub spring_length: f64,            // L
+    pub k_spring: f64,                 // 1.0
+    pub c_vv: f64,                     // vertex-vertex charge (≈ 0.14*L^3)
+    pub dangling_charge: f64,          // dangling edge charge (≈ 0.14*L^3)
+    pub dangling_centroid_charge: f64, // dangling edge vs node-centroid charge
+    pub external_pull: f64,            // constant outward force on external endpoints
+    /// Exponent of each topology weight: 0 gives uniform per-leg pull, 1 gives
+    /// normalized pull, and larger values strengthen the correction.
+    pub external_pull_balance: f64,
+    pub c_ev: f64,             // edge-vertex (≈ 0.028*L^3)
+    pub c_ee_local: f64,       // edge-edge local (≈ 0.014*L^3)
+    pub c_center: f64,         // central pull (dimensionless relative strength)
+    pub crossing_penalty: f64, // crossing energy penalty (≈ penalty*L^2)
+    pub eps: f64,              // softened distance (≈ eps*L)
 }
 
 impl<'a, E, V, H, N: NodeStorageOps<NodeData = V> + Clone> Energy<LayoutState<'a, E, V, H, N>>
@@ -957,18 +1145,19 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V> + Clone> Energy<LayoutState<'a
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct ParamTuning {
-    pub length_scale: f64,               // scales L: default 1.0
-    pub k_spring: f64,                   // spring stiffness: default 1.0
-    pub beta: f64,                       // vertex–vertex strength
-    pub gamma_dangling: f64,             // dangling edge vs vertex–vertex
-    pub gamma_dangling_centroid: f64,    // dangling edge vs node centroid
-    pub external_centroid_bias: f64,     // horizontal centroid spring relative to k_spring
-    pub external_centroid_distance: f64, // target offset in external spring lengths
-    pub gamma_ev: f64,                   // edge–vertex vs vertex–vertex
-    pub gamma_ee: f64,                   // local edge–edge vs vertex–vertex
-    pub g_center: f64,                   // central vs vertex–vertex
-    pub crossing_penalty: f64,           // fixed penalty per crossing
-    pub eps: f64,                        // softening epsilon
+    pub length_scale: f64,            // scales L: default 1.0
+    pub k_spring: f64,                // spring stiffness: default 1.0
+    pub beta: f64,                    // vertex–vertex strength
+    pub gamma_dangling: f64,          // dangling edge vs vertex–vertex
+    pub gamma_dangling_centroid: f64, // dangling edge vs node centroid
+    pub external_pull: f64,           // constant external pull relative to k_spring * L
+    /// Finite nonnegative topology-weight exponent, defaulting to 1.
+    pub external_pull_balance: f64,
+    pub gamma_ev: f64,         // edge–vertex vs vertex–vertex
+    pub gamma_ee: f64,         // local edge–edge vs vertex–vertex
+    pub g_center: f64,         // central vs vertex–vertex
+    pub crossing_penalty: f64, // fixed penalty per crossing
+    pub eps: f64,              // softening epsilon
 }
 
 impl ParamTuning {
@@ -994,13 +1183,12 @@ impl ParamTuning {
             "gamma_dangling_centroid".to_string(),
             self.gamma_dangling_centroid.to_string(),
         );
+        global_data
+            .statements
+            .insert("external_pull".to_string(), self.external_pull.to_string());
         global_data.statements.insert(
-            "external_centroid_bias".to_string(),
-            self.external_centroid_bias.to_string(),
-        );
-        global_data.statements.insert(
-            "external_centroid_distance".to_string(),
-            self.external_centroid_distance.to_string(),
+            "external_pull_balance".to_string(),
+            self.external_pull_balance.to_string(),
         );
         global_data
             .statements
@@ -1036,14 +1224,14 @@ impl ParamTuning {
                         tune.gamma_dangling_centroid = v;
                     }
                 }
-                "external_centroid_bias" => {
+                "external_pull" => {
                     if let Ok(v) = value.parse::<f64>() {
-                        tune.external_centroid_bias = v;
+                        tune.external_pull = v;
                     }
                 }
-                "external_centroid_distance" => {
+                "external_pull_balance" => {
                     if let Ok(v) = value.parse::<f64>() {
-                        tune.external_centroid_distance = v;
+                        tune.external_pull_balance = v;
                     }
                 }
                 "k_spring" => {
@@ -1096,8 +1284,8 @@ impl Default for ParamTuning {
             beta: 0.14,
             gamma_dangling: 0.14,
             gamma_dangling_centroid: 0.0,
-            external_centroid_bias: 0.0,
-            external_centroid_distance: 1.0,
+            external_pull: 0.0,
+            external_pull_balance: 1.0,
             gamma_ev: 0.20,
             gamma_ee: 0.10,
             g_center: 0.05,
@@ -1213,6 +1401,15 @@ pub use energy_trace::{
 };
 
 impl SpringChargeEnergy {
+    pub(super) fn external_pull_strength(&self, topology_scale: f64) -> f64 {
+        let scale = match self.external_pull_balance {
+            0.0 => 1.0,
+            1.0 => topology_scale,
+            balance => topology_scale.powf(balance),
+        };
+        self.external_pull * scale
+    }
+
     #[cfg_attr(feature = "energy_trace", inline(never))]
     fn vv_term(&self, dist: f64) -> f64 {
         0.5 * self.c_vv / (dist + self.eps)
@@ -1249,7 +1446,7 @@ impl SpringChargeEnergy {
         N: NodeStorageOps<NodeData = V> + Clone,
     {
         let active_nodes = state.active_nodes().collect::<Vec<_>>();
-        if (self.dangling_centroid_charge == 0.0 && self.external_centroid_strength == 0.0)
+        if (self.dangling_centroid_charge == 0.0 && self.external_pull == 0.0)
             || active_nodes.is_empty()
         {
             return 0.0;
@@ -1260,6 +1457,7 @@ impl SpringChargeEnergy {
                 sum + state.vertex_points[node].to_vec()
             }) / active_nodes.len() as f64,
         );
+        let horizontal = state.external_flows_are_mixed();
         state
             .ext
             .included_iter()
@@ -1271,15 +1469,17 @@ impl SpringChargeEnergy {
                 } else {
                     self.dangling_centroid_term(point.distance(centroid))
                 };
-                let side = match state.graph.flow(hedge) {
-                    Flow::Source => 1.0,
-                    Flow::Sink => -1.0,
+                let extension = if horizontal {
+                    let side = match state.graph.flow(hedge) {
+                        Flow::Source => 1.0,
+                        Flow::Sink => -1.0,
+                    };
+                    side * (point.x - centroid.x)
+                } else {
+                    point.distance(centroid)
                 };
-                let target = centroid.x
-                    + side
-                        * self.external_centroid_distance
-                        * Self::edge_spring_length(state, edge, self.spring_length);
-                repulsion + 0.5 * self.external_centroid_strength * (point.x - target).powi(2)
+                repulsion
+                    - self.external_pull_strength(state.external_pull_scales[edge]) * extension
             })
             .sum()
     }
@@ -1733,7 +1933,7 @@ impl SpringChargeEnergy {
                     - self.dangling_term(prev_pi.distance(prev_pj));
             }
         }
-        if (self.dangling_centroid_charge != 0.0 || self.external_centroid_strength != 0.0)
+        if (self.dangling_centroid_charge != 0.0 || self.external_pull != 0.0)
             && (next.active_nodes().any(|node| node_changes.includes(&node))
                 || next
                     .ext
@@ -1782,6 +1982,7 @@ impl SpringChargeEnergy {
     }
 
     pub fn from_graph(n_nodes: usize, viewport_w: f64, viewport_h: f64, tune: ParamTuning) -> Self {
+        assert!(tune.external_pull_balance.is_finite() && tune.external_pull_balance >= 0.0);
         let area = (viewport_w * viewport_h).max(1e-9);
         let spring_length = tune.length_scale * (area / (n_nodes.max(1) as f64)).sqrt();
         let spring_length_sq = spring_length.powi(2);
@@ -1796,8 +1997,8 @@ impl SpringChargeEnergy {
             c_center: tune.beta * tune.g_center,
             dangling_charge: tune.gamma_dangling * tune.beta * repulsion_scale,
             dangling_centroid_charge: tune.gamma_dangling_centroid * tune.beta * repulsion_scale,
-            external_centroid_strength: tune.external_centroid_bias * tune.k_spring,
-            external_centroid_distance: tune.external_centroid_distance,
+            external_pull: tune.external_pull * tune.k_spring * spring_length,
+            external_pull_balance: tune.external_pull_balance,
             crossing_penalty: tune.crossing_penalty * spring_length_sq,
             eps: tune.eps * spring_length,
         }
@@ -1811,6 +2012,305 @@ mod tests {
         builder::HedgeGraphBuilder, involution::Flow, nodestore::DefaultNodeStore, NoData,
     };
     use rand::{rngs::SmallRng, SeedableRng};
+
+    fn normalized_pull_scales(
+        n: usize,
+        internal: &[(usize, usize)],
+        external: &[(usize, Flow)],
+    ) -> Vec<f64> {
+        let mut builder = HedgeGraphBuilder::<(), ()>::new();
+        let nodes = (0..n).map(|_| builder.add_node(())).collect::<Vec<_>>();
+        for &(a, b) in internal {
+            builder.add_edge(nodes[a], nodes[b], (), false);
+        }
+        for &(node, flow) in external {
+            builder.add_external_edge(nodes[node], (), false, flow);
+        }
+        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let state = graph.new_layout_state(
+            vec![Point2::origin(); n].into(),
+            vec![Point2::origin(); graph.n_edges()].into(),
+            1.0,
+            0.0,
+            false,
+        );
+        external
+            .iter()
+            .enumerate()
+            .map(|(i, _)| state.external_pull_scales[EdgeIndex(internal.len() + i)])
+            .collect()
+    }
+
+    #[test]
+    fn external_pull_balance_defaults_roundtrips_and_preserves_endpoints() {
+        assert_eq!(ParamTuning::default().external_pull_balance, 1.0);
+        let mut global = GlobalData {
+            name: String::new(),
+            payload: None,
+            statements: Default::default(),
+            edge_statements: Default::default(),
+            node_statements: Default::default(),
+        };
+        assert_eq!(ParamTuning::parse(&global).external_pull_balance, 1.0);
+        for (balance, half_scale) in [
+            (0.0, 1.0),
+            (0.5, 0.5_f64.sqrt()),
+            (1.0, 0.5),
+            (2.0, 0.25),
+            (2.5, 0.25 * 0.5_f64.sqrt()),
+        ] {
+            let tune = ParamTuning {
+                external_pull: 2.0,
+                external_pull_balance: balance,
+                ..ParamTuning::default()
+            };
+            tune.add_to_global(&mut global);
+            let parsed = ParamTuning::parse(&global);
+            assert_eq!(parsed.external_pull_balance, balance);
+            let energy = SpringChargeEnergy::from_graph(2, 3.0, 4.0, parsed);
+            assert_eq!(energy.external_pull_balance, balance);
+            assert!(
+                (energy.external_pull_strength(0.5) - energy.external_pull * half_scale).abs()
+                    < 1e-12
+            );
+            if balance == 0.0 || balance == 1.0 {
+                for scale in [0.0, 0.25, 1.0 / 3.0, 1.0] {
+                    let expected = if balance == 0.0 {
+                        energy.external_pull
+                    } else {
+                        energy.external_pull * scale
+                    };
+                    assert_eq!(
+                        energy.external_pull_strength(scale).to_bits(),
+                        expected.to_bits()
+                    );
+                }
+            }
+        }
+        for invalid in [-0.1, f64::NEG_INFINITY, f64::NAN, f64::INFINITY] {
+            assert!(std::panic::catch_unwind(|| SpringChargeEnergy::from_graph(
+                2,
+                3.0,
+                4.0,
+                ParamTuning {
+                    external_pull_balance: invalid,
+                    ..ParamTuning::default()
+                },
+            ))
+            .is_err());
+        }
+    }
+
+    #[test]
+    fn external_pull_balance_strengthens_correction_without_reversing_force() {
+        let mut energy = SpringChargeEnergy {
+            external_pull: 3.0,
+            ..test_energy(0.0)
+        };
+        for topology_scale in [0.0, 1e-4, 0.25, 0.5, 1.0] {
+            let mut previous = energy.external_pull;
+            for balance in [0.0, 0.25, 0.5, 1.0, 2.0, 2.5, 100.0, f64::MAX] {
+                energy.external_pull_balance = balance;
+                let force = energy.external_pull_strength(topology_scale);
+                assert!(force.is_finite() && force >= 0.0 && force <= previous);
+                previous = force;
+            }
+        }
+    }
+
+    #[test]
+    fn normalized_pull_shares_parallel_load_and_preserves_long_series_chains() {
+        for length in [1, 4, 257] {
+            for multiplicity in [1, 3] {
+                let internal = (0..length)
+                    .flat_map(|i| std::iter::repeat_n((i, i + 1), multiplicity))
+                    .collect::<Vec<_>>();
+                for legs in [1, 2, 3, 5] {
+                    let external = (0..legs)
+                        .map(|_| (0, Flow::Sink))
+                        .chain((0..legs).map(|_| (length, Flow::Source)))
+                        .collect::<Vec<_>>();
+                    let scales = normalized_pull_scales(length + 1, &internal, &external);
+                    let expected = (multiplicity as f64 / legs as f64).min(1.0);
+                    for scale in scales {
+                        assert!((scale - expected).abs() < 1e-8,
+                            "length={length}, multiplicity={multiplicity}, legs={legs}: {scale} != {expected}");
+                        assert!(scale <= 1.0);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn normalized_pull_uses_edge_currents_and_ignores_unloaded_cycles() {
+        let external = [
+            (0, Flow::Sink),
+            (0, Flow::Sink),
+            (0, Flow::Sink),
+            (0, Flow::Sink),
+            (1, Flow::Source),
+            (1, Flow::Source),
+            (1, Flow::Source),
+            (1, Flow::Source),
+        ];
+        // One direct path and a path with three springs split load 3:1.
+        // A mincut would count two channels equally; conductance alone would
+        // incorrectly reduce force when both paths gain the same series length.
+        let internal = [(0, 1), (0, 2), (2, 3), (3, 1)];
+        let scales = normalized_pull_scales(4, &internal, &external);
+        for scale in scales {
+            assert!((scale - 1.0 / 3.0).abs() < 1e-12);
+        }
+        // Relabeling vertices, reversing edge orientation/order, and adding
+        // self-loops or a pendant cycle cannot change load through the bridge.
+        let bare = [(0, 1)];
+        let with_cycles = [(0, 1), (0, 0), (1, 1), (0, 2), (2, 3), (3, 0)];
+        for internal in [&bare[..], &with_cycles[..]] {
+            for permutation in [[0, 1, 2, 3], [3, 1, 0, 2], [1, 2, 3, 0]] {
+                let renamed = internal
+                    .iter()
+                    .rev()
+                    .map(|&(a, b)| (permutation[b], permutation[a]))
+                    .collect::<Vec<_>>();
+                let external = external
+                    .iter()
+                    .map(|&(v, f)| (permutation[v], f))
+                    .collect::<Vec<_>>();
+                for scale in normalized_pull_scales(4, &renamed, &external) {
+                    assert!((scale - 0.25).abs() < 1e-12);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn normalized_pull_handles_contacts_distributed_attachments_and_components() {
+        for (incoming, outgoing) in [(1, 1), (2, 2), (2, 3), (51, 50)] {
+            let external = (0..incoming)
+                .map(|_| (0, Flow::Sink))
+                .chain((0..outgoing).map(|_| (0, Flow::Source)))
+                .collect::<Vec<_>>();
+            let scales = normalized_pull_scales(1, &[], &external);
+            for (i, scale) in scales.into_iter().enumerate() {
+                let count = if i < incoming { incoming } else { outgoing };
+                let expected = incoming.min(outgoing) as f64 / count as f64;
+                assert!((scale - expected).abs() < 1e-12);
+            }
+        }
+        // Mixed attachments at b cancel locally; the a-c bridge carries 2/3
+        // of the unit side load. No singular source/sink contraction is needed.
+        let external = [
+            (0, Flow::Sink),
+            (1, Flow::Sink),
+            (1, Flow::Source),
+            (2, Flow::Source),
+            (2, Flow::Source),
+        ];
+        let expected = [0.75, 0.75, 0.5, 0.5, 0.5];
+        for (scale, expected) in normalized_pull_scales(3, &[(0, 1), (0, 2)], &external)
+            .into_iter()
+            .zip(expected)
+        {
+            assert!((scale - expected).abs() < 1e-12);
+        }
+        // Rational cancellation is exact even when endpoint insertion order
+        // would accumulate a nonzero rounding residual from repeated 1/6 terms.
+        for legs in [3, 50] {
+            let mut repeated_contacts = (0..2)
+                .flat_map(|node| {
+                    std::iter::repeat_n((node, Flow::Source), legs)
+                        .chain(std::iter::repeat_n((node, Flow::Sink), legs))
+                })
+                .collect::<Vec<_>>();
+            for _ in 0..2 {
+                assert_eq!(
+                    normalized_pull_scales(2, &[(0, 1)], &repeated_contacts),
+                    vec![1.0; 4 * legs]
+                );
+                repeated_contacts.reverse();
+            }
+        }
+        let contact_each_end = [
+            (0, Flow::Sink),
+            (0, Flow::Source),
+            (1, Flow::Sink),
+            (1, Flow::Source),
+        ];
+        assert_eq!(
+            normalized_pull_scales(2, &[(0, 1)], &contact_each_end),
+            vec![1.0; 4]
+        );
+        // A separate component, a homogeneous-flow component and an isolated
+        // vertex must not change the load sharing of the first bridge.
+        let internal = [(0, 1), (2, 3), (2, 3), (2, 3)];
+        let external = [
+            (0, Flow::Sink),
+            (0, Flow::Sink),
+            (1, Flow::Source),
+            (1, Flow::Source),
+            (2, Flow::Sink),
+            (3, Flow::Source),
+            (4, Flow::Source),
+            (4, Flow::Source),
+        ];
+        assert_eq!(
+            normalized_pull_scales(6, &internal, &external),
+            vec![0.5, 0.5, 0.5, 0.5, 1.0, 1.0, 1.0, 1.0]
+        );
+        assert!(normalized_pull_scales(3, &[], &[]).is_empty());
+    }
+
+    #[test]
+    fn normalized_pull_rebuilds_for_active_edges_and_exposed_half_edges() {
+        let mut builder = HedgeGraphBuilder::<(), ()>::new();
+        let a = builder.add_node(());
+        let b = builder.add_node(());
+        builder.add_edge(a, b, (), false);
+        builder.add_edge(a, b, (), false);
+        for _ in 0..2 {
+            builder.add_external_edge(a, (), false, Flow::Sink);
+        }
+        for _ in 0..2 {
+            builder.add_external_edge(b, (), false, Flow::Source);
+        }
+        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let state = graph.new_layout_state(
+            vec![Point2::origin(); 2].into(),
+            vec![Point2::origin(); 6].into(),
+            1.0,
+            0.0,
+            false,
+        );
+        assert_eq!(state.external_pull_scales, vec![1.0; 6].into());
+        let mut selected: SuBitGraph = graph.external_filter();
+        let pair = graph[&EdgeIndex(0)].1;
+        selected.add(pair);
+        let isolated = state.clone().with_active_subgraph(selected);
+        for i in 2..6 {
+            assert_eq!(isolated.external_pull_scales[EdgeIndex(i)], 0.5);
+        }
+        assert_eq!(state.external_pull_scales, vec![1.0; 6].into());
+        let HedgePair::Paired { source, .. } = pair else {
+            panic!("paired edge");
+        };
+        let mut half = graph.empty_subgraph::<SuBitGraph>();
+        half.add(source);
+        for hedge in graph.external_filter::<SuBitGraph>().included_iter() {
+            if graph.node_id(hedge) == a {
+                half.add(hedge);
+            }
+        }
+        let half = state.with_active_subgraph(half);
+        assert_eq!(half.external_pull_scales[EdgeIndex(0)], 1.0);
+        for i in 2..4 {
+            assert_eq!(half.external_pull_scales[EdgeIndex(i)], 0.5);
+        }
+        for i in 4..6 {
+            assert_eq!(half.external_pull_scales[EdgeIndex(i)], 1.0);
+        }
+        assert_eq!(half.external_pull_scales, half.clone().external_pull_scales);
+    }
 
     #[test]
     fn directional_force_only_restores_wrong_side() {
@@ -1850,13 +2350,207 @@ mod tests {
             c_vv: 0.0,
             dangling_charge: 0.0,
             dangling_centroid_charge: 0.0,
-            external_centroid_strength: 0.0,
-            external_centroid_distance: 1.0,
+            external_pull: 0.0,
+            external_pull_balance: 1.0,
             c_ev: 0.0,
             c_ee_local: 0.0,
             c_center,
             crossing_penalty: 0.0,
             eps: 1e-4,
+        }
+    }
+
+    #[test]
+    fn constrained_line_swaps_lower_energy_on_fixed_and_grouped_rotated_lines() {
+        let fixed = PointConstraint {
+            x: Constraint::Fixed,
+            y: Constraint::Fixed,
+        };
+        for (rotated, reflection) in [(false, 1.0), (true, 1.0), (false, -1.0), (true, -1.0)] {
+            for grouped in [false, true] {
+                let rail = if grouped {
+                    Constraint::Grouped(LayoutPointIndex::Edge(EdgeIndex(0)), ShiftDirection::Any)
+                } else {
+                    Constraint::Fixed
+                };
+                let constraint = if rotated {
+                    PointConstraint {
+                        x: Constraint::Free,
+                        y: rail,
+                    }
+                } else {
+                    PointConstraint {
+                        x: rail,
+                        y: Constraint::Free,
+                    }
+                };
+                let point = |x, y| {
+                    if rotated {
+                        Point2::new(reflection * y, x)
+                    } else {
+                        Point2::new(x, reflection * y)
+                    }
+                };
+                let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
+                let a = builder.add_node(fixed);
+                let b = builder.add_node(fixed);
+                builder.add_external_edge(a, constraint, false, Flow::Source);
+                builder.add_external_edge(b, constraint, false, Flow::Source);
+                let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+                let mut state = graph.new_layout_state(
+                    vec![point(-1.0, -2.0), point(-1.0, 2.0)].into(),
+                    vec![point(1.0, 2.0), point(1.0, -2.0)].into(),
+                    1.0,
+                    0.0,
+                    true,
+                );
+                state.vertex_depths = vec![Some(3.0), Some(-4.0)].into();
+                state.edge_depths = vec![Some(5.0), Some(-6.0)].into();
+                state.edge_depth_pins = vec![true; 2].into();
+                state.edge_spring_length_scales = vec![1.5; 2].into();
+                let before = state.clone();
+                let energy = SpringChargeEnergy {
+                    crossing_penalty: 10.0,
+                    ..test_energy(0.0)
+                };
+                let initial_energy = energy.total_energy(&state);
+                assert_eq!(state.improve_constrained_lines(&energy), 4.0);
+                assert!(energy.total_energy(&state) < initial_energy);
+                assert_eq!(
+                    state.edge_points,
+                    vec![point(1.0, -2.0), point(1.0, 2.0)].into()
+                );
+                assert_eq!(state.vertex_points, before.vertex_points);
+                assert_eq!(state.vertex_depths, before.vertex_depths);
+                assert_eq!(state.edge_depths, before.edge_depths);
+                assert_eq!(state.edge_depth_pins, before.edge_depth_pins);
+                assert_eq!(
+                    state.edge_spring_length_scales,
+                    before.edge_spring_length_scales
+                );
+                assert_eq!(state.improve_constrained_lines(&energy), 0.0);
+                // Annealing uses the same coordinate-space move and preserves
+                // the same constraints, with its own acceptance policy.
+                let mut proposal = before;
+                assert!(proposal.swap_on_constrained_line(&mut SmallRng::seed_from_u64(4)));
+                assert_eq!(proposal.vertex_points, state.vertex_points);
+                assert_eq!(proposal.edge_points, state.edge_points);
+            }
+        }
+    }
+
+    #[test]
+    fn constrained_line_swaps_can_exchange_node_and_edge_but_protect_groups_and_complement() {
+        let fixed = PointConstraint {
+            x: Constraint::Fixed,
+            y: Constraint::Fixed,
+        };
+        let rail = PointConstraint {
+            x: Constraint::Fixed,
+            y: Constraint::Free,
+        };
+        let y_group = PointConstraint {
+            x: Constraint::Fixed,
+            y: Constraint::Grouped(LayoutPointIndex::Edge(EdgeIndex(2)), ShiftDirection::Any),
+        };
+        let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
+        let a = builder.add_node(rail);
+        let b = builder.add_node(fixed);
+        let c = builder.add_node(fixed);
+        let inactive = builder.add_node(rail);
+        builder.add_edge(a, b, fixed, false);
+        builder.add_external_edge(c, rail, false, Flow::Source);
+        builder.add_external_edge(c, y_group, false, Flow::Source);
+        builder.add_external_edge(c, y_group, false, Flow::Source);
+        builder.add_external_edge(inactive, rail, false, Flow::Source);
+        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let mut selected = graph.empty_subgraph::<SuBitGraph>();
+        for (pair, edge, _) in graph.iter_edges() {
+            if edge != EdgeIndex(4) {
+                selected.add(pair);
+            }
+        }
+        let mut state = graph
+            .new_layout_state(
+                vec![
+                    Point2::new(1.0, 2.0),
+                    Point2::new(-1.0, -2.0),
+                    Point2::new(-1.0, 2.0),
+                    Point2::new(1.0, -20.0),
+                ]
+                .into(),
+                vec![
+                    Point2::new(0.0, -2.0),
+                    Point2::new(1.0, -2.0),
+                    Point2::new(1.0, 5.0),
+                    Point2::new(1.0, 5.0),
+                    Point2::new(1.0, 20.0),
+                ]
+                .into(),
+                1.0,
+                0.0,
+                true,
+            )
+            .with_active_subgraph(selected);
+        state.vertex_depths = vec![Some(7.0); 4].into();
+        state.edge_depths = vec![Some(-8.0); 5].into();
+        let before = state.clone();
+        let energy = test_energy(0.0);
+        let initial_energy = energy.total_energy(&state);
+        assert_eq!(state.improve_constrained_lines(&energy), 4.0);
+        assert!(energy.total_energy(&state) < initial_energy);
+        assert_eq!(state.vertex_points[a], Point2::new(1.0, -2.0));
+        assert_eq!(state.edge_points[EdgeIndex(1)], Point2::new(1.0, 2.0));
+        for node in [b, c, inactive] {
+            assert_eq!(state.vertex_points[node], before.vertex_points[node]);
+        }
+        for edge in [EdgeIndex(0), EdgeIndex(2), EdgeIndex(3), EdgeIndex(4)] {
+            assert_eq!(state.edge_points[edge], before.edge_points[edge]);
+        }
+        assert_eq!(state.vertex_depths, before.vertex_depths);
+        assert_eq!(state.edge_depths, before.edge_depths);
+        assert_eq!(
+            state.changed_nodes.included_iter().collect::<Vec<_>>(),
+            vec![a]
+        );
+        assert_eq!(
+            state.changed_edges.included_iter().collect::<Vec<_>>(),
+            vec![EdgeIndex(1)]
+        );
+        assert_eq!(state.improve_constrained_lines(&energy), 0.0);
+    }
+
+    #[test]
+    fn constrained_line_swaps_leave_free_layouts_and_equal_energy_orders_unchanged() {
+        for constraint in [
+            PointConstraint::default(),
+            PointConstraint {
+                x: Constraint::Fixed,
+                y: Constraint::Free,
+            },
+        ] {
+            let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
+            let a = builder.add_node(PointConstraint {
+                x: Constraint::Fixed,
+                y: Constraint::Fixed,
+            });
+            builder.add_external_edge(a, constraint, false, Flow::Source);
+            builder.add_external_edge(a, constraint, false, Flow::Source);
+            let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+            let mut state = graph.new_layout_state(
+                vec![Point2::origin()].into(),
+                vec![Point2::new(1.0, -2.0), Point2::new(1.0, 2.0)].into(),
+                1.0,
+                0.0,
+                true,
+            );
+            let before = state.clone();
+            let energy = test_energy(0.0);
+            assert_eq!(state.improve_constrained_lines(&energy), 0.0);
+            assert_eq!(state.vertex_points, before.vertex_points);
+            assert_eq!(state.edge_points, before.edge_points);
+            assert!(state.changed_nodes.is_empty());
+            assert!(state.changed_edges.is_empty());
         }
     }
 
@@ -1928,52 +2622,54 @@ mod tests {
 
     #[test]
     fn heterogeneous_edge_spring_length_scales_incremental_energy_matches_full() {
-        let mut builder = HedgeGraphBuilder::<(), ()>::new();
-        let a = builder.add_node(());
-        let b = builder.add_node(());
-        let c = builder.add_node(());
-        builder.add_edge(a, b, (), false);
-        builder.add_edge(b, c, (), false);
-        builder.add_external_edge(a, (), false, Flow::Source);
-        builder.add_external_edge(c, (), false, Flow::Sink);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
-        let mut state = graph.new_layout_state(
-            vec![
-                Point2::new(-2.0, 0.0),
-                Point2::new(1.0, 2.0),
-                Point2::new(4.0, -1.0),
-            ]
-            .into(),
-            vec![
-                Point2::new(-1.0, 1.0),
-                Point2::new(2.5, 0.5),
-                Point2::new(-4.0, -1.0),
-                Point2::new(6.0, 1.0),
-            ]
-            .into(),
-            1.0,
-            0.0,
-            true,
-        );
-        state.edge_spring_length_scales = vec![0.5, 2.0, 1.5, 0.75].into();
-        let energy = SpringChargeEnergy {
-            external_centroid_strength: 2.0,
-            ..test_energy(0.2)
-        };
-        let mut rng = SmallRng::seed_from_u64(17);
-        let mut cached = energy.energy(None, &state);
-        for iteration in 0..100 {
-            let next = LayoutNeighbor.propose(&state, &mut rng, 0.2, 0.3);
-            let incremental = energy.energy(Some((&state, cached)), &next);
-            let exact = energy.total_energy(&next);
-            assert!(
-                (incremental - exact).abs() <= 1e-9 * (1.0 + exact.abs()),
-                "iteration {iteration}: incremental={incremental}, exact={exact}",
+        for second_flow in [Flow::Sink, Flow::Source] {
+            let mut builder = HedgeGraphBuilder::<(), ()>::new();
+            let a = builder.add_node(());
+            let b = builder.add_node(());
+            let c = builder.add_node(());
+            builder.add_edge(a, b, (), false);
+            builder.add_edge(b, c, (), false);
+            builder.add_external_edge(a, (), false, Flow::Source);
+            builder.add_external_edge(c, (), false, second_flow);
+            let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+            let mut state = graph.new_layout_state(
+                vec![
+                    Point2::new(-2.0, 0.0),
+                    Point2::new(1.0, 2.0),
+                    Point2::new(4.0, -1.0),
+                ]
+                .into(),
+                vec![
+                    Point2::new(-1.0, 1.0),
+                    Point2::new(2.5, 0.5),
+                    Point2::new(-4.0, -1.0),
+                    Point2::new(6.0, 1.0),
+                ]
+                .into(),
+                1.0,
+                0.0,
+                true,
             );
-            state = next;
-            energy.on_accept(&mut state);
-            cached = incremental;
-            assert_eq!(energy.energy(Some((&state, cached)), &state), cached);
+            state.edge_spring_length_scales = vec![0.5, 2.0, 1.5, 0.75].into();
+            let energy = SpringChargeEnergy {
+                external_pull: 2.0,
+                ..test_energy(0.2)
+            };
+            let mut rng = SmallRng::seed_from_u64(17);
+            let mut cached = energy.energy(None, &state);
+            for iteration in 0..100 {
+                let next = LayoutNeighbor.propose(&state, &mut rng, 0.2, 0.3);
+                let incremental = energy.energy(Some((&state, cached)), &next);
+                let exact = energy.total_energy(&next);
+                assert!(
+                    (incremental - exact).abs() <= 1e-9 * (1.0 + exact.abs()),
+                    "iteration {iteration}: incremental={incremental}, exact={exact}",
+                );
+                state = next;
+                energy.on_accept(&mut state);
+                cached = incremental;
+                assert_eq!(energy.energy(Some((&state, cached)), &state), cached);
+            }
         }
     }
 
@@ -2009,8 +2705,8 @@ mod tests {
             c_vv: 3.0,
             dangling_charge: 4.0,
             dangling_centroid_charge: 5.0,
-            external_centroid_strength: 2.0,
-            external_centroid_distance: 1.0,
+            external_pull: 2.0,
+            external_pull_balance: 1.0,
             c_ev: 6.0,
             c_ee_local: 7.0,
             c_center: 8.0,
@@ -2076,8 +2772,8 @@ mod tests {
             beta: 3.0,
             gamma_dangling: 0.7,
             gamma_dangling_centroid: 1.3,
-            external_centroid_bias: 2.0,
-            external_centroid_distance: 1.0,
+            external_pull: 2.0,
+            external_pull_balance: 1.0,
             gamma_ev: 0.2,
             gamma_ee: 0.4,
             g_center: 0.05,
@@ -2085,7 +2781,7 @@ mod tests {
             eps: 1e-4,
         };
         let small = SpringChargeEnergy::from_graph(4, 4.0, 4.0, tune);
-        assert_eq!(small.external_centroid_strength, 22.0);
+        assert_eq!(small.external_pull, 22.0);
         let large = SpringChargeEnergy::from_graph(
             4,
             4.0,
@@ -2098,6 +2794,7 @@ mod tests {
 
         assert_eq!(small.spring_length, 1.0);
         assert_eq!(large.spring_length, 2.0);
+        assert_eq!(large.external_pull / small.external_pull, 2.0);
         assert_eq!(large.c_vv / small.c_vv, 8.0);
         assert_eq!(large.c_ev / small.c_ev, 8.0);
         assert_eq!(large.c_ee_local / small.c_ee_local, 8.0);

@@ -1378,6 +1378,7 @@ enum ValueRule {
     NonNegativeInt,
     Number,
     NonNegativeNumber,
+    NonNegativeFiniteNumber,
     Point,
     Angle,
     Enum(EnumKind),
@@ -1434,6 +1435,11 @@ impl ValueRule {
             Self::NonNegativeNumber => {
                 matches!(value, NativeValue::Int(number) if *number >= 0)
                     || matches!(value, NativeValue::Float(number) if *number >= 0.0)
+                    || expression_kind(SymbolKind::Value)
+            }
+            Self::NonNegativeFiniteNumber => {
+                matches!(value, NativeValue::Int(number) if *number >= 0)
+                    || matches!(value, NativeValue::Float(number) if number.is_finite() && *number >= 0.0)
                     || expression_kind(SymbolKind::Value)
             }
             Self::Point => {
@@ -1589,6 +1595,7 @@ impl ValueRule {
             Self::NonNegativeInt => "a non-negative int",
             Self::Number => "a number",
             Self::NonNegativeNumber => "a non-negative number",
+            Self::NonNegativeFiniteNumber => "a non-negative finite number",
             Self::Point => "a two-number point dictionary or array, or module value",
             Self::Angle => "an Angle, number, or module value",
             Self::Enum(kind) => kind.name(),
@@ -2641,6 +2648,21 @@ const LAYOUT_FIELDS: &[FieldSpec] = &[
     FieldSpec::new("delta", "delta", ValueRule::NonNegativeNumber),
     FieldSpec::new("beta", "beta", ValueRule::Number),
     FieldSpec::new("spring_strength", "k-spring", ValueRule::Number),
+    FieldSpec::new(
+        "spring_length_scale",
+        "spring-length-scale",
+        ValueRule::NonNegativeNumber,
+    ),
+    FieldSpec::new(
+        "initial_repulsion",
+        "initial-repulsion",
+        ValueRule::NonNegativeNumber,
+    ),
+    FieldSpec::new(
+        "repulsion_growth",
+        "repulsion-growth",
+        ValueRule::NonNegativeNumber,
+    ),
     FieldSpec::new("centering_strength", "g-center", ValueRule::Number),
     FieldSpec::new("epochs", "epochs", ValueRule::NonNegativeInt),
     FieldSpec::new("crossing_penalty", "crossing-penalty", ValueRule::Number),
@@ -2650,15 +2672,11 @@ const LAYOUT_FIELDS: &[FieldSpec] = &[
         "gamma-dangling-centroid",
         ValueRule::Number,
     ),
+    FieldSpec::new("external_pull", "external-pull", ValueRule::Number),
     FieldSpec::new(
-        "external_centroid_bias",
-        "external-centroid-bias",
-        ValueRule::Number,
-    ),
-    FieldSpec::new(
-        "external_centroid_distance",
-        "external-centroid-distance",
-        ValueRule::Number,
+        "external_pull_balance",
+        "external-pull-balance",
+        ValueRule::NonNegativeFiniteNumber,
     ),
     FieldSpec::new("edge_edge_repulsion", "gamma-ee", ValueRule::Number),
     FieldSpec::new("directional_force", "directional-force", ValueRule::Number),
@@ -2734,6 +2752,10 @@ const LAYOUT_FIELDS: &[FieldSpec] = &[
 ];
 
 /// One or more ordered Linnest layout passes.
+///
+/// `external_pull_balance` is a finite nonnegative exponent on topology weights:
+/// 0 gives uniform pull, 1 (the default) balances topology, and values above 1
+/// strengthen balancing. It does not change radial pull.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(module = "linnet", from_py_object, frozen, name = "LayoutOptions")]
 #[derive(Clone, Debug, PartialEq)]
@@ -2748,7 +2770,7 @@ impl PyLayoutOptions {
     #[new]
     #[pyo3(
         signature = (**kwargs),
-        text_signature = "(*, subgraph=..., viewport_width=..., viewport_height=..., tree_dx=..., tree_dy=..., steps=..., seed=..., step=..., step_shrink=..., cool=..., accept_floor=..., early_tolerance=..., temperature=..., delta=..., beta=..., spring_strength=..., centering_strength=..., epochs=..., crossing_penalty=..., dangling_repulsion=..., dangling_centroid_repulsion=..., external_centroid_bias=..., external_centroid_distance=..., edge_edge_repulsion=..., directional_force=..., internal_label_length_scale=..., external_label_length_scale=..., label_spring=..., label_charge=..., label_steps=..., label_layout=..., label_step=..., label_early_tolerance=..., label_max_delta_scale=..., edge_vertex_repulsion=..., epsilon=..., incremental_energy=..., algorithm=..., nodes=..., direction=..., rank_align=..., roots=..., rank_same=..., route_edge_weight=..., route_exit_weight=..., route_label_width_scale=..., route_label_width_cap=..., z_spring=..., z_spring_growth=..., length_scale=...)"
+        text_signature = "(*, subgraph=..., viewport_width=..., viewport_height=..., tree_dx=..., tree_dy=..., steps=..., seed=..., step=..., step_shrink=..., cool=..., accept_floor=..., early_tolerance=..., temperature=..., delta=..., beta=..., spring_strength=..., spring_length_scale=..., initial_repulsion=..., repulsion_growth=..., centering_strength=..., epochs=..., crossing_penalty=..., dangling_repulsion=..., dangling_centroid_repulsion=..., external_pull=..., external_pull_balance=..., edge_edge_repulsion=..., directional_force=..., internal_label_length_scale=..., external_label_length_scale=..., label_spring=..., label_charge=..., label_steps=..., label_layout=..., label_step=..., label_early_tolerance=..., label_max_delta_scale=..., edge_vertex_repulsion=..., epsilon=..., incremental_energy=..., algorithm=..., nodes=..., direction=..., rank_align=..., roots=..., rank_same=..., route_edge_weight=..., route_exit_weight=..., route_label_width_scale=..., route_label_width_cap=..., z_spring=..., z_spring_growth=..., length_scale=...)"
     )]
     #[gen_stub(skip)]
     fn new(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
@@ -2774,7 +2796,7 @@ impl PyLayoutOptions {
 
     #[pyo3(
         signature = (**kwargs),
-        text_signature = "($self, *, subgraph=..., viewport_width=..., viewport_height=..., tree_dx=..., tree_dy=..., steps=..., seed=..., step=..., step_shrink=..., cool=..., accept_floor=..., early_tolerance=..., temperature=..., delta=..., beta=..., spring_strength=..., centering_strength=..., epochs=..., crossing_penalty=..., dangling_repulsion=..., dangling_centroid_repulsion=..., external_centroid_bias=..., external_centroid_distance=..., edge_edge_repulsion=..., directional_force=..., internal_label_length_scale=..., external_label_length_scale=..., label_spring=..., label_charge=..., label_steps=..., label_layout=..., label_step=..., label_early_tolerance=..., label_max_delta_scale=..., edge_vertex_repulsion=..., epsilon=..., incremental_energy=..., algorithm=..., nodes=..., direction=..., rank_align=..., roots=..., rank_same=..., route_edge_weight=..., route_exit_weight=..., route_label_width_scale=..., route_label_width_cap=..., z_spring=..., z_spring_growth=..., length_scale=...)"
+        text_signature = "($self, *, subgraph=..., viewport_width=..., viewport_height=..., tree_dx=..., tree_dy=..., steps=..., seed=..., step=..., step_shrink=..., cool=..., accept_floor=..., early_tolerance=..., temperature=..., delta=..., beta=..., spring_strength=..., spring_length_scale=..., initial_repulsion=..., repulsion_growth=..., centering_strength=..., epochs=..., crossing_penalty=..., dangling_repulsion=..., dangling_centroid_repulsion=..., external_pull=..., external_pull_balance=..., edge_edge_repulsion=..., directional_force=..., internal_label_length_scale=..., external_label_length_scale=..., label_spring=..., label_charge=..., label_steps=..., label_layout=..., label_step=..., label_early_tolerance=..., label_max_delta_scale=..., edge_vertex_repulsion=..., epsilon=..., incremental_energy=..., algorithm=..., nodes=..., direction=..., rank_align=..., roots=..., rank_same=..., route_edge_weight=..., route_exit_weight=..., route_label_width_scale=..., route_label_width_cap=..., z_spring=..., z_spring_growth=..., length_scale=...)"
     )]
     #[gen_stub(skip)]
     fn then(&self, kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
@@ -3257,8 +3279,8 @@ pyo3_stub_gen::inventory::submit! {
         import typing
 
         class PyLayoutOptions:
-            def __new__(cls, *, subgraph: _OptionalHedgeSelection = ..., viewport_width: _Number = ..., viewport_height: _Number = ..., tree_dx: _Number = ..., tree_dy: _Number = ..., steps: _Integer = ..., seed: _Integer = ..., step: _Number = ..., step_shrink: _Number = ..., cool: _Number = ..., accept_floor: _Number = ..., early_tolerance: _Number = ..., temperature: _Number = ..., delta: _Number = ..., beta: _Number = ..., spring_strength: _Number = ..., centering_strength: _Number = ..., epochs: _Integer = ..., crossing_penalty: _Number = ..., dangling_repulsion: _Number = ..., dangling_centroid_repulsion: _Number = ..., external_centroid_bias: _Number = ..., external_centroid_distance: _Number = ..., edge_edge_repulsion: _Number = ..., directional_force: _Number = ..., internal_label_length_scale: _Number = ..., external_label_length_scale: _Number = ..., label_spring: _Number = ..., label_charge: _Number = ..., label_steps: _Integer = ..., label_layout: _LabelLayoutValue = ..., label_step: _Number = ..., label_early_tolerance: _Number = ..., label_max_delta_scale: _Number = ..., edge_vertex_repulsion: _Number = ..., epsilon: _Number = ..., incremental_energy: _Boolean = ..., algorithm: _LayoutAlgorithmValue = ..., nodes: _LayoutNodesValue = ..., direction: _LayoutDirectionValue = ..., rank_align: _RankAlignmentValue = ..., roots: _NodeIndices = ..., rank_same: _NodeGroups = ..., route_edge_weight: _Number = ..., route_exit_weight: _Number = ..., route_label_width_scale: _Number = ..., route_label_width_cap: _Number = ..., z_spring: _Number = ..., z_spring_growth: _Number = ..., length_scale: _Number = ...) -> LayoutOptions: ...
-            def then(self, *, subgraph: _OptionalHedgeSelection = ..., viewport_width: _Number = ..., viewport_height: _Number = ..., tree_dx: _Number = ..., tree_dy: _Number = ..., steps: _Integer = ..., seed: _Integer = ..., step: _Number = ..., step_shrink: _Number = ..., cool: _Number = ..., accept_floor: _Number = ..., early_tolerance: _Number = ..., temperature: _Number = ..., delta: _Number = ..., beta: _Number = ..., spring_strength: _Number = ..., centering_strength: _Number = ..., epochs: _Integer = ..., crossing_penalty: _Number = ..., dangling_repulsion: _Number = ..., dangling_centroid_repulsion: _Number = ..., external_centroid_bias: _Number = ..., external_centroid_distance: _Number = ..., edge_edge_repulsion: _Number = ..., directional_force: _Number = ..., internal_label_length_scale: _Number = ..., external_label_length_scale: _Number = ..., label_spring: _Number = ..., label_charge: _Number = ..., label_steps: _Integer = ..., label_layout: _LabelLayoutValue = ..., label_step: _Number = ..., label_early_tolerance: _Number = ..., label_max_delta_scale: _Number = ..., edge_vertex_repulsion: _Number = ..., epsilon: _Number = ..., incremental_energy: _Boolean = ..., algorithm: _LayoutAlgorithmValue = ..., nodes: _LayoutNodesValue = ..., direction: _LayoutDirectionValue = ..., rank_align: _RankAlignmentValue = ..., roots: _NodeIndices = ..., rank_same: _NodeGroups = ..., route_edge_weight: _Number = ..., route_exit_weight: _Number = ..., route_label_width_scale: _Number = ..., route_label_width_cap: _Number = ..., z_spring: _Number = ..., z_spring_growth: _Number = ..., length_scale: _Number = ...) -> LayoutOptions: ...
+            def __new__(cls, *, subgraph: _OptionalHedgeSelection = ..., viewport_width: _Number = ..., viewport_height: _Number = ..., tree_dx: _Number = ..., tree_dy: _Number = ..., steps: _Integer = ..., seed: _Integer = ..., step: _Number = ..., step_shrink: _Number = ..., cool: _Number = ..., accept_floor: _Number = ..., early_tolerance: _Number = ..., temperature: _Number = ..., delta: _Number = ..., beta: _Number = ..., spring_strength: _Number = ..., spring_length_scale: _Number = ..., initial_repulsion: _Number = ..., repulsion_growth: _Number = ..., centering_strength: _Number = ..., epochs: _Integer = ..., crossing_penalty: _Number = ..., dangling_repulsion: _Number = ..., dangling_centroid_repulsion: _Number = ..., external_pull: _Number = ..., external_pull_balance: _Number = ..., edge_edge_repulsion: _Number = ..., directional_force: _Number = ..., internal_label_length_scale: _Number = ..., external_label_length_scale: _Number = ..., label_spring: _Number = ..., label_charge: _Number = ..., label_steps: _Integer = ..., label_layout: _LabelLayoutValue = ..., label_step: _Number = ..., label_early_tolerance: _Number = ..., label_max_delta_scale: _Number = ..., edge_vertex_repulsion: _Number = ..., epsilon: _Number = ..., incremental_energy: _Boolean = ..., algorithm: _LayoutAlgorithmValue = ..., nodes: _LayoutNodesValue = ..., direction: _LayoutDirectionValue = ..., rank_align: _RankAlignmentValue = ..., roots: _NodeIndices = ..., rank_same: _NodeGroups = ..., route_edge_weight: _Number = ..., route_exit_weight: _Number = ..., route_label_width_scale: _Number = ..., route_label_width_cap: _Number = ..., z_spring: _Number = ..., z_spring_growth: _Number = ..., length_scale: _Number = ...) -> LayoutOptions: ...
+            def then(self, *, subgraph: _OptionalHedgeSelection = ..., viewport_width: _Number = ..., viewport_height: _Number = ..., tree_dx: _Number = ..., tree_dy: _Number = ..., steps: _Integer = ..., seed: _Integer = ..., step: _Number = ..., step_shrink: _Number = ..., cool: _Number = ..., accept_floor: _Number = ..., early_tolerance: _Number = ..., temperature: _Number = ..., delta: _Number = ..., beta: _Number = ..., spring_strength: _Number = ..., spring_length_scale: _Number = ..., initial_repulsion: _Number = ..., repulsion_growth: _Number = ..., centering_strength: _Number = ..., epochs: _Integer = ..., crossing_penalty: _Number = ..., dangling_repulsion: _Number = ..., dangling_centroid_repulsion: _Number = ..., external_pull: _Number = ..., external_pull_balance: _Number = ..., edge_edge_repulsion: _Number = ..., directional_force: _Number = ..., internal_label_length_scale: _Number = ..., external_label_length_scale: _Number = ..., label_spring: _Number = ..., label_charge: _Number = ..., label_steps: _Integer = ..., label_layout: _LabelLayoutValue = ..., label_step: _Number = ..., label_early_tolerance: _Number = ..., label_max_delta_scale: _Number = ..., edge_vertex_repulsion: _Number = ..., epsilon: _Number = ..., incremental_energy: _Boolean = ..., algorithm: _LayoutAlgorithmValue = ..., nodes: _LayoutNodesValue = ..., direction: _LayoutDirectionValue = ..., rank_align: _RankAlignmentValue = ..., roots: _NodeIndices = ..., rank_same: _NodeGroups = ..., route_edge_weight: _Number = ..., route_exit_weight: _Number = ..., route_label_width_scale: _Number = ..., route_label_width_cap: _Number = ..., z_spring: _Number = ..., z_spring_growth: _Number = ..., length_scale: _Number = ...) -> LayoutOptions: ...
     "# }
 }
 

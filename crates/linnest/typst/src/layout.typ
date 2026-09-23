@@ -4,7 +4,7 @@
 #let _plugin = plugin("../linnest.wasm")
 
 #let _option-rules = (
-  spring: (strength: "number", length: "number"),
+  spring: (strength: "number", length: "number", "rest-length-scale": "number"),
   repulsion: (
     strength: "number",
     centering: "number",
@@ -16,8 +16,8 @@
   ),
   constraints: (
     "side-strength": "number",
-    "external-centroid-bias": "number",
-    "external-centroid-distance": "number",
+    "external-pull": "number",
+    "external-pull-balance": "non-negative-finite",
     "node-movement": ("fixed", "layout"),
     direction: ("down", "right", "left-to-right", "left-right", "lr"),
     "rank-alignment": (
@@ -48,6 +48,8 @@
     "max-movement": "number",
   ),
   solver: (
+    "initial-repulsion": "number",
+    "repulsion-growth": "number",
     algorithm: ("force", "anneal", "tree", "dot", "stable-layered", "railroad"),
     steps: "integer",
     epochs: "integer",
@@ -336,8 +338,8 @@
   accept-floor: 0.15,
   /// Force-only early stop threshold for maximum movement in one step, as a
   /// multiple of the natural spring length, eligible only after effective depth
-  /// scale reaches zero. The annealing schedule stores this value but does not
-  /// currently use it for stopping. -> float
+  /// scale reaches zero and repulsion reaches its final strength. The annealing
+  /// schedule stores this value but does not currently use it for stopping. -> float
   early-tol: 1e-6,
   /// Anneal-only initial temperature used in the Metropolis acceptance test,
   /// scaled by natural spring length squared. -> float
@@ -354,6 +356,15 @@
   /// Spring stiffness for node-to-edge incidence lengths. Applies to both
   /// modes. -> float
   k-spring: 11.0,
+  /// Rest-length multiplier, independent of drawing scale and repulsive strengths.
+  /// Multiplies each edge's `spring-length` value. -> float
+  spring-length-scale: 1.0,
+  /// Initial fraction of final repulsion for force layout. It grows monotonically
+  /// without resetting positions; 1 disables continuation. -> float
+  initial-repulsion: 1.0,
+  /// Fraction of the iteration budget spent growing repulsion to its final value.
+  /// Remaining iterations settle at full repulsion. -> float
+  repulsion-growth: 0.7,
   /// Centering strength relative to `beta`. Applies to both modes.
   /// -> float
   g-center: 0.002,
@@ -361,8 +372,9 @@
   /// each epoch. Force mode shares this budget and its cooling schedule across
   /// depth flattening and the remaining planar relaxation. -> int
   epochs: 30,
-  /// Anneal-only fixed energy penalty per detected edge crossing. The direct
-  /// force integrator does not currently add a crossing force. -> float
+  /// Fixed energy penalty per detected edge crossing. Force layout also uses
+  /// it when choosing swaps along constrained lines during planar relaxation;
+  /// it does not add a continuous crossing force. -> float
   crossing-penalty: 30.0,
   /// Repulsion for dangling half edges, relative to `beta`. Applies to
   /// both modes through the shared spring energy. -> float
@@ -371,15 +383,21 @@
   /// relative to `beta`. The equal-and-opposite reaction is shared over the
   /// nodes, avoiding translational drift. Applies to both modes. -> float
   gamma-dangling-centroid: 0.0,
-  /// Horizontal spring relative to `k-spring`, pulling incoming endpoints left
-  /// and outgoing endpoints right of the current node centroid. The target
-  /// distance is controlled by `external-centroid-distance`. Leaves Y free
-  /// and respects pins. Both modes.
-  /// Zero disables this bias. -> float
-  external-centroid-bias: 0.0,
-  /// Horizontal target offset from the centroid in external spring lengths,
-  /// including each edge's `spring-length` multiplier. -> float
-  external-centroid-distance: 1.0,
+  /// Constant external pull, scaled by `k-spring` and natural spring length.
+  /// Mixed momentum directions pull left/right; one direction spreads radially.
+  /// Components with both directions balance their total pull across the sides
+  /// and normalize it by the largest unit-flow spring load, including dangling
+  /// springs. No endpoint exceeds the requested base force. A series chain
+  /// with one leg at each end keeps its pull regardless of length; parallel
+  /// routes share the load. One-direction components keep the base force.
+  /// These fixed topology weights apply identically to force and energy.
+  /// Reaction is shared over nodes, preserving translation and respecting pins.
+  /// Zero disables the pull. Applies to force and annealing modes. -> float
+  external-pull: 0.0,
+  /// Non-negative exponent on topology weights: 0 gives uniform per-endpoint
+  /// pull, 1 keeps the default balancing, and values above 1 strengthen it.
+  /// One-direction radial pull is unaffected. -> float
+  external-pull-balance: 1.0,
   /// Local edge-edge repulsion, relative to `beta`. Applies to both
   /// modes. -> float
   gamma-ee: 0.1,
@@ -496,6 +514,16 @@
   spring = _checked-group("spring", spring)
   repulsion = _checked-group("repulsion", repulsion)
   constraints = _checked-group("constraints", constraints)
+  let pull-balance = constraints.at(
+    "external-pull-balance",
+    default: external-pull-balance,
+  )
+  _check-option-value(
+    "constraints",
+    "external-pull-balance",
+    pull-balance,
+    "non-negative-finite",
+  )
   labels = _checked-group("labels", labels)
   solver = _checked-group(
     "solver",
@@ -525,6 +553,18 @@
     delta: str(solver.at("max-movement", default: delta)),
     beta: str(repulsion.at("strength", default: beta)),
     k-spring: str(spring.at("strength", default: k-spring)),
+    spring-length-scale: str(spring.at(
+      "rest-length-scale",
+      default: spring-length-scale,
+    )),
+    initial-repulsion: str(solver.at(
+      "initial-repulsion",
+      default: initial-repulsion,
+    )),
+    repulsion-growth: str(solver.at(
+      "repulsion-growth",
+      default: repulsion-growth,
+    )),
     g-center: str(repulsion.at("centering", default: g-center)),
     epochs: str(solver.at("epochs", default: epochs)),
     crossing-penalty: str(solver.at(
@@ -535,21 +575,21 @@
     gamma-dangling-centroid: str(
       repulsion.at("dangling-centroid", default: gamma-dangling-centroid),
     ),
-    external-centroid-bias: str(constraints.at(
-      "external-centroid-bias",
-      default: external-centroid-bias,
-    )),
-    external-centroid-distance: str(constraints.at(
-      "external-centroid-distance",
-      default: external-centroid-distance,
-    )),
+    external-pull: str(constraints.at("external-pull", default: external-pull)),
+    external-pull-balance: str(pull-balance),
     gamma-ee: str(repulsion.at("edge-edge", default: gamma-ee)),
     directional-force: str(constraints.at(
       "side-strength",
       default: directional-force,
     )),
-    internal-label-length-scale: str(labels.at("internal-distance", default: internal-label-length-scale)),
-    external-label-length-scale: str(labels.at("external-distance", default: external-label-length-scale)),
+    internal-label-length-scale: str(labels.at(
+      "internal-distance",
+      default: internal-label-length-scale,
+    )),
+    external-label-length-scale: str(labels.at(
+      "external-distance",
+      default: external-label-length-scale,
+    )),
     label-spring: str(labels.at("spring", default: label-spring)),
     label-charge: str(labels.at("repulsion", default: label-charge)),
     label-steps: str(labels.at("steps", default: label-steps)),

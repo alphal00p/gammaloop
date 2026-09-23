@@ -94,9 +94,12 @@
 /// -> dictionary
 #let coil = (
   pattern: "coil",
-  pattern-amplitude: 0.14,
-  pattern-wavelength: 0.55,
-  pattern-coil-longitudinal-scale: 1.6,
+  pattern-amplitude: 0.15,
+  pattern-wavelength: 0.45,
+  pattern-fit: true,
+  pattern-phase: calc.pi / 2,
+  pattern-natural-endpoints: true,
+  pattern-coil-longitudinal-scale: 1.4,
 )
 
 /// Weak-boson-style zigzag pattern.
@@ -169,12 +172,13 @@
 
 #let _momentum-arrow-stroke = (paint: palette.ink, thickness: 1pt, cap: "round")
 
-/// Default style for source-to-sink momentum arrow layers.
+/// Default style for source-to-sink momentum arrow layers. The requested length
+/// is capped at half the offset carrier's arc length.
 /// -> dictionary
 #let momentum-arrow-defaults = (
-  offset: 0.35,
-  length: 1.0,
-  ratio: none,
+  offset: 0.5,
+  length: 1.4,
+  ratio: 0.5,
   stroke: _momentum-arrow-stroke,
   mark: (end: "straight", scale: 1.1),
 )

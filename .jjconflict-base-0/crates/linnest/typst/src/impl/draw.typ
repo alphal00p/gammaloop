@@ -1837,6 +1837,195 @@
   _layer-label(style, data) != none
 ))
 
+// Collision footprints use actual rendered shafts and marks. Keep separate
+// pieces: the empty space between an arrow and its text is not occupied.
+#let _annotation-bounds(ctx, elements) = {
+  let painted = cetz.process.many(ctx, elements.flatten(), compute-bounds: false)
+  let arrow-bounds = ()
+  for drawable in painted.drawables {
+    if cetz.drawable.TAG.hidden in drawable.tags { continue }
+    if drawable.type == "path" and drawable.at("stroke", default: none) == none and drawable.at("fill", default: none) == none { continue }
+    let stroke = cetz.util.resolve-stroke(drawable.at("stroke", default: none))
+    let radius = cetz.util.resolve-number(ctx, stroke.thickness) / 2
+    let pieces = ()
+    if drawable.type == "path" {
+      if cetz.drawable.TAG.mark in drawable.tags {
+        pieces.push(cetz.path-util.bounds(drawable.segments))
+      } else {
+        for (start, _, commands) in drawable.segments {
+          for command in commands {
+            pieces.push(cetz.path-util.bounds(((start, false, (command,)),)))
+            start = command.last()
+          }
+        }
+      }
+    } else if drawable.type == "content" {
+      let (x, y, _) = drawable.pos
+      pieces.push(((x - drawable.width / 2, y - drawable.height / 2),
+        (x + drawable.width / 2, y + drawable.height / 2)))
+    }
+    for points in pieces {
+      if points.len() == 0 { continue }
+      arrow-bounds.push((
+        left: calc.min(..points.map(p => p.at(0))) - radius,
+        right: calc.max(..points.map(p => p.at(0))) + radius,
+        bottom: calc.min(..points.map(p => p.at(1))) - radius,
+        top: calc.max(..points.map(p => p.at(1))) + radius,
+      ))
+    }
+  }
+  arrow-bounds
+}
+
+// Flatten only the finite attachment geometry. Affine transformation happens
+// before the flatness test, so rotated text and scaled canvases use one metric.
+#let _label-path-lines(ctx, path, accuracy) = {
+  let lines = ()
+  if path == none { return lines }
+  let pending = curve-api.segments(path).rev().map(segment => (
+    points: (segment.start, segment.control-start, segment.control-end, segment.end).map(
+      point => _point(cetz.matrix.mul4x4-vec3(ctx.transform, (..point, 0))),
+    ),
+    depth: 0,
+  ))
+  while pending.len() > 0 {
+    let current = pending.pop()
+    let (a, b, c, d) = current.points
+    let chord = _point-sub(d, a)
+    let squared = chord.at(0) * chord.at(0) + chord.at(1) * chord.at(1)
+    let distance = point => {
+      let relative = _point-sub(point, a)
+      let at = if squared <= 1e-18 { 0 } else {
+        calc.clamp((relative.at(0) * chord.at(0) + relative.at(1) * chord.at(1)) / squared, 0, 1)
+      }
+      _point-distance(point, _point-lerp(a, d, at))
+    }
+    let flatness = calc.max(distance(b), distance(c))
+    if flatness <= accuracy or current.depth >= 10 {
+      lines.push((a, d))
+    } else {
+      let ab = _point-lerp(a, b, 0.5)
+      let bc = _point-lerp(b, c, 0.5)
+      let cd = _point-lerp(c, d, 0.5)
+      let abc = _point-lerp(ab, bc, 0.5)
+      let bcd = _point-lerp(bc, cd, 0.5)
+      let mid = _point-lerp(abc, bcd, 0.5)
+      pending.push((points: (mid, bcd, cd, d), depth: current.depth + 1))
+      pending.push((points: (a, ab, abc, mid), depth: current.depth + 1))
+    }
+  }
+  lines
+}
+
+// Find actual clearance from a measured quad to the finite attachment path.
+// The arc frame is unchanged; only its outward normal offset is adjusted.
+#let _label-attachment-offset(lines, corners, frame, outward, gap, initial) = {
+  if lines.len() == 0 { return initial }
+  let dot = (a, b) => _point-x(a) * _point-x(b) + _point-y(a) * _point-y(b)
+  let cross = (a, b) => _point-x(a) * _point-y(b) - _point-y(a) * _point-x(b)
+  let direction = _point(outward)
+  let scale = _point-length(direction)
+  if scale <= 1e-9 { return initial }
+  let normal = _point-scale(direction, 1 / scale)
+  let tangent = (-normal.at(1), normal.at(0))
+  let project = point => (dot(point, tangent), dot(point, normal))
+  let quad = (corners.at(0), corners.at(1), corners.at(3), corners.at(2)).map(project)
+  let orientation = cross(_point-sub(quad.at(1), quad.at(0)), _point-sub(quad.at(2), quad.at(1)))
+  let left = calc.min(..quad.map(point => point.at(0)))
+  let right = calc.max(..quad.map(point => point.at(0)))
+  let radius = gap * scale
+  // Intersect the vertical normal ray with a finite capsule. Its rectangle and
+  // endpoint discs give exact clearance to each straight boundary segment.
+  let capsule = (a, b) => {
+    if calc.min(a.at(0), b.at(0)) > radius or calc.max(a.at(0), b.at(0)) < -radius { return none }
+    let low = calc.inf
+    let high = -calc.inf
+    for point in (a, b) {
+      if calc.abs(point.at(0)) <= radius {
+        let reach = calc.sqrt(calc.max(0, radius * radius - point.at(0) * point.at(0)))
+        low = calc.min(low, point.at(1) - reach)
+        high = calc.max(high, point.at(1) + reach)
+      }
+    }
+    let delta = _point-sub(b, a)
+    let length = _point-length(delta)
+    if length > 1e-12 {
+      let along = _point-scale(delta, 1 / length)
+      let across = (-along.at(1), along.at(0))
+      let bottom = -calc.inf
+      let top = calc.inf
+      for (axis, minimum, maximum) in ((along, 0, length), (across, -radius, radius)) {
+        let intercept = dot(a, axis)
+        let slope = axis.at(1)
+        if calc.abs(slope) <= 1e-12 {
+          if -intercept < minimum or -intercept > maximum {
+            bottom = calc.inf
+            top = -calc.inf
+            break
+          }
+        } else {
+          let first = (minimum + intercept) / slope
+          let last = (maximum + intercept) / slope
+          bottom = calc.max(bottom, calc.min(first, last))
+          top = calc.min(top, calc.max(first, last))
+        }
+      }
+      if bottom <= top {
+        low = calc.min(low, bottom)
+        high = calc.max(high, top)
+      }
+    }
+    if low <= high { (low, high) } else { none }
+  }
+  let intervals = ()
+  for (start, end) in lines {
+    let start = project(_point-sub(start, frame))
+    let end = project(_point-sub(end, frame))
+    if calc.min(start.at(0), end.at(0)) > right + radius or calc.max(start.at(0), end.at(0)) < left - radius { continue }
+    // Sweep the measured quad along this finite segment. Each quad edge is
+    // exposed at one endpoint; side transitions add the corner trajectories.
+    let first = quad.map(corner => _point-sub(start, corner))
+    let last = quad.map(corner => _point-sub(end, corner))
+    let delta = _point-sub(end, start)
+    let at-end = range(4).map(i => cross(
+      _point-sub(first.at(calc.rem(i + 1, 4)), first.at(i)), delta,
+    ) * orientation < 0)
+    let boundary = ()
+    for i in range(4) {
+      let next = calc.rem(i + 1, 4)
+      let points = if at-end.at(i) { last } else { first }
+      boundary.push((points.at(i), points.at(next)))
+      if calc.abs(orientation) <= 1e-18 { boundary.push((last.at(i), last.at(next))) }
+      if at-end.at(i) != at-end.at(calc.rem(i + 3, 4)) or calc.abs(orientation) <= 1e-18 {
+        boundary.push((first.at(i), last.at(i)))
+      }
+    }
+    let low = calc.inf
+    let high = -calc.inf
+    for (a, b) in boundary {
+      let interval = capsule(a, b)
+      if interval != none {
+        low = calc.min(low, interval.at(0))
+        high = calc.max(high, interval.at(1))
+      }
+    }
+    if low <= high { intervals.push((low, high)) }
+  }
+  // Curves can give disjoint collision intervals. Leave the component touching
+  // the attachment frame, rather than jumping over a clear gap to a remote bend.
+  let reach = 0
+  let attached = false
+  for (low, high) in intervals.sorted(key: interval => interval.at(0)) {
+    if high < 0 { continue }
+    if low > reach + 1e-10 { break }
+    attached = true
+    reach = calc.max(reach, high)
+  }
+  // Explicit independent arrow/label shifts may separate the whole finite
+  // arrow from this normal ray; retain that deliberate tangential placement.
+  if attached { reach / scale } else { initial }
+}
+
 #let _layer-label-element(ctx, path, style, label-pos, data, href: none, fixed-position: none, placement: false) = {
   let label = _layer-label(style, data)
   if label == none { return none }
@@ -1882,8 +2071,10 @@
       offset-side: none, length: none, ratio: none, resolve-length: "none", shift: 0,
     ), 0, 0, none, auto)
   })
-  let candidates = ()
-  for (path-index, candidate-path) in paths.enumerate() {
+  let carrier-lines = if clear-box and fixed-position == none {
+    _label-path-lines(ctx, path, accuracy)
+  } else { () }
+  let path-options = paths.enumerate().map(((path-index, candidate-path)) => {
     let candidate-side = sides.at(path-index)
     let total = if candidate-path == none { 0 } else { curve-api.length(candidate-path, accuracy: accuracy) }
     let preferred = calc.clamp(total / 2 + shift, 0, total)
@@ -1899,34 +2090,122 @@
       high = calc.clamp(total - half-length - relative-shift, low, total)
       preferred = calc.clamp(preferred, low, high)
     }
-    let positions = (preferred,)
+    (
+      total: total, preferred: preferred, low: low, high: high,
+      lines: carrier-lines,
+    )
+  })
+  let candidate-at = (path-index, at, sampled-frame: none, base: none) => {
+    let candidate-path = paths.at(path-index)
+    let candidate-side = sides.at(path-index)
+    let options = path-options.at(path-index)
+    let total = options.total
+    let preferred = options.preferred
+    let at = calc.clamp(at, options.low, options.high)
+    let frame = if sampled-frame != none { sampled-frame } else if fixed-position != none { frame } else {
+      _path-mid-frame(candidate-path, accuracy, shift: at - total / 2)
+    }
+    let tangent-length = _point-length(frame.tangent)
+    let normal = if tangent-length <= 1e-9 { (0, candidate-side) } else {
+      _point-scale((-_point-y(frame.tangent), _point-x(frame.tangent)), candidate-side / tangent-length)
+    }
+    let outward = cetz.vector.sub(
+      cetz.matrix.mul4x4-vec3(ctx.transform, (..normal, 0)), origin,
+    )
+    let normal-squared = cetz.vector.dot(outward, outward)
+    let nearest = if clear-box and normal-squared > 1e-18 {
+      calc.min(..corners.map(corner => cetz.vector.dot(corner, outward))) / normal-squared
+    } else { 0 }
+    let path-shift = at - total / 2 + if attached == none { 0 } else { _style-value(attached, "shift") - shift }
+    let arrow-bounds = ()
+    let attachment-lines = options.lines
+    if attached != none {
+      let arrow-style = attached + (offset: 0, offset-side: none, shift: path-shift)
+      let arrow-path = _path-layer(candidate-path, arrow-style, 0, 0, none, auto)
+      if clear-box and fixed-position == none {
+        // The finite arrow and its physical carrier are one attachment:
+        // a wide label must not cross the carrier beyond the short arrow.
+        attachment-lines = _label-path-lines(ctx, arrow-path, accuracy) + carrier-lines
+      }
+      if placement {
+        arrow-bounds = _annotation-bounds(ctx, _derived-path-elements(
+          arrow-path, arrow-style, auto, true, true,
+        ).elements)
+      }
+    }
+    let normal-offset = if clear-box and fixed-position == none {
+      _label-attachment-offset(
+        attachment-lines, corners,
+        _point(cetz.matrix.mul4x4-vec3(ctx.transform, (..frame.point, 0))),
+        outward, gap, gap - nearest,
+      )
+    } else { gap - nearest }
+    let position = if base != none and (fixed-position != none or normal-offset == gap - nearest) {
+      base.position
+    } else if fixed-position != none { frame.point } else {
+      _point-add(frame.point, _point-scale(normal, normal-offset))
+    }
+    let center = cetz.matrix.mul4x4-vec3(ctx.transform, (..position, 0))
+    let bounds = corners.map(corner => cetz.vector.add(center, corner))
+    (
+      position: position,
+      at: at,
+      side: candidate-side,
+      path-index: path-index,
+      path-shift: path-shift,
+      arrow-bounds: arrow-bounds,
+      corners: bounds,
+      bounds: if base != none and position == base.position { base.bounds } else {
+        (
+          left: calc.min(..bounds.map(p => p.at(0))),
+          right: calc.max(..bounds.map(p => p.at(0))),
+          bottom: calc.min(..bounds.map(p => p.at(1))),
+          top: calc.max(..bounds.map(p => p.at(1))),
+        )
+      },
+      // Prefer the original side when both placements are otherwise equivalent.
+      cost: if base != none { base.cost } else { (
+        (if total <= accuracy { 0 } else { 0.002 * calc.pow((at - preferred) / total, 2) })
+          + if candidate-side == side { 0 } else { 0.00002 }
+      ) },
+    )
+  }
+  let candidates = ()
+  for (path-index, options) in path-options.enumerate() {
+    let positions = (options.preferred,)
     if movable {
       // Stay inside the carrier; endpoints belong to the vertex labels.
-      positions += range(3, 30).map(i => calc.clamp(total * i / 32, low, high))
-        .dedup().filter(at => calc.abs(at - preferred) > accuracy)
+      positions += range(3, 30).map(i => calc.clamp(options.total * i / 32, options.low, options.high))
+        .dedup().filter(at => calc.abs(at - options.preferred) > accuracy)
     }
-    // Batch the unchanged prefix trims in Kurvst instead of serializing the
-    // carrier and decoding its segments for every candidate in Typst.
+    let candidate-path = paths.at(path-index)
+    let candidate-side = sides.at(path-index)
+    // Batch prefix trims and coordinate transforms before attaching the finite
+    // arrow footprint and enforcing its shared clearance with the text.
     let frames = if fixed-position != none { (frame,) } else {
-      curve-api.frames(candidate-path, positions.map(at => total / 2 + (at - total / 2)), accuracy: accuracy)
+      curve-api.frames(candidate-path, positions.map(at => options.total / 2 + (at - options.total / 2)), accuracy: accuracy)
     }
-    candidates += cbor(_plugin.label_candidates(cbor.encode((
+    let bases = cbor(_plugin.label_candidates(cbor.encode((
       frames: frames.map(frame => (point: frame.point.map(float), tangent: frame.tangent.map(float))),
       positions: positions.map(float), transform: ctx.transform.map(row => row.map(float)),
       origin: origin.map(float), corners: corners.map(corner => corner.map(float)),
-      total: float(total), preferred: float(preferred),
+      total: float(options.total), preferred: float(options.preferred),
       accuracy: float(accuracy), side: float(candidate-side), preferred-side: float(side),
       path-index: path-index,
       path-shift: float(if attached == none { 0 } else { _style-value(attached, "shift") - shift }),
       gap: float(gap), clear-box: clear-box, fixed: fixed-position != none,
     ))))
+    for (at, sampled-frame, base) in positions.zip(frames, bases) {
+      candidates.push(candidate-at(path-index, at, sampled-frame: sampled-frame, base: base))
+    }
   }
   if attached == none and sides.len() == 2 {
     let count = calc.quo(candidates.len(), 2)
     candidates = range(count).map(i => (candidates.at(i), candidates.at(i + count))).flatten()
   }
   if placement {
-    (label: label, style: label-style, candidates: candidates, edge: data.at("eid", default: none), paths: paths, path-style: attached)
+    (label: label, style: label-style, candidates: candidates, edge: data.at("eid", default: none), paths: paths, path-style: attached,
+      candidate-at: candidate-at, ranges: path-options.map(options => (options.low, options.high)))
   } else {
     cetz.draw.content(candidates.first().position, label, padding: 0, ..label-style)
   }
@@ -1936,20 +2215,121 @@
 // enlarges only label boxes; the collision overlay uses the same clearances.
 #let _label-collision-padding = (labels: 0.35, obstacles: 0.08, extra: 0.6)
 
-// Optimize arc length and automatic side choices: every candidate has the same
-// measured normal clearance. Annealing can leave a local minimum, then
-// deterministic coordinate sweeps settle the best arrangement found.
-#let _relax-label-placements(placements, obstacles, label-padding: _label-collision-padding.extra) = {
+// Use the painted paths, including waves, coils and crossing gaps. Collision
+// scoring must not turn their empty surrounding space into an edge obstacle.
+// Native dash styles use the continuous stroke envelope, as for a solid edge.
+#let _edge-collision-lines(ctx, elements) = {
+  let painted = cetz.process.many(ctx, elements.flatten(), compute-bounds: false)
+  let lines = ()
+  let canvas = ctx + (transform: cetz.matrix.ident(4))
+  for drawable in painted.drawables {
+    if drawable.type != "path" or cetz.drawable.TAG.hidden in drawable.tags { continue }
+    let stroke = cetz.util.resolve-stroke(drawable.at("stroke", default: none))
+    if drawable.at("stroke", default: none) == none { continue }
+    let radius = cetz.util.resolve-number(ctx, stroke.thickness) / 2
+    for (origin, closed, commands) in drawable.segments {
+      let start = origin
+      for command in commands {
+        let pieces = ()
+        if command.first() == "l" {
+          for end in command.slice(1) {
+            pieces.push((_point(start), _point(end)))
+            start = end
+          }
+        } else if command.first() == "c" {
+          let segment = (start: _point(start), control-start: _point(command.at(1)),
+            control-end: _point(command.at(2)), end: _point(command.at(3)))
+          pieces = _label-path-lines(canvas, _segments-path((segment,)), 0.005)
+          start = command.last()
+        }
+        lines += pieces.map(((a, b)) => (start: a, end: b, radius: radius))
+      }
+      if closed and start != origin {
+        lines.push((start: _point(start), end: _point(origin), radius: radius))
+      }
+    }
+  }
+  lines
+}
+
+// Clip physical edge segments to the measured, possibly rotated text quad.
+// Only the stroke's radius expands this box (conservatively at corners):
+// no label collision padding and
+// no force at all outside an actual intersection. Integrating covered length
+// makes the penalty independent of how finely the edge was subdivided.
+#let _label-edge-intersection(candidate, lines) = {
+  if lines.len() == 0 { return 0 }
+  let corners = candidate.corners
+  let origin = _point(corners.at(0))
+  let x = _point-sub(corners.at(1), origin)
+  let y = _point-sub(corners.at(2), origin)
+  let determinant = x.at(0) * y.at(1) - x.at(1) * y.at(0)
+  if calc.abs(determinant) < 1e-12 { return 0 }
+  let width = _point-length(x)
+  let height = _point-length(y)
+  let local = point => {
+    let delta = _point-sub(point, origin)
+    ((delta.at(0) * y.at(1) - delta.at(1) * y.at(0)) / determinant,
+      (x.at(0) * delta.at(1) - x.at(1) * delta.at(0)) / determinant)
+  }
+  let length = 0
+  for line in lines {
+    let box = candidate.bounds
+    if (calc.max(line.start.at(0), line.end.at(0)) + line.radius < box.left
+      or calc.min(line.start.at(0), line.end.at(0)) - line.radius > box.right
+      or calc.max(line.start.at(1), line.end.at(1)) + line.radius < box.bottom
+      or calc.min(line.start.at(1), line.end.at(1)) - line.radius > box.top) { continue }
+    let a = local(line.start)
+    let b = local(line.end)
+    let low = 0
+    let high = 1
+    for axis in range(2) {
+      // The inverse transform's row norm also handles sheared canvases.
+      let padding = line.radius * (if axis == 0 { height } else { width }) / calc.abs(determinant)
+      let delta = b.at(axis) - a.at(axis)
+      if calc.abs(delta) < 1e-12 {
+        if a.at(axis) < -padding or a.at(axis) > 1 + padding { high = -1; break }
+      } else {
+        let from = (-padding - a.at(axis)) / delta
+        let to = (1 + padding - a.at(axis)) / delta
+        low = calc.max(low, calc.min(from, to))
+        high = calc.min(high, calc.max(from, to))
+      }
+    }
+    length += calc.max(0, high - low) * _point-distance(line.start, line.end)
+  }
+  6 * length / calc.max(1e-9, calc.min(width, height))
+}
+
+// Optimize arc length and automatic side choices with fixed normal clearance.
+// Joint proposals let annotations pass one another without requiring a single
+// temporarily worse move; a short joint descent settles remaining collisions.
+#let _relax-label-placements(placements, obstacles, label-padding: _label-collision-padding.extra, fixed-arrows: (), edge-lines: ()) = {
   assert(label-padding >= 0, message: "label-collision-padding must be non-negative")
   if placements.all(label => label.candidates.len() == 1) {
     return placements.map(label => label.candidates.first())
   }
+  let coordinated = placements.any(label => label.candidates.any(candidate => (
+    candidate.keys().contains("arrow-bounds")
+  )))
+  // Normal clearance handles ordinary carriers. Only actual text intersections,
+  // vertices and self-loop bends contribute static annotation penalties.
+  let obstacles = if coordinated { obstacles.filter(obstacle => (
+    obstacle.at("edge", default: none) == none or obstacle.at("self-loop", default: false)
+  )) } else { obstacles }
   let geometry = cbor.encode((
     placements: placements.map(label => (
       edge: label.at("edge", default: none),
-      candidates: label.candidates.map(candidate => (bounds: candidate.bounds, cost: candidate.cost)),
+      candidates: label.candidates.map(candidate => (
+        bounds: candidate.bounds,
+        cost: candidate.cost + if edge-lines.len() > 0 and candidate.keys().contains("corners") {
+          _label-edge-intersection(candidate, edge-lines)
+        } else { 0 },
+        arrow-bounds: candidate.at("arrow-bounds", default: ()),
+      )),
     )),
     obstacles: obstacles, label-padding: label-padding,
+    fixed-arrows: fixed-arrows, coordinated: coordinated,
     obstacle-padding: _label-collision-padding.obstacles,
   ))
   let math = (
@@ -2755,6 +3135,8 @@
         let node-targets = ()
         let edge-targets = ()
         let label-placements = ()
+        let fixed-arrows = ()
+        let edge-lines = ()
         let label-obstacles = ()
         let debug-level = _debug-level(debug)
         let subgraph-records = _subgraph-records(
@@ -3094,6 +3476,7 @@
           let hrefs = (half-hrefs.at(0), edge-hrefs.at(0), edge-hrefs.at(1), half-hrefs.at(1))
 
           for layer-index in range(0, layer-count) {
+            let layer-start = elements.len()
             let source-layer = _style-layer(source-style-layers, layer-index)
             let sink-layer = _style-layer(sink-style-layers, layer-index)
             let source-style-value = if source-layer == none {
@@ -3606,12 +3989,24 @@
                 }
               }
             }
+            // An unlabelled bounded offset layer is a fixed decoration, such
+            // as an external momentum arrow whose text stays at the endpoint.
+            // Other painted paths participate only when they intersect text.
+            if (source-draw-style, sink-draw-style).any(style => (
+              style != none and not _style-value(style, "label-only")
+                and _layer-label(style, edge-data) == none
+                and _style-value(style, "offset") != 0
+                and (_style-value(style, "length") != none or _style-value(style, "ratio") != none)
+            )) {
+              fixed-arrows += _annotation-bounds(ctx, elements.slice(layer-start))
+            } else {
+              edge-lines += _edge-collision-lines(ctx, elements.slice(layer-start))
+            }
           }
 
-          // Cover visible carriers with short segment boxes, retaining ownership
-          // so each label ignores its own non-loop edge. Self-loops still repel
-          // their labels: a remote bend can approach from another side.
-          // Waves and coils occupy a band around the carrier, not just a line.
+          // Only self-loop bends repel annotations: a remote part of the loop
+          // can approach from another side. Ordinary carriers are handled by the
+          // fixed normal gap. Waves and coils occupy a band, not just a line.
           let radius = 0.06 + calc.max(0, ..(source-style-layers + sink-style-layers).map(style => (
             if _style-value(style, "pattern") == none { 0 } else {
               calc.abs(_style-value(style, "pattern-amplitude"))
@@ -3619,12 +4014,14 @@
           )))
           let pad-x = radius * (calc.abs(ctx.transform.at(0).at(0)) + calc.abs(ctx.transform.at(0).at(1)))
           let pad-y = radius * (calc.abs(ctx.transform.at(1).at(0)) + calc.abs(ctx.transform.at(1).at(1)))
-          let obstacle-segments = (source-label-segments, sink-label-segments)
-            .filter(segments => segments != none).flatten()
-          label-obstacles += cbor(_plugin.label_obstacle_boxes(cbor.encode((
-            segments: obstacle-segments, transform: ctx.transform.map(row => row.map(float)),
-            pad-x: pad-x, pad-y: pad-y,
-          )))).map(box => (edge: edge.edge, self-loop: self-loop, ..box))
+          if self-loop {
+            let obstacle-segments = (source-label-segments, sink-label-segments)
+              .filter(segments => segments != none).flatten()
+            label-obstacles += cbor(_plugin.label_obstacle_boxes(cbor.encode((
+              segments: obstacle-segments, transform: ctx.transform.map(row => row.map(float)),
+              pad-x: pad-x, pad-y: pad-y,
+            )))).map(box => (edge: edge.edge, self-loop: self-loop, ..box))
+          }
 
           if ev-label != none {
             let gap = _statement-number(edge, "layout-label-gap")
@@ -3701,7 +4098,7 @@
 
         label-placements = label-placements.filter(label => label != none)
         let label-padding = options.label-collision-padding
-        let relaxed = _relax-label-placements(label-placements, label-obstacles, label-padding: label-padding)
+        let relaxed = _relax-label-placements(label-placements, label-obstacles, label-padding: label-padding, fixed-arrows: fixed-arrows, edge-lines: edge-lines)
         for (label, candidate) in label-placements.zip(relaxed) {
           if label.path-style != none {
             let style = label.path-style + (offset: 0, offset-side: none, shift: candidate.path-shift)
@@ -3729,6 +4126,7 @@
               (label-obstacles, _label-collision-padding.obstacles / 2, rgb("#f59e0b"), false),
               (relaxed.map(candidate => candidate.bounds), _label-collision-padding.labels / 2 + label-padding, rgb("#a855f7"), true),
               (relaxed.map(candidate => candidate.bounds), _label-collision-padding.obstacles / 2 + label-padding, rgb("#06b6d4"), false),
+              (relaxed.map(candidate => candidate.arrow-bounds).flatten() + fixed-arrows, _label-collision-padding.labels / 2, rgb("#22c55e"), true),
             ) {
               for box in boxes {
                 cetz.draw.rect(

@@ -63,14 +63,56 @@ fn svg_numbers(value: &str) -> Vec<f64> {
         .collect()
 }
 
-// The fixture deliberately uses horizontal cubic paths, so inspecting their
-// final x delta is enough and avoids coupling this test to a general SVG parser.
+// Shaft probes measure the X extent of straight segments. Accept both cubic
+// commands and CeTZ's optimized line forms, including moves and closed paths.
 fn horizontal_span(tag: &str) -> (f64, f64) {
-    let values = svg_numbers(svg_attr(tag, "d").unwrap());
-    assert!(values[0].abs() < 1e-9 && values[1].abs() < 1e-9);
-    let start = own_translation(tag).0;
-    let end = start + values[values.len() - 2];
-    (start.min(end), start.max(end))
+    let path = svg_attr(tag, "d").unwrap();
+    let commands = path
+        .char_indices()
+        .filter(|(_, command)| command.is_ascii_alphabetic() && !matches!(command, 'e' | 'E'))
+        .collect::<Vec<_>>();
+    let origin = own_translation(tag).0;
+    let mut x = origin;
+    let mut subpath_x = x;
+    let mut low = f64::INFINITY;
+    let mut high = f64::NEG_INFINITY;
+    for (index, &(offset, command)) in commands.iter().enumerate() {
+        let next = commands
+            .get(index + 1)
+            .map_or(path.len(), |&(next, _)| next);
+        let values = svg_numbers(&path[offset + 1..next]);
+        if matches!(command, 'Z' | 'z') {
+            low = low.min(x).min(subpath_x);
+            high = high.max(x).max(subpath_x);
+            x = subpath_x;
+            continue;
+        }
+        let stride = match command {
+            'H' | 'h' | 'V' | 'v' => 1,
+            'M' | 'm' | 'L' | 'l' => 2,
+            'C' | 'c' => 6,
+            _ => panic!("unexpected shaft path command {command}: {path}"),
+        };
+        assert_eq!(values.len() % stride, 0);
+        for (segment_index, segment) in values.chunks_exact(stride).enumerate() {
+            let previous = x;
+            if !matches!(command, 'V' | 'v') {
+                let endpoint_x = segment[if stride == 1 { 0 } else { stride - 2 }];
+                x = if command.is_ascii_lowercase() {
+                    x
+                } else {
+                    origin
+                } + endpoint_x;
+            }
+            if matches!(command, 'M' | 'm') && segment_index == 0 {
+                subpath_x = x;
+            } else {
+                low = low.min(previous).min(x);
+                high = high.max(previous).max(x);
+            }
+        }
+    }
+    if low.is_finite() { (low, high) } else { (x, x) }
 }
 
 fn merged_spans(mut spans: Vec<(f64, f64)>) -> Vec<(f64, f64)> {
@@ -188,6 +230,13 @@ fn public_linnest_layout_and_drawing_behavior_is_observable() {
         base.path()
             .join(".clinnet/templates/named-map-behavior.typ"),
         include_str!("resources/named-map-behavior.typ"),
+    )
+    .unwrap();
+
+    fs::write(
+        base.path()
+            .join(".clinnet/templates/annotation-placement-behavior.typ"),
+        include_str!("resources/annotation-placement-behavior.typ"),
     )
     .unwrap();
 
@@ -546,9 +595,17 @@ fn public_linnest_layout_and_drawing_behavior_is_observable() {
     ] {
         assert_eq!(label_positions["short"], label_positions[mode], "{mode}");
     }
-    assert_eq!(
-        label_positions["curved-short"],
-        label_positions["curved-long"]
+    // Trimming finite curved attachments changes their adaptive subdivision;
+    // use the same physical tolerance as the arrow geometry checks below.
+    assert_close(
+        label_positions["curved-short"].0,
+        label_positions["curved-long"].0,
+        0.02,
+    );
+    assert_close(
+        label_positions["curved-short"].1,
+        label_positions["curved-long"].1,
+        0.02,
     );
     assert_eq!(momentum_outputs["short"], momentum_outputs["label-default"]);
     assert_eq!(momentum_outputs["fallback"], momentum_outputs["ordinary"]);
@@ -684,11 +741,6 @@ fn public_linnest_layout_and_drawing_behavior_is_observable() {
         assert!(outside_positions[mode].1 < outside_positions["outside-outgoing"].1 - 5.0);
     }
 
-    fs::write(
-        templates.join("epemttbar.dot"),
-        include_str!("../../../tests/resources/graphs/epemttbar.dot"),
-    )
-    .unwrap();
     let fixture = templates.join("gamma-cross-section-behavior.typ");
     fs::write(
         &fixture,

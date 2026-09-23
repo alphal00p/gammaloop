@@ -302,14 +302,17 @@
   /// Show the padded boxes used by label placement: dashed purple for
   /// label–label clearance, cyan for label–obstacle clearance, and orange for
   /// node/edge obstacles. Base pair padding is shared equally; label boxes also
-  /// include `label-collision-padding`. A label ignores orange boxes belonging
-  /// to its own edge unless it is a self-loop. Floating
+  /// include `label-collision-padding`. Ordinary painted edges penalize only
+  /// intersections with the unpadded text box; self-loop bends retain clearance
+  /// boxes. Green boxes show momentum shafts and arrowheads. Floating
   /// overlays do not affect placement, canvas bounds, or interaction targets.
   /// -> bool
   debug-label-collisions: false,
   /// Extra padding on every side of label collision boxes, in canvas units.
   /// Adds to the base label–label and label–obstacle clearances; zero restores
-  /// those base boxes. Affects sliding/side choices, not the normal label gap.
+  /// those base boxes. Affects sliding/side choices, not the normal label gap
+  /// or the text–edge intersection test. Arrow and text slide together; coupled
+  /// moves help crowded annotations pass one another.
   /// -> int | float
   label-collision-padding: _impl-label-collision-padding.extra,
   /// Show `h_i` beside every half-edge without an explicit endpoint label.

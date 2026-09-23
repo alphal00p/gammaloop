@@ -127,7 +127,7 @@ config = ln.RenderConfig(
         epochs=10,
         internal_label_length_scale=0.8,
         external_label_length_scale=0.7,
-        external_centroid_bias=1.5,
+        external_pull=1.5,
     ),
     template_options={"show-particle": False, "show-edge-index": True},
 )

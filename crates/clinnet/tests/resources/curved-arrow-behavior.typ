@@ -3,6 +3,7 @@
 #import "crates/linnest/typst/src/impl/draw.typ" as drawing
 #import "@preview/cetz:0.5.1" as cetz
 #import "map-style.typ" as feynman
+#import "annotation-placement-behavior.typ": attachment-distance
 
 // Include this file, or import and render this value: canvas assertions need layout.
 #let curved-arrow-behavior = {
@@ -939,17 +940,19 @@
                 cetz.vector.norm(shifted.tangent), cetz.vector.norm(frame.tangent),
                 message: case + ": unchanged label normal",
               )
-              assert.eq(
-                cetz.process.many(
-                  native,
-                  drawing
-                    ._layer-label-element(native, path, carrier, none, (:))
-                    .flatten(),
-                  compute-bounds: false,
-                ).drawables,
-                rendered,
-                message: case + ": unchanged final label placement",
-              )
+              let resized = cetz.process.many(
+                native,
+                drawing._layer-label-element(native, path, carrier, none, (:)).flatten(),
+                compute-bounds: false,
+              ).drawables
+              if anchor in (auto, "auto") {
+                let center = resized.filter(d => d.type == "content").first().pos
+                let delta = cetz.vector.sub(center, labels.first().pos)
+                assert(calc.abs(cetz.vector.dot(delta, (..cetz.vector.norm(frame.tangent), 0))) < epsilon,
+                  message: case + ": finite-arrow clearance preserves the label arc coordinate")
+              } else {
+                assert.eq(resized, rendered, message: case + ": explicit anchor preserves final label placement")
+              }
             }
           }
           for center in centers.slice(1, 4) {
@@ -1054,15 +1057,11 @@
           assert.eq(frames.len(), 1, message: case + ": one rendered box")
           if automatic {
             let (start, _, commands) = frames.first().segments.first()
-            let nearest = calc.min(..(start, ..commands.map(c => c.last())).map(
-              point => (
-                cetz.vector.dot(cetz.vector.sub(point, origin), outward)
-                  / cetz.vector.dot(outward, outward)
-              ),
-            ))
+            let points = (start, ..commands.map(command => command.last())).dedup()
+            let actual = attachment-distance(drawing._label-path-lines(local, path, accuracy), points) / calc.sqrt(outward.at(0) * outward.at(0) + outward.at(1) * outward.at(1))
             assert(
-              calc.abs(nearest - gap) < epsilon,
-              message: case + ": rendered clearance " + repr((nearest, gap)),
+              calc.abs(actual - gap) < 8 * accuracy,
+              message: case + ": finite-path rendered clearance " + repr((actual, gap)),
             )
           }
         }
@@ -1119,10 +1118,10 @@
               origin,
             )
             let label = cetz.draw.content(candidate.position, placement.label, padding: 0, ..placement.style).first()(native)
-            let nearest = calc.min(..("north-west", "north-east", "south-west", "south-east").map(anchor => (
-              cetz.vector.dot(cetz.vector.sub((label.anchors)(anchor), origin), outward) / cetz.vector.dot(outward, outward)
-            )))
-            assert(calc.abs(nearest - 0.2) < epsilon, message: "momentum sliding keeps fixed rendered label clearance")
+            let corners = ("north-west", "north-east", "south-east", "south-west").map(label.anchors)
+            let attachment = drawing._label-path-lines(native, arrow-path, accuracy) + drawing._label-path-lines(native, carrier, accuracy)
+            let actual = attachment-distance(attachment, corners) / calc.sqrt(outward.at(0) * outward.at(0) + outward.at(1) * outward.at(1))
+            assert(calc.abs(actual - 0.2) < 8 * accuracy, message: "momentum sliding keeps fixed clearance to the finite arrow and physical carrier")
           }
           if side == auto {
             let preferred = placement.candidates.first().side
@@ -1139,6 +1138,65 @@
             assert(calc.abs(pinned.candidates.first().path-shift - 0.35) < epsilon, message: "pinned momentum preserves its arrow shift")
           }
         }
+      }
+
+      // An arrow-only collision must move the pair even when its text is clear.
+      // Conversely, empty space between the two pieces is not an obstacle.
+      let paired-style = (
+        label: box(width: 2pt, height: 2pt, fill: black),
+        label-side: "left", label-gap: 1,
+        label-path: (
+          offset: 0.5, length: 1.4, ratio: 0.5, resolve-length: "min",
+          stroke: black + 0.4pt, mark: (end: "straight"), mark-position: 1,
+        ),
+      )
+      let carrier = curve.line((0, 0), (8, 0))
+      let pair = drawing._layer-label-element(native, carrier, paired-style, none, (eid: 0), placement: true)
+      let first = pair.candidates.first()
+      assert(first.arrow-bounds.len() >= 2, message: "shaft and arrowhead have separate collision bounds")
+      let blocker = first.arrow-bounds.last()
+      assert(first.bounds.bottom > blocker.top + 0.08, message: "arrow-only obstacle is clear of the text")
+      let text-only = pair + (candidates: pair.candidates.map(c => c + (arrow-bounds: ())))
+      assert.eq(drawing._relax-label-placements((text-only,), (blocker,), label-padding: 0).first().path-shift, first.path-shift, message: "clear text alone would not move")
+      let shifted = drawing._relax-label-placements((pair,), (blocker,), label-padding: 0).first()
+      assert.ne(shifted.path-shift, first.path-shift, message: "arrowhead collision moves the annotation")
+      assert(calc.abs(shifted.position.at(0) - first.position.at(0) - shifted.path-shift + first.path-shift) < epsilon, message: "arrow and label have exactly the same tangential displacement")
+      assert.eq(shifted.position.at(1), first.position.at(1), message: "shared movement keeps the normal gap")
+      let middle = (first.bounds.bottom + calc.max(..first.arrow-bounds.map(b => b.top))) / 2
+      let gap-obstacle = (left: 3.95, right: 4.05, bottom: middle - 0.05, top: middle + 0.05)
+      assert.eq(drawing._relax-label-placements((pair,), (gap-obstacle,), label-padding: 0).first().path-shift, first.path-shift, message: "unoccupied arrow/text gap is not one enclosing collision box")
+      // A fixed standalone arrow has the same clearance as a pinned paired
+      // arrow, and its actual marker remains part of the obstacle footprint.
+      let fixed-paint = drawing._derived-path-elements(
+        curve.line((4, -0.2), (4, 1.2)),
+        (stroke: black + 0.4pt, mark: (end: "straight"), mark-position: 1),
+        auto, true, true,
+      ).elements
+      let fixed-bounds = drawing._annotation-bounds(native, fixed-paint)
+      assert(fixed-bounds.len() >= 2, message: "fixed arrows retain shaft and marker footprints")
+      let avoiding-fixed = drawing._relax-label-placements((pair,), (), label-padding: 0, fixed-arrows: fixed-bounds).first()
+      assert.ne(avoiding-fixed.path-shift, first.path-shift, message: "a fixed standalone arrow moves the paired annotation")
+      let fixed-pair = (candidates: ((bounds: (left: 100, right: 101, bottom: 100, top: 101), arrow-bounds: fixed-bounds, cost: 0),))
+      assert.eq(
+        avoiding-fixed.position,
+        drawing._relax-label-placements((pair, fixed-pair), (), label-padding: 0).first().position,
+        message: "fixed and pinned annotation arrows have identical collision clearance",
+      )
+      assert.eq(drawing._annotation-bounds(native, cetz.draw.hide(fixed-paint.flatten())), (), message: "hidden arrow geometry is not an obstacle")
+
+      let blocker-label = drawing._layer-label-element(
+        native, carrier, (label: box(width: 2pt, height: 2pt, fill: black)), none, (eid: 1),
+        fixed-position: (4, 0.5), placement: true,
+      )
+      assert.ne(drawing._relax-label-placements((pair, blocker-label), (), label-padding: 0).first().path-shift, first.path-shift, message: "other labels repel the arrow even when both text boxes are clear")
+      let opposing = (-2, 2).map(shift => drawing._layer-label-element(
+        native, carrier, paired-style + (label-shift: shift), none, (:), placement: true,
+      ))
+      let separated = drawing._relax-label-placements(opposing, (), label-padding: 0)
+      assert(separated.zip(opposing).any(((choice, original)) => choice.path-shift != original.candidates.first().path-shift), message: "overlapping arrows separate even when their text is apart")
+      for (length, expected) in ((8, 1.4), (2, 1), (0.8, 0.4)) {
+        let capped = drawing._path-layer(curve.line((0, 0), (length, 0)), paired-style.label-path, 0, 0, none, auto)
+        assert(calc.abs(curve.length(capped) - expected) < 1e-6, message: "arrow length is capped by its carrier percentage")
       }
 
       // Crowded labels may slide or switch sides on a straight or curved carrier
@@ -1178,10 +1236,9 @@
             let outward = cetz.vector.sub(cetz.matrix.mul4x4-vec3(native.transform, (..cetz.vector.add(frame.point, normal), 0)), origin)
             let element = cetz.draw.content(candidate.position, label.label, padding: 0, ..label.style)
             let measured = element.first()(native)
-            let nearest = calc.min(..("north-west", "north-east", "south-west", "south-east").map(anchor => (
-              cetz.vector.dot(cetz.vector.sub((measured.anchors)(anchor), origin), outward) / cetz.vector.dot(outward, outward)
-            )))
-            assert(calc.abs(nearest - 0.3) < epsilon, message: "sliding preserves measured normal clearance")
+            let corners = ("north-west", "north-east", "south-east", "south-west").map(measured.anchors)
+            let actual = attachment-distance(drawing._label-path-lines(native, carrier, 0.001), corners)
+            assert(calc.abs(actual - 0.3) < 0.008, message: "sliding preserves actual clearance to the finite carrier")
           }
           let blocked = drawing._relax-label-placements((label,), (label.candidates.first().bounds,))
           assert.ne(blocked.first().position, label.candidates.first().position, message: "labels slide away from node obstacles")
@@ -1194,8 +1251,8 @@
       }
 
       // A near miss at base clearance becomes a collision when label boxes grow.
-      let small = (bounds: (left: 0, right: 1, bottom: 0, top: 1), cost: 0)
-      let moved = (bounds: (left: -2, right: -1, bottom: 0, top: 1), cost: 0.001)
+      let small = (bounds: (left: 0, right: 1, bottom: 0, top: 1), arrow-bounds: (), cost: 0)
+      let moved = (bounds: (left: -2, right: -1, bottom: 0, top: 1), arrow-bounds: (), cost: 0.001)
       let obstacle = (left: 1.2, right: 2.2, bottom: 0, top: 1)
       let movable = (candidates: (small, moved))
       assert.eq(drawing._relax-label-placements((movable,), (obstacle,), label-padding: 0).first(), small, message: "zero padding keeps a clear label in place")
@@ -1204,18 +1261,20 @@
       let fixed = (candidates: (small,))
       let scored = drawing._relax-label-placements((fixed, movable), ((left: 0.3, right: 0.7, bottom: 0.3, top: 0.7),), label-padding: 0.3)
       assert(calc.abs(scored.first().cost - calc.pow(0.48, 2)) < epsilon, message: "collision cost matches the displayed contained obstacle box")
-      // Padding must not move a label away from its own non-loop carrier.
+      // Padding must not move a label away from ordinary edge carriers.
       let owned = movable + (edge: 0)
       for padding in (0, 0.25, 0.6) {
         let own-edge = small.bounds + (edge: 0, self-loop: false)
-        assert.eq(drawing._relax-label-placements((owned,), (own-edge,), label-padding: padding).first(), small, message: "own edge does not cause label drift")
-        for blocking in (own-edge + (edge: 1), own-edge + (self-loop: true), small.bounds) {
-          assert.eq(drawing._relax-label-placements((owned,), (blocking,), label-padding: padding).first().bounds, moved.bounds, message: "other edges, self-loops, and nodes still repel labels")
+        for carrier in (own-edge, own-edge + (edge: 1)) {
+          assert.eq(drawing._relax-label-placements((owned,), (carrier,), label-padding: padding).first(), small, message: "ordinary edges do not cause label drift")
+        }
+        for blocking in (own-edge + (self-loop: true), small.bounds) {
+          assert.eq(drawing._relax-label-placements((owned,), (blocking,), label-padding: padding).first().bounds, moved.bounds, message: "self-loops and nodes still repel labels")
         }
       }
       let same-edge = drawing._relax-label-placements((owned, owned), (), label-padding: 0.25)
       assert.ne(same-edge.first().bounds, same-edge.last().bounds, message: "labels on the same edge still repel each other")
-      let neighbour = (candidates: ((bounds: obstacle, cost: 0),))
+      let neighbour = (candidates: ((bounds: obstacle, arrow-bounds: (), cost: 0),))
       // Separate the labels beyond the base pair padding, but inside added padding.
       neighbour.candidates.at(0).bounds.left = 1.5
       neighbour.candidates.at(0).bounds.right = 2.5
@@ -1240,6 +1299,42 @@
       ()
     })
   })
+  // Exercise fixed-arrow and actual text-edge contact through the complete
+  // drawing path. A clear ordinary carrier and invisible decoration stay inert.
+  for mode in ("arrow", "shaft", "ordinary", "clear-ordinary", "hidden") {
+    let incoming-x = if mode == "clear-ordinary" { 4.4 } else { 4 }
+    let scene = graph.build({
+      graph.node(<a>, pos: graph.pos(x: 0, y: 0))
+      graph.node(<b>, pos: graph.pos(x: 8, y: 0))
+      graph.node(<c>, pos: graph.pos(x: incoming-x, y: 4))
+      graph.edge(<pair>, graph.source(<a>), graph.sink(<b>), pos: graph.pos(x: 4, y: 0))
+      graph.edge(<incoming>, graph.sink(<c>), pos: graph.pos(x: incoming-x, y: -4))
+    })
+    draw(scene, unit: 10pt, node-label: none, edge-label: none,
+      node-style: (radius: 0, stroke: none, fill: none), node-outset: 0,
+      label-collision-padding: 0,
+      edge-style: edge => if edge.eid == 0 { (
+        (stroke: gray + 0.3pt),
+        (label-only: true, label: box(width: 2pt, height: 2pt, fill: red),
+          label-side: "left", label-gap: 1, label-style: (name: "moving-pair"),
+          label-path: (offset: 0.5, length: 1.4, ratio: 0.5,
+            stroke: blue + 0.4pt, mark: (end: "straight"), mark-position: 1)),
+      ) } else if mode in ("ordinary", "clear-ordinary") { (stroke: gray + 0.3pt) } else { (
+        offset: 0.5, length: 1.4,
+        stroke: if mode == "hidden" { none } else { black + 0.4pt },
+        mark: if mode == "arrow" { (end: "straight") } else { none },
+      ) },
+      draw-after: (g, bounds) => cetz.draw.get-ctx(ctx => {
+        let label = (ctx.nodes.at("moving-pair").anchors)("center")
+        if mode in ("arrow", "shaft", "ordinary") {
+          assert(calc.abs(label.at(0) - 4) > 0.1, message: "standalone arrows and actual text-edge contact move the shared annotation")
+        } else {
+          assert(calc.abs(label.at(0) - 4) < 1e-6, message: "clear ordinary and invisible carriers do not move the annotation")
+        }
+        ()
+      }),
+    )
+  }
   // Hidden edges provide neither label carriers nor stroke obstacles.
   draw(graph.build({
     graph.node(<hidden-a>, pos: graph.pos(x: 0, y: 0))

@@ -67,7 +67,7 @@
   )
   let fields = (:)
   for (kind, options, keys) in (
-    ("arrow", arrow.named(), ("side", "offset", "length", "shift")),
+    ("arrow", arrow.named(), ("side", "offset", "length", "ratio", "shift")),
     ("label", label, ("gap", "shift", "anchor", "slide", "side")),
   ) {
     for (key, value) in options {
@@ -127,7 +127,11 @@
   let shift = _number(edge, "momentum-arrow-shift", 0)
   let label-shift = _number(edge, "momentum-label-shift", shift)
   let anchor = _value(edge, "momentum-label-anchor", auto)
-  let offset = _number(edge, "momentum-arrow-offset", 0.62)
+  let offset = _number(edge, "momentum-arrow-offset", 0.5)
+  let ratio = _value(edge, "momentum-arrow-ratio", 0.5)
+  let ratio = if ratio == none or str(ratio).trim("\"") == "none" { none } else {
+    _number(edge, "momentum-arrow-ratio", 0.5)
+  }
   let side = _value(edge, "momentum-arrow-side", auto)
   let side = if side == auto { "auto" } else { str(side).trim("\"") }
   assert(
@@ -153,10 +157,10 @@
   let arrow = (
     geometry
       + (
-        length: _number(edge, "momentum-arrow-length", 1.0),
+        length: _number(edge, "momentum-arrow-length", 1.4),
         shift: shift,
-        ratio: none,
-        resolve-length: "length",
+        ratio: ratio,
+        resolve-length: if ratio == none { "length" } else { "min" },
         stroke: config.at("momentum-stroke", default: (
           paint: black,
           thickness: 0.4pt,

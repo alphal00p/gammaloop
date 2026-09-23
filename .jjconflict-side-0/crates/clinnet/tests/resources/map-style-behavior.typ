@@ -49,7 +49,7 @@
   ghG: reference-scalar,
 )
 #let reference-geometry = (
-  offset: 0.62,
+  offset: 0.5,
   offset-side: "label",
   label-side: auto,
   label-gap: 0.45,
@@ -58,10 +58,10 @@
 #let reference-arrow = (
   reference-geometry
     + (
-      length: 1.0,
+      length: 1.4,
       shift: 0,
-      ratio: none,
-      resolve-length: "length",
+      ratio: 0.5,
+      resolve-length: "min",
       stroke: (paint: black, thickness: 0.4pt, cap: "round"),
       mark: (
         end: (

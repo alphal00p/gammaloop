@@ -47,17 +47,19 @@ def _(mo):
     Use `int_id` when particles alone do not identify an interaction uniquely.
     Numerators default to one; compact import does not generate Feynman rules.
 
-    **Automatic** placement puts incoming legs on the left and outgoing legs
-    on the right, with a centroid bias that separates them from the diagram.
+    **Automatic** placement uses momentum flow to pull incoming legs left and
+    outgoing legs right with a constant force. The graph can stretch with its
+    chain of interactions. All-incoming or all-outgoing diagrams spread radially.
+    Repulsion grows once from a compact start to its final strength.
     Cross-sections open initial-state connections into left/right legs by default;
     matching pairs share movable rows. Disable **Split initial state** to draw
     the sewn graph. Internal labels keep a uniform gap to their text bounds,
     sliding along their curves or switching sides to avoid overlaps.
     Momentum labels use the diagram's stored loop momentum basis. Arrows and
     their labels slide together at a fixed offset; automatic sides can flip
-    to avoid collisions. **Momentum settings** controls their offset, length,
-    label gap, and preferred position. Disable **Automatic momentum placement**
-    to pin the pair. **Debug IDs** adds node and half-edge IDs.
+    to avoid collisions. **Momentum settings** controls their offset, requested
+    length, maximum fraction of the edge, label gap, and preferred position.
+    Disable **Automatic momentum placement** to pin the pair. **Debug IDs** adds node and half-edge IDs.
     **Collision boxes** shows padded label boxes: dashed purple for label–label
     clearance, cyan for label–edge/node clearance, and orange for edge/node
     obstacles. Only matching purple–purple or cyan–orange overlaps are penalized.
@@ -224,10 +226,55 @@ def _(lp, mo):
         1,
         100,
         1,
-        11,
+        9,
         debounce=True,
         show_value=True,
         label="Spring strength",
+    )
+    spring_length_scale = mo.ui.slider(
+        0.25,
+        2,
+        0.05,
+        0.75,
+        debounce=True,
+        show_value=True,
+        label="Spring rest-length multiplier",
+    )
+    external_pull = mo.ui.slider(
+        0,
+        3,
+        0.05,
+        1,
+        debounce=True,
+        show_value=True,
+        label="Constant external pull",
+    )
+    external_pull_balance = mo.ui.slider(
+        0,
+        3,
+        0.05,
+        1,
+        debounce=True,
+        show_value=True,
+        label="Pull balancing",
+    )
+    initial_repulsion = mo.ui.slider(
+        0,
+        1,
+        0.05,
+        0.15,
+        debounce=True,
+        show_value=True,
+        label="Initial repulsion fraction",
+    )
+    repulsion_growth = mo.ui.slider(
+        0,
+        1,
+        0.05,
+        0.7,
+        debounce=True,
+        show_value=True,
+        label="Fraction of run used to grow repulsion",
     )
     beta = mo.ui.slider(
         0,
@@ -288,7 +335,16 @@ def _(lp, mo):
                     ),
                     directional_force,
                     spring_strength,
+                    spring_length_scale,
+                    external_pull,
+                    external_pull_balance,
+                    mo.md(
+                        "Pull balancing: 0 keeps uniform pull; 1 balances spring loads; "
+                        "values above 1 strengthen the balancing."
+                    ),
                     beta,
+                    initial_repulsion,
+                    repulsion_growth,
                     dangling_repulsion,
                     dangling_centroid_repulsion,
                     edge_edge_repulsion,
@@ -310,6 +366,11 @@ def _(lp, mo):
         force_steps,
         label_steps,
         spring_strength,
+        spring_length_scale,
+        external_pull,
+        external_pull_balance,
+        initial_repulsion,
+        repulsion_growth,
     )
 
 
@@ -324,10 +385,19 @@ def _(mo):
         label="Momentum side",
     )
     momentum_offset = mo.ui.slider(
-        0, 1, 0.05, 0.35, debounce=True, show_value=True, label="Arrow offset"
+        0, 1, 0.05, 0.5, debounce=True, show_value=True, label="Arrow offset"
     )
     momentum_length = mo.ui.slider(
-        0.2, 2, 0.1, 1, debounce=True, show_value=True, label="Arrow length"
+        0.2, 2, 0.1, 1.4, debounce=True, show_value=True, label="Requested arrow length"
+    )
+    momentum_ratio = mo.ui.slider(
+        0.1,
+        1,
+        0.05,
+        0.5,
+        debounce=True,
+        show_value=True,
+        label="Maximum arrow fraction of edge",
     )
     momentum_gap = mo.ui.slider(
         0, 0.8, 0.05, 0.2, debounce=True, show_value=True, label="Momentum label gap"
@@ -343,6 +413,7 @@ def _(mo):
                     momentum_side,
                     momentum_offset,
                     momentum_length,
+                    momentum_ratio,
                     momentum_gap,
                     momentum_shift,
                 ],
@@ -355,6 +426,7 @@ def _(mo):
         momentum_side,
         momentum_offset,
         momentum_length,
+        momentum_ratio,
         momentum_gap,
         momentum_shift,
     )
@@ -377,6 +449,7 @@ def _(
     momentum_side,
     momentum_offset,
     momentum_length,
+    momentum_ratio,
     momentum_gap,
     momentum_shift,
     beta,
@@ -397,6 +470,11 @@ def _(
     show_momentum_labels,
     show_momenta,
     spring_strength,
+    spring_length_scale,
+    external_pull,
+    external_pull_balance,
+    initial_repulsion,
+    repulsion_growth,
     split_initial_state,
 ):
     _forces = {}
@@ -404,6 +482,11 @@ def _(
         _forces = {
             "directional_force": directional_force.value,
             "spring_strength": spring_strength.value,
+            "spring_length_scale": spring_length_scale.value,
+            "external_pull": external_pull.value,
+            "external_pull_balance": external_pull_balance.value,
+            "initial_repulsion": initial_repulsion.value,
+            "repulsion_growth": repulsion_growth.value,
             "beta": beta.value,
             "dangling_repulsion": dangling_repulsion.value,
             "dangling_centroid_repulsion": dangling_centroid_repulsion.value,
@@ -432,6 +515,7 @@ def _(
             "momentum-arrow-side": momentum_side.value,
             "momentum-arrow-offset": momentum_offset.value,
             "momentum-arrow-length": momentum_length.value,
+            "momentum-arrow-ratio": momentum_ratio.value,
             "momentum-label-gap": momentum_gap.value,
             "momentum-arrow-shift": momentum_shift.value,
             "debug": show_half_edge_ids.value,
