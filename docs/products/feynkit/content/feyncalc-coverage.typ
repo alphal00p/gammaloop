@@ -297,71 +297,46 @@ sign handling to the caller and is not used in this calculation. Five live
 control configurations pass for both reactions, including equal Møller results
 at opposite scattering cosines with a nonzero electron mass.
 
-== Massive Compton scattering: unresolved sewn-state convention
+== Sewing-aware massive QED amplitudes
 
-The ordinary-amplitude result does not validate conversion from a sewn forward
-graph into a squared amplitude. Generation supplies four sewn
-contributions for `e gamma -> e gamma`: both diagonal terms and both
-interferences. Select the electron cut edge with
-`with_loop_momentum_edges`, obtain its physical charge and momentum sign from
-the cut, exclude cut denominators, and contract the initial-state spin sums.
-This calculation reproduces the massless result
-$-2 e^4 (s/u + u/s)$ for electrons and positrons.
+The `hep/sewn_qed.py` notebook converts generated forward graphs into squared
+amplitudes using the physical `Particle.sum_spins` tensors. It checks the full
+massive electron and positron Compton results with both covariant and timelike
+axial incoming-photon projectors, as well as electron-positron annihilation into
+muons and electron-muon scattering. All six differences vanish exactly after
+the Mandelstam relation. Both Compton massless limits also agree with
+$-2 e^4 (s/u + u/s)$.
 
-The massive result currently fails when the physical `Particle.sum_spins`
-tensor is applied directly to the native sewn projector. At
-$e = m_e = 1$, $s = 3$, $t = -1$, $u = 0$, the reference squared matrix element
-is $3$. The generated result is $-17$ with covariant photon sums and $1$ with
-an axial incoming-photon sum whose reference is the incoming electron momentum.
-The reference is timelike and has nonzero contraction with the photon, so these
-are two admissible polarization sums for the same physical process.
+The shared graph finalizer retains the incoming attachment when sewing the two
+amplitudes. Its physical left side contains that incoming endpoint. A
+source-oriented cut carries the stored particle into the final state; a
+target-oriented cut carries its antiparticle. Opening a sewn carrier therefore
+preserves its species and particle flow. Vertex-slot validation uses the same
+rule for ordinary and sewn edges.
 
-Reversing only the mass term in the incoming fermion density matrix is a
-diagnostic: it restores the complete massive reference expression and agreement
-between both photon sums, for electrons and positrons. This is not a change to
-the physical completeness relation. The missing boundary is between a physical
-spin density and the sewn initial-state momentum convention. The unsquared
-Compton amplitude routes its fermion propagator with the expected physical
-momentum. Resolve the sewing boundary in shared code before treating this
-sewn calculation as validated; do not compensate by changing a reference formula
-or inserting a process-specific mass replacement into an example.
+For $n$ open fermion chains joined into $c$ cycles, the generator supplies the
+relative permutation parity $(-1)^(n-c)$. Closing an external chain is distinct
+from creating a virtual fermion loop. The physical completeness tensors and
+existing antifermion factor remain shared with GammaLoop; no process-specific
+mass substitution or separate sewing spin-sum formula is needed.
 
-GammaLoop already owns the relevant workflow:
-`CrossSectionGraph.apply_spin_sum` calls `ParticleTrait.polarization_sum`, which
-now delegates to the shared `SpinSum`. Its original `GeneratePolarizations`
-implementation selects wavefunctions from each half-edge's flow after sewing.
-The physical completeness relation must remain shared and unchanged.
+Select a cut coordinate with `with_loop_momentum_edges`, obtain its physical
+charge from `cut.particles`, and multiply its stored momentum by
+`cut.orientations[edge.id]` to define the positive-energy outgoing momentum.
+Exclude cut propagators from the squared-amplitude denominator. Neither a
+particular default loop edge nor a positive stored orientation is guaranteed.
+The generated unpolarized and chiral-projected annihilation regressions use
+this convention without changing their reference formulas. They also check
+the unpolarized angular distribution and total cross section, and both
+physical final-state momentum choices for the chiral projection.
 
-A comparison with GammaLoop's original `ParseGraph` sewing callback found that
-FeynKit finalization reverses the incoming attachment, while the original
-callback preserves it. A diagnostic restoring that callback, its vertex-slot
-assignments, and the corresponding physical cut side restored covariant/axial
-agreement for massive electron and positron Compton scattering. Both then gave
-the negative of the complete reference expression, while annihilation retained
-the correct sign. A common cut-phase multiplier cannot correct both results.
-
-The external ordering calculation counts the closed fermion cycles created by
-sewing. For $n$ open chains joined into $c$ cycles, the relative permutation
-parity is $(-1)^(n-c)$, rather than the virtual-loop factor $(-1)^c$. An isolated
-correction retaining the incoming attachment and including this chain-count
-parity reproduces six exact full-mass comparisons: electron and positron Compton
-scattering with both covariant and timelike axial incoming-photon sums,
-electron-positron annihilation into muons, and electron-muon scattering. The
-physical completeness tensors and the existing antifermion factor are unchanged.
-
-This correction remains isolated from the production implementation pending
-review of two native fixtures that explicitly encode the reversed-carrier
-convention. With the correction, 142 of 144 graph/generator tests pass; the two
-convention-dependent fixtures fail. Clippy passes with warnings denied. The
-public Python regression also passes all six comparisons in a separate host
-extension, including the massless Compton limit. The single-chain ordering
-regression passes, as does GammaLoop's native-to-runtime parity regression for
-both Compton charges. Two older Python checks still stop at hard-coded routing
-assertions on both the current and corrected implementations; their previously
-proposed routing-independent drafts pass the unpolarized angular distribution,
-total cross section, and both polarized momentum choices without changing the
-reference formulas. No separate sewing-specific spin-sum formula has been
-introduced.
+The isolated validation checkout passes all 179 model/graph/generator tests and
+GammaLoop's native-to-runtime parity check for both Compton charges. The two
+structural fixtures now encode the same incoming-carrier convention as the
+production graph. Its shared Python host also passes the exact massive QED,
+polarized QED, diphoton amplitude, and massive/massless QCD renormalization
+regressions. Rebuilding the current development checkout remains separately
+blocked by unrelated conflict markers in committed workspace files.
 
 == Normalize and integrate two-body observables
 
@@ -441,13 +416,10 @@ the massless limit. It selects the positive above-threshold flux branch
 explicitly. `hep/diphoton.py` offers polarization-reference, angular-cut and
 incoming-speed controls on the existing Marimo server.
 
-The massive sewn-forward conversion remains unresolved. At
-$m_e=e=1$, $s=10$, $t=-1$ and $u=-7$, its Bose-completed result is $59/8$ with
-covariant photon sums and $265/16$ with an incoming-electron reference; the
-ordinary-amplitude reference is $83/8$. Both sewn massless limits agree with
-the reference. This gauge dependence cannot be repaired by an
-identical-particle normalization factor and supplies another regression target
-for the pending shared sewing correction. Existing graph weights must not be
+The sewn-forward diphoton calculation, including Bose completion, remains a
+separate validation target. The shared sewing correction above is certified
+for Compton, muon production, and electron-muon scattering; this section's
+diphoton results use ordinary amplitudes. Existing graph weights must not be
 multiplied by a second inverse automorphism factor.
 
 == Generated chiral Z decays
