@@ -20,7 +20,7 @@ pub enum SymbolicKinematicsError {
     InvalidMomentum(Atom),
     #[error("{0} is not linear in the declared momenta; declare momenta before combining them")]
     NonlinearMomentum(Atom),
-    #[error("two-body phase space requires four-dimensional kinematics")]
+    #[error("phase-space densities require four-dimensional kinematics")]
     PhaseSpaceDimension,
 }
 
@@ -166,6 +166,35 @@ impl Kinematics {
             / (Atom::num(64) * Atom::var(symbolica::atom::Symbol::PI).pow(2) * invariant))
     }
 
+    /// Four-dimensional `dPhi_3 / (ds12 ds23)`, with overall orientation integrated.
+    ///
+    /// Here `sij=(pi+pj)^2`. The normalization includes `(2 pi)^4 delta^4`
+    /// and `d^3p / ((2 pi)^3 2E)` for each final particle. The density is
+    /// `1/(128 pi^3 P^2)`, where `P=p1+p2+p3`, inside the physical Dalitz
+    /// region. Masses determine that region, not the density. This method does
+    /// not impose its boundaries or include flux or identical-particle factors.
+    /// Use an orientation-independent or orientation-averaged squared amplitude.
+    pub fn three_body_phase_space(
+        &self,
+        first: &Atom,
+        second: &Atom,
+        third: &Atom,
+    ) -> Result<Atom, SymbolicKinematicsError> {
+        if self.dimension != Dimension::from(4) {
+            return Err(SymbolicKinematicsError::PhaseSpaceDimension);
+        }
+        let momenta = [first, second, third];
+        let mut invariant = Atom::Zero;
+        for (i, p) in momenta.iter().enumerate() {
+            invariant += self.scalar_product(p, p)?;
+            for q in &momenta[i + 1..] {
+                invariant += Atom::num(2) * self.scalar_product(p, q)?;
+            }
+        }
+        Ok(Atom::one()
+            / (Atom::num(128) * Atom::var(symbolica::atom::Symbol::PI).pow(3) * invariant))
+    }
+
     /// Scalar products for `p1 + p2 -> p3 + p4`.
     ///
     /// Mass arguments are squared masses. The invariants obey
@@ -287,6 +316,56 @@ mod tests {
         );
         // Momentum names also work without assumptions or prior declarations.
         assert!(Kinematics::new().two_body_phase_space(&p, &q).is_ok());
+    }
+
+    #[test]
+    fn dalitz_density_has_massless_volume_and_permutation_symmetry() {
+        let [p, q, r, s, s12, s23] = [
+            parse!("p"),
+            parse!("q"),
+            parse!("r"),
+            parse!("s"),
+            parse!("s12"),
+            parse!("s23"),
+        ];
+        let mut kin = Kinematics::new();
+        for momentum in [&p, &q, &r] {
+            kin = kin.with_mass_squared(momentum, Atom::Zero).unwrap();
+        }
+        kin = kin
+            .with_scalar_product(&p, &q, &s12 / 2)
+            .unwrap()
+            .with_scalar_product(&q, &r, &s23 / 2)
+            .unwrap()
+            .with_scalar_product(&p, &r, (&s - &s12 - &s23) / 2)
+            .unwrap();
+        let density = kin.three_body_phase_space(&p, &q, &r).unwrap();
+        let pi = Atom::var(symbolica::atom::Symbol::PI);
+        // The massless Dalitz triangle has area s^2/2. Its integrated volume
+        // also follows from two sequential two-body phase spaces.
+        assert!(
+            (density.clone() * s.clone().pow(2) / 2 - &s / (Atom::num(256) * pi.clone().pow(3)))
+                .together()
+                .is_zero()
+        );
+        assert_eq!(density, kin.three_body_phase_space(&r, &p, &q).unwrap());
+        let massive = kin.clone().with_mass_squared(&p, Atom::num(9)).unwrap();
+        assert!(
+            (massive.three_body_phase_space(&p, &q, &r).unwrap()
+                * (s + Atom::num(9))
+                * Atom::num(128)
+                * pi.pow(3)
+                - Atom::one())
+            .together()
+            .is_zero()
+        );
+        assert!(matches!(
+            Kinematics::in_dimension(&parse!("D"))
+                .unwrap()
+                .three_body_phase_space(&p, &q, &r),
+            Err(SymbolicKinematicsError::PhaseSpaceDimension)
+        ));
+        assert!(kin.three_body_phase_space(&(&p * &q), &q, &r).is_err());
     }
 
     #[test]

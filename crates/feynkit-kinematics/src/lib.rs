@@ -3,7 +3,7 @@
 //! This crate owns only language- and application-independent physics types:
 //! three- and four-momenta, spatial rotations, Lorentz boosts, signed momentum
 //! combinations, scoped symbolic scalar products, Mandelstam kinematics,
-//! initial-state flux and symbolic two-body phase-space measures,
+//! initial-state flux and symbolic two- and three-body phase-space densities,
 //! and generalized-kt jet clustering. Event records, particle
 //! selection, phase-space sampling, and observables belong to callers.
 

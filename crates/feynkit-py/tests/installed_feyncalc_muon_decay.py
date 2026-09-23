@@ -192,9 +192,11 @@ s_max = s_of_cosine.replace(cosine, -one).together()
 assert (s_min - mass**2 * M**2 / t).together() == zero
 assert (s_max - M**2 - mass**2 + t).together() == zero
 jacobian = -s_of_cosine.derivative(cosine)
-dalitz_measure = (
+recursive_measure = (
     outer_measure * inner_measure * (4 * pi) * (2 * pi) / (2 * pi * jacobian)
 ).together()
+dalitz_measure = kin.three_body_phase_space(P(1), P(2), P(3)).replace(mm, M).together()
+assert (dalitz_measure - recursive_measure).together() == zero
 assert (dalitz_measure - 1 / (128 * pi**3 * M**2)).together() == zero
 flux = hep.Kinematics().with_scalar_product(P(0), P(0), M**2).flux(P(0))
 assert flux == 2 * M
