@@ -2,6 +2,7 @@
 //! --example trace_form -- /absolute/path/to/form [maximum_even_length]
 //! Idenso times are in-process; FORM times include process startup, parsing,
 //! sorting and the exact scalar check. Neither includes input construction.
+//! Term counts describe the output representation, not algebraic correctness.
 
 use std::{hint::black_box, process::Command, time::Instant};
 
@@ -47,7 +48,7 @@ fn main() {
     std::fs::create_dir(&directory).unwrap();
     eprintln!("FORM programs and output: {}", directory.display());
     println!(
-        "case,length,terms,idenso_cold_ms,idenso_warm_ms,form_trace4_process_ms,form_tracen_process_ms"
+        "case,length,terms,idenso_cold_ms,idenso_warm_ms,form_trace4_process_ms,form_tracen_process_ms,form_trace4_terms,form_tracen_terms"
     );
     for n in (2..=maximum).step_by(2) {
         for case in ["free", "paired", "alternating"] {
@@ -144,6 +145,7 @@ fn main() {
                 String::new()
             };
             let mut form_times = Vec::new();
+            let mut form_counts = Vec::new();
             for mode in ["trace4", "tracen"] {
                 let source = format!(
                     "Off Statistics;\nVectors p,q;\nSymbols pp,qq,pq;\nIndices {declarations};\nLocal F=g_(1,{word});\n{mode},1;\n.sort\n#$nterms=termsin_(F);\n#write \"NTERMS=%$\",$nterms\n{projection}id p.p=pp;\nid q.q=qq;\nid p.q=pq;\n.sort\nLocal Check=F-({expected});\n.sort\n#write \"CHECK=%E\",Check\n.end\n"
@@ -172,7 +174,7 @@ fn main() {
                             .is_some_and(|value| value.trim().trim_end_matches(';') == "0")),
                         "{stdout}"
                     );
-                    if mode == "trace4" {
+                    if round == 0 {
                         let count: usize = stdout
                             .lines()
                             .find_map(|line| line.strip_prefix("NTERMS="))
@@ -180,11 +182,7 @@ fn main() {
                             .trim()
                             .parse()
                             .unwrap();
-                        assert_eq!(
-                            count,
-                            result.expand().nterms(),
-                            "FORM term count {case}/{n}"
-                        );
+                        form_counts.push(count);
                     }
                     if round > 0 {
                         samples.push(seconds);
@@ -194,12 +192,14 @@ fn main() {
                 form_times.push(median(samples));
             }
             println!(
-                "{case},{n},{},{:.6},{:.6},{:.6},{:.6}",
+                "{case},{n},{},{:.6},{:.6},{:.6},{:.6},{},{}",
                 result.expand().nterms(),
                 cold * 1000.,
                 median(times) * 1000.,
                 form_times[0] * 1000.,
-                form_times[1] * 1000.
+                form_times[1] * 1000.,
+                form_counts[0],
+                form_counts[1]
             );
         }
     }

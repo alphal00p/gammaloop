@@ -28,6 +28,7 @@ def _():
         GammaSimplifySettings,
         Representation,
         TensorExpression,
+        TensorName,
         chain,
         trace,
     )
@@ -41,6 +42,7 @@ def _():
         Representation,
         S,
         TensorExpression,
+        TensorName,
         chain,
         mo,
         partial,
@@ -714,11 +716,9 @@ def _(mo):
 
 
 @app.cell
-def _(E, S, TensorExpression, slash_length, slash_pattern):
+def _(E, S, TensorExpression, TensorName, slash_length, slash_pattern):
     from functools import reduce
     from operator import mul
-
-    from symbolica.community.spenso import TensorName
 
     _bis, _mink, _gamma, _trace, _cyclic, _in, _out, _g = S(
         *(
@@ -889,8 +889,10 @@ def _(mo):
     mo.md(r"""
     ## 10. Are we at FORM `trace4` parity?
 
-    **The core short-trace reduction now matches FORM's term counts; full
-    correctness and performance parity remain separate questions.**
+    **The short-trace kernels reach the same output sizes on these inputs.
+    FORM remains faster in the amortized native benchmark below.** Term counts
+    describe expression size, not correctness: 4D identities allow different
+    expressions for the same tensor. Section 11 compares HEP component contractions.
 
     Closed traces reuse the open-chain adjacent contractions and 4D Chisholm
     identities, including cyclic repeated pairs. A macro dispatches lengths
@@ -939,8 +941,40 @@ def _(mo):
     call took 73.12 ms. All native scalar polynomial checks passed. Raw records
     and provenance are in `examples/notebooks/gamma_trace_measurements.json`.
     These are recorded observations on a shared host; the tables below rerun
-    the installed software. Similar fourteen-index elapsed times do not prove
-    engine parity, given FORM's additional process overhead and wider feature set.
+    the installed software. FORM's roughly 9 ms process overhead hides its
+    advantage on small traces, creating an apparent crossover near length 14.
+
+    **Amortizing that overhead changes the comparison.** A follow-up run on
+    the same host measured complete FORM processes containing six batches of
+    independent free-index traces, including parsing, sorting and disposal
+    but excluding scalar verification. Medians of three processes, divided
+    by their trace counts, compare with five warm Idenso wall-time samples:
+
+    | Length | Idenso warm | FORM amortized wall | Idenso / FORM |
+    |--:|--:|--:|--:|
+    | 8 | 0.150 ms | 0.055 ms | 2.75× |
+    | 10 | 1.100 ms | 0.386 ms | 2.85× |
+    | 12 | 8.094 ms | 2.887 ms | 2.80× |
+    | 14 | 61.770 ms | 22.198 ms | 2.78× |
+
+    At length 14, an instrumented copy of the kernel spends about **36.0 ms
+    constructing and normalizing products**, **23.5 ms canonicalizing their
+    sum**, and **0.15 ms constructing metric atoms**. These are diagnostic
+    phase measurements; they do not sum exactly to the uninstrumented time.
+    Standalone free traces already bypass the later fixed-point passes, and
+    warm timings exclude recipe generation. FORM emits packed metric-index
+    records into reusable scratch storage; our kernel constructs general
+    Symbolica products and sums. This points to output construction as the
+    next optimization target, rather than more cached identities.
+
+    The batch comparison holds more simultaneous expressions in FORM and is
+    still a selected workload, not general engine parity. Its raw samples,
+    timing boundaries and source hashes are in
+    `examples/notebooks/gamma_trace_scaling.json`. Reproduce it with:
+
+    ```sh
+    cargo run -p idenso --profile dev-optim --example trace_scaling -- /path/to/form
+    ```
 
     Its CSV distinguishes first-call Idenso time, warm Idenso time, FORM
     `trace4` process time and FORM `tracen` process time. First calls in a
@@ -1187,9 +1221,210 @@ def _(
 
 
 @app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 11. Compare tensor values, allowing different simplifications
+
+    The original trace contracts the HEP library's explicit 4×4 gamma
+    matrices. The simplified expression contracts its metric and epsilon
+    tensors against the **same exact integer four-vectors**. Neither route
+    uses the other's symbolic answer as its oracle. Both samples span four
+    dimensions, so gamma5 checks cannot pass merely because epsilon vanishes.
+    We use the repository's (+−−−) metric and epsilon convention
+    $\epsilon_{0123}=-i$, with exact Symbolica components throughout.
+
+    When FORM is available, its ordinary `trace4` and `tracen` outputs are
+    imported as metric networks and evaluated by that same HEP library.
+    Length 10 is particularly useful: `trace4` has 693 terms and `tracen`
+    has 945, yet their four-dimensional component values must agree.
+    No comparison requires equal term counts or identical symbolic forms.
+
+    These finite assignments are regression checks, not a proof for all
+    tensors. The Rust HEP tests additionally cover every length 1–14,
+    gamma5 positions, repeated momenta and cyclic contracted indices.
+    """)
+    return
+
+
+@app.cell
+def _(E, S, TensorExpression, TensorName, form_executable, lorentz):
+    from itertools import permutations
+
+    from symbolica import Expression
+    from symbolica.community.spenso import (
+        Tensor,
+        TensorLibrary,
+        TensorNetwork,
+    )
+
+    _bis, _mink, _gamma, _g5, _trace, _cyclic, _inside, _outside, _metric = S(
+        *(
+            f"spenso::{name}"
+            for name in (
+                "bis",
+                "mink",
+                "gamma",
+                "gamma5",
+                "trace",
+                "cyclic",
+                "in",
+                "out",
+                "g",
+            )
+        )
+    )
+    _names = [TensorName.vector(f"gamma_hep::p{i}") for i in range(10)]
+    _momenta = [name.to_expression()(_mink(4)) for name in _names]
+    _base = [
+        [2, 1, 0, 1],
+        [1, 2, 1, -1],
+        [3, -1, 2, 1],
+        [1, 0, -1, 2],
+        [2, -1, -2, 1],
+        [-1, 2, 1, 2],
+        [3, 1, -1, 0],
+        [1, 1, 2, -2],
+        [-2, 1, 3, -1],
+        [2, 2, -1, 3],
+    ]
+    _epsilon_name = TensorName("spenso::epsilon", is_antisymmetric=True)
+    _epsilon = Tensor.sparse(
+        _epsilon_name(lorentz, lorentz, lorentz, lorentz), Expression
+    )
+    for _perm in permutations(range(4)):
+        _inversions = sum(
+            _perm[i] > _perm[j] for i in range(4) for j in range(i + 1, 4)
+        )
+        _epsilon[_perm] = E("-1𝑖" if _inversions % 2 == 0 else "1𝑖")
+
+    _expressions = {}
+    for _length in (4, 8, 10):
+        for _axial in (False, True):
+            _factors = [_gamma(_inside, _outside, p) for p in _momenta[:_length]]
+            if _axial:
+                _factors.insert(0, _g5(_inside, _outside))
+            _original = _trace(_bis(4), _cyclic(*_factors))
+            _expressions[_length, _axial] = {
+                "Original gamma network": _original,
+                "Idenso metric/epsilon network": TensorExpression(_original)
+                .simplify_gamma()
+                .to_expression(),
+            }
+
+    hep_component_form_sources = {}
+    if form_executable:
+        import re as _re
+        import subprocess as _subprocess
+        import tempfile as _tempfile
+        from pathlib import Path as _Path
+
+        with _tempfile.TemporaryDirectory(prefix="gamma-hep-form-") as _directory:
+            _path = _Path(_directory) / "components.frm"
+            for _length in (4, 8, 10):
+                _word = ",".join(f"p{i}" for i in range(_length))
+                for _mode in ("trace4", "tracen"):
+                    _source = (
+                        f"Off Statistics;\nVectors {_word};\nLocal F=g_(1,{_word});\n"
+                        f'{_mode},1;\n.sort\n#write "RESULT=%E",F\n.end\n'
+                    )
+                    _path.write_text(_source)
+                    _run = _subprocess.run(
+                        [form_executable, "-q", str(_path)],
+                        cwd=_directory,
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                        timeout=30,
+                    )
+                    _polynomial = (
+                        _run.stdout.split("RESULT=", 1)[1].strip().removesuffix(";")
+                    )
+                    # Import each FORM scalar product as a Spenso metric tensor.
+                    # Symbolica parses the polynomial; no Python eval is used.
+                    _polynomial = _re.sub(
+                        r"p(\d+)\.p(\d+)",
+                        lambda match: f"gamma_hep::dot{match[1]}x{match[2]}",
+                        _polynomial,
+                    )
+                    _expression = E(_polynomial)
+                    for _i in range(_length):
+                        for _j in range(_i, _length):
+                            _expression = _expression.replace(
+                                S(f"gamma_hep::dot{_i}x{_j}"),
+                                _metric(_momenta[_i], _momenta[_j]),
+                            )
+                    _expressions[_length, False][f"FORM {_mode} metric network"] = (
+                        _expression
+                    )
+                    hep_component_form_sources[f"{_length} / {_mode}"] = _source
+
+    hep_component_checks = []
+    for _sample in range(2):
+        _library = TensorLibrary.hep_lib_atom()
+        _library.register(_epsilon)
+        for _name, _components in zip(_names, _base, strict=True):
+            # Sparse Expression storage forces exact components; automatic
+            # dense input conversion can otherwise choose floating-point data.
+            _tensor = Tensor.sparse(_name(lorentz), Expression)
+            for _axis, _value in enumerate(_components):
+                _tensor[_axis] = E(
+                    str(_value if _sample == 0 else _value * (1, -1, 2, 1)[_axis])
+                )
+            _library.register(_tensor)
+
+        def _evaluate(_expression, _library=_library):
+            _network = TensorNetwork(_expression, library=_library)
+            _network.execute(library=_library)
+            return _network.result_scalar()
+
+        assert _evaluate(_epsilon_name.to_expression()(*_momenta[:4])) != E("0")
+        for (_length, _axial), _routes in _expressions.items():
+            _expected = _evaluate(_routes["Original gamma network"])
+            for _route, _expression in _routes.items():
+                _value = _evaluate(_expression)
+                assert _value == _expected, (_sample, _length, _axial, _route)
+                hep_component_checks.append(
+                    {
+                        "sample": _sample + 1,
+                        "gammas": _length,
+                        "gamma5": _axial,
+                        "route": _route,
+                        "exact HEP value": _value.format_plain(),
+                        "agrees": True,
+                    }
+                )
+    return hep_component_checks, hep_component_form_sources
+
+
+@app.cell(hide_code=True)
+def _(hep_component_checks, hep_component_form_sources, mo):
+    mo.vstack(
+        [
+            mo.ui.table(
+                hep_component_checks,
+                selection=None,
+                pagination=False,
+                show_download=False,
+            ),
+            mo.md(
+                "FORM rows are included only when the executable is available; the HEP checks always run."
+            ),
+            mo.accordion(
+                {
+                    f"FORM component check: {name}": mo.md(f"```form\n{source}\n```")
+                    for name, source in hep_component_form_sources.items()
+                }
+            ),
+        ]
+    )
+    return
+
+
+@app.cell(hide_code=True)
 def _(
     boundary_checks,
     benchmark_results,
+    hep_component_checks,
     metric_pairings,
     form_records,
     chiral_checks,
@@ -1203,7 +1438,7 @@ def _(
     trace_terms,
 ):
     mo.Html(
-        '<p data-notebook-ready="gamma_simplification">All identity and boundary checks passed.</p>'
+        '<p data-notebook-ready="gamma_simplification">All identity, boundary and HEP component checks passed.</p>'
     )
     return
 

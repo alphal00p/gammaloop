@@ -113,9 +113,9 @@ a shared AMD EPYC 9754 host, the example measured the following medians in milli
 The ten-index case improves by about 150 times in this controlled before/after
 comparison. The first fourteen-index call takes 73.12 ms, including initialization.
 FORM's fourteen-index pipeline is about 3.5 times faster with `trace4` than `tracen`.
-Idenso and FORM now have comparable elapsed times in that example, but the different
-timing boundaries do not establish engine parity. In particular, the small FORM
-cases include substantial process overhead. Full symbolic scalar checks passed for
+The roughly 9 ms FORM process overhead hides its advantage on smaller traces,
+creating an apparent crossover near length fourteen. These timings do not establish
+engine parity. Full symbolic scalar checks passed for
 every reported input. The #source-link("examples/notebooks/gamma_trace_measurements.json", label: "measurement record")
 contains every length, the baseline provenance, timing boundaries and source hashes.
 
@@ -123,6 +123,75 @@ The separately measured Python notebook's default eight-factor paired example gi
 590.16 ms for tracing first, 18.88 ms for contracting first, and 4.66 ms for compact
 input: about 31 times faster with early contraction. This unoptimized Python-host
 measurement is not compared directly with the optimized native Rust numbers above.
+
+== Amortized FORM timing and output construction
+
+A follow-up benchmark on the same host amortizes FORM startup over six batches of
+independent traces per process. Complete process wall times include parsing, tracing,
+sorting and disposal, but exclude scalar verification. The median of three processes,
+divided by the trace count, compares with five warm in-process Idenso wall-time samples:
+
+#table(
+  columns: 4,
+  [Free indices], [Idenso (ms)], [FORM (ms)], [Idenso / FORM],
+  [8], [0.150], [0.055], [2.75×],
+  [10], [1.100], [0.386], [2.85×],
+  [12], [8.094], [2.887], [2.80×],
+  [14], [61.770], [22.198], [2.78×],
+)
+
+FORM is already faster at every measured length. Shared-host variability matters:
+its fourteen-index samples range from 19.38 to 25.47 ms per trace. The batch approach
+also holds more simultaneous expressions in FORM than the Idenso call loop. These
+results characterize this workload, rather than general engine parity.
+
+An instrumented copy of the fourteen-index kernel attributes about 36.0 ms to
+materializing and normalizing products, 23.5 ms to canonicalizing the sum, and
+0.15 ms to constructing metric atoms. Instrumentation changes the loop slightly,
+so these diagnostic phase medians do not sum exactly to the API median. Warm calls
+exclude integer-recipe generation, and standalone free traces already bypass the
+later fixed-point passes. Output construction is the next optimization target.
+FORM's `Trace4Gen` writes packed metric-index records into reusable scratch storage;
+our kernel constructs general Symbolica products and sums. This supports the
+implementation explanation, without isolating allocation as the sole cause.
+
+The #source-link("examples/notebooks/gamma_trace_scaling.json", label: "scaling measurement record")
+contains raw samples, source hashes and timing boundaries. Reproduce the complete
+API and FORM measurements with the native example; it saves generated FORM programs
+and logs and prints every sample as CSV. The historical phase instrumentation is
+separate from this reproducible API comparison.
+
+// docs-example: syntax
+```sh
+cargo run -p idenso --profile dev-optim --example trace_scaling -- /path/to/form
+```
+
+== HEP tensor-component validation
+
+Four-dimensional identities allow different symbolic expressions for the same tensor.
+Term counts are output-size diagnostics, never the criterion for equivalence.
+The notebook contracts original gamma traces using the HEP library's explicit
+four-by-four matrices, and contracts simplified metric/epsilon networks against the
+same exact integer momenta. Each sample spans four dimensions; nonzero epsilon
+contractions prevent gamma-five checks from passing for degenerate kinematics.
+The conventions are the (+---) metric and epsilon component `epsilon(0,1,2,3) = -i`.
+
+For lengths four, eight and ten, ordinary and gamma-five checks compare these HEP
+values. When FORM is available, its ordinary `trace4` and `tracen` polynomials are
+imported as metric networks and evaluated using the same library. The ten-factor
+case demonstrates agreement despite 693 versus 945 terms. Finite component samples
+provide regression evidence, not a symbolic proof for all tensors.
+
+The dedicated Rust HEP tests extend this coverage to lengths one through fourteen,
+several gamma-five positions, repeated slashes and cyclic contracted Lorentz indices.
+They compare exact Gaussian-integer results. To keep the tests small, repeated scalar
+metric/epsilon subnetworks reuse their HEP contraction values across the polynomial;
+the original gamma-matrix network is contracted independently.
+
+// docs-example: syntax
+```sh
+cargo nextest run -p spenso-hep-lib --test short_trace_validation --cargo-profile dev-optim
+```
 
 == Run locally
 
