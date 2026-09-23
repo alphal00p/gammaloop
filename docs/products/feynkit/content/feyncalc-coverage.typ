@@ -507,7 +507,10 @@ massless flux prefactor $1/(16 pi s^2)$. Its massive rate is therefore the
 physical rate here times $1-4m_e^2/s$. The massless total agrees directly.
 Nine independent quadratures check massive rates, including three checks
 against the published massless total. The notebook keeps widths zero and
-uses illustrative tree-level inputs.
+uses illustrative tree-level inputs. The installed regression, HTML export,
+strict Marimo checks and all 36 live energy, mass and angular selections pass.
+The diagram cell uses the public `RenderConfig` generic layout independently
+of the algebra cells.
 
 == Generated chiral Z decays
 

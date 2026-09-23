@@ -4402,7 +4402,30 @@
         "Total",
         "TrickMandelstam"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "passed: four generated exchanges, full massive squared amplitude and interference, exact Higgs high-energy cancellation, analytic angular integral, physical massive flux and published massless total rate",
+      "validated_components": [
+        {
+          "scope": "full tree-level e- e+ -> W- W+ with massive incoming fermions, physical W polarizations, Higgs exchange and all sixteen interference products; exact angular integration and finite-mass flux",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_ww.py",
+          "components": [
+            "Model.standard_model",
+            "Model.generate_diagrams",
+            "Model.expand_couplings",
+            "Particle.spin_sum",
+            "TensorExpression.dirac_adjoint",
+            "TensorExpression.simplify_gamma",
+            "TensorExpression.simplify_epsilon",
+            "TensorExpression.undo_schoonschip",
+            "Kinematics.mandelstam",
+            "Kinematics.two_body_phase_space",
+            "Kinematics.flux",
+            "Symbolica.series",
+            "Symbolica.integrate"
+          ],
+          "result": "passed",
+          "note": "Live notebook: hep/ww_production.py. The longitudinal Z numerator is certified to vanish against the two physical W sums before removal. Explicit momentum conservation removes the residual compact epsilon contraction; reversed interference pairs then agree exactly. The complete massive squared amplitude matches the published expression. The fixed-angle s coefficient is e^4 me^2 (H-1)^2/(32 mW^4 sw^4), and the s^2 coefficient vanishes. Symbolica differentiates the full antiderivative back to the generated amplitude. Nine independent quadratures validate total rates; three also match the published massless total. Shared flux supplies the physical factor 1/[16 pi s(s-4me^2)]; the reference uses its massless-flux approximation 1/(16 pi s^2). The notebook uses an explicit generic diagram layout and illustrative zero-width tree-level inputs. Installed regression, strict Marimo checks, HTML export and all 36 live energy, mass and angular selections pass."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/EW/Tree/AnelEl-ZZ",
