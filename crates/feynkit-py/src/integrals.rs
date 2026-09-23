@@ -185,7 +185,7 @@ impl PyIntegralFamily {
                 .collect::<PyResult<Vec<_>>>()?
                 .join(", ");
             metadata.push_str(&format!(
-                "<div><strong>{label}:</strong> {}</div>",
+                "<div class=\"feynkit-family-metadata\"><strong>{label}:</strong> {}</div>",
                 if values.is_empty() {
                     "<em>none</em>"
                 } else {
@@ -208,6 +208,7 @@ impl PyIntegralFamily {
         }
         Ok(format!(
             "<section class=\"feynkit-integral-family\" style=\"max-width:100%;overflow-x:auto\">\
+             <style>.feynkit-integral-family > .feynkit-family-metadata > div {{ display:inline; }}</style>\
              <strong>Integral family</strong>{metadata}\
              <div>Rank: {} / {} &middot; {} &middot; {}</div>\
              <table style=\"border-collapse:collapse;margin-top:.4rem\">\

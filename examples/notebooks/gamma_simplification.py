@@ -703,6 +703,7 @@ def _(mo):
 def _(E, S, TensorExpression, slash_length, slash_pattern):
     from functools import reduce
     from operator import mul
+
     from symbolica.community.spenso import TensorName
 
     _bis, _mink, _gamma, _trace, _cyclic, _in, _out, _g = S(
@@ -890,7 +891,8 @@ def _(mo):
     generic pairing produces 945 metric terms, whereas FORM 5.0.0 `trace4`
     produced 693 in our local probe (`tracen`: 945). Different four-dimensional
     representations need not cancel by treating every metric as independent.
-    The optional native check below verifies FORM's free-index results after
+    The optional native check uses **fourteen** free indices to make the
+    `trace4`/`tracen` timing difference easier to measure. It verifies the results after
     contraction with the same paired momenta, in addition to comparing the
     selected compact scalar example exactly.
 
@@ -904,7 +906,8 @@ def _(mo):
 @app.cell
 def _(momentum_names, scalar_oracle):
     _word = ",".join(momentum_names)
-    _oracle = scalar_oracle.to_canonical_string().replace("gamma_benchmark::", "")
+    # The oracle is a short rational polynomial in the declared pp, qq, pq.
+    _oracle = str(scalar_oracle)
     compact_form_source = f"""Off Statistics;
 Vectors p,q;
 Symbols pp,qq,pq;
@@ -922,8 +925,8 @@ Local Check = F - ({_oracle});
 #write "CHECK=%E",Check
 .end
 """
-    _indices = ",".join(f"mu{i}" for i in range(1, 11))
-    _projection = "*".join(f"{'p' if i <= 2 else 'q'}(mu{i})" for i in range(1, 11))
+    _indices = ",".join(f"mu{i}" for i in range(1, 15))
+    _projection = "*".join(f"{'p' if i <= 2 else 'q'}(mu{i})" for i in range(1, 15))
     generic_form_source = f"""Off Statistics;
 Vectors p,q;
 Indices {_indices};
@@ -934,7 +937,7 @@ trace4,1;
 #write "NTERMS=%$",$nterms
 Multiply {_projection};
 .sort
-Local Check = F - 4*p.p*(q.q)^4;
+Local Check = F - 4*p.p*(q.q)^6;
 .sort
 #write "CHECK=%E",Check
 .end
@@ -978,9 +981,9 @@ def _(compact_form_source, generic_form_source, median, perf_counter):
                     "Compact scalar / tracen",
                     compact_form_source.replace("trace4,1;", "tracen,1;"),
                 ),
-                ("Ten free indices / trace4", generic_form_source),
+                ("Fourteen free indices / trace4", generic_form_source),
                 (
-                    "Ten free indices / tracen",
+                    "Fourteen free indices / tracen",
                     generic_form_source.replace("trace4,1;", "tracen,1;"),
                 ),
             ):
@@ -991,12 +994,16 @@ def _(compact_form_source, generic_form_source, median, perf_counter):
                     _run = subprocess.run(
                         [form_executable, "-q", str(_path)],
                         cwd=_directory,
-                        check=True,
+                        check=False,
                         capture_output=True,
                         text=True,
                         timeout=30,
                     )
                     _seconds = perf_counter() - _start
+                    if _run.returncode:
+                        raise RuntimeError(
+                            f"FORM failed for {_label}:\n{_run.stdout}\n{_run.stderr}"
+                        )
                     assert re.search(
                         r"CHECK=\s*0\s*(?:;|$)", _run.stdout, re.MULTILINE
                     ), _run.stdout
@@ -1037,6 +1044,18 @@ def _(compact_form_source, form_executable, form_records, form_version, mo):
                 selection=None,
                 pagination=False,
                 show_download=False,
+            )
+        )
+        _native_times = {
+            record["case"]: record["process median (ms)"] for record in form_records
+        }
+        _trace4_speedup = (
+            _native_times["Fourteen free indices / tracen"]
+            / _native_times["Fourteen free indices / trace4"]
+        )
+        mo.output.append(
+            mo.md(
+                f"**Within FORM, the fourteen-index pipeline is {_trace4_speedup:.2f}× faster with `trace4` than `tracen`.** This compares the same native executable and projection check. Tiny compact traces may instead be dominated by startup time."
             )
         )
         mo.output.append(
