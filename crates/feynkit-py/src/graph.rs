@@ -20,7 +20,7 @@ use pyo3::{
     prelude::*,
     types::{PyAny, PyBytes, PyDict, PyModule, PyTuple},
 };
-use spynso3::expression::TensorExpression;
+use spynso3::{expression::TensorExpression, structure::SpensoName};
 use symbolica::{
     api::python::{ConvertibleToExpression, PythonExpression},
     atom::Atom,
@@ -949,6 +949,11 @@ impl PyLoopMomentumBasis {
     /// ----------
     /// expression : Expression or TensorExpression
     ///     Expression with canonical indexed edge momenta to route.
+    /// loop_momenta : sequence[TensorName] or None, optional
+    ///     Vector names in ``loop_edges`` order. None retains indexed ``K`` calls.
+    /// external_momenta : sequence[TensorName] or None, optional
+    ///     Vector names in ``external_edges`` order, excluding ``dependent_externals``.
+    ///     None retains indexed ``P`` calls. Naming also applies to already routed vectors.
     ///
     /// Returns
     /// -------
@@ -956,16 +961,66 @@ impl PyLoopMomentumBasis {
     ///     Tensor inputs retain their type and ordered interface, including zero results.
     ///     Other inputs return a plain Expression.
     #[gen_stub(skip)]
+    #[pyo3(signature = (expression, *, loop_momenta=None, external_momenta=None))]
     fn route_expression(
         &self,
         py: Python<'_>,
         expression: &Bound<'_, PyAny>,
+        loop_momenta: Option<Vec<SpensoName>>,
+        external_momenta: Option<Vec<SpensoName>>,
     ) -> PyResult<Py<PyAny>> {
+        use symbolica::{atom::AtomCore, function, id::Replacement, symbol};
+
+        let arguments = symbol!("feynkit_py::routing_ports___");
+        let mut replacements = Vec::new();
+        for (parameter, names, head, positions) in [
+            (
+                "loop_momenta",
+                loop_momenta,
+                feynkit_graph::symbols::loop_momentum(),
+                (0..self.inner.loop_edges.len()).collect::<Vec<_>>(),
+            ),
+            (
+                "external_momenta",
+                external_momenta,
+                feynkit_graph::symbols::external_momentum(),
+                self.inner
+                    .external_edges
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, edge)| !self.inner.dependent_externals.contains(edge))
+                    .map(|(position, _)| position)
+                    .collect(),
+            ),
+        ] {
+            let Some(names) = names else { continue };
+            if names.len() != positions.len() {
+                return Err(PyValueError::new_err(format!(
+                    "{parameter} requires {} independent vector names, got {}",
+                    positions.len(),
+                    names.len(),
+                )));
+            }
+            for (position, name) in positions.into_iter().zip(names) {
+                if !name.is_vector() {
+                    return Err(PyValueError::new_err(format!(
+                        "{parameter} entries must be created with TensorName.vector"
+                    )));
+                }
+                replacements.push(Replacement::new(
+                    function!(head, position, arguments).to_pattern(),
+                    function!(name.name, arguments).to_pattern(),
+                ));
+            }
+        }
         let atom = expression
             .extract::<ConvertibleToExpression>()?
             .to_expression()
             .expr;
-        let routed = self.inner.route_expression(&atom);
+        let routed = self
+            .inner
+            .route_expression(&atom)
+            .replace_multiple(replacements);
         if expression.is_instance_of::<TensorExpression>() {
             let tensor = expression.extract::<PyRef<'_, TensorExpression>>()?;
             TensorExpression::preserving_interface(&tensor, py, routed).map(Py::into_any)
@@ -1200,6 +1255,9 @@ submit! {
             def route_expression(
                 self,
                 expression: pyo3_stub_gen.RustType["TensorExpression"],
+                *,
+                loop_momenta: pyo3_stub_gen.RustType["Option<Vec<SpensoName>>"] = None,
+                external_momenta: pyo3_stub_gen.RustType["Option<Vec<SpensoName>>"] = None,
             ) -> pyo3_stub_gen.RustType["TensorExpression"]:
                 """Express edge momenta in this basis while preserving the tensor interface.
 
@@ -1214,12 +1272,20 @@ submit! {
                 ----------
                 expression : TensorExpression
                     Tensor expression with canonical indexed edge momenta to route.
+                loop_momenta : sequence[TensorName] or None, optional
+                    Vector names in ``loop_edges`` order. None retains indexed ``K`` calls.
+                external_momenta : sequence[TensorName] or None, optional
+                    Vector names in ``external_edges`` order, excluding ``dependent_externals``.
+                    None retains indexed ``P`` calls. Naming also applies to already routed vectors.
                 """
 
             @typing.overload
             def route_expression(
                 self,
                 expression: pyo3_stub_gen.RustType["ConvertibleToExpression"],
+                *,
+                loop_momenta: pyo3_stub_gen.RustType["Option<Vec<SpensoName>>"] = None,
+                external_momenta: pyo3_stub_gen.RustType["Option<Vec<SpensoName>>"] = None,
             ) -> pyo3_stub_gen.RustType["PythonExpression"]:
                 """Express edge momenta in this basis while retaining tensor index arguments.
 
@@ -1231,6 +1297,11 @@ submit! {
                 ----------
                 expression : Expression or number
                     Expression with canonical edge momenta to route, or a scalar constant.
+                loop_momenta : sequence[TensorName] or None, optional
+                    Vector names in ``loop_edges`` order. None retains indexed ``K`` calls.
+                external_momenta : sequence[TensorName] or None, optional
+                    Vector names in ``external_edges`` order, excluding ``dependent_externals``.
+                    None retains indexed ``P`` calls. Naming also applies to already routed vectors.
                 """
 
             @typing.overload

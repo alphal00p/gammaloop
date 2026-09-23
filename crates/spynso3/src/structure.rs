@@ -220,6 +220,11 @@ pub struct SpensoName {
 impl ModuleInit for SpensoName {}
 
 impl SpensoName {
+    /// Whether this name declares a rank-one tensor.
+    pub fn is_vector(&self) -> bool {
+        self.name.has_tag(&SPENSO_TAG.rank1)
+    }
+
     fn builtin_factory(&self) -> Option<&'static str> {
         if self.name == ETS.metric {
             Some("g")

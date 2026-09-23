@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 from symbolica import E, S, Expression
-from symbolica.community.spenso import Representation, TensorExpression, TensorName
+from symbolica.community.spenso import Representation, TensorExpression, TensorName, dot
 
 fk = importlib.import_module(
     f"symbolica.community.{sys.argv[1] if len(sys.argv) > 1 else 'feynkit'}"
@@ -172,3 +172,101 @@ for expression in (diagram.numerator_expression, diagram.denominator_expression)
             assert "momentum basis belongs to a different diagram" in str(error)
         else:
             raise AssertionError("a supplied basis must belong to the diagram instance")
+
+
+# Custom names label independent coordinates without changing the routing.
+# Exercise multiple loops, alternate bases, indexed vectors, and compact dots.
+two_loop = next(
+    iter(
+        model.generate_diagrams(
+            ["scalar_0"],
+            ["scalar_0"],
+            loops=2,
+            max_vertices=4,
+            vertex_allow=["V_3_SCALAR_000"],
+            allow_self_loops=False,
+            progress=None,
+        )
+    )
+)
+for selected_basis in (basis, alternate, two_loop.loop_momentum_basis):
+    loop_names = [
+        TensorName.vector(f"named_routing::k{i}")
+        for i in range(len(selected_basis.loop_edges))
+    ]
+    independent_external = [
+        i
+        for i, edge in enumerate(selected_basis.external_edges)
+        if edge not in selected_basis.dependent_externals
+    ]
+    external_names = [
+        TensorName.vector(f"named_routing::p{i}") for i in independent_external
+    ]
+    options = dict(loop_momenta=loop_names, external_momenta=external_names)
+    zero = 0 * Q(selected_basis.loop_edges[0], mu)
+    routed_zero = selected_basis.route_expression(zero, **options)
+    assert isinstance(routed_zero, TensorExpression)
+    assert routed_zero == 0 and routed_zero.interface == zero.interface
+    for edge, signature in selected_basis.edge_signatures.items():
+        for port in (mu, lorentz):
+            raw = Q(edge, port)
+            expected = sum(
+                (
+                    coefficient * name(port).to_expression()
+                    for coefficient, name in [
+                        *zip(signature.loops, loop_names),
+                        *(
+                            (signature.external[i], name)
+                            for i, name in zip(independent_external, external_names)
+                        ),
+                    ]
+                ),
+                E("0"),
+            )
+            named = selected_basis.route_expression(raw, **options)
+            assert isinstance(named, TensorExpression)
+            assert named.interface == raw.interface
+            assert named.to_expression() == expected
+            assert selected_basis.route_expression(named, **options) == named
+            assert (
+                selected_basis.route_expression(
+                    selected_basis.route_expression(raw), **options
+                )
+                == named
+            )
+            plain = selected_basis.route_expression(raw.to_expression(), **options)
+            assert isinstance(plain, Expression) and not isinstance(
+                plain, TensorExpression
+            )
+            assert plain == expected
+        compact = dot(Q(edge, lorentz), Q(edge, lorentz))
+        named_dot = selected_basis.route_expression(compact, **options)
+        assert isinstance(named_dot, TensorExpression) and named_dot.is_scalar
+        assert not {
+            S("gammalooprs::Q"),
+            S("gammalooprs::K"),
+            S("gammalooprs::P"),
+        } & set(named_dot.get_all_symbols())
+
+    for invalid, message in (
+        ({"loop_momenta": []}, "loop_momenta requires"),
+        (
+            {"external_momenta": [*external_names, loop_names[0]]},
+            "external_momenta requires",
+        ),
+        (
+            {
+                "loop_momenta": [TensorName("named_routing::not_a_vector")]
+                * len(loop_names)
+            },
+            "TensorName.vector",
+        ),
+    ):
+        try:
+            selected_basis.route_expression(
+                Q(selected_basis.loop_edges[0], mu), **invalid
+            )
+        except ValueError as error:
+            assert message in str(error)
+        else:
+            raise AssertionError(f"invalid momentum names accepted: {invalid}")
