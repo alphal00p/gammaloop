@@ -44,29 +44,21 @@ def _(mo):
 
 @app.cell
 def _():
-    from pathlib import Path
-
     import symbolica.community.feynkit as fk
     from symbolica import S
 
-    _data_file = (
-        Path(__file__).resolve().parents[3]
-        / "crates/feynkit-model/tests/fixtures"
-        / "scalars_2p_3p.json"
-    )
-    model = fk.Model(_data_file)
+    model = fk.Model.phi3()
     return S, fk, model
 
 
 @app.cell
 def _(mo, model, table):
     _generated = model.generate_diagrams(
-        ["scalar_0"],
-        [1000, "scalar_0"],
+        ["phi"],
+        [9000001, "phi"],
         loops=(0, 1),
         max_vertices=3,
         allow_self_loops=True,
-        vertex_allow=["V_3_SCALAR_000"],
     )
 
     diagram = next(

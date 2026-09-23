@@ -58,7 +58,6 @@ def _(mo):
 def _():
     import math
     import time
-    from pathlib import Path
 
     import symbolica.community.feynkit as fk
     from symbolica import E, S
@@ -67,7 +66,7 @@ def _():
     momentum = S("gammalooprs::Q")
     external = S("TensorTutorial::p")
     mink = S("spenso::mink")
-    return D, E, Path, S, external, fk, math, mink, momentum, time
+    return D, E, S, external, fk, math, mink, momentum, time
 
 
 @app.cell(hide_code=True)
@@ -265,7 +264,7 @@ def _(mo):
 
     A finalized vacuum diagram exposes the same operation directly. The cell
     below generates the two-loop pure-gluon theta vacuum graph from FeynKit's
-    normalized Standard Model. Its two three-gluon vertices give a rank-two
+    built-in `Model.yang_mills()` model. Its two three-gluon vertices give a rank-two
     momentum numerator. Since the graph has no external legs, every native
     `gammalooprs::Q` is an integrated vacuum momentum and the convenience
     reducer is unambiguous.
@@ -298,20 +297,15 @@ def _(mo):
 
 
 @app.cell
-def _(E, Path, fk, mo, table):
-    _model_path = (
-        Path(__file__).resolve().parents[3]
-        / "crates/feynkit-model/tests/fixtures"
-        / "sm.json"
-    )
-    _vacuum_model = fk.Model(_model_path)
+def _(E, fk, mo, table):
+    _vacuum_model = fk.Model.yang_mills()
 
     _vacuum_result = _vacuum_model.generate_diagrams(
         incoming=[],
         outgoing=[],
         loops=2,
         max_vertices=2,
-        coupling_orders={"QCD": 2, "QED": 0},
+        coupling_orders={"QCD": 2},
         particle_veto=[
             _particle
             for _particle in _vacuum_model.particles

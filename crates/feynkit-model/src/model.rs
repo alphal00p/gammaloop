@@ -19,6 +19,8 @@ use crate::{
     ModelExpression, ModelValidationError, ParameterCard, RecomputeError,
 };
 
+mod builtins;
+
 const fn default_true() -> bool {
     true
 }

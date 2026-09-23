@@ -1937,6 +1937,7 @@ dependencies = [
  "bincode 2.0.1",
  "bincode-trait-derive",
  "blake3",
+ "miniz_oxide 0.8.9",
  "serde",
  "serde_json",
  "symbolica",
