@@ -277,9 +277,11 @@ impl<'a> FinalIntegrandBuilder<'a> {
         // contracts its loop-energy dependence.  The exact DDx GL0 UV ray
         // verifies that this is the full production tree, including the
         // carrier shared with the factorized self-energy coefficient.
-        let fourddenoms = GS.wrap_tree_denoms(
-            graph.denominator(&graph.tree_edges.subtract(&graph.initial_state_cut), |_| -1),
-        );
+        let fourddenoms = GS.wrap_tree_denoms(graph.denominator(
+            &graph.tree_edges.subtract(&graph.initial_state_cut),
+            &graph.model,
+            |_| -1,
+        ));
         let allowed_zero: Integrands = localizer
             .cutset
             .residue_selector
@@ -564,8 +566,8 @@ mod tests {
     use super::*;
     use crate::{
         cff::esurface::RaisedEsurfaceGroup,
-        dot,
-        graph::{cuts::CutSet, parse::IntoGraph},
+        finalized_runtime_dot,
+        graph::{cuts::CutSet, parse::IntoFinalizedRuntimeGraph},
         initialisation::test_initialise,
         settings::global::OrientationPattern,
         uv::{
@@ -583,7 +585,7 @@ mod tests {
     #[test]
     fn final_integrand_collects_tensor_factors_without_merging_denominators() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph factorized_final {
+        let graph: Graph = finalized_runtime_dot!(digraph factorized_final {
             edge [num=1 mass=1];
             node [num=1];
             a -> b [id=0 lmb_id=0];
@@ -856,7 +858,7 @@ mod tests {
     #[test]
     fn projected_zero_sectors_preserve_cut_orders_without_energy_maps() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = dot!(digraph projected_zero {
+        let mut graph: Graph = finalized_runtime_dot!(digraph projected_zero {
             edge [num=1 mass=1];
             node [num=1];
             a -> b [id=0 lmb_id=0];
@@ -921,7 +923,7 @@ mod tests {
         };
         let zero_local = uv_limit(
             &zero_prefix,
-            &UVCtx::new(&graph, &settings),
+            &UVCtx::new(&graph, &graph.model, &settings),
             &current,
             &given,
             &current,

@@ -602,7 +602,7 @@ mod tests {
         gammalooprs::initialisation::test_initialise()?;
         let assets = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/models");
         let (imported, _) = load_ufo_model(&assets.join("ufo/sm"), None, false)?;
-        let canonical = Model::from_file(assets.join("json/sm/sm.json"))?;
+        let canonical = Model::from_path(assets.join("json/sm/sm.json"))?;
         assert_eq!(
             imported.covariant_cut_multiplets,
             canonical.covariant_cut_multiplets
@@ -611,23 +611,33 @@ mod tests {
             "W+", "W-", "Z", "G+", "G-", "G0", "ghWp", "ghWp~", "ghWm", "ghWm~", "ghZ", "ghZ~",
         ] {
             let fresh = imported
-                .propagators
+                .propagators()
                 .iter()
-                .find(|p| p.particle.name.as_str() == name)
+                .find(|p| imported.particle_by_id(p.particle).unwrap().name.as_str() == name)
                 .unwrap();
             let saved = canonical
-                .propagators
+                .propagators()
                 .iter()
-                .find(|p| p.particle.name.as_str() == name)
+                .find(|p| canonical.particle_by_id(p.particle).unwrap().name.as_str() == name)
                 .unwrap();
             assert_eq!(fresh.numerator, saved.numerator, "{name} numerator");
             assert_eq!(fresh.denominator, saved.denominator, "{name} denominator");
             assert_eq!(
-                fresh.particle.is_goldstone(),
-                saved.particle.is_goldstone(),
+                imported
+                    .particle_by_id(fresh.particle)
+                    .unwrap()
+                    .is_goldstone(),
+                canonical
+                    .particle_by_id(saved.particle)
+                    .unwrap()
+                    .is_goldstone(),
                 "{name} Goldstone metadata"
             );
-            assert_eq!(fresh.particle.mass, saved.particle.mass, "{name} pole mass");
+            assert_eq!(
+                imported.particle_by_id(fresh.particle).unwrap().mass,
+                canonical.particle_by_id(saved.particle).unwrap().mass,
+                "{name} pole mass"
+            );
         }
         Ok(())
     }

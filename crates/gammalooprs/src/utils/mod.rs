@@ -5062,7 +5062,7 @@ impl<T> Length for Vec<T> {
     }
 }
 
-pub(crate) fn ose_atom_from_index(index: EdgeIndex) -> Atom {
+pub fn ose_atom_from_index(index: EdgeIndex) -> Atom {
     function!(
         GS.ose,
         usize::from(index) as i64 // Atom::from(FlatIndex::from(0))
@@ -5073,7 +5073,7 @@ pub(crate) fn cut_energy(index: EdgeIndex) -> Atom {
     function!(GS.energy, usize::from(index) as i64)
 }
 
-pub(crate) fn external_energy_atom_from_index(index: EdgeIndex) -> Atom {
+pub fn external_energy_atom_from_index(index: EdgeIndex) -> Atom {
     GS.emr_mom(index, Atom::from(ExpandedIndex::from_iter([0])))
 }
 

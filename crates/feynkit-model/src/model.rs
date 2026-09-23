@@ -183,6 +183,8 @@ pub(crate) struct ModelFormFactorDefinition {
 pub(crate) struct ModelDefinition {
     pub name: String,
     pub restriction: Option<String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub covariant_cut_multiplets: BTreeMap<i64, [i64; 4]>,
     pub orders: Vec<Order>,
     pub parameters: Vec<ParameterDefinition>,
     pub particles: Vec<ParticleDefinition>,
@@ -377,6 +379,10 @@ impl Particle {
         self.spin == 2
     }
 
+    pub fn is_anticommutating(&self) -> bool {
+        self.is_fermion() || self.is_ghost()
+    }
+
     pub fn is_ghost(&self) -> bool {
         self.ghost_number != 0
     }
@@ -485,6 +491,8 @@ struct ModelIndexes {
 /// A validated physics model with fallible, indexed lookups.
 #[derive(Clone, Debug)]
 pub struct Model {
+    /// Physical vector PDG -> [vector, Goldstone, ghost, antighost]. Equal masses do not infer a quartet.
+    pub covariant_cut_multiplets: BTreeMap<i64, [i64; 4]>,
     name: String,
     restriction: Option<String>,
     orders: Vec<Order>,
@@ -500,6 +508,30 @@ pub struct Model {
     coupling_replacement_rules: OnceLock<Vec<Replacement>>,
 }
 
+// Model interchange contains symbolic expressions and validated name-based
+// references. Keep binary persistence on the same reconstruction boundary.
+impl bincode::Encode for Model {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), bincode::error::EncodeError> {
+        let json = self
+            .to_json()
+            .map_err(|error| bincode::error::EncodeError::OtherString(error.to_string()))?;
+        bincode::Encode::encode(&json, encoder)
+    }
+}
+
+impl<Context> bincode::Decode<Context> for Model {
+    fn decode<D: bincode::de::Decoder<Context = Context>>(
+        decoder: &mut D,
+    ) -> Result<Self, bincode::error::DecodeError> {
+        let json = <String as bincode::Decode<Context>>::decode(decoder)?;
+        Self::from_json(&json)
+            .map_err(|error| bincode::error::DecodeError::OtherString(error.to_string()))
+    }
+}
+
 impl Model {
     /// Construct an empty, validated model for application state that has not
     /// loaded a physics model yet.
@@ -507,6 +539,7 @@ impl Model {
         Self::new(ModelDefinition {
             name: name.into(),
             restriction: None,
+            covariant_cut_multiplets: BTreeMap::new(),
             orders: Vec::new(),
             parameters: Vec::new(),
             particles: Vec::new(),
@@ -712,7 +745,8 @@ impl Model {
                 })
             })
             .collect::<Result<Vec<_>, ModelError>>()?;
-        Ok(Self {
+        let model = Self {
+            covariant_cut_multiplets: definition.covariant_cut_multiplets,
             name: definition.name,
             restriction: definition.restriction,
             orders: definition.orders,
@@ -726,7 +760,117 @@ impl Model {
             form_factors,
             indexes,
             coupling_replacement_rules: OnceLock::new(),
-        })
+        };
+        model.validate_covariant_cut_multiplets()?;
+        Ok(model)
+    }
+
+    pub fn validate_covariant_cut_multiplets(&self) -> Result<(), ModelError> {
+        let mut declared = BTreeSet::new();
+        for (&physical, members) in &self.covariant_cut_multiplets {
+            let invalid = |reason: &str| ModelValidationError::CovariantCutMultiplet {
+                physical,
+                reason: reason.to_owned(),
+            };
+            let particles = members
+                .iter()
+                .map(|pdg| self.particle_by_pdg(*pdg))
+                .collect::<Result<Vec<_>, _>>()?;
+            let vector = particles[0];
+            let denominator = |particle: &Particle| -> Result<&Atom, ModelError> {
+                let id = self.particle_id(&particle.name)?;
+                let propagator = match particle.propagator {
+                    Some(id) => self.propagator_by_id(id)?,
+                    None => self
+                        .propagators
+                        .iter()
+                        .find(|p| p.particle == id)
+                        .ok_or_else(|| invalid("a quartet member has no propagator"))?,
+                };
+                Ok(&propagator.denominator)
+            };
+            let pole = denominator(vector)?;
+            if members[0] != physical
+                || !vector.is_vector()
+                || vector.is_massless(self)
+                || vector.ghost_number != 0
+                || particles[1].spin != 1
+                || !particles[1].is_goldstone()
+                || particles[1].ghost_number != 0
+                || particles[2].spin != -1
+                || particles[2].ghost_number != 1
+                || particles[3].spin != -1
+                || particles[3].ghost_number != -1
+                || particles.iter().any(|p| {
+                    p.mass != vector.mass || p.charge != vector.charge || p.color != vector.color
+                })
+                || members.iter().any(|pdg| !declared.insert(*pdg))
+            {
+                return Err(invalid("must contain one massive vector, its Goldstone, ghost and antighost with the same symbolic pole mass, charge and color").into());
+            }
+            for particle in &particles {
+                if denominator(particle)? != pole {
+                    return Err(invalid("members must have the same propagator denominator").into());
+                }
+            }
+            let conjugate_vector = self.antiparticle(vector)?.pdg_code;
+            let mut conjugate_members = particles
+                .iter()
+                .map(|p| self.antiparticle(p).map(|p| p.pdg_code))
+                .collect::<Result<Vec<_>, _>>()?;
+            conjugate_members.sort_unstable();
+            let conjugate = self
+                .covariant_cut_multiplets
+                .get(&conjugate_vector)
+                .map(|m| {
+                    let mut m = m.to_vec();
+                    m.sort_unstable();
+                    m
+                });
+            if conjugate != Some(conjugate_members) {
+                return Err(invalid("is not closed under particle conjugation").into());
+            }
+        }
+        Ok(())
+    }
+
+    /// Covariant completeness acts on whole final-state multisets. Mixed
+    /// vector/Goldstone states and the two ghost charges remain distinct;
+    /// graph automorphisms supply their symmetry factors exactly once.
+    pub fn covariant_cut_states(&self, states: &[Vec<i64>]) -> Result<Vec<Vec<i64>>, ModelError> {
+        self.validate_covariant_cut_multiplets()?;
+        if !states
+            .iter()
+            .flatten()
+            .any(|pdg| self.covariant_cut_multiplets.contains_key(pdg))
+        {
+            return Ok(states.to_vec());
+        }
+        let mut expanded = BTreeSet::new();
+        for state in states {
+            let mut products = vec![Vec::new()];
+            for pdg in state {
+                let members = self
+                    .covariant_cut_multiplets
+                    .get(pdg)
+                    .map_or_else(|| std::slice::from_ref(pdg), |members| members.as_slice());
+                products = products
+                    .into_iter()
+                    .flat_map(|prefix| {
+                        members.iter().map(move |member| {
+                            let mut next = prefix.clone();
+                            next.push(*member);
+                            next
+                        })
+                    })
+                    .collect();
+            }
+            for mut members in products {
+                members.sort_unstable();
+                expanded.insert(members);
+            }
+        }
+        Ok(expanded.into_iter().collect())
     }
 
     pub fn from_json(json: &str) -> Result<Self, ModelError> {
@@ -762,6 +906,7 @@ impl Model {
         ModelDefinition {
             name: self.name.clone(),
             restriction: self.restriction.clone(),
+            covariant_cut_multiplets: self.covariant_cut_multiplets.clone(),
             orders: self.orders.clone(),
             parameters: self
                 .parameters
@@ -1851,6 +1996,18 @@ mod tests {
                 "form_factors":[{{"name":"FF1","type":"complex","value":"twice(P(1)^2)"}}]
             }}"#
         )
+    }
+
+    #[test]
+    fn binary_roundtrip_preserves_canonical_records_and_identity() {
+        let model = Model::from_json(&model_json("GC1")).unwrap();
+        let bytes = bincode::encode_to_vec(&model, bincode::config::standard()).unwrap();
+        let (decoded, consumed): (Model, _) =
+            bincode::decode_from_slice(&bytes, bincode::config::standard()).unwrap();
+        assert_eq!(consumed, bytes.len());
+        assert_eq!(decoded.fingerprint(), model.fingerprint());
+        assert_eq!(decoded.to_json().unwrap(), model.to_json().unwrap());
+        assert_eq!(decoded.particle("s").unwrap(), model.particle("s").unwrap());
     }
 
     #[test]

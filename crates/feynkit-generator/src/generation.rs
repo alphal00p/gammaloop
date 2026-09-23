@@ -1311,6 +1311,11 @@ impl Generator {
         let options = options.resolve_selectors(&self.model)?;
         let options = &options;
         self.validate_options(process, options)?;
+        process.validate_covariant_cut_filters(&self.model, options)?;
+        let expanded_process = process
+            .clone()
+            .with_final_state_alternatives(process.covariant_cut_states(&self.model)?)?;
+        let process = &expanded_process;
         let resolved = ResolvedProcess::new(&self.model, process)?;
         let signatures = InteractionSignatures::new(&self.model, options)?;
         let external_edges = resolved.external_edges(&self.model)?;
@@ -2626,7 +2631,9 @@ impl Generator {
         // contributes degree two.
         for edge in graph.edges() {
             let particle = self.model.particle_by_id(edge.data.particle)?;
-            if !(particle.is_fermion() || include_ghosts && particle.is_ghost()) {
+            if !(particle.is_fermion() && !particle.is_ghost()
+                || include_ghosts && particle.is_ghost())
+            {
                 continue;
             }
             let (left, right) = edge.vertices;
@@ -4079,11 +4086,13 @@ impl ResolvedProcess {
                 false,
             )?;
             let legs = legs.into_iter().collect::<Vec<_>>();
-            // Ghost chains are oriented like fermion chains but do not enter
-            // the external-fermion permutation sign. Physical processes do
-            // not normally expose external ghosts, yet keeping this split
-            // makes the flow normalization faithful for complete UFO models.
-            if !model.particle_by_id(external.particle)?.is_fermion() {
+            // Both spinor and ghost chains anticommute. Ghosts therefore
+            // enter external permutation signs even though their scalar
+            // propagators do not contribute antifermion spin sums.
+            if !model
+                .particle_by_id(external.particle)?
+                .is_anticommutating()
+            {
                 continue;
             }
             let [first_leg, second_leg] = legs.as_slice() else {
@@ -4098,9 +4107,9 @@ impl ResolvedProcess {
             let first_particle = all_incoming_particle(&first.1, model)?;
             let second_particle = all_incoming_particle(&second.1, model)?;
             let (anti_leg, anti, particle_leg, particle) = match (
-                first_particle.is_fermion(),
+                first_particle.is_anticommutating(),
                 first_particle.is_antiparticle(),
-                second_particle.is_fermion(),
+                second_particle.is_anticommutating(),
                 second_particle.is_antiparticle(),
             ) {
                 (true, true, true, false) => {
@@ -4232,7 +4241,7 @@ impl ResolvedProcess {
             connect(left, right);
         }
         for (index, particle) in self.incoming.iter().enumerate() {
-            if particle.is_fermion() {
+            if particle.is_anticommutating() {
                 connect(index, self.incoming.len() + index);
             }
         }
@@ -5558,7 +5567,7 @@ mod tests {
     }
 
     #[test]
-    fn ghost_chains_are_oriented_without_entering_external_fermion_signs() {
+    fn ghost_chains_follow_external_anticommuting_order() {
         let source = fermion_model().to_json().unwrap();
         let mut definition = serde_json::from_str::<serde_json::Value>(&source).unwrap();
         for particle in definition["particles"].as_array_mut().unwrap() {
@@ -5604,7 +5613,103 @@ mod tests {
         assert_eq!(normalized.graph.edges()[0].vertices, (ghost, left));
         assert_eq!(normalized.graph.edges()[1].vertices, (left, right));
         assert_eq!(normalized.graph.edges()[2].vertices, (right, antighost));
-        assert!(!normalized.signs.external_ordering_negative);
+        // The all-incoming order [ghost, antighost] is one transposition
+        // from the canonical [antighost, ghost] order, just as for spinors.
+        assert!(normalized.signs.external_ordering_negative);
+        assert!(!normalized.signs.antifermion_spin_sum_negative);
+    }
+
+    #[test]
+    fn cp_symmetrization_groups_mirrored_real_scalar_forward_graphs() {
+        let model = Model::from_json(include_str!(
+            "../../feynkit-model/tests/fixtures/scalars_2p_3p.json"
+        ))
+        .unwrap();
+        let mut definition = serde_json::to_value(&model).unwrap();
+        definition["lorentz_structures"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!({
+                "name":"SCALAR_4_LORENTZ_STRUCTURE", "spins":[1,1,1,1], "structure":"1"
+            }));
+        definition["vertex_rules"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!({
+                "name":"V_4_SCALAR_0000", "particles":["scalar_0","scalar_0","scalar_0","scalar_0"],
+                "color_structures":["1"], "lorentz_structures":["SCALAR_4_LORENTZ_STRUCTURE"],
+                "couplings":[["SCALAR_COUPLING"]]
+            }));
+        let model: Model = serde_json::from_value(definition).unwrap();
+        let mut graphs = Vec::new();
+        for mirrored in [false, true] {
+            let mut graph = Graph::new();
+            // Sew a cubic box to a quartic Born vertex. Its two external
+            // neighbors have different valences, so only a global side swap
+            // can identify the mirror.
+            for node in 0..5 {
+                graph.add_node(ColoredNode::Interaction(vertex(
+                    &model,
+                    if node == 4 {
+                        "V_4_SCALAR_0000"
+                    } else {
+                        "V_3_SCALAR_000"
+                    },
+                )));
+            }
+            for index in 0..2 {
+                let index = if mirrored { 1 - index } else { index };
+                graph.add_node(ColoredNode::External(ExternalNode {
+                    index,
+                    state: if index == 0 {
+                        ExternalState::Incoming
+                    } else {
+                        ExternalState::Outgoing
+                    },
+                    particle: particle(&model, 1000),
+                }));
+            }
+            for (left, right) in [
+                (5, 0),
+                (0, 1),
+                (1, 2),
+                (2, 3),
+                (3, 0),
+                (1, 4),
+                (2, 4),
+                (3, 4),
+                (4, 6),
+            ] {
+                let (left, right) = if mirrored {
+                    (right, left)
+                } else {
+                    (left, right)
+                };
+                graph
+                    .add_edge(left, right, true, edge(&model, 1000))
+                    .unwrap();
+            }
+            graphs.push(graph);
+        }
+        for enabled in [false, true] {
+            let process = ResolvedProcess::new(
+                &model,
+                &Process::cross_section([1000_i64], [1000_i64, 1000, 1000])
+                    .with_loop_count(3, 3)
+                    .unwrap()
+                    .symmetrize_left_right(enabled),
+            )
+            .unwrap();
+            let canonical = graphs
+                .iter()
+                .map(|graph| {
+                    process
+                        .canonicalize_numerator_graph(graph, &model, &NumeratorGrouping::None)
+                        .unwrap()
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(canonical[0] == canonical[1], enabled);
+        }
     }
 
     #[test]
@@ -6618,6 +6723,64 @@ mod tests {
     }
 
     #[test]
+    fn open_ghost_chain_exchange_has_grassmann_sign() {
+        let model = standard_model();
+        let process = ResolvedProcess::new(
+            &model,
+            &Process::amplitude([9000005_i64, 9000005], [9000005_i64, 9000005]),
+        )
+        .unwrap();
+        let mut signs = Vec::new();
+        for outgoing in [[2, 3], [3, 2]] {
+            let mut graph = Graph::new();
+            for index in 0..4 {
+                graph.add_node(ColoredNode::External(ExternalNode {
+                    index,
+                    state: if index < 2 {
+                        ExternalState::Incoming
+                    } else {
+                        ExternalState::Outgoing
+                    },
+                    particle: particle(&model, 9000005),
+                }));
+            }
+            for _ in 0..2 {
+                graph.add_node(ColoredNode::Interaction(vertex(&model, "V_35")));
+            }
+            for (left, right, pdg) in [
+                (0, 4, 9000005),
+                (4, outgoing[0], 9000005),
+                (1, 5, 9000005),
+                (5, outgoing[1], 9000005),
+                (4, 5, 21),
+            ] {
+                graph
+                    .add_edge(
+                        left,
+                        right,
+                        true,
+                        EdgeColor {
+                            particle: particle(&model, pdg),
+                            direction: None,
+                        },
+                    )
+                    .unwrap();
+            }
+            signs.push(
+                process
+                    .normalize_fermion_flows(&graph, &model)
+                    .unwrap()
+                    .signs
+                    .external_ordering_negative,
+            );
+        }
+        assert_ne!(
+            signs[0], signs[1],
+            "exchanging two identical external ghosts must reverse the sign"
+        );
+    }
+
+    #[test]
     fn closed_ghost_loops_contribute_a_grassmann_minus_sign() {
         let generator = Generator::new(standard_model());
         let generated = generator
@@ -6654,6 +6817,97 @@ mod tests {
             factor, &without_loop_sign,
             "a closed ghost loop must carry its Grassmann minus sign in the overall factor",
         );
+    }
+
+    #[test]
+    fn closed_anticommutating_loop_counts() {
+        let model = standard_model();
+        let mut definition = serde_json::to_value(&model).unwrap();
+        for particle in definition["particles"].as_array_mut().unwrap() {
+            if particle["ghost_number"].as_i64().unwrap_or(0) != 0 {
+                particle["spin"] = serde_json::json!(2);
+            }
+        }
+        for lorentz in definition["lorentz_structures"].as_array_mut().unwrap() {
+            for spin in lorentz["spins"].as_array_mut().unwrap() {
+                if spin.as_i64() == Some(-1) {
+                    *spin = serde_json::json!(2);
+                }
+            }
+        }
+        let half_integer_ghost_model: Model = serde_json::from_value(definition).unwrap();
+        let generators = [
+            Generator::new(model),
+            Generator::new(half_integer_ghost_model),
+        ];
+        for (name, edges, expected, expected_fermions) in [
+            ("ghost", vec![(0, 1, 9000005), (1, 0, 9000005)], 1, 0),
+            ("antighost", vec![(0, 1, -9000005), (1, 0, -9000005)], 1, 0),
+            ("ghost self-loop", vec![(0, 0, 9000005)], 1, 0),
+            ("Dirac", vec![(0, 1, 5), (1, 0, 5)], 1, 1),
+            ("anti-Dirac", vec![(0, 1, -5), (1, 0, -5)], 1, 1),
+            ("Dirac self-loop", vec![(0, 0, 5)], 1, 1),
+            ("open Dirac chain", vec![(0, 1, 5), (1, 2, 5)], 0, 0),
+            (
+                "open ghost chain",
+                vec![(0, 1, 9000005), (1, 2, 9000005)],
+                0,
+                0,
+            ),
+            ("gluon cycle", vec![(0, 1, 21), (1, 0, 21)], 0, 0),
+            (
+                "ghost and Dirac loops joined by a gluon",
+                vec![
+                    (0, 1, 9000005),
+                    (1, 0, 9000005),
+                    (1, 2, 21),
+                    (2, 3, 5),
+                    (3, 2, 5),
+                ],
+                2,
+                1,
+            ),
+            (
+                "two ghost loops joined by a gluon",
+                vec![
+                    (0, 1, 9000005),
+                    (1, 0, 9000005),
+                    (1, 2, 21),
+                    (2, 3, 9000005),
+                    (3, 2, 9000005),
+                ],
+                2,
+                0,
+            ),
+            (
+                "two Dirac loops joined by a gluon",
+                vec![(0, 1, 5), (1, 0, 5), (1, 2, 21), (2, 3, 5), (3, 2, 5)],
+                2,
+                2,
+            ),
+        ] {
+            for generator in &generators {
+                let model = &generator.model;
+                let mut graph = Graph::new();
+                let last_node = edges.iter().flat_map(|(a, b, _)| [*a, *b]).max().unwrap();
+                for _ in 0..=last_node {
+                    graph.add_node(ColoredNode::Interaction(vertex(model, "V_35")));
+                }
+                for &(a, b, pdg) in &edges {
+                    graph.add_edge(a, b, true, edge(model, pdg)).unwrap();
+                }
+                assert_eq!(
+                    generator.closed_fermion_loop_count(&graph, true).unwrap(),
+                    expected,
+                    "{name}"
+                );
+                assert_eq!(
+                    generator.closed_fermion_loop_count(&graph, false).unwrap(),
+                    expected_fermions,
+                    "fermion filter: {name}"
+                );
+            }
+        }
     }
 
     #[test]

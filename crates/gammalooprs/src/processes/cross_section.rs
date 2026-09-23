@@ -1,3 +1,4 @@
+use crate::model::ModelGammaLoopExt;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt::{Display, Formatter},
@@ -14,12 +15,9 @@ mod gauge_sewing_tests;
 mod sewing_tests;
 
 // use bincode::{Decode, Encode};
+use crate::cff::{Esurface, EsurfaceID};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
-use feynkit_cff::{
-    CffResult, EnergySurface, EnergySurfaceId, OrientationId, RaisedEnergySurfaceData,
-    RaisedEnergySurfaceGroup, RaisedEnergySurfaceId, Surface,
-};
 use itertools::Itertools;
 use rayon::{
     ThreadPool,
@@ -170,8 +168,8 @@ impl<T> IndexMut<(LeftThresholdId, RightThresholdId)> for IteratedCtCollection<T
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct LUCounterTermData {
-    pub left_thresholds: TiVec<LeftThresholdId, RaisedEnergySurfaceGroup>,
-    pub right_thresholds: TiVec<RightThresholdId, RaisedEnergySurfaceGroup>,
+    pub left_thresholds: TiVec<LeftThresholdId, RaisedEsurfaceGroup>,
+    pub right_thresholds: TiVec<RightThresholdId, RaisedEsurfaceGroup>,
     pub left_atoms: TiVec<LeftThresholdId, ParametricIntegrands>,
     pub right_atoms: TiVec<RightThresholdId, ParametricIntegrands>,
     pub iterated: IteratedCtCollection<ParametricIntegrands>,
@@ -792,7 +790,7 @@ impl CrossSection {
         }
     }
 
-    pub fn from_graph_list(name: String, mut graphs: Vec<Graph>, _model: &Model) -> Result<Self> {
+    pub fn from_graph_list(name: String, mut graphs: Vec<Graph>) -> Result<Self> {
         let mut cross_section = CrossSection::new(name);
         cross_section.graph_group_structure = complete_group_parsing(&mut graphs)?;
         // println!("group structure: {:?}", cross_section.graph_group_structure);
@@ -897,7 +895,7 @@ impl CrossSection {
 
     pub fn build_integrand(
         &mut self,
-        model: &Model,
+        _model: &Model,
         process_definition: &ProcessDefinition,
         global_settings: &GlobalSettings,
         runtime_default: LockedRuntimeSettings,
@@ -959,7 +957,7 @@ impl CrossSection {
                     let _progress_context_guard = generation_progress::enter_progress_context(
                         format!("{} / {} cuts", sg.graph.name, sg.cuts.len()),
                     );
-                    let (term, mut stats) = sg.generate_term_for_graph(model, global_settings)?;
+                    let (term, mut stats) = sg.generate_term_for_graph(global_settings)?;
                     if crate::is_interrupted() {
                         return Err(eyre!("Generation interrupted by user"));
                     }
@@ -1035,7 +1033,7 @@ impl CrossSection {
                 external_cache_id: 0,
                 base_external_cache_id: 0,
                 rotations: None,
-                symmetrize_left_right_states: process_definition.symmetrize_left_right_states,
+                symmetrize_left_right_states: process_definition.process.symmetrizes_left_right(),
                 name: self.name.clone(),
                 external_connections: self.external_connections.clone(),
                 n_incoming: self.n_incmoming,
@@ -1341,8 +1339,8 @@ pub struct CrossSectionGraph {
     pub target_nodes: HedgeNode,
     pub cuts: TiVec<CutId, FinalizedCut>,
     pub topology_threshold_candidates: Vec<FinalizedTopologyThresholdCandidate>,
-    pub cut_esurface: TiVec<CutId, EnergySurface>,
-    pub cut_esurface_id_map: TiVec<CutId, EnergySurfaceId>,
+    pub cut_esurface: TiVec<CutId, Esurface>,
+    pub cut_esurface_id_map: TiVec<CutId, EsurfaceID>,
     pub derived_data: CrossSectionDerivedData,
 }
 
@@ -1716,18 +1714,17 @@ impl CrossSectionGraph {
     fn generate_esurface_cuts(&mut self) -> Result<()> {
         debug!("generating esurfaces for cuts");
 
-        let esurfaces: TiVec<CutId, EnergySurface> = self
+        let esurfaces: TiVec<CutId, Esurface> = self
             .cuts
             .iter()
             .map(|cut| {
-                EnergySurface::from_cut_side(
+                Esurface::new_from_cut_left(
                     &self.graph.underlying,
-                    &cut.cut,
-                    &cut.left,
+                    cut,
                     Some(&self.graph.initial_state_cut),
                 )
             })
-            .collect::<Result<_, _>>()?;
+            .collect();
 
         debug!("generated esurfaces {:?}", esurfaces);
 
@@ -1767,7 +1764,7 @@ impl CrossSectionGraph {
             .cut_group_data
             .cut_groups
             .iter()
-            .map(|cut_group| cut_group.related_esurface_group.max_occurrence)
+            .map(|cut_group| cut_group.related_esurface_group.max_occurence)
             .max()
             .unwrap();
 
@@ -3355,7 +3352,6 @@ impl CrossSectionGraph {
 
     fn generate_term_for_graph(
         &self,
-        _model: &Model,
         settings: &GlobalSettings,
     ) -> Result<(CrossSectionGraphTerm, GraphGenerationStats)> {
         CrossSectionGraphTerm::from_cross_section_graph(self, settings)
@@ -3401,14 +3397,14 @@ pub struct CutGroupData {
 #[trait_decode(trait = GammaLoopContext)]
 pub struct CutGroup {
     pub cuts: Vec<CutId>,
-    pub related_esurface_group: RaisedEnergySurfaceGroup,
+    pub related_esurface_group: RaisedEsurfaceGroup,
 }
 
 impl CutGroup {
     pub(crate) fn lu_prefactor(
         &self,
         graph: &Graph,
-        cuts: &TiVec<CutId, CrossSectionCut>,
+        cuts: &TiVec<CutId, FinalizedCut>,
     ) -> Result<Atom> {
         let loop_number =
             graph.cyclotomatic_number(&graph.full_filter()) - graph.initial_state_cut.nedges(graph);
@@ -3460,7 +3456,7 @@ impl CutGroup {
     pub(crate) fn lu_cut_selection(
         &self,
         graph: &Graph,
-        cuts: &TiVec<CutId, CrossSectionCut>,
+        cuts: &TiVec<CutId, FinalizedCut>,
     ) -> LuCutSelection {
         let raised_edge_groups = graph.get_raised_edge_groups();
         let cut_edge_alternatives = self
@@ -3529,7 +3525,7 @@ impl CutGroupData {
 
         let global_max_occurence = groups
             .iter()
-            .map(|group| group.related_esurface_group.max_occurrence)
+            .map(|group| group.related_esurface_group.max_occurence)
             .max()
             .unwrap_or_else(|| {
                 println!("corrupted groups");
@@ -3812,14 +3808,14 @@ mod tests {
 
     #[test]
     fn scalar_cut_residue_keeps_the_propagator_i_exactly_once() {
-        use crate::graph::{FeynmanGraph, Graph};
+        use crate::graph::Graph;
         use symbolica::atom::Atom;
 
         test_initialise().unwrap();
         // This one-line cut is a residue-boundary diagnostic, not a 1->1
         // scattering-rate fixture. It deliberately bypasses the physical
         // process selector's requirement of at least two final particles.
-        let graph: Graph = dot!(
+        let graph: Graph = finalized_runtime_dot!(
             digraph scalar_cut_line {
                 node [num=1];
                 edge [particle="scalar_0", num="1𝑖"];
@@ -3833,13 +3829,13 @@ mod tests {
         let mut graph = super::CrossSectionGraph::new(graph);
         graph.cuts = graph
             .graph
-            .all_st_cuts_for_cs(
-                graph.source_nodes.clone(),
-                graph.target_nodes.clone(),
-                &graph.graph.get_initial_state_tree(),
-            )
-            .into_iter()
-            .map(|(left, cut, right)| super::CrossSectionCut { cut, left, right })
+            .finalized_topology_threshold_candidates
+            .iter()
+            .map(|candidate| super::FinalizedCut {
+                cut: candidate.cut.clone(),
+                left: candidate.left.clone(),
+                right: candidate.right.clone(),
+            })
             .collect();
         assert_eq!(graph.cuts.len(), 1);
         let group = super::CutGroup {

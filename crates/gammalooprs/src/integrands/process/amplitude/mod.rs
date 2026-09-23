@@ -18,7 +18,7 @@ use linnet::half_edge::{
 use momtrop::SampleGenerator;
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
-use feynkit_cff::{OrientationId, RaisedEnergySurfaceId, SurfaceId};
+use crate::cff::{HybridSurfaceID, OrientationID, RaisedEsurfaceId};
 use spenso::algebra::complex::Complex;
 use symbolica::{
     atom::AtomCore,
@@ -30,10 +30,7 @@ use typed_index_collections::{TiVec, ti_vec};
 
 use crate::{
     DependentMomentaConstructor, F, FloatLike, GammaLoopContext, GammaLoopContextContainer,
-    cff::esurface::{
-        EnergySurfaceCollection, EnergySurfaceExt, ExistingEsurfaces, GroupEsurfaceId,
-        get_representative,
-    },
+    cff::esurface::{EsurfaceCollection, ExistingEsurfaces, GroupEsurfaceId, get_representative},
     graph::{
         FeynmanGraph, Graph, GraphGroup, GraphGroupPosition, GroupId, LMBext, LmbIndex,
         LoopMomentumBasis, parse::complete_group_parsing,
@@ -121,10 +118,7 @@ impl AmplitudeGraphTerm {
     pub fn from_amplitude_graph(
         graph: &AmplitudeGraph,
         own_group_position: GraphGroupPosition,
-        esurface_map: TiVec<
-            GroupEsurfaceId,
-            TiVec<GraphGroupPosition, Option<RaisedEnergySurfaceId>>,
-        >,
+        esurface_map: TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<RaisedEsurfaceId>>>,
         model: &Model,
         settings: &GlobalSettings,
     ) -> Result<(Self, GraphGenerationStats)> {
@@ -265,7 +259,7 @@ impl AmplitudeGraphTerm {
         let mut threshold_counterterm = AmplitudeCountertermData::new_empty(own_group_position);
         let mut threshold_evaluators =
             Vec::with_capacity(graph.derived_data.threshold_counterterms.len());
-        let selected_generation_raised_esurfaces: HashSet<RaisedEnergySurfaceId> =
+        let selected_generation_raised_esurfaces: HashSet<RaisedEsurfaceId> =
             if graph.derived_data.threshold_counterterms.is_empty() {
                 HashSet::new()
             } else {
@@ -274,7 +268,7 @@ impl AmplitudeGraphTerm {
                     .map(|esurface_id| graph.derived_data.raised_esurface_ids[*esurface_id])
                     .collect()
             };
-        let active_mask: TiVec<RaisedEnergySurfaceId, bool> = graph
+        let active_mask: TiVec<RaisedEsurfaceId, bool> = graph
             .derived_data
             .threshold_counterterms
             .iter_enumerated()
@@ -347,7 +341,8 @@ impl AmplitudeGraphTerm {
         threshold_counterterm.raised_data = graph.derived_data.raised_data.clone();
         threshold_counterterm.helper_evaluators = graph
             .derived_data
-            .raised_surface_evaluators
+            .raised_data
+            .pass_two_evaluator
             .clone()
             .unwrap_or_default();
         stats.evaluator_count += threshold_counterterm.helper_evaluators.len();
@@ -392,7 +387,7 @@ impl AmplitudeGraphTerm {
                     .expect("cff_expression should have been created")
                     .expression
                     .surfaces
-                    .energy_surfaces()
+                    .esurface_cache
                     .clone(),
                 param_builder: graph.graph.param_builder.clone(),
                 real_mass_vec: None,
@@ -1154,9 +1149,9 @@ impl AmplitudeIntegrand {
             .map(|(graph_group_pos, raised_esurface_id)| {
                 let graph_id = self.data.graph_group_structure[group_id][graph_group_pos];
                 let graph_term = &self.data.graph_terms[graph_id];
-                let esurface_id = graph_term.threshold_counterterm.raised_data.groups
+                let esurface_id = graph_term.threshold_counterterm.raised_data.raised_groups
                     [raised_esurface_id]
-                    .surface_ids[0];
+                    .esurface_ids[0];
                 let esurface = &graph_term.esurfaces[esurface_id];
                 let loop_order = esurface.energies.len().saturating_sub(1);
                 let edge_ids = esurface.energies.iter().map(|edge_id| edge_id.0).join(",");
@@ -1514,9 +1509,10 @@ impl AmplitudeIntegrand {
                     let candidate_exists = {
                         let graph_term = &self.data.graph_terms[graph_id];
                         let graph = &graph_term.graph;
-                        let raised_group = &graph_term.threshold_counterterm.raised_data.groups
-                            [raised_esurface_id];
-                        let esurface_id = raised_group.surface_ids[0];
+                        let raised_group =
+                            &graph_term.threshold_counterterm.raised_data.raised_groups
+                                [raised_esurface_id];
+                        let esurface_id = raised_group.esurface_ids[0];
                         let esurface = &graph_term.esurfaces[esurface_id];
                         let lmb = &graph.loop_momentum_basis;
                         let real_mass_vector = graph.get_real_mass_vector(model);
@@ -1563,7 +1559,7 @@ impl AmplitudeIntegrand {
                                 .map(|edge_id| edge_id.0)
                                 .collect_vec();
                             let local_esurface_ids = raised_group
-                                .surface_ids
+                                .esurface_ids
                                 .iter()
                                 .map(|esurface_id| esurface_id.0)
                                 .collect_vec();
@@ -1601,7 +1597,7 @@ impl AmplitudeIntegrand {
                                 classification = ?candidate_existence,
                                 generated = ?generated,
                                 active = ?active,
-                                max_occurrence = raised_group.max_occurrence,
+                                max_occurrence = raised_group.max_occurence,
                                 shift_part = %format!("{:+16e}", shift_part),
                                 shift_vector_sq = %format!("{:+16e}", shift_vector_sq),
                                 mass_sum = %format!("{:+16e}", mass_sum),
@@ -1893,9 +1889,10 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
                         let graph_id = self.data.graph_group_structure[group_id][graph_group_pos];
                         let graph_term = &self.data.graph_terms[graph_id];
                         let graph = &graph_term.graph;
-                        let esurface_id = graph_term.threshold_counterterm.raised_data.groups
-                            [raised_esurface_id]
-                            .surface_ids[0];
+                        let esurface_id =
+                            graph_term.threshold_counterterm.raised_data.raised_groups
+                                [raised_esurface_id]
+                                .esurface_ids[0];
                         let lmb_reps = graph.integrand_replacement(
                             &graph.full_filter(),
                             &graph.loop_momentum_basis,
@@ -1971,9 +1968,9 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
                                     let graph_term = &self.data.graph_terms[graph_id];
                                     let graph = &graph_term.graph;
                                     let esurface_id =
-                                        graph_term.threshold_counterterm.raised_data.groups
+                                        graph_term.threshold_counterterm.raised_data.raised_groups
                                             [raised_esurface_id]
-                                            .surface_ids[0];
+                                            .esurface_ids[0];
                                     let lmb_reps = graph.integrand_replacement(
                                         &graph.full_filter(),
                                         &graph.loop_momentum_basis,
@@ -2031,9 +2028,9 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
                     let max_required_power = graph_term
                         .threshold_counterterm
                         .raised_data
-                        .groups
+                        .raised_groups
                         .iter()
-                        .map(|raised_group| raised_group.max_occurrence)
+                        .map(|raised_group| raised_group.max_occurence)
                         .max()
                         .unwrap_or(0) as i32
                         + 1;

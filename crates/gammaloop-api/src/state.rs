@@ -3069,10 +3069,10 @@ impl State {
         } = options;
         let generation_type = Self::infer_graph_list_generation_type(&graphs)?;
         if let Some(definition) = &process_definition {
-            if definition.generation_type != generation_type {
+            if definition.process.generation_type() != generation_type {
                 return Err(eyre!(
                     "--process-spec describes a {} process, but the imported graph list is {}",
-                    definition.generation_type,
+                    definition.process.generation_type(),
                     generation_type
                 ));
             }
@@ -3173,7 +3173,6 @@ impl State {
                         .add_cross_section(CrossSection::from_graph_list(
                             integrand_name.clone(),
                             graphs,
-                            &self.model,
                         )?)
                 }
             }
@@ -3492,7 +3491,7 @@ mod tests {
         let temp = tempdir().unwrap();
         let mut state = State::new(temp.path(), None);
         state.model = load_generic_model("sm");
-        state.model_parameters = InputParamCard::default_from_model(&state.model);
+        state.model_parameters = state.model.default_param_card();
         state.save(temp.path(), true, false).unwrap();
 
         let output = Command::new(std::env::current_exe().unwrap())
@@ -3580,8 +3579,8 @@ mod tests {
             let temp = tempdir()?;
             let mut state = State::new_test();
             state.model = load_generic_model("scalars");
-            state.model_parameters = InputParamCard::default_from_model(&state.model);
-            let mut graphs = Graph::from_string(source, &state.model)?;
+            state.model_parameters = state.model.default_param_card();
+            let mut graphs = Graph::from_finalized_runtime_string(source, &state.model)?;
             graphs.truncate(1);
             let graph_name = graphs[0].name.clone();
             for name in ["first", "second"] {
@@ -3699,6 +3698,7 @@ mod tests {
                 for computed in [false, true] {
                     let output = temp.path().join(format!("export-{loaded}-{computed}"));
                     state.process_list.export_uv_forests(
+                        &state.model,
                         &output,
                         0,
                         "first",
@@ -3719,7 +3719,9 @@ mod tests {
                                 let node = node?;
                                 let dot = fs::read_to_string(node.path())?;
                                 assert!(dot.contains("forest_residue_index"));
-                                for graph in Graph::from_string(&dot, &state.model)? {
+                                for graph in
+                                    Graph::from_finalized_runtime_string(&dot, &state.model)?
+                                {
                                     exported_graph = true;
                                     expression += graph.full_numerator_atom();
                                 }

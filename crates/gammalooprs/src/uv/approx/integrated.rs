@@ -2181,14 +2181,14 @@ mod tests {
     #[test]
     fn vakint_preparation_reduces_color_before_opening_traces() {
         use crate::{
-            dot,
-            graph::{Graph, parse::IntoGraph},
+            finalized_runtime_dot,
+            graph::{Graph, parse::IntoFinalizedRuntimeGraph},
         };
         use idenso::{coad, cof, color_cas, color_f, color_idx, color_t};
         use spenso::{g, trace_sym};
 
         test_initialise().unwrap();
-        let graph: Graph = dot!(digraph color_vakint_tadpole {
+        let graph: Graph = finalized_runtime_dot!(digraph color_vakint_tadpole {
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
@@ -2239,12 +2239,12 @@ mod tests {
     #[test]
     fn affine_vakint_routing_keeps_external_momenta_fixed() {
         use crate::{
-            dot,
-            graph::{Graph, parse::IntoGraph},
+            finalized_runtime_dot,
+            graph::{Graph, parse::IntoFinalizedRuntimeGraph},
         };
 
         test_initialise().unwrap();
-        let graph: Graph = dot!(digraph affine_vakint_tadpole {
+        let graph: Graph = finalized_runtime_dot!(digraph affine_vakint_tadpole {
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
@@ -2332,12 +2332,12 @@ mod tests {
     #[test]
     fn nested_vacuum_denominators_preserve_incidence_and_factorized_numerators() {
         use crate::{
-            dot,
-            graph::{Graph, parse::IntoGraph},
+            finalized_runtime_dot,
+            graph::{Graph, parse::IntoFinalizedRuntimeGraph},
         };
 
         test_initialise().unwrap();
-        let graph: Graph = dot!(digraph nested_vacuum_bubble {
+        let graph: Graph = finalized_runtime_dot!(digraph nested_vacuum_bubble {
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]

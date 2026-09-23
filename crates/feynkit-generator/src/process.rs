@@ -1,4 +1,4 @@
-use std::{fmt, ops::RangeInclusive, str::FromStr};
+use std::{collections::BTreeMap, fmt, ops::RangeInclusive, str::FromStr};
 
 use feynkit_model::{Model, ModelError, ModelFingerprint, ParticleId, VertexRuleId};
 use serde::{Deserialize, Serialize};
@@ -252,6 +252,14 @@ pub enum ProcessError {
     MultipleAmplitudeFinalStates,
     #[error("invalid loop range {minimum}..={maximum}")]
     InvalidLoopRange { minimum: usize, maximum: usize },
+    #[error(
+        "Final-state PDG {member} overlaps the covariant cut multiplet of requested physical PDG {physical}; separate physical and diagnostic requests so their observable labels remain unambiguous. For imported covariant partner graphs, supply the physical channel with --process-spec"
+    )]
+    CovariantCutOverlap { physical: i64, member: i64 },
+    #[error(
+        "Particle veto removes PDG {member} from the covariant cut multiplet of physical PDG {physical}; retain the complete vector/Goldstone/ghost sector for a physical cross section"
+    )]
+    CovariantCutVeto { physical: i64, member: i64 },
 }
 
 impl Process {
@@ -380,6 +388,82 @@ impl Process {
         self.symmetrize_external_fermions
     }
 
+    /// Resolve explicit final-state alternatives to PDG codes.
+    pub fn outgoing_pdgs(&self, model: &Model) -> Result<Vec<Vec<i64>>, crate::GenerationError> {
+        self.outgoing_alternatives
+            .iter()
+            .map(|state| {
+                state
+                    .iter()
+                    .map(|selector| Ok(model.particle_by_id(selector.resolve(model)?)?.pdg_code))
+                    .collect()
+            })
+            .collect()
+    }
+
+    /// Observable labels for the complete covariant partner sets requested by
+    /// physical vector states. Explicit diagnostic states retain their identity.
+    pub fn covariant_cut_representatives(
+        &self,
+        model: &Model,
+    ) -> Result<BTreeMap<i64, i64>, crate::GenerationError> {
+        if self.generation_type != GenerationType::CrossSection {
+            return Ok(BTreeMap::new());
+        }
+        let states = self.outgoing_pdgs(model)?;
+        Ok(model
+            .covariant_cut_multiplets
+            .iter()
+            .filter(|(physical, _)| states.iter().any(|state| state.contains(physical)))
+            .flat_map(|(&physical, members)| members.iter().map(move |&member| (member, physical)))
+            .collect())
+    }
+
+    /// Validate that generation filters retain every declared covariant partner.
+    pub fn validate_covariant_cut_filters(
+        &self,
+        model: &Model,
+        options: &crate::GenerationOptions,
+    ) -> Result<(), crate::GenerationError> {
+        let representatives = self.covariant_cut_representatives(model)?;
+        for scope in [crate::FilterScope::Graph, crate::FilterScope::CutAmplitude] {
+            for filter in options.filters(scope) {
+                if let crate::GenerationFilter::ParticleVeto(vetoes) = filter {
+                    for selector in vetoes {
+                        let particle = model.particle_by_id(selector.resolve(model)?)?;
+                        for member in [particle.pdg_code, model.antiparticle(particle)?.pdg_code] {
+                            if let Some(&physical) = representatives.get(&member) {
+                                return Err(
+                                    ProcessError::CovariantCutVeto { physical, member }.into()
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub fn covariant_cut_states(
+        &self,
+        model: &Model,
+    ) -> Result<Vec<Vec<i64>>, crate::GenerationError> {
+        let requested = self.outgoing_pdgs(model)?;
+        if self.generation_type != GenerationType::CrossSection {
+            return Ok(requested);
+        }
+        let representatives = self.covariant_cut_representatives(model)?;
+        for &member in requested.iter().flatten() {
+            if let Some(&physical) = representatives.get(&member)
+                && member != physical
+            {
+                return Err(ProcessError::CovariantCutOverlap { physical, member }.into());
+            }
+        }
+        Ok(model.covariant_cut_states(&requested)?)
+    }
+
     pub fn validate(&self) -> Result<(), ProcessError> {
         if self.outgoing_alternatives.is_empty() {
             return Err(ProcessError::MissingFinalState);
@@ -396,6 +480,19 @@ impl Process {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cp_symmetrization_is_an_explicit_serialized_opt_in() {
+        let process = Process::cross_section([25_i64], [25_i64, 25]);
+        assert!(!process.symmetrizes_left_right());
+        for enabled in [false, true] {
+            let process = process.clone().symmetrize_left_right(enabled);
+            let definition = serde_json::to_value(&process).unwrap();
+            assert_eq!(definition["symmetrize_left_right"], enabled);
+            let decoded: Process = serde_json::from_value(definition).unwrap();
+            assert_eq!(decoded.symmetrizes_left_right(), enabled);
+        }
+    }
 
     #[test]
     fn accepts_vacuum_processes_and_empty_cross_section_alternatives() {

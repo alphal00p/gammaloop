@@ -638,8 +638,8 @@ mod tests {
     use super::*;
     use crate::uv::approx::local_4d::FourDSector;
     use crate::{
-        dot,
-        graph::{LMBext, parse::IntoGraph},
+        finalized_runtime_dot,
+        graph::{LMBext, parse::IntoFinalizedRuntimeGraph},
         initialisation::test_initialise,
         settings::global::OrientationPattern,
         utils::W_,
@@ -654,7 +654,7 @@ mod tests {
     #[test]
     fn projected_rows_retain_one_ordinary_numerator_and_scalar_arguments() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = dot!(digraph projected_parametric_numerator {
+        let mut graph: Graph = finalized_runtime_dot!(digraph projected_parametric_numerator {
             edge [num=1 mass=1]
             node [num=1]
             a -> b [id=0 lmb_id=0]
@@ -793,7 +793,7 @@ mod tests {
         let mut state = Vec::new();
         symbolica::state::State::export(&mut state)?;
         let state_map = symbolica::state::State::import(&mut std::io::Cursor::new(state), None)?;
-        let model = crate::model::Model::default();
+        let model = crate::model::Model::empty("test");
         let (decoded, consumed): (Integrands, _) = bincode::decode_from_slice_with_context(
             &encoded,
             bincode::config::standard(),
@@ -811,7 +811,7 @@ mod tests {
     #[test]
     fn canonical_source_and_template_preparation_share_retention_invariant_budget() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = dot!(digraph preparation_retention {
+        let mut graph: Graph = finalized_runtime_dot!(digraph preparation_retention {
             edge [num=1 mass=1]
             node [num=1]
             a -> b [id=0 lmb_id=0]
@@ -878,7 +878,7 @@ mod tests {
     #[test]
     fn nested_banana_quotient_powered_component_has_the_analytic_one_energy_sign() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = dot!(digraph nested_banana_quotient_sign {
+        let mut graph: Graph = finalized_runtime_dot!(digraph nested_banana_quotient_sign {
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
@@ -1100,7 +1100,7 @@ mod tests {
     #[test]
     fn typed_taylor_wave_batches_genuine_owner_relabelled_terms() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = dot!(
+        let mut graph: Graph = finalized_runtime_dot!(
             digraph G {
                 edge [particle="scalar_1"];
                 node [num=1];
@@ -1119,7 +1119,10 @@ mod tests {
             GS.den(
                 usize::from(source_edge),
                 momentum(momentum_edge),
-                graph.underlying[momentum_edge].particle.mass_atom().pow(2),
+                graph.underlying[momentum_edge]
+                    .particle
+                    .mass_atom(&graph.model)
+                    .pow(2),
                 Atom::one(),
             )
             .pow(-1)
@@ -1240,7 +1243,7 @@ mod tests {
     #[test]
     fn typed_taylor_next_component_reuses_one_topology_for_prior_residue_states() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = dot!(digraph typed_taylor_component_waves {
+        let mut graph: Graph = finalized_runtime_dot!(digraph typed_taylor_component_waves {
             edge [particle="scalar_1"];
             node [num=1];
             a -> b [id=0 lmb_id=0];
@@ -1292,7 +1295,10 @@ mod tests {
             GS.den(
                 usize::from(edge),
                 &momentum,
-                graph.underlying[edge].particle.mass_atom().pow(2),
+                graph.underlying[edge]
+                    .particle
+                    .mass_atom(&graph.model)
+                    .pow(2),
                 Atom::one(),
             )
             .pow(-1)

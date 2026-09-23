@@ -8,8 +8,11 @@ use crate::{
         orientations::GraphOrientation,
         surface::LinearEnergyExpr,
     },
-    dot,
-    graph::{FeynmanGraph, FourDDenominator, Graph, LMBext, cuts::CutSet, parse::IntoGraph},
+    finalized_runtime_dot,
+    graph::{
+        FeynmanGraph, FourDDenominator, Graph, LMBext, cuts::CutSet,
+        parse::IntoFinalizedRuntimeGraph,
+    },
     initialisation::test_initialise,
     settings::global::OrientationPattern,
     utils::GS,
@@ -72,7 +75,7 @@ fn two_edge_graph() -> Result<Graph> {
     Ok(TWO_EDGE_GRAPH
         .get_or_init(|| {
             test_initialise().expect("test model initialization succeeds");
-            dot!(
+            finalized_runtime_dot!(
                 digraph G {
                     edge [particle="scalar_1"];
                     node [num=1];
@@ -92,7 +95,7 @@ fn soft_dispatch_preserves_the_complete_quartic_contour() -> Result<()> {
     use three_dimensional_reps::{Generate3DExpressionOptions, NumeratorSamplingScaleMode};
 
     test_initialise()?;
-    let mut graph: Graph = dot!(digraph soft_count_triangle {
+    let mut graph: Graph = finalized_runtime_dot!(digraph soft_count_triangle {
         edge [num=1 mass=2]
         node [num=1]
         a -> b [id=0 lmb_id=0]
@@ -211,7 +214,10 @@ fn production_emr_map_cancels_one_powered_denominator() -> Result<()> {
         );
     }
     let on_shell_energy_squared = (1..=3).fold(
-        graph.underlying[edge].particle.mass_atom().pow(2),
+        graph.underlying[edge]
+            .particle
+            .mass_atom(&graph.model)
+            .pow(2),
         |norm_squared, spatial_index| {
             norm_squared + GS.emr_mom(edge, GS.cind(spatial_index)).pow(2)
         },
@@ -277,7 +283,10 @@ fn production_emr_map_cancels_one_powered_denominator() -> Result<()> {
     let momentum = FunctionBuilder::new(GS.emr_mom)
         .add_arg(usize::from(edge))
         .finish();
-    let mass_squared = graph.underlying[edge].particle.mass_atom().pow(2);
+    let mass_squared = graph.underlying[edge]
+        .particle
+        .mass_atom(&graph.model)
+        .pow(2);
     let denominators = [
         FourDDenominator {
             source_edge: edge,
@@ -288,7 +297,10 @@ fn production_emr_map_cancels_one_powered_denominator() -> Result<()> {
         FourDDenominator {
             source_edge: EdgeIndex(1),
             momentum: -momentum,
-            mass_squared: graph.underlying[EdgeIndex(1)].particle.mass_atom().pow(2),
+            mass_squared: graph.underlying[EdgeIndex(1)]
+                .particle
+                .mass_atom(&graph.model)
+                .pow(2),
             full_expr: Atom::var(symbolica::symbol!("local_3d_test::second")),
         },
     ];
@@ -325,7 +337,7 @@ fn production_emr_map_cancels_one_powered_denominator() -> Result<()> {
         .map(|orientation| orientation.expression.clone())
         .sum::<Atom>()
         * Atom::num(exact_lower.production_prefactor_factor());
-    let mass = graph.underlying[edge].particle.mass_atom();
+    let mass = graph.underlying[edge].particle.mass_atom(&graph.model);
     for expression in [
         &mut explicit_sum,
         &mut regenerated_sum,
@@ -367,7 +379,10 @@ fn direct_root_preserves_powered_production_entries() -> Result<()> {
     let mut graph = two_edge_graph()?;
     let edge = EdgeIndex(0);
     let on_shell_energy_squared = (1..=3).fold(
-        graph.underlying[edge].particle.mass_atom().pow(2),
+        graph.underlying[edge]
+            .particle
+            .mass_atom(&graph.model)
+            .pow(2),
         |norm_squared, spatial_index| {
             norm_squared + GS.emr_mom(edge, GS.cind(spatial_index)).pow(2)
         },
@@ -385,9 +400,11 @@ fn direct_root_preserves_powered_production_entries() -> Result<()> {
     let cutset = CutSet::empty(graph.n_hedges());
     let raw_root = graph.cff_from_production_expression(&production, &cutset, &pattern)?;
     let production_prefactor = Atom::num(raw_root.production_prefactor_factor());
-    let fourddenoms = GS.wrap_tree_denoms(
-        graph.denominator(&graph.tree_edges.subtract(&graph.initial_state_cut), |_| -1),
-    );
+    let fourddenoms = GS.wrap_tree_denoms(graph.denominator(
+        &graph.tree_edges.subtract(&graph.initial_state_cut),
+        &graph.model,
+        |_| -1,
+    ));
 
     // The direct root is the stored production CFF itself. A generalized
     // numerator sample may leave an edge undirected, but that is part of
@@ -827,7 +844,10 @@ fn nested_powered_contact_keeps_loop_lift_as_provenance_only() -> Result<()> {
     let mut graph = two_edge_graph()?;
     let powered_edge = EdgeIndex(0);
     let on_shell_energy_squared = (1..=3).fold(
-        graph.underlying[powered_edge].particle.mass_atom().pow(2),
+        graph.underlying[powered_edge]
+            .particle
+            .mass_atom(&graph.model)
+            .pow(2),
         |norm_squared, spatial_index| {
             norm_squared + GS.emr_mom(powered_edge, GS.cind(spatial_index)).pow(2)
         },
@@ -852,7 +872,10 @@ fn nested_powered_contact_keeps_loop_lift_as_provenance_only() -> Result<()> {
         momentum: FunctionBuilder::new(GS.emr_mom)
             .add_arg(usize::from(powered_edge))
             .finish(),
-        mass_squared: graph.underlying[powered_edge].particle.mass_atom().pow(2),
+        mass_squared: graph.underlying[powered_edge]
+            .particle
+            .mass_atom(&graph.model)
+            .pow(2),
         full_expr: Atom::one(),
     };
     let denominators = [source_denominator(), source_denominator()];
@@ -1453,7 +1476,7 @@ fn denominator_only_cff_has_no_localizer_fallback() -> Result<()> {
 fn exact_localization_capacity_excludes_replaced_spinney_numerator() -> Result<()> {
     // Share model initialization with the other graph-backed tests in this module.
     let _ = two_edge_graph()?;
-    let mut graph: Graph = dot!(
+    let mut graph: Graph = finalized_runtime_dot!(
         digraph replaced_spinney_numerator {
             edge [pdg=1000 num=1 mass=1]
             node [num=1]
@@ -1499,7 +1522,7 @@ fn exact_localization_capacity_excludes_replaced_spinney_numerator() -> Result<(
 fn exact_localization_maps_finite_ct_instead_of_leaving_it_unmapped() -> Result<()> {
     // Share model initialization with the other graph-backed tests in this module.
     let _ = two_edge_graph()?;
-    let mut graph: Graph = dot!(
+    let mut graph: Graph = finalized_runtime_dot!(
         digraph finite_ct_map {
             edge [particle="scalar_1"];
             node [num=1];

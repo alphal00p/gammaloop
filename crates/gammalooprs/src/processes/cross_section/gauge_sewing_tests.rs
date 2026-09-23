@@ -1,6 +1,9 @@
 //! Complete model-generated covariant cuts, tested against three physical
 //! polarizations. Component contraction never expands a physical numerator.
 
+use feynkit_generator::{
+    GenerationFilter, GenerationOptions, GenerationType, Process as GenerationProcess,
+};
 use std::collections::BTreeMap;
 
 use itertools::Itertools;
@@ -26,9 +29,8 @@ use spenso::{
 use symbolica::atom::{Atom, AtomCore};
 
 use crate::{
-    feyngen::{FeynGenFilter, FeynGenFilters, GenerationType},
     initialisation::test_initialise,
-    model::UFOSymbol,
+    model::{ModelGammaLoopExt, ParticleIdGammaLoopExt, UFOSymbol},
     numerator::{ParsingNet, aind::Aind},
     processes::{Process, ProcessCollection, ProcessDefinition},
     settings::GlobalSettings,
@@ -41,8 +43,7 @@ fn declared_covariant_cut_states_preserve_multisets_and_physical_labels() -> eyr
     let model = load_generic_model("sm");
     for (state, count) in [(vec![24, -24], 16), (vec![23, 23], 10)] {
         let process = ProcessDefinition {
-            generation_type: GenerationType::CrossSection,
-            final_pdgs_lists: vec![state.clone()],
+            process: GenerationProcess::cross_section(Vec::<i64>::new(), state.clone()),
             ..Default::default()
         };
         let closure = process.covariant_cut_states(&model)?;
@@ -61,17 +62,19 @@ fn declared_covariant_cut_states_preserve_multisets_and_physical_labels() -> eyr
         }
     }
     let diagnostic = ProcessDefinition {
-        generation_type: GenerationType::CrossSection,
-        final_pdgs_lists: vec![vec![250, 250]],
+        process: GenerationProcess::cross_section(Vec::<i64>::new(), [250_i64, 250]),
         ..Default::default()
     };
     assert!(diagnostic.covariant_cut_representatives(&model).is_empty());
     assert_eq!(
         diagnostic.covariant_cut_states(&model)?,
-        diagnostic.final_pdgs_lists
+        diagnostic.process.outgoing_pdgs(&model)?
     );
     let mixed = ProcessDefinition {
-        final_pdgs_lists: vec![vec![23, 23], vec![250, 25]],
+        process: diagnostic
+            .process
+            .clone()
+            .with_final_state_alternatives([vec![23_i64, 23], vec![250, 25]])?,
         ..diagnostic.clone()
     };
     assert!(
@@ -82,25 +85,23 @@ fn declared_covariant_cut_states_preserve_multisets_and_physical_labels() -> eyr
             .contains("observable labels remain unambiguous")
     );
     let unresolved = ProcessDefinition {
-        cross_section_filters: FeynGenFilters(vec![FeynGenFilter::PerturbativeOrders(
-            [("QED".into(), 1)].into_iter().collect(),
-        )]),
+        generation_options: GenerationOptions::default().with_graph_filter(
+            GenerationFilter::PerturbativeOrders([("QED".into(), 1)].into_iter().collect()),
+        ),
         ..diagnostic
     };
     let mut unresolved_model = model.clone();
-    // The default unresolved sets are massless. Exercise the same closure
-    // boundary for a declared class that also contains a massive vector.
-    unresolved_model
-        .unresolved_particles
-        .entry("QED".into())
-        .or_default()
-        .insert(model.get_particle_from_pdg(23));
+    // Native unresolved sets derive from massless interactions. A massless
+    // restriction of a declared massive-vector quartet is invalid as well.
+    let mut card = feynkit_model::ParameterCard::new();
+    card.insert("MZ".into(), feynkit_model::ComplexValue::new(0.0, 0.0));
+    unresolved_model.apply_parameter_card(&card)?;
     assert!(unresolved.covariant_cut_states(&unresolved_model).is_err());
 
     let incomplete = ProcessDefinition {
-        generation_type: GenerationType::CrossSection,
-        final_pdgs_lists: vec![vec![24, -24]],
-        cross_section_filters: FeynGenFilters(vec![FeynGenFilter::ParticleVeto(vec![251])]),
+        process: GenerationProcess::cross_section(Vec::<i64>::new(), [24_i64, -24]),
+        generation_options: GenerationOptions::default()
+            .with_graph_filter(GenerationFilter::ParticleVeto(vec![251_i64.into()])),
         ..Default::default()
     };
     assert!(
@@ -113,14 +114,22 @@ fn declared_covariant_cut_states_preserve_multisets_and_physical_labels() -> eyr
     let mut invalid = model.clone();
     invalid.covariant_cut_multiplets.get_mut(&24).unwrap()[3] = -9000003;
     assert!(invalid.validate_covariant_cut_multiplets().is_err());
-    let mut invalid = model.clone();
-    let position = invalid
-        .propagators
-        .iter()
-        .position(|p| p.particle.name.as_str() == "G0")
+    let mut invalid = serde_json::to_value(&model)?;
+    let propagator = invalid["propagators"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|p| p["particle"] == "G0")
         .unwrap();
-    std::sync::Arc::make_mut(&mut invalid.propagators[position]).denominator += Atom::one();
-    assert!(invalid.validate_covariant_cut_multiplets().is_err());
+    let denominator = &model
+        .propagators()
+        .iter()
+        .find(|p| p.particle.resolve(&model).name == "G0")
+        .unwrap()
+        .denominator;
+    propagator["denominator"] =
+        serde_json::to_value((denominator + Atom::one()).to_canonical_string())?;
+    assert!(serde_json::from_value::<crate::model::Model>(invalid).is_err());
     Ok(())
 }
 
@@ -139,13 +148,12 @@ fn generated_higgs_covariant_cuts_equal_three_physical_vector_polarizations() ->
         (vec![23, 23], Atom::num((15, 4)), 4, Atom::num((1, 2))),
     ] {
         let process = ProcessDefinition {
-            generation_type: GenerationType::CrossSection,
-            initial_pdgs: vec![25],
-            final_pdgs_lists: vec![physical],
-            loop_count_range: (1, 1),
-            cross_section_filters: FeynGenFilters(vec![FeynGenFilter::CouplingOrders(
-                [("QED".into(), (2, Some(2)))].into_iter().collect(),
-            )]),
+            process: GenerationProcess::cross_section([25_i64], physical).with_loop_count(1, 1)?,
+            generation_options: GenerationOptions::default().with_graph_filter(
+                GenerationFilter::CouplingOrders(
+                    [("QED".into(), (2, Some(2)))].into_iter().collect(),
+                ),
+            ),
             ..Default::default()
         };
         let graphs = process.generate(&model, &settings)?;
@@ -155,17 +163,17 @@ fn generated_higgs_covariant_cuts_equal_three_physical_vector_polarizations() ->
             "the complete covariant Higgs cut inventory"
         );
         assert!(!process.may_filter_covariant_partners(&model));
-        if process.final_pdgs_lists[0] == [24, -24] {
+        if process.process.outgoing_pdgs(&model)?[0] == [24, -24] {
             let mut filtered = process.clone();
             // In H -> WW this retains the four bosonic Born graphs while
             // removing the two ghost graphs required by covariant completeness.
-            filtered
-                .cross_section_filters
-                .0
-                .push(FeynGenFilter::VertexVeto(vec![
-                    "V_17".into(),
-                    "V_25".into(),
-                ]));
+            filtered.generation_options =
+                filtered
+                    .generation_options
+                    .with_graph_filter(GenerationFilter::VertexVeto(vec![
+                        "V_17".into(),
+                        "V_25".into(),
+                    ]));
             assert!(filtered.may_filter_covariant_partners(&model));
             let bosonic_graphs = filtered.generate(&model, &settings)?;
             assert_eq!(bosonic_graphs.len(), 4);
@@ -174,10 +182,12 @@ fn generated_higgs_covariant_cuts_equal_three_physical_vector_polarizations() ->
                     !edge
                         .data
                         .particle()
-                        .is_some_and(|particle| particle.is_ghost())
+                        .is_some_and(|particle| particle.resolve(&model).is_ghost())
                 })
             }));
-            filtered.final_pdgs_lists = vec![vec![251, -251]];
+            filtered.process = filtered
+                .process
+                .with_final_state_alternatives([vec![251_i64, -251]])?;
             assert!(!filtered.may_filter_covariant_partners(&model));
         }
         // Raw imported states cannot establish physical-vector intent. The
@@ -280,9 +290,9 @@ fn generated_higgs_covariant_cuts_equal_three_physical_vector_polarizations() ->
                         };
                         let particle = edge.data.particle().unwrap();
                         particles.push(if flow == Flow::Source {
-                            particle.pdg_code
+                            particle.resolve(&model).pdg_code
                         } else {
-                            particle.get_anti_particle(&model).pdg_code
+                            particle.antiparticle(&model).resolve(&model).pdg_code
                         } as i64);
                         let sign = if flow == Flow::Source { 1 } else { -1 };
                         let key = ExplicitKey::from_iter(
@@ -315,7 +325,7 @@ fn generated_higgs_covariant_cuts_equal_three_physical_vector_polarizations() ->
                         )?;
                         library.insert_explicit(Canonicalized::identity(tensor));
                     }
-                    let mut expression = model.apply_coupling_replacement_rules(
+                    let mut expression = model.expand_couplings(
                         &graph.production_numerator_atom_for_full_3d_expression(),
                     );
                     for (name, value) in [
@@ -353,7 +363,12 @@ fn generated_higgs_covariant_cuts_equal_three_physical_vector_polarizations() ->
                 for (particles, value) in &channels {
                     let spins = particles
                         .iter()
-                        .map(|pdg| model.get_particle_from_pdg(*pdg as isize).spin)
+                        .map(|pdg| {
+                            model
+                                .get_particle_from_pdg(*pdg as isize)
+                                .resolve(&model)
+                                .spin
+                        })
                         .sorted()
                         .collect_vec();
                     let expected = match spins.as_slice() {
@@ -375,7 +390,7 @@ fn generated_higgs_covariant_cuts_equal_three_physical_vector_polarizations() ->
                     "{channels:?}, boosted={boosted}"
                 );
                 // The VV channel alone is the incomplete covariant metric sum.
-                let vector_channel = process.final_pdgs_lists[0]
+                let vector_channel = process.process.outgoing_pdgs(&model)?[0]
                     .iter()
                     .copied()
                     .sorted()

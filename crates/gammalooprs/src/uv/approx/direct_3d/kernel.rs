@@ -329,7 +329,7 @@ fn t_tilde<S: ForestNodeLike>(
     let mut reps = Vec::new();
     for (p, eid, e) in graph.iter_edges_of(rescaled_subgraph) {
         if p.is_paired() {
-            let e_mass = e.data.mass_atom();
+            let e_mass = e.data.mass_atom(ctx.model);
             reps.push(GS.split_mom_pattern(eid, lmb_id, e_mass, settings.inner_products));
         }
     }
@@ -362,7 +362,7 @@ fn t_tilde<S: ForestNodeLike>(
                 // set energies from inner_t on-shell
                 atomarg = atomarg.replace(function!(GS.energy, eid)).with(GS.ose(ei));
 
-                let e_mass = e.data.mass_atom();
+                let e_mass = e.data.mass_atom(ctx.model);
                 atomarg = atomarg.replace(GS.ose(ei)).with(GS.ose_full(
                     ei,
                     lmb_id,
@@ -479,7 +479,7 @@ fn start<S: ForestNodeLike>(
             // set energies from inner_t on-shell
             atomarg = atomarg.replace(function!(GS.energy, eid)).with(GS.ose(ei));
 
-            let e_mass = e.data.mass_atom();
+            let e_mass = e.data.mass_atom(ctx.model);
             atomarg = atomarg.replace(GS.ose(ei)).with(GS.ose_full(
                 ei,
                 lmb_id,
@@ -500,7 +500,7 @@ fn start<S: ForestNodeLike>(
     let mut reps = Vec::new();
     for (p, eid, e) in graph.iter_edges_of(rescaled_subgraph) {
         if p.is_paired() {
-            let e_mass = e.data.mass_atom();
+            let e_mass = e.data.mass_atom(ctx.model);
             let rep = GS.split_mom_pattern(eid, lmb_id, e_mass, settings.inner_products);
             debug_tags!(#uv, #local, #momentum, #trace;
                 stage = "local_3d_start_split_mom_pattern",

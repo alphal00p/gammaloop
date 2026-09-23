@@ -1878,6 +1878,7 @@ dependencies = [
  "spenso",
  "symbolica",
  "thiserror 2.0.18",
+ "three-dimensional-reps",
  "typed-index-collections",
 ]
 
@@ -1985,6 +1986,7 @@ version = "0.1.0"
 dependencies = [
  "feynkit-model",
  "pyo3",
+ "serde_json",
  "thiserror 2.0.18",
 ]
 
@@ -2261,6 +2263,7 @@ dependencies = [
  "colored 3.1.1",
  "eyre",
  "feynkit-generator",
+ "feynkit-graph",
  "feynkit-model",
  "gammaloop-api",
  "gammaloop-workspace-hack",

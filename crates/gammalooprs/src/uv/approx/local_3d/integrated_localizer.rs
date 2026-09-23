@@ -44,9 +44,11 @@ impl Localizer<'_> {
             integrated_loop_count,
             "Applied integrated UV forest-overlap addback rule"
         );
-        let fourddenoms = GS.wrap_tree_denoms(
-            graph.denominator(&graph.tree_edges.subtract(&graph.initial_state_cut), |_| -1),
-        );
+        let fourddenoms = GS.wrap_tree_denoms(graph.denominator(
+            &graph.tree_edges.subtract(&graph.initial_state_cut),
+            &graph.model,
+            |_| -1,
+        ));
 
         // CFF capacity belongs to the complete factorized numerator of this
         // reduced term. The integrated finite CT replaces the numerator of

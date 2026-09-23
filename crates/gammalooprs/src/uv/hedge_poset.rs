@@ -1731,7 +1731,7 @@ mod tests {
     #[test]
     fn union_terms_project_factorized_typed_4d_values() -> Result<()> {
         test_initialise().unwrap();
-        let graph: Graph = dot!(
+        let graph: Graph = finalized_runtime_dot!(
             digraph G{
                 edge [particle="scalar_1"];
                 v1 -> v2;
@@ -1747,8 +1747,8 @@ mod tests {
             ..Default::default()
         };
         let cut_structure = CutStructure::empty(&graph);
-        let mut forests = Wood::new(cut_structure, &graph, &settings).unfold();
-        forests.integrate(&graph, crate::utils::vakint()?, &settings)?;
+        let mut forests = Wood::new(cut_structure, &graph, &graph.model, &settings).unfold();
+        forests.integrate(&graph, &graph.model, crate::utils::vakint()?, &settings)?;
 
         let unions = forests
             .graph
@@ -2690,7 +2690,7 @@ mod tests {
         // The two-line component has DOD two, while the scalar triangle has DOD
         // minus two. Their disconnected union is therefore logarithmically
         // divergent even though the triangle is not a UV region on its own.
-        let graph: Graph = dot!(
+        let graph: Graph = finalized_runtime_dot!(
             digraph G {
                 node [num = "1"];
                 edge [particle = "scalar_1"];
@@ -2708,7 +2708,7 @@ mod tests {
             generate_integrated: false,
             ..Default::default()
         };
-        let wood = Wood::new(CutStructure::empty(&graph), &graph, &settings);
+        let wood = Wood::new(CutStructure::empty(&graph), &graph, &graph.model, &settings);
         let collective = wood
             .graph
             .iter_nodes()
@@ -2761,7 +2761,7 @@ mod tests {
             .expect("the collective region has a compatible source chart"),
             topo_order: 1,
         };
-        let ctx = UVCtx::new(&graph, &settings);
+        let ctx = UVCtx::new(&graph, &graph.model, &settings);
         let input = Full4dCts::from_factorized_local(&Local4dCts::root());
         let prefix = local_4d::uv_limit(&input, &ctx, &divergent, &root, &divergent, &root)?;
         // The two physical forests containing U are {U} and {A,U}:
@@ -2785,7 +2785,7 @@ mod tests {
         )?;
         let expected = atomic.atom() + nested.atom();
         let mut forests = wood.unfold();
-        forests.integrate(&graph, crate::utils::vakint()?, &settings)?;
+        forests.integrate(&graph, &graph.model, crate::utils::vakint()?, &settings)?;
         let actual = forests
             .graph
             .iter_nodes()
@@ -2862,7 +2862,7 @@ mod tests {
         // other two components have non-negative combined DOD. The triangle itself
         // supplies no independent counterterm: complete complement coverage alone
         // cannot replace the collective Taylor operation by a factorized product.
-        let graph: Graph = dot!(
+        let graph: Graph = finalized_runtime_dot!(
             digraph G {
                 node [num = "1"];
                 edge [particle = "scalar_1"];
@@ -2883,7 +2883,7 @@ mod tests {
             generate_integrated: false,
             ..Default::default()
         };
-        let wood = Wood::new(CutStructure::empty(&graph), &graph, &settings);
+        let wood = Wood::new(CutStructure::empty(&graph), &graph, &graph.model, &settings);
         let collective = wood
             .graph
             .iter_nodes()
@@ -2930,7 +2930,7 @@ mod tests {
         };
         let root_local = Local4dCts::root();
         let input = Full4dCts::from_factorized_local(&root_local);
-        let ctx = UVCtx::new(&graph, &settings);
+        let ctx = UVCtx::new(&graph, &graph.model, &settings);
         let convergent = components
             .iter()
             .find(|component| graph.compute_dod(*component) < 0)
@@ -3056,7 +3056,7 @@ mod tests {
             expected += term.atom();
         }
         let mut forests = wood.unfold();
-        forests.integrate(&graph, crate::utils::vakint()?, &settings)?;
+        forests.integrate(&graph, &graph.model, crate::utils::vakint()?, &settings)?;
         let actual = forests
             .graph
             .iter_nodes()
@@ -3088,7 +3088,7 @@ mod tests {
     fn spectacles_typed_4d_local_construction_matches_uv_limit() -> Result<()> {
         test_initialise().unwrap();
 
-        let spectacles: Graph = dot!(
+        let spectacles: Graph = finalized_runtime_dot!(
             digraph G{
                 edge [particle="scalar_1"];
                 v1 -> v2;
@@ -3109,7 +3109,7 @@ mod tests {
             ..Default::default()
         };
         let cut_structure = CutStructure::empty(&spectacles);
-        let f = Wood::new(cut_structure, &spectacles, &settings);
+        let f = Wood::new(cut_structure, &spectacles, &spectacles.model, &settings);
         println!("{}", f);
         let mut f = f.unfold();
         println!("{}", f);
@@ -3123,13 +3123,18 @@ mod tests {
                     .then_some((parent, child, edge))
             })
             .expect("spectacles has a connected child above its disconnected union");
-        f.integrate(&spectacles, crate::utils::vakint()?, &settings)?;
+        f.integrate(
+            &spectacles,
+            &spectacles.model,
+            crate::utils::vakint()?,
+            &settings,
+        )?;
 
         let step_order = f.graph[union].key.op_count();
         let (current, given) = f.wood.current_given_pair(edge, step_order);
         let expected = local_4d::uv_limit(
             &f.recursion_input_4d(union)?,
-            &UVCtx::new(&spectacles, &settings),
+            &UVCtx::new(&spectacles, &spectacles.model, &settings),
             &current,
             &given,
             &current,

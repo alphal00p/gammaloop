@@ -665,82 +665,42 @@ impl CffGenerator {
         cache: &mut SurfaceCache,
         orientation: usize,
     ) -> Result<ExpressionTree<SurfaceId>, CffError> {
-        let mut tree = ExpressionTree::from_root(GenerationNode {
-            graph,
-            surface: None,
-        });
-
-        loop {
-            let leaves = tree.leaf_ids();
-            let generated = leaves
-                .iter()
-                .map(|leaf| {
-                    let graph = &tree
-                        .node(*leaf)
-                        .ok_or_else(|| {
-                            CffError::Invariant(format!(
-                                "leaf node {} is missing from its expression tree",
-                                leaf.index()
-                            ))
-                        })?
-                        .data
-                        .graph;
-                    let (children, surface) = graph.generate_children(orientation)?;
-                    let surface = self.prepare_surface(surface)?;
-                    Ok((children, cache.intern(surface)))
-                })
-                .collect::<Result<Vec<_>, CffError>>()?;
-
-            for (leaf, (_, surface)) in leaves.iter().zip(&generated) {
-                tree.data_mut(*leaf)
-                    .ok_or_else(|| {
-                        CffError::Invariant(format!(
-                            "leaf node {} disappeared from its expression tree",
-                            leaf.index()
-                        ))
-                    })?
-                    .surface = Some(*surface);
-            }
-
-            let finished = generated.iter().all(|(children, _)| children.is_none());
-            let continuing = generated.iter().all(|(children, _)| children.is_some());
-            if !finished && !continuing {
-                return Err(CffError::UnevenBranchDepth { orientation });
-            }
-            if finished {
-                break;
-            }
-
-            for (leaf, (children, _)) in leaves.into_iter().zip(generated) {
-                let children = children.ok_or_else(|| {
-                    CffError::Invariant(format!(
-                        "leaf node {} ended while sibling branches continued",
-                        leaf.index()
-                    ))
-                })?;
-                for child in children {
-                    tree.insert(
-                        leaf,
-                        GenerationNode {
-                            graph: child,
-                            surface: None,
-                        },
-                    )
-                    .ok_or_else(|| {
-                        CffError::Invariant(format!(
-                            "cannot insert a child below missing leaf node {}",
-                            leaf.index()
-                        ))
-                    })?;
-                }
+        use three_dimensional_reps::cff_recursion::{CffVertex, EdgeType};
+        let chains = graph
+            .shared_topology()
+            .try_surface_chains(&mut |vertex: &CffVertex| {
+                let convert = |edge: &three_dimensional_reps::cff_recursion::EdgeRef| WorkingEdge {
+                    id: EdgeId::new(edge.edge_id),
+                    kind: match edge.edge_type {
+                        EdgeType::Virtual => WorkingEdgeKind::Internal,
+                        EdgeType::Boundary => WorkingEdgeKind::Boundary,
+                        EdgeType::External | EdgeType::InitialStateCut => WorkingEdgeKind::External,
+                    },
+                };
+                let vertex = WorkingVertex {
+                    vertices: vertex.nodes.iter().fold(VertexSet::dummy(), |nodes, &id| {
+                        nodes.union(VertexSet::from_usize(id))
+                    }),
+                    incoming: vertex.incoming.iter().map(convert).collect(),
+                    outgoing: vertex.outgoing.iter().map(convert).collect(),
+                };
+                self.prepare_surface(graph.surface_for(&vertex)?)
+                    .map(|surface| cache.intern(surface))
+            })?;
+        let Some(first) = chains.first() else {
+            return Err(CffError::NoSourceOrSink { orientation });
+        };
+        let root = first.first().copied().unwrap_or(SurfaceId::Unit);
+        let mut tree = ExpressionTree::from_root(root);
+        for chain in chains {
+            let mut parent = crate::NodeId::ROOT;
+            for surface in chain.into_iter().skip(1) {
+                parent = tree
+                    .insert(parent, surface)
+                    .expect("newly inserted tree parent exists");
             }
         }
-
-        tree.try_map(|node| {
-            node.surface.ok_or_else(|| {
-                CffError::Invariant("completed generation node has no surface".to_owned())
-            })
-        })
+        Ok(tree)
     }
 
     fn prepare_surface(&self, surface: Surface) -> Result<Surface, CffError> {
@@ -755,12 +715,6 @@ impl CffGenerator {
             (surface, _) => Ok(surface),
         }
     }
-}
-
-#[derive(Clone, Debug)]
-struct GenerationNode {
-    graph: WorkingGraph,
-    surface: Option<SurfaceId>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -937,100 +891,32 @@ impl WorkingGraph {
             .find(|vertex| vertex.vertices == vertices)
     }
 
-    fn directed_neighbours(&self, vertices: VertexSet) -> Vec<VertexSet> {
-        let Some(vertex) = self.vertex(vertices) else {
-            return Vec::new();
+    fn shared_topology(&self) -> three_dimensional_reps::cff_recursion::CffGenerationGraph {
+        use three_dimensional_reps::cff_recursion::{
+            CffGenerationGraph, CffVertex, EdgeRef, EdgeType,
         };
-        vertex
-            .outgoing
-            .iter()
-            .filter(|edge| edge.kind == WorkingEdgeKind::Internal)
-            .filter_map(|edge| {
-                self.vertices
-                    .iter()
-                    .find(|candidate| candidate.incoming.contains(edge))
-                    .map(|candidate| candidate.vertices)
-            })
-            .collect()
-    }
-
-    fn undirected_neighbours(&self, vertices: VertexSet) -> Vec<VertexSet> {
-        self.vertices
-            .iter()
-            .filter(|other| other.vertices != vertices)
-            .filter(|other| {
-                self.are_directed_adjacent(vertices, other.vertices)
-                    || self.are_directed_adjacent(other.vertices, vertices)
-            })
-            .map(|other| other.vertices)
-            .collect()
-    }
-
-    fn are_directed_adjacent(&self, left: VertexSet, right: VertexSet) -> bool {
-        let (Some(left), Some(right)) = (self.vertex(left), self.vertex(right)) else {
-            return false;
+        let convert = |edge: &WorkingEdge| EdgeRef {
+            edge_id: edge.id.index(),
+            edge_type: match edge.kind {
+                WorkingEdgeKind::Internal => EdgeType::Virtual,
+                WorkingEdgeKind::External => EdgeType::External,
+                WorkingEdgeKind::Boundary => EdgeType::Boundary,
+            },
         };
-        left.outgoing
-            .iter()
-            .filter(|edge| edge.kind == WorkingEdgeKind::Internal)
-            .any(|edge| right.incoming.contains(edge))
+        CffGenerationGraph::new(
+            self.vertices
+                .iter()
+                .map(|vertex| CffVertex {
+                    nodes: vertex.vertices.iter().map(|id| id.index()).collect(),
+                    incoming: vertex.incoming.iter().map(convert).collect(),
+                    outgoing: vertex.outgoing.iter().map(convert).collect(),
+                })
+                .collect(),
+        )
     }
 
     fn has_directed_cycle(&self) -> bool {
-        self.vertices.iter().any(|vertex| {
-            self.depth_first_cycle(vertex.vertices, &mut BTreeSet::new(), &mut Vec::new())
-        })
-    }
-
-    fn depth_first_cycle(
-        &self,
-        vertex: VertexSet,
-        visited: &mut BTreeSet<VertexSet>,
-        stack: &mut Vec<VertexSet>,
-    ) -> bool {
-        if visited.contains(&vertex) {
-            return stack.contains(&vertex);
-        }
-        visited.insert(vertex);
-        stack.push(vertex);
-        if self
-            .directed_neighbours(vertex)
-            .into_iter()
-            .any(|neighbour| self.depth_first_cycle(neighbour, visited, stack))
-        {
-            return true;
-        }
-        stack.pop();
-        false
-    }
-
-    fn has_connected_complement(&self, removed: VertexSet) -> bool {
-        if self.vertices.len() == 1 {
-            return true;
-        }
-        let Some(seed) = self
-            .vertices
-            .iter()
-            .find(|vertex| vertex.vertices != removed)
-            .map(|vertex| vertex.vertices)
-        else {
-            return true;
-        };
-        let mut visited = BTreeSet::from([seed]);
-        let mut pending = vec![seed];
-        while let Some(vertex) = pending.pop() {
-            for neighbour in self.undirected_neighbours(vertex) {
-                if neighbour != removed && visited.insert(neighbour) {
-                    pending.push(neighbour);
-                }
-            }
-        }
-        visited.len() == self.vertices.len() - 1
-    }
-
-    fn valid_source_or_sink(&self, vertex: &WorkingVertex) -> bool {
-        vertex.vertex_type() != VertexType::Neither
-            && self.has_connected_complement(vertex.vertices)
+        self.shared_topology().has_directed_cycle()
     }
 
     fn contract_edge(&mut self, edge: EdgeId) -> Result<(), CffError> {
@@ -1119,38 +1005,6 @@ impl WorkingGraph {
             vertices,
             orientation: self.orientation.clone(),
         })
-    }
-
-    fn generate_children(
-        &self,
-        orientation: usize,
-    ) -> Result<(Option<Vec<Self>>, Surface), CffError> {
-        if self.vertices.len() < 2 {
-            return Ok((None, Surface::Unit));
-        }
-        let vertex = self
-            .vertices
-            .iter()
-            .find(|vertex| self.valid_source_or_sink(vertex))
-            .ok_or(CffError::NoSourceOrSink { orientation })?;
-        let surface = self.surface_for(vertex)?;
-
-        if self.vertices.len() == 2 {
-            return Ok((None, surface));
-        }
-        let children = self
-            .undirected_neighbours(vertex.vertices)
-            .into_iter()
-            .map(|adjacent| self.contract_vertices(vertex.vertices, adjacent, None))
-            .collect::<Result<Vec<_>, _>>()?
-            .into_iter()
-            .filter(|graph| !graph.has_directed_cycle())
-            .collect::<Vec<_>>();
-        if children.is_empty() {
-            Err(CffError::NoContractionBranch { orientation })
-        } else {
-            Ok((Some(children), surface))
-        }
     }
 
     fn surface_for(&self, vertex: &WorkingVertex) -> Result<Surface, CffError> {

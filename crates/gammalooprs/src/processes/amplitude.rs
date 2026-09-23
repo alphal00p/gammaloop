@@ -14,7 +14,7 @@ use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use momtrop::SampleGenerator;
 
-use feynkit_cff::{CffResult, EnergySurfaceId, RaisedEnergySurfaceData, RaisedEnergySurfaceId};
+use crate::cff::EsurfaceID;
 use idenso::dirac::GammaSimplifier;
 use rayon::{
     ThreadPool,
@@ -100,8 +100,7 @@ pub struct Amplitude {
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct GroupDerivedData {
-    pub esurface_map:
-        TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<RaisedEnergySurfaceId>>>,
+    pub esurface_map: TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<RaisedEsurfaceId>>>,
     pub esurface_atoms: TiVec<GroupEsurfaceId, Atom>,
 }
 
@@ -703,10 +702,9 @@ impl Amplitude {
             .graph_group_structure
             .iter()
             .map(|group| {
-                let mut group_esurface_structure = BTreeMap::<
-                    Atom,
-                    TiVec<GraphGroupPosition, Option<RaisedEnergySurfaceId>>,
-                >::default();
+                let mut group_esurface_structure =
+                    BTreeMap::<Atom, TiVec<GraphGroupPosition, Option<RaisedEsurfaceId>>>::default(
+                    );
 
                 for (graph_group_position, graph_id) in group.iter_enumerated() {
                     let amplitude_graph = &self.graphs[graph_id];
@@ -716,17 +714,17 @@ impl Amplitude {
                         &[W_.x___],
                     );
 
-                    let esurfaces = &amplitude_graph.graph.surface_cache.energy_surfaces();
+                    let esurfaces = &amplitude_graph.graph.surface_cache.esurface_cache;
 
                     // Cached surfaces without a surviving pole are not threshold candidates.
                     for (raised_esurface_id, raised_group) in amplitude_graph
                         .derived_data
                         .raised_data
-                        .groups
+                        .raised_groups
                         .iter_enumerated()
                         .filter(|(_, raised_group)| raised_group.max_occurence > 0)
                     {
-                        let esurface = &esurfaces[raised_group.surface_ids[0]];
+                        let esurface = &esurfaces[raised_group.esurface_ids[0]];
                         let esurface_atom =
                             esurface.lmb_atom(&amplitude_graph.graph, model, &lmb_reps);
 
@@ -782,8 +780,7 @@ impl AmplitudeGraph {
                 tropical_sampler: None,
                 multi_channeling_setup: None,
                 threshold_counterterms: TiVec::new(),
-                raised_data: RaisedEnergySurfaceData::default(),
-                raised_surface_evaluators: None,
+                raised_data: RaisedEsurfaceData::default(),
                 raised_esurface_ids: TiVec::new(),
             },
         }
@@ -915,15 +912,15 @@ impl AmplitudeGraph {
 
         if let Some(raised_data) = raised_data {
             let max_order = raised_data
-                .groups
+                .raised_groups
                 .iter()
-                .map(|raised_group| raised_group.max_occurrence)
+                .map(|raised_group| raised_group.max_occurence)
                 .max()
                 .unwrap_or(0);
             if max_order > 1 {
                 self.graph.param_builder.initialize_duals(max_order);
             }
-            self.derived_data.raised_surface_evaluators = Some(
+            self.derived_data.raised_data.pass_two_evaluator = Some(
                 (1..=max_order)
                     .map(|order| {
                         threshold_counterterm_helper(
@@ -1311,8 +1308,8 @@ impl AmplitudeGraph {
         locked_runtime_settings: &LockedRuntimeSettings,
         model: &Model,
     ) -> Result<(
-        TiVec<RaisedEnergySurfaceId, AmplitudeCountertermAtom>,
-        TiVec<EnergySurfaceId, RaisedEnergySurfaceId>,
+        TiVec<RaisedEsurfaceId, AmplitudeCountertermAtom>,
+        TiVec<EsurfaceID, RaisedEsurfaceId>,
     )> {
         let _progress_guard =
             generation_progress::enter_detailed_progress_span("Building Threshold Counterterms");
@@ -1401,7 +1398,6 @@ impl AmplitudeGraph {
                 .assume_positive_external_energies
                 && !is_known_existing_at_generation
                 && !esurface.external_shift_is_strictly_negative_for_positive_energies(
-                    &self.graph.loop_momentum_basis,
                     &incoming_externals,
                     &outgoing_externals,
                 )
@@ -1460,7 +1456,7 @@ impl AmplitudeGraph {
                 parametric: expr.integrands,
             };
             let raised_group = expr.cuts.residue_selector.left_th_cut.unwrap();
-            let raised_esurface_id = raised_esurface_ids[raised_group.surface_ids[0]];
+            let raised_esurface_id = raised_esurface_ids[raised_group.esurface_ids[0]];
             debug!("raised_esurface_id: {}", raised_esurface_id.0);
 
             if tracing::enabled!(tracing::Level::DEBUG) {
@@ -1610,10 +1606,7 @@ impl AmplitudeGraph {
         &self,
         model: &Model,
         own_group_position: GraphGroupPosition,
-        esurface_map: TiVec<
-            GroupEsurfaceId,
-            TiVec<GraphGroupPosition, Option<RaisedEnergySurfaceId>>,
-        >,
+        esurface_map: TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<RaisedEsurfaceId>>>,
         global_settings: &GlobalSettings,
     ) -> Result<(AmplitudeGraphTerm, GraphGenerationStats)> {
         let _progress_guard = generation_progress::enter_detailed_progress_span(&format!(
@@ -1844,6 +1837,7 @@ pub(crate) fn threshold_counterterm_helper(
 #[cfg(test)]
 pub mod test {
 
+    use crate::cff::OrientationID;
     use crate::{
         finalized_runtime_dot,
         graph::{GraphGroupPosition, parse::IntoFinalizedRuntimeGraph},
@@ -1856,7 +1850,6 @@ pub mod test {
         },
         utils::load_generic_model,
     };
-    use feynkit_cff::OrientationId;
     use symbolica::atom::Atom;
     use typed_index_collections::TiVec;
 
@@ -1917,7 +1910,7 @@ pub mod test {
         .unwrap();
 
         let model = load_generic_model("scalars");
-        graph.generate_cff(&OrientationPattern::default()).unwrap();
+        graph.generate_cff(&GenerationSettings::default()).unwrap();
         graph.derived_data.all_mighty_integrand = Atom::one();
         graph.build_lmbs();
 

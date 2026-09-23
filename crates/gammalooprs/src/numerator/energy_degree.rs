@@ -2155,8 +2155,8 @@ mod tests {
     use std::collections::BTreeMap;
 
     use crate::{
-        dot,
-        graph::{Graph, LMBext, parse::IntoGraph},
+        finalized_runtime_dot,
+        graph::{Graph, LMBext, parse::IntoFinalizedRuntimeGraph},
         initialisation::test_initialise,
         numerator::energy_degree::{
             EnergyCandidateFamily, EnergyPowerAnalysisError, EnergyPowerAnalyzer, EnergyReference,
@@ -2468,7 +2468,7 @@ mod tests {
     fn soft_taylor_routing_balances_the_outer_envelope_without_moving_originals()
     -> color_eyre::Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph soft_taylor_cograph {
+        let graph: Graph = finalized_runtime_dot!(digraph soft_taylor_cograph {
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]

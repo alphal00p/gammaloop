@@ -186,8 +186,41 @@ fn load_model(
         .map_err(|source| UfoLoadError::Output { source })?;
 
     // to_json() -> String
-    let model_json = to_json(py, &py_model)?;
+    let mut model_json = to_json(py, &py_model)?;
     let card_json = to_json(py, &py_card)?;
+
+    // The loader imports the UFO module but does not serialize its explicit
+    // BRST declaration. Preserve the declaration rather than inferring partners
+    // from mass degeneracies.
+    let declaration = (|| -> Result<Option<String>, PyErr> {
+        let module_name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("invalid UFO module path"))?;
+        let modules = py.import("sys")?.getattr("modules")?;
+        let modules = modules.cast::<PyDict>()?;
+        let Some(module) = modules.get_item(module_name)? else {
+            return Ok(None);
+        };
+        if !module.hasattr("covariant_cut_multiplets")? {
+            return Ok(None);
+        }
+        py.import("json")?
+            .call_method1("dumps", (module.getattr("covariant_cut_multiplets")?,))?
+            .extract()
+            .map(Some)
+    })()
+    .map_err(|source| UfoLoadError::Output { source })?;
+    if let Some(declaration) = declaration {
+        let enrich = || -> Result<String, serde_json::Error> {
+            let mut serialized: serde_json::Value = serde_json::from_str(&model_json)?;
+            serialized["covariant_cut_multiplets"] = serde_json::from_str(&declaration)?;
+            serde_json::to_string(&serialized)
+        };
+        model_json = enrich().map_err(|source| UfoLoadError::ModelJson {
+            source: source.into(),
+        })?;
+    }
 
     // Deserialize into the standalone Rust types.
     let model =

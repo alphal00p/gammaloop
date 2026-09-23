@@ -416,6 +416,8 @@ fn residue_suffix(index: CutCFFIndex) -> String {
 
 #[cfg(test)]
 mod tests {
+    use crate::{graph::FeynmanGraph, model::ModelGammaLoopExt};
+    use feynkit_generator::GenerationType;
     use symbolica::{atom::Atom, function};
 
     use super::{
@@ -510,7 +512,6 @@ mod tests {
     #[test]
     fn computed_exports_match_physical_production_normalization() -> color_eyre::Result<()> {
         use crate::{
-            feyngen::GenerationType,
             processes::{Process, ProcessCollection, ProcessDefinition},
             settings::{GlobalSettings, RuntimeSettings},
             utils::{W_, load_generic_model},
@@ -548,7 +549,7 @@ mod tests {
                     source.push('}');
                     (GenerationType::CrossSection, source)
                 };
-                let graphs = Graph::from_string(&source, &model)?;
+                let graphs = Graph::from_finalized_runtime_string(&source, &model)?;
                 let definition = ProcessDefinition::from_graph_list(&graphs, kind, &model)?;
                 let mut process = Process::from_graph_list(
                     "export_phase".into(),
@@ -606,6 +607,7 @@ mod tests {
                     .get_integrand("default")?
                     .require_generated()?
                     .export_uv_forest_graph(
+                        &model,
                         0,
                         Some(orientation),
                         &settings.generation,
@@ -622,7 +624,7 @@ mod tests {
                     .collect::<Vec<_>>();
                 let mut actual = Atom::Zero;
                 for term in &exported.node_terms {
-                    for parsed in Graph::from_string(&term.dot, &model)? {
+                    for parsed in Graph::from_finalized_runtime_string(&term.dot, &model)? {
                         actual += UvMarker::new(&settings.generation.uv).finish(
                             &parsed
                                 .global_prefactor
@@ -664,8 +666,10 @@ mod tests {
                     }
                 }
                 if multiplicity != 0 {
-                    let [coupling, expression] = model.get_coupling("SCALAR_COUPLING").rep_rule();
-                    let lambda: Atom = model.get_parameter("lam").name.into();
+                    let record = model.get_coupling("SCALAR_COUPLING");
+                    let coupling = Atom::from(crate::model::UFOSymbol::from(record.name.as_str()));
+                    let expression = record.expression.clone();
+                    let lambda = Atom::from(crate::model::UFOSymbol::from("lam"));
                     // The runtime tree-denominator function is the identity;
                     // these contact Born graphs have an empty product inside it.
                     let mut physical = actual
@@ -702,7 +706,7 @@ mod tests {
     fn computed_export_retains_nonempty_forests_in_all_routes_and_orchestrators()
     -> color_eyre::Result<()> {
         test_initialise()?;
-        let mut graph: Graph = dot!(digraph computed_direct_forest {
+        let mut graph: Graph = finalized_runtime_dot!(digraph computed_direct_forest {
             edge [num=1 mass=1]
             node [num=1]
             a -> b [id=0 lmb_id=0]
@@ -738,6 +742,7 @@ mod tests {
                 );
                 let exported = export_graph(
                     &graph,
+                    &graph.model,
                     CutStructure::empty(&graph),
                     Some(projection),
                     &generation,
@@ -764,6 +769,7 @@ mod tests {
 
                 let topology = export_graph(
                     &graph,
+                    &graph.model,
                     CutStructure::empty(&graph),
                     None,
                     &generation,

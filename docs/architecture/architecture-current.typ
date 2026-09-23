@@ -241,9 +241,10 @@ GammaLoop converts each finalized diagram once into its
 evaluator-oriented runtime graph. That conversion translates identifiers
 and builds derived caches; it does not repeat model loading, rule
 lookup, canonicalization, numerator construction, grouping, or momentum
-routing. GammaLoop consumes FeynKit CFF values directly. GammaLoop-only
-numerical behavior is implemented with extension traits on those types
-rather than wrapper IRs. Integrands, compiled evaluators, numerical
+routing. FeynKit and GammaLoop share the CFF recursion in
+`three-dimensional-reps`. FeynKit exposes its generalized generation API
+and adapts topology-only callers to that same recursion. GammaLoop adds
+its runtime surface classification and numerical behavior. Integrands, compiled evaluators, numerical
 threshold/subtraction machinery, events, observables, and histogramming
 remain downstream.
 

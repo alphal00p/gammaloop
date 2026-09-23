@@ -1384,10 +1384,11 @@ fn test_vacuum_amplitude_kaapo() -> Result<()> {
         let graph = &amplitude_graph.graph;
         let fermions: SuBitGraph = graph
             .underlying
-            .from_filter(|edge| edge.particle.is_fermion());
-        let ghosts: SuBitGraph = graph
-            .underlying
-            .from_filter(|edge| edge.particle.is_anticommutating() && !edge.particle.is_fermion());
+            .from_filter(|edge| edge.particle.is_fermion(&graph.model));
+        let ghosts: SuBitGraph = graph.underlying.from_filter(|edge| {
+            edge.particle.is_anticommutating(&graph.model)
+                && !edge.particle.is_fermion(&graph.model)
+        });
         // These QCD species form disjoint closed chains, so cycle rank counts loops.
         for subset in [&fermions, &ghosts] {
             for (_, neighbors, _) in graph.underlying.iter_nodes_of(subset) {

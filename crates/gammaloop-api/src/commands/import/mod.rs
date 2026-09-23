@@ -163,27 +163,17 @@ impl Import {
     fn load_graph_file(path: &Path, model: &gammalooprs::model::Model) -> Result<Vec<Graph>> {
         let input = fs::read_to_string(path)
             .with_context(|| format!("Could not read graph file '{}'.", path.display()))?;
-        if !input.contains("model_fingerprint") {
-            return Graph::from_finalized_runtime_string(&input, model).with_context(|| {
-                format!(
-                    "Could not import finalized runtime graphs from '{}'.",
-                    path.display()
-                )
-            });
-        }
+        Self::load_graph_string(&input, model)
+            .with_context(|| format!("Could not import graphs from '{}'.", path.display()))
+    }
 
-        let diagrams =
-            FeynmanDiagram::from_dot_set(Arc::new(model.clone()), &input).with_context(|| {
-                format!(
-                    "Could not import canonical FeynKit diagrams from '{}'.",
-                    path.display()
-                )
-            })?;
+    fn load_graph_string(input: &str, model: &gammalooprs::model::Model) -> Result<Vec<Graph>> {
+        if !input.contains("model_fingerprint") {
+            return Graph::from_finalized_runtime_string(input, model);
+        }
+        let diagrams = FeynmanDiagram::from_dot_set(Arc::new(model.clone()), input)?;
         if diagrams.is_empty() {
-            return Err(eyre!(
-                "No canonical FeynKit diagrams found in '{}'.",
-                path.display()
-            ));
+            return Err(eyre!("No canonical FeynKit diagrams found."));
         }
         diagrams
             .iter()

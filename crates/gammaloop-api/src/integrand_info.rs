@@ -3,7 +3,7 @@ use std::fmt;
 use color_eyre::Result;
 use eyre::{eyre, Context};
 use gammalooprs::{
-    cff::esurface::{EnergySurfaceExt, EsurfaceExistenceStatus},
+    cff::esurface::EsurfaceExistenceStatus,
     graph::{FeynmanGraph, FinalizedCut, Graph},
     integrands::process::{ActiveF64Backend, LmbMultiChannelingSetup, ParamBuilder},
     model::Model,
@@ -253,7 +253,7 @@ pub struct IntegrandGraphGroupInfo {
 }
 
 fn threshold_esurface_edge_ids(
-    esurfaces: &gammalooprs::cff::esurface::EnergySurfaceCollection,
+    esurfaces: &gammalooprs::cff::esurface::EsurfaceCollection,
     esurface_id: usize,
 ) -> Vec<usize> {
     esurfaces
@@ -407,7 +407,7 @@ fn cut_raising_powers(
     let mut raising_powers: typed_index_collections::TiVec<CutId, usize> =
         vec![1; graph.cuts.len()].into();
     for cut_group in graph.cut_group_data.cut_groups.iter() {
-        let raising_power = cut_group.related_esurface_group.max_occurrence;
+        let raising_power = cut_group.related_esurface_group.max_occurence;
         for cut_id in &cut_group.cuts {
             raising_powers[*cut_id] = raising_power;
         }
@@ -497,9 +497,10 @@ fn amplitude_graph_groups(
                                 .generated_mask[*raised_esurface_id]
                         })?;
                     let graph_term = &integrand.data.graph_terms[representative_graph_id];
-                    let local_esurface_id = graph_term.threshold_counterterm.raised_data.groups
-                        [raised_esurface_id]
-                        .surface_ids[0];
+                    let local_esurface_id =
+                        graph_term.threshold_counterterm.raised_data.raised_groups
+                            [raised_esurface_id]
+                            .esurface_ids[0];
 
                     let mut classification = IntegrandEsurfaceClassification::NonExisting;
                     for (graph_group_position, raised_esurface_id) in raised_esurface_map
@@ -513,8 +514,9 @@ fn amplitude_graph_groups(
                         let graph_id = group[graph_group_position];
                         let candidate = &integrand.data.graph_terms[graph_id];
                         let candidate_esurface_id =
-                            candidate.threshold_counterterm.raised_data.groups[raised_esurface_id]
-                                .surface_ids[0];
+                            candidate.threshold_counterterm.raised_data.raised_groups
+                                [raised_esurface_id]
+                                .esurface_ids[0];
                         let candidate_status = candidate.esurfaces[candidate_esurface_id]
                             .existence_status(
                                 &external_momenta,

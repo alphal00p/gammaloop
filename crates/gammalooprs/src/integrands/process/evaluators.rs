@@ -4480,7 +4480,7 @@ mod tests {
                     let mut state = Vec::new();
                     State::export(&mut state).unwrap();
                     let state_map = State::import(&mut Cursor::new(state), None).unwrap();
-                    let model = Model::default();
+                    let model = Model::empty("test");
                     let (mut decoded, _): (EvaluatorStack, _) =
                         bincode::decode_from_slice_with_context(
                             &encoded,
@@ -5397,7 +5397,7 @@ mod tests {
                     let mut state = Vec::new();
                     State::export(&mut state).unwrap();
                     let state_map = State::import(&mut Cursor::new(state), None).unwrap();
-                    let model = Model::default();
+                    let model = Model::empty("test");
                     let (mut decoded, _): (GenericEvaluator, _) =
                         bincode::decode_from_slice_with_context(
                             &encoded,
@@ -6036,7 +6036,7 @@ mod tests {
         let mut state = Vec::new();
         State::export(&mut state).unwrap();
         let state_map = State::import(&mut Cursor::new(state), None).unwrap();
-        let model = Model::default();
+        let model = Model::empty("test");
         let (mut decoded, _): (GenericEvaluator, _) = bincode::decode_from_slice_with_context(
             &encoded,
             bincode::config::standard(),

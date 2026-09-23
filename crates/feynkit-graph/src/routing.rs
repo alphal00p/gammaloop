@@ -301,6 +301,7 @@ pub trait MomentumRouting {
         outer: &SuBitGraph,
         shrunken: &InternalSubGraph,
         externals: SuBitGraph,
+        parent_lmb: Option<&MomentumBasis>,
     ) -> LmbResult<MomentumBasis>;
 
     /// Construct the canonical shrunken-subgraph LMB using the full crown of
@@ -391,6 +392,7 @@ impl<E, V, H> MomentumRouting for HedgeGraph<E, V, H> {
         outer: &SuBitGraph,
         shrunken: &InternalSubGraph,
         externals: SuBitGraph,
+        parent_lmb: Option<&MomentumBasis>,
     ) -> LmbResult<MomentumBasis> {
         let graph_size = self.n_hedges();
         let outer_dot = || {
@@ -431,12 +433,21 @@ impl<E, V, H> MomentumRouting for HedgeGraph<E, V, H> {
             });
         }
 
+        if !outer.union(&self.full_crown(outer)).includes(&externals) {
+            return Err(LmbError::ExternalsOutsideSubgraph {
+                externals_dot: self.dot(&externals),
+                subgraph_dot: outer_dot(),
+            });
+        }
+
         if shrunken.is_empty() {
-            return self.lmb_impl(outer, outer, externals);
+            return match parent_lmb {
+                Some(parent_lmb) => self.try_compatible_sub_lmb(outer, externals, parent_lmb),
+                None => self.lmb_impl(outer, outer, externals),
+            };
         }
 
         let remainder = outer.subtract(&shrunken.filter);
-        let contracted_externals = externals.subtract(&shrunken.filter);
         let mut contracted = self.to_ref();
 
         for component in self.connected_components(shrunken) {
@@ -448,20 +459,36 @@ impl<E, V, H> MomentumRouting for HedgeGraph<E, V, H> {
                 &component, node_data,
             );
         }
+        contracted.forget_identification_history();
 
-        contracted
-            .lmb_impl(&remainder, &remainder, contracted_externals)
-            .map_err(|source| LmbError::NoShrunkenLmb {
-                outer_dot: outer_dot(),
-                shrunken_dot: shrunken_dot(),
-                remainder_dot: self.dot(&remainder),
-                source: Box::new(source),
-            })
+        // A fully contracted component can have no node in the remainder.
+        // Remove only its retired crown endpoints; the opposite endpoints at
+        // surviving nodes remain external flows. Unrelated invalid externals
+        // have already been rejected against the original outer footprint.
+        let retired_crown = self
+            .full_crown(shrunken)
+            .subtract(&contracted.full_crown(&remainder).union(&remainder));
+        let contracted_externals = externals
+            .subtract(&shrunken.filter)
+            .subtract(&retired_crown);
+
+        match parent_lmb {
+            Some(parent_lmb) => {
+                contracted.try_compatible_sub_lmb(&remainder, contracted_externals, parent_lmb)
+            }
+            None => contracted.lmb_impl(&remainder, &remainder, contracted_externals),
+        }
+        .map_err(|source| LmbError::NoShrunkenLmb {
+            outer_dot: outer_dot(),
+            shrunken_dot: shrunken_dot(),
+            remainder_dot: self.dot(&remainder),
+            source: Box::new(source),
+        })
     }
 
     fn shrunken_lmb_of(&self, outer: &SuBitGraph, shrunken: &InternalSubGraph) -> MomentumBasis {
         let externals = self.full_crown(outer);
-        self.shrunken_sub_lmb(outer, shrunken, externals)
+        self.shrunken_sub_lmb(outer, shrunken, externals, None)
             .unwrap_or_else(|err| {
                 panic!("Failed to build shrunken-subgraph loop momentum basis:\n{err}")
             })
@@ -643,7 +670,9 @@ impl<E, V, H> MomentumRouting for HedgeGraph<E, V, H> {
                         })?;
 
                 let external_cover = subgraph_tree.covers(&externals);
+                let subgraph_cover = subgraph_tree.covers(subgraph);
 
+                // Select the last true boundary half-edge as dependent; omitted chords are independent.
                 let dependent = self
                     .iter_edges_of(&external_cover)
                     .filter_map(|(pair, _, _)| match pair {
@@ -669,15 +698,21 @@ impl<E, V, H> MomentumRouting for HedgeGraph<E, V, H> {
                         subgraph_dot: self.dot(subgraph),
                     })?;
                 let root_node = self.node_id(root);
-                let tree =
+                let tree = if subgraph_tree.tree_subgraph.is_empty() {
+                    // A singleton component has an empty spanning forest after external
+                    // hairs are stripped. Retain its root, including for contact graphs
+                    // and tadpoles, so its external flows still conserve momentum.
+                    subgraph_tree
+                } else {
                     SimpleTraversalTree::depth_first_traverse(self, forest_guide, &root_node, None)
                         .map_err(|_| LmbError::ForestGuideMismatch {
                             forest_guide_dot: self.dot(forest_guide),
                             subgraph_dot: self.dot(subgraph),
-                        })?; // Select the last true boundary half-edge as dependent; omitted chords are independent.
+                        })?
+                };
 
                 debug_assert_eq!(
-                    subgraph_tree.covers(subgraph),
+                    subgraph_cover,
                     tree.covers(subgraph),
                     "Forest guide \n{}\n,does not cover the same nodes as subgraph \n{}\n",
                     self.dot(forest_guide),
@@ -823,21 +858,34 @@ impl<E, V, H> MomentumRouting for HedgeGraph<E, V, H> {
                             externals.sub(h);
                         }
                         if !tree.tree_subgraph.includes(&p) {
-                            let cycle = tree.get_cycle(source, self).ok_or_else(|| {
-                                LmbError::MissingCycle {
-                                    hedge: source,
-                                    tree_dot: self.dot(&tree.tree_subgraph),
+                            let signed_cycle = if self.node_id(source) == self.node_id(sink) {
+                                // A contracted UV component can turn a retained edge into
+                                // a tadpole. Its positive generator follows the same source
+                                // half-edge convention as `SignedCycle::from_cycle` below.
+                                let mut filter: SuBitGraph = self.empty_subgraph();
+                                filter.add(source);
+                                SignedCycle {
+                                    filter,
+                                    loop_count: Some(1),
                                 }
-                            })?;
-                            let cycle_is_circuit = cycle.is_circuit(self);
-                            let cycle_dot = self.dot(&cycle.filter);
-                            cycles.push(SignedCycle::from_cycle(cycle, source, self).ok_or_else(
-                                || LmbError::InvalidCycle {
-                                    is_circuit: cycle_is_circuit,
-                                    cycle_dot,
-                                    cover_dot: self.dot(&cover),
-                                },
-                            )?);
+                            } else {
+                                let cycle = tree.get_cycle(source, self).ok_or_else(|| {
+                                    LmbError::MissingCycle {
+                                        hedge: source,
+                                        tree_dot: self.dot(&tree.tree_subgraph),
+                                    }
+                                })?;
+                                let cycle_is_circuit = cycle.is_circuit(self);
+                                let cycle_dot = self.dot(&cycle.filter);
+                                SignedCycle::from_cycle(cycle, source, self).ok_or_else(|| {
+                                    LmbError::InvalidCycle {
+                                        is_circuit: cycle_is_circuit,
+                                        cycle_dot,
+                                        cover_dot: self.dot(&cover),
+                                    }
+                                })?
+                            };
+                            cycles.push(signed_cycle);
                             loop_edges.push(e);
                         }
                     }
@@ -1269,7 +1317,12 @@ impl crate::FeynmanDiagram {
     ) -> Result<crate::LoopMomentumBasis, crate::DiagramError> {
         let selected = subgraph.intersection(&self.momentum_subgraph());
         self.graph
-            .shrunken_sub_lmb(&selected, contracted, self.routing_externals(&selected))
+            .shrunken_sub_lmb(
+                &selected,
+                contracted,
+                self.routing_externals(&selected),
+                None,
+            )
             .map(|basis| self.normalize_routing(basis))
             .map_err(|error| crate::DiagramError::InvalidLoopMomentumBasis(error.to_string()))
     }

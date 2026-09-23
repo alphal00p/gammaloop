@@ -240,26 +240,6 @@ impl<T> ExpressionTree<T> {
         self.nodes.get_mut(id.index()).map(|node| &mut node.data)
     }
 
-    pub(crate) fn try_map<U, E>(
-        self,
-        mut f: impl FnMut(T) -> Result<U, E>,
-    ) -> Result<ExpressionTree<U>, E> {
-        Ok(ExpressionTree {
-            nodes: self
-                .nodes
-                .into_iter()
-                .map(|node| {
-                    Ok(TreeNode {
-                        data: f(node.data)?,
-                        id: node.id,
-                        children: node.children,
-                        parent: node.parent,
-                    })
-                })
-                .collect::<Result<_, E>>()?,
-        })
-    }
-
     pub fn map<U>(self, mut f: impl FnMut(T) -> U) -> ExpressionTree<U> {
         ExpressionTree {
             nodes: self

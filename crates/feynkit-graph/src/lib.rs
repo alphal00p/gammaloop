@@ -3330,7 +3330,10 @@ mod tests {
                 + Atom::num(2 * shifted_power * (shifted_power + 1))
                     * kp.pow(2)
                     * vacuum.pow(-n - 2);
-            assert_eq!((expanded - expected).expand().cancel(), Atom::Zero);
+            // Compare rational functions over a common denominator. `cancel`
+            // alone simplifies each summand and cannot certify this identity
+            // when the series and oracle factor their denominators differently.
+            assert_eq!((expanded - expected).together().cancel(), Atom::Zero);
         }
         let powers = BTreeMap::from([(shifted_edge, 2)]);
         assert_eq!(

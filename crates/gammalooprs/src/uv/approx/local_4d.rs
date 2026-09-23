@@ -897,7 +897,7 @@ impl Full4dCts {
         graph: &Graph,
         cograph: &S,
     ) -> Self {
-        let cograph = graph.denominator(cograph, |_| -1);
+        let cograph = graph.denominator(cograph, &graph.model, |_| -1);
         let active = local
             .0
             .active
@@ -929,7 +929,7 @@ impl Full4dCts {
         cograph: &S,
     ) -> Self {
         Self(FourDSectors::active_atom(
-            coefficient * graph.denominator(cograph, |_| -1),
+            coefficient * graph.denominator(cograph, &graph.model, |_| -1),
         ))
     }
 
@@ -1895,8 +1895,8 @@ mod tests {
 
     use super::*;
     use crate::{
-        dot,
-        graph::{Graph, GraphThreeDSource, parse::IntoGraph},
+        finalized_runtime_dot,
+        graph::{Graph, GraphThreeDSource, parse::IntoFinalizedRuntimeGraph},
         initialisation::test_initialise,
         numerator::{aind::Aind, energy_degree::EnergyPowerAnalyzer},
         uv::approx::projected_4d::Local4dProjectionContext,
@@ -1977,7 +1977,7 @@ mod tests {
     #[test]
     fn canonical_uv_classes_certify_signed_aliases_and_preserve_raw_sectors() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph canonical_signed_triangle {
+        let graph: Graph = finalized_runtime_dot!(digraph canonical_signed_triangle {
             edge [num=1 mass=1]
             node [num=1]
             a -> b [id=0 lmb_id=0]
@@ -2056,7 +2056,7 @@ mod tests {
     #[test]
     fn canonical_uv_signed_multiloop_carriers_preserve_factorized_numerators() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph canonical_signed_sunset {
+        let graph: Graph = finalized_runtime_dot!(digraph canonical_signed_sunset {
             edge [num=1 mass=1]
             node [num=1]
             a -> b [id=0 lmb_id=0]
@@ -2137,7 +2137,7 @@ mod tests {
     #[test]
     fn canonical_uv_positive_blocks_and_absent_poles_keep_their_roles() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph canonical_positive_triangle {
+        let graph: Graph = finalized_runtime_dot!(digraph canonical_positive_triangle {
             edge [num=1 mass=1]
             node [num=1]
             a -> b [id=0 lmb_id=0]
@@ -2189,7 +2189,7 @@ mod tests {
     #[test]
     fn canonical_positive_denominator_recovers_one_class_from_expanded_coordinates() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph canonical_positive_sunset {
+        let graph: Graph = finalized_runtime_dot!(digraph canonical_positive_sunset {
             edge [num=1 mass=1]
             node [num=1]
             a -> b [id=0 lmb_id=0]
@@ -2242,7 +2242,7 @@ mod tests {
     #[test]
     fn projection_sector_grouping_preserves_frozen_domains_and_recursion() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph canonical_sector_triangle {
+        let graph: Graph = finalized_runtime_dot!(digraph canonical_sector_triangle {
             edge [num=1 mass=1]
             node [num=1]
             a -> b [id=0 lmb_id=0]
@@ -2299,7 +2299,7 @@ mod tests {
         };
 
         test_initialise()?;
-        let mut graph: Graph = dot!(digraph cancelling_projection_sectors {
+        let mut graph: Graph = finalized_runtime_dot!(digraph cancelling_projection_sectors {
             edge [num=1 mass=1];
             node [num=1];
             a -> b [id=0 lmb_id=0];
@@ -2316,7 +2316,7 @@ mod tests {
             topo_order: 1,
         };
         let coefficient = (GS.emr_mom(EdgeIndex(0), GS.cind(0)).pow(2) + Atom::one())
-            / graph.denominator(&owners, |_| 1);
+            / graph.denominator(&owners, &graph.model, |_| 1);
         let bindings = vec![(owners.clone(), owners, graph.loop_momentum_basis.clone())];
         let cancelled = Local4dCts(FourDSectors::new(
             vec![
@@ -2369,7 +2369,7 @@ mod tests {
     #[test]
     fn analytic_uv_rejects_gamma5_before_simplification_with_subgraph_scope() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = dot!(digraph gamma5_uv_scope {
+        let mut graph: Graph = finalized_runtime_dot!(digraph gamma5_uv_scope {
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
@@ -2410,7 +2410,7 @@ mod tests {
         let run = |graph: &Graph, current: &OwnedForestNode, settings: &UVgenerationSettings| {
             uv_limit(
                 &input,
-                &UVCtx::new(graph, settings),
+                &UVCtx::new(graph, &graph.model, settings),
                 current,
                 &given,
                 current,
@@ -2497,7 +2497,7 @@ mod tests {
         assert!(
             uv_limit(
                 &zero,
-                &UVCtx::new(&graph, &UVgenerationSettings::default()),
+                &UVCtx::new(&graph, &graph.model, &UVgenerationSettings::default()),
                 &current,
                 &given,
                 &current,
@@ -2559,7 +2559,7 @@ mod tests {
     #[test]
     fn nested_uv_rescaling_keeps_child_momentum_provenance_immutable() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph nested_provenance_rescaling {
+        let graph: Graph = finalized_runtime_dot!(digraph nested_provenance_rescaling {
             edge [num=1 mass=1]
             node [num=1]
 
@@ -2669,7 +2669,7 @@ mod tests {
     #[test]
     fn uv_taylor_provenance_erasure_matches_plain_child_lmb_expansion() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(
+        let graph: Graph = finalized_runtime_dot!(
             digraph uv_taylor_provenance_oracle {
                 num = 1
                 edge [particle="scalar_1" num=1]
@@ -2713,7 +2713,7 @@ mod tests {
             .to_d_dim(GS.dim)
             .get_single_atom()
             .unwrap();
-        input /= graph.denominator(&reduced, |_| 1);
+        input /= graph.denominator(&reduced, &graph.model, |_| 1);
 
         let first_hard = current
             .lmb()
@@ -2890,7 +2890,7 @@ mod tests {
         // acceptance test. The quartic factor is local to e1. The deliberately
         // collected common denominator below stresses ownership while each
         // numerator stays factorized; production keeps Taylor topologies separate.
-        let graph: Graph = dot!(
+        let graph: Graph = finalized_runtime_dot!(
             digraph gl24_dod_two_taylor {
                 edge [particle="scalar_0" num=1]
                 node [num=1]
@@ -2929,7 +2929,7 @@ mod tests {
         let q1_first = GS.emr_mom(owners[0], minkowski.to_symbolic([Atom::num(1)]));
         let q1_second = GS.emr_mom(owners[0], minkowski.to_symbolic([Atom::num(2)]));
         let numerator = q1_first.pow(2) * q1_second.pow(2);
-        let integrand = &numerator / graph.denominator(&uv_filter, |_| 1);
+        let integrand = &numerator / graph.denominator(&uv_filter, &graph.model, |_| 1);
         // DOD two starts at t^-2, so the t^0 Laurent coefficient is exactly
         // the second-order Taylor layer, without its leading and linear peers.
         let expanded = graph
@@ -3141,7 +3141,7 @@ mod tests {
         let settings = UVgenerationSettings::default();
         let (production, _) = t(
             &integrand,
-            &UVCtx::new(&graph, &settings),
+            &UVCtx::new(&graph, &graph.model, &settings),
             &current,
             &given,
             &[],
@@ -3230,7 +3230,7 @@ mod tests {
             let mut constant_leaf = [1, 1, 1];
             constant_leaf[position] += 1;
             let coefficient = &reduced_numerators[&constant_leaf];
-            let physical_mass = graph.underlying[owner].particle.mass_atom();
+            let physical_mass = graph.underlying[owner].particle.mass_atom(&graph.model);
             let AtomView::Var(physical_mass_variable) = physical_mass.as_view() else {
                 panic!("the mass-sensitive GL24 fixture must use symbolic owner masses");
             };
@@ -3260,7 +3260,12 @@ mod tests {
         let vacuum_mass_squared = Atom::var(GS.m_uv_vacuum).pow(2);
         for coefficient in [expansion_mass_squared, vacuum_mass_squared]
             .into_iter()
-            .chain(owners.map(|edge| graph.underlying[edge].particle.mass_atom().pow(2)))
+            .chain(owners.map(|edge| {
+                graph.underlying[edge]
+                    .particle
+                    .mass_atom(&graph.model)
+                    .pow(2)
+            }))
         {
             assert!(
                 analyzer.analyze_atom(&coefficient)?.is_empty(),
@@ -3273,7 +3278,7 @@ mod tests {
     #[test]
     fn dod_one_triangle_keeps_separate_denominator_topologies() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph exact_uv_triangle_taylor {
+        let graph: Graph = finalized_runtime_dot!(digraph exact_uv_triangle_taylor {
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
@@ -3315,11 +3320,11 @@ mod tests {
         let numerator = owners.into_iter().fold(Atom::one(), |product, edge| {
             product * GS.emr_mom(edge, GS.cind(0))
         });
-        let integrand = numerator / graph.denominator(&uv_filter, |_| 1);
+        let integrand = numerator / graph.denominator(&uv_filter, &graph.model, |_| 1);
         let settings = UVgenerationSettings::default();
         let (expanded, _) = t(
             &integrand,
-            &UVCtx::new(&graph, &settings),
+            &UVCtx::new(&graph, &graph.model, &settings),
             &current,
             &given,
             &[],
@@ -3441,7 +3446,7 @@ mod tests {
     #[test]
     fn factorized_product_separates_active_and_completed_sectors() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(
+        let graph: Graph = finalized_runtime_dot!(
             digraph G {
                 edge [particle="scalar_1"];
                 node [num=1];
@@ -3537,7 +3542,7 @@ mod tests {
     #[test]
     fn affine_uv_rescaling_preserves_enclosing_chart_and_owner() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph affine_enclosing_taylor_chart {
+        let graph: Graph = finalized_runtime_dot!(digraph affine_enclosing_taylor_chart {
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
@@ -3735,7 +3740,7 @@ mod tests {
     #[test]
     fn early_color_simplification_preserves_open_and_nested_numerator_boundaries() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = dot!(digraph nested_open_color_bubble {
+        let mut graph: Graph = finalized_runtime_dot!(digraph nested_open_color_bubble {
             edge [num=1 mass=1]
             node [num=1]
             a -> b [id=0 lmb_id=0]
@@ -3773,7 +3778,7 @@ mod tests {
             topo_order: 0,
         };
         let settings = UVgenerationSettings::default();
-        let ctx = UVCtx::new(&graph, &settings);
+        let ctx = UVCtx::new(&graph, &graph.model, &settings);
         let raw_inner = graph
             .numerator(inner.subgraph(), empty.subgraph())
             .get_single_atom()?;
@@ -3788,7 +3793,7 @@ mod tests {
         assert_eq!(prepared_inner, expected_inner);
         let grown_inner = grow(&Atom::one(), &ctx, inner, &empty)?;
         assert_eq!(
-            &grown_inner * graph.denominator(inner.subgraph(), |_| 1),
+            &grown_inner * graph.denominator(inner.subgraph(), &graph.model, |_| 1),
             expected_inner
         );
 
@@ -3799,8 +3804,8 @@ mod tests {
             .numerator(outer.subgraph(), empty.subgraph())
             .get_single_atom()?;
         assert_eq!(&raw_inner * &raw_remainder, raw_full);
-        let nested =
-            grow(&grown_inner, &ctx, outer, inner)? * graph.denominator(outer.subgraph(), |_| 1);
+        let nested = grow(&grown_inner, &ctx, outer, inner)?
+            * graph.denominator(outer.subgraph(), &graph.model, |_| 1);
         let late = raw_full.simplify_color().simplify_metrics();
         assert_eq!(nested, late);
         assert_eq!(nested, casimir * spenso::g!(&c, &d) * &spectator);
@@ -3823,7 +3828,7 @@ mod tests {
     #[test]
     fn local_taylor_retains_dirac_traces_with_or_without_analytic_addbacks() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = dot!(digraph factorized_local_spin {
+        let mut graph: Graph = finalized_runtime_dot!(digraph factorized_local_spin {
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
@@ -3874,7 +3879,7 @@ mod tests {
             };
             let local = uv_limit(
                 &input,
-                &UVCtx::new(&graph, &settings),
+                &UVCtx::new(&graph, &graph.model, &settings),
                 &current,
                 &given,
                 &current,
