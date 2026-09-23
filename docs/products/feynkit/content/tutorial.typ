@@ -257,6 +257,23 @@ propagator powers are applied before routing. Both methods return `TensorExpress
 their ordered interfaces, including when routing cancels the tensor to zero.
 Plain Symbolica expressions and scalar constants return a plain `Expression`.
 
+Pass `loop_momenta` and `external_momenta` to name the independent basis vectors
+using Spenso `TensorName.vector` objects. Loop names follow `basis.loop_edges`;
+external names follow `basis.external_edges` with `basis.dependent_externals`
+omitted. Each supplied list must cover its independent coordinates. Omitted lists
+retain the canonical indexed `K` or `P` calls. The same naming applies to vectors
+already expressed in the basis, preserving indexed and compact vector syntax.
+
+// docs-example: compile
+```python
+from symbolica.community.spenso import TensorName
+
+# For a one-loop, two-point graph:
+K = TensorName.vector("example::K")
+P = TensorName.vector("example::P")
+routed = basis.route_expression(numerator, loop_momenta=[K], external_momenta=[P])
+```
+
 `kinematics.apply(expression)` follows the same convention: scalar-product
 substitution preserves a tensor's ordered ports, even when an on-shell relation
 makes it zero. Tensor methods can therefore be chained directly on the result.

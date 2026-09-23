@@ -12,7 +12,7 @@ import symbolica.core
 import types
 import typing
 from symbolica import ComplexFloat, Float
-from symbolica.community.spenso import TensorExpression
+from symbolica.community.spenso import TensorExpression, TensorName
 from symbolica.core import Expression
 
 @typing.final
@@ -3792,18 +3792,36 @@ class Kinematics:
         second : Expression
             Second outgoing unindexed momentum or declared linear combination.
         """
-    def apply(self, expression: Expression) -> Expression:
+    @typing.overload
+    def apply(self, expression: TensorExpression) -> TensorExpression:
+        r"""
+        Substitute scalar products while preserving the ordered tensor interface.
+
+        Tensor zeros retain their original ports.
+
+        Examples
+        --------
+        >>> result = kin.apply(contracted_tensor)
+        >>> assert result.interface == contracted_tensor.interface
+
+        Parameters
+        ----------
+        expression : TensorExpression
+            Tensor expression with compact scalar products.
+        """
+    @typing.overload
+    def apply(self, expression: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]) -> Expression:
         r"""
         Substitute scalar products without mutating global assumptions.
 
         Examples
         --------
-        >>> invariant_expression = kin.apply(contracted_squared_amplitude)
+        >>> result = kin.apply(contracted_expression)
 
         Parameters
         ----------
         expression : Expression
-            Expression after tensor contractions have been simplified.
+            Expression with compact scalar products.
         """
 
 class KinematicsError(FeynkitError):
@@ -4000,7 +4018,7 @@ class LoopMomentumBasis:
             Whether this object is part of a recursive formatting cycle.
         """
     @typing.overload
-    def route_expression(self, expression: TensorExpression) -> TensorExpression:
+    def route_expression(self, expression: TensorExpression, *, loop_momenta: typing.Optional[typing.Sequence[TensorName]] = None, external_momenta: typing.Optional[typing.Sequence[TensorName]] = None) -> TensorExpression:
         r"""
         Express edge momenta in this basis while preserving the tensor interface.
 
@@ -4015,9 +4033,14 @@ class LoopMomentumBasis:
         ----------
         expression : TensorExpression
             Tensor expression with canonical indexed edge momenta to route.
+        loop_momenta : sequence[TensorName] or None, optional
+            Vector names in ``loop_edges`` order. None retains indexed ``K`` calls.
+        external_momenta : sequence[TensorName] or None, optional
+            Vector names in ``external_edges`` order, excluding ``dependent_externals``.
+            None retains indexed ``P`` calls. Naming also applies to already routed vectors.
         """
     @typing.overload
-    def route_expression(self, expression: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]) -> Expression:
+    def route_expression(self, expression: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], *, loop_momenta: typing.Optional[typing.Sequence[TensorName]] = None, external_momenta: typing.Optional[typing.Sequence[TensorName]] = None) -> Expression:
         r"""
         Express edge momenta in this basis while retaining tensor index arguments.
 
@@ -4029,6 +4052,11 @@ class LoopMomentumBasis:
         ----------
         expression : Expression or number
             Expression with canonical edge momenta to route, or a scalar constant.
+        loop_momenta : sequence[TensorName] or None, optional
+            Vector names in ``loop_edges`` order. None retains indexed ``K`` calls.
+        external_momenta : sequence[TensorName] or None, optional
+            Vector names in ``external_edges`` order, excluding ``dependent_externals``.
+            None retains indexed ``P`` calls. Naming also applies to already routed vectors.
         """
     @typing.overload
     def route(self, loop_momenta: typing.Sequence[ThreeMomentum], external_momenta: typing.Sequence[ThreeMomentum]) -> dict[int, ThreeMomentum]:
