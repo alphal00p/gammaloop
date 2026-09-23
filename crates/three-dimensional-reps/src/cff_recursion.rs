@@ -5,23 +5,25 @@ use serde::{Deserialize, Serialize};
 use crate::{LinearEnergyExpr, ParsedGraph};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-struct EdgeRef {
-    edge_id: usize,
-    edge_type: EdgeType,
+pub struct EdgeRef {
+    pub edge_id: usize,
+    pub edge_type: EdgeType,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-enum EdgeType {
+pub enum EdgeType {
     Virtual,
     External,
     InitialStateCut,
+    /// A severed internal edge with fixed boundary flow.
+    Boundary,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-struct CffVertex {
-    nodes: BTreeSet<usize>,
-    incoming: Vec<EdgeRef>,
-    outgoing: Vec<EdgeRef>,
+pub struct CffVertex {
+    pub nodes: BTreeSet<usize>,
+    pub incoming: Vec<EdgeRef>,
+    pub outgoing: Vec<EdgeRef>,
 }
 
 impl CffVertex {
@@ -52,12 +54,12 @@ enum VertexType {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-struct CffGenerationGraph {
+pub struct CffGenerationGraph {
     vertices: Vec<CffVertex>,
 }
 
 impl CffGenerationGraph {
-    fn new(mut vertices: Vec<CffVertex>) -> Self {
+    pub fn new(mut vertices: Vec<CffVertex>) -> Self {
         vertices.sort_by_key(|vertex| vertex.nodes.iter().copied().collect::<Vec<_>>());
         Self { vertices }
     }
@@ -89,7 +91,7 @@ impl CffGenerationGraph {
         adjacency
     }
 
-    fn has_directed_cycle(&self) -> bool {
+    pub fn has_directed_cycle(&self) -> bool {
         let adjacency_edges = self.virtual_adjacency();
         let mut visited = HashSet::new();
         let mut stack = HashSet::new();
@@ -318,42 +320,53 @@ fn build_base_graph_from_parsed(parsed: &ParsedGraph) -> CffGenerationGraph {
     CffGenerationGraph::new(vertices)
 }
 
+impl CffGenerationGraph {
+    /// Generate causal denominator chains, mapping each selected cut in the
+    /// caller's energy convention. Cyclic orientations have no branches.
+    pub fn try_surface_chains<S: Clone, E>(
+        &self,
+        surface: &mut impl FnMut(&CffVertex) -> Result<S, E>,
+    ) -> Result<Vec<Vec<S>>, E> {
+        if self.has_directed_cycle() {
+            return Ok(Vec::new());
+        }
+        if self.vertices.len() < 2 {
+            return Ok(vec![Vec::new()]);
+        }
+        let Some(vertex) = self.source_sink_greedy() else {
+            return Ok(Vec::new());
+        };
+        let selected = surface(vertex)?;
+        if self.vertices.len() == 2 {
+            return Ok(vec![vec![selected]]);
+        }
+        let mut branches = Vec::new();
+        for neighbour in self.undirected_neighbours(&vertex.nodes) {
+            let child = self.contract_vertices(&vertex.nodes, &neighbour.nodes);
+            for chain in child.try_surface_chains(surface)? {
+                let mut branch = vec![selected.clone()];
+                branch.extend(chain);
+                branches.push(branch);
+            }
+        }
+        if branches.is_empty() {
+            branches.push(vec![selected]);
+        }
+        Ok(branches)
+    }
+}
+
 fn enumerate_cff_branches(
     graph: &CffGenerationGraph,
     parsed: &ParsedGraph,
     branch_acc: &mut Vec<Vec<LinearEnergyExpr>>,
 ) {
-    if graph.vertices.len() < 2 {
-        branch_acc.push(Vec::new());
-        return;
-    }
-    let Some(vertex) = graph.source_sink_greedy() else {
-        return;
-    };
-    let surface = cff_surface_for_vertex(parsed, vertex);
-    if graph.vertices.len() == 2 {
-        branch_acc.push(vec![surface]);
-        return;
-    }
-
-    let mut emitted = false;
-    for neighbour in graph.undirected_neighbours(&vertex.nodes) {
-        let child = graph.contract_vertices(&vertex.nodes, &neighbour.nodes);
-        if child.has_directed_cycle() {
-            continue;
-        }
-        let mut sub = Vec::new();
-        enumerate_cff_branches(&child, parsed, &mut sub);
-        for mut chain in sub {
-            let mut full_chain = vec![surface.clone()];
-            full_chain.append(&mut chain);
-            branch_acc.push(full_chain);
-            emitted = true;
-        }
-    }
-    if !emitted {
-        branch_acc.push(vec![surface]);
-    }
+    let branches = graph
+        .try_surface_chains(&mut |vertex| {
+            Ok::<_, std::convert::Infallible>(cff_surface_for_vertex(parsed, vertex))
+        })
+        .unwrap();
+    branch_acc.extend(branches);
 }
 
 fn cff_surface_for_vertex(parsed: &ParsedGraph, vertex: &CffVertex) -> LinearEnergyExpr {

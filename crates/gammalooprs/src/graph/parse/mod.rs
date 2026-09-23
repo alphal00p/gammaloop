@@ -459,6 +459,7 @@ impl Graph {
         let mut tree_edges = underlying.bridges_of(&full_without_initials);
         tree_edges.union_with(&initial_state_cut.left);
         let mut result = Graph {
+            model: diagram.model_arc(),
             overall_factor: initial_data.overall_factor,
             polarizations,
             global_prefactor,
@@ -577,6 +578,7 @@ impl Graph {
         tree_edges.union_with(&initial_state_cut.left);
 
         let mut g = Graph {
+            model: std::sync::Arc::new(model.clone()),
             overall_factor: initial_data.overall_factor,
             polarizations: global_prefactor.polarizations(),
             global_prefactor,

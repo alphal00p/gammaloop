@@ -2,74 +2,58 @@
 <cff-surface-cache-ownership-proposal>
 == Status
 <status>
-Implemented. `feynkit-cff` owns the only structural CFF expression,
-surface, identifier, tree, and cache types used by FeynKit and
-GammaLoop.
+Implemented with one shared recursion engine in `three-dimensional-reps`.
+`feynkit-cff` exposes that generalized engine and adapts it to FeynKit's
+standalone topology and surface APIs. GammaLoop uses the generalized
+engine for production expressions, including repeated poles and
+numerator energy dependence.
 
-== Invariant
-<invariant>
-A surface identifier is meaningful only with the `SurfaceCache` supplied
-with the expression that contains it. Consumers must discover an
-expression's surface set from its trees; they must not treat every entry
-in a shared arena as part of that expression.
-
-```text
-CffResult
-  expression -> trees containing SurfaceId values
-  surfaces   -> arena that resolves those IDs
-  report     -> generation statistics
-```
-
-The arena may contain additional entries when related expressions
-deliberately share it. IDs are append-only and stable, while
-`CffExpression` exposes the exact referenced subset. Raised-surface
-analysis, residue selection, symbolic lowering, threshold construction,
-and diagnostics therefore start from the expression's IDs and resolve
-only those IDs through its arena.
-
-== Generation Modes
+== Shared generation
 <generation-modes>
-`CffGenerator::generate` creates a fresh arena and returns it in
-`CffResult`. This is the normal standalone and Python API.
+`CffGenerationGraph::try_surface_chains` owns source/sink selection,
+contraction, cycle rejection, and surface-chain enumeration. Its surface
+callback lets each consumer retain its own surface representation while
+using the same recursion. Fixed boundary edges retain their direction
+when contracted subgraphs are enumerated.
 
-`CffGenerator::generate_into` accepts a caller-owned `SurfaceCache` and
-returns an expression whose IDs use that arena. GammaLoop uses this mode
-for related root, contracted, subgraph, and UV expressions that must
-share stable IDs. The runtime graph stores the canonical FeynKit cache;
-it does not define a second surface cache or translate through
-GammaLoop-specific surface IDs.
+`feynkit_cff::generate_3d_expression` and `feynkit_cff::generalized` expose
+the generalized engine directly. The topology-only `CffGenerator`
+converts graph boundaries to that engine and reconstructs FeynKit trees
+from the returned chains. It does not implement a second recursion.
 
-When independently generated results must be combined,
-`SurfaceCache::merge` returns a `SurfaceIdMap`, and
-`CffExpression::remap_surfaces` applies that map to the expression. This
-makes arena changes explicit instead of relying on index coincidence.
+== Standalone surface invariant
+<invariant>
+A FeynKit surface identifier is meaningful only with the `SurfaceCache`
+supplied with its expression. Consumers discover the referenced surface
+set from that expression's trees; a shared arena can contain additional
+entries from other expressions.
 
-== Downstream Extensions
+`CffGenerator::generate` returns an expression, fresh arena, and report in
+`CffResult`. `generate_into` accepts a caller-owned arena for related
+standalone expressions. IDs remain append-only and stable. Raised-surface
+analysis, residues, lowering, and diagnostics resolve only the IDs used
+by the source expression.
+
+Combining independent arenas requires the explicit `SurfaceIdMap`
+returned by `SurfaceCache::merge` and applied by
+`CffExpression::remap_surfaces`. Index coincidence is not an identity map.
+
+== Runtime surfaces
 <downstream-extensions>
-GammaLoop adds numerical and Symbolica-specific behavior with extension
-traits implemented directly for FeynKit CFF types. These extensions may
-evaluate a surface, lower it to a runtime expression, classify
-thresholds, or construct subtraction data, but they do not wrap or copy
-the structural CFF IR.
+GammaLoop supplies the generalized engine with its runtime E-surface and
+H-surface types. These carry the numerical and threshold information
+needed for production integrands and UV subtraction. Runtime caches and
+FeynKit topology caches are separate representations; their identifiers
+must never be interchanged implicitly.
 
-The topology conversion is implemented once by `HedgeGraphCffExt`,
-directly on Linnet graphs. GammaLoop classifies runtime edges as
-standard, omitted dummy, or sewn initial-state edges through that
-extension trait; it does not build an adapter object or reconstruct a
-`CffGraph` itself. It then consumes the returned FeynKit expression and
-shared cache directly. There is no separate UV CFF engine.
+The shared engine owns combinatorics, while each adapter owns conversion,
+surface interning, and symbolic lowering. This retains main's generalized
+production functionality while making it available through FeynKit.
 
-== Required Checks
+== Required checks
 <required-checks>
-Tests and the ownership-boundary guard enforce these properties:
-
-- every surface ID in an expression resolves in the associated arena;
-- generating another expression into a shared arena never changes
-  existing IDs or the referenced surface subset of an earlier
-  expression;
-- raised-surface groups contain only IDs present in the source
-  expression;
-- merging arenas and remapping preserves symbolic lowering;
-- root, contracted, subgraph, and UV call paths all use `feynkit-cff`;
-- GammaLoop does not define compatibility aliases or duplicate CFF
-  structures.
+Tests cover stable standalone arena IDs, exact referenced surface sets,
+explicit remapping, fixed boundaries, selected orientations, and
+contracted/subgraph generation. Generalized and runtime regressions
+cover repeated poles, signed contours, numerator energy maps, and UV
+sources. Both API families must continue to use the shared recursion.

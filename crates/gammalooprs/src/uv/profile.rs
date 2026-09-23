@@ -30,7 +30,6 @@ use clap::ValueEnum;
 use color_eyre::{Result, eyre::Context};
 use colored::Colorize;
 use eyre::eyre;
-use feynkit_cff::OrientationData;
 use itertools::Itertools;
 use linnet::half_edge::PowersetIterator;
 use linnet::half_edge::involution::{EdgeIndex, HedgePair, SignOrZero};
@@ -367,8 +366,8 @@ mod tests {
     };
     use typed_index_collections::TiVec;
 
-    use crate::dot;
-    use crate::graph::parse::from_dot::IntoGraph;
+    use crate::finalized_runtime_dot;
+    use crate::graph::parse::from_dot::IntoFinalizedRuntimeGraph;
     use crate::graph::{FeynmanGraph, Graph, LMBext, LmbIndex, LoopMomentumBasis};
     use crate::initialisation::test_initialise;
     use crate::integrands::evaluation::EvaluationResult;
@@ -398,7 +397,7 @@ mod tests {
         THETA_GRAPH
             .get_or_init(|| {
                 test_initialise().unwrap();
-                let mut graph: Graph = dot!(digraph theta_profile {
+                let mut graph: Graph = finalized_runtime_dot!(digraph theta_profile {
                     edge [num=1 mass=0]
                     node [num=1]
                     A -> B [id=0]
@@ -438,7 +437,7 @@ mod tests {
     #[test]
     fn cycle_union_uses_lmb_signatures_for_a_self_loop() {
         let _ = theta_graph();
-        let graph: Graph = dot!(digraph tadpole_profile {
+        let graph: Graph = finalized_runtime_dot!(digraph tadpole_profile {
             edge [num=1 mass=0]
             node [num=1]
             A -> A [id=0]
@@ -455,7 +454,7 @@ mod tests {
     #[test]
     fn only_divergent_targets_stay_inside_the_production_uv_domain() {
         let _ = theta_graph();
-        let mut graph: Graph = dot!(digraph theta_profile_domain {
+        let mut graph: Graph = finalized_runtime_dot!(digraph theta_profile_domain {
             edge [num=1 mass=0]
             node [num=1]
             A -> B [id=0]

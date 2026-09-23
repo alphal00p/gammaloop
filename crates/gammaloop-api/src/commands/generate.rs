@@ -399,7 +399,6 @@ impl Default for SpecArgs {
             graph_prefix: None,
             global_prefactor_projector: None,
             global_prefactor_num: None,
-            max_multiplicity_for_fast_cut_filter: 6,
             filter_self_loop: None,
             filter_zero_flow_edges: None,
         }
@@ -795,7 +794,6 @@ impl Generate {
                                 .add_cross_section(CrossSection::from_graph_list(
                                     integrand_name.clone(),
                                     graphs,
-                                    model,
                                 )?);
                         }
                         _ => unreachable!(),
@@ -2438,7 +2436,7 @@ mod tests {
             let spec =
                 parse_spec_with_model(&decoded, GenerationType::CrossSection, &model).unwrap();
             assert_eq!(
-                spec.process_definition.symmetrize_left_right_states,
+                spec.process_definition.process.symmetrizes_left_right(),
                 option.unwrap_or(false)
             );
         }
@@ -2462,13 +2460,13 @@ mod tests {
                 .process_definition;
             assert_eq!(
                 (
-                    definition.symmetrize_initial_states,
-                    definition.symmetrize_final_states
+                    definition.process.symmetrizes_initial(),
+                    definition.process.symmetrizes_final()
                 ),
                 expected
             );
             assert_eq!(
-                definition.symmetrize_left_right_states,
+                definition.process.symmetrizes_left_right(),
                 left_right.unwrap_or(false)
             );
         }
@@ -2501,14 +2499,17 @@ mod tests {
         for mode in [GenerationType::Amplitude, GenerationType::CrossSection] {
             let spec = parse_spec_with_model(&args, mode, model).unwrap();
             let filters = if mode == GenerationType::Amplitude {
-                &spec.process_definition.amplitude_filters
+                spec.process_definition
+                    .generation_options
+                    .filters(FilterScope::Graph)
             } else {
-                &spec.process_definition.cross_section_filters
+                spec.process_definition
+                    .generation_options
+                    .filters(FilterScope::Graph)
             };
             assert!(filters
-                .0
                 .iter()
-                .any(|filter| matches!(filter, FeynGenFilter::FermionLoopCountRange((1, 2)))));
+                .any(|filter| matches!(filter, GenerationFilter::FermionLoopCountRange((1, 2)))));
         }
     }
 

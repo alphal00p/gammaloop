@@ -52,7 +52,8 @@
     "feynkit-cff": [
       "feynkit-graph",
       "linnet",
-      "spenso"
+      "spenso",
+      "three-dimensional-reps"
     ],
     "feynkit-generator": [
       "feynkit-graph",
@@ -111,6 +112,7 @@
     ],
     "gammaloop-integration-tests": [
       "feynkit-generator",
+      "feynkit-graph",
       "feynkit-model",
       "gammaloop-api",
       "gammaloop-workspace-hack",
@@ -277,7 +279,8 @@
       ],
       "spenso": [
         "shadowing"
-      ]
+      ],
+      "three-dimensional-reps": []
     },
     "feynkit-generator": {
       "feynkit-graph": [],
@@ -363,6 +366,7 @@
     },
     "gammaloop-integration-tests": {
       "feynkit-generator": [],
+      "feynkit-graph": [],
       "feynkit-model": [],
       "gammaloop-api": [],
       "gammaloop-workspace-hack": [],
@@ -621,7 +625,8 @@
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
-      "symbolica-utils"
+      "symbolica-utils",
+      "three-dimensional-reps"
     ],
     "feynkit-cff": [
       "feynkit-graph",
@@ -631,7 +636,8 @@
       "linnet",
       "spenso",
       "spenso-macros",
-      "symbolica-utils"
+      "symbolica-utils",
+      "three-dimensional-reps"
     ],
     "feynkit-generator": [
       "feynkit-graph",
@@ -680,7 +686,8 @@
       "spenso-hep-lib",
       "spenso-macros",
       "spynso3",
-      "symbolica-utils"
+      "symbolica-utils",
+      "three-dimensional-reps"
     ],
     "feynkit-tensor": [
       "feynkit-graph",
@@ -881,7 +888,8 @@
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
-      "symbolica-utils"
+      "symbolica-utils",
+      "three-dimensional-reps"
     ],
     "feynkit-cff": [
       "feynkit-graph",
@@ -891,7 +899,8 @@
       "linnet",
       "spenso",
       "spenso-macros",
-      "symbolica-utils"
+      "symbolica-utils",
+      "three-dimensional-reps"
     ],
     "feynkit-generator": [
       "feynkit-graph",
@@ -940,7 +949,8 @@
       "spenso-hep-lib",
       "spenso-macros",
       "spynso3",
-      "symbolica-utils"
+      "symbolica-utils",
+      "three-dimensional-reps"
     ],
     "feynkit-tensor": [
       "feynkit-graph",
@@ -1194,7 +1204,8 @@
       "feynkit-graph",
       "feynkit-model",
       "linnet",
-      "spenso"
+      "spenso",
+      "three-dimensional-reps"
     ],
     "feynkit-generator": [
       "feynkit-graph",
@@ -1254,6 +1265,7 @@
     ],
     "gammaloop-integration-tests": [
       "feynkit-generator",
+      "feynkit-graph",
       "feynkit-model",
       "gammaloop-api",
       "gammaloop-workspace-hack",
@@ -1424,7 +1436,8 @@
       ],
       "spenso": [
         "shadowing"
-      ]
+      ],
+      "three-dimensional-reps": []
     },
     "feynkit-generator": {
       "feynkit-graph": [],
@@ -1511,6 +1524,7 @@
     },
     "gammaloop-integration-tests": {
       "feynkit-generator": [],
+      "feynkit-graph": [],
       "feynkit-model": [],
       "gammaloop-api": [],
       "gammaloop-workspace-hack": [],

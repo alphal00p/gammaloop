@@ -86,25 +86,27 @@ static METRIC_DOT_PRODUCT: LazyLock<[Replacement; 2]> = LazyLock::new(|| {
         Replacement::new(
             g!(
                 rank1_!(0; W_.d___, &self_dual_stripped1),
-                rank1_!(1; W_.c___, &self_dual_stripped2)
+                function!(RS.f_, RS.a___, &self_dual_stripped2)
             )
             .to_pattern(),
             dot!(
                 rank1_!(0; W_.d___, self_dual_stripped1),
-                rank1_!(1; W_.c___, self_dual_stripped2)
+                function!(RS.f_, RS.a___, self_dual_stripped2)
             ),
-        ),
+        )
+        .when(not_slot(RS.a___)),
         Replacement::new(
             g!(
                 rank1_!(0; W_.d___, &dualizable_stripped1),
-                rank1_!(1; W_.c___, &dualizable_stripped2)
+                function!(RS.f_, RS.a___, &dualizable_stripped2)
             )
             .to_pattern(),
             dot!(
                 rank1_!(0; W_.d___, dualizable_stripped1),
-                rank1_!(1; W_.c___, dualizable_stripped2)
+                function!(RS.f_, RS.a___, dualizable_stripped2)
             ),
-        ),
+        )
+        .when(not_slot(RS.a___)),
     ]
 });
 
@@ -184,8 +186,7 @@ impl DotNormalizer {
             if fun.get_symbol().has_tag(&T.rank1)
                 && fun.iter().any(|arg| {
                     matches!(arg, AtomView::Fun(inner)
-                        if inner.get_symbol().has_tag(&T.rank1)
-                            && inner.iter().any(|arg| matches!(arg, AtomView::Fun(rep)
+                        if inner.iter().any(|arg| matches!(arg, AtomView::Fun(rep)
                                 if rep.get_symbol().has_tag(&T.representation))))
                 })
             {
@@ -294,6 +295,7 @@ mod tests {
             function!(p, &stripped),
             vector.clone(),
             nested.clone(),
+            function!(p, function!(opaque, &stripped)),
             function!(p, function!(q, function!(p, &stripped))),
             function!(p, function!(opaque, &nested), &slot),
             function!(p, function!(q, function!(generic_rep, d))),

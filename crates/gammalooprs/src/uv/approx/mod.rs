@@ -550,8 +550,8 @@ mod tests {
     use super::*;
     use crate::{
         cff::CutCFFIndex,
-        dot,
-        graph::{FeynmanGraph, cuts::LuCutSelection, parse::IntoGraph},
+        finalized_runtime_dot,
+        graph::{FeynmanGraph, cuts::LuCutSelection, parse::IntoFinalizedRuntimeGraph},
         initialisation::test_initialise,
         integrands::{
             evaluation::EvaluationMetaData,
@@ -594,7 +594,7 @@ mod tests {
     #[test]
     fn expanded_4d_setting_does_not_change_the_empty_forest_root() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = dot!(digraph root_identity {
+        let mut graph: Graph = finalized_runtime_dot!(digraph root_identity {
             edge [num=1 mass=1]
             node [num=1]
 
@@ -650,7 +650,7 @@ mod tests {
     #[test]
     fn selected_raised_lu_projection_preserves_quadratic_contact_family() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = dot!(digraph raised_lu_contact_family {
+        let mut graph: Graph = finalized_runtime_dot!(digraph raised_lu_contact_family {
             num = 1
             edge [particle="scalar_1" num=1]
             node [num=1]
@@ -817,7 +817,7 @@ mod tests {
             for edge in 0..graph.underlying.n_edges() {
                 let edge = EdgeIndex(edge);
                 expression = expression
-                    .replace(graph.underlying[edge].particle.mass_atom())
+                    .replace(graph.underlying[edge].particle.mass_atom(&graph.model))
                     .with(Atom::one())
                     .replace(GS.ose(edge))
                     .with(Atom::num(Rational::from((5, 4))))
@@ -874,7 +874,7 @@ mod tests {
     #[test]
     fn gl24_direct_3d_modes_preserve_orientation_selector_contracts() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = dot!(digraph gl24_selector_contract {
+        let mut graph: Graph = finalized_runtime_dot!(digraph gl24_selector_contract {
             edge [num=1 mass=1]
             node [num=1]
 
@@ -971,6 +971,7 @@ mod tests {
             let vakint_settings = vakint::VakintSettings::default();
             child.compute_4d(
                 &route_graph,
+                &graph.model,
                 (crate::utils::vakint()?, &vakint_settings),
                 &root,
                 &settings,
@@ -1036,7 +1037,7 @@ mod tests {
     #[test]
     fn nested_scalar_bubble_direct_3d_modes_match_without_a_cut() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = dot!(
+        let mut graph: Graph = finalized_runtime_dot!(
             digraph nested_scalar_bubble_selector_contract {
                 edge [particle="scalar_1"];
                 node [num=1];
@@ -1091,6 +1092,7 @@ mod tests {
             );
             child.compute_4d(
                 &route_graph,
+                &graph.model,
                 (crate::utils::vakint()?, &vakint::VakintSettings::default()),
                 &root,
                 &settings,
@@ -1264,7 +1266,7 @@ mod tests {
     #[test]
     fn factorized_owned_dot_child_cff_matches_direct_3d_for_uncut_self_energy() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = dot!(digraph factorized_child_cff {
+        let mut graph: Graph = finalized_runtime_dot!(digraph factorized_child_cff {
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
@@ -1334,6 +1336,7 @@ mod tests {
             let vakint_settings = vakint::VakintSettings::default();
             child.compute_4d(
                 &route_graph,
+                &graph.model,
                 (crate::utils::vakint()?, &vakint_settings),
                 &root,
                 &settings,
@@ -1557,7 +1560,7 @@ mod tests {
         test_initialise()?;
         for depth in [2, 3] {
             let mut graph: Graph = if depth == 2 {
-                dot!(digraph nested_scalar_banana {
+                finalized_runtime_dot!(digraph nested_scalar_banana {
                     edge [num=1 mass=1]
                     node [num=1]
                     incoming [style=invis]
@@ -1570,7 +1573,7 @@ mod tests {
                     b -> outgoing [id=4]
                 })?
             } else {
-                dot!(digraph depth_three_scalar_banana {
+                finalized_runtime_dot!(digraph depth_three_scalar_banana {
                     edge [num=1 mass=1]
                     node [num=1]
                     incoming [style=invis]
@@ -1643,6 +1646,7 @@ mod tests {
                     );
                     current.compute_4d(
                         &route_graph,
+                        &graph.model,
                         (crate::utils::vakint()?, &vakint_settings),
                         &parent,
                         &settings,
@@ -1841,7 +1845,7 @@ mod tests {
     #[test]
     fn complete_self_energy_taylor_sum_matches_direct_3d_for_raised_lu_jets() -> Result<()> {
         test_initialise()?;
-        let base_graph: Graph = dot!(
+        let base_graph: Graph = finalized_runtime_dot!(
             digraph complete_self_energy_taylor_sum {
                 num = 1
                 edge [particle="scalar_1" num=1]
@@ -1983,6 +1987,7 @@ mod tests {
                 let vakint_settings = vakint::VakintSettings::default();
                 child.compute_4d(
                     &route_graph,
+                    &graph.model,
                     (crate::utils::vakint()?, &vakint_settings),
                     &root,
                     &settings,
@@ -1995,7 +2000,7 @@ mod tests {
                     .to_d_dim(GS.dim)
                     .get_single_atom()
                     .expect("the scalar child numerator is available")
-                    / route_graph.denominator(&reduced, |_| 1);
+                    / route_graph.denominator(&reduced, &graph.model, |_| 1);
                 let explicit_taylor_sum = route_graph
                     .uv_rescaled(
                         &reduced,
@@ -2156,7 +2161,7 @@ mod tests {
                 for edge in 0..graph.underlying.n_edges() {
                     let edge = EdgeIndex(edge);
                     expression = expression
-                        .replace(graph.underlying[edge].particle.mass_atom())
+                        .replace(graph.underlying[edge].particle.mass_atom(&graph.model))
                         .with(mass_squared.clone().sqrt());
                     if external_edges.contains(&edge) {
                         expression = expression

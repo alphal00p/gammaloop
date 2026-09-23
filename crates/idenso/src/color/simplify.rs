@@ -111,9 +111,15 @@ impl ColorAlgebraSimplifier {
     }
 
     fn reduce_payload(&self, expression: AtomView<'_>) -> Atom {
+        // Contract metrics before trace terminals turn ordered generators into
+        // symmetric invariants. The same rules also handle already-collected traces.
+        let metrics = SchoonschipSettings::default()
+            .without_rank1_tensors()
+            .with_chain_like_functions();
         let mut current = expression.to_owned();
         loop {
-            let collected = self.collect_lines(current.as_view());
+            let contracted = current.schoonschip_with_settings(&metrics);
+            let collected = self.collect_lines(contracted.as_view());
             let rewritten = self.rewrite_terms(collected.as_view());
             // Resolve scalar invariants before their representation labels trigger
             // tensor collection over the accompanying factorized numerator. Include
@@ -123,7 +129,9 @@ impl ColorAlgebraSimplifier {
             } else {
                 rewritten
             };
-            let next = rewritten.collect_color().simplify_metrics();
+            let next = rewritten
+                .collect_color()
+                .schoonschip_with_settings(&metrics);
             if next == current {
                 // Every antisymmetric color tensor carries adjoint slots, so this
                 // isolates its complete network without expanding other sectors.

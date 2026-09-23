@@ -56,7 +56,6 @@ use bincode_trait_derive::Decode;
 use color_eyre::{Result, owo_colors::OwoColorize};
 use eyre::Context;
 use eyre::eyre;
-use feynkit_cff::{EnergySurface, EnergySurfaceId, OrientationId, SurfaceId};
 use std::{
     collections::{BTreeMap, HashSet},
     time::{Duration, Instant},
@@ -682,7 +681,7 @@ impl CrossSectionGraphTerm {
             .map(|cut_group| {
                 cut_group
                     .related_esurface_group
-                    .surface_ids
+                    .esurface_ids
                     .iter()
                     .any(|esurface_id| selected_generation_esurfaces.contains(esurface_id))
             })
@@ -957,7 +956,7 @@ impl CrossSectionGraphTerm {
                 ct_data,
                 graph.derived_data.cut_group_data.cut_groups[cut_group_id]
                     .related_esurface_group
-                    .max_occurrence,
+                    .max_occurence,
                 threshold_helpers,
                 &graph.graph.param_builder,
                 settings,
@@ -1008,7 +1007,7 @@ impl CrossSectionGraphTerm {
                 generate_rstar_t_dependence_evaluator(
                     cut_group
                         .related_esurface_group
-                        .max_occurrence
+                        .max_occurence
                         .saturating_sub(1),
                 )
             })
@@ -1537,7 +1536,7 @@ impl GraphTerm for CrossSectionGraphTerm {
         );
 
         for (cut_group_id, cut_group) in self.cut_group_data.cut_groups.iter_enumerated() {
-            let max_occurrence = cut_group.related_esurface_group.max_occurrence;
+            let max_occurrence = cut_group.related_esurface_group.max_occurence;
             if !self.counterterm.cut_group_is_active(cut_group_id) {
                 let zero = Complex::new_re(momentum_sample.zero());
                 for _ in 1..=max_occurrence {

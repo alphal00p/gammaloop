@@ -35,6 +35,8 @@ impl std::fmt::Display for EntityKind {
 /// A structural error in a model definition.
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum ModelValidationError {
+    #[error("Covariant cut multiplet {physical} {reason}")]
+    CovariantCutMultiplet { physical: i64, reason: String },
     #[error("model name must not be empty")]
     EmptyModelName,
     #[error("duplicate {kind} name '{name}'")]

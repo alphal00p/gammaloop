@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use feynkit_cff::OrientationId;
+use crate::cff::OrientationID;
 
 use crate::graph::cuts::CutSet;
 use crate::graph::edge::ParseEdge;
@@ -193,7 +193,7 @@ fn integrands_retain_flat_numerator_definitions_through_arithmetic_and_persisten
     let mut state = Vec::new();
     State::export(&mut state)?;
     let state_map = State::import(&mut Cursor::new(state), None)?;
-    let model = Model::default();
+    let model = Model::empty("test");
     let (decoded, consumed): (Integrands, _) = bincode::decode_from_slice_with_context(
         &encoded,
         bincode::config::standard(),
@@ -1886,7 +1886,7 @@ fn loop_energy_dod_replaces_four_dimensional_measure_by_one_power_per_loop() {
 
     let model = load_generic_model("scalars");
     let source = include_str!("../../../../tests/resources/graphs/scalar/dod2_bubble.dot");
-    let graph: Graph = source.into_graph(&model).unwrap();
+    let graph: Graph = source.into_finalized_runtime_graph(&model).unwrap();
     let cycle = graph
         .spinneys(&graph.no_dummy())
         .into_iter()
@@ -1906,7 +1906,9 @@ fn loop_energy_dod_replaces_four_dimensional_measure_by_one_power_per_loop() {
         "Q(2,spenso::cind(0))*Q(2,spenso::mink(4,edge(2,1)))",
         1,
     );
-    let marginal: Graph = marginal_source.into_graph(&model).unwrap();
+    let marginal: Graph = marginal_source
+        .into_finalized_runtime_graph(&model)
+        .unwrap();
     let marginal_cycle = marginal
         .spinneys(&marginal.no_dummy())
         .into_iter()
@@ -1937,7 +1939,7 @@ fn production_energy_gate_includes_factorized_global_numerator() {
 
     let model = load_generic_model("scalars");
     let source = include_str!("../../../../tests/resources/graphs/scalar/dod2_bubble.dot");
-    let graph: Graph = source.into_graph(&model).unwrap();
+    let graph: Graph = source.into_finalized_runtime_graph(&model).unwrap();
     let q0 = function!(GS.emr_mom, 2, GS.cind(0));
     let convergent_numerator = (&q0 + Atom::one()) * (&q0 + Atom::num(2));
     let convergent = graph.with_global_numerator_only(
@@ -1993,7 +1995,7 @@ fn four_d_renormalization_without_cff_preserves_source_energy_gate() {
     test_initialise().unwrap();
     let model = load_generic_model("scalars");
     let source = include_str!("../../../../tests/resources/graphs/scalar/dod2_bubble.dot");
-    let graph: Graph = source.into_graph(&model).unwrap();
+    let graph: Graph = source.into_finalized_runtime_graph(&model).unwrap();
     let convergent = graph.with_global_numerator_only("four_d_unit_bubble".into(), Atom::one());
     let q0 = function!(GS.emr_mom, 2, GS.cind(0));
     let divergent = graph.with_global_numerator_only(
@@ -2017,13 +2019,13 @@ fn four_d_renormalization_without_cff_preserves_source_energy_gate() {
         };
         let mut bare = AmplitudeGraph::new(convergent.clone());
         assert!(bare.derived_data.cff_expression.is_none());
-        let part = bare.renormalization_part(&settings).unwrap();
+        let part = bare.renormalization_part(&model, &settings).unwrap();
         assert!(!part.expression.is_zero());
         assert!(bare.derived_data.cff_expression.is_none());
         let mut stored = AmplitudeGraph::new(convergent.clone());
         stored.generate_cff(&GenerationSettings::default()).unwrap();
         assert!(stored.derived_data.cff_expression.is_some());
-        let with_cff = stored.renormalization_part(&settings).unwrap();
+        let with_cff = stored.renormalization_part(&model, &settings).unwrap();
         assert_eq!(
             part.expression.collect_factors(),
             with_cff.expression.collect_factors()
@@ -2037,7 +2039,7 @@ fn four_d_renormalization_without_cff_preserves_source_energy_gate() {
         let mut unsupported = AmplitudeGraph::new(divergent.clone());
         assert!(unsupported.derived_data.cff_expression.is_none());
         let error = unsupported
-            .renormalization_part(&settings)
+            .renormalization_part(&model, &settings)
             .unwrap_err()
             .to_string();
         assert!(error.contains("DOD_4D=3"), "{error}");
@@ -2054,7 +2056,7 @@ fn production_energy_gate_rejects_denominator_cancelling_r_contact() {
     // one r denominator and three q denominators carry the factor q0^2-r0^2.
     // Along the r-only cycle (q fixed), r0^2/Dr leaves a constant and therefore
     // has DOD_E=1. It is not a valid finite-pole oracle.
-    let graph: Graph = dot!(
+    let graph: Graph = finalized_runtime_dot!(
         digraph energy_divergent_r_contact {
             edge [particle=scalar_1]
             node [num=1]
@@ -2092,7 +2094,7 @@ fn production_energy_gate_rejects_denominator_cancelling_r_contact() {
 
 #[test]
 fn production_energy_gate_checks_nonlocal_edge_numerator_on_each_cycle() {
-    use crate::utils::symbolica_ext::DOD;
+    use feynkit_graph::DOD;
 
     test_initialise().unwrap();
     let model = load_generic_model("scalars");
@@ -2111,7 +2113,7 @@ fn production_energy_gate_checks_nonlocal_edge_numerator_on_each_cycle() {
         B -> C [id=2]
         C -> A [id=3]
     }"#;
-    let graph: Graph = source.into_graph(&model).unwrap();
+    let graph: Graph = source.into_finalized_runtime_graph(&model).unwrap();
     let r_squared = function!(GS.emr_mom, 0, GS.cind(0)).pow(2);
     assert_eq!(
         graph.production_numerator_atom_for_full_3d_expression(),
@@ -2123,7 +2125,7 @@ fn production_energy_gate_checks_nonlocal_edge_numerator_on_each_cycle() {
     // outside a cycle and depending only on its own momentum is soft there.
     let owner_local: Graph = source
         .replace("Q(0,spenso::cind(0))", "Q(1,spenso::cind(0))")
-        .into_graph(&model)
+        .into_finalized_runtime_graph(&model)
         .unwrap();
     owner_local
         .ensure_energy_convergent_cycles(&owner_local.no_dummy())
@@ -2160,9 +2162,10 @@ fn production_energy_gate_checks_nonlocal_edge_numerator_on_each_cycle() {
             &lmb,
             &lmb,
             &(graph.production_numerator_atom_for_full_3d_expression()
-                / graph.denominator(&r_cycle.filter, |_| 1)),
+                / graph.denominator(&r_cycle.filter, &model, |_| 1)),
         )
-        .trailing_exponent()
+        .trailing_exponent(GS.rescale)
+        .unwrap()
         - 3;
     assert_eq!(
         local_degree, -1,

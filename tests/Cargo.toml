@@ -18,6 +18,7 @@ color-eyre = { workspace = true }
 colored = { workspace = true }
 eyre = { workspace = true }
 feynkit-generator = { workspace = true }
+feynkit-graph = { workspace = true }
 feynkit-model = { workspace = true }
 gammaloop-api = { workspace = true }
 gammalooprs = { workspace = true }

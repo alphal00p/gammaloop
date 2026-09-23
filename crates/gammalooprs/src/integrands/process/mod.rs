@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 
+use crate::cff::OrientationID;
 use crate::graph::{FeynmanGraph, Graph, GraphGroup, GroupId, LmbIndex, LoopMomentumBasis};
 use crate::integrands::evaluation::{
     EvaluationMetaData, EvaluationResult, GenericEvaluationResult, GraphEvaluationResult,
@@ -27,7 +28,6 @@ use colored::Colorize;
 use derive_more::{From, Into};
 use enum_dispatch::enum_dispatch;
 use eyre::{Context, eyre};
-use feynkit_cff::OrientationId;
 use gammaloop_sample::{DiscreteGraphSample, GammaLoopSample, parameterize};
 use itertools::Itertools;
 use linnet::half_edge::involution::EdgeVec;
@@ -1163,11 +1163,11 @@ fn format_orientation_label(signature: &EdgeVec<Orientation>) -> String {
 }
 
 pub(crate) fn resolve_visible_orientation_id(
-    orientation_filter: &SubSet<OrientationId>,
+    orientation_filter: &SubSet<OrientationID>,
     visible_orientation_id: usize,
-) -> Option<OrientationId> {
+) -> Option<OrientationID> {
     if orientation_filter.is_full() {
-        Some(OrientationId::from(visible_orientation_id))
+        Some(OrientationID::from(visible_orientation_id))
     } else {
         orientation_filter
             .included_iter()
@@ -1176,8 +1176,8 @@ pub(crate) fn resolve_visible_orientation_id(
 }
 
 pub(crate) fn filtered_orientation_count(
-    orientation_filter: &SubSet<OrientationId>,
-    orientations: &TiVec<OrientationId, EdgeVec<Orientation>>,
+    orientation_filter: &SubSet<OrientationID>,
+    orientations: &TiVec<OrientationID, EdgeVec<Orientation>>,
 ) -> usize {
     if orientation_filter.is_full() {
         orientations.len()
@@ -4266,7 +4266,6 @@ mod tests {
         },
         utils::{F, load_generic_model},
     };
-    use feynkit_cff::OrientationId;
     use linnet::half_edge::{
         involution::{EdgeIndex, EdgeVec, Orientation},
         subgraph::{ModifySubSet, SubSetLike, subset::SubSet},
@@ -4487,24 +4486,24 @@ mod tests {
 
     #[test]
     fn filtered_orientation_helpers_map_visible_indices_into_subset_order() {
-        let orientations = TiVec::<OrientationId, EdgeVec<Orientation>>::from_iter([
+        let orientations = TiVec::<OrientationID, EdgeVec<Orientation>>::from_iter([
             EdgeVec::from_iter([Orientation::Default]),
             EdgeVec::from_iter([Orientation::Reversed]),
             EdgeVec::from_iter([Orientation::Undirected]),
             EdgeVec::from_iter([Orientation::Default]),
         ]);
         let mut filter = SubSet::empty(orientations.len());
-        filter.add(OrientationId(1));
-        filter.add(OrientationId(3));
+        filter.add(OrientationID(1));
+        filter.add(OrientationID(3));
 
         assert_eq!(filtered_orientation_count(&filter, &orientations), 2);
         assert_eq!(
             resolve_visible_orientation_id(&filter, 0),
-            Some(OrientationId(1))
+            Some(OrientationID(1))
         );
         assert_eq!(
             resolve_visible_orientation_id(&filter, 1),
-            Some(OrientationId(3))
+            Some(OrientationID(3))
         );
         assert_eq!(resolve_visible_orientation_id(&filter, 2), None);
     }

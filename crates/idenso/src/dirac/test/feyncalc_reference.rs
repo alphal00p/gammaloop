@@ -49,7 +49,8 @@ fn dirac_simplify_id3_four_interior_chain() {
         "{}",
         simplified.spenso_print(&SpensoPrintSettings::compact())
     );
-    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,rho)),gamma(in,out,mink(4,beta)),gamma(in,out,mink(4,alpha)),gamma(in,out,mink(4,sigma)))+chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,sigma)),gamma(in,out,mink(4,alpha)),gamma(in,out,mink(4,beta)),gamma(in,out,mink(4,rho)))");
+    // Normalize only the test oracle: production simplification preserves factored sums.
+    assert_snapshot!(expr.simplify_gamma().expand().to_bare_ordered_string(), @"chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,rho)),gamma(in,out,mink(4,beta)),gamma(in,out,mink(4,alpha)),gamma(in,out,mink(4,sigma)))+chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,sigma)),gamma(in,out,mink(4,alpha)),gamma(in,out,mink(4,beta)),gamma(in,out,mink(4,rho)))");
     let simplified = expr.simplify_gamma_with(GammaSimplifySettings::canonical());
     println!(
         "{}",

@@ -22,11 +22,11 @@ pub(crate) struct TestReps {
 symbol_set!(TestSymbols, TS;
     a b c d e f h i j k l m n o p q r s t u v w x y z
     A B C D E F G H I J K L M N O P Q R S T U V W X Y Z
-    mul nu mu
+    mul nu mu alpha beta rho sigma
 );
 
 symbol_set!(SpensoTestSymbols, SPENSO_TS, namespace = "spenso";
-    l_1 l_2 l_3 l_4 l_5 l_6 l_7 l_8 l_9 l_10 l_20
+    l_1 l_2 l_3 l_4 l_5 l_6 l_7 l_8 l_9 l_10 l_20 l_0
     EMRID G dummy_ss l r dim
     ebar
     edge_1_1 edge_2_1 edge_3_1 edge_4_1 edge_5_1 edge_6_1 edge_7_1 edge_8_1 edge_9_1 edge_10_1 edge_11_1 edge_12_1 edge_13_1 edge_14_1 edge_15_1 edge_16_1 edge_17_1 edge_18_1 edge_19_1 edge_20_1

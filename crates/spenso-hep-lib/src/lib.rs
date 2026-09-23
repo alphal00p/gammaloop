@@ -785,7 +785,7 @@ where
             }
         },
     )
-    .map_canonical(|tensor| ParamOrConcrete::param(tensor.into()));
+    .map_canonical(|tensor| ParamTensor::param(tensor.into()).into());
     weyl.insert_explicit(charge_conjugation);
 
     let color_t_key = su3_generator_data_atom(CS.t_strct::<Aind>(3, 8))

@@ -1,6 +1,5 @@
 use crate::GammaLoopContext;
-use crate::cff::esurface::EnergySurfaceCollection;
-use crate::cff::esurface::EnergySurfaceExt;
+use crate::cff::esurface::EsurfaceCollection;
 use crate::cff::esurface::ExistingEsurfaceId;
 use crate::cff::esurface::ExistingThresholds;
 use crate::cff::esurface::esurface_value_is_strictly_inside;
@@ -401,7 +400,7 @@ pub(crate) struct OverlapInput<'a> {
     pub settings: &'a RuntimeSettings,
     pub subspace: &'a SubspaceData,
     pub lmbs: &'a TiVec<LmbIndex, LoopMomentumBasis>,
-    pub thresholds: &'a EnergySurfaceCollection,
+    pub thresholds: &'a EsurfaceCollection,
     pub edge_masses: EdgeVec<F<f64>>,
 }
 
@@ -991,7 +990,7 @@ mod tests {
         .unwrap();
         assert_eq!(subspace.loopcount(), 2);
 
-        let radial_surface = EnergySurface {
+        let radial_surface = Esurface {
             energies: vec![graph.loop_momentum_basis.loop_edges[LoopIndex(0)]],
             external_shift: vec![(EdgeIndex::from(0), -1)].into(),
             vertex_set: VertexSet::dummy(),
@@ -1033,14 +1032,14 @@ mod tests {
         ));
 
         let complement_edge = graph.loop_momentum_basis.loop_edges[LoopIndex(2)];
-        let thresholds: crate::cff::esurface::EnergySurfaceCollection = vec![EnergySurface {
+        let thresholds: crate::cff::esurface::EsurfaceCollection = vec![Esurface {
             energies: vec![complement_edge],
             external_shift: vec![(EdgeIndex::from(0), -1)].into(),
             vertex_set: VertexSet::dummy(),
         }]
         .into();
         assert!(
-            !thresholds[EnergySurfaceId::from(0)]
+            !thresholds[EsurfaceID::from(0)]
                 .has_radial_dependence_in_subspace(&subspace, &all_lmbs, &graph,)
         );
         let masses = graph.underlying.new_edgevec(|_, _, _| F(0.0));
@@ -1069,7 +1068,7 @@ mod tests {
             ThreeMomentum::new(F(2.0), F(0.0), F(0.0)),
         ]);
 
-        let origin_value = overlap_input.thresholds[EnergySurfaceId::from(0)].compute_from_momenta(
+        let origin_value = overlap_input.thresholds[EsurfaceID::from(0)].compute_from_momenta(
             subspace.get_lmb(&all_lmbs),
             &overlap_input.edge_masses,
             &center,
@@ -1078,14 +1077,14 @@ mod tests {
         assert!(origin_value < F(0.0));
         assert!(!check_global_center(
             &overlap_input,
-            &ti_vec![EnergySurfaceId::from(0)],
+            &ti_vec![EsurfaceID::from(0)],
             &center,
             &sampled_momenta,
             &external_momenta,
         ));
         assert!(check_global_center(
             &overlap_input,
-            &ti_vec![EnergySurfaceId::from(0)],
+            &ti_vec![EsurfaceID::from(0)],
             &center,
             &center,
             &external_momenta,
@@ -1121,7 +1120,7 @@ mod tests {
 
         let forced_overlap = find_maximal_overlap(
             &forced_overlap_input,
-            &ti_vec![EnergySurfaceId::from(0)],
+            &ti_vec![EsurfaceID::from(0)],
             &center,
             &external_momenta,
             &probe_rotation,
@@ -1146,7 +1145,7 @@ mod tests {
             &alternate_lmbs,
         )
         .unwrap();
-        let empty_thresholds: EnergySurfaceCollection = Vec::new().into();
+        let empty_thresholds: EsurfaceCollection = Vec::new().into();
         let alternate_overlap_input = OverlapInput {
             graph: &graph,
             settings: &forced_settings,
@@ -1245,7 +1244,7 @@ mod tests {
             .map(EdgeIndex::from)
             .find(|edge| !graph.loop_momentum_basis.loop_edges.contains(edge))
             .unwrap();
-        let covariant_thresholds = vec![EnergySurface {
+        let covariant_thresholds = vec![Esurface {
             energies: vec![
                 graph.loop_momentum_basis.loop_edges[LoopIndex(0)],
                 support_edge,
@@ -1271,7 +1270,7 @@ mod tests {
             FourMomentum::from_args(F(20.0), F(6.0), F(8.0), F(0.0)),
             FourMomentum::from_args(F(-20.0), F(-6.0), F(-8.0), F(0.0)),
         ]);
-        let existing = ti_vec![EnergySurfaceId::from(0)];
+        let existing = ti_vec![EsurfaceID::from(0)];
         let identity_center = find_center(
             &covariant_overlap_input,
             &[ExistingEsurfaceId::from(0)],

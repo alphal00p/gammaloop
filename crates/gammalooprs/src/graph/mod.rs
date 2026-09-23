@@ -39,7 +39,6 @@ use crate::{
     utils::{F, Length, ose_atom_from_index},
     uv::{UltravioletGraph, uv_graph::UVE},
 };
-use feynkit_cff::SurfaceCache;
 
 pub(crate) mod attribute_warnings;
 pub mod autogen;
@@ -73,6 +72,9 @@ pub struct FinalizedTopologyThresholdCandidate {
 #[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
 #[trait_decode(trait = crate::GammaLoopContext)]
 pub struct Graph {
+    /// Canonical model records bound to the graph's stable particle IDs. Numerical
+    /// evaluation still uses the current runtime parameter card.
+    pub model: std::sync::Arc<Model>,
     pub overall_factor: Atom,
     pub name: String,
     pub group_id: Option<GroupId>,
@@ -558,7 +560,8 @@ impl Graph {
             let group_position = result.iter().position(|group| {
                 group.iter().all(|e| {
                     self.loop_momentum_basis.edges_are_raised(*e, edge_index)
-                        && self[edge_index].particle.mass_atom() == self[*e].particle.mass_atom()
+                        && self[edge_index].particle.mass_atom(&self.model)
+                            == self[*e].particle.mass_atom(&self.model)
                 })
             });
 

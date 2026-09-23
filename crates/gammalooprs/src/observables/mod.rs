@@ -1574,7 +1574,7 @@ impl ObjectQuantityDefinition {
 enum MetadataQuantityKind {
     GraphId,
     GraphGroupId,
-    OrientationId,
+    OrientationID,
     LmbChannelId,
 }
 
@@ -1590,7 +1590,7 @@ impl MetadataQuantityDefinition {
             MetadataQuantityKind::GraphGroupId => {
                 event.cut_info.graph_group_id.map(|id| id as isize)
             }
-            MetadataQuantityKind::OrientationId => {
+            MetadataQuantityKind::OrientationID => {
                 event.cut_info.orientation_id.map(|id| id as isize)
             }
             MetadataQuantityKind::LmbChannelId => {
@@ -1673,7 +1673,7 @@ impl ObservableDefinition {
             }
             QuantitySettings::OrientationId {} => {
                 ObservableDefinition::Metadata(MetadataQuantityDefinition {
-                    kind: MetadataQuantityKind::OrientationId,
+                    kind: MetadataQuantityKind::OrientationID,
                 })
             }
             QuantitySettings::LmbChannelId {} => {

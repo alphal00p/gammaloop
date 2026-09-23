@@ -1,3 +1,4 @@
+use linnet::num_traits::SignOrZero;
 use std::fmt::Display;
 
 use bincode_trait_derive::{Decode, Encode};
@@ -1255,7 +1256,7 @@ pub mod test {
     #[test]
     fn generated_singleton_lmbs_conserve_external_momentum() {
         test_initialise().unwrap();
-        let graphs: Vec<Graph> = dot!(
+        let graphs: Vec<Graph> = finalized_runtime_dot!(
             digraph contact {
                 ext [style=invis]
                 node[num=1]
@@ -1713,7 +1714,7 @@ pub mod test {
 
         let _guard = SHRUNKEN_LMB_TEST_LOCK.lock().unwrap();
         SHRUNKEN_LMB_TEST_INIT.call_once(|| test_initialise().unwrap());
-        let g: Graph = dot!(digraph {
+        let g: Graph = finalized_runtime_dot!(digraph {
             edge[num=1 mass=1]
             node[num=1]
             b:17 -> a:0 [id=0]

@@ -1,4 +1,5 @@
 use gammalooprs::{
+    finalized_runtime_dot,
     graph::{Graph, parse::IntoFinalizedRuntimeGraph},
     initialisation::test_initialise,
     model::{Model, ModelGammaLoopExt},
@@ -787,7 +788,7 @@ mod failing {
         test_initialise().unwrap();
 
         let model = load_generic_model("sm");
-        let g: Vec<Graph> = Graph::from_path(
+        let g: Vec<Graph> = Graph::from_finalized_runtime_path(
             concat!(
                 env!("CARGO_MANIFEST_DIR"),
                 "/../../tests/resources/graphs/uv_tests/rqft_ghG_3l.dot"

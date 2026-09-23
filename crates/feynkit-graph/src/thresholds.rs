@@ -16,8 +16,7 @@ pub trait InitialStateTreeExt {
     /// threshold queries reuse the same selection without changing those sides.
     ///
     /// Prefer the edge's source crown when it touches the initial cut; otherwise
-    /// use its sink crown. This is GammaLoop's existing threshold normalization,
-    /// including its deterministic source/sink choice and complete crown selection.
+    /// use its sink crown if that touches the cut. Internal bridges are retained.
     fn initial_state_tree(
         &self,
         initial_state: &SuBitGraph,
@@ -38,21 +37,20 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> InitialStateTreeExt for HedgeGrap
             if let HedgePair::Paired { source, sink } = pair
                 && loop_independent(edge)
             {
-                tree_like_edges.push(edge);
-                let source_node = self.node_id(source);
-                let sink_node = self.node_id(sink);
-                let source_connects_initial_state = self.iter_crown(source_node).any(|hedge| {
-                    let mut one_hedge = self.empty_subgraph::<SuBitGraph>();
-                    one_hedge.add(hedge);
-                    one_hedge.intersects(initial_state)
-                });
-                let initial_node = if source_connects_initial_state {
-                    source_node
-                } else {
-                    sink_node
-                };
-                for hedge in self.iter_crown(initial_node) {
-                    result.add(hedge);
+                // A fixed-momentum bridge can also join internal loop components.
+                // Amputate only an endpoint attached to the initial-state cut.
+                let initial_node = [source, sink]
+                    .into_iter()
+                    .map(|hedge| self.node_id(hedge))
+                    .find(|node| {
+                        self.iter_crown(*node)
+                            .any(|hedge| initial_state.includes(&hedge))
+                    });
+                if let Some(node) = initial_node {
+                    tree_like_edges.push(edge);
+                    for hedge in self.iter_crown(node) {
+                        result.add(hedge);
+                    }
                 }
             }
         }
@@ -93,7 +91,7 @@ mod tests {
     };
 
     #[test]
-    fn initial_attachment_tree_keeps_the_historical_crown_choice() {
+    fn initial_attachment_tree_retains_internal_bridges() {
         let mut builder = HedgeGraphBuilder::new();
         let a = builder.add_node(());
         let b = builder.add_node(());
@@ -101,7 +99,7 @@ mod tests {
         let d = builder.add_node(());
         builder.add_edge(a, b, (), Orientation::Default); // sewn initial edge
         builder.add_edge(a, c, (), Orientation::Default); // source touches initial state
-        builder.add_edge(c, d, (), Orientation::Default); // sink fallback
+        builder.add_edge(c, d, (), Orientation::Default); // internal bridge: neither endpoint touches the initial cut
         let graph: HedgeGraph<(), ()> = builder.into();
         let mut initial: SuBitGraph = graph.empty_subgraph();
         for (pair, edge, _) in graph.iter_edges() {
@@ -114,13 +112,13 @@ mod tests {
         }
         let (tree, edges) = graph.initial_state_tree(&initial, |_| true);
         let mut expected: SuBitGraph = graph.empty_subgraph();
-        for node in [a, d] {
+        for node in [a] {
             for hedge in graph.iter_crown(node) {
                 expected.add(hedge);
             }
         }
         assert_eq!(tree, expected);
-        assert_eq!(edges, vec![EdgeIndex(1), EdgeIndex(2)]);
+        assert_eq!(edges, vec![EdgeIndex(1)]);
         let (empty, edges) = graph.initial_state_tree(&initial, |_| false);
         assert!(empty.is_empty());
         assert!(edges.is_empty());

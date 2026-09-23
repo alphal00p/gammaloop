@@ -1,8 +1,8 @@
 //! Standalone Cross-Free Family (CFF) combinatorics.
 //!
-//! The crate owns the canonical CFF graph, generation algorithms, surface
-//! arena, orientation and denominator trees, residue construction, and
-//! Symbolica lowering. It deliberately has no knowledge of GammaLoop settings,
+//! The crate exposes topology-only and generalized CFF generation. Both use
+//! the recursion owned by `three-dimensional-reps`; FeynKit provides graph
+//! adapters, surface views, residue construction, and Symbolica lowering. It deliberately has no knowledge of GammaLoop settings,
 //! numerical evaluators, or runtime threshold classification. Callers may
 //! construct a [`CffGraph`] explicitly or invoke the extension trait directly
 //! on a finalized FeynKit diagram.
@@ -54,3 +54,11 @@ pub use surface::{
     SurfaceIdMap, VertexSet,
 };
 pub use tree::{ExpressionTree, ExpressionTreeError, NodeId, TreeNode};
+
+/// Generalized CFF generation, including repeated poles and bounded numerator
+/// energy dependence, shared with GammaLoop's production runtime.
+pub use three_dimensional_reps as generalized;
+pub use three_dimensional_reps::{
+    Generate3DExpressionOptions, GeneratedThreeDExpression, ParsedGraph, ThreeDGraphSource,
+    generate_3d_expression,
+};

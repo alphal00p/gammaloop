@@ -399,10 +399,11 @@ impl Graph {
                 // factors without changing UV DOD semantics or expanding the
                 // numerator.
                 let lmb = self.lmb_of(&cycle.filter);
-                let integrand = &numerator / self.denominator(&cycle.filter, |_| 1);
+                let integrand = &numerator / self.denominator(&cycle.filter, &self.model, |_| 1);
                 let four_d_dod = self
                     .uv_rescaled(cycle.filter.included(), loop_count, &lmb, &lmb, &integrand)
-                    .trailing_exponent();
+                    .trailing_exponent(GS.rescale)
+                    .expect("UV momentum power counting failed");
                 // The rescaled source already contains the four-dimensional
                 // loop measure; retain one energy measure per loop instead.
                 let energy_dod = four_d_dod - 3 * loop_count as i32;

@@ -169,6 +169,7 @@ impl Model {
             })
             .collect();
         let definition = ModelDefinition {
+            covariant_cut_multiplets: Default::default(),
             name: name.to_owned(),
             restriction: None,
             orders: vec![Order {

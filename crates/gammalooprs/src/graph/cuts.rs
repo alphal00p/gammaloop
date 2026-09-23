@@ -7,7 +7,7 @@ use linnet::half_edge::{
 };
 
 use crate::cff::CutCFFIndex;
-use feynkit_cff::RaisedEnergySurfaceGroup;
+use crate::cff::RaisedEsurfaceGroup;
 
 #[derive(Debug, Clone, Encode, Decode, PartialEq, Hash, Eq, PartialOrd, Ord)]
 pub struct CutSet {
@@ -59,7 +59,7 @@ impl ResidueSelector {
             })
             .flat_map(|index| {
                 if let Some(left_th_cut) = &self.left_th_cut {
-                    (1..=left_th_cut.max_occurrence)
+                    (1..=left_th_cut.max_occurence)
                         .map(|left_th_cut_index| {
                             let mut new_index = index;
                             new_index.left_threshold_order = Some(left_th_cut_index);
@@ -72,7 +72,7 @@ impl ResidueSelector {
             })
             .flat_map(|index| {
                 if let Some(right_th_cut) = &self.right_th_cut {
-                    (1..=right_th_cut.max_occurrence)
+                    (1..=right_th_cut.max_occurence)
                         .map(|right_th_cut_index| {
                             let mut new_index = index;
                             new_index.right_threshold_order = Some(right_th_cut_index);

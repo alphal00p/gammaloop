@@ -9,13 +9,13 @@ use std::{
 };
 
 use color_eyre::Result;
+use feynkit_generator::GenerationType;
 use gammaloop_api::{
     CLISettings, OneShot, StateLoadOption,
     state::{CommandHistory, CommandsBlock, RunHistory},
 };
 use gammaloop_integration_tests::{CLIState, clean_test, get_test_cli, get_tests_workspace_path};
 use gammalooprs::{
-    feyngen::GenerationType,
     graph::Graph,
     processes::{CrossSection, ProcessCollection, ProcessDefinition},
     settings::{RuntimeSettings, global::GenerationSettings},
@@ -879,14 +879,14 @@ fn import_graphs_inline_dot_process_spec_filters_cutkosky_cuts() -> Result<()> {
     let mut cli = get_test_cli(None, root.join("state"), None, true)?;
     cli.run_command("import model sm-default.json")?;
 
-    let graphs = Graph::from_string(DOT, &cli.state.model)?;
+    let graphs = Graph::from_finalized_runtime_string(DOT, &cli.state.model)?;
     let inferred_definition = ProcessDefinition::from_graph_list(
         &graphs,
         GenerationType::CrossSection,
         &cli.state.model,
     )?;
     let all_cuts_cross_section =
-        CrossSection::from_graph_list("all_cuts".to_string(), graphs.clone(), &cli.state.model)?;
+        CrossSection::from_graph_list("all_cuts".to_string(), graphs.clone())?;
     let all_cut_count = all_cuts_cross_section.supergraphs[0].cutkosky_cut_count_for_process(
         &cli.state.model,
         &inferred_definition,

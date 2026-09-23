@@ -244,60 +244,33 @@ impl Default for ProcessDefinition {
 
 impl ProcessDefinition {
     pub(crate) fn covariant_cut_states(&self, model: &Model) -> Result<Vec<Vec<i64>>> {
-        if self.generation_type != GenerationType::CrossSection {
-            return Ok(self.final_pdgs_lists.clone());
-        }
-        let states = model.covariant_cut_states(&self.final_pdgs_lists)?;
-        let representatives = self.covariant_cut_representatives(model);
-        for &member in self.final_pdgs_lists.iter().flatten() {
-            if let Some(&physical) = representatives.get(&(member as isize))
-                && member != physical as i64
-            {
-                return Err(eyre!(
-                    "Final-state PDG {member} overlaps the covariant cut multiplet of requested physical PDG {physical}; separate physical-vector and unphysical diagnostic final-state requests so their observable labels remain unambiguous. For imported covariant partner graphs, supply the physical channel with --process-spec; raw graph states do not establish that intent"
-                ));
-            }
-        }
-        for filter in [&self.amplitude_filters, &self.cross_section_filters] {
-            if let Some(vetoes) = filter.get_particle_vetos() {
-                for (&member, &physical) in &representatives {
-                    let anti = model
-                        .get_particle_from_pdg(member)
-                        .get_anti_particle(model)
-                        .pdg_code;
-                    if vetoes.contains(&(member as i64)) || vetoes.contains(&(anti as i64)) {
-                        return Err(eyre!(
-                            "Particle veto removes PDG {member} from the covariant cut multiplet of physical PDG {physical}; retain the complete vector/Goldstone/ghost sector for a physical cross section"
-                        ));
-                    }
-                }
-            }
-        }
-        Ok(states)
+        self.process
+            .validate_covariant_cut_filters(model, &self.generation_options)?;
+        Ok(self.process.covariant_cut_states(model)?)
     }
 
     pub(crate) fn covariant_cut_representatives(&self, model: &Model) -> BTreeMap<isize, isize> {
-        if self.generation_type != GenerationType::CrossSection {
-            return BTreeMap::new();
-        }
-        let (_, unresolved) = self.unresolved_cut_content(model);
-        model
-            .covariant_cut_multiplets
-            .iter()
-            .filter(|(physical, _)| {
-                self.final_pdgs_lists
-                    .iter()
-                    .any(|state| state.contains(physical))
-                    || unresolved
-                        .iter()
-                        .any(|particle| particle.pdg_code as i64 == **physical)
-            })
-            .flat_map(|(&physical, members)| {
-                members
-                    .iter()
-                    .map(move |&member| (member as isize, physical as isize))
-            })
+        self.process
+            .covariant_cut_representatives(model)
+            .expect("process selectors were validated against the graph model")
+            .into_iter()
+            .map(|(member, physical)| (member as isize, physical as isize))
             .collect()
+    }
+
+    pub fn may_filter_covariant_partners(&self, model: &Model) -> bool {
+        !self.covariant_cut_representatives(model).is_empty()
+            && [FilterScope::Graph, FilterScope::CutAmplitude]
+                .into_iter()
+                .any(|scope| {
+                    self.generation_options.filters(scope).iter().any(|filter| {
+                        !matches!(
+                            filter,
+                            feynkit_generator::GenerationFilter::CouplingOrders(_)
+                                | feynkit_generator::GenerationFilter::PerturbativeOrders(_)
+                        )
+                    })
+                })
     }
 
     // Best attempt at creating what process definition matches the given graphs
@@ -965,7 +938,7 @@ impl Process {
         generation_type: GenerationType,
         definition: Option<ProcessDefinition>,
         sub_classes: Option<Vec<Vec<String>>>,
-        model: &Model,
+        _model: &Model,
     ) -> Result<Self> {
         let mut proc_definition = definition.unwrap_or_default();
         proc_definition.folder_name = process_name;
@@ -992,11 +965,8 @@ impl Process {
                 if let Some(_sub_classes) = sub_classes {
                     todo!("implement seperation of processes into user defined sub classes");
                 } else {
-                    collection.add_cross_section(CrossSection::from_graph_list(
-                        integrand_name,
-                        graphs,
-                        model,
-                    )?);
+                    collection
+                        .add_cross_section(CrossSection::from_graph_list(integrand_name, graphs)?);
                     // TODO: construct a better default definition from graph (i.e. at least the external IDs)
                     Ok(Self {
                         settings_history: None,
@@ -1283,6 +1253,7 @@ mod tests {
     };
 
     use crate::{GammaLoopContextContainer, utils::load_generic_model};
+    use feynkit_generator::GenerationType;
     use symbolica::atom::{Atom, AtomCore};
 
     fn fresh_temp_dir(name: &str) -> PathBuf {
@@ -1318,7 +1289,6 @@ mod tests {
     fn computed_uv_forest_process_export_uses_stored_sources_in_all_routes()
     -> color_eyre::Result<()> {
         use crate::{
-            feyngen::GenerationType,
             graph::{Graph, GroupId},
             initialisation::test_initialise,
             processes::{
@@ -1362,7 +1332,7 @@ mod tests {
                 ] {
                     // Keep the fixture's physical graph and all default subtraction
                     // terms; only the three requested CFF/UV routes differ.
-                    let mut graphs = Graph::from_string(source, &model)?;
+                    let mut graphs = Graph::from_finalized_runtime_string(source, &model)?;
                     let exercise_selection = kind == GenerationType::CrossSection
                         && orchestrator == UVOrchestrator::HedgePoset
                         && mode == "direct_keyed";
@@ -1500,6 +1470,7 @@ mod tests {
                                 &GraphGroupSelectionSpec::from_master_graph_names(vec![
                                     graph_name.clone(),
                                 ]),
+                                &model,
                             )?;
                             assert_eq!(plan.retained_group_ids(), &[GroupId(1)]);
                             assert_eq!(plan.new_group_id_for_old(GroupId(1)), Some(GroupId(0)));
@@ -1600,6 +1571,7 @@ mod tests {
                         }
                         let export_dir = case_dir.join(phase);
                         processes.export_uv_forests(
+                            &model,
                             &export_dir,
                             0,
                             "default",
@@ -1648,7 +1620,9 @@ mod tests {
                                 actual.insert(residue.clone());
                                 let node_dot = fs::read_to_string(node.path())?;
                                 assert!(node_dot.contains("forest_residue_index"));
-                                for exported in Graph::from_string(&node_dot, &model)? {
+                                for exported in
+                                    Graph::from_finalized_runtime_string(&node_dot, &model)?
+                                {
                                     *exported_expressions
                                         .entry((forest_index, residue.clone()))
                                         .or_insert(Atom::Zero) += exported.global_prefactor.num;
@@ -1723,6 +1697,7 @@ mod tests {
                     source_graph.name.push_str("_mismatch");
                     let error = processes
                         .export_uv_forests(
+                            &model,
                             case_dir.join("mismatch"),
                             0,
                             "default",
@@ -1747,6 +1722,7 @@ mod tests {
                     *source = None;
                     let topology_dir = case_dir.join("topology_without_source");
                     processes.export_uv_forests(
+                        &model,
                         &topology_dir,
                         0,
                         "default",
@@ -1769,6 +1745,7 @@ mod tests {
                     );
                     let error = processes
                         .export_uv_forests(
+                            &model,
                             case_dir.join("missing_source"),
                             0,
                             "default",
