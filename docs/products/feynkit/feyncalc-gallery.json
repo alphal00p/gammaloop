@@ -4927,12 +4927,19 @@
         "ToString",
         "Total"
       ],
-      "end_to_end_validation": "partial: supplied two-loop scalar integrands, Taylor/tensor projection, native IBP and reference-counterterm renormalization constants pass; model-based diagram and counterterm generation remain pending",
+      "end_to_end_validation": "passed: generated two-loop scalar self-energy and counterterm diagrams, native UV/tensor expansion and IBP, exact poles and both displayed two-loop renormalization constants",
       "validated_components": [
         {
-          "scope": "two scalar self-energy integrands from the reference, expansion through external momentum squared, Laporta reduction, six verified vacuum-family symmetry maps, parametric doubled-tadpole recurrence, UV poles and two-loop field/mass renormalization constants",
+          "scope": "two generated bare self-energy topologies, three one-loop counterterm graphs, two local two-loop counterterms from bare-factor expansions; native UV expansion through external momentum squared, Laporta reduction, six verified vacuum-family symmetry maps, parametric doubled-tadpole recurrence, UV poles and a generated linear system for field/mass renormalization",
           "test": "crates/feynkit-py/tests/installed_feyncalc_ibp_phi4.py",
           "components": [
+            "Model.phi4",
+            "Model.generate_diagrams",
+            "Model.expand_couplings",
+            "FeynmanDiagram.integral_family",
+            "FeynmanDiagram.uv_expansion",
+            "IntegralFamily.rewrite_numerator",
+            "Matrix.solve",
             "Symbolica.series",
             "TensorReducer.reduce",
             "IntegralFamily",
@@ -4943,7 +4950,7 @@
             "IBPSolution.reduce"
           ],
           "result": "passed",
-          "note": "Live notebook: hep/ibp_phi4.py. Integrands, analytic tadpole/equal-mass vacuum Laurent coefficients and one-loop counterterms are supplied inputs. Finite Laporta residuals are identified by verified momentum maps, not certified as a minimal master basis. This does not establish generated diagrams or automatic counterterm insertions."
+          "note": "Live notebook: hep/ibp_phi4.py. Unexpanded generated integrands match the reference individually. All seven generated diagrams supply their own numerators and symmetry factors. Analytic tadpole/equal-mass vacuum Laurent coefficients and one-loop renormalization constants remain explicit reference inputs, as in FeynCalc. Finite Laporta residuals are identified by verified momentum maps, not certified as a minimal master basis. Installed regression, strict Marimo check, HTML export and live execution pass."
         }
       ]
     },
