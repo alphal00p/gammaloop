@@ -4346,6 +4346,110 @@ mod tests {
     }
 
     #[test]
+    fn explicit_dyad_projection_is_independent_of_metric_and_operand_order() {
+        idenso::representations::initialize();
+        Python::initialize();
+        let settings = SchoonschipSettings::new(None).with_expanded_contracted_sums();
+        let p = spenso::vector_symbol!("dyad_projection_p");
+        let q = spenso::vector_symbol!("dyad_projection_q");
+        for dimension in [
+            Dimension::Concrete(4),
+            Dimension::from(symbol!("dyad_projection_D")),
+        ] {
+            let mink = Minkowski {}.new_rep(dimension);
+            let [mu, nu] = [201, 202].map(|index| {
+                mink.slot::<AbstractIndex, _>(AbstractIndex::Normal(index))
+                    .to_atom()
+            });
+            let vector = |name, slot: &Atom| FunctionBuilder::new(name).add_arg(slot).finish();
+            let dyad = vector(p, &mu) * vector(q, &nu);
+            let expected_dot = FunctionBuilder::new(SPENSO_TAG.dot)
+                .add_arg(vector(p, &mink.to_symbolic([])))
+                .add_arg(vector(q, &mink.to_symbolic([])))
+                .finish();
+            for (input, output) in [(&mu, &nu), (&nu, &mu)] {
+                let metric = FunctionBuilder::new(ETS.metric)
+                    .add_arg(input)
+                    .add_arg(output)
+                    .finish();
+                for (numerator, expected) in [
+                    (dyad.clone(), expected_dot.clone()),
+                    (
+                        dyad.clone() + &metric,
+                        expected_dot.clone() + dimension.to_symbolic(),
+                    ),
+                ] {
+                    let numerator = StructuredAtom::new(
+                        numerator.clone(),
+                        infer_interface(&numerator).unwrap(),
+                    );
+                    let metric =
+                        StructuredAtom::new(metric.clone(), infer_interface(&metric).unwrap());
+                    for (left, right) in [(&numerator, &metric), (&metric, &numerator)] {
+                        let product = composition::multiply(left, right).unwrap();
+                        assert!(product.is_scalar());
+                        assert!(
+                            infer_interface(&product.atom)
+                                .unwrap()
+                                .canonical()
+                                .is_scalar()
+                        );
+                        assert_eq!(
+                            product
+                                .atom
+                                .schoonschip_with_net::<false, AbstractIndex>(&settings)
+                                .unwrap()
+                                .to_dots()
+                                .expand_in(Atom::var(ETS.metric).as_view())
+                                .schoonschip_with_net::<false, AbstractIndex>(&settings)
+                                .unwrap()
+                                .to_dots(),
+                            expected
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn explicit_dyad_contraction_preserves_uncontracted_slots() {
+        idenso::representations::initialize();
+        Python::initialize();
+        let mink = Minkowski {}.new_rep(4);
+        let [mu, nu, rho] = [211, 212, 213].map(|index| {
+            mink.slot::<AbstractIndex, _>(AbstractIndex::Normal(index))
+                .to_atom()
+        });
+        let p = spenso::vector_symbol!("dyad_partial_p");
+        let q = spenso::vector_symbol!("dyad_partial_q");
+        let vector = |name, slot: &Atom| FunctionBuilder::new(name).add_arg(slot).finish();
+        let numerator = vector(p, &mu) * vector(q, &nu);
+        let numerator =
+            StructuredAtom::new(numerator.clone(), infer_interface(&numerator).unwrap());
+        let expected = vector(p, &mu) * vector(q, &rho);
+        for (input, output) in [(&nu, &rho), (&rho, &nu)] {
+            let metric = FunctionBuilder::new(ETS.metric)
+                .add_arg(input)
+                .add_arg(output)
+                .finish();
+            let metric = StructuredAtom::new(metric.clone(), infer_interface(&metric).unwrap());
+            for (left, right) in [(&numerator, &metric), (&metric, &numerator)] {
+                let product = composition::multiply(left, right).unwrap();
+                assert_eq!(product.rank(), 2);
+                assert_eq!(
+                    infer_interface(&product.atom).unwrap().canonical(),
+                    infer_interface(&expected).unwrap().canonical()
+                );
+                assert_eq!(
+                    product.atom.schoonschip_net::<AbstractIndex>().unwrap(),
+                    expected
+                );
+            }
+        }
+    }
+
+    #[test]
     fn raw_gamma_trace_accepts_longitudinal_projection() {
         use idenso::shorthands::schoonschip::{Schoonschip, SchoonschipSettings};
 
