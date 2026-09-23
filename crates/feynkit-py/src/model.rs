@@ -25,7 +25,7 @@ use crate::{
         generate_diagrams,
     },
 };
-use symbolica::api::python::PythonExpression;
+use symbolica::api::python::{ConvertibleToExpression, PythonExpression};
 
 fn complex_value<'py>(py: Python<'py>, value: ComplexValue) -> Bound<'py, PyComplex> {
     PyComplex::from_doubles(py, value.re, value.im)
@@ -149,6 +149,8 @@ impl PyParticle {
     /// >>> p, i, j = S("p", "i", "j")
     /// >>> projector = model.particle("e-").spin_sum(p, i, j, average=True)
     /// >>> polarized = model.particle("ta-").spin_sum(p, i, j, spin_vector=S("s"))
+    /// >>> dimensional = model.particle("g").spin_sum(p, i, j, dimension=S("D"))
+    /// >>> six_dimensional = model.particle("g").spin_sum(p, i, j, dimension=6)
     ///
     /// Parameters
     /// ----------
@@ -161,7 +163,7 @@ impl PyParticle {
     /// average : bool
     ///     Divide by two for Dirac fermions, D-2 for massless vectors, or D-1
     ///     for massive vectors. Scalars have one state.
-    /// dimension : Expression | None
+    /// dimension : Expression | int | None
     ///     Integer or symbolic Lorentz dimension; defaults to four. Dirac
     ///     spinor slots and their trace dimension stay four. To use a fixed
     ///     two-state vector average at symbolic D, leave average=False and
@@ -178,7 +180,9 @@ impl PyParticle {
     /// ------
     /// ValueError
     ///     If ``spin_vector`` is used with averaging, a massless particle, or
-    ///     a particle other than a Dirac fermion, or is not an unindexed name.
+    ///     a particle other than a Dirac fermion, non-four-dimensional Lorentz
+    ///     slots, or is not an unindexed name. Also raised for an invalid
+    ///     dimension or a concrete dimension with no physical vector states.
     #[pyo3(signature = (momentum, left, right, *, average=false, reference=None, covariant=false, spin_vector=None, dimension=None))]
     #[allow(clippy::too_many_arguments)]
     fn spin_sum(
@@ -190,12 +194,13 @@ impl PyParticle {
         reference: Option<&PythonExpression>,
         covariant: bool,
         spin_vector: Option<&PythonExpression>,
-        dimension: Option<&PythonExpression>,
+        dimension: Option<ConvertibleToExpression>,
     ) -> PyResult<PythonExpression> {
         let sum = feynkit_generator::SpinSum::new(self.inner(), &self.model)
             .map_err(|error| PyValueError::new_err(error.to_string()))?
             .with_dimension(
-                &dimension.map_or_else(|| symbolica::atom::Atom::num(4), |d| d.expr.clone()),
+                &dimension
+                    .map_or_else(|| symbolica::atom::Atom::num(4), |d| d.to_expression().expr),
             )
             .map_err(|error| PyValueError::new_err(error.to_string()))?
             .averaged(average)
@@ -217,6 +222,7 @@ impl PyParticle {
     /// diagram's ``projector_expression()`` or a squared amplitude. Only pairs
     /// with the supplied edge label are replaced; unpaired wavefunctions stay
     /// unchanged. Scalar particles have no external wavefunction factors.
+    /// Vector wavefunction slots must use the requested Lorentz dimension.
     /// External states default to four dimensions; reference and gauge conventions
     /// are those of ``spin_sum``. For a massive Dirac particle, ``spin_vector``
     /// selects the same physical spin state as in ``spin_sum``, including for
@@ -241,7 +247,7 @@ impl PyParticle {
     /// average : bool
     ///     Divide by two for Dirac fermions, D-2 for massless vectors, or D-1
     ///     for massive vectors. Scalars have one state.
-    /// dimension : Expression | None
+    /// dimension : Expression | int | None
     ///     Integer or symbolic Lorentz dimension; defaults to four. Dirac
     ///     spinor slots and their trace dimension stay four. To use a fixed
     ///     two-state vector average at symbolic D, leave average=False and
@@ -258,7 +264,9 @@ impl PyParticle {
     /// ------
     /// ValueError
     ///     If ``spin_vector`` is used with averaging, a massless particle, or
-    ///     a particle other than a Dirac fermion, or is not an unindexed name.
+    ///     a particle other than a Dirac fermion, non-four-dimensional Lorentz
+    ///     slots, or is not an unindexed name. Also raised for an invalid
+    ///     dimension or a concrete dimension with no physical vector states.
     #[pyo3(signature = (expression, momentum, *, edge, average=false, reference=None, covariant=false, spin_vector=None, dimension=None))]
     #[allow(clippy::too_many_arguments)]
     fn sum_spins(
@@ -270,12 +278,13 @@ impl PyParticle {
         reference: Option<&PythonExpression>,
         covariant: bool,
         spin_vector: Option<&PythonExpression>,
-        dimension: Option<&PythonExpression>,
+        dimension: Option<ConvertibleToExpression>,
     ) -> PyResult<PythonExpression> {
         feynkit_generator::SpinSum::new(self.inner(), &self.model)
             .map_err(|error| PyValueError::new_err(error.to_string()))?
             .with_dimension(
-                &dimension.map_or_else(|| symbolica::atom::Atom::num(4), |d| d.expr.clone()),
+                &dimension
+                    .map_or_else(|| symbolica::atom::Atom::num(4), |d| d.to_expression().expr),
             )
             .map_err(|error| PyValueError::new_err(error.to_string()))?
             .averaged(average)

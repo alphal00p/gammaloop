@@ -226,6 +226,7 @@ impl SpinSum {
     ///
     /// Unpaired wavefunctions and other edge labels are left unchanged. The
     /// momentum and reference conventions are those of [`Self::expression`].
+    /// Vector wavefunction slots must match the configured Lorentz dimension.
     pub fn apply(
         &self,
         expression: &Atom,

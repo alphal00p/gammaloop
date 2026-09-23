@@ -12,13 +12,15 @@ mink, metric, ket, bra = S(
     "spenso::mink", "spenso::g", "gammalooprs::ϵ", "gammalooprs::ϵbar"
 )
 zero, one = E("0"), E("1")
-for dimension in (E("4"), E("6"), D):
+for dimension in (4, 6, E("4"), E("6"), D):
     for name, mass_squared, missing, reference in (
         ("g", zero, 2, n),
         ("Z", S("UFO::MZ") ** 2, 1, None),
     ):
         particle = model.particle(name)
-        kin = hep.Kinematics(dimension).with_scalar_product(p, p, mass_squared)
+        kin = hep.Kinematics(
+            E(str(dimension)) if isinstance(dimension, int) else dimension
+        ).with_scalar_product(p, p, mass_squared)
         for average in (False, True):
             projector = particle.spin_sum(
                 p, i, j, reference=reference, average=average, dimension=dimension
@@ -67,7 +69,7 @@ for particle_name, invalid_dimension, options in (
     ("g", E("2"), {}),
     ("Z", E("1"), {}),
     ("e-", E("0"), {}),
-    ("g", E("-1"), {}),
+    ("g", -1, {}),
     ("g", E("3/2"), {}),
     ("g", D - 2, {}),
     ("ta-", D, {"spin_vector": n}),
