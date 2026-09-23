@@ -1061,16 +1061,34 @@ solved targets; a parametric solution or rule performs one recurrence step per
 call. Returning an expression does not recursively reduce the remaining
 integrals or certify them as masters.
 
-`hep/ibp_phi4.py` and `installed_feyncalc_ibp_phi4.py` construct the two scalar
-integrands from the #link("https://feyncalc.github.io/FeynCalcExamples/Phi4/TwoLoops/Renormalization-SS")[two-loop scalar self-energy reference].
-A Taylor expansion through the external momentum squared uses the shared vacuum
-tensor reducer. The example computes Laporta reductions of the resulting
-massive vacuum family, identifies equivalent residuals through six verified
-loop-momentum mappings, and obtains a doubled-tadpole recurrence parametrically.
-Analytic tadpole and equal-mass vacuum Laurent coefficients are supplied as
-reference inputs. Together with the stated loop measure and counterterms,
-the notebook checks the UV poles and renormalization constants; the IBP solver
-does not evaluate those analytic integrals itself.
+`hep/ibp_phi4.py` and `installed_feyncalc_ibp_phi4.py` start from
+`Model.phi4()` and generate the two bare topologies of the
+#link("https://feyncalc.github.io/FeynCalcExamples/Phi4/TwoLoops/Renormalization-SS")[two-loop scalar self-energy reference].
+Each unexpanded integrand, including its native symmetry factor and phase,
+matches a distinct reference topology. The shared graph UV expansion keeps
+terms through external momentum squared, and the vacuum tensor reducer
+projects them into the equal-mass family. Laporta reduction and six verified
+loop-momentum mappings identify equivalent residuals; a parametric recurrence
+reduces the doubled tadpole in the one-loop counterterm.
+
+Expand the bare kinetic, mass and quartic factors $Z_phi$, $Z_phi Z_m$ and
+$Z_g Z_phi^2$ to build local counterterm rules. The generator produces three
+one-loop counterterm diagrams and two local second-order diagrams. Their
+actual numerators determine the counterterm integral combination and the final
+two-by-two linear system, solved by Symbolica. Keeping the first-order field
+constant symbolic during generation checks its cancellation before inserting
+its vanishing reference value.
+
+Analytic tadpole and equal-mass vacuum Laurent coefficients and first-order
+renormalization constants remain explicit reference inputs, as in FeynCalc.
+With $a=g/(16 pi^2)$, the computed results are
+$Z_phi=1-a^2/(24 epsilon)$ and
+$Z_m=1+a/(2 epsilon)+a^2(1/(2 epsilon^2)-5/(24 epsilon))$,
+where $Z_m$ renormalizes the mass squared. Generated local counterterms cancel
+all momentum, mass and logarithmic poles exactly. The installed regression,
+strict Marimo check, HTML export and live execution pass. These checks cover
+the displayed two-loop self-energy renormalization example; the IBP solver
+does not evaluate analytic masters or certify a minimal master basis.
 
 `hep/ibp_bubble.py` constructs a bubble with unequal nonzero masses and nonzero
 external momentum. The targets $I_(2 1)$, $I_(1 2)$ and $I_(2 2)$ reduce to the

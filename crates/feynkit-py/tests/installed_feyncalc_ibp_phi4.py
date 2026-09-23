@@ -1,12 +1,16 @@
-"""Shared IBP reduction of the FeynCalc two-loop phi4 self-energy.
+"""Generated two-loop phi4 self-energy and counterterms with shared IBP reduction.
 
 Reference: https://feyncalc.github.io/FeynCalcExamples/Phi4/TwoLoops/Renormalization-SS
 Analytic tadpole/vacuum pole coefficients are reference inputs. A finite
 Laporta residual list is not a certification of a minimal master basis.
 """
 
-from symbolica import E, Expression, Replacement, S
+import json
+from math import prod
+
+from symbolica import E, Expression, Matrix, Replacement, S, Symbol
 from symbolica.community import hep
+from symbolica.community.spenso import TensorExpression
 
 d, k1, k2, mass_squared, p_squared, eps, coupling = S(
     "ibp_phi4::d",
@@ -47,7 +51,7 @@ expected_taylor = (
     + 4 * mass_squared * p_squared / (d * denominator**3)
 )
 assert (taylor - expected_taylor).together() == zero
-bare_input = (
+reference_bare_input = (
     integral(2, 1, 0) / 4
     + taylor.replace_multiple(
         [
@@ -67,6 +71,112 @@ family = hep.IntegralFamily(
     kinematics=kinematics,
 )
 assert family.is_complete and family.is_independent
+# Generate the two bare topologies and carry their native factors through the
+# shared graph UV expansion. The supplied integrands are independent checks.
+model = hep.Model.phi4()
+particle = model.particle("phi")
+generated = model.generate_diagrams(
+    [particle],
+    [particle],
+    loops=2,
+    max_vertices=2,
+    maximum_bridges=0,
+    self_energy=None,
+    tadpoles=None,
+    zero_snails=None,
+    numerator_grouping=None,
+    progress=None,
+)
+assert len(generated.diagrams) == 2
+K, P, dim = S("gammalooprs::K", "gammalooprs::P", "gammalooprs::dim")
+model_mass, model_coupling = S("UFO::mass", "UFO::lam")
+index, dimension = S("ibp_phi4::index_", "ibp_phi4::dimension_")
+den, edge_, mom_, mass_, quad_ = S(
+    "gammalooprs::denom",
+    "ibp_phi4::edge_",
+    "ibp_phi4::mom_",
+    "ibp_phi4::mass_",
+    "ibp_phi4::quad_",
+)
+coordinates = S("ibp_phi4::x1", "ibp_phi4::x2", "ibp_phi4::x3")
+external_kinematics = kinematics.with_scalar_product(P(0), P(0), p_squared)
+reducer = (
+    hep.TensorReducer(d)
+    .with_integrated_vector(k1(mink(d)))
+    .with_integrated_vector(k2(mink(d)))
+)
+bare_input = zero
+bare_terms = []
+raw_checks = []
+for diagram in generated.diagrams:
+    numerator = model.expand_couplings(diagram.numerator_expression().to_expression())
+    factor = (
+        diagram.overall_factor_expression(evaluate=True)
+        * diagram.numerator_prefactor_expression()
+    )
+    raw_family = diagram.integral_family(kinematics=hep.Kinematics(d))
+    raw = factor * numerator / (Symbol.I * model_coupling**2)
+    for propagator in raw_family.denominators:
+        raw /= propagator
+    raw = (
+        raw.replace(K(0, index), k1(index))
+        .replace(K(1, index), k2(index))
+        .replace(model_mass**2, mass_squared)
+    )
+    raw_checks.append(raw)
+    expanded = diagram.momentum_basis().route_expression(
+        diagram.uv_expansion(model_mass, numerator=numerator).to_expression()
+    )
+    expanded = (
+        expanded.replace(dim, d)
+        .replace(K(0, index), k1(index))
+        .replace(K(1, index), k2(index))
+        .replace(model_mass**2, mass_squared)
+    )
+    for match in list(expanded.match(den(edge_, mom_, mass_, quad_))):
+        values = dict(match)
+        expanded = expanded.replace(
+            den(values[edge_], values[mom_], values[mass_], values[quad_]),
+            family.rewrite_numerator(values[quad_], coordinates),
+        )
+    scalar = family.rewrite_numerator(
+        external_kinematics.apply(reducer.reduce(expanded)), coordinates
+    )
+    scalar = (scalar * factor / (Symbol.I * model_coupling**2)).together().expand()
+    for monomial, coefficient in scalar.coefficient_list(*coordinates):
+        powers = [
+            -int((monomial.derivative(x) * x / monomial).together())
+            for x in coordinates
+        ]
+        assert monomial == prod(
+            x ** (-power) for x, power in zip(coordinates, powers, strict=True)
+        )
+        assert not coefficient.matches(K(S("ibp_phi4::args___")))
+        bare_terms.append((powers, coefficient))
+        bare_input += coefficient * integral(*powers)
+raw_reference = [
+    1 / (4 * family.denominators[0] ** 2 * family.denominators[1]),
+    1
+    / (
+        6
+        * family.denominators[0]
+        * family.denominators[1]
+        * (
+            external_kinematics.scalar_product(k1 + k2 + P(0), k1 + k2 + P(0))
+            - mass_squared
+        )
+    ),
+]
+assert all(
+    sum(
+        external_kinematics.apply(raw - reference).together() == zero
+        for raw in raw_checks
+    )
+    == 1
+    for reference in raw_reference
+)
+assert (bare_input - reference_bare_input).together() == zero
+
 ibp = hep.IBPFamily(family, name="phi4_vacuum")
 identities = ibp.ibp_identities()
 assert len(identities) == 4
@@ -84,7 +194,8 @@ symmetries = [
 assert all(mapping is not None for mapping in symmetries)
 assert len({tuple(mapping.denominator_map) for mapping in symmetries}) == 6
 
-targets = [[2, 1, 0], [1, 1, 1], [1, 1, 2], [1, 1, 3]]
+targets = sorted({tuple(powers) for powers, coefficient in bare_terms})
+assert set(targets) == {(2, 1, 0), (1, 1, 1), (1, 1, 2), (1, 1, 3)}
 laporta = ibp.reduce_laporta(targets, max_depth=2)
 assert laporta.stats["rows"] > 0
 # These are the solver's unresolved integrals at finite search depth. Their
@@ -160,12 +271,131 @@ assert len(tadpole_terms) == 1 and tadpole_terms[0][0] == [1]
 tadpole_coefficient = tadpole_terms[0][1]
 assert (tadpole_coefficient - (d - 2) / (2 * mass_squared)).together() == zero
 zg1, zm1 = 3 / (2 * eps), 1 / (2 * eps)
+# Build local counterterm vertices from the bare Lagrangian factors. Keep the
+# one-loop field constant symbolic through graph generation, although its
+# reference value vanishes in phi4. h counts powers of g/(16*pi^2).
+h, field1, mass1, vertex1, field2, mass2 = S(
+    "ibp_phi4::h",
+    "ibp_phi4::field1",
+    "ibp_phi4::mass1",
+    "ibp_phi4::vertex1",
+    "ibp_phi4::field2",
+    "ibp_phi4::mass2",
+)
+Zfield = 1 + h * field1 + h**2 * field2
+Zmass = 1 + h * mass1 + h**2 * mass2
+Zvertex = 1 + h * vertex1
+specification = json.loads(model.to_json())
+specification["orders"].append({"name": "CT", "expansion_order": 2, "hierarchy": 1})
+for label, valence, lorentz, bare_factor in [
+    ("kinetic", 2, "P(dummy(1),1)*P(dummy(1),1)", Symbol.I * (Zfield - 1)),
+    ("mass", 2, "1", -Symbol.I * model_mass**2 * (Zfield * Zmass - 1)),
+    ("quartic", 4, "1", -Symbol.I * model_coupling * (Zvertex * Zfield**2 - 1)),
+]:
+    specification["lorentz_structures"].append(
+        {"name": "CT_L_" + label, "spins": [1] * valence, "structure": lorentz}
+    )
+    for order in [1, 2] if valence == 2 else [1]:
+        name = f"CT_{label}_{order}"
+        specification["couplings"].append(
+            {
+                "name": name,
+                "expression": repr(
+                    bare_factor.expand().coefficient(h**order) * h**order
+                ),
+                "orders": [["SCALAR", 1 if valence == 4 else 0], ["CT", order]],
+                "value": None,
+            }
+        )
+        specification["vertex_rules"].append(
+            {
+                "name": name,
+                "particles": [particle.name] * valence,
+                "color_structures": ["1"],
+                "lorentz_structures": ["CT_L_" + label],
+                "couplings": [[name]],
+            }
+        )
+ct_model = hep.Model.from_json(json.dumps(specification))
+ct_diagrams = {}
+ct_integral, ct_coordinate = S("ibp_phi4::J", "ibp_phi4::y")
+ct_input, tree_ct = zero, zero
+for loops, ct_order in [(1, 1), (0, 2)]:
+    result = ct_model.generate_diagrams(
+        [particle.name],
+        [particle.name],
+        loops=loops,
+        max_vertices=2 if loops else 1,
+        coupling_orders={"CT": ct_order},
+        maximum_bridges=0,
+        self_energy=None,
+        tadpoles=None,
+        zero_snails=None,
+        numerator_grouping=None,
+        progress=None,
+    )
+    assert len(result.diagrams) == (3 if loops else 2)
+    ct_diagrams[loops] = result.diagrams
+    for diagram in result.diagrams:
+        numerator = ct_model.expand_couplings(
+            diagram.numerator_expression().to_expression()
+        )
+        numerator = TensorExpression(numerator.expand()).to_dots().to_expression()
+        if loops:
+            numerator = diagram.uv_expansion(
+                model_mass, numerator=numerator
+            ).to_expression()
+        numerator = diagram.momentum_basis().route_expression(numerator)
+        numerator = (
+            numerator.replace(mink(dimension), mink(d))
+            .replace(K(0, index), k1(index))
+            .replace(model_mass**2, mass_squared)
+        )
+        for match in list(numerator.match(den(edge_, mom_, mass_, quad_))):
+            values = dict(match)
+            numerator = numerator.replace(
+                den(values[edge_], values[mom_], values[mass_], values[quad_]),
+                tadpole_family.rewrite_numerator(values[quad_], [ct_coordinate]),
+            )
+        factor = (
+            diagram.overall_factor_expression(evaluate=True)
+            * diagram.numerator_prefactor_expression()
+        )
+        numerator = external_kinematics.apply(numerator) * factor
+        if loops:
+            scalar = (
+                (
+                    tadpole_family.rewrite_numerator(numerator, [ct_coordinate])
+                    / (h * model_coupling)
+                )
+                .together()
+                .expand()
+            )
+            for monomial, coefficient in scalar.coefficient_list(ct_coordinate):
+                power = -int(
+                    (
+                        monomial.derivative(ct_coordinate) * ct_coordinate / monomial
+                    ).together()
+                )
+                assert monomial == ct_coordinate ** (-power)
+                ct_input += coefficient * ct_integral(power)
+        else:
+            tree_ct += numerator / (Symbol.I * h**2)
+assert (
+    ct_input
+    - (vertex1 + field1) * ct_integral(1) / 2
+    - mass_squared * mass1 * ct_integral(2) / 2
+).together() == zero
+assert (
+    tree_ct - p_squared * field2 + mass_squared * (mass2 + field2 + field1 * mass1)
+).together() == zero
+ct_reduced = ct_input.replace(ct_integral(2), tadpole_coefficient * ct_integral(1))
+ct_reduced = ct_reduced.replace(field1, zero).replace(vertex1, zg1).replace(mass1, zm1)
+
 counterterm_uv = (
     (
         (1 + eps * log_4pi)
-        * (zg1 + mass_squared * zm1 * tadpole_coefficient.replace(d, 4 - 2 * eps))
-        * tadpole_poles
-        / 2
+        * ct_reduced.replace(d, 4 - 2 * eps).replace(ct_integral(1), tadpole_poles)
     )
     .series(eps, 0, -1)
     .to_expression()
@@ -182,8 +412,20 @@ assert (
     + mass_squared / (4 * eps)
     - p_squared / (24 * eps)
 ).together() == zero
-zphi2 = -loop_uv.coefficient(p_squared).expand()
-zm2 = (loop_uv.replace(p_squared, zero) / mass_squared - zphi2).expand()
+tree_ct = tree_ct.replace(field1, zero).expand()
+ct_rows = [
+    tree_ct.coefficient(p_squared),
+    (tree_ct.replace(p_squared, zero) / mass_squared).together().expand(),
+]
+ct_matrix = Matrix.from_linear(
+    2, 2, [row.coefficient(unknown) for row in ct_rows for unknown in (field2, mass2)]
+)
+rhs = Matrix.vec(
+    [-loop_uv.coefficient(p_squared), -loop_uv.replace(p_squared, zero) / mass_squared]
+)
+solution = ct_matrix.solve(rhs)
+zphi2, zm2 = (solution[row, 0].to_expression().expand() for row in range(2))
+assert (loop_uv + tree_ct.replace(field2, zphi2).replace(mass2, zm2)).together() == zero
 assert (loop_uv + p_squared * zphi2 - mass_squared * (zm2 + zphi2)).together() == zero
 loop_coupling = coupling / (16 * pi**2)
 zphi = (1 + loop_coupling**2 * zphi2).expand()
@@ -197,6 +439,6 @@ assert (
     + 5 * coupling**2 / (6144 * pi**4 * eps)
 ).together() == zero
 print(
-    "Phi4 Laporta and parametric IBP, Taylor projection, UV poles and renormalization constants passed",
+    "Generated phi4 diagrams and counterterms, native UV/tensor expansion, IBP and renormalization constants passed",
     laporta.stats,
 )
