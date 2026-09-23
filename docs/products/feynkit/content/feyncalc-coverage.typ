@@ -1189,6 +1189,38 @@ integrals. The installed regression and all eight live scheme/kinematics
 combinations pass. This covers the reference's two- and three-point functions
 in four dimensions; a one-point tadpole or a vacuum condition is separate.
 
+== Scalar and pseudoscalar Yukawa renormalization
+
+`hep/yukawa_renormalization.py` runs both Yukawa interactions through one
+calculation. The model definition combines the built-in quartic scalar with
+the Standard Model Dirac propagators. Only the Yukawa interaction and its
+projector differ between the scalar and pseudoscalar cases. Each generates
+thirteen bare graphs and six local counterterms. Shared graph UV expansion,
+Spenso traces, tensor projection and native tadpole IBP determine every pole;
+OneLOop supplies the master residue. The auxiliary-mass dependence cancels.
+
+The generated local operators supply a six-by-six matching system for the
+fermion and scalar field and mass constants and the Yukawa and quartic
+couplings. All six constants agree with each of the
+#link("https://feyncalc.github.io/FeynCalcExamples/YukawaS/OneLoop/Renormalization")[scalar]
+and #link("https://feyncalc.github.io/FeynCalcExamples/YukawaPS/OneLoop/Renormalization")[pseudoscalar]
+references. Bare and counterterm graphs retain the same external-fermion
+ordering; the pseudoscalar vertex projector removes its known overall phase
+before the rational matrix solve. Both subtraction schemes and their finite
+difference are checked.
+
+Differentiating the bare couplings derives
+$beta_g=5g^3/(16 pi^2)$ and
+$beta_lambda=(3 lambda^2+8g^2 lambda-48g^4)/(16 pi^2)$ for both interactions.
+The additive quartic counterterm remains finite at $lambda=0$, even though
+its multiplicative renormalization constant contains $1/lambda$. The mass
+constants distinguish the two theories. The installed regression, HTML
+export, strict Marimo checks and all 32 live interaction, scheme, process
+and diagram selections pass. This covers the reference two-, three- and
+four-point functions; vacuum and odd-scalar operators are separate. Paired
+gamma-five factors suffice for these leading poles; anomalous axial traces
+are outside this validation.
+
 == Generated electron anomalous magnetic moment
 
 `hep/gminus2.py` and `installed_feyncalc_gminus2.py` generate the tree and
