@@ -1,0 +1,76 @@
+# Split only the second serial H propagator; keep spectator and bubble masses fixed.
+# Compare the limit m_split -> 0.6 with the raised graph in run.toml.
+# Bare pointwise diagnostic: the bubble UV subdivergence is not subtracted.
+commands = []
+
+[[command_blocks]]
+name = "generate"
+commands = [
+  "import model ./examples/cli/thermal_production/massive_double_triangle/model.json",
+  "set model MX=1.6",
+  "set global kv global.generation.medium.mode=$(mode:thermodynamic_equilibrium)",
+  "import graphs $(graph:./examples/cli/thermal_production/massive_self_energy/split_mass.dot) --process-spec 'X > { H H, H H L } [{{2}}]' -p insertion -i NLO -o",
+  "generate existing -p insertion -i NLO",
+]
+
+[[command_blocks]]
+name = "export"
+commands = [
+  "save standalone $(output:/tmp/gammaloop-self-energy-split)-standalone --json",
+]
+
+[[command_blocks]]
+name = "inspect"
+commands = [
+  "set process -p insertion -i NLO kv general.inverse_temperature=$(beta:2.0) general.generate_events=true general.store_additional_weights_in_event=false",
+  "inspect -p insertion -i NLO $(precision:-f) -m --graph-id 0 -x 0.4 0.2 0.1 -0.3 0.5 0.2 --json-output $(output:/tmp/gammaloop-self-energy-split)-inspect.json",
+]
+
+[cli_settings.global.generation.evaluator]
+compile = false
+store_atom = true
+iterative_orientation_optimization = false
+summed = false
+summed_function_map = true
+
+[cli_settings.global.generation.uv]
+subtract_uv = false
+generate_integrated = false
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = false
+
+[default_runtime_settings.general]
+inverse_temperature = 2.0
+integral_unit = "none"
+evaluator_method = "SummedFunctionMap"
+
+[default_runtime_settings.kinematics]
+e_cm = 1.6
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [[1.6, 0.0, 0.0, 0.0]]
+helicities = [0]
+
+[default_runtime_settings.sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = false
+lmb_channels = "summed"
+coordinate_system = "spherical"
+mapping = "linear"
+b = 1.0
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = true
+
+[default_runtime_settings.integrator]
+n_start = 1000
+n_increase = 0
+n_max = 1000
+seed = 271828
+integrated_phase = "real"
+target_relative_accuracy = 0.005

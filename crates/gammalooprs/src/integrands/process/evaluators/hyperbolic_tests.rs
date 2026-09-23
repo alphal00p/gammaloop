@@ -617,3 +617,75 @@ fn hyperbolic_symjit_o2() {
         |x| F(x.to_f64()),
     );
 }
+
+#[test]
+fn hyperbolic_hyperdual_thermal_workaround() {
+    use super::GenericEvaluatorFloat;
+    use crate::utils::hyperdual_utils::{DualOrNot, simple_n_deriv_shape};
+
+    test_initialise().unwrap();
+    let argument = symbol!("hyperbolic_dual_test_argument");
+    let body = symbol!("hyperbolic_dual_test_body");
+    let mut function_map = FunctionMap::default();
+    let expressions = [tanh(), coth(), sech(), csch()]
+        .into_iter()
+        .enumerate()
+        .map(|(index, function)| {
+            // Keep the native function nested in a shared body, as in thermal N.
+            function_map
+                .add_tagged_function(
+                    body,
+                    vec![Atom::num(index)],
+                    Vec::<symbolica::atom::Symbol>::new(),
+                    function.call_args([Atom::var(argument)]),
+                )
+                .unwrap();
+            body.call_args([Atom::num(index)])
+        })
+        .collect::<Vec<_>>();
+    let mut evaluator = GenericEvaluator::new_from_raw_params(
+        expressions,
+        &[Atom::var(argument)],
+        &function_map,
+        vec![],
+        OptimizationSettings::default(),
+        Some(simple_n_deriv_shape(1)),
+        &EvaluatorSettings::default(),
+    )
+    .unwrap();
+    let mut checks = Checks {
+        precision: 53,
+        checked: 0,
+        failures: BTreeMap::new(),
+    };
+    for (re, im) in [
+        (0.25, 0.0),
+        (0.8, 0.0),
+        (1.0, 0.5),
+        (100.0, 0.0),
+        (1000.0, 0.0),
+    ] {
+        let input = Mpc::with_val(REFERENCE_PRECISION, (re, im));
+        let expected = reference_values(&input, REFERENCE_PRECISION);
+        let results = <f64 as GenericEvaluatorFloat>::get_evaluator(&mut evaluator)(&[
+            Complex::new(F(re), F(im)),
+            Complex::new_re(F(1.0)),
+        ]);
+        for (function, result) in results.into_iter().enumerate() {
+            let DualOrNot::Dual(result) = result else {
+                panic!("expected a hyperdual result")
+            };
+            for (order, value) in result.values.into_iter().enumerate() {
+                let index = (function + 2) * 3 + order;
+                checks.compare(
+                    "thermal dual",
+                    index,
+                    &input,
+                    &to_mpc(value),
+                    &expected[index],
+                );
+            }
+        }
+    }
+    checks.finish("hyperbolic hyperdual workaround");
+}

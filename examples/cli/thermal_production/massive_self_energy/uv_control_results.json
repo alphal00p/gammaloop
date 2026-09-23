@@ -1,0 +1,1347 @@
+[
+  {
+    "label": "vacuum",
+    "mode": "vacuum",
+    "command": [
+      "./gammaloop",
+      "--dev-optim",
+      "--read-only-state",
+      "-s",
+      "/tmp/gammaloop-self-energy-uv-vacuum-state",
+      "-n",
+      "-L",
+      "off",
+      "examples/cli/thermal_production/massive_self_energy/uv_run.toml",
+      "run",
+      "generate",
+      "export",
+      "inspect",
+      "integrate",
+      "-D",
+      "mode=vacuum",
+      "-D",
+      "output=/tmp/gammaloop-self-energy-uv-vacuum",
+      "-D",
+      "samples=1000000"
+    ],
+    "exit_code": 0,
+    "native": {
+      "slots": [
+        {
+          "key": "insertion@NLO",
+          "process": "insertion",
+          "integrand": "NLO",
+          "target": null,
+          "integral": {
+            "neval": 1000000,
+            "real_zero": 8185,
+            "im_zero": 1000000,
+            "result": {
+              "re": 6.962130538386608e-05,
+              "im": 0.0
+            },
+            "error": {
+              "re": 4.515497343325725e-07,
+              "im": 0.0
+            },
+            "real_chisq": 20.68106038579674,
+            "im_chisq": 0.0
+          },
+          "table_results": [
+            {
+              "component": "re",
+              "value": 6.962130538386608e-05,
+              "error": 4.515497343325725e-07,
+              "relative_error_percent": 0.6485798159671017,
+              "chi_sq_per_dof": 1.034053019289837,
+              "target_delta_sigma": null,
+              "target_delta_percent": null,
+              "max_weight_impact": 0.00021995071997321013
+            },
+            {
+              "component": "im",
+              "value": 0.0,
+              "error": 0.0,
+              "relative_error_percent": null,
+              "chi_sq_per_dof": 0.0,
+              "target_delta_sigma": null,
+              "target_delta_percent": null,
+              "max_weight_impact": 0.0
+            }
+          ],
+          "integration_statistics": {
+            "num_evals": 1000000,
+            "average_total_time_seconds": 3.2322e-05,
+            "average_parameterization_time_seconds": 2.19e-07,
+            "average_integrand_time_seconds": 1.4465e-05,
+            "average_evaluator_time_seconds": 2.587e-06,
+            "average_observable_time_seconds": 0.0,
+            "average_integrator_time_seconds": 4.29e-07,
+            "f64_percentage": 99.8981,
+            "f128_percentage": 0.10189999999999999,
+            "arb_percentage": 0.0,
+            "nan_percentage": 0.0,
+            "nan_or_unstable_percentage": 0.0,
+            "generated_event_count": 0,
+            "accepted_event_count": 0,
+            "selection_efficiency_percentage": null
+          },
+          "max_weight_info": [
+            {
+              "component": "re",
+              "sign": "+",
+              "max_eval": 0.015313256244656072,
+              "coordinates": "graph: 0, xs: [\n5.5261138032531965e-02 8.7717473223512854e-01 8.8362846608880619e-01\n7.9587163209804732e-02 8.3141098378147615e-01 9.8416874777298402e-01 ]"
+            },
+            {
+              "component": "re",
+              "sign": "-",
+              "max_eval": -0.010008200146772183,
+              "coordinates": "graph: 0, xs: [\n1.6999285053790902e-01 3.7093427572980020e-01 6.4952568009492362e-01\n1.5708561225171347e-01 3.7175010127855701e-01 6.4721360888275414e-01 ]"
+            }
+          ],
+          "grid_breakdown": {
+            "re": null,
+            "im": null
+          }
+        }
+      ]
+    },
+    "point": {
+      "evaluation": {
+        "integrand_result": {
+          "re": 8.000414708818148e-06,
+          "im": 0.0
+        },
+        "parameterization_jacobian": null,
+        "integrator_weight": 1.0,
+        "event_groups": [
+          [
+            {
+              "kinematic_configuration": [
+                [
+                  {
+                    "temporal": {
+                      "value": 1.6
+                    },
+                    "spatial": {
+                      "px": 0.0,
+                      "py": 0.0,
+                      "pz": 0.0
+                    }
+                  }
+                ],
+                [
+                  {
+                    "temporal": {
+                      "value": 0.8000000000000003
+                    },
+                    "spatial": {
+                      "px": -0.461880215351701,
+                      "py": -0.2309401076758505,
+                      "pz": -0.11547005383792525
+                    }
+                  },
+                  {
+                    "temporal": {
+                      "value": 0.8000000000000003
+                    },
+                    "spatial": {
+                      "px": 0.461880215351701,
+                      "py": 0.2309401076758505,
+                      "pz": 0.11547005383792525
+                    }
+                  }
+                ]
+              ],
+              "cut_info": {
+                "particle_pdgs": [
+                  [
+                    9000001
+                  ],
+                  [
+                    9000003,
+                    9000003
+                  ]
+                ],
+                "cut_id": 0,
+                "graph_id": 0,
+                "graph_group_id": 0,
+                "orientation_id": null,
+                "lmb_channel_id": null,
+                "lmb_channel_edge_ids": null
+              },
+              "weight": {
+                "re": 8.000366748116376e-06,
+                "im": 0.0
+              },
+              "additional_weights": {
+                "weights": {}
+              }
+            },
+            {
+              "kinematic_configuration": [
+                [
+                  {
+                    "temporal": {
+                      "value": 1.6
+                    },
+                    "spatial": {
+                      "px": 0.0,
+                      "py": 0.0,
+                      "pz": 0.0
+                    }
+                  }
+                ],
+                [
+                  {
+                    "temporal": {
+                      "value": 0.6176797038921384
+                    },
+                    "spatial": {
+                      "px": -0.1280720529353316,
+                      "py": -0.0640360264676658,
+                      "pz": -0.0320180132338329
+                    }
+                  },
+                  {
+                    "temporal": {
+                      "value": 0.6316294962355639
+                    },
+                    "spatial": {
+                      "px": -0.09605403970149869,
+                      "py": 0.1600900661691645,
+                      "pz": 0.0640360264676658
+                    }
+                  },
+                  {
+                    "temporal": {
+                      "value": 0.3506907998722978
+                    },
+                    "spatial": {
+                      "px": 0.2241260926368303,
+                      "py": -0.09605403970149869,
+                      "pz": -0.0320180132338329
+                    }
+                  }
+                ]
+              ],
+              "cut_info": {
+                "particle_pdgs": [
+                  [
+                    9000001
+                  ],
+                  [
+                    9000003,
+                    9000003,
+                    9000002
+                  ]
+                ],
+                "cut_id": 2,
+                "graph_id": 0,
+                "graph_group_id": 0,
+                "orientation_id": null,
+                "lmb_channel_id": null,
+                "lmb_channel_edge_ids": null
+              },
+              "weight": {
+                "re": 4.796070177206247e-11,
+                "im": 0.0
+              },
+              "additional_weights": {
+                "weights": {}
+              }
+            }
+          ]
+        ],
+        "evaluation_metadata": {
+          "total_timing": {
+            "secs": 0,
+            "nanos": 80750
+          },
+          "integrand_evaluation_time": {
+            "secs": 0,
+            "nanos": 46292
+          },
+          "evaluator_evaluation_time": {
+            "secs": 0,
+            "nanos": 5791
+          },
+          "parameterization_time": {
+            "secs": 0,
+            "nanos": 0
+          },
+          "event_processing_time": {
+            "secs": 0,
+            "nanos": 6291
+          },
+          "generated_event_count": 2,
+          "accepted_event_count": 2,
+          "relative_instability_error": {
+            "re": 0.0,
+            "im": 0.0
+          },
+          "is_nan": false,
+          "loop_momenta_escalation": null,
+          "stability_results": [
+            {
+              "precision": "Double",
+              "estimated_relative_accuracy": 8.469890405263034e-16,
+              "status": {
+                "Stable": 2
+              },
+              "total_time": {
+                "secs": 0,
+                "nanos": 75625
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "label": "zero_temperature",
+    "mode": "zero_temperature_equilibrium",
+    "command": [
+      "./gammaloop",
+      "--dev-optim",
+      "--read-only-state",
+      "-s",
+      "/tmp/gammaloop-self-energy-uv-zero_temperature-state",
+      "-n",
+      "-L",
+      "off",
+      "examples/cli/thermal_production/massive_self_energy/uv_run.toml",
+      "run",
+      "generate",
+      "export",
+      "inspect",
+      "integrate",
+      "-D",
+      "mode=zero_temperature_equilibrium",
+      "-D",
+      "output=/tmp/gammaloop-self-energy-uv-zero_temperature",
+      "-D",
+      "samples=300000"
+    ],
+    "exit_code": 0,
+    "native": {
+      "slots": [
+        {
+          "key": "insertion@NLO",
+          "process": "insertion",
+          "integrand": "NLO",
+          "target": null,
+          "integral": {
+            "neval": 300000,
+            "real_zero": 6058,
+            "im_zero": 300000,
+            "result": {
+              "re": 6.945978748544694e-05,
+              "im": 0.0
+            },
+            "error": {
+              "re": 9.745766611230816e-07,
+              "im": 0.0
+            },
+            "real_chisq": 10.288249652965504,
+            "im_chisq": 0.0
+          },
+          "table_results": [
+            {
+              "component": "re",
+              "value": 6.945978748544694e-05,
+              "error": 9.745766611230816e-07,
+              "relative_error_percent": 1.4030803957286404,
+              "chi_sq_per_dof": 1.7147082754942506,
+              "target_delta_sigma": null,
+              "target_delta_percent": null,
+              "max_weight_impact": 0.0004802874924271389
+            },
+            {
+              "component": "im",
+              "value": 0.0,
+              "error": 0.0,
+              "relative_error_percent": null,
+              "chi_sq_per_dof": 0.0,
+              "target_delta_sigma": null,
+              "target_delta_percent": null,
+              "max_weight_impact": 0.0
+            }
+          ],
+          "integration_statistics": {
+            "num_evals": 300000,
+            "average_total_time_seconds": 4.8309e-05,
+            "average_parameterization_time_seconds": 2.24e-07,
+            "average_integrand_time_seconds": 2.249e-05,
+            "average_evaluator_time_seconds": 4.477e-06,
+            "average_observable_time_seconds": 0.0,
+            "average_integrator_time_seconds": 4.81e-07,
+            "f64_percentage": 99.899,
+            "f128_percentage": 0.101,
+            "arb_percentage": 0.0,
+            "nan_percentage": 0.0,
+            "nan_or_unstable_percentage": 0.0,
+            "generated_event_count": 0,
+            "accepted_event_count": 0,
+            "selection_efficiency_percentage": null
+          },
+          "max_weight_info": [
+            {
+              "component": "re",
+              "sign": "+",
+              "max_eval": 0.009074345467875179,
+              "coordinates": "graph: 0, xs: [\n3.2333807593990904e-01 3.0638852045224985e-02 1.1593891618278096e-01\n2.7582723479306759e-01 9.6440776202272349e-01 1.1348281965862261e-01 ]"
+            },
+            {
+              "component": "re",
+              "sign": "-",
+              "max_eval": -0.010008200146772183,
+              "coordinates": "graph: 0, xs: [\n1.6999285053790902e-01 3.7093427572980020e-01 6.4952568009492362e-01\n1.5708561225171347e-01 3.7175010127855701e-01 6.4721360888275414e-01 ]"
+            }
+          ],
+          "grid_breakdown": {
+            "re": null,
+            "im": null
+          }
+        }
+      ]
+    },
+    "point": {
+      "evaluation": {
+        "integrand_result": {
+          "re": 8.000414708818148e-06,
+          "im": 0.0
+        },
+        "parameterization_jacobian": null,
+        "integrator_weight": 1.0,
+        "event_groups": [
+          [
+            {
+              "kinematic_configuration": [
+                [
+                  {
+                    "temporal": {
+                      "value": 1.6
+                    },
+                    "spatial": {
+                      "px": 0.0,
+                      "py": 0.0,
+                      "pz": 0.0
+                    }
+                  }
+                ],
+                [
+                  {
+                    "temporal": {
+                      "value": 0.8000000000000003
+                    },
+                    "spatial": {
+                      "px": -0.461880215351701,
+                      "py": -0.2309401076758505,
+                      "pz": -0.11547005383792525
+                    }
+                  },
+                  {
+                    "temporal": {
+                      "value": 0.8000000000000003
+                    },
+                    "spatial": {
+                      "px": 0.461880215351701,
+                      "py": 0.2309401076758505,
+                      "pz": 0.11547005383792525
+                    }
+                  }
+                ]
+              ],
+              "cut_info": {
+                "particle_pdgs": [
+                  [
+                    9000001
+                  ],
+                  [
+                    9000003,
+                    9000003
+                  ]
+                ],
+                "cut_id": 0,
+                "graph_id": 0,
+                "graph_group_id": 0,
+                "orientation_id": null,
+                "lmb_channel_id": null,
+                "lmb_channel_edge_ids": null
+              },
+              "weight": {
+                "re": 8.000366748116376e-06,
+                "im": 0.0
+              },
+              "additional_weights": {
+                "weights": {}
+              }
+            },
+            {
+              "kinematic_configuration": [
+                [
+                  {
+                    "temporal": {
+                      "value": 1.6
+                    },
+                    "spatial": {
+                      "px": 0.0,
+                      "py": 0.0,
+                      "pz": 0.0
+                    }
+                  }
+                ],
+                [
+                  {
+                    "temporal": {
+                      "value": 0.6176797038921384
+                    },
+                    "spatial": {
+                      "px": -0.1280720529353316,
+                      "py": -0.0640360264676658,
+                      "pz": -0.0320180132338329
+                    }
+                  },
+                  {
+                    "temporal": {
+                      "value": 0.6316294962355639
+                    },
+                    "spatial": {
+                      "px": -0.09605403970149869,
+                      "py": 0.1600900661691645,
+                      "pz": 0.0640360264676658
+                    }
+                  },
+                  {
+                    "temporal": {
+                      "value": 0.3506907998722978
+                    },
+                    "spatial": {
+                      "px": 0.2241260926368303,
+                      "py": -0.09605403970149869,
+                      "pz": -0.0320180132338329
+                    }
+                  }
+                ]
+              ],
+              "cut_info": {
+                "particle_pdgs": [
+                  [
+                    9000001
+                  ],
+                  [
+                    9000003,
+                    9000003,
+                    9000002
+                  ]
+                ],
+                "cut_id": 2,
+                "graph_id": 0,
+                "graph_group_id": 0,
+                "orientation_id": null,
+                "lmb_channel_id": null,
+                "lmb_channel_edge_ids": null
+              },
+              "weight": {
+                "re": 4.7960701772062485e-11,
+                "im": 0.0
+              },
+              "additional_weights": {
+                "weights": {}
+              }
+            },
+            {
+              "kinematic_configuration": [
+                [
+                  {
+                    "temporal": {
+                      "value": 1.6
+                    },
+                    "spatial": {
+                      "px": 0.0,
+                      "py": 0.0,
+                      "pz": 0.0
+                    }
+                  },
+                  {
+                    "temporal": {
+                      "value": 1.0015247456873997
+                    },
+                    "spatial": {
+                      "px": 0.6999601709616997,
+                      "py": 0.34998008548084986,
+                      "pz": 0.17499004274042493
+                    }
+                  }
+                ],
+                [
+                  {
+                    "temporal": {
+                      "value": 1.2343490479662704
+                    },
+                    "spatial": {
+                      "px": -0.5249701282212748,
+                      "py": 0.8749502137021246,
+                      "pz": 0.34998008548084986
+                    }
+                  },
+                  {
+                    "temporal": {
+                      "value": 1.3671756977211995
+                    },
+                    "spatial": {
+                      "px": 1.2249302991829745,
+                      "py": -0.5249701282212746,
+                      "pz": -0.17499004274042493
+                    }
+                  }
+                ]
+              ],
+              "cut_info": {
+                "particle_pdgs": [
+                  [
+                    9000001,
+                    9000003
+                  ],
+                  [
+                    9000003,
+                    9000002
+                  ]
+                ],
+                "cut_id": 2,
+                "graph_id": 0,
+                "graph_group_id": 0,
+                "orientation_id": null,
+                "lmb_channel_id": null,
+                "lmb_channel_edge_ids": null
+              },
+              "weight": {
+                "re": 0.0,
+                "im": 0.0
+              },
+              "additional_weights": {
+                "weights": {}
+              }
+            },
+            {
+              "kinematic_configuration": [
+                [
+                  {
+                    "temporal": {
+                      "value": 1.6
+                    },
+                    "spatial": {
+                      "px": 0.0,
+                      "py": 0.0,
+                      "pz": 0.0
+                    }
+                  },
+                  {
+                    "temporal": {
+                      "value": 3.685220356641732
+                    },
+                    "spatial": {
+                      "px": -3.3506870147380683,
+                      "py": 1.436008720602029,
+                      "pz": 0.47866957353400974
+                    }
+                  }
+                ],
+                [
+                  {
+                    "temporal": {
+                      "value": 2.274118680537989
+                    },
+                    "spatial": {
+                      "px": -1.914678294136039,
+                      "py": -0.9573391470680195,
+                      "pz": -0.47866957353400974
+                    }
+                  },
+                  {
+                    "temporal": {
+                      "value": 3.0111016761037424
+                    },
+                    "spatial": {
+                      "px": -1.436008720602029,
+                      "py": 2.3933478676700486,
+                      "pz": 0.9573391470680195
+                    }
+                  }
+                ]
+              ],
+              "cut_info": {
+                "particle_pdgs": [
+                  [
+                    9000001,
+                    9000002
+                  ],
+                  [
+                    9000003,
+                    9000003
+                  ]
+                ],
+                "cut_id": 2,
+                "graph_id": 0,
+                "graph_group_id": 0,
+                "orientation_id": null,
+                "lmb_channel_id": null,
+                "lmb_channel_edge_ids": null
+              },
+              "weight": {
+                "re": 0.0,
+                "im": 0.0
+              },
+              "additional_weights": {
+                "weights": {}
+              }
+            },
+            {
+              "kinematic_configuration": [
+                [
+                  {
+                    "temporal": {
+                      "value": 1.6
+                    },
+                    "spatial": {
+                      "px": 0.0,
+                      "py": 0.0,
+                      "pz": 0.0
+                    }
+                  },
+                  {
+                    "temporal": {
+                      "value": 1.677080220305536
+                    },
+                    "spatial": {
+                      "px": 0.7621538487467535,
+                      "py": -1.2702564145779225,
+                      "pz": -0.508102565831169
+                    }
+                  }
+                ],
+                [
+                  {
+                    "temporal": {
+                      "value": 1.3097263612572443
+                    },
+                    "spatial": {
+                      "px": -1.016205131662338,
+                      "py": -0.508102565831169,
+                      "pz": -0.2540512829155845
+                    }
+                  },
+                  {
+                    "temporal": {
+                      "value": 1.9673538590482922
+                    },
+                    "spatial": {
+                      "px": 1.7783589804090916,
+                      "py": -0.7621538487467535,
+                      "pz": -0.2540512829155845
+                    }
+                  }
+                ]
+              ],
+              "cut_info": {
+                "particle_pdgs": [
+                  [
+                    9000001,
+                    9000003
+                  ],
+                  [
+                    9000003,
+                    9000002
+                  ]
+                ],
+                "cut_id": 2,
+                "graph_id": 0,
+                "graph_group_id": 0,
+                "orientation_id": null,
+                "lmb_channel_id": null,
+                "lmb_channel_edge_ids": null
+              },
+              "weight": {
+                "re": 0.0,
+                "im": 0.0
+              },
+              "additional_weights": {
+                "weights": {}
+              }
+            }
+          ]
+        ],
+        "evaluation_metadata": {
+          "total_timing": {
+            "secs": 0,
+            "nanos": 87417
+          },
+          "integrand_evaluation_time": {
+            "secs": 0,
+            "nanos": 52291
+          },
+          "evaluator_evaluation_time": {
+            "secs": 0,
+            "nanos": 9540
+          },
+          "parameterization_time": {
+            "secs": 0,
+            "nanos": 0
+          },
+          "event_processing_time": {
+            "secs": 0,
+            "nanos": 6959
+          },
+          "generated_event_count": 5,
+          "accepted_event_count": 5,
+          "relative_instability_error": {
+            "re": 0.0,
+            "im": 0.0
+          },
+          "is_nan": false,
+          "loop_momenta_escalation": null,
+          "stability_results": [
+            {
+              "precision": "Double",
+              "estimated_relative_accuracy": 8.469890405263034e-16,
+              "status": {
+                "Stable": 2
+              },
+              "total_time": {
+                "secs": 0,
+                "nanos": 82334
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "label": "thermal_aux",
+    "mode": "thermodynamic_equilibrium",
+    "command": [
+      "./gammaloop",
+      "--dev-optim",
+      "--read-only-state",
+      "-s",
+      "/tmp/gammaloop-self-energy-uv-thermal_aux-state",
+      "-n",
+      "-L",
+      "off",
+      "examples/cli/thermal_production/massive_self_energy/uv_run.toml",
+      "run",
+      "generate",
+      "export",
+      "inspect",
+      "integrate",
+      "-D",
+      "mode=thermodynamic_equilibrium",
+      "-D",
+      "output=/tmp/gammaloop-self-energy-uv-thermal_aux",
+      "-D",
+      "samples=2000000",
+      "-D",
+      "m_uv=1.4",
+      "-D",
+      "localization=0.7"
+    ],
+    "exit_code": 0,
+    "native": {
+      "slots": [
+        {
+          "key": "insertion@NLO",
+          "process": "insertion",
+          "integrand": "NLO",
+          "target": null,
+          "integral": {
+            "neval": 2000000,
+            "real_zero": 7168,
+            "im_zero": 2000000,
+            "result": {
+              "re": 0.00014045877445967563,
+              "im": 0.0
+            },
+            "error": {
+              "re": 7.382148455620356e-07,
+              "im": 0.0
+            },
+            "real_chisq": 60.55275862615292,
+            "im_chisq": 0.0
+          },
+          "table_results": [
+            {
+              "component": "re",
+              "value": 0.00014045877445967563,
+              "error": 7.382148455620356e-07,
+              "relative_error_percent": 0.5255740329515477,
+              "chi_sq_per_dof": 1.513818965653823,
+              "target_delta_sigma": null,
+              "target_delta_percent": null,
+              "max_weight_impact": 0.00010850205551053605
+            },
+            {
+              "component": "im",
+              "value": 0.0,
+              "error": 0.0,
+              "relative_error_percent": null,
+              "chi_sq_per_dof": 0.0,
+              "target_delta_sigma": null,
+              "target_delta_percent": null,
+              "max_weight_impact": 0.0
+            }
+          ],
+          "integration_statistics": {
+            "num_evals": 2000000,
+            "average_total_time_seconds": 0.0001384,
+            "average_parameterization_time_seconds": 2.33e-07,
+            "average_integrand_time_seconds": 6.7573e-05,
+            "average_evaluator_time_seconds": 5.1228e-05,
+            "average_observable_time_seconds": 0.0,
+            "average_integrator_time_seconds": 3.93e-07,
+            "f64_percentage": 99.82520000000001,
+            "f128_percentage": 0.1748,
+            "arb_percentage": 0.0,
+            "nan_percentage": 0.0,
+            "nan_or_unstable_percentage": 0.0,
+            "generated_event_count": 0,
+            "accepted_event_count": 0,
+            "selection_efficiency_percentage": null
+          },
+          "max_weight_info": [
+            {
+              "component": "re",
+              "sign": "+",
+              "max_eval": 0.029005654661582402,
+              "coordinates": "graph: 0, xs: [\n2.9208120083675493e-01 7.6621089030570477e-01 8.6347457447154718e-01\n2.8080356355959046e-01 7.5180977258261439e-01 8.4719627283845178e-01 ]"
+            },
+            {
+              "component": "re",
+              "sign": "-",
+              "max_eval": -0.030480131486731177,
+              "coordinates": "graph: 0, xs: [\n1.6999285053790902e-01 3.7093427572980020e-01 6.4952568009492362e-01\n1.5708561225171347e-01 3.7175010127855701e-01 6.4721360888275414e-01 ]"
+            }
+          ],
+          "grid_breakdown": {
+            "re": null,
+            "im": null
+          }
+        }
+      ]
+    },
+    "point": {
+      "evaluation": {
+        "integrand_result": {
+          "re": 1.0460947484434374e-05,
+          "im": 0.0
+        },
+        "parameterization_jacobian": null,
+        "integrator_weight": 1.0,
+        "event_groups": [
+          [
+            {
+              "kinematic_configuration": [
+                [
+                  {
+                    "temporal": {
+                      "value": 1.6
+                    },
+                    "spatial": {
+                      "px": 0.0,
+                      "py": 0.0,
+                      "pz": 0.0
+                    }
+                  }
+                ],
+                [
+                  {
+                    "temporal": {
+                      "value": 0.8000000000000003
+                    },
+                    "spatial": {
+                      "px": -0.461880215351701,
+                      "py": -0.2309401076758505,
+                      "pz": -0.11547005383792525
+                    }
+                  },
+                  {
+                    "temporal": {
+                      "value": 0.8000000000000003
+                    },
+                    "spatial": {
+                      "px": 0.461880215351701,
+                      "py": 0.2309401076758505,
+                      "pz": 0.11547005383792525
+                    }
+                  }
+                ]
+              ],
+              "cut_info": {
+                "particle_pdgs": [
+                  [
+                    9000001
+                  ],
+                  [
+                    9000003,
+                    9000003
+                  ]
+                ],
+                "cut_id": 0,
+                "graph_id": 0,
+                "graph_group_id": 0,
+                "orientation_id": null,
+                "lmb_channel_id": null,
+                "lmb_channel_edge_ids": null
+              },
+              "weight": {
+                "re": 1.0285083043678614e-05,
+                "im": 0.0
+              },
+              "additional_weights": {
+                "weights": {}
+              }
+            },
+            {
+              "kinematic_configuration": [
+                [
+                  {
+                    "temporal": {
+                      "value": 1.6
+                    },
+                    "spatial": {
+                      "px": 0.0,
+                      "py": 0.0,
+                      "pz": 0.0
+                    }
+                  }
+                ],
+                [
+                  {
+                    "temporal": {
+                      "value": 0.6176797038921384
+                    },
+                    "spatial": {
+                      "px": -0.1280720529353316,
+                      "py": -0.0640360264676658,
+                      "pz": -0.0320180132338329
+                    }
+                  },
+                  {
+                    "temporal": {
+                      "value": 0.6316294962355639
+                    },
+                    "spatial": {
+                      "px": -0.09605403970149869,
+                      "py": 0.1600900661691645,
+                      "pz": 0.0640360264676658
+                    }
+                  },
+                  {
+                    "temporal": {
+                      "value": 0.3506907998722978
+                    },
+                    "spatial": {
+                      "px": 0.2241260926368303,
+                      "py": -0.09605403970149869,
+                      "pz": -0.0320180132338329
+                    }
+                  }
+                ]
+              ],
+              "cut_info": {
+                "particle_pdgs": [
+                  [
+                    9000001
+                  ],
+                  [
+                    9000003,
+                    9000003,
+                    9000002
+                  ]
+                ],
+                "cut_id": 2,
+                "graph_id": 0,
+                "graph_group_id": 0,
+                "orientation_id": null,
+                "lmb_channel_id": null,
+                "lmb_channel_edge_ids": null
+              },
+              "weight": {
+                "re": 1.7939131692444076e-10,
+                "im": 0.0
+              },
+              "additional_weights": {
+                "weights": {}
+              }
+            },
+            {
+              "kinematic_configuration": [
+                [
+                  {
+                    "temporal": {
+                      "value": 1.6
+                    },
+                    "spatial": {
+                      "px": 0.0,
+                      "py": 0.0,
+                      "pz": 0.0
+                    }
+                  },
+                  {
+                    "temporal": {
+                      "value": 1.0015247456873997
+                    },
+                    "spatial": {
+                      "px": 0.6999601709616997,
+                      "py": 0.34998008548084986,
+                      "pz": 0.17499004274042493
+                    }
+                  }
+                ],
+                [
+                  {
+                    "temporal": {
+                      "value": 1.2343490479662704
+                    },
+                    "spatial": {
+                      "px": -0.5249701282212748,
+                      "py": 0.8749502137021246,
+                      "pz": 0.34998008548084986
+                    }
+                  },
+                  {
+                    "temporal": {
+                      "value": 1.3671756977211995
+                    },
+                    "spatial": {
+                      "px": 1.2249302991829745,
+                      "py": -0.5249701282212746,
+                      "pz": -0.17499004274042493
+                    }
+                  }
+                ]
+              ],
+              "cut_info": {
+                "particle_pdgs": [
+                  [
+                    9000001,
+                    9000003
+                  ],
+                  [
+                    9000003,
+                    9000002
+                  ]
+                ],
+                "cut_id": 2,
+                "graph_id": 0,
+                "graph_group_id": 0,
+                "orientation_id": null,
+                "lmb_channel_id": null,
+                "lmb_channel_edge_ids": null
+              },
+              "weight": {
+                "re": 1.0821039999250356e-07,
+                "im": 0.0
+              },
+              "additional_weights": {
+                "weights": {}
+              }
+            },
+            {
+              "kinematic_configuration": [
+                [
+                  {
+                    "temporal": {
+                      "value": 1.6
+                    },
+                    "spatial": {
+                      "px": 0.0,
+                      "py": 0.0,
+                      "pz": 0.0
+                    }
+                  },
+                  {
+                    "temporal": {
+                      "value": 3.685220356641732
+                    },
+                    "spatial": {
+                      "px": -3.3506870147380683,
+                      "py": 1.436008720602029,
+                      "pz": 0.47866957353400974
+                    }
+                  }
+                ],
+                [
+                  {
+                    "temporal": {
+                      "value": 2.274118680537989
+                    },
+                    "spatial": {
+                      "px": -1.914678294136039,
+                      "py": -0.9573391470680195,
+                      "pz": -0.47866957353400974
+                    }
+                  },
+                  {
+                    "temporal": {
+                      "value": 3.0111016761037424
+                    },
+                    "spatial": {
+                      "px": -1.436008720602029,
+                      "py": 2.3933478676700486,
+                      "pz": 0.9573391470680195
+                    }
+                  }
+                ]
+              ],
+              "cut_info": {
+                "particle_pdgs": [
+                  [
+                    9000001,
+                    9000002
+                  ],
+                  [
+                    9000003,
+                    9000003
+                  ]
+                ],
+                "cut_id": 2,
+                "graph_id": 0,
+                "graph_group_id": 0,
+                "orientation_id": null,
+                "lmb_channel_id": null,
+                "lmb_channel_edge_ids": null
+              },
+              "weight": {
+                "re": 1.6718691169373502e-16,
+                "im": 0.0
+              },
+              "additional_weights": {
+                "weights": {}
+              }
+            },
+            {
+              "kinematic_configuration": [
+                [
+                  {
+                    "temporal": {
+                      "value": 1.6
+                    },
+                    "spatial": {
+                      "px": 0.0,
+                      "py": 0.0,
+                      "pz": 0.0
+                    }
+                  },
+                  {
+                    "temporal": {
+                      "value": 1.677080220305536
+                    },
+                    "spatial": {
+                      "px": 0.7621538487467535,
+                      "py": -1.2702564145779225,
+                      "pz": -0.508102565831169
+                    }
+                  }
+                ],
+                [
+                  {
+                    "temporal": {
+                      "value": 1.3097263612572443
+                    },
+                    "spatial": {
+                      "px": -1.016205131662338,
+                      "py": -0.508102565831169,
+                      "pz": -0.2540512829155845
+                    }
+                  },
+                  {
+                    "temporal": {
+                      "value": 1.9673538590482922
+                    },
+                    "spatial": {
+                      "px": 1.7783589804090916,
+                      "py": -0.7621538487467535,
+                      "pz": -0.2540512829155845
+                    }
+                  }
+                ]
+              ],
+              "cut_info": {
+                "particle_pdgs": [
+                  [
+                    9000001,
+                    9000003
+                  ],
+                  [
+                    9000003,
+                    9000002
+                  ]
+                ],
+                "cut_id": 2,
+                "graph_id": 0,
+                "graph_group_id": 0,
+                "orientation_id": null,
+                "lmb_channel_id": null,
+                "lmb_channel_edge_ids": null
+              },
+              "weight": {
+                "re": 6.747464927914611e-08,
+                "im": 0.0
+              },
+              "additional_weights": {
+                "weights": {}
+              }
+            }
+          ]
+        ],
+        "evaluation_metadata": {
+          "total_timing": {
+            "secs": 0,
+            "nanos": 213583
+          },
+          "integrand_evaluation_time": {
+            "secs": 0,
+            "nanos": 124917
+          },
+          "evaluator_evaluation_time": {
+            "secs": 0,
+            "nanos": 71878
+          },
+          "parameterization_time": {
+            "secs": 0,
+            "nanos": 0
+          },
+          "event_processing_time": {
+            "secs": 0,
+            "nanos": 8749
+          },
+          "generated_event_count": 5,
+          "accepted_event_count": 5,
+          "relative_instability_error": {
+            "re": 0.0,
+            "im": 0.0
+          },
+          "is_nan": false,
+          "loop_momenta_escalation": null,
+          "stability_results": [
+            {
+              "precision": "Double",
+              "estimated_relative_accuracy": 1.6194191750119435e-15,
+              "status": {
+                "Stable": 2
+              },
+              "total_time": {
+                "secs": 0,
+                "nanos": 208250
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+]

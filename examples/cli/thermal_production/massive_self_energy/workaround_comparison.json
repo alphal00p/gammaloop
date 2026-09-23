@@ -1,0 +1,33 @@
+{
+  "scope": "Bare pointwise integrands; the bubble UV subdivergence is not subtracted. The split-mass comparison is a native consistency check, not an integrated literature reference.",
+  "point": [
+    0.4,
+    0.2,
+    0.1,
+    -0.3,
+    0.5,
+    0.2
+  ],
+  "parameters": {
+    "M": 1.6,
+    "H": 0.6,
+    "L": 0.25,
+    "T": 0.5
+  },
+  "values": {
+    "thermal_double": 2.091810044314622e-05,
+    "thermal_arb": 2.0918100443146576e-05,
+    "vacuum_arb": 1.7841968873755768e-05,
+    "zero_temperature_arb": 1.7841968873755768e-05,
+    "thermal_hh_arb": 2.074223600239079e-05,
+    "thermal_hhl_double": 1.7586444075576102e-07
+  },
+  "thermal_double_vs_arb_relative": 1.6986412276764895e-14,
+  "inclusive_minus_hh_minus_hhl": 2.6205081805679917e-20,
+  "split_step": 0.0001,
+  "split_symmetric_mean": 2.0918103661502923e-05,
+  "split_vs_exact_relative": 1.5385509577470202e-07,
+  "vacuum_minus_zero_temperature": 0.0,
+  "all_exit_codes_zero": true,
+  "all_finite": true
+}

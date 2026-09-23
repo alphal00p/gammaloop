@@ -33,6 +33,7 @@ use symbolica::{
     domains::{dual::HyperDual, float::Complex as SymComplex, rational::Fraction},
     evaluate::JITCompiledEvaluator,
     prelude::*,
+    transcendental::{coth, csch, sech, tanh},
 };
 use tracing::{debug, instrument};
 use typed_index_collections::TiVec;
@@ -1382,6 +1383,32 @@ impl GenericEvaluator {
                 (Atom::var(symbol!("symbolica::𝑖")), Atom::i()),
             ])
             .map_err(|e| eyre!("Failed to register the imaginary-unit constant: {e}"))?;
+
+        if dual_shape.is_some() {
+            // Temporary workaround until upgrading to Symbolica 3 for native
+            // hyperbolic vectorization. Decaying exponentials avoid overflow for positive
+            // thermal arguments; large negative arguments and near-zero Bose
+            // poles retain the limitations of this exponential representation.
+            let argument = symbol!("hyperbolic_dual_argument");
+            let exp = (-Atom::var(argument)).exp();
+            let exp_squared = exp.clone().pow(2);
+            for (function, body) in [
+                (
+                    tanh(),
+                    (Atom::num(1) - &exp_squared) / (Atom::num(1) + &exp_squared),
+                ),
+                (
+                    coth(),
+                    (Atom::num(1) + &exp_squared) / (Atom::num(1) - &exp_squared),
+                ),
+                (sech(), Atom::num(2) * &exp / (Atom::num(1) + &exp_squared)),
+                (csch(), Atom::num(2) * &exp / (Atom::num(1) - &exp_squared)),
+            ] {
+                fn_map
+                    .add_function(function, vec![argument], body)
+                    .map_err(|e| eyre!("Failed to register hyperbolic dual workaround: {e}"))?;
+            }
+        }
 
         for replacement in &evaluator_replacements {
             crate::debug_tags!(#generation, #compile, #term, #dump;

@@ -1,0 +1,195 @@
+{
+  "observable": "Gamma_rho = -Im Pi_R/M, labelled graph factor 1; full equilibrium contribution with vacuum retained",
+  "reference_kind": "Independent evaluation using published bubble/dispersion ingredients and our derived raised-line spectral convolution; not tabulated literature numbers",
+  "parameters": {
+    "M": 1.6,
+    "H": 0.6,
+    "L": 0.25,
+    "T": 0.5,
+    "mu_r": 1.6,
+    "scheme": "MSbar"
+  },
+  "generation": {
+    "subtract_uv": true,
+    "generate_integrated": true,
+    "vacuum_subtraction": false,
+    "enable_thresholds": false
+  },
+  "rows": [
+    {
+      "label": "thermal",
+      "samples": 2000000,
+      "value": 0.00014041890504939058,
+      "error": 7.13695899689591e-07,
+      "reference": 0.00014011350428792384,
+      "difference_in_mc_errors": 0.4279144122861993,
+      "stability": {
+        "num_evals": 2000000,
+        "average_total_time_seconds": 0.000137493,
+        "average_parameterization_time_seconds": 2.4e-07,
+        "average_integrand_time_seconds": 6.7046e-05,
+        "average_evaluator_time_seconds": 5.0182e-05,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 4.34e-07,
+        "f64_percentage": 99.8235,
+        "f128_percentage": 0.17650000000000002,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      }
+    },
+    {
+      "label": "vacuum",
+      "samples": 1000000,
+      "value": 6.962130538386608e-05,
+      "error": 4.515497343325725e-07,
+      "reference": 6.911153274387017e-05,
+      "difference_in_mc_errors": 1.1289401836309165,
+      "stability": {
+        "num_evals": 1000000,
+        "average_total_time_seconds": 3.2322e-05,
+        "average_parameterization_time_seconds": 2.19e-07,
+        "average_integrand_time_seconds": 1.4465e-05,
+        "average_evaluator_time_seconds": 2.587e-06,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 4.29e-07,
+        "f64_percentage": 99.8981,
+        "f128_percentage": 0.10189999999999999,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      }
+    },
+    {
+      "label": "zero_temperature",
+      "samples": 300000,
+      "value": 6.945978748544694e-05,
+      "error": 9.745766611230816e-07,
+      "reference": 6.911153274387017e-05,
+      "difference_in_mc_errors": 0.3573395049040542,
+      "stability": {
+        "num_evals": 300000,
+        "average_total_time_seconds": 4.8309e-05,
+        "average_parameterization_time_seconds": 2.24e-07,
+        "average_integrand_time_seconds": 2.249e-05,
+        "average_evaluator_time_seconds": 4.477e-06,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 4.81e-07,
+        "f64_percentage": 99.899,
+        "f128_percentage": 0.101,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      }
+    },
+    {
+      "label": "thermal_aux",
+      "samples": 2000000,
+      "value": 0.00014045877445967563,
+      "error": 7.382148455620356e-07,
+      "reference": 0.00014011350428792384,
+      "difference_in_mc_errors": 0.46770960219435836,
+      "stability": {
+        "num_evals": 2000000,
+        "average_total_time_seconds": 0.0001384,
+        "average_parameterization_time_seconds": 2.33e-07,
+        "average_integrand_time_seconds": 6.7573e-05,
+        "average_evaluator_time_seconds": 5.1228e-05,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 3.93e-07,
+        "f64_percentage": 99.82520000000001,
+        "f128_percentage": 0.1748,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      }
+    },
+    {
+      "label": "thermal_hh",
+      "samples": 2000000,
+      "value": -8.811910606987919e-05,
+      "error": 6.768930298413176e-07,
+      "reference": -8.825872261661233e-05,
+      "difference_in_mc_errors": 0.20626087221769512,
+      "stability": {
+        "num_evals": 2000000,
+        "average_total_time_seconds": 5.1754e-05,
+        "average_parameterization_time_seconds": 2.28e-07,
+        "average_integrand_time_seconds": 2.4408e-05,
+        "average_evaluator_time_seconds": 1.3767e-05,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 4.11e-07,
+        "f64_percentage": 99.95135,
+        "f128_percentage": 0.04865,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      }
+    },
+    {
+      "label": "thermal_hhl",
+      "samples": 200000,
+      "value": 0.00022725037156367072,
+      "error": 1.0985455503683499e-06,
+      "reference": 0.00022837222690453616,
+      "difference_in_mc_errors": -1.021218774669176,
+      "stability": {
+        "num_evals": 200000,
+        "average_total_time_seconds": 0.000100405,
+        "average_parameterization_time_seconds": 2.66e-07,
+        "average_integrand_time_seconds": 4.8112e-05,
+        "average_evaluator_time_seconds": 4.1021e-05,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 4.88e-07,
+        "f64_percentage": 99.4705,
+        "f128_percentage": 0.5295,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      }
+    }
+  ],
+  "total_native_evaluations": 7500000,
+  "auxiliary_scale_check": {
+    "base": {
+      "m_uv": 1.0,
+      "localization": 1.0
+    },
+    "shifted": {
+      "m_uv": 1.4,
+      "localization": 0.7
+    },
+    "difference": 3.986941028504779e-08
+  },
+  "native_inclusive_minus_hh_minus_hhl": 1.287639555599035e-06,
+  "production_source": {
+    "native": 5.967012636262934e-06,
+    "error": 3.0328056257089544e-08,
+    "reference": 5.954034823893898e-06,
+    "bose_factor": 0.04249436807788889
+  },
+  "differential_production_per_d3p": {
+    "native": 2.405566418772131e-08,
+    "error": 1.2226579383344186e-10,
+    "reference": 2.400334489241037e-08
+  },
+  "reference_virtual_cancellation_fraction": 0.38646872175707303
+}

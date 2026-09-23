@@ -1,0 +1,416 @@
+[
+  {
+    "label": "vacuum",
+    "path": "/tmp/gammaloop-self-energy-vacuum-standalone/processes/cross_sections/insertion/NLO/standalone_cross_section.json",
+    "graph": "massive_self_energy",
+    "orientations": 14,
+    "cut_groups": [
+      [
+        {
+          "cut_cff_index": {
+            "left_threshold_order": null,
+            "right_threshold_order": null,
+            "lu_cut_order": 1
+          },
+          "dual_shape": null
+        },
+        {
+          "cut_cff_index": {
+            "left_threshold_order": null,
+            "right_threshold_order": null,
+            "lu_cut_order": 2
+          },
+          "dual_shape": [
+            [
+              0
+            ],
+            [
+              1
+            ]
+          ]
+        }
+      ],
+      [
+        {
+          "cut_cff_index": {
+            "left_threshold_order": null,
+            "right_threshold_order": null,
+            "lu_cut_order": 1
+          },
+          "dual_shape": null
+        }
+      ]
+    ],
+    "parameter_slots": 44,
+    "function_map_entries": 72,
+    "counterterms": 0
+  },
+  {
+    "label": "zero_temperature_equilibrium",
+    "path": "/tmp/gammaloop-self-energy-zero_temperature_equilibrium-standalone/processes/cross_sections/insertion/NLO/standalone_cross_section.json",
+    "graph": "massive_self_energy",
+    "orientations": 32,
+    "cut_groups": [
+      [
+        {
+          "cut_cff_index": {
+            "left_threshold_order": null,
+            "right_threshold_order": null,
+            "lu_cut_order": 1
+          },
+          "dual_shape": null
+        },
+        {
+          "cut_cff_index": {
+            "left_threshold_order": null,
+            "right_threshold_order": null,
+            "lu_cut_order": 2
+          },
+          "dual_shape": [
+            [
+              0
+            ],
+            [
+              1
+            ]
+          ]
+        }
+      ],
+      [
+        {
+          "cut_cff_index": {
+            "left_threshold_order": null,
+            "right_threshold_order": null,
+            "lu_cut_order": 1
+          },
+          "dual_shape": null
+        }
+      ],
+      [
+        {
+          "cut_cff_index": {
+            "left_threshold_order": null,
+            "right_threshold_order": null,
+            "lu_cut_order": 1
+          },
+          "dual_shape": null
+        }
+      ],
+      [
+        {
+          "cut_cff_index": {
+            "left_threshold_order": null,
+            "right_threshold_order": null,
+            "lu_cut_order": 1
+          },
+          "dual_shape": null
+        }
+      ],
+      [
+        {
+          "cut_cff_index": {
+            "left_threshold_order": null,
+            "right_threshold_order": null,
+            "lu_cut_order": 1
+          },
+          "dual_shape": null
+        }
+      ],
+      [
+        {
+          "cut_cff_index": {
+            "left_threshold_order": null,
+            "right_threshold_order": null,
+            "lu_cut_order": 1
+          },
+          "dual_shape": null
+        }
+      ],
+      [
+        {
+          "cut_cff_index": {
+            "left_threshold_order": null,
+            "right_threshold_order": null,
+            "lu_cut_order": 1
+          },
+          "dual_shape": null
+        }
+      ],
+      [
+        {
+          "cut_cff_index": {
+            "left_threshold_order": null,
+            "right_threshold_order": null,
+            "lu_cut_order": 1
+          },
+          "dual_shape": null
+        }
+      ],
+      [
+        {
+          "cut_cff_index": {
+            "left_threshold_order": null,
+            "right_threshold_order": null,
+            "lu_cut_order": 1
+          },
+          "dual_shape": null
+        }
+      ],
+      [
+        {
+          "cut_cff_index": {
+            "left_threshold_order": null,
+            "right_threshold_order": null,
+            "lu_cut_order": 1
+          },
+          "dual_shape": null
+        }
+      ],
+      [
+        {
+          "cut_cff_index": {
+            "left_threshold_order": null,
+            "right_threshold_order": null,
+            "lu_cut_order": 1
+          },
+          "dual_shape": null
+        }
+      ],
+      [
+        {
+          "cut_cff_index": {
+            "left_threshold_order": null,
+            "right_threshold_order": null,
+            "lu_cut_order": 1
+          },
+          "dual_shape": null
+        }
+      ]
+    ],
+    "parameter_slots": 44,
+    "function_map_entries": 72,
+    "counterterms": 0
+  },
+  {
+    "label": "thermal_real_only",
+    "path": "/tmp/gammaloop-self-energy-real-thermodynamic_equilibrium-standalone/processes/cross_sections/insertion/NLO/standalone_cross_section.json",
+    "graph": "massive_self_energy",
+    "orientations": 32,
+    "cut_groups": [
+      [
+        {
+          "cut_cff_index": {
+            "left_threshold_order": null,
+            "right_threshold_order": null,
+            "lu_cut_order": 1
+          },
+          "dual_shape": null
+        }
+      ],
+      [
+        {
+          "cut_cff_index": {
+            "left_threshold_order": null,
+            "right_threshold_order": null,
+            "lu_cut_order": 1
+          },
+          "dual_shape": null
+        }
+      ],
+      [
+        {
+          "cut_cff_index": {
+            "left_threshold_order": null,
+            "right_threshold_order": null,
+            "lu_cut_order": 1
+          },
+          "dual_shape": null
+        }
+      ],
+      [
+        {
+          "cut_cff_index": {
+            "left_threshold_order": null,
+            "right_threshold_order": null,
+            "lu_cut_order": 1
+          },
+          "dual_shape": null
+        }
+      ],
+      [
+        {
+          "cut_cff_index": {
+            "left_threshold_order": null,
+            "right_threshold_order": null,
+            "lu_cut_order": 1
+          },
+          "dual_shape": null
+        }
+      ],
+      [
+        {
+          "cut_cff_index": {
+            "left_threshold_order": null,
+            "right_threshold_order": null,
+            "lu_cut_order": 1
+          },
+          "dual_shape": null
+        }
+      ],
+      [
+        {
+          "cut_cff_index": {
+            "left_threshold_order": null,
+            "right_threshold_order": null,
+            "lu_cut_order": 1
+          },
+          "dual_shape": null
+        }
+      ]
+    ],
+    "parameter_slots": 44,
+    "function_map_entries": 72,
+    "counterterms": 0
+  },
+  {
+    "label": "thermal_split",
+    "path": "/tmp/gammaloop-self-energy-split-check-standalone/processes/cross_sections/insertion/NLO/standalone_cross_section.json",
+    "graph": "massive_self_energy_split",
+    "orientations": 32,
+    "cut_groups": [
+      [
+        {
+          "cut_cff_index": {
+            "left_threshold_order": null,
+            "right_threshold_order": null,
+            "lu_cut_order": 1
+          },
+          "dual_shape": null
+        }
+      ],
+      [
+        {
+          "cut_cff_index": {
+            "left_threshold_order": null,
+            "right_threshold_order": null,
+            "lu_cut_order": 1
+          },
+          "dual_shape": null
+        }
+      ],
+      [
+        {
+          "cut_cff_index": {
+            "left_threshold_order": null,
+            "right_threshold_order": null,
+            "lu_cut_order": 1
+          },
+          "dual_shape": null
+        }
+      ],
+      [
+        {
+          "cut_cff_index": {
+            "left_threshold_order": null,
+            "right_threshold_order": null,
+            "lu_cut_order": 1
+          },
+          "dual_shape": null
+        }
+      ],
+      [
+        {
+          "cut_cff_index": {
+            "left_threshold_order": null,
+            "right_threshold_order": null,
+            "lu_cut_order": 1
+          },
+          "dual_shape": null
+        }
+      ],
+      [
+        {
+          "cut_cff_index": {
+            "left_threshold_order": null,
+            "right_threshold_order": null,
+            "lu_cut_order": 1
+          },
+          "dual_shape": null
+        }
+      ],
+      [
+        {
+          "cut_cff_index": {
+            "left_threshold_order": null,
+            "right_threshold_order": null,
+            "lu_cut_order": 1
+          },
+          "dual_shape": null
+        }
+      ],
+      [
+        {
+          "cut_cff_index": {
+            "left_threshold_order": null,
+            "right_threshold_order": null,
+            "lu_cut_order": 1
+          },
+          "dual_shape": null
+        }
+      ],
+      [
+        {
+          "cut_cff_index": {
+            "left_threshold_order": null,
+            "right_threshold_order": null,
+            "lu_cut_order": 1
+          },
+          "dual_shape": null
+        }
+      ],
+      [
+        {
+          "cut_cff_index": {
+            "left_threshold_order": null,
+            "right_threshold_order": null,
+            "lu_cut_order": 1
+          },
+          "dual_shape": null
+        }
+      ],
+      [
+        {
+          "cut_cff_index": {
+            "left_threshold_order": null,
+            "right_threshold_order": null,
+            "lu_cut_order": 1
+          },
+          "dual_shape": null
+        }
+      ],
+      [
+        {
+          "cut_cff_index": {
+            "left_threshold_order": null,
+            "right_threshold_order": null,
+            "lu_cut_order": 1
+          },
+          "dual_shape": null
+        }
+      ],
+      [
+        {
+          "cut_cff_index": {
+            "left_threshold_order": null,
+            "right_threshold_order": null,
+            "lu_cut_order": 1
+          },
+          "dual_shape": null
+        }
+      ]
+    ],
+    "parameter_slots": 44,
+    "function_map_entries": 72,
+    "counterterms": 0
+  }
+]

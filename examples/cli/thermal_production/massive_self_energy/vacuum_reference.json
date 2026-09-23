@@ -1,0 +1,93 @@
+{
+  "source": "https://arxiv.org/pdf/hep-ph/9409388",
+  "source_equations": [
+    3,
+    13,
+    15
+  ],
+  "reference_kind": "Independent numerical evaluation of published integral relations; not a published numerical table.",
+  "parameters": {
+    "M": 1.6,
+    "H": 0.6,
+    "L": 0.25,
+    "mu_r": 1.6,
+    "T": 0.0
+  },
+  "normalization": "Labelled graph factor 1, unit cubic couplings; Gamma_rho = Im I_R/M = -Im Pi_R/M for positive Euclidean five-propagator master I.",
+  "renormalization": "MSbar bubble B_R(a) = -int_0^1 dx log((x H^2 +(1-x) L^2 -x(1-x)a)/mu_r^2)/(16 pi^2).",
+  "formulas": {
+    "phi": "sqrt(lambda(M^2,a,H^2))/(16 pi M^2)",
+    "virtual": "-d/da [phi(a,H^2) B_R(a)]/M, at a=H^2; inner bubble masses held fixed",
+    "real": "int_(H+L)^2^((M-H)^2) dt sqrt(lambda(t,H^2,L^2))/(16 pi^2 t) phi(t,H^2)/((t-H^2)^2 M)"
+  },
+  "quadrature": [
+    {
+      "order": 16,
+      "bubble_msbar": 0.019025771989505974,
+      "bubble_derivative": 0.00954830479590135,
+      "gamma_virtual_hh": 6.118053358302163e-05,
+      "gamma_real_hhl": 7.93099916099007e-06,
+      "gamma_inclusive": 6.91115327440117e-05
+    },
+    {
+      "order": 32,
+      "bubble_msbar": 0.019025771989506085,
+      "bubble_derivative": 0.009548304795918637,
+      "gamma_virtual_hh": 6.118053358288028e-05,
+      "gamma_real_hhl": 7.930999160990016e-06,
+      "gamma_inclusive": 6.91115327438703e-05
+    },
+    {
+      "order": 64,
+      "bubble_msbar": 0.019025771989506085,
+      "bubble_derivative": 0.009548304795918656,
+      "gamma_virtual_hh": 6.118053358288012e-05,
+      "gamma_real_hhl": 7.930999160990028e-06,
+      "gamma_inclusive": 6.911153274387015e-05
+    },
+    {
+      "order": 128,
+      "bubble_msbar": 0.019025771989506068,
+      "bubble_derivative": 0.009548304795918554,
+      "gamma_virtual_hh": 6.118053358288084e-05,
+      "gamma_real_hhl": 7.930999160989946e-06,
+      "gamma_inclusive": 6.911153274387078e-05
+    },
+    {
+      "order": 256,
+      "bubble_msbar": 0.01902577198950608,
+      "bubble_derivative": 0.00954830479591863,
+      "gamma_virtual_hh": 6.118053358288031e-05,
+      "gamma_real_hhl": 7.93099916099001e-06,
+      "gamma_inclusive": 6.911153274387032e-05
+    }
+  ],
+  "virtual_divided_difference_check": [
+    {
+      "mass_squared_step": 0.01,
+      "gamma_virtual_hh": 6.118045598265931e-05
+    },
+    {
+      "mass_squared_step": 0.001,
+      "gamma_virtual_hh": 6.11805328207466e-05
+    },
+    {
+      "mass_squared_step": 0.0001,
+      "gamma_virtual_hh": 6.118053357579177e-05
+    },
+    {
+      "mass_squared_step": 1e-05,
+      "gamma_virtual_hh": 6.118053358036573e-05
+    },
+    {
+      "mass_squared_step": 1e-06,
+      "gamma_virtual_hh": 6.118053354987256e-05
+    }
+  ],
+  "gamma_derivative_wrt_log_mu_r_squared": 4.650090872109675e-05,
+  "mpmath_50_digit_check": {
+    "gamma_virtual_hh": "0.000061180533582880222503890749715318155803584096",
+    "gamma_real_hhl": "0.00000793099916099000896111455226614401311312677752",
+    "gamma_inclusive": "0.0000691115327438702314650053019814621689167108736"
+  }
+}

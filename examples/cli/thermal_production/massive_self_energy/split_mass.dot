@@ -1,0 +1,15 @@
+digraph massive_self_energy_split {
+  overall_factor="1";
+  ext0 [style=invis is_cut=0];
+  a [int_id="V_XHH"];
+  b [int_id="V_HHL"];
+  c [int_id="V_HHL"];
+  d [int_id="V_XHH"];
+  ext0 -> a [particle=X];
+  d -> ext0 [particle=X];
+  a -> b [id=0 particle=H lmb_id=0];
+  b -> c [id=1 particle=H lmb_id=1];
+  b -> c [id=2 particle=L];
+  c -> d [id=3 particle=H mass="0.601"];
+  a -> d [id=4 particle=H];
+}

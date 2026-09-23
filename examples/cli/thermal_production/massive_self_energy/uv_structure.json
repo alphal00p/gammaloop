@@ -1,0 +1,25 @@
+{
+  "source": "/tmp/gammaloop-self-energy-uv-thermal-final-standalone/processes/cross_sections/insertion/NLO/standalone_cross_section.json",
+  "graph": "massive_self_energy",
+  "orientations": 32,
+  "cut_groups": 12,
+  "threshold_counterterms": 0,
+  "has_integrated_uv_localization": true,
+  "has_integrated_uv_scale_log": true,
+  "generation": {
+    "medium_mode": "thermodynamic_equilibrium",
+    "vacuum_subtraction": false,
+    "subtract_uv": true,
+    "generate_integrated": true,
+    "enable_thresholds": false
+  },
+  "runtime": {
+    "M": 1.6,
+    "mH": 0.6,
+    "mL": 0.25,
+    "T": 0.5,
+    "mu_r": 1.6,
+    "m_uv": 1.0,
+    "renormalization_localization_scale": 1.0
+  }
+}

@@ -1,0 +1,1152 @@
+{
+  "method": "Symmetric split-mass limit of the same graph with simple cut poles; this is a native consistency oracle, not an independent integrated literature rate.",
+  "parameters": {
+    "M": 1.6,
+    "H": 0.6,
+    "L": 0.25,
+    "T": 0.5
+  },
+  "point": [
+    0.4,
+    0.2,
+    0.1,
+    -0.3,
+    0.5,
+    0.2
+  ],
+  "precision": "Arb via inspect -f",
+  "rows": [
+    {
+      "step": 0.01,
+      "sign": -1,
+      "split_mass": 0.59,
+      "mode": "vacuum",
+      "exit_code": 0,
+      "integrand": {
+        "re": 1.702791424792611e-05,
+        "im": 0.0
+      },
+      "metadata": {
+        "total_timing": {
+          "secs": 0,
+          "nanos": 2775750
+        },
+        "integrand_evaluation_time": {
+          "secs": 0,
+          "nanos": 1189792
+        },
+        "evaluator_evaluation_time": {
+          "secs": 0,
+          "nanos": 163084
+        },
+        "parameterization_time": {
+          "secs": 0,
+          "nanos": 0
+        },
+        "event_processing_time": {
+          "secs": 0,
+          "nanos": 43125
+        },
+        "generated_event_count": 3,
+        "accepted_event_count": 3,
+        "relative_instability_error": {
+          "re": 0.0,
+          "im": 0.0
+        },
+        "is_nan": false,
+        "loop_momenta_escalation": null,
+        "stability_results": [
+          {
+            "precision": "Arb",
+            "estimated_relative_accuracy": 1.2644880870612144e-297,
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "secs": 0,
+              "nanos": 2760792
+            }
+          }
+        ]
+      }
+    },
+    {
+      "step": 0.01,
+      "sign": -1,
+      "split_mass": 0.59,
+      "mode": "thermodynamic_equilibrium",
+      "exit_code": 0,
+      "integrand": {
+        "re": 1.942942257869823e-05,
+        "im": 0.0
+      },
+      "metadata": {
+        "total_timing": {
+          "secs": 0,
+          "nanos": 4394083
+        },
+        "integrand_evaluation_time": {
+          "secs": 0,
+          "nanos": 2285083
+        },
+        "evaluator_evaluation_time": {
+          "secs": 0,
+          "nanos": 805667
+        },
+        "parameterization_time": {
+          "secs": 0,
+          "nanos": 0
+        },
+        "event_processing_time": {
+          "secs": 0,
+          "nanos": 66001
+        },
+        "generated_event_count": 6,
+        "accepted_event_count": 6,
+        "relative_instability_error": {
+          "re": 0.0,
+          "im": 0.0
+        },
+        "is_nan": false,
+        "loop_momenta_escalation": null,
+        "stability_results": [
+          {
+            "precision": "Arb",
+            "estimated_relative_accuracy": 2.321933002037152e-297,
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "secs": 0,
+              "nanos": 4380375
+            }
+          }
+        ]
+      }
+    },
+    {
+      "step": 0.01,
+      "sign": 1,
+      "split_mass": 0.61,
+      "mode": "vacuum",
+      "exit_code": 0,
+      "integrand": {
+        "re": 1.8676216999318547e-05,
+        "im": 0.0
+      },
+      "metadata": {
+        "total_timing": {
+          "secs": 0,
+          "nanos": 2258041
+        },
+        "integrand_evaluation_time": {
+          "secs": 0,
+          "nanos": 1107750
+        },
+        "evaluator_evaluation_time": {
+          "secs": 0,
+          "nanos": 156957
+        },
+        "parameterization_time": {
+          "secs": 0,
+          "nanos": 0
+        },
+        "event_processing_time": {
+          "secs": 0,
+          "nanos": 40625
+        },
+        "generated_event_count": 3,
+        "accepted_event_count": 3,
+        "relative_instability_error": {
+          "re": 0.0,
+          "im": 0.0
+        },
+        "is_nan": false,
+        "loop_momenta_escalation": null,
+        "stability_results": [
+          {
+            "precision": "Arb",
+            "estimated_relative_accuracy": 2.1288786569755647e-297,
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "secs": 0,
+              "nanos": 2240958
+            }
+          }
+        ]
+      }
+    },
+    {
+      "step": 0.01,
+      "sign": 1,
+      "split_mass": 0.61,
+      "mode": "thermodynamic_equilibrium",
+      "exit_code": 0,
+      "integrand": {
+        "re": 2.246960171111963e-05,
+        "im": 0.0
+      },
+      "metadata": {
+        "total_timing": {
+          "secs": 0,
+          "nanos": 4442750
+        },
+        "integrand_evaluation_time": {
+          "secs": 0,
+          "nanos": 2227792
+        },
+        "evaluator_evaluation_time": {
+          "secs": 0,
+          "nanos": 799999
+        },
+        "parameterization_time": {
+          "secs": 0,
+          "nanos": 0
+        },
+        "event_processing_time": {
+          "secs": 0,
+          "nanos": 62584
+        },
+        "generated_event_count": 6,
+        "accepted_event_count": 6,
+        "relative_instability_error": {
+          "re": 0.0,
+          "im": 0.0
+        },
+        "is_nan": false,
+        "loop_momenta_escalation": null,
+        "stability_results": [
+          {
+            "precision": "Arb",
+            "estimated_relative_accuracy": 3.6506197069774856e-297,
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "secs": 0,
+              "nanos": 4429291
+            }
+          }
+        ]
+      }
+    },
+    {
+      "step": 0.001,
+      "sign": -1,
+      "split_mass": 0.599,
+      "mode": "vacuum",
+      "exit_code": 0,
+      "integrand": {
+        "re": 1.775964748569541e-05,
+        "im": 0.0
+      },
+      "metadata": {
+        "total_timing": {
+          "secs": 0,
+          "nanos": 1986750
+        },
+        "integrand_evaluation_time": {
+          "secs": 0,
+          "nanos": 943375
+        },
+        "evaluator_evaluation_time": {
+          "secs": 0,
+          "nanos": 131251
+        },
+        "parameterization_time": {
+          "secs": 0,
+          "nanos": 0
+        },
+        "event_processing_time": {
+          "secs": 0,
+          "nanos": 36835
+        },
+        "generated_event_count": 3,
+        "accepted_event_count": 3,
+        "relative_instability_error": {
+          "re": 0.0,
+          "im": 0.0
+        },
+        "is_nan": false,
+        "loop_momenta_escalation": null,
+        "stability_results": [
+          {
+            "precision": "Arb",
+            "estimated_relative_accuracy": 1.7160751679498982e-295,
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "secs": 0,
+              "nanos": 1974166
+            }
+          }
+        ]
+      }
+    },
+    {
+      "step": 0.001,
+      "sign": -1,
+      "split_mass": 0.599,
+      "mode": "thermodynamic_equilibrium",
+      "exit_code": 0,
+      "integrand": {
+        "re": 2.0766414631646445e-05,
+        "im": 0.0
+      },
+      "metadata": {
+        "total_timing": {
+          "secs": 0,
+          "nanos": 4294166
+        },
+        "integrand_evaluation_time": {
+          "secs": 0,
+          "nanos": 2143875
+        },
+        "evaluator_evaluation_time": {
+          "secs": 0,
+          "nanos": 756042
+        },
+        "parameterization_time": {
+          "secs": 0,
+          "nanos": 0
+        },
+        "event_processing_time": {
+          "secs": 0,
+          "nanos": 59457
+        },
+        "generated_event_count": 6,
+        "accepted_event_count": 6,
+        "relative_instability_error": {
+          "re": 0.0,
+          "im": 0.0
+        },
+        "is_nan": false,
+        "loop_momenta_escalation": null,
+        "stability_results": [
+          {
+            "precision": "Arb",
+            "estimated_relative_accuracy": 3.0326403262673035e-295,
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "secs": 0,
+              "nanos": 4280584
+            }
+          }
+        ]
+      }
+    },
+    {
+      "step": 0.001,
+      "sign": 1,
+      "split_mass": 0.601,
+      "mode": "vacuum",
+      "exit_code": 0,
+      "integrand": {
+        "re": 1.7924492304414323e-05,
+        "im": 0.0
+      },
+      "metadata": {
+        "total_timing": {
+          "secs": 0,
+          "nanos": 2283500
+        },
+        "integrand_evaluation_time": {
+          "secs": 0,
+          "nanos": 1142083
+        },
+        "evaluator_evaluation_time": {
+          "secs": 0,
+          "nanos": 160498
+        },
+        "parameterization_time": {
+          "secs": 0,
+          "nanos": 0
+        },
+        "event_processing_time": {
+          "secs": 0,
+          "nanos": 41458
+        },
+        "generated_event_count": 3,
+        "accepted_event_count": 3,
+        "relative_instability_error": {
+          "re": 0.0,
+          "im": 0.0
+        },
+        "is_nan": false,
+        "loop_momenta_escalation": null,
+        "stability_results": [
+          {
+            "precision": "Arb",
+            "estimated_relative_accuracy": 5.659169217980974e-296,
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "secs": 0,
+              "nanos": 2271208
+            }
+          }
+        ]
+      }
+    },
+    {
+      "step": 0.001,
+      "sign": 1,
+      "split_mass": 0.601,
+      "mode": "thermodynamic_equilibrium",
+      "exit_code": 0,
+      "integrand": {
+        "re": 2.107041461919589e-05,
+        "im": 0.0
+      },
+      "metadata": {
+        "total_timing": {
+          "secs": 0,
+          "nanos": 4397708
+        },
+        "integrand_evaluation_time": {
+          "secs": 0,
+          "nanos": 2201083
+        },
+        "evaluator_evaluation_time": {
+          "secs": 0,
+          "nanos": 784835
+        },
+        "parameterization_time": {
+          "secs": 0,
+          "nanos": 0
+        },
+        "event_processing_time": {
+          "secs": 0,
+          "nanos": 59957
+        },
+        "generated_event_count": 6,
+        "accepted_event_count": 6,
+        "relative_instability_error": {
+          "re": 0.0,
+          "im": 0.0
+        },
+        "is_nan": false,
+        "loop_momenta_escalation": null,
+        "stability_results": [
+          {
+            "precision": "Arb",
+            "estimated_relative_accuracy": 9.957185936037458e-296,
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "secs": 0,
+              "nanos": 4381041
+            }
+          }
+        ]
+      }
+    },
+    {
+      "step": 0.0001,
+      "sign": -1,
+      "split_mass": 0.5999,
+      "mode": "vacuum",
+      "exit_code": 0,
+      "integrand": {
+        "re": 1.7833727654393703e-05,
+        "im": 0.0
+      },
+      "metadata": {
+        "total_timing": {
+          "secs": 0,
+          "nanos": 2309125
+        },
+        "integrand_evaluation_time": {
+          "secs": 0,
+          "nanos": 1142167
+        },
+        "evaluator_evaluation_time": {
+          "secs": 0,
+          "nanos": 159250
+        },
+        "parameterization_time": {
+          "secs": 0,
+          "nanos": 0
+        },
+        "event_processing_time": {
+          "secs": 0,
+          "nanos": 41416
+        },
+        "generated_event_count": 3,
+        "accepted_event_count": 3,
+        "relative_instability_error": {
+          "re": 0.0,
+          "im": 0.0
+        },
+        "is_nan": false,
+        "loop_momenta_escalation": null,
+        "stability_results": [
+          {
+            "precision": "Arb",
+            "estimated_relative_accuracy": 1.138044027976224e-293,
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "secs": 0,
+              "nanos": 2296292
+            }
+          }
+        ]
+      }
+    },
+    {
+      "step": 0.0001,
+      "sign": -1,
+      "split_mass": 0.5999,
+      "mode": "thermodynamic_equilibrium",
+      "exit_code": 0,
+      "integrand": {
+        "re": 2.0902903633047052e-05,
+        "im": 0.0
+      },
+      "metadata": {
+        "total_timing": {
+          "secs": 0,
+          "nanos": 4368417
+        },
+        "integrand_evaluation_time": {
+          "secs": 0,
+          "nanos": 2211334
+        },
+        "evaluator_evaluation_time": {
+          "secs": 0,
+          "nanos": 791750
+        },
+        "parameterization_time": {
+          "secs": 0,
+          "nanos": 0
+        },
+        "event_processing_time": {
+          "secs": 0,
+          "nanos": 58791
+        },
+        "generated_event_count": 6,
+        "accepted_event_count": 6,
+        "relative_instability_error": {
+          "re": 0.0,
+          "im": 0.0
+        },
+        "is_nan": false,
+        "loop_momenta_escalation": null,
+        "stability_results": [
+          {
+            "precision": "Arb",
+            "estimated_relative_accuracy": 2.0060706251631967e-293,
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "secs": 0,
+              "nanos": 4353125
+            }
+          }
+        ]
+      }
+    },
+    {
+      "step": 0.0001,
+      "sign": 1,
+      "split_mass": 0.6001,
+      "mode": "vacuum",
+      "exit_code": 0,
+      "integrand": {
+        "re": 1.785021218763353e-05,
+        "im": 0.0
+      },
+      "metadata": {
+        "total_timing": {
+          "secs": 0,
+          "nanos": 2402333
+        },
+        "integrand_evaluation_time": {
+          "secs": 0,
+          "nanos": 1146667
+        },
+        "evaluator_evaluation_time": {
+          "secs": 0,
+          "nanos": 160584
+        },
+        "parameterization_time": {
+          "secs": 0,
+          "nanos": 0
+        },
+        "event_processing_time": {
+          "secs": 0,
+          "nanos": 41959
+        },
+        "generated_event_count": 3,
+        "accepted_event_count": 3,
+        "relative_instability_error": {
+          "re": 0.0,
+          "im": 0.0
+        },
+        "is_nan": false,
+        "loop_momenta_escalation": null,
+        "stability_results": [
+          {
+            "precision": "Arb",
+            "estimated_relative_accuracy": 3.4091819292873765e-293,
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "secs": 0,
+              "nanos": 2387208
+            }
+          }
+        ]
+      }
+    },
+    {
+      "step": 0.0001,
+      "sign": 1,
+      "split_mass": 0.6001,
+      "mode": "thermodynamic_equilibrium",
+      "exit_code": 0,
+      "integrand": {
+        "re": 2.093330368995879e-05,
+        "im": 0.0
+      },
+      "metadata": {
+        "total_timing": {
+          "secs": 0,
+          "nanos": 4374000
+        },
+        "integrand_evaluation_time": {
+          "secs": 0,
+          "nanos": 2216583
+        },
+        "evaluator_evaluation_time": {
+          "secs": 0,
+          "nanos": 833915
+        },
+        "parameterization_time": {
+          "secs": 0,
+          "nanos": 0
+        },
+        "event_processing_time": {
+          "secs": 0,
+          "nanos": 60123
+        },
+        "generated_event_count": 6,
+        "accepted_event_count": 6,
+        "relative_instability_error": {
+          "re": 0.0,
+          "im": 0.0
+        },
+        "is_nan": false,
+        "loop_momenta_escalation": null,
+        "stability_results": [
+          {
+            "precision": "Arb",
+            "estimated_relative_accuracy": 6.006685603131827e-293,
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "secs": 0,
+              "nanos": 4360667
+            }
+          }
+        ]
+      }
+    },
+    {
+      "step": 1e-05,
+      "sign": -1,
+      "split_mass": 0.59999,
+      "mode": "vacuum",
+      "exit_code": 0,
+      "integrand": {
+        "re": 1.784114084629344e-05,
+        "im": 0.0
+      },
+      "metadata": {
+        "total_timing": {
+          "secs": 0,
+          "nanos": 2167125
+        },
+        "integrand_evaluation_time": {
+          "secs": 0,
+          "nanos": 1037292
+        },
+        "evaluator_evaluation_time": {
+          "secs": 0,
+          "nanos": 146250
+        },
+        "parameterization_time": {
+          "secs": 0,
+          "nanos": 0
+        },
+        "event_processing_time": {
+          "secs": 0,
+          "nanos": 37459
+        },
+        "generated_event_count": 3,
+        "accepted_event_count": 3,
+        "relative_instability_error": {
+          "re": 0.0,
+          "im": 0.0
+        },
+        "is_nan": false,
+        "loop_momenta_escalation": null,
+        "stability_results": [
+          {
+            "precision": "Arb",
+            "estimated_relative_accuracy": 1.1375253871272084e-291,
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "secs": 0,
+              "nanos": 2153417
+            }
+          }
+        ]
+      }
+    },
+    {
+      "step": 1e-05,
+      "sign": -1,
+      "split_mass": 0.59999,
+      "mode": "thermodynamic_equilibrium",
+      "exit_code": 0,
+      "integrand": {
+        "re": 2.091657259781912e-05,
+        "im": 0.0
+      },
+      "metadata": {
+        "total_timing": {
+          "secs": 0,
+          "nanos": 4154833
+        },
+        "integrand_evaluation_time": {
+          "secs": 0,
+          "nanos": 2037333
+        },
+        "evaluator_evaluation_time": {
+          "secs": 0,
+          "nanos": 696040
+        },
+        "parameterization_time": {
+          "secs": 0,
+          "nanos": 0
+        },
+        "event_processing_time": {
+          "secs": 0,
+          "nanos": 54958
+        },
+        "generated_event_count": 6,
+        "accepted_event_count": 6,
+        "relative_instability_error": {
+          "re": 0.0,
+          "im": 0.0
+        },
+        "is_nan": false,
+        "loop_momenta_escalation": null,
+        "stability_results": [
+          {
+            "precision": "Arb",
+            "estimated_relative_accuracy": 2.0047373502978015e-291,
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "secs": 0,
+              "nanos": 4140834
+            }
+          }
+        ]
+      }
+    },
+    {
+      "step": 1e-05,
+      "sign": 1,
+      "split_mass": 0.6000099999999999,
+      "mode": "vacuum",
+      "exit_code": 0,
+      "integrand": {
+        "re": 1.784278764285788e-05,
+        "im": 0.0
+      },
+      "metadata": {
+        "total_timing": {
+          "secs": 0,
+          "nanos": 1686584
+        },
+        "integrand_evaluation_time": {
+          "secs": 0,
+          "nanos": 858750
+        },
+        "evaluator_evaluation_time": {
+          "secs": 0,
+          "nanos": 119500
+        },
+        "parameterization_time": {
+          "secs": 0,
+          "nanos": 0
+        },
+        "event_processing_time": {
+          "secs": 0,
+          "nanos": 31875
+        },
+        "generated_event_count": 3,
+        "accepted_event_count": 3,
+        "relative_instability_error": {
+          "re": 0.0,
+          "im": 0.0
+        },
+        "is_nan": false,
+        "loop_momenta_escalation": null,
+        "stability_results": [
+          {
+            "precision": "Arb",
+            "estimated_relative_accuracy": 5.687363521280675e-292,
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "secs": 0,
+              "nanos": 1676166
+            }
+          }
+        ]
+      }
+    },
+    {
+      "step": 1e-05,
+      "sign": 1,
+      "split_mass": 0.6000099999999999,
+      "mode": "thermodynamic_equilibrium",
+      "exit_code": 0,
+      "integrand": {
+        "re": 2.0919609180451357e-05,
+        "im": 0.0
+      },
+      "metadata": {
+        "total_timing": {
+          "secs": 0,
+          "nanos": 4345708
+        },
+        "integrand_evaluation_time": {
+          "secs": 0,
+          "nanos": 2250625
+        },
+        "evaluator_evaluation_time": {
+          "secs": 0,
+          "nanos": 817834
+        },
+        "parameterization_time": {
+          "secs": 0,
+          "nanos": 0
+        },
+        "event_processing_time": {
+          "secs": 0,
+          "nanos": 57959
+        },
+        "generated_event_count": 6,
+        "accepted_event_count": 6,
+        "relative_instability_error": {
+          "re": 0.0,
+          "im": 0.0
+        },
+        "is_nan": false,
+        "loop_momenta_escalation": null,
+        "stability_results": [
+          {
+            "precision": "Arb",
+            "estimated_relative_accuracy": 1.002251058919684e-291,
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "secs": 0,
+              "nanos": 4332833
+            }
+          }
+        ]
+      }
+    },
+    {
+      "step": 1e-06,
+      "sign": -1,
+      "split_mass": 0.599999,
+      "mode": "vacuum",
+      "exit_code": 0,
+      "integrand": {
+        "re": 1.784269568725591e-05,
+        "im": 0.0
+      },
+      "metadata": {
+        "total_timing": {
+          "secs": 0,
+          "nanos": 2270292
+        },
+        "integrand_evaluation_time": {
+          "secs": 0,
+          "nanos": 1129291
+        },
+        "evaluator_evaluation_time": {
+          "secs": 0,
+          "nanos": 157543
+        },
+        "parameterization_time": {
+          "secs": 0,
+          "nanos": 0
+        },
+        "event_processing_time": {
+          "secs": 0,
+          "nanos": 42458
+        },
+        "generated_event_count": 3,
+        "accepted_event_count": 3,
+        "relative_instability_error": {
+          "re": 0.0,
+          "im": 0.0
+        },
+        "is_nan": false,
+        "loop_momenta_escalation": null,
+        "stability_results": [
+          {
+            "precision": "Arb",
+            "estimated_relative_accuracy": 2.274780864742016e-289,
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "secs": 0,
+              "nanos": 2257542
+            }
+          }
+        ]
+      }
+    },
+    {
+      "step": 1e-06,
+      "sign": -1,
+      "split_mass": 0.599999,
+      "mode": "thermodynamic_equilibrium",
+      "exit_code": 0,
+      "integrand": {
+        "re": 2.0919620444525324e-05,
+        "im": 0.0
+      },
+      "metadata": {
+        "total_timing": {
+          "secs": 0,
+          "nanos": 4297584
+        },
+        "integrand_evaluation_time": {
+          "secs": 0,
+          "nanos": 2132750
+        },
+        "evaluator_evaluation_time": {
+          "secs": 0,
+          "nanos": 766041
+        },
+        "parameterization_time": {
+          "secs": 0,
+          "nanos": 0
+        },
+        "event_processing_time": {
+          "secs": 0,
+          "nanos": 60001
+        },
+        "generated_event_count": 6,
+        "accepted_event_count": 6,
+        "relative_instability_error": {
+          "re": 0.0,
+          "im": 0.0
+        },
+        "is_nan": false,
+        "loop_momenta_escalation": null,
+        "stability_results": [
+          {
+            "precision": "Arb",
+            "estimated_relative_accuracy": 4.008735298000167e-289,
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "secs": 0,
+              "nanos": 4284000
+            }
+          }
+        ]
+      }
+    },
+    {
+      "step": 1e-06,
+      "sign": 1,
+      "split_mass": 0.600001,
+      "mode": "vacuum",
+      "exit_code": 0,
+      "integrand": {
+        "re": 1.7841922581932844e-05,
+        "im": 0.0
+      },
+      "metadata": {
+        "total_timing": {
+          "secs": 0,
+          "nanos": 2581958
+        },
+        "integrand_evaluation_time": {
+          "secs": 0,
+          "nanos": 1211709
+        },
+        "evaluator_evaluation_time": {
+          "secs": 0,
+          "nanos": 170708
+        },
+        "parameterization_time": {
+          "secs": 0,
+          "nanos": 0
+        },
+        "event_processing_time": {
+          "secs": 0,
+          "nanos": 43876
+        },
+        "generated_event_count": 3,
+        "accepted_event_count": 3,
+        "relative_instability_error": {
+          "re": 0.0,
+          "im": 0.0
+        },
+        "is_nan": false,
+        "loop_momenta_escalation": null,
+        "stability_results": [
+          {
+            "precision": "Arb",
+            "estimated_relative_accuracy": 1.7061563054554289e-289,
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "secs": 0,
+              "nanos": 2568500
+            }
+          }
+        ]
+      }
+    },
+    {
+      "step": 1e-06,
+      "sign": 1,
+      "split_mass": 0.600001,
+      "mode": "thermodynamic_equilibrium",
+      "exit_code": 0,
+      "integrand": {
+        "re": 2.0917986500639037e-05,
+        "im": 0.0
+      },
+      "metadata": {
+        "total_timing": {
+          "secs": 0,
+          "nanos": 4283375
+        },
+        "integrand_evaluation_time": {
+          "secs": 0,
+          "nanos": 2152292
+        },
+        "evaluator_evaluation_time": {
+          "secs": 0,
+          "nanos": 737333
+        },
+        "parameterization_time": {
+          "secs": 0,
+          "nanos": 0
+        },
+        "event_processing_time": {
+          "secs": 0,
+          "nanos": 61540
+        },
+        "generated_event_count": 6,
+        "accepted_event_count": 6,
+        "relative_instability_error": {
+          "re": 0.0,
+          "im": 0.0
+        },
+        "is_nan": false,
+        "loop_momenta_escalation": null,
+        "stability_results": [
+          {
+            "precision": "Arb",
+            "estimated_relative_accuracy": 3.006781190212231e-289,
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "secs": 0,
+              "nanos": 4270542
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "limits": [
+    {
+      "mode": "vacuum",
+      "step": 0.01,
+      "symmetric_mean": 1.785206562362233e-05
+    },
+    {
+      "mode": "vacuum",
+      "step": 0.001,
+      "symmetric_mean": 1.784206989505487e-05
+    },
+    {
+      "mode": "vacuum",
+      "step": 0.0001,
+      "symmetric_mean": 1.7841969921013616e-05
+    },
+    {
+      "mode": "vacuum",
+      "step": 1e-05,
+      "symmetric_mean": 1.784196424457566e-05
+    },
+    {
+      "mode": "vacuum",
+      "step": 1e-06,
+      "symmetric_mean": 1.7842309134594377e-05
+    },
+    {
+      "mode": "thermodynamic_equilibrium",
+      "step": 0.01,
+      "symmetric_mean": 2.0949512144908932e-05
+    },
+    {
+      "mode": "thermodynamic_equilibrium",
+      "step": 0.001,
+      "symmetric_mean": 2.0918414625421167e-05
+    },
+    {
+      "mode": "thermodynamic_equilibrium",
+      "step": 0.0001,
+      "symmetric_mean": 2.0918103661502923e-05
+    },
+    {
+      "mode": "thermodynamic_equilibrium",
+      "step": 1e-05,
+      "symmetric_mean": 2.091809088913524e-05
+    },
+    {
+      "mode": "thermodynamic_equilibrium",
+      "step": 1e-06,
+      "symmetric_mean": 2.091880347258218e-05
+    }
+  ]
+}
