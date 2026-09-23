@@ -949,11 +949,28 @@ impl PyLoopMomentumBasis {
     /// ----------
     /// expression : Expression or TensorExpression
     ///     Expression with canonical indexed edge momenta to route.
-    fn route_expression(&self, expression: ConvertibleToExpression) -> PythonExpression {
-        PythonExpression {
-            expr: self
-                .inner
-                .route_expression(&expression.to_expression().expr),
+    ///
+    /// Returns
+    /// -------
+    /// TensorExpression or Expression
+    ///     Tensor inputs retain their type and ordered interface, including zero results.
+    ///     Other inputs return a plain Expression.
+    #[gen_stub(skip)]
+    fn route_expression(
+        &self,
+        py: Python<'_>,
+        expression: &Bound<'_, PyAny>,
+    ) -> PyResult<Py<PyAny>> {
+        let atom = expression
+            .extract::<ConvertibleToExpression>()?
+            .to_expression()
+            .expr;
+        let routed = self.inner.route_expression(&atom);
+        if expression.is_instance_of::<TensorExpression>() {
+            let tensor = expression.extract::<PyRef<'_, TensorExpression>>()?;
+            TensorExpression::preserving_interface(&tensor, py, routed).map(Py::into_any)
+        } else {
+            Py::new(py, PythonExpression { expr: routed }).map(Py::into_any)
         }
     }
 
@@ -1179,6 +1196,43 @@ submit! {
         import typing
 
         class PyLoopMomentumBasis:
+            @typing.overload
+            def route_expression(
+                self,
+                expression: pyo3_stub_gen.RustType["TensorExpression"],
+            ) -> pyo3_stub_gen.RustType["TensorExpression"]:
+                """Express edge momenta in this basis while preserving the tensor interface.
+
+                Tensor zeros retain their original ordered interface.
+
+                Examples
+                --------
+                >>> routed = basis.route_expression(diagram.numerator_expression())
+                >>> assert routed.interface == diagram.numerator_expression().interface
+
+                Parameters
+                ----------
+                expression : TensorExpression
+                    Tensor expression with canonical indexed edge momenta to route.
+                """
+
+            @typing.overload
+            def route_expression(
+                self,
+                expression: pyo3_stub_gen.RustType["ConvertibleToExpression"],
+            ) -> pyo3_stub_gen.RustType["PythonExpression"]:
+                """Express edge momenta in this basis while retaining tensor index arguments.
+
+                Examples
+                --------
+                >>> routed = basis.route_expression(diagram.numerator_expression().to_expression())
+
+                Parameters
+                ----------
+                expression : Expression or number
+                    Expression with canonical edge momenta to route, or a scalar constant.
+                """
+
             @typing.overload
             def route(
                 self,

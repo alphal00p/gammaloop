@@ -8,8 +8,8 @@ import json
 import sys
 from pathlib import Path
 
-from symbolica import S
-from symbolica.community.spenso import TensorExpression
+from symbolica import E, S, Expression
+from symbolica.community.spenso import Representation, TensorExpression, TensorName
 
 fk = importlib.import_module(
     f"symbolica.community.{sys.argv[1] if len(sys.argv) > 1 else 'feynkit'}"
@@ -64,6 +64,41 @@ assert basis.route_expression(raw_numerator) != raw_numerator
 assert alternate.route_expression(raw_numerator) != basis.route_expression(
     raw_numerator
 )
+
+# Routing preserves the caller's expression type, including open ports and
+# ordered interfaces which cannot be recovered from a zero atom alone.
+lorentz = Representation.mink(4)
+mu, nu = lorentz("routing_type_mu"), lorentz("routing_type_nu")
+Q = TensorName.vector("gammalooprs::Q", tags=S("gammalooprs::Q").get_tags())
+for selected_basis in (basis, alternate):
+    indexed = Q(loop_edge.id, mu)
+    # Expose numerical signs before routing, which only substitutes momenta.
+    cancelling = (
+        indexed - selected_basis.route_expression(indexed.to_expression())
+    ).expand_num()
+    for tensor in (
+        indexed,
+        Q(loop_edge.id, lorentz),
+        Q(loop_edge.id, nu) * indexed,
+        TensorExpression(3),
+        0 * indexed,
+        cancelling,
+    ):
+        routed = selected_basis.route_expression(tensor)
+        assert isinstance(routed, TensorExpression)
+        assert routed.interface == tensor.interface
+        plain = selected_basis.route_expression(tensor.to_expression())
+        assert isinstance(plain, Expression) and not isinstance(plain, TensorExpression)
+        assert routed.to_expression() == plain
+    cancelled = selected_basis.route_expression(cancelling)
+    assert cancelled == 0
+    assert cancelled.rank == 1
+    for scalar in (E("3"), 3, 2.5):
+        routed = selected_basis.route_expression(scalar)
+        assert isinstance(routed, Expression) and not isinstance(
+            routed, TensorExpression
+        )
+        assert routed == scalar
 
 for expression in (diagram.numerator_expression, diagram.denominator_expression):
     raw = expression()
