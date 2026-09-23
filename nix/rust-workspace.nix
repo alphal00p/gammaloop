@@ -388,6 +388,7 @@
       "docs/products"
       "pyproject.toml"
     ];
+    "feynkit-model" = ["crates/feynkit-model/data/sm.json.zlib"];
     "gammaloop-api" = [
       "assets/embedded"
       "assets/models"

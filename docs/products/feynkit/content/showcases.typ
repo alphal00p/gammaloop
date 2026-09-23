@@ -53,7 +53,7 @@ Use a shared Symbolica host containing FeynKit, as described in the
 distribution.
 
 Run the following from the checkout, replacing the interpreter path with that environment's
-Python. The command opens an editable Marimo notebook and reads the checkout's model fixtures.
+Python. The command opens an editable Marimo notebook using FeynKit's built-in models.
 
 // docs-example: syntax
 ```sh

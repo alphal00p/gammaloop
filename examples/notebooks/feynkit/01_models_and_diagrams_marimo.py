@@ -36,23 +36,18 @@ def _(mo):
 
     This tutorial treats a model as physics data: inspect particles and
     parameters, make an immutable parameter update, generate tree and loop
-    diagrams, and inspect their graph structure.
+    diagrams, and inspect their graph structure. `Model.phi_3_4()` provides
+    one real scalar with independent cubic (`g`) and quartic (`lam`) couplings;
+    its mass and both couplings default to one.
     """)
     return
 
 
 @app.cell
 def _():
-    from pathlib import Path
-
     import symbolica.community.feynkit as fk
 
-    _data_file = (
-        Path(__file__).resolve().parents[3]
-        / "crates/feynkit-model/tests/fixtures"
-        / "scalars_2p_3p.json"
-    )
-    model = fk.Model(_data_file)
+    model = fk.Model.phi_3_4()
     return fk, model
 
 
@@ -105,7 +100,7 @@ def _(fk, mo, model, table):
     _updated = model.with_parameter_card(_card)
 
     try:
-        _dependent_coupling = _updated.coupling("SCALAR_COUPLING").value
+        _dependent_coupling = _updated.coupling("SCALAR4_COUPLING").value
     except fk.ModelError:
         _dependent_coupling = "not evaluated after the parameter update"
 
@@ -137,9 +132,9 @@ def _(mo):
 
 @app.cell
 def _(model, table):
-    incoming_particles = [model.particle("scalar_0")]
+    incoming_particles = [model.particle("phi")]
     outgoing_particles = [
-        model.particle_by_pdg(1000),
+        model.particle_by_pdg(9000001),
         incoming_particles[0].antiparticle,
     ]
 
@@ -186,7 +181,6 @@ def _(incoming_particles, mo, model, outgoing_particles, table):
             progress=_report,
             max_vertices=3,
             allow_self_loops=True,
-            vertex_allow=["V_3_SCALAR_000"],
         )
 
     table(

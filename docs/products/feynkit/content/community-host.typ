@@ -111,8 +111,9 @@ just docs-notebooks /path/to/symbolica-wasm.whl idenso docs/generated/notebooks 
 ```
 
 Publication builds both wheels at the documented revision and adds all three products' assets
-to the versioned site. The source notebooks use the checkout's model fixtures; the browser
-export bundles those same inputs so it needs no external model download.
+to the versioned site. The FeynKit notebooks use built-in model constructors, so neither
+native execution nor browser export needs separate model JSON files. The UFO-loading
+tutorial deliberately retains its raw UFO fixture to demonstrate importing external models.
 
 == Verify an installed host
 

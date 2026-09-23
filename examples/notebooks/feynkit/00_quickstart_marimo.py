@@ -49,39 +49,34 @@ def _(mo):
     Use a Symbolica host built with the FeynKit community module. We use
     the conventional short alias `fk` so the physics namespace stays visible.
 
-    The data path below selects the checkout's existing model fixture, so it
-    works whether Marimo is launched from the repository root or this directory.
+    Built-in constructors need no model files. This example uses a single
+    real scalar with a cubic interaction and unit mass and coupling.
     """)
     return
 
 
 @app.cell
 def _():
-    from pathlib import Path
-
     import symbolica.community.feynkit as fk
 
-    data_dir = (
-        Path(__file__).resolve().parents[3] / "crates/feynkit-model/tests/fixtures"
-    )
-    return data_dir, fk
+    return (fk,)
 
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Load a normalized model
+    ## Construct a built-in model
 
-    A normalized JSON model is portable and does not require Python UFO
-    tooling. The bundled scalar model is deliberately small enough for an
-    interactive tutorial.
+    `Model.phi3()` constructs a real scalar with interaction
+    $-g\phi^3/3!$. It is deliberately small enough for an interactive
+    tutorial and requires no Python UFO tooling.
     """)
     return
 
 
 @app.cell
-def _(data_dir, fk, table):
-    model = fk.Model(data_dir / "scalars_2p_3p.json")
+def _(fk, table):
+    model = fk.Model.phi3()
 
     table(
         [
@@ -101,7 +96,7 @@ def _(mo):
     mo.md(r"""
     ## Describe and generate an amplitude
 
-    Particle selectors may be names such as `"scalar_0"`, PDG codes, or
+    Particle selectors may be names such as `"phi"`, PDG codes, or
     explicit `ParticleSelector` objects. Here `loops=1` requests exactly one
     loop. Self-loops are allowed, while the default topology filters reject
     self-energies, tadpoles and zero-momentum snails. Below, we select the first
@@ -113,12 +108,11 @@ def _(mo):
 @app.cell
 def _(model, table):
     generated = model.generate_diagrams(
-        incoming=["scalar_0"],
-        outgoing=["scalar_0", "scalar_0"],
+        incoming=["phi"],
+        outgoing=["phi", "phi"],
         loops=1,
         max_vertices=3,
         allow_self_loops=True,
-        vertex_allow=["V_3_SCALAR_000"],
     )
 
     table(

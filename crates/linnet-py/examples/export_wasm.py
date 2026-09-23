@@ -182,7 +182,7 @@ def staged_notebooks(
                 dependency = dependency_wheel.name.split("-")[0].replace("_", "-")
                 if PUBLISHED_REQUIREMENTS[dependency] in source:
                     source = with_local_wheel(source, dependency_wheel.name, dependency)
-            if notebook.docs_product in {"feynkit", "gammaloop"}:
+            if notebook.ready_value == "04_ufo_loading_marimo":
                 source = source.replace(
                     "Path(__file__).resolve().parents[3]", 'Path("/feynkit-data")'
                 )
@@ -259,26 +259,18 @@ def export(
                 for island, cell in zip(generator.stubs, cells, strict=True):
                     island._display_code = not cell.config.hide_code
             bootstrap = ""
-            if notebook.docs_product in {"feynkit", "gammaloop"}:
+            if notebook.ready_value == "04_ufo_loading_marimo":
                 repository = EXAMPLES_DIR.parents[2]
-                assets = [
-                    repository
-                    / "crates/feynkit-model/tests/fixtures/scalars_2p_3p.json",
-                    repository / "crates/feynkit-model/tests/fixtures/sm.json",
-                    *(
-                        asset
-                        for asset in (repository / "assets/models/ufo/scalars").rglob(
-                            "*"
-                        )
-                        if asset.is_file() and "__pycache__" not in asset.parts
-                    ),
-                ]
+                ufo_model = repository / "assets/models/ufo/scalars"
                 # Require the model assets from this source tree; missing fixtures
                 # must fail export rather than leave the browser with a partial bundle.
-                if notebook.ready_value == "physics":
-                    assets = [
-                        repository / "crates/feynkit-model/tests/fixtures/sm.json"
-                    ]
+                if not (ufo_model / "__init__.py").is_file():
+                    raise FileNotFoundError(ufo_model / "__init__.py")
+                assets = [
+                    asset
+                    for asset in ufo_model.rglob("*")
+                    if asset.is_file() and "__pycache__" not in asset.parts
+                ]
                 bundle = source.parent / "feynkit-data.zip"
                 with zipfile.ZipFile(bundle, "w") as archive:
                     for asset in sorted(assets):
