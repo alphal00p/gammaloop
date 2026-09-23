@@ -1475,8 +1475,39 @@ At $N_c=3$, the existing flux and two-body phase-space APIs give
 $ frac(d sigma, d Omega) = frac(alpha_s^2, 18s) (1+cos^2 theta), quad
   sigma = frac(8 pi alpha_s^2, 27s). $
 The separate `hep/qcd_annihilation.py` notebook runs these exact comparisons
-in the same Marimo instance as the other examples. Identical-flavor channels,
-quark-gluon scattering and general QCD observables remain unvalidated.
+in the same Marimo instance as the other examples. Elastic quark channels are
+covered below. Quark-gluon scattering and general QCD observables remain
+unvalidated.
+
+== Generated gluon scattering in symbolic dimension
+
+`hep/gluon_scattering.py` and `installed_feyncalc_gluon_scattering.py` cover
+#link("https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/GlGl-GlGl")[the four-gluon tree example].
+The built-in model supplies the three exchange diagrams and four-gluon contact
+interaction. All sixteen amplitude products retain their generated signs,
+weights and coupling factors. Particle lookup uses `model.particle("g")`.
+
+The shared `Particle.spin_sum(..., dimension=D)` builds physical axial
+projectors in symbolic dimension. The incoming momenta are each other's
+reference, as are the outgoing pair. Spenso contracts the symbolic SU(N) color
+structure and Lorentz tensors; Symbolica collects their scalar coefficients.
+With incoming color averages and a fixed factor of one half for each incoming
+spin sum, the exact result is
+$ frac((D-2)^2 N_c^2 g_s^4 (t^2+t u+u^2)^3,
+       (N_c^2-1) s^2 t^2 u^2). $
+This is the convention used by the gallery. Averaging instead over the $D-2$
+physical states of each incoming gluon multiplies it by $4/(D-2)^2$.
+The regression checks the generic expression, the usual four-dimensional
+SU(3) result and exchange of the identical outgoing gluons exactly.
+
+The notebook also integrates the four-dimensional event rate with the shared
+flux and two-body phase space. Azimuth integration and the identical-final-state
+factor $1/2!$ give $d sigma / d cos(theta) = abs(cal(M))^2/(64 pi s)$.
+An angular cut $abs(cos(theta)) < c < 1$ excludes the massless exchange poles.
+Symbolica's antiderivative passes exact differentiation and boundary checks;
+nine independent Gaussian quadratures check $N_c=2,3,5$ at three cuts.
+The controls expose both spin-average conventions, symbolic or concrete Lorentz
+dimensions, color groups and angular cuts without repeating diagram generation.
 
 == Generated elastic quark scattering
 
