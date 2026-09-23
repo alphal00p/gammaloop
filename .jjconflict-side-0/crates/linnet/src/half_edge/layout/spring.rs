@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     half_edge::{
-        involution::{EdgeIndex, EdgeVec, Flow, Hedge, HedgePair},
+        involution::{EdgeIndex, EdgeVec, Flow, Hedge, HedgePair, HedgeVec},
         layout::simulatedanneale::{Energy, Neighbor},
         nodestore::NodeStorageOps,
         subgraph::{subset::SubSet, Inclusion, ModifySubSet, SuBitGraph, SubSetLike},
@@ -122,6 +122,9 @@ pub(crate) fn directional_force_shift(
     )
 }
 
+/// A physical edge's normalized charge at its anchor or a half-edge route point.
+pub(super) type EdgeChargeSample = (Option<(Hedge, usize)>, Point2<f64>, f64);
+
 pub struct LayoutState<'a, E, V, H, N: NodeStorageOps<NodeData = V>> {
     pub graph: &'a HedgeGraph<E, V, H, N>,
     pub ext: SuBitGraph,
@@ -130,6 +133,9 @@ pub struct LayoutState<'a, E, V, H, N: NodeStorageOps<NodeData = V>> {
     pub(super) external_pull_scales: EdgeVec<f64>,
     pub vertex_points: NodeVec<Point2<f64>>,
     pub edge_points: EdgeVec<Point2<f64>>,
+    /// Interior drawing points, ordered from each half-edge's vertex to its edge anchor.
+    /// These carry no interaction-node identity and do not change the graph topology.
+    pub route_points: HedgeVec<Vec<Point2<f64>>>,
     /// Raw auxiliary depths: optional seeds before force layout, final raw values afterwards.
     /// Effective depth collapses to zero without changing hard-pinned raw values.
     pub vertex_depths: NodeVec<Option<f64>>,
@@ -167,6 +173,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
             external_pull_scales: vec![1.0; len_e].into(),
             vertex_points,
             edge_points,
+            route_points: vec![Vec::new(); self.n_hedges()].into(),
             vertex_depths: vec![None; len_v].into(),
             edge_depths: vec![None; len_e].into(),
             vertex_depth_pins: vec![false; len_v].into(),
@@ -192,6 +199,7 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> Clone for LayoutState<'a, E, 
             external_pull_scales: self.external_pull_scales.clone(),
             vertex_points: self.vertex_points.clone(),
             edge_points: self.edge_points.clone(),
+            route_points: self.route_points.clone(),
             vertex_depths: self.vertex_depths.clone(),
             edge_depths: self.edge_depths.clone(),
             vertex_depth_pins: self.vertex_depth_pins.clone(),
@@ -498,6 +506,74 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayoutState<'a, E, V, H, N> {
             .filter(|&edge| self.edge_is_active(edge))
     }
 
+    /// Complete vertex-to-anchor path for one physical incidence.
+    pub(super) fn half_route_points(&self, hedge: Hedge) -> Vec<Point2<f64>> {
+        std::iter::once(self.vertex_points[self.graph.node_id(hedge)])
+            .chain(self.route_points[hedge].iter().copied())
+            .chain(std::iter::once(self.edge_points[self.graph[&hedge]]))
+            .collect()
+    }
+
+    pub(super) fn half_route_length(&self, hedge: Hedge) -> f64 {
+        self.half_route_points(hedge)
+            .windows(2)
+            .map(|points| points[0].distance(points[1]))
+            .sum()
+    }
+
+    pub(super) fn edge_route_hedges(&self, edge: EdgeIndex) -> Vec<Hedge> {
+        let (_, pair) = &self.graph[&edge];
+        let hedges = match *pair {
+            HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } => {
+                vec![source, sink]
+            }
+            HedgePair::Unpaired { hedge, .. } => vec![hedge],
+        };
+        hedges
+            .into_iter()
+            .filter(|&hedge| self.hedge_is_active(hedge))
+            .collect()
+    }
+
+    /// One unit of edge charge shared by its anchor and active interior points.
+    /// Position-independent weights keep force gradients consistent with energy.
+    pub(super) fn edge_charge_samples(&self, edge: EdgeIndex) -> Vec<EdgeChargeSample> {
+        if !self.edge_is_active(edge) {
+            return Vec::new();
+        }
+        let mut samples = vec![(None, self.edge_points[edge], 1.0)];
+        for hedge in self.edge_route_hedges(edge) {
+            samples.extend(
+                self.route_points[hedge]
+                    .iter()
+                    .enumerate()
+                    .map(|(index, &point)| (Some((hedge, index)), point, 1.0)),
+            );
+        }
+        let weight = 1.0 / samples.len() as f64;
+        for sample in &mut samples {
+            sample.2 = weight;
+        }
+        samples
+    }
+
+    fn active_route_points(&self) -> Vec<(Hedge, usize)> {
+        self.route_points
+            .iter()
+            .filter(|(hedge, _)| self.hedge_is_active(*hedge))
+            .flat_map(|(hedge, points)| (0..points.len()).map(move |index| (hedge, index)))
+            .collect()
+    }
+
+    fn shift_route_point(&mut self, hedge: Hedge, index: usize, shift: Vector2<f64>) -> bool {
+        if !self.hedge_is_active(hedge) || shift == Vector2::zero() {
+            return false;
+        }
+        self.route_points[hedge][index] += shift;
+        self.mark_edge_changed(self.graph[&hedge]);
+        true
+    }
+
     fn mark_node_changed(&mut self, index: NodeIndex) {
         self.changed_nodes.add(index);
     }
@@ -527,6 +603,7 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V> + Clone> Neighbor<LayoutState<
         let mut st = s.clone();
         let active_nodes = st.active_nodes().collect::<Vec<_>>();
         let active_edges = st.active_edges().collect::<Vec<_>>();
+        let active_routes = st.active_route_points();
         let step_range: Uniform<f64> = Uniform::from(-step..step);
         if active_nodes.is_empty() && active_edges.is_empty() {
             return st;
@@ -538,6 +615,12 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V> + Clone> Neighbor<LayoutState<
             attempts += 1;
             if st.has_active_subgraph() && attempts > 1024 {
                 return st;
+            }
+            if !active_routes.is_empty() && rng.gen_bool(0.25) {
+                let (hedge, index) = active_routes[rng.gen_range(0..active_routes.len())];
+                let shift = LayoutNeighbor::axis_shift(&step_range, rng);
+                didnothing = !st.shift_route_point(hedge, index, shift);
+                continue;
             }
             match rng.gen_range(0..100) {
                 0..=69 => {
@@ -635,6 +718,7 @@ where
         st.synchronize_grouped_coordinates();
         let active_nodes = st.active_nodes().collect::<Vec<_>>();
         let active_edges = st.active_edges().collect::<Vec<_>>();
+        let active_routes = st.active_route_points();
         let step_range: Uniform<f64> = Uniform::from(-step..step);
         if active_nodes.is_empty() && active_edges.is_empty() {
             return st;
@@ -646,6 +730,12 @@ where
             attempts += 1;
             if st.has_active_subgraph() && attempts > 1024 {
                 return st;
+            }
+            if !active_routes.is_empty() && rng.gen_bool(0.25) {
+                let (hedge, index) = active_routes[rng.gen_range(0..active_routes.len())];
+                let shift = LayoutNeighbor::axis_shift(&step_range, rng);
+                didnothing = !apply_route_point_shift(&mut st, hedge, index, shift);
+                continue;
             }
             match rng.gen_range(0..100) {
                 0..=6 => {
@@ -730,6 +820,28 @@ where
         }
         st
     }
+}
+
+/// Move an interior point without changing its physical edge or anchor constraints.
+/// Fixed owner axes apply to its bends; grouped coordinates refer only to the anchor.
+pub(crate) fn apply_route_point_shift<'a, E, V, H, N>(
+    state: &mut LayoutState<'a, E, V, H, N>,
+    hedge: Hedge,
+    index: usize,
+    mut shift: Vector2<f64>,
+) -> bool
+where
+    E: HasPointConstraint,
+    N: NodeStorageOps<NodeData = V>,
+{
+    let constraints = state.graph[state.graph[&hedge]].point_constraint();
+    if matches!(constraints.x, Constraint::Fixed) {
+        shift.x = 0.0;
+    }
+    if matches!(constraints.y, Constraint::Fixed) {
+        shift.y = 0.0;
+    }
+    state.shift_route_point(hedge, index, shift)
 }
 
 pub(crate) fn apply_vertex_shift<'a, E, V, H, N: NodeStorageOps<NodeData = V> + Clone>(
@@ -1119,7 +1231,18 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V> + Clone> Energy<LayoutState<'a
         prev: Option<(&LayoutState<'a, E, V, H, N>, f64)>,
         next: &LayoutState<'a, E, V, H, N>,
     ) -> f64 {
-        if !next.incremental {
+        if !next.incremental
+            || next
+                .route_points
+                .iter()
+                .any(|(_, points)| !points.is_empty())
+            || prev.is_some_and(|(state, _)| {
+                state
+                    .route_points
+                    .iter()
+                    .any(|(_, points)| !points.is_empty())
+            })
+        {
             return self.total_energy(next);
         }
 
@@ -1497,44 +1620,29 @@ impl SpringChargeEnergy {
     fn edge_segments<'a, E, V, H, N>(
         s: &LayoutState<'a, E, V, H, N>,
         edge: EdgeIndex,
-    ) -> Vec<(Point2<f64>, Point2<f64>, NodeIndex)>
+    ) -> Vec<(Point2<f64>, Point2<f64>, Option<NodeIndex>)>
     where
         N: NodeStorageOps<NodeData = V> + Clone,
     {
-        let (_, pair) = &s.graph[&edge];
-        let pair = match &s.active_subgraph {
-            Some(active) => pair.with_subgraph(active),
-            None => Some(*pair),
-        };
-        let p = s.edge_points[edge];
-        match pair {
-            Some(HedgePair::Paired { source, sink }) => {
-                let a = s.graph.node_id(source);
-                let b = s.graph.node_id(sink);
-                if a == b {
-                    Vec::new()
-                } else {
-                    vec![(s.vertex_points[a], p, a), (s.vertex_points[b], p, b)]
-                }
-            }
-            Some(HedgePair::Split {
-                source,
-                sink,
-                split,
-            }) => {
-                let hedge = match split {
-                    Flow::Source => source,
-                    Flow::Sink => sink,
-                };
-                let node = s.graph.node_id(hedge);
-                vec![(s.vertex_points[node], p, node)]
-            }
-            Some(HedgePair::Unpaired { hedge, .. }) => {
-                let node = s.graph.node_id(hedge);
-                vec![(s.vertex_points[node], p, node)]
-            }
-            None => Vec::new(),
+        let hedges = s.edge_route_hedges(edge);
+        // An unrouted self-loop's out-and-back span does not describe its drawn loop.
+        if hedges.len() == 2
+            && s.graph.node_id(hedges[0]) == s.graph.node_id(hedges[1])
+            && hedges.iter().all(|&hedge| s.route_points[hedge].is_empty())
+        {
+            return Vec::new();
         }
+        hedges
+            .into_iter()
+            .flat_map(|hedge| {
+                let node = s.graph.node_id(hedge);
+                s.half_route_points(hedge)
+                    .windows(2)
+                    .enumerate()
+                    .map(|(index, points)| (points[0], points[1], (index == 0).then_some(node)))
+                    .collect::<Vec<_>>()
+            })
+            .collect()
     }
 
     pub(super) fn edge_spring_length<'a, E, V, H, N>(
@@ -1597,7 +1705,7 @@ impl SpringChargeEnergy {
         }
         for (a, b, ai) in &seg_i {
             for (c, d, aj) in &seg_j {
-                if ai == aj {
+                if ai.is_some() && ai == aj {
                     continue;
                 }
                 if Self::segments_cross(*a, *b, *c, *d) {
@@ -1654,8 +1762,9 @@ impl SpringChargeEnergy {
                     if !s.edge_is_active(ei) {
                         continue;
                     }
-                    let ep = s.edge_points[ei];
-                    energy += self.ev_term(np.distance(ep));
+                    for (_, point, weight) in s.edge_charge_samples(ei) {
+                        energy += weight * self.ev_term(np.distance(point));
+                    }
                 }
             }
         }
@@ -1671,16 +1780,14 @@ impl SpringChargeEnergy {
             if !s.node_is_active(ni) {
                 continue;
             }
-            let np = s.vertex_points[ni];
             for e in s
                 .graph
                 .iter_crown(ni)
                 .filter(|&hedge| s.hedge_is_active(hedge))
             {
                 let ei = s.graph[&e];
-                let ep = s.edge_points[ei];
                 let length = Self::edge_spring_length(s, ei, self.spring_length);
-                energy += self.spring_term_with_length(np.distance(ep), length);
+                energy += self.spring_term_with_length(s.half_route_length(e), length);
                 for e in s
                     .graph
                     .iter_crown(ni)
@@ -1690,8 +1797,13 @@ impl SpringChargeEnergy {
                     if ei == ej {
                         continue;
                     }
-                    let ejp = s.edge_points[ej];
-                    energy += self.ee_local_term(ejp.distance(ep));
+                    for (_, first, first_weight) in s.edge_charge_samples(ei) {
+                        for (_, second, second_weight) in s.edge_charge_samples(ej) {
+                            energy += first_weight
+                                * second_weight
+                                * self.ee_local_term(first.distance(second));
+                        }
+                    }
                 }
             }
         }
@@ -2310,6 +2422,262 @@ mod tests {
             assert_eq!(half.external_pull_scales[EdgeIndex(i)], 1.0);
         }
         assert_eq!(half.external_pull_scales, half.clone().external_pull_scales);
+    }
+
+    #[test]
+    fn route_spring_length_is_invariant_under_collinear_subdivision() {
+        let mut builder = HedgeGraphBuilder::<(), ()>::new();
+        let a = builder.add_node(());
+        let b = builder.add_node(());
+        builder.add_edge(a, b, (), false);
+        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let HedgePair::Paired { source, sink } = graph[&EdgeIndex(0)].1 else {
+            panic!("expected paired edge");
+        };
+        let mut state = graph.new_layout_state(
+            vec![Point2::new(-3.0, 0.0), Point2::new(3.0, 0.0)].into(),
+            vec![Point2::origin()].into(),
+            1.0,
+            0.0,
+            true,
+        );
+        let energy = test_energy(0.0);
+        let original = energy.energy(None, &state);
+        state.route_points[source] = vec![Point2::new(-2.0, 0.0), Point2::new(-0.3, 0.0)];
+        state.route_points[sink] = vec![Point2::new(2.0, 0.0), Point2::new(1.0, 0.0)];
+        assert_eq!(state.half_route_length(source), 3.0);
+        assert_eq!(energy.energy(None, &state), original);
+        assert_eq!(state.clone().route_points, state.route_points);
+        state.route_points[source][0].y = 2.0;
+        let length = 5.0_f64.sqrt() + 6.89_f64.sqrt() + 0.3;
+        let expected = 0.5 * (length - 1.0).powi(2) + 2.0;
+        assert!((energy.energy(None, &state) - expected).abs() < 1e-12);
+    }
+
+    #[test]
+    fn route_charge_samples_normalize_active_physical_edge_charge() {
+        let mut builder = HedgeGraphBuilder::<(), ()>::new();
+        let a = builder.add_node(());
+        let b = builder.add_node(());
+        builder.add_edge(a, b, (), false);
+        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let HedgePair::Paired { source, sink } = graph[&EdgeIndex(0)].1 else {
+            panic!("expected paired edge");
+        };
+        let mut state = graph.new_layout_state(
+            vec![Point2::new(-3.0, 0.0), Point2::new(3.0, 0.0)].into(),
+            vec![Point2::origin()].into(),
+            1.0,
+            0.0,
+            true,
+        );
+        assert_eq!(
+            state.edge_charge_samples(EdgeIndex(0)),
+            vec![(None, Point2::origin(), 1.0)]
+        );
+        state.route_points[source] = vec![Point2::new(-2.0, 0.0), Point2::new(-1.0, 0.0)];
+        state.route_points[sink] = vec![Point2::new(1.0, 0.0)];
+        let samples = state.edge_charge_samples(EdgeIndex(0));
+        assert_eq!(samples.len(), 4);
+        assert_eq!(samples.iter().map(|sample| sample.2).sum::<f64>(), 1.0);
+        let energy = SpringChargeEnergy {
+            k_spring: 0.0,
+            c_ev: 3.0,
+            ..test_energy(0.0)
+        };
+        let expected = state
+            .vertex_points
+            .iter()
+            .flat_map(|(_, vertex)| {
+                samples
+                    .iter()
+                    .map(|(_, point, weight)| weight * energy.ev_term(vertex.distance(*point)))
+            })
+            .sum::<f64>();
+        assert_eq!(energy.energy(None, &state), expected);
+        let mut active = graph.empty_subgraph::<SuBitGraph>();
+        active.add(source);
+        state = state.with_active_subgraph(active);
+        let samples = state.edge_charge_samples(EdgeIndex(0));
+        assert_eq!(samples.len(), 3);
+        assert!(samples
+            .iter()
+            .all(|(address, _, _)| address.is_none_or(|(hedge, _)| hedge == source)));
+        assert!((samples.iter().map(|sample| sample.2).sum::<f64>() - 1.0).abs() < 1e-12);
+        let before = energy.energy(None, &state);
+        state.route_points[sink][0] = Point2::new(1000.0, 1000.0);
+        assert_eq!(energy.energy(None, &state), before);
+    }
+
+    #[test]
+    fn route_point_shifts_preserve_fixed_axes_and_inactive_half_edges() {
+        let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
+        let a = builder.add_node(PointConstraint::default());
+        let b = builder.add_node(PointConstraint::default());
+        builder.add_edge(
+            a,
+            b,
+            PointConstraint {
+                x: Constraint::Fixed,
+                y: Constraint::Free,
+            },
+            false,
+        );
+        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let HedgePair::Paired { source, sink } = graph[&EdgeIndex(0)].1 else {
+            panic!("expected paired edge");
+        };
+        let mut state = graph.new_layout_state(
+            vec![Point2::new(-3.0, 0.0), Point2::new(3.0, 0.0)].into(),
+            vec![Point2::origin()].into(),
+            1.0,
+            0.0,
+            true,
+        );
+        state.route_points[source] = vec![Point2::new(-1.0, 2.0)];
+        assert!(apply_route_point_shift(
+            &mut state,
+            source,
+            0,
+            Vector2::new(4.0, 5.0)
+        ));
+        assert_eq!(state.route_points[source][0], Point2::new(-1.0, 7.0));
+        assert!(state.changed_edges.includes(&EdgeIndex(0)));
+        state.clear_changes();
+        let mut active = graph.empty_subgraph::<SuBitGraph>();
+        active.add(sink);
+        state = state.with_active_subgraph(active);
+        assert!(!apply_route_point_shift(
+            &mut state,
+            source,
+            0,
+            Vector2::new(4.0, 5.0)
+        ));
+        assert_eq!(state.route_points[source][0], Point2::new(-1.0, 7.0));
+        assert!(state.changed_edges.is_empty());
+    }
+
+    #[test]
+    fn route_annealing_moves_bends_and_evaluates_their_complete_energy() {
+        let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
+        let a = builder.add_node(PointConstraint::default());
+        let b = builder.add_node(PointConstraint::default());
+        builder.add_edge(a, b, PointConstraint::default(), false);
+        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let HedgePair::Paired { source, sink } = graph[&EdgeIndex(0)].1 else {
+            panic!("expected paired edge");
+        };
+        let mut state = graph.new_layout_state(
+            vec![Point2::new(-3.0, 0.0), Point2::new(3.0, 0.0)].into(),
+            vec![Point2::origin()].into(),
+            1.0,
+            0.0,
+            true,
+        );
+        state.route_points[source] = vec![Point2::new(-1.0, 1.0)];
+        state.route_points[sink] = vec![Point2::new(1.0, -1.0)];
+        let energy = SpringChargeEnergy {
+            c_ev: 0.4,
+            c_ee_local: 0.2,
+            ..test_energy(0.1)
+        };
+        let mut rng = SmallRng::seed_from_u64(42);
+        let mut moves = 0;
+        for _ in 0..100 {
+            let before = energy.energy(None, &state);
+            let mut next = PinnedLayoutNeighbor.propose(&state, &mut rng, 0.1, 1.0);
+            moves += usize::from(next.route_points != state.route_points);
+            assert_eq!(
+                energy.energy(Some((&state, before)), &next),
+                energy.total_energy(&next)
+            );
+            energy.on_accept(&mut next);
+            state = next;
+        }
+        assert!(moves > 0);
+    }
+
+    #[test]
+    fn route_crossing_penalty_includes_routed_self_loops_only() {
+        let mut builder = HedgeGraphBuilder::<(), ()>::new();
+        let a = builder.add_node(());
+        let b = builder.add_node(());
+        let c = builder.add_node(());
+        builder.add_edge(a, a, (), false);
+        builder.add_edge(b, c, (), false);
+        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let mut state = graph.new_layout_state(
+            vec![
+                Point2::new(-3.0, 0.0),
+                Point2::new(-1.0, 2.0),
+                Point2::new(1.0, 2.0),
+            ]
+            .into(),
+            vec![Point2::origin(), Point2::new(0.5, 2.0)].into(),
+            1.0,
+            0.0,
+            true,
+        );
+        assert!(SpringChargeEnergy::edge_segments(&state, EdgeIndex(0)).is_empty());
+        let HedgePair::Paired { source, sink } = graph[&EdgeIndex(0)].1 else {
+            panic!("expected paired loop");
+        };
+        state.route_points[source] = vec![Point2::new(-3.0, 3.0), Point2::new(0.0, 3.0)];
+        state.route_points[sink] = vec![Point2::new(-3.0, -3.0), Point2::new(0.0, -3.0)];
+        assert!(SpringChargeEnergy::edge_crosses(
+            &state,
+            EdgeIndex(0),
+            EdgeIndex(1)
+        ));
+    }
+
+    #[test]
+    fn route_crossing_penalty_checks_bends_beyond_a_shared_vertex() {
+        let mut builder = HedgeGraphBuilder::<(), ()>::new();
+        let a = builder.add_node(());
+        let b = builder.add_node(());
+        let c = builder.add_node(());
+        builder.add_edge(a, b, (), false);
+        builder.add_edge(a, c, (), false);
+        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let mut state = graph.new_layout_state(
+            vec![
+                Point2::origin(),
+                Point2::new(4.0, 0.0),
+                Point2::new(4.0, 4.0),
+            ]
+            .into(),
+            vec![Point2::new(2.0, 0.0), Point2::new(2.0, 4.0)].into(),
+            1.0,
+            0.0,
+            true,
+        );
+        assert!(!SpringChargeEnergy::edge_crosses(
+            &state,
+            EdgeIndex(0),
+            EdgeIndex(1)
+        ));
+        let first = graph
+            .iter_crown(a)
+            .find(|&hedge| graph[&hedge] == EdgeIndex(0))
+            .unwrap();
+        let second = graph
+            .iter_crown(a)
+            .find(|&hedge| graph[&hedge] == EdgeIndex(1))
+            .unwrap();
+        state.route_points[first] = vec![Point2::new(0.0, 3.0), Point2::new(3.0, 3.0)];
+        state.route_points[second] = vec![Point2::new(0.0, 1.0), Point2::new(3.0, 1.0)];
+        assert!(SpringChargeEnergy::edge_crosses(
+            &state,
+            EdgeIndex(0),
+            EdgeIndex(1)
+        ));
+        let energy = SpringChargeEnergy {
+            k_spring: 0.0,
+            crossing_penalty: 7.0,
+            ..test_energy(0.0)
+        };
+        assert_eq!(energy.energy(None, &state), 7.0);
     }
 
     #[test]

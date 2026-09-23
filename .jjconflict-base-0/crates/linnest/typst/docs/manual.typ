@@ -1068,6 +1068,36 @@
   override their corresponding flat arguments. Flat arguments remain useful for
   numerical experiments and controls that do not have a semantic grouping.
 
+  An edge may carry any number of intermediate route points, independently of
+  other edges. Set `route-points` on `graph.source(...)` or `graph.sink(...)`,
+  or on a half-edge through `graph.map`. Each list runs from its incident node
+  toward the edge's central layout point, excluding those two endpoints.
+  In Python, use `half_edge.drawing.route_points = [(x, y), ...]`.
+  Coordinates use the same layout units as node and edge positions.
+
+  Force and annealing layouts retain these points as movable coordinates.
+  Springs measure the complete half-route length; adding collinear points does
+  not change the spring's preferred length or stiffness. The edge's repulsion
+  charge is shared equally between its central point and active route points,
+  so extra bends do not multiply its total charge. This retains the existing
+  local edge--edge, edge--vertex and vertex--vertex interactions. Fixed edge
+  axes freeze the corresponding bend coordinates; unselected half-routes stay
+  fixed. Grouped placement constraints still refer to the central edge point.
+  Routed annealing evaluates the full energy after proposals.
+
+  A full layout records its solved geometry. Subsequent force or annealing
+  passes start from those node positions, central edge points and half-routes;
+  they do not restart the traversal-tree initializer. The representation is
+  shared by layered layouts, manual geometry and solver refinement. Route
+  point counts may differ between edges, but stay fixed during each solver run.
+
+  Rendering fits a Hobby curve through the resulting points. Empty route lists
+  retain the usual single-point layout and curve construction. This enables an
+  ImPrEd route to seed a short ordinary force pass; the ordinary pass and Hobby
+  fit do not enforce ImPrEd's crossing-preservation constraints. A native
+  `ForceLayoutStream` can start from a routed `TypstGraph`; its frames include
+  complete source-to-sink `paths`, as well as node and central edge positions.
+
   `spring-length-scale` (also `spring.rest-length-scale`) multiplies preferred
   incidence spring lengths independently of repulsive strengths. It must be
   positive and finite, defaults to `1`, and combines multiplicatively with each

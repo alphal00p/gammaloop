@@ -45,6 +45,14 @@ class LayoutStreamTests(unittest.TestCase):
         for frame in frames:
             self.assertEqual(len(frame.nodes), 2)
             self.assertEqual(len(frame.edges), 3)
+            self.assertEqual(
+                frame.paths,
+                [
+                    [frame.edges[0], frame.nodes[0]],
+                    [frame.nodes[0], frame.edges[1], frame.nodes[1]],
+                    [frame.nodes[1], frame.edges[2]],
+                ],
+            )
             self.assertEqual(frame.nodes[0], (1.0, 2.0))
             self.assertTrue(math.isfinite(frame.max_movement))
             self.assertTrue(

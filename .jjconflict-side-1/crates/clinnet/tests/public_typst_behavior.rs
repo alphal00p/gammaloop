@@ -192,6 +192,18 @@ fn public_linnest_layout_and_drawing_behavior_is_observable() {
         )
         .unwrap();
 
+    let route_fixture = base
+        .path()
+        .join(".clinnet/templates/route-points-behavior.typ");
+    fs::write(
+        &route_fixture,
+        include_str!("resources/route-points-behavior.typ"),
+    )
+    .unwrap();
+    renderer
+        .compile_template(&route_fixture, base.path().join("route-points.svg"), &[])
+        .unwrap();
+
     fs::write(
         base.path().join(".clinnet/templates/map-style.typ"),
         include_str!("../../linnest/typst/examples/map-style.typ"),

@@ -28,6 +28,41 @@
   }
 }
 
+// Preserve the caller's span indexes while removing solver-collapsed knots
+// from the Hobby solve. Empty spans keep the half-edge split at its anchor.
+#let _routed-split-through(points, omega: 1.0, accuracy: 0.001) = {
+  let knots = ()
+  let indexes = ()
+  for point in points.map(_point) {
+    if knots.len() == 0 or _point-distance(knots.last(), point) > 2.220446049250313e-16 {
+      knots.push(point)
+    }
+    indexes.push(knots.len() - 1)
+  }
+  let split = if knots.len() < 2 {
+    (curve: curve-api.path(), parts: ())
+  } else {
+    curve-api.split-through(knots, omega: omega, accuracy: accuracy)
+  }
+  (
+    curve: split.curve,
+    parts: range(calc.max(0, points.len() - 1)).map(i => {
+      if indexes.at(i) == indexes.at(i + 1) { curve-api.path() }
+      else { split.parts.at(indexes.at(i)) }
+    }),
+  )
+}
+
+#let _trim-routed-path(path, start-outset: 0, end-outset: 0, accuracy: 0.001) = {
+  if curve-api.elements(path).len() == 0 or (start-outset == 0 and end-outset == 0) {
+    return path
+  }
+  if start-outset + end-outset >= curve-api.length(path, accuracy: accuracy) {
+    return curve-api.path()
+  }
+  curve-api.trim(path, start-outset: start-outset, end-outset: end-outset, accuracy: accuracy)
+}
+
 #let _statement-number(record, key, default: none) = {
   let value = record.statements.at(key, default: none)
   if value == none {
@@ -132,7 +167,7 @@
   sink-anchor: auto,
   anchor-control-distance: auto,
   route: "edge-pos",
-  route-points: "ignore",
+  route-points: "through",
   dangling-tangent: auto,
 )
 
@@ -717,6 +752,7 @@
   label-pos,
   center-outset,
 ) = {
+  if curve-api.elements(path).len() == 0 { return path }
   let geometry = _edge-geometry(style)
   let side-point = if geometry.offset-side == "label" { label-pos } else {
     none
@@ -1093,7 +1129,7 @@
     )
     let source-points = (start, source-guide, ..source-route, route)
     let sink-points = (..sink-route.rev(), sink-guide, end)
-    let split = curve-api.split-through(
+    let split = _routed-split-through(
       (..source-points, ..sink-points),
       omega: omega,
       accuracy: accuracy,
@@ -1205,21 +1241,34 @@
     panic("edge-halves currently requires a paired edge with source and sink")
   }
 
+  let source-route = _route-points(edge.source)
+  let sink-route = _route-points(edge.sink)
   let points = (
     _point(nodes.at(edge.source.node).pos),
+    ..source-route,
     _point(edge.pos),
+    ..sink-route.rev(),
     _point(nodes.at(edge.sink.node).pos),
   )
-  let split = curve-api.split-through(
-    points,
-    omega: omega,
-    start-outset: source-outset,
-    end-outset: sink-outset,
-    accuracy: accuracy,
-  )
+  let routed = source-route.len() > 0 or sink-route.len() > 0
+  let split = if routed {
+    _routed-split-through(points, omega: omega, accuracy: accuracy)
+  } else {
+    curve-api.split-through(points,
+      omega: omega, start-outset: source-outset,
+      end-outset: sink-outset, accuracy: accuracy,
+    )
+  }
   let split-outset = calc.max(0, options.at("split-gap", default: 0)) / 2
-  let source = split.parts.at(0)
-  let sink = split.parts.at(1)
+  let boundary = source-route.len() + 1
+  let source = if source-route.len() == 0 { split.parts.at(0) }
+    else { curve-api.path(..split.parts.slice(0, boundary)) }
+  let sink = if sink-route.len() == 0 { split.parts.at(boundary) }
+    else { curve-api.path(..split.parts.slice(boundary)) }
+  if routed {
+    source = _trim-routed-path(source, start-outset: source-outset, accuracy: accuracy)
+    sink = _trim-routed-path(sink, end-outset: sink-outset, accuracy: accuracy)
+  }
   let source-split-outset = 0
   let sink-split-outset = 0
   if split-outset > 0 {
@@ -1314,7 +1363,13 @@
       accuracy,
     )
   }
-  let base = edge-halves(edge, nodes, (
+  let routed-edge = if (
+    _style-value(source-style, "route-points") == "ignore"
+      and _style-value(sink-style, "route-points") == "ignore"
+  ) {
+    edge + (source: edge.source + (route-points: ()), sink: edge.sink + (route-points: ()))
+  } else { edge }
+  let base = edge-halves(routed-edge, nodes, (
     omega: omega,
     source-outset: 0,
     sink-outset: 0,
@@ -2530,7 +2585,35 @@
   curve-api.segments(curve-api.quad(start, control, end)).first()
 }
 
-#let _dangling-path(start, end, bend, style, dangling-at-start: false) = {
+#let _dangling-path(
+  start, end, bend, style, dangling-at-start: false,
+  route-points: (), node-point: none, node-outset: 0, omega: 1.0,
+) = {
+  if route-points.len() > 0 and _style-value(style, "route-points") != "ignore" {
+    let start = if not dangling-at-start and node-point != none { _point(node-point) } else { _point(start) }
+    let end = if dangling-at-start and node-point != none { _point(node-point) } else { _point(end) }
+    let route = if dangling-at-start { route-points.rev() } else { route-points }
+    let path = _routed-split-through((start, ..route.map(_point), end), omega: omega).curve
+    let segments = curve-api.segments(path)
+    if segments.len() > 0 and _style-value(style, "dangling-tangent") != auto {
+      let index = if dangling-at-start { 0 } else { segments.len() - 1 }
+      let segment = segments.at(index)
+      // Keep the interior Hobby tangent while imposing the existing external
+      // endpoint tangent on its adjacent span only.
+      let endpoint = curve-api.segments(_dangling-path(
+        segment.start, segment.end, none, style, dangling-at-start: dangling-at-start,
+      )).first()
+      if dangling-at-start { segment.control-start = endpoint.control-start }
+      else { segment.control-end = endpoint.control-end }
+      segments.at(index) = segment
+      path = curve-api.path(..segments.map(curve-api.from-cubic))
+    }
+    return _trim-routed-path(path,
+      start-outset: if dangling-at-start { 0 } else { node-outset },
+      end-outset: if dangling-at-start { node-outset } else { 0 },
+    )
+  }
+
   let segment = _bent-line-segment(start, end, bend)
   let tangent = _style-value(style, "dangling-tangent")
   if tangent == auto {
@@ -3006,6 +3089,10 @@
       edge.pos,
       edge.at("bend", default: none),
       source-geometry-style,
+      route-points: _route-points(source-half-edge),
+      node-point: if source-anchor == auto { _node-pos(nodes.at(source-half-edge.node)) } else { none },
+      node-outset: if source-anchor == auto { node-outsets.at(source-half-edge.node) } else { 0 },
+      omega: edge-omega,
     )
     _path-layer(path, source-geometry-style, 0, 0, record.label-pos, auto)
   } else {
@@ -3028,6 +3115,10 @@
       edge.at("bend", default: none),
       sink-geometry-style,
       dangling-at-start: true,
+      route-points: _route-points(sink-half-edge),
+      node-point: if sink-anchor == auto { _node-pos(nodes.at(sink-half-edge.node)) } else { none },
+      node-outset: if sink-anchor == auto { node-outsets.at(sink-half-edge.node) } else { 0 },
+      omega: edge-omega,
     )
     _path-layer(path, sink-geometry-style, 0, 0, record.label-pos, auto)
   }
@@ -3800,6 +3891,10 @@
                 edge.pos,
                 bend,
                 source-geometry-style,
+                route-points: _route-points(source-half-edge),
+                node-point: if source-anchor == auto { _node-pos(nodes.at(source-half-edge.node)) } else { none },
+                node-outset: if source-anchor == auto { node-outsets.at(source-half-edge.node) } else { 0 },
+                omega: edge-omega,
               )
               let visible-path = _path-layer(
                 dangling-path,
@@ -3907,6 +4002,10 @@
                 bend,
                 sink-geometry-style,
                 dangling-at-start: true,
+                route-points: _route-points(sink-half-edge),
+                node-point: if sink-anchor == auto { _node-pos(nodes.at(sink-half-edge.node)) } else { none },
+                node-outset: if sink-anchor == auto { node-outsets.at(sink-half-edge.node) } else { 0 },
+                omega: edge-omega,
               )
               let visible-path = _path-layer(
                 dangling-path,

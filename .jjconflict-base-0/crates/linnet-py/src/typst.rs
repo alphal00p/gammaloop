@@ -1380,6 +1380,7 @@ enum ValueRule {
     NonNegativeNumber,
     NonNegativeFiniteNumber,
     Point,
+    PointList,
     Angle,
     Enum(EnumKind),
     EnumOrFunction(EnumKind),
@@ -1449,6 +1450,10 @@ impl ValueRule {
                             && values.get("x").is_some_and(|value| Self::Number.accepts(value))
                             && values.get("y").is_some_and(|value| Self::Number.accepts(value))
                     })
+                    || expression_kind(SymbolKind::Value)
+            }
+            Self::PointList => {
+                matches!(value, NativeValue::Array(values) if values.iter().all(|point| Self::Point.accepts(point)))
                     || expression_kind(SymbolKind::Value)
             }
             Self::Angle => {
@@ -1597,6 +1602,7 @@ impl ValueRule {
             Self::NonNegativeNumber => "a non-negative number",
             Self::NonNegativeFiniteNumber => "a non-negative finite number",
             Self::Point => "a two-number point dictionary or array, or module value",
+            Self::PointList => "an array of two-number points, or module value",
             Self::Angle => "an Angle, number, or module value",
             Self::Enum(kind) => kind.name(),
             Self::EnumOrFunction(kind) => match kind {
@@ -3910,6 +3916,7 @@ const EDGE_DRAWING_FIELDS: &[FieldSpec] = &[
 const HALF_EDGE_DRAWING_FIELDS: &[FieldSpec] = &[
     FieldSpec::new("label", "label", ValueRule::Content).none(),
     FieldSpec::new("statement", "statement", ValueRule::String).none(),
+    FieldSpec::new("route_points", "route_points", ValueRule::PointList).none(),
     FieldSpec::new("port_label", "port_label", ValueRule::String).none(),
     FieldSpec::new("compass", "compass", ValueRule::Enum(EnumKind::Compass)).none(),
     FieldSpec::new("anchor", "anchor", ValueRule::Enum(EnumKind::Anchor))

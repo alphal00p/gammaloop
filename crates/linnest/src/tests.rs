@@ -4645,7 +4645,7 @@ fn cross_kind_group_is_one_force_and_annealing_coordinate() {
     let exact = energy.energy(None, &full);
     assert!((incremental - exact).abs() <= 1e-9 * (1.0 + exact.abs()));
 
-    let (nodes, edges) = graph.optimized_positions(nodes, edges, &energy, None, None);
+    let (nodes, edges, _) = graph.optimized_positions(nodes, edges, &energy, None, None);
     assert_eq!(nodes[NodeIndex(0)].y, edges[EdgeIndex(0)].y);
     assert_ne!(nodes[NodeIndex(0)].y, 4.0);
 }
@@ -4822,7 +4822,7 @@ fn dangling_centroid_repulsion_keeps_grouped_external_edges_outside() {
     let (tree, energy) = graph.tree_init_cfg(&spring, graph.n_nodes());
     assert!((energy.dangling_centroid_charge / energy.c_vv - 1.25).abs() < 1e-12);
     let (nodes, edges) = graph.new_positions(tree);
-    let (nodes, edges) = graph.optimized_positions(nodes, edges, &energy, None, None);
+    let (nodes, edges, _) = graph.optimized_positions(nodes, edges, &energy, None, None);
 
     assert!(edges[EdgeIndex(4)].x > nodes[NodeIndex(3)].x);
     assert!(edges[EdgeIndex(2)].x < nodes[NodeIndex(2)].x);
@@ -5235,12 +5235,10 @@ fn external_pull_balance_rejects_invalid_settings_before_layout_or_streaming() {
             &config,
             Profile::Default,
         )));
-        assert!(
-            graph
-                .validate_layout()
-                .unwrap_err()
-                .contains("external-pull-balance")
-        );
+        assert!(graph
+            .validate_layout()
+            .unwrap_err()
+            .contains("external-pull-balance"));
         let bytes = encode_cbor(&config);
         assert!(
             crate::ForceLayoutStream::from_dot("digraph { a -> b }", &bytes)
@@ -5408,5 +5406,132 @@ fn relaxation_parameters_reject_invalid_values() {
             .validate_layout()
             .unwrap_err()
             .contains("spring-length-scale"));
+    }
+}
+
+#[test]
+fn iterative_layout_preserves_and_relaxes_variable_half_routes() {
+    use cgmath::Point2;
+    use linnet::half_edge::involution::Hedge;
+
+    for algorithm in ["force", "anneal"] {
+        let mut graph = TypstGraph::parse(
+            r#"digraph {
+            a [id=0 pos="0,0!"]
+            b [id=1 pos="4,0!"]
+            a:0 -> b:1 [id=0 pos="2,0"]
+        }"#,
+        )
+        .unwrap();
+        graph.graph[Hedge(0)].route_points = vec![Point2::new(0.5, 1.0), Point2::new(1.5, 1.0)];
+        graph.graph[Hedge(1)].route_points = vec![Point2::new(3.0, -1.0)];
+        let settings = BTreeMap::from([
+            ("layout-algo", algorithm),
+            ("steps", "0"),
+            ("epochs", "1"),
+            ("label-steps", "0"),
+            ("beta", "0"),
+            ("k-spring", "1"),
+            ("depth-scale", "0"),
+            ("early-tol", "0"),
+            ("step", "0.01"),
+        ]);
+        graph.layout_config = crate::LayoutConfig::from_figment(&Figment::from(Serialized::from(
+            settings.clone(),
+            Profile::Default,
+        )));
+        let original = graph.layout_route_points();
+        graph.layout_with_subgraph(None).unwrap();
+        for (hedge, points) in &original {
+            assert_eq!(
+                &graph.graph[hedge].route_points, points,
+                "{algorithm}: zero steps"
+            );
+        }
+        let mut settings = settings;
+        settings.insert("steps", "30");
+        graph.layout_config = crate::LayoutConfig::from_figment(&Figment::from(Serialized::from(
+            settings,
+            Profile::Default,
+        )));
+        graph.layout_with_subgraph(None).unwrap();
+        assert_ne!(
+            graph.graph[Hedge(0)].route_points,
+            original[Hedge(0)],
+            "{algorithm}: bends must move"
+        );
+        assert_eq!(graph.graph[Hedge(0)].route_points.len(), 2);
+        assert_eq!(graph.graph[Hedge(1)].route_points.len(), 1);
+        assert_eq!(graph.graph[NodeIndex(0)].pos, Point2::new(0.0, 0.0));
+        assert_eq!(graph.graph[NodeIndex(1)].pos, Point2::new(4.0, 0.0));
+        graph.layout_with_subgraph(None).unwrap();
+        assert_eq!(
+            graph.graph[Hedge(0)].route_points.len(),
+            2,
+            "{algorithm}: warm start"
+        );
+    }
+}
+
+#[test]
+fn invalid_half_route_coordinates_are_rejected_before_layout() {
+    use cgmath::Point2;
+    use linnet::half_edge::involution::Hedge;
+    for value in [f64::NAN, f64::INFINITY] {
+        let mut graph = TypstGraph::parse("digraph { a -> b }").unwrap();
+        graph.graph[Hedge(0)].route_points = vec![Point2::new(value, 0.0)];
+        assert!(graph
+            .layout_with_subgraph(None)
+            .unwrap_err()
+            .contains("route points must be finite"));
+    }
+}
+
+#[test]
+fn isolated_half_route_writeback_preserves_complement_with_edge_shift() {
+    use cgmath::Point2;
+    use linnet::half_edge::involution::Hedge;
+
+    for algorithm in ["force", "anneal"] {
+        let mut graph = TypstGraph::parse(
+            r#"digraph {
+            a [id=0 pos="0,0!"]
+            b [id=1 pos="4,0!"]
+            a:0 -> b:1 [id=0 pos="2,0" shift="0.5,1.0"]
+        }"#,
+        )
+        .unwrap();
+        let source = vec![Point2::new(0.5, 1.0), Point2::new(1.5, 1.0)];
+        let sink = vec![Point2::new(3.0, -1.0)];
+        graph.graph[Hedge(0)].route_points = source.clone();
+        graph.graph[Hedge(1)].route_points = sink.clone();
+        let settings = BTreeMap::from([
+            ("layout-algo", algorithm),
+            ("subgraph-mode", "isolated"),
+            ("steps", "0"),
+            ("epochs", "0"),
+            ("label-steps", "0"),
+            ("depth-scale", "0"),
+        ]);
+        graph.layout_config = crate::LayoutConfig::from_figment(&Figment::from(Serialized::from(
+            settings,
+            Profile::Default,
+        )));
+        let mut selected = graph.empty_subgraph::<SuBitGraph>();
+        selected.add(Hedge(0));
+        graph.layout_with_subgraph(Some(&selected)).unwrap();
+        assert_eq!(
+            graph.graph[Hedge(1)].route_points,
+            sink,
+            "{algorithm}: inactive half moved"
+        );
+        assert_eq!(
+            graph.graph[Hedge(0)].route_points,
+            source
+                .into_iter()
+                .map(|point| Point2::new(point.x + 0.5, point.y + 1.0))
+                .collect::<Vec<_>>(),
+            "{algorithm}: active half must receive its edge shift"
+        );
     }
 }

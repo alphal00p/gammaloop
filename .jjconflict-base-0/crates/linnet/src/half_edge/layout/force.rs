@@ -2,11 +2,11 @@ use cgmath::{EuclideanSpace, InnerSpace, Point2, Point3, Vector2, Vector3, Zero}
 
 use crate::half_edge::{
     NodeIndex, NodeVec,
-    involution::{EdgeIndex, EdgeVec, Flow},
+    involution::{EdgeIndex, EdgeVec, Flow, Hedge, HedgeVec},
     layout::spring::{
         Constraint, HasPointConstraint, LayoutPointIndex, LayoutState, PointConstraint,
-        SpringChargeEnergy, apply_edge_shift_with_groups, apply_vertex_shift_with_groups,
-        directional_force_shift,
+        SpringChargeEnergy, apply_edge_shift_with_groups, apply_route_point_shift,
+        apply_vertex_shift_with_groups, directional_force_shift,
     },
     nodestore::NodeStorageOps,
     subgraph::SubSetLike,
@@ -77,6 +77,8 @@ where
     forces: ForceBuffers,
     node_z: NodeVec<f64>,
     edge_z: EdgeVec<f64>,
+    // Interior depths start on the plane and persist across streamed steps.
+    route_z: HedgeVec<Vec<f64>>,
     z_bound: f64,
     iteration: usize,
     step_size: f64,
@@ -90,6 +92,7 @@ where
 pub struct ForceLayoutSnapshot {
     pub vertex_points: NodeVec<Point2<f64>>,
     pub edge_points: EdgeVec<Point2<f64>>,
+    pub route_points: HedgeVec<Vec<Point2<f64>>>,
     pub iteration: usize,
     pub done: bool,
     pub max_move: f64,
@@ -150,6 +153,9 @@ where
             z_spread,
             &workset.movable_edge_depth,
         );
+        let route_z = state
+            .graph
+            .new_hedgevec(|h, _| vec![0.0; state.route_points[h].len()]);
         let z_bound = workset
             .active_nodes
             .iter()
@@ -158,7 +164,7 @@ where
             .fold(z_spread, |bound, z| bound.max(z.abs()));
         let no_active_points = workset.active_nodes.is_empty() && workset.active_edges.is_empty();
 
-        let forces = ForceBuffers::new(state.vertex_points.len().0, state.edge_points.len().0);
+        let forces = ForceBuffers::new(&state);
         Self {
             state,
             energy,
@@ -167,6 +173,7 @@ where
             forces,
             node_z,
             edge_z,
+            route_z,
             z_bound,
             iteration: 0,
             step_size,
@@ -197,6 +204,7 @@ where
         ForceLayoutSnapshot {
             vertex_points: self.state.vertex_points.clone(),
             edge_points: self.state.edge_points.clone(),
+            route_points: self.state.route_points.clone(),
             iteration: self.iteration,
             done: self.done,
             max_move: self.last_max_move,
@@ -238,11 +246,13 @@ where
             &energy,
             &self.node_z,
             &self.edge_z,
+            &self.route_z,
             scale,
             &self.workset,
         );
         let forces_v = &mut self.forces.vertices;
         let forces_e = &mut self.forces.edges;
+        let forces_r = &self.forces.routes;
         if self.state.directional_force != 0.0 {
             for &idx in &self.workset.movable_nodes {
                 let bias = directional_force_shift(
@@ -286,6 +296,27 @@ where
             max_move = max_move.max(shift3.magnitude());
         }
 
+        for &(hedge, point) in &self.workset.movable_routes {
+            let shift = clamp_shift3(forces_r[hedge][point] * self.step_size, self.cfg.max_delta);
+            let mut actual = Vector3::zero();
+            if scale != 0.0 && !self.state.edge_depth_pins[self.state.graph[&hedge]] {
+                let z = (self.route_z[hedge][point] + shift.z).clamp(-self.z_bound, self.z_bound);
+                actual.z = z - self.route_z[hedge][point];
+                self.route_z[hedge][point] = z;
+            }
+            let before = self.state.route_points[hedge][point];
+            apply_route_point_shift(
+                &mut self.state,
+                hedge,
+                point,
+                Vector2::new(shift.x, shift.y),
+            );
+            let delta = self.state.route_points[hedge][point] - before;
+            actual.x = delta.x;
+            actual.y = delta.y;
+            max_move = max_move.max(actual.magnitude());
+        }
+
         self.iteration += 1;
         let epoch_end = self.cfg.steps != 0 && self.iteration.is_multiple_of(self.cfg.steps);
         let budget_end = self.iteration >= self.total_iterations;
@@ -316,6 +347,7 @@ struct ForceWorkSet {
     active_edges: Vec<EdgeIndex>,
     movable_nodes: Vec<NodeIndex>,
     movable_edges: Vec<EdgeIndex>,
+    movable_routes: Vec<(Hedge, usize)>,
     movable_node_depth: NodeVec<bool>,
     movable_edge_depth: EdgeVec<bool>,
     force_nodes: Vec<NodeIndex>,
@@ -323,7 +355,7 @@ struct ForceWorkSet {
     force_edge: EdgeVec<bool>,
     node_targets: NodeVec<[Option<LayoutPointIndex>; 2]>,
     edge_targets: EdgeVec<[Option<LayoutPointIndex>; 2]>,
-    incident_edges: NodeVec<Vec<EdgeIndex>>,
+    incident_hedges: NodeVec<Vec<Hedge>>,
     dangling_edges: Vec<EdgeIndex>,
 }
 
@@ -395,17 +427,26 @@ impl ForceWorkSet {
             force_edge.push(receives_force);
         }
 
-        let mut incident_edges = NodeVec::with_capacity(n);
+        let mut incident_hedges = NodeVec::with_capacity(n);
         for i in 0..n {
             let idx = NodeIndex(i);
-            incident_edges.push(
+            incident_hedges.push(
                 state
                     .graph
                     .iter_crown(idx)
-                    .filter(|&hedge| state.hedge_is_active(hedge))
-                    .map(|h| state.graph[&h])
+                    .filter(|&h| state.hedge_is_active(h))
                     .collect(),
             );
+        }
+        let mut movable_routes = Vec::new();
+        for (hedge, points) in &state.route_points {
+            let constraints = state.graph[state.graph[&hedge]].point_constraint();
+            if state.hedge_is_active(hedge)
+                && (!matches!(constraints.x, Constraint::Fixed)
+                    || !matches!(constraints.y, Constraint::Fixed))
+            {
+                movable_routes.extend((0..points.len()).map(|i| (hedge, i)));
+            }
         }
 
         let dangling_edges = state.ext.included_iter().map(|h| state.graph[&h]).collect();
@@ -415,6 +456,7 @@ impl ForceWorkSet {
             active_edges,
             movable_nodes,
             movable_edges,
+            movable_routes,
             movable_node_depth,
             movable_edge_depth,
             force_nodes,
@@ -422,7 +464,7 @@ impl ForceWorkSet {
             force_edge,
             node_targets,
             edge_targets,
-            incident_edges,
+            incident_hedges,
             dangling_edges,
         }
     }
@@ -482,11 +524,21 @@ fn apply_initial_jitter<'a, E, V, H, N>(
             apply_edge_shift_with_groups(state, idx, shift);
         }
     }
+    for &(hedge, point) in &workset.movable_routes {
+        let shift = Vector2::new(
+            rng.gen_range(-jitter..=jitter),
+            rng.gen_range(-jitter..=jitter),
+        );
+        apply_route_point_shift(state, hedge, point, shift);
+    }
 }
 
 struct ForceBuffers {
     vertices: NodeVec<Vector3<f64>>,
     edges: EdgeVec<Vector3<f64>>,
+    routes: HedgeVec<Vec<Vector3<f64>>>,
+    samples: EdgeVec<Vec<(Option<(Hedge, usize)>, Point3<f64>, f64)>>,
+    half_routes: HedgeVec<Vec<Point3<f64>>>,
     projected_vertices: NodeVec<Vector3<f64>>,
     projected_edges: EdgeVec<Vector3<f64>>,
     node_points: NodeVec<Point3<f64>>,
@@ -494,10 +546,30 @@ struct ForceBuffers {
 }
 
 impl ForceBuffers {
-    fn new(nodes: usize, edges: usize) -> Self {
+    fn new<E, V, H, N>(state: &LayoutState<'_, E, V, H, N>) -> Self
+    where
+        E: HasPointConstraint,
+        V: HasPointConstraint,
+        N: NodeStorageOps<NodeData = V> + Clone,
+    {
+        let nodes = state.vertex_points.len().0;
+        let edges = state.edge_points.len().0;
         Self {
             vertices: vec![Vector3::zero(); nodes].into(),
             edges: vec![Vector3::zero(); edges].into(),
+            routes: state
+                .graph
+                .new_hedgevec(|h, _| vec![Vector3::zero(); state.route_points[h].len()]),
+            samples: state.graph.new_edgevec(|_, edge, _| {
+                state
+                    .edge_charge_samples(edge)
+                    .into_iter()
+                    .map(|(address, _, weight)| (address, Point3::origin(), weight))
+                    .collect()
+            }),
+            half_routes: state
+                .graph
+                .new_hedgevec(|h, _| vec![Point3::origin(); state.route_points[h].len() + 2]),
             projected_vertices: vec![Vector3::zero(); nodes].into(),
             projected_edges: vec![Vector3::zero(); edges].into(),
             node_points: vec![Point3::origin(); nodes].into(),
@@ -511,6 +583,7 @@ impl ForceBuffers {
         energy: &SpringChargeEnergy,
         node_z: &NodeVec<f64>,
         edge_z: &EdgeVec<f64>,
+        route_z: &HedgeVec<Vec<f64>>,
         scale: f64,
         workset: &ForceWorkSet,
     ) where
@@ -526,8 +599,33 @@ impl ForceBuffers {
             self.edge_points[edge] =
                 point3_from_point(state.edge_points[edge], edge_z[edge], scale);
         }
+        // The session keeps topology and route counts fixed. Cache sample weights
+        // once, and reuse projected path and force storage at every iteration.
+        for &edge in &workset.active_edges {
+            for (address, point, _) in &mut self.samples[edge] {
+                *point = address.map_or(self.edge_points[edge], |(h, i)| {
+                    point3_from_point(state.route_points[h][i], route_z[h][i], scale)
+                });
+            }
+        }
+        for &node in &workset.active_nodes {
+            for &hedge in &workset.incident_hedges[node] {
+                let points = &mut self.half_routes[hedge];
+                points[0] = self.node_points[node];
+                for (i, &point) in state.route_points[hedge].iter().enumerate() {
+                    points[i + 1] = point3_from_point(point, route_z[hedge][i], scale);
+                }
+                let last = points.len() - 1;
+                points[last] = self.edge_points[state.graph[&hedge]];
+            }
+        }
+        let samples = &self.samples;
         let forces_v = &mut self.vertices;
         let forces_e = &mut self.edges;
+        let forces_r = &mut self.routes;
+        for (_, forces) in forces_r.iter_mut() {
+            forces.fill(Vector3::zero());
+        }
         for (_, force) in forces_v.iter_mut() {
             *force = Vector3::zero();
         }
@@ -563,85 +661,93 @@ impl ForceBuffers {
             }
         }
 
-        // Edge-vertex repulsion.
+        // Each physical edge keeps one unit of charge, distributed over its anchor
+        // and interior samples. Refining a route therefore does not multiply charge.
         if energy.c_ev != 0.0 {
-            // Evaluate each pair once. Node-major traversal retains each
-            // vertex's edge order and each edge's node order when summing.
             for &ni in &workset.active_nodes {
                 let pi = self.node_points[ni];
                 for &ei in &workset.active_edges {
-                    if !workset.force_node[ni] && !workset.force_edge[ei] {
-                        continue;
-                    }
-                    let pe = self.edge_points[ei];
-                    let d = pi - pe;
-                    let dist = d.magnitude();
-                    if dist <= 1e-9 {
-                        continue;
-                    }
-                    let dir = d / dist;
-                    let fmag = energy.c_ev / (dist + energy.eps).powi(2);
-                    let f = dir * fmag;
-                    if workset.force_node[ni] {
-                        forces_v[ni] += f;
-                    }
-                    if workset.force_edge[ei] {
-                        forces_e[ei] -= f;
+                    for &(address, pe, weight) in &samples[ei] {
+                        let d = pi - pe;
+                        let dist = d.magnitude();
+                        if dist <= 1e-9 {
+                            continue;
+                        }
+                        let f = d / dist * (weight * energy.c_ev / (dist + energy.eps).powi(2));
+                        if workset.force_node[ni] {
+                            forces_v[ni] += f;
+                        }
+                        match address {
+                            None if workset.force_edge[ei] => forces_e[ei] -= f,
+                            Some((h, i)) => forces_r[h][i] -= f,
+                            _ => {}
+                        }
                     }
                 }
             }
         }
 
-        // Springs and local edge-edge repulsion around nodes.
+        // One spring per incidence uses the whole half-route length. Its chain
+        // gradient acts on every segment without adding springs when points are added.
         for &ni in &workset.active_nodes {
-            let pi = self.node_points[ni];
-            let edges = &workset.incident_edges[ni];
-
-            for &ei in edges {
-                if !workset.force_node[ni] && !workset.force_edge[ei] {
-                    continue;
-                }
-                let pe = self.edge_points[ei];
-                let d = pi - pe;
-                let dist = d.magnitude();
-                if dist <= 1e-9 {
-                    continue;
-                }
-                let dir = d / dist;
-                let length =
-                    SpringChargeEnergy::edge_spring_length(state, ei, energy.spring_length);
-                let fmag = energy.k_spring * (length - dist);
-                let f = dir * fmag;
-                if workset.force_node[ni] {
-                    forces_v[ni] += f;
-                }
-                if workset.force_edge[ei] {
-                    forces_e[ei] -= f;
-                }
-            }
-
-            for a in 0..edges.len() {
-                for b in (a + 1)..edges.len() {
-                    let ea = edges[a];
-                    let eb = edges[b];
-                    if !workset.force_edge[ea] && !workset.force_edge[eb] {
-                        continue;
-                    }
-                    let pa = self.edge_points[ea];
-                    let pb = self.edge_points[eb];
-                    let d = pa - pb;
+            for &hedge in &workset.incident_hedges[ni] {
+                let ei = state.graph[&hedge];
+                let points = &self.half_routes[hedge];
+                let length: f64 = points.windows(2).map(|p| (p[0] - p[1]).magnitude()).sum();
+                let rest = SpringChargeEnergy::edge_spring_length(state, ei, energy.spring_length);
+                let tension = energy.k_spring * (rest - length);
+                for (i, pair) in points.windows(2).enumerate() {
+                    let d = pair[0] - pair[1];
                     let dist = d.magnitude();
                     if dist <= 1e-9 {
                         continue;
                     }
-                    let dir = d / dist;
-                    let fmag = energy.c_ee_local / (dist + energy.eps).powi(2);
-                    let f = dir * fmag;
-                    if workset.force_edge[ea] {
-                        forces_e[ea] += f;
+                    let f = d / dist * tension;
+                    if i == 0 {
+                        if workset.force_node[ni] {
+                            forces_v[ni] += f;
+                        }
+                    } else {
+                        forces_r[hedge][i - 1] += f;
                     }
-                    if workset.force_edge[eb] {
-                        forces_e[eb] -= f;
+                    if i + 2 == points.len() {
+                        if workset.force_edge[ei] {
+                            forces_e[ei] -= f;
+                        }
+                    } else {
+                        forces_r[hedge][i] -= f;
+                    }
+                }
+            }
+            let hedges = &workset.incident_hedges[ni];
+            for a in 0..hedges.len() {
+                for b in (a + 1)..hedges.len() {
+                    let ea = state.graph[&hedges[a]];
+                    let eb = state.graph[&hedges[b]];
+                    if ea == eb {
+                        continue;
+                    }
+                    for &(address_a, pa, weight_a) in &samples[ea] {
+                        for &(address_b, pb, weight_b) in &samples[eb] {
+                            let d = pa - pb;
+                            let dist = d.magnitude();
+                            if dist <= 1e-9 {
+                                continue;
+                            }
+                            let f = d / dist
+                                * (weight_a * weight_b * energy.c_ee_local
+                                    / (dist + energy.eps).powi(2));
+                            match address_a {
+                                None if workset.force_edge[ea] => forces_e[ea] += f,
+                                Some((h, i)) => forces_r[h][i] += f,
+                                _ => {}
+                            }
+                            match address_b {
+                                None if workset.force_edge[eb] => forces_e[eb] -= f,
+                                Some((h, i)) => forces_r[h][i] -= f,
+                                _ => {}
+                            }
+                        }
                     }
                 }
             }
@@ -749,6 +855,30 @@ impl ForceBuffers {
             } else {
                 0.0
             };
+        }
+
+        for (hedge, forces) in forces_r.iter_mut() {
+            let edge = state.graph[&hedge];
+            let constraints = state.graph[edge].point_constraint();
+            let active = state.hedge_is_active(hedge);
+            for force in forces {
+                if !active || matches!(constraints.x, Constraint::Fixed) {
+                    force.x = 0.0;
+                }
+                if !active || matches!(constraints.y, Constraint::Fixed) {
+                    force.y = 0.0;
+                }
+                force.z = if active
+                    && scale != 0.0
+                    && !state.edge_depth_pins[edge]
+                    && (!matches!(constraints.x, Constraint::Fixed)
+                        || !matches!(constraints.y, Constraint::Fixed))
+                {
+                    force.z * scale
+                } else {
+                    0.0
+                };
+            }
         }
 
         // A grouped axis is one shared degree of freedom. Its generalized force is
@@ -868,22 +998,352 @@ mod tests {
         subgraph::{ModifySubSet, SuBitGraph},
     };
 
+    type LayoutForces = (
+        NodeVec<Vector3<f64>>,
+        EdgeVec<Vector3<f64>>,
+        HedgeVec<Vec<Vector3<f64>>>,
+    );
+
     fn compute_forces<'a, E, V, H, N>(
         state: &LayoutState<'a, E, V, H, N>,
         energy: &SpringChargeEnergy,
         node_z: &NodeVec<f64>,
         edge_z: &EdgeVec<f64>,
+        route_z: &HedgeVec<Vec<f64>>,
         scale: f64,
         workset: &ForceWorkSet,
-    ) -> (NodeVec<Vector3<f64>>, EdgeVec<Vector3<f64>>)
+    ) -> LayoutForces
     where
         E: HasPointConstraint,
         V: HasPointConstraint,
         N: NodeStorageOps<NodeData = V> + Clone,
     {
-        let mut buffers = ForceBuffers::new(state.vertex_points.len().0, state.edge_points.len().0);
-        buffers.compute(state, energy, node_z, edge_z, scale, workset);
-        (buffers.vertices, buffers.edges)
+        let mut buffers = ForceBuffers::new(state);
+        buffers.compute(state, energy, node_z, edge_z, route_z, scale, workset);
+        (buffers.vertices, buffers.edges, buffers.routes)
+    }
+
+    #[test]
+    fn routed_spring_depth_force_uses_effective_depth_chain_rule() {
+        let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
+        let node = builder.add_node(PointConstraint::default());
+        builder.add_external_edge(node, PointConstraint::default(), false, Flow::Source);
+        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let mut state = graph.new_layout_state(
+            vec![Point2::new(-1.0, 0.0)].into(),
+            vec![Point2::new(2.0, 0.0)].into(),
+            1.0,
+            0.0,
+            false,
+        );
+        state.route_points[Hedge(0)] = vec![Point2::new(0.5, 1.0)];
+        let energy = SpringChargeEnergy {
+            k_spring: 1.3,
+            ..SpringChargeEnergy::from_graph(
+                1,
+                2.0,
+                2.0,
+                ParamTuning {
+                    beta: 0.0,
+                    ..ParamTuning::default()
+                },
+            )
+        };
+        let scale = 0.4;
+        let raw_depth = 0.3;
+        let rest =
+            SpringChargeEnergy::edge_spring_length(&state, EdgeIndex(0), energy.spring_length);
+        let potential = |depth| {
+            let a = point3_from_point(state.vertex_points[node], 2.0, scale);
+            let p = point3_from_point(state.route_points[Hedge(0)][0], depth, scale);
+            let b = point3_from_point(state.edge_points[EdgeIndex(0)], -1.0, scale);
+            0.5 * energy.k_spring * ((a - p).magnitude() + (p - b).magnitude() - rest).powi(2)
+        };
+        let gradient = (potential(raw_depth + 1e-5) - potential(raw_depth - 1e-5)) / 2e-5;
+        let forces = compute_forces(
+            &state,
+            &energy,
+            &vec![2.0].into(),
+            &vec![-1.0].into(),
+            &vec![vec![raw_depth]].into(),
+            scale,
+            &ForceWorkSet::new(&state),
+        );
+        assert!(gradient.abs() > 1e-3);
+        assert!((forces.2[Hedge(0)][0].z + gradient).abs() < 1e-8);
+        state.edge_depth_pins[EdgeIndex(0)] = true;
+        let pinned = compute_forces(
+            &state,
+            &energy,
+            &vec![2.0].into(),
+            &vec![-1.0].into(),
+            &vec![vec![raw_depth]].into(),
+            scale,
+            &ForceWorkSet::new(&state),
+        );
+        assert_eq!(pinned.2[Hedge(0)][0].z, 0.0);
+        assert_eq!(pinned.2[Hedge(0)][0].x, forces.2[Hedge(0)][0].x);
+        assert_eq!(pinned.2[Hedge(0)][0].y, forces.2[Hedge(0)][0].y);
+    }
+
+    #[test]
+    fn routed_forces_match_every_planar_energy_gradient() {
+        let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
+        let a = builder.add_node(PointConstraint::default());
+        let b = builder.add_node(PointConstraint::default());
+        builder.add_edge(a, b, PointConstraint::default(), false);
+        builder.add_edge(a, b, PointConstraint::default(), false);
+        builder.add_edge(a, a, PointConstraint::default(), false);
+        builder.add_external_edge(a, PointConstraint::default(), false, Flow::Sink);
+        builder.add_external_edge(b, PointConstraint::default(), false, Flow::Source);
+        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let mut state = graph.new_layout_state(
+            vec![Point2::new(-2.0, 0.5), Point2::new(3.0, -0.4)].into(),
+            vec![
+                Point2::new(0.2, 2.0),
+                Point2::new(0.7, -2.0),
+                Point2::new(-4.0, 3.0),
+                Point2::new(-5.0, -1.0),
+                Point2::new(5.0, 1.0),
+            ]
+            .into(),
+            1.0,
+            0.0,
+            false,
+        );
+        for (hedge, points) in state.route_points.iter_mut() {
+            let node = graph.node_id(hedge);
+            let anchor = state.edge_points[graph[&hedge]];
+            let vertex = state.vertex_points[node];
+            // Distinct routed self-loop incidences, with unequal sample counts.
+            for i in 0..1 + hedge.0 % 2 {
+                let t = (i + 1) as f64 / (2 + hedge.0 % 2) as f64;
+                points.push(
+                    vertex + (anchor - vertex) * t + Vector2::new(0.13 * hedge.0 as f64, 0.27),
+                );
+            }
+        }
+        let zero = SpringChargeEnergy {
+            spring_length: 1.3,
+            k_spring: 0.0,
+            c_vv: 0.0,
+            dangling_charge: 0.0,
+            dangling_centroid_charge: 0.0,
+            external_pull: 0.0,
+            external_pull_balance: 1.0,
+            c_ev: 0.0,
+            c_ee_local: 0.0,
+            c_center: 0.0,
+            crossing_penalty: 0.0,
+            eps: 0.01,
+        };
+        for (term, energy) in [
+            SpringChargeEnergy {
+                k_spring: 0.9,
+                ..zero
+            },
+            SpringChargeEnergy { c_vv: 0.8, ..zero },
+            SpringChargeEnergy { c_ev: 0.7, ..zero },
+            SpringChargeEnergy {
+                c_ee_local: 0.6,
+                ..zero
+            },
+            SpringChargeEnergy {
+                dangling_charge: 0.5,
+                dangling_centroid_charge: 0.4,
+                external_pull: 0.3,
+                ..zero
+            },
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let (fv, fe, fr) = compute_forces(
+                &state,
+                &energy,
+                &vec![0.0; 2].into(),
+                &vec![0.0; 5].into(),
+                &graph.new_hedgevec(|h, _| vec![0.0; state.route_points[h].len()]),
+                0.0,
+                &ForceWorkSet::new(&state),
+            );
+            let total = fv
+                .iter()
+                .map(|(_, f)| *f)
+                .chain(fe.iter().map(|(_, f)| *f))
+                .chain(fr.iter().flat_map(|(_, fs)| fs.iter().copied()))
+                .fold(Vector3::zero(), |a, b| a + b);
+            assert!(
+                total.magnitude() < 1e-10,
+                "internal forces must balance: term {term}"
+            );
+            for axis in 0..2 {
+                for (node, force) in &fv {
+                    let mut plus = state.clone();
+                    let mut minus = state.clone();
+                    plus.vertex_points[node][axis] += 1e-5;
+                    minus.vertex_points[node][axis] -= 1e-5;
+                    let gradient =
+                        (energy.energy(None, &plus) - energy.energy(None, &minus)) / 2e-5;
+                    assert!(
+                        (gradient + force[axis]).abs() < 1e-6,
+                        "node {node:?}, term {term}: {gradient} / {force:?}"
+                    );
+                }
+                for (edge, force) in &fe {
+                    let mut plus = state.clone();
+                    let mut minus = state.clone();
+                    plus.edge_points[edge][axis] += 1e-5;
+                    minus.edge_points[edge][axis] -= 1e-5;
+                    let gradient =
+                        (energy.energy(None, &plus) - energy.energy(None, &minus)) / 2e-5;
+                    assert!(
+                        (gradient + force[axis]).abs() < 1e-6,
+                        "edge {edge:?}, term {term}: {gradient} / {force:?}"
+                    );
+                }
+                for (hedge, forces) in &fr {
+                    for (i, force) in forces.iter().enumerate() {
+                        let mut plus = state.clone();
+                        let mut minus = state.clone();
+                        plus.route_points[hedge][i][axis] += 1e-5;
+                        minus.route_points[hedge][i][axis] -= 1e-5;
+                        let gradient =
+                            (energy.energy(None, &plus) - energy.energy(None, &minus)) / 2e-5;
+                        assert!(
+                            (gradient + force[axis]).abs() < 1e-6,
+                            "route {hedge:?}/{i}, term {term}: {gradient} / {force:?}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn routed_spring_refinement_keeps_endpoint_forces_and_stiffness() {
+        let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
+        let node = builder.add_node(PointConstraint::default());
+        builder.add_external_edge(node, PointConstraint::default(), false, Flow::Source);
+        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let mut state = graph.new_layout_state(
+            vec![Point2::origin()].into(),
+            vec![Point2::new(6.0, 0.0)].into(),
+            1.0,
+            0.0,
+            false,
+        );
+        let energy = SpringChargeEnergy {
+            k_spring: 2.0,
+            ..SpringChargeEnergy::from_graph(
+                1,
+                2.0,
+                2.0,
+                ParamTuning {
+                    beta: 0.0,
+                    ..ParamTuning::default()
+                },
+            )
+        };
+        let baseline_energy = energy.energy(None, &state);
+        let baseline = compute_forces(
+            &state,
+            &energy,
+            &vec![0.0].into(),
+            &vec![0.0].into(),
+            &vec![vec![]].into(),
+            0.0,
+            &ForceWorkSet::new(&state),
+        );
+        for count in [1, 3, 7] {
+            state.route_points[Hedge(0)] = (1..=count)
+                .map(|i| Point2::new(6.0 * i as f64 / (count + 1) as f64, 0.0))
+                .collect();
+            let forces = compute_forces(
+                &state,
+                &energy,
+                &vec![0.0].into(),
+                &vec![0.0].into(),
+                &vec![vec![0.0; count]].into(),
+                0.0,
+                &ForceWorkSet::new(&state),
+            );
+            assert_eq!(energy.energy(None, &state), baseline_energy);
+            assert_eq!(forces.0, baseline.0);
+            assert_eq!(forces.1, baseline.1);
+            assert!(forces.2[Hedge(0)].iter().all(|f| *f == Vector3::zero()));
+        }
+    }
+
+    #[test]
+    fn routed_sessions_preserve_fixed_axes_inactive_halves_and_streaming() {
+        let rail = PointConstraint {
+            x: Constraint::Fixed,
+            y: Constraint::Free,
+        };
+        let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
+        let a = builder.add_node(PointConstraint::default());
+        let b = builder.add_node(PointConstraint::default());
+        builder.add_edge(a, b, rail, false);
+        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let mut state = graph.new_layout_state(
+            vec![Point2::new(-2.0, 0.0), Point2::new(2.0, 0.0)].into(),
+            vec![Point2::new(0.0, 0.3)].into(),
+            1.0,
+            0.0,
+            false,
+        );
+        state.route_points[Hedge(0)] = vec![Point2::new(-1.0, 1.0), Point2::new(-0.4, 1.5)];
+        state.route_points[Hedge(1)] = vec![Point2::new(1.0, -1.0)];
+        let mut selection = graph.empty_subgraph::<SuBitGraph>();
+        selection.add(Hedge(0));
+        let state = state.with_active_subgraph(selection);
+        let energy = SpringChargeEnergy::from_graph(2, 2.0, 2.0, ParamTuning::default());
+        let cfg = ForceLayoutConfig {
+            steps: 13,
+            epochs: 2,
+            step: 0.02,
+            cool: 0.8,
+            max_delta: 0.1,
+            early_tol: 0.0,
+            seed: 41,
+            depth_scale: 0.4,
+            flattening_end: 0.5,
+            initial_repulsion: 0.2,
+            repulsion_growth: 0.7,
+        };
+        let mut streamed = ForceLayoutSession::new(state.clone(), energy, cfg);
+        let initial = streamed.step(0);
+        assert_eq!(initial.route_points[Hedge(1)], state.route_points[Hedge(1)]);
+        assert!(streamed.route_z[Hedge(0)].iter().all(|z| *z == 0.0));
+        for _ in 0..5 {
+            streamed.step(2);
+        }
+        assert!(streamed.route_z[Hedge(0)].iter().any(|z| *z != 0.0));
+        streamed.run_to_end();
+        let mut batch = ForceLayoutSession::new(state.clone(), energy, cfg);
+        batch.run_to_end();
+        let actual = streamed.snapshot();
+        let expected = batch.snapshot();
+        assert_eq!(actual.vertex_points, expected.vertex_points);
+        assert_eq!(actual.edge_points, expected.edge_points);
+        assert_eq!(actual.route_points, expected.route_points);
+        assert_eq!(actual.route_points[Hedge(1)], state.route_points[Hedge(1)]);
+        assert_eq!(actual.vertex_points[b], state.vertex_points[b]);
+        assert_ne!(
+            actual.route_points[Hedge(0)],
+            initial.route_points[Hedge(0)]
+        );
+        for (before, after) in state.route_points[Hedge(0)]
+            .iter()
+            .zip(&actual.route_points[Hedge(0)])
+        {
+            assert_eq!(before.x, after.x);
+        }
+        assert_eq!(
+            actual.edge_points[EdgeIndex(0)].x,
+            state.edge_points[EdgeIndex(0)].x
+        );
     }
 
     #[test]
@@ -1057,11 +1517,14 @@ mod tests {
                         *point += translation;
                     }
                     assert!((energy.energy(None, &state) - original_energy).abs() < 1e-10);
-                    let (forces_v, forces_e) = compute_forces(
+                    let (forces_v, forces_e, _) = compute_forces(
                         &state,
                         &energy,
                         &node_z,
                         &edge_z,
+                        &state
+                            .graph
+                            .new_hedgevec(|h, _| vec![0.0; state.route_points[h].len()]),
                         0.0,
                         &ForceWorkSet::new(&state),
                     );
@@ -1171,11 +1634,31 @@ mod tests {
                 let node_z = vec![0.0; length + 1].into();
                 let edge_z = vec![0.0; length + 2].into();
                 let workset = ForceWorkSet::new(&state);
-                let baseline = compute_forces(&state, &energy, &node_z, &edge_z, 0.0, &workset);
+                let baseline = compute_forces(
+                    &state,
+                    &energy,
+                    &node_z,
+                    &edge_z,
+                    &state
+                        .graph
+                        .new_hedgevec(|h, _| vec![0.0; state.route_points[h].len()]),
+                    0.0,
+                    &workset,
+                );
                 let baseline_energy = energy.energy(None, &state);
                 for balance in [0.5, 1.0, 2.0, 2.5] {
                     energy.external_pull_balance = balance;
-                    let forces = compute_forces(&state, &energy, &node_z, &edge_z, 0.0, &workset);
+                    let forces = compute_forces(
+                        &state,
+                        &energy,
+                        &node_z,
+                        &edge_z,
+                        &state
+                            .graph
+                            .new_hedgevec(|h, _| vec![0.0; state.route_points[h].len()]),
+                        0.0,
+                        &workset,
+                    );
                     assert!((energy.energy(None, &state) - baseline_energy).abs() < 1e-10);
                     for (i, force) in &forces.0 {
                         assert!((*force - baseline.0[i]).magnitude() < 1e-12);
@@ -1298,11 +1781,14 @@ mod tests {
                 false,
             );
             let workset = ForceWorkSet::new(&state);
-            let (forces_v, forces_e) = compute_forces(
+            let (forces_v, forces_e, _) = compute_forces(
                 &state,
                 &energy,
                 &vec![0.0; 2].into(),
                 &vec![0.0; 2].into(),
+                &state
+                    .graph
+                    .new_hedgevec(|h, _| vec![0.0; state.route_points[h].len()]),
                 0.0,
                 &workset,
             );
@@ -1338,11 +1824,14 @@ mod tests {
             // Increasing distance and changing only rest lengths cannot change the pull.
             state.edge_points[EdgeIndex(0)] = Point2::new(30.0, 40.0);
             state.edge_spring_length_scales = vec![10.0, 0.1].into();
-            let (_, stretched) = compute_forces(
+            let (_, stretched, _) = compute_forces(
                 &state,
                 &energy,
                 &vec![0.0; 2].into(),
                 &vec![0.0; 2].into(),
+                &state
+                    .graph
+                    .new_hedgevec(|h, _| vec![0.0; state.route_points[h].len()]),
                 0.0,
                 &workset,
             );
@@ -1568,11 +2057,14 @@ mod tests {
             assert!((energy.energy(None, &state) - 24.0).abs() < 1e-10);
             let workset = ForceWorkSet::new(&state);
             for scale in [0.0, 1.0] {
-                let (forces_v, forces_e) = compute_forces(
+                let (forces_v, forces_e, _) = compute_forces(
                     &state,
                     &energy,
                     &vec![100.0, -20.0].into(),
                     &vec![-50.0, 70.0].into(),
+                    &state
+                        .graph
+                        .new_hedgevec(|h, _| vec![0.0; state.route_points[h].len()]),
                     scale,
                     &workset,
                 );
@@ -1642,11 +2134,14 @@ mod tests {
                 )
                 .with_active_subgraph(selected);
             let workset = ForceWorkSet::new(&state);
-            let (forces_v, forces_e) = compute_forces(
+            let (forces_v, forces_e, _) = compute_forces(
                 &state,
                 &energy,
                 &vec![0.0; 2].into(),
                 &vec![0.0].into(),
+                &state
+                    .graph
+                    .new_hedgevec(|h, _| vec![0.0; state.route_points[h].len()]),
                 0.0,
                 &workset,
             );
@@ -1770,7 +2265,7 @@ mod tests {
         let workset = ForceWorkSet::new(&state);
         let node_z = vec![0.0; 2].into();
         let edge_z = vec![0.0; 3].into();
-        let mut buffers = ForceBuffers::new(2, 3);
+        let mut buffers = ForceBuffers::new(&state);
         for (scales, expected_energy, node_forces, edge_forces) in [
             (
                 [1.0, 1.0, 1.0],
@@ -1805,7 +2300,17 @@ mod tests {
         ] {
             state.edge_spring_length_scales = scales.to_vec().into();
             assert_eq!(energy.energy(None, &state), expected_energy);
-            buffers.compute(&state, &energy, &node_z, &edge_z, 0.0, &workset);
+            buffers.compute(
+                &state,
+                &energy,
+                &node_z,
+                &edge_z,
+                &state
+                    .graph
+                    .new_hedgevec(|h, _| vec![0.0; state.route_points[h].len()]),
+                0.0,
+                &workset,
+            );
             let forces_v = &buffers.vertices;
             let forces_e = &buffers.edges;
             assert_eq!(*forces_v, node_forces.to_vec().into());
@@ -1872,12 +2377,32 @@ mod tests {
         let node_z = vec![1.0, -2.0].into();
         let edge_z = vec![3.0, 4.0, -5.0].into();
         let baseline_energy = energy.energy(None, &state);
-        let baseline_forces = compute_forces(&state, &energy, &node_z, &edge_z, 0.25, &workset);
+        let baseline_forces = compute_forces(
+            &state,
+            &energy,
+            &node_z,
+            &edge_z,
+            &state
+                .graph
+                .new_hedgevec(|h, _| vec![0.0; state.route_points[h].len()]),
+            0.25,
+            &workset,
+        );
         assert!(baseline_energy > 0.0);
         state.edge_spring_length_scales = vec![0.5, 2.0, 3.0].into();
         assert_eq!(energy.energy(None, &state), baseline_energy);
         assert_eq!(
-            compute_forces(&state, &energy, &node_z, &edge_z, 0.25, &workset),
+            compute_forces(
+                &state,
+                &energy,
+                &node_z,
+                &edge_z,
+                &state
+                    .graph
+                    .new_hedgevec(|h, _| vec![0.0; state.route_points[h].len()]),
+                0.25,
+                &workset
+            ),
             baseline_forces
         );
     }
@@ -2056,8 +2581,17 @@ mod tests {
             state.vertex_depth_pins[node] = pinned;
             state.edge_depth_pins[edge] = pinned;
             let workset = ForceWorkSet::new(&state);
-            let (forces_v, forces_e) =
-                compute_forces(&state, &energy, &node_z, &edge_z, 0.5, &workset);
+            let (forces_v, forces_e, _) = compute_forces(
+                &state,
+                &energy,
+                &node_z,
+                &edge_z,
+                &state
+                    .graph
+                    .new_hedgevec(|h, _| vec![0.0; state.route_points[h].len()]),
+                0.5,
+                &workset,
+            );
             let expected_v = Vector3::new(3.6, 0.0, if pinned { 0.0 } else { -2.65 });
             let expected_e = Vector3::new(-3.6, 0.0, if pinned { 0.0 } else { 2.4 });
             assert!((forces_v[node] - expected_v).magnitude() < 1e-12);
@@ -2066,8 +2600,17 @@ mod tests {
                 assert!((clamp_shift3(forces_v[node], 0.2).x - 0.2).abs() < 1e-12);
                 assert!((clamp_shift3(forces_e[edge], 0.2).x + 0.2).abs() < 1e-12);
             }
-            let (planar_v, planar_e) =
-                compute_forces(&state, &energy, &node_z, &edge_z, 0.0, &workset);
+            let (planar_v, planar_e, _) = compute_forces(
+                &state,
+                &energy,
+                &node_z,
+                &edge_z,
+                &state
+                    .graph
+                    .new_hedgevec(|h, _| vec![0.0; state.route_points[h].len()]),
+                0.0,
+                &workset,
+            );
             assert_eq!(planar_v[node], Vector3::new(2.0, 0.0, 0.0));
             assert_eq!(planar_e[edge], Vector3::new(-2.0, 0.0, 0.0));
         }
@@ -2085,8 +2628,17 @@ mod tests {
         };
         let workset = ForceWorkSet::new(&state);
         for scale in [0.0, 0.5, 1.0, 2.0] {
-            let (forces_v, forces_e) =
-                compute_forces(&state, &energy, &node_z, &edge_z, scale, &workset);
+            let (forces_v, forces_e, _) = compute_forces(
+                &state,
+                &energy,
+                &node_z,
+                &edge_z,
+                &state
+                    .graph
+                    .new_hedgevec(|h, _| vec![0.0; state.route_points[h].len()]),
+                scale,
+                &workset,
+            );
             assert_eq!(forces_v[node], Vector3::new(-125.0 / 9.0, 0.0, 0.0));
             assert_eq!(forces_e[edge], Vector3::new(125.0 / 9.0, 0.0, 0.0));
         }
@@ -2324,7 +2876,7 @@ mod tests {
         let mut forces_e = EdgeVec::new();
         forces_e.push(Vector3::new(3.0, 30.0, 300.0));
 
-        let mut buffers = ForceBuffers::new(forces_v.len().0, forces_e.len().0);
+        let mut buffers = ForceBuffers::new(&state);
         project_grouped_forces(
             &ForceWorkSet::new(&state),
             &mut forces_v,

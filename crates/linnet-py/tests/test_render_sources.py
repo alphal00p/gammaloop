@@ -32,6 +32,42 @@ class RenderSourcesTests(unittest.TestCase):
             self.assertIn("original", prepared.typst_source)
             self.assertIn("<svg", prepared.to_svg())
 
+    def test_half_edge_routes_validate_and_reach_native_rendering(self):
+        points = [(0.5, 1.0), (1.5, 1.0)]
+        drawing = ln.HalfEdgeDrawing(route_points=points)
+        self.assertEqual(drawing.route_points, tuple(points))
+        points.append((9, 9))
+        self.assertEqual(len(drawing.route_points), 2)
+        for invalid in ["bad", [1], [(1, 2, 3)], [(float("nan"), 0)]]:
+            with (
+                self.subTest(invalid=invalid),
+                self.assertRaises((TypeError, ValueError)),
+            ):
+                ln.HalfEdgeDrawing(route_points=invalid)
+
+        left, right = ln.node("left"), ln.node("right")
+        graph = ln.build(
+            left,
+            right,
+            ln.edge(ln.source(left), "edge", ln.sink(right)),
+        )
+        config = ln.RenderConfig(
+            layouts=ln.LayoutOptions(algorithm=ln.LayoutAlgorithm.Force, steps=0),
+            selectors=ln.DrawingSelectors(
+                source=lambda half_edge: ln.HalfEdgeDrawing(
+                    route_points=[(0.5, 1), (1.5, 1)]
+                ),
+                sink=lambda half_edge: ln.HalfEdgeDrawing(route_points=[(3, -1)]),
+            ),
+        )
+        prepared = graph.prepare_render(config=config)
+        self.assertIn("route-points", prepared.typst_source)
+        svg = prepared.to_svg()
+        self.assertIn("<svg", svg)
+        self.assertNotEqual(
+            svg, graph.to_svg(config=ln.RenderConfig(layouts=config.layouts))
+        )
+
     def test_invalid_configuration_and_missing_entrypoint_are_rejected(self):
         with self.assertRaises(TypeError):
             ln.PreparedRender.from_sources({"main.typ": b"hello"}, config={})

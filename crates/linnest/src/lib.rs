@@ -41,7 +41,7 @@ use figment::{providers::Serialized, Figment, Profile};
 use linnet::half_edge::swap::Swap;
 use linnet::{
     half_edge::{
-        involution::{EdgeData, EdgeIndex, EdgeVec, Flow, Hedge, HedgePair, Involution},
+        involution::{EdgeData, EdgeIndex, EdgeVec, Flow, Hedge, HedgePair, HedgeVec, Involution},
         layout::{
             force::{ForceLayoutConfig, ForceLayoutSession},
             layered::{
@@ -624,7 +624,9 @@ fn hedge_compass_to_string(compass: CompassPt) -> String {
     .to_string()
 }
 
-#[derive(Debug, Serialize, Deserialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(
+    Debug, Clone, Serialize, Deserialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
+)]
 #[archive(check_bytes)]
 pub struct TypstGraph {
     graph: HedgeGraph<TypstEdge, TypstNode, TypstHedge>,
@@ -635,6 +637,8 @@ pub struct TypstGraph {
     default_edge_statements: BTreeMap<String, String>,
     default_node_statements: BTreeMap<String, String>,
     layout_config: LayoutConfig,
+    #[serde(default)]
+    layout_initialized: bool,
 }
 
 impl Deref for TypstGraph {
@@ -1270,6 +1274,7 @@ impl TypstGraph {
                 })
                 .collect(),
             layout_config: config,
+            layout_initialized: false,
         }
     }
 }
@@ -2329,6 +2334,12 @@ where
     deserializer.deserialize_any(StringVecVisitor)
 }
 
+type LayoutPositions = (
+    NodeVec<Point2<f64>>,
+    EdgeVec<Point2<f64>>,
+    HedgeVec<Vec<Point2<f64>>>,
+);
+
 impl TypstGraph {
     pub fn layout(&mut self) {
         self.layout_with_subgraph(None)
@@ -2359,36 +2370,42 @@ impl TypstGraph {
             });
         let spring_params = ParamTuning::from(&self.layout_config.spring);
         let (tree_cfg, energy) = self.tree_init_cfg(&spring_params, node_count);
-        self.clear_hedge_route_points(isolated.then(|| subgraph.unwrap()));
+        if !iterative {
+            self.clear_hedge_route_points(isolated.then(|| subgraph.unwrap()));
+        }
 
         let fixed_nodes = self.layout_config.layout_nodes.nodes_are_fixed();
         if let Some(subgraph) = subgraph {
-            let (mut vertex_points, mut edge_points) = match self.layout_config.layout_algo {
-                LayoutAlgo::Tree | LayoutAlgo::Dot | LayoutAlgo::StableLayered => {
-                    if fixed_nodes {
-                        let (_, selected_edges) = self.selected_layout_items(subgraph);
-                        self.fixed_node_partial_layout_positions(
-                            tree_cfg,
-                            self.layout_config.layout_algo,
-                            Some(&selected_edges),
-                        )
-                    } else {
-                        self.partial_layout_positions(
-                            tree_cfg,
-                            self.layout_config.layout_algo,
-                            subgraph,
-                        )
+            let (mut vertex_points, mut edge_points, route_points) =
+                match self.layout_config.layout_algo {
+                    LayoutAlgo::Tree | LayoutAlgo::Dot | LayoutAlgo::StableLayered => {
+                        let (nodes, edges) = if fixed_nodes {
+                            let (_, selected_edges) = self.selected_layout_items(subgraph);
+                            self.fixed_node_partial_layout_positions(
+                                tree_cfg,
+                                self.layout_config.layout_algo,
+                                Some(&selected_edges),
+                            )
+                        } else {
+                            self.partial_layout_positions(
+                                tree_cfg,
+                                self.layout_config.layout_algo,
+                                subgraph,
+                            )
+                        };
+                        (nodes, edges, self.layout_route_points())
                     }
-                }
-                LayoutAlgo::Anneal | LayoutAlgo::Force => {
-                    self.partial_optimized_positions(tree_cfg, subgraph, &energy)
-                }
-            };
+                    LayoutAlgo::Anneal | LayoutAlgo::Force => {
+                        self.partial_optimized_positions(tree_cfg, subgraph, &energy)
+                    }
+                };
             self.apply_layout_constraints(&mut vertex_points, &mut edge_points);
             self.update_positions(
                 vertex_points,
                 edge_points,
+                route_points,
                 selected_items.as_ref().map(|(nodes, edges)| (nodes, edges)),
+                isolated.then_some(subgraph),
             );
             if matches!(
                 self.layout_config.layout_algo,
@@ -2414,7 +2431,13 @@ impl TypstGraph {
                 self.direct_layout_positions(tree_cfg, self.layout_config.layout_algo)
             };
             self.apply_layout_constraints(&mut vertex_points, &mut edge_points);
-            self.update_positions(vertex_points, edge_points, None);
+            self.update_positions(
+                vertex_points,
+                edge_points,
+                self.layout_route_points(),
+                None,
+                None,
+            );
             if matches!(
                 self.layout_config.layout_algo,
                 LayoutAlgo::Dot | LayoutAlgo::StableLayered
@@ -2423,20 +2446,22 @@ impl TypstGraph {
             } else {
                 self.layout_edge_labels(energy.spring_length, None);
             }
+            self.layout_initialized = true;
             return Ok(());
         }
 
-        let (mut vertex_points, mut edge_points) = if fixed_nodes {
+        let (mut vertex_points, mut edge_points, route_points) = if fixed_nodes {
             let full = self.full_filter();
             self.partial_optimized_positions(tree_cfg, &full, &energy)
         } else {
-            let (pos_n, pos_e) = self.new_positions(tree_cfg);
+            let (pos_n, pos_e) = self.initial_solver_positions(tree_cfg);
             self.optimized_positions(pos_n, pos_e, &energy, None, None)
         };
 
         self.apply_layout_constraints(&mut vertex_points, &mut edge_points);
-        self.update_positions(vertex_points, edge_points, None);
+        self.update_positions(vertex_points, edge_points, route_points, None, None);
         self.layout_edge_labels(energy.spring_length, None);
+        self.layout_initialized = true;
         Ok(())
     }
 
@@ -2491,6 +2516,15 @@ impl TypstGraph {
                 }
             }
         }
+        for hedge in 0..self.n_hedges() {
+            if self.graph[Hedge(hedge)]
+                .route_points
+                .iter()
+                .any(|point| !point.x.is_finite() || !point.y.is_finite())
+            {
+                return Err(format!("half-edge {hedge}: route points must be finite"));
+            }
+        }
         for (_, edge, data) in self.graph.iter_edges() {
             if dot_statement_value(&data.data.statements, "spring-length").is_some()
                 && !Self::positive_statement_f64(&data.data.statements, "spring-length")
@@ -2512,7 +2546,7 @@ impl TypstGraph {
     ) {
         let spring_params = ParamTuning::from(&self.layout_config.spring);
         let (tree_cfg, energy) = self.tree_init_cfg(&spring_params, self.n_nodes());
-        let (mut pos_n, mut pos_e) = self.new_positions(tree_cfg);
+        let (mut pos_n, mut pos_e) = self.initial_solver_positions(tree_cfg);
         self.apply_initial_grouped_constraints(&mut pos_n, &mut pos_e);
         let mut state = self.graph.new_layout_state(
             pos_n,
@@ -2526,6 +2560,7 @@ impl TypstGraph {
                 },
             self.layout_config.incremental_energy,
         );
+        state.route_points = self.initial_solver_route_points();
         state.edge_spring_length_scales = self.new_edgevec(|edge, _, _| {
             self.layout_config.spring_length_scale
                 * Self::positive_statement_f64(&edge.statements, "spring-length").unwrap_or(1.0)
@@ -2808,7 +2843,7 @@ impl TypstGraph {
         energy: &SpringChargeEnergy,
         selection: Option<(&NodeVec<bool>, &EdgeVec<bool>)>,
         active_subgraph: Option<&SuBitGraph>,
-    ) -> (NodeVec<Point2<f64>>, EdgeVec<Point2<f64>>) {
+    ) -> LayoutPositions {
         self.apply_initial_grouped_constraints(&mut pos_n, &mut pos_e);
         let spring_length = energy.spring_length;
         let mut state = self.graph.new_layout_state(
@@ -2823,6 +2858,7 @@ impl TypstGraph {
                 },
             self.layout_config.incremental_energy,
         );
+        state.route_points = self.initial_solver_route_points();
         state.edge_spring_length_scales = self.new_edgevec(|edge, _, _| {
             self.layout_config.spring_length_scale
                 * Self::positive_statement_f64(&edge.statements, "spring-length").unwrap_or(1.0)
@@ -2845,13 +2881,13 @@ impl TypstGraph {
                     energy,
                     &mut schedule,
                 );
-                (out.vertex_points, out.edge_points)
+                (out.vertex_points, out.edge_points, out.route_points)
             }
             LayoutAlgo::Force => {
                 let mut session = self.force_session(state, energy, selection);
                 session.run_to_end();
                 let state = session.into_state();
-                (state.vertex_points, state.edge_points)
+                (state.vertex_points, state.edge_points, state.route_points)
             }
             LayoutAlgo::Dot | LayoutAlgo::StableLayered | LayoutAlgo::Tree => unreachable!(),
         }
@@ -2916,7 +2952,9 @@ impl TypstGraph {
         &mut self,
         node: NodeVec<Point2<f64>>,
         edge: EdgeVec<Point2<f64>>,
+        routes: HedgeVec<Vec<Point2<f64>>>,
         selection: Option<(&NodeVec<bool>, &EdgeVec<bool>)>,
+        active_subgraph: Option<&SuBitGraph>,
     ) {
         node.into_iter().for_each(|(i, p)| {
             if selection.is_none_or(|(nodes, _)| nodes[i]) {
@@ -2951,6 +2989,15 @@ impl TypstGraph {
             }
             self.graph[i].pos = p;
         });
+        for (hedge, points) in routes {
+            let edge = self.graph[&hedge];
+            if selection.is_none_or(|(_, edges)| edges[edge])
+                && active_subgraph.is_none_or(|active| active[hedge])
+            {
+                let shift = self.graph[edge].shift.unwrap_or_else(Vector2::zero);
+                self.graph[hedge].route_points = points.into_iter().map(|p| p + shift).collect();
+            }
+        }
     }
 
     fn layout_edge_labels(
@@ -3162,6 +3209,32 @@ impl TypstGraph {
                 .statements
                 .remove("layout-label-gap");
         }
+    }
+
+    fn layout_route_points(&self) -> HedgeVec<Vec<Point2<f64>>> {
+        (0..self.n_hedges())
+            .map(|h| self.graph[Hedge(h)].route_points.clone())
+            .collect()
+    }
+
+    fn initial_solver_route_points(&self) -> HedgeVec<Vec<Point2<f64>>> {
+        (0..self.n_hedges())
+            .map(|h| {
+                let hedge = Hedge(h);
+                let shift = if self.layout_initialized {
+                    self.graph[self.graph[&hedge]]
+                        .shift
+                        .unwrap_or_else(Vector2::zero)
+                } else {
+                    Vector2::zero()
+                };
+                self.graph[hedge]
+                    .route_points
+                    .iter()
+                    .map(|point| *point - shift)
+                    .collect::<Vec<_>>()
+            })
+            .collect()
     }
 
     fn clear_hedge_route_points(&mut self, subgraph: Option<&SuBitGraph>) {
@@ -3569,14 +3642,16 @@ impl TypstGraph {
         cfg: TreeInitCfg,
         subgraph: &SuBitGraph,
         energy: &SpringChargeEnergy,
-    ) -> (NodeVec<Point2<f64>>, EdgeVec<Point2<f64>>) {
+    ) -> LayoutPositions {
         let fixed_nodes = self.layout_config.layout_nodes.nodes_are_fixed();
         let (selected_nodes, selected_edges) = self.selected_layout_items(subgraph);
         let (selected_node_axes, selected_edge_axes) =
             self.grouped_layout_selection(&selected_nodes, &selected_edges, !fixed_nodes);
         let selected_edge_points =
             self.new_edgevec(|_, edge, _| selected_edge_axes[edge].x || selected_edge_axes[edge].y);
-        let (mut pos_n, mut pos_e) = if fixed_nodes {
+        let (mut pos_n, mut pos_e) = if self.layout_initialized {
+            self.initial_solver_positions(cfg)
+        } else if fixed_nodes {
             self.edge_layout_positions_from_current_nodes(cfg, Some(&selected_edge_points), true)
         } else {
             self.partial_layout_positions(cfg, LayoutAlgo::Tree, subgraph)
@@ -4754,6 +4829,20 @@ impl TypstGraph {
             Vector2::unit_x()
         } else {
             Vector2::new(-direction.y, direction.x) / length
+        }
+    }
+
+    fn initial_solver_positions(
+        &self,
+        cfg: TreeInitCfg,
+    ) -> (NodeVec<Point2<f64>>, EdgeVec<Point2<f64>>) {
+        if self.layout_initialized {
+            (
+                self.new_nodevec(|_, _, node| node.pos - node.shift.unwrap_or_else(Vector2::zero)),
+                self.new_edgevec(|edge, _, _| edge.pos - edge.shift.unwrap_or_else(Vector2::zero)),
+            )
+        } else {
+            self.new_positions(cfg)
         }
     }
 

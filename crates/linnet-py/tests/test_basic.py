@@ -2548,6 +2548,7 @@ class TestTypedTypstSurface(unittest.TestCase):
             label=lp.MathSymbol("p", subscript=0),
             statement="cut-0",
             port_label="out",
+            route_points=[(0, 1), [1, 2], {"x": 3, "y": value}, value],
             style={"stroke": stroke},
         )
 

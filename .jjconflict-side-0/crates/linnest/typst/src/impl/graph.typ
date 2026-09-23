@@ -128,6 +128,19 @@
   }
 }
 
+#let _route-points(points) = {
+  if type(points) != array { panic("route-points must be an array") }
+  points.map(point => {
+    let coords = if type(point) == array and point.len() == 2 { point }
+      else if type(point) == dictionary and point.keys().contains("x") and point.keys().contains("y") { (point.x, point.y) }
+      else { panic("route-points entries must be two-item arrays or (x:, y:) dictionaries") }
+    if not coords.all(value => type(value) in (int, float) and value > -calc.inf and value < calc.inf) {
+      panic("route-points coordinates must be finite numbers")
+    }
+    (x: coords.at(0), y: coords.at(1))
+  })
+}
+
 #let _point-statement(point) = {
   if type(point) == str {
     point
@@ -405,6 +418,7 @@
   }
   let result = (
     node: _resolve-node-ref(half.node, node-keys, context_),
+    route-points: _route-points(half.at("route-points", default: ())),
   )
   let id = half.at("id", default: none)
   if id != none {
@@ -926,7 +940,7 @@
   } else if kind == "edge" {
     ("pos", "shift", "label-pos", "label-angle", "bend", "statements", "spring-length")
   } else if kind == "hedge" {
-    ("statement", "port-label", "compass")
+    ("statement", "port-label", "compass", "route-points")
   } else {
     ()
   }
@@ -987,6 +1001,8 @@
         if changed.len() != 0 {
           structural.insert(key, changed)
         }
+      } else if key == "route-points" {
+        structural.insert(key, _route-points(value))
       } else if key == "spring-length" {
         if value != none and (
           type(value) not in (int, float)
@@ -1672,6 +1688,7 @@
     data: data,
     statement: statement,
     compass: compass,
+    route-points: _route-points(options.route-points),
   )
 }
 #let sink(node, options, ..args) = {
@@ -1693,6 +1710,7 @@
     data: data,
     statement: statement,
     compass: compass,
+    route-points: _route-points(options.route-points),
   )
 }
 #let edge(options, ..args) = {

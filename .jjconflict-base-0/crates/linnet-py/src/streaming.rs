@@ -12,6 +12,7 @@ use pyo3::prelude::*;
 pub(crate) struct PyLayoutFrame {
     nodes: Vec<(f64, f64)>,
     edges: Vec<(f64, f64)>,
+    paths: Vec<Vec<(f64, f64)>>,
     iteration: usize,
     done: bool,
     max_movement: f64,
@@ -159,6 +160,11 @@ impl PyLayoutStream {
         let frame = self.stream.step(count);
         self.finished = frame.done;
         Some(PyLayoutFrame {
+            paths: frame
+                .paths
+                .into_iter()
+                .map(|path| path.into_iter().map(|point| (point.x, point.y)).collect())
+                .collect(),
             nodes: frame
                 .nodes
                 .into_iter()
