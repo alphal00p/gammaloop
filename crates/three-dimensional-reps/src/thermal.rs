@@ -264,6 +264,9 @@ mod tests {
         for edge in &mut parsed.internal_edges {
             edge.signature.external_signature.truncate(2);
         }
+        for edge in &mut parsed.external_edges {
+            edge.external_coefficients.truncate(2);
+        }
         for (medium_mode, expected_orientations) in [
             (MediumMode::Vacuum, 6),
             (MediumMode::ThermodynamicEquilibrium, 8),
@@ -292,6 +295,9 @@ mod tests {
         parsed.node_name_to_internal.retain(|_, node| *node < 3);
         for edge in &mut parsed.internal_edges {
             edge.signature.external_signature.truncate(2);
+        }
+        for edge in &mut parsed.external_edges {
+            edge.external_coefficients.truncate(2);
         }
         for medium_mode in [
             MediumMode::ThermodynamicEquilibrium,

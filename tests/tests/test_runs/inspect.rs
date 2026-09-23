@@ -3,6 +3,7 @@ use super::*;
 use std::fs;
 
 use gammaloop_api::commands::Commands;
+use gammalooprs::integrands::process::ProcessIntegrand;
 use gammalooprs::settings::runtime::{
     RotationSetting, StabilityLevelSetting, StabilityRecordingSettings,
 };
