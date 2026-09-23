@@ -5246,7 +5246,33 @@
         "ToString",
         "Total"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "passed: thirteen generated bare graphs and six local counterterms, shared UV expansion and tadpole IBP, all six reference renormalization constants, MS/MSbar cancellation and derived one-loop beta functions",
+      "validated_components": [
+        {
+          "scope": "massive fermion and scalar self-energies, Yukawa vertex and all nine four-scalar diagrams; native UV expansion, gamma traces and tensor projection, Laporta tadpole reduction, generated six-by-six counterterm matching, all reference constants and exact pole cancellation",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_yukawa.py",
+          "components": [
+            "Model.phi4",
+            "Model.standard_model",
+            "Model.from_json",
+            "Model.generate_diagrams",
+            "Model.expand_couplings",
+            "FeynmanDiagram.uv_expansion",
+            "LoopMomentumBasis.route_expression",
+            "TensorExpression.simplify_gamma",
+            "TensorReducer.reduce",
+            "IntegralFamily.rewrite_numerator",
+            "IBPFamily.reduce_laporta",
+            "IBPSolution.reduce",
+            "Matrix.solve",
+            "Symbolica.series",
+            "Symbolica.derivative",
+            "oneloop.get_expression"
+          ],
+          "result": "passed",
+          "note": "Live notebook: hep/yukawa_renormalization.py. One pipeline handles both interactions; native external-fermion ordering is retained consistently for bare and local graphs. The pseudoscalar projector removes its overall phase before rational matching. No renormalization constant is supplied as an input. Auxiliary-mass cancellation, both subtraction schemes and their finite difference, the regular additive quartic shift at zero quartic coupling and both derived beta functions pass. Paired gamma-five factors suffice for these leading UV poles; anomalous axial traces are not covered. The scope is the reference two-, three- and four-point functions, excluding vacuum and odd-scalar operators. Installed regression, HTML export, strict Marimo and all 32 live control selections pass."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/YukawaPS/OneLoop/Renormalization",
@@ -5327,7 +5353,33 @@
         "ToString",
         "Total"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "passed: thirteen generated bare graphs and six local counterterms, shared UV expansion and tadpole IBP, all six reference renormalization constants, MS/MSbar cancellation and derived one-loop beta functions",
+      "validated_components": [
+        {
+          "scope": "massive fermion and scalar self-energies, Yukawa vertex and all nine four-scalar diagrams; native UV expansion, gamma traces and tensor projection, Laporta tadpole reduction, generated six-by-six counterterm matching, all reference constants and exact pole cancellation",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_yukawa.py",
+          "components": [
+            "Model.phi4",
+            "Model.standard_model",
+            "Model.from_json",
+            "Model.generate_diagrams",
+            "Model.expand_couplings",
+            "FeynmanDiagram.uv_expansion",
+            "LoopMomentumBasis.route_expression",
+            "TensorExpression.simplify_gamma",
+            "TensorReducer.reduce",
+            "IntegralFamily.rewrite_numerator",
+            "IBPFamily.reduce_laporta",
+            "IBPSolution.reduce",
+            "Matrix.solve",
+            "Symbolica.series",
+            "Symbolica.derivative",
+            "oneloop.get_expression"
+          ],
+          "result": "passed",
+          "note": "Live notebook: hep/yukawa_renormalization.py. One pipeline handles both interactions; native external-fermion ordering is retained consistently for bare and local graphs. The pseudoscalar projector removes its overall phase before rational matching. No renormalization constant is supplied as an input. Auxiliary-mass cancellation, both subtraction schemes and their finite difference, the regular additive quartic shift at zero quartic coupling and both derived beta functions pass. Paired gamma-five factors suffice for these leading UV poles; anomalous axial traces are not covered. The scope is the reference two-, three- and four-point functions, excluding vacuum and odd-scalar operators. Installed regression, HTML export, strict Marimo and all 32 live control selections pass."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/MSSM/Tree/MnelEl-MnelEl",
