@@ -48,13 +48,14 @@ fn parse_expression(
 
 /// Export an expression in the UFO interchange syntax.
 ///
-/// Runtime atoms deliberately live in Symbolica's `UFO` namespace, but the
-/// UFO JSON and evaluator boundaries use the original, namespaceless symbol
-/// spelling. Keeping that conversion in one place also gives every exported
-/// expression a deterministic ordering.
+/// Model symbols use Symbolica's `UFO` namespace, which is implicit at the
+/// UFO JSON and evaluator boundaries. Preserve other namespaces so user
+/// parameters and tensor functions retain their identities when reloaded.
+/// Keeping that conversion in one place also gives every exported expression
+/// a deterministic ordering.
 fn export_expression(expression: &Atom) -> String {
     expression
-        .printer(PrintOptions::file_no_namespace())
+        .printer(PrintOptions::file().hide_namespace("UFO"))
         .to_string()
 }
 
@@ -1927,6 +1928,39 @@ mod tests {
                 .unwrap(),
             model.form_factor("FF1").unwrap()
         );
+    }
+
+    #[test]
+    fn model_round_trip_preserves_non_ufo_namespaces() {
+        let mut definition = Model::from_json(&model_json("GC1")).unwrap().definition();
+        definition.propagators[0].numerator =
+            "mass+custom_model::mass+spenso::dot(custom_model::p,custom_model::p)".to_owned();
+        let model = Model::new(definition).unwrap();
+        let serialized = model.to_json().unwrap();
+        let restored = Model::from_json(&serialized).unwrap();
+
+        assert!(!serialized.contains("UFO::"));
+        assert_eq!(restored.propagators(), model.propagators());
+        assert_eq!(restored.fingerprint(), model.fingerprint());
+        assert_eq!(
+            model
+                .with_restriction(Some("custom".to_owned()))
+                .unwrap()
+                .propagators(),
+            model.propagators()
+        );
+    }
+
+    #[test]
+    fn fingerprints_distinguish_identical_names_in_different_namespaces() {
+        let mut definition = Model::from_json(&model_json("GC1")).unwrap().definition();
+        definition.propagators[0].numerator = "gauge_a::xi".to_owned();
+        let first = Model::new(definition.clone()).unwrap();
+        definition.propagators[0].numerator = "gauge_b::xi".to_owned();
+        let second = Model::new(definition).unwrap();
+
+        assert_ne!(first.propagators(), second.propagators());
+        assert_ne!(first.fingerprint(), second.fingerprint());
     }
 
     #[test]
