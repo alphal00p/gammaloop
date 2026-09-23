@@ -3227,7 +3227,34 @@
         "Total",
         "TrickMandelstam"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "passed: four generated tree amplitudes with symbolic Lorentz dimension and SU(N), both incoming polarization averages, the SU(3) reference and four-dimensional angular-cut event rates",
+      "validated_components": [
+        {
+          "scope": "All four generated gg -> gg diagrams and their interference; physical axial projectors in symbolic D; incoming color averages; fixed two-state and D-dimensional spin averages; Bose exchange; native flux and phase space with identical-final-state counting.",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_gluon_scattering.py",
+          "components": [
+            "Model.standard_model",
+            "Model.particle",
+            "Model.generate_diagrams",
+            "Model.expand_couplings",
+            "Particle.spin_sum",
+            "Particle.color_sum",
+            "TensorExpression.spenso_conjugate",
+            "TensorExpression.with_lorentz_dimension",
+            "TensorExpression.simplify_color",
+            "TensorExpression.expand_mink",
+            "TensorExpression.to_cof_dimension_invariants",
+            "TensorExpression.simplify_metrics",
+            "TensorExpression.to_dots",
+            "Kinematics.apply",
+            "Kinematics.flux",
+            "Kinematics.two_body_phase_space",
+            "Symbolica.integrate"
+          ],
+          "result": "passed",
+          "note": "Notebook: hep/gluon_scattering.py. The symbolic result agrees exactly with the gallery, which divides each incoming polarization sum by two even away from D=4. Averaging over D-2 physical states removes the overall D dependence. Four-dimensional angular-cut rates include the identical-gluon 1/2! factor and pass nine independent Gaussian quadratures for N=2,3,5 and three cuts. The cuts exclude forward/backward massless-exchange poles."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/GlGl-QQbar",

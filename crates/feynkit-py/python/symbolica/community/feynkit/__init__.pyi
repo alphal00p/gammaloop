@@ -5357,7 +5357,7 @@ class Particle:
         ValueError
             If the particle's UFO color representation is unsupported.
         """
-    def spin_sum(self, momentum: Expression, left: Expression, right: Expression, *, average: builtins.bool = False, reference: typing.Optional[Expression] = None, covariant: builtins.bool = False, spin_vector: typing.Optional[Expression] = None, dimension: typing.Optional[Expression] = None) -> Expression:
+    def spin_sum(self, momentum: Expression, left: Expression, right: Expression, *, average: builtins.bool = False, reference: typing.Optional[Expression] = None, covariant: builtins.bool = False, spin_vector: typing.Optional[Expression] = None, dimension: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None) -> Expression:
         r"""
         Construct this particle's external-state spin or polarization sum.
 
@@ -5385,6 +5385,8 @@ class Particle:
         >>> p, i, j = S("p", "i", "j")
         >>> projector = model.particle("e-").spin_sum(p, i, j, average=True)
         >>> polarized = model.particle("ta-").spin_sum(p, i, j, spin_vector=S("s"))
+        >>> dimensional = model.particle("g").spin_sum(p, i, j, dimension=S("D"))
+        >>> six_dimensional = model.particle("g").spin_sum(p, i, j, dimension=6)
 
         Parameters
         ----------
@@ -5397,7 +5399,7 @@ class Particle:
         average : bool
             Divide by two for Dirac fermions, D-2 for massless vectors, or D-1
             for massive vectors. Scalars have one state.
-        dimension : Expression | None
+        dimension : Expression | int | None
             Integer or symbolic Lorentz dimension; defaults to four. Dirac
             spinor slots and their trace dimension stay four. To use a fixed
             two-state vector average at symbolic D, leave average=False and
@@ -5414,9 +5416,11 @@ class Particle:
         ------
         ValueError
             If ``spin_vector`` is used with averaging, a massless particle, or
-            a particle other than a Dirac fermion, or is not an unindexed name.
+            a particle other than a Dirac fermion, non-four-dimensional Lorentz
+            slots, or is not an unindexed name. Also raised for an invalid
+            dimension or a concrete dimension with no physical vector states.
         """
-    def sum_spins(self, expression: Expression, momentum: Expression, *, edge: builtins.int, average: builtins.bool = False, reference: typing.Optional[Expression] = None, covariant: builtins.bool = False, spin_vector: typing.Optional[Expression] = None, dimension: typing.Optional[Expression] = None) -> Expression:
+    def sum_spins(self, expression: Expression, momentum: Expression, *, edge: builtins.int, average: builtins.bool = False, reference: typing.Optional[Expression] = None, covariant: builtins.bool = False, spin_vector: typing.Optional[Expression] = None, dimension: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None) -> Expression:
         r"""
         Sum paired generated external wavefunctions for one edge.
 
@@ -5425,6 +5429,7 @@ class Particle:
         diagram's ``projector_expression()`` or a squared amplitude. Only pairs
         with the supplied edge label are replaced; unpaired wavefunctions stay
         unchanged. Scalar particles have no external wavefunction factors.
+        Vector wavefunction slots must use the requested Lorentz dimension.
         External states default to four dimensions; reference and gauge conventions
         are those of ``spin_sum``. For a massive Dirac particle, ``spin_vector``
         selects the same physical spin state as in ``spin_sum``, including for
@@ -5449,7 +5454,7 @@ class Particle:
         average : bool
             Divide by two for Dirac fermions, D-2 for massless vectors, or D-1
             for massive vectors. Scalars have one state.
-        dimension : Expression | None
+        dimension : Expression | int | None
             Integer or symbolic Lorentz dimension; defaults to four. Dirac
             spinor slots and their trace dimension stay four. To use a fixed
             two-state vector average at symbolic D, leave average=False and
@@ -5466,7 +5471,9 @@ class Particle:
         ------
         ValueError
             If ``spin_vector`` is used with averaging, a massless particle, or
-            a particle other than a Dirac fermion, or is not an unindexed name.
+            a particle other than a Dirac fermion, non-four-dimensional Lorentz
+            slots, or is not an unindexed name. Also raised for an invalid
+            dimension or a concrete dimension with no physical vector states.
         """
     def __repr__(self) -> builtins.str:
         r"""
