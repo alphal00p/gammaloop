@@ -156,7 +156,15 @@ impl NetworkSchoonschip<'_> {
             );
         }
 
-        Ok(new.normalize_dots())
+        let normalized = new.normalize_dots();
+        // Distribute signs and numerical coefficients after each local
+        // contraction so equal terms cancel before the next network pass.
+        // Symbolic coefficients and products of sums remain factorized.
+        Ok(if EXPANDSUMS || self.settings.expand_contracted_sums {
+            normalized.expand_num()
+        } else {
+            normalized
+        })
     }
 
     fn run_once<const EXPANDSUMS: bool, const RECURSE: bool, const DEPTH_FIRST: bool, Aind>(

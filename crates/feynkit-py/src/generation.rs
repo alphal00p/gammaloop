@@ -1118,7 +1118,7 @@ impl GenerationSettings {
         loop_momentum_bases: Option<Vec<(DiagramSelectionInput, Vec<usize>)>>,
         numerator_prefactor: Option<PythonExpression>,
         projector: Option<PythonExpression>,
-        numerator_grouping: Option<Py<PyAny>>,
+        numerator_grouping: Option<PyNumeratorGrouping>,
         cancellation_token: Option<PyCancellationToken>,
     ) -> PyResult<Self> {
         // Ported from GammaLoop's CLI policy. Explicit None disables a default;
@@ -1160,19 +1160,6 @@ impl GenerationSettings {
                 .map(|value| {
                     value
                         .extract::<PySnailFilterOptions>(py)
-                        .map_err(PyErr::from)
-                        .map(|value| value.inner)
-                })
-                .transpose()?,
-        };
-        let numerator_grouping = match numerator_grouping {
-            Some(value) if value.bind(py).is_instance_of::<PyEllipsis>() => Some(
-                NumeratorGrouping::UpToScalar(GraphGroupingOptions::default()),
-            ),
-            value => value
-                .map(|value| {
-                    value
-                        .extract::<PyNumeratorGrouping>(py)
                         .map_err(PyErr::from)
                         .map(|value| value.inner)
                 })
@@ -1313,7 +1300,7 @@ impl GenerationSettings {
             inner = inner.projector(value.expr);
         }
         if let Some(value) = numerator_grouping {
-            inner = inner.numerator_grouping(value);
+            inner = inner.numerator_grouping(value.inner);
         }
         if let Some(value) = cancellation_token {
             inner = inner.cancellation_token(value.inner);
@@ -1951,8 +1938,8 @@ impl PyGenerator {
     /// projector : Expression or None, optional
     ///     Override external-state contraction; S("1") disables external wavefunctions.
     /// numerator_grouping : NumeratorGrouping or None, optional
-    ///     Omission groups up to scalar rescaling, matching the GammaLoop CLI.
-    ///     Explicit None disables comparison, but diagrams still contain numerators.
+    ///     Defaults to None: no numerator comparison or grouping. Diagrams still
+    ///     contain numerators. Pass NumeratorGrouping to enable zero detection or grouping.
     /// progress : {"auto"}, Callable[[GenerationProgress], None] or None, optional
     ///     Defaults to "auto": show progress when marimo.running_in_notebook()
     ///     is true, with stage, counts, and elapsed time. None disables progress.
@@ -1971,9 +1958,9 @@ impl PyGenerator {
     ///     Shared token for cancelling a running generation task. Token cancellation
     ///     returns an incomplete result; Python signal-handler exceptions, including
     ///     KeyboardInterrupt, stop generation and propagate to the caller.
-    #[pyo3(signature = (process, *, threads=None, max_vertices=None, allow_self_loops=true, allow_zero_flow_edges=false, graph_prefix=None, particle_veto=None, vertex_allow=None, vertex_veto=None, maximum_bridges=0, self_energy=Some(Python::attach(|py| py.Ellipsis())), tadpoles=Some(Python::attach(|py| py.Ellipsis())), zero_snails=Some(Python::attach(|py| py.Ellipsis())), coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=Some(Python::attach(|py| py.Ellipsis())), blob_range=Some(Python::attach(|py| py.Ellipsis())), spectator_range=Some(Python::attach(|py| py.Ellipsis())), perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=Some(Python::attach(|py| py.Ellipsis())), cancellation_token=None, progress=Some(Python::attach(|py| PyString::new(py, "auto").into_any().unbind())), filter=None))]
+    #[pyo3(signature = (process, *, threads=None, max_vertices=None, allow_self_loops=true, allow_zero_flow_edges=false, graph_prefix=None, particle_veto=None, vertex_allow=None, vertex_veto=None, maximum_bridges=0, self_energy=Some(Python::attach(|py| py.Ellipsis())), tadpoles=Some(Python::attach(|py| py.Ellipsis())), zero_snails=Some(Python::attach(|py| py.Ellipsis())), coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=Some(Python::attach(|py| py.Ellipsis())), blob_range=Some(Python::attach(|py| py.Ellipsis())), spectator_range=Some(Python::attach(|py| py.Ellipsis())), perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, cancellation_token=None, progress=Some(Python::attach(|py| PyString::new(py, "auto").into_any().unbind())), filter=None))]
     #[pyo3(
-        text_signature = "($self, process, *, threads=None, max_vertices=None, allow_self_loops=True, allow_zero_flow_edges=False, graph_prefix=None, particle_veto=None, vertex_allow=None, vertex_veto=None, maximum_bridges=0, self_energy=..., tadpoles=..., zero_snails=..., coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=..., blob_range=..., spectator_range=..., perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=..., cancellation_token=None, progress='auto', filter=None)"
+        text_signature = "($self, process, *, threads=None, max_vertices=None, allow_self_loops=True, allow_zero_flow_edges=False, graph_prefix=None, particle_veto=None, vertex_allow=None, vertex_veto=None, maximum_bridges=0, self_energy=..., tadpoles=..., zero_snails=..., coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=..., blob_range=..., spectator_range=..., perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, cancellation_token=None, progress='auto', filter=None)"
     )]
     #[allow(clippy::too_many_arguments)]
     fn generate(
@@ -2012,8 +1999,7 @@ impl PyGenerator {
         loop_momentum_bases: Option<Vec<(DiagramSelectionInput, Vec<usize>)>>,
         numerator_prefactor: Option<PythonExpression>,
         projector: Option<PythonExpression>,
-        #[gen_stub(override_type(type_repr = "NumeratorGrouping | types.EllipsisType | None", imports = ("types")))]
-        numerator_grouping: Option<Py<PyAny>>,
+        numerator_grouping: Option<PyNumeratorGrouping>,
         cancellation_token: Option<PyCancellationToken>,
         #[gen_stub(override_type(type_repr = "typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None", imports = ("collections.abc", "typing")))]
         progress: Option<Py<PyAny>>,
@@ -2580,7 +2566,7 @@ for via_model in (True, False):
     }
 
     #[test]
-    fn generation_defaults_match_the_ported_cli_policy() {
+    fn generation_defaults_leave_numerator_grouping_opt_in() {
         Python::initialize();
         Python::attach(|py| {
             let module = PyModule::new(py, "symbolica.community.feynkit").unwrap();
@@ -2601,7 +2587,7 @@ settings = dict(max_vertices=3, vertex_allow=["V_3_SCALAR_000"])
 explicit = dict(
     maximum_bridges=0, allow_self_loops=True,
     self_energy=fk.SelfEnergyFilterOptions(), tadpoles=fk.TadpoleFilterOptions(),
-    zero_snails=fk.SnailFilterOptions(), numerator_grouping=fk.NumeratorGrouping("up_to_scalar"),
+    zero_snails=fk.SnailFilterOptions(), numerator_grouping=None,
 )
 for via_model in (True, False):
     def generate(incoming, outgoing, loops=0, **kwargs):
@@ -2610,9 +2596,18 @@ for via_model in (True, False):
         process = fk.Process.amplitude(incoming, outgoing).with_loop_count(loops, loops)
         return generator.generate(process, **settings, **kwargs)
 
-    implicit = generate([1000], [1000, 1000], loops=1)
+    stages = []
+    implicit = generate([1000], [1000, 1000], loops=1, progress=lambda p: stages.append(p.stage))
     configured = generate([1000], [1000, 1000], loops=1, **explicit)
     assert implicit.report.completed and len(implicit) > 0
+    assert all(len(group.members) == 1 for group in implicit.groups)
+    assert not any(stage.startswith("grouping_") for stage in stages)
+    stages.clear()
+    grouped = generate([1000], [1000, 1000], loops=1,
+        numerator_grouping=fk.NumeratorGrouping("up_to_scalar"),
+        progress=lambda p: stages.append(p.stage))
+    assert grouped.report.completed and len(grouped) > 0
+    assert "grouping_preparation" in stages
     assert [d.to_json() for d in implicit.diagrams] == [d.to_json() for d in configured.diagrams]
 
     # A tree with two cubic vertices needs an internal bridge. None explicitly
@@ -2634,7 +2629,7 @@ for generate in (model.generate_diagrams, generator.generate):
     parameters = inspect.signature(generate).parameters
     assert parameters["maximum_bridges"].default == 0
     assert parameters["allow_self_loops"].default is True
-    assert parameters["numerator_grouping"].default is Ellipsis
+    assert parameters["numerator_grouping"].default is None
 "#).unwrap();
             py.run(&code, Some(&locals), Some(&locals)).unwrap();
         });
