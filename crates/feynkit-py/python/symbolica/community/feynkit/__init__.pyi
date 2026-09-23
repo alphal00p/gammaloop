@@ -3161,18 +3161,28 @@ class IntegralFamily:
         cycle : bool
             Whether this family is part of a recursive formatting cycle.
         """
-    def complete(self) -> IntegralFamily:
+    def complete(self, *, candidates: typing.Optional[typing.Sequence[Expression]] = None) -> IntegralFamily:
         r"""
-        Append irreducible scalar products to obtain a complete family.
+        Complete a basis, preferring supplied inverse propagators.
 
         Original propagators retain their positions. Dependent families must
         first be partial-fractioned. Added propagators carry nonpositive powers
         when used to represent numerator factors in an IBP integral list.
+        Candidates are tried in order after applying this family's kinematics.
+        Redundant candidates are skipped; bare scalar products fill any missing
+        directions. All candidates must be affine in the loop scalar products.
 
         Examples
         --------
         >>> completed = family.complete()
         >>> assert completed.is_complete
+        >>> completed = family.complete(candidates=other_family.denominators)
+
+        Parameters
+        ----------
+        candidates : list[Expression] | None
+            Preferred auxiliary inverse propagators in this family's momentum
+            coordinates. Defaults to using only bare scalar products.
         """
     def partial_fraction(self, powers: typing.Sequence[builtins.int], *, max_states: builtins.int = 100000) -> builtins.list[tuple[Expression, builtins.list[builtins.int]]]:
         r"""

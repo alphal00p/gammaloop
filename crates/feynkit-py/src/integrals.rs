@@ -258,19 +258,38 @@ impl PyIntegralFamily {
         Ok(())
     }
 
-    /// Append irreducible scalar products to obtain a complete family.
+    /// Complete a basis, preferring supplied inverse propagators.
     ///
     /// Original propagators retain their positions. Dependent families must
     /// first be partial-fractioned. Added propagators carry nonpositive powers
     /// when used to represent numerator factors in an IBP integral list.
+    /// Candidates are tried in order after applying this family's kinematics.
+    /// Redundant candidates are skipped; bare scalar products fill any missing
+    /// directions. All candidates must be affine in the loop scalar products.
     ///
     /// Examples
     /// --------
     /// >>> completed = family.complete()
     /// >>> assert completed.is_complete
-    fn complete(&self) -> PyResult<Self> {
+    /// >>> completed = family.complete(candidates=other_family.denominators)
+    ///
+    /// Parameters
+    /// ----------
+    /// candidates : list[Expression] | None
+    ///     Preferred auxiliary inverse propagators in this family's momentum
+    ///     coordinates. Defaults to using only bare scalar products.
+    #[pyo3(signature = (*, candidates=None))]
+    fn complete(&self, candidates: Option<Vec<PythonExpression>>) -> PyResult<Self> {
+        let candidates = candidates
+            .unwrap_or_default()
+            .into_iter()
+            .map(|x| x.expr)
+            .collect::<Vec<_>>();
         Ok(Self {
-            inner: self.inner.complete().map_err(error::integral_family)?,
+            inner: self
+                .inner
+                .complete(&candidates)
+                .map_err(error::integral_family)?,
         })
     }
 

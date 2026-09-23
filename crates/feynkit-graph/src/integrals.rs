@@ -214,15 +214,27 @@ impl IntegralFamily {
             .map_err(|error| IntegralFamilyError::InvalidBasis(error.to_string()))
     }
 
-    /// Append irreducible scalar products until the propagators form a basis.
+    /// Append independent candidates, then scalar products, to form a basis.
     ///
     /// Original propagators retain their positions. Added entries are auxiliary
     /// inverse propagators, whose nonpositive powers represent numerator factors.
     /// A dependent family must be partial-fractioned first.
-    pub fn complete(&self) -> Result<Self, IntegralFamilyError> {
+    /// Candidates are affine inverse propagators in this family's momenta,
+    /// tried in order after applying its kinematics. Redundant candidates are
+    /// skipped; bare scalar products fill any directions still missing.
+    pub fn complete(&self, candidates: &[Atom]) -> Result<Self, IntegralFamilyError> {
         self.require_independent()?;
+        let candidates = candidates
+            .iter()
+            .map(|candidate| self.kinematics.apply(candidate).expand())
+            .collect::<Vec<_>>();
+        // Validate the entire supplied pool, including entries beyond the first
+        // complete basis, so invalid candidates are never silently accepted.
+        if !candidates.is_empty() {
+            self.rank_of(&candidates)?;
+        }
         let mut result = self.clone();
-        for product in &self.scalar_products {
+        for product in candidates.iter().chain(&self.scalar_products) {
             if result.is_complete() {
                 break;
             }
@@ -391,7 +403,7 @@ mod tests {
         .unwrap();
         assert_eq!(family.rank(), 4);
         assert!(!family.is_complete());
-        let completed = family.complete().unwrap();
+        let completed = family.complete(&[]).unwrap();
         assert!(completed.is_complete());
         assert_eq!(&completed.denominators()[..4], denominators);
         assert_eq!(
@@ -399,9 +411,44 @@ mod tests {
             kin.scalar_product(&k, &q).unwrap()
         );
         assert_eq!(
-            completed.complete().unwrap().denominators(),
+            completed.complete(&[]).unwrap().denominators(),
             completed.denominators()
         );
+        let preferred = kin.scalar_product(&(&k - &q), &(&k - &q)).unwrap();
+        let pool = [denominators[0].clone(), preferred.clone()];
+        let selected = family.complete(&pool).unwrap();
+        assert_eq!(&selected.denominators()[..4], denominators);
+        assert_eq!(selected.denominators()[4], preferred);
+        assert_eq!(
+            selected.complete(&pool).unwrap().denominators(),
+            selected.denominators()
+        );
+        // Complete with the physical mixed propagator rather than a bare k.q.
+        let labels = [
+            parse!("c1"),
+            parse!("c2"),
+            parse!("c3"),
+            parse!("c4"),
+            parse!("c5"),
+        ];
+        let reduced = selected
+            .rewrite_numerator(&kin.scalar_product(&k, &q).unwrap(), &labels)
+            .unwrap();
+        assert!(
+            (reduced - (&labels[0] + &labels[1] - &labels[4]) / 2)
+                .expand()
+                .is_zero()
+        );
+        assert_eq!(
+            family
+                .complete(&[denominators[0].clone()])
+                .unwrap()
+                .denominators(),
+            completed.denominators()
+        );
+        let nonlinear = kin.scalar_product(&k, &q).unwrap().pow(2);
+        assert!(family.complete(&[preferred, nonlinear.clone()]).is_err());
+        assert!(selected.complete(&[nonlinear]).is_err());
     }
 
     #[test]
@@ -421,7 +468,7 @@ mod tests {
         assert!(dependent.is_complete());
         assert!(!dependent.is_independent());
         assert!(matches!(
-            dependent.complete(),
+            dependent.complete(&[]),
             Err(IntegralFamilyError::Dependent { .. })
         ));
         let eikonal = IntegralFamily::new(
