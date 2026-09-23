@@ -164,7 +164,7 @@ impl IntegralFamily {
                 ));
             }
         }
-        let (jacobian, _) = Atom::system_to_matrix::<u16, _, _>(loop_images, &target.loop_momenta)
+        let (jacobian, _) = Self::affine_system(loop_images, &target.loop_momenta)
             .map_err(|e| IntegralFamilyError::InvalidMapping(e.to_string()))?;
         let determinant = jacobian
             .det()
@@ -260,9 +260,8 @@ impl IntegralFamily {
             return Err(IntegralFamilyError::NoQuadraticBasis);
         }
         let source_momenta = basis.iter().map(|q| &q.momentum).collect::<Vec<_>>();
-        let (matrix, rhs) =
-            Atom::system_to_matrix::<u16, _, _>(&source_momenta, &self.loop_momenta)
-                .map_err(|e| IntegralFamilyError::InvalidMapping(e.to_string()))?;
+        let (matrix, rhs) = Self::affine_system(&source_momenta, &self.loop_momenta)
+            .map_err(|e| IntegralFamilyError::InvalidMapping(e.to_string()))?;
         let inverse = matrix
             .inv()
             .map_err(|e| IntegralFamilyError::InvalidMapping(e.to_string()))?
@@ -367,6 +366,88 @@ mod tests {
     use super::*;
     use feynkit_kinematics::Kinematics;
     use symbolica::parse;
+
+    #[test]
+    fn light_cone_shift_basis_maps_to_itself() {
+        let [k, q, n, b] = [
+            "map_lightcone::k",
+            "map_lightcone::q",
+            "map_lightcone::n",
+            "map_lightcone::b",
+        ]
+        .map(|s| symbolica::symbol!(s).to_atom());
+        let kin = Kinematics::new()
+            .with_momenta([k.clone(), q.clone(), n.clone(), b.clone()])
+            .unwrap()
+            .with_mass_squared(&n, Atom::Zero)
+            .unwrap()
+            .with_mass_squared(&b, Atom::Zero)
+            .unwrap()
+            .with_scalar_product(&n, &b, Atom::num(2))
+            .unwrap();
+        let mixed = &k - &q + &n - &b / 2;
+        let momenta = [k.clone(), mixed.clone(), q.clone()];
+        let family = IntegralFamily::new(
+            vec![k.clone(), q.clone()],
+            vec![n.clone(), b.clone()],
+            momenta
+                .iter()
+                .map(|v| kin.scalar_product(v, v).unwrap())
+                .collect(),
+            &kin,
+        )
+        .unwrap();
+        assert!(family.mapping_to(&family, &[k, q]).unwrap().is_some());
+        assert!(family.find_mapping(&family, 100).unwrap().is_some());
+    }
+
+    #[test]
+    fn reciprocal_loop_rescalings_preserve_the_measure() {
+        let [k, q, l, r] = [
+            "map_scale::k",
+            "map_scale::q",
+            "map_scale::l",
+            "map_scale::r",
+        ]
+        .map(|s| symbolica::symbol!(s).to_atom());
+        let kin = Kinematics::new()
+            .with_momenta([k.clone(), q.clone(), l.clone(), r.clone()])
+            .unwrap();
+        let source = IntegralFamily::new(
+            vec![k.clone(), q.clone()],
+            vec![],
+            vec![
+                kin.scalar_product(&k, &k).unwrap() - 1,
+                kin.scalar_product(&q, &q).unwrap() - 2,
+            ],
+            &kin,
+        )
+        .unwrap();
+        let target = IntegralFamily::new(
+            vec![l.clone(), r.clone()],
+            vec![],
+            vec![
+                4 * kin.scalar_product(&l, &l).unwrap() - 1,
+                kin.scalar_product(&r, &r).unwrap() / 4 - 2,
+            ],
+            &kin,
+        )
+        .unwrap();
+        assert!(
+            source
+                .mapping_to(&target, &[2 * &l, &r / 2])
+                .unwrap()
+                .is_some()
+        );
+        let mapping = source.find_mapping(&target, 100).unwrap().unwrap();
+        for (i, j) in mapping.denominator_map().iter().enumerate() {
+            assert!(
+                (mapping.apply(&source.denominators[i]) - &target.denominators[*j])
+                    .together()
+                    .is_zero()
+            );
+        }
+    }
 
     #[test]
     fn feyncalc_three_loop_topology_mapping() {

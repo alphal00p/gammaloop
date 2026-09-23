@@ -173,6 +173,14 @@ real coefficients and loop-variable determinant `+1` or `-1`, so the loop measur
 is unchanged. Dimensions, external names, and external scalar-product assumptions
 must agree.
 
+Fractional shifts and reciprocal loop rescalings are supported. The shared
+coefficient extraction preserves rational row factors before constructing
+Symbolica matrices. Clearing these factors is valid when solving equations,
+but would change a Jacobian, a Symanzik determinant, or a relation between
+the original inverse propagators. Regression cases include the light-cone
+shift `k-q+n-nbar/2`, the unit-Jacobian rescaling `(k,q) -> (2*l,r/2)`,
+and exact partial fractions with fractional quadratic coefficients.
+
 // docs-example: compile feynkit-integral-family-mapping
 ```python
 from symbolica import E, S

@@ -1908,6 +1908,10 @@ denominator unchanged. The external light-cone Gram matrix is nonsingular,
 so the unconstrained polynomial transverse integral vanishes in dimensional
 regularization. A degenerate Symanzik polynomial alone is not used as proof.
 Another 434 sectors remain unclassified by either criterion.
+All 434 also pass automatic self-mapping with every mapped denominator checked
+exactly. This caught a row-normalization error in fractional light-cone shift
+reconstruction: the corrected coefficient extraction retains the original
+rational coefficients for mappings, Symanzik forms, and partial fractions.
 
 The shared `IntegralFamily.complete(candidates=pool)` now tries an ordered
 pool of inverse propagators before bare scalar products. It preserves original

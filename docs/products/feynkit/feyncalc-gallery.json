@@ -5965,10 +5965,11 @@
             "IntegralFamily.scaleless_scaling",
             "IntegralFamily.scaleless_transverse_direction",
             "IntegralFamily.complete",
-            "IntegralFamily.scalar_product_rules"
+            "IntegralFamily.scalar_product_rules",
+            "IntegralFamily.find_mapping"
           ],
           "result": "passed",
-          "note": "Notebook: hep/topology_preparation.py. Source commit and SHA-256 are recorded in the fixture. All 677 sectors complete using the source pool alone; original propagator order and idempotence are checked. All seven scalar products reconstruct exactly in every completed family. The 112 scaling certificates are differentiated explicitly. All 131 singular quadratic forms have real transverse certificates, verified independently by simultaneous shifts of every denominator. 434 sectors remain unclassified by the two criteria. These intermediate counts depend on partial-fraction ordering and do not claim the reference final topology minimization. Rust tests, Clippy, installed API regression, 28 live notebook control combinations, strict Marimo validation, Ruff and HTML export passed."
+          "note": "Notebook: hep/topology_preparation.py. Source commit and SHA-256 are recorded in the fixture. All 677 sectors complete using the source pool alone; original propagator order and idempotence are checked. All seven scalar products reconstruct exactly in every completed family. The 112 scaling certificates are differentiated explicitly. All 131 singular quadratic forms have real transverse certificates, verified independently by simultaneous shifts of every denominator. 434 sectors remain unclassified by the two criteria. All 434 pass automatic self-mapping with exact denominator verification; fractional light-cone shifts retain their original row normalization. These intermediate counts depend on partial-fraction ordering and do not claim the reference final topology minimization. Rust tests, Clippy, installed API regression, 28 live notebook control combinations, strict Marimo validation, Ruff and HTML export passed."
         }
       ]
     }

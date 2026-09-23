@@ -8,6 +8,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use feynkit_kinematics::{Kinematics, SymbolicKinematicsError};
 use spenso::structure::representation::{Minkowski, RepName};
 use symbolica::atom::{Atom, AtomCore, AtomView};
+use symbolica::domains::{
+    integer::{IntegerRing, Z},
+    rational::Q,
+    rational_polynomial::{RationalPolynomial, RationalPolynomialField},
+};
+use symbolica::tensors::matrix::Matrix;
 use thiserror::Error;
 
 mod diagram;
@@ -15,6 +21,8 @@ mod mapping;
 mod parametric;
 mod partial_fraction;
 pub use mapping::{IntegralMapping, PropagatorMapping};
+
+type CoefficientMatrix = Matrix<RationalPolynomialField<IntegerRing, u16>>;
 
 #[derive(Clone, Debug, Error)]
 pub enum IntegralFamilyError {
@@ -76,6 +84,65 @@ pub struct IntegralFamily {
 }
 
 impl IntegralFamily {
+    /// Preserve affine coefficients, including rational row normalization.
+    /// Symbolica's equation-to-matrix conversion may clear denominators, which
+    /// preserves solutions and ranks but changes determinants and relations
+    /// between the original expressions. Extract those coefficients explicitly;
+    /// Symbolica still owns all polynomial and matrix operations.
+    fn affine_system(
+        expressions: &[impl AtomCore],
+        variables: &[Atom],
+    ) -> Result<(CoefficientMatrix, CoefficientMatrix), IntegralFamilyError> {
+        let mut entries: Vec<RationalPolynomial<IntegerRing, u16>> = Vec::new();
+        for expression in expressions {
+            let coefficients = expression
+                .coefficient_list::<i32>(variables)
+                .into_iter()
+                .collect::<BTreeMap<_, _>>();
+            if coefficients
+                .keys()
+                .any(|key| !key.is_one() && !variables.contains(key))
+            {
+                return Err(IntegralFamilyError::InvalidBasis(
+                    "expected affine expressions".into(),
+                ));
+            }
+            for variable in variables.iter().chain(std::iter::once(&Atom::one())) {
+                let coefficient = coefficients.get(variable).cloned().unwrap_or_default();
+                entries.push(
+                    coefficient
+                        .try_to_rational_polynomial(&Q, &Z, None)
+                        .map_err(|e| IntegralFamilyError::InvalidBasis(e.to_string()))?,
+                );
+            }
+        }
+        // Every entry must use the same variable ordering for exact arithmetic.
+        if let Some((first, rest)) = entries.split_first_mut() {
+            for _ in 0..2 {
+                for entry in &mut *rest {
+                    first.unify_variables(entry);
+                }
+            }
+        }
+        let field = RationalPolynomialField::new(Z);
+        let mut matrix = Vec::new();
+        let mut rhs = Vec::new();
+        for row in entries.chunks(variables.len() + 1) {
+            matrix.extend_from_slice(&row[..variables.len()]);
+            rhs.push(-row[variables.len()].clone());
+        }
+        Ok((
+            Matrix::from_linear(
+                matrix,
+                expressions.len() as u32,
+                variables.len() as u32,
+                field.clone(),
+            )
+            .map_err(IntegralFamilyError::InvalidBasis)?,
+            Matrix::new_vec(rhs, field),
+        ))
+    }
+
     /// Construct a family and compute its rank over the external invariants.
     pub fn new(
         loop_momenta: Vec<Atom>,

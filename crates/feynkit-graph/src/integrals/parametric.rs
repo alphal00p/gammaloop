@@ -272,7 +272,7 @@ impl IntegralFamily {
                     .sum::<Atom>()
             })
             .collect::<Vec<_>>();
-        let (matrix, _) = Atom::system_to_matrix::<u16, _, _>(&rows, &self.loop_momenta)
+        let (matrix, _) = Self::affine_system(&rows, &self.loop_momenta)
             .map_err(|e| IntegralFamilyError::InvalidBasis(e.to_string()))?;
         let u = matrix
             .det()
@@ -838,5 +838,27 @@ mod tests {
             .unwrap();
         assert!(u.is_zero());
         assert!(family.scaleless_transverse_direction().unwrap().is_none());
+    }
+
+    #[test]
+    fn fractional_quadratic_coefficients_keep_symanzik_normalization() {
+        let [k, q] = [parse!("uf_fraction::k"), parse!("uf_fraction::q")];
+        let kin = Kinematics::new();
+        let family = IntegralFamily::new(
+            vec![k.clone(), q.clone()],
+            vec![],
+            vec![
+                kin.scalar_product(&k, &k).unwrap() / 2 - parse!("m2"),
+                kin.scalar_product(&k, &q).unwrap(),
+                kin.scalar_product(&q, &q).unwrap() / 3 - parse!("M2"),
+            ],
+            &kin,
+        )
+        .unwrap();
+        let (u, f) = family
+            .symanzik(&[parse!("x"), parse!("y"), parse!("z")])
+            .unwrap();
+        assert!((u - parse!("x*z/6-y^2/4")).expand().is_zero());
+        assert!((f - parse!("(x*z/6-y^2/4)*(m2*x+M2*z)")).expand().is_zero());
     }
 }
