@@ -1336,7 +1336,17 @@ pub(crate) fn product_plan(
             return Err(TensorCompositionError::Ambiguous(pairs));
         }
     }
-    if let (Some(left_channel), Some(right_channel)) = (matrix_channel(left), matrix_channel(right))
+    let remaining = candidates
+        .iter()
+        .copied()
+        .filter(|pair| !named_left.contains(&pair.left) && !named_right.contains(&pair.right))
+        .collect::<Vec<_>>();
+    // Fully determined Einstein contractions need no matrix-channel inference.
+    // A rank-two composite may expose its ports on separate vector factors,
+    // which cannot each supply both placeholders required by a chain factor.
+    if !remaining.is_empty()
+        && let (Some(left_channel), Some(right_channel)) =
+            (matrix_channel(left), matrix_channel(right))
     {
         let channel_pair = PortPair {
             left: left_channel.output,
@@ -1356,10 +1366,6 @@ pub(crate) fn product_plan(
             return Ok(ProductPlan::Compose(left_channel, right_channel));
         }
     }
-    let remaining = candidates
-        .into_iter()
-        .filter(|pair| !named_left.contains(&pair.left) && !named_right.contains(&pair.right))
-        .collect::<Vec<_>>();
     // Augmenting paths find a maximum set of simultaneous contractions. Removing
     // any selected edge must lower its size; otherwise a second pairing exists.
     let maximum_matching = |excluded: Option<PortPair>| {
