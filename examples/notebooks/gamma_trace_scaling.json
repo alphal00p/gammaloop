@@ -1,0 +1,284 @@
+{
+  "date": "2026-09-23",
+  "cpu": "AMD EPYC 9754 128-Core Processor",
+  "platform": "Linux x86_64; shared host, no CPU pinning",
+  "form": "FORM 5.0.0 (Jan  1 1980)",
+  "form_executable": "/nix/store/c2x9lj2l3x99xrdx1ba1a63lxyxq6ji0-form-5.0.0/bin/form",
+  "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+  "profile": "dev-optim; Idenso/workspace opt-level 2, external dependencies opt-level 3",
+  "source_sha256": {
+    "crates/idenso/src/dirac/simplify.rs": "76adb67a6061a4b1293f55ea73a5ae774bd775016de5740977ecb9ab8468acad",
+    "crates/idenso/src/dirac/simplify/trace_kernel.rs": "bf1df312af6e6adc238e30c878270ef790007b96fde6f31510d68f0038ac4b5c",
+    "crates/idenso/examples/trace_scaling.rs": "6fc4cdbbb87e578a3191926b77e663c37438efa63693f38d133115061999243d"
+  },
+  "method": {
+    "form_wall": "Median of three complete subprocess wall times, each divided by its six batches times the number of independent expressions per batch. Includes amortized startup, parsing, input preparation, trace4, sort, term-count printing, dropping outputs and process teardown. No scalar projection or correctness verification.",
+    "form_cpu": "FORM TIMER_ around trace4 plus .sort only, after sorting input expressions. Millisecond batch resolution; median of last five of six batches per process, then median of three processes. Reported separately from wall time.",
+    "idenso": "Median of five per-call wall times obtained by timing loops over warm simplify_gamma calls. Inputs, initialization, and validation excluded. Result destruction included.",
+    "phases": "Isolated copy of the current kernel, compiled opt-level=2 against the exact same optimized dependency artifacts. Products collected into a Vec before add_many to separately time metric construction, product materialization (coefficient/metric copies and mul_many), and add_many sum canonicalization. These phase measurements are diagnostic and include small instrumentation/materialization changes; direct kernel and full API totals agree closely.",
+    "correctness": "The copied kernel result is asserted exactly equal to the production result on each test input. This is only a profiling integrity check, not an independent algebraic correctness test. FORM term counts are recorded separately.",
+    "comparison": "Use FORM amortized wall time for ratios; internal CPU times are supporting diagnostics. Batch mode holds more simultaneous expressions than the Idenso call loop. This measures this free-index benchmark, not general FORM parity."
+  },
+  "commands": {
+    "full_api_and_form": "cargo run -p idenso --profile dev-optim --example trace_scaling -- /absolute/path/to/form > trace_scaling.csv",
+    "scalar_validation": "cargo run -p idenso --profile dev-optim --example trace_form -- /absolute/path/to/form > trace_form.csv"
+  },
+  "artifacts_directory": "/tmp/gamma-trace-scaling",
+  "measurements": [
+    {
+      "length": 8,
+      "terms": 105,
+      "form_repetitions_per_batch": 2000,
+      "form_batches_per_process": 6,
+      "form_process_samples": 3,
+      "form_wall_ms_per_trace_samples": [
+        0.0555910481683289,
+        0.053247161578231804,
+        0.054554803490949176
+      ],
+      "form_wall_ms_per_trace": 0.054554803490949176,
+      "form_cpu_ms_per_trace_samples": [
+        0.051,
+        0.0485,
+        0.0495
+      ],
+      "form_cpu_ms_per_trace": 0.0495,
+      "idenso_repetitions_per_sample": 100,
+      "idenso_samples": 5,
+      "idenso_full_ms": 0.150162,
+      "idenso_full_ms_samples": [
+        0.150296,
+        0.150267,
+        0.148963,
+        0.150162,
+        0.150054
+      ],
+      "idenso_kernel_ms": 0.146399,
+      "idenso_kernel_ms_samples": [
+        0.146658,
+        0.146399,
+        0.145889,
+        0.146399,
+        0.146006
+      ],
+      "idenso_metrics_ms": 0.045221,
+      "idenso_metrics_ms_samples": [
+        0.045204,
+        0.045221,
+        0.045307,
+        0.04524,
+        0.045031
+      ],
+      "idenso_products_ms": 0.07651,
+      "idenso_products_ms_samples": [
+        0.076983,
+        0.07651,
+        0.07665,
+        0.076432,
+        0.076403
+      ],
+      "idenso_sum_ms": 0.023132,
+      "idenso_sum_ms_samples": [
+        0.023071,
+        0.023164,
+        0.022544,
+        0.023341,
+        0.023132
+      ],
+      "ratio_idenso_full_to_form_amortized_wall": 2.7524982291414974
+    },
+    {
+      "length": 10,
+      "terms": 693,
+      "form_repetitions_per_batch": 500,
+      "form_batches_per_process": 6,
+      "form_process_samples": 3,
+      "form_wall_ms_per_trace_samples": [
+        0.4203375073460241,
+        0.3760993479906271,
+        0.3863249426552405
+      ],
+      "form_wall_ms_per_trace": 0.3863249426552405,
+      "form_cpu_ms_per_trace_samples": [
+        0.406,
+        0.36,
+        0.372
+      ],
+      "form_cpu_ms_per_trace": 0.372,
+      "idenso_repetitions_per_sample": 100,
+      "idenso_samples": 5,
+      "idenso_full_ms": 1.100365,
+      "idenso_full_ms_samples": [
+        1.107873,
+        1.100365,
+        1.097964,
+        1.100429,
+        1.100112
+      ],
+      "idenso_kernel_ms": 1.076131,
+      "idenso_kernel_ms_samples": [
+        1.081088,
+        1.07286,
+        1.085697,
+        1.074553,
+        1.076131
+      ],
+      "idenso_metrics_ms": 0.07138,
+      "idenso_metrics_ms_samples": [
+        0.072079,
+        0.071426,
+        0.071022,
+        0.07138,
+        0.071356
+      ],
+      "idenso_products_ms": 0.678559,
+      "idenso_products_ms_samples": [
+        0.679378,
+        0.675014,
+        0.685379,
+        0.678559,
+        0.676058
+      ],
+      "idenso_sum_ms": 0.294968,
+      "idenso_sum_ms_samples": [
+        0.295521,
+        0.292314,
+        0.2953,
+        0.290746,
+        0.294968
+      ],
+      "ratio_idenso_full_to_form_amortized_wall": 2.8482887810378186
+    },
+    {
+      "length": 12,
+      "terms": 4383,
+      "form_repetitions_per_batch": 100,
+      "form_batches_per_process": 6,
+      "form_process_samples": 3,
+      "form_wall_ms_per_trace_samples": [
+        2.9120188167629144,
+        2.817361884905646,
+        2.8873136814218014
+      ],
+      "form_wall_ms_per_trace": 2.8873136814218014,
+      "form_cpu_ms_per_trace_samples": [
+        2.85,
+        2.75,
+        2.8
+      ],
+      "form_cpu_ms_per_trace": 2.8,
+      "idenso_repetitions_per_sample": 20,
+      "idenso_samples": 5,
+      "idenso_full_ms": 8.093885,
+      "idenso_full_ms_samples": [
+        8.114171,
+        8.16848,
+        8.051144,
+        8.083926,
+        8.093885
+      ],
+      "idenso_kernel_ms": 7.975055,
+      "idenso_kernel_ms_samples": [
+        8.117572,
+        8.051241,
+        7.959855,
+        7.936837,
+        7.975055
+      ],
+      "idenso_metrics_ms": 0.104064,
+      "idenso_metrics_ms_samples": [
+        0.103842,
+        0.103884,
+        0.104686,
+        0.106355,
+        0.104064
+      ],
+      "idenso_products_ms": 5.135412,
+      "idenso_products_ms_samples": [
+        5.250531,
+        5.214099,
+        5.114557,
+        5.092749,
+        5.135412
+      ],
+      "idenso_sum_ms": 2.501461,
+      "idenso_sum_ms_samples": [
+        2.520821,
+        2.49515,
+        2.501461,
+        2.502182,
+        2.49738
+      ],
+      "ratio_idenso_full_to_form_amortized_wall": 2.803257939059231
+    },
+    {
+      "length": 14,
+      "terms": 26931,
+      "form_repetitions_per_batch": 30,
+      "form_batches_per_process": 6,
+      "form_process_samples": 3,
+      "form_wall_ms_per_trace_samples": [
+        25.474753621448244,
+        19.382796133868396,
+        22.19809096099602
+      ],
+      "form_wall_ms_per_trace": 22.19809096099602,
+      "form_cpu_ms_per_trace_samples": [
+        24.366666666666667,
+        18.933333333333334,
+        22.633333333333333
+      ],
+      "form_cpu_ms_per_trace": 22.633333333333333,
+      "idenso_repetitions_per_sample": 20,
+      "idenso_samples": 5,
+      "idenso_full_ms": 61.76994,
+      "idenso_full_ms_samples": [
+        59.861086,
+        62.705418,
+        65.356656,
+        61.76994,
+        61.69937
+      ],
+      "idenso_kernel_ms": 61.615393,
+      "idenso_kernel_ms_samples": [
+        59.944532,
+        63.476616,
+        61.615393,
+        61.755899,
+        60.89574
+      ],
+      "idenso_metrics_ms": 0.151375,
+      "idenso_metrics_ms_samples": [
+        0.161049,
+        0.158129,
+        0.151375,
+        0.151127,
+        0.150708
+      ],
+      "idenso_products_ms": 35.990801,
+      "idenso_products_ms_samples": [
+        35.514612,
+        37.140245,
+        35.990801,
+        36.091477,
+        35.943703
+      ],
+      "idenso_sum_ms": 23.46675,
+      "idenso_sum_ms_samples": [
+        22.286027,
+        24.321161,
+        23.46675,
+        23.501069,
+        22.793445
+      ],
+      "ratio_idenso_full_to_form_amortized_wall": 2.7826690190852523
+    }
+  ],
+  "reproduction": {
+    "runner": "crates/idenso/examples/trace_scaling.rs",
+    "output": "Raw CSV samples; group by engine and length and take the median of wall_ms_per_trace. FORM CPU times are separate diagnostics.",
+    "environment": "Run from the repository root with the pinned development environment (nix develop). FORM must be installed separately; pass its executable path.",
+    "logs": "The example prints the directory containing every generated FORM program and raw timing log to stderr.",
+    "phase_breakdown": "The recorded metric/product/sum phase split used a temporary instrumented copy of the kernel. It is a historical diagnostic, not reproduced by the durable runner. The runner reproduces full-API and FORM timing boundaries without copying production algebra."
+  }
+}
