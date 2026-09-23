@@ -3,9 +3,9 @@
 
 import builtins
 import decimal
-import enum
 import symbolica.core
 import typing
+import typing_extensions
 from symbolica import ComplexFloat, Float
 from symbolica.core import Condition, Expression, FormattedOutput, HeldExpression, PatternRestriction
 
@@ -80,6 +80,7 @@ class ColorCasimirSettings:
         r"""
         Whether the fundamental Dynkin index is replaced by `T_F = 1/2`.
         """
+    def __repr__(self) -> builtins.str: ...
     def __new__(cls, *, rewrite_fundamental_dimension: builtins.bool = True, substitute_fundamental_index: builtins.bool = False) -> ColorCasimirSettings:
         r"""
         Configure the SU(N) dimension and fundamental-index normalizations used by Casimir rewriting.
@@ -105,6 +106,7 @@ class ColorSimplifySettings:
         r"""
         Whether supported `cof(N)` invariants are replaced by explicit dimension formulas.
         """
+    def __repr__(self) -> builtins.str: ...
     def __new__(cls, *, evaluate_traces: builtins.bool = True, expand_cross_chain_fierz: builtins.bool = True, substitute_cof_dimension_invariants: builtins.bool = False) -> ColorSimplifySettings:
         r"""
         Configure color-trace evaluation, cross-chain Fierz expansion, and invariant substitution.
@@ -132,6 +134,7 @@ class CompiledTensorEvaluator:
     >>> compiled = evaluator.compile("eval_func", "code.cpp", "lib")
     >>> results = compiled.evaluate_complex(large_input_batch)
     """
+    def __repr__(self) -> builtins.str: ...
     def evaluate_complex(self, inputs: typing.Sequence[typing.Sequence[builtins.complex]]) -> builtins.list[Tensor]:
         r"""
         Evaluate the tensor expression for multiple complex-valued parameter inputs.
@@ -162,6 +165,27 @@ class CompiledTensorEvaluator:
         """
 
 @typing.final
+class CookMode:
+    r"""
+    Selects how cooked function payloads are represented as symbols.
+
+    Available values are `FlattenedSymbol` for readable names and `ReversibleEncoding` for a
+    stable encoding that can later be restored by `uncook`.
+    """
+    FlattenedSymbol: typing.ClassVar[CookMode]
+    r"""
+    Build a readable symbol name from the function name and its arguments.
+    """
+    ReversibleEncoding: typing.ClassVar[CookMode]
+    r"""
+    Store a stable encoding that can later be restored by `uncook` with matching settings.
+    """
+    def __int__(self) -> builtins.int:
+        r"""
+        Return the underlying integer discriminant.
+        """
+
+@typing.final
 class CookSettings:
     r"""
     Immutable configuration for cooking symbolic functions and index payloads.
@@ -186,6 +210,7 @@ class CookSettings:
         r"""
         Whether matching input tags are preserved on cooked symbols.
         """
+    def __repr__(self) -> builtins.str: ...
     def __new__(cls, *, mode: typing.Optional[CookMode] = None, source: typing.Optional[CookSourceFilter] = None, output_tags: typing.Optional[typing.Sequence[builtins.str]] = None, preserve_tags: builtins.bool = False) -> CookSettings:
         r"""
         Configure how functions are selected, encoded, and tagged when cooked.
@@ -216,6 +241,7 @@ class CookSourceFilter:
     r"""
     Selects the function occurrences or representation-index payloads to cook.
     """
+    def __repr__(self) -> builtins.str: ...
     @staticmethod
     def any_function() -> CookSourceFilter:
         r"""
@@ -239,6 +265,7 @@ class CookTagFilter:
     r"""
     A tag predicate used to select which function heads are cooked.
     """
+    def __repr__(self) -> builtins.str: ...
     @staticmethod
     def any(tags: typing.Sequence[builtins.str]) -> CookTagFilter:
         r"""
@@ -313,6 +340,48 @@ class DotExpansionError(builtins.ValueError):
     """
     ...
 
+@typing.final
+class ExecutionMode:
+    r"""
+    Execution modes for tensor network evaluation.
+
+    Controls how the tensor network execution engine processes the computational graph.
+
+    Variants
+    --------
+    Single : Select one smallest-degree rewrite per step; without `n_steps`, continue until no work remains
+    Scalar : Only contract scalar operations, leaving tensor structure intact
+    All : Execute all possible contractions for complete evaluation
+    """
+    Single: typing.ClassVar[ExecutionMode]
+    Scalar: typing.ClassVar[ExecutionMode]
+    All: typing.ClassVar[ExecutionMode]
+    def __int__(self) -> builtins.int:
+        r"""
+        Return the underlying integer discriminant.
+        """
+
+@typing.final
+class GammaChainOrdering:
+    r"""
+    Controls how open gamma chains are reordered during simplification.
+
+    Available values are `RepeatedPairs`, which only moves matching matrices together, and
+    `Canonical`, which canonically orders the complete open chain.
+    """
+    RepeatedPairs: typing.ClassVar[GammaChainOrdering]
+    r"""
+    Move repeated gamma matrices toward each other without reordering unrelated factors.
+    """
+    Canonical: typing.ClassVar[GammaChainOrdering]
+    r"""
+    Canonically order open chains using adjacent Clifford-algebra swaps.
+    """
+    def __int__(self) -> builtins.int:
+        r"""
+        Return the underlying integer discriminant.
+        """
+
 class GammaConjugationError(builtins.ValueError):
     r"""
     Raised when conjugated gamma matrices cannot be rewritten consistently.
@@ -339,6 +408,7 @@ class GammaSimplifySettings:
         r"""
         Whether three four-dimensional gammas expand into a gamma5-epsilon basis.
         """
+    def __repr__(self) -> builtins.str: ...
     def __new__(cls, *, chain_ordering: typing.Optional[GammaChainOrdering] = None, evaluate_traces: builtins.bool = True, expand_three_gamma_epsilon: builtins.bool = False) -> GammaSimplifySettings:
         r"""
         Configure gamma-chain ordering, trace evaluation, and the optional 4D three-gamma identity.
@@ -453,7 +523,7 @@ class Representation:
         """
     def __eq__(self, other: builtins.object) -> builtins.bool: ...
     @typing.overload
-    def __call__(self, aind: builtins.int | Expression | str) -> Slot:
+    def __call__(self, aind: builtins.int | builtins.str) -> Slot:
         r"""
         Create a slot from this representation, by specifying an index.
 
@@ -498,6 +568,8 @@ class Representation:
         >>> rep = Representation.euc(3)
         >>> expr = rep(sp.E("cos(x)"))
         """
+    def _repr_html_(self) -> typing.Optional[builtins.str]: ...
+    def _repr_latex_(self) -> builtins.str: ...
     def __new__(cls, name: builtins.str, dimension: builtins.int | Expression | str, is_self_dual: builtins.bool = True) -> Representation:
         r"""
         Create and register a new representation with specified properties.
@@ -639,6 +711,72 @@ class Representation:
         """
 
 @typing.final
+class SchoonschipContractionOrder:
+    r"""
+    Selects the heuristic used to choose the next tensor-network contraction.
+
+    Available values are `SmallestDegree`, `LargestDegree`, `MinLargestOperandBytes`,
+    `MinProductTerms`, `MinProductBytes`, `SmallestDegreeMinLargestOperandBytes`,
+    `SmallestDegreeMinProductTerms`, and `SmallestDegreeMinProductBytes`.
+    """
+    SmallestDegree: typing.ClassVar[SchoonschipContractionOrder]
+    r"""
+    Contract the pair with the fewest paired tensor slots.
+    """
+    LargestDegree: typing.ClassVar[SchoonschipContractionOrder]
+    r"""
+    Contract the pair with the most paired tensor slots.
+    """
+    MinLargestOperandBytes: typing.ClassVar[SchoonschipContractionOrder]
+    r"""
+    Minimize the larger operand's estimated memory footprint.
+    """
+    MinProductTerms: typing.ClassVar[SchoonschipContractionOrder]
+    r"""
+    Minimize the estimated number of terms in the product.
+    """
+    MinProductBytes: typing.ClassVar[SchoonschipContractionOrder]
+    r"""
+    Minimize the product's estimated memory footprint.
+    """
+    SmallestDegreeMinLargestOperandBytes: typing.ClassVar[SchoonschipContractionOrder]
+    r"""
+    Minimize the paired-slot count first, then the larger operand's estimated bytes.
+    """
+    SmallestDegreeMinProductTerms: typing.ClassVar[SchoonschipContractionOrder]
+    r"""
+    Minimize the paired-slot count first, then the estimated product term count.
+    """
+    SmallestDegreeMinProductBytes: typing.ClassVar[SchoonschipContractionOrder]
+    r"""
+    Minimize the paired-slot count first, then the estimated product bytes.
+    """
+    def __int__(self) -> builtins.int:
+        r"""
+        Return the underlying integer discriminant.
+        """
+
+@typing.final
+class SchoonschipMode:
+    r"""
+    Selects whether a Schoonschip pass runs once or recursively.
+
+    Available values are `SinglePass` and `Recursive`.
+    """
+    SinglePass: typing.ClassVar[SchoonschipMode]
+    r"""
+    Visit each eligible expression at most once.
+    """
+    Recursive: typing.ClassVar[SchoonschipMode]
+    r"""
+    Repeat traversal until the configured depth or a fixed point is reached.
+    """
+    def __int__(self) -> builtins.int:
+        r"""
+        Return the underlying integer discriminant.
+        """
+
+@typing.final
 class SchoonschipSettings:
     r"""
     Immutable configuration for expression and network Schoonschip passes.
@@ -678,6 +816,7 @@ class SchoonschipSettings:
         r"""
         Heuristic used to choose network contractions.
         """
+    def __repr__(self) -> builtins.str: ...
     def __new__(cls, *, depth_limit: typing.Optional[builtins.int] = 1, mode: typing.Optional[SchoonschipMode] = None, traversal: typing.Optional[SchoonschipTraversal] = None, expand_contracted_sums: builtins.bool = False, simplify_chain_like_functions: builtins.bool = False, schoonschip_rank1_tensors: builtins.bool = True, contraction_order: typing.Optional[SchoonschipContractionOrder] = None) -> SchoonschipSettings:
         r"""
         Configure traversal, depth, shorthand expansion, and network-contraction policies.
@@ -719,6 +858,26 @@ class SchoonschipSettings:
         """
 
 @typing.final
+class SchoonschipTraversal:
+    r"""
+    Selects the recursive traversal order for a Schoonschip pass.
+
+    Available values are `DepthFirst` and `BreadthFirst`.
+    """
+    DepthFirst: typing.ClassVar[SchoonschipTraversal]
+    r"""
+    Fully simplify each branch before advancing to its siblings.
+    """
+    BreadthFirst: typing.ClassVar[SchoonschipTraversal]
+    r"""
+    Advance all branches one level before descending further.
+    """
+    def __int__(self) -> builtins.int:
+        r"""
+        Return the underlying integer discriminant.
+        """
+
+@typing.final
 class Slot:
     r"""
     A tensor index slot combining a representation with an abstract index.
@@ -752,6 +911,8 @@ class Slot:
         The representation carried by this slot, including its dimension and duality.
         """
     def __eq__(self, other: builtins.object) -> builtins.bool: ...
+    def _repr_html_(self) -> typing.Optional[builtins.str]: ...
+    def _repr_latex_(self) -> builtins.str: ...
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
     def dual(self) -> Slot:
@@ -794,6 +955,28 @@ class Slot:
         slot = rep('mu')
         expr = slot.to_expression()  # Symbolic representation of the slot
         ```
+        """
+
+@typing.final
+class SymbolicParallelism:
+    r"""
+    Policy for Rayon operations that manipulate Symbolica expressions.
+    """
+    Auto: typing.ClassVar[SymbolicParallelism]
+    r"""
+    Permit Rayon when licensed and use workload heuristics where available.
+    """
+    Serial: typing.ClassVar[SymbolicParallelism]
+    r"""
+    Keep symbolic operations on the calling thread.
+    """
+    Parallel: typing.ClassVar[SymbolicParallelism]
+    r"""
+    Force Rayon without `Auto`'s Symbolica license safety check.
+    """
+    def __int__(self) -> builtins.int:
+        r"""
+        Return the underlying integer discriminant.
         """
 
 @typing.final
@@ -949,99 +1132,6 @@ class Tensor:
     def _repr_latex_(self) -> typing.Optional[builtins.str]: ...
     def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None: ...
     def __len__(self) -> builtins.int: ...
-    @typing.overload
-    def __getitem__(self, item: builtins.slice | builtins.int | builtins.list[builtins.int]) -> typing.Any:
-        r"""
-        Return tensor data in logical interface order.
-
-        An integer is a flat logical row-major position. A list supplies one coordinate
-        per slot in `structure().interface`; slices likewise traverse flat logical order.
-        Canonical storage-axis order is never exposed through this API.
-        """
-    @typing.overload
-    def __getitem__(self, item: builtins.slice) -> builtins.list[Expression | builtins.complex | float]:
-        r"""
-        Get tensor elements at the specified range of indices.
-
-        Slices traverse the flat logical row-major order shown by `Tensor.structure().interface`;
-        canonical storage-axis order is not exposed.
-
-        Parameters
-        ----------
-        item : slice
-            Slice object defining the range of indices
-
-        Returns
-        -------
-        list of float, complex, or Expression
-            The tensor elements at the specified range
-        """
-    @typing.overload
-    def __getitem__(self, item: typing.Sequence[builtins.int] | builtins.int) -> Expression | builtins.complex | float:
-        r"""
-        Get tensor element at the specified index or indices.
-
-        Integers are flat logical row-major positions. Coordinate lists follow
-        `Tensor.structure().interface`; canonical storage-axis order is not exposed.
-
-        Parameters
-        ----------
-        item : int or list of int
-            Index specification (int for flat index, list of int for coordinates)
-
-        Returns
-        -------
-        float, complex, or Expression
-            The tensor element at the specified index
-        """
-    @typing.overload
-    def __setitem__(self, item: typing.Any, value: typing.Any) -> None:
-        r"""
-        Set tensor element(s) at the specified index or indices.
-
-        Parameters
-        ----------
-        item : int or list of int
-            Logical index specification (int for flat row-major position, list of int
-            for coordinates following `structure().interface`)
-        value : float, complex, or Expression
-            The value to set. Its coefficient kind must match the tensor: `float` for
-            real storage, `complex` for complex storage, or `Expression` for parametric storage.
-
-        Examples
-        --------
-        >>> from symbolica.community.spenso import Tensor, TensorName, Representation
-        >>> rep = Representation.euc(2)
-        >>> structure = TensorName("T")(rep("mu"), rep("nu"))
-        >>> tensor = Tensor.sparse(structure, float)
-        >>> tensor[0] = 4.0
-        >>> tensor[1, 1] = 1.0
-        """
-    @typing.overload
-    def __setitem__(self, item: builtins.int | typing.Sequence[builtins.int], value: Expression | builtins.complex | float) -> None:
-        r"""
-        Set tensor element at the specified index.
-
-        Integers are flat logical row-major positions. Coordinate lists follow
-        `Tensor.structure().interface`; canonical storage-axis order is not exposed.
-
-        Parameters
-        ----------
-        item : int or list of int
-            Index specification (int for flat index, list of int for coordinates)
-        value : float, complex, or Expression
-            The value to set. Use float for real storage, complex for complex storage,
-            or Expression for parametric storage.
-
-        Examples
-        --------
-        >>> from symbolica.community.spenso import Tensor, TensorName, Representation
-        >>> rep = Representation.euc(2)
-        >>> structure = TensorName("T")(rep("mu"), rep("nu"))
-        >>> tensor = Tensor.sparse(structure, float)
-        >>> tensor[0] = 1.0
-        >>> tensor[1, 1] = 2.0
-        """
     def evaluator(self, constants: typing.Mapping[Expression, Expression], funs: typing.Mapping[tuple[Expression, builtins.str, typing.Sequence[Expression]], Expression], params: typing.Sequence[Expression], iterations: builtins.int = 100, n_cores: builtins.int = 4, verbose: builtins.bool = False) -> TensorEvaluator:
         r"""
         Create an optimized evaluator for symbolic tensor expressions.
@@ -1114,27 +1204,27 @@ class Tensor:
         Reference this tensor with new abstract indices and return a lazy network.
         """
     def __neg__(self) -> TensorNetwork: ...
-    def __add__(self, rhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
-    def __radd__(self, lhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
-    def __sub__(self, rhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
-    def __rsub__(self, lhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
-    def __mul__(self, rhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
-    def __rmul__(self, lhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
-    def __truediv__(self, rhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
-    def __rtruediv__(self, lhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
-    def outer(self, rhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+    def __add__(self, rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
+    def __radd__(self, lhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
+    def __sub__(self, rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
+    def __rsub__(self, lhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
+    def __mul__(self, rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
+    def __rmul__(self, lhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
+    def __truediv__(self, rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
+    def __rtruediv__(self, lhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
+    def outer(self, rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
         r"""
         Form a lazy outer product without contracting compatible ports.
         """
-    def contract(self, rhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor, *, left: builtins.int, right: builtins.int) -> TensorNetwork:
+    def contract(self, rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor, *, left: builtins.int, right: builtins.int) -> TensorNetwork:
         r"""
         Contract one selected pair of ordered interface positions.
         """
-    def compose(self, rhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor, *, left: tuple[builtins.int, builtins.int], right: tuple[builtins.int, builtins.int]) -> TensorNetwork:
+    def compose(self, rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor, *, left: tuple[builtins.int, builtins.int], right: tuple[builtins.int, builtins.int]) -> TensorNetwork:
         r"""
         Compose two selected `(input, output)` matrix channels.
         """
-    def dot(self, rhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+    def dot(self, rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
         r"""
         Contract two rank-one operands into the canonical dot form.
         """
@@ -1142,9 +1232,69 @@ class Tensor:
         r"""
         Close `channel`, or the unique matrix channel when it is omitted.
         """
-    def __iter__(self) -> typing.Iterator[typing.Any]:
+    def __iter__(self) -> typing.Iterator[Expression | float | complex]:
         r"""
         Iterator
+        """
+    @typing.overload
+    def __getitem__(self, item: builtins.slice) -> builtins.list[Expression | builtins.complex | float]:
+        r"""
+        Get tensor elements at the specified range of indices.
+
+        Slices traverse the flat logical row-major order shown by `Tensor.structure().interface`;
+        canonical storage-axis order is not exposed.
+
+        Parameters
+        ----------
+        item : slice
+            Slice object defining the range of indices
+
+        Returns
+        -------
+        list of float, complex, or Expression
+            The tensor elements at the specified range
+        """
+    @typing.overload
+    def __getitem__(self, item: typing.Sequence[builtins.int] | builtins.int) -> Expression | builtins.complex | float:
+        r"""
+        Get tensor element at the specified index or indices.
+
+        Integers are flat logical row-major positions. Coordinate lists follow
+        `Tensor.structure().interface`; canonical storage-axis order is not exposed.
+
+        Parameters
+        ----------
+        item : int or list of int
+            Index specification (int for flat index, list of int for coordinates)
+
+        Returns
+        -------
+        float, complex, or Expression
+            The tensor element at the specified index
+        """
+    def __setitem__(self, item: builtins.int | typing.Sequence[builtins.int], value: Expression | builtins.complex | float) -> None:
+        r"""
+        Set tensor element at the specified index.
+
+        Integers are flat logical row-major positions. Coordinate lists follow
+        `Tensor.structure().interface`; canonical storage-axis order is not exposed.
+
+        Parameters
+        ----------
+        item : int or list of int
+            Index specification (int for flat index, list of int for coordinates)
+        value : float, complex, or Expression
+            The value to set. Use float for real storage, complex for complex storage,
+            or Expression for parametric storage.
+
+        Examples
+        --------
+        >>> from symbolica.community.spenso import Tensor, TensorName, Representation
+        >>> rep = Representation.euc(2)
+        >>> structure = TensorName("T")(rep("mu"), rep("nu"))
+        >>> tensor = Tensor.sparse(structure, float)
+        >>> tensor[0] = 1.0
+        >>> tensor[1, 1] = 2.0
         """
 
 @typing.final
@@ -1164,6 +1314,7 @@ class TensorEvaluator:
     >>> evaluator = my_tensor.evaluator(constants={}, funs={}, params=[x, y])
     >>> results = evaluator.evaluate([[1.0, 2.0], [3.0, 4.0]])
     """
+    def __repr__(self) -> builtins.str: ...
     def evaluate(self, inputs: typing.Sequence[typing.Sequence[builtins.float]]) -> builtins.list[Tensor]:
         r"""
         Evaluate the tensor expression for multiple real-valued parameter inputs.
@@ -1269,7 +1420,7 @@ class TensorExpression(Expression):
         Whether the expression has no external tensor ports.
         """
     @property
-    def interface(self) -> tuple:
+    def interface(self) -> tuple[Representation | Slot, ...]:
         r"""
         Ordered external interface as concrete `Slot` objects or unresolved `Representation`s.
         """
@@ -1303,7 +1454,7 @@ class TensorExpression(Expression):
         Call the result with two indices to fill its ports in logical order.
         """
     @staticmethod
-    def gamma(minkowski_dimension: builtins.int | Expression | str) -> TensorExpression:
+    def gamma(minkowski_dimension: builtins.int | Expression | str) -> TensorExpression:  # type: ignore[override]  # ty: ignore[invalid-method-override]
         r"""
         Create an unresolved gamma matrix with Minkowski dimension
         `minkowski_dimension`.
@@ -2255,7 +2406,7 @@ class TensorExpression(Expression):
         symbolic index payloads before insertion. Repeated compatible indices contract their
         ports, in which case the result no longer carries the original stored-data identity.
         """
-    def __call__(self, *indices: typing.Any, cook_indices: builtins.bool = False) -> TensorExpression:
+    def __call__(self, *indices: typing.Any, cook_indices: builtins.bool = False) -> TensorExpression:  # type: ignore[override]  # ty: ignore[invalid-method-override]
         r"""
         Fill the unresolved external ports with `indices` in interface order.
         """
@@ -2268,11 +2419,11 @@ class TensorExpression(Expression):
         r"""
         Format this structured expression using compact Spenso notation.
         """
-    def to_typst(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None) -> builtins.str:
+    def to_typst(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None) -> builtins.str:  # type: ignore[override]  # ty: ignore[invalid-method-override]
         r"""
         Format this structured expression as Typst math source.
         """
-    def formatted(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> FormattedOutput:
+    def formatted(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> FormattedOutput:  # type: ignore[override]  # ty: ignore[invalid-method-override]
         r"""
         Build Symbolica's rich display value, including semantic HTML when the
         optional ``gammaloop[typst-display]`` renderer is installed.
@@ -2301,7 +2452,7 @@ class TensorExpression(Expression):
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
     def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None: ...
-    def _repr_html_(self) -> typing.Optional[builtins.str]: ...
+    def _repr_html_(self) -> typing.Optional[builtins.str]: ...  # type: ignore[override]  # ty: ignore[invalid-method-override]
     def _repr_latex_(self) -> builtins.str: ...
     @typing.overload
     def __add__(self, rhs: typing.Union[Tensor, TensorNetwork]) -> TensorNetwork: ...
@@ -2366,17 +2517,17 @@ class TensorExpression(Expression):
         Compose two selected `(input, output)` matrix channels.
         """
     @typing.overload
-    def __getitem__(self, item: builtins.int) -> builtins.list[builtins.int]:
+    def __getitem__(self, item: builtins.int) -> builtins.list[builtins.int]:  # type: ignore[override]
         r"""
         Convert a logical row-major flat index to tensor coordinates.
         """
     @typing.overload
-    def __getitem__(self, item: typing.Sequence[builtins.int]) -> builtins.int:
+    def __getitem__(self, item: typing.Sequence[builtins.int]) -> builtins.int:  # type: ignore[override]
         r"""
         Convert tensor coordinates to a logical row-major flat index.
         """
     @typing.overload
-    def __getitem__(self, item: builtins.slice) -> builtins.list[builtins.list[builtins.int]]:
+    def __getitem__(self, item: builtins.slice) -> builtins.list[builtins.list[builtins.int]]:  # type: ignore[override]  # ty: ignore[invalid-method-override]
         r"""
         Expand a slice of logical row-major flat indices to tensor coordinates.
         """
@@ -2386,6 +2537,7 @@ class TensorFunctionLibrary:
     r"""
     A registry of elementwise tensor functions used during network evaluation.
     """
+    def __repr__(self) -> builtins.str: ...
     def __new__(cls) -> TensorFunctionLibrary:
         r"""
         Create a new empty tensor function library.
@@ -2402,7 +2554,7 @@ class TensorFunctionLibrary:
         >>> from symbolica.community.spenso import TensorFunctionLibrary
         >>> lib = TensorFunctionLibrary()
         """
-    def register(self, function: BroadcastFunction, callback: typing.Any) -> None:
+    def register(self, function: BroadcastFunction, callback: typing.Callable[[float | complex], float | complex]) -> None:
         r"""
         Register an elementwise callback for concrete tensor execution.
 
@@ -2432,6 +2584,7 @@ class TensorLibrary:
     tensor_ref = lib[name]
     ```
     """
+    def __repr__(self) -> builtins.str: ...
     def __new__(cls) -> TensorLibrary:
         r"""
         Create a new empty tensor library.
@@ -2589,6 +2742,8 @@ class TensorName:
     >>> nu = rep('nu')
     >>> tensor_expression = T(mu, nu)
     """
+    def _repr_html_(self) -> typing.Optional[builtins.str]: ...
+    def _repr_latex_(self) -> builtins.str: ...
     def __new__(cls, name: builtins.str, *, rank: typing.Optional[builtins.int] = None, is_symmetric: typing.Optional[builtins.bool] = None, is_antisymmetric: typing.Optional[builtins.bool] = None, is_cyclesymmetric: typing.Optional[builtins.bool] = None, is_linear: typing.Optional[builtins.bool] = None, is_flat: typing.Optional[builtins.bool] = None, is_scalar: typing.Optional[builtins.bool] = None, is_real: typing.Optional[builtins.bool] = None, is_integer: typing.Optional[builtins.bool] = None, is_positive: typing.Optional[builtins.bool] = None, tags: typing.Optional[typing.Sequence[builtins.str]] = None, aliases: typing.Optional[typing.Sequence[builtins.str]] = None, normalization: typing.Optional[symbolica.core.Transformer | typing.Callable[[symbolica.core.Expression], symbolica.core.Expression]] = None, print: typing.Optional[dict[str, str] | typing.Callable[..., str | None]] = None, derivative: typing.Optional[typing.Any] = None, series: typing.Optional[typing.Any] = None, eval: typing.Optional[typing.Any] = None, data: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | str | dict | list | bytes] = None) -> TensorName:
         r"""
         Create a new tensor name with optional mathematical properties.
@@ -2983,13 +3138,13 @@ class TensorNetwork:
         >>> network.execute()
         >>> scalar_result = network.result_scalar()
         """
+    def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str:
         r"""
-        Return a DOT representation of the executable network graph.
-
-        Generates a DOT format representation of the computational graph that can be
-        visualized using graphviz or similar tools.
+        Format the semantic tensor expression; use `to_dot()` for the executable graph.
         """
+    def _repr_latex_(self) -> builtins.str: ...
+    def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None: ...
     def to_dot(self) -> builtins.str:
         r"""
         Return the computational graph in Graphviz DOT format.
@@ -3030,7 +3185,7 @@ class TensorNetwork:
         Fill the unresolved external ports with `indices` in interface order.
         """
     def __neg__(self) -> TensorNetwork: ...
-    def __add__(self, rhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+    def __add__(self, rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
         r"""
         Add two tensor networks element-wise.
 
@@ -3050,11 +3205,11 @@ class TensorNetwork:
         >>> net2 = TensorNetwork(expr2)
         >>> sum_net = net1 + net2
         """
-    def __radd__(self, rhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+    def __radd__(self, rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
         r"""
         Add two tensor networks element-wise (right-hand addition).
         """
-    def __sub__(self, rhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+    def __sub__(self, rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
         r"""
         Subtract one tensor network from another element-wise.
 
@@ -3074,11 +3229,11 @@ class TensorNetwork:
         >>> net2 = TensorNetwork(expr2)
         >>> diff_net = net1 - net2
         """
-    def __rsub__(self, rhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+    def __rsub__(self, rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
         r"""
         Subtract one tensor network from another (right-hand subtraction).
         """
-    def __mul__(self, rhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+    def __mul__(self, rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
         r"""
         Multiply two tensor networks.
 
@@ -3098,25 +3253,25 @@ class TensorNetwork:
         >>> net2 = TensorNetwork(expr2)
         >>> product_net = net1 * net2
         """
-    def __rmul__(self, rhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+    def __rmul__(self, rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
         r"""
         Multiply two tensor networks (right-hand multiplication).
         """
-    def __truediv__(self, rhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
-    def __rtruediv__(self, lhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
-    def outer(self, rhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+    def __truediv__(self, rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
+    def __rtruediv__(self, lhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
+    def outer(self, rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
         r"""
         Form an outer tensor product without contracting compatible ports.
         """
-    def contract(self, rhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor, *, left: builtins.int, right: builtins.int) -> TensorNetwork:
+    def contract(self, rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor, *, left: builtins.int, right: builtins.int) -> TensorNetwork:
         r"""
         Contract one selected pair of public interface positions.
         """
-    def compose(self, rhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor, *, left: tuple[builtins.int, builtins.int], right: tuple[builtins.int, builtins.int]) -> TensorNetwork:
+    def compose(self, rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor, *, left: tuple[builtins.int, builtins.int], right: tuple[builtins.int, builtins.int]) -> TensorNetwork:
         r"""
         Compose two explicitly selected matrix channels.
         """
-    def dot(self, rhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+    def dot(self, rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
         r"""
         Contract two rank-one operands into the canonical dot form.
         """
@@ -3187,7 +3342,7 @@ class TensorPattern(Expression):
         Match a musical-isomorphism tensor in logical index order.
         """
     @staticmethod
-    def gamma(minkowski_dimension: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], i: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], j: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], mu: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]) -> TensorPattern:
+    def gamma(minkowski_dimension: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], i: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], j: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], mu: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]) -> TensorPattern:  # type: ignore[override]  # ty: ignore[invalid-method-override]
         r"""
         Match a gamma matrix in storage `(i, j, mu)` order.
         """
@@ -3229,153 +3384,16 @@ class _AutoIndex:
     """
     ...
 
-@typing.final
-class CookMode(enum.Enum):
-    r"""
-    Selects how cooked function payloads are represented as symbols.
-
-    Available values are `FlattenedSymbol` for readable names and `ReversibleEncoding` for a
-    stable encoding that can later be restored by `uncook`.
-    """
-    FlattenedSymbol = ...
-    r"""
-    Build a readable symbol name from the function name and its arguments.
-    """
-    ReversibleEncoding = ...
-    r"""
-    Store a stable encoding that can later be restored by `uncook` with matching settings.
-    """
-
-@typing.final
-class ExecutionMode(enum.Enum):
-    r"""
-    Execution modes for tensor network evaluation.
-
-    Controls how the tensor network execution engine processes the computational graph.
-
-    Variants
-    --------
-    Single : Select one smallest-degree rewrite per step; without `n_steps`, continue until no work remains
-    Scalar : Only contract scalar operations, leaving tensor structure intact
-    All : Execute all possible contractions for complete evaluation
-    """
-    Single = ...
-    Scalar = ...
-    All = ...
-
-@typing.final
-class GammaChainOrdering(enum.Enum):
-    r"""
-    Controls how open gamma chains are reordered during simplification.
-
-    Available values are `RepeatedPairs`, which only moves matching matrices together, and
-    `Canonical`, which canonically orders the complete open chain.
-    """
-    RepeatedPairs = ...
-    r"""
-    Move repeated gamma matrices toward each other without reordering unrelated factors.
-    """
-    Canonical = ...
-    r"""
-    Canonically order open chains using adjacent Clifford-algebra swaps.
-    """
-
-@typing.final
-class SchoonschipContractionOrder(enum.Enum):
-    r"""
-    Selects the heuristic used to choose the next tensor-network contraction.
-
-    Available values are `SmallestDegree`, `LargestDegree`, `MinLargestOperandBytes`,
-    `MinProductTerms`, `MinProductBytes`, `SmallestDegreeMinLargestOperandBytes`,
-    `SmallestDegreeMinProductTerms`, and `SmallestDegreeMinProductBytes`.
-    """
-    SmallestDegree = ...
-    r"""
-    Contract the pair with the fewest paired tensor slots.
-    """
-    LargestDegree = ...
-    r"""
-    Contract the pair with the most paired tensor slots.
-    """
-    MinLargestOperandBytes = ...
-    r"""
-    Minimize the larger operand's estimated memory footprint.
-    """
-    MinProductTerms = ...
-    r"""
-    Minimize the estimated number of terms in the product.
-    """
-    MinProductBytes = ...
-    r"""
-    Minimize the product's estimated memory footprint.
-    """
-    SmallestDegreeMinLargestOperandBytes = ...
-    r"""
-    Minimize the paired-slot count first, then the larger operand's estimated bytes.
-    """
-    SmallestDegreeMinProductTerms = ...
-    r"""
-    Minimize the paired-slot count first, then the estimated product term count.
-    """
-    SmallestDegreeMinProductBytes = ...
-    r"""
-    Minimize the paired-slot count first, then the estimated product bytes.
-    """
-
-@typing.final
-class SchoonschipMode(enum.Enum):
-    r"""
-    Selects whether a Schoonschip pass runs once or recursively.
-
-    Available values are `SinglePass` and `Recursive`.
-    """
-    SinglePass = ...
-    r"""
-    Visit each eligible expression at most once.
-    """
-    Recursive = ...
-    r"""
-    Repeat traversal until the configured depth or a fixed point is reached.
-    """
-
-@typing.final
-class SchoonschipTraversal(enum.Enum):
-    r"""
-    Selects the recursive traversal order for a Schoonschip pass.
-
-    Available values are `DepthFirst` and `BreadthFirst`.
-    """
-    DepthFirst = ...
-    r"""
-    Fully simplify each branch before advancing to its siblings.
-    """
-    BreadthFirst = ...
-    r"""
-    Advance all branches one level before descending further.
-    """
-
-@typing.final
-class SymbolicParallelism(enum.Enum):
-    r"""
-    Policy for Rayon operations that manipulate Symbolica expressions.
-    """
-    Auto = ...
-    r"""
-    Permit Rayon when licensed and use workload heuristics where available.
-    """
-    Serial = ...
-    r"""
-    Keep symbolic operations on the calling thread.
-    """
-    Parallel = ...
-    r"""
-    Force Rayon without `Auto`'s Symbolica license safety check.
-    """
-
 def as_tensor(expression: typing.Any) -> TensorExpression:
     r"""
     Restore tensor-aware dispatch after a base Symbolica transformation.
     """
+
+@typing.overload
+def chain(start_slot: Slot, end_slot: Slot, factor: typing.Union[Tensor, TensorNetwork], /, *factors: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
+
+@typing.overload
+def chain(start_slot: Slot, end_slot: Slot, first: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor, second: typing.Union[Tensor, TensorNetwork], /, *factors: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
 
 @typing.overload
 def chain(start_slot: Slot, end_slot: Slot, *factors: Expression) -> TensorExpression:
@@ -3384,22 +3402,22 @@ def chain(start_slot: Slot, end_slot: Slot, *factors: Expression) -> TensorExpre
     """
 
 @typing.overload
-def chain(start_slot: Slot, end_slot: Slot, *factors: typing.Unpack[tuple[typing.Union[Tensor, TensorNetwork], typing.Unpack[tuple[typing.Union[Expression, int, Float, ComplexFloat, Tensor, TensorNetwork], ...]]]]) -> TensorNetwork: ...
+def chain(start_slot: Slot, end_slot: Slot, *factors: typing_extensions.Unpack[tuple[typing.Union[Tensor, TensorNetwork], typing_extensions.Unpack[tuple[typing.Union[Expression, int, float, complex, Float, ComplexFloat, decimal.Decimal, str, Tensor, TensorNetwork], ...]]]]) -> TensorNetwork: ...
 
 @typing.overload
-def chain(start_slot: Slot, end_slot: Slot, *factors: typing.Unpack[tuple[typing.Unpack[tuple[typing.Union[Expression, int, Float, ComplexFloat, Tensor, TensorNetwork], ...]], typing.Union[Tensor, TensorNetwork]]]) -> TensorNetwork: ...
+def chain(start_slot: Slot, end_slot: Slot, *factors: typing_extensions.Unpack[tuple[typing_extensions.Unpack[tuple[typing.Union[Expression, int, float, complex, Float, ComplexFloat, decimal.Decimal, str, Tensor, TensorNetwork], ...]], typing.Union[Tensor, TensorNetwork]]]) -> TensorNetwork: ...
 
 @typing.overload
-def chain(start_slot: Slot, end_slot: Slot, *factors: typing.Union[Expression, int, Float, ComplexFloat, Tensor, TensorNetwork]) -> TensorExpression | TensorNetwork: ...
+def chain(start_slot: Slot, end_slot: Slot, *factors: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorExpression | TensorNetwork: ...
 
 @typing.overload
-def dot(left: typing.Union[Tensor, TensorNetwork], right: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+def dot(left: typing.Union[Tensor, TensorNetwork], right: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
     r"""
     Contract two rank-one tensors into the canonical dot form.
     """
 
 @typing.overload
-def dot(left: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor, right: typing.Union[Tensor, TensorNetwork]) -> TensorNetwork: ...
+def dot(left: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor, right: typing.Union[Tensor, TensorNetwork]) -> TensorNetwork: ...
 
 @typing.overload
 def dot(left: Expression, right: Expression) -> TensorExpression: ...
@@ -3441,17 +3459,23 @@ def to_typst(expression: Expression, show_dimensions: typing.Optional[builtins.b
     """
 
 @typing.overload
+def trace(representation: Representation, factor: typing.Union[Tensor, TensorNetwork], /, *factors: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
+
+@typing.overload
+def trace(representation: Representation, first: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor, second: typing.Union[Tensor, TensorNetwork], /, *factors: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
+
+@typing.overload
 def trace(representation: Representation, *factors: Expression) -> TensorExpression:
     r"""
     Close an ordered factor sequence into a canonical cyclic trace.
     """
 
 @typing.overload
-def trace(representation: Representation, *factors: typing.Unpack[tuple[typing.Union[Tensor, TensorNetwork], typing.Unpack[tuple[typing.Union[Expression, int, Float, ComplexFloat, Tensor, TensorNetwork], ...]]]]) -> TensorNetwork: ...
+def trace(representation: Representation, *factors: typing_extensions.Unpack[tuple[typing.Union[Tensor, TensorNetwork], typing_extensions.Unpack[tuple[typing.Union[Expression, int, float, complex, Float, ComplexFloat, decimal.Decimal, str, Tensor, TensorNetwork], ...]]]]) -> TensorNetwork: ...
 
 @typing.overload
-def trace(representation: Representation, *factors: typing.Unpack[tuple[typing.Unpack[tuple[typing.Union[Expression, int, Float, ComplexFloat, Tensor, TensorNetwork], ...]], typing.Union[Tensor, TensorNetwork]]]) -> TensorNetwork: ...
+def trace(representation: Representation, *factors: typing_extensions.Unpack[tuple[typing_extensions.Unpack[tuple[typing.Union[Expression, int, float, complex, Float, ComplexFloat, decimal.Decimal, str, Tensor, TensorNetwork], ...]], typing.Union[Tensor, TensorNetwork]]]) -> TensorNetwork: ...
 
 @typing.overload
-def trace(representation: Representation, *factors: typing.Union[Expression, int, Float, ComplexFloat, Tensor, TensorNetwork]) -> TensorExpression | TensorNetwork: ...
+def trace(representation: Representation, *factors: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorExpression | TensorNetwork: ...
 

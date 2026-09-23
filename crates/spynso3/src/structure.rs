@@ -286,6 +286,20 @@ impl SpensoName {
 #[cfg_attr(not(feature = "python_stubgen"), remove_gen_stub)]
 #[pymethods]
 impl SpensoName {
+    fn _repr_html_(&self, py: Python<'_>) -> Option<String> {
+        crate::display::atom_to_html(
+            py,
+            &self.to_expression().expr,
+            &crate::display::DisplaySettings::default(),
+            None,
+        )
+        .ok()
+    }
+
+    fn _repr_latex_(&self) -> String {
+        crate::display::atom_to_latex(&self.to_expression().expr, false)
+    }
+
     #[new]
     #[pyo3(signature = (name, *, rank=None, is_symmetric=None, is_antisymmetric=None, is_cyclesymmetric=None, is_linear=None, is_flat=None, is_scalar=None, is_real=None, is_integer=None, is_positive=None, tags=None, aliases=None, normalization=None, print=None, derivative=None, series=None, eval=None, data=None))]
     /// Create a new tensor name with optional mathematical properties.
@@ -579,7 +593,7 @@ impl SpensoName {
     }
 
     fn __repr__(&self) -> String {
-        format!("{:?}", self.name)
+        format!("TensorName({:?})", self.name.get_name())
     }
 
     fn __str__(&self) -> String {
@@ -689,7 +703,7 @@ pub enum ArithmeticStructure {
 #[cfg(feature = "python_stubgen")]
 impl PyStubType for ArithmeticStructure {
     fn type_output() -> pyo3_stub_gen::TypeInfo {
-        ConvertibleToExpression::type_output() | TensorExpression::type_output()
+        ConvertibleToExpression::type_input() | TensorExpression::type_input()
     }
 }
 
@@ -904,6 +918,20 @@ impl PyStubType for ConvertibleToInvariantDegree {
 #[cfg_attr(not(feature = "python_stubgen"), remove_gen_stub)]
 #[pymethods]
 impl SpensoRepresentation {
+    fn _repr_html_(&self, py: Python<'_>) -> Option<String> {
+        crate::display::atom_to_html(
+            py,
+            &self.to_expression().expr,
+            &crate::display::DisplaySettings::default(),
+            None,
+        )
+        .ok()
+    }
+
+    fn _repr_latex_(&self) -> String {
+        crate::display::atom_to_latex(&self.to_expression().expr, false)
+    }
+
     #[new]
     #[pyo3(signature =(name,dimension,is_self_dual=true))]
     /// Create and register a new representation with specified properties.
@@ -1132,7 +1160,7 @@ impl SpensoRepresentation {
     }
 
     fn __repr__(&self) -> String {
-        format!("{:?}", self.representation)
+        format!("Representation({})", self.representation.to_symbolic([]))
     }
 
     fn __str__(&self) -> String {
@@ -1264,8 +1292,22 @@ impl ModuleInit for SpensoSlot {}
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl SpensoSlot {
+    fn _repr_html_(&self, py: Python<'_>) -> Option<String> {
+        crate::display::atom_to_html(
+            py,
+            &self.to_expression().expr,
+            &crate::display::DisplaySettings::default(),
+            None,
+        )
+        .ok()
+    }
+
+    fn _repr_latex_(&self) -> String {
+        crate::display::atom_to_latex(&self.to_expression().expr, false)
+    }
+
     fn __repr__(&self) -> String {
-        format!("{:?}", self.slot)
+        format!("Slot({})", self.slot.to_atom())
     }
 
     fn __str__(&self) -> String {

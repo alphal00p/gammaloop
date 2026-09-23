@@ -207,12 +207,42 @@ impl DisplaySettings {
         }
     }
 
-    fn __repr__(&self) -> String {
-        format!(
-            "DisplaySettings(tensor_layout={:?}, show_dimensions={}, index_style={:?}, component_style={:?})",
-            self.tensor_layout, self.show_dimensions, self.index_style, self.component_style
+    fn __repr__(self_: pyo3::PyRef<'_, Self>) -> PyResult<String> {
+        let py = self_.py();
+        let object = pyo3::IntoPyObject::into_pyobject(self_, py)?;
+        constructor_repr(
+            object.as_any(),
+            &[
+                ("tensor_layout", "tensor_layout"),
+                ("show_dimensions", "show_dimensions"),
+                ("parentheses", "parentheses"),
+                ("commas", "commas"),
+                ("symbol_scripts", "symbol_scripts"),
+                ("index_gap", "index_gap"),
+                ("factor_gap", "factor_gap"),
+                ("index_style", "index_style"),
+                ("component_style", "component_style"),
+            ],
         )
     }
+}
+
+/// Format settings through their public getters, using Python value syntax.
+pub(crate) fn constructor_repr(
+    value: &Bound<'_, PyAny>,
+    fields: &[(&str, &str)],
+) -> PyResult<String> {
+    let name = value.get_type().name()?;
+    let arguments = fields
+        .iter()
+        .map(|(parameter, attribute)| {
+            Ok(format!(
+                "{parameter}={}",
+                value.getattr(*attribute)?.repr()?
+            ))
+        })
+        .collect::<PyResult<Vec<_>>>()?;
+    Ok(format!("{name}({})", arguments.join(", ")))
 }
 
 pub(crate) fn resolved_settings(
@@ -634,9 +664,13 @@ pub(crate) fn format_structured(value: &StructuredAtom, show_dimensions: bool) -
     format_structured_with_mode(value, TensorDisplayMode::Plain, show_dimensions)
 }
 
-pub(crate) fn structured_to_latex(value: &StructuredAtom, show_dimensions: bool) -> String {
-    let body = format_structured_with_mode(value, TensorDisplayMode::Latex, show_dimensions);
+pub(crate) fn atom_to_latex(atom: &Atom, show_dimensions: bool) -> String {
+    let body = format_atom_with_mode(atom, TensorDisplayMode::Latex, show_dimensions);
     format!("$${body}$$")
+}
+
+pub(crate) fn structured_to_latex(value: &StructuredAtom, show_dimensions: bool) -> String {
+    atom_to_latex(&value.presentation_atom(), show_dimensions)
 }
 
 // Typst supplies semantic HTML when the optional renderer is installed;
@@ -892,8 +926,12 @@ pub(crate) fn atom_to_html(
     let html = String::from_utf8(html).map_err(|error| {
         PyRuntimeError::new_err(format!("Typst returned invalid UTF-8: {error}"))
     })?;
-    let fragment = extract_html_fragment(&html).map_err(PyRuntimeError::new_err)?;
-    // Use the page's math fonts so each standalone fragment stays small.
+    notebook_html_fragment(&html)
+}
+
+fn notebook_html_fragment(document: &str) -> PyResult<String> {
+    let fragment = extract_html_fragment(document).map_err(PyRuntimeError::new_err)?;
+    // Share fonts and horizontal overflow behavior for symbolic and concrete tensors.
     Ok(format!(
         "<style>{NOTEBOOK_STYLE}</style><div data-spenso-math>{fragment}</div>"
     ))
@@ -1826,7 +1864,7 @@ pub(crate) fn concrete_tensor_to_html(
     let html = String::from_utf8(html).map_err(|error| {
         PyRuntimeError::new_err(format!("Typst returned invalid UTF-8: {error}"))
     })?;
-    extract_html_fragment(&html).map_err(PyRuntimeError::new_err)
+    notebook_html_fragment(&html)
 }
 
 pub(crate) fn concrete_tensor_to_svg(
@@ -2054,7 +2092,16 @@ mod tests {
             )
             .unwrap();
             assert_eq!(settings.index_style, style);
-            assert!(settings.__repr__().contains(style));
+            Python::initialize();
+            let rendered = Python::attach(|py| {
+                Py::new(py, settings.clone())
+                    .unwrap()
+                    .bind(py)
+                    .repr()
+                    .unwrap()
+                    .to_string()
+            });
+            assert!(rendered.contains(style));
         }
         assert!(
             DisplaySettings::new(
@@ -2081,7 +2128,16 @@ mod tests {
             )
             .unwrap();
             assert_eq!(settings.component_style, style);
-            assert!(settings.__repr__().contains(style));
+            Python::initialize();
+            let rendered = Python::attach(|py| {
+                Py::new(py, settings.clone())
+                    .unwrap()
+                    .bind(py)
+                    .repr()
+                    .unwrap()
+                    .to_string()
+            });
+            assert!(rendered.contains(style));
             assert!(
                 typst_settings_source(&settings, &Atom::Zero)
                     .contains(&format!("component-style: {style:?}"))

@@ -98,6 +98,19 @@ impl PyGammaSimplifySettings {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyGammaSimplifySettings {
+    fn __repr__(self_: pyo3::PyRef<'_, Self>) -> PyResult<String> {
+        let py = self_.py();
+        let object = pyo3::IntoPyObject::into_pyobject(self_, py)?;
+        crate::display::constructor_repr(
+            object.as_any(),
+            &[
+                ("chain_ordering", "chain_ordering"),
+                ("evaluate_traces", "evaluate_traces"),
+                ("expand_three_gamma_epsilon", "expand_three_gamma_epsilon"),
+            ],
+        )
+    }
+
     /// Configure gamma-chain ordering, trace evaluation, and the optional 4D three-gamma identity.
     ///
     /// `chain_ordering=None` selects `GammaChainOrdering.RepeatedPairs`.
@@ -180,6 +193,22 @@ impl PyColorSimplifySettings {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyColorSimplifySettings {
+    fn __repr__(self_: pyo3::PyRef<'_, Self>) -> PyResult<String> {
+        let py = self_.py();
+        let object = pyo3::IntoPyObject::into_pyobject(self_, py)?;
+        crate::display::constructor_repr(
+            object.as_any(),
+            &[
+                ("evaluate_traces", "evaluate_traces"),
+                ("expand_cross_chain_fierz", "expand_cross_chain_fierz"),
+                (
+                    "substitute_cof_dimension_invariants",
+                    "substitute_cof_dimension_invariants",
+                ),
+            ],
+        )
+    }
+
     /// Configure color-trace evaluation, cross-chain Fierz expansion, and invariant substitution.
     #[new]
     #[pyo3(signature = (
@@ -244,6 +273,24 @@ impl PyColorCasimirSettings {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyColorCasimirSettings {
+    fn __repr__(self_: pyo3::PyRef<'_, Self>) -> PyResult<String> {
+        let py = self_.py();
+        let object = pyo3::IntoPyObject::into_pyobject(self_, py)?;
+        crate::display::constructor_repr(
+            object.as_any(),
+            &[
+                (
+                    "rewrite_fundamental_dimension",
+                    "rewrite_fundamental_dimension",
+                ),
+                (
+                    "substitute_fundamental_index",
+                    "substitute_fundamental_index",
+                ),
+            ],
+        )
+    }
+
     /// Configure the SU(N) dimension and fundamental-index normalizations used by Casimir rewriting.
     #[new]
     #[pyo3(signature = (

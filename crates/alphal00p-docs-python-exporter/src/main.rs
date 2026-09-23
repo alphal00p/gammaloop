@@ -129,6 +129,8 @@ fn render(
     module: &pyo3_stub_gen::generate::Module,
 ) -> Result<String, Box<dyn Error>> {
     match component {
+        #[cfg(feature = "spenso")]
+        "spynso3" => Ok(spynso3::SpensoModule::stub_source(module)),
         "feynkit-community" => Ok(module.to_string().trim_end().to_owned()),
         #[cfg(feature = "linnet")]
         "linnet-python" => Ok(linnet_py::canonical_stub()?),

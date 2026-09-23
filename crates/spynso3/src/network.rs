@@ -1341,12 +1341,25 @@ impl SpensoNet {
         )
     }
 
-    /// Return a DOT representation of the executable network graph.
-    ///
-    /// Generates a DOT format representation of the computational graph that can be
-    /// visualized using graphviz or similar tools.
-    fn __str__(&self) -> PyResult<String> {
-        Ok(self.network.dot_pretty())
+    fn __repr__(&self) -> String {
+        format!(
+            "TensorNetwork({})",
+            display::format_structured(&self.structure, false)
+        )
+    }
+
+    /// Format the semantic tensor expression; use `to_dot()` for the executable graph.
+    fn __str__(&self) -> String {
+        display::format_structured(&self.structure, false)
+    }
+
+    fn _repr_latex_(&self) -> String {
+        display::structured_to_latex(&self.structure, false)
+    }
+
+    fn _repr_pretty_(&self, pretty: &Bound<'_, PyAny>, cycle: bool) -> PyResult<()> {
+        pretty.call_method1("text", (if cycle { "...".into() } else { self.__str__() },))?;
+        Ok(())
     }
 
     /// Return the computational graph in Graphviz DOT format.

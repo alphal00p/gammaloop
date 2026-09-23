@@ -133,8 +133,20 @@ impl<'a, 'py> FromPyObject<'a, 'py> for ConvertibleToSymbol {
 }
 #[allow(clippy::new_without_default)]
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl SpensorFunctionLibrary {
+    fn __repr__(&self) -> String {
+        let mut names = self
+            .library
+            .functions
+            .keys()
+            .map(|name| name.to_string())
+            .collect::<Vec<_>>();
+        names.sort();
+        format!("TensorFunctionLibrary(functions={names:?})")
+    }
+
     #[new]
     /// Create a new empty tensor function library.
     ///
@@ -171,7 +183,15 @@ impl SpensorFunctionLibrary {
     /// The callback receives a Python `float` or `complex` matching each input value and
     /// must return either type. The result uses complex storage if any returned value is
     /// complex; otherwise it uses real storage.
-    pub fn register(&mut self, function: &SpensoBroadcastFunction, callback: Py<PyAny>) {
+    pub fn register(
+        &mut self,
+        function: &SpensoBroadcastFunction,
+        #[gen_stub(override_type(
+            type_repr = "typing.Callable[[float | complex], float | complex]",
+            imports = ("typing",)
+        ))]
+        callback: Py<PyAny>,
+    ) {
         let name = function.name;
         let scalar_callback = Python::attach(|py| callback.clone_ref(py));
         self.library.insert_scalar_fallible(name, move |scalar| {
@@ -398,6 +418,14 @@ fn storage_hep_references() -> HashMap<ExplicitKey<AbstractIndex>, PartialStruct
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl SpensorLibrary {
+    fn __repr__(&self) -> String {
+        format!(
+            "TensorLibrary(explicit={}, generic={})",
+            self.library.explicit_len(),
+            self.library.generic_len()
+        )
+    }
+
     #[new]
     /// Create a new empty tensor library.
     ///
