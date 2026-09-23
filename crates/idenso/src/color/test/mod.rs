@@ -407,7 +407,12 @@ fn color_collection_preserves_wrappers_and_mixed_tensor_slots() {
         symbol!("color_wrapper"),
     ] {
         let input = function!(wrapper, &color * &spectator);
-        let expected = function!(wrapper, Atom::num(24) * &spectator);
+        let scalar = Atom::num(24) * &spectator;
+        let expected = if wrapper == SPENSO_TAG.bracket {
+            scalar
+        } else {
+            function!(wrapper, scalar)
+        };
         assert_eq!(input.simplify_color_with(settings), expected);
     }
     let mixed = parse_lit!(
