@@ -425,6 +425,32 @@ for Compton, muon production, and electron-muon scattering; this section's
 diphoton results use ordinary amplitudes. Existing graph weights must not be
 multiplied by a second inverse automorphism factor.
 
+== Generated charged-current decays
+
+`hep/weak_decays.py` generates eight W and top channels from the embedded
+Standard Model. Massive leptonic W decay and unequal-mass quark decay reproduce
+the #link("https://feyncalc.github.io/FeynCalcExamples/EW/Tree/W-ElAnel")[leptonic]
+and #link("https://feyncalc.github.io/FeynCalcExamples/EW/Tree/W-QiQjbar")[quark]
+references. The massive quark test uses charm and bottom fields to retain two
+independent masses; light up/down channels check the massless limit. Both W
+charges, top and antitop preserve a generic complex CKM element, and each
+charge-conjugate pair agrees exactly.
+
+Shared particle spin sums average the initial spin and retain every physical
+massive-vector polarization. Shared color sums distinguish the physical top
+width, averaged over initial colors, from the
+#link("https://feyncalc.github.io/FeynCalcExamples/EW/Tree/Qt-QbW")[gallery top width],
+which sums them. Their exact ratio is three. The notebook defaults to the
+physical width and exposes the reference convention explicitly. W widths
+coincide under both choices.
+
+`Kinematics.two_body_phase_space` and `flux` supply the complete width factor
+on the domain $M>m_1+m_2$. The installed regression compares full symbolic
+mass dependence and 64 numerical cases, including a complex CKM phase and
+the top threshold limit. HTML export, strict Marimo checks and all 64 live
+channel, color and kinematic selections pass. These are on-shell two-body
+widths; off-shell W decay chains are separate.
+
 == Generated chiral Z decays
 
 `installed_feyncalc_z_decay.py` reproduces all four classes in the
