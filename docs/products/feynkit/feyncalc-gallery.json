@@ -3423,7 +3423,34 @@
         "TimeUsed",
         "TrickMandelstam"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "passed: generated massive SU(N) quark-gluon scattering with physical polarization sums, independently generated ghost subtraction and massless SU(3); additional massive angular-cut event rates",
+      "validated_components": [
+        {
+          "scope": "Three generated qg -> qg amplitudes and all interference; two independently generated ghost channels; initial spin/color averages; exact massive SU(N), null/timelike gauge-reference agreement, covariant ghost subtraction and massless SU(3) reference.",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_quark_gluon_scattering.py",
+          "components": [
+            "Model.standard_model",
+            "Model.particle",
+            "Model.generate_diagrams",
+            "Model.expand_couplings",
+            "Particle.spin_sum",
+            "Particle.color_sum",
+            "TensorExpression.dirac_adjoint",
+            "TensorExpression.simplify_color",
+            "TensorExpression.to_cof_dimension_invariants",
+            "TensorExpression.simplify_gamma",
+            "TensorExpression.expand_mink",
+            "TensorExpression.simplify_metrics",
+            "TensorExpression.to_dots",
+            "Kinematics.mandelstam",
+            "Kinematics.flux",
+            "Kinematics.two_body_phase_space",
+            "Symbolica.integrate"
+          ],
+          "result": "passed",
+          "note": "Notebook: hep/quark_gluon_scattering.py. The incoming gluon spin average is applied after both ghost contributions are subtracted. The nonzero ghost correction is checked explicitly. Scalar coefficients remain factored during Lorentz contraction. Massive angular-cut rates use rho=m^2/s<1 and pass exact primitive/boundary checks plus 27 independent Gaussian quadratures for three color groups, three mass ratios and three cuts. The final quark and gluon are distinct; no identical-particle factor applies. All 81 live notebook control combinations, strict Marimo validation and HTML export passed."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/QGl-QGl-2",
@@ -3465,7 +3492,34 @@
         "Together",
         "TrickMandelstam"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "passed: generated massive SU(N) quark-gluon scattering with physical polarization sums, independently generated ghost subtraction and massless SU(3); additional massive angular-cut event rates",
+      "validated_components": [
+        {
+          "scope": "Three generated qg -> qg amplitudes and all interference; two independently generated ghost channels; initial spin/color averages; exact massive SU(N), null/timelike gauge-reference agreement, covariant ghost subtraction and massless SU(3) reference.",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_quark_gluon_scattering.py",
+          "components": [
+            "Model.standard_model",
+            "Model.particle",
+            "Model.generate_diagrams",
+            "Model.expand_couplings",
+            "Particle.spin_sum",
+            "Particle.color_sum",
+            "TensorExpression.dirac_adjoint",
+            "TensorExpression.simplify_color",
+            "TensorExpression.to_cof_dimension_invariants",
+            "TensorExpression.simplify_gamma",
+            "TensorExpression.expand_mink",
+            "TensorExpression.simplify_metrics",
+            "TensorExpression.to_dots",
+            "Kinematics.mandelstam",
+            "Kinematics.flux",
+            "Kinematics.two_body_phase_space",
+            "Symbolica.integrate"
+          ],
+          "result": "passed",
+          "note": "Notebook: hep/quark_gluon_scattering.py. The incoming gluon spin average is applied after both ghost contributions are subtracted. The nonzero ghost correction is checked explicitly. Scalar coefficients remain factored during Lorentz contraction. Massive angular-cut rates use rho=m^2/s<1 and pass exact primitive/boundary checks plus 27 independent Gaussian quadratures for three color groups, three mass ratios and three cuts. The final quark and gluon are distinct; no identical-particle factor applies. All 81 live notebook control combinations, strict Marimo validation and HTML export passed."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/QiQibar-QiQibar",

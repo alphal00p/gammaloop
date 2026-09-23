@@ -1487,8 +1487,7 @@ $ frac(d sigma, d Omega) = frac(alpha_s^2, 18s) (1+cos^2 theta), quad
   sigma = frac(8 pi alpha_s^2, 27s). $
 The separate `hep/qcd_annihilation.py` notebook runs these exact comparisons
 in the same Marimo instance as the other examples. Elastic quark channels are
-covered below. Quark-gluon scattering and general QCD observables remain
-unvalidated.
+covered below. General QCD observables remain unvalidated.
 
 == Generated gluon scattering in symbolic dimension
 
@@ -1519,6 +1518,40 @@ Symbolica's antiderivative passes exact differentiation and boundary checks;
 nine independent Gaussian quadratures check $N_c=2,3,5$ at three cuts.
 The controls expose both spin-average conventions, symbolic or concrete Lorentz
 dimensions, color groups and angular cuts without repeating diagram generation.
+
+== Generated quark-gluon scattering
+
+`hep/quark_gluon_scattering.py` and
+`installed_feyncalc_quark_gluon_scattering.py` cover the
+#link("https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/QGl-QGl")[physical-polarization example]
+and its #link("https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/QGl-QGl-2")[ghost-subtraction counterpart].
+The three ordinary amplitudes retain the quark mass, their relative graph
+factors and all interference. Both ghost channels are generated separately.
+Particles and vertices are selected by model names.
+
+Shared particle spin and color sums close the Dirac adjoint. Spenso and Idenso
+perform the color and Dirac algebra. Collecting Lorentz structures with
+`TensorExpression.expand_mink` keeps scalar coefficients factored while the
+physical projectors are contracted. Null and timelike gluon reference momenta
+give the same exact massive SU(N) expression.
+
+The covariant square includes unphysical states. Subtract the ghost and
+antighost contributions, each
+$g_s^4 (m^2-u)(s-m^2)/(2t^2)$, then divide by two for the incoming gluon spin
+average. The incoming quark spin and both color averages are already included.
+This produces the same massive expression as the physical projectors, while
+the covariant result alone differs by a nonzero correction. At zero mass and
+$N_c=3$, the result is
+$g_s^4 (s^2+u^2) (1/t^2 - 4/(9s u))$.
+
+The notebook also integrates massive elastic event rates. With
+$rho=m^2/s<1$ and $z=cos(theta)$, use
+$t=-s(1-rho)^2(1-z)/2$. Native flux and two-body phase space give
+$d sigma/d z = abs(cal(M))^2/(32 pi s)$. The final particles are distinct.
+Angular cuts exclude massless exchange poles. Symbolica's primitive passes
+exact differentiation and boundary checks, followed by 27 independent Gaussian
+quadratures for three color groups, mass ratios and cuts. Controls compare
+the physical and ghost-subtracted calculations and show $s sigma/alpha_s^2$.
 
 == Generated elastic quark scattering
 

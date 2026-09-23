@@ -7,7 +7,7 @@ The sewn-forward-graph conversion is a separate regression requirement.
 from pathlib import Path
 
 from symbolica import E, S
-from symbolica.community import feynkit as fk
+from symbolica.community import hep as fk
 from symbolica.community.spenso import CookSettings, TensorExpression
 
 model = fk.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
@@ -75,7 +75,7 @@ for pdg in (11, -11):
         )
 
     operator = TensorExpression(amplitude.expand())
-    assert len(operator.list_dangling()) == 4
+    assert len(operator.interface) == 4
     adjoint = operator.dirac_adjoint().expand().simplify_gamma0().to_expression()
     # Physical external momenta, the tree-level charge, masses and invariants
     # are real. Idenso retains these assumptions as explicit conjugations.
