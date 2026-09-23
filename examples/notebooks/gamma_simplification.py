@@ -655,8 +655,416 @@ def _(AUTO, S, gamma, lorentz, mo, perf_counter, prod, tr, trace_length):
 
 
 @app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 9. Schoonschip notation changes the work, not just the display
+
+    Contracting $p_\mu\gamma^\mu$ into $\not p$ exposes repeated momenta
+    before the trace generates metric pairings. Compare **the same scalar**
+    through three routes:
+
+    | Route | Ordered stages inside the timer |
+    |:--|:--|
+    | Trace first | Free-index trace → attach momenta → `schoonschip_net()` |
+    | Contract first | Indexed input → `schoonschip_net()` → `simplify_gamma()` |
+    | Compact input | Constructed slash trace → `simplify_gamma()` |
+
+    The first two start from the same indexed problem; their ratio includes
+    the early contraction cost. Compact input starts after that conversion,
+    so its time is reported separately. The gamma engine is shared. The first
+    difference is whether it sees distinct indices or repeated momenta.
+    `DisplaySettings(tensor_layout="schoonschip")` only changes rendering and
+    cannot produce this speedup. Here the network pass changes the expression.
+
+    Paired slashes give
+    $\mathrm{tr}(\not p\not p\not q^{\,2m-2})=4p^2(q^2)^{m-1}$.
+    For alternating slashes, the independent oracle is
+    $T_m=2(p\cdot q)T_{m-1}-p^2q^2T_{m-2}$ with
+    $T_0=4$ and $T_1=4p\cdot q$.
+    These relations do not require on-shell momenta.
+    """)
+    return
+
+
+@app.cell
+def _(mo):
+    slash_length = mo.ui.dropdown([4, 6, 8, 10], value=8, label="Gamma factors")
+    slash_pattern = mo.ui.radio(
+        {"Adjacent pairs": "paired", "Alternating p, q": "alternating"},
+        value="Adjacent pairs",
+        inline=True,
+        label="Momentum pattern",
+    )
+    mo.hstack([slash_length, slash_pattern], justify="start")
+    return slash_length, slash_pattern
+
+
+@app.cell
+def _(E, S, TensorExpression, slash_length, slash_pattern):
+    from functools import reduce
+    from operator import mul
+    from symbolica.community.spenso import TensorName
+
+    _bis, _mink, _gamma, _trace, _cyclic, _in, _out, _g = S(
+        *(
+            f"spenso::{name}"
+            for name in ("bis", "mink", "gamma", "trace", "cyclic", "in", "out", "g")
+        )
+    )
+    _p, _q = (
+        TensorName.vector(f"gamma_benchmark::{name}").to_expression()
+        for name in ("p", "q")
+    )
+    _n = slash_length.value
+    _m = _n // 2
+    momentum_names = (
+        ["p", "p"] + ["q"] * (_n - 2)
+        if slash_pattern.value == "paired"
+        else ["p", "q"] * _m
+    )
+    _momenta = [{"p": _p, "q": _q}[name] for name in momentum_names]
+    _indices = [_mink(4, S(f"gamma_benchmark::mu{i}")) for i in range(_n)]
+    bare_trace = TensorExpression(
+        _trace(_bis(4), _cyclic(*(_gamma(_in, _out, i) for i in _indices)))
+    )
+    momentum_factors = reduce(mul, (p(i) for p, i in zip(_momenta, _indices)))
+    indexed_trace = TensorExpression(momentum_factors * bare_trace.to_expression())
+    compact_trace = TensorExpression(
+        _trace(_bis(4), _cyclic(*(_gamma(_in, _out, p(_mink(4))) for p in _momenta)))
+    )
+
+    _pp, _qq, _pq = S(
+        "gamma_benchmark::pp", "gamma_benchmark::qq", "gamma_benchmark::pq"
+    )
+    if slash_pattern.value == "paired":
+        scalar_oracle = 4 * _pp * _qq ** (_m - 1)
+    else:
+        _previous, scalar_oracle = E("4"), 4 * _pq
+        for _ in range(2, _m + 1):
+            _previous, scalar_oracle = (
+                scalar_oracle,
+                (2 * _pq * scalar_oracle - _pp * _qq * _previous).expand(),
+            )
+    scalar_expected = (
+        scalar_oracle.replace(_pp, _g(_p(_mink(4)), _p(_mink(4))))
+        .replace(_qq, _g(_q(_mink(4)), _q(_mink(4))))
+        .replace(_pq, _g(_p(_mink(4)), _q(_mink(4))))
+    )
+    return (
+        bare_trace,
+        compact_trace,
+        indexed_trace,
+        momentum_factors,
+        momentum_names,
+        scalar_expected,
+        scalar_oracle,
+    )
+
+
+@app.cell
+def _(compact_trace, display_settings, indexed_trace, mo):
+    contracted_trace = indexed_trace.schoonschip_net()
+    assert contracted_trace.to_expression() == compact_trace.to_expression()
+    mo.vstack(
+        [
+            mo.md(
+                "**Same input, after contracting the momentum indices** — exact compact expression checked."
+            ),
+            mo.Html(indexed_trace.to_html(settings=display_settings)),
+            mo.Html(contracted_trace.to_html(settings=display_settings)),
+        ]
+    )
+    return (contracted_trace,)
+
+
+@app.cell
+def _(
+    E,
+    TensorExpression,
+    bare_trace,
+    compact_trace,
+    contracted_trace,
+    indexed_trace,
+    momentum_factors,
+    perf_counter,
+    scalar_expected,
+):
+    from statistics import median
+
+    # Inputs are built outside the timed region. Every timed route computes
+    # the complete scalar result; no precomputed trace is reused in a route.
+    _routes = {
+        "Trace first": lambda: TensorExpression(
+            momentum_factors * bare_trace.simplify_gamma().to_expression()
+        ).schoonschip_net(),
+        "Contract first": lambda: indexed_trace.schoonschip_net().simplify_gamma(),
+        "Compact input": lambda: compact_trace.simplify_gamma(),
+    }
+    _samples = {name: [] for name in _routes}
+    benchmark_results = {}
+    for _name, _operation in _routes.items():
+        _result = _operation()  # one untimed warm-up per route
+        assert (_result.to_expression() - scalar_expected).expand() == E("0"), _name
+    _names = list(_routes)
+    for _round in range(3):
+        # Rotate order to reduce systematic first/last-route bias.
+        for _name in _names[_round:] + _names[:_round]:
+            _start = perf_counter()
+            _result = _routes[_name]()
+            _samples[_name].append(perf_counter() - _start)
+            assert (_result.to_expression() - scalar_expected).expand() == E("0"), _name
+            benchmark_results[_name] = _result
+    benchmark_seconds = {name: median(samples) for name, samples in _samples.items()}
+    benchmark_speedup = (
+        benchmark_seconds["Trace first"] / benchmark_seconds["Contract first"]
+    )
+    return benchmark_results, benchmark_seconds, benchmark_speedup, median
+
+
+@app.cell
+def _(
+    bare_trace,
+    benchmark_results,
+    benchmark_seconds,
+    benchmark_speedup,
+    display_settings,
+    mo,
+    prod,
+    slash_length,
+):
+    metric_pairings = len(
+        list(bare_trace.simplify_gamma().to_expression().expand().terms())
+    )
+    assert metric_pairings == prod(range(1, slash_length.value, 2))
+    mo.vstack(
+        [
+            mo.ui.table(
+                [
+                    {
+                        "route": name,
+                        "median (ms)": round(1000 * seconds, 3),
+                        "final scalar terms": len(
+                            list(
+                                benchmark_results[name].to_expression().expand().terms()
+                            )
+                        ),
+                    }
+                    for name, seconds in benchmark_seconds.items()
+                ],
+                selection=None,
+                pagination=False,
+                show_download=False,
+            ),
+            mo.md(
+                f"**Measured early-contraction speedup: {benchmark_speedup:.2f}×.** The trace-first route builds **{metric_pairings}** free-index metric terms before seeing the repeated momenta. All three final scalar results agree exactly. Timings are medians of three warm runs, excluding construction, assertions and rendering; they depend on the installed build and hardware."
+            ),
+            mo.Html(
+                benchmark_results["Contract first"].to_html(settings=display_settings)
+            ),
+        ]
+    )
+    return (metric_pairings,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 10. Are we at FORM `trace4` parity?
+
+    **Not at algorithmic parity.** Compact slash notation is supported and
+    the scalar examples above agree with independent identities, but that is
+    narrower than matching FORM's complete `trace4` implementation.
+
+    Idenso's ordinary closed-trace branch uses the generic signed pairing
+    recursion. Its four-dimensional Chisholm and optional three-gamma epsilon
+    rules are in the **open-chain** branch; enabling
+    `expand_three_gamma_epsilon` does not select a separate ordinary `trace4`
+    algorithm. FORM additionally scans traces for repeated indices/vectors
+    and uses a four-dimensional reduction when all remaining arguments differ.
+    Its documented options also include cross-trace Chisholm contraction and
+    symmetrization. See the
+    [FORM Dirac-algebra manual](https://github.com/form-dev/form/blob/master/doc/manual/gamma.tex)
+    and this checkout's `crates/idenso/src/dirac/simplify.rs`.
+
+    A concrete distinction appears at **ten distinct Lorentz indices**:
+    generic pairing produces 945 metric terms, whereas FORM 5.0.0 `trace4`
+    produced 693 in our local probe (`tracen`: 945). Different four-dimensional
+    representations need not cancel by treating every metric as independent.
+    The optional native check below verifies FORM's free-index results after
+    contraction with the same paired momenta, in addition to comparing the
+    selected compact scalar example exactly.
+
+    This notebook does not establish full correctness or performance parity.
+    In particular, timings of a development Python extension and a release
+    FORM executable are not a controlled comparison of the two engines.
+    """)
+    return
+
+
+@app.cell
+def _(momentum_names, scalar_oracle):
+    _word = ",".join(momentum_names)
+    _oracle = scalar_oracle.to_canonical_string().replace("gamma_benchmark::", "")
+    compact_form_source = f"""Off Statistics;
+Vectors p,q;
+Symbols pp,qq,pq;
+Local F = g_(1,{_word});
+trace4,1;
+.sort
+id p.p=pp;
+id q.q=qq;
+id p.q=pq;
+.sort
+Local Check = F - ({_oracle});
+.sort
+#$nterms=termsin_(F);
+#write "NTERMS=%$",$nterms
+#write "CHECK=%E",Check
+.end
+"""
+    _indices = ",".join(f"mu{i}" for i in range(1, 11))
+    _projection = "*".join(f"{'p' if i <= 2 else 'q'}(mu{i})" for i in range(1, 11))
+    generic_form_source = f"""Off Statistics;
+Vectors p,q;
+Indices {_indices};
+Local F = g_(1,{_indices});
+trace4,1;
+.sort
+#$nterms=termsin_(F);
+#write "NTERMS=%$",$nterms
+Multiply {_projection};
+.sort
+Local Check = F - 4*p.p*(q.q)^4;
+.sort
+#write "CHECK=%E",Check
+.end
+"""
+    return compact_form_source, generic_form_source
+
+
+@app.cell
+def _(compact_form_source, generic_form_source, median, perf_counter):
+    import os
+    import shutil
+    import sys
+
+    form_records = []
+    form_version = None
+    # Browser notebooks cannot launch native subprocesses. Native users can
+    # select an installed binary explicitly without changing the notebook.
+    form_executable = (
+        None
+        if sys.platform == "emscripten"
+        else os.environ.get("FORM_EXECUTABLE") or shutil.which("form")
+    )
+    if form_executable:
+        import re
+        import subprocess
+        import tempfile
+        from pathlib import Path
+
+        form_version = subprocess.run(
+            [form_executable, "-v"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        ).stdout.strip()
+        with tempfile.TemporaryDirectory(prefix="gamma-trace-form-") as _directory:
+            _path = Path(_directory) / "trace.frm"
+            for _label, _source in (
+                ("Compact scalar / trace4", compact_form_source),
+                (
+                    "Compact scalar / tracen",
+                    compact_form_source.replace("trace4,1;", "tracen,1;"),
+                ),
+                ("Ten free indices / trace4", generic_form_source),
+                (
+                    "Ten free indices / tracen",
+                    generic_form_source.replace("trace4,1;", "tracen,1;"),
+                ),
+            ):
+                _path.write_text(_source)
+                _samples = []
+                for _round in range(4):
+                    _start = perf_counter()
+                    _run = subprocess.run(
+                        [form_executable, "-q", str(_path)],
+                        cwd=_directory,
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                        timeout=30,
+                    )
+                    _seconds = perf_counter() - _start
+                    assert re.search(
+                        r"CHECK=\s*0\s*(?:;|$)", _run.stdout, re.MULTILINE
+                    ), _run.stdout
+                    _terms = re.search(r"NTERMS=(\d+)", _run.stdout)
+                    assert _terms, _run.stdout
+                    if _round:
+                        _samples.append(_seconds)
+                form_records.append(
+                    {
+                        "case": _label,
+                        "terms": int(_terms.group(1)),
+                        "process median (ms)": round(1000 * median(_samples), 3),
+                        "source": _source,
+                        "stdout": _run.stdout,
+                    }
+                )
+    return form_executable, form_records, form_version
+
+
+@app.cell(hide_code=True)
+def _(compact_form_source, form_executable, form_records, form_version, mo):
+    if form_executable:
+        mo.output.append(
+            mo.md(
+                f"**Native comparison:** `{form_version}`. Every FORM check reduced the scalar difference to zero. Process timings include startup, parsing, tracing, sorting and verification; they are not isolated trace-kernel times."
+            )
+        )
+        mo.output.append(
+            mo.ui.table(
+                [
+                    {
+                        key: value
+                        for key, value in record.items()
+                        if key not in {"source", "stdout"}
+                    }
+                    for record in form_records
+                ],
+                selection=None,
+                pagination=False,
+                show_download=False,
+            )
+        )
+        mo.output.append(
+            mo.accordion(
+                {
+                    record["case"]: mo.md(
+                        f"```form\n{record['source']}\n```\n\n```text\n{record['stdout']}\n```"
+                    )
+                    for record in form_records
+                }
+            )
+        )
+    else:
+        mo.output.append(
+            mo.md(
+                "**Native FORM comparison not run.** Browser notebooks cannot launch FORM. Locally, put `form` on `PATH` or set `FORM_EXECUTABLE` to its absolute path before starting Marimo. The program below reproduces the selected scalar check; no FORM timing is invented when it is unavailable."
+            )
+        )
+        mo.output.append(mo.md(f"```form\n{compact_form_source}\n```"))
+    return
+
+
+@app.cell(hide_code=True)
 def _(
     boundary_checks,
+    benchmark_results,
+    metric_pairings,
+    form_records,
     chiral_checks,
     dimension_checks,
     epsilon_result,
