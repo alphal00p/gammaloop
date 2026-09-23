@@ -5,7 +5,6 @@ import builtins
 import decimal
 import symbolica.core
 import typing
-import typing_extensions
 from symbolica import ComplexFloat, Float
 from symbolica.core import Condition, Expression, FormattedOutput, HeldExpression, PatternRestriction
 
@@ -3402,12 +3401,6 @@ def chain(start_slot: Slot, end_slot: Slot, *factors: Expression) -> TensorExpre
     """
 
 @typing.overload
-def chain(start_slot: Slot, end_slot: Slot, *factors: typing_extensions.Unpack[tuple[typing.Union[Tensor, TensorNetwork], typing_extensions.Unpack[tuple[typing.Union[Expression, int, float, complex, Float, ComplexFloat, decimal.Decimal, str, Tensor, TensorNetwork], ...]]]]) -> TensorNetwork: ...
-
-@typing.overload
-def chain(start_slot: Slot, end_slot: Slot, *factors: typing_extensions.Unpack[tuple[typing_extensions.Unpack[tuple[typing.Union[Expression, int, float, complex, Float, ComplexFloat, decimal.Decimal, str, Tensor, TensorNetwork], ...]], typing.Union[Tensor, TensorNetwork]]]) -> TensorNetwork: ...
-
-@typing.overload
 def chain(start_slot: Slot, end_slot: Slot, *factors: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorExpression | TensorNetwork: ...
 
 @typing.overload
@@ -3469,12 +3462,6 @@ def trace(representation: Representation, *factors: Expression) -> TensorExpress
     r"""
     Close an ordered factor sequence into a canonical cyclic trace.
     """
-
-@typing.overload
-def trace(representation: Representation, *factors: typing_extensions.Unpack[tuple[typing.Union[Tensor, TensorNetwork], typing_extensions.Unpack[tuple[typing.Union[Expression, int, float, complex, Float, ComplexFloat, decimal.Decimal, str, Tensor, TensorNetwork], ...]]]]) -> TensorNetwork: ...
-
-@typing.overload
-def trace(representation: Representation, *factors: typing_extensions.Unpack[tuple[typing_extensions.Unpack[tuple[typing.Union[Expression, int, float, complex, Float, ComplexFloat, decimal.Decimal, str, Tensor, TensorNetwork], ...]], typing.Union[Tensor, TensorNetwork]]]) -> TensorNetwork: ...
 
 @typing.overload
 def trace(representation: Representation, *factors: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorExpression | TensorNetwork: ...
