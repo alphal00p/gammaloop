@@ -128,7 +128,7 @@ impl IntegralFamily {
             .iter()
             .map(|i| &self.denominators[*i])
             .collect::<Vec<_>>();
-        let (matrix, _) = Atom::system_to_matrix::<u16, _, _>(&denominators, &self.scalar_products)
+        let (matrix, _) = Self::affine_system(&denominators, &self.scalar_products)
             .map_err(|e| IntegralFamilyError::InvalidBasis(e.to_string()))?;
         let mut rows = Vec::new();
         for (position, row) in matrix.row_iter().enumerate() {
@@ -281,6 +281,20 @@ mod tests {
         assert_eq!(
             zero.partial_fraction(&[0], 10).unwrap(),
             vec![(Atom::one(), vec![0])]
+        );
+    }
+
+    #[test]
+    fn fractional_propagator_coefficients_reconstruct_exactly() {
+        let k = parse!("apart_fraction::k");
+        let kin = Kinematics::new();
+        let square = kin.scalar_product(&k, &k).unwrap();
+        verify(
+            vec![&square / 2 - parse!("m2"), &square / 3 - parse!("M2")],
+            vec![2, 1],
+            vec![k],
+            vec![],
+            &kin,
         );
     }
 }

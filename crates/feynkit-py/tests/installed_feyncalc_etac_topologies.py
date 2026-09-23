@@ -128,6 +128,16 @@ for family in sectors.values():
                 - G
             ).expand() == E("0")
     statistics[status] += 1
+    if status == "not detected":
+        # All surviving families must pass automatic self-mapping before any
+        # global minimization can rely on the shift search. Fractional
+        # light-cone offsets previously broke candidate reconstruction.
+        mapping = family.find_mapping(family)
+        assert mapping is not None
+        for source, target in enumerate(mapping.denominator_map):
+            assert (
+                mapping.apply(family.denominators[source]) - family.denominators[target]
+            ).together() == E("0")
     completed = family.complete(candidates=pool)
     assert completed.is_complete and completed.is_independent
     assert completed.denominators[: len(family.denominators)] == family.denominators
@@ -147,7 +157,7 @@ assert statistics == {
     "transverse certificate": 131,
 }
 print(
-    "PASS: 251 exact partial fractions, 677 independent sectors, 112 parametric and 131 transverse certificates, and 677 preferred completions",
+    "PASS: 251 exact partial fractions, 677 independent sectors, 112 parametric and 131 transverse certificates, 434 automatic self-mappings, and 677 preferred completions",
     flush=True,
 )
 print(
