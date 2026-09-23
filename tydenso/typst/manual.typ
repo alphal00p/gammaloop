@@ -527,7 +527,10 @@ as in $A(; rho)$. Commas are on by default in this mode and can be disabled
 with `commas: false`.
 
 The most common layout switches live directly on `notation`: `tensor-layout`,
-`with-dim`, `parens`, `commas`, `symbol-scripts`, `index-gap`, and `factor-gap`.
+`with-dim`, `parens`, `commas`, `symbol-scripts`, `component-style`, `index-gap`,
+and `factor-gap`. Concrete components use $A(x,7)^(0,1)$ by default;
+`component-style: "array"` selects $A(x,7)[0,1]$. Ordinary parameters stay
+in parentheses in both styles, independently of abstract-index layout.
 `print-settings` configures the separate compact string returned by
 `to-string`.
 

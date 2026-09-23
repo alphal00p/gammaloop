@@ -1372,6 +1372,9 @@
   /// and `"call"` groups top and bottom rows around a semicolon.
   /// -> str | none
   tensor-layout: none,
+  /// Concrete coordinates: `"superscript"` gives A(x,7)^{0,1}; `"array"` gives A(x,7)[0,1].
+  /// -> str | none
+  component-style: none,
   /// Show each representation and dimension on its indices.
   /// -> bool | none
   with-dim: none,
@@ -1405,6 +1408,7 @@
 ) = tensor-notation.notation(
   settings: settings,
   tensor-layout: tensor-layout,
+  component-style: component-style,
   with-dim: with-dim,
   parens: parens,
   commas: commas,

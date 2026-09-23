@@ -37,6 +37,21 @@
   }
 }
 
+// Array coordinates share parameter placement and preserve powers without extra grouping.
+#let array-notation = notation.notation(component-style: "array")
+#let array-bare = notation.render(tree(component()), notation: array-notation)
+#let array-expected = ([A], math.lr($ [#([0], [12]).join($,$)] $)).join()
+#assert.eq(array-bare, array-expected)
+#let array-parameterized = notation.render(tree(parameterized), notation: array-notation)
+#assert.eq(array-parameterized,
+  ([A], math.lr($ (#parameters) $), math.lr($ [#([0], [12]).join($,$)] $)).join())
+#assert.eq(
+  notation.render(tree((kind: "power", base: parameterized, exponent: number(2))), notation: array-notation),
+  math.attach(array-parameterized, t: notation.render(number(2))),
+)
+#let scalar = call("A", (call("spenso::cind", ()),), tags: ("spenso::tensor",))
+#assert.eq(notation.render(tree(scalar), notation: array-notation), [A])
+
 // A power must not merge with the component superscript.
 #let squared = notation.render(tree((kind: "power", base: component(), exponent: number(2))))
 #assert.eq(squared, math.attach(math.lr($ (#actual) $), t: notation.render(number(2))))
@@ -54,4 +69,4 @@
 #let unrelated = call("A", (call("other::cind", (number(0), number(12))),), tags: ("spenso::tensor",))
 #assert.ne(actual, notation.render(tree(unrelated)))
 
-$ #actual quad #parameterized-expected $
+$ #actual quad #parameterized-expected quad #array-parameterized $

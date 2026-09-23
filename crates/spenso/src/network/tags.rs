@@ -685,6 +685,13 @@ fn tensor_component_print(
         .map(ToString::to_string)
         .collect::<Vec<_>>()
         .join(separator);
+    if resolved.presentation.array_components {
+        return Some(match resolved.backend {
+            SpensoPrintBackend::Plain => format!("{base}[{indices}]"),
+            SpensoPrintBackend::Latex => format!(r"{base}\!\left[{indices}\right]"),
+            SpensoPrintBackend::Typst => format!("{base} lr([{indices}])"),
+        });
+    }
     let rendered = match resolved.backend {
         SpensoPrintBackend::Plain => format!("{base}^({indices})"),
         SpensoPrintBackend::Latex => format!("{base}^{{{indices}}}"),
