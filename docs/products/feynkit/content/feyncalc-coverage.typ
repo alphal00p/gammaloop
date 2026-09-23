@@ -335,8 +335,8 @@ GammaLoop's native-to-runtime parity check for both Compton charges. The two
 structural fixtures now encode the same incoming-carrier convention as the
 production graph. Its shared Python host also passes the exact massive QED,
 polarized QED, diphoton amplitude, and massive/massless QCD renormalization
-regressions. Rebuilding the current development checkout remains separately
-blocked by unrelated conflict markers in committed workspace files.
+regressions. The validation build combines the previously verified baseline with the shared
+sewing correction and built-in model constructors.
 
 == Normalize and integrate two-body observables
 
@@ -1108,6 +1108,41 @@ integrals and four kinematic presets. Headless exports pass for both IBP
 notebooks and the Bhabha/Møller notebook. These checks validate the stated
 reductions and observables, not a general master-basis certification or the
 remaining gallery's IBP coverage.
+
+== Generated one-loop scalar renormalization and scattering
+
+`hep/phi4_renormalization.py` generates the tadpole, all three four-point
+channels, and three local counterterm diagrams from `Model.phi4()`. Each
+bubble's momentum signatures determine its channel invariant; its original
+propagators are reconstructed exactly before conversion to the shared
+one-loop reducer. Native numerators and graph factors give the scalar master
+coefficients. OneLOop supplies their Laurent coefficients.
+
+Expand $Z_phi$, $Z_phi Z_m$ and $Z_g Z_phi^2$ in the local operators. The
+actual generated counterterms supply a three-by-three matching matrix. With
+$a=g/(16 pi^2)$, its solution gives
+$Z_phi=1$, $Z_m=1+a Delta/2$ and $Z_g=1+3a Delta/2$.
+Here $Delta=1/epsilon$ in MS and
+$Delta=1/epsilon+ln(4 pi)-gamma_E$ in MSbar. The calculation checks pole
+cancellation and the finite scheme difference in a common loop measure,
+matching the #link("https://feyncalc.github.io/FeynCalcExamples/Phi4/OneLoop/Renormalization")[one-loop renormalization example].
+
+`hep/phi4_scattering.py` reuses the companion notebook through Marimo
+composition. The finite correction includes all three massive bubble
+channels with their physical complex branches. Independent Feynman-parameter
+integrals check eighteen channel values across six scattering points, including
+the massive threshold and massless limits. The compiled combined amplitude
+agrees with their sum. Both subtraction schemes and three coupling values are
+available for each preset.
+
+The massless symbolic expression comes from OneLOop's branch selection, with
+$s>0$, $t<0$, $u<0$ and $s+t+u=0$. At fixed $t$, the logarithmic derivative
+of its finite coefficient in units of $i g^2/(16 pi^2)$ approaches $-1$.
+This reproduces the #link("https://feyncalc.github.io/FeynCalcExamples/Phi4/OneLoop/PhiPhi-PhiPhi")[reference high-energy logarithm]
+$-i g^2 ln(s/mu^2)/(16 pi^2)$ while preserving the physical imaginary part.
+`installed_feyncalc_phi4_one_loop.py` checks the complete symbolic and
+numerical calculation. Generic massless channels exclude the scaleless
+zero-invariant point, where a separate UV/IR pole separation is required.
 
 == Generated electron anomalous magnetic moment
 
