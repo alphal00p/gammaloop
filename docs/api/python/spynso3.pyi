@@ -2589,7 +2589,7 @@ class TensorName:
     >>> nu = rep('nu')
     >>> tensor_expression = T(mu, nu)
     """
-    def __new__(cls, name: builtins.str, *, rank: typing.Optional[builtins.int] = None, is_symmetric: typing.Optional[builtins.bool] = None, is_antisymmetric: typing.Optional[builtins.bool] = None, is_cyclesymmetric: typing.Optional[builtins.bool] = None, is_linear: typing.Optional[builtins.bool] = None, is_flat: typing.Optional[builtins.bool] = None, is_scalar: typing.Optional[builtins.bool] = None, is_real: typing.Optional[builtins.bool] = None, is_integer: typing.Optional[builtins.bool] = None, is_positive: typing.Optional[builtins.bool] = None, tags: typing.Optional[typing.Sequence[builtins.str]] = None, aliases: typing.Optional[typing.Sequence[builtins.str]] = None, normalization: typing.Optional[symbolica.core.Transformer | typing.Callable[[symbolica.core.Expression], symbolica.core.Expression]] = None, print: typing.Optional[typing.Any] = None, derivative: typing.Optional[typing.Any] = None, series: typing.Optional[typing.Any] = None, eval: typing.Optional[typing.Any] = None, data: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | str | dict | list | bytes] = None) -> TensorName:
+    def __new__(cls, name: builtins.str, *, rank: typing.Optional[builtins.int] = None, is_symmetric: typing.Optional[builtins.bool] = None, is_antisymmetric: typing.Optional[builtins.bool] = None, is_cyclesymmetric: typing.Optional[builtins.bool] = None, is_linear: typing.Optional[builtins.bool] = None, is_flat: typing.Optional[builtins.bool] = None, is_scalar: typing.Optional[builtins.bool] = None, is_real: typing.Optional[builtins.bool] = None, is_integer: typing.Optional[builtins.bool] = None, is_positive: typing.Optional[builtins.bool] = None, tags: typing.Optional[typing.Sequence[builtins.str]] = None, aliases: typing.Optional[typing.Sequence[builtins.str]] = None, normalization: typing.Optional[symbolica.core.Transformer | typing.Callable[[symbolica.core.Expression], symbolica.core.Expression]] = None, print: typing.Optional[dict[str, str] | typing.Callable[..., str | None]] = None, derivative: typing.Optional[typing.Any] = None, series: typing.Optional[typing.Any] = None, eval: typing.Optional[typing.Any] = None, data: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | str | dict | list | bytes] = None) -> TensorName:
         r"""
         Create a new tensor name with optional mathematical properties.
 
@@ -2609,7 +2609,15 @@ class TensorName:
             The declared rank. Only rank one has a dedicated construction invariant.
         tags : list[str], optional
             Extra Symbolica tags. The Spenso tensor tag is always included.
-        normalization, print, derivative, series, eval, data : optional
+        print : dict[str, str] | Callable[..., str | None] | None
+            A mapping with ``typst``, ``latex``, and/or ``plain`` keys customizes only
+            the tensor name. Values are backend source without math delimiters,
+            for example ``{"typst": "macron(J)", "latex": r"\bar{J}"}``.
+            Spenso adds arguments, indices, and component coordinates. Missing
+            backends use the ordinary name. A callable uses Symbolica's print
+            signature and overrides the complete display; returning None selects
+            standard tensor notation. Typst source is trusted formatting code.
+        normalization, derivative, series, eval, data : optional
             Symbolica symbol callbacks and metadata.
 
         Returns
@@ -2626,9 +2634,9 @@ class TensorName:
         >>> D = TensorName("D", is_linear=True)
         """
     @staticmethod
-    def vector(name: builtins.str, *, is_symmetric: typing.Optional[builtins.bool] = None, is_antisymmetric: typing.Optional[builtins.bool] = None, is_cyclesymmetric: typing.Optional[builtins.bool] = None, is_linear: typing.Optional[builtins.bool] = None, is_flat: typing.Optional[builtins.bool] = None, is_scalar: typing.Optional[builtins.bool] = None, is_real: typing.Optional[builtins.bool] = None, is_integer: typing.Optional[builtins.bool] = None, is_positive: typing.Optional[builtins.bool] = None, tags: typing.Optional[typing.Sequence[builtins.str]] = None, aliases: typing.Optional[typing.Sequence[builtins.str]] = None, normalization: typing.Optional[symbolica.core.Transformer | typing.Callable[[symbolica.core.Expression], symbolica.core.Expression]] = None, print: typing.Optional[typing.Any] = None, derivative: typing.Optional[typing.Any] = None, series: typing.Optional[typing.Any] = None, eval: typing.Optional[typing.Any] = None, data: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | str | dict | list | bytes] = None) -> TensorName:
+    def vector(name: builtins.str, *, is_symmetric: typing.Optional[builtins.bool] = None, is_antisymmetric: typing.Optional[builtins.bool] = None, is_cyclesymmetric: typing.Optional[builtins.bool] = None, is_linear: typing.Optional[builtins.bool] = None, is_flat: typing.Optional[builtins.bool] = None, is_scalar: typing.Optional[builtins.bool] = None, is_real: typing.Optional[builtins.bool] = None, is_integer: typing.Optional[builtins.bool] = None, is_positive: typing.Optional[builtins.bool] = None, tags: typing.Optional[typing.Sequence[builtins.str]] = None, aliases: typing.Optional[typing.Sequence[builtins.str]] = None, normalization: typing.Optional[symbolica.core.Transformer | typing.Callable[[symbolica.core.Expression], symbolica.core.Expression]] = None, print: typing.Optional[dict[str, str] | typing.Callable[..., str | None]] = None, derivative: typing.Optional[typing.Any] = None, series: typing.Optional[typing.Any] = None, eval: typing.Optional[typing.Any] = None, data: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | str | dict | list | bytes] = None) -> TensorName:
         r"""
-        Create a rank-one tensor name.
+        Create a rank-one tensor name; ``print`` accepts the same mappings and callbacks as ``TensorName``.
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...

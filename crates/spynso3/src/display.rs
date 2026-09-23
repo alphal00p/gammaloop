@@ -12,9 +12,12 @@ use pyo3::{
 use spenso::{
     algebra::complex::RealOrComplexRef,
     iterators::IteratableTensor,
-    network::tags::{SPENSO_TAG, prepare_tensor_print},
+    network::tags::{
+        SPENSO_TAG, TENSOR_PRINT_CALLBACK_TAG, prepare_tensor_print, tensor_custom_print,
+        tensor_head_print,
+    },
     portable_payload::register_math_display_symbol,
-    shadowing::symbolica_utils::SpensoPrintSettings,
+    shadowing::symbolica_utils::{SpensoPrintBackend, SpensoPrintSettings},
     structure::{
         TensorDataLayout,
         partial::PartialStructureExt,
@@ -37,7 +40,7 @@ use symbolica::{
     domains::SelfRing,
     printer::{AnsiHtmlFormatter, PrintOptions, PrintState},
 };
-use symbolica_typst_atom_payload::{AttachmentSet, encode_atom_render_tree};
+use symbolica_typst_atom_payload::{AttachmentSet, encode_atom_from_set, encode_atom_render_tree};
 use tabled::{
     builder::Builder,
     settings::{Alignment, Style},
@@ -698,13 +701,90 @@ fn typst_settings_source(settings: &DisplaySettings, atom: &Atom) -> String {
     )
 }
 
-fn typst_main_source(settings: &DisplaySettings, atom: &Atom) -> String {
-    format!(
+fn typst_custom_print_source(settings: &DisplaySettings, atom: &Atom) -> PyResult<String> {
+    let options = display_options_with_settings(TensorDisplayMode::Typst, settings);
+    let attachments = portable_attachments(atom).map_err(PyRuntimeError::new_err)?;
+    let mut heads = BTreeMap::new();
+    for symbol in atom.get_all_symbols(true) {
+        if let Some(source) = tensor_head_print(symbol, SpensoPrintBackend::Typst) {
+            heads.insert(symbol.get_name().to_owned(), source);
+        }
+    }
+    let mut calls = BTreeMap::new();
+    let mut seen = HashSet::new();
+    let mut error = None;
+    atom.visitor(&mut |view| {
+        let symbol = match view {
+            AtomView::Fun(function) => function.get_symbol(),
+            AtomView::Var(variable) => variable.get_symbol(),
+            _ => return true,
+        };
+        if !symbol.has_tag(TENSOR_PRINT_CALLBACK_TAG) {
+            return true;
+        }
+        let value = view.to_owned();
+        if !seen.insert(value.clone()) {
+            return true;
+        }
+        let normal = tensor_custom_print(view, &options, &PrintState::new());
+        if matches!(view, AtomView::Var(_)) {
+            if let Some(source) = normal {
+                heads.insert(symbol.get_name().to_owned(), source);
+            }
+            return true;
+        }
+        let mut state = PrintState::new();
+        state.in_exp_base = true;
+        let power = tensor_custom_print(view, &options, &state);
+        if normal.is_some() || power.is_some() {
+            match encode_atom_from_set(&value, &attachments) {
+                Ok(payload) => {
+                    calls.insert(payload, (normal, power));
+                }
+                Err(failure) => {
+                    error = Some(PyRuntimeError::new_err(failure.to_string()));
+                }
+            }
+        }
+        true
+    });
+    if let Some(error) = error {
+        return Err(error);
+    }
+    let heads = heads
+        .into_iter()
+        .map(|(name, source)| format!("{name:?}: ${source}$,"))
+        .collect::<String>();
+    let heads = if heads.is_empty() {
+        ":".to_owned()
+    } else {
+        heads
+    };
+    let calls = calls
+        .into_iter()
+        .map(|(payload, (normal, power))| {
+            let bytes = payload
+                .iter()
+                .map(|byte| format!("{byte},"))
+                .collect::<String>();
+            let normal = normal.map_or_else(|| "none".to_owned(), |source| format!("${source}$"));
+            let power = power.map_or_else(|| "none".to_owned(), |source| format!("${source}$"));
+            format!("(bytes(({bytes})), {normal}, {power}),")
+        })
+        .collect::<String>();
+    Ok(format!(
+        "#let settings = (..settings, print-heads: ({heads}), print-calls: ({calls}))\n"
+    ))
+}
+
+fn typst_main_source(settings: &DisplaySettings, atom: &Atom) -> PyResult<String> {
+    Ok(format!(
         concat!(
             "#import \"notation.typ\" as tensor-notation\n",
             "#set page(width: auto, height: auto, margin: 4pt)\n",
             "#let tree = cbor(read(\"tree.cbor\", encoding: none))\n",
             "#let settings = {}\n",
+            "{}",
             "#let visual = tensor-notation.render(\n",
             "  tree,\n",
             "  notation: tensor-notation.default-notation(settings: settings),\n",
@@ -712,7 +792,8 @@ fn typst_main_source(settings: &DisplaySettings, atom: &Atom) -> String {
             "$ #visual $\n"
         ),
         typst_settings_source(settings, atom),
-    )
+        typst_custom_print_source(settings, atom)?,
+    ))
 }
 
 fn render_atom_tree(atom: &Atom) -> PyResult<Vec<u8>> {
@@ -806,7 +887,7 @@ pub(crate) fn atom_to_html(
     notation_source: Option<&str>,
 ) -> PyResult<String> {
     let tree = render_atom_tree(atom)?;
-    let source = typst_main_source(settings, atom);
+    let source = typst_main_source(settings, atom)?;
     let html = compile_typst(py, &source, "html", notation_source, Some(&tree))?;
     let html = String::from_utf8(html).map_err(|error| {
         PyRuntimeError::new_err(format!("Typst returned invalid UTF-8: {error}"))
@@ -825,7 +906,7 @@ pub(crate) fn atom_to_svg(
     notation_source: Option<&str>,
 ) -> PyResult<String> {
     let tree = render_atom_tree(atom)?;
-    let source = typst_main_source(settings, atom);
+    let source = typst_main_source(settings, atom)?;
     let svg = compile_typst(py, &source, "svg", notation_source, Some(&tree))?;
     String::from_utf8(svg)
         .map_err(|error| PyRuntimeError::new_err(format!("Typst returned invalid UTF-8: {error}")))
@@ -1667,6 +1748,7 @@ fn concrete_render_project(
             "#set page(width: auto, height: auto, margin: 4pt)\n",
             "#let tree = cbor(read(\"tree.cbor\", encoding: none))\n",
             "#let settings = {}\n",
+            "{}",
             "#let descriptor = tensor-notation.render(\n",
             "  tree,\n",
             "  notation: tensor-notation.default-notation(settings: settings),\n",
@@ -1674,6 +1756,7 @@ fn concrete_render_project(
             "$ #descriptor = {} $\n"
         ),
         typst_settings_source(settings, &descriptor),
+        typst_custom_print_source(settings, &descriptor)?,
         body,
     );
     Ok((source, tree))
@@ -2037,7 +2120,7 @@ mod tests {
         ] {
             assert!(!format_atom_with_mode(&atom, mode, false).contains("hedge"));
         }
-        let source = typst_main_source(&DisplaySettings::default(), &atom);
+        let source = typst_main_source(&DisplaySettings::default(), &atom).unwrap();
         assert!(source.contains("index-aliases:"));
         assert!(source.contains("display_index_tests::hedge"));
         assert_eq!(atom.to_canonical_string(), original);
@@ -2538,7 +2621,7 @@ mod tests {
 
     #[test]
     fn generated_project_reads_the_portable_render_tree_as_binary() {
-        let source = typst_main_source(&DisplaySettings::default(), &Atom::Zero);
+        let source = typst_main_source(&DisplaySettings::default(), &Atom::Zero).unwrap();
         assert!(source.contains("cbor(read(\"tree.cbor\", encoding: none))"));
         assert!(source.contains("tensor-notation.render"));
     }

@@ -16,6 +16,8 @@
 #let _settings(value) = _merge((
   tensor-layout: "ports",
   component-style: "superscript",
+  print-heads: (:),
+  print-calls: (),
   with-dim: false,
   parens: true,
   commas: none,
@@ -476,6 +478,12 @@
 
 #let _render-tensor(ctx, settings) = {
   let node = ctx.node
+  for (atom, normal, power) in settings.print-calls {
+    if node.at("atom", default: none) == atom {
+      let visual = if ctx.power-base { power } else { normal }
+      if visual != none { return visual }
+    }
+  }
   if node.arguments.len() > 0 {
     let component = node.arguments.last()
     if _is-function(component) and _name(component) == "spenso::cind" and (
@@ -786,7 +794,7 @@
     (ctx.default)()
   }
   let defaults = core.notation(
-    heads: _default-heads,
+    heads: _merge(_default-heads, settings.print-heads),
     calls: (
       "spenso::bracket": ctx => {
         if ctx.arguments.len() == 0 { return (ctx.default)() }
