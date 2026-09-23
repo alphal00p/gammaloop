@@ -2161,12 +2161,34 @@ mod tests {
         for (mode, expected) in [
             (TensorDisplayMode::Plain, "A^(0,12)"),
             (TensorDisplayMode::Latex, "A^{0,12}"),
-            (TensorDisplayMode::Typst, r#"attach(A,t:0 "," 12)"#),
+            (TensorDisplayMode::Typst, "attach(A,t:0 comma 12)"),
         ] {
             assert_eq!(
                 format_atom_with_settings(&component, mode, &settings),
                 expected
             );
+        }
+        let parameterized = function!(
+            head,
+            Atom::var(symbol!("component_display_test::x")),
+            7,
+            function!(spenso::structure::abstract_index::AIND_SYMBOLS.cind, 0, 12)
+        );
+        for symbol_scripts in [false, true] {
+            let settings = DisplaySettings {
+                symbol_scripts,
+                ..DisplaySettings::default()
+            };
+            for (mode, expected) in [
+                (TensorDisplayMode::Plain, "A(x,7)^(0,12)"),
+                (TensorDisplayMode::Latex, r"A\!\left(x,7\right)^{0,12}"),
+                (TensorDisplayMode::Typst, "attach(A(x,7),t:0 comma 12)"),
+            ] {
+                assert_eq!(
+                    format_atom_with_settings(&parameterized, mode, &settings),
+                    expected
+                );
+            }
         }
         assert!(head.get_print_function().is_none());
         assert_eq!(

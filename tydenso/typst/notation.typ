@@ -483,12 +483,8 @@
       let base = _head(ctx, node)
       let labels = node.arguments.slice(0, -1).map(argument => _visual(ctx, argument))
       if labels.len() > 0 {
-        base = if settings.symbol-scripts {
-          _row-attachment(base, labels.map(source => (source: source, row: "bottom")), settings)
-        } else {
-          let separator = if settings.commas { $,$ } else { h(0.15em) }
-          _tight((base, _parentheses(labels.join(separator))))
-        }
+        // Component parameters are ordinary function arguments in every layout.
+        base = _tight((base, _parentheses(labels.join($,$))))
       }
       if component.arguments.len() == 0 { return base }
       let coordinates = component.arguments.map(index => _visual(ctx, index)).join($,$)

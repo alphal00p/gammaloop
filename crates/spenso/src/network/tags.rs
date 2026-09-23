@@ -648,29 +648,35 @@ fn tensor_component_print(
         .map(natural_index)
         .collect::<Option<Vec<_>>>()?;
     let head = function.get_symbol();
-    let base = if labels.is_empty() {
-        if resolved.backend == SpensoPrintBackend::Typst {
-            typst_tensor_head(head)
-        } else if let Some(label) = head
-            .get_tags()
-            .iter()
-            .find_map(|tag| tag.strip_prefix("spenso::tensor-label:"))
-        {
-            label.to_owned()
-        } else {
-            Atom::var(head).format_string(options, PrintState::new())
-        }
+    let mut base = if resolved.backend == SpensoPrintBackend::Typst {
+        typst_tensor_head(head)
+    } else if let Some(label) = head
+        .get_tags()
+        .iter()
+        .find_map(|tag| tag.strip_prefix("spenso::tensor-label:"))
+    {
+        label.to_owned()
     } else {
-        FunctionBuilder::new(head)
-            .add_args(labels.iter().copied())
-            .finish()
-            .format_string(options, PrintState::new())
+        Atom::var(head).format_string(options, PrintState::new())
     };
+    // Component parameters remain function arguments, even when abstract
+    // tensors display their labels as scripts.
+    if !labels.is_empty() {
+        let latex = resolved.backend == SpensoPrintBackend::Latex;
+        base.push_str(if latex { r"\!\left(" } else { "(" });
+        for (position, label) in labels.iter().enumerate() {
+            if position > 0 {
+                base.push(',');
+            }
+            label.format(&mut base, options, PrintState::new()).ok()?;
+        }
+        base.push_str(if latex { r"\right)" } else { ")" });
+    }
     if indices.is_empty() {
         return Some(base);
     }
     let separator = if resolved.backend == SpensoPrintBackend::Typst {
-        " \",\" "
+        " comma "
     } else {
         ","
     };
@@ -1999,7 +2005,7 @@ mod tests {
         assert_eq!(component.printer(latex).to_string(), "A^{0,12}");
         assert_eq!(
             component.printer(PrintOptions::typst()).to_string(),
-            r#"attach(A,t:0 "," 12)"#
+            "attach(A,t:0 comma 12)"
         );
         assert_eq!(component.to_string(), original);
         assert_eq!(
@@ -2034,27 +2040,30 @@ mod tests {
             component
                 .printer(SpensoPrintSettings::typst_options())
                 .to_string(),
-            "attach(q_7,t:0)"
+            "attach(q(7),t:0)"
         );
         let latex = PrintOptions {
             custom_print_mode: SpensoPrintSettings::typst().into(),
             ..PrintOptions::latex()
         };
-        assert_eq!(component.printer(latex.clone()).to_string(), "q_{7}^{0}");
+        assert_eq!(
+            component.printer(latex.clone()).to_string(),
+            r"q\!\left(7\right)^{0}"
+        );
         assert!(
             component
                 .clone()
                 .pow(2)
                 .printer(latex)
                 .to_string()
-                .contains(r"\left(q_{7}^{0}\right)")
+                .contains(r"\left(q\!\left(7\right)^{0}\right)")
         );
         assert!(
             component
                 .pow(2)
                 .printer(PrintOptions::typst())
                 .to_string()
-                .contains("lr((attach(q_7,t:0)))")
+                .contains("lr((attach(q(7),t:0)))")
         );
     }
 
